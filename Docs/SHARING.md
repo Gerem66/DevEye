@@ -64,11 +64,12 @@ compte ouvert se projette, le compte gardé jamais), branchés le 29 août 2026
 avec le test de palier ligne à ligne : `items.shareable` refuse à l'entrée,
 et la bascule vers le palier gardé chez soi appelle `ctx.items.forget`, de
 sorte qu'aucune projection ne survit à un élément devenu illisible ailleurs.
-Projets reste refusé franchement : son manifest déclare `shareTier: 'never'`
-par-dessus le `'perItem'` du descripteur publié, parce que projeter un projet
-pose des questions de sens avant de code (assignés et auteurs membres de
-l'espace d'origine, non-lus et « mes tâches » par personne et par espace,
-liaisons vers des objets de l'espace d'origine). Le registre dit ce que le
+Projets l'est aussi, depuis la même nuit, sur trois décisions de Gerem : un
+assigné ou un auteur n'est nommé que s'il est membre de l'espace qu'on
+charge (sinon « Membre hors de cet espace ») ; un projet projeté compte dans
+« mes tâches » de la fenêtre ; ses liaisons sont visibles par leur nom
+(`labelOf` des providers d'éléments, sous le codec de l'espace d'origine),
+sans être ouvrables ni modifiables d'ici. Le registre dit ce que le
 chiffrement autorise, le manifest ce que le code fait, et le boot refuse un
 module qui déclare autre chose que `'never'` sans offrir `items`. Plus aucune
 native n'a d'éléments à brancher : `SHARE_WIRED` ne sert plus qu'à lire la
@@ -102,6 +103,7 @@ gestes :
 | Sauvegardes | fiche, historique, **déclencher** | modifier, supprimer (destination et source vivent chez lui) |
 | Notes | lire, éditer le corps, archiver, restaurer (chez elle, sous sa clé ; rangée à la racine, hors classement d'ici) | classer (dossier, rang), passer en privée, détruire |
 | Mail | dossiers, lire, marquer, déplacer, envoyer, relever, renommer, cadence, pause | supprimer le compte, changer de palier, identifiants et proxy, reconnexion OAuth |
+| Projets | tout l'arbre (colonnes, cartes, assignation parmi les membres d'ici, jalons, dépendances, discussion, historique), profil, statut, archivage, version manuelle ; liaisons lues et nommées | changer de palier, version suivie d'une release, relier / délier, classer le portefeuille |
 
 Le critère n'est pas le goût : un geste reste au domicile quand il **référence
 d'autres objets de l'espace d'origine** (une clé d'API, une destination, les
@@ -268,14 +270,6 @@ comme un bug.
 
 ## 9. Reste à faire
 
-- Brancher Projets, le dernier `'perItem'` : retirer le `shareTier: 'never'`
-  de son manifest, offrir `items` (avec `shareable` : un projet gardé ne se
-  projette pas) et lire `ctx.sharing.scope()` dans ses listages, comme Notes
-  et Mail. Mais d'abord décider ce qu'un projet projeté montre : ses assignés
-  et ses auteurs sont des membres de l'espace d'origine, ses non-lus et « mes
-  tâches » sont par personne et par espace, ses liaisons pointent vers des
-  dépôts, cibles, bases et sites de l'espace d'origine que la fenêtre ne voit
-  pas.
 - L'ordonnanceur de fond n'a pas changé : il sonde les éléments **d'un espace**,
   pas ce qu'on y voit. C'est voulu — sonder deux fois le même service parce
   qu'il est projeté ailleurs doublerait requêtes et incidents.

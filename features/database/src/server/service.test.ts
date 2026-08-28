@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import type { DatabaseAlertRow, DatabaseRow, DatabaseRows } from '../contracts/domain';
+import { DATABASE_ITEMS_PROVIDER, type DatabaseItemsProvider } from '@deveye/types/sdk';
 import { createTestServiceDeps } from '@deveye/types/sdk/testing';
 
 import type { Inventory, Session } from './engine';
+import { serverEntry } from './index';
 import type { DatabaseRepo } from './repo';
 import { DatabaseMonitor } from './service';
 
@@ -363,5 +365,23 @@ describe('les alertes', () => {
         await monitor.checkNow(1, 1);
         assert.deepEqual(repo.alertChecks, []);
         assert.equal(deps.recorded.notifications.length, 0);
+    });
+});
+
+/** Le contrat offert à Projets, tel que `createService` le publie au boot. */
+function itemsProviderOn(repo: FakeRepo): DatabaseItemsProvider {
+    const service = serverEntry.createService?.(createTestServiceDeps({ repo }));
+    assert.ok(service, 'le module crée un service');
+    const provider = service.providers?.[DATABASE_ITEMS_PROVIDER] as DatabaseItemsProvider | undefined;
+    assert.ok(provider, 'le service publie le contrat des éléments');
+    return provider;
+}
+
+describe('DATABASE_ITEMS_PROVIDER : labelOf', () => {
+    it("rend le nom déchiffré d'une base vivante, null pour un identifiant inconnu ou un autre espace", async () => {
+        const provider = itemsProviderOn(fakeRepo([row()]));
+        assert.equal(await provider.labelOf(1, 1), 'Prod');
+        assert.equal(await provider.labelOf(42, 1), null);
+        assert.equal(await provider.labelOf(1, 2), null);
     });
 });

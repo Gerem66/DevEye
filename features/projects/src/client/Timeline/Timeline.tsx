@@ -1,8 +1,8 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Avatar, Button, useLiveOutlines, useRequestPopupWidth } from 'deveye-sdk-client';
-import type { MinimalUser } from '@deveye/types';
+import { Button, useLiveOutlines, useRequestPopupWidth } from 'deveye-sdk-client';
 import { formatDate } from '../api';
 import type { ProjectCard, ProjectCardDep, ProjectMilestone } from '../../contracts/domain';
+import { MemberAvatar } from '../Member';
 import { timelineNaturalWidth } from '../Board/width';
 import { DAY_MS, startOfDay, timelineTicks, ZOOM_LEVELS, type ZoomId } from './scale';
 import { modeAt, useDateDrag } from './dateDrag';
@@ -73,7 +73,6 @@ interface TimelineProps {
     cards: ProjectCard[];
     milestones: ProjectMilestone[];
     deps: ProjectCardDep[];
-    members: readonly MinimalUser[];
     canWrite: boolean;
     onCardOpen: (card: ProjectCard) => void;
     /** Repose les dates d'une carte après un glissé sur la frise. */
@@ -96,7 +95,6 @@ export function Timeline({
     cards,
     milestones,
     deps,
-    members,
     canWrite,
     onCardOpen,
     onCardDates,
@@ -429,7 +427,6 @@ export function Timeline({
                         {dated.map((card) => {
                             const view = shown(card);
                             const s = spanOf(view);
-                            const assignee = members.find((m) => m.id === card.assigneeUserId);
                             const overdue = view.dueDate !== null && view.dueDate * 1000 < Date.now();
                             // Étirable seulement si les deux bouts existent :
                             // un point n'a qu'une date, il se déplace en bloc.
@@ -482,7 +479,9 @@ export function Timeline({
                                             </>
                                         )}
                                         <span className={styles.barLabel}>{card.title || 'Sans titre'}</span>
-                                        {card.assigneeUserId !== null && <Avatar user={assignee} size={16} />}
+                                        {card.assigneeUserId !== null && (
+                                            <MemberAvatar userId={card.assigneeUserId} size={16} />
+                                        )}
                                     </button>
                                 </div>
                             );

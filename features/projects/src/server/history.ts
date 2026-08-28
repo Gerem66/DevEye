@@ -3,7 +3,7 @@ import { PROJECT_EVENT_PAGE_SIZE, projectEventSchema } from '../contracts/domain
 import type { ProjectEvent, ProjectEventRow } from '../contracts/domain';
 import { defineSdkFeature, type SdkCipher } from '@deveye/types/sdk/server';
 
-import { assertProjectUnlocked, cipherFor, loadProject, type Ctx, type StoredEvent } from './_shared';
+import { assertProjectUnlocked, loadProject, projectCipher, type Ctx, type StoredEvent } from './_shared';
 
 /**
  * La frise verticale d'un projet.
@@ -13,7 +13,9 @@ import { assertProjectUnlocked, cipherFor, loadProject, type Ctx, type StoredEve
  * produit, et par les autres modules à travers le contrat d'usage
  * (`PROJECTS_USAGE_PROVIDER.recordEvent`, un déploiement parti de l'onglet
  * d'un projet) : c'est ce qui garantit qu'aucune histoire ne peut être
- * réécrite après coup.
+ * réécrite après coup. Elle se lit chez le projet, sous son codec, depuis une
+ * fenêtre comme chez lui ; ses acteurs sont des identifiants, que le client
+ * nomme parmi les membres de l'espace actif et masque sinon.
  */
 
 /** Ne lève jamais : un événement illisible reste sur la frise, sans son libellé. */
@@ -58,14 +60,14 @@ export const projectEventListFeature = defineSdkFeature({
         // frise en dessous, sans second COUNT.
         const rows = await ctx.repo.history.listByProject(
             input.projectId,
-            ctx.workspaceId,
+            project.workspace_id,
             input.before ?? null,
             limit + 1
         );
         const hasMore = rows.length > limit;
         const page = hasMore ? rows.slice(0, limit) : rows;
 
-        const cipher = cipherFor(ctx, project.security_tier);
+        const cipher = await projectCipher(ctx, project);
         const events = await Promise.all(
             page.map(async (row) => toEvent(row, await decryptEvent(cipher, row.content)))
         );

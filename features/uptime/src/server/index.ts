@@ -1,10 +1,39 @@
 import { UPTIME_ITEMS_PROVIDER, type UptimeItemsProvider } from '@deveye/types/sdk';
-import type { FeatureServer } from '@deveye/types/sdk/server';
+import type { FeatureServer, SdkCipher } from '@deveye/types/sdk/server';
 
 import { uptimeHandlers } from './handlers';
 import { setMonitor } from './_shared';
 import { createRepo, type UptimeRepo } from './repo';
 import { UptimeMonitor } from './service';
+
+/**
+ * Le nom d'un service (la première clé du blob chiffré à l'étage ouvert),
+ * déchiffré par `cipher` (le codec OUVERT de `workspaceId`, son domicile).
+ * Un service disparu ou un blob illisible vaut `null`, jamais une exception :
+ * ce que l'écran des canaux montre comme « une cible disparue », et une
+ * fenêtre sur un projet projeté comme une liaison sans nom.
+ *
+ * Une seule fonction pour les deux appelants : l'entrée `items` (le codec de
+ * l'espace appelant, fourni par l'app) et le contrat offert à Projets
+ * (`deps.cipherFor(workspaceId)`).
+ */
+async function labelOf(
+    repo: UptimeRepo,
+    cipher: SdkCipher,
+    serviceId: number,
+    workspaceId: number
+): Promise<string | null> {
+    const row = await repo.services.findById(serviceId, workspaceId);
+    if (!row) return null;
+    const plain = await cipher.tryDecrypt(row.content);
+    if (plain === null) return null;
+    try {
+        const parsed = JSON.parse(plain) as { name?: unknown };
+        return typeof parsed.name === 'string' && parsed.name.length > 0 ? parsed.name : null;
+    } catch {
+        return null;
+    }
+}
 
 /**
  * L'entrée serveur du module.
@@ -14,7 +43,8 @@ import { UptimeMonitor } from './service';
  * l'élagage horaire des pings bruts (l'ancien bloc du balayage de rétention
  * d'`index.ts`, devenu un ticker du module), le singleton posé pour les
  * handlers (`uptime.add`, `uptime.checkNow`), et le contrat offert à Projets
- * (`UPTIME_ITEMS_PROVIDER` : un service existe-t-il dans cet espace ?).
+ * (`UPTIME_ITEMS_PROVIDER` : un service existe-t-il dans cet espace, et
+ * comment s'appelle-t-il ?).
  *
  * `items` est ce que le partage et les routes de notification savent des
  * services sans ouvrir la feature : le domicile d'un service visible d'ici
@@ -36,10 +66,13 @@ export const serverEntry: FeatureServer<UptimeRepo> = {
         // demande si le service existe dans l'espace (le sien : c'est ce que
         // faisait `uptimeServices.findById` avant le rapatriement), pour
         // qu'un identifiant étranger ne se relie pas et ne trahisse pas son
-        // existence.
+        // existence. Et le nom d'un service relié, sous le codec ouvert de son
+        // domicile : ce qu'une fenêtre sur un projet projeté montre pour une
+        // liaison qu'elle ne peut pas ouvrir, un nom, jamais un identifiant.
         const items: UptimeItemsProvider = {
             exists: async (serviceId, workspaceId) =>
-                (await deps.repo.services.findById(serviceId, workspaceId)) !== null
+                (await deps.repo.services.findById(serviceId, workspaceId)) !== null,
+            labelOf: (serviceId, workspaceId) => labelOf(deps.repo, deps.cipherFor(workspaceId), serviceId, workspaceId)
         };
         return {
             start() {
@@ -56,20 +89,6 @@ export const serverEntry: FeatureServer<UptimeRepo> = {
     items: {
         homeOf: async (repo, itemId, workspaceId) =>
             (await repo.services.findVisible(itemId, workspaceId))?.workspace_id ?? null,
-        // Le nom est la première clé du blob chiffré à l'étage ouvert ; un blob
-        // illisible ou un service disparu vaut `null`, ce que l'écran des canaux
-        // montre comme « une cible disparue ».
-        labelOf: async (repo, cipher, itemId, workspaceId) => {
-            const row = await repo.services.findById(itemId, workspaceId);
-            if (!row) return null;
-            const plain = await cipher.tryDecrypt(row.content);
-            if (plain === null) return null;
-            try {
-                const parsed = JSON.parse(plain) as { name?: unknown };
-                return typeof parsed.name === 'string' && parsed.name.length > 0 ? parsed.name : null;
-            } catch {
-                return null;
-            }
-        }
+        labelOf
     }
 };

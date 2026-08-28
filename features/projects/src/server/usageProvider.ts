@@ -24,6 +24,12 @@ import { encryptProject, tryDecryptProject, type StoredEvent } from './_shared';
  * Tout ici travaille **sans session**, à l'étage ouvert (`deps.cipherFor`,
  * mémoïsé par l'hôte) : un projet gardé ne se relie pas, donc n'a rien à
  * rendre ni à recevoir par ce contrat.
+ *
+ * Rien à savoir des projections (`Docs/SHARING.md`) : une liaison ne se pose
+ * qu'au domicile du projet, vers un élément du même espace, et c'est cet
+ * espace que les modules passent ici (`workspaceId`). Le domicile du projet
+ * et celui de l'élément relié sont donc toujours le même, et `findById`
+ * (le domicile seul, jamais une fenêtre) suffit.
  */
 
 /** Ce que le contrat lit du dépôt et de l'hôte : pas le service entier. */

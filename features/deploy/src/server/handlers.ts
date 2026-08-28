@@ -301,7 +301,9 @@ export const deployHandlers = [
             // par construction : déclenché depuis la feature, ce déploiement
             // n'appartient à aucun projet en particulier, et l'inscrire dans l'un
             // d'eux au hasard serait faux.
-            if (input.projectId !== undefined) await recordProjectEvent(ctx, input.projectId, title);
+            if (input.projectId !== undefined) {
+                await recordProjectEvent(ctx, input.projectId, target.workspace_id, title);
+            }
 
             // Le suivi d'état est repris par l'ordonnanceur du module : c'est lui
             // qui ira demander à Dokploy où en est ce déploiement. `wake()` et non

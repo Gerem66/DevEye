@@ -3,6 +3,7 @@ import {
     Button,
     humanizeError,
     invalidate,
+    StatusBadge,
     useActiveWorkspace,
     useCurrentUser,
     useDragReorder,
@@ -20,6 +21,18 @@ import ProjectDialog, { type ProjectDialogResult } from './ProjectDialog';
 import ProjectDetail from './ProjectDetail';
 import MyTasks from './MyTasks';
 import styles from './style.module.css';
+
+/**
+ * Les projets projetés depuis un autre espace viennent après les locaux.
+ *
+ * Leur rang est celui de leur domicile : les mêler au classement d'ici les
+ * ferait paraître déplaçables, alors que le serveur refuse un ordre qui les
+ * inclut. Le tri est stable : dans chaque moitié, l'ordre du serveur demeure.
+ * Même parti que les notes.
+ */
+function byHome(a: ProjectSummary, b: ProjectSummary): number {
+    return Number(a.foreign) - Number(b.foreign);
+}
 
 /**
  * Projets — le portefeuille de l'espace actif.
@@ -75,7 +88,7 @@ export function FeatureProjects(_props: FeatureViewProps) {
         const task = (async () => {
             try {
                 const res = await api.send('projects.list', { archived: showArchived });
-                setSummaries(res.projects);
+                setSummaries([...res.projects].sort(byHome));
                 setError(null);
             } catch (e) {
                 setError(humanizeError(e, 'Impossible de charger les projets.'));
@@ -132,13 +145,16 @@ export function FeatureProjects(_props: FeatureViewProps) {
      * sans attendre l'aller-retour. `projects.reorder` ne touche jamais au corps
      * chiffré — un portefeuille où dorment des projets confidentiels se range
      * donc sans rien déverrouiller.
+     *
+     * `ids` ne compte que les projets **locaux** : les projetés ne font pas
+     * partie de l'ordre (voir `byHome`), ils gardent leur place en queue.
      */
     const reorder = useCallback(
         (ids: number[]) => {
             setSummaries((prev) => {
                 if (!prev) return prev;
                 const byId = new Map(prev.map((s) => [s.project.id, s]));
-                return ids.flatMap((id) => byId.get(id) ?? []);
+                return [...ids.flatMap((id) => byId.get(id) ?? []), ...prev.filter((s) => s.foreign)];
             });
             api.send('projects.reorder', { projectIds: ids }).catch(() => {
                 setError('Réorganisation impossible.');
@@ -278,6 +294,12 @@ export function FeatureProjects(_props: FeatureViewProps) {
         void openProject(summary);
     }, [liveTarget, summaries, selectedId, openProject]);
 
+    /** Les projets projetés du portefeuille : « Mes tâches » les signale. */
+    const foreignIds = useMemo(
+        () => new Set(summaries?.flatMap((s) => (s.foreign ? [s.project.id] : [])) ?? []),
+        [summaries]
+    );
+
     const totals = useMemo(() => {
         if (!summaries) return null;
         return {
@@ -304,8 +326,14 @@ export function FeatureProjects(_props: FeatureViewProps) {
 
     // La grille compte plusieurs colonnes : le geste vise les gouttières
     // verticales, et non les interstices horizontaux des listes en colonne.
+    //
+    // Les projets projetés en sont exclus de bout en bout : ni comme source
+    // (pas de poignée), ni dans l'ordre envoyé (le serveur refuse un ordre qui
+    // les inclut), ni parmi les rangées visées (leur carte ne porte pas
+    // `data-project-card`). Rangés en queue, ils n'occupent aucun des
+    // interstices qu'un dépôt peut viser.
     const drag = useDragReorder<HTMLUListElement, HTMLLIElement>({
-        ids: summaries?.map((s) => s.project.id) ?? [],
+        ids: summaries?.flatMap((s) => (s.foreign ? [] : [s.project.id])) ?? [],
         rowSelector: '[data-project-card]',
         layout: 'grid',
         onReorder: (ids) => reorder(ids as number[]),
@@ -410,6 +438,7 @@ export function FeatureProjects(_props: FeatureViewProps) {
 
             {showMine && (
                 <MyTasks
+                    foreignProjectIds={foreignIds}
                     onOpenProject={(projectId) => {
                         const summary = summaries?.find((s) => s.project.id === projectId);
                         if (summary) void openProject(summary);
@@ -440,7 +469,9 @@ export function FeatureProjects(_props: FeatureViewProps) {
                             onOpen={() => void openProject(summary)}
                             onArchive={() => void setArchived(summary, !showArchived)}
                             onDragPointerDown={
-                                canReorder ? (e) => drag.onGripPointerDown(e, summary.project.id) : undefined
+                                canReorder && !summary.foreign
+                                    ? (e) => drag.onGripPointerDown(e, summary.project.id)
+                                    : undefined
                             }
                         />
                     ))}
@@ -498,12 +529,18 @@ function ProjectCard({
     onArchive,
     onDragPointerDown
 }: ProjectCardProps) {
-    const { project, masked, cardTotal, cardDone, cardOverdue, nextDueDate, unread } = summary;
+    const { project, masked, foreign, cardTotal, cardDone, cardOverdue, nextDueDate, unread } = summary;
     const progress = cardTotal === 0 ? 0 : Math.round((cardDone / cardTotal) * 100);
     const due = formatDate(nextDueDate);
 
     return (
-        <li className={`${styles.card} ${dragging ? styles.cardDragging : ''}`} data-project-card='' {...outline}>
+        // `data-project-card` désigne une rangée que le glisser-classer peut
+        // viser : un projet projeté n'en est pas une (voir `useDragReorder`).
+        <li
+            className={`${styles.card} ${dragging ? styles.cardDragging : ''}`}
+            data-project-card={foreign ? undefined : ''}
+            {...outline}
+        >
             {/* La poignée est sœur du corps cliquable, et non son enfant : un
                 clic parti d'ici ne peut donc pas remonter jusqu'à « ouvrir le
                 projet », même sans le neutraliser. */}
@@ -559,6 +596,20 @@ function ProjectCard({
                         {project.securityTier === 'guarded' && (
                             <span className={styles.lock} title='Projet confidentiel'>
                                 <span className='icon icon-lock' />
+                            </span>
+                        )}
+                        {/* Projeté depuis un autre espace : il se lit et se
+                            travaille comme les autres, mais ne se classe pas
+                            d'ici et ses liaisons se règlent là-bas. Sans cette
+                            pastille, rien ne distinguerait une ligne locale
+                            d'une fenêtre sur l'espace voisin. Même pastille
+                            que les notes, les boîtes mail et les uptimes. */}
+                        {foreign && (
+                            <span
+                                className={styles.shared}
+                                title='Ce projet appartient à un autre espace qui le partage ici'
+                            >
+                                <StatusBadge tone='accent'>partagé</StatusBadge>
                             </span>
                         )}
 

@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import type { UptimeCheckRow, UptimeIncidentRow, UptimeServiceRow } from '../contracts/domain';
+import { UPTIME_ITEMS_PROVIDER, type UptimeItemsProvider } from '@deveye/types/sdk';
 import { createTestServiceDeps } from '@deveye/types/sdk/testing';
 
+import { serverEntry } from './index';
 import type { UptimeRepo } from './repo';
 import { UptimeMonitor, type ProbeOutcome } from './service';
 
@@ -68,7 +70,8 @@ function fakeRepo(over: Partial<UptimeServiceRow> = {}): FakeRepo {
         services: {
             listByWorkspace: unused,
             listVisible: unused,
-            findById: unused,
+            findById: async (id, workspaceId) =>
+                rows.find((r) => r.id === id && r.workspace_id === workspaceId) ?? null,
             findVisible: unused,
             create: unused,
             update: unused,
@@ -246,5 +249,23 @@ describe('une panne', () => {
         assert.notEqual(repo.incidents[0].ended_at, null);
         // Rien de plus n'est parti : la tentative de la panne, et c'est tout.
         assert.equal(deps.recorded.notifications.length, 1);
+    });
+});
+
+/** Le contrat offert à Projets, tel que `createService` le publie au boot. */
+function itemsProviderOn(repo: FakeRepo): UptimeItemsProvider {
+    const service = serverEntry.createService?.(createTestServiceDeps({ repo }));
+    assert.ok(service, 'le module crée un service');
+    const provider = service.providers?.[UPTIME_ITEMS_PROVIDER] as UptimeItemsProvider | undefined;
+    assert.ok(provider, 'le service publie le contrat des éléments');
+    return provider;
+}
+
+describe('UPTIME_ITEMS_PROVIDER : labelOf', () => {
+    it("rend le nom déchiffré d'un service vivant, null pour un identifiant inconnu ou un autre espace", async () => {
+        const provider = itemsProviderOn(fakeRepo());
+        assert.equal(await provider.labelOf(1, 1), 'API OxyFoo');
+        assert.equal(await provider.labelOf(42, 1), null);
+        assert.equal(await provider.labelOf(1, 2), null);
     });
 });

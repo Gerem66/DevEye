@@ -7,10 +7,21 @@ export interface CardUnread {
     unread: number;
 }
 
-/** Les tables `project_columns` et `project_cards` : le tableau d'un projet. */
+/**
+ * Les tables `project_columns` et `project_cards` : le tableau d'un projet.
+ *
+ * Les lectures par projet et toutes les écritures prennent le `workspaceId`
+ * du projet : son **domicile**, qui n'est pas forcément l'espace actif quand
+ * le projet est projeté (`Docs/SHARING.md`). Les lectures par identifiant
+ * seul (`findColumn`, `findCard`) ne le connaissent pas encore : la ligne
+ * porte l'espace de son projet par construction, et c'est le projet que le
+ * handler vérifie (`loadProject`) avant d'agir, parce que c'est lui
+ * l'élément, visible d'ici chez lui ou par une fenêtre.
+ */
 export interface ProjectBoardRepo {
     listColumns(projectId: number, workspaceId: number): Promise<ProjectColumnRow[]>;
-    findColumn(columnId: number, workspaceId: number): Promise<ProjectColumnRow | null>;
+    /** Par identifiant seul : l'appelant remonte au projet, et c'est lui qu'il garde. */
+    findColumn(columnId: number): Promise<ProjectColumnRow | null>;
     createColumn(input: {
         projectId: number;
         workspaceId: number;
@@ -28,7 +39,8 @@ export interface ProjectBoardRepo {
     reorderColumns(projectId: number, workspaceId: number, columnIds: number[]): Promise<void>;
 
     listCards(projectId: number, workspaceId: number, archived: boolean): Promise<ProjectCardRow[]>;
-    findCard(cardId: number, workspaceId: number): Promise<ProjectCardRow | null>;
+    /** Par identifiant seul : l'appelant remonte au projet, et c'est lui qu'il garde. */
+    findCard(cardId: number): Promise<ProjectCardRow | null>;
     createCard(input: {
         projectId: number;
         workspaceId: number;
@@ -60,11 +72,13 @@ export interface ProjectBoardRepo {
 
     unreadByProject(projectId: number, workspaceId: number, userId: number): Promise<CardUnread[]>;
     /**
-     * Toutes les cartes vivantes attribuées à quelqu'un, **tous projets de
-     * l'espace confondus**. Une seule requête : c'est exactement ce que la
-     * colonne claire `assignee_user_id` sert à rendre possible.
+     * Toutes les cartes vivantes attribuées à quelqu'un dans les projets
+     * donnés : ceux que le portefeuille voit d'ici, les projetés compris, déjà
+     * triés sur leur archivage par l'appelant. Une seule requête : c'est
+     * exactement ce que la colonne claire `assignee_user_id` sert à rendre
+     * possible.
      */
-    listAssignedTo(workspaceId: number, userId: number): Promise<ProjectCardRow[]>;
+    listAssignedIn(projectIds: number[], userId: number): Promise<ProjectCardRow[]>;
 }
 
 /** Prochain rang libre à la fin d'une colonne (0 quand elle est vide). */
@@ -86,11 +100,8 @@ export function projectBoardRepo(q: SdkQueryable): ProjectBoardRepo {
                 [projectId, workspaceId]
             );
         },
-        async findColumn(columnId, workspaceId) {
-            const rows = await q.query<ProjectColumnRow>(
-                'SELECT * FROM project_columns WHERE id = ? AND workspace_id = ?',
-                [columnId, workspaceId]
-            );
+        async findColumn(columnId) {
+            const rows = await q.query<ProjectColumnRow>('SELECT * FROM project_columns WHERE id = ?', [columnId]);
             return rows[0] ?? null;
         },
         async createColumn({ projectId, workspaceId, content, countsAsDone = false }) {
@@ -113,7 +124,7 @@ export function projectBoardRepo(q: SdkQueryable): ProjectBoardRepo {
                 [content, countsAsDone ? 1 : 0, wipLimit, columnId, workspaceId]
             );
             if (res.affectedRows === 0) return null;
-            return this.findColumn(columnId, workspaceId);
+            return this.findColumn(columnId);
         },
         async countCardsInColumn(columnId, workspaceId) {
             // Archivées comprises : elles sont toujours là, et la contrainte SQL
@@ -148,11 +159,8 @@ export function projectBoardRepo(q: SdkQueryable): ProjectBoardRepo {
                 [projectId, workspaceId]
             );
         },
-        async findCard(cardId, workspaceId) {
-            const rows = await q.query<ProjectCardRow>(
-                'SELECT * FROM project_cards WHERE id = ? AND workspace_id = ?',
-                [cardId, workspaceId]
-            );
+        async findCard(cardId) {
+            const rows = await q.query<ProjectCardRow>('SELECT * FROM project_cards WHERE id = ?', [cardId]);
             return rows[0] ?? null;
         },
         async createCard(input) {
@@ -196,7 +204,7 @@ export function projectBoardRepo(q: SdkQueryable): ProjectBoardRepo {
                 ]
             );
             if (res.affectedRows === 0) return null;
-            return this.findCard(cardId, workspaceId);
+            return this.findCard(cardId);
         },
         async moveCards(workspaceId, columnId, cardIds) {
             // `updated` ne bouge pas : ranger une carte n'est pas la modifier.
@@ -217,8 +225,8 @@ export function projectBoardRepo(q: SdkQueryable): ProjectBoardRepo {
             return res.affectedRows > 0;
         },
         async restoreCard(cardId, workspaceId) {
-            const existing = await this.findCard(cardId, workspaceId);
-            if (!existing) return false;
+            const existing = await this.findCard(cardId);
+            if (!existing || existing.workspace_id !== workspaceId) return false;
             // Son ancien rang appartenait à une colonne qui a bougé : on l'ajoute
             // à la fin, comme les notes restaurées.
             const sortOrder = await nextCardOrder(q, existing.column_id);
@@ -229,16 +237,16 @@ export function projectBoardRepo(q: SdkQueryable): ProjectBoardRepo {
             return res.affectedRows > 0;
         },
 
-        async listAssignedTo(workspaceId, userId) {
+        async listAssignedIn(projectIds, userId) {
+            if (projectIds.length === 0) return [];
             // Les tâches sans échéance en dernier, puis les plus urgentes : c'est
             // l'ordre dans lequel on veut lire sa propre liste.
+            const placeholders = projectIds.map(() => '?').join(', ');
             return q.query<ProjectCardRow>(
                 `SELECT c.* FROM project_cards c
-                 JOIN projects p ON p.id = c.project_id
-                 WHERE c.workspace_id = ? AND c.assignee_user_id = ?
-                   AND c.archived_at IS NULL AND p.archived_at IS NULL
+                 WHERE c.project_id IN (${placeholders}) AND c.assignee_user_id = ? AND c.archived_at IS NULL
                  ORDER BY c.due_date IS NULL, c.due_date ASC, c.priority DESC, c.id ASC`,
-                [workspaceId, userId]
+                [...projectIds, userId]
             );
         },
         async unreadByProject(projectId, workspaceId, userId) {

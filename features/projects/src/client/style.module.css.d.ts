@@ -71,6 +71,10 @@ declare const styles: {
     readonly empty: string;
     readonly error: string;
     readonly field: string;
+    readonly foreignLink: string;
+    readonly foreignLinkGone: string;
+    readonly foreignLinkName: string;
+    readonly foreignLinks: string;
     readonly form: string;
     readonly grid: string;
     readonly gridLabel: string;
@@ -106,6 +110,7 @@ declare const styles: {
     readonly loadMore: string;
     readonly lock: string;
     readonly masked: string;
+    readonly memberHidden: string;
     readonly meta: string;
     readonly metaLeft: string;
     readonly milestone: string;
@@ -134,6 +139,7 @@ declare const styles: {
     readonly row: string;
     readonly rows: string;
     readonly sectionTitle: string;
+    readonly shared: string;
     readonly status: string;
     readonly subheading: string;
     readonly tab: string;

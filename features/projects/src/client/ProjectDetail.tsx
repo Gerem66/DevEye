@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Button,
+    FeatureSettingsButton,
     humanizeError,
     invalidate,
+    StatusBadge,
     useLiveOutlines,
     useLiveSegment,
     useResourceVersion,
@@ -480,13 +482,41 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
                                     <span className='icon icon-lock' />
                                 </span>
                             )}
+                            {/* Projeté depuis un autre espace : même pastille
+                                que sur la carte du portefeuille. Tout l'arbre
+                                se travaille d'ici ; les gestes du domicile
+                                (palier, liaisons, classement) restent là-bas. */}
+                            {project.foreign && (
+                                <span
+                                    className={styles.shared}
+                                    title='Ce projet appartient à un autre espace qui le partage ici'
+                                >
+                                    <StatusBadge tone='accent'>partagé</StatusBadge>
+                                </span>
+                            )}
                         </div>
                     </div>
-                    {canWrite && (
-                        <Button variant='secondary' icon='edit' onClick={onEditProfile}>
-                            Modifier le projet
-                        </Button>
-                    )}
+                    <div className={styles.actions}>
+                        {/* Le bouton commun, comme partout : ses onglets sont
+                            ceux que la coquille ajoute d'elle-même, Partage et
+                            Permissions. L'onglet Partage n'est pas proposé pour
+                            un projet confidentiel, que le serveur refuserait de
+                            projeter (chiffré par le mot de passe). */}
+                        <FeatureSettingsButton
+                            scope={{
+                                kind: 'item',
+                                feature: 'projects',
+                                itemId: project.id,
+                                itemLabel: project.title || 'Sans titre',
+                                shareable: project.securityTier === 'open'
+                            }}
+                        />
+                        {canWrite && (
+                            <Button variant='secondary' icon='edit' onClick={onEditProfile}>
+                                Modifier le projet
+                            </Button>
+                        )}
+                    </div>
                 </header>
 
                 <ProjectTabs
@@ -509,7 +539,6 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
                 <Board
                     columns={columns}
                     cards={cards}
-                    members={members}
                     canWrite={canWrite}
                     onCardsMoved={(columnId, cardIds, next) => void onCardsMoved(columnId, cardIds, next)}
                     onCardOpen={(card) => {
@@ -537,7 +566,6 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
                     cards={cards}
                     milestones={milestones}
                     deps={deps}
-                    members={members}
                     canWrite={canWrite}
                     onCardOpen={(card) => {
                         setDialogError(null);
@@ -566,7 +594,6 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
             {loaded && tab === 'history' && (
                 <History
                     projectId={project.id}
-                    members={members}
                     archivedCards={archivedCards}
                     onOpenArchived={(card) => setArchivedView(card)}
                 />
@@ -589,7 +616,6 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
             <ArchivedCardDialog
                 open={archivedView !== null}
                 card={archivedView}
-                members={members}
                 canWrite={canWrite}
                 busy={busy}
                 onClose={() => setArchivedView(null)}

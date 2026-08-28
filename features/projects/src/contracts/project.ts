@@ -97,6 +97,17 @@ export const projectSchema = z.object({
      */
     authorUserId: z.number().int().positive().nullable(),
     archived: z.boolean(),
+    /**
+     * Vrai quand le projet vit dans un autre espace, qui le projette ici
+     * (`Docs/SHARING.md`) : l'écran regarde une fenêtre sur un domicile. Il se
+     * lit et tout son arbre s'écrit d'ici, chez lui, sous la clé de son espace
+     * d'origine ; ce qui référence d'autres objets de cet espace (liaisons,
+     * palier, suivi des releases, classement du portefeuille) se règle là-bas,
+     * le serveur le refuse d'ici et l'écran ne le propose pas. Ses assignés et
+     * ses auteurs sont des identifiants d'utilisateurs : nommés s'ils sont
+     * membres de l'espace actif, masqués sinon.
+     */
+    foreign: z.boolean(),
     created: z.number().int(),
     updated: z.number().int()
 });
@@ -115,6 +126,13 @@ export type Project = z.infer<typeof projectSchema>;
 export const projectSummarySchema = z.object({
     project: projectSchema,
     masked: z.boolean(),
+    /**
+     * Le même drapeau que `project.foreign`, relevé sur la ligne comme
+     * `masked` : le portefeuille range et filtre ses lignes sans ouvrir le
+     * projet. Une ligne projetée compte dans les compteurs comme les autres,
+     * et ses non-lus sont ceux de l'appelant.
+     */
+    foreign: z.boolean(),
     /** Cartes actives (non archivées) et celles assises dans une colonne de fin. */
     cardTotal: z.number().int().nonnegative(),
     cardDone: z.number().int().nonnegative(),

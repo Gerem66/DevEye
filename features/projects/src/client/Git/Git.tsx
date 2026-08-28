@@ -10,10 +10,11 @@ import {
     WsError
 } from 'deveye-sdk-client';
 import { api } from '../api';
-import type { Project } from '../../contracts/domain';
+import type { Project, ProjectLinkLabel } from '../../contracts/domain';
 import { GIT_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { GitClientProvider, GitLinkedCandidate } from '@deveye/types/sdk/client';
 import { LinkRepoDialog } from './LinkRepoDialog';
+import { ForeignLinks } from '../ForeignLinks';
 import styles from '../style.module.css';
 
 interface GitProps {
@@ -52,6 +53,8 @@ export function Git({ project, canWrite }: GitProps) {
     const canWriteGit = permissions.canFeature('git', 'write');
 
     const [repoIds, setRepoIds] = useState<number[]>([]);
+    /** Les dépôts nommés par le serveur : ce qu'un projet projeté en montre. */
+    const [labels, setLabels] = useState<readonly ProjectLinkLabel[]>([]);
     /** Les dépôts de l'espace, pour nommer celui qu'on délie. */
     const [candidates, setCandidates] = useState<readonly GitLinkedCandidate[]>([]);
     const [loaded, setLoaded] = useState(false);
@@ -64,6 +67,7 @@ export function Git({ project, canWrite }: GitProps) {
     const boardVersion = useResourceVersion('projects.board');
     const listVersion = useResourceVersion('git.list');
     const guarded = project.securityTier === 'guarded';
+    const foreign = project.foreign;
 
     const load = useCallback(async () => {
         if (guarded) {
@@ -73,6 +77,7 @@ export function Git({ project, canWrite }: GitProps) {
         try {
             const link = await api.send('projects.repoList', { projectId: project.id });
             setRepoIds(link.repoIds);
+            setLabels(link.labels);
             setError(null);
         } catch (e) {
             setError(humanizeError(e, 'Impossible de charger les dépôts liés.'));
@@ -90,7 +95,7 @@ export function Git({ project, canWrite }: GitProps) {
     // pointeurs plutôt que d'encaisser un refus, qui n'est pas une erreur à
     // afficher.
     useEffect(() => {
-        if (guarded || !canReadGit || !provider) {
+        if (guarded || foreign || !canReadGit || !provider) {
             setCandidates([]);
             return;
         }
@@ -109,7 +114,7 @@ export function Git({ project, canWrite }: GitProps) {
         return () => {
             alive = false;
         };
-    }, [guarded, canReadGit, provider, listVersion]);
+    }, [guarded, foreign, canReadGit, provider, listVersion]);
 
     const unlink = async (repoId: number) => {
         setBusy(true);
@@ -134,6 +139,18 @@ export function Git({ project, canWrite }: GitProps) {
     }
 
     if (!loaded) return <p className={styles.empty}>Chargement…</p>;
+
+    // Projeté depuis un autre espace : les dépôts se nomment, sans le bloc du
+    // module ni ses gestes (voir `ForeignLinks`).
+    if (foreign) {
+        return (
+            <div className={styles.linkedRepos}>
+                {error && <p className={styles.error}>{error}</p>}
+                {!provider && <p className={styles.hint}>Le module Git n’est pas installé.</p>}
+                <ForeignLinks labels={labels} empty='Aucun dépôt relié à ce projet.' />
+            </div>
+        );
+    }
 
     const unlinkingCandidate = unlinking === null ? null : (candidates.find((c) => c.id === unlinking) ?? null);
     const unlinkingName = unlinkingCandidate ? `${unlinkingCandidate.owner}/${unlinkingCandidate.repo}` : null;

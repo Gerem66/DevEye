@@ -10,11 +10,12 @@ import {
     WsError
 } from 'deveye-sdk-client';
 import { api } from '../api';
-import type { Project } from '../../contracts/domain';
+import type { Project, ProjectLinkLabel } from '../../contracts/domain';
 import { DEPLOY_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { DeployClientProvider, DeployLinkedCandidate } from '@deveye/types/sdk/client';
 import { LinkTargetDialog } from './LinkTargetDialog';
 import { UptimeLinks } from './UptimeLinks';
+import { ForeignLinks } from '../ForeignLinks';
 import styles from '../style.module.css';
 
 interface DeployProps {
@@ -49,6 +50,8 @@ export function Deploy({ project, canWrite }: DeployProps) {
     const canWriteDeploy = permissions.canFeature('deploy', 'write');
 
     const [targetIds, setTargetIds] = useState<number[]>([]);
+    /** Les cibles nommées par le serveur : ce qu'un projet projeté en montre. */
+    const [labels, setLabels] = useState<readonly ProjectLinkLabel[]>([]);
     /** Les cibles de l'espace, pour nommer celle qu'on délie. */
     const [candidates, setCandidates] = useState<readonly DeployLinkedCandidate[]>([]);
     const [loaded, setLoaded] = useState(false);
@@ -61,6 +64,7 @@ export function Deploy({ project, canWrite }: DeployProps) {
     const boardVersion = useResourceVersion('projects.board');
     const listVersion = useResourceVersion('deploy.list');
     const guarded = project.securityTier === 'guarded';
+    const foreign = project.foreign;
 
     const load = useCallback(async () => {
         if (guarded) {
@@ -70,6 +74,7 @@ export function Deploy({ project, canWrite }: DeployProps) {
         try {
             const res = await api.send('projects.deployList', { projectId: project.id });
             setTargetIds(res.targetIds);
+            setLabels(res.labels);
             setError(null);
         } catch (e) {
             setError(humanizeError(e, 'Impossible de charger les cibles reliées.'));
@@ -87,7 +92,7 @@ export function Deploy({ project, canWrite }: DeployProps) {
     // pointeurs plutôt que d'encaisser un refus, qui n'est pas une erreur à
     // afficher.
     useEffect(() => {
-        if (guarded || !canReadDeploy || !provider) {
+        if (guarded || foreign || !canReadDeploy || !provider) {
             setCandidates([]);
             return;
         }
@@ -106,7 +111,7 @@ export function Deploy({ project, canWrite }: DeployProps) {
         return () => {
             alive = false;
         };
-    }, [guarded, canReadDeploy, provider, listVersion]);
+    }, [guarded, foreign, canReadDeploy, provider, listVersion]);
 
     const unlink = async (targetId: number) => {
         setBusy(true);
@@ -122,6 +127,23 @@ export function Deploy({ project, canWrite }: DeployProps) {
     };
 
     if (!loaded) return <p className={styles.empty}>Chargement…</p>;
+
+    // Projeté depuis un autre espace : les deux sections se nomment, sans le
+    // bloc du module ni ses gestes (voir `ForeignLinks`). Le rappel du
+    // domicile ne se dit qu'une fois, en bas de l'onglet.
+    if (foreign) {
+        return (
+            <div className={styles.linkedTargets}>
+                {error && <p className={styles.error}>{error}</p>}
+                <UptimeLinks projectId={project.id} canWrite={canWrite} foreign />
+                <section className={styles.deployLinks}>
+                    <h3 className={styles.sectionTitle}>Déploiements</h3>
+                    {!provider && <p className={styles.hint}>Le module Déploiements n’est pas installé.</p>}
+                    <ForeignLinks labels={labels} empty='Aucune cible reliée à ce projet.' />
+                </section>
+            </div>
+        );
+    }
 
     const unlinkingName = unlinking === null ? null : (candidates.find((c) => c.id === unlinking)?.name ?? null);
 

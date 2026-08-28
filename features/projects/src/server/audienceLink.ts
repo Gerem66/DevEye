@@ -2,7 +2,7 @@ import { projectAudienceLink, projectAudienceList, projectAudienceUnlink } from 
 import { AUDIENCE_ITEMS_PROVIDER, type AudienceItemsProvider } from '@deveye/types/sdk';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
-import { loadProject, WRITE, type Ctx } from './_shared';
+import { assertAtHome, linkLabels, loadProject, WRITE, type Ctx } from './_shared';
 
 /**
  * Le pointeur d'un projet vers des sites suivis.
@@ -14,14 +14,18 @@ import { loadProject, WRITE, type Ctx } from './_shared';
  * Gardé sous `projects: write` : c'est le projet qu'on modifie ici, pas le
  * site. Lire les statistiques relève, elles, du droit `audience` : un membre
  * peut avoir l'un sans l'autre, et l'onglet le dit plutôt que d'afficher un
- * écran vide qui se lirait comme un bug.
+ * écran vide qui se lirait comme un bug. Les sites sont nommés par le contrat
+ * du module (`labelOf`, sous le codec du domicile du projet), et la liaison se
+ * pose et se retire au domicile seulement (`assertAtHome`).
  */
 
 export const projectAudienceListFeature = defineSdkFeature({
     ...projectAudienceList,
     handler: async (ctx: Ctx, input) => {
-        await loadProject(ctx, input.projectId);
-        return { siteIds: await ctx.repo.links.listSiteIds(input.projectId, ctx.workspaceId) };
+        const project = await loadProject(ctx, input.projectId);
+        const siteIds = await ctx.repo.links.listSiteIds(input.projectId, project.workspace_id);
+        const audience = ctx.providers.get<AudienceItemsProvider>(AUDIENCE_ITEMS_PROVIDER);
+        return { siteIds, labels: await linkLabels(audience, siteIds, project.workspace_id) };
     }
 });
 
@@ -30,7 +34,8 @@ export const projectAudienceLinkFeature = defineSdkFeature({
     mutates: ['projects', 'audience'],
     access: WRITE,
     handler: async (ctx: Ctx, input) => {
-        const project = await loadProject(ctx, input.projectId);
+        const project = await loadProject(ctx, input.projectId, 'write');
+        assertAtHome(ctx, project, 'relier un site suivi');
 
         // Un projet confidentiel ne peut pas être lié : la liaison est une ligne
         // en clair, le site vit à l'étage ouvert, et son ingestion tourne sans
@@ -49,12 +54,12 @@ export const projectAudienceLinkFeature = defineSdkFeature({
         // proprement quand le module est absent.
         const audience = ctx.providers.get<AudienceItemsProvider>(AUDIENCE_ITEMS_PROVIDER);
         if (!audience) throw new FeatureError('validation', 'Le module Audience n’est pas installé.');
-        if (!(await audience.exists(input.siteId, ctx.workspaceId))) {
+        if (!(await audience.exists(input.siteId, project.workspace_id))) {
             throw new FeatureError('not_found', 'Ce site n’existe pas dans cet espace.');
         }
 
-        await ctx.repo.links.linkSite(input.projectId, ctx.workspaceId, input.siteId);
-        return { siteIds: await ctx.repo.links.listSiteIds(input.projectId, ctx.workspaceId) };
+        await ctx.repo.links.linkSite(input.projectId, project.workspace_id, input.siteId);
+        return { siteIds: await ctx.repo.links.listSiteIds(input.projectId, project.workspace_id) };
     }
 });
 
@@ -63,10 +68,11 @@ export const projectAudienceUnlinkFeature = defineSdkFeature({
     mutates: ['projects', 'audience'],
     access: WRITE,
     handler: async (ctx: Ctx, input) => {
-        await loadProject(ctx, input.projectId);
+        const project = await loadProject(ctx, input.projectId, 'write');
+        assertAtHome(ctx, project, 'délier un site suivi');
         // Le site lui-même n'est pas touché : seule la liaison tombe.
-        await ctx.repo.links.unlinkSite(input.projectId, ctx.workspaceId, input.siteId);
-        return { siteIds: await ctx.repo.links.listSiteIds(input.projectId, ctx.workspaceId) };
+        await ctx.repo.links.unlinkSite(input.projectId, project.workspace_id, input.siteId);
+        return { siteIds: await ctx.repo.links.listSiteIds(input.projectId, project.workspace_id) };
     }
 });
 

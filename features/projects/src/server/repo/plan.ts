@@ -4,7 +4,12 @@ import type { SdkQueryable } from '@deveye/types/sdk/server';
 /** Les tables `project_milestones` et `project_card_deps` : la frise d'un projet. */
 export interface ProjectPlanRepo {
     listMilestones(projectId: number, workspaceId: number): Promise<ProjectMilestoneRow[]>;
-    findMilestone(milestoneId: number, workspaceId: number): Promise<ProjectMilestoneRow | null>;
+    /**
+     * Par identifiant seul : l'espace du jalon est celui de son projet, que
+     * l'appelant vérifie (`loadProject`) avant d'agir. Les écritures, elles,
+     * prennent le domicile du projet.
+     */
+    findMilestone(milestoneId: number): Promise<ProjectMilestoneRow | null>;
     createMilestone(input: {
         projectId: number;
         workspaceId: number;
@@ -40,11 +45,10 @@ export function projectPlanRepo(q: SdkQueryable): ProjectPlanRepo {
                 [projectId, workspaceId]
             );
         },
-        async findMilestone(milestoneId, workspaceId) {
-            const rows = await q.query<ProjectMilestoneRow>(
-                'SELECT * FROM project_milestones WHERE id = ? AND workspace_id = ?',
-                [milestoneId, workspaceId]
-            );
+        async findMilestone(milestoneId) {
+            const rows = await q.query<ProjectMilestoneRow>('SELECT * FROM project_milestones WHERE id = ?', [
+                milestoneId
+            ]);
             return rows[0] ?? null;
         },
         async createMilestone({ projectId, workspaceId, dueDate, content }) {
@@ -68,7 +72,7 @@ export function projectPlanRepo(q: SdkQueryable): ProjectPlanRepo {
                 [dueDate, content, milestoneId, workspaceId]
             );
             if (res.affectedRows === 0) return null;
-            return this.findMilestone(milestoneId, workspaceId);
+            return this.findMilestone(milestoneId);
         },
         async setMilestoneReached(milestoneId, workspaceId, reachedAt) {
             const res = await q.execute(
@@ -76,7 +80,7 @@ export function projectPlanRepo(q: SdkQueryable): ProjectPlanRepo {
                 [reachedAt, milestoneId, workspaceId]
             );
             if (res.affectedRows === 0) return null;
-            return this.findMilestone(milestoneId, workspaceId);
+            return this.findMilestone(milestoneId);
         },
         async deleteMilestone(milestoneId, workspaceId) {
             const res = await q.execute('DELETE FROM project_milestones WHERE id = ? AND workspace_id = ?', [

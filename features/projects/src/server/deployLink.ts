@@ -2,7 +2,7 @@ import { projectDeployLink, projectDeployList, projectDeployUnlink } from '../co
 import { DEPLOY_ITEMS_PROVIDER, type DeployItemsProvider } from '@deveye/types/sdk';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
-import { loadProject, recordEvent, WRITE, type Ctx } from './_shared';
+import { assertAtHome, linkLabels, loadProject, recordEvent, WRITE, type Ctx } from './_shared';
 
 /**
  * Le pointeur d'un projet vers les cibles de déploiement de l'espace.
@@ -23,14 +23,18 @@ import { loadProject, recordEvent, WRITE, type Ctx } from './_shared';
  *
  * La table de liaison (`project_deploy_links`) est celle de Projets, lue par
  * `ctx.repo.links` : Projets ne lit pas la table des cibles, et ne les connaît
- * que par le contrat que le module Déploiement offre.
+ * que par le contrat que le module Déploiement offre, qui les nomme aussi
+ * (`labelOf`, sous le codec du domicile du projet). Domicile seulement pour
+ * poser et retirer (`assertAtHome`), comme toute liaison.
  */
 
 export const projectDeployListFeature = defineSdkFeature({
     ...projectDeployList,
     handler: async (ctx: Ctx, input) => {
-        await loadProject(ctx, input.projectId);
-        return { targetIds: await ctx.repo.links.listDeployTargetIds(input.projectId, ctx.workspaceId) };
+        const project = await loadProject(ctx, input.projectId);
+        const targetIds = await ctx.repo.links.listDeployTargetIds(input.projectId, project.workspace_id);
+        const targets = ctx.providers.get<DeployItemsProvider>(DEPLOY_ITEMS_PROVIDER);
+        return { targetIds, labels: await linkLabels(targets, targetIds, project.workspace_id) };
     }
 });
 
@@ -39,7 +43,8 @@ export const projectDeployLinkFeature = defineSdkFeature({
     mutates: ['projects', 'deploy'],
     access: WRITE,
     handler: async (ctx: Ctx, input) => {
-        const project = await loadProject(ctx, input.projectId);
+        const project = await loadProject(ctx, input.projectId, 'write');
+        assertAtHome(ctx, project, 'relier une cible de déploiement');
 
         // Un projet confidentiel ne peut pas être lié : la liaison est une ligne
         // en clair, la cible vit à l'étage ouvert, et le suivi d'état tourne
@@ -61,18 +66,18 @@ export const projectDeployLinkFeature = defineSdkFeature({
         // proprement quand le module est absent.
         const targets = ctx.providers.get<DeployItemsProvider>(DEPLOY_ITEMS_PROVIDER);
         if (!targets) throw new FeatureError('validation', 'Le module Déploiements n’est pas installé.');
-        if (!(await targets.exists(input.targetId, ctx.workspaceId))) {
+        if (!(await targets.exists(input.targetId, project.workspace_id))) {
             throw new FeatureError('not_found', 'Cette cible n’existe pas dans cet espace.');
         }
 
-        await ctx.repo.links.linkDeployTarget(input.projectId, ctx.workspaceId, input.targetId);
+        await ctx.repo.links.linkDeployTarget(input.projectId, project.workspace_id, input.targetId);
         await recordEvent(ctx, project, { kind: 'projects.deployLink', label: 'Cible de déploiement reliée' });
         ctx.audit({
             action: 'projects.deployLink',
             description: 'Cible de déploiement reliée au projet',
             metadata: { projectId: input.projectId, targetId: input.targetId }
         });
-        return { targetIds: await ctx.repo.links.listDeployTargetIds(input.projectId, ctx.workspaceId) };
+        return { targetIds: await ctx.repo.links.listDeployTargetIds(input.projectId, project.workspace_id) };
     }
 });
 
@@ -81,13 +86,14 @@ export const projectDeployUnlinkFeature = defineSdkFeature({
     mutates: ['projects', 'deploy'],
     access: WRITE,
     handler: async (ctx: Ctx, input) => {
-        const project = await loadProject(ctx, input.projectId);
+        const project = await loadProject(ctx, input.projectId, 'write');
+        assertAtHome(ctx, project, 'délier une cible de déploiement');
         // La cible et son historique survivent : ils appartiennent à l'espace,
         // et d'autres projets peuvent s'en servir.
-        const ok = await ctx.repo.links.unlinkDeployTarget(input.projectId, ctx.workspaceId, input.targetId);
+        const ok = await ctx.repo.links.unlinkDeployTarget(input.projectId, project.workspace_id, input.targetId);
         if (ok)
             await recordEvent(ctx, project, { kind: 'projects.deployUnlink', label: 'Cible de déploiement déliée' });
-        return { targetIds: await ctx.repo.links.listDeployTargetIds(input.projectId, ctx.workspaceId) };
+        return { targetIds: await ctx.repo.links.listDeployTargetIds(input.projectId, project.workspace_id) };
     }
 });
 

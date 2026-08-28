@@ -307,9 +307,17 @@ export async function projectIdsOf(ctx: Ctx, targetId: number): Promise<number[]
  * une ligne de frise ne doit pas le transformer en échec. Sans contrat (rien
  * n'offre la clé), la frise n'est simplement pas écrite.
  */
-export async function recordProjectEvent(ctx: Ctx, projectId: number, title: string): Promise<void> {
+export async function recordProjectEvent(
+    ctx: Ctx,
+    projectId: number,
+    workspaceId: number,
+    title: string
+): Promise<void> {
     try {
-        await projectsProvider(ctx)?.recordEvent(projectId, ctx.workspaceId, {
+        // L'espace de la CIBLE, pas celui de l'appelant : un projet ne relie
+        // qu'une cible de son propre espace, donc la frise vit là où la cible
+        // vit, même quand le geste part d'une fenêtre sur elle.
+        await projectsProvider(ctx)?.recordEvent(projectId, workspaceId, {
             kind: 'deploy.triggered',
             label: title,
             actorUserId: ctx.userId

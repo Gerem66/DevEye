@@ -1,13 +1,12 @@
-import { Avatar, Button, Dialog } from 'deveye-sdk-client';
-import type { MinimalUser } from '@deveye/types';
+import { Button, Dialog } from 'deveye-sdk-client';
 import { formatDate, PRIORITY_LABELS } from '../api';
 import type { ProjectCard } from '../../contracts/domain';
+import { MemberAvatar, MemberName } from '../Member';
 import styles from '../style.module.css';
 
 interface ArchivedCardDialogProps {
     open: boolean;
     card: ProjectCard | null;
-    members: readonly MinimalUser[];
     canWrite: boolean;
     busy: boolean;
     onClose: () => void;
@@ -22,16 +21,7 @@ interface ArchivedCardDialogProps {
  * action possible est de la restaurer — ce qui la fait redevenir vivante, et
  * laisse à son tour une trace.
  */
-export function ArchivedCardDialog({
-    open,
-    card,
-    members,
-    canWrite,
-    busy,
-    onClose,
-    onRestore
-}: ArchivedCardDialogProps) {
-    const assignee = members.find((m) => m.id === card?.assigneeUserId);
+export function ArchivedCardDialog({ open, card, canWrite, busy, onClose, onRestore }: ArchivedCardDialogProps) {
     const done = card?.checklist.filter((i) => i.done).length ?? 0;
 
     return (
@@ -70,8 +60,8 @@ export function ArchivedCardDialog({
                             <div>
                                 <dt>Assignée à</dt>
                                 <dd className={styles.readonlyAssignee}>
-                                    <Avatar user={assignee} size={18} />
-                                    {assignee?.username ?? 'Compte supprimé'}
+                                    <MemberAvatar userId={card.assigneeUserId} size={18} />
+                                    <MemberName userId={card.assigneeUserId} />
                                 </dd>
                             </div>
                         )}

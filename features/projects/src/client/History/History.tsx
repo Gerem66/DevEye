@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Avatar, humanizeError, useResourceVersion, withSecrecy } from 'deveye-sdk-client';
-import type { MinimalUser } from '@deveye/types';
+import { humanizeError, useResourceVersion, withSecrecy } from 'deveye-sdk-client';
 import { api } from '../api';
 import type { ProjectCard, ProjectEvent, ProjectEventKind } from '../../contracts/domain';
+import { MemberAvatar } from '../Member';
 import styles from '../style.module.css';
 
 /** Intitulé et pastille de chaque type d'événement. */
@@ -24,7 +24,6 @@ const KIND_META: Record<ProjectEventKind, { icon: string; text: string }> = {
 
 interface HistoryProps {
     projectId: number;
-    members: readonly MinimalUser[];
     /** Les cartes archivées, pour ouvrir un bloc en lecture seule. */
     archivedCards: ProjectCard[];
     onOpenArchived: (card: ProjectCard) => void;
@@ -39,7 +38,7 @@ interface HistoryProps {
  * v2 ? ». Elle ne cherche donc pas à attirer l'œil, seulement à être lisible
  * quand on la consulte.
  */
-export function History({ projectId, members, archivedCards, onOpenArchived }: HistoryProps) {
+export function History({ projectId, archivedCards, onOpenArchived }: HistoryProps) {
     const [events, setEvents] = useState<ProjectEvent[] | null>(null);
     const [hasMore, setHasMore] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -75,7 +74,6 @@ export function History({ projectId, members, archivedCards, onOpenArchived }: H
                 <ol className={styles.histList}>
                     {events.map((event) => {
                         const meta = KIND_META[event.kind];
-                        const actor = members.find((m) => m.id === event.actorUserId);
                         // Une carte archivée s'ouvre en lecture seule ; une carte
                         // restaurée est revenue au tableau, il n'y a rien à
                         // rouvrir ici.
@@ -92,7 +90,10 @@ export function History({ projectId, members, archivedCards, onOpenArchived }: H
                                     <div className={styles.histHead}>
                                         <span className={styles.histKind}>{meta.text}</span>
                                         <span className={styles.histTime}>{formatWhen(event.created)}</span>
-                                        {event.actorUserId !== null && <Avatar user={actor} size={18} />}
+                                        {/* Masqué s'il n'est pas membre d'ici (projet projeté). */}
+                                        {event.actorUserId !== null && (
+                                            <MemberAvatar userId={event.actorUserId} size={18} />
+                                        )}
                                     </div>
                                     <p className={styles.histLabel}>
                                         {card ? (

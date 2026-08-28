@@ -1,10 +1,29 @@
 import { GIT_ITEMS_PROVIDER, type GitItemsProvider } from '@deveye/types/sdk';
-import type { FeatureServer } from '@deveye/types/sdk/server';
+import type { FeatureServer, SdkCipher } from '@deveye/types/sdk/server';
 
 import { gitHandlers } from './handlers';
 import { createRepo, type GitRepo } from './repo';
 import { GitSync } from './service';
 import { readJson, setSync, type StoredRepo } from './_shared';
+
+/**
+ * Le nom d'un dépôt (`owner/repo`, les deux clés du blob chiffré à l'étage
+ * ouvert), déchiffré par `cipher` (le codec OUVERT de `workspaceId`, son
+ * domicile). Un dépôt disparu ou un blob illisible vaut `null`, jamais une
+ * exception : ce que l'appelant montre comme « une cible disparue », qu'il
+ * soit l'app (le partage) ou une fenêtre sur un projet projeté (une liaison
+ * qu'elle ne peut pas ouvrir).
+ *
+ * Une seule fonction pour les deux appelants : l'entrée `items` (le codec de
+ * l'espace appelant, fourni par l'app) et le contrat offert à Projets
+ * (`deps.cipherFor(workspaceId)`).
+ */
+async function labelOf(repo: GitRepo, cipher: SdkCipher, repoId: number, workspaceId: number): Promise<string | null> {
+    const row = await repo.findRepo(repoId, workspaceId);
+    if (!row) return null;
+    const stored = await readJson<Partial<StoredRepo>>(cipher, row.content);
+    return stored?.owner && stored.repo ? `${stored.owner}/${stored.repo}` : null;
+}
 
 /**
  * L'entrée serveur du module.
@@ -16,7 +35,7 @@ import { readJson, setSync, type StoredRepo } from './_shared';
  * les handlers (`git.repoAdd`, `git.repoSyncNow` et `git.repoResync`
  * réveillent un tour ; `git.repoSyncStatus` et `git.syncStatuses` lisent son
  * avancement en mémoire), et le contrat offert à Projets (`GIT_ITEMS_PROVIDER` :
- * un dépôt existe-t-il dans cet espace ?).
+ * un dépôt existe-t-il dans cet espace, et comment s'appelle-t-il ?).
  *
  * Git ne notifie personne (`notifies: false`) : aucune capacité `notify`, et
  * ce qu'il dit à Projets (la version d'un projet qui suit une release) passe
@@ -46,9 +65,13 @@ export const serverEntry: FeatureServer<GitRepo> = {
         // faisait `git.findRepo` avant le rapatriement), pour qu'un
         // identifiant étranger ne se relie pas et ne trahisse pas son
         // existence. Le domicile seulement, jamais une projection : un projet
-        // relie ce que son espace possède.
+        // relie ce que son espace possède. Et le nom d'un dépôt relié, sous le
+        // codec ouvert de son domicile : ce qu'une fenêtre sur un projet projeté
+        // montre pour une liaison qu'elle ne peut pas ouvrir, un nom, jamais un
+        // identifiant.
         const items: GitItemsProvider = {
-            exists: async (repoId, workspaceId) => (await deps.repo.findRepo(repoId, workspaceId)) !== null
+            exists: async (repoId, workspaceId) => (await deps.repo.findRepo(repoId, workspaceId)) !== null,
+            labelOf: (repoId, workspaceId) => labelOf(deps.repo, deps.cipherFor(workspaceId), repoId, workspaceId)
         };
         return {
             start() {
@@ -65,14 +88,6 @@ export const serverEntry: FeatureServer<GitRepo> = {
     items: {
         homeOf: async (repo, itemId, workspaceId) =>
             (await repo.findVisibleRepo(itemId, workspaceId))?.workspace_id ?? null,
-        // Le nom d'un dépôt est `owner/repo`, les deux clés du blob chiffré à
-        // l'étage ouvert ; un blob illisible ou un dépôt disparu vaut `null`,
-        // ce que l'écran des canaux montre comme « une cible disparue ».
-        labelOf: async (repo, cipher, itemId, workspaceId) => {
-            const row = await repo.findRepo(itemId, workspaceId);
-            if (!row) return null;
-            const stored = await readJson<Partial<StoredRepo>>(cipher, row.content);
-            return stored?.owner && stored.repo ? `${stored.owner}/${stored.repo}` : null;
-        }
+        labelOf
     }
 };

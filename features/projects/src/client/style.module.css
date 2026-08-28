@@ -2360,3 +2360,54 @@
     gap: var(--space-md);
     min-height: 100%;
 }
+
+/* --------------------------------------------- partage entre espaces */
+
+/*
+ * La pastille « partagé » d'un projet projeté depuis un autre espace, sur la
+ * carte du portefeuille et dans l'en-tête de la fiche. Un `span` autour de la
+ * pastille commune : c'est lui qui porte l'infobulle, et qui refuse de se
+ * tasser quand le titre manque de place. Même pastille que les notes, les
+ * boîtes mail et les services Uptime.
+ */
+.shared {
+    display: inline-flex;
+    flex-shrink: 0;
+}
+
+/* Dans l'en-tête, la ligne s'aligne sur la ligne de base du titre ; la
+   pastille n'en a pas d'utile et pendrait sous le titre, comme le cadenas. */
+.detailTitle .shared {
+    align-self: center;
+}
+
+/* Un membre que l'espace actif ne connaît pas (voir `Member.tsx`) : le
+   libellé se distingue d'un pseudo, pour qu'on ne le prenne pas pour un. */
+.memberHidden {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* Les liaisons d'un projet projeté, en lecture (voir `ForeignLinks.tsx`) :
+   une rangée nommée par liaison, sans le bloc du module ni ses gestes. */
+.foreignLinks {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.foreignLink {
+    composes: linkedBare;
+}
+
+.foreignLinkName {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+/* `null` côté serveur : le module est absent, ou l'élément a disparu. */
+.foreignLinkGone {
+    font-size: 0.9rem;
+    font-style: italic;
+    color: var(--text-muted);
+}

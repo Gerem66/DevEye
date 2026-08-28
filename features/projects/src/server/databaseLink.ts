@@ -2,7 +2,7 @@ import { projectDatabaseLink, projectDatabaseList, projectDatabaseUnlink } from 
 import { DATABASE_ITEMS_PROVIDER, type DatabaseItemsProvider } from '@deveye/types/sdk';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
-import { loadProject, WRITE, type Ctx } from './_shared';
+import { assertAtHome, linkLabels, loadProject, WRITE, type Ctx } from './_shared';
 
 /**
  * Le pointeur d'un projet vers des bases de données.
@@ -17,14 +17,18 @@ import { loadProject, WRITE, type Ctx } from './_shared';
  * La table de liaison (`project_database_links`) est celle de Projets, lue par
  * `ctx.repo.links` à côté des services surveillés : Projets ne lit pas la
  * table des bases, et ne les connaît que par le contrat que le module Bases de
- * données offre.
+ * données offre, qui les nomme aussi (`labelOf`, sous le codec du domicile du
+ * projet). Domicile seulement pour poser et retirer (`assertAtHome`), comme
+ * toute liaison.
  */
 
 export const projectDatabaseListFeature = defineSdkFeature({
     ...projectDatabaseList,
     handler: async (ctx: Ctx, input) => {
-        await loadProject(ctx, input.projectId);
-        return { databaseIds: await ctx.repo.links.listDatabaseIds(input.projectId, ctx.workspaceId) };
+        const project = await loadProject(ctx, input.projectId);
+        const databaseIds = await ctx.repo.links.listDatabaseIds(input.projectId, project.workspace_id);
+        const databases = ctx.providers.get<DatabaseItemsProvider>(DATABASE_ITEMS_PROVIDER);
+        return { databaseIds, labels: await linkLabels(databases, databaseIds, project.workspace_id) };
     }
 });
 
@@ -33,7 +37,8 @@ export const projectDatabaseLinkFeature = defineSdkFeature({
     mutates: ['projects', 'database'],
     access: WRITE,
     handler: async (ctx: Ctx, input) => {
-        const project = await loadProject(ctx, input.projectId);
+        const project = await loadProject(ctx, input.projectId, 'write');
+        assertAtHome(ctx, project, 'relier une base de données');
 
         // Un projet confidentiel ne peut pas être lié : la liaison est une ligne
         // en clair, la base vit à l'étage ouvert, et le relevé périodique tourne
@@ -57,12 +62,12 @@ export const projectDatabaseLinkFeature = defineSdkFeature({
         // proprement quand le module est absent.
         const databases = ctx.providers.get<DatabaseItemsProvider>(DATABASE_ITEMS_PROVIDER);
         if (!databases) throw new FeatureError('validation', 'Le module Bases de données n’est pas installé.');
-        if (!(await databases.exists(input.databaseId, ctx.workspaceId))) {
+        if (!(await databases.exists(input.databaseId, project.workspace_id))) {
             throw new FeatureError('not_found', 'Cette base n’existe pas dans cet espace.');
         }
 
-        await ctx.repo.links.linkDatabase(input.projectId, ctx.workspaceId, input.databaseId);
-        return { databaseIds: await ctx.repo.links.listDatabaseIds(input.projectId, ctx.workspaceId) };
+        await ctx.repo.links.linkDatabase(input.projectId, project.workspace_id, input.databaseId);
+        return { databaseIds: await ctx.repo.links.listDatabaseIds(input.projectId, project.workspace_id) };
     }
 });
 
@@ -71,10 +76,11 @@ export const projectDatabaseUnlinkFeature = defineSdkFeature({
     mutates: ['projects', 'database'],
     access: WRITE,
     handler: async (ctx: Ctx, input) => {
-        await loadProject(ctx, input.projectId);
+        const project = await loadProject(ctx, input.projectId, 'write');
+        assertAtHome(ctx, project, 'délier une base de données');
         // La base elle-même n'est pas touchée : seule la liaison tombe.
-        await ctx.repo.links.unlinkDatabase(input.projectId, ctx.workspaceId, input.databaseId);
-        return { databaseIds: await ctx.repo.links.listDatabaseIds(input.projectId, ctx.workspaceId) };
+        await ctx.repo.links.unlinkDatabase(input.projectId, project.workspace_id, input.databaseId);
+        return { databaseIds: await ctx.repo.links.listDatabaseIds(input.projectId, project.workspace_id) };
     }
 });
 

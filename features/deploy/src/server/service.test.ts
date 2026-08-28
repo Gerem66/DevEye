@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import type { DeployCredentialRow, DeploymentRow, DeployTargetRow } from '../contracts/domain';
+import { DEPLOY_ITEMS_PROVIDER, type DeployItemsProvider } from '@deveye/types/sdk';
 import { createTestServiceDeps } from '@deveye/types/sdk/testing';
 
 import type { DokployDeployment, DokployTarget } from './dokploy';
+import { serverEntry } from './index';
 import type { DeployRepo } from './repo';
 import { DeploySync } from './service';
 
@@ -86,7 +88,8 @@ function fakeRepo(
         credentials,
         listTargets: unused,
         listVisibleTargets: unused,
-        findTarget: unused,
+        findTarget: async (id, workspaceId) =>
+            targets.find((t) => t.id === id && t.workspace_id === workspaceId) ?? null,
         findVisibleTarget: unused,
         findTargetWithUsage: unused,
         findVisibleTargetWithUsage: unused,
@@ -400,5 +403,23 @@ describe('le rattachement', () => {
         assert.equal(deps.recorded.notifications.length, 0);
         assert.equal(deps.recorded.liveMessages.length, 0);
         assert.deepEqual(deps.recorded.liveChanges, [1]);
+    });
+});
+
+/** Le contrat offert à Projets, tel que `createService` le publie au boot. */
+function itemsProviderOn(repo: FakeRepo): DeployItemsProvider {
+    const service = serverEntry.createService?.(createTestServiceDeps({ repo }));
+    assert.ok(service, 'le module crée un service');
+    const provider = service.providers?.[DEPLOY_ITEMS_PROVIDER] as DeployItemsProvider | undefined;
+    assert.ok(provider, 'le service publie le contrat des éléments');
+    return provider;
+}
+
+describe('DEPLOY_ITEMS_PROVIDER : labelOf', () => {
+    it("rend le nom déchiffré d'une cible vivante, null pour un identifiant inconnu ou un autre espace", async () => {
+        const provider = itemsProviderOn(fakeRepo([target()], [credential()]));
+        assert.equal(await provider.labelOf(1, 1), 'Serveur');
+        assert.equal(await provider.labelOf(42, 1), null);
+        assert.equal(await provider.labelOf(1, 2), null);
     });
 });

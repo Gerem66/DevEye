@@ -6,9 +6,11 @@ premières phases au déclenchement d'un déploiement.
 
 Relu le 28 août 2026, au rapatriement de la feature en module
 (`features/projects`, la quatorzième native portée sur le SDK des features,
-[FEATURE_SDK.md](./FEATURE_SDK.md)). Elle est branchée, par le SDK, sur les
-trois systèmes transverses du dépôt : [WORKSPACES.md](./WORKSPACES.md),
-[LIVE.md](./LIVE.md) et [SECURITY_MODEL.md](./SECURITY_MODEL.md).
+[FEATURE_SDK.md](./FEATURE_SDK.md)) et au branchement du partage inter-espaces
+(§4, « Le partage »). Elle est branchée, par le SDK, sur les quatre systèmes
+transverses du dépôt : [WORKSPACES.md](./WORKSPACES.md),
+[LIVE.md](./LIVE.md), [SECURITY_MODEL.md](./SECURITY_MODEL.md) et
+[SHARING.md](./SHARING.md).
 
 > ⚠️ **Les objets d'espace ne sont pas ici.** Dépôts ([GIT.md](./GIT.md)), bases
 > ([DATABASES.md](./DATABASES.md)), sites suivis ([AUDIENCE.md](./AUDIENCE.md))
@@ -106,7 +108,7 @@ appartient à l'espace.
 | Vue | Contenu |
 |---|---|
 | **Portefeuille** | tous les projets, avancement, retards, prochaine échéance, non-lus |
-| **Mes tâches** | mes cartes assignées, tous projets confondus |
+| **Mes tâches** | mes cartes assignées, tous projets visibles d'ici confondus, projetés compris |
 | **Archives** | projets archivés, restaurables |
 | **Tableau** | kanban, glisser-déposer (dnd-kit), colonnes, limites WIP |
 | **Frise** | cartes datées, jalons, dépendances « bloque / bloqué par » |
@@ -284,9 +286,9 @@ domain.ts     le barrel des six
 commands.ts   les cinquante et une commandes (préfixe unique `projects.`)
 ```
 
-`src/manifest.ts` étale le descripteur et déclare ce que le registre ne porte
-pas : `shareTier: 'never'` par-dessus le `'perItem'` publié (§4, « Le partage »),
-`category: 'work'`, les liens vers les cinq features reliées, les cinq clés de
+`src/manifest.ts` étale le descripteur (dont `shareTier: 'perItem'`, que le
+module tient : §4, « Le partage ») et déclare ce que le registre ne porte
+pas : `category: 'work'`, les liens vers les cinq features reliées, les cinq clés de
 ressources (`projects.count`, `projects.list`, `projects.board`,
 `projects.myTasks`, `projects.messages`), les quatre que le sujet `projects`
 ravive, le sujet secondaire `projectsChat`, la capacité `members.read` (les
@@ -295,11 +297,13 @@ assignés et les mentions sont des membres), et les commandes.
 ### Serveur : `features/projects/src/server/`
 
 ```
-index.ts            serverEntry : createRepo, features, migrationsDir, createService (publie PROJECTS_USAGE_PROVIDER)
+index.ts            serverEntry : createRepo, features, migrationsDir, createService (publie PROJECTS_USAGE_PROVIDER),
+                    items (homeOf, labelOf, shareable : ce que le partage sait des projets)
 handlers.ts         l'agrégat des dix fichiers de commandes, ce que serverEntry.features expose
-_shared.ts          Ctx, WRITE, cipherFor, codecs (projet, colonne, carte, événement), toProject / toSummary /
-                    toMaskedSummary, loadProject, assertGuardedAllowed, assertProjectUnlocked, isMember,
-                    recordEvent, reencryptProjectTree
+_shared.ts          Ctx, WRITE, cipherFor (création et conversion, chez lui), projectCipher (par projet, chez lui ou
+                    projeté), isForeign, assertAtHome, codecs (projet, colonne, carte, événement), toProject /
+                    toSummary / toMaskedSummary, loadProject (findVisible puis items.assert), assertGuardedAllowed,
+                    assertProjectUnlocked, isMember, linkLabels, recordEvent, reencryptProjectTree
 projects.ts         le portefeuille : list, count, get, add, update, setStatus, setVersion, setSecurityTier,
                     archive, restore, reorder
 board.ts            colonnes et cartes
@@ -313,7 +317,7 @@ databaseLink.ts     le pointeur vers les bases (DATABASE_ITEMS_PROVIDER)
 audienceLink.ts     le pointeur vers les sites (AUDIENCE_ITEMS_PROVIDER)
 usageProvider.ts    PROJECTS_USAGE_PROVIDER : usageOf, countByItem, recordEvent, applyVersion
 repo/index.ts       ProjectsRepo, createRepo(SdkQueryable) : les sept dépôts natifs, un fichier par agrégat
-repo/projects.ts    la table projects et ses compteurs en clair (statsByWorkspace)
+repo/projects.ts    la table projects (listVisible, findVisible : les siens plus les projetés) et ses compteurs en clair (statsFor)
 repo/board.ts       project_columns, project_cards, les non-lus
 repo/chat.ts        project_messages, project_card_reads
 repo/plan.ts        project_milestones, project_card_deps
@@ -395,24 +399,82 @@ a disparu avec Projets natif).
   pas. Les deux écritures ravivent `projects` (`deps.live.changed`) quand
   elles ont changé quelque chose, ce que les services natifs de Git et de
   Déploiement faisaient en nommant `['git', 'projects']`.
-- **`*_ITEMS_PROVIDER`**, lus par `ctx.providers.get(KEY)` avant de poser une
-  liaison : « cet élément existe-t-il dans cet espace ? » (le domicile seul).
-  Module absent = refus propre (`validation`, « Le module X n'est pas
-  installé »), jamais une ligne écrite ; élément inconnu = `not_found`, sans
-  trahir l'existence d'un élément d'un autre espace. Les listes d'identifiants
-  liés se lisent, elles, sans contrat : les tables de liaison sont celles de
-  Projets, et la jointure sur la table de la feature visée, pour l'ordre
-  d'affichage seul, est admise.
+- **`*_ITEMS_PROVIDER`**, lus par `ctx.providers.get(KEY)` : `exists` avant
+  de poser une liaison, « cet élément existe-t-il dans cet espace ? » (le
+  domicile seul), et `labelOf` pour nommer celles qui existent (le nom sous le
+  codec ouvert du domicile du projet, `null` si l'élément a disparu). Module
+  absent = refus propre à la pose (`validation`, « Le module X n'est pas
+  installé »), jamais une ligne écrite, et des noms `null` à la lecture ;
+  élément inconnu = `not_found`, sans trahir l'existence d'un élément d'un
+  autre espace. Les listes d'identifiants liés se lisent, elles, sans contrat :
+  les tables de liaison sont celles de Projets, et la jointure sur la table de
+  la feature visée, pour l'ordre d'affichage seul, est admise.
 
 ### Le partage
 
-Le descripteur publié dit `'perItem'` (un projet `open` vit à l'étage ouvert,
-le serveur saurait le servir ailleurs) ; le manifest déclare `shareTier: 'never'`
-par-dessus, comme les Notes et Mail, parce que le listage n'est pas branché sur
-le partage ([SHARING.md](./SHARING.md) §9) et qu'un module qui déclare autre
-chose s'engage à l'être (entrée `items`, `ctx.sharing.scope()`). Pas de
-restriction par élément non plus : le natif n'en appliquait aucune sur les
-projets, le module ne fait ni plus ni moins.
+Le descripteur publié dit `'perItem'`, et le module le tient
+([SHARING.md](./SHARING.md)) : un projet **ouvert** se projette vers d'autres
+espaces de ses membres, un projet **gardé** jamais (`items.shareable`, que
+`share.set` refuse en le disant : il est chiffré par le mot de passe de son
+auteur, illisible partout ailleurs). Un projet projeté garde **un seul
+domicile** : il reste chiffré sous la clé ouverte de son espace d'origine, et
+la fenêtre le lit avec elle (`projectCipher` : `ctx.cipher()` chez lui,
+`scope.cipherFor(id)` projeté, choisi projet par projet dans chaque listage).
+Tout son arbre suit son domicile : les requêtes sont gardées par
+`row.workspace_id`, jamais par l'espace actif, et les lectures par identifiant
+seul (une carte, une colonne, un message, un jalon) remontent au projet, qui
+est l'élément gardé (`loadProject` : `findVisible` puis `ctx.items.assert`).
+Les droits sont ceux de l'espace actif, restriction par élément comprise : un
+projet masqué pour ce rôle disparaît de la liste, du compte et de « mes
+tâches », un projet en lecture seule ne s'écrit pas.
+
+Trois décisions, prises avant de brancher, parce que projeter un projet posait
+des questions de sens que les Notes et le Mail n'avaient pas :
+
+- **Les membres.** Un assigné ou un auteur (carte, message, événement) n'est
+  nommé que s'il est accessible depuis l'espace qu'on regarde, masqué sinon.
+  Le serveur n'y touche pas : les DTO portent les identifiants tels quels, le
+  client nomme parmi les membres de l'espace actif et masque un identifiant
+  qu'il n'y trouve pas. Assigner ou mentionner depuis une fenêtre se fait parmi
+  les membres de l'espace actif (`isMember`, la garde n'a pas changé) : on
+  assigne parmi les gens qu'on voit, et l'espace d'origine masquera à son tour
+  un identifiant qu'il ne connaît pas.
+- **« Mes tâches » et les non-lus.** Un projet projeté **compte** dans « mes
+  tâches » de la fenêtre (`projects.myTasks` liste mes cartes dans les projets
+  visibles d'ici, chacun lu sous son codec), et ses non-lus sont ceux de
+  l'appelant, par personne, comme aujourd'hui : le point de lecture est posé
+  chez le projet, au nom de qui lit.
+- **Les liaisons.** Visibles depuis la fenêtre, **par leur nom**. Les cinq
+  listes (`repoList`, `deployList`, `databaseList`, `audienceList`,
+  `uptimeList`) gardent leurs identifiants et rendent `labels` : une entrée par
+  identifiant, toujours remplie (chez soi aussi), obtenue par le contrat
+  d'éléments de la feature visée (`labelOf(id, domicile)`, sous le codec
+  ouvert du domicile du projet, jamais de l'espace actif), `null` sans module
+  ou quand l'élément a disparu. Relier et délier restent des gestes du
+  domicile : une liaison référence un objet de l'espace d'origine, que la
+  fenêtre ne voit pas.
+
+| | Depuis la fenêtre | Domicile seulement |
+|---|---|---|
+| Projets | lire (portefeuille avec `foreign: true`, compteurs, non-lus) ; tout l'arbre : colonnes, cartes (ajout, édition, déplacement, archivage, assignation parmi les membres d'ici), jalons, dépendances, discussion (envoi, édition, marquage lu), historique ; le profil (`update` : titre, description, étiquettes, statut, dates), `setStatus`, une version `manual`, archiver, restaurer ; les liaisons se lisent, nommées | `setSecurityTier`, `setVersion` en `github_release` (un dépôt de là-bas), relier et délier toute liaison, le classement du portefeuille (`reorder` refuse un identifiant projeté) |
+
+Aucune commande de suppression n'existe (§1.1) : rien à interdire de ce côté.
+Le refus est `validation`, et son message dit que le geste « se règle dans son
+espace d'origine » (`assertAtHome`) ; l'écran ne le propose pas.
+
+**Passer en gardé oublie les projections.** `projects.setSecurityTier` vers
+`guarded` appelle `ctx.items.forget(id)` après la conversion : plus de
+projections ni de restrictions par élément. C'est juste parce qu'un projet
+gardé n'existe que dans un espace personnel (`assertGuardedAllowed`), où
+aucune restriction de rôle n'a de sens, et que sa clé est le mot de passe de
+son auteur, qu'aucune fenêtre ne détient. La requête de projection ne rend de
+toute façon que l'étage ouvert (`listVisible`, `findVisible`) : la fenêtre
+perd le projet avant même le ménage, et une ligne `item_shares` dormante ne le
+remontrerait pas le jour où il rouvre.
+
+Le provider d'usage (`PROJECTS_USAGE_PROVIDER`) n'a rien à savoir des
+projections : une liaison ne se pose qu'au domicile, vers un élément du même
+espace, et c'est cet espace que les modules passent.
 
 ---
 
@@ -513,7 +575,14 @@ Le serveur du module se teste sans base ni réseau, sur le harnais du SDK
   lecture d'office, pagination, mots d'autrui), la frise (cycle, jalon
   atteint, jalon d'un autre projet), l'historique paginé, les liaisons par
   contrat (absent, inconnu, gardé, idempotence), les compteurs d'onglets, mes
-  tâches masquées ;
+  tâches masquées, le partage inter-espaces (un projet projeté listé `foreign`
+  sous le codec de son domicile avec ses compteurs et les non-lus de
+  l'appelant, l'arbre lu et écrit depuis la fenêtre chez lui, l'assigné parmi
+  les membres d'ici, mes tâches avec un projet projeté, les liaisons nommées
+  par le contrat au domicile et `null` sans module, les refus depuis la
+  fenêtre, `reorder` avec un identifiant projeté, le passage en gardé qui
+  oublie ses projections) et l'entrée `items` (domicile, titre à l'étage
+  ouvert, `shareable` faux pour un gardé) ;
 - `usageProvider.test.ts` : le contrat publié (usage et comptes par élément,
   titre de secours, feature inconnue vide, frise d'un projet gardé ignorée,
   version reportée sur les seuls suiveurs ouverts, le sujet ravivé seulement
@@ -530,7 +599,10 @@ transaction, et ne sont jamais rejouées.
 ### Points d'attention à l'essai manuel
 
 1. **Droits** — un rôle sans `projects` : tuile désaturée, `handleExpand` refuse.
-2. **Espaces** — un projet de l'espace A est invisible depuis B.
+2. **Espaces** : un projet de l'espace A est invisible depuis B, sauf projeté
+   (onglet Partage de sa fiche, ouvert seulement). Il s'y lit et s'y édite
+   alors avec sa pastille, ses liaisons nommées mais non modifiables, ses
+   membres inconnus d'ici masqués, et son « + » absent.
 3. **Chiffrement** — `content` illisible en base ; un projet `guarded` en espace
    personnel avec chiffrement actif déclenche l'invite, et passer un projet en
    `guarded` **retire ses liaisons** (les objets, eux, survivent).
@@ -562,6 +634,5 @@ transaction, et ne sont jamais rejouées.
   d'usage** : Uptime ne lit pas `PROJECTS_USAGE_PROVIDER`, seul l'onglet
   Déploiement d'un projet montre ses services. Le jour venu, `LINKS` dans
   `usageProvider.ts` gagne une entrée `uptime`.
-- **Le partage inter-espaces** : `shareTier: 'never'` en manifest, voir §4.
 - **Le live est local au processus** : deux instances derrière un proxy = salles
   silencieusement séparées. Vrai avant ce module, ça le reste.

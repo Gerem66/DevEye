@@ -41,6 +41,25 @@ export const myTaskSchema = z.object({
 export type MyTask = z.infer<typeof myTaskSchema>;
 
 /**
+ * L'intitulé d'un objet d'espace relié, tel que la feature visée le rend par
+ * son contrat d'éléments (`labelOf`, sous le codec ouvert du DOMICILE du
+ * projet). Une entrée par identifiant lié, toujours, chez soi comme depuis une
+ * fenêtre : `label` vaut `null` quand le module est absent ou que l'élément a
+ * disparu, et l'écran montre alors « un élément disparu », jamais un numéro.
+ *
+ * C'est ce qui rend une liaison lisible depuis une fenêtre sur un projet
+ * projeté (`Docs/SHARING.md`) : le dépôt, la base, le site, la cible ou le
+ * service vivent dans l'espace d'origine, que la fenêtre ne voit pas et ne
+ * saurait nommer par ses propres listes. Le nom seul voyage ; ouvrir l'objet
+ * reste un droit de l'espace d'origine, vérifié par sa feature.
+ */
+export const projectLinkLabelSchema = z.object({
+    id: z.number().int().positive(),
+    label: z.string().nullable()
+});
+export type ProjectLinkLabel = z.infer<typeof projectLinkLabelSchema>;
+
+/**
  * Combien d'éléments chaque intégration d'un projet a à montrer.
  *
  * Des **compteurs seulement** : ils décident si l'écran a quelque chose à

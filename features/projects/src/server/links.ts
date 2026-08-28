@@ -9,7 +9,17 @@ import type { MyTask, ProjectRow } from '../contracts/domain';
 import { UPTIME_ITEMS_PROVIDER, type UptimeItemsProvider } from '@deveye/types/sdk';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
-import { cipherFor, decryptCard, loadProject, toCard, tryDecryptProject, WRITE, type Ctx } from './_shared';
+import {
+    assertAtHome,
+    decryptCard,
+    linkLabels,
+    loadProject,
+    projectCipher,
+    toCard,
+    tryDecryptProject,
+    WRITE,
+    type Ctx
+} from './_shared';
 
 /**
  * Le transverse : mes tâches à travers tous les projets, et les services
@@ -18,27 +28,36 @@ import { cipherFor, decryptCard, loadProject, toCard, tryDecryptProject, WRITE, 
  * Les deux répondent à la même question posée dans les deux sens (« qu'est-ce
  * qui touche ce projet ? » et « qu'est-ce qui me touche, moi, dans tous les
  * projets ? »), d'où leur cohabitation dans ce fichier.
+ *
+ * Les liaisons vivent au **domicile** du projet (`Docs/SHARING.md`) : depuis
+ * une fenêtre elles se lisent, nommées par le contrat d'éléments de la
+ * feature visée sous le codec de là-bas (`labels`), mais ne se posent ni ne
+ * se retirent, parce qu'elles référencent des objets de l'espace d'origine
+ * que la fenêtre ne voit pas (`assertAtHome`).
  */
 
 export const projectMyTasksFeature = defineSdkFeature({
     ...projectMyTasks,
     handler: async (ctx: Ctx) => {
-        const rows = await ctx.repo.board.listAssignedTo(ctx.workspaceId, ctx.userId);
+        // Les projets visibles d'ici, projetés compris, moins ceux qu'une
+        // restriction masque : un projet projeté compte dans « mes tâches » de
+        // la fenêtre, et une carte d'un projet qu'on ne voit pas n'existe pas.
+        const [visible, hidden, scope] = await Promise.all([
+            ctx.repo.projects.listVisible(ctx.workspaceId, false),
+            ctx.items.restrictions(),
+            ctx.sharing.scope()
+        ]);
+        const projects = new Map<number, ProjectRow>(
+            visible.filter((p) => hidden.get(p.id) !== 'none').map((p) => [p.id, p])
+        );
+        const rows = await ctx.repo.board.listAssignedIn([...projects.keys()], ctx.userId);
         if (rows.length === 0) return { tasks: [] };
-
-        // Les projets concernés, chargés une fois : une même carte par projet
-        // n'a pas à provoquer une lecture de projet par carte.
-        const projectIds = [...new Set(rows.map((r) => r.project_id))];
-        const projects = new Map<number, ProjectRow>();
-        for (const id of projectIds) {
-            const row = await ctx.repo.projects.findById(id, ctx.workspaceId);
-            if (row) projects.set(id, row);
-        }
 
         // Un projet gardé n'est lisible que si la session l'est déjà. On ne le
         // demande qu'une fois, et seulement s'il y a vraiment du gardé en jeu :
         // interroger le coffre fait glisser la fenêtre de grâce.
-        const anyGuarded = [...projects.values()].some((p) => p.security_tier === 'guarded');
+        const concerned = [...new Set(rows.map((r) => r.project_id))].map((id) => projects.get(id));
+        const anyGuarded = concerned.some((p) => p?.security_tier === 'guarded');
         const canReadGuarded = anyGuarded ? await ctx.secrecy.isUnlocked() : false;
 
         const tasks: MyTask[] = [];
@@ -48,7 +67,8 @@ export const projectMyTasksFeature = defineSdkFeature({
 
             const guarded = project.security_tier === 'guarded';
             const masked = guarded && !canReadGuarded;
-            const cipher = cipherFor(ctx, project.security_tier);
+            // Le codec du projet, chez lui : celui d'ici ou celui de son domicile.
+            const cipher = await projectCipher(ctx, project, scope);
 
             // Masqué plutôt qu'absent : une liste de tâches incomplète serait
             // pire qu'une liste qui dit ce qu'elle ne peut pas lire.
@@ -71,17 +91,18 @@ export const projectMyTasksFeature = defineSdkFeature({
 export const projectLinkCountsFeature = defineSdkFeature({
     ...projectLinkCounts,
     handler: async (ctx: Ctx, input) => {
-        await loadProject(ctx, input.projectId);
+        const project = await loadProject(ctx, input.projectId);
+        const home = project.workspace_id;
         // Les listes plutôt que quatre `COUNT(*)` : ce sont des poignées
         // d'identifiants, les requêtes existent déjà et sont celles que les
         // onglets eux-mêmes appellent. Une seconde famille de requêtes pour
         // rendre le même fait ne se serait payée qu'en occasions de diverger.
         const [repos, databases, sites, targets, services] = await Promise.all([
-            ctx.repo.links.listRepoIds(input.projectId, ctx.workspaceId),
-            ctx.repo.links.listDatabaseIds(input.projectId, ctx.workspaceId),
-            ctx.repo.links.listSiteIds(input.projectId, ctx.workspaceId),
-            ctx.repo.links.listDeployTargetIds(input.projectId, ctx.workspaceId),
-            ctx.repo.links.listServiceIds(input.projectId, ctx.workspaceId)
+            ctx.repo.links.listRepoIds(input.projectId, home),
+            ctx.repo.links.listDatabaseIds(input.projectId, home),
+            ctx.repo.links.listSiteIds(input.projectId, home),
+            ctx.repo.links.listDeployTargetIds(input.projectId, home),
+            ctx.repo.links.listServiceIds(input.projectId, home)
         ]);
         return {
             counts: {
@@ -100,8 +121,12 @@ export const projectLinkCountsFeature = defineSdkFeature({
 export const projectUptimeListFeature = defineSdkFeature({
     ...projectUptimeList,
     handler: async (ctx: Ctx, input) => {
-        await loadProject(ctx, input.projectId);
-        return { serviceIds: await ctx.repo.links.listServiceIds(input.projectId, ctx.workspaceId) };
+        const project = await loadProject(ctx, input.projectId);
+        const serviceIds = await ctx.repo.links.listServiceIds(input.projectId, project.workspace_id);
+        // Nommés par le contrat d'Uptime, au domicile du projet : c'est là que
+        // les services vivent, et la seule façon pour une fenêtre de les nommer.
+        const uptime = ctx.providers.get<UptimeItemsProvider>(UPTIME_ITEMS_PROVIDER);
+        return { serviceIds, labels: await linkLabels(uptime, serviceIds, project.workspace_id) };
     }
 });
 
@@ -110,7 +135,8 @@ export const projectUptimeLinkFeature = defineSdkFeature({
     mutates: true,
     access: WRITE,
     handler: async (ctx: Ctx, input) => {
-        await loadProject(ctx, input.projectId);
+        const project = await loadProject(ctx, input.projectId, 'write');
+        assertAtHome(ctx, project, 'relier un service surveillé');
         // La cible existe-t-elle, et dans **cet** espace ? Sans cette garde on
         // rattacherait n'importe quel identifiant, y compris celui d'un service
         // d'un autre espace, dont l'existence même n'a pas à fuiter. On ne
@@ -122,11 +148,11 @@ export const projectUptimeLinkFeature = defineSdkFeature({
         // pas sa table, et dégrade proprement quand le module est absent.
         const uptime = ctx.providers.get<UptimeItemsProvider>(UPTIME_ITEMS_PROVIDER);
         if (!uptime) throw new FeatureError('validation', 'Le module Uptime n’est pas installé.');
-        if (!(await uptime.exists(input.serviceId, ctx.workspaceId))) {
+        if (!(await uptime.exists(input.serviceId, project.workspace_id))) {
             throw new FeatureError('not_found', 'Ce service n’existe pas dans cet espace.');
         }
-        await ctx.repo.links.link(input.projectId, ctx.workspaceId, input.serviceId);
-        return { serviceIds: await ctx.repo.links.listServiceIds(input.projectId, ctx.workspaceId) };
+        await ctx.repo.links.link(input.projectId, project.workspace_id, input.serviceId);
+        return { serviceIds: await ctx.repo.links.listServiceIds(input.projectId, project.workspace_id) };
     }
 });
 
@@ -135,10 +161,11 @@ export const projectUptimeUnlinkFeature = defineSdkFeature({
     mutates: true,
     access: WRITE,
     handler: async (ctx: Ctx, input) => {
-        await loadProject(ctx, input.projectId);
+        const project = await loadProject(ctx, input.projectId, 'write');
+        assertAtHome(ctx, project, 'délier un service surveillé');
         // Le service lui-même n'est pas touché : seule la liaison tombe.
-        await ctx.repo.links.unlink(input.projectId, ctx.workspaceId, input.serviceId);
-        return { serviceIds: await ctx.repo.links.listServiceIds(input.projectId, ctx.workspaceId) };
+        await ctx.repo.links.unlink(input.projectId, project.workspace_id, input.serviceId);
+        return { serviceIds: await ctx.repo.links.listServiceIds(input.projectId, project.workspace_id) };
     }
 });
 

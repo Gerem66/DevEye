@@ -6,6 +6,8 @@ import {
     projectAdd,
     projectArchive,
     projectAudienceLink,
+    projectAudienceList,
+    projectAudienceUnlink,
     projectBoard,
     projectCardAdd,
     projectCardArchive,
@@ -16,8 +18,12 @@ import {
     projectCommands,
     projectCount,
     projectDatabaseLink,
+    projectDatabaseList,
+    projectDatabaseUnlink,
     projectDepAdd,
     projectDeployLink,
+    projectDeployList,
+    projectDeployUnlink,
     projectEventList,
     projectGet,
     projectLinkCounts,
@@ -25,14 +31,21 @@ import {
     projectMessageEdit,
     projectMessageList,
     projectMessageSend,
+    projectMilestoneAdd,
     projectMilestoneSetReached,
     projectMyTasks,
+    projectPlan,
     projectReorder,
     projectRepoLink,
+    projectRepoList,
+    projectRepoUnlink,
+    projectRestore,
     projectSetSecurityTier,
+    projectSetStatus,
     projectSetVersion,
     projectUpdate,
     projectUptimeLink,
+    projectUptimeList,
     projectUptimeUnlink
 } from '../contracts/commands';
 import { PROJECT_MAX_COLUMNS } from '../contracts/domain';
@@ -57,6 +70,7 @@ import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/ty
 import { createTestContext, type TestContext, type TestContextOverrides } from '@deveye/types/sdk/testing';
 
 import { projectsHandlers } from './handlers';
+import { serverEntry } from './index';
 import type { ProjectsRepo } from './repo';
 
 /**
@@ -75,7 +89,12 @@ import type { ProjectsRepo } from './repo';
  * contrats d'éléments (absents = refus propre, jamais une ligne écrite), les
  * gardes de forme (une carte ne change pas de projet, une dépendance ne forme
  * pas de cycle, une colonne pleine ne se retire pas, un assigné ou une
- * mention est un membre), et la frise posée par les mutations elles-mêmes.
+ * mention est un membre), la frise posée par les mutations elles-mêmes, et le
+ * **partage inter-espaces** (un projet projeté se liste avec `foreign: true`
+ * sous le codec de son domicile, son arbre se lit et s'écrit chez lui depuis
+ * la fenêtre, ses liaisons s'y nomment mais ne s'y posent pas, son palier, son
+ * suivi des releases et son rang restent chez lui, et un projet qui devient
+ * gardé est oublié de ses fenêtres).
  */
 
 /** Le handler d'un contrat, typé par ce contrat (le registre est hétérogène). */
@@ -207,8 +226,15 @@ function event(over: Partial<ProjectEventRow> & { id: number; project_id: number
  * Un dépôt en mémoire, même contrat que le vrai, sur des tableaux que les
  * tests lisent après coup. Les listes d'identifiants liés rendent l'ordre
  * d'insertion : la jointure d'ordre du vrai dépôt n'a rien à prouver ici.
+ *
+ * `projections` reproduit la table `item_shares` : `projectId → espaces où il
+ * est projeté`. C'est ce qui donne à `listVisible` / `findVisible` leur
+ * seconde branche (les projets ouverts seulement, comme la vraie requête), et
+ * ce que le harnais (`shares`) doit dire en écho pour que
+ * `ctx.sharing.scope()` connaisse le domicile. Lu à l'appel : un test qui
+ * mime le ménage de l'app (`items.forget`) le mute après coup.
  */
-function fakeRepo(): FakeRepo {
+function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
     let seq = 100;
     const rows: FakeRepo['rows'] = {
         projects: [],
@@ -230,6 +256,14 @@ function fakeRepo(): FakeRepo {
         const row = locate(list, id, ws);
         return row ? { ...row } : null;
     };
+    // Par identifiant seul, comme les lectures d'une ligne de l'arbre dont le
+    // handler remonte au projet avant d'agir.
+    const findAny = <T extends { id: number }>(list: T[], id: number): T | null => {
+        const row = list.find((r) => r.id === id);
+        return row ? { ...row } : null;
+    };
+    const visible = (p: ProjectRow, ws: number) =>
+        p.workspace_id === ws || (p.security_tier === 'open' && (projections[p.id] ?? []).includes(ws));
     const unreadOf = (c: ProjectCardRow, userId: number): number => {
         const mark = rows.reads.find((r) => r.card_id === c.id && r.user_id === userId)?.last_read_message_id ?? 0;
         return rows.messages.filter((m) => m.card_id === c.id && m.id > mark).length;
@@ -279,13 +313,21 @@ function fakeRepo(): FakeRepo {
     return {
         rows,
         projects: {
-            listByWorkspace: async (ws, archived) =>
+            listVisible: async (ws, archived) =>
                 rows.projects
-                    .filter((p) => p.workspace_id === ws && (p.archived_at !== null) === archived)
-                    .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id),
-            countActiveByWorkspace: async (ws) =>
-                rows.projects.filter((p) => p.workspace_id === ws && p.archived_at === null).length,
+                    .filter((p) => visible(p, ws) && (p.archived_at !== null) === archived)
+                    .sort((a, b) =>
+                        archived
+                            ? (b.archived_at ?? 0) - (a.archived_at ?? 0) || a.id - b.id
+                            : Number(a.workspace_id !== ws) - Number(b.workspace_id !== ws) ||
+                              a.sort_order - b.sort_order ||
+                              a.id - b.id
+                    ),
             findById: async (id, ws) => find(rows.projects, id, ws),
+            findVisible: async (id, ws) => {
+                const row = rows.projects.find((p) => p.id === id && visible(p, ws));
+                return row ? { ...row } : null;
+            },
             async create(input) {
                 const row = project({
                     id: ++seq,
@@ -344,9 +386,9 @@ function fakeRepo(): FakeRepo {
                     if (row) row.sort_order = i;
                 });
             },
-            statsByWorkspace: async (ws, userId, now) =>
+            statsFor: async (projectIds, userId, now) =>
                 rows.projects
-                    .filter((p) => p.workspace_id === ws && p.archived_at === null)
+                    .filter((p) => projectIds.includes(p.id) && p.archived_at === null)
                     .map((p) => {
                         const live = rows.cards.filter((c) => c.project_id === p.id && c.archived_at === null);
                         const isDone = (c: ProjectCardRow) =>
@@ -370,7 +412,7 @@ function fakeRepo(): FakeRepo {
                 rows.columns
                     .filter((c) => c.project_id === projectId && c.workspace_id === ws)
                     .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id),
-            findColumn: async (id, ws) => find(rows.columns, id, ws),
+            findColumn: async (id) => findAny(rows.columns, id),
             async createColumn(input) {
                 const row = column({
                     id: ++seq,
@@ -413,7 +455,7 @@ function fakeRepo(): FakeRepo {
                             c.project_id === projectId && c.workspace_id === ws && (c.archived_at !== null) === archived
                     )
                     .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id),
-            findCard: async (id, ws) => find(rows.cards, id, ws),
+            findCard: async (id) => findAny(rows.cards, id),
             async createCard(input) {
                 const row = card({
                     id: ++seq,
@@ -466,13 +508,9 @@ function fakeRepo(): FakeRepo {
                 rows.cards
                     .filter((c) => c.project_id === projectId && c.workspace_id === ws && c.archived_at === null)
                     .map((c) => ({ card_id: c.id, unread: unreadOf(c, userId) })),
-            listAssignedTo: async (ws, userId) =>
+            listAssignedIn: async (projectIds, userId) =>
                 rows.cards.filter(
-                    (c) =>
-                        c.workspace_id === ws &&
-                        c.assignee_user_id === userId &&
-                        c.archived_at === null &&
-                        rows.projects.find((p) => p.id === c.project_id)?.archived_at === null
+                    (c) => projectIds.includes(c.project_id) && c.assignee_user_id === userId && c.archived_at === null
                 )
         },
         chat: {
@@ -481,7 +519,7 @@ function fakeRepo(): FakeRepo {
                     .filter((m) => m.card_id === cardId && m.workspace_id === ws && (before === null || m.id < before))
                     .sort((a, b) => b.id - a.id)
                     .slice(0, limit),
-            findById: async (id, ws) => find(rows.messages, id, ws),
+            findById: async (id) => findAny(rows.messages, id),
             async create(input) {
                 const row = message({
                     id: ++seq,
@@ -524,7 +562,7 @@ function fakeRepo(): FakeRepo {
                 rows.milestones
                     .filter((m) => m.project_id === projectId && m.workspace_id === ws)
                     .sort((a, b) => a.due_date - b.due_date || a.id - b.id),
-            findMilestone: async (id, ws) => find(rows.milestones, id, ws),
+            findMilestone: async (id) => findAny(rows.milestones, id),
             async createMilestone(input) {
                 const row: ProjectMilestoneRow = {
                     id: ++seq,
@@ -674,6 +712,34 @@ function taggedCipher(tag: string): SdkCipher {
 
 function tagging(ctx: TestContext<FakeRepo>): TestContext<FakeRepo> {
     ctx.cipher = (mode) => taggedCipher(mode ?? 'server');
+    return ctx;
+}
+
+/**
+ * Le même étiquetage, vu d'une fenêtre : l'étage ouvert d'ici porte `server:`,
+ * et le codec d'un projet projeté (`scope.cipherFor`) porte l'étiquette de son
+ * domicile (`home:` par défaut). C'est ce qui prouve qu'une ligne écrite depuis
+ * la fenêtre l'est sous la clé de l'espace d'origine, et qu'une ligne lue l'est
+ * avec elle : à l'identité, le harnais ne saurait pas distinguer les deux.
+ */
+function windowTagging(ctx: TestContext<FakeRepo>, homeTag = 'home'): TestContext<FakeRepo> {
+    tagging(ctx);
+    const scope = ctx.sharing.scope;
+    ctx.sharing = {
+        scope: async () => {
+            const real = await scope();
+            return {
+                ...real,
+                cipherFor: async (itemId) => taggedCipher(real.homeOf(itemId) === null ? 'server' : homeTag)
+            };
+        }
+    };
+    return ctx;
+}
+
+/** Chez lui : l'étage ouvert de l'espace d'origine porte `home:`, celui que ses fenêtres voient par `scope.cipherFor`. */
+function homeTagging(ctx: TestContext<FakeRepo>): TestContext<FakeRepo> {
+    ctx.cipher = (mode) => taggedCipher(mode === 'private' ? 'private' : 'home');
     return ctx;
 }
 
@@ -1493,5 +1559,476 @@ describe('projects.myTasks : mes tâches à travers les projets', () => {
                 ['Secret', 'Carte 21', false]
             ]
         );
+    });
+});
+
+describe('le partage inter-espaces', () => {
+    /**
+     * Un projet projeté : le projet 1 vit dans l'espace 42 (partagé), avec sa
+     * colonne 10 et sa carte 11, tout son arbre sous le codec ouvert de son
+     * domicile (`home:`) ; il se projette vers l'espace 1, où vit le projet 2
+     * (`server:`, colonne 20, carte 21).
+     */
+    function projected(over: Omit<TestContextOverrides<FakeRepo>, 'repo' | 'workspaceId' | 'shares'> = {}) {
+        const repo = fakeRepo({ 1: [1] });
+        repo.rows.projects.push(
+            project({ id: 1, workspace_id: 42, content: `home:${body('Partagé')}` }),
+            project({ id: 2, content: `server:${body('Local')}` })
+        );
+        repo.rows.columns.push(
+            column({ id: 10, project_id: 1, workspace_id: 42, content: 'home:{"name":"À faire"}' }),
+            column({ id: 20, project_id: 2, content: 'server:{"name":"Ici"}' })
+        );
+        repo.rows.cards.push(
+            card({
+                id: 11,
+                project_id: 1,
+                column_id: 10,
+                workspace_id: 42,
+                content: 'home:{"title":"Partagée","description":"","checklist":[]}'
+            }),
+            card({
+                id: 21,
+                project_id: 2,
+                column_id: 20,
+                content: 'server:{"title":"Locale","description":"","checklist":[]}'
+            })
+        );
+        const home = homeTagging(contextWith(repo, { workspaceId: 42, kind: 'shared' }));
+        const window = windowTagging(contextWith(repo, { workspaceId: 1, shares: { 1: 42 }, ...over }));
+        return { repo, home, window };
+    }
+
+    const CARD = {
+        title: 'Faire',
+        description: '',
+        checklist: [],
+        priority: 'normal' as const,
+        assigneeUserId: null,
+        startDate: null,
+        dueDate: null,
+        estimateMinutes: null
+    };
+
+    it('liste un projet projeté avec sa pastille, sous le codec de son domicile, ses compteurs et les non-lus de l’appelant, et le compte', async () => {
+        const { repo, window } = projected();
+        repo.rows.messages.push(
+            message({
+                id: 30,
+                card_id: 11,
+                project_id: 1,
+                workspace_id: 42,
+                author_user_id: 7,
+                content: 'home:{"text":"Salut"}'
+            })
+        );
+
+        // Les locaux d'abord, puis les projetés ; les compteurs et les non-lus
+        // du projet projeté sont ceux de l'appelant, comme chez lui.
+        const listed = await handlerFor(projectList)(window, {});
+        assert.deepEqual(
+            listed.projects.map((p) => [
+                p.project.id,
+                p.project.title,
+                p.foreign,
+                p.project.foreign,
+                p.cardTotal,
+                p.unread
+            ]),
+            [
+                [2, 'Local', false, false, 1, 0],
+                [1, 'Partagé', true, true, 1, 1]
+            ]
+        );
+        assert.deepEqual(await handlerFor(projectCount)(window, {}), { count: 2 });
+        const read = await handlerFor(projectGet)(window, { projectId: 1 });
+        assert.deepEqual([read.project.foreign, read.project.title], [true, 'Partagé']);
+
+        // Masqué pour ce rôle : disparaît de la liste et du compte, et ne s'ouvre pas.
+        const restricted = windowTagging(
+            contextWith(repo, { workspaceId: 1, shares: { 1: 42 }, itemRestrictions: { 1: 'none' } })
+        );
+        assert.deepEqual(
+            (await handlerFor(projectList)(restricted, {})).projects.map((p) => p.project.id),
+            [2]
+        );
+        assert.deepEqual(await handlerFor(projectCount)(restricted, {}), { count: 1 });
+        await assert.rejects(handlerFor(projectGet)(restricted, { projectId: 1 }), failsWith('forbidden'));
+
+        // Et depuis un espace qui ne le voit pas : introuvable, sans rien trahir.
+        await assert.rejects(
+            handlerFor(projectGet)(contextWith(repo, { workspaceId: 9 }), { projectId: 1 }),
+            failsWith('not_found')
+        );
+    });
+
+    it('lit le tableau, la frise, l’historique et la discussion d’un projet projeté depuis la fenêtre, sous le codec de son domicile', async () => {
+        const { repo, window } = projected();
+        repo.rows.messages.push(
+            message({
+                id: 30,
+                card_id: 11,
+                project_id: 1,
+                workspace_id: 42,
+                author_user_id: 7,
+                content: 'home:{"text":"Salut"}'
+            })
+        );
+        repo.rows.milestones.push({
+            id: 40,
+            project_id: 1,
+            workspace_id: 42,
+            due_date: 10,
+            reached_at: null,
+            sort_order: 0,
+            content: 'home:{"name":"Bêta","description":""}',
+            created: 1
+        });
+        repo.rows.events.push(
+            event({
+                id: 50,
+                project_id: 1,
+                workspace_id: 42,
+                actor_user_id: 7,
+                content: 'home:{"label":"Créé","from":null,"to":null}'
+            })
+        );
+
+        const board = await handlerFor(projectBoard)(window, { projectId: 1 });
+        assert.deepEqual(
+            board.columns.map((c) => c.name),
+            ['À faire']
+        );
+        assert.deepEqual(
+            board.cards.map((c) => [c.title, c.unread]),
+            [['Partagée', 1]]
+        );
+        const plan = await handlerFor(projectPlan)(window, { projectId: 1 });
+        assert.deepEqual(
+            plan.milestones.map((m) => m.name),
+            ['Bêta']
+        );
+        // Les acteurs et les auteurs voyagent en identifiants : c'est le client
+        // qui nomme parmi les membres d'ici, et masque les autres.
+        const history = await handlerFor(projectEventList)(window, { projectId: 1 });
+        assert.deepEqual(
+            history.events.map((e) => [e.label, e.actorUserId]),
+            [['Créé', 7]]
+        );
+        const thread = await handlerFor(projectMessageList)(window, { cardId: 11 });
+        assert.deepEqual(
+            thread.messages.map((m) => [m.text, m.authorUserId]),
+            [['Salut', 7]]
+        );
+    });
+
+    it('écrit le tableau et la frise d’un projet projeté depuis la fenêtre : chez lui, sous son codec, assigné parmi les membres d’ici', async () => {
+        const { repo, home, window } = projected({ deveye: TWO_MEMBERS });
+
+        const added = await handlerFor(projectCardAdd)(window, {
+            projectId: 1,
+            columnId: 10,
+            card: { ...CARD, assigneeUserId: 2 }
+        });
+        const row = repo.rows.cards.find((c) => c.id === added.card.id)!;
+        assert.deepEqual([row.workspace_id, row.assignee_user_id, row.content.startsWith('home:')], [42, 2, true]);
+        // Chez lui, où 2 n'est pas membre, le même assigné est refusé : la
+        // garde est celle de l'espace actif.
+        await assert.rejects(
+            handlerFor(projectCardAdd)(home, { projectId: 1, columnId: 10, card: { ...CARD, assigneeUserId: 2 } }),
+            failsWith('validation')
+        );
+
+        const col = await handlerFor(projectColumnAdd)(window, { projectId: 1, name: 'Relecture' });
+        const colRow = repo.rows.columns.find((c) => c.id === col.column.id)!;
+        assert.deepEqual([colRow.workspace_id, colRow.content], [42, 'home:{"name":"Relecture"}']);
+
+        const milestone = await handlerFor(projectMilestoneAdd)(window, {
+            projectId: 1,
+            milestone: { name: 'V1', description: '', dueDate: 20 }
+        });
+        const milestoneRow = repo.rows.milestones.find((m) => m.id === milestone.milestone.id)!;
+        assert.deepEqual([milestoneRow.workspace_id, milestoneRow.content.startsWith('home:')], [42, true]);
+
+        await handlerFor(projectDepAdd)(window, { cardId: added.card.id, blockedByCardId: 11 });
+        assert.deepEqual(
+            repo.rows.deps.map((d) => [d.card_id, d.blocked_by_card_id, d.project_id]),
+            [[added.card.id, 11, 1]]
+        );
+        // Une dépendance ne traverse pas la fenêtre : la carte 21 est d'ici.
+        await assert.rejects(
+            handlerFor(projectDepAdd)(window, { cardId: 11, blockedByCardId: 21 }),
+            failsWith('validation')
+        );
+
+        // La frise de l'archivage est écrite chez lui, sous son codec, par
+        // l'appelant d'ici.
+        await handlerFor(projectCardArchive)(window, { cardId: 11 });
+        const archived = repo.rows.events.at(-1)!;
+        assert.deepEqual(
+            [
+                archived.project_id,
+                archived.workspace_id,
+                archived.actor_user_id,
+                archived.kind,
+                archived.content.startsWith('home:')
+            ],
+            [1, 42, 1, 'card.archived', true]
+        );
+    });
+
+    it('écrit la discussion et le profil d’un projet projeté depuis la fenêtre, et l’archive chez lui', async () => {
+        const { repo, window } = projected({ deveye: TWO_MEMBERS });
+
+        const sent = await handlerFor(projectMessageSend)(window, { cardId: 11, text: 'Bonjour', mentions: [2, 3] });
+        const msg = repo.rows.messages.find((m) => m.id === sent.message.id)!;
+        assert.deepEqual(
+            [msg.workspace_id, msg.author_user_id, sent.message.mentions, msg.content.startsWith('home:')],
+            [42, 1, [2], true]
+        );
+        // Le point de lecture reste celui de l'appelant, posé chez le projet.
+        assert.deepEqual(repo.rows.reads, [
+            { card_id: 11, user_id: 1, workspace_id: 42, last_read_message_id: sent.message.id }
+        ]);
+
+        const updated = await handlerFor(projectUpdate)(window, {
+            projectId: 1,
+            project: { ...DRAFT, title: 'Partagé, relu', status: 'paused' }
+        });
+        assert.deepEqual([updated.project.title, updated.project.foreign], ['Partagé, relu', true]);
+        const row = repo.rows.projects.find((p) => p.id === 1)!;
+        assert.deepEqual([row.workspace_id, row.content.startsWith('home:')], [42, true]);
+        assert.deepEqual(
+            repo.rows.events.map((e) => [e.kind, e.workspace_id, e.content.startsWith('home:')]),
+            [
+                ['projects.renamed', 42, true],
+                ['projects.status', 42, true]
+            ]
+        );
+
+        const versioned = await handlerFor(projectSetVersion)(window, {
+            projectId: 1,
+            source: 'manual',
+            version: '1.0.0'
+        });
+        assert.deepEqual([versioned.project.version, versioned.project.foreign], ['1.0.0', true]);
+        const status = await handlerFor(projectSetStatus)(window, { projectId: 1, status: 'done' });
+        assert.deepEqual([status.project.status, status.project.foreign], ['done', true]);
+
+        await handlerFor(projectArchive)(window, { projectId: 1 });
+        assert.notEqual(row.archived_at, null);
+        assert.deepEqual(
+            (await handlerFor(projectList)(window, { archived: true })).projects.map((p) => [p.project.id, p.foreign]),
+            [[1, true]]
+        );
+        assert.deepEqual(
+            (await handlerFor(projectList)(window, {})).projects.map((p) => p.project.id),
+            [2]
+        );
+        await handlerFor(projectRestore)(window, { projectId: 1 });
+        assert.deepEqual([row.archived_at, row.workspace_id], [null, 42]);
+    });
+
+    it('compte les cartes d’un projet projeté dans mes tâches, sous son titre, et tait celles d’un projet masqué pour ce rôle', async () => {
+        const { repo, window } = projected();
+        repo.rows.cards[0].assignee_user_id = 1;
+        repo.rows.cards[1].assignee_user_id = 1;
+        const mine = await handlerFor(projectMyTasks)(window, {});
+        assert.deepEqual(
+            mine.tasks.map((t) => [t.projectId, t.projectTitle, t.card.title, t.masked]),
+            [
+                [1, 'Partagé', 'Partagée', false],
+                [2, 'Local', 'Locale', false]
+            ]
+        );
+        const restricted = windowTagging(
+            contextWith(repo, { workspaceId: 1, shares: { 1: 42 }, itemRestrictions: { 1: 'none' } })
+        );
+        assert.deepEqual(
+            (await handlerFor(projectMyTasks)(restricted, {})).tasks.map((t) => t.projectId),
+            [2]
+        );
+    });
+
+    it('nomme les liaisons par le contrat d’éléments, au domicile du projet, chez soi comme depuis la fenêtre, et `null` sans module ou sans élément', async () => {
+        const { repo } = projected();
+        repo.rows.links.repo.push({ project_id: 1, workspace_id: 42, item_id: 5 });
+        repo.rows.links.database.push({ project_id: 1, workspace_id: 42, item_id: 6 });
+        repo.rows.links.site.push({ project_id: 1, workspace_id: 42, item_id: 7 });
+        repo.rows.links.deploy.push({ project_id: 1, workspace_id: 42, item_id: 8 });
+        repo.rows.links.uptime.push({ project_id: 1, workspace_id: 42, item_id: 9 });
+        // Chaque contrat ne nomme qu'au domicile (42) ; la base 6 a disparu.
+        const naming = (noun: string) => ({
+            exists: async () => true,
+            labelOf: async (id: number, ws: number) => (ws === 42 && id !== 6 ? `${noun} ${id}` : null)
+        });
+        const providers = {
+            [GIT_ITEMS_PROVIDER]: naming('Dépôt'),
+            [DATABASE_ITEMS_PROVIDER]: naming('Base'),
+            [AUDIENCE_ITEMS_PROVIDER]: naming('Site'),
+            [DEPLOY_ITEMS_PROVIDER]: naming('Cible'),
+            [UPTIME_ITEMS_PROVIDER]: naming('Service')
+        };
+        const home = contextWith(repo, { workspaceId: 42, kind: 'shared', providers });
+        const window = contextWith(repo, { workspaceId: 1, shares: { 1: 42 }, providers });
+        for (const ctx of [home, window]) {
+            assert.deepEqual(await handlerFor(projectRepoList)(ctx, { projectId: 1 }), {
+                repoIds: [5],
+                labels: [{ id: 5, label: 'Dépôt 5' }]
+            });
+            assert.deepEqual(await handlerFor(projectDatabaseList)(ctx, { projectId: 1 }), {
+                databaseIds: [6],
+                labels: [{ id: 6, label: null }]
+            });
+            assert.deepEqual(await handlerFor(projectAudienceList)(ctx, { projectId: 1 }), {
+                siteIds: [7],
+                labels: [{ id: 7, label: 'Site 7' }]
+            });
+            assert.deepEqual(await handlerFor(projectDeployList)(ctx, { projectId: 1 }), {
+                targetIds: [8],
+                labels: [{ id: 8, label: 'Cible 8' }]
+            });
+            assert.deepEqual(await handlerFor(projectUptimeList)(ctx, { projectId: 1 }), {
+                serviceIds: [9],
+                labels: [{ id: 9, label: 'Service 9' }]
+            });
+        }
+        // Sans module : les identifiants restent, les noms valent `null` ; et
+        // les compteurs d'onglets se lisent au domicile, depuis la fenêtre.
+        const bare = contextWith(repo, { workspaceId: 1, shares: { 1: 42 } });
+        assert.deepEqual(await handlerFor(projectRepoList)(bare, { projectId: 1 }), {
+            repoIds: [5],
+            labels: [{ id: 5, label: null }]
+        });
+        assert.deepEqual((await handlerFor(projectLinkCounts)(bare, { projectId: 1 })).counts, {
+            git: 1,
+            database: 1,
+            audience: 1,
+            deploy: 2
+        });
+    });
+
+    it('refuse depuis la fenêtre ce qui référence l’espace d’origine : liaisons, palier, suivi des releases, classement', async () => {
+        const { repo, window } = projected();
+        repo.rows.links.repo.push({ project_id: 1, workspace_id: 42, item_id: 5 });
+        const present = { exists: async () => true, labelOf: async () => null };
+        const linking = contextWith(repo, {
+            workspaceId: 1,
+            shares: { 1: 42 },
+            providers: {
+                [GIT_ITEMS_PROVIDER]: present,
+                [DATABASE_ITEMS_PROVIDER]: present,
+                [AUDIENCE_ITEMS_PROVIDER]: present,
+                [DEPLOY_ITEMS_PROVIDER]: present,
+                [UPTIME_ITEMS_PROVIDER]: present
+            }
+        });
+        const refused = failsWith('validation');
+        await assert.rejects(handlerFor(projectRepoLink)(linking, { projectId: 1, repoId: 6 }), refused);
+        await assert.rejects(handlerFor(projectRepoUnlink)(linking, { projectId: 1, repoId: 5 }), refused);
+        await assert.rejects(handlerFor(projectUptimeLink)(linking, { projectId: 1, serviceId: 9 }), refused);
+        await assert.rejects(handlerFor(projectUptimeUnlink)(linking, { projectId: 1, serviceId: 9 }), refused);
+        await assert.rejects(handlerFor(projectDatabaseLink)(linking, { projectId: 1, databaseId: 6 }), refused);
+        await assert.rejects(handlerFor(projectDatabaseUnlink)(linking, { projectId: 1, databaseId: 6 }), refused);
+        await assert.rejects(handlerFor(projectAudienceLink)(linking, { projectId: 1, siteId: 7 }), refused);
+        await assert.rejects(handlerFor(projectAudienceUnlink)(linking, { projectId: 1, siteId: 7 }), refused);
+        await assert.rejects(handlerFor(projectDeployLink)(linking, { projectId: 1, targetId: 8 }), refused);
+        await assert.rejects(handlerFor(projectDeployUnlink)(linking, { projectId: 1, targetId: 8 }), refused);
+        assert.deepEqual(
+            [
+                repo.rows.links.repo,
+                repo.rows.links.uptime,
+                repo.rows.links.database,
+                repo.rows.links.site,
+                repo.rows.links.deploy
+            ].map((l) => l.length),
+            [1, 0, 0, 0, 0]
+        );
+
+        await assert.rejects(
+            handlerFor(projectSetSecurityTier)(window, { projectId: 1, securityTier: 'guarded' }),
+            refused
+        );
+        await assert.rejects(
+            handlerFor(projectSetVersion)(window, { projectId: 1, source: 'github_release', version: '' }),
+            refused
+        );
+        await assert.rejects(handlerFor(projectReorder)(window, { projectIds: [1, 2] }), refused);
+        assert.deepEqual(
+            repo.rows.projects.map((p) => [p.id, p.security_tier, p.version_source, p.sort_order]),
+            [
+                [1, 'open', 'manual', 1],
+                [2, 'open', 'manual', 2]
+            ]
+        );
+        assert.deepEqual(window.forgotten, []);
+        assert.equal(repo.rows.events.length, 0);
+        // Le portefeuille d'ici se range sans lui.
+        assert.deepEqual(await handlerFor(projectReorder)(window, { projectIds: [2] }), { projectIds: [2] });
+    });
+
+    it('passer un projet en confidentiel chez lui oublie ses projections et ses restrictions, et ses fenêtres ne le voient plus', async () => {
+        // Le projet 1 vit dans l'espace 1 (personnel) et se projette vers le 7.
+        const projections: Record<number, number[]> = { 1: [7] };
+        const repo = fakeRepo(projections);
+        repo.rows.projects.push(project({ id: 1, content: `server:${body('Bientôt secret')}` }));
+        repo.rows.columns.push(column({ id: 10, project_id: 1, content: 'server:{"name":"À faire"}' }));
+        const home = tagging(contextWith(repo, { kind: 'personal' }));
+        const window = windowTagging(contextWith(repo, { workspaceId: 7, kind: 'shared', shares: { 1: 1 } }), 'server');
+        assert.deepEqual(
+            (await handlerFor(projectList)(window, {})).projects.map((p) => [p.project.id, p.foreign]),
+            [[1, true]]
+        );
+
+        // La bascule : le ménage est demandé à l'app, une seule fois, et
+        // seulement vers le palier gardé.
+        await handlerFor(projectSetSecurityTier)(home, { projectId: 1, securityTier: 'guarded' });
+        assert.deepEqual(home.forgotten, [1]);
+        assert.equal(repo.rows.projects[0].security_tier, 'guarded');
+        // Avant même le ménage de l'app, la fenêtre ne voit plus un projet
+        // gardé : la projection ne rend que l'étage ouvert.
+        assert.deepEqual((await handlerFor(projectList)(window, {})).projects, []);
+        await assert.rejects(handlerFor(projectGet)(window, { projectId: 1 }), failsWith('not_found'));
+        await handlerFor(projectSetSecurityTier)(home, { projectId: 1, securityTier: 'open' });
+        assert.deepEqual(home.forgotten, [1]);
+
+        // Ce que l'app a fait de l'oubli : la projection n'existe plus, et la
+        // fenêtre ne voit plus rien, ni en liste, ni au compte, ni par l'id.
+        projections[1] = [];
+        const after = windowTagging(contextWith(repo, { workspaceId: 7, kind: 'shared' }), 'server');
+        assert.deepEqual((await handlerFor(projectList)(after, {})).projects, []);
+        assert.deepEqual(await handlerFor(projectCount)(after, {}), { count: 0 });
+        await assert.rejects(handlerFor(projectGet)(after, { projectId: 1 }), failsWith('not_found'));
+    });
+});
+
+describe("l'entrée items", () => {
+    it('donne le domicile d’un projet visible, son titre à l’étage ouvert, et refuse de projeter un projet gardé', async () => {
+        const repo = fakeRepo({ 1: [7] });
+        repo.rows.projects.push(
+            project({ id: 1 }),
+            project({ id: 2, content: body('') }),
+            project({ id: 3, security_tier: 'guarded', content: body('Secret') })
+        );
+        const items = serverEntry.items!;
+
+        // Chez lui, par sa fenêtre, et depuis un espace qui ne le voit pas.
+        assert.equal(await items.homeOf(repo, 1, 1), 1);
+        assert.equal(await items.homeOf(repo, 1, 7), 1);
+        assert.equal(await items.homeOf(repo, 1, 9), null);
+        assert.equal(await items.homeOf(repo, 99, 1), null);
+
+        // Le titre à l'étage ouvert, demandé avec le domicile ; un projet
+        // gardé, disparu ou d'ailleurs vaut `null`.
+        const open = contextWith(repo).cipher();
+        assert.equal(await items.labelOf(repo, open, 1, 1), 'Projet 1');
+        assert.equal(await items.labelOf(repo, open, 2, 1), 'Sans titre');
+        assert.equal(await items.labelOf(repo, open, 3, 1), null);
+        assert.equal(await items.labelOf(repo, open, 99, 1), null);
+        assert.equal(await items.labelOf(repo, open, 1, 7), null);
+
+        assert.equal(await items.shareable!(repo, 1, 1), true);
+        assert.equal(await items.shareable!(repo, 3, 1), false);
+        assert.equal(await items.shareable!(repo, 99, 1), false);
     });
 });

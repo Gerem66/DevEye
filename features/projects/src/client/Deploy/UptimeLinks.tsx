@@ -3,13 +3,21 @@ import { UPTIME_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { UptimeClientProvider, UptimeLinkedService } from '@deveye/types/sdk/client';
 import { Button, humanizeError, moduleClientProvider, useWorkspacePermissions, WsError } from 'deveye-sdk-client';
 import { api } from '../api';
+import type { ProjectLinkLabel } from '../../contracts/domain';
 import { LinkUptimeDialog } from './LinkUptimeDialog';
 import { UptimeLinkRow } from './UptimeLinkRow';
+import { ForeignLinks } from '../ForeignLinks';
 import styles from '../style.module.css';
 
 interface UptimeLinksProps {
     projectId: number;
     canWrite: boolean;
+    /**
+     * Le projet est projeté depuis un autre espace : les services se nomment,
+     * sans bloc ni geste (voir `ForeignLinks`). Rattacher et délier sont des
+     * gestes du domicile, que le serveur refuse depuis une fenêtre.
+     */
+    foreign?: boolean;
 }
 
 /**
@@ -28,12 +36,14 @@ interface UptimeLinksProps {
  * nommer, plutôt que de les voir disparaître. Module absent : même lecture,
  * des identifiants nus, et une phrase qui le dit.
  */
-export function UptimeLinks({ projectId, canWrite }: UptimeLinksProps) {
+export function UptimeLinks({ projectId, canWrite, foreign = false }: UptimeLinksProps) {
     const permissions = useWorkspacePermissions();
     const uptime = moduleClientProvider<UptimeClientProvider>(UPTIME_CLIENT_PROVIDER);
     const canReadUptime = permissions.canFeature('uptime');
     const canWriteUptime = permissions.canFeature('uptime', 'write');
     const [serviceIds, setServiceIds] = useState<number[]>([]);
+    /** Les services nommés par le serveur : ce qu'un projet projeté en montre. */
+    const [labels, setLabels] = useState<readonly ProjectLinkLabel[]>([]);
     const [services, setServices] = useState<readonly UptimeLinkedService[] | null>(null);
     const [linkOpen, setLinkOpen] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -43,6 +53,7 @@ export function UptimeLinks({ projectId, canWrite }: UptimeLinksProps) {
         try {
             const res = await api.send('projects.uptimeList', { projectId });
             setServiceIds(res.serviceIds);
+            setLabels(res.labels);
             setError(null);
         } catch (e) {
             setError(humanizeError(e, 'Impossible de charger les services rattachés.'));
@@ -57,7 +68,7 @@ export function UptimeLinks({ projectId, canWrite }: UptimeLinksProps) {
     // de droit n'est pas une erreur à afficher : il dit « tu ne peux pas choisir
     // ici », et la liste retombe sur des identifiants nus.
     useEffect(() => {
-        if (!canReadUptime || !uptime) {
+        if (foreign || !canReadUptime || !uptime) {
             setServices([]);
             return;
         }
@@ -76,7 +87,7 @@ export function UptimeLinks({ projectId, canWrite }: UptimeLinksProps) {
         return () => {
             alive = false;
         };
-    }, [canReadUptime, uptime]);
+    }, [foreign, canReadUptime, uptime]);
 
     const unlink = async (serviceId: number) => {
         setBusy(true);
@@ -90,6 +101,19 @@ export function UptimeLinks({ projectId, canWrite }: UptimeLinksProps) {
             setBusy(false);
         }
     };
+
+    if (foreign) {
+        return (
+            <section className={styles.uptimeLinks}>
+                <h3 className={styles.sectionTitle}>Services surveillés</h3>
+                {error && <p className={styles.error}>{error}</p>}
+                {!uptime && <p className={styles.hint}>Le module Uptime n’est pas installé.</p>}
+                {/* Sans le rappel du domicile : l'onglet le dit une fois, sous
+                    les déploiements. */}
+                <ForeignLinks labels={labels} empty='Aucun service rattaché à ce projet.' note={false} />
+            </section>
+        );
+    }
 
     const byId = new Map((services ?? []).map((s) => [s.id, s]));
 

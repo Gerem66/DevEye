@@ -4,9 +4,11 @@ import Projects from './Projects';
 import ProjectsWidget from './ProjectsWidget';
 
 /**
- * Pas de `settingsPanels` : le manifest ne déclare aucun onglet de réglages,
- * un projet se règle dans son dialogue de profil. Le bouton commun de réglages
- * n'est donc pas monté. Pas de `providers` non plus : ce que Projets offre aux
+ * Pas de `settingsPanels` : le manifest ne déclare aucun onglet de réglages
+ * propre, un projet se règle dans son dialogue de profil. Le bouton commun
+ * n'en est pas moins monté sur la fiche d'un projet, pour ce que la coquille
+ * ajoute d'elle-même : Partage (un projet `open` se projette dans un autre
+ * espace) et Permissions. Pas de `providers` non plus : ce que Projets offre aux
  * autres modules (`PROJECTS_USAGE_PROVIDER`, « quels projets utilisent cet
  * élément ») est un contrat serveur, et les onglets d'un projet composent
  * dans l'autre sens les contrats client de Git, Déploiement, Bases de

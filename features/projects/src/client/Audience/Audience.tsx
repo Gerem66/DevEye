@@ -10,10 +10,11 @@ import {
     WsError
 } from 'deveye-sdk-client';
 import { api } from '../api';
-import type { Project } from '../../contracts/domain';
+import type { Project, ProjectLinkLabel } from '../../contracts/domain';
 import { AUDIENCE_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { AudienceClientProvider, AudienceLinkedCandidate } from '@deveye/types/sdk/client';
 import { LinkSiteDialog } from './LinkSiteDialog';
+import { ForeignLinks } from '../ForeignLinks';
 import styles from '../style.module.css';
 
 interface AudienceProps {
@@ -48,6 +49,8 @@ export function Audience({ project, canWrite }: AudienceProps) {
     const canWriteAudience = permissions.canFeature('audience', 'write');
 
     const [linkedIds, setLinkedIds] = useState<number[]>([]);
+    /** Les sites nommés par le serveur : ce qu'un projet projeté en montre. */
+    const [labels, setLabels] = useState<readonly ProjectLinkLabel[]>([]);
     /** Les sites de l'espace, pour nommer celui qu'on délie. */
     const [candidates, setCandidates] = useState<readonly AudienceLinkedCandidate[]>([]);
     const [loaded, setLoaded] = useState(false);
@@ -60,6 +63,7 @@ export function Audience({ project, canWrite }: AudienceProps) {
     const boardVersion = useResourceVersion('projects.board');
     const listVersion = useResourceVersion('audience.list');
     const guarded = project.securityTier === 'guarded';
+    const foreign = project.foreign;
 
     const load = useCallback(async () => {
         if (guarded) {
@@ -69,6 +73,7 @@ export function Audience({ project, canWrite }: AudienceProps) {
         try {
             const res = await api.send('projects.audienceList', { projectId: project.id });
             setLinkedIds(res.siteIds);
+            setLabels(res.labels);
             setError(null);
         } catch (e) {
             setError(humanizeError(e, 'Impossible de charger les sites liés.'));
@@ -86,7 +91,7 @@ export function Audience({ project, canWrite }: AudienceProps) {
     // pointeurs plutôt que d'encaisser un refus, qui n'est pas une erreur à
     // afficher.
     useEffect(() => {
-        if (guarded || !canReadAudience || !provider) {
+        if (guarded || foreign || !canReadAudience || !provider) {
             setCandidates([]);
             return;
         }
@@ -105,7 +110,7 @@ export function Audience({ project, canWrite }: AudienceProps) {
         return () => {
             alive = false;
         };
-    }, [guarded, canReadAudience, provider, listVersion]);
+    }, [guarded, foreign, canReadAudience, provider, listVersion]);
 
     const unlink = async (siteId: number) => {
         setBusy(true);
@@ -130,6 +135,18 @@ export function Audience({ project, canWrite }: AudienceProps) {
     }
 
     if (!loaded) return <p className={styles.empty}>Chargement…</p>;
+
+    // Projeté depuis un autre espace : les sites se nomment, sans le bloc du
+    // module ni ses gestes (voir `ForeignLinks`).
+    if (foreign) {
+        return (
+            <div className={styles.linkedSites}>
+                {error && <p className={styles.error}>{error}</p>}
+                {!provider && <p className={styles.hint}>Le module Audience n’est pas installé.</p>}
+                <ForeignLinks labels={labels} empty='Aucun site suivi relié à ce projet.' />
+            </div>
+        );
+    }
 
     const unlinkingName = unlinking === null ? null : (candidates.find((c) => c.id === unlinking)?.name ?? null);
 

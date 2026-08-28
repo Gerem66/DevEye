@@ -10,10 +10,11 @@ import {
     WsError
 } from 'deveye-sdk-client';
 import { api } from '../api';
-import type { Project } from '../../contracts/domain';
+import type { Project, ProjectLinkLabel } from '../../contracts/domain';
 import { DATABASE_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { DatabaseClientProvider, DatabaseLinkedCandidate } from '@deveye/types/sdk/client';
 import { LinkDatabaseDialog } from './LinkDatabaseDialog';
+import { ForeignLinks } from '../ForeignLinks';
 import styles from '../style.module.css';
 
 interface DatabasesProps {
@@ -50,6 +51,8 @@ export function Databases({ project, canWrite }: DatabasesProps) {
     const canWriteDb = permissions.canFeature('database', 'write');
 
     const [linkedIds, setLinkedIds] = useState<number[]>([]);
+    /** Les bases nommées par le serveur : ce qu'un projet projeté en montre. */
+    const [labels, setLabels] = useState<readonly ProjectLinkLabel[]>([]);
     /** Les bases de l'espace, pour nommer celle qu'on délie. */
     const [candidates, setCandidates] = useState<readonly DatabaseLinkedCandidate[]>([]);
     const [loaded, setLoaded] = useState(false);
@@ -62,6 +65,7 @@ export function Databases({ project, canWrite }: DatabasesProps) {
     const boardVersion = useResourceVersion('projects.board');
     const listVersion = useResourceVersion('database.list');
     const guarded = project.securityTier === 'guarded';
+    const foreign = project.foreign;
 
     const load = useCallback(async () => {
         if (guarded) {
@@ -71,6 +75,7 @@ export function Databases({ project, canWrite }: DatabasesProps) {
         try {
             const res = await api.send('projects.databaseList', { projectId: project.id });
             setLinkedIds(res.databaseIds);
+            setLabels(res.labels);
             setError(null);
         } catch (e) {
             setError(humanizeError(e, 'Impossible de charger les bases liées.'));
@@ -88,7 +93,7 @@ export function Databases({ project, canWrite }: DatabasesProps) {
     // pointeurs plutôt que d'encaisser un refus, qui n'est pas une erreur à
     // afficher.
     useEffect(() => {
-        if (guarded || !canReadDb || !provider) {
+        if (guarded || foreign || !canReadDb || !provider) {
             setCandidates([]);
             return;
         }
@@ -107,7 +112,7 @@ export function Databases({ project, canWrite }: DatabasesProps) {
         return () => {
             alive = false;
         };
-    }, [guarded, canReadDb, provider, listVersion]);
+    }, [guarded, foreign, canReadDb, provider, listVersion]);
 
     const unlink = async (databaseId: number) => {
         setBusy(true);
@@ -132,6 +137,18 @@ export function Databases({ project, canWrite }: DatabasesProps) {
     }
 
     if (!loaded) return <p className={styles.empty}>Chargement…</p>;
+
+    // Projeté depuis un autre espace : les bases se nomment, sans le bloc du
+    // module ni ses gestes (voir `ForeignLinks`).
+    if (foreign) {
+        return (
+            <div className={styles.linkedDatabases}>
+                {error && <p className={styles.error}>{error}</p>}
+                {!provider && <p className={styles.hint}>Le module Bases de données n’est pas installé.</p>}
+                <ForeignLinks labels={labels} empty='Aucune base reliée à ce projet.' />
+            </div>
+        );
+    }
 
     const unlinkingName = unlinking === null ? null : (candidates.find((c) => c.id === unlinking)?.name ?? null);
 

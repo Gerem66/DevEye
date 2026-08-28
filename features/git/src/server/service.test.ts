@@ -10,7 +10,12 @@ import type {
     GitReleaseRow,
     GitRepoRow
 } from '../contracts/domain';
-import { PROJECTS_USAGE_PROVIDER, type ProjectsUsageProvider } from '@deveye/types/sdk';
+import {
+    GIT_ITEMS_PROVIDER,
+    PROJECTS_USAGE_PROVIDER,
+    type GitItemsProvider,
+    type ProjectsUsageProvider
+} from '@deveye/types/sdk';
 import { createTestServiceDeps } from '@deveye/types/sdk/testing';
 
 import {
@@ -23,6 +28,7 @@ import {
     type GitHubRelease,
     type GitHubSyncState
 } from './github';
+import { serverEntry } from './index';
 import type { GitRepo } from './repo';
 import { GitSync } from './service';
 
@@ -620,5 +626,23 @@ describe('les tours suivants', () => {
         const row = store.repos[0];
         assert.ok(row.last_sync_at !== null && row.last_sync_at >= before && row.last_sync_at < before + 60);
         assert.equal(row.last_sync_error, 'Jeton refusé par GitHub.');
+    });
+});
+
+/** Le contrat offert à Projets, tel que `createService` le publie au boot. */
+function itemsProviderOn(store: FakeRepo): GitItemsProvider {
+    const service = serverEntry.createService?.(createTestServiceDeps({ repo: store }));
+    assert.ok(service, 'le module crée un service');
+    const provider = service.providers?.[GIT_ITEMS_PROVIDER] as GitItemsProvider | undefined;
+    assert.ok(provider, 'le service publie le contrat des éléments');
+    return provider;
+}
+
+describe('GIT_ITEMS_PROVIDER : labelOf', () => {
+    it("rend le nom déchiffré d'un dépôt vivant, null pour un identifiant inconnu ou un autre espace", async () => {
+        const provider = itemsProviderOn(fakeRepo([repo()], [credential()]));
+        assert.equal(await provider.labelOf(1, 1), 'gerem66/DevEye');
+        assert.equal(await provider.labelOf(42, 1), null);
+        assert.equal(await provider.labelOf(1, 2), null);
     });
 });

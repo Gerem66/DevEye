@@ -18,11 +18,35 @@ export interface ProjectStats {
     unread: number;
 }
 
-/** La table `projects` : le portefeuille de l'espace. */
+/**
+ * La table `projects` : le portefeuille de l'espace, et ce qu'un autre espace
+ * y projette.
+ *
+ * Toute écriture prend le `workspaceId` de la ligne visée : son **domicile**,
+ * qui n'est pas forcément l'espace actif quand le projet est projeté. C'est le
+ * handler qui le résout (`loadProject`) ; le dépôt ne fait que refuser
+ * (`null`, `false`) une écriture adressée au mauvais espace.
+ */
 export interface ProjectRepo {
-    listByWorkspace(workspaceId: number, archived: boolean): Promise<ProjectRow[]>;
-    countActiveByWorkspace(workspaceId: number): Promise<number>;
+    /**
+     * Les projets **visibles** depuis cet espace : les siens, plus ceux qu'un
+     * autre espace y projette (`item_shares`). Actifs ou archivés, deux
+     * ensembles disjoints : les vivants dans l'ordre choisi, les locaux
+     * d'abord (le rang d'un projet projeté est celui de son domicile, le
+     * client le range après) ; les archivés du plus récemment archivé au plus
+     * ancien, d'où qu'ils viennent, l'archive se lisant comme une histoire.
+     *
+     * La branche projetée ne retient que les projets **ouverts**, en garde de
+     * cohérence : un projet gardé est chiffré par le mot de passe de son
+     * auteur, illisible dans tout autre espace. `share.set` refuse de le
+     * projeter (`items.shareable`), et sa conversion en gardé retire ses
+     * projections (`ctx.items.forget`).
+     */
+    listVisible(workspaceId: number, archived: boolean): Promise<ProjectRow[]>;
+    /** Un projet **de** cet espace : son domicile, jamais une fenêtre. */
     findById(id: number, workspaceId: number): Promise<ProjectRow | null>;
+    /** Comme `findById`, mais accepte aussi un projet ouvert projeté vers cet espace. */
+    findVisible(id: number, workspaceId: number): Promise<ProjectRow | null>;
     create(input: {
         userId: number;
         workspaceId: number;
@@ -50,8 +74,13 @@ export interface ProjectRepo {
     archive(id: number, workspaceId: number, at: number): Promise<boolean>;
     restore(id: number, workspaceId: number): Promise<boolean>;
     reorder(workspaceId: number, projectIds: number[]): Promise<void>;
-    /** Les compteurs de tous les projets d'un espace, pour l'appelant donné. */
-    statsByWorkspace(workspaceId: number, userId: number, now: number): Promise<ProjectStats[]>;
+    /**
+     * Les compteurs des projets donnés (ceux que le portefeuille liste, où
+     * qu'ils vivent), pour l'appelant donné : ses non-lus sont les siens,
+     * chez lui comme par une fenêtre. Les archivés n'en ont pas : un projet
+     * rangé n'a plus d'avancement à montrer.
+     */
+    statsFor(projectIds: number[], userId: number, now: number): Promise<ProjectStats[]>;
 }
 
 /** Prochain rang libre à la fin du portefeuille (0 s'il est vide). */
@@ -66,28 +95,44 @@ async function nextSortOrder(q: SdkQueryable, workspaceId: number): Promise<numb
 
 export function projectRepo(q: SdkQueryable): ProjectRepo {
     return {
-        async listByWorkspace(workspaceId, archived) {
-            // Les deux ensembles sont disjoints : les projets vivants suivent
-            // l'ordre choisi, les archivés le plus récemment archivé d'abord.
+        async listVisible(workspaceId, archived) {
+            // `sort_order` appartient à l'espace d'origine : un projet projeté
+            // se range après les locaux, dans l'ordre de chez lui. Lui donner
+            // un rang propre à chaque espace demanderait une colonne par
+            // projection (un réglage d'affichage ne vaut pas cette table).
             return q.query<ProjectRow>(
-                `SELECT * FROM projects
-                 WHERE workspace_id = ? AND archived_at IS ${archived ? 'NOT NULL' : 'NULL'}
-                 ORDER BY ${archived ? 'archived_at DESC' : 'sort_order ASC'}, id ASC`,
-                [workspaceId]
+                `SELECT v.* FROM (
+                     SELECT p.* FROM projects p WHERE p.workspace_id = ?
+                     UNION
+                     SELECT p.* FROM projects p
+                       JOIN item_shares sh
+                         ON sh.feature = 'projects' AND sh.item_id = p.id AND sh.home_workspace_id = p.workspace_id
+                      WHERE sh.workspace_id = ? AND p.security_tier = 'open'
+                 ) v
+                 WHERE v.archived_at IS ${archived ? 'NOT NULL' : 'NULL'}
+                 ORDER BY ${archived ? 'v.archived_at DESC' : 'v.workspace_id <> ?, v.sort_order ASC'}, v.id ASC`,
+                archived ? [workspaceId, workspaceId] : [workspaceId, workspaceId, workspaceId]
             );
-        },
-        async countActiveByWorkspace(workspaceId) {
-            const rows = await q.query<{ count: number }>(
-                'SELECT COUNT(*) AS count FROM projects WHERE workspace_id = ? AND archived_at IS NULL',
-                [workspaceId]
-            );
-            return Number(rows[0]?.count ?? 0);
         },
         async findById(id, workspaceId) {
             const rows = await q.query<ProjectRow>('SELECT * FROM projects WHERE id = ? AND workspace_id = ?', [
                 id,
                 workspaceId
             ]);
+            return rows[0] ?? null;
+        },
+        async findVisible(id, workspaceId) {
+            const rows = await q.query<ProjectRow>(
+                `SELECT p.* FROM projects p
+                  WHERE p.id = ?
+                    AND (p.workspace_id = ?
+                         OR (p.security_tier = 'open'
+                             AND EXISTS (SELECT 1 FROM item_shares sh
+                                          WHERE sh.feature = 'projects' AND sh.item_id = p.id
+                                            AND sh.home_workspace_id = p.workspace_id
+                                            AND sh.workspace_id = ?)))`,
+                [id, workspaceId, workspaceId]
+            );
             return rows[0] ?? null;
         },
         async create({ userId, workspaceId, status, securityTier, startDate, dueDate, content }) {
@@ -165,13 +210,17 @@ export function projectRepo(q: SdkQueryable): ProjectRepo {
                 ]);
             }
         },
-        async statsByWorkspace(workspaceId, userId, now) {
-            // Une seule requête pour tout l'espace plutôt qu'une par projet : le
-            // portefeuille en affiche plusieurs dizaines.
+        async statsFor(projectIds, userId, now) {
+            if (projectIds.length === 0) return [];
+            // Une seule requête pour tout le portefeuille plutôt qu'une par
+            // projet : il en affiche plusieurs dizaines. Par identifiant et non
+            // par espace : un projet projeté ici vit ailleurs, et ses compteurs
+            // se lisent de la même façon que ceux d'un projet d'ici.
             //
             // Les non-lus se comptent contre le point d'eau haute de l'appelant
             // (`project_card_reads`) ; une carte jamais ouverte n'a pas de ligne,
             // d'où le COALESCE à 0 qui compte alors tous ses messages.
+            const placeholders = projectIds.map(() => '?').join(', ');
             const rows = await q.query<ProjectStats>(
                 `SELECT p.id AS project_id,
                         COUNT(c.id)                                             AS card_total,
@@ -196,9 +245,9 @@ export function projectRepo(q: SdkQueryable): ProjectRepo {
                         WHERE m.id <= r.last_read_message_id
                         GROUP BY m.card_id
                  ) seen ON seen.card_id = c.id
-                 WHERE p.workspace_id = ? AND p.archived_at IS NULL
+                 WHERE p.id IN (${placeholders}) AND p.archived_at IS NULL
                  GROUP BY p.id`,
-                [now, now, userId, workspaceId]
+                [now, now, userId, ...projectIds]
             );
             return rows.map((row) => ({
                 project_id: Number(row.project_id),

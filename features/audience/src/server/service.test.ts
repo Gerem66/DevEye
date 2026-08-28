@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import type { AudienceSiteRow } from '../contracts/domain';
+import { AUDIENCE_ITEMS_PROVIDER, type AudienceItemsProvider } from '@deveye/types/sdk';
 import { createTestServiceDeps } from '@deveye/types/sdk/testing';
 
 import { dayKey } from './normalize';
+import { serverEntry } from './index';
 import type { AudienceRepo, NewSessionInput, PendingEventRow } from './repo';
 import { AudienceIngest, type IngestRequest } from './service';
 
@@ -68,7 +70,7 @@ function fakeRepo(sites: AudienceSiteRow[]): FakeRepo {
         pruned: { events: [], sessions: [], labels: [] },
         list: unused,
         listVisible: unused,
-        find: unused,
+        find: async (id, workspaceId) => sites.find((s) => s.id === id && s.workspace_id === workspaceId) ?? null,
         findVisible: unused,
         findWithStats: unused,
         findByName: unused,
@@ -355,5 +357,23 @@ describe('le sel des visiteurs', () => {
         assert.equal(repo.sessions.length, 1);
         assert.equal(repo.sessions[0].touched, 2);
         assert.equal(asked.length, 2);
+    });
+});
+
+/** Le contrat offert à Projets, tel que `createService` le publie au boot. */
+function itemsProviderOn(repo: FakeRepo): AudienceItemsProvider {
+    const service = serverEntry.createService?.(createTestServiceDeps({ repo }));
+    assert.ok(service, 'le module crée un service');
+    const provider = service.providers?.[AUDIENCE_ITEMS_PROVIDER] as AudienceItemsProvider | undefined;
+    assert.ok(provider, 'le service publie le contrat des éléments');
+    return provider;
+}
+
+describe('AUDIENCE_ITEMS_PROVIDER : labelOf', () => {
+    it("rend le nom déchiffré d'un site vivant, null pour un identifiant inconnu ou un autre espace", async () => {
+        const provider = itemsProviderOn(fakeRepo([site()]));
+        assert.equal(await provider.labelOf(1, 1), 'Vitrine');
+        assert.equal(await provider.labelOf(42, 1), null);
+        assert.equal(await provider.labelOf(1, 2), null);
     });
 });

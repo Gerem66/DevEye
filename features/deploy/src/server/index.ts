@@ -1,10 +1,33 @@
 import { DEPLOY_ITEMS_PROVIDER, type DeployItemsProvider } from '@deveye/types/sdk';
-import type { FeatureServer } from '@deveye/types/sdk/server';
+import type { FeatureServer, SdkCipher } from '@deveye/types/sdk/server';
 
 import { deployHandlers } from './handlers';
 import { createRepo, type DeployRepo } from './repo';
 import { DeploySync } from './service';
 import { readJson, setSync, type StoredTarget } from './_shared';
+
+/**
+ * Le nom d'une cible (la seule clé du blob chiffré à l'étage ouvert),
+ * déchiffré par `cipher` (le codec OUVERT de `workspaceId`, son domicile).
+ * Une cible disparue ou un blob illisible vaut `null`, jamais une exception :
+ * ce que l'écran des canaux montre comme « une cible disparue », et une
+ * fenêtre sur un projet projeté comme une liaison sans nom.
+ *
+ * Une seule fonction pour les deux appelants : l'entrée `items` (le codec de
+ * l'espace appelant, fourni par l'app) et le contrat offert à Projets
+ * (`deps.cipherFor(workspaceId)`).
+ */
+async function labelOf(
+    repo: DeployRepo,
+    cipher: SdkCipher,
+    targetId: number,
+    workspaceId: number
+): Promise<string | null> {
+    const row = await repo.findTarget(targetId, workspaceId);
+    if (!row) return null;
+    const stored = await readJson<Partial<StoredTarget>>(cipher, row.content);
+    return typeof stored?.name === 'string' && stored.name.length > 0 ? stored.name : null;
+}
 
 /**
  * L'entrée serveur du module.
@@ -14,7 +37,8 @@ import { readJson, setSync, type StoredTarget } from './_shared';
  * `Services/IntegrationSyncService.ts`, qui garde la synchronisation git)
  * démarré avec les autres services, le singleton posé pour les handlers
  * (`deploy.trigger` réveille un tour), et le contrat offert à Projets
- * (`DEPLOY_ITEMS_PROVIDER` : une cible existe-t-elle dans cet espace ?).
+ * (`DEPLOY_ITEMS_PROVIDER` : une cible existe-t-elle dans cet espace, et
+ * comment s'appelle-t-elle ?).
  *
  * Déploiement a **ses propres** canaux (`notification_channels`, feature
  * `deploy`) : le service notifie par la façade `notify` du SDK, sur la route
@@ -45,9 +69,13 @@ export const serverEntry: FeatureServer<DeployRepo> = {
         // faisait `deploy.findTarget` avant le rapatriement), pour qu'un
         // identifiant étranger ne se relie pas et ne trahisse pas son
         // existence. Le domicile seulement, jamais une projection : un projet
-        // relie ce que son espace possède.
+        // relie ce que son espace possède. Et le nom d'une cible reliée, sous le
+        // codec ouvert de son domicile : ce qu'une fenêtre sur un projet projeté
+        // montre pour une liaison qu'elle ne peut pas ouvrir, un nom, jamais un
+        // identifiant.
         const items: DeployItemsProvider = {
-            exists: async (targetId, workspaceId) => (await deps.repo.findTarget(targetId, workspaceId)) !== null
+            exists: async (targetId, workspaceId) => (await deps.repo.findTarget(targetId, workspaceId)) !== null,
+            labelOf: (targetId, workspaceId) => labelOf(deps.repo, deps.cipherFor(workspaceId), targetId, workspaceId)
         };
         return {
             start() {
@@ -64,14 +92,6 @@ export const serverEntry: FeatureServer<DeployRepo> = {
     items: {
         homeOf: async (repo, itemId, workspaceId) =>
             (await repo.findVisibleTarget(itemId, workspaceId))?.workspace_id ?? null,
-        // Le nom est la seule clé du blob chiffré à l'étage ouvert ; un blob
-        // illisible ou une cible disparue vaut `null`, ce que l'écran des canaux
-        // montre comme « une cible disparue ».
-        labelOf: async (repo, cipher, itemId, workspaceId) => {
-            const row = await repo.findTarget(itemId, workspaceId);
-            if (!row) return null;
-            const stored = await readJson<Partial<StoredTarget>>(cipher, row.content);
-            return typeof stored?.name === 'string' && stored.name.length > 0 ? stored.name : null;
-        }
+        labelOf
     }
 };

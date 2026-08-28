@@ -16,6 +16,7 @@ import {
     type ProjectPriority
 } from '../../contracts/domain';
 import { Chat } from '../Chat/Chat';
+import { HIDDEN_MEMBER_LABEL } from '../Member';
 import styles from '../style.module.css';
 
 interface CardDialogProps {
@@ -406,6 +407,16 @@ export function CardDialog({
                         onChange={(e) => patch({ assigneeUserId: e.target.value ? Number(e.target.value) : null })}
                     >
                         <option value=''>Personne</option>
+                        {/* Seuls les membres d'ici se proposent. L'assigné
+                            courant peut n'en être pas (projet projeté depuis
+                            un autre espace) : on nomme alors la valeur sans
+                            l'offrir, sinon le sélecteur lirait « Personne »
+                            sur une tâche pourtant attribuée. */}
+                        {draft.assigneeUserId !== null && !members.some((m) => m.id === draft.assigneeUserId) && (
+                            <option value={draft.assigneeUserId} disabled>
+                                {HIDDEN_MEMBER_LABEL}
+                            </option>
+                        )}
                         {members.map((m) => (
                             <option key={m.id} value={m.id}>
                                 {m.username}

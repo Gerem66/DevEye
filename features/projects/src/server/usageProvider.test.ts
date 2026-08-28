@@ -110,9 +110,9 @@ function fakeRepo(): FakeRepo {
         eventRows,
         repoLinks,
         projects: {
-            listByWorkspace: unused,
-            countActiveByWorkspace: unused,
+            listVisible: unused,
             findById: async (id, ws) => projectRows.find((p) => p.id === id && p.workspace_id === ws) ?? null,
+            findVisible: unused,
             create: unused,
             async update(id, ws, input) {
                 const row = projectRows.find((p) => p.id === id && p.workspace_id === ws);
@@ -126,7 +126,7 @@ function fakeRepo(): FakeRepo {
             archive: unused,
             restore: unused,
             reorder: unused,
-            statsByWorkspace: unused
+            statsFor: unused
         },
         board: {} as ProjectsRepo['board'],
         chat: {} as ProjectsRepo['chat'],

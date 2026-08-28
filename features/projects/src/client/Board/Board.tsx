@@ -23,17 +23,16 @@ import {
     verticalListSortingStrategy
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Avatar, Button, useLiveOutlines, useRequestPopupWidth, type LiveOutlineProps } from 'deveye-sdk-client';
-import type { MinimalUser } from '@deveye/types';
+import { Button, useLiveOutlines, useRequestPopupWidth, type LiveOutlineProps } from 'deveye-sdk-client';
 import { formatDate, PRIORITY_LABELS } from '../api';
 import type { ProjectCard, ProjectColumn } from '../../contracts/domain';
+import { MemberAvatar } from '../Member';
 import { boardNaturalWidth } from './width';
 import styles from '../style.module.css';
 
 interface BoardProps {
     columns: ProjectColumn[];
     cards: ProjectCard[];
-    members: readonly MinimalUser[];
     canWrite: boolean;
     /** Applique un nouvel ordre localement (optimiste) puis le persiste. */
     onCardsMoved: (columnId: number, cardIds: number[], next: ProjectCard[]) => void;
@@ -65,7 +64,6 @@ interface BoardProps {
 export function Board({
     columns,
     cards,
-    members,
     canWrite,
     onCardsMoved,
     onCardOpen,
@@ -202,7 +200,6 @@ export function Board({
                         key={column.id}
                         column={column}
                         cards={byColumn.get(column.id) ?? []}
-                        members={members}
                         canWrite={canWrite}
                         first={index === 0}
                         last={index === columns.length - 1}
@@ -222,7 +219,7 @@ export function Board({
 
             {/* La copie flottante reprend exactement la carte, sans son contour
                 de présence — deux cadres superposés seraient illisibles. */}
-            <DragOverlay>{activeCard && <CardBody card={activeCard} members={members} dragging />}</DragOverlay>
+            <DragOverlay>{activeCard && <CardBody card={activeCard} dragging />}</DragOverlay>
         </DndContext>
     );
 }
@@ -238,7 +235,6 @@ function applyOrder(cards: ProjectCard[], columnId: number, ids: number[]): Proj
 interface ColumnProps {
     column: ProjectColumn;
     cards: ProjectCard[];
-    members: readonly MinimalUser[];
     canWrite: boolean;
     first: boolean;
     last: boolean;
@@ -252,7 +248,6 @@ interface ColumnProps {
 function Column({
     column,
     cards,
-    members,
     canWrite,
     first,
     last,
@@ -330,7 +325,6 @@ function Column({
                         <SortableCard
                             key={card.id}
                             card={card}
-                            members={members}
                             outline={outlineFor(`card:${card.id}`)}
                             onOpen={() => onCardOpen(card)}
                         />
@@ -354,12 +348,11 @@ function Column({
 
 interface SortableCardProps {
     card: ProjectCard;
-    members: readonly MinimalUser[];
     outline: LiveOutlineProps;
     onOpen: () => void;
 }
 
-function SortableCard({ card, members, outline, onOpen }: SortableCardProps) {
+function SortableCard({ card, outline, onOpen }: SortableCardProps) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: card.id });
     const style = {
         transform: CSS.Translate.toString(transform),
@@ -371,20 +364,18 @@ function SortableCard({ card, members, outline, onOpen }: SortableCardProps) {
 
     return (
         <div ref={setNodeRef} style={style} {...attributes} {...listeners} {...outline}>
-            <CardBody card={card} members={members} onOpen={onOpen} />
+            <CardBody card={card} onOpen={onOpen} />
         </div>
     );
 }
 
 interface CardBodyProps {
     card: ProjectCard;
-    members: readonly MinimalUser[];
     dragging?: boolean;
     onOpen?: () => void;
 }
 
-function CardBody({ card, members, dragging, onOpen }: CardBodyProps) {
-    const assignee = members.find((m) => m.id === card.assigneeUserId);
+function CardBody({ card, dragging, onOpen }: CardBodyProps) {
     const due = formatDate(card.dueDate);
     const overdue = card.dueDate !== null && card.dueDate * 1000 < Date.now();
     const done = card.checklist.filter((i) => i.done).length;
@@ -436,7 +427,8 @@ function CardBody({ card, members, dragging, onOpen }: CardBodyProps) {
                 )}
                 {due && <span className={overdue ? styles.overdue : undefined}>{due}</span>}
                 <span className={styles.card2Spacer} />
-                {card.assigneeUserId !== null && <Avatar user={assignee} size={20} />}
+                {/* Masqué s'il n'est pas membre d'ici (projet projeté). */}
+                {card.assigneeUserId !== null && <MemberAvatar userId={card.assigneeUserId} size={20} />}
             </div>
         </article>
     );

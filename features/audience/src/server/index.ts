@@ -1,11 +1,35 @@
 import { AUDIENCE_ITEMS_PROVIDER, type AudienceItemsProvider } from '@deveye/types/sdk';
-import type { FeatureServer } from '@deveye/types/sdk/server';
+import type { FeatureServer, SdkCipher } from '@deveye/types/sdk/server';
 
 import { audienceHandlers } from './handlers';
 import { createRepo, type AudienceRepo } from './repo';
 import { audienceRoutes } from './routes';
 import { AudienceIngest } from './service';
 import { readJson, setIngest, type StoredSite } from './_shared';
+
+/**
+ * Le nom d'un site (la première clé du blob chiffré à l'étage ouvert),
+ * déchiffré par `cipher` (le codec OUVERT de `workspaceId`, son domicile).
+ * Un site disparu ou un blob illisible vaut `null`, jamais une exception : ce
+ * que l'appelant montre comme « une cible disparue », qu'il soit l'app (le
+ * partage) ou une fenêtre sur un projet projeté (une liaison qu'elle ne peut
+ * pas ouvrir).
+ *
+ * Une seule fonction pour les deux appelants : l'entrée `items` (le codec de
+ * l'espace appelant, fourni par l'app) et le contrat offert à Projets
+ * (`deps.cipherFor(workspaceId)`).
+ */
+async function labelOf(
+    repo: AudienceRepo,
+    cipher: SdkCipher,
+    siteId: number,
+    workspaceId: number
+): Promise<string | null> {
+    const row = await repo.find(siteId, workspaceId);
+    if (!row) return null;
+    const stored = await readJson<Partial<StoredSite>>(cipher, row.content);
+    return typeof stored?.name === 'string' && stored.name.length > 0 ? stored.name : null;
+}
 
 /**
  * L'entrée serveur du module.
@@ -15,11 +39,12 @@ import { readJson, setIngest, type StoredSite } from './_shared';
  * mémoire, vidange par lots, agrégat journalier, rétention) démarrée avec les
  * autres services, le singleton posé pour les handlers (toute mutation d'un
  * site lui fait oublier son cache), le contrat offert à Projets
- * (`AUDIENCE_ITEMS_PROVIDER` : un site existe-t-il dans cet espace ?), et les
- * **routes publiques** (`publicRoutes`, capacité `routes.public`) : le script
- * de mesure et les deux points d'entrée des balises, que l'hôte monte sur
- * chacun de ses écouteurs exposés, à la place de l'ex `audienceRoutes(app)`
- * que `app.ts` et `publicApp.ts` appelaient chacun.
+ * (`AUDIENCE_ITEMS_PROVIDER` : un site existe-t-il dans cet espace, et
+ * comment s'appelle-t-il ?), et les **routes publiques** (`publicRoutes`,
+ * capacité `routes.public`) : le script de mesure et les deux points d'entrée
+ * des balises, que l'hôte monte sur chacun de ses écouteurs exposés, à la
+ * place de l'ex `audienceRoutes(app)` que `app.ts` et `publicApp.ts`
+ * appelaient chacun.
  *
  * Audience ne notifie personne (`notifies: false`) : aucune capacité `notify`.
  *
@@ -43,9 +68,13 @@ export const serverEntry: FeatureServer<AudienceRepo> = {
         // faisait `audience.find` avant le rapatriement), pour qu'un
         // identifiant étranger ne se relie pas et ne trahisse pas son
         // existence. Le domicile seulement, jamais une projection : un projet
-        // relie ce que son espace possède.
+        // relie ce que son espace possède. Et le nom d'un site relié, sous le
+        // codec ouvert de son domicile : ce qu'une fenêtre sur un projet projeté
+        // montre pour une liaison qu'elle ne peut pas ouvrir, un nom, jamais un
+        // identifiant.
         const items: AudienceItemsProvider = {
-            exists: async (siteId, workspaceId) => (await deps.repo.find(siteId, workspaceId)) !== null
+            exists: async (siteId, workspaceId) => (await deps.repo.find(siteId, workspaceId)) !== null,
+            labelOf: (siteId, workspaceId) => labelOf(deps.repo, deps.cipherFor(workspaceId), siteId, workspaceId)
         };
         return {
             start() {
@@ -65,14 +94,6 @@ export const serverEntry: FeatureServer<AudienceRepo> = {
     items: {
         homeOf: async (repo, itemId, workspaceId) =>
             (await repo.findVisible(itemId, workspaceId))?.workspace_id ?? null,
-        // Le nom est la première clé du blob chiffré à l'étage ouvert ; un blob
-        // illisible ou un site disparu vaut `null`, ce que l'écran des canaux
-        // montre comme « une cible disparue ».
-        labelOf: async (repo, cipher, itemId, workspaceId) => {
-            const row = await repo.find(itemId, workspaceId);
-            if (!row) return null;
-            const stored = await readJson<Partial<StoredSite>>(cipher, row.content);
-            return typeof stored?.name === 'string' && stored.name.length > 0 ? stored.name : null;
-        }
+        labelOf
     }
 };

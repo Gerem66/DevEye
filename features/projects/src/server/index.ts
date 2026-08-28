@@ -6,6 +6,7 @@ import type { FeatureServer } from '@deveye/types/sdk/server';
 
 import { projectsHandlers } from './handlers';
 import { createRepo, type ProjectsRepo } from './repo';
+import { tryDecryptProject } from './_shared';
 import { createProjectsUsageProvider } from './usageProvider';
 
 /**
@@ -22,12 +23,16 @@ import { createProjectsUsageProvider } from './usageProvider';
  * `providers.get`, comme avant.
  *
  * Dans l'autre sens, Projets consomme leurs contrats d'éléments
- * (`*_ITEMS_PROVIDER`) par `ctx.providers` avant de poser une liaison.
+ * (`*_ITEMS_PROVIDER`) par `ctx.providers` : `exists` avant de poser une
+ * liaison, `labelOf` pour nommer celles qui existent.
  *
- * Pas d'entrée `items` : le manifest déclare `shareTier: 'never'` par-dessus
- * le `'perItem'` du descripteur publié, parce que le listage n'est pas
- * branché sur le partage (voir `manifest.ts`). Le jour où il l'est, `items`
- * arrive ici en même temps que `ctx.sharing.scope()` dans `projects.list`.
+ * `items` est ce que le partage sait des projets sans ouvrir la feature
+ * (`Docs/SHARING.md`) : le domicile d'un projet visible d'ici (le sien, ou
+ * l'espace qui le projette), son titre déchiffré par le codec ouvert de
+ * l'espace appelant, et son palier (`shareable` : un projet ouvert se
+ * projette, un projet gardé est chiffré par le mot de passe de son auteur et
+ * ne se lit nulle part ailleurs). `shareTier: 'perItem'`, hérité du
+ * descripteur, l'exige ; le boot refuse un module qui déclare sans l'offrir.
  *
  * `migrationsDir` : les treize tables du module datent du socle (060, 061 et
  * leurs suites, jamais déplacées, allowlist dans deveye-feature.json) ; la
@@ -47,5 +52,26 @@ export const serverEntry: FeatureServer<ProjectsRepo> = {
             stop() {},
             providers: { [PROJECTS_USAGE_PROVIDER]: createProjectsUsageProvider(deps) }
         };
+    },
+    items: {
+        homeOf: async (repo, itemId, workspaceId) =>
+            (await repo.projects.findVisible(itemId, workspaceId))?.workspace_id ?? null,
+        // Le titre vit dans le blob chiffré ; un projet gardé (étage gardé, que
+        // le codec ouvert ne sait pas lire), un blob illisible ou un projet
+        // disparu valent `null`. Le titre vide se nomme comme partout à
+        // l'écran. Demandé avec le domicile du projet.
+        labelOf: async (repo, cipher, itemId, workspaceId) => {
+            const row = await repo.projects.findById(itemId, workspaceId);
+            if (!row || row.security_tier !== 'open') return null;
+            const payload = await tryDecryptProject(cipher, row.content);
+            if (!payload) return null;
+            return payload.title.length > 0 ? payload.title : 'Sans titre';
+        },
+        // Le palier, projet par projet : seul un projet ouvert se lit sous une
+        // clé que le serveur tient seul, donc dans un autre espace. Projeter un
+        // projet gardé ouvrirait une fenêtre sur rien ; `share.set` refuse en
+        // le disant. Demandé avec le domicile du projet.
+        shareable: async (repo, itemId, workspaceId) =>
+            (await repo.projects.findById(itemId, workspaceId))?.security_tier === 'open'
     }
 };

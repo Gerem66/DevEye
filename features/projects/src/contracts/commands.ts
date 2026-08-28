@@ -17,7 +17,7 @@ import {
 import { PROJECT_MESSAGE_MAX_LENGTH, PROJECT_MESSAGE_PAGE_SIZE, projectMessageSchema } from './chat';
 import { projectCardDepSchema, projectMilestoneDraftSchema, projectMilestoneSchema } from './plan';
 import { PROJECT_EVENT_PAGE_SIZE, projectEventSchema } from './history';
-import { myTaskSchema, projectLinkCountsSchema } from './link';
+import { myTaskSchema, projectLinkCountsSchema, projectLinkLabelSchema } from './link';
 
 /**
  * Commandes des projets.
@@ -36,7 +36,11 @@ import { myTaskSchema, projectLinkCountsSchema } from './link';
 const projectId = z.number().int().positive();
 
 /**
- * Le portefeuille : tous les projets actifs de l'espace, avec leurs compteurs.
+ * Le portefeuille : tous les projets actifs visibles d'ici, avec leurs
+ * compteurs. Ceux de l'espace d'abord, puis ceux qu'un autre espace y
+ * projette (`foreign: true`, lus sous le codec de leur domicile, voir
+ * `Docs/SHARING.md`) ; un projet qu'une restriction de rôle masque n'y figure
+ * pas.
  *
  * Jamais verrouillée. Un projet `guarded` dont la session ne peut pas lire le
  * corps revient **masqué** (`masked: true`) plutôt qu'absent : la liste doit
@@ -50,9 +54,10 @@ export const projectList = {
 };
 
 /**
- * Compte les projets **actifs**. Métadonnée en clair pure : aucune ligne n'est
- * déchiffrée, la tuile d'accueil affiche donc toujours un nombre, même session
- * verrouillée.
+ * Compte les projets **actifs** visibles d'ici, les mêmes lignes que la liste
+ * (projetés compris, restrictions déduites). Métadonnée en clair pure : aucune
+ * ligne n'est déchiffrée, la tuile d'accueil affiche donc toujours un nombre,
+ * même session verrouillée.
  */
 export const projectCount = {
     command: 'projects.count' as const,
@@ -99,7 +104,9 @@ export const projectUpdate = {
  *
  * `github_release` exige un dépôt lié et un projet `open` (un projet `guarded`
  * ne se synchronise pas) ; `version` est alors ignorée et recalculée par le
- * service de fond. En `manual`, la valeur passée fait foi.
+ * service de fond. En `manual`, la valeur passée fait foi, d'ici ou depuis une
+ * fenêtre. Suivre les releases, lui, référence un dépôt de l'espace d'origine :
+ * refusé (`validation`) sur un projet projeté, il se règle chez lui.
  */
 export const projectSetVersion = {
     command: 'projects.setVersion' as const,
@@ -124,7 +131,11 @@ export const projectSetStatus = {
  * re-chiffre pas ce qu'on ne peut pas lire.
  *
  * Passer en `guarded` **désactive les intégrations** du projet (synchronisation
- * git, déploiement) : elles ont besoin de lire sans session.
+ * git, déploiement) : elles ont besoin de lire sans session. Et retire ses
+ * projections : un projet gardé est chiffré par le mot de passe de son auteur,
+ * aucun autre espace ne peut le lire. Domicile seulement (`validation` depuis
+ * une fenêtre) : le palier relie l'arbre au mot de passe d'un membre de
+ * l'espace d'origine.
  */
 export const projectSetSecurityTier = {
     command: 'projects.setSecurityTier' as const,
@@ -153,6 +164,11 @@ export const projectRestore = {
  * Ordonne le portefeuille : `projectIds` en est le contenu **complet**, dans son
  * ordre final (indice le plus bas en premier). Ne touche jamais au corps
  * chiffré, donc fonctionne aussi sur des projets masqués.
+ *
+ * Les projets d'ici seulement : un projet projeté se classe chez lui, et un
+ * identifiant projeté dans la liste est refusé (`validation`) plutôt
+ * qu'ignoré, le client ne le propose pas au glisser. Un projet que ce rôle ne
+ * peut pas écrire est laissé de côté.
  */
 export const projectReorder = {
     command: 'projects.reorder' as const,
@@ -354,7 +370,9 @@ export const projectDepRemove = {
  */
 
 /**
- * Les dépôts liés au projet, dans l'ordre de la feature Git.
+ * Les dépôts liés au projet, dans l'ordre de la feature Git, et leur nom
+ * (`labels`, une entrée par identifiant, par le contrat d'éléments du module
+ * Git sous le codec du domicile du projet ; `null` sans module ou sans dépôt).
  *
  * **Plusieurs**, et c'est le cas normal : un projet réel se compose souvent d'un
  * client, d'un serveur et de contrats partagés, chacun dans son dépôt.
@@ -362,7 +380,10 @@ export const projectDepRemove = {
 export const projectRepoList = {
     command: 'projects.repoList' as const,
     input: z.object({ projectId }),
-    output: z.object({ repoIds: z.array(z.number().int().positive()) })
+    output: z.object({
+        repoIds: z.array(z.number().int().positive()),
+        labels: z.array(projectLinkLabelSchema)
+    })
 };
 
 /**
@@ -373,6 +394,10 @@ export const projectRepoList = {
  * Refusé sur un projet confidentiel : la synchronisation tourne sans session, et
  * rattacher un projet gardé à une entité d'espace en clair révélerait par la
  * bande ce qu'il contient. Le dire ici évite un réglage sans effet.
+ *
+ * Domicile seulement (`validation` depuis une fenêtre) : une liaison référence
+ * un dépôt de l'espace d'origine, que la fenêtre ne voit pas ; lui proposer
+ * les dépôts d'ici relierait le projet à un autre monde.
  */
 export const projectRepoLink = {
     command: 'projects.repoLink' as const,
@@ -381,7 +406,7 @@ export const projectRepoLink = {
 };
 
 /**
- * Retire une liaison.
+ * Retire une liaison. Domicile seulement, comme la pose.
  *
  * **Le dépôt et son cache survivent** : ils appartiennent à l'espace, et
  * d'autres projets peuvent s'en servir. C'est le pointeur qui part, rien d'autre.
@@ -395,7 +420,9 @@ export const projectRepoUnlink = {
 // ------------------------------------------------------------- transverse
 
 /**
- * Toutes mes tâches, tous projets de l'espace confondus.
+ * Toutes mes tâches, tous projets visibles d'ici confondus : ceux de l'espace
+ * et ceux qu'un autre espace y projette, chacun lu sous son codec. Un projet
+ * projeté compte dans « mes tâches » de la fenêtre comme chez lui.
  *
  * Une seule requête, rendue possible par le fait qu'`assignee_user_id` est en
  * clair. Les cartes d'un projet confidentiel verrouillé reviennent masquées
@@ -429,22 +456,29 @@ export const projectLinkCounts = {
 /**
  * Les services surveillés rattachés au projet, dans l'ordre d'Uptime.
  *
- * Ne rend que des identifiants : les nommer supposerait de lire Uptime au nom
- * de l'appelant, alors que ce droit-là s'y vérifie déjà. Le client résout les
- * noms et les états par `uptime.list`, et affiche des identifiants nus si son
- * rôle ne lui ouvre pas cette feature — plutôt que de faire disparaître des
- * liaisons qui existent.
+ * Des identifiants, et leur nom (`labels`, une entrée par identifiant, rendu
+ * par le contrat d'éléments d'Uptime sous le codec du domicile du projet ;
+ * `null` sans module ou sans service). Le nom seul : les états relèvent
+ * d'Uptime, que le client lit par `uptime.list` quand son rôle le lui ouvre,
+ * et il montre sinon le nom, ce qui suffit à dire ce qui est relié, plutôt
+ * que de faire disparaître des liaisons qui existent. Depuis une fenêtre sur
+ * un projet projeté, c'est même la seule façon de nommer un service d'un
+ * autre espace.
  */
 export const projectUptimeList = {
     command: 'projects.uptimeList' as const,
     input: z.object({ projectId }),
-    output: z.object({ serviceIds: z.array(z.number().int().positive()) })
+    output: z.object({
+        serviceIds: z.array(z.number().int().positive()),
+        labels: z.array(projectLinkLabelSchema)
+    })
 };
 
 /**
  * Rattache un service surveillé au projet. **Idempotente** : rattacher deux
  * fois le même service n'est pas une erreur, c'est le même fait déclaré deux
  * fois. Rend la liste complète, pour que l'appelant n'ait pas à la recomposer.
+ * Domicile seulement (`validation` depuis une fenêtre), comme toute liaison.
  */
 export const projectUptimeLink = {
     command: 'projects.uptimeLink' as const,
@@ -452,7 +486,7 @@ export const projectUptimeLink = {
     output: z.object({ serviceIds: z.array(z.number().int().positive()) })
 };
 
-/** Retire la liaison. Le service, lui, n'est pas touché. */
+/** Retire la liaison, domicile seulement. Le service, lui, n'est pas touché. */
 export const projectUptimeUnlink = {
     command: 'projects.uptimeUnlink' as const,
     input: z.object({ projectId, serviceId: z.number().int().positive() }),
@@ -460,22 +494,23 @@ export const projectUptimeUnlink = {
 };
 
 /**
- * Les bases de données rattachées au projet, dans l'ordre de la feature Bases.
- *
- * Ne rend que des identifiants, pour la même raison que
- * {@link projectUptimeList} : les nommer supposerait de lire la feature Bases au
- * nom de l'appelant, alors que ce droit s'y vérifie déjà.
+ * Les bases de données rattachées au projet, dans l'ordre de la feature Bases,
+ * et leur nom (`labels`, comme {@link projectUptimeList} : par le contrat
+ * d'éléments du module, sous le codec du domicile du projet).
  */
 export const projectDatabaseList = {
     command: 'projects.databaseList' as const,
     input: z.object({ projectId }),
-    output: z.object({ databaseIds: z.array(z.number().int().positive()) })
+    output: z.object({
+        databaseIds: z.array(z.number().int().positive()),
+        labels: z.array(projectLinkLabelSchema)
+    })
 };
 
 /**
  * Rattache une base au projet. **Idempotente**, et refusée sur un projet
  * confidentiel : la liaison est une ligne en clair, et la base vit à l'étage
- * ouvert — exactement comme pour un dépôt git.
+ * ouvert, exactement comme pour un dépôt git. Domicile seulement.
  */
 export const projectDatabaseLink = {
     command: 'projects.databaseLink' as const,
@@ -483,7 +518,7 @@ export const projectDatabaseLink = {
     output: z.object({ databaseIds: z.array(z.number().int().positive()) })
 };
 
-/** Retire la liaison. La base, elle, n'est pas touchée. */
+/** Retire la liaison, domicile seulement. La base, elle, n'est pas touchée. */
 export const projectDatabaseUnlink = {
     command: 'projects.databaseUnlink' as const,
     input: z.object({ projectId, databaseId: z.number().int().positive() }),
@@ -491,22 +526,23 @@ export const projectDatabaseUnlink = {
 };
 
 /**
- * Les sites suivis rattachés au projet, dans l'ordre de la feature Audience.
- *
- * Ne rend que des identifiants, pour la même raison que
- * {@link projectDatabaseList} : les nommer supposerait de lire la feature
- * Audience au nom de l'appelant, alors que ce droit s'y vérifie déjà.
+ * Les sites suivis rattachés au projet, dans l'ordre de la feature Audience,
+ * et leur nom (`labels`, comme {@link projectUptimeList} : par le contrat
+ * d'éléments du module, sous le codec du domicile du projet).
  */
 export const projectAudienceList = {
     command: 'projects.audienceList' as const,
     input: z.object({ projectId }),
-    output: z.object({ siteIds: z.array(z.number().int().positive()) })
+    output: z.object({
+        siteIds: z.array(z.number().int().positive()),
+        labels: z.array(projectLinkLabelSchema)
+    })
 };
 
 /**
  * Rattache un site au projet. **Idempotente**, et refusée sur un projet
  * confidentiel : la liaison est une ligne en clair, et le site vit à l'étage
- * ouvert — exactement comme un dépôt git ou une base.
+ * ouvert, exactement comme un dépôt git ou une base. Domicile seulement.
  */
 export const projectAudienceLink = {
     command: 'projects.audienceLink' as const,
@@ -514,7 +550,7 @@ export const projectAudienceLink = {
     output: z.object({ siteIds: z.array(z.number().int().positive()) })
 };
 
-/** Retire la liaison. Le site, lui, n'est pas touché. */
+/** Retire la liaison, domicile seulement. Le site, lui, n'est pas touché. */
 export const projectAudienceUnlink = {
     command: 'projects.audienceUnlink' as const,
     input: z.object({ projectId, siteId: z.number().int().positive() }),
@@ -535,16 +571,25 @@ export const projectAudienceUnlink = {
  * Déclencher ne se fait pas ici : c'est `deploy.trigger`, qui accepte un
  * `projectId` facultatif pour inscrire le fait dans la frise du projet.
  */
+/**
+ * Les cibles reliées, dans l'ordre de la feature Déploiement, et leur nom
+ * (`labels`, comme {@link projectUptimeList} : par le contrat d'éléments du
+ * module, sous le codec du domicile du projet).
+ */
 export const projectDeployList = {
     command: 'projects.deployList' as const,
     input: z.object({ projectId }),
-    output: z.object({ targetIds: z.array(z.number().int().positive()) })
+    output: z.object({
+        targetIds: z.array(z.number().int().positive()),
+        labels: z.array(projectLinkLabelSchema)
+    })
 };
 
 /**
  * Rattache une cible au projet. **Idempotente**, et refusée sur un projet
  * confidentiel : la liaison est une ligne en clair, la cible vit à l'étage
  * ouvert et son suivi tourne sans session — exactement comme pour un dépôt.
+ * Domicile seulement.
  */
 export const projectDeployLink = {
     command: 'projects.deployLink' as const,
@@ -552,7 +597,7 @@ export const projectDeployLink = {
     output: z.object({ targetIds: z.array(z.number().int().positive()) })
 };
 
-/** Retire la liaison. La cible, son historique et les autres projets survivent. */
+/** Retire la liaison, domicile seulement. La cible, son historique et les autres projets survivent. */
 export const projectDeployUnlink = {
     command: 'projects.deployUnlink' as const,
     input: z.object({ projectId, targetId: z.number().int().positive() }),

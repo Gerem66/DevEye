@@ -9,7 +9,12 @@ export interface ProjectChatRepo {
      * `before` exclu ; `limit + 1` lignes sont lues pour savoir s'il en reste.
      */
     listByCard(cardId: number, workspaceId: number, before: number | null, limit: number): Promise<ProjectMessageRow[]>;
-    findById(messageId: number, workspaceId: number): Promise<ProjectMessageRow | null>;
+    /**
+     * Par identifiant seul : l'espace du message est celui de son projet, que
+     * l'appelant vérifie (`loadProject`) avant d'agir. Les écritures, elles,
+     * prennent le domicile du projet.
+     */
+    findById(messageId: number): Promise<ProjectMessageRow | null>;
     create(input: {
         cardId: number;
         projectId: number;
@@ -38,11 +43,8 @@ export function projectChatRepo(q: SdkQueryable): ProjectChatRepo {
                 before === null ? [cardId, workspaceId, limit] : [cardId, workspaceId, before, limit]
             );
         },
-        async findById(messageId, workspaceId) {
-            const rows = await q.query<ProjectMessageRow>(
-                'SELECT * FROM project_messages WHERE id = ? AND workspace_id = ?',
-                [messageId, workspaceId]
-            );
+        async findById(messageId) {
+            const rows = await q.query<ProjectMessageRow>('SELECT * FROM project_messages WHERE id = ?', [messageId]);
             return rows[0] ?? null;
         },
         async create({ cardId, projectId, workspaceId, authorUserId, mentions, content }) {
@@ -77,7 +79,7 @@ export function projectChatRepo(q: SdkQueryable): ProjectChatRepo {
                 [content, mentions.length ? JSON.stringify(mentions) : null, messageId, workspaceId]
             );
             if (res.affectedRows === 0) return null;
-            return this.findById(messageId, workspaceId);
+            return this.findById(messageId);
         },
         async markRead(cardId, workspaceId, userId, lastMessageId) {
             // `GREATEST` : la marque ne recule jamais. Deux onglets qui lisent

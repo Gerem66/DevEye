@@ -6,7 +6,7 @@ import {
     type DatabaseBackupProvider,
     type DatabaseItemsProvider
 } from '@deveye/types/sdk';
-import type { FeatureServer, FeatureServiceDeps } from '@deveye/types/sdk/server';
+import type { FeatureServer, FeatureServiceDeps, SdkCipher } from '@deveye/types/sdk/server';
 
 import { databaseHandlers } from './handlers';
 import { createRepo, type DatabaseRepo } from './repo';
@@ -72,6 +72,29 @@ function createBackupProvider(
 }
 
 /**
+ * Le nom d'une base (la première clé du blob chiffré à l'étage ouvert),
+ * déchiffré par `cipher` (le codec OUVERT de `workspaceId`, son domicile).
+ * Une base disparue ou un blob illisible vaut `null`, jamais une exception :
+ * ce que l'écran des canaux montre comme « une cible disparue », et une
+ * fenêtre sur un projet projeté comme une liaison sans nom.
+ *
+ * Une seule fonction pour les deux appelants : l'entrée `items` (le codec de
+ * l'espace appelant, fourni par l'app) et le contrat offert à Projets
+ * (`deps.cipherFor(workspaceId)`).
+ */
+async function labelOf(
+    repo: DatabaseRepo,
+    cipher: SdkCipher,
+    databaseId: number,
+    workspaceId: number
+): Promise<string | null> {
+    const row = await repo.find(databaseId, workspaceId);
+    if (!row) return null;
+    const stored = await readJson<Partial<StoredDatabase>>(cipher, row.content);
+    return typeof stored?.name === 'string' && stored.name.length > 0 ? stored.name : null;
+}
+
+/**
  * L'entrée serveur du module.
  *
  * `createService` recompose ce que le boot natif faisait : le relevé
@@ -81,7 +104,7 @@ function createBackupProvider(
  * qui déchiffre une cible), et les deux contrats offerts : à Sauvegardes
  * (`DATABASE_BACKUP_PROVIDER`, qu'`app.ts` enregistrait pour la native) et à
  * Projets (`DATABASE_ITEMS_PROVIDER` : une base existe-t-elle dans cet
- * espace ?).
+ * espace, et comment s'appelle-t-elle ?).
  *
  * Bases de données a **ses propres** canaux (`notification_settings`, ligne
  * `database`), depuis la migration 085. Elle empruntait ceux d'Uptime, et un
@@ -112,9 +135,14 @@ export const serverEntry: FeatureServer<DatabaseRepo> = {
         // faisait `databases.find` avant le rapatriement), pour qu'un
         // identifiant étranger ne se relie pas et ne trahisse pas son
         // existence. Le domicile seulement, jamais une projection : un projet
-        // relie ce que son espace possède.
+        // relie ce que son espace possède. Et le nom d'une base reliée, sous le
+        // codec ouvert de son domicile : ce qu'une fenêtre sur un projet projeté
+        // montre pour une liaison qu'elle ne peut pas ouvrir, un nom, jamais un
+        // identifiant.
         const items: DatabaseItemsProvider = {
-            exists: async (databaseId, workspaceId) => (await deps.repo.find(databaseId, workspaceId)) !== null
+            exists: async (databaseId, workspaceId) => (await deps.repo.find(databaseId, workspaceId)) !== null,
+            labelOf: (databaseId, workspaceId) =>
+                labelOf(deps.repo, deps.cipherFor(workspaceId), databaseId, workspaceId)
         };
         return {
             start() {
@@ -134,14 +162,6 @@ export const serverEntry: FeatureServer<DatabaseRepo> = {
     items: {
         homeOf: async (repo, itemId, workspaceId) =>
             (await repo.findVisible(itemId, workspaceId))?.workspace_id ?? null,
-        // Le nom est la première clé du blob chiffré à l'étage ouvert ; un blob
-        // illisible ou une base disparue vaut `null`, ce que l'écran des canaux
-        // montre comme « une cible disparue ».
-        labelOf: async (repo, cipher, itemId, workspaceId) => {
-            const row = await repo.find(itemId, workspaceId);
-            if (!row) return null;
-            const stored = await readJson<Partial<StoredDatabase>>(cipher, row.content);
-            return typeof stored?.name === 'string' && stored.name.length > 0 ? stored.name : null;
-        }
+        labelOf
     }
 };

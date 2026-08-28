@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
-import { humanizeError, useResourceVersion } from 'deveye-sdk-client';
+import { humanizeError, StatusBadge, useResourceVersion } from 'deveye-sdk-client';
 import { api, formatDate, PRIORITY_LABELS } from './api';
 import type { MyTask } from '../contracts/domain';
 import styles from './style.module.css';
 
 interface MyTasksProps {
+    /**
+     * Les projets projetés depuis un autre espace, relevés sur le portefeuille
+     * (`ProjectSummary.foreign`) : une tâche qui en vient porte la pastille
+     * « partagé » à côté du titre de son projet d'origine. La tâche elle-même
+     * ne dit pas d'où vient son projet ; le portefeuille, chargé au même
+     * moment, le sait.
+     */
+    foreignProjectIds: ReadonlySet<number>;
     /** Ouvre le projet auquel appartient la tâche. */
     onOpenProject: (projectId: number) => void;
 }
@@ -20,7 +28,7 @@ interface MyTasksProps {
  * verrouillé reviennent masquées plutôt qu'absentes — une liste de tâches
  * incomplète serait pire qu'une liste qui dit ce qu'elle ne peut pas lire.
  */
-export function MyTasks({ onOpenProject }: MyTasksProps) {
+export function MyTasks({ foreignProjectIds, onOpenProject }: MyTasksProps) {
     const [tasks, setTasks] = useState<MyTask[] | null>(null);
     const [error, setError] = useState<string | null>(null);
     const version = useResourceVersion('projects.myTasks');
@@ -72,6 +80,14 @@ export function MyTasks({ onOpenProject }: MyTasksProps) {
                                     <span className={styles.taskProject}>
                                         {task.masked ? '—' : task.projectTitle || 'Projet'}
                                     </span>
+                                    {foreignProjectIds.has(task.projectId) && (
+                                        <span
+                                            className={styles.shared}
+                                            title='Ce projet appartient à un autre espace qui le partage ici'
+                                        >
+                                            <StatusBadge tone='accent'>partagé</StatusBadge>
+                                        </span>
+                                    )}
                                     {due && <span className={overdue ? styles.overdue : styles.itemDate}>{due}</span>}
                                     {task.card.unread > 0 && <span className={styles.unread}>{task.card.unread}</span>}
                                 </button>

@@ -1,16 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    Avatar,
-    Button,
-    humanizeError,
-    useResourceVersion,
-    useTypers,
-    useTypingSignal,
-    withSecrecy
-} from 'deveye-sdk-client';
+import { Button, humanizeError, useResourceVersion, useTypers, useTypingSignal, withSecrecy } from 'deveye-sdk-client';
 import type { MinimalUser } from '@deveye/types';
 import { api } from '../api';
 import { PROJECT_MESSAGE_MAX_LENGTH, type ProjectMessage } from '../../contracts/domain';
+import { MemberAvatar, MemberName } from '../Member';
 import { renderMessage } from './markdown';
 import styles from '../style.module.css';
 
@@ -142,30 +135,30 @@ export function Chat({ cardId, members, meUserId, canWrite }: ChatProps) {
                 {messages === null && <p className={styles.empty}>Chargement…</p>}
                 {messages?.length === 0 && <p className={styles.empty}>Aucun message. Lancez la discussion.</p>}
 
-                {groups.map((group) => {
-                    const author = members.find((m) => m.id === group.authorUserId);
-                    return (
-                        <div key={group.key} className={styles.msgGroup}>
-                            <Avatar user={author} size={26} />
-                            <div className={styles.msgBody}>
-                                <div className={styles.msgHead}>
-                                    <span className={styles.msgAuthor}>{author?.username ?? 'Compte supprimé'}</span>
-                                    <span className={styles.msgTime}>{formatTime(group.created)}</span>
-                                </div>
-                                {group.messages.map((m) => (
-                                    <div key={m.id} className={styles.msgText}>
-                                        {renderMessage(
-                                            m.text,
-                                            m.edited !== null ? (
-                                                <span className={styles.msgEdited}> (modifié)</span>
-                                            ) : null
-                                        )}
-                                    </div>
-                                ))}
+                {/* L'auteur passe par `Member` : sur un projet projeté, il peut
+                    être membre de l'espace d'origine et pas d'ici, auquel cas
+                    il s'affiche masqué plutôt que nommé. */}
+                {groups.map((group) => (
+                    <div key={group.key} className={styles.msgGroup}>
+                        <MemberAvatar userId={group.authorUserId} size={26} />
+                        <div className={styles.msgBody}>
+                            <div className={styles.msgHead}>
+                                <span className={styles.msgAuthor}>
+                                    <MemberName userId={group.authorUserId} />
+                                </span>
+                                <span className={styles.msgTime}>{formatTime(group.created)}</span>
                             </div>
+                            {group.messages.map((m) => (
+                                <div key={m.id} className={styles.msgText}>
+                                    {renderMessage(
+                                        m.text,
+                                        m.edited !== null ? <span className={styles.msgEdited}> (modifié)</span> : null
+                                    )}
+                                </div>
+                            ))}
                         </div>
-                    );
-                })}
+                    </div>
+                ))}
 
                 <div ref={bottomRef} />
             </div>

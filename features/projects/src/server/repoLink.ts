@@ -2,7 +2,7 @@ import { projectRepoLink, projectRepoList, projectRepoUnlink } from '../contract
 import { GIT_ITEMS_PROVIDER, type GitItemsProvider } from '@deveye/types/sdk';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
-import { loadProject, recordEvent, WRITE, type Ctx } from './_shared';
+import { assertAtHome, linkLabels, loadProject, recordEvent, WRITE, type Ctx } from './_shared';
 
 /**
  * Le pointeur d'un projet vers des dépôts de l'espace.
@@ -23,7 +23,11 @@ import { loadProject, recordEvent, WRITE, type Ctx } from './_shared';
  * La table de liaison (`project_repo_links`) est celle de Projets, lue par
  * `ctx.repo.links` à côté des services surveillés, des bases et des cibles :
  * Projets ne lit pas la table des dépôts, et ne les connaît que par le contrat
- * que le module Git offre.
+ * que le module Git offre, qui les nomme aussi (`labelOf`, sous le codec du
+ * domicile du projet, pour une fenêtre qui ne les verrait pas autrement).
+ *
+ * Domicile seulement pour poser et retirer (`assertAtHome`) : une liaison
+ * référence un dépôt de l'espace d'origine, que la fenêtre ne voit pas.
  *
  * Ces liaisons battent deux sujets (`['projects', 'git']`) : la fiche d'un
  * dépôt montre les projets qui l'utilisent, et doit suivre.
@@ -32,8 +36,10 @@ import { loadProject, recordEvent, WRITE, type Ctx } from './_shared';
 export const projectRepoListFeature = defineSdkFeature({
     ...projectRepoList,
     handler: async (ctx: Ctx, input) => {
-        await loadProject(ctx, input.projectId);
-        return { repoIds: await ctx.repo.links.listRepoIds(input.projectId, ctx.workspaceId) };
+        const project = await loadProject(ctx, input.projectId);
+        const repoIds = await ctx.repo.links.listRepoIds(input.projectId, project.workspace_id);
+        const repos = ctx.providers.get<GitItemsProvider>(GIT_ITEMS_PROVIDER);
+        return { repoIds, labels: await linkLabels(repos, repoIds, project.workspace_id) };
     }
 });
 
@@ -42,7 +48,8 @@ export const projectRepoLinkFeature = defineSdkFeature({
     mutates: ['projects', 'git'],
     access: WRITE,
     handler: async (ctx: Ctx, input) => {
-        const project = await loadProject(ctx, input.projectId);
+        const project = await loadProject(ctx, input.projectId, 'write');
+        assertAtHome(ctx, project, 'relier un dépôt');
 
         // Un projet confidentiel ne peut pas être lié : la liaison est une ligne
         // en clair, le dépôt vit à l'étage ouvert, et la synchronisation tourne
@@ -61,18 +68,18 @@ export const projectRepoLinkFeature = defineSdkFeature({
         // proprement quand le module est absent.
         const repos = ctx.providers.get<GitItemsProvider>(GIT_ITEMS_PROVIDER);
         if (!repos) throw new FeatureError('validation', 'Le module Git n’est pas installé.');
-        if (!(await repos.exists(input.repoId, ctx.workspaceId))) {
+        if (!(await repos.exists(input.repoId, project.workspace_id))) {
             throw new FeatureError('not_found', 'Ce dépôt n’existe pas dans cet espace.');
         }
 
-        await ctx.repo.links.linkRepo(input.projectId, ctx.workspaceId, input.repoId);
+        await ctx.repo.links.linkRepo(input.projectId, project.workspace_id, input.repoId);
         await recordEvent(ctx, project, { kind: 'projects.repoLink', label: 'Dépôt git relié' });
         ctx.audit({
             action: 'projects.repoLink',
             description: 'Dépôt git relié au projet',
             metadata: { projectId: input.projectId, repoId: input.repoId }
         });
-        return { repoIds: await ctx.repo.links.listRepoIds(input.projectId, ctx.workspaceId) };
+        return { repoIds: await ctx.repo.links.listRepoIds(input.projectId, project.workspace_id) };
     }
 });
 
@@ -81,12 +88,13 @@ export const projectRepoUnlinkFeature = defineSdkFeature({
     mutates: ['projects', 'git'],
     access: WRITE,
     handler: async (ctx: Ctx, input) => {
-        const project = await loadProject(ctx, input.projectId);
+        const project = await loadProject(ctx, input.projectId, 'write');
+        assertAtHome(ctx, project, 'délier un dépôt');
         // Le dépôt et son cache survivent : ils appartiennent à l'espace, et
         // d'autres projets peuvent s'en servir.
-        const ok = await ctx.repo.links.unlinkRepo(input.projectId, ctx.workspaceId, input.repoId);
+        const ok = await ctx.repo.links.unlinkRepo(input.projectId, project.workspace_id, input.repoId);
         if (ok) await recordEvent(ctx, project, { kind: 'projects.repoUnlink', label: 'Dépôt git délié' });
-        return { repoIds: await ctx.repo.links.listRepoIds(input.projectId, ctx.workspaceId) };
+        return { repoIds: await ctx.repo.links.listRepoIds(input.projectId, project.workspace_id) };
     }
 });
 

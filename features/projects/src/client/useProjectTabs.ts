@@ -114,9 +114,13 @@ export function useProjectTabs(project: Project, canWrite: boolean): ProjectTabs
      * compteurs se lisent quand même — un tel projet peut porter des services
      * surveillés, rattachés avant sa conversion, et l'onglet Déploiement reste
      * le seul endroit d'où les atteindre.
+     *
+     * Un projet projeté depuis un autre espace n'en admet pas davantage :
+     * relier est un geste du domicile, que le serveur refuse depuis une
+     * fenêtre. Ses onglets, eux, se lisent (voir `ForeignLinks`).
      */
     const addable: ProjectTabAddable[] =
-        canWrite && !guarded && counts !== null
+        canWrite && !guarded && !project.foreign && counts !== null
             ? PROJECT_FEATURE_TABS.filter((tab) => counts[tab.id] === 0).flatMap((tab) =>
                   tab.add
                       .filter((action) => permissions.canFeature(action.requires.feature, action.requires.level))
