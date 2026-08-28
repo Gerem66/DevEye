@@ -688,7 +688,8 @@ Pairs admis d'un module : `@deveye/types`, `react`, `zod`, `framer-motion`
   harnais de test qui les simulent par `shares` et `itemRestrictions`). Ce qui
   reste : les modules **externes** déclarent `shareTier: 'never'` tant
   qu'aucun module tiers n'a exercé le contrat (une ligne de `validateManifest`
-  à lever le jour venu) ; Notes et Mail sont branchés (`items.shareable`
-  pour le palier, `ctx.items.forget` à la bascule vers le palier gardé), et
-  Projets reste à brancher une fois décidé ce qu'un projet projeté montre
-  (SHARING.md §9).
+  à lever le jour venu). Les trois `'perItem'` (Notes, Mail, Projets) sont
+  branchés : `items.shareable` pour le palier, `ctx.items.forget` à la
+  bascule vers le palier gardé, et pour Projets les trois décisions de
+  SHARING.md §2 (membres hors espace masqués, projetés comptés dans « mes
+  tâches », liaisons nommées en lecture).
