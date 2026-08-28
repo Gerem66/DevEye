@@ -7,7 +7,7 @@ import { useResourceVersion } from '@/stores/invalidation';
 import { useTypers, useTypingSignal } from '@/live/useTyping';
 import { humanizeError, withSecrecy } from '../api';
 import { renderMessage } from './markdown';
-import { Avatar } from '../Board/Avatar';
+import { Avatar } from '@/Components/Avatar/Avatar';
 import styles from '../style.module.css';
 
 /**

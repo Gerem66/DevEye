@@ -8,6 +8,11 @@
 > Depuis : les sites se **partagent entre espaces** comme les autres éléments
 > de premier rang (`SHARING.md`), et la fiche d'un site porte le bouton de
 > réglages commun (partage, permissions par rôle : `SETTINGS.md`).
+>
+> 28 août 2026 : Audience est la **douzième native rapatriée** sur le SDK des
+> modules (`features/audience`, [FEATURE_SDK.md](./FEATURE_SDK.md)), et la
+> première à ouvrir des routes HTTP publiques (capacité `routes.public`). Ce
+> document décrit l'état après ce rapatriement ; la section 6 en est la carte.
 
 DevEye savait piloter le travail, suivre le code, surveiller l'infra — mais rien
 ne disait ce que les visiteurs faisaient des projets une fois livrés. Il
@@ -76,7 +81,16 @@ façon publics : la balise les expose dans le HTML de chaque page suivie.
 
 `visitor_ref = sha256(sel du jour + clé du site + IP + user-agent)`, tronqué à
 16 caractères. **Ni l'IP ni le user-agent ne sont stockés** ; le sel est dérivé
-d'un secret serveur et de la date UTC.
+d'un secret serveur et de la date UTC. Ce secret est, depuis le rapatriement
+en module, une clé **dérivée** de la clé serveur par le SDK
+(`deps.keys.derive('audience', 'visitor-salt', 32)`, HKDF, jamais stockée),
+et non plus `CRYPT_KEY_A` brute, qu'un module ne lit pas. Même propriété :
+stable d'un redémarrage à l'autre tant que la clé serveur ne change pas.
+Conséquence assumée, une seule fois : les condensés de visiteurs ont changé à
+la migration. Un visiteur persistant a été compté « nouveau » une fois (sa
+session suivante ne s'est pas rattachée à l'ancienne empreinte) ; les condensés
+anonymes tournaient déjà chaque jour, rien n'a bougé pour eux. C'est le prix
+de ne plus manipuler la clé serveur.
 
 Trois conséquences, toutes voulues :
 
@@ -97,10 +111,12 @@ Le « par qui » nominatif vient d'ailleurs, et seulement si le site le veut : u
 
 `AUDIENCE_ORIGIN` (à défaut `PUBLIC_ORIGIN`) porte l'adresse par laquelle les
 pages suivies atteignent l'ingestion, et c'est le serveur qui la rend au client
-(`audience.get`). La déduire de `window.location.origin` — ce que faisait la
-première version — donnait une balise juste en développement et **fausse en
-production** : l'application vit derrière le VPN, l'ingestion doit être joignable
-sans lui, donc les deux adresses diffèrent par construction.
+(`audience.get`, par `ctx.origins.public` : le contexte du SDK la porte pour
+tous les modules, aucun ne lit la variable). La déduire de
+`window.location.origin` — ce que faisait la première version — donnait une
+balise juste en développement et **fausse en production** : l'application vit
+derrière le VPN, l'ingestion doit être joignable sans lui, donc les deux
+adresses diffèrent par construction.
 
 En développement sur l'hôte, le client est servi par Vite sur `:5173` : `/t.js`
 est donc aussi **proxifié** dans `client/vite.config.ts`, à côté de `/api` et
@@ -119,10 +135,12 @@ Trois façons d'y arriver, et deux sont moins sûres :
 | **Second écouteur** | **rien à séparer : les routes internes n'y sont pas enregistrées** |
 
 C'est la troisième. `PUBLIC_LISTEN_PORT` démarre un serveur qui ne déclare que
-`/t.js`, `/api/t/b`, `/api/t/e` et une sonde de vivacité. Il n'existe aucun
-chemin de code de ce port vers l'authentification, la socket, la flotte
-d'appareils ou le client web. Ni cookies, ni WebSocket, ni fichiers statiques,
-ni repli SPA n'y sont montés.
+les **routes publiques des modules** (`modulePublicRoutes`, capacité
+`routes.public` : aujourd'hui `/t.js`, `/api/t/b` et `/api/t/e`, déclarées par
+le service d'Audience) et une sonde de vivacité. Il n'existe aucun chemin de
+code de ce port vers l'authentification, la socket, la flotte d'appareils ou
+le client web. Ni cookies, ni WebSocket, ni fichiers statiques, ni repli SPA
+n'y sont montés.
 
 Vide, il n'y a pas de second serveur et les routes publiques restent sur le port
 principal : c'est le cas du développement, et celui d'une installation qui n'a
@@ -132,22 +150,28 @@ pas besoin de la séparation.
 débit compte par IP ; sans lui il verrait celle du proxy, et le premier visiteur
 un peu actif fermerait la porte à tous les autres.
 
-**Même processus, et c'est une contrainte.** `AudienceIngest` prévient les
-écrans par `LiveHub`, dont l'état est local au processus ([LIVE.md](./LIVE.md)
-§6). Un conteneur séparé écrirait les mesures sans que personne ne soit averti :
-le rafraîchissement à la minute cesserait de fonctionner, **silencieusement**.
-Partager le processus, c'est partager la file, les caches et le hub.
+**Même processus, et c'est une contrainte.** Le service du module
+(`AudienceIngest`) prévient les écrans par `deps.live.changed`, donc par
+`LiveHub`, dont l'état est local au processus ([LIVE.md](./LIVE.md) §6). Un
+conteneur séparé écrirait les mesures sans que personne ne soit averti : le
+rafraîchissement à la minute cesserait de fonctionner, **silencieusement**.
+Partager le processus, c'est partager la file, les caches et le hub. C'est
+aussi pourquoi le second écouteur monte les routes des services **déjà créés**
+par `buildApp` : le module déclare les mêmes routes sur chaque écouteur, c'est
+l'écouteur qui change, pas l'ingestion.
 
 ### 3.1 Trois obstacles dans le socle, trois réponses
 
 1. **Le CORS était global** sur `PUBLIC_ORIGIN`. Il est désormais **délégué par
-   requête** : `*` sans identifiants pour `/api/t/*` et `/t.js`, `PUBLIC_ORIGIN`
-   avec cookies partout ailleurs. Le délégateur est la seule forme qui reçoive
-   la requête.
+   requête** : `*` sans identifiants pour les chemins publics que les modules
+   ont déclarés (`isModulePublicPath`, les trois routes d'Audience),
+   `PUBLIC_ORIGIN` avec cookies partout ailleurs. Le délégateur est la seule
+   forme qui reçoive la requête.
 2. **Le plafond de débit global** (200/min) est dimensionné pour une interface
-   humaine ; les routes d'ingestion ont le leur (600/min par IP). La clé du site
-   n'entre pas dans la clé de comptage : le plafond s'applique **avant** que le
-   corps ne soit analysé.
+   humaine ; les routes d'ingestion ont le leur (600/min par IP, le `rateLimit`
+   que le module pose sur ses deux POST). La clé du site n'entre pas dans la
+   clé de comptage : le plafond s'applique **avant** que le corps ne soit
+   analysé.
 3. **La clé de site est publique** et ne protège rien. Ce qui filtre, c'est la
    liste d'**origines autorisées** par site, confrontée à l'en-tête `Origin`
    côté serveur — là où un client ne peut pas mentir. Le CORS, lui, est un
@@ -260,7 +284,8 @@ Les graphes sont du **SVG écrit à la main**, `viewBox` fixe, sans
 - Les mutations d'un humain (déclarer un site, le régler, renouveler sa clé, le
   supprimer) gardent `mutates` : instantanées, sous le plancher de 200 ms du hub.
 - Le **flux d'ingestion** est coalescé à **une diffusion par minute et par
-  espace**, dans `AudienceIngest`. Diffuser par événement ferait re-solliciter
+  espace**, dans `AudienceIngest` (`features/audience/src/server/service.ts`,
+  par `deps.live.changed`). Diffuser par événement ferait re-solliciter
   l'écran de tous les membres à chaque visite.
 
 ⚠️ **Ne pas déplacer cette coalescence dans le hub.** `TOPIC_FLOOR_MS` (200 ms)
@@ -350,56 +375,104 @@ mesure avant la mise en ligne.
 
 ## 6. Carte du code
 
-### Contrats — `DevEye-Types/src/`
+Depuis le 28 août 2026, tout ce qui est propre à la feature vit dans le module
+`DevEye/features/audience/` ; l'app ne garde que ce qui appartient à Projets
+(la liaison) et l'infrastructure des routes publiques.
+
+### Le module — `DevEye/features/audience/`
 
 ```
-domain/audience.ts     site, plateforme, dimensions, mesures, charge d'ingestion
-features/audience.ts   12 commandes, préfixe unique `audience.`
-features/project.ts    project.audienceList / audienceLink / audienceUnlink
-domain/workspaceRole.ts  le droit `audience` (le sujet live en découle)
+package.json, deveye-feature.json    deveye-feature-audience ; allowlist des 7 tables historiques
+src/index.ts                         manifest + contrats (l'entrée isomorphe)
+src/manifest.ts                      featureDescriptor('audience') étalé ; resources, routes.public, settings.item
+src/contracts/domain.ts              site, plateforme, dimensions, mesures, charge d'ingestion, lignes SQL
+src/contracts/commands.ts            16 commandes, préfixe unique `audience.`
 ```
 
-### Serveur — `DevEye/src/`
+@deveye/types ne garde que l'**identité** (l'id dans les schémas d'espace, de
+sujet live et de registre) et les **couplages déclarés** :
+`AUDIENCE_ITEMS_PROVIDER` (serveur, lu par Projets avant de relier),
+`AUDIENCE_CLIENT_PROVIDER` (client, composé par l'onglet d'un projet), et
+`ProjectAudienceLinkRow` (`domain/projectLink.ts`, la table est à Projets).
+
+### Serveur — `features/audience/src/server/`
 
 ```
-db/migrations/076_audience.sql             5 tables
-db/migrations/077_project_audience_links.sql  la liaison
+index.ts        serverEntry : createRepo, features, createService (ingestion + provider + publicRoutes), items
+repo.ts         AudienceRepo sur SdkQueryable : les trois dépôts natifs en un contrat, sections gardées
+                (sites et lectures agrégées : le chemin froid ; entonnoirs ; ingestion : le chemin chaud)
+_shared.ts      Ctx, StoredSite, nameRef, generatePublicKey, packOrigins/parseOrigins, loadSite,
+                loadHomeSite, siteCipher, toSite(…, projectCount), rangeWindow, toMetrics,
+                setIngest/ingestOf (le singleton), projectsProvider/projectCountsOf/projectUsageOf
+crud.ts         count, list, get, siteAdd, siteUpdate, siteRotateKey, siteRemove, reorder
+stats.ts        overview, breakdown, activity, live
+funnels.ts      funnelList, funnelAdd, funnelUpdate, funnelRemove
+handlers.ts     l'agrégat des seize commandes
+service.ts      AudienceIngest sur FeatureServiceDeps : caches, file, lot, coalescence, ménage, sel dérivé
+routes.ts       publicRoutes sur SdkPublicApp : GET /t.js · POST /api/t/b · POST /api/t/e
+script.ts       le script servi aux pages suivies, et son ETag
+normalize.ts    chemins, hôtes, référents, condensés (pur)
+userAgent.ts    navigateur / système / appareil (pur)
+*.test.ts       handlers, service, routes, normalize (harnais @deveye/types/sdk/testing)
+```
+
+Ce qui a changé de main au rapatriement, et pourquoi :
+
+- **le dépôt ne connaît plus Projets** : `project_count`, `listUsage` et les
+  liaisons ont quitté le module. Le compte et la liste des projets viennent du
+  contrat `PROJECTS_USAGE_PROVIDER` (`projectCountsOf`, `projectUsageOf`), et
+  `toSite` reçoit le compte en paramètre ; sans contrat, zéro projet partout,
+  aucune commande ne casse ;
+- **l'ingestion est un singleton du module** posé par `createService`
+  (`setIngest`), lu par les handlers (`ingestOf()?.invalidate()`) : l'ex
+  `ctx.audience` que le dispatcheur natif prêtait ;
+- **le sel des visiteurs est dérivé** (`deps.keys.derive`), voir §2.4 ;
+- **les routes publiques sont déclarées par le service** (`publicRoutes`), et
+  c'est l'hôte qui les monte, sur chaque écouteur ;
+- **`ingestOrigin()` est `ctx.origins.public`**, voir §3.0.
+
+### Ce qui reste dans l'app — `DevEye/src/`
+
+```
+db/migrations/076_audience.sql             5 tables (historiques, allowlist du module)
+db/migrations/077_project_audience_links.sql  la liaison (table de Projets)
 db/migrations/078_audience_funnels.sql     entonnoirs et marches
-db/repos/audience.ts                       le chemin **froid** : écrans, agrégats
-db/repos/audienceIngest.ts                 le chemin **chaud** : ce que l'ingestion écrit
-Services/AudienceIngest.ts                 caches, file, lot, coalescence, ménage
-Services/audience/normalize.ts             chemins, hôtes, référents, condensés — pur
-Services/audience/userAgent.ts             navigateur / système / appareil — pur
-audience/routes.ts                         POST /api/t/b · /api/t/e · GET /t.js
-audience/script.ts                         le script servi aux pages suivies
-db/repos/audienceFunnels.ts                 définitions + la rétention ordonnée
-features/audience/{_shared,crud,stats,funnels}.ts
-features/project/audienceLink.ts           le pointeur d'un projet
+db/repos/projectLinks.ts                   listSiteIds, linkSite, unlinkSite, unlinkAllSites,
+                                           listSiteUsage, countSiteLinks
+features/project/usageProvider.ts          l'entrée `audience` de PROJECTS_USAGE_PROVIDER
+features/project/audienceLink.ts           le pointeur d'un projet (existence par AUDIENCE_ITEMS_PROVIDER)
+features/_sdk/register.ts                  modulePublicRoutes(app), isModulePublicPath(url)
+features/_sdk/context.ts                   ctx.origins { app, public } (AUDIENCE_ORIGIN || PUBLIC_ORIGIN)
+app.ts                                     le délégateur CORS (isModulePublicPath), modulePublicRoutes(app)
+publicApp.ts                               le second écouteur : modulePublicRoutes(app), rien d'autre
+Utils/Env.ts                               AUDIENCE_ORIGIN, PUBLIC_LISTEN_PORT (infrastructure)
 ```
 
-Les deux dépôts touchent les mêmes tables et sont séparés exprès : l'un sert des
-écrans quelques fois par minute, l'autre écrit à la cadence des visites de tous
-les sites de tous les espaces. Les mélanger aurait fait cohabiter des requêtes
-qu'on optimise et des requêtes qu'on écrit pour être lues.
-
-### Client — `DevEye/client/src/Features/Audience/`
+### Client — `features/audience/src/client/`
 
 ```
-index.tsx         liste + fiche ; possède le niveau live `l1` (`site:<id>`)
-SiteList.tsx      les cartes + le glisser-déposer (src/dragReorder.ts)
-SiteDetail.tsx    en-tête, SiteView, projets liés
-SiteView.tsx      ⟵ le cœur partagé avec l'onglet d'un projet
-SiteDialog.tsx    déclarer / régler / supprimer
-InstallDialog.tsx la balise, l'état « première mesure », la rotation de clé
-FunnelDialog.tsx  définir un parcours à partir du déjà-observé
-Stats/{StatBand,TrendChart,Heatmap,TopList,Funnel}.tsx
-AudienceWidget.tsx  format.ts  style.module.css
+index.tsx           clientEntry : Widget, Full, settingsPanels, providers
+Audience.tsx        liste + fiche ; possède le niveau live `l1` (l'id du site)
+api.ts              featureApi(manifest)
+SiteList.tsx        les cartes + le glisser-déposer (useDragReorder)
+SiteDetail.tsx      en-tête, SiteView, projets liés
+SiteView.tsx        ⟵ le cœur partagé avec l'onglet d'un projet
+SiteDialog.tsx      déclarer / régler l'identité du site (nom, description, plateforme, origines)
+SiteGeneralPanel.tsx  le panneau Général d'un site (rétention, visiteurs, état) : settings.item
+InstallDialog.tsx   la balise, l'état « première mesure », la rotation de clé
+FunnelDialog.tsx    définir un parcours à partir du déjà-observé
+FunnelDetailDialog.tsx
+Stats/{StatBand,TrendChart,Heatmap,TopList,FunnelBar,FunnelSteps}.tsx
+AudienceWidget.tsx  format.ts  usage.ts  style.module.css
+provider.tsx        AUDIENCE_CLIENT_PROVIDER : ce que l'onglet d'un projet compose
 ```
 
-`Features/Projects/Audience/` se réduit à `Audience.tsx` (enveloppe mince) et
-`LinkSiteDialog.tsx`. L'onglet **n'apparaît qu'à partir du premier site relié** ;
-sans liaison, il repart dans le menu « + » de la barre d'onglets, qui rouvre le
-même `LinkSiteDialog` — voir [PROJECTS.md](./PROJECTS.md) §2.
+`client/src/Features/Projects/Audience/` se réduit à `Audience.tsx` (enveloppe
+mince) et `LinkSiteDialog.tsx`, qui composent le contrat client du module par
+`moduleClientProvider(AUDIENCE_CLIENT_PROVIDER)`. L'onglet **n'apparaît qu'à
+partir du premier site relié** ; sans liaison, il repart dans le menu « + » de
+la barre d'onglets, qui rouvre le même `LinkSiteDialog` (voir
+[PROJECTS.md](./PROJECTS.md) §2).
 
 ---
 
@@ -430,7 +503,8 @@ fait échouer le démarrage : c'est un contrat, pas une heuristique.
 
 ### Toute mutation d'un site doit invalider le cache de l'ingestion
 
-`ctx.audience?.invalidate()`. Sans lui, un site qu'on vient d'éteindre continue
+`ingestOf()?.invalidate()` (le singleton posé par `createService`, l'ex
+`ctx.audience`). Sans lui, un site qu'on vient d'éteindre continue
 d'accepter des mesures pendant toute la vie du processus, et une clé qu'on vient
 de renouveler laisse l'ancienne entrer — c'est-à-dire que la rotation ne sert à
 rien, précisément dans le cas où on la demande. La panne est silencieuse : elle
@@ -483,45 +557,51 @@ type.
 ## 8. Vérification
 
 ```bash
-./ci.sh
-rsync -a --delete DevEye-Types/src/ DevEye/node_modules/@deveye/types/src/
-diff -rq DevEye-Types/src DevEye/node_modules/@deveye/types/src   # doit être vide
+cd DevEye
+npm run typecheck
+npx tsc -p features/tsconfig.server.json --noEmit
+DOTENV_CONFIG_PATH=.env.test npx tsx --test "features/audience/src/**/*.test.ts"
+npx eslint features/audience/src/server features/audience/src/contracts features/audience/src/manifest.ts
 ```
 
-**Vérifié hors serveur — les routes** (35 assertions, `tsx` + `app.inject()`, sur
-le montage réel de `app.ts` — **helmet compris** — avec un service bouchonné) :
-`Cross-Origin-Resource-Policy: cross-origin` sur les trois routes publiques et
-`same-origin` préservé partout ailleurs (assertion éprouvée en retirant le
-correctif) ; `/t.js` sert son type,
-son cache, son ETag et un `304` sur ETag connu ; un lot `text/plain` — la forme
-qu'émet `sendBeacon` — est bien analysé, avec origine et user-agent transmis ;
-`application/json` marche aussi (curl, client serveur) ; l'événement isolé
-passe ; **cinq formes de refus rendent toutes `204` sans que rien n'atteigne le
-service** (corps vide, JSON cassé, clé trop courte, lot vide, type inconnu) ; le
-préalable CORS d'une origine quelconque est accepté sur l'ingestion, et une
-route ordinaire reste sur `PUBLIC_ORIGIN` avec ses identifiants — le délégateur
-ne laisse pas fuiter son `*`.
+**Vérifié hors serveur, par les tests committés du module** (harnais
+`@deveye/types/sdk/testing`, dépôts en mémoire, aucune base ni réseau) :
 
-**Vérifié hors serveur — les entonnoirs** (32 assertions, `tsx`, avec un
-`Queryable` qui n'exécute rien et retient ce qu'on lui demande) : la requête de
-rétention porte **autant de marqueurs que de paramètres, dans le bon ordre** —
-le piège le plus probable du module ; un chemin lit `path_id` et un événement
-`name_id` ; la chaîne de conditions cumule bien les marches précédentes ; une
-marche jamais émise coupe la construction et met des zéros jusqu'au bout ; une
-première marche absente n'émet aucune requête ; `COALESCE` ramène à zéro un
-`SUM` sur zéro visite ; les libellés sont indexés sur `kind:ref` (le même texte
-peut être un chemin **et** un événement) ; et la désignation de la marche qui
-bloque le plus, égalités et entonnoirs vides compris.
+- `handlers.test.ts` : les restrictions par élément (un site masqué disparaît
+  de la liste et du compte), le partage inter-espaces (`foreign: true` sous le
+  codec du domicile ; régler, renouveler, supprimer ou définir un entonnoir
+  depuis la fenêtre est refusé), le contrat de Projets (`projectCount` et
+  `usage` du provider, zéro sans provider), l'adresse de la balise
+  (`ctx.origins.public`), les origines normalisées à l'écriture, la clé
+  choisie par le serveur, le cache de l'ingestion vidé par toute mutation
+  d'un site et par aucun réordonnancement, le ménage à la suppression
+  (`items.forget`), et un entonnoir aux marches normalisées comme à
+  l'ingestion, relu avec ses chiffres ;
+- `service.test.ts` : un événement accepté entre en base à la vidange (session
+  aux dimensions posées à l'ouverture, fait, site touché), une identité
+  arrivée en route rattache la session ouverte, les refus (origine, `Origin`
+  absent sur un site `web`, clé inconnue, robot, événement sans nom, site
+  éteint) n'écrivent rien et ne diffusent rien, un site `app` accepte sans
+  `Origin`, le direct est coalescé (deux vidanges, un battement par espace),
+  `invalidate` fait relire un site que le cache tenait pour actif, le ménage
+  agrège hier et aujourd'hui puis élague à la rétention et balaie les
+  libellés orphelins, et le sel est demandé une fois à `deps.keys.derive`
+  (un visiteur persistant est reconnu à l'identique par une seconde instance) ;
+- `routes.test.ts` : les trois routes déclarées, les deux POST avec leur
+  plafond ; `/t.js` servi avec son type, son cache, son ETag et CORP, `304`
+  sur ETag connu ; un lot valide atteint l'ingestion avec l'origine, le
+  user-agent et l'adresse ; quatre corps invalides rendent le même `204` sans
+  l'atteindre ; l'événement isolé passe, `Origin` absent compris ;
+- `normalize.test.ts` : chemins, hôtes, référents, les trois règles
+  d'`originAllowed`, la stabilité et la sensibilité des condensés, les jours
+  UTC, l'ordre de détection des user-agents.
 
-**Vérifié hors serveur — la logique pure** (85 assertions, `tsx`, sur les
-fonctions livrées et non des copies) : normalisation des chemins (requête, ancre, barre finale, URL
-complète, URL illisible tolérée), des hôtes (protocole, port, chemin, IPv6) et
-des référents (interne ignoré) ; les trois règles d'`originAllowed` sur les trois
-plateformes ; la stabilité du condensé de visiteur et sa sensibilité à chacun de
-ses quatre champs, séparateurs compris ; les bornes de jour ; l'ordre de
-détection des user-agents (Edge avant Chrome, Chrome avant Safari, Android avant
-Linux, tablette Android sans « Mobile ») ; l'alignement des cinq fenêtres sur
-leur propre pas ; et les moyennes sur zéro session.
+Ce que ces tests ne couvrent pas, et qui se vérifie sur un serveur monté :
+le montage réel des routes par l'hôte (helmet compris : CORP `same-origin`
+préservé ailleurs), les analyseurs `text/plain` et `application/json`, le
+plafond de débit appliqué par Fastify, et le délégateur CORS. C'est le banc
+d'essai de la première version (ci-dessous), à rejouer à chaque changement
+d'`app.ts` ou de `publicApp.ts`.
 
 ### Vérifié le 26 août 2026, sur une base
 

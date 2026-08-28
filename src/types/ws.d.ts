@@ -1,14 +1,16 @@
 /**
  * Types minimaux pour `ws`, dépendance transitive de `@fastify/websocket`
- * qu'on utilise ici en client sortant (voir `Services/integrations/dokploy.ts`).
+ * qu'on utilise en client sortant dans l'adaptateur Dokploy du module
+ * Déploiement (`features/deploy/src/server/dokploy.ts`, qui déclare `ws` en
+ * dépendance ; le projet serveur des modules inclut cette déclaration).
  *
  * Pas de `@types/ws` posé pour si peu : ce fichier ne déclare que ce dont on se
  * sert réellement, pas toute la surface du paquet.
  *
- * Le volet **serveur** n'est là que pour les tests : `dokployLog.test.ts` monte
- * une vraie WebSocket pour reproduire le seul comportement qui compte — Dokploy
- * ne referme jamais la connexion. Un faux client mentirait précisément sur ce
- * point, donc le serveur d'essai est réel, et ses types avec.
+ * Le volet **serveur** n'est là que pour les tests : le `dokploy.test.ts` du
+ * module monte une vraie WebSocket pour reproduire le seul comportement qui
+ * compte — Dokploy ne referme jamais la connexion. Un faux client mentirait
+ * précisément sur ce point, donc le serveur d'essai est réel, et ses types avec.
  */
 declare module 'ws' {
     export default class WebSocket {

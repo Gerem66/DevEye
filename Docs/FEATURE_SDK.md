@@ -348,6 +348,118 @@ multi-sujets (`database.remove` déclarait `['database', 'projects']` ; un
 module ne nomme que son sujet, le tableau d'un projet et ses compteurs
 d'onglets se remettent à jour à leur prochaine lecture).
 
+**Déploiements** est la dixième native rapatriée (`features/deploy`, 28
+août 2026), menée par deux agents en parallèle (serveur + app, client +
+écrans natifs), et la première dont le service **entretient un message** :
+sa migration a élargi la façade `notify` d'un suivi vivant
+(`liveChannels({ itemId })` : les canaux d'une route capables de porter un
+message qui se modifie, Discord aujourd'hui ; `postLive(channelId, message,
+messageId?)` : publie sans identifiant, modifie avec, rend l'identifiant à
+garder ou `null` quand le canal refuse ; `send(alert, { except })` : l'avis en
+texte sans les canaux qui ont déjà conclu), implémenté dans la façade et
+enregistré par le harnais (`recorded.liveMessages`, option `liveChannels`).
+Ses clés Dokploy ont quitté `workspace_credentials` pour une table du module
+par une migration du SOCLE (`099` : le socle crée et copie, identifiants
+conservés, un module ne pouvant pas écrire dans une table du socle ; la clé
+étrangère `fk_deploy_target_credential` retirée et non recréée, le ménage
+devenant explicite dans le dépôt), `_credentials.ts` et `repos/credentials.ts`
+ne connaissant plus que GitHub. Le contrat de Projets a gagné `recordEvent`
+(la frise d'un projet pour un déploiement parti de son onglet : la seule
+chose qu'un module ait à DIRE à Projets), et `project_deploy_links` a rejoint
+`db/repos/projectLinks.ts` avec ses six lectures ; dans l'autre sens,
+`DEPLOY_ITEMS_PROVIDER` est publié par le service du module et lu par
+`project/deployLink.ts`, `DEPLOY_CLIENT_PROVIDER` composé par l'onglet d'un
+projet. Le barrel client a gagné `Avatar` et `useWorkspaceMembers` (qui a
+déclenché quoi, montré sans lire la table des membres). Le service
+(`DeploySync` sur `FeatureServiceDeps`, l'ex moitié déploiement
+d'`IntegrationSyncService`, qui ne garde que les dépôts git) accepte une
+couture de test (`{ listDeployments, listTargets, fetchDeploymentLog }`) ;
+la déclaration ambiante de `ws` reste dans `src/types` (incluse par le projet
+serveur des modules). Ce que le SDK n'offre pas, deux fois de plus : un
+`mutates` multi-sujets (`deploy.remove` et `deploy.trigger` déclaraient
+`['deploy', 'projects']`) et un `live.changed` sur un autre sujet que le sien
+(le service natif diffusait `['deploy', 'projects']`) : l'onglet d'un projet
+suit `deploy.detail` et voit l'état changer, ses compteurs se relisent à
+leur prochaine ouverture.
+
+**Git** est la onzième native rapatriée (`features/git`, 28 août 2026),
+menée par deux agents en parallèle (serveur + app, client + écrans natifs).
+Ses jetons GitHub ont quitté `workspace_credentials` pour une table du module
+par une migration du SOCLE (`100` : le socle crée `ft_git_credentials`, copie
+les jetons, identifiants conservés, retire la clé étrangère
+`fk_git_repo_credential` sans la recréer, puis SUPPRIME la table commune, qui
+n'avait plus qu'un propriétaire) : `_credentials.ts`, `db/repos/credentials.ts`
+et l'entrée `credentials` de `db/index.ts` ont disparu avec elle, le ménage
+d'un jeton retiré étant explicite dans le dépôt du module (`removeCredential`
+met ses dépôts à NULL avant de retirer la ligne). `IntegrationSyncService`
+n'existe plus : sa moitié git est `GitSync` sur `FeatureServiceDeps` (un
+ticker du SDK à deux minutes, `cipherFor` mémoïsé, `live.changed`, la tranche
+de backfill toujours enchaînée par un `setTimeout(...).unref()` parce que ce
+n'est pas une boucle), avec une couture de test (`{ github }`, les six
+lectures de l'adaptateur), et `ctx.integrations` a quitté `FeatureContext`,
+`WSDeps` et `app.ts`. Le contrat de Projets a gagné `applyVersion(feature,
+itemId, ws, version)` : l'ex `applyReleaseVersion` du service, côté Projets
+(le module dit la dernière release stable, Projets réécrit la version des
+projets liés de l'étage ouvert dont `versionSource` est `github_release`,
+la seule source suivie aujourd'hui) ; `project_repo_links` a rejoint
+`db/repos/projectLinks.ts` avec ses six lectures, et `project_count` a quitté
+le dépôt du module (`toRepo` reçoit le compte). Dans l'autre sens,
+`GIT_ITEMS_PROVIDER` est publié par le service du module et lu par
+`project/repoLink.ts`, `GIT_CLIENT_PROVIDER` composé par l'onglet d'un projet.
+Ce que sa migration a élargi : la façade `members.list()` rend la **couleur**
+du compte (`color`, `null` sur un compte jamais colorié), la seule donnée
+d'utilisateur que le graphe des commits lisait dans la table `users` (un
+auteur rattaché prend la couleur de sa présence en direct), et Git déclare
+donc `members.read` (le rattachement d'un auteur vérifie aussi l'appartenance
+par la façade, l'ex `workspaceMembers.isMember`) ; le barrel client a gagné
+`userColorVar`. Ce que le SDK n'offre pas, une fois de plus : un `mutates`
+multi-sujets (`git.repoRemove` déclarait `['git', 'projects']`) et un
+`live.changed` sur un autre sujet que le sien (le service natif diffusait
+`['git', 'projects']` parce qu'une release peut changer la version d'un
+projet lié) : l'onglet d'un projet suit `git.repo`, la version d'un projet se
+relit à sa prochaine lecture.
+
+**Audience** est la douzième native rapatriée (`features/audience`, 28 août
+2026), menée par deux agents en parallèle (serveur + app, client + écrans
+natifs), et la première à ouvrir des **routes HTTP publiques**. Sa migration
+a élargi le SDK de la capacité `'routes.public'` et de
+`FeatureService.publicRoutes(app: SdkPublicApp)` : le module déclare ses
+routes (`get`/`post`, un `rateLimit` par route quand il en veut un, une
+requête réduite à `headers`/`body` déjà décodé/`ip`, une réponse chaînable
+`header`/`code`/`send`), l'hôte les monte sur chacun de ses écouteurs exposés
+(`modulePublicRoutes(app)` dans `app.ts` et `publicApp.ts`, journal
+silencieux, plafond de débit par route) et retient leurs chemins pour son
+délégateur CORS (`isModulePublicPath`, à la place des chemins en dur) ;
+`buildPublicApp()` n'a plus de dépendance, le second écouteur ne sert que ces
+routes. Le contexte des deux côtés porte `origins { app, public }` (l'ex
+`ingestOrigin()` : `AUDIENCE_ORIGIN` sinon `PUBLIC_ORIGIN`, sans barre
+finale, ce qu'un module donne à copier ne se déduit jamais du navigateur), et
+le harnais le simule (`createTestContext({ origins })`). Les **sels** des
+visiteurs ne sont plus la clé serveur brute (`CRYPT_KEY_A`), qu'un module ne
+lit pas : le service dérive une fois `deps.keys.derive('audience',
+'visitor-salt', 32)` et s'en sert dans le condensé persistant comme dans le
+sel du jour ; conséquence assumée, les condensés de visiteurs ont changé une
+fois à la migration (un visiteur persistant compté « nouveau » une fois, les
+condensés anonymes tournaient déjà chaque jour). Le service (`AudienceIngest`
+sur `FeatureServiceDeps` : deux tickers, `cipherFor` de l'hôte, `live.changed`
+avec la coalescence à la minute gardée dans le module, `stop()` attend la
+dernière vidange puisque l'hôte attend l'arrêt avant de fermer le pool) se
+teste sans horloge ni réseau sur le harnais. `project_audience_links` a
+rejoint `db/repos/projectLinks.ts` (`listSiteIds`, `linkSite`, `unlinkSite`,
+`unlinkAllSites`, `listSiteUsage`, `countSiteLinks`), `usageProvider.ts` a
+gagné l'entrée `audience`, et `project_count` a quitté le dépôt du module
+(`toSite` reçoit le compte du contrat de Projets) ; dans l'autre sens,
+`AUDIENCE_ITEMS_PROVIDER` est publié par le service et lu par
+`project/audienceLink.ts`, `AUDIENCE_CLIENT_PROVIDER` composé par l'onglet
+d'un projet. Les trois dépôts natifs (sites, entonnoirs, ingestion) sont un
+seul `AudienceRepo` sur `SdkQueryable`, sections gardées. Avec elle disparaît
+la dernière native branchée au partage : `itemHomeWorkspace` (sharing) et
+`itemLabelOf` (notify) n'ont plus de `switch` natif, seulement `moduleItems`.
+Le barrel client a gagné `useStickyOffset`. Ce que le SDK n'offre pas, une
+fois de plus : un `mutates` multi-sujets (`audience.siteRemove` déclarait
+`['audience', 'projects']`) ; les compteurs d'onglets d'un projet se relisent
+à leur prochaine ouverture.
+
 ## La désinstallation d'un module (22 août 2026)
 
 Le geste inverse de l'installation, conçu pour emporter TOUTES les traces :
@@ -383,7 +495,7 @@ de l'appel (`userId`, `workspaceId`, `workspace`, `isOwner`, `canWrite`,
 `canExtra`/`extraValue` par `resolveExtras`, la même règle que le harnais),
 `repo`, `store` (KV chiffrable, `'server' | 'private' | 'none'`), `cipher(mode)`,
 `deveye` (façade gardée par `nativeCapabilities` : `notify` avec `embeds`
-Discord, `mail.accounts`, `members.read`, `devices.read` (des `SdkDevice`
+Discord, `except`, et le suivi vivant `liveChannels` / `postLive`, `mail.accounts`, `members.read` (chaque membre avec la couleur de son compte), `devices.read` (des `SdkDevice`
 complets : état, propriétaire, espace, cadence, rapport ; `list()` suit la règle
 de `device.list`, l'admin dans son espace personnel voit la flotte),
 `telemetry.read` (`snapshot`, `pinInstant`, réservée aux ids natifs) et
@@ -393,7 +505,9 @@ appelant, `agents`), `secrecy.isUnlocked()` (le verrou de la session),
 restrictions du dispatcheur liées à LA feature du module, et le ménage d'un
 élément supprimé), `sharing.scope()` (les projections vers l'espace actif,
 `shareScope` de `_sharing.ts` ; refusé sous `shareTier: 'never'`), `audit`,
-`logger`, `requestId`. Une erreur se signale par `FeatureError(code, message)`.
+`logger`, `requestId`, `origins { app, public }` (où vit DevEye, sans barre
+finale : l'origine des membres et celle de l'écouteur public). Une erreur se
+signale par `FeatureError(code, message)`.
 
 Par service (`FeatureServiceDeps`, `_sdk/service.ts`) : `repo`,
 `listWorkspaceIds` (tous les espaces), `storeFor`/`cipherFor`/`deveyeFor`/
@@ -401,8 +515,11 @@ Par service (`FeatureServiceDeps`, `_sdk/service.ts`) : `repo`,
 gardée par `devices.read`, avec l'état en ligne du hub), `devices` (la flotte
 par identifiant, même garde), `telemetry`, `live.changed(workspaceId)` (le
 sujet du module, diffusé par le hub, projections comprises), `audit` (source
-système), `agents`, `keys` (`sealBytes`/`openBytes` sous la clé serveur),
-`createTicker` (boucle avec garde de réentrance), `logger`. Les hooks agent
+système), `agents`, `keys` (`sealBytes`/`openBytes` sous la clé serveur,
+`derive(salt, info, length)` : HKDF sur la même clé, jamais stockée),
+`createTicker` (boucle avec garde de réentrance), `logger`. Un service peut
+aussi déclarer `publicRoutes(app: SdkPublicApp)` (capacité `'routes.public'`) :
+l'hôte monte ces routes sur chacun de ses écouteurs exposés, hors session. Les hooks agent
 d'un module (connexion, télémétrie après persistance, sync) qui échouent sont
 isolés et journalisés (`moduleAgentHooks`), deux modules offrant le même
 provider sont refusés au boot, et `validateGrantExtras` vérifie les extras

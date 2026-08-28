@@ -1,0 +1,6 @@
+{
+  "id": "git",
+  "tables": ["git_repos", "git_branches", "git_commits", "git_commit_authors", "git_pull_requests", "git_releases"],
+  "minTypesVersion": "0.15.2",
+  "$comment": "Tables historiques (migration 064 du socle, complétées par la 065 et la 069, jamais déplacées) : l'allowlist les dispense du préfixe ft_git_. `ft_git_credentials` (créée par la 100 du socle, qui y a copié les jetons GitHub de workspace_credentials avant de supprimer cette table) porte le préfixe : le module la possède et son uninstall.sql la détruit. `project_repo_links` (064) appartient à Projets."
+}

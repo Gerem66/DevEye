@@ -3,7 +3,7 @@ import type { MinimalUser, ProjectCard, ProjectCardDep, ProjectMilestone } from 
 import { Button } from '@/Components';
 import { useLiveOutlines } from '@/live/useLiveOutline';
 import { useRequestPopupWidth } from '@/stores/popupWidth';
-import { Avatar } from '../Board/Avatar';
+import { Avatar } from '@/Components/Avatar/Avatar';
 import { timelineNaturalWidth } from '../Board/width';
 import { formatDate } from '../api';
 import { DAY_MS, startOfDay, timelineTicks, ZOOM_LEVELS, type ZoomId } from './scale';

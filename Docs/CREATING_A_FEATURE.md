@@ -5,10 +5,10 @@
 > [DevEye-Feature-Template](https://github.com/Gerem66/DevEye-Feature-Template)
 > (doc anglaise complète) côté développeur, [FEATURE_SDK.md](./FEATURE_SDK.md)
 > côté mainteneur. La checklist ci-dessous reste celle du chemin **natif
-> historique**, encore suivi par six features sur seize (Déploiement, Git,
-> Audience, Mail, Appareils et Projets ; Météo, OSINT, Finances, le Coffre,
-> les Notes, Uptime, Sentinelle, les Sauvegardes et les Bases de données sont
-> passés au format module dans `features/*`, CloudSync en module privé).
+> historique**, encore suivi par trois features sur seize (Mail, Appareils et
+> Projets ; Météo, OSINT, Finances, le Coffre, les Notes, Uptime, Sentinelle,
+> les Sauvegardes, les Bases de données, les Déploiements, Git et Audience
+> sont passés au format module dans `features/*`, CloudSync en module privé).
 
 Ce document liste **tout** ce qu'implique l'ajout d'une fonctionnalité dans DevEye,
 dans l'ordre, à travers les trois bases de code. Suis-le de haut en bas pour ne
@@ -148,7 +148,7 @@ handler })` par commande. Le handler reçoit un `FeatureContext` (`ctx.db`,
    réussi** ; tout widget lisant cette clé via `useResourceVersion` re-fetch
    aussitôt. La clé est par convention la commande de comptage (`audience.count`,
    `git.count`) et doit figurer dans `ResourceKey`. Invalider **à la source
-   de la mutation**, pas au cycle de vie du popup. Exemple : `Features/Audience/SiteDialog.tsx`.
+   de la mutation**, pas au cycle de vie du popup. Exemple : `features/audience/src/client/SiteDialog.tsx`.
 
 ---
 

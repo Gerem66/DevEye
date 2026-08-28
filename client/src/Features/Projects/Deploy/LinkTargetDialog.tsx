@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import type { DeployTarget } from '@deveye/types';
+import { DEPLOY_CLIENT_PROVIDER } from '@deveye/types/sdk';
+import type { DeployClientProvider, DeployLinkedCandidate } from '@deveye/types/sdk/client';
 import { Button, Dialog, SelectInput } from '@/Components';
 import { ws } from '@/api/ws';
-import { TargetDialog } from '@/Features/Deploy/TargetDialog';
-import { hostOf } from '@/Features/Deploy/format';
+import { moduleClientProvider } from '@/sdk/registry';
 import { humanizeError } from '../api';
 import styles from '../style.module.css';
 
@@ -20,18 +20,20 @@ interface LinkTargetDialogProps {
  * Ajouter une cible de déploiement au projet : en choisir une de l'espace, ou en
  * déclarer une.
  *
- * **La déclaration passe par le vrai dialogue de la feature** (`TargetDialog`),
- * pas par une copie réduite — même parti pris que `LinkDatabaseDialog` et
- * `LinkSiteDialog`. Une cible a une instance, un type et un identifiant externe
- * qu'il faut aller lire chez le fournisseur ; en réécrire un formulaire ici
- * garantirait qu'il diverge au premier réglage ajouté.
+ * **La déclaration passe par le vrai dialogue de la feature** (`TargetDialog`,
+ * lu par le contrat client du module Déploiement), pas par une copie réduite :
+ * même parti pris que `LinkDatabaseDialog` et `LinkSiteDialog`. Une cible a une
+ * instance, un type et un identifiant externe qu'il faut aller lire chez le
+ * fournisseur ; en réécrire un formulaire ici garantirait qu'il diverge au
+ * premier réglage ajouté. Module absent, le dialogue le dit et ne propose rien.
  *
  * Rien n'est exclusif : une cible déjà déployée par un autre projet peut être
  * choisie ici sans lui être retirée — c'est même le cas normal quand un client
  * et un serveur partent dans la même pile compose.
  */
 export function LinkTargetDialog({ open, projectId, linkedIds, onClose, onSaved }: LinkTargetDialogProps) {
-    const [targets, setTargets] = useState<DeployTarget[]>([]);
+    const provider = moduleClientProvider<DeployClientProvider>(DEPLOY_CLIENT_PROVIDER);
+    const [targets, setTargets] = useState<readonly DeployLinkedCandidate[]>([]);
     const [picked, setPicked] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -42,15 +44,15 @@ export function LinkTargetDialog({ open, projectId, linkedIds, onClose, onSaved 
         if (!open) return;
         setPicked('');
         setError(null);
+        if (!provider) return;
         void (async () => {
             try {
-                const res = await ws.send('deploy.list', {});
-                setTargets(res.targets);
+                setTargets(await provider.listTargets());
             } catch (e) {
                 setError(humanizeError(e, 'Impossible de charger les cibles de l’espace.'));
             }
         })();
-    }, [open]);
+    }, [open, provider]);
 
     const free = targets.filter((t) => !linkedIds.includes(t.id));
 
@@ -87,35 +89,39 @@ export function LinkTargetDialog({ open, projectId, linkedIds, onClose, onSaved 
                 }
             >
                 <div className={styles.form}>
-                    {free.length === 0 ? (
-                        <p className={styles.hint}>
-                            {targets.length === 0
-                                ? 'Aucune cible n’est encore déclarée dans cet espace.'
-                                : 'Toutes les cibles de l’espace sont déjà reliées à ce projet.'}
-                        </p>
+                    {!provider ? (
+                        <p className={styles.hint}>Le module Déploiements n’est pas installé.</p>
                     ) : (
-                        <label className={styles.field}>
-                            <span className={styles.label}>Cible de l’espace</span>
-                            <SelectInput value={picked} onChange={(e) => setPicked(e.target.value)}>
-                                <option value=''>Choisir…</option>
-                                {free.map((target) => (
-                                    <option key={target.id} value={target.id}>
-                                        {target.name} — {hostOf(target.baseUrl)}
-                                        {target.projectCount > 0 &&
-                                            ` — ${target.projectCount} projet${target.projectCount > 1 ? 's' : ''}`}
-                                    </option>
-                                ))}
-                            </SelectInput>
-                            <span className={styles.hint}>
-                                Une cible peut servir plusieurs projets : en choisir une déjà utilisée ailleurs ne la
-                                retire à personne.
-                            </span>
-                        </label>
-                    )}
+                        <>
+                            {free.length === 0 ? (
+                                <p className={styles.hint}>
+                                    {targets.length === 0
+                                        ? 'Aucune cible n’est encore déclarée dans cet espace.'
+                                        : 'Toutes les cibles de l’espace sont déjà reliées à ce projet.'}
+                                </p>
+                            ) : (
+                                <label className={styles.field}>
+                                    <span className={styles.label}>Cible de l’espace</span>
+                                    <SelectInput value={picked} onChange={(e) => setPicked(e.target.value)}>
+                                        <option value=''>Choisir…</option>
+                                        {free.map((target) => (
+                                            <option key={target.id} value={target.id}>
+                                                {target.name} — {target.host}
+                                            </option>
+                                        ))}
+                                    </SelectInput>
+                                    <span className={styles.hint}>
+                                        Une cible peut servir plusieurs projets : en choisir une déjà utilisée ailleurs
+                                        ne la retire à personne.
+                                    </span>
+                                </label>
+                            )}
 
-                    <Button variant='ghost' icon='add' onClick={() => setCreateOpen(true)}>
-                        Déclarer une nouvelle cible
-                    </Button>
+                            <Button variant='ghost' icon='add' onClick={() => setCreateOpen(true)}>
+                                Déclarer une nouvelle cible
+                            </Button>
+                        </>
+                    )}
 
                     {error && <p className={styles.error}>{error}</p>}
                 </div>
@@ -125,15 +131,16 @@ export function LinkTargetDialog({ open, projectId, linkedIds, onClose, onSaved 
                 immédiatement : sans cela, « déclarer une cible » depuis un projet
                 laisserait l'utilisateur devant une liste où il faut la
                 rechercher, ce qui est exactement le geste qu'on lui épargne. */}
-            <TargetDialog
-                open={createOpen}
-                target={null}
-                onClose={() => setCreateOpen(false)}
-                onSaved={(target) => {
-                    setCreateOpen(false);
-                    void link(target.id);
-                }}
-            />
+            {provider && (
+                <provider.TargetDialog
+                    open={createOpen}
+                    onClose={() => setCreateOpen(false)}
+                    onSaved={(targetId) => {
+                        setCreateOpen(false);
+                        void link(targetId);
+                    }}
+                />
+            )}
         </>
     );
 }

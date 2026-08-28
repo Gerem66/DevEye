@@ -12,7 +12,8 @@ import { useEffect, useRef, type ChangeEvent } from 'react';
 import { ws } from '@/api/ws';
 import { useLiveSegment } from '@/live/useLiveSegment';
 import { startTeleport, type LiveSegmentKind } from '@/stores/live';
-import { getActiveWorkspaceId } from '@/stores/workspace';
+import { getActiveWorkspaceId, useActiveWorkspace } from '@/stores/workspace';
+import type { MinimalUser } from '@deveye/types';
 
 export type { LiveSegmentKind };
 /** The change event of a text input, for handlers typed by hand. */
@@ -72,6 +73,23 @@ export { useFeatureLifecycle } from '@/Features/useFeatureLifecycle';
  * par défaut, comme un explorateur de tables en mode agrandi.
  */
 export { useRequestPopupWidth } from '@/stores/popupWidth';
+/** La pastille d'identité d'un membre, commune à toute feature qui nomme quelqu'un. */
+export { Avatar } from '@/Components/Avatar/Avatar';
+/** La variable CSS d'une couleur de compte, celle dont la présence en direct peint chacun. */
+export { userColorVar } from '@/Features/Profile/userColors';
+/** Deux bandeaux collants l'un sous l'autre : la mesure du haut, décalage du bas. */
+export { useStickyOffset, type StickyOffset } from '@/stickyOffset';
+
+const NO_MEMBERS: readonly MinimalUser[] = [];
+
+/**
+ * Les membres de l'espace actif, tels que la session les liste : de quoi
+ * mettre un visage sur « qui a déclenché quoi ». Vide tant que la session
+ * n'a rien fourni, jamais `null` (une liste se filtre sans garde).
+ */
+export function useWorkspaceMembers(): readonly MinimalUser[] {
+    return useActiveWorkspace()?.users ?? NO_MEMBERS;
+}
 
 /**
  * Ouvrir une autre feature de l'espace actif, sur l'un de ses éléments quand

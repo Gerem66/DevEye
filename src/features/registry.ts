@@ -8,9 +8,6 @@ import { mailFeatures } from './mail';
 import { notifyFeatures } from './notify';
 import { sharingFeatures } from './sharing';
 import { metricsFeatures } from './metrics';
-import { audienceFeatures } from './audience';
-import { gitFeatures } from './git';
-import { deployFeatures } from './deploy';
 import { projectFeatures } from './project';
 import { secrecyFeatures } from './secrecy';
 import { twoFactorFeatures } from './twofa';
@@ -65,9 +62,6 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     userSetColorFeature,
     userSetSettingFeature,
     ...projectFeatures,
-    ...gitFeatures,
-    ...deployFeatures,
-    ...audienceFeatures,
     ...deviceFeatures,
     ...metricsFeatures,
     ...twoFactorFeatures,

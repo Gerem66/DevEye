@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { DeployTarget, Deployment, MinimalUser, Project } from '@deveye/types';
+import type { Project } from '@deveye/types';
+import { DEPLOY_CLIENT_PROVIDER } from '@deveye/types/sdk';
+import type { DeployClientProvider, DeployLinkedCandidate } from '@deveye/types/sdk/client';
 import { Button, Dialog } from '@/Components';
-import { ws } from '@/api/ws';
+import { ws, WsError } from '@/api/ws';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
-import { startTeleport } from '@/stores/live';
-import { getActiveWorkspaceId, useWorkspacePermissions } from '@/stores/workspace';
-import { TargetDialog } from '@/Features/Deploy/TargetDialog';
-import { TargetView } from '@/Features/Deploy/TargetView';
-import deployStyles from '@/Features/Deploy/style.module.css';
+import { useWorkspacePermissions } from '@/stores/workspace';
+import { moduleClientProvider } from '@/sdk/registry';
 import { humanizeError } from '../api';
 import { LinkTargetDialog } from './LinkTargetDialog';
 import { UptimeLinks } from './UptimeLinks';
@@ -15,14 +14,7 @@ import styles from '../style.module.css';
 
 interface DeployProps {
     project: Project;
-    members: MinimalUser[];
     canWrite: boolean;
-}
-
-/** Ce qu'une cible ouverte dans cet onglet porte avec elle. */
-interface Linked {
-    target: DeployTarget;
-    deployments: Deployment[];
 }
 
 /**
@@ -34,28 +26,35 @@ interface Linked {
  * avec sa clé, son historique et son suivi d'état, et plusieurs projets peuvent
  * déployer la même — le cas normal quand un client et un serveur partent dans la
  * même pile compose. Cet onglet ne possède qu'un pointeur (`project.deployList`
- * / `deployLink` / `deployUnlink`) et délègue tout l'affichage à `TargetView`.
+ * / `deployLink` / `deployUnlink`) et délègue tout l'affichage au module
+ * Déploiement, par son contrat client (`DEPLOY_CLIENT_PROVIDER`) : cet écran
+ * n'importe pas le module. C'est le bloc du module (`LinkedTarget`) qui charge
+ * sa cible lui-même, suit les invalidations de la feature et porte son
+ * dialogue de réglage.
  *
  * Corollaire à connaître : déclencher relève du droit `deploy`, pas de
  * `projects`. Un membre qui a l'un sans l'autre voit qu'il y a des cibles
- * rattachées sans pouvoir les ouvrir, et l'écran le dit.
+ * rattachées sans pouvoir les ouvrir, et l'écran le dit. Module absent : même
+ * lecture, des identifiants nus, et une phrase qui le dit.
  */
-export function Deploy({ project, members, canWrite }: DeployProps) {
+export function Deploy({ project, canWrite }: DeployProps) {
     const permissions = useWorkspacePermissions();
+    const provider = moduleClientProvider<DeployClientProvider>(DEPLOY_CLIENT_PROVIDER);
     const canReadDeploy = permissions.canFeature('deploy');
     const canWriteDeploy = permissions.canFeature('deploy', 'write');
 
     const [targetIds, setTargetIds] = useState<number[]>([]);
-    const [linked, setLinked] = useState<Linked[]>([]);
+    /** Les cibles de l'espace, pour nommer celle qu'on délie. */
+    const [candidates, setCandidates] = useState<readonly DeployLinkedCandidate[]>([]);
     const [loaded, setLoaded] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [linkOpen, setLinkOpen] = useState(false);
-    const [editing, setEditing] = useState<DeployTarget | null>(null);
-    const [unlinking, setUnlinking] = useState<DeployTarget | null>(null);
+    /** La cible qu'on s'apprête à délier ; `null` = aucune confirmation ouverte. */
+    const [unlinking, setUnlinking] = useState<number | null>(null);
 
     const boardVersion = useResourceVersion('project.board');
-    const deployVersion = useResourceVersion('deploy.detail');
+    const listVersion = useResourceVersion('deploy.list');
     const guarded = project.securityTier === 'guarded';
 
     const load = useCallback(async () => {
@@ -66,26 +65,43 @@ export function Deploy({ project, members, canWrite }: DeployProps) {
         try {
             const res = await ws.send('project.deployList', { projectId: project.id });
             setTargetIds(res.targetIds);
-            // Le détail relève de la feature Déploiement : sans le droit, on
-            // s'arrête aux pointeurs plutôt que d'encaisser un refus.
-            setLinked(
-                canReadDeploy
-                    ? (await Promise.all(res.targetIds.map((targetId) => ws.send('deploy.get', { targetId })))).map(
-                          (r) => ({ target: r.target, deployments: r.deployments })
-                      )
-                    : []
-            );
             setError(null);
         } catch (e) {
             setError(humanizeError(e, 'Impossible de charger les cibles reliées.'));
         } finally {
             setLoaded(true);
         }
-    }, [project.id, guarded, canReadDeploy]);
+    }, [project.id, guarded]);
 
     useEffect(() => {
         void load();
-    }, [load, boardVersion, deployVersion]);
+    }, [load, boardVersion]);
+
+    // Le catalogue, pour nommer la cible qu'on délie. Le détail relève de la
+    // feature Déploiement : sans le droit (ou sans le module), on s'arrête aux
+    // pointeurs plutôt que d'encaisser un refus, qui n'est pas une erreur à
+    // afficher.
+    useEffect(() => {
+        if (guarded || !canReadDeploy || !provider) {
+            setCandidates([]);
+            return;
+        }
+        let alive = true;
+        void (async () => {
+            try {
+                const listed = await provider.listTargets();
+                if (alive) setCandidates(listed);
+            } catch (e) {
+                if (alive) setCandidates([]);
+                if (!(e instanceof WsError && e.code === 'forbidden')) {
+                    setError(humanizeError(e, 'Impossible de charger les cibles de l’espace.'));
+                }
+            }
+        })();
+        return () => {
+            alive = false;
+        };
+    }, [guarded, canReadDeploy, provider, listVersion]);
 
     const unlink = async (targetId: number) => {
         setBusy(true);
@@ -102,8 +118,10 @@ export function Deploy({ project, members, canWrite }: DeployProps) {
 
     if (!loaded) return <p className={styles.empty}>Chargement…</p>;
 
+    const unlinkingName = unlinking === null ? null : (candidates.find((c) => c.id === unlinking)?.name ?? null);
+
     return (
-        <div className={deployStyles.feature}>
+        <div className={styles.linkedTargets}>
             {error && <p className={styles.error}>{error}</p>}
 
             {/* Au-dessus des cibles, et non en dessous : « est-ce en ligne ? » se
@@ -115,6 +133,8 @@ export function Deploy({ project, members, canWrite }: DeployProps) {
 
             <section className={styles.deployLinks}>
                 <h3 className={styles.sectionTitle}>Déploiements</h3>
+
+                {!provider && <p className={styles.hint}>Le module Déploiements n’est pas installé.</p>}
 
                 {guarded && (
                     <p className={styles.empty}>
@@ -132,55 +152,37 @@ export function Deploy({ project, members, canWrite }: DeployProps) {
                     </p>
                 )}
 
-                {linked.map((item) => (
-                    <TargetView
-                        key={item.target.id}
-                        target={item.target}
-                        deployments={item.deployments}
-                        members={members}
-                        canWrite={canWrite && canWriteDeploy}
-                        // C'est bien de **ce** projet que part le geste : le
-                        // déclenchement s'inscrira dans sa frise.
-                        projectId={project.id}
-                        onEdit={canWriteDeploy ? () => setEditing(item.target) : undefined}
-                        // L'historique complet est un panneau de la feature Déploiement,
-                        // pas de cet onglet : ici, le dernier déploiement affiché dans
-                        // l'en-tête suffit, comme avant que l'historique n'ait sa propre carte.
-                        showHistory={false}
-                        after={
-                            <>
-                                {/* Le sens qui manquerait sinon : la feature sait
-                                    mener aux projets d'une cible, l'onglet d'un
-                                    projet doit savoir mener à la cible. Par la
-                                    téléportation, comme partout — garde d'accès
-                                    comprise. Offert même sans droit d'écriture,
-                                    c'est une navigation. */}
-                                <Button
-                                    variant='secondary'
-                                    icon='chevrons-right'
-                                    onClick={() =>
-                                        startTeleport(getActiveWorkspaceId() ?? 0, [
-                                            'view:deploy',
-                                            `l1:${item.target.id}`
-                                        ])
-                                    }
-                                >
-                                    Ouvrir le Déploiement
-                                </Button>
+                {canReadDeploy &&
+                    targetIds.map((id) =>
+                        provider ? (
+                            <provider.LinkedTarget
+                                key={id}
+                                targetId={id}
+                                // C'est bien de **ce** projet que part le geste : le
+                                // déclenchement s'inscrira dans sa frise.
+                                projectId={project.id}
+                                canWrite={canWrite && canWriteDeploy}
+                                onUnlink={() => setUnlinking(id)}
+                            />
+                        ) : (
+                            // Sans le module, le serveur ne rend qu'un identifiant
+                            // nu : la ligne reste là, avec son « Délier », plutôt
+                            // que de disparaître.
+                            <div key={id} className={styles.linkedBare}>
+                                <span className={styles.hint}>Cible #{id}</span>
                                 {canWrite && canWriteDeploy && (
-                                    <Button variant='ghost' onClick={() => setUnlinking(item.target)} disabled={busy}>
+                                    <Button variant='ghost' icon='x' onClick={() => setUnlinking(id)} disabled={busy}>
                                         Délier
                                     </Button>
                                 )}
-                            </>
-                        }
-                    />
-                ))}
+                            </div>
+                        )
+                    )}
 
                 {/* Toujours en bas, même quand une cible est déjà reliée : un
                     projet en déploie parfois deux (une application et sa
                     base). */}
-                {!guarded && canWrite && canWriteDeploy && (
+                {!guarded && canWrite && canWriteDeploy && provider && (
                     <div className={styles.addRow}>
                         <Button icon='add' onClick={() => setLinkOpen(true)}>
                             Ajouter une cible
@@ -206,42 +208,30 @@ export function Deploy({ project, members, canWrite }: DeployProps) {
                 }}
             />
 
-            {/* Le vrai dialogue de la feature, pas une copie : régler une cible
-                depuis un projet ou depuis sa feature doit être le même geste. */}
-            <TargetDialog
-                open={editing !== null}
-                target={editing}
-                onClose={() => setEditing(null)}
-                onSaved={() => {
-                    setEditing(null);
-                    invalidate('project.board', 'deploy.list', 'deploy.detail');
-                }}
-            />
-
             <Dialog
                 open={unlinking !== null}
                 onClose={() => setUnlinking(null)}
                 title='Délier cette cible ?'
                 width={460}
-                onSubmit={() => unlinking && void unlink(unlinking.id)}
+                onSubmit={() => unlinking !== null && void unlink(unlinking)}
                 footer={
                     <>
                         <Button variant='secondary' onClick={() => setUnlinking(null)} disabled={busy}>
                             Annuler
                         </Button>
-                        <Button variant='danger' disabled={busy} onClick={() => unlinking && void unlink(unlinking.id)}>
+                        <Button
+                            variant='danger'
+                            disabled={busy}
+                            onClick={() => unlinking !== null && void unlink(unlinking)}
+                        >
                             Délier
                         </Button>
                     </>
                 }
             >
                 <p className={styles.hint}>
-                    {unlinking && (
-                        <>
-                            <strong>{unlinking.name}</strong> quitte ce projet : plus rien ne sera déclenché d’ici. La
-                            cible, son historique et les autres projets qui la déploient ne sont pas touchés.
-                        </>
-                    )}
+                    <strong>{unlinkingName ?? 'Cette cible'}</strong> quitte ce projet : plus rien ne sera déclenché
+                    d’ici. La cible, son historique et les autres projets qui la déploient ne sont pas touchés.
                 </p>
             </Dialog>
         </div>

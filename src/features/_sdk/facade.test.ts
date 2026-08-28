@@ -287,15 +287,16 @@ describe('createFacade : members.list', () => {
             users: {
                 findByIds: async (ids: number[]) => {
                     asked = ids;
-                    return ids.map((id) => ({ id, username: `u${id}` }));
+                    return ids.map((id) => ({ id, username: `u${id}`, color: id === OWNER ? 'blue' : '' }));
                 }
             }
         };
         const members = await facadeWith(['members.read'], db).members.list();
         assert.deepEqual(asked, [OWNER, 11]);
+        // La couleur suit le compte ; un compte jamais colorié rend `null`.
         assert.deepEqual(members, [
-            { userId: OWNER, name: 'u10', isOwner: true },
-            { userId: 11, name: 'u11', isOwner: false }
+            { userId: OWNER, name: 'u10', isOwner: true, color: 'blue' },
+            { userId: 11, name: 'u11', isOwner: false, color: null }
         ]);
     });
 });
@@ -438,5 +439,90 @@ describe('createFacade : agents (capacité déclarée)', () => {
             facade.agents[name](payload as never);
             assert.deepEqual(hubCalls.at(-1), { method: name, args: [payload] });
         }
+    });
+});
+
+describe('createFacade : notify, le message vivant', () => {
+    const route = { id: 51, workspace_id: WS, feature: 'x-facadetest', item_id: 0 };
+    const discord = {
+        id: 8,
+        workspace_id: WS,
+        feature: 'x-facadetest',
+        kind: 'discord',
+        label_enc: 'enc:Salon',
+        target_enc: 'enc:https://discord.com/api/webhooks/1/abc',
+        mail_account_id: null,
+        enabled: 1,
+        position: 0,
+        created: 0
+    };
+    const webhook = { ...discord, id: 7, kind: 'webhook', target_enc: 'enc:https://hooks.example.test/abc' };
+    const foreign = { ...discord, id: 9, feature: 'x-other' };
+    const db = {
+        notificationChannels: {
+            findRoute: async () => route,
+            routeChannelIds: async () => [webhook.id, discord.id],
+            list: async () => [webhook, discord],
+            findById: async (id: number) => [webhook, discord, foreign].find((c) => c.id === id) ?? null
+        }
+    };
+
+    /** Un Discord factice : POST rend un identifiant, PATCH accepte, et tout est relevé. */
+    async function withDiscord<T>(
+        run: () => Promise<T>
+    ): Promise<{ result: T; calls: { method: string; url: string }[] }> {
+        const calls: { method: string; url: string }[] = [];
+        const original = globalThis.fetch;
+        globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+            calls.push({ method: init?.method ?? 'GET', url: String(url) });
+            return init?.method === 'POST'
+                ? new Response(JSON.stringify({ id: 'msg-1' }), { status: 200 })
+                : new Response(null, { status: 204 });
+        }) as typeof fetch;
+        try {
+            return { result: await run(), calls };
+        } finally {
+            globalThis.fetch = original;
+        }
+    }
+
+    it('liveChannels ne liste que les canaux Discord de la route', async () => {
+        assert.deepEqual(await facadeWith(['notify'], db).notify.liveChannels(), [{ id: 8 }]);
+    });
+
+    it('postLive publie sans identifiant, modifie avec, et rend celui à garder', async () => {
+        const facade = facadeWith(['notify'], db);
+        const { result: posted, calls } = await withDiscord(() =>
+            facade.notify.postLive(8, { embeds: [{ title: 'En cours' }] })
+        );
+        assert.equal(posted, 'msg-1');
+        const { result: edited, calls: edits } = await withDiscord(() =>
+            facade.notify.postLive(8, { embeds: [{ title: 'Fini' }] }, 'msg-1')
+        );
+        assert.equal(edited, 'msg-1');
+        assert.deepEqual(
+            [...calls, ...edits].map((c) => c.method),
+            ['POST', 'PATCH']
+        );
+    });
+
+    it("postLive refuse un canal qui n'est pas Discord, ou pas celui de la feature", async () => {
+        const facade = facadeWith(['notify'], db);
+        const { result, calls } = await withDiscord(async () => [
+            await facade.notify.postLive(7, { content: 'texte' }),
+            await facade.notify.postLive(9, { content: 'texte' })
+        ]);
+        assert.deepEqual(result, [null, null]);
+        assert.deepEqual(calls, []);
+    });
+
+    it("send écarte les canaux d'`except`, ceux dont le message vivant a conclu", async () => {
+        const { calls } = await withFetch(() =>
+            facadeWith(['notify'], db).notify.send({ subject: 's', body: 'b' }, { except: [8] })
+        );
+        assert.deepEqual(
+            calls.map((c) => c.url),
+            ['https://hooks.example.test/abc']
+        );
     });
 });

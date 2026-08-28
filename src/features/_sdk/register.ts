@@ -8,11 +8,12 @@ import type {
     SdkQueryable
 } from '@deveye/types/sdk/server';
 import { FeatureError } from '@deveye/types/sdk/server';
+import type { FastifyInstance, RouteShorthandOptions } from 'fastify';
 
 import type { Database } from '@/db';
 import type { Queryable } from '@/db/pool';
 import { defineFeature, type FeatureDefinition } from '@/features/_define';
-import type { SdkProviders } from '@deveye/types/sdk/server';
+import type { SdkProviders, SdkPublicApp, SdkPublicHandler, SdkPublicRouteOptions } from '@deveye/types/sdk/server';
 import { createSdkContext } from './context';
 import { createServiceDeps, type ModuleServiceHost } from './service';
 
@@ -312,5 +313,58 @@ export function validateGrantExtras(
                 throw new FeatureError('validation', `« ${key} » attend une des options déclarées`);
             }
         }
+    }
+}
+
+/**
+ * Les chemins publics que les modules ont déclarés, pour le délégateur CORS
+ * de l'app : ces routes-là sont faites pour être atteintes d'ailleurs, et
+ * c'est la seule chose que l'app a besoin d'en savoir.
+ */
+const PUBLIC_PATHS = new Set<string>();
+
+export function isModulePublicPath(url: string): boolean {
+    const end = url.indexOf('?');
+    return PUBLIC_PATHS.has(end === -1 ? url : url.slice(0, end));
+}
+
+/**
+ * Monte les routes publiques des modules (capacité `'routes.public'`) sur un
+ * écouteur : l'app elle-même, et la surface publique quand elle existe. Le
+ * module déclare les mêmes routes à chaque appel ; c'est l'écouteur qui
+ * change. Un module qui offre `publicRoutes` sans déclarer la capacité est
+ * refusé ici, comme une façade non déclarée le serait à l'appel : ouvrir une
+ * porte ne se fait pas en douce. Pas de session, journal silencieux (ce sont
+ * des balises, à la cadence des visites), plafond de débit par route quand
+ * le module en demande un.
+ */
+export function modulePublicRoutes(app: FastifyInstance): void {
+    for (const s of SERVICES) {
+        const routes = s.service.publicRoutes;
+        if (!routes) continue;
+        if (!(s.manifest.nativeCapabilities ?? []).includes('routes.public')) {
+            throw new Error(`Module « ${s.manifest.id} » : publicRoutes sans la capacité 'routes.public'`);
+        }
+        const mount = (
+            method: 'get' | 'post',
+            path: string,
+            opts: SdkPublicRouteOptions,
+            handler: SdkPublicHandler
+        ) => {
+            PUBLIC_PATHS.add(path);
+            const route: RouteShorthandOptions = { logLevel: 'silent' };
+            if (opts.rateLimit) route.config = { rateLimit: opts.rateLimit };
+            // Deux branches plutôt qu'un `app[method]` : l'union des deux
+            // signatures ne se résout pas contre le gestionnaire (la surcharge
+            // WebSocket de `get` prend le dessus). La requête et la réponse de
+            // Fastify satisfont structurellement la surface promise au SDK.
+            if (method === 'get') app.get(path, route, (req, reply) => handler(req, reply));
+            else app.post(path, route, (req, reply) => handler(req, reply));
+        };
+        const surface: SdkPublicApp = {
+            get: (path, opts, handler) => mount('get', path, opts, handler),
+            post: (path, opts, handler) => mount('post', path, opts, handler)
+        };
+        routes.call(s.service, surface);
     }
 }

@@ -206,8 +206,10 @@ Elles écrivent sans commande, donc sans socket : elles appellent
 - `agent/routes.ts` — l'appairage passe par HTTP, pas par une commande WS : sans
   ce signal, rien n'en avertirait personne.
 - et tout service arrivé depuis suit la même règle — sauvegardes, Sentinelle,
-  ingestion d'audience, relevés de bases : qui écrit sans commande appelle
-  `liveHub.changed()` lui-même.
+  ingestion d'audience (`features/audience/src/server/service.ts`, coalescée
+  à une fois par minute et par espace), relevés de bases : qui écrit sans
+  commande appelle `liveHub.changed()` lui-même (`deps.live.changed` pour un
+  module).
 
 ### Les sondages supprimés
 

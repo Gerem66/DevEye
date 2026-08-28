@@ -32,28 +32,28 @@ async function main() {
     const db = createDatabase(getQueryable(pool));
     const crypt = new Encryption(env.CRYPT_KEY_A, env.CRYPT_KEY_B);
 
-    const { app, mailSync, integrations, audience, moduleServices } = await buildApp({
+    const { app, mailSync, moduleServices } = await buildApp({
         db,
         crypt
     });
     const audit = createAuditLog(db);
 
     /**
-     * Le second écouteur, sur son propre port, quand il est réglé.
+     * Le second écouteur, sur son propre port, quand il est réglé : les routes
+     * publiques des modules, et rien d'autre.
      *
      * Même processus que le premier, et c'est une contrainte et non un choix :
-     * l'ingestion prévient les écrans par `LiveHub`, dont l'état est local au
-     * processus. Un conteneur séparé écrirait les mesures sans que personne ne
-     * soit averti, et le rafraîchissement cesserait en silence.
+     * l'ingestion d'audience prévient les écrans par `LiveHub`, dont l'état est
+     * local au processus. Un conteneur séparé écrirait les mesures sans que
+     * personne ne soit averti, et le rafraîchissement cesserait en silence.
+     * Après `buildApp`, qui a créé les services que ces routes prolongent.
      */
-    const publicApp = env.PUBLIC_LISTEN_PORT ? await buildPublicApp({ ingest: audience }) : null;
+    const publicApp = env.PUBLIC_LISTEN_PORT ? await buildPublicApp() : null;
 
     const shutdown = async (signal: string) => {
         logger.info({ signal }, 'Shutting down');
         try {
             mailSync.stop();
-            integrations.stop();
-            audience.stop();
             // Attendus, et AVANT la fermeture du pool : un module rend son état
             // par une écriture en base (CloudSync libère son bail d'instance).
             // Lancés en `void`, ces arrêts étaient coupés par `pool.end()` puis
@@ -109,14 +109,13 @@ async function main() {
     // de passe, comptes « open » uniquement. (La sonde de disponibilité est un
     // service du module Uptime, démarré avec les autres dans buildApp.)
     mailSync.start();
-    integrations.start();
     // (Le relevé des bases de données est un service du module
-    // `features/database`, démarré avec les autres dans buildApp.)
-    // Audience : la seule qui ne sonde rien. Elle vide ce que l'ingestion
-    // publique a déposé, et tient l'agrégat journalier + la rétention par site.
-    audience.start();
-    // (Les sauvegardes sont un service du module `features/backup`, démarré
-    // avec les autres dans buildApp.)
+    // `features/database`, la synchronisation des dépôts git un service du
+    // module `features/git`, l'ingestion d'audience un service du module
+    // `features/audience` (la seule qui ne sonde rien : elle vide ce que les
+    // routes publiques ont déposé, et tient l'agrégat journalier + la
+    // rétention par site), les sauvegardes un service du module
+    // `features/backup` : tous démarrés avec les autres dans buildApp.)
 
     await app.listen({ port: env.LISTEN_PORT, host: '0.0.0.0' });
     logger.info({ port: env.LISTEN_PORT }, 'DevEye server ready');
@@ -125,7 +124,7 @@ async function main() {
         await publicApp.listen({ port: env.PUBLIC_LISTEN_PORT, host: '0.0.0.0' });
         logger.warn(
             { port: env.PUBLIC_LISTEN_PORT, origin: env.AUDIENCE_ORIGIN || null },
-            'Public surface listening — audience ingest only, no session route registered'
+            'Public surface listening: module public routes only, no session route registered'
         );
     }
 

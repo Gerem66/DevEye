@@ -10,8 +10,9 @@
  *    échelles — deux dates à 12 px l'une de l'autre se chevauchent. Ce fichier
  *    ne s'occupe que de celles-là.
  *
- * Le module sert aussi le graphe des commits (`Features/Git/CommitGraph`), qui
- * n'a pas de zoom : il tasse tout l'historique d'un dépôt dans la largeur d'une
+ * Le graphe des commits du module Git en porte une copie
+ * (`features/git/src/client/scale.ts`, un module n'importe pas l'app) : lui
+ * n'a pas de zoom, il tasse tout l'historique d'un dépôt dans la largeur d'une
  * carte, et descend donc bien plus bas en pixels par jour qu'une frise. D'où une
  * échelle qui va du jour au siècle, et un choix de pas fondé sur la largeur
  * réelle des étiquettes plutôt que sur une constante.

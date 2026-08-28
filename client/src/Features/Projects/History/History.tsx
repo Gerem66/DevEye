@@ -3,7 +3,7 @@ import type { MinimalUser, ProjectCard, ProjectEvent, ProjectEventKind } from '@
 import { ws } from '@/api/ws';
 import { useResourceVersion } from '@/stores/invalidation';
 import { humanizeError, withSecrecy } from '../api';
-import { Avatar } from '../Board/Avatar';
+import { Avatar } from '@/Components/Avatar/Avatar';
 import styles from '../style.module.css';
 
 /** Intitulé et pastille de chaque type d'événement. */

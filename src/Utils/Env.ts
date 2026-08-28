@@ -7,17 +7,21 @@ export const env = {
     LISTEN_PORT: getEnvVar('LISTEN_PORT', 'number'),
     PUBLIC_ORIGIN: getEnvVar('PUBLIC_ORIGIN', 'string'),
 
-    // Origine par laquelle les sites suivis atteignent l'ingestion d'audience,
-    // et donc celle qui figure dans la balise donnée à copier.
+    // Origine de l'écouteur **public** : celle par laquelle le monde extérieur
+    // atteint les routes publiques des modules, donc celle qui figure dans ce
+    // qu'un module donne à copier (la balise d'audience). Elle nourrit
+    // `ctx.origins.public` de TOUS les modules (`_sdk/context.ts`) ; aucun ne
+    // la lit directement, et l'app non plus.
     //
     // **Distincte de `PUBLIC_ORIGIN` par nature** : l'application est derrière
     // le VPN, l'ingestion doit être joignable sans lui. C'est en général un
     // sous-domaine dédié rangé sur le même conteneur (`https://t.exemple.fr`),
-    // exempté du filtre côté proxy — exempter un hôte entier se relit d'un coup
-    // d'œil, là où un `PathPrefix` mal écrit exposerait toute l'application.
+    // exempté du filtre côté proxy, exempter un hôte entier se relisant d'un
+    // coup d'œil, là où un `PathPrefix` mal écrit exposerait toute l'application.
     //
     // Vide, on retombe sur `PUBLIC_ORIGIN` : c'est ce qui fait marcher le
-    // développement local sans rien configurer.
+    // développement local sans rien configurer. Le nom garde son histoire
+    // (Audience a été la première, et reste la seule, à ouvrir une porte).
     AUDIENCE_ORIGIN: getEnvVar('AUDIENCE_ORIGIN', 'string', false),
 
     /**
@@ -27,9 +31,10 @@ export const env = {
      * les routes publiques restent joignables sur le port principal. C'est le
      * cas du développement, où un seul port sert tout.
      *
-     * Réglé, un second serveur démarre, qui **n'enregistre que** l'ingestion
-     * d'audience et son script (voir `publicApp.ts`). On lui dédie alors un
-     * domaine côté proxy, et il n'existe aucun chemin de code de ce port vers
+     * Réglé, un second serveur démarre, qui **n'enregistre que** les routes
+     * publiques des modules (capacité `routes.public` : l'ingestion d'audience
+     * et son script, voir `publicApp.ts`). On lui dédie alors un domaine côté
+     * proxy, et il n'existe aucun chemin de code de ce port vers
      * l'authentification, la socket ou le client web.
      */
     PUBLIC_LISTEN_PORT: getEnvVar('PUBLIC_LISTEN_PORT', 'number', false),

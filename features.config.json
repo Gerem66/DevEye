@@ -27,6 +27,15 @@
     },
     {
       "package": "deveye-feature-database"
+    },
+    {
+      "package": "deveye-feature-deploy"
+    },
+    {
+      "package": "deveye-feature-git"
+    },
+    {
+      "package": "deveye-feature-audience"
     }
   ]
 }

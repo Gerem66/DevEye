@@ -248,7 +248,10 @@ de commit passent tous par le chiffre.
 > (`author_ref`, `name_ref`, `tag_ref`) — des condensés stables qui portent
 > l'unicité pendant que la valeur lisible vit dans le payload chiffré.
 
-Les secrets d'accès (`project_credentials.secret_enc` : jeton GitHub, clé
-Dokploy) sont **toujours** sous l'étage ouvert, quel que soit le tier des projets
-qui s'en servent — le service de fond doit les lire sans session. Ils ne sont
-jamais renvoyés au client, qui n'en reçoit qu'un booléen `hasSecret`.
+Les secrets d'accès (`ft_git_credentials.secret_enc` pour un jeton GitHub,
+`ft_deploy_credentials.secret_enc` pour une clé Dokploy : chaque module possède
+les siens depuis les migrations 099 et 100, qui ont vidé puis supprimé la table
+commune `workspace_credentials`) sont **toujours** sous l'étage ouvert, quel que
+soit le tier des projets qui s'en servent — le service de fond doit les lire
+sans session. Ils ne sont jamais renvoyés au client, qui n'en reçoit qu'un
+booléen `hasSecret`.

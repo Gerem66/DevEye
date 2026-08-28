@@ -1,0 +1,6 @@
+{
+  "id": "deploy",
+  "tables": ["deploy_targets", "deployments"],
+  "minTypesVersion": "0.15.2",
+  "$comment": "Tables historiques (migration 080 du socle, complétée par la 085, jamais déplacées) : l'allowlist les dispense du préfixe ft_deploy_. `ft_deploy_credentials` (créée par la 099 du socle, qui y a copié les clés Dokploy de workspace_credentials) porte le préfixe : le module la possède et son uninstall.sql la détruit. `project_deploy_links` (080) appartient à Projets."
+}

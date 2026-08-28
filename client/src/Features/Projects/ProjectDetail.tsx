@@ -553,11 +553,11 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
                 />
             )}
 
-            {loaded && tab === 'git' && <Git project={project} members={members} canWrite={canWrite} />}
+            {loaded && tab === 'git' && <Git project={project} canWrite={canWrite} />}
             {loaded && tab === 'database' && <Databases project={project} canWrite={canWrite} />}
             {loaded && tab === 'audience' && <Audience project={project} canWrite={canWrite} />}
 
-            {loaded && tab === 'deploy' && <Deploy project={project} members={members} canWrite={canWrite} />}
+            {loaded && tab === 'deploy' && <Deploy project={project} canWrite={canWrite} />}
 
             {loaded && tab === 'history' && (
                 <History

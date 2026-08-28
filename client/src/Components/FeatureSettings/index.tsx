@@ -11,7 +11,6 @@ import GeneralSection, { GENERAL_WIRED } from './sections/GeneralSection';
 import NotificationsSection from './sections/NotificationsSection';
 import ItemPermissionsSection from './sections/ItemPermissionsSection';
 import SharingSection from './sections/SharingSection';
-import SourcesSection from './sections/SourcesSection';
 import SyncSection, { SYNC_WIRED } from './sections/SyncSection';
 import SideNav, { type SideNavItem } from './SideNav';
 import { isModuleShareWired, moduleClient, moduleManifest } from '@/sdk/registry';
@@ -137,14 +136,9 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
             sections.push({ id: 'general', label: 'Général', icon: 'settings' });
         }
 
-        // Sources : à l'échelle de la **fonctionnalité** seulement. C'est le
-        // seul endroit où les réglages réutilisables (jetons, destinations) se
-        // créent et se corrigent. Les dialogues d'élément ne font que choisir
-        // dans la liste, avec un bouton qui mène ici. En tête : on déclare ses
-        // sources avant de s'en servir.
-        if (scope.kind === 'feature' && descriptor.sources) {
-            sections.push({ id: 'sources', label: 'Sources', icon: 'key' });
-        }
+        // Sources : plus aucune native n'en déclare. Les cinq features à
+        // sources (Météo, OSINT, Sauvegardes, Déploiement, Git) sont des
+        // modules, et l'onglet vient de leur manifest (plus haut).
 
         // Notifications : réservé aux émetteurs, et à l'échelle d'un élément
         // seulement quand la fonctionnalité en a de réglables.
@@ -253,9 +247,6 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection }: 
                             ) : (
                                 <>
                                     {current === 'general' && <GeneralSection scope={scope} />}
-                                    {current === 'sources' && scope.kind === 'feature' && (
-                                        <SourcesSection scope={scope} />
-                                    )}
                                     {current === 'sync' && <SyncSection scope={scope} />}
                                     {current === 'encryption' && <EncryptionSection scope={scope} />}
                                 </>
@@ -386,14 +377,23 @@ function ModulePanel({ scope, section }: { scope: SettingsScope; section: Settin
     const client = moduleClient(scope.feature);
     const Panel = client?.settingsPanels?.[section];
     if (!Panel) return null;
+    // La phrase de tête des Sources vient du registre (`sources.hint`), comme
+    // du temps des natives : elle dit à quoi servent ces réglages d'espace
+    // avant que le panneau du module ne les liste. Les cinq features à
+    // sources sont des modules depuis le rapatriement de Git ; c'est donc ici
+    // qu'elle s'affiche, et nulle part ailleurs.
+    const hint = section === 'sources' ? featureDescriptor(scope.feature).sources?.hint : undefined;
     return (
-        <Panel
-            scope={
-                scope.kind === 'feature'
-                    ? { kind: 'feature' }
-                    : { kind: 'item', itemId: scope.itemId, itemLabel: scope.itemLabel }
-            }
-            canWrite={permissions.canFeature(scope.feature, 'write')}
-        />
+        <>
+            {hint && <p className={styles.sectionHint}>{hint}</p>}
+            <Panel
+                scope={
+                    scope.kind === 'feature'
+                        ? { kind: 'feature' }
+                        : { kind: 'item', itemId: scope.itemId, itemLabel: scope.itemLabel }
+                }
+                canWrite={permissions.canFeature(scope.feature, 'write')}
+            />
+        </>
     );
 }

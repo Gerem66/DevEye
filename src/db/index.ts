@@ -23,12 +23,6 @@ import { projectBoardRepo, type ProjectBoardRepo } from './repos/projectBoard';
 import { projectChatRepo, type ProjectChatRepo } from './repos/projectChat';
 import { projectPlanRepo, type ProjectPlanRepo } from './repos/projectPlan';
 import { projectHistoryRepo, type ProjectHistoryRepo } from './repos/projectHistory';
-import { audienceRepo, type AudienceRepo } from './repos/audience';
-import { audienceIngestRepo, type AudienceIngestRepo } from './repos/audienceIngest';
-import { audienceFunnelsRepo, type AudienceFunnelsRepo } from './repos/audienceFunnels';
-import { gitRepo, type GitRepo } from './repos/git';
-import { credentialsRepo, type CredentialsRepo } from './repos/credentials';
-import { deployRepo, type DeployRepo } from './repos/deploy';
 import { projectLinksRepo, type ProjectLinksRepo } from './repos/projectLinks';
 import { refreshTokensRepo, type RefreshTokensRepo } from './repos/refreshTokens';
 import { twoFactorRepo, type TwoFactorRepo } from './repos/twoFactor';
@@ -65,21 +59,7 @@ export interface Database {
     projectChat: ProjectChatRepo;
     projectPlan: ProjectPlanRepo;
     projectHistory: ProjectHistoryRepo;
-    git: GitRepo;
-    /** Les jetons d'accès de l'espace, partagés par Git et Déploiement. */
-    credentials: CredentialsRepo;
-    deploy: DeployRepo;
-    /** Les sites suivis de l'espace, et leurs statistiques — le chemin froid. */
-    audience: AudienceRepo;
-    /**
-     * Le chemin **chaud** de l'audience : ce que l'ingestion publique écrit.
-     * Séparé exprès, il ne bat pas au même rythme que le reste (voir
-     * `repos/audienceIngest.ts`).
-     */
-    audienceIngest: AudienceIngestRepo;
-    /** Les entonnoirs : des lectures des événements, jamais une collecte à part. */
-    audienceFunnels: AudienceFunnelsRepo;
-    /** Les liaisons d'un projet vers les services surveillés et les bases de données. */
+    /** Les liaisons d'un projet vers les services surveillés, les bases de données, les cibles de déploiement, les dépôts git et les sites suivis. */
     projectLinks: ProjectLinksRepo;
     devices: DevicesRepo;
     linkCodes: LinkCodesRepo;
@@ -116,12 +96,6 @@ export function createDatabase(q: Queryable): Database {
         projectChat: projectChatRepo(q),
         projectPlan: projectPlanRepo(q),
         projectHistory: projectHistoryRepo(q),
-        git: gitRepo(q),
-        credentials: credentialsRepo(q),
-        deploy: deployRepo(q),
-        audience: audienceRepo(q),
-        audienceIngest: audienceIngestRepo(q),
-        audienceFunnels: audienceFunnelsRepo(q),
         projectLinks: projectLinksRepo(q),
         devices: devicesRepo(q),
         linkCodes: linkCodesRepo(q),

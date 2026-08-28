@@ -2,10 +2,11 @@
 
 > Écrit le 13 août 2026, à la fin du chantier qui a sorti le déploiement du
 > module Projets ; relu et mis à jour le 21 août 2026 (sources, notifications
-> par cible, coquille de réglages). Compagnon de [PROJECTS.md](./PROJECTS.md)
-> et jumeau de [GIT.md](./GIT.md) : c'est le même renversement, appliqué au
-> dernier module qui ne l'avait pas eu. Il dit **pourquoi** ; le code dit
-> comment.
+> par cible, coquille de réglages), puis le 28 août 2026 (rapatriement au
+> format module, `features/deploy`, voir §9). Compagnon de
+> [PROJECTS.md](./PROJECTS.md) et jumeau de [GIT.md](./GIT.md) : c'est le
+> même renversement, appliqué au dernier module qui ne l'avait pas eu. Il dit
+> **pourquoi** ; le code dit comment.
 
 ---
 
@@ -69,10 +70,23 @@ autorise à poser la clé d'API d'une instance et à pousser en production ; lir
 des dépôts ou piloter un tableau de tâches n'a jamais impliqué cela.
 
 D'où le découpage des jetons : `git.credential*` pour GitHub, `deploy.credential*`
-pour Dokploy, **une seule table** (`workspace_credentials`) et un comportement
-partagé (`src/features/_credentials.ts`). Le dépôt exige le fournisseur sur
-chaque lecture, si bien qu'aucune des deux portes ne peut servir le jeton de
-l'autre, même par erreur.
+pour Dokploy. Ils ont partagé **une seule table** (`workspace_credentials`,
+un `provider` exigé sur chaque lecture) et un comportement
+(`src/features/_credentials.ts`) jusqu'au rapatriement en module : depuis la
+migration `099`, les clés Dokploy vivent dans la table du module,
+`ft_deploy_credentials` (identifiants conservés), et leurs quatre gestes sont
+les siens (`features/deploy/src/server/handlers.ts`, audités
+`deploy.credential*`). La `100` a fait de même pour les jetons GitHub
+(`ft_git_credentials`, module Git) et supprimé la table commune avec le
+comportement partagé. Aucune des deux portes ne peut servir le jeton de
+l'autre, même par erreur : elles ne lisent plus la même table.
+
+La `099` a aussi retiré, sans la recréer, la clé étrangère
+`fk_deploy_target_credential` (`ON DELETE SET NULL`) : InnoDB revalidait la
+ligne mise à NULL contre un parent que la même cascade supprimait, et la
+suppression d'un espace échouait dessus. Le ménage est désormais **explicite**
+dans le dépôt du module (`removeCredential` met à NULL les cibles de la clé,
+puis retire la ligne), ce que la contrainte faisait sans le dire.
 
 ### 2.3 DevEye déclenche et observe, rien de plus
 
@@ -83,9 +97,13 @@ d'ici ? » et « où en est le dernier ? ».
 
 Aucun webhook n'arrive, et il n'y en aura pas : Dokploy n'émet pas de forme
 générique, ses « notifications » étant mises en page pour Discord, Slack ou
-Telegram. L'état est donc **sondé**, par `IntegrationSyncService.syncDeployTargets`,
-qui diffuse sur les sujets `deploy` **et** `projects` — la fiche de la cible et
-l'onglet du projet qui la déploie montrent le même état.
+Telegram. L'état est donc **sondé**, par le service de fond du module
+(`DeploySync`, `features/deploy/src/server/service.ts`, l'ex moitié
+déploiement d'`IntegrationSyncService`), qui diffuse sur le sujet `deploy` : la
+fiche de la cible et l'onglet du projet qui la déploie suivent tous deux
+`deploy.detail`, donc montrent le même état. (Le sujet `projects`, que le
+service natif nommait aussi, n'est pas nommable par un module : les compteurs
+d'onglets d'un projet se remettent à jour à leur prochaine lecture.)
 
 Ce sondage a changé de sujet en cours de route, et la nuance décide de ce qui est
 visible. Il portait sur les **lignes encore en vol** ; il porte désormais sur les
@@ -124,46 +142,68 @@ hasard serait faux.
 
 ## 4. Carte du code
 
-### Contrats — `DevEye-Types/src/`
+Déploiements est un **module** (`DevEye/features/deploy`, dixième native
+rapatriée, 28 août 2026) : tout ce qui lui est propre vit dans son répertoire,
+`@deveye/types` ne garde que son identité (l'id dans les enums, le descripteur
+du registre) et les couplages déclarés (les trois providers ci-dessous).
+
+### Le module — `DevEye/features/deploy/`
 
 ```
-domain/credential.ts   le jeton, commun aux deux features qui en possèdent
-domain/deploy.ts       la cible, le déploiement, le candidat
-features/deploy.ts     toutes les commandes (préfixe unique `deploy.`)
+deveye-feature.json                 l'allowlist des tables historiques (deploy_targets, deployments)
+package.json                        deveye-feature-deploy ; `ws` en dépendance (le journal Dokploy)
+src/index.ts, src/manifest.ts       l'entrée isomorphe ; le descripteur étalé, `shareTier: 'open'`,
+                                    ressources deploy.count / list / detail, capacité `notify`, onglet Sources
+src/contracts/domain.ts             la cible, le déploiement, le candidat, la clé Dokploy (l'ex domain/deploy.ts)
+src/contracts/commands.ts           les quinze commandes (préfixe unique `deploy.`)
+
+src/server/index.ts                 serverEntry : dépôt, handlers, service, `items` (domicile et nom d'une cible),
+                                    provider DEPLOY_ITEMS_PROVIDER offert à Projets
+src/server/repo.ts                  cibles, déploiements, et les clés Dokploy (ft_deploy_credentials) ; sur SdkQueryable
+src/server/_shared.ts               Stored*, loadTarget / loadHomeTarget, toTarget, toDeployment, loadDokployCredential,
+                                    le singleton du suivi (setSync / wakeSync), le contrat de Projets (compte, liste, frise)
+src/server/handlers.ts              les onze commandes + les quatre gestes de clés, en defineSdkFeature
+src/server/service.ts               DeploySync : le rapprochement de fond (minuteur propre), le message vivant
+src/server/notice.ts                la mise en forme du message vivant (barre, journal) ; helpers Discord de l'app par privilège
+src/server/dokploy.ts               l'adaptateur tRPC + le WebSocket du journal
+src/server/uninstall.sql            DROP de ft_deploy_credentials (les tables historiques restent)
+src/server/*.test.ts                handlers (harnais SDK), service (Dokploy factice), notice (les calculs), dokploy (vraie WebSocket)
+
+src/client/index.tsx                clientEntry : widget, vue complète, panneau Sources, provider client
+src/client/Deploy.tsx               liste + fiche ; possède le niveau live `l1` (l'identifiant nu de la cible)
+src/client/TargetList.tsx           les cartes + le glisser-déposer
+src/client/TargetView.tsx           ⟵ le cœur partagé avec l'onglet d'un projet
+src/client/TargetDialog.tsx         déclarer / régler / supprimer ; le « + » du sélecteur de clé ouvre Réglages → Sources
+src/client/CredentialsPanel.tsx     les clés Dokploy (panneau Sources du manifest, le sien : Git garde le sien)
+src/client/LogsDialog.tsx           le journal complet d'un déploiement
+src/client/DeployWidget.tsx         la tuile d'accueil
+src/client/provider.tsx             ce que l'onglet d'un projet compose (DEPLOY_CLIENT_PROVIDER)
+src/client/api.ts, format.ts        featureApi(manifest) ; les libellés d'état et de date
+src/client/style.module.css         la feuille du module
 ```
 
-### Serveur — `DevEye/src/`
+### Ce qui reste dans l'app — `DevEye/src/`
 
 ```
-db/migrations/080_deploy_feature.sql  le renversement, données reprises
-db/repos/deploy.ts                    cibles, liaisons, déploiements
-db/repos/credentials.ts               les jetons, filtrés par fournisseur
-features/deploy/{index,credentials,_shared}.ts
-features/project/deployLink.ts        les trois commandes de liaison
-features/_credentials.ts              le comportement partagé des jetons
+db/migrations/080_deploy_feature.sql             le renversement, données reprises
 db/migrations/085_deploy_sync_notifications.sql  le rapprochement de fond + les canaux
-features/deploy/notifications.ts      où partent les avis (3 commandes)
-Services/IntegrationSyncService.ts    le rapprochement de fond (minuteur propre)
-Services/notifications.ts             la résolution des canaux et la livraison
-Services/discord.ts                   publier ET modifier — la seule exception au canal agnostique
-Services/DeployNotice.ts              la mise en forme du message vivant (barre, journal)
-Services/deployNotice.test.ts         les trois calculs qui pourraient mentir sans qu'on le voie
-Services/integrations/dokploy.ts      l'adaptateur tRPC
+db/migrations/099_deploy_credentials.sql         les clés Dokploy dans la table du module, la clé étrangère retirée
+db/repos/projectLinks.ts                         project_deploy_links : la table de Projets, ses lectures et ses comptes
+features/project/deployLink.ts                   les trois commandes de liaison ; l'existence d'une cible par DEPLOY_ITEMS_PROVIDER
+features/project/usageProvider.ts                PROJECTS_USAGE_PROVIDER : ce que le module demande à Projets (et la frise)
+Services/notifications.ts                        la résolution des canaux et la livraison, derrière la façade `notify` du SDK
+Services/discord.ts                              publier ET modifier, derrière `notify.postLive`
+Services/notices/shared.ts                       les helpers Discord, importés par le module (privilège de native, commenté)
+features/_sdk/facade.ts                          la façade : send / hasRoute / liveChannels / postLive
 ```
 
 ### Client — `DevEye/client/src/`
 
 ```
-Features/Deploy/index.tsx        liste + fiche ; possède le niveau live `l1` (`target:<id>`)
-Features/Deploy/TargetList.tsx   les cartes + le glisser-déposer
-Features/Deploy/TargetView.tsx   ⟵ le cœur partagé avec l'onglet d'un projet
-Features/Deploy/TargetDialog.tsx déclarer / régler / supprimer ; le « + » du
-                                 sélecteur de jeton ouvre Réglages → Sources
-Components/FeatureSettings/sections/CredentialsPanel.tsx  les jetons (panneau
-                                 Sources, partagé avec Git)
+Features/Projects/Deploy/        l'onglet d'un projet : compose moduleClientProvider(DEPLOY_CLIENT_PROVIDER),
+                                 dégrade proprement quand le module est absent
 Components/FeatureSettings/sections/NotificationsSection.tsx  les canaux et la
                                  sélection par cible, communs aux émetteurs
-Features/Projects/Deploy/        enveloppe mince + dialogue de liaison
 ```
 
 ---
@@ -332,8 +372,10 @@ chaque tour.
 
 ### 6.5 Les avis ont leurs propres canaux
 
-Le mécanisme est celui commun aux émetteurs (`Services/notifications.ts`), et
-il a changé deux fois depuis l'écriture de ce document : les canaux
+Le mécanisme est celui commun aux émetteurs (`Services/notifications.ts`,
+derrière la façade `notify` du SDK depuis le rapatriement : le module appelle
+`send(alert, { itemId, except })` et ne voit ni les canaux ni leur résolution),
+et il a changé deux fois depuis l'écriture de ce document : les canaux
 appartiennent à **la feature** (091, plus de liste commune aux cinq émetteurs
 ni de `notification_settings`, supprimée en 087), et la sélection vit sur
 **chaque cible** (092) : une cible sans canal coché ne prévient personne, il
@@ -358,9 +400,11 @@ largement l'intervalle de 60 s au repos. Le coût est linéaire et modeste : dix
 cibles à 60 s font un appel toutes les six secondes vers une instance
 auto-hébergée.
 
-`wake()`, appelé par `deploy.trigger`, vise ce tour-là : le message d'un
-déploiement lancé depuis DevEye s'ouvre dans la foulée, sans attendre le
-battement.
+`DeploySync.wake()`, appelé par `deploy.trigger` (par le singleton du module,
+`wakeSync`, tolérant à l'absence du service), vise ce tour-là : le message
+d'un déploiement lancé depuis DevEye s'ouvre dans la foulée, sans attendre le
+battement. La boucle est un ticker du SDK (`deps.createTicker`), avec sa propre
+garde de ré-entrance pour ce réveil hors cadence.
 
 ---
 
@@ -444,23 +488,34 @@ utile à trois têtes (`content` pour Discord, `text` pour Slack, les champs
 structurés pour un point d'entrée maison), et jamais la question posée à la
 configuration. Le suivi vivant la pose, forcément.
 
-Il est donc une **couche en plus**, jamais un remplacement : `Services/discord.ts`
-reconnaît l'URL (analysée, pas cherchée dans la chaîne — `includes('discord.com')`
-dirait oui à `https://exemple.com/?ref=discord.com`), et tout ce qui n'en est pas
-garde son message unique à l'atterrissage. Rien de nouveau n'est demandé à qui a
-réglé un webhook Discord, rien n'est retiré à qui en a réglé un autre.
+Il est donc une **couche en plus**, jamais un remplacement : c'est le type
+déclaré du canal (`discord`) qui dit qu'il sait modifier ce qu'il a envoyé, et
+tout ce qui n'en est pas garde son message unique à l'atterrissage. Rien de
+nouveau n'est demandé à qui a réglé un webhook Discord, rien n'est retiré à
+qui en a réglé un autre.
+
+Depuis le rapatriement, le module ne voit **aucune URL de webhook** : la façade
+`notify` du SDK porte le suivi vivant en trois appels. `liveChannels({ itemId })`
+rend les canaux de la route de la cible capables de porter un message vivant
+(Discord aujourd'hui) ; `postLive(channelId, message, messageId?)` publie sans
+identifiant, modifie avec, et rend l'identifiant à garder (ou `null` quand le
+canal refuse : message supprimé à la main, webhook révoqué, et l'on s'arrête là
+sans republier) ; `send(alert, { itemId, except })` livre l'avis en texte en
+sautant les canaux dont le message vivant a conclu. Le corps de tout cela
+(`Services/discord.ts`, `Services/notifications.ts`) reste à l'app.
 
 ⚠️ Corollaire à ne pas manquer : **quand le suivi vivant a conclu, le webhook est
 retiré de la livraison finale**. Sans cela Discord recevrait le message modifié
 *et* un second message en clair juste en dessous. Le mail, lui, est toujours
 servi — il ne sait pas se modifier.
 
-L'identifiant du message vit dans le blob chiffré de la ligne
-(`StoredDeployment.noticeId`) et non dans une colonne : rien ne l'interroge, le
+Les identifiants des messages vivent dans le blob chiffré de la ligne
+(`StoredDeployment.noticeIds`, un par canal : `identifiant de canal →
+identifiant de message`) et non dans une colonne : rien ne les interroge, le
 blob est déjà réécrit à chaque changement d'état, et une colonne aurait coûté une
-migration. Il est **persisté**, ce qui est le point : un serveur redémarré au
-milieu d'un déploiement reprend le message qu'il avait ouvert, au lieu d'en poser
-un second à côté.
+migration. Ils sont **persistés**, ce qui est le point : un serveur redémarré au
+milieu d'un déploiement reprend les messages qu'il avait ouverts, au lieu d'en
+poser de seconds à côté.
 
 ### 7.3 La barre est une estimation, et le dit
 
@@ -527,7 +582,15 @@ de code Discord les rendrait telles quelles.
 ```bash
 ./ci.sh    # lint + typecheck des trois dépôts + build client
 diff -rq DevEye-Types/src DevEye/node_modules/@deveye/types/src   # doit être vide
+npm run ci:features                                                # les modules : lint, format, typecheck, tests
+DOTENV_CONFIG_PATH=.env.test npx tsx --test "features/deploy/src/**/*.test.ts"
 ```
+
+Les tests du module tournent sans base ni réseau (harnais
+`@deveye/types/sdk/testing` : dépôt en mémoire, Dokploy factice injecté dans
+`DeploySync`), sauf `dokploy.test.ts`, qui monte une vraie WebSocket locale
+pour reproduire le seul comportement qui compte (§7.4 : le serveur ne ferme
+jamais).
 
 **Migration** : rejeu obligatoire sur une copie d'un dump avant livraison, et
 sur une copie **au défaut de collation différent** — c'est ce qui révèle les
@@ -583,6 +646,57 @@ mysql DevEye_migdry < src/db/migrations/0XX_….sql  # deux fois : ré-entrance
 12. **Barre sans référence** — première mise en production d'une cible neuve : le
     message affiche le temps écoulé et **aucune barre**.
 
+
+## 9. Le module (28 août 2026)
+
+Déploiements est la dixième native rapatriée sur le SDK des features
+(`FEATURE_SDK.md`, « La migration des natives »). Ce que le rapatriement a
+changé, en plus des chemins du §4 :
+
+- **Les clés Dokploy ont leur table** (`ft_deploy_credentials`, migration
+  `099` du socle : c'est le socle qui crée et copie, une migration de module
+  ne pouvant pas écrire dans `workspace_credentials`), et leurs quatre gestes
+  sont ceux du module. `_credentials.ts` et `db/repos/credentials.ts` n'ont
+  plus connu que GitHub, jusqu'à ce que Git suive le même chemin (`100`,
+  `ft_git_credentials`) et que la table commune disparaisse avec eux. Le
+  module possède la table : son `uninstall.sql` la détruit, les deux tables
+  historiques restent.
+- **Le module ne lit aucune table de Projets.** `project_deploy_links` et ses
+  lectures (`listDeployTargetIds`, `linkDeployTarget`, `unlinkDeployTarget`,
+  `unlinkAllDeployTargets`, `listDeployUsage`, `countDeployLinks`) ont
+  rejoint `db/repos/projectLinks.ts`, à côté des services surveillés et des
+  bases ; `project_count` a quitté le dépôt du module, `toTarget` reçoit le
+  compte. Dans un sens, Projets demande au module si une cible existe avant
+  de la relier (`DEPLOY_ITEMS_PROVIDER`, publié par le service du module,
+  lu par `moduleProvider` dans `project/deployLink.ts`) ; dans l'autre, le
+  module lit le contrat de Projets (`PROJECTS_USAGE_PROVIDER`, offert par
+  l'app tant que Projets est native) : combien de projets déploient chaque
+  cible, lesquels (`deploy.get` liste les projets d'ICI, comme avant), et la
+  **frise** d'un projet pour un déploiement parti de son onglet
+  (`recordEvent`, élargissement du contrat pour ce module : l'ex
+  `recordProjectEvent` lisait `projects` et `project_events` en direct).
+- **Le suivi vivant passe par la façade** `notify` du SDK, élargie pour ce
+  module (§7.2) : `liveChannels`, `postLive`, `send` avec `except`. Le module
+  ne voit ni URL de webhook ni canal résolu ; `hasChannel` n'a plus lieu
+  d'être appelé, la façade ne fait rien sans canal routé (le même « toujours
+  tenté : la route décide » qu'Uptime).
+- **Un seul sujet de diffusion**, `deploy` : un module ne nomme que le sien.
+  L'onglet d'un projet suit `deploy.detail`, donc voit l'état changer ; ses
+  compteurs d'onglets (le sujet `projects`) se relisent à leur prochaine
+  ouverture. `deploy.remove` et `deploy.trigger` déclaraient
+  `['deploy', 'projects']`.
+- **Le service accepte une couture de test** (`new DeploySync(deps, { listDeployments,
+  listTargets, fetchDeploymentLog })`, patron `{ openSession }` de Bases de
+  données) : `service.test.ts` rejoue le premier import silencieux, le message
+  ouvert puis modifié puis conclu, l'avis en texte avec `except`, le suivi
+  perdu, sans réseau.
+- **Deux privilèges de native**, commentés à chaque import : les helpers
+  Discord de `Services/notices/shared.ts` dans `notice.ts`, `formatMoment` /
+  `formatDuration` de `Services/notifications` dans le service. Tout le reste
+  (`dokploy.ts`, `notice.ts`, le dépôt, les handlers, le service) a déménagé
+  tel quel, commentaires compris.
+- **`src/types/ws.d.ts` reste dans l'app** : la déclaration ambiante de `ws`
+  (dépendance du module) est incluse par le projet serveur des modules.
 
 ## Modules privés au déploiement
 

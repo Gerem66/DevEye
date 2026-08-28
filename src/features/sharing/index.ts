@@ -101,28 +101,18 @@ async function loadHome(ctx: FeatureContext, feature: FeatureId, itemId: number)
 /**
  * L'espace d'origine d'un élément, lu dans la table de sa fonctionnalité.
  *
- * Un module répond par son entrée `items` (son repo, sa requête) ; les natives
- * par le `switch`, explicite plutôt que dynamique : chaque fonctionnalité range
- * ses éléments dans sa propre table, et une résolution par nom construirait une
- * requête à partir d'une entrée, ce que ce dépôt ne fait nulle part.
+ * Un module répond par son entrée `items` (son repo, sa requête). Il n'y a
+ * plus de native branchée au partage depuis le rapatriement d'Audience (la
+ * dernière) : le `switch` explicite qui les servait a disparu avec elle, et
+ * une native encore chez elle (Notes, Mail, Projets, en `'perItem'`) tombe
+ * sur `null`. `shareBlockerFor` l'a déjà refusée sur `shareTier`, donc ce cas
+ * ne se produit que si le registre et les modules divergent, et il vaut
+ * mieux « introuvable » qu'une projection vers rien.
  */
 async function itemHomeWorkspace(ctx: FeatureContext, feature: FeatureId, itemId: number): Promise<number | null> {
     const items = moduleItems(feature, ctx.db);
     if (items) return items.homeOf(itemId, ctx.workspaceId);
-    switch (feature) {
-        case 'deploy':
-            return (await ctx.db.deploy.findTarget(itemId, ctx.workspaceId))?.workspace_id ?? null;
-        case 'git':
-            return (await ctx.db.git.findRepo(itemId, ctx.workspaceId))?.workspace_id ?? null;
-        case 'audience':
-            return (await ctx.db.audience.find(itemId, ctx.workspaceId))?.workspace_id ?? null;
-        default:
-            // Les fonctionnalités qu'on ne sait pas encore projeter tombent ici.
-            // `shareBlockerFor` les a déjà refusées sur `shareTier`, donc ce cas
-            // ne se produit que si le registre et ce switch divergent — et il
-            // vaut mieux « introuvable » qu'une projection vers rien.
-            return null;
-    }
+    return null;
 }
 
 /** L'état complet, relu après chaque écriture plutôt que reconstruit. */

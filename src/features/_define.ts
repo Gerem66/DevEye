@@ -4,8 +4,6 @@ import type { SecureStore } from '@/Services/SecureStore';
 import type { SecretKeyService } from '@/Services/SecretKeyService';
 import type { MonitorTransport } from '@/agent/hub';
 import type { LiveTransport } from '@/live/hub';
-import type { IntegrationSyncService } from '@/Services/IntegrationSyncService';
-import type { AudienceIngest } from '@/Services/AudienceIngest';
 import type { LiveTopic, LogLevelName } from '@deveye/types';
 import type { Logger } from 'pino';
 import type { FeatureAccess, FeatureId, ItemAccess, WorkspaceCapability } from '@deveye/types';
@@ -125,32 +123,6 @@ export interface FeatureContext {
      * dispatcheur depuis `mutates`, jamais par un handler.
      */
     live?: LiveTransport;
-    /**
-     * Ordonnanceur des intégrations externes : synchronisation des dépôts git de
-     * l'espace, et suivi des déploiements en vol.
-     *
-     * Sert à *réveiller* une lecture (`git.repoAdd`, `git.repoSyncNow`) et à
-     * rendre l'avancement d'une synchronisation (`git.repoSyncStatus`) : ces
-     * commandes-là ne dépendent donc d'aucune API tierce.
-     *
-     * Une seule exception, délibérée : `git.commitDetail` va chercher le diff
-     * chez le fournisseur au moment de la demande, parce qu'un diff ne se met
-     * pas en cache (voir `gitCommitDetailSchema`).
-     */
-    integrations?: IntegrationSyncService;
-    /**
-     * Ingestion d'audience.
-     *
-     * Sert à **une** chose : lui faire oublier ce qu'elle sait des sites après
-     * une mutation (`invalidate`). Elle tient un cache `clé publique → site`
-     * pour ne pas interroger la base à chaque visite ; sans cet appel, un site
-     * qu'on vient d'éteindre continuerait d'accepter des mesures, et une clé
-     * qu'on vient de renouveler laisserait l'ancienne entrer.
-     *
-     * Aucune lecture ne passe par elle : les statistiques viennent des dépôts,
-     * pour qu'une réponse ne dépende jamais de l'état d'une file en mémoire.
-     */
-    audience?: AudienceIngest;
 }
 
 /**

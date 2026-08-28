@@ -1,4 +1,5 @@
 import type { SdkFeatureContext, SdkProviders, SdkSocketTransport } from '@deveye/types/sdk/server';
+import { env } from '@/Utils/Env';
 import { FeatureError } from '@deveye/types/sdk/server';
 import { resolveExtras, type FeatureManifest } from '@deveye/types/sdk';
 import type { NotificationFeature } from '@deveye/types';
@@ -16,6 +17,18 @@ import { createFeatureStore } from './store';
  * par processus (voir `register.ts`) et injecté ; le store et la façade se
  * construisent par requête, liés à l'espace de l'enveloppe.
  */
+/**
+ * Où vit DevEye, sans barre finale : l'origine des membres (`PUBLIC_ORIGIN`)
+ * et celle joignable sans le VPN quand un écouteur public existe
+ * (`AUDIENCE_ORIGIN`, sinon la même). Le serveur est le seul à la connaître :
+ * une balise qui déduirait l'adresse du navigateur serait juste en
+ * développement et fausse en production.
+ */
+const ORIGINS = {
+    app: env.PUBLIC_ORIGIN.replace(/\/+$/, ''),
+    public: (env.AUDIENCE_ORIGIN || env.PUBLIC_ORIGIN).replace(/\/+$/, '')
+} as const;
+
 export function createSdkContext(
     ctx: FeatureContext,
     manifest: FeatureManifest,
@@ -94,7 +107,8 @@ export function createSdkContext(
                 metadata: entry.metadata ?? null
             }),
         logger: ctx.logger,
-        requestId: ctx.requestId
+        requestId: ctx.requestId,
+        origins: ORIGINS
     };
 }
 

@@ -109,6 +109,10 @@ pas une, sans refuser.
 `Services/notices/` : `shared.ts` (couleurs, `moment`, `duration`, `trim`,
 `block`) puis un module par émetteur. Seuls `deploy` et `uptime` en avaient ;
 les trois autres envoyaient du texte brut faute que le module ait été écrit.
+Depuis leur rapatriement, les émetteurs devenus modules portent la leur chez
+eux (`features/<f>/src/server/notice.ts` : Uptime, Bases de données,
+Déploiements) et importent `shared.ts` par le privilège de native, commenté ;
+le socle commun reste à l'app, seul endroit d'où deux copies ne divergent pas.
 
 Le socle commun n'est pas de la cosmétique : les deux jeux de helpers avaient
 **dérivé**. `duration()` traitait les jours côté Uptime et s'arrêtait aux heures
@@ -125,6 +129,30 @@ au premier. D'où `noticeIds`.
 Les canaux d'un même déploiement sont publiés **séquentiellement**, jamais en
 `Promise.all` : ils écrivent tous dans le même blob, et les lancer de front en
 perdrait. Le parallélisme reste sur les déploiements, où est la latence.
+
+### Le suivi vivant, par la façade du SDK
+
+Depuis le rapatriement de Déploiements en module (28 août 2026), le suivi
+vivant ne touche plus `Services/discord.ts` : la façade `notify` du SDK
+(`features/_sdk/facade.ts`) le porte en trois appels, que le module fait sans
+jamais voir une URL de webhook ni un canal résolu.
+
+```
+notify.liveChannels({ itemId })              les canaux de la route de la cible qui savent
+                                             modifier un message (le type déclaré `discord`)
+notify.postLive(channelId, message, id?)     publie sans identifiant, modifie avec ; rend
+                                             l'identifiant à garder, `null` si le canal refuse
+notify.send(alert, { itemId, except })       l'avis en texte, en sautant les canaux dont le
+                                             message vivant a conclu
+```
+
+`postLive` relit la ligne du canal pour vérifier qu'il appartient à LA feature
+du module et à SON espace avant de publier quoi que ce soit : la résolution
+par identifiant ignore la feature, la façade ne s'y fie pas. Un `null` dit de
+s'arrêter là (message supprimé à la main, webhook révoqué), jamais de
+republier. Les émetteurs natifs (`deliver`, `postMessage`, `editMessage`)
+restent le corps de tout cela ; la façade en est la seule porte pour un
+module.
 
 ---
 

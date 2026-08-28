@@ -1,0 +1,14 @@
+{
+  "id": "audience",
+  "tables": [
+    "audience_sites",
+    "audience_events",
+    "audience_sessions",
+    "audience_daily",
+    "audience_labels",
+    "audience_funnels",
+    "audience_funnel_steps"
+  ],
+  "minTypesVersion": "0.15.2",
+  "$comment": "Tables historiques (migrations 076 à 078 du socle, jamais déplacées) : l'allowlist les dispense du préfixe ft_audience_. `project_audience_links` appartient à Projets. Toute NOUVELLE table du module prendra le préfixe, via src/server/migrations/."
+}

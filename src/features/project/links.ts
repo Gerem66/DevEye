@@ -90,10 +90,10 @@ export const projectLinkCountsFeature: FeatureDefinition<
         // onglets eux-mêmes appellent. Une seconde famille de requêtes pour
         // rendre le même fait ne se serait payée qu'en occasions de diverger.
         const [repos, databases, sites, targets, services] = await Promise.all([
-            ctx.db.git.listLinkedRepoIds(input.projectId, ctx.workspaceId),
+            ctx.db.projectLinks.listRepoIds(input.projectId, ctx.workspaceId),
             ctx.db.projectLinks.listDatabaseIds(input.projectId, ctx.workspaceId),
-            ctx.db.audience.listLinkedIds(input.projectId, ctx.workspaceId),
-            ctx.db.deploy.listLinkedTargetIds(input.projectId, ctx.workspaceId),
+            ctx.db.projectLinks.listSiteIds(input.projectId, ctx.workspaceId),
+            ctx.db.projectLinks.listDeployTargetIds(input.projectId, ctx.workspaceId),
             ctx.db.projectLinks.listServiceIds(input.projectId, ctx.workspaceId)
         ]);
         return {

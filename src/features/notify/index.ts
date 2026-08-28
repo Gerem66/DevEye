@@ -79,42 +79,21 @@ function assertRouteAccess(ctx: FeatureContext, feature: NotificationFeature, le
  * L'intitulé d'un élément, relu au moment de l'affichage.
  *
  * Sert à une seule chose : que la confirmation de suppression d'un canal nomme
- * ce qui va cesser de prévenir. Les émetteurs natifs à éléments rangent tous un
- * blob JSON chiffré à l'étage ouvert dont le nom est la première clé — la forme
- * est assez régulière pour une seule lecture générique, et assez peu pour
- * mériter le `switch` qui suit plutôt qu'un accès dynamique aux dépôts.
+ * ce qui va cesser de prévenir. Un module nomme ses éléments lui-même (entrée
+ * `items` de son serveur, le nom déchiffré par le codec ouvert de l'espace
+ * appelant) ; plus aucun émetteur natif n'a d'éléments depuis le rapatriement
+ * des dernières features à éléments, et le `switch` qui lisait leurs blobs a
+ * disparu avec elles.
  *
  * `null` n'est pas une erreur : un élément supprimé dont la route a survécu est
- * exactement ce que l'écran doit montrer comme « une cible disparue ».
+ * exactement ce que l'écran doit montrer comme « une cible disparue », et un
+ * module externe dont les éléments ne sont pas lisibles d'ici garde une
+ * confirmation générique.
  */
 async function itemLabelOf(ctx: FeatureContext, feature: NotificationFeature, itemId: number): Promise<string | null> {
-    // Un module nomme ses éléments lui-même (entrée `items` de son serveur) ;
-    // le `switch` ne connaît que les natives.
     const items = moduleItems(feature, ctx.db);
     if (items) return items.labelOf(ctx.secure.open, itemId, ctx.workspaceId);
-    const content = await (async (): Promise<string | null> => {
-        switch (feature) {
-            case 'deploy':
-                return (await ctx.db.deploy.findTarget(itemId, ctx.workspaceId))?.content ?? null;
-            case 'sentinel':
-                // Sentinelle n'a pas d'éléments réglables : aucune route ne peut
-                // porter un `item_id`, donc ce cas ne se produit pas.
-                return null;
-            default:
-                // Module externe : ses éléments ne sont pas lisibles d'ici, la
-                // confirmation restera générique (« une cible disparue »).
-                return null;
-        }
-    })();
-    if (!content) return null;
-    try {
-        const raw = await ctx.secure.open.tryDecrypt(content);
-        if (!raw) return null;
-        const parsed = JSON.parse(raw) as { name?: string; title?: string };
-        return parsed.name ?? parsed.title ?? null;
-    } catch {
-        return null;
-    }
+    return null;
 }
 
 /**

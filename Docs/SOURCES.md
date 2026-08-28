@@ -39,8 +39,8 @@ boîte créée.
 
 | Feature | Sources | Table | Sélecteur côté élément |
 |---|---|---|---|
-| Déploiements | accès Dokploy (adresse + clé d'API) | `workspace_credentials` | `TargetDialog`, champ « Instance Dokploy » |
-| Git | jetons GitHub | `workspace_credentials` | `RepoPicker` / `RepoDialog`, champ « Jeton d'accès » |
+| Déploiements | accès Dokploy (adresse + clé d'API) | `ft_deploy_credentials` (le module `features/deploy`) | `TargetDialog`, champ « Instance Dokploy » |
+| Git | jetons GitHub | `ft_git_credentials` (le module `features/git`) | `RepoPicker` / `RepoDialog`, champ « Jeton d'accès » |
 | Sauvegardes | destinations d'archives | `backup_destinations` | `JobDialog`, champ « Où l'écrire » |
 | chaque émetteur | ses canaux d'alerte | `notification_channels` (colonne `feature`) | section Notifications (cases) |
 | Météo | clés d'API des fournisseurs | `weather_provider_keys` | le dialogue d'un lieu peut porter la sienne en surcharge |
@@ -56,17 +56,23 @@ affaire de **surface** : une seule porte au lieu de cinq.
 
 **Côté client**, trois pièces :
 
-- `sources?: { hint }` dans `FEATURE_REGISTRY` (@deveye/types) crée l'onglet et
-  sa phrase de tête. C'est la déclaration de vérité : le registre, jamais une
-  liste locale de plus.
-- `Components/FeatureSettings/sections/SourcesSection.tsx` aiguille vers le
-  panneau de la feature. Un panneau est **autonome** : il se charge
-  (`useResource` sur la ressource de la feature), s'invalide et se
-  rafraîchit tout seul ; la coquille ne lui passe rien. Une native l'inscrit
-  dans l'aiguillage, ou dans la coquille quand deux features le partagent
-  (`sections/CredentialsPanel`, un `CredentialsKind` par porte) ; un module le
-  déclare (`settings.feature: ['sources']`) et le fournit
-  (`settingsPanels.sources`, par exemple `features/backup/src/client/DestinationsPanel`).
+- `settings.feature: ['sources']` dans le manifest du module crée l'onglet.
+  C'est la déclaration de vérité : le manifest, jamais une liste locale de
+  plus. (`sources?: { hint }` du registre publié n'est plus lu par la coquille,
+  qui ne montre plus de phrase de tête au-dessus d'un panneau de module.)
+- La coquille monte le panneau de la feature (`ModulePanel` dans
+  `Components/FeatureSettings/index.tsx`). Un panneau est **autonome** : il se
+  charge (`useResource` sur la ressource de la feature), s'invalide et se
+  rafraîchit tout seul ; la coquille ne lui passe que la portée et le droit
+  d'écriture. Toutes les features à sources sont des modules : chacune
+  déclare l'onglet (`settings.feature: ['sources']`) et fournit le panneau
+  (`settingsPanels.sources`, par exemple
+  `features/backup/src/client/DestinationsPanel`,
+  `features/deploy/src/client/CredentialsPanel` pour les accès Dokploy,
+  `features/git/src/client/CredentialsPanel` pour les jetons GitHub). Il n'y a
+  plus de panneau natif dans la coquille : `sections/CredentialsPanel` (un
+  `CredentialsKind` par porte, Git et Déploiement) et l'aiguillage
+  `sections/SourcesSection` ont disparu avec le rapatriement de Git.
   Tous partagent la même silhouette que la liste des canaux de la
   section Notifications : rangée (icône, libellé, méta, badge d'usage, actions
   en icônes), ajout et correction par un dialogue empilé, retrait par la
@@ -88,15 +94,14 @@ sections existantes suivent déjà cette règle.
 
 ## Brancher une feature de plus
 
-1. `sources: { hint }` sur son entrée de `FEATURE_REGISTRY` ;
-2. un panneau autonome, et son cas dans l'aiguillage de `SourcesSection` ;
-3. dans son dialogue d'élément : sélecteur + « + » + adoption (copier l'un des
+1. `settings: { feature: ['sources'] }` dans son manifest ;
+2. un panneau autonome, déclaré dans `settingsPanels.sources` de son entrée
+   client (sur `settingsStyles`, modèle `features/git/src/client/CredentialsPanel`) ;
+3. dans son dialogue d'élément : sélecteur + « + » (`FeatureSettingsButton`,
+   `initialSection='sources'`, `onOpenChange`) + adoption (copier l'un des
    trois existants) ;
 4. retirer la porte dédiée qu'elle avait, s'il y en avait une ; le point du
    chantier est qu'il n'en reste qu'une.
 
-À terme (`Docs/FEATURE_MODULES.md`), l'aiguillage de l'étape 2 a vocation à
-devenir une inscription au registre comme le reste — c'est déjà le cas pour
-les features migrées sur le SDK (Météo, OSINT) : leur panneau vient de
-`settingsPanels.sources` dans l'entrée client du module, sans cas dans
-l'aiguillage.
+Une feature à sources est un module : la coquille n'a plus d'aiguillage natif,
+et n'en retrouvera pas.

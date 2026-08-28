@@ -5,7 +5,6 @@ import { Button } from '@/Components';
 import { ws, WsError } from '@/api/ws';
 import { useWorkspacePermissions } from '@/stores/workspace';
 import { moduleClientProvider } from '@/sdk/registry';
-import deployStyles from '@/Features/Deploy/style.module.css';
 import { humanizeError } from '../api';
 import { LinkUptimeDialog } from './LinkUptimeDialog';
 import { UptimeLinkRow } from './UptimeLinkRow';
@@ -111,13 +110,13 @@ export function UptimeLinks({ projectId, canWrite }: UptimeLinksProps) {
                 // nom ni barres, plutôt que de le faire disparaître.
                 if (!service) {
                     return (
-                        <section key={id} className={deployStyles.block}>
-                            <header className={deployStyles.blockHead}>
-                                <div className={deployStyles.blockIdent}>
-                                    <p className={deployStyles.blockName}>Service #{id}</p>
+                        <section key={id} className={styles.block}>
+                            <header className={styles.blockHead}>
+                                <div className={styles.blockIdent}>
+                                    <p className={styles.blockName}>Service #{id}</p>
                                 </div>
                                 {canWrite && (
-                                    <div className={deployStyles.actions}>
+                                    <div className={styles.actions}>
                                         <Button
                                             variant='ghost'
                                             icon='x'

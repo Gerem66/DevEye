@@ -11,7 +11,6 @@ import Fastify, { type FastifyBaseLogger, type FastifyError, type FastifyInstanc
 import { err, ok, serverStatusSchema, type ErrorCode } from '@deveye/types';
 
 import { agentRoutes } from '@/agent/routes';
-import { audienceRoutes } from '@/audience/routes';
 import { registerAgentWS } from '@/agent/ws';
 import { MonitorHub } from '@/agent/hub';
 import { LiveHub } from '@/live/hub';
@@ -22,13 +21,17 @@ import { authRoutes } from '@/auth/routes';
 import { logger } from '@/logger';
 import { env, isDev } from '@/Utils/Env';
 import { registerWS } from '@/ws/handler';
-import { createModuleServices, moduleAgentHooks, registerNativeProvider } from '@/features/_sdk/register';
+import {
+    createModuleServices,
+    isModulePublicPath,
+    moduleAgentHooks,
+    modulePublicRoutes,
+    registerNativeProvider
+} from '@/features/_sdk/register';
 import { setSdkHost } from '@/features/_sdk/host';
 import type { FeatureService } from '@deveye/types/sdk/server';
 import { createAuditLog } from '@/Services/AuditLog';
 import { MailSyncService } from '@/Services/MailSyncService';
-import { IntegrationSyncService } from '@/Services/IntegrationSyncService';
-import { AudienceIngest } from '@/Services/AudienceIngest';
 import { createProjectsUsageProvider, PROJECTS_USAGE_PROVIDER } from '@/features/project/usageProvider';
 import { mailAttachmentRoutes } from '@/mail/attachmentRoutes';
 import { mailOAuthRoutes } from '@/mail/oauthRoutes';
@@ -49,10 +52,6 @@ export interface BuiltApp {
     app: FastifyInstance;
     /** Services des modules installés — démarrés ici, arrêtés par index.ts. */
     moduleServices: readonly FeatureService[];
-    integrations: IntegrationSyncService;
-    /** Ingestion d'audience — démarrée/arrêtée par index.ts. */
-    audience: AudienceIngest;
-    /** Ordonnanceur des sauvegardes — démarré/arrêté par index.ts. */
     /** Synchro Mail en tâche de fond (comptes « open » uniquement) — démarrée/arrêtée par index.ts. */
     mailSync: MailSyncService;
 }
@@ -68,20 +67,23 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // CORS **délégué par requête**, et non fixé une fois pour toutes.
     //
     // Tout DevEye n'accepte que `PUBLIC_ORIGIN`, avec les cookies de session.
-    // L'ingestion d'audience, elle, est appelée depuis des sites tiers qu'on ne
-    // connaît pas d'avance : elle doit accepter n'importe quelle origine, et
-    // surtout **sans** identifiants — il n'y a aucune session à y transporter.
+    // Les routes publiques des modules (capacité `routes.public` : l'ingestion
+    // d'audience et son script), elles, sont appelées depuis des sites tiers
+    // qu'on ne connaît pas d'avance : elles doivent accepter n'importe quelle
+    // origine, et surtout **sans** identifiants, il n'y a aucune session à y
+    // transporter. `isModulePublicPath` connaît leurs chemins : ce sont ceux
+    // que `modulePublicRoutes` a montés ci-dessous.
     //
     // Le délégateur est la seule forme qui reçoive la requête ; `origin` seul ne
     // voit pas le chemin, et une instance encapsulée aurait fait vivre les
     // routes publiques dans un contexte Fastify séparé pour un seul en-tête.
     //
-    // ⚠️ Ce n'est pas la protection de l'ingestion. Le CORS est un mécanisme
-    // que le navigateur applique à lui-même ; ce qui filtre réellement, c'est la
-    // liste d'origines **par site** vérifiée côté serveur (`originAllowed`).
+    // ⚠️ Ce n'est pas la protection de ces routes. Le CORS est un mécanisme
+    // que le navigateur applique à lui-même ; ce qui filtre réellement, c'est
+    // la liste d'origines **par site** vérifiée côté serveur par le module
+    // (`originAllowed`, dans `features/audience`).
     await app.register(fastifyCors, () => (req: FastifyRequest, callback: FastifyCorsDelegateCallback) => {
-        const url = req.url ?? '';
-        if (url.startsWith('/api/t/') || url === '/t.js' || url.startsWith('/t.js?')) {
+        if (isModulePublicPath(req.url ?? '')) {
             callback(null, { origin: '*', credentials: false, methods: ['GET', 'POST'] });
             return;
         }
@@ -128,9 +130,10 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
 
     // `text/plain` porteur de JSON : c'est ce que `navigator.sendBeacon` sait
     // envoyer sans déclencher de requête préalable OPTIONS, et donc la seule
-    // forme qui traverse une page tierce en un aller simple. Aucune autre route
-    // n'accepte ce type ; un corps illisible rend `undefined`, que la validation
-    // zod de l'ingestion écarte comme le reste.
+    // forme qui traverse une page tierce en un aller simple. Seules les routes
+    // publiques des modules (l'ingestion d'audience) reçoivent ce type ; un
+    // corps illisible rend `undefined`, que leur validation zod écarte comme
+    // le reste.
     app.addContentTypeParser('text/plain', { parseAs: 'string' }, (_req, body, done) => {
         if (!body) {
             done(null, undefined);
@@ -178,28 +181,35 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     for (const svc of moduleServices) await svc.start();
 
     const mailSync = new MailSyncService({ db: deps.db, crypt: deps.crypt, logger, live });
-    const integrations = new IntegrationSyncService({ db: deps.db, crypt: deps.crypt, logger, live });
-    // Ce que le module Bases de données demande à Projets (les projets de
-    // l'espace qui relient une base, et combien par base), offert par l'app
-    // tant que Projets est native. Le module le lit par `providers.get` sans
-    // savoir qui l'offre ; le jour où Projets migre, son service publie la
-    // même clé et ce fichier disparaît.
+    // Ce que les modules Bases de données, Déploiements, Git et Audience
+    // demandent à Projets (les projets de l'espace qui relient un élément, et
+    // combien par élément ; la frise d'un projet pour un déploiement parti de
+    // son onglet ; la version d'un projet qui suit les releases d'un dépôt),
+    // offert par l'app tant que Projets est native. Les modules le lisent par
+    // `providers.get` sans savoir qui l'offre ; le jour où Projets migre, son
+    // service publie la même clé et ce fichier disparaît.
     registerNativeProvider(PROJECTS_USAGE_PROVIDER, createProjectsUsageProvider({ db: deps.db, crypt: deps.crypt }));
-    // L'ingestion d'audience. Rien à joindre au-dehors : contrairement aux
-    // deux services ci-dessus, celui-ci ne sonde rien — il **reçoit**, et son
-    // seul travail périodique est de vider ce qu'on lui a déposé.
-    const audience = new AudienceIngest({ db: deps.db, crypt: deps.crypt, logger, live });
     // (Le moteur de Sentinelle est un service du module `features/sentinel`,
     // démarré avec les autres ci-dessus ; ses relevés lui arrivent par les
     // hooks agent.)
     // (Les sauvegardes sont un service du module `features/backup` : la flotte
     // d'agents par sa façade, CloudSync et les bases par leurs contrats. Le
     // relevé des bases est un service du module `features/database`, qui
-    // publie ces contrats lui-même.)
+    // publie ces contrats lui-même. Le rapprochement des cibles de déploiement
+    // est un service du module `features/deploy`, la synchronisation des
+    // dépôts git un service du module `features/git` : l'ex
+    // `IntegrationSyncService`, rendu moitié par moitié à ses deux features.
+    // L'ingestion d'audience est un service du module `features/audience`,
+    // la seule qui ne sonde rien : elle **reçoit**, par les routes publiques
+    // montées ci-dessous, et son seul travail périodique est de vider ce
+    // qu'on lui a déposé.)
 
     await authRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
     await agentRoutes(app, { db: deps.db, hub, live, audit });
-    await audienceRoutes(app, { ingest: audience });
+    // Les routes publiques des modules (capacité `routes.public`) : sur cet
+    // écouteur-ci, et sur la surface publique quand elle existe
+    // (`publicApp.ts`). Après la création des services, qui les déclarent.
+    modulePublicRoutes(app);
     await mailOAuthRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
     await mailAttachmentRoutes(app, { db: deps.db, crypt: deps.crypt });
     await registerWS(app, {
@@ -207,8 +217,6 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         crypt: deps.crypt,
         hub,
         live,
-        integrations,
-        audience,
         audit
     });
     // Les modules reçoivent ce que les agents envoient, une fois persisté, par
@@ -243,5 +251,5 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         app.log.debug({ clientDir }, 'No client build found; static serving disabled (host dev uses Vite)');
     }
 
-    return { app, mailSync, integrations, audience, moduleServices };
+    return { app, mailSync, moduleServices };
 }

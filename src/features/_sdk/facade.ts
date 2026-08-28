@@ -6,7 +6,8 @@ import type { DeviceRow, NotificationFeature } from '@deveye/types';
 import type { Database } from '@/db';
 import type { Logger } from 'pino';
 import { parseDeviceReport } from '@/agent/mappers';
-import { deliver, hasChannel, resolveRoute } from '@/Services/notifications';
+import { editMessage, postMessage } from '@/Services/discord';
+import { deliver, discordChannels, hasChannel, resolveChannelIds, resolveRoute } from '@/Services/notifications';
 import { pushAgentConfig, sdkHub } from './host';
 
 /**
@@ -49,7 +50,12 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
             },
             async send(alert, opts) {
                 gate('notify');
-                const channels = await resolveRoute(deps.db, cipher, deps.workspaceId, feature, opts?.itemId);
+                const routed = await resolveRoute(deps.db, cipher, deps.workspaceId, feature, opts?.itemId);
+                // Un canal dont le message vivant a conclu a déjà tout dit :
+                // lui renvoyer l'avis en texte afficherait deux fois la même
+                // chose (le suivi d'un déploiement).
+                const except = new Set(opts?.except ?? []);
+                const channels = routed.filter((c) => !except.has(c.id));
                 if (!hasChannel(channels)) return false;
                 return deliver(
                     channels,
@@ -64,6 +70,31 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
                     },
                     deps.logger
                 );
+            },
+            async liveChannels(opts) {
+                gate('notify');
+                const routed = await resolveRoute(deps.db, cipher, deps.workspaceId, feature, opts?.itemId);
+                // Discord seul sait modifier ce qu'il a déjà envoyé (voir
+                // `Services/discord.ts`) : ce sont les canaux d'un message qui
+                // se met à jour du début à la fin.
+                return discordChannels(routed).map((c) => ({ id: c.id }));
+            },
+            async postLive(channelId, message, messageId) {
+                gate('notify');
+                // Un canal de LA feature du module, dans SON espace : la
+                // résolution par identifiant ignore la feature, la ligne est
+                // relue pour la vérifier avant de publier quoi que ce soit.
+                const row = await deps.db.notificationChannels.findById(channelId, deps.workspaceId);
+                if (!row || row.feature !== feature) return null;
+                const [channel] = discordChannels(
+                    await resolveChannelIds(deps.db, cipher, deps.workspaceId, [channelId])
+                );
+                if (!channel?.webhookUrl) return null;
+                const body = { content: message.content, embeds: message.embeds ? [...message.embeds] : undefined };
+                if (messageId) {
+                    return (await editMessage(channel.webhookUrl, messageId, body, deps.logger)) ? messageId : null;
+                }
+                return postMessage(channel.webhookUrl, body, deps.logger);
             }
         },
         mail: {
@@ -91,7 +122,13 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
                 return users.map((u) => ({
                     userId: u.id,
                     name: u.username,
-                    isOwner: u.id === deps.ownerUserId
+                    isOwner: u.id === deps.ownerUserId,
+                    // La couleur du compte, celle de sa présence en direct :
+                    // un module qui montre une personne la montre de la même
+                    // couleur que partout ailleurs. Vide sur un compte jamais
+                    // colorié : `null`, et l'appelant retombe sur
+                    // `defaultUserColor`, comme l'app.
+                    color: u.color || null
                 }));
             }
         },

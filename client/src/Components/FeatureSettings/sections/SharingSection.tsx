@@ -41,25 +41,6 @@ const BLOCKER_TEXT: Record<ShareBlocker, string> = {
         'Cet élément vient d’un autre espace, où vous n’avez pas le droit de le modifier : son partage se règle par ceux qui l’ont. Qui tient l’écriture de l’élément chez lui peut, en revanche, régler son partage d’ici.'
 };
 
-/**
- * Ce qu'un partage invalide, par fonctionnalité native branchée.
- *
- * La clé était codée en dur sur `uptime.list` : partager un dépôt ou une cible
- * rafraîchissait… la liste des services. La table suit `SHARE_WIRED_FEATURES` ;
- * une feature native qu'on branche au partage s'inscrit ici en même temps. Un
- * module n'a rien à inscrire : ses ressources déclarées (manifest) se ravivent
- * toutes, c'est le même geste que son sujet live.
- */
-const LIST_KEYS: Partial<Record<SettingsScope['feature'], ResourceKey[]>> = {
-    deploy: ['deploy.list', 'deploy.count'],
-    git: ['git.list', 'git.count'],
-    audience: ['audience.list', 'audience.count']
-};
-
-function listKeysOf(feature: SettingsScope['feature']): readonly ResourceKey[] {
-    return LIST_KEYS[feature] ?? ((moduleManifest(feature)?.resources ?? []) as ResourceKey[]);
-}
-
 interface Props {
     scope: SettingsScope;
 }
@@ -92,8 +73,17 @@ export default function SharingSection({ scope }: Props) {
                 setState(res);
                 // La liste de la fonctionnalité change des deux côtés : ici on
                 // vient d'ouvrir ou de fermer une fenêtre, là-bas la ligne
-                // apparaît ou disparaît.
-                for (const key of listKeysOf(feature)) invalidate(key);
+                // apparaît ou disparaît. Ce qu'on ravive : les ressources que
+                // le manifest du module déclare, toutes, c'est le même geste
+                // que son sujet live. Il y avait ici une table par feature
+                // native branchée au partage, qui suivait
+                // `SHARE_WIRED_FEATURES` (la clé avait d'abord été codée en
+                // dur sur `uptime.list` : partager un dépôt rafraîchissait…
+                // la liste des services). Les natives partageables ont toutes
+                // été rapatriées, Audience la dernière, et la table est partie
+                // avec elles : une feature qui se partage est un module, et un
+                // module n'a rien à inscrire.
+                for (const key of moduleManifest(feature)?.resources ?? []) invalidate(key as ResourceKey);
             })
             .catch(() => setError('Modification impossible.'))
             .finally(() => setBusy(false));

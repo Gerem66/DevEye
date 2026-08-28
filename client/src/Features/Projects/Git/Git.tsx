@@ -1,20 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Credential, GitRepo, MinimalUser, Project } from '@deveye/types';
+import type { Project } from '@deveye/types';
+import { GIT_CLIENT_PROVIDER } from '@deveye/types/sdk';
+import type { GitClientProvider, GitLinkedCandidate } from '@deveye/types/sdk/client';
 import { Button, Dialog } from '@/Components';
-import { ws } from '@/api/ws';
+import { ws, WsError } from '@/api/ws';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
-import { startTeleport } from '@/stores/live';
-import { getActiveWorkspaceId, useWorkspacePermissions } from '@/stores/workspace';
-import { RepoView } from '@/Features/Git/RepoView';
-import { RepoDialog } from '@/Features/Git/RepoDialog';
-import gitStyles from '@/Features/Git/style.module.css';
+import { useWorkspacePermissions } from '@/stores/workspace';
+import { moduleClientProvider } from '@/sdk/registry';
 import { humanizeError } from '../api';
 import { LinkRepoDialog } from './LinkRepoDialog';
 import styles from '../style.module.css';
 
 interface GitProps {
     project: Project;
-    members: MinimalUser[];
     canWrite: boolean;
 }
 
@@ -25,34 +23,41 @@ interface GitProps {
  * projet** : il vit dans la feature Git, avec son cache, sa synchronisation et
  * ses jetons, et plusieurs projets peuvent viser le même. Cet onglet ne possède
  * donc qu'un pointeur (`project.repoList` / `repoLink` / `repoUnlink`) et délègue
- * tout l'affichage à `RepoView`, exactement le même composant que la feature
- * Git — un dépôt n'a pas à se présenter autrement selon la porte par laquelle
- * on entre.
+ * tout l'affichage au module Git, par son contrat client (`GIT_CLIENT_PROVIDER`) :
+ * cet écran n'importe pas le module. C'est le bloc du module (`LinkedRepo`),
+ * exactement le même contenu que la feature Git (un dépôt n'a pas à se
+ * présenter autrement selon la porte par laquelle on entre), qui charge son
+ * dépôt lui-même, suit les invalidations de la feature et porte son dialogue
+ * de réglage.
  *
  * **Plusieurs dépôts**, depuis la migration 069 : un projet réel se compose
- * souvent d'un client, d'un serveur et de contrats partagés. Au-delà du premier,
- * chaque dépôt reçoit un cadre discret — sans lui, deux graphes et huit panneaux
+ * souvent d'un client, d'un serveur et de contrats partagés. Chaque dépôt
+ * reçoit un cadre discret, sans lequel deux graphes et huit panneaux
  * s'enchaîneraient sans qu'on sache où l'un finit et où l'autre commence.
  *
  * Corollaire à connaître : lire ces dépôts relève du droit `git`, pas de
  * `projects`. Un membre qui a l'un sans l'autre voit le projet mais pas ses
- * dépôts, et l'écran le dit.
+ * dépôts, et l'écran le dit. Module absent : même lecture, des identifiants
+ * nus, et une phrase qui le dit.
  */
-export function Git({ project, members, canWrite }: GitProps) {
+export function Git({ project, canWrite }: GitProps) {
     const permissions = useWorkspacePermissions();
+    const provider = moduleClientProvider<GitClientProvider>(GIT_CLIENT_PROVIDER);
     const canReadGit = permissions.canFeature('git');
     const canWriteGit = permissions.canFeature('git', 'write');
 
     const [repoIds, setRepoIds] = useState<number[]>([]);
-    const [repos, setRepos] = useState<GitRepo[]>([]);
+    /** Les dépôts de l'espace, pour nommer celui qu'on délie. */
+    const [candidates, setCandidates] = useState<readonly GitLinkedCandidate[]>([]);
     const [loaded, setLoaded] = useState(false);
+    const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [linkOpen, setLinkOpen] = useState(false);
-    const [unlinking, setUnlinking] = useState<GitRepo | null>(null);
-    const [busy, setBusy] = useState(false);
+    /** Le dépôt qu'on s'apprête à délier ; `null` = aucune confirmation ouverte. */
+    const [unlinking, setUnlinking] = useState<number | null>(null);
 
     const boardVersion = useResourceVersion('project.board');
-    const gitVersion = useResourceVersion('git.repo');
+    const listVersion = useResourceVersion('git.list');
     const guarded = project.securityTier === 'guarded';
 
     const load = useCallback(async () => {
@@ -63,26 +68,43 @@ export function Git({ project, members, canWrite }: GitProps) {
         try {
             const link = await ws.send('project.repoList', { projectId: project.id });
             setRepoIds(link.repoIds);
-            // Le détail d'un dépôt relève de la feature Git : sans le droit, on
-            // s'arrête aux pointeurs plutôt que d'encaisser un refus.
-            setRepos(
-                canReadGit
-                    ? (await Promise.all(link.repoIds.map((id) => ws.send('git.repoGet', { repoId: id })))).map(
-                          (r) => r.repo
-                      )
-                    : []
-            );
             setError(null);
         } catch (e) {
             setError(humanizeError(e, 'Impossible de charger les dépôts liés.'));
         } finally {
             setLoaded(true);
         }
-    }, [project.id, guarded, canReadGit]);
+    }, [project.id, guarded]);
 
     useEffect(() => {
         void load();
-    }, [load, boardVersion, gitVersion]);
+    }, [load, boardVersion]);
+
+    // Le catalogue, pour nommer le dépôt qu'on délie. Le détail relève de la
+    // feature Git : sans le droit (ou sans le module), on s'arrête aux
+    // pointeurs plutôt que d'encaisser un refus, qui n'est pas une erreur à
+    // afficher.
+    useEffect(() => {
+        if (guarded || !canReadGit || !provider) {
+            setCandidates([]);
+            return;
+        }
+        let alive = true;
+        void (async () => {
+            try {
+                const listed = await provider.listRepos();
+                if (alive) setCandidates(listed);
+            } catch (e) {
+                if (alive) setCandidates([]);
+                if (!(e instanceof WsError && e.code === 'forbidden')) {
+                    setError(humanizeError(e, 'Impossible de charger les dépôts de l’espace.'));
+                }
+            }
+        })();
+        return () => {
+            alive = false;
+        };
+    }, [guarded, canReadGit, provider, listVersion]);
 
     const unlink = async (repoId: number) => {
         setBusy(true);
@@ -108,15 +130,15 @@ export function Git({ project, members, canWrite }: GitProps) {
 
     if (!loaded) return <p className={styles.empty}>Chargement…</p>;
 
-    return (
-        <div className={gitStyles.git}>
-            {error && <p className={styles.error}>{error}</p>}
+    const unlinkingCandidate = unlinking === null ? null : (candidates.find((c) => c.id === unlinking) ?? null);
+    const unlinkingName = unlinkingCandidate ? `${unlinkingCandidate.owner}/${unlinkingCandidate.repo}` : null;
 
-            {repoIds.length === 0 && (
-                <div className={gitStyles.gitEmpty}>
-                    <p className={styles.empty}>Aucun dépôt relié à ce projet.</p>
-                </div>
-            )}
+    return (
+        <div className={styles.linkedRepos}>
+            {error && <p className={styles.error}>{error}</p>}
+            {!provider && <p className={styles.hint}>Le module Git n’est pas installé.</p>}
+
+            {repoIds.length === 0 && <p className={styles.empty}>Aucun dépôt relié à ce projet.</p>}
 
             {/* Le pointeur existe mais le dépôt n'est pas lisible : c'est un
                 manque de droit, pas une erreur. Le dire plutôt que d'afficher
@@ -128,26 +150,45 @@ export function Git({ project, members, canWrite }: GitProps) {
                 </p>
             )}
 
-            {repos.map((repo) => (
-                <RepoBlock
-                    key={repo.id}
-                    repo={repo}
-                    members={members}
-                    canWrite={canWrite}
-                    canWriteGit={canWriteGit}
-                    onUnlink={() => setUnlinking(repo)}
-                />
-            ))}
+            {canReadGit &&
+                repoIds.map((id) =>
+                    provider ? (
+                        <provider.LinkedRepo
+                            key={id}
+                            repoId={id}
+                            canWrite={canWrite && canWriteGit}
+                            onUnlink={() => setUnlinking(id)}
+                        />
+                    ) : (
+                        // Sans le module, le serveur ne rend qu'un identifiant
+                        // nu : la ligne reste là, avec son « Délier », plutôt
+                        // que de disparaître.
+                        <div key={id} className={styles.linkedBare}>
+                            <span className={styles.hint}>Dépôt #{id}</span>
+                            {canWrite && canWriteGit && (
+                                <Button variant='ghost' icon='x' onClick={() => setUnlinking(id)} disabled={busy}>
+                                    Délier
+                                </Button>
+                            )}
+                        </div>
+                    )
+                )}
 
             {/* Toujours en bas, même quand un dépôt est déjà relié : on peut en
                 ajouter autant qu'on veut, et c'est le geste suivant naturel une
                 fois qu'on a fini de lire ce qui précède. */}
-            {canWrite && canWriteGit && (
-                <div className={gitStyles.addRow}>
+            {canWrite && canWriteGit && provider && (
+                <div className={styles.addRow}>
                     <Button icon='add' onClick={() => setLinkOpen(true)}>
                         Ajouter un dépôt
                     </Button>
                 </div>
+            )}
+
+            {canWrite && !canWriteGit && (
+                <span className={styles.hintCentered}>
+                    Votre rôle ne permet pas de modifier les dépôts de cet espace.
+                </span>
             )}
 
             <LinkRepoDialog
@@ -166,165 +207,28 @@ export function Git({ project, members, canWrite }: GitProps) {
                 onClose={() => setUnlinking(null)}
                 title='Délier ce dépôt ?'
                 width={460}
+                onSubmit={() => unlinking !== null && void unlink(unlinking)}
                 footer={
                     <>
                         <Button variant='secondary' onClick={() => setUnlinking(null)} disabled={busy}>
                             Annuler
                         </Button>
-                        <Button variant='danger' disabled={busy} onClick={() => unlinking && void unlink(unlinking.id)}>
+                        <Button
+                            variant='danger'
+                            disabled={busy}
+                            onClick={() => unlinking !== null && void unlink(unlinking)}
+                        >
                             Délier
                         </Button>
                     </>
                 }
             >
                 <p className={styles.hint}>
-                    {unlinking && (
-                        <>
-                            <strong>
-                                {unlinking.owner}/{unlinking.repo}
-                            </strong>{' '}
-                            quitte ce projet. Le dépôt lui-même, son historique et les autres projets qui l’utilisent ne
-                            sont pas touchés.
-                        </>
-                    )}
+                    <strong>{unlinkingName ?? 'Ce dépôt'}</strong> quitte ce projet. Le dépôt lui-même, son historique
+                    et les autres projets qui l’utilisent ne sont pas touchés.
                 </p>
             </Dialog>
         </div>
-    );
-}
-
-interface RepoBlockProps {
-    repo: GitRepo;
-    members: MinimalUser[];
-    canWrite: boolean;
-    canWriteGit: boolean;
-    onUnlink: () => void;
-}
-
-/** Un dépôt du projet : son en-tête, et le contenu partagé avec la feature Git. */
-function RepoBlock({ repo, members, canWrite, canWriteGit, onUnlink }: RepoBlockProps) {
-    // `RepoView` sonde l'avancement ; l'en-tête, lui, porte les boutons. Tant
-    // qu'une synchronisation tourne, ni « Synchroniser » ni « Modifier » n'ont
-    // de sens : le contenu est déjà voilé et va être remplacé.
-    const [syncing, setSyncing] = useState(false);
-    const onSyncingChange = useCallback((v: boolean) => setSyncing(v), []);
-    const [syncRequest, setSyncRequest] = useState(0);
-    const [dialogOpen, setDialogOpen] = useState(false);
-    /** Les jetons de l'espace, lus seulement quand le dialogue s'ouvre. */
-    const [credentials, setCredentials] = useState<Credential[]>([]);
-
-    useEffect(() => {
-        if (!dialogOpen) return;
-        void ws.send('git.credentialList', {}).then((res) => setCredentials(res.credentials));
-    }, [dialogOpen]);
-
-    // Toujours encadré, y compris sur un dépôt unique.
-    //
-    // Le cadre ne servait qu'à *séparer* deux blocs, d'où la règle précédente
-    // qui l'omettait quand il n'y avait rien à séparer. Mais il fait aussi
-    // autre chose : il dit où finit ce que l'onglet montre. Sans lui, un dépôt
-    // seul se confondait avec le fond de la popup, et l'onglet ne ressemblait
-    // plus aux autres du même projet.
-    return (
-        <section className={gitStyles.repoBlockFramed}>
-            <header className={gitStyles.repoHead}>
-                <div className={gitStyles.repoIdent}>
-                    {/* Un intitulé, et rien de plus. Il menait au dépôt, mais
-                        un titre qui navigue ne s'annonce pas : rien ne le
-                        distinguait d'un texte, et il fallait le survoler pour
-                        s'en apercevoir. Le geste est devenu un bouton de la
-                        barre, comme dans les deux autres onglets. */}
-                    <p className={gitStyles.repoName}>
-                        <span className='icon icon-branch' aria-hidden='true' /> {repo.owner}/{repo.repo}
-                    </p>
-                    <p className={gitStyles.repoMeta}>
-                        {repo.defaultBranch && <span>branche {repo.defaultBranch}</span>}
-                        {repo.lastSyncAt !== null && (
-                            <span> · synchronisé {new Date(repo.lastSyncAt * 1000).toLocaleString('fr-FR')}</span>
-                        )}
-                        {repo.credentialId === null && (
-                            <span className={gitStyles.overdue}> · jeton retiré, synchronisation arrêtée</span>
-                        )}
-                        {repo.projectCount > 1 && (
-                            <span>
-                                {' '}
-                                · partagé avec {repo.projectCount - 1} autre{repo.projectCount > 2 ? 's' : ''} projet
-                                {repo.projectCount > 2 ? 's' : ''}
-                            </span>
-                        )}
-                    </p>
-                    {repo.lastSyncError && <p className={gitStyles.error}>{repo.lastSyncError}</p>}
-                </div>
-                <div className={gitStyles.actions}>
-                    {canWrite && canWriteGit && (
-                        <>
-                            <Button
-                                variant='secondary'
-                                icon='refresh'
-                                onClick={() => {
-                                    setSyncRequest((n) => n + 1);
-                                    void ws.send('git.repoSyncNow', { repoId: repo.id });
-                                }}
-                                disabled={syncing}
-                            >
-                                {syncing ? 'Synchronisation…' : 'Synchroniser'}
-                            </Button>
-                            <Button
-                                variant='secondary'
-                                icon='edit'
-                                onClick={() => setDialogOpen(true)}
-                                disabled={syncing}
-                            >
-                                Modifier
-                            </Button>
-                        </>
-                    )}
-
-                    {/* Par la téléportation, comme partout : le chemin
-                        `view:git l1:7` dit « ouvre la feature, et dedans,
-                        ce dépôt-là », garde d'accès comprise. Offert même sans
-                        droit d'écriture : c'est une navigation. */}
-                    <Button
-                        variant='secondary'
-                        icon='chevrons-right'
-                        onClick={() => startTeleport(getActiveWorkspaceId() ?? 0, ['view:git', `l1:${repo.id}`])}
-                    >
-                        Ouvrir le Git
-                    </Button>
-
-                    {/* Destructeur, donc en bout de barre et confirmé : il ne
-                        doit pas côtoyer « Synchroniser », qu'on presse souvent. */}
-                    {canWrite && canWriteGit && (
-                        <Button variant='ghost' onClick={onUnlink} disabled={syncing}>
-                            Délier
-                        </Button>
-                    )}
-                </div>
-            </header>
-
-            <RepoView
-                repo={repo}
-                members={members}
-                canWrite={canWrite && canWriteGit}
-                onSyncingChange={onSyncingChange}
-                syncRequest={syncRequest}
-            />
-
-            {/* Le vrai dialogue de la feature Git, pas une copie : régler un
-                dépôt depuis un projet ou depuis sa feature doit être le même
-                geste, et une seconde implémentation divergerait au premier
-                ajustement. */}
-            <RepoDialog
-                open={dialogOpen}
-                repo={repo}
-                credentials={credentials}
-                onClose={() => setDialogOpen(false)}
-                onSaved={() => {
-                    setDialogOpen(false);
-                    invalidate('git.list', 'git.repo', 'git.count');
-                }}
-            />
-        </section>
     );
 }
 

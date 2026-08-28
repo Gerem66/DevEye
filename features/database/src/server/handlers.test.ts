@@ -239,7 +239,11 @@ const projects: ProjectsUsageProvider = {
               ]
             : [],
     countByItem: async (feature, workspaceId) =>
-        feature === 'database' && workspaceId === 1 ? new Map([[1, 2]]) : new Map()
+        feature === 'database' && workspaceId === 1 ? new Map([[1, 2]]) : new Map(),
+    // La frise d'un projet : ce que Déploiement lui dit, jamais Bases de données.
+    recordEvent: async () => undefined,
+    // Une version ne se reporte que depuis un dépôt git : rien à faire ici.
+    applyVersion: async () => undefined
 };
 
 const ACCESS = { kind: 'direct' as const, host: '', port: null, username: '', auth: 'password' as const };

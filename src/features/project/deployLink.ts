@@ -1,4 +1,6 @@
 import { projectDeployLink, projectDeployList, projectDeployUnlink } from '@deveye/types';
+import { DEPLOY_ITEMS_PROVIDER, type DeployItemsProvider } from '@deveye/types/sdk';
+import { moduleProvider } from '@/features/_sdk/register';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { loadProject, recordEvent } from './_shared';
 
@@ -18,6 +20,11 @@ import { loadProject, recordEvent } from './_shared';
  * Gardé sous `projects: write` : c'est le projet qu'on modifie ici, pas la
  * cible. Lire son historique — et surtout **déclencher** — relève du droit
  * `deploy`.
+ *
+ * La table de liaison (`project_deploy_links`) est celle de Projets, lue par
+ * `ctx.db.projectLinks` à côté des services surveillés et des bases : depuis
+ * le rapatriement de Déploiement en module, Projets ne lit plus la table des
+ * cibles, et ne les connaît que par le contrat que le module offre.
  */
 
 const READ = { feature: 'projects' } as const;
@@ -32,7 +39,7 @@ export const projectDeployListFeature: FeatureDefinition<
     access: READ,
     handler: async (ctx, input) => {
         await loadProject(ctx, input.projectId);
-        return { targetIds: await ctx.db.deploy.listLinkedTargetIds(input.projectId, ctx.workspaceId) };
+        return { targetIds: await ctx.db.projectLinks.listDeployTargetIds(input.projectId, ctx.workspaceId) };
     }
 });
 
@@ -61,17 +68,24 @@ export const projectDeployLinkFeature: FeatureDefinition<
         // La cible existe-t-elle, et dans **cet** espace ? On ne vérifie que
         // l'existence : le **droit** de la déclencher reste celui de la feature
         // Déploiement, vérifié au moment où on déclenche.
-        const target = await ctx.db.deploy.findTarget(input.targetId, ctx.workspaceId);
-        if (!target) throw new FeatureError('not_found', 'Cette cible n’existe pas dans cet espace.');
+        //
+        // Depuis le rapatriement de Déploiement en module, la question passe
+        // par le contrat qu'il offre (`DEPLOY_ITEMS_PROVIDER`) : Projets ne lit
+        // plus sa table, et dégrade proprement quand le module est absent.
+        const targets = moduleProvider<DeployItemsProvider>(DEPLOY_ITEMS_PROVIDER);
+        if (!targets) throw new FeatureError('validation', 'Le module Déploiements n’est pas installé.');
+        if (!(await targets.exists(input.targetId, ctx.workspaceId))) {
+            throw new FeatureError('not_found', 'Cette cible n’existe pas dans cet espace.');
+        }
 
-        await ctx.db.deploy.linkProject(input.projectId, ctx.workspaceId, input.targetId);
+        await ctx.db.projectLinks.linkDeployTarget(input.projectId, ctx.workspaceId, input.targetId);
         await recordEvent(ctx, project, { kind: 'project.deployLink', label: 'Cible de déploiement reliée' });
         ctx.audit({
             action: 'project.deployLink',
             description: 'Cible de déploiement reliée au projet',
             metadata: { projectId: input.projectId, targetId: input.targetId }
         });
-        return { targetIds: await ctx.db.deploy.listLinkedTargetIds(input.projectId, ctx.workspaceId) };
+        return { targetIds: await ctx.db.projectLinks.listDeployTargetIds(input.projectId, ctx.workspaceId) };
     }
 });
 
@@ -87,9 +101,9 @@ export const projectDeployUnlinkFeature: FeatureDefinition<
         const project = await loadProject(ctx, input.projectId);
         // La cible et son historique survivent : ils appartiennent à l'espace,
         // et d'autres projets peuvent s'en servir.
-        const ok = await ctx.db.deploy.unlinkProject(input.projectId, ctx.workspaceId, input.targetId);
+        const ok = await ctx.db.projectLinks.unlinkDeployTarget(input.projectId, ctx.workspaceId, input.targetId);
         if (ok) await recordEvent(ctx, project, { kind: 'project.deployUnlink', label: 'Cible de déploiement déliée' });
-        return { targetIds: await ctx.db.deploy.listLinkedTargetIds(input.projectId, ctx.workspaceId) };
+        return { targetIds: await ctx.db.projectLinks.listDeployTargetIds(input.projectId, ctx.workspaceId) };
     }
 });
 

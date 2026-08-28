@@ -29,6 +29,7 @@ Et une dérivation, sans stockage :
 | Quoi | Comment |
 |---|---|
 | `BAK`, la clé des archives de sauvegarde | `HKDF(serverKey, 'deveye-backup')`, `src/backup/crypto.ts` |
+| le sel des visiteurs d'Audience | `HKDF(serverKey, 'audience', 'visitor-salt')`, `features/audience/src/server/service.ts` : entre dans chaque condensé de visiteur (`visitor_ref`). Changer la clé serveur change donc les condensés une fois : un visiteur persistant est compté « nouveau » une fois, les condensés anonymes tournaient déjà chaque jour. Rien à re-sceller, rien n'est stocké |
 
 **Ce qui n'en dépend pas** : tout le contenu des features (sous DEK ou WDK),
 les blobs CloudSync (sous BMK), les DEK emballées par mot de passe

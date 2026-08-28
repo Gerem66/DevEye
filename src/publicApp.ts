@@ -4,14 +4,15 @@ import fastifyRateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyBaseLogger, type FastifyError, type FastifyInstance } from 'fastify';
 import { err, type ErrorCode } from '@deveye/types';
 
-import { audienceRoutes } from '@/audience/routes';
+import { modulePublicRoutes } from '@/features/_sdk/register';
 import { logger } from '@/logger';
 import { env, isDev } from '@/Utils/Env';
-import type { AudienceIngest } from '@/Services/AudienceIngest';
 
 /**
  * Le serveur **public** : un second écouteur, sur son propre port, qui ne porte
- * que ce qui a le droit d'être atteint depuis Internet.
+ * que ce qui a le droit d'être atteint depuis Internet : les routes publiques
+ * des modules (capacité `routes.public`), et c'est la seule chose que ce port
+ * sert. Aujourd'hui l'ingestion d'audience et son script (`features/audience`).
  *
  * ## Pourquoi un second écouteur plutôt qu'une garde
  *
@@ -33,12 +34,15 @@ import type { AudienceIngest } from '@/Services/AudienceIngest';
  *
  * ## Pourquoi le **même processus**
  *
- * Ce n'est pas un confort, c'est une contrainte. `AudienceIngest` prévient les
- * écrans ouverts par `LiveHub`, dont l'état est **local au processus** (voir
- * LIVE.md §6). Un second conteneur écrirait donc les mesures sans que personne
- * ne soit averti : le rafraîchissement à la minute cesserait de fonctionner,
- * silencieusement. Partager le processus, c'est partager la file d'ingestion,
- * les caches de sites et de libellés, et le hub.
+ * Ce n'est pas un confort, c'est une contrainte. L'ingestion d'audience
+ * prévient les écrans ouverts par `LiveHub` (par `deps.live.changed`), dont
+ * l'état est **local au processus** (voir LIVE.md §6). Un second conteneur
+ * écrirait donc les mesures sans que personne ne soit averti : le
+ * rafraîchissement à la minute cesserait de fonctionner, silencieusement.
+ * Partager le processus, c'est partager la file d'ingestion, les caches de
+ * sites et de libellés, et le hub. C'est aussi pourquoi les routes viennent
+ * des **services déjà créés** par `buildApp` : le module déclare les mêmes
+ * routes sur chaque écouteur, c'est l'écouteur qui change, pas l'ingestion.
  *
  * ## Ce qui est volontairement dupliqué depuis `app.ts`
  *
@@ -49,11 +53,7 @@ import type { AudienceIngest } from '@/Services/AudienceIngest';
  * paramétrée aurait rendu difficile à lire ce qui doit rester évident : ce port
  * n'expose rien d'autre.
  */
-export interface PublicAppDeps {
-    ingest: AudienceIngest;
-}
-
-export async function buildPublicApp({ ingest }: PublicAppDeps): Promise<FastifyInstance> {
+export async function buildPublicApp(): Promise<FastifyInstance> {
     const app = Fastify({
         loggerInstance: logger.child({ surface: 'public' }) as FastifyBaseLogger,
         // Indispensable, et pas seulement cosmétique : le plafond de débit
@@ -77,7 +77,7 @@ export async function buildPublicApp({ ingest }: PublicAppDeps): Promise<Fastify
 
     // `text/plain` porteur de JSON : la forme qu'émet `navigator.sendBeacon`
     // sans déclencher de requête préalable OPTIONS. Un corps illisible rend
-    // `undefined`, que la validation zod de l'ingestion écarte comme le reste.
+    // `undefined`, que la validation zod du module écarte comme le reste.
     app.addContentTypeParser('text/plain', { parseAs: 'string' }, (_req, body, done) => {
         if (!body) {
             done(null, undefined);
@@ -121,7 +121,7 @@ export async function buildPublicApp({ ingest }: PublicAppDeps): Promise<Fastify
      */
     app.get('/api/health', { logLevel: 'silent' }, async () => ({ ok: true }));
 
-    await audienceRoutes(app, { ingest });
+    modulePublicRoutes(app);
 
     // Pas de repli SPA : tout ce qui n'est pas déclaré ci-dessus n'existe pas.
     // C'est la différence avec `app.ts`, où un GET inconnu rend `index.html`.

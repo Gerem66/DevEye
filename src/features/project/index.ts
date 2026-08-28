@@ -362,7 +362,7 @@ export const projectSetSecurityTierFeature: FeatureDefinition<
         // enregistré sous l'ancien tier — celui sous lequel le reste de
         // l'historique du projet a été écrit.
         if (input.securityTier === 'guarded') {
-            const dropped = await ctx.db.git.unlinkAllProjects(input.projectId, ctx.workspaceId);
+            const dropped = await ctx.db.projectLinks.unlinkAllRepos(input.projectId, ctx.workspaceId);
             if (dropped > 0) {
                 await recordEvent(ctx, existing, {
                     kind: 'project.repoUnlink',
@@ -390,9 +390,9 @@ export const projectSetSecurityTierFeature: FeatureDefinition<
         // liaison est en clair, l'objet vit à l'étage ouvert, et un service
         // sans session y travaille. Les sites et leur historique survivent.
         if (input.securityTier === 'guarded') {
-            const sites = await ctx.db.audience.listLinkedIds(input.projectId, ctx.workspaceId);
+            const sites = await ctx.db.projectLinks.listSiteIds(input.projectId, ctx.workspaceId);
             if (sites.length > 0) {
-                await ctx.db.audience.unlinkAll(input.projectId, ctx.workspaceId);
+                await ctx.db.projectLinks.unlinkAllSites(input.projectId, ctx.workspaceId);
                 await recordEvent(ctx, existing, {
                     kind: 'project.audienceUnlink',
                     label: `${sites.length} site${sites.length > 1 ? 's' : ''} de suivi délié${sites.length > 1 ? 's' : ''} (projet passé en confidentiel)`
@@ -404,7 +404,7 @@ export const projectSetSecurityTierFeature: FeatureDefinition<
         // (migration 080). Les cibles, leur clé et leur historique survivent —
         // seules les liaisons tombent.
         if (input.securityTier === 'guarded') {
-            const dropped = await ctx.db.deploy.unlinkAllProjects(input.projectId, ctx.workspaceId);
+            const dropped = await ctx.db.projectLinks.unlinkAllDeployTargets(input.projectId, ctx.workspaceId);
             if (dropped > 0) {
                 await recordEvent(ctx, existing, {
                     kind: 'project.deployUnlink',

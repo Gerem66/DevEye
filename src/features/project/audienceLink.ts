@@ -1,4 +1,6 @@
 import { projectAudienceLink, projectAudienceList, projectAudienceUnlink } from '@deveye/types';
+import { AUDIENCE_ITEMS_PROVIDER, type AudienceItemsProvider } from '@deveye/types/sdk';
+import { moduleProvider } from '@/features/_sdk/register';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { loadProject } from './_shared';
 
@@ -27,7 +29,7 @@ export const projectAudienceListFeature: FeatureDefinition<
     access: READ,
     handler: async (ctx, input) => {
         await loadProject(ctx, input.projectId);
-        return { siteIds: await ctx.db.audience.listLinkedIds(input.projectId, ctx.workspaceId) };
+        return { siteIds: await ctx.db.projectLinks.listSiteIds(input.projectId, ctx.workspaceId) };
     }
 });
 
@@ -53,11 +55,18 @@ export const projectAudienceLinkFeature: FeatureDefinition<
         // Le site existe-t-il, et dans **cet** espace ? Sans cette garde on
         // lierait n'importe quel identifiant, y compris celui d'un site d'un
         // autre espace — dont l'existence même n'a pas à fuiter.
-        const site = await ctx.db.audience.find(input.siteId, ctx.workspaceId);
-        if (!site) throw new FeatureError('not_found', 'Ce site n’existe pas dans cet espace.');
+        //
+        // Depuis le rapatriement d'Audience en module, la question passe par le
+        // contrat qu'il offre (`AUDIENCE_ITEMS_PROVIDER`) : Projets ne lit plus
+        // sa table, et dégrade proprement quand le module est absent.
+        const audience = moduleProvider<AudienceItemsProvider>(AUDIENCE_ITEMS_PROVIDER);
+        if (!audience) throw new FeatureError('validation', 'Le module Audience n’est pas installé.');
+        if (!(await audience.exists(input.siteId, ctx.workspaceId))) {
+            throw new FeatureError('not_found', 'Ce site n’existe pas dans cet espace.');
+        }
 
-        await ctx.db.audience.link(input.projectId, ctx.workspaceId, input.siteId);
-        return { siteIds: await ctx.db.audience.listLinkedIds(input.projectId, ctx.workspaceId) };
+        await ctx.db.projectLinks.linkSite(input.projectId, ctx.workspaceId, input.siteId);
+        return { siteIds: await ctx.db.projectLinks.listSiteIds(input.projectId, ctx.workspaceId) };
     }
 });
 
@@ -72,8 +81,8 @@ export const projectAudienceUnlinkFeature: FeatureDefinition<
     handler: async (ctx, input) => {
         await loadProject(ctx, input.projectId);
         // Le site lui-même n'est pas touché : seule la liaison tombe.
-        await ctx.db.audience.unlink(input.projectId, ctx.workspaceId, input.siteId);
-        return { siteIds: await ctx.db.audience.listLinkedIds(input.projectId, ctx.workspaceId) };
+        await ctx.db.projectLinks.unlinkSite(input.projectId, ctx.workspaceId, input.siteId);
+        return { siteIds: await ctx.db.projectLinks.listSiteIds(input.projectId, ctx.workspaceId) };
     }
 });
 

@@ -4,7 +4,6 @@ import { Button } from '@/Components';
 import { startTeleport } from '@/stores/live';
 import { getActiveWorkspaceId } from '@/stores/workspace';
 import { moduleClientProvider } from '@/sdk/registry';
-import deployStyles from '@/Features/Deploy/style.module.css';
 import styles from '../style.module.css';
 
 interface UptimeLinkRowProps {
@@ -39,16 +38,16 @@ export function UptimeLinkRow({ service, canWrite, busy, onUnlink }: UptimeLinkR
     const uptime = moduleClientProvider<UptimeClientProvider>(UPTIME_CLIENT_PROVIDER);
 
     return (
-        <section className={deployStyles.block}>
-            <header className={deployStyles.blockHead}>
-                <div className={deployStyles.blockIdent}>
-                    <p className={deployStyles.blockName}>
+        <section className={styles.block}>
+            <header className={styles.blockHead}>
+                <div className={styles.blockIdent}>
+                    <p className={styles.blockName}>
                         <span className={styles.uptimeDot} data-tone={tone(service)} aria-hidden='true' />
                         {service.name}
                     </p>
-                    <p className={deployStyles.blockMeta}>{service.url}</p>
+                    <p className={styles.blockMeta}>{service.url}</p>
                 </div>
-                <div className={deployStyles.actions}>
+                <div className={styles.actions}>
                     {/* Le sens qui manquerait sinon : la feature sait mener aux
                         projets d'un service, l'onglet d'un projet doit savoir
                         mener au service. Par la téléportation, comme partout,

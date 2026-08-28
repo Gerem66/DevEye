@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import type { Credential, GitRepo } from '@deveye/types';
+import { GIT_CLIENT_PROVIDER } from '@deveye/types/sdk';
+import type { GitClientProvider, GitLinkedCandidate } from '@deveye/types/sdk/client';
 import { Button, Dialog, SelectInput } from '@/Components';
 import { ws } from '@/api/ws';
-import { RepoPicker, type RepoTarget } from '@/Features/Git/RepoPicker';
+import { moduleClientProvider } from '@/sdk/registry';
 import { humanizeError } from '../api';
 import styles from '../style.module.css';
 
@@ -15,80 +16,55 @@ interface LinkRepoDialogProps {
     onSaved: () => void;
 }
 
-/** Deux façons d'arriver au même endroit : pointer l'existant, ou en créer un. */
-type Mode = 'pick' | 'create';
-
 /**
- * Relier un dépôt de l'espace au projet.
+ * Ajouter un dépôt au projet : en choisir un de l'espace, ou en créer un.
  *
- * **Les jetons ne se créent plus ici.** Ils appartiennent à l'espace, servent
- * plusieurs dépôts et plusieurs cibles de déploiement, et n'étaient de toute
- * façon ni modifiables ni supprimables depuis cet écran. Ils vivent maintenant
- * dans la feature Git ; le sélecteur, lui, reste — c'est le geste courant.
- *
- * Deux modes, parce qu'il y a deux situations réelles :
- *
- * - **Choisir** un dépôt déjà présent dans l'espace, y compris un dépôt qu'un
- *   autre projet utilise déjà : rien n'est exclusif ;
- * - **Ajouter** un dépôt que l'espace ne connaît pas encore. Il rejoint alors
- *   la feature Git comme n'importe quel autre — un dépôt né dans un projet
- *   n'est pas un dépôt de seconde classe.
+ * **La création passe par le vrai dialogue de la feature** (`RepoDialog`, lu
+ * par le contrat client du module Git), pas par une copie réduite : même parti
+ * pris que `LinkDatabaseDialog` et `LinkTargetDialog`. Un dépôt se désigne par
+ * un jeton, un propriétaire et un nom qu'il faut aller lire chez le
+ * fournisseur ; en réécrire un formulaire ici garantirait qu'il diverge au
+ * premier réglage ajouté. Ce dialogue-ci ne fait que l'ouvrir, puis relier ce
+ * qu'il a créé. Module absent, le dialogue le dit et ne propose rien.
  *
  * `git.repoAdd` étant idempotente sur `owner/repo`, saisir par mégarde un dépôt
- * déjà présent le retrouve au lieu de le dupliquer.
+ * déjà présent le retrouve au lieu de le dupliquer. Un dépôt né dans un projet
+ * n'est pas un dépôt de seconde classe : il rejoint la feature Git comme
+ * n'importe quel autre.
+ *
+ * Rien n'est exclusif : un dépôt déjà utilisé par un autre projet peut être
+ * choisi ici sans lui être retiré.
  */
 export function LinkRepoDialog({ open, projectId, linkedRepoIds, onClose, onSaved }: LinkRepoDialogProps) {
-    const [repos, setRepos] = useState<GitRepo[]>([]);
-    const [credentials, setCredentials] = useState<Credential[]>([]);
-    const [mode, setMode] = useState<Mode>('pick');
+    const provider = moduleClientProvider<GitClientProvider>(GIT_CLIENT_PROVIDER);
+    const [repos, setRepos] = useState<readonly GitLinkedCandidate[]>([]);
     const [picked, setPicked] = useState('');
-    const [target, setTarget] = useState<RepoTarget>({ owner: '', repo: '', credentialId: null });
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    /** Le dialogue d'ajout de la feature, ouvert par-dessus celui-ci. */
+    const [createOpen, setCreateOpen] = useState(false);
 
     useEffect(() => {
         if (!open) return;
         setPicked('');
-        setTarget({ owner: '', repo: '', credentialId: null });
         setError(null);
+        if (!provider) return;
         void (async () => {
             try {
-                const [list, creds] = await Promise.all([
-                    ws.send('git.repoList', {}),
-                    ws.send('git.credentialList', {})
-                ]);
-                setRepos(list.repos);
-                setCredentials(creds.credentials.filter((c) => c.provider === 'github'));
-                // Rien à choisir — espace vide, ou tout déjà relié — : on ouvre
-                // directement sur la création.
-                setMode(list.repos.some((r) => !linkedRepoIds.includes(r.id)) ? 'pick' : 'create');
+                setRepos(await provider.listRepos());
             } catch (e) {
                 setError(humanizeError(e, 'Impossible de charger les dépôts de l’espace.'));
             }
         })();
-    }, [open]);
+    }, [open, provider]);
 
     /** Ce qui reste à relier : un dépôt déjà là n'a rien à faire dans la liste. */
     const free = repos.filter((r) => !linkedRepoIds.includes(r.id));
 
-    const canSubmit = mode === 'pick' ? picked !== '' : target.owner.trim() !== '' && target.repo.trim() !== '';
-
-    const submit = async () => {
-        if (busy || !canSubmit) return;
+    const link = async (repoId: number) => {
         setBusy(true);
         setError(null);
         try {
-            const repoId =
-                mode === 'pick'
-                    ? Number(picked)
-                    : (
-                          await ws.send('git.repoAdd', {
-                              provider: 'github',
-                              owner: target.owner.trim(),
-                              repo: target.repo.trim(),
-                              credentialId: target.credentialId
-                          })
-                      ).repo.id;
             await ws.send('project.repoLink', { projectId, repoId });
             onSaved();
         } catch (e) {
@@ -99,80 +75,87 @@ export function LinkRepoDialog({ open, projectId, linkedRepoIds, onClose, onSave
     };
 
     return (
-        <Dialog
-            open={open}
-            onClose={onClose}
-            title='Ajouter un dépôt au projet'
-            width={560}
-            onSubmit={submit}
-            footer={
-                <>
-                    <Button variant='secondary' onClick={onClose} disabled={busy}>
-                        Annuler
-                    </Button>
-                    <Button onClick={submit} disabled={busy || !canSubmit}>
-                        {busy ? 'Enregistrement…' : 'Relier'}
-                    </Button>
-                </>
-            }
-        >
-            <div className={styles.form}>
-                {free.length > 0 && (
-                    <div className={styles.tabs}>
-                        <button
-                            type='button'
-                            className={mode === 'pick' ? styles.tabActive : styles.tab}
-                            onClick={() => setMode('pick')}
-                        >
-                            Dépôt existant
-                        </button>
-                        <button
-                            type='button'
-                            className={mode === 'create' ? styles.tabActive : styles.tab}
-                            onClick={() => setMode('create')}
-                        >
-                            Nouveau dépôt
-                        </button>
-                    </div>
-                )}
-
-                {mode === 'pick' && (
-                    <label className={styles.field}>
-                        <span className={styles.label}>Dépôt de l’espace</span>
-                        <SelectInput value={picked} onChange={(e) => setPicked(e.target.value)}>
-                            <option value=''>Choisir un dépôt…</option>
-                            {free.map((r) => (
-                                <option key={r.id} value={r.id}>
-                                    {r.owner}/{r.repo}
-                                    {r.projectCount > 0 &&
-                                        ` — ${r.projectCount} projet${r.projectCount > 1 ? 's' : ''}`}
-                                </option>
-                            ))}
-                        </SelectInput>
-                        <span className={styles.hint}>
-                            Un dépôt peut servir plusieurs projets : en choisir un déjà utilisé ailleurs ne le retire à
-                            personne.
-                        </span>
-                    </label>
-                )}
-
-                {mode === 'create' && (
+        <>
+            <Dialog
+                open={open && !createOpen}
+                onClose={onClose}
+                title='Ajouter un dépôt au projet'
+                width={560}
+                onSubmit={() => picked !== '' && void link(Number(picked))}
+                footer={
                     <>
-                        {/* Le même sélecteur que la feature Git : jeton d'abord —
-                            il décide de ce que la liste peut montrer — puis
-                            propriétaire, puis dépôt. */}
-                        <RepoPicker credentials={credentials} value={target} onChange={setTarget} autoFocus />
-
-                        <span className={styles.hint}>
-                            Ce dépôt rejoindra la liste de la feature Git, où il sera visible et réutilisable par
-                            d’autres projets.
-                        </span>
+                        <Button variant='secondary' onClick={onClose} disabled={busy}>
+                            Annuler
+                        </Button>
+                        <Button onClick={() => void link(Number(picked))} disabled={busy || picked === ''}>
+                            {busy ? 'Enregistrement…' : 'Relier'}
+                        </Button>
                     </>
-                )}
+                }
+            >
+                <div className={styles.form}>
+                    {!provider ? (
+                        <p className={styles.hint}>Le module Git n’est pas installé.</p>
+                    ) : (
+                        <>
+                            <label className={styles.field}>
+                                <span className={styles.label}>Dépôt de l’espace</span>
+                                <SelectInput
+                                    value={picked}
+                                    disabled={free.length === 0}
+                                    onChange={(e) => setPicked(e.target.value)}
+                                >
+                                    <option value=''>
+                                        {free.length === 0 ? 'Aucun dépôt à relier' : 'Choisir un dépôt…'}
+                                    </option>
+                                    {free.map((r) => (
+                                        <option key={r.id} value={r.id}>
+                                            {r.owner}/{r.repo}
+                                        </option>
+                                    ))}
+                                </SelectInput>
+                                <span className={styles.hint}>
+                                    Un dépôt peut servir plusieurs projets : en choisir un déjà utilisé ailleurs ne le
+                                    retire à personne.
+                                </span>
+                            </label>
 
-                {error && <p className={styles.error}>{error}</p>}
-            </div>
-        </Dialog>
+                            <div className={styles.actions}>
+                                <Button
+                                    variant='secondary'
+                                    icon='add'
+                                    onClick={() => setCreateOpen(true)}
+                                    disabled={busy}
+                                >
+                                    Créer un dépôt
+                                </Button>
+                                <span className={styles.hint}>
+                                    Il rejoindra la feature Git, où il sera visible et réutilisable par d’autres
+                                    projets, et sera relié à ce projet dans la foulée.
+                                </span>
+                            </div>
+                        </>
+                    )}
+
+                    {error && <p className={styles.error}>{error}</p>}
+                </div>
+            </Dialog>
+
+            {/* Le vrai formulaire de la feature. Ce qu'il crée est relié
+                immédiatement : sans cela, « Créer un dépôt » depuis un projet
+                laisserait l'utilisateur devant une liste où il faut le
+                rechercher, ce qui est exactement le geste qu'on lui épargne. */}
+            {provider && (
+                <provider.RepoDialog
+                    open={createOpen}
+                    onClose={() => setCreateOpen(false)}
+                    onSaved={(repoId) => {
+                        setCreateOpen(false);
+                        void link(repoId);
+                    }}
+                />
+            )}
+        </>
     );
 }
 

@@ -1,4 +1,6 @@
 import { projectRepoLink, projectRepoList, projectRepoUnlink } from '@deveye/types';
+import { GIT_ITEMS_PROVIDER, type GitItemsProvider } from '@deveye/types/sdk';
+import { moduleProvider } from '@/features/_sdk/register';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 import { loadProject, recordEvent } from './_shared';
 
@@ -17,6 +19,11 @@ import { loadProject, recordEvent } from './_shared';
  *
  * Gardé sous `projects: write` : c'est le projet qu'on modifie ici, pas le
  * dépôt. Lire son contenu relève, lui, du droit `git`.
+ *
+ * La table de liaison (`project_repo_links`) est celle de Projets, lue par
+ * `ctx.db.projectLinks` à côté des services surveillés, des bases et des
+ * cibles : depuis le rapatriement de Git en module, Projets ne lit plus la
+ * table des dépôts, et ne les connaît que par le contrat que le module offre.
  */
 
 const READ = { feature: 'projects' } as const;
@@ -31,7 +38,7 @@ export const projectRepoListFeature: FeatureDefinition<
     access: READ,
     handler: async (ctx, input) => {
         await loadProject(ctx, input.projectId);
-        return { repoIds: await ctx.db.git.listLinkedRepoIds(input.projectId, ctx.workspaceId) };
+        return { repoIds: await ctx.db.projectLinks.listRepoIds(input.projectId, ctx.workspaceId) };
     }
 });
 
@@ -57,17 +64,24 @@ export const projectRepoLinkFeature: FeatureDefinition<
         // Le dépôt existe-t-il, et dans **cet** espace ? Sans cette garde on
         // lierait n'importe quel identifiant, y compris celui d'un dépôt d'un
         // autre espace — dont l'existence même n'a pas à fuiter.
-        const repo = await ctx.db.git.findRepo(input.repoId, ctx.workspaceId);
-        if (!repo) throw new FeatureError('not_found', 'Ce dépôt n’existe pas dans cet espace.');
+        //
+        // Depuis le rapatriement de Git en module, la question passe par le
+        // contrat qu'il offre (`GIT_ITEMS_PROVIDER`) : Projets ne lit plus sa
+        // table, et dégrade proprement quand le module est absent.
+        const repos = moduleProvider<GitItemsProvider>(GIT_ITEMS_PROVIDER);
+        if (!repos) throw new FeatureError('validation', 'Le module Git n’est pas installé.');
+        if (!(await repos.exists(input.repoId, ctx.workspaceId))) {
+            throw new FeatureError('not_found', 'Ce dépôt n’existe pas dans cet espace.');
+        }
 
-        await ctx.db.git.linkProject(input.projectId, ctx.workspaceId, input.repoId);
+        await ctx.db.projectLinks.linkRepo(input.projectId, ctx.workspaceId, input.repoId);
         await recordEvent(ctx, project, { kind: 'project.repoLink', label: 'Dépôt git relié' });
         ctx.audit({
             action: 'project.repoLink',
             description: 'Dépôt git relié au projet',
             metadata: { projectId: input.projectId, repoId: input.repoId }
         });
-        return { repoIds: await ctx.db.git.listLinkedRepoIds(input.projectId, ctx.workspaceId) };
+        return { repoIds: await ctx.db.projectLinks.listRepoIds(input.projectId, ctx.workspaceId) };
     }
 });
 
@@ -83,9 +97,9 @@ export const projectRepoUnlinkFeature: FeatureDefinition<
         const project = await loadProject(ctx, input.projectId);
         // Le dépôt et son cache survivent : ils appartiennent à l'espace, et
         // d'autres projets peuvent s'en servir.
-        const ok = await ctx.db.git.unlinkProject(input.projectId, ctx.workspaceId, input.repoId);
+        const ok = await ctx.db.projectLinks.unlinkRepo(input.projectId, ctx.workspaceId, input.repoId);
         if (ok) await recordEvent(ctx, project, { kind: 'project.repoUnlink', label: 'Dépôt git délié' });
-        return { repoIds: await ctx.db.git.listLinkedRepoIds(input.projectId, ctx.workspaceId) };
+        return { repoIds: await ctx.db.projectLinks.listRepoIds(input.projectId, ctx.workspaceId) };
     }
 });
 

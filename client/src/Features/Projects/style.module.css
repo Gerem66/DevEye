@@ -1011,22 +1011,6 @@
     flex: 1;
 }
 
-.avatar {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-pill);
-    object-fit: cover;
-    color: var(--on-accent);
-    font-weight: 700;
-    flex: 0 0 auto;
-}
-
-.avatarGhost {
-    background: var(--surface-subtle);
-    color: var(--text-muted);
-}
-
 /* --------------------------------------------------------------- formulaire */
 
 .form {
@@ -2312,9 +2296,9 @@
 /*
  * Les services surveillés rattachés au projet, dans l'onglet Déploiement.
  *
- * `padding-bottom` égale le `gap` du conteneur qui suit (`.feature` de la
- * feature Déploiement, `--space-md`) : sans ça, la ligne du bas se retrouvait
- * deux fois plus près des uptimes que des déploiements.
+ * `padding-bottom` égale le `gap` du conteneur qui suit (`.linkedTargets`,
+ * `--space-md`) : sans ça, la ligne du bas se retrouvait deux fois plus près
+ * des uptimes que des déploiements.
  */
 .uptimeLinks {
     display: flex;
@@ -2352,6 +2336,73 @@
 .uptimeDot[data-tone='down'] {
     background: var(--danger);
     box-shadow: 0 0 6px var(--danger);
+}
+
+/* ------------------------------------------------- onglet « Déploiement » */
+
+/* La colonne de l'onglet : les services surveillés, puis les blocs de cibles
+   reliées, rendus par le module (`LinkedTarget`). Même hauteur minimale que
+   toute racine de feature (la boîte défilante de la popup), comme l'onglet
+   des bases. */
+.linkedTargets {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    min-height: 100%;
+}
+
+/*
+ * Le bloc encadré d'un service surveillé.
+ *
+ * Les rangées d'uptime empruntaient ces classes à la feuille de la feature
+ * Déploiement, pour porter la même forme que la cible reliée juste en dessous.
+ * La feature devenue module, sa feuille n'est plus importable d'ici : les
+ * classes sont recopiées telles quelles, et la forme reste la même des deux
+ * côtés. Le cadre ne sert pas qu'à séparer deux services : il dit **où finit
+ * ce que la vue montre**. Sans lui, un service seul se confondrait avec le
+ * fond de la popup, c'est la règle qu'appliquent déjà les onglets Git, Bases
+ * et Audience.
+ */
+.block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    min-width: 0;
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-subtle);
+}
+
+.blockHead {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+/* `min-width: 0` : sans lui, un nom long refuse de se tronquer et pousse les
+   boutons hors du cadre. */
+.blockIdent {
+    min-width: 0;
+    flex: 1;
+}
+
+.blockName {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin: 0;
+    font-size: 1rem;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+}
+
+.blockMeta {
+    margin: var(--space-xs) 0 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
 }
 
 /* --------------------------------------------- vignette du projet (dialogue) */
@@ -2394,6 +2445,20 @@
     object-fit: cover;
 }
 
+/* ------------------------------------------------------- onglet « Git » */
+
+/* Les blocs de dépôts reliés, rendus par le module (`LinkedRepo`) : ce qui
+   reste à l'onglet est la colonne qui les empile, le vide et la rangée
+   d'ajout, avec la même hauteur minimale que toute racine de feature (la
+   boîte défilante de la popup). La colonne empruntait `.git` à la feuille de
+   la feature ; devenue module, sa feuille n'est plus importable d'ici. */
+.linkedRepos {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+    min-height: 100%;
+}
+
 /* --------------------------------------------- onglet « Bases de données » */
 
 /* Les blocs de bases reliées, rendus par le module (`LinkedDatabase`) : ce
@@ -2422,4 +2487,18 @@
     composes: hint;
     display: block;
     text-align: center;
+}
+
+/* ------------------------------------------------------ onglet « Audience » */
+
+/* Les blocs de sites reliés, rendus par le module (`LinkedSite`) : ce qui
+   reste à l'onglet est la colonne qui les empile, et la même hauteur minimale
+   que toute racine de feature. La colonne empruntait `.detail` à la feuille de
+   la feature Audience ; devenue module, sa feuille n'est plus importable
+   d'ici. */
+.linkedSites {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    min-height: 100%;
 }

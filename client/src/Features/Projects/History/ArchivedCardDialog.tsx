@@ -1,7 +1,7 @@
 import type { MinimalUser, ProjectCard } from '@deveye/types';
 import { Button, Dialog } from '@/Components';
 import { formatDate, PRIORITY_LABELS } from '../api';
-import { Avatar } from '../Board/Avatar';
+import { Avatar } from '@/Components/Avatar/Avatar';
 import styles from '../style.module.css';
 
 interface ArchivedCardDialogProps {

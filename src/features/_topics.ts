@@ -22,7 +22,8 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     //
     // ⚠️ Le gros du trafic de ce sujet ne passe pas par une commande du tout :
     // l'ingestion publique écrit sans socket et diffuse elle-même, coalescée à
-    // une fois par minute et par espace (voir `Services/AudienceIngest.ts`).
+    // une fois par minute et par espace (le service du module,
+    // `features/audience/src/server/service.ts`, par `deps.live.changed`).
     audience: 'audience',
     // Même forme que `git`, `database` et `deploy` : préfixe unique, verbes en
     // camelCase derrière le point. Le filet `MUTATION_VERB` n'en voit donc

@@ -238,8 +238,8 @@ domain/projectLink.ts    liens croisés, « mes tâches »
 features/project.ts      toutes les commandes (préfixe unique `project.`)
 ```
 
-Le git a son propre contrat (`domain/git.ts`, `features/git.ts`) : voir
-[GIT.md](./GIT.md).
+Le git a son propre contrat (`features/git/src/contracts/{domain,commands}.ts`,
+dans son module) : voir [GIT.md](./GIT.md).
 
 ### Serveur — `DevEye/src/`
 
@@ -250,7 +250,7 @@ db/migrations/064_git_repos.sql              sort le git du projet (voir GIT.md)
 db/repos/project*.ts                         un repo par agrégat
 features/project/_shared.ts                  ciphers, codecs, recordEvent, rekey
 features/project/{index,board,chat,timeline,history,repoLink,deployLink,links}.ts
-Services/IntegrationSyncService.ts           ordonnanceur (calqué sur l'ex UptimeMonitor, devenu le service du module Uptime)
+features/git/src/server/service.ts et features/deploy/src/server/service.ts   les services de fond des deux modules (l'ex IntegrationSyncService, scindé au rapatriement)
 Services/integrations/{github,dokploy}.ts
 ```
 
@@ -270,10 +270,10 @@ AddFeatureDialog.tsx  les formulaires d'ajout du « + », montés hors des ongle
 Board/             kanban dnd-kit, dialogues carte et colonne, largeur naturelle
 Timeline/          frise horizontale, échelle dédiée, jalons
 Chat/              fil de discussion
-Git/               enveloppe mince autour de `Features/Git/RepoView`
+Git/               compose le contrat client du module Git (`GIT_CLIENT_PROVIDER`), dégrade sans lui
 Database/          compose le contrat client du module Bases de données (`DATABASE_CLIENT_PROVIDER`), dégrade sans lui
-Audience/          idem autour de `Features/Audience/SiteView`
-Deploy/            enveloppe mince autour de `Features/Deploy/TargetView`, + services surveillés
+Audience/          compose le contrat client du module Audience (`AUDIENCE_CLIENT_PROVIDER`), dégrade sans lui
+Deploy/            compose le contrat client du module Déploiement (`DEPLOY_CLIENT_PROVIDER`), dégrade sans lui, + services surveillés
 History/           frise verticale, carte archivée en lecture seule
 ```
 
@@ -322,7 +322,7 @@ disaient rien.
 Deux réponses, et il fallait les deux : `client/scripts/check-css-modules.mjs`,
 branché en tête du script `ci` du client, qui échoue si une classe est redéfinie
 seule dans son sélecteur ; et le **découpage** du module, dont la section git est
-partie dans `Features/Git/style.module.css`. Le filet attrape le symptôme, le
+partie dans `features/git/src/client/style.module.css`. Le filet attrape le symptôme, le
 découpage traite la cause — un module de 2000 lignes pour une douzaine d'écrans
 rend la collision structurellement probable.
 

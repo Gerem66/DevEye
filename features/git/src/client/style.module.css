@@ -1,0 +1,1491 @@
+/* Git — dépôts de l'espace, graphe des commits, diffs.
+   Uniquement des variables de thème : aucune couleur en dur.
+
+   Module séparé de `Features/Projects/style.module.css`, et pas seulement
+   parce que la feature l'est : un module CSS de 2000 lignes pour une douzaine
+   d'écrans rend une collision de noms structurellement probable — c'est
+   exactement comme ça que `.grid` a été défini deux fois et que la page
+   d'accueil des Projets s'est retrouvée illisible. `check-css-modules.mjs`
+   attrape désormais le cas, mais la vraie réponse est de découper. */
+
+/* ------------------------------------------------------- primitives partagées */
+
+/* La popup fournit une boîte défilante en `flex: 1` ; la racine d'une feature
+   doit l'occuper entièrement, sinon son contenu se tasse en haut à gauche. */
+.root {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+    min-height: 100%;
+}
+
+.header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.heading {
+    margin: 0;
+    font-size: 1.25rem;
+    color: var(--text-primary);
+}
+
+.subheading {
+    margin: var(--space-xs) 0 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.empty {
+    margin: 0;
+    padding: var(--space-xl) 0;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.error {
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--danger-bg);
+    color: var(--danger);
+    font-size: 0.85rem;
+}
+
+.overdue {
+    color: var(--danger);
+}
+
+.actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    flex: 1;
+    min-width: 0;
+}
+
+.label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.hint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.row {
+    display: flex;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+/* -------------------------------------------------------------------- git */
+
+/* L'en-tête d'un dépôt reste en vue tant qu'on parcourt son bloc : un projet
+   peut en relier plusieurs, et sans lui on ne sait plus lequel on regarde. Il
+   se pose sous l'en-tête du projet, dont `useStickyOffset` publie la hauteur
+   dans `--sticky-head` ; le repli à 0 vaut pour la feature Git elle-même. */
+.repoHead {
+    position: sticky;
+    top: var(--sticky-head, 0px);
+    z-index: 2;
+    background: var(--block-bg, var(--surface-popup-solid));
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+/* `min-width: 0` : sans lui, un nom de dépôt long refuse de se tronquer et
+   pousse les boutons hors de la ligne. */
+.repoIdent {
+    min-width: 0;
+    flex: 1;
+}
+
+/* Boîte du contenu synchronisable : c'est elle que le voile recouvre, et elle
+   seule — l'en-tête reste net et cliquable pendant la synchronisation. */
+.gitContent {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+/* La pile de contenu, sous le voile. Une classe explicite et non un
+   `.gitContent > div` : ce sélecteur aurait aussi frappé le voile lui-même —
+   plus spécifique que `.syncOverlay`, il aurait écrasé son centrage. */
+.gitStack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+.gitDimmed {
+    /* framer-motion possède l'`opacity` en ligne sur les surfaces animées : on
+       atténue par un filtre, jamais par la propriété elle-même. */
+    filter: opacity(0.25);
+    pointer-events: none;
+    transition: filter var(--transition-normal);
+}
+
+/* Le voile couvre toute la boîte remplacée — y compris ce qui dépasse sous le
+   pli. Il ne centre donc rien lui-même : c'est `.syncPanel` qui s'en charge. */
+.syncOverlay {
+    position: absolute;
+    inset: 0;
+    /* Le voile ne capture rien : ce qu'il couvre est déjà inerte. */
+    pointer-events: none;
+}
+
+/*
+ * Le contenu du voile, collé à la zone visible.
+ *
+ * `.gitContent` est plus haut que la fenêtre dès qu'un dépôt a quelques
+ * branches : un simple `inset: 0` centrait le texte et la barre au milieu du
+ * *contenu*, c'est-à-dire hors écran, et le voile débordait sous la barre de
+ * défilement. `position: sticky` se cale sur l'ancêtre défilant — le corps de
+ * la popup — et fonctionne parfaitement à l'intérieur d'une boîte absolue.
+ *
+ * La hauteur est celle de ce corps, déduite de la géométrie de la popup
+ * (`top: navbar + md`, `bottom: lg`, moins son propre padding vertical) plutôt
+ * que d'un `100vh` qui déborderait sous la barre de navigation.
+ */
+.syncPanel {
+    position: sticky;
+    top: 0;
+    height: min(100%, calc(100vh - var(--navbar-height) - var(--space-md) - var(--space-lg) - 2 * var(--space-md)));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+}
+
+.syncPhase {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.syncBar {
+    width: min(280px, 60%);
+    height: 4px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    overflow: hidden;
+}
+
+.syncBarFill {
+    height: 100%;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    transition: width var(--transition-normal);
+}
+
+.spinning {
+    animation: projectsSpin 1s linear infinite;
+    color: var(--accent);
+}
+
+@keyframes projectsSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.repoName {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin: 0;
+    font-size: 1rem;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+}
+
+.repoMeta {
+    margin: var(--space-xs) 0 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.graphWrap {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.graphHead {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+.graphRange {
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+}
+
+/* Boîte mesurée : le graphe travaille en pixels réels (voir useElementWidth),
+   et l'info-bulle se positionne dans ce repère. */
+.graphBox {
+    position: relative;
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    border: 1px solid var(--glass-border);
+    overflow: hidden;
+}
+
+/*
+ * Le nuage de points, en canvas. Deux couches superposées : le canvas dessous
+ * porte les disques (un seul élément, quel que soit le nombre de commits), le
+ * SVG dessus porte les axes et leurs libellés (une vingtaine d'éléments, du
+ * texte qui suit le thème et se met à l'échelle).
+ */
+.graphCanvas {
+    display: block;
+}
+
+.graphAxes {
+    position: absolute;
+    inset: 0;
+    /* Les gestes appartiennent à la boîte : la couche d'axes ne doit pas les
+       intercepter au passage. */
+    pointer-events: none;
+}
+
+.graphAxis {
+    stroke: var(--glass-border-strong);
+    stroke-width: 1;
+}
+
+.graphGrid {
+    stroke: var(--glass-border);
+    stroke-width: 1;
+}
+
+.graphGridMajor {
+    stroke: var(--glass-border-strong);
+    stroke-width: 1;
+}
+
+.graphLabel {
+    fill: var(--text-muted);
+    font-size: 10px;
+    font-family: var(--font-mono);
+}
+
+/* Halo du point survolé : il ne remplace pas le point, il l'entoure. */
+.graphHalo {
+    fill: none;
+    stroke: var(--text-primary);
+    stroke-width: 1.5;
+}
+
+.graphTip {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-md);
+    background: var(--surface-popup);
+    border: 1px solid var(--glass-border-strong);
+    box-shadow: var(--shadow-lg);
+    font-size: 0.75rem;
+    color: var(--text-primary);
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.legendItem {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: 2px 10px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--glass-border);
+    background: var(--surface-widget);
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
+.legendOn {
+    composes: legendItem;
+    border-color: var(--accent);
+    color: var(--text-primary);
+}
+
+.legendDot {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-pill);
+}
+
+.legendCount {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+.authorList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin: var(--space-sm) 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+/* Une grille, et non `justify-content: space-between` : c'est ce qui aligne
+   tous les sélecteurs sur une même colonne. En flex, chaque ligne se répartit
+   pour son compte, et un sélecteur suivait la longueur du nom qui le précède —
+   ils mordaient alors sur les adresses e-mail et ne s'alignaient jamais. */
+.authorList li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 200px;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+.authorName {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+/* Les deux lignes du nom se tronquent plutôt que de pousser le sélecteur. */
+.authorName > * {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.authorSelect {
+    width: 100%;
+}
+
+@media (max-width: 560px) {
+    .authorList li {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/*
+ * Trois colonnes explicites, et non `auto-fit`.
+ *
+ * `auto-fit` déduit le nombre de colonnes de la largeur : à 1200 px avec un
+ * plancher de 300 px il en fabrique quatre, les trois panneaux occupent les
+ * trois premières et chacun vaut un quart de la largeur au lieu d'un tiers. Une
+ * grille de trois dit ce qu'on veut vraiment.
+ *
+ * `align-items` reste à sa valeur par défaut (`stretch`) : les trois panneaux
+ * d'une même ligne prennent la hauteur du plus grand.
+ */
+.gitCols {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-md);
+}
+
+@media (max-width: 900px) {
+    .gitCols {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/*
+ * Carte autour d'une liste.
+ *
+ * Les quatre listes s'étalaient auparavant sur toute la largeur sans rien qui
+ * les sépare : un contour discret leur rend une limite, sans alourdir. Même
+ * traitement que `.column` du kanban, pour que les deux onglets se ressemblent.
+ */
+.panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    min-width: 0;
+    padding: var(--space-md);
+    border-radius: var(--radius-lg);
+    background: var(--surface-subtle);
+    border: 1px solid var(--glass-border);
+}
+
+/* Les listes longues (les commits) traversent la grille au lieu de tenir dans
+   une colonne de 300 px, où chaque message serait tronqué à trois mots. */
+.panelWide {
+    composes: panel;
+    grid-column: 1 / -1;
+}
+
+.panelHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+/*
+ * Deux sorties, et elles ne mènent pas au même endroit.
+ *
+ * Le **titre** ouvre la liste complète dans DevEye : c'est le geste courant,
+ * il prend toute la place disponible. La petite **icône GitHub** part chez le
+ * fournisseur : c'est le geste rare, elle se contente du coin.
+ *
+ * Auparavant le titre faisait la seconde chose, ce qui obligeait à quitter
+ * l'application pour lire la seizième branche.
+ */
+.panelTitle {
+    flex: 1;
+    min-width: 0;
+    margin: 0 calc(-1 * var(--space-xs));
+    padding: var(--space-xs);
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.panelTitle:hover {
+    background: var(--glass-bg-light);
+}
+
+.panelTitle:hover .gitTitle {
+    color: var(--accent);
+}
+
+.panelTitle:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+
+/* Discrète au repos : quatre icônes toujours vives feraient du bruit sur une
+   grille de quatre panneaux. */
+.panelGithub {
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-muted);
+    filter: opacity(0.55);
+    transition:
+        filter var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.panelGithub:hover,
+.panelGithub:focus-visible {
+    filter: opacity(1);
+    color: var(--accent);
+}
+
+.panelGithub:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: var(--radius-sm);
+}
+
+.panelCount {
+    padding: 0 6px;
+    border-radius: var(--radius-pill);
+    background: var(--glass-bg-light);
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-family: var(--font-mono);
+}
+
+/* Le pied d'un panneau tronqué. Discret : c'est la même action que le titre,
+   posée là où le regard arrive quand la liste s'arrête. */
+/*
+ * Le pied d'un panneau tronqué, **collé au bas de la carte**.
+ *
+ * `margin-top: auto` est tout le sujet. Les trois panneaux d'une même ligne
+ * prennent la hauteur du plus grand (`align-items: stretch`), mais leurs enfants
+ * s'empilent depuis le haut : sans cette marge, l'espace libre tombait *sous* le
+ * « Voir tout », qui flottait alors au milieu de sa carte pendant que le voisin
+ * touchait le fond.
+ *
+ * On avait d'abord cherché à corriger ça en ajustant le **nombre d'éléments** de
+ * chaque liste. C'était voué à l'échec : une ligne de pull request n'a pas la
+ * même hauteur qu'une ligne de release, donc aucun couple de nombres ne rend
+ * deux colonnes égales — réduire l'une déplaçait simplement le décalage sur
+ * l'autre. La marge automatique, elle, aligne les pieds quelles que soient les
+ * listes, leurs longueurs et leurs hauteurs de ligne.
+ *
+ * Le filet supérieur fait lire l'espace restant comme un pied de carte plutôt
+ * que comme un trou.
+ */
+.seeAll {
+    margin-top: auto;
+    padding: var(--space-xs);
+    border: none;
+    border-top: 1px solid var(--glass-border);
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+    background: none;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition:
+        color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.seeAll:hover {
+    color: var(--accent);
+    background: var(--glass-bg-light);
+}
+
+.gitTitle {
+    margin: 0;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    transition: color var(--transition-fast);
+}
+
+.gitList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.gitList li {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    min-width: 0;
+}
+
+.gitItemName {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+}
+
+.gitDate {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
+
+.sha {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--accent);
+}
+
+.defaultTag,
+.preTag {
+    padding: 0 6px;
+    border-radius: var(--radius-pill);
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-size: 0.68rem;
+    white-space: nowrap;
+}
+
+.preTag {
+    background: var(--warning-bg);
+    color: var(--warning);
+}
+
+/* Une ligne de liste rendue cliquable, sans rien changer à sa mise en page. */
+.gitRowButton {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    min-width: 0;
+    margin: 0 calc(-1 * var(--space-xs));
+    padding: var(--space-xs);
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.gitRowButton:hover {
+    background: var(--glass-bg-light);
+}
+
+.gitRowButton:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+
+/* Avance / retard d'une branche sur la principale. */
+.drift {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.7rem;
+    font-family: var(--font-mono);
+    white-space: nowrap;
+}
+
+.driftAhead {
+    color: var(--success);
+}
+
+.driftBehind {
+    color: var(--warning);
+}
+
+.driftSync {
+    color: var(--text-muted);
+}
+
+/* ----------------------------------------------------------- pull requests */
+
+.pullState {
+    padding: 0 8px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font-size: 0.68rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.pullState[data-state='open'] {
+    background: var(--success-bg);
+    color: var(--success);
+}
+
+.pullState[data-state='draft'] {
+    background: var(--surface-subtle);
+    color: var(--text-muted);
+}
+
+.pullState[data-state='merged'] {
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+.pullState[data-state='closed'] {
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+.pullMeta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+.pullBranches {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    color: var(--text-muted);
+}
+
+.pullDates {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+.pullDates li {
+    display: flex;
+    flex-direction: column;
+}
+
+/* La description telle qu'elle a été écrite : retours à la ligne et
+   indentation préservés (voir PullRequestView pour le parti pris). */
+.pullBody {
+    margin: 0;
+    padding: var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    border: 1px solid var(--glass-border);
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.85rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+/* Dans le pied d'un dialogue, à côté de « Fermer ».
+   Surtout pas d'`align-self: flex-start` : le pied est une ligne flex, et cette
+   règle collait le lien en haut au lieu de l'aligner sur les boutons. Le pied
+   centre déjà ses enfants — il suffit de le laisser faire. */
+.externalLink {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    /* Pousse le lien à gauche, les boutons restant à droite. */
+    margin-right: auto;
+    font-size: 0.82rem;
+    color: var(--accent);
+    text-decoration: none;
+}
+
+.externalLink:hover {
+    text-decoration: underline;
+}
+
+/* --------------------------------------------------------- détail d'un commit */
+
+.commitHead {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+
+.commitBody {
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.82rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.diffStat {
+    display: inline-flex;
+    gap: var(--space-xs);
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+.diffAdd {
+    color: var(--success);
+}
+
+.diffDel {
+    color: var(--danger);
+}
+
+.diffList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.diffFile {
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border);
+    overflow: hidden;
+}
+
+.diffFileHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--surface-subtle);
+    border: none;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.8rem;
+    text-align: left;
+    cursor: pointer;
+}
+
+.diffFileHead:hover {
+    color: var(--text-primary);
+}
+
+/* 12 px et non les 18 par défaut : à taille d'icône pleine, un chevron devant
+   un chemin de fichier écrase la ligne. */
+.diffChevron {
+    width: 12px;
+    color: var(--text-muted);
+    transition: transform var(--transition-normal);
+}
+
+/* Fermé : pointe à droite. Ouvert : vers le bas. C'est le sens de lecture d'un
+   dépliage, et la rotation se voit puisqu'elle est animée. */
+.diffChevronOpen {
+    transform: rotate(90deg);
+}
+
+/*
+ * Dépliage animé, sans mesurer le DOM.
+ *
+ * `grid-template-rows: 0fr → 1fr` interpole la hauteur **réelle** du contenu :
+ * c'est la seule façon d'animer vers `auto` en CSS pur. Une `max-height`
+ * arbitraire aurait soit tronqué un gros diff, soit produit une fin
+ * d'animation dans le vide sur un petit.
+ *
+ * Sur un moteur qui ne sait pas interpoler `fr`, la bascule reste correcte —
+ * elle est simplement instantanée.
+ */
+.diffReveal {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows var(--transition-normal);
+}
+
+.diffRevealOpen {
+    grid-template-rows: 1fr;
+}
+
+/* `min-height: 0` : sans lui, la piste de grille refuse de descendre sous la
+   hauteur du contenu et rien ne s'anime. */
+.diffRevealInner {
+    min-height: 0;
+    overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .diffReveal,
+    .diffChevron {
+        transition: none;
+    }
+}
+
+.diffPath {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+    /* `anywhere` plutôt qu'une troncature : un chemin coupé perd son nom de
+       fichier, c'est-à-dire la seule partie qui identifie la ligne. Mieux vaut
+       qu'il passe à la ligne. */
+    overflow-wrap: anywhere;
+}
+
+.diffPath[data-status='removed'] {
+    color: var(--danger);
+}
+
+.diffPath[data-status='added'] {
+    color: var(--success);
+}
+
+.diffOldPath {
+    color: var(--text-muted);
+}
+
+.diffTag {
+    padding: 0 6px;
+    border-radius: var(--radius-pill);
+    background: var(--glass-bg-light);
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    white-space: nowrap;
+}
+
+/* Le diff défile horizontalement dans sa propre boîte : une ligne longue ne
+   doit jamais faire partir la page en travers. */
+.diffBody {
+    margin: 0;
+    padding: var(--space-sm) 0;
+    max-height: 420px;
+    overflow: auto;
+    background: var(--surface-widget);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    line-height: 1.5;
+    tab-size: 4;
+}
+
+.diffLine,
+.diffLineAdd,
+.diffLineDel,
+.diffHunk,
+.diffMeta {
+    display: block;
+    padding: 0 var(--space-sm);
+    color: var(--text-secondary);
+    white-space: pre;
+}
+
+.diffLineAdd {
+    background: var(--success-bg);
+    color: var(--success);
+}
+
+.diffLineDel {
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+.diffHunk {
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+.diffMeta {
+    color: var(--text-muted);
+}
+
+.diffNone {
+    margin: 0;
+    padding: var(--space-md);
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+/* Zone rouge du dialogue de dépôt : une action destructrice se sépare
+   visuellement de ce qui l'entoure. */
+.dangerZone {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    padding: var(--space-md);
+    border-radius: var(--radius-md);
+    border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+    background: var(--danger-bg);
+}
+
+/*
+ * Le texte de la zone, et lui seul.
+ *
+ * C'était `.dangerZone > div`, ce qui frappait aussi le groupe de boutons de
+ * confirmation — enfant direct lui aussi. « Annuler / Confirmer » héritaient
+ * donc de `flex-direction: column` et s'empilaient, étirés, au lieu de rester
+ * côte à côte. Une classe nommée ne peut pas se tromper de cible.
+ */
+.dangerText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+}
+
+/* ------------------------------------------------- feature Git : les dépôts */
+
+/*
+ * Une ligne par dépôt, comme le portefeuille des Projets.
+ *
+ * Une grille de cartes irait mal ici : ce qui distingue deux dépôts, c'est un
+ * chemin `owner/repo` — du texte long, horizontal, qui se tronque mal dans une
+ * colonne de 300 px.
+ */
+.repoGrid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-sm);
+    margin: 0;
+    padding: 0 0 var(--space-md);
+    list-style: none;
+    align-content: start;
+    /* Repère de la barre d'insertion, positionnée par rapport à cette boîte. */
+    position: relative;
+}
+
+/*
+ * Où atterrirait la carte glissée. Traverse la liste et se tient dans
+ * l'interstice lui-même : aucune ligne n'est déplacée ni restylée pour montrer
+ * la cible, donc ce qu'on voit est exactement la position obtenue. Pilotée par
+ * le DOM (voir RepoList), jamais par un état React.
+ *
+ * `position: absolute` la sort du flux : c'est un `<li>` — le seul enfant
+ * valide d'une `<ul>` — mais il n'occupe aucune cellule de la grille.
+ */
+.dropBar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent-glow);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.repoCard {
+    position: relative;
+    display: flex;
+    /* La bande de progression épouse les coins arrondis de la carte. */
+    overflow: hidden;
+    border-radius: var(--radius-lg);
+    background: var(--surface-widget);
+    border: 1px solid var(--glass-border);
+    transition:
+        border-color var(--transition-fast),
+        transform var(--transition-fast);
+}
+
+.repoCard:hover {
+    border-color: var(--glass-border-strong);
+    transform: translateY(-1px);
+}
+
+/* La carte en cours de déplacement : estompée plutôt que masquée, pour que sa
+   place dans la liste reste un repère pendant que la barre montre la cible.
+   `filter: opacity()` et non `opacity` — la propriété est déjà revendiquée par
+   les surfaces animées de l'application (voir la note sur framer-motion). */
+.repoCardDragging {
+    filter: opacity(0.4);
+    cursor: grabbing;
+}
+
+/* Poignée de réorganisation, sur le modèle d'une ligne de bloc dans une note :
+   cachée jusqu'au survol, à la manière des éditeurs natifs. `touch-action: none`
+   est ce qui rend le geste possible au doigt — il empêche le défileur de
+   revendiquer le mouvement — et reste cantonné à ces 18 px, de sorte qu'une
+   pression ailleurs sur la carte fait toujours défiler la page. */
+.repoGrip {
+    flex-shrink: 0;
+    align-self: center;
+    width: 18px;
+    height: 18px;
+    margin-left: var(--space-sm);
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: grab;
+    touch-action: none;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+}
+
+.repoCard:hover .repoGrip,
+.repoCard:focus-within .repoGrip {
+    opacity: 1;
+}
+
+.repoGrip:active {
+    cursor: grabbing;
+}
+
+/* Aucun survol pour la révéler : elle doit être là d'emblée. */
+@media (pointer: coarse) {
+    .repoGrip {
+        opacity: 1;
+    }
+}
+
+/* Deux colonnes : le texte, puis la flèche — alignées en haut, de sorte que la
+   flèche marque le coin de la carte plutôt que de se ranger au bas avec les
+   indicateurs d'état, où elle se lisait comme l'un d'eux. */
+.repoCardBody {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    text-align: left;
+    cursor: pointer;
+    color: inherit;
+    font: inherit;
+}
+
+.repoCardMain {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.repoCardBody:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    border-radius: var(--radius-lg);
+}
+
+.repoCardFoot {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-top: var(--space-xs);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.repoUses {
+    padding: 0 8px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+}
+
+/* Symbole, pas bouton : il dit que toute la ligne est cliquable, il ne se
+   clique pas lui-même. */
+.openArrow {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-muted);
+    pointer-events: none;
+    filter: opacity(0.5);
+}
+
+.repoCard:hover .openArrow {
+    filter: opacity(1);
+    color: var(--accent);
+}
+
+/* Les projets qui utilisent un dépôt — l'autre sens de l'interconnexion. */
+.usage {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.usageList {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.usageItem {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    max-width: 320px;
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--glass-border);
+    background: var(--surface-widget);
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition:
+        border-color var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.usageItem:hover {
+    border-color: var(--accent);
+    color: var(--text-primary);
+}
+
+.status {
+    padding: 2px 10px;
+    border-radius: var(--radius-pill);
+    font-size: 0.72rem;
+    font-weight: 600;
+    background: var(--surface-subtle);
+}
+
+.status[data-status='active'] {
+    color: var(--success);
+}
+
+.status[data-status='done'] {
+    color: var(--accent);
+}
+
+.status[data-status='paused'] {
+    color: var(--warning);
+}
+
+/* En-tête d'un dépôt ouvert : la flèche de retour et l'identité sur une ligne. */
+.detailHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    min-width: 0;
+}
+
+/* ------------------------------------------------------ « voir tout » */
+
+/* La liste complète défile dans le dialogue, pas la page derrière. */
+/*
+ * La liste complète défile dans le dialogue, pas la page derrière.
+ *
+ * Le padding horizontal n'est pas décoratif : `.gitRowButton` déborde de sa
+ * boîte par une marge négative (`0 calc(-1 * var(--space-xs))`) pour que son
+ * fond de survol dépasse le texte. Dans un conteneur défilant, ces quelques
+ * pixels suffisaient à faire apparaître une barre horizontale parasite. Le
+ * padding leur rend exactement la place qu'ils prennent ; `overflow-x: hidden`
+ * ferme la porte pour tout ce qui déborderait autrement.
+ */
+.listDialogBody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    max-height: min(60vh, 520px);
+    padding-inline: var(--space-xs);
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.listDialogFooter {
+    display: flex;
+    justify-content: center;
+    padding-top: var(--space-sm);
+}
+
+/* Dernier jeton de la légende du graphe : il ouvre le rattachement des auteurs. */
+.legendConfig {
+    composes: legendItem;
+    border-style: dashed;
+    color: var(--text-muted);
+}
+
+.legendConfig:hover {
+    border-color: var(--accent);
+    color: var(--text-primary);
+}
+
+/* ------------------------------------------------- désignation d'un dépôt */
+
+/* L'échec de la découverte n'est pas une panne de l'application : GitHub a
+   refusé (quota anonyme, propriétaire inconnu, jeton à portée réduite). On le
+   dit dans le champ, sans le bandeau rouge des vraies erreurs. */
+.lookupError {
+    font-size: 0.75rem;
+    color: var(--warning);
+}
+
+/* Une action secondaire qui se lit comme un lien : basculer entre la liste et
+   la saisie libre n'est pas une décision, c'est un repli. */
+.linkButton {
+    align-self: flex-start;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
+.linkButton:hover {
+    text-decoration: underline;
+}
+
+/* --------------------------------------------------- sha : copie et ouverture */
+
+/* Le sha d'une branche, seul élément cliquable de sa ligne (voir `BranchRow`). */
+.shaButton {
+    flex: 0 0 auto;
+    padding: 2px 6px;
+    margin: -2px 0;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    font: inherit;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.shaButton:hover {
+    background: var(--glass-bg-light);
+}
+
+.shaButton:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+}
+
+/* Copier le sha du commit ouvert. La confirmation vit sur le bouton même : un
+   toast pour une copie de presse-papiers serait disproportionné. */
+.copySha {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: 2px var(--space-xs);
+    margin-left: calc(-1 * var(--space-xs));
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text-muted);
+    font: inherit;
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.copySha:hover {
+    background: var(--glass-bg-light);
+    color: var(--text-primary);
+}
+
+.copySha:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+}
+
+.copiedTag {
+    font-size: 0.72rem;
+    color: var(--success);
+}
+
+.copyFailed {
+    font-size: 0.72rem;
+    color: var(--warning);
+}
+
+/*
+ * Une action notable mais non destructrice, au pied d'un dialogue.
+ *
+ * Même géométrie que `.dangerZone` — elle partage `.dangerText` — mais un ton
+ * neutre : tout resynchroniser coûte du temps et du quota, ça ne perd rien.
+ */
+.actionZone {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    padding: var(--space-md);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border);
+    background: var(--surface-subtle);
+}
+
+/* ------------------------------------------- avancement dans la liste */
+
+/*
+ * Bande fine en tête de carte, pendant qu'un dépôt se synchronise.
+ *
+ * Même parti pris que la carte d'un compte mail : elle se superpose au lieu de
+ * s'insérer, donc rien ne bouge dans la carte quand elle apparaît ou disparaît.
+ * `.repoCard` est déjà `position: relative` ; le `overflow: hidden` ci-dessous
+ * est ce qui lui fait épouser les coins arrondis.
+ */
+.syncStrip {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    background: var(--glass-border-strong);
+    overflow: hidden;
+    z-index: 1;
+}
+
+.syncStripFill {
+    height: 100%;
+    width: 0;
+    background: var(--accent);
+    box-shadow: 0 0 4px var(--accent-glow);
+    transition: width var(--transition-normal);
+}
+
+/* L'étape en cours, à la place des indicateurs habituels : ceux-ci décrivent un
+   état qui est précisément en train de changer. */
+.syncPhaseTag {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: 0 8px;
+    border-radius: var(--radius-pill);
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+/* ------------------------------------------------- un objet dans un projet */
+
+/*
+ * Un dépôt / une base à l'intérieur de l'onglet d'un projet.
+ *
+ * Sans cadre tant qu'il n'y en a qu'un : une boîte dans une boîte n'apporterait
+ * rien. À partir de deux, un contour sobre — pas une carte pleine — dit
+ * simplement où l'un finit et où l'autre commence, entre deux graphes et huit
+ * panneaux qui se ressembleraient sinon.
+ */
+.repoBlock {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    min-width: 0;
+}
+
+.repoBlockFramed {
+    /*
+     * Le fond que doit porter le bandeau collant de ce bloc, **opaque**.
+     *
+     * La teinte du bloc ne l'est pas : `--surface-subtle` vaut 4 % de blanc et
+     * `--surface-widget` 62 %. Posée telle quelle sur un en-tête collant, elle
+     * laissait défiler le contenu au travers, ce qui est le contraire de ce
+     * qu'on lui demande.
+     *
+     * On empile donc la teinte du bloc **sur** le jumeau opaque du fond de
+     * popup (`linear-gradient` d'une seule couleur sert de calque). Le résultat
+     * a exactement la couleur apparente du bloc, sans rien laisser passer. La
+     * peindre en dur aurait figé une valeur que le thème peut changer.
+     */
+    --block-bg: linear-gradient(var(--surface-subtle), var(--surface-subtle)), var(--surface-popup-solid);
+    composes: repoBlock;
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-subtle);
+}
+
+/* Un sélecteur de source et son « + » : le champ prend la place, le geste qui
+   mène à Réglages → Sources reste collé à ce qu'il complète. `min-width: 0`
+   pour qu'un intitulé long rétrécisse le champ, jamais ne pousse le bouton. */
+.fieldWithAction {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.fieldWithAction > select {
+    flex: 1;
+    min-width: 0;
+}

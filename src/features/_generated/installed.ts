@@ -23,6 +23,12 @@ import { manifest as manifest7 } from 'deveye-feature-backup';
 import { serverEntry as server7 } from 'deveye-feature-backup/server';
 import { manifest as manifest8 } from 'deveye-feature-database';
 import { serverEntry as server8 } from 'deveye-feature-database/server';
+import { manifest as manifest9 } from 'deveye-feature-deploy';
+import { serverEntry as server9 } from 'deveye-feature-deploy/server';
+import { manifest as manifest10 } from 'deveye-feature-git';
+import { serverEntry as server10 } from 'deveye-feature-git/server';
+import { manifest as manifest11 } from 'deveye-feature-audience';
+import { serverEntry as server11 } from 'deveye-feature-audience/server';
 
 export const INSTALLED_MODULES: readonly InstalledFeatureModule[] = [
     { manifest: { ...manifest0, icon: 'cloud' }, server: server0 },
@@ -34,5 +40,8 @@ export const INSTALLED_MODULES: readonly InstalledFeatureModule[] = [
     { manifest: { ...manifest6, icon: 'shield' }, server: server6 },
     { manifest: { ...manifest7, icon: 'archive' }, server: server7 },
     { manifest: { ...manifest8, icon: 'database' }, server: server8 },
+    { manifest: { ...manifest9, icon: 'rocket' }, server: server9 },
+    { manifest: { ...manifest10, icon: 'branch' }, server: server10 },
+    { manifest: { ...manifest11, icon: 'eye-open' }, server: server11 },
     ...LOCAL_MODULES
 ];

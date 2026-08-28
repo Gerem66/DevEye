@@ -167,18 +167,14 @@ const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
     // Le portefeuille affiche le compte de non-lus : un message venu d'ailleurs
     // doit donc le rafraîchir lui aussi.
     projectsChat: ['project.messages', 'project.list'],
-    // Un dépôt qui bouge touche la liste (dates de synchro, compteurs) et la vue
-    // ouverte. `git.count` suit pour la tuile de l'accueil.
-    git: ['git.count', 'git.list', 'git.repo'],
-    /*
-     * Un déploiement qui change d'état touche la liste (dernier état, date) et
-     * la fiche ouverte. `deploy.count` suit pour la tuile de l'accueil.
-     *
-     * Le sujet bat surtout au rythme du suivi de fond, qui réinterroge Dokploy
-     * sur les déploiements en vol : c'est ce qui fait avancer « En cours » vers
-     * « Réussi » sous les yeux, sans sondage côté navigateur.
-     */
-    deploy: ['deploy.count', 'deploy.list', 'deploy.detail'],
+    // (`git` : ses trois clés sont déclarées par le manifest du module
+    // `features/git` et enregistrées par la glue générée ; le sujet bat après
+    // une écriture d'un membre et à chaque tour de synchronisation qui a
+    // changé quelque chose, jamais sur un tour de 304.)
+    // (`deploy` : ses trois clés sont déclarées par le manifest du module
+    // `features/deploy` et enregistrées par la glue générée ; le sujet bat
+    // surtout au rythme du suivi de fond, qui fait avancer « En cours » vers
+    // « Réussi » sous les yeux, sans sondage côté navigateur.)
     /*
      * Les cinq clés ensemble, parce qu'une seule exécution les remue toutes :
      * elle change l'état du travail (liste), son historique (fiche), le journal
@@ -189,21 +185,11 @@ const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
      * navigateur n'ait rien demandé : c'est ce qui fait passer un travail de
      * « en cours » à « réussi » sous les yeux, à 3 h du matin comme à midi.
      */
-    /*
-     * **Les quatre clés ensemble, et c'est le sujet.**
-     *
-     * Ce battement vient presque toujours de l'ingestion publique, qui le
-     * coalesce à une fois par minute et par espace. Il doit donc rafraîchir d'un
-     * seul coup tout ce qui montre de l'audience, où que ce soit : la tuile de
-     * l'accueil, la liste des sites, la fiche ouverte et l'onglet Audience d'un
-     * projet. N'en invalider qu'une partie ferait diverger deux écrans de la
-     * même donnée à la même seconde, chez la même personne.
-     *
-     * `audience.stats` est distincte de `audience.detail` pour la raison
-     * inverse : une mutation humaine (réglage, rotation de clé) n'a aucune
-     * raison de faire relire six requêtes d'agrégat.
-     */
-    audience: ['audience.count', 'audience.list', 'audience.detail', 'audience.stats'],
+    // (`audience` : ses quatre clés sont déclarées par le manifest du module
+    // `features/audience` et enregistrées par la glue générée, ensemble parce
+    // que c'est le sujet ; le battement vient presque toujours de l'ingestion
+    // publique, coalescée à une fois par minute et par espace, et doit
+    // rafraîchir d'un coup tout ce qui montre de l'audience, où que ce soit.)
     /*
      * Un rôle modifié, un membre ajouté ou retiré, l'espace renommé : la liste
      * des rôles bouge, mais **les droits de chacun aussi** — y compris ceux de

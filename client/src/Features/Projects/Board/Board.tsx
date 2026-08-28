@@ -28,7 +28,7 @@ import { Button } from '@/Components';
 import { useLiveOutlines, type LiveOutlineProps } from '@/live/useLiveOutline';
 import { useRequestPopupWidth } from '@/stores/popupWidth';
 import { formatDate, PRIORITY_LABELS } from '../api';
-import { Avatar } from './Avatar';
+import { Avatar } from '@/Components/Avatar/Avatar';
 import { boardNaturalWidth } from './width';
 import styles from '../style.module.css';
 

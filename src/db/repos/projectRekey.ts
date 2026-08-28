@@ -12,7 +12,8 @@ type Q = Queryable;
  * deviendrait illisible à la bascule. Rien ne peut le détecter : un blob chiffré
  * est indistinguable d'un autre.
  *
- * N'y figurent PAS, et c'est volontaire : `workspace_credentials.secret_enc`, le
+ * N'y figurent PAS, et c'est volontaire : les jetons des modules
+ * (`ft_git_credentials.secret_enc`, `ft_deploy_credentials.secret_enc`), le
  * cache git (`git_*`) et le déploiement (`deploy_targets`, `deployments`),
  * toujours sous l'étage ouvert quel que soit le tier des projets qui s'y
  * rattachent : les services de fond doivent pouvoir les lire sans session.

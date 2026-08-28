@@ -4,16 +4,10 @@ import type { HomeFeatureId, WorkspaceKind } from '@deveye/types';
 import { MonitoringWidget } from '@/Features/Monitoring';
 import { MailWidget } from '@/Features/Mail/MailWidget';
 import { ProjectsWidget } from '@/Features/Projects/ProjectsWidget';
-import { GitWidget } from '@/Features/Git/GitWidget';
-import { DeployWidget } from '@/Features/Deploy/DeployWidget';
-import { AudienceWidget } from '@/Features/Audience/AudienceWidget';
 
 import Monitoring from '@/Features/Monitoring';
 import Mail from '@/Features/Mail';
 import FeatureProjects from '@/Features/Projects';
-import FeatureGit from '@/Features/Git';
-import FeatureDeploy from '@/Features/Deploy';
-import FeatureAudience from '@/Features/Audience';
 
 import type { FeatureProps } from '@/Features/types';
 import { clientModules } from '@/sdk/registry';
@@ -137,54 +131,6 @@ const NATIVE_CATALOG: FeatureCatalogEntry[] = [
         // cache continuerait de travailler sans être vue.
         cacheDurationMinutes: 0,
         holdSecrecy: true
-    },
-    {
-        id: 'git',
-        title: 'Git',
-        icon: 'branch',
-        description: 'Vos dépôts : branches, commits, pull requests, releases.',
-        category: 'dev',
-        WidgetContent: GitWidget,
-        FullComponent: FeatureGit,
-        // Démonté dès la fermeture : la vue d'un dépôt sonde l'avancement d'une
-        // synchronisation en cours, et une instance en cache continuerait de
-        // sonder sans être vue. Pas de `holdSecrecy` : rien n'y est chiffré à
-        // l'étage gardé, donc rien ne peut déclencher l'invite.
-        cacheDurationMinutes: 0
-    },
-    {
-        id: 'deploy',
-        title: 'Déploiements',
-        icon: 'rocket',
-        description: 'Cibles de déploiement et mises en production, avec leur historique.',
-        category: 'dev',
-        links: [{ to: 'mail', what: 'envoie ses alertes par un compte Mail' }],
-        WidgetContent: DeployWidget,
-        FullComponent: FeatureDeploy,
-        // Démonté dès la fermeture, comme Git : la fiche d'une cible suit l'état
-        // d'un déploiement en vol, et une instance en cache continuerait de le
-        // suivre sans être vue. Pas de `holdSecrecy` : rien n'y est chiffré à
-        // l'étage gardé, donc rien ne peut déclencher l'invite.
-        cacheDurationMinutes: 0
-    },
-    {
-        id: 'audience',
-        title: 'Audience',
-        // `eye-open` et non `activity` : ce dernier appartient déjà à
-        // Monitoring, et deux tuiles voisines qui portent le même pictogramme
-        // ne se distinguent plus au coup d'œil — ce qui est précisément ce
-        // qu'on demande à une grille d'icônes. L'œil dit « des vues », là où la
-        // courbe d'activité dit « une machine qui tourne ».
-        icon: 'eye-open',
-        description: 'Usage des sites que vous livrez : visites, parcours, conversions.',
-        category: 'analysis',
-        WidgetContent: AudienceWidget,
-        FullComponent: FeatureAudience,
-        // Démonté dès la fermeture, comme Git et les bases : la fiche tient des
-        // agrégats bornés par une fenêtre de temps, qui auraient vieilli en
-        // silence dans une instance mise en cache. Pas de `holdSecrecy` : rien
-        // n'y est chiffré à l'étage gardé, donc rien ne peut ouvrir l'invite.
-        cacheDurationMinutes: 0
     },
     {
         id: 'mail',
