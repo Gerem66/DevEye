@@ -2393,3 +2393,33 @@
     height: 100%;
     object-fit: cover;
 }
+
+/* --------------------------------------------- onglet « Bases de données » */
+
+/* Les blocs de bases reliées, rendus par le module (`LinkedDatabase`) : ce
+   qui reste à l'onglet est la colonne qui les empile, et la même hauteur
+   minimale que toute racine de feature (la boîte défilante de la popup). */
+.linkedDatabases {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    min-height: 100%;
+}
+
+/* Une base reliée sans le module Bases de données : un identifiant nu, et
+   son « Délier », plutôt qu'une ligne qui disparaît. */
+.linkedBare {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+}
+
+.hintCentered {
+    composes: hint;
+    display: block;
+    text-align: center;
+}

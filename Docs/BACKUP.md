@@ -6,8 +6,10 @@ serveur qui les produit.
 Module in-repo (`features/backup`, huitième native rapatriée sur le SDK des
 features, 28 août 2026) : contrats dans `src/contracts/`, moteur et handlers
 dans `src/server/`, écrans dans `src/client/`. L'app ne garde que l'identité
-(`backup` dans le registre publié) et, tant que Bases de données est native,
-le contrat qu'elle offre au module (`src/features/database/backupProvider.ts`).
+(`backup` dans le registre publié) ; le contrat des bases lui vient du module
+Bases de données (`features/database/src/server/index.ts`, publié par son
+service), sans qu'une ligne de Sauvegardes ait changé à la migration de
+celui-ci.
 
 Trois notions, et la séparation est la feature elle-même :
 
@@ -124,11 +126,13 @@ là-dedans. Les sauvegarder séparément reviendrait à les copier deux fois.
 Passe par le **même accès** que la supervision, tunnel SSH ou proxy SOCKS
 compris : le module ne déchiffre aucune connexion, il demande à Bases de
 données un accès ouvert (`DATABASE_BACKUP_PROVIDER`, `openAccess`, lu par
-`deps.providers.get`), que la feature construit avec `DatabaseMonitor.targetOf`
-et son tunnel, et referme quand le flux s'achève. Une base joignable par la
-feature Bases de données est donc sauvegardable sans configuration
-supplémentaire, et le jour où cette feature devient un module, son service
-publie la même clé sans que Sauvegardes change d'une ligne.
+`deps.providers.get`), que le module Bases de données construit avec
+`DatabaseMonitor.targetOf` (`features/database/src/server/service.ts`) et son
+tunnel, et referme quand le flux s'achève. Une base joignable par Bases de
+données est donc sauvegardable sans configuration supplémentaire. L'app
+offrait ce contrat tant que la feature était native ; c'est désormais le
+service du module qui publie la même clé, et Sauvegardes n'a pas changé
+d'une ligne.
 
 ### `cloudsync` — les blobs d'un partage
 

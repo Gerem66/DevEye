@@ -91,7 +91,7 @@ export const projectLinkCountsFeature: FeatureDefinition<
         // rendre le même fait ne se serait payée qu'en occasions de diverger.
         const [repos, databases, sites, targets, services] = await Promise.all([
             ctx.db.git.listLinkedRepoIds(input.projectId, ctx.workspaceId),
-            ctx.db.databases.listLinkedIds(input.projectId, ctx.workspaceId),
+            ctx.db.projectLinks.listDatabaseIds(input.projectId, ctx.workspaceId),
             ctx.db.audience.listLinkedIds(input.projectId, ctx.workspaceId),
             ctx.db.deploy.listLinkedTargetIds(input.projectId, ctx.workspaceId),
             ctx.db.projectLinks.listServiceIds(input.projectId, ctx.workspaceId)

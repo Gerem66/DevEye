@@ -12,8 +12,8 @@ se supprime lui-même quand aucune section n'est lisible : les features ne le
 conditionnent jamais elles-mêmes.
 
 Un dialogue artisanal derrière un engrenage à part est une dette : Mail, Météo,
-OSINT, Finances, Uptime, Sentinelle et CloudSync en ont été purgés, les candidats restants
-sont listés en fin de fichier.
+OSINT, Finances, Uptime, Sentinelle, CloudSync et Bases de données en ont été
+purgés, les candidats restants sont listés en fin de fichier.
 
 ## Les sections
 
@@ -22,7 +22,7 @@ ordre :
 
 | Onglet | Échelle | Qui l'a | Contenu |
 |---|---|---|---|
-| Général | feature (et élément pour Mail, Uptime, CloudSync) | table `GENERAL_WIRED`, ou `settings` du manifest d'un module | les réglages qui ne sont ni sources ni notifications |
+| Général | feature (et élément pour Mail, Uptime, CloudSync, Bases de données) | table `GENERAL_WIRED`, ou `settings` du manifest d'un module | les réglages qui ne sont ni sources ni notifications |
 | Sources | feature | registre `sources: { hint }` | jetons, destinations, clés d'API (voir `SOURCES.md`) |
 | Notifications | feature + élément | registre `notifies` | canaux et sélection (voir `NOTIFICATIONS.md`) |
 | Synchronisation | élément | table `SYNC_WIRED` | cadence de relève, maintenance |
@@ -69,7 +69,5 @@ Trois mécanismes font qu'aucun réglage n'est un mur :
 
 - **Monitoring** : la configuration de collecte est enfouie dans un menu
   déroulant d'appareil ; `TerminalSettings` à part.
-- **Bases de données** : `AlertDialog` (règles d'alerte par base) vit dans le
-  corps de la fiche, pas dans ses réglages.
 - **Audience** : origines, plateforme, rétention et clé d'un site vivent dans
   `SiteDialog` (« Modifier ») ; une partie est du réglage.

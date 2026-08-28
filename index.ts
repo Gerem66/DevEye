@@ -32,7 +32,7 @@ async function main() {
     const db = createDatabase(getQueryable(pool));
     const crypt = new Encryption(env.CRYPT_KEY_A, env.CRYPT_KEY_B);
 
-    const { app, mailSync, integrations, databases, audience, moduleServices } = await buildApp({
+    const { app, mailSync, integrations, audience, moduleServices } = await buildApp({
         db,
         crypt
     });
@@ -53,7 +53,6 @@ async function main() {
         try {
             mailSync.stop();
             integrations.stop();
-            databases.stop();
             audience.stop();
             // Attendus, et AVANT la fermeture du pool : un module rend son état
             // par une écriture en base (CloudSync libère son bail d'instance).
@@ -111,7 +110,8 @@ async function main() {
     // service du module Uptime, démarré avec les autres dans buildApp.)
     mailSync.start();
     integrations.start();
-    databases.start();
+    // (Le relevé des bases de données est un service du module
+    // `features/database`, démarré avec les autres dans buildApp.)
     // Audience : la seule qui ne sonde rien. Elle vide ce que l'ingestion
     // publique a déposé, et tient l'agrégat journalier + la rétention par site.
     audience.start();

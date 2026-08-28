@@ -16,7 +16,8 @@ import { tarEnd, tarHeader, tarPadding } from './tar';
  *
  * ## Pourquoi `mysqldump` et `pg_dump` plutôt qu'un vidage maison
  *
- * DevEye sait déjà lire une base par ses adaptateurs (`Services/databases/`), et
+ * DevEye sait déjà lire une base par les adaptateurs du module Bases de
+ * données (`features/database/src/server/engine.ts`), et
  * il aurait été tentant d'en tirer le vidage. Ce serait une erreur : un vidage
  * juste doit reproduire les vues, les procédures, les déclencheurs, les
  * séquences, les contraintes différées, les types utilisateur, l'ordre

@@ -24,6 +24,9 @@
     },
     {
       "package": "deveye-feature-backup"
+    },
+    {
+      "package": "deveye-feature-database"
     }
   ]
 }

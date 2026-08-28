@@ -179,9 +179,6 @@ const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
      * « Réussi » sous les yeux, sans sondage côté navigateur.
      */
     deploy: ['deploy.count', 'deploy.list', 'deploy.detail'],
-    // Un relevé qui aboutit touche la liste (état, taille, alertes franchies) et
-    // la fiche ouverte. `database.count` suit pour la tuile de l'accueil.
-    database: ['database.count', 'database.list', 'database.detail'],
     /*
      * Les cinq clés ensemble, parce qu'une seule exécution les remue toutes :
      * elle change l'état du travail (liste), son historique (fiche), le journal

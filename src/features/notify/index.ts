@@ -94,8 +94,6 @@ async function itemLabelOf(ctx: FeatureContext, feature: NotificationFeature, it
     if (items) return items.labelOf(ctx.secure.open, itemId, ctx.workspaceId);
     const content = await (async (): Promise<string | null> => {
         switch (feature) {
-            case 'database':
-                return (await ctx.db.databases.find(itemId, ctx.workspaceId))?.content ?? null;
             case 'deploy':
                 return (await ctx.db.deploy.findTarget(itemId, ctx.workspaceId))?.content ?? null;
             case 'sentinel':

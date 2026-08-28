@@ -44,14 +44,13 @@ const BLOCKER_TEXT: Record<ShareBlocker, string> = {
 /**
  * Ce qu'un partage invalide, par fonctionnalité native branchée.
  *
- * La clé était codée en dur sur `uptime.list` : partager une base ou une cible
+ * La clé était codée en dur sur `uptime.list` : partager un dépôt ou une cible
  * rafraîchissait… la liste des services. La table suit `SHARE_WIRED_FEATURES` ;
  * une feature native qu'on branche au partage s'inscrit ici en même temps. Un
  * module n'a rien à inscrire : ses ressources déclarées (manifest) se ravivent
  * toutes, c'est le même geste que son sujet live.
  */
 const LIST_KEYS: Partial<Record<SettingsScope['feature'], ResourceKey[]>> = {
-    database: ['database.list', 'database.count'],
     deploy: ['deploy.list', 'deploy.count'],
     git: ['git.list', 'git.count'],
     audience: ['audience.list', 'audience.count']

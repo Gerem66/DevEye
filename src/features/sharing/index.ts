@@ -110,8 +110,6 @@ async function itemHomeWorkspace(ctx: FeatureContext, feature: FeatureId, itemId
     const items = moduleItems(feature, ctx.db);
     if (items) return items.homeOf(itemId, ctx.workspaceId);
     switch (feature) {
-        case 'database':
-            return (await ctx.db.databases.find(itemId, ctx.workspaceId))?.workspace_id ?? null;
         case 'deploy':
             return (await ctx.db.deploy.findTarget(itemId, ctx.workspaceId))?.workspace_id ?? null;
         case 'git':

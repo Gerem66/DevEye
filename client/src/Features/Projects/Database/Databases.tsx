@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Database, DatabaseAlert, DatabaseProbe, Project } from '@deveye/types';
+import type { Project } from '@deveye/types';
+import { DATABASE_CLIENT_PROVIDER } from '@deveye/types/sdk';
+import type { DatabaseClientProvider, DatabaseLinkedCandidate } from '@deveye/types/sdk/client';
 import { Button, Dialog } from '@/Components';
-import { ws } from '@/api/ws';
+import { ws, WsError } from '@/api/ws';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
-import { startTeleport } from '@/stores/live';
-import { getActiveWorkspaceId, useWorkspacePermissions } from '@/stores/workspace';
-import { DatabaseDialog } from '@/Features/Database/DatabaseDialog';
-import { DatabaseHeader } from '@/Features/Database/DatabaseHeader';
-import { DatabaseView } from '@/Features/Database/DatabaseView';
-import dbStyles from '@/Features/Database/style.module.css';
+import { useWorkspacePermissions } from '@/stores/workspace';
+import { moduleClientProvider } from '@/sdk/registry';
 import { humanizeError } from '../api';
 import { LinkDatabaseDialog } from './LinkDatabaseDialog';
 import styles from '../style.module.css';
@@ -18,12 +16,6 @@ interface DatabasesProps {
     canWrite: boolean;
 }
 
-/** Ce qu'une base ouverte dans cet onglet porte avec elle. */
-interface Linked {
-    database: Database;
-    alerts: DatabaseAlert[];
-}
-
 /**
  * L'onglet « Bases de données » d'un projet : celles qu'il pointe.
  *
@@ -31,33 +23,39 @@ interface Linked {
  * projet** : elle vit dans sa feature, avec ses alertes et son relevé, et
  * plusieurs projets peuvent viser la même. Cet onglet ne possède qu'un pointeur
  * (`project.databaseList` / `databaseLink` / `databaseUnlink`) et délègue tout
- * l'affichage à `DatabaseView`, le composant de la feature.
+ * l'affichage au module Bases de données, par son contrat client
+ * (`DATABASE_CLIENT_PROVIDER`) : cet écran n'importe pas le module.
  *
  * Le contenu est rendu **ici**, et non derrière un renvoi vers la feature : une
  * base reliée à un projet se consulte depuis le projet, sinon la liaison ne sert
- * qu'à ranger. Au-delà de la première, chaque base reçoit un cadre discret —
- * sans lui, deux jeux de statistiques, d'alertes et de tables s'enchaîneraient
- * sans qu'on sache où l'un finit.
+ * qu'à ranger. Chaque base reçoit un cadre discret, sans lequel deux jeux de
+ * statistiques, d'alertes et de tables s'enchaîneraient sans qu'on sache où
+ * l'un finit ; c'est le bloc du module (`LinkedDatabase`), qui charge sa base
+ * lui-même et suit les invalidations de la feature.
  *
  * Corollaire à connaître : lire une base relève du droit `database`, pas de
  * `projects`. Un membre qui a l'un sans l'autre voit qu'il y a des bases
- * rattachées sans pouvoir les ouvrir, et l'écran le dit.
+ * rattachées sans pouvoir les ouvrir, et l'écran le dit. Module absent : même
+ * lecture, des identifiants nus, et une phrase qui le dit.
  */
 export function Databases({ project, canWrite }: DatabasesProps) {
     const permissions = useWorkspacePermissions();
+    const provider = moduleClientProvider<DatabaseClientProvider>(DATABASE_CLIENT_PROVIDER);
     const canReadDb = permissions.canFeature('database');
     const canWriteDb = permissions.canFeature('database', 'write');
 
     const [linkedIds, setLinkedIds] = useState<number[]>([]);
-    const [linked, setLinked] = useState<Linked[]>([]);
+    /** Les bases de l'espace, pour nommer celle qu'on délie. */
+    const [candidates, setCandidates] = useState<readonly DatabaseLinkedCandidate[]>([]);
     const [loaded, setLoaded] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [linkOpen, setLinkOpen] = useState(false);
-    const [unlinking, setUnlinking] = useState<Database | null>(null);
+    /** La base qu'on s'apprête à délier ; `null` = aucune confirmation ouverte. */
+    const [unlinking, setUnlinking] = useState<number | null>(null);
 
     const boardVersion = useResourceVersion('project.board');
-    const dbVersion = useResourceVersion('database.detail');
+    const listVersion = useResourceVersion('database.list');
     const guarded = project.securityTier === 'guarded';
 
     const load = useCallback(async () => {
@@ -68,26 +66,43 @@ export function Databases({ project, canWrite }: DatabasesProps) {
         try {
             const res = await ws.send('project.databaseList', { projectId: project.id });
             setLinkedIds(res.databaseIds);
-            // Le détail relève de la feature Bases : sans le droit, on s'arrête
-            // aux pointeurs plutôt que d'encaisser un refus.
-            setLinked(
-                canReadDb
-                    ? (await Promise.all(res.databaseIds.map((id) => ws.send('database.get', { databaseId: id })))).map(
-                          (r) => ({ database: r.database, alerts: r.alerts })
-                      )
-                    : []
-            );
             setError(null);
         } catch (e) {
             setError(humanizeError(e, 'Impossible de charger les bases liées.'));
         } finally {
             setLoaded(true);
         }
-    }, [project.id, guarded, canReadDb]);
+    }, [project.id, guarded]);
 
     useEffect(() => {
         void load();
-    }, [load, boardVersion, dbVersion]);
+    }, [load, boardVersion]);
+
+    // Le catalogue, pour nommer la base qu'on délie. Le détail relève de la
+    // feature Bases : sans le droit (ou sans le module), on s'arrête aux
+    // pointeurs plutôt que d'encaisser un refus, qui n'est pas une erreur à
+    // afficher.
+    useEffect(() => {
+        if (guarded || !canReadDb || !provider) {
+            setCandidates([]);
+            return;
+        }
+        let alive = true;
+        void (async () => {
+            try {
+                const listed = await provider.listDatabases();
+                if (alive) setCandidates(listed);
+            } catch (e) {
+                if (alive) setCandidates([]);
+                if (!(e instanceof WsError && e.code === 'forbidden')) {
+                    setError(humanizeError(e, 'Impossible de charger les bases de l’espace.'));
+                }
+            }
+        })();
+        return () => {
+            alive = false;
+        };
+    }, [guarded, canReadDb, provider, listVersion]);
 
     const unlink = async (databaseId: number) => {
         setBusy(true);
@@ -113,9 +128,12 @@ export function Databases({ project, canWrite }: DatabasesProps) {
 
     if (!loaded) return <p className={styles.empty}>Chargement…</p>;
 
+    const unlinkingName = unlinking === null ? null : (candidates.find((c) => c.id === unlinking)?.name ?? null);
+
     return (
-        <div className={dbStyles.root}>
+        <div className={styles.linkedDatabases}>
             {error && <p className={styles.error}>{error}</p>}
+            {!provider && <p className={styles.hint}>Le module Bases de données n’est pas installé.</p>}
 
             {linkedIds.length === 0 && <p className={styles.empty}>Aucune base reliée à ce projet.</p>}
 
@@ -126,20 +144,34 @@ export function Databases({ project, canWrite }: DatabasesProps) {
                 </p>
             )}
 
-            {linked.map((item) => (
-                <DatabaseBlock
-                    key={item.database.id}
-                    database={item.database}
-                    alerts={item.alerts}
-                    canWrite={canWrite && canWriteDb}
-                    onUnlink={() => setUnlinking(item.database)}
-                />
-            ))}
+            {canReadDb &&
+                linkedIds.map((id) =>
+                    provider ? (
+                        <provider.LinkedDatabase
+                            key={id}
+                            databaseId={id}
+                            canWrite={canWrite && canWriteDb}
+                            onUnlink={() => setUnlinking(id)}
+                        />
+                    ) : (
+                        // Sans le module, le serveur ne rend qu'un identifiant
+                        // nu : la ligne reste là, avec son « Délier », plutôt
+                        // que de disparaître.
+                        <div key={id} className={styles.linkedBare}>
+                            <span className={styles.hint}>Base #{id}</span>
+                            {canWrite && canWriteDb && (
+                                <Button variant='ghost' icon='x' onClick={() => setUnlinking(id)} disabled={busy}>
+                                    Délier
+                                </Button>
+                            )}
+                        </div>
+                    )
+                )}
 
             {/* Toujours en bas, même quand une base est déjà reliée : on peut en
                 ajouter autant qu'on veut. */}
-            {canWrite && canWriteDb && (
-                <div className={dbStyles.addRow}>
+            {canWrite && canWriteDb && provider && (
+                <div className={styles.addRow}>
                     <Button icon='add' onClick={() => setLinkOpen(true)}>
                         Ajouter une base
                     </Button>
@@ -147,7 +179,7 @@ export function Databases({ project, canWrite }: DatabasesProps) {
             )}
 
             {canWrite && !canWriteDb && (
-                <span className={dbStyles.hintCentered}>
+                <span className={styles.hintCentered}>
                     Votre rôle ne permet pas de modifier les bases de données de cet espace.
                 </span>
             )}
@@ -173,128 +205,22 @@ export function Databases({ project, canWrite }: DatabasesProps) {
                         <Button variant='secondary' onClick={() => setUnlinking(null)} disabled={busy}>
                             Annuler
                         </Button>
-                        <Button variant='danger' disabled={busy} onClick={() => unlinking && void unlink(unlinking.id)}>
+                        <Button
+                            variant='danger'
+                            disabled={busy}
+                            onClick={() => unlinking !== null && void unlink(unlinking)}
+                        >
                             Délier
                         </Button>
                     </>
                 }
             >
                 <p className={styles.hint}>
-                    {unlinking && (
-                        <>
-                            <strong>{unlinking.name}</strong> quitte ce projet. La base elle-même, ses alertes et les
-                            autres projets qui l’utilisent ne sont pas touchés.
-                        </>
-                    )}
+                    <strong>{unlinkingName ?? 'Cette base'}</strong> quitte ce projet. La base elle-même, ses alertes et
+                    les autres projets qui l’utilisent ne sont pas touchés.
                 </p>
             </Dialog>
         </div>
-    );
-}
-
-interface DatabaseBlockProps {
-    database: Database;
-    alerts: DatabaseAlert[];
-    canWrite: boolean;
-    onUnlink: () => void;
-}
-
-/** Une base du projet : son en-tête, et le contenu partagé avec la feature. */
-function DatabaseBlock({ database, alerts, canWrite, onUnlink }: DatabaseBlockProps) {
-    const [probe, setProbe] = useState<DatabaseProbe | null>(null);
-    const [testing, setTesting] = useState(false);
-    const [busy, setBusy] = useState(false);
-    const [dialogOpen, setDialogOpen] = useState(false);
-    /** L'explorateur occupe tout : l'en-tête et les voisins s'effacent. */
-    const [expanded, setExpanded] = useState(false);
-
-    const test = async () => {
-        setBusy(true);
-        setTesting(true);
-        setProbe(null);
-        try {
-            const res = await ws.send('database.test', { databaseId: database.id });
-            setProbe(res.probe);
-        } finally {
-            setTesting(false);
-            setBusy(false);
-        }
-    };
-
-    /**
-     * Relever n'écrit rien à l'écran : son résultat est le bandeau d'état, juste
-     * en dessous. La phrase de connexion appartient aux essais seuls.
-     */
-    const inspect = async () => {
-        setBusy(true);
-        try {
-            await ws.send('database.inspect', { databaseId: database.id });
-            invalidate('database.list', 'database.detail', 'database.count');
-        } finally {
-            setBusy(false);
-        }
-    };
-
-    const removeAlert = async (alertId: number) => {
-        await ws.send('database.alertRemove', { alertId });
-        invalidate('database.detail', 'database.list');
-    };
-
-    // Toujours encadré, y compris sur une base unique : le cadre ne fait pas
-    // que séparer deux blocs, il dit où finit ce que l'onglet montre. Seul
-    // l'explorateur en plein écran le retire, parce qu'il prend toute la place
-    // et qu'un cadre autour n'aurait plus rien à délimiter.
-    return (
-        <section className={expanded ? dbStyles.linkedBlock : dbStyles.linkedBlockFramed}>
-            {!expanded && (
-                <DatabaseHeader
-                    database={database}
-                    canWrite={canWrite}
-                    busy={busy}
-                    onTest={() => void test()}
-                    onInspect={() => void inspect()}
-                    onEdit={() => setDialogOpen(true)}
-                    // Le sens qui manquait : la feature sait déjà mener aux
-                    // projets d'une base, l'onglet d'un projet ne savait pas
-                    // mener à la base. Par la téléportation, comme partout — un
-                    // chemin `view:database l1:7` dit « ouvre la feature, et
-                    // dedans, cette base-là », garde d'accès comprise.
-                    onOpenInFeature={() =>
-                        startTeleport(getActiveWorkspaceId() ?? 0, ['view:database', `l1:${database.id}`])
-                    }
-                    after={
-                        // Destructeur, donc à part et confirmé : il ne doit pas
-                        // côtoyer « Tester », qu'on presse souvent.
-                        <Button variant='ghost' onClick={onUnlink} disabled={busy}>
-                            Délier
-                        </Button>
-                    }
-                />
-            )}
-
-            <DatabaseView
-                database={database}
-                alerts={alerts}
-                canWrite={canWrite}
-                testing={testing}
-                probe={probe}
-                onAlertsChanged={() => invalidate('database.detail', 'database.list')}
-                onRemoveAlert={(alertId) => void removeAlert(alertId)}
-                onExpandChange={setExpanded}
-            />
-
-            {/* Le vrai formulaire de la feature, pas une copie : régler une base
-                depuis un projet ou depuis sa feature doit être le même geste. */}
-            <DatabaseDialog
-                open={dialogOpen}
-                database={database}
-                onClose={() => setDialogOpen(false)}
-                onSaved={() => {
-                    setDialogOpen(false);
-                    invalidate('database.list', 'database.detail', 'database.count');
-                }}
-            />
-        </section>
     );
 }
 

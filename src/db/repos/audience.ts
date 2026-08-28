@@ -50,7 +50,7 @@ export interface AudienceActivityRow {
  * ⚠️ **C'est la seule table qui nomme une colonne dans une requête**, et c'est
  * délibérément une constante fermée : un nom de colonne ne peut pas être un
  * paramètre lié, il faut bien l'écrire dans le texte SQL. La discipline est
- * celle de `features/database/explore.ts` — on n'utilise jamais l'identifiant
+ * celle de `features/database/src/server/explore.ts` — on n'utilise jamais l'identifiant
  * reçu, on s'en sert pour choisir celui que le serveur détient déjà. Le contrat
  * zod borne déjà l'entrée aux neuf valeurs ; ceci la borne une seconde fois, là
  * où la chaîne devient du code.

@@ -375,9 +375,9 @@ export const projectSetSecurityTierFeature: FeatureDefinition<
         // vivent à l'étage ouvert, et le relevé périodique les lit sans session.
         // Les bases et leurs alertes survivent — seules les liaisons tombent.
         if (input.securityTier === 'guarded') {
-            const linked = await ctx.db.databases.listLinkedIds(input.projectId, ctx.workspaceId);
+            const linked = await ctx.db.projectLinks.listDatabaseIds(input.projectId, ctx.workspaceId);
             if (linked.length > 0) {
-                await ctx.db.databases.unlinkAll(input.projectId, ctx.workspaceId);
+                await ctx.db.projectLinks.unlinkAllDatabases(input.projectId, ctx.workspaceId);
                 await recordEvent(ctx, existing, {
                     kind: 'project.databaseUnlink',
                     label: `${linked.length} base${linked.length > 1 ? 's' : ''} déliée${linked.length > 1 ? 's' : ''} (projet passé en confidentiel)`

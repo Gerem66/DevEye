@@ -23,7 +23,6 @@ import { projectBoardRepo, type ProjectBoardRepo } from './repos/projectBoard';
 import { projectChatRepo, type ProjectChatRepo } from './repos/projectChat';
 import { projectPlanRepo, type ProjectPlanRepo } from './repos/projectPlan';
 import { projectHistoryRepo, type ProjectHistoryRepo } from './repos/projectHistory';
-import { databaseRepo, type DatabaseRepo } from './repos/database';
 import { audienceRepo, type AudienceRepo } from './repos/audience';
 import { audienceIngestRepo, type AudienceIngestRepo } from './repos/audienceIngest';
 import { audienceFunnelsRepo, type AudienceFunnelsRepo } from './repos/audienceFunnels';
@@ -70,12 +69,6 @@ export interface Database {
     /** Les jetons d'accès de l'espace, partagés par Git et Déploiement. */
     credentials: CredentialsRepo;
     deploy: DeployRepo;
-    /**
-     * Sauvegardes : destinations, travaux et exécutions. Un seul dépôt pour les
-     * trois tables — elles ne se lisent jamais séparément, et la rétention les
-     * traverse toutes les trois.
-     */
-    databases: DatabaseRepo;
     /** Les sites suivis de l'espace, et leurs statistiques — le chemin froid. */
     audience: AudienceRepo;
     /**
@@ -86,6 +79,7 @@ export interface Database {
     audienceIngest: AudienceIngestRepo;
     /** Les entonnoirs : des lectures des événements, jamais une collecte à part. */
     audienceFunnels: AudienceFunnelsRepo;
+    /** Les liaisons d'un projet vers les services surveillés et les bases de données. */
     projectLinks: ProjectLinksRepo;
     devices: DevicesRepo;
     linkCodes: LinkCodesRepo;
@@ -125,7 +119,6 @@ export function createDatabase(q: Queryable): Database {
         git: gitRepo(q),
         credentials: credentialsRepo(q),
         deploy: deployRepo(q),
-        databases: databaseRepo(q),
         audience: audienceRepo(q),
         audienceIngest: audienceIngestRepo(q),
         audienceFunnels: audienceFunnelsRepo(q),

@@ -4,9 +4,18 @@ Feature de premier rang, bâtie sur le même patron que [GIT.md](GIT.md) : une b
 appartient à **l'espace**, plusieurs projets peuvent s'en servir, et certaines ne
 servent aucun projet. Un projet ne fait qu'y **pointer**.
 
-Relu et mis à jour le 21 août 2026 (canaux et sélection par élément).
+Module in-repo (`features/database`, neuvième native rapatriée sur le SDK des
+features, 28 août 2026) : contrats dans `src/contracts/`, relevé, moteur et
+handlers dans `src/server/`, écrans dans `src/client/`. L'app ne garde que
+l'identité (`database` dans le registre publié), les deux contrats que le
+module publie ou consomme (`sdk/providers.ts`) et la table de liaison de
+Projets. Voir [FEATURE_SDK.md](FEATURE_SDK.md), section « La migration des
+natives ».
+
+Relu et mis à jour le 28 août 2026 (rapatriement en module).
 Documents voisins à respecter : [WORKSPACES.md](WORKSPACES.md), [LIVE.md](LIVE.md),
-[GIT.md](GIT.md), [PROJECTS.md](PROJECTS.md), [AUDIENCE.md](AUDIENCE.md).
+[GIT.md](GIT.md), [PROJECTS.md](PROJECTS.md), [AUDIENCE.md](AUDIENCE.md),
+[BACKUP.md](BACKUP.md).
 
 ---
 
@@ -33,7 +42,8 @@ Une seule exception à « rien ne part sans clic » : `autoLoadTables`, réglage
 **par base et éteint par défaut**, charge l'inventaire des tables à l'ouverture
 de la fiche. Il vit dans le blob chiffré `content` et non dans une colonne — un
 réglage d'affichage n'entre dans aucune requête et ne se trie sur rien, donc
-aucune migration.
+aucune migration. Il se règle, comme le relevé et sa cadence, dans le panneau
+**Général** de la base (Réglages de l'élément, coquille commune).
 
 Le **relevé périodique** existe, mais il est **éteint par défaut et s'active base
 par base** (`monitor_enabled`). C'est la différence de fond avec Uptime, qui
@@ -73,13 +83,23 @@ injoignable.
 
 Une base est d'espace et peut servir des projets de paliers différents ; elle ne
 peut donc suivre aucun d'eux. Tout — réglages, secrets, alertes — est chiffré
-sous la clé de l'espace. Conséquences assumées :
+sous la clé de l'espace (`ctx.cipher()` dans les handlers, `deps.cipherFor(ws)`
+dans le service : l'étage ouvert du SDK, l'ex `secure.open`). Conséquences
+assumées :
 
 - rien ici ne demande jamais de mot de passe ;
 - le relevé périodique lit tout sans session, ce qui est exactement ce dont il a
   besoin ;
 - **un projet confidentiel ne peut pas lier de base**, et passer un projet en
   confidentiel délie les siennes (les bases, elles, survivent).
+
+Une base **projetée** vers un autre espace (`shareTier: 'open'`, voir
+[SHARING.md](SHARING.md)) reste chiffrée chez elle : les listages choisissent
+le codec ligne par ligne (`ctx.sharing.scope().cipherFor`), la fiche et les
+alertes se lisent sous la clé du domicile, et toute session ouverte depuis la
+fenêtre (tables, requête, relevé manuel) déchiffre la cible sous cette même
+clé (`targetOf(row, row.workspace_id)`). Modifier et supprimer restent des
+gestes du domicile ; la fenêtre lit, explore et relève.
 
 ### 2.2 Aucun secret ne redescend
 
@@ -104,6 +124,28 @@ aucune contrainte d'unicité.
 l'analyse. Le contourner à coups de guillemets obliques dans chaque requête
 reviendrait à confier la correction à la vigilance ; un nom libre la rend
 inutile.
+
+Les deux tables du module (`database_connections`, `database_alerts`) datent
+du socle (068, complétée par la 070) et sont en allowlist dans
+`deveye-feature.json` ; `project_database_links`, de la même migration,
+appartient à **Projets** (voir §2.5).
+
+### 2.5 Projets et le module se lisent par contrat, jamais par table
+
+Le module ne lit **aucune** table de Projets, et Projets ne lit de la table des
+bases que l'ordre d'affichage (une jointure admise, comme pour un dépôt git).
+Trois contrats publiés dans `@deveye/types/sdk/providers.ts` portent tout le
+reste :
+
+| Contrat | Qui l'offre | Qui le lit | Ce qu'il dit |
+|---|---|---|---|
+| `DATABASE_ITEMS_PROVIDER` | le service du module | `project.databaseLink` (app) | « cette base existe-t-elle dans cet espace ? » (domicile seul), avant de relier ; module absent = liaison refusée proprement |
+| `PROJECTS_USAGE_PROVIDER` | l'app, tant que Projets est native (`src/features/project/usageProvider.ts`, `registerNativeProvider` dans `app.ts`) | `database.list` / `get` (module) | combien de projets de l'espace **appelant** relient chaque base, et lesquels, avec leur titre (étage ouvert, `'Sans titre'` à défaut) ; contrat absent = zéro projet, jamais une erreur |
+| `DATABASE_BACKUP_PROVIDER` | le service du module | Sauvegardes | ses bases nommées et un accès ouvert, tunnel compris (voir [BACKUP.md](BACKUP.md)) |
+
+Corollaire visible : les projets listés et comptés sur une base sont ceux de
+l'espace **d'où l'on regarde**. Une base projetée montre les projets de la
+fenêtre, pas ceux de son domicile.
 
 ---
 
@@ -132,7 +174,8 @@ Trois décisions qui méritent d'être connues :
    son seuil la nuit enverrait un message toutes les cinq minutes.
 
 Les **canaux sont les siens** depuis la migration `085`. Ils ne l'ont pas toujours
-été : `DatabaseMonitor` appelait `UptimeMonitor.resolveChannels`, au motif que
+été : `DatabaseMonitor` (aujourd'hui `src/server/service.ts`) appelait
+`UptimeMonitor.resolveChannels`, au motif que
 c'étaient « mêmes destinataires, une seule configuration à tenir à jour ». C'est
 mot pour mot le raisonnement que Sentinelle avait suivi avant la `075`, et il a
 produit le même effet — un seuil SQL franchi arrivait sur le salon désigné pour
@@ -146,14 +189,27 @@ feature (091) et se gèrent dans **Réglages → Notifications** de la coquille
 commune, et c'est **chaque base** qui coche les siens dans ses propres réglages
 (092), sans héritage depuis la feature : une base sans canal coché ne prévient
 personne. Le mécanisme d'envoi, lui, est celui commun aux émetteurs
-(`Services/notifications.ts`) : `DatabaseMonitor` en gardait une copie mot pour
-mot, alors que ce module existait précisément pour l'éviter. Voir
-`NOTIFICATIONS.md`.
+(`Services/notifications.ts`), atteint par la façade `notify` du SDK
+(`deps.deveyeFor(ws).notify.send(alert, { itemId: databaseId })` : c'est
+`itemId` qui choisit la route de LA base) ; `DatabaseMonitor` en gardait une
+copie mot pour mot, alors que ce module existait précisément pour l'éviter.
+La mise en page Discord est `src/server/notice.ts`, sur les helpers partagés
+de `Services/notices/shared.ts` (le seul import de l'app par le module, au
+privilège de native commenté). Voir `NOTIFICATIONS.md`.
 
-Le bouton **« Essayer maintenant »** du dialogue d'alerte est le cœur de cet
-écran, pas un extra : il évalue les conditions telles qu'on vient de les écrire,
-sans rien enregistrer ni notifier. Sans lui, on choisirait un seuil à l'aveugle
-et l'on découvrirait son erreur par une notification, la nuit.
+Les alertes s'écrivent dans l'onglet **Alertes** des réglages de la base
+(onglet personnalisé du manifest, `DatabaseAlertsPanel`), qui ouvre le
+dialogue de la feature (`AlertDialog`) ; la fiche n'en montre que l'état
+(franchie, dernières mesures). Le bouton **« Essayer »** de ce dialogue est le
+cœur de l'écran, pas un extra : il évalue les conditions telles qu'on vient de
+les écrire (`database.alertTest`), sans rien enregistrer ni notifier. Sans lui,
+on choisirait un seuil à l'aveugle et l'on découvrirait son erreur par une
+notification, la nuit.
+
+Les quatre fonctions pures de l'évaluation (`compare`, `runConditions`,
+`isFiring`, `renderMessage`) vivent dans `src/server/rules.ts`, partagées par
+le relevé et l'essai à blanc : une condition ne peut pas franchir d'un côté et
+pas de l'autre.
 
 ---
 
@@ -195,7 +251,7 @@ en trois règles, et aucune n'est un nettoyage de chaîne.
 Un nom de table ou de colonne **ne peut pas être un paramètre lié** : il faut
 bien l'écrire dans le texte de la requête. La parade n'est pas de le filtrer mais
 de ne jamais utiliser celui qu'on a reçu : `resolveTable` et `resolveColumns`
-(`features/database/explore.ts`) le cherchent dans le catalogue réel et rendent
+(`src/server/explore.ts`) le cherchent dans le catalogue réel et rendent
 **celui du serveur**. Un nom absent n'atteint donc aucune requête.
 
 C'est le seul fichier du module qui nomme des identifiants venus du client, et
@@ -272,64 +328,104 @@ toute autre valeur.
 
 ## 6. Carte du code
 
-### Contrats — `DevEye-Types/src/`
+Tout vit dans `DevEye/features/database/` ; les chemins ci-dessous y sont
+relatifs.
+
+### Contrats — `src/contracts/`
 
 ```
-domain/database.ts     schémas, lignes SQL, bornes de longueur
-features/database.ts   25 commandes, préfixe unique `database.`
-features/project.ts    project.databaseList / databaseLink / databaseUnlink
+domain.ts      schémas, lignes SQL, bornes de longueur
+commands.ts    24 commandes, préfixe unique `database.`
 ```
 
-### Serveur — `DevEye/src/`
+`@deveye/types` ne garde que l'identité (`database` dans le registre, le
+descripteur : `notifies`, `hasItems`, `shareTier: 'open'`) et les trois
+contrats de `sdk/providers.ts` (§2.5). `project.databaseList` / `databaseLink`
+/ `databaseUnlink` restent des commandes de Projets (`features/project.ts` du
+package).
+
+### Serveur — `src/server/`
 
 ```
-db/migrations/068_databases.sql   database_connections, database_alerts,
-                                  project_database_links
-db/migrations/070_…_time.sql      last_elapsed_ms : la durée du dernier relevé
-db/repos/database.ts              lectures enrichies, alertes, liaisons
-Services/databases/tunnel.ts      SSH (ssh2) et SOCKS5 (socks)
-Services/databases/engine.ts      adaptateurs MySQL et PostgreSQL
-Services/DatabaseMonitor.ts       relevé périodique + évaluation + notification
-Services/notifications.ts         résolution des canaux et livraison, communes aux 4 émetteurs
-features/database/notifications.ts  les 3 commandes de réglage des canaux
-db/migrations/085_deploy_sync_notifications.sql  la ligne `database`, reprise d'Uptime
-features/database/                crud.ts · probe.ts · explore.ts · alerts.ts
-features/project/databaseLink.ts  le pointeur d'un projet
+index.ts       serverEntry : createRepo, features, createService (le relevé, les
+               deux providers publiés), items (domicile et intitulé d'une base)
+repo.ts        lectures enrichies (alertes comptées), alertes ; sur SdkQueryable
+_shared.ts     Stored*, nameRef, readJson, loadDatabase, databaseCipherFor,
+               toDatabase, toAlert, reloadDatabase, le contrat de Projets, le
+               singleton du relevé (setMonitor / monitorOf)
+crud.ts        l'inventaire : count, list, get, add, update, remove, reorder
+probe.ts       ce qui joint un serveur sur un geste : test, testDraft, inspect,
+               query ; `withSession` (ouvre, fait, referme)
+explore.ts     les tables : structure, pages, écriture de lignes, terminal, export
+alerts.ts      les conditions, leur essai à blanc
+handlers.ts    l'agrégat des quatre fichiers, ce que serverEntry.features expose
+rules.ts       compare, runConditions, isFiring, renderMessage (fonctions pures)
+service.ts     DatabaseMonitor : relevé périodique + évaluation + notification,
+               sur FeatureServiceDeps (ticker, cipherFor, notify, live.changed)
+engine.ts      adaptateurs MySQL et PostgreSQL, les deux gardes d'instruction
+tunnel.ts      SSH (ssh2) et SOCKS5 (socks)
+notice.ts      la mise en page Discord d'une alerte
+*.test.ts      handlers, rules, explore (l'export), engine (les gardes), service
 ```
 
-### Client — `DevEye/client/src/Features/Database/`
+Côté app, ce qui reste de la feature : la table de liaison de Projets et ses
+lectures (`src/db/repos/projectLinks.ts` : `listDatabaseIds`, `linkDatabase`,
+`unlinkDatabase`, `unlinkAllDatabases`, `listDatabaseUsage`,
+`countDatabaseLinks`), le pointeur d'un projet (`src/features/project/databaseLink.ts`)
+et le contrat de Projets offert aux modules (`src/features/project/usageProvider.ts`).
+Les migrations du socle : `068_databases.sql` (les trois tables),
+`070_database_response_time.sql` (`last_elapsed_ms`),
+`085_deploy_sync_notifications.sql` (la ligne `database` des canaux).
+
+### Client — `src/client/`
 
 ```
-index.tsx           liste + détail ; possède le niveau live `l1`
-DatabaseList.tsx    les cartes + le glisser-déposer (src/dragReorder.ts)
-DatabaseDetail.tsx  état, alertes, explorateur, projets liés
-DatabaseView.tsx    le contenu partagé avec l'onglet d'un projet
-DatabaseDialog.tsx  onglets Paramètres / Options : connexion, tunnel, surveillance
-ProbeLine.tsx       « en cours », puis le résultat d'un essai, effacé après 10 s
-AlertDialog.tsx     conditions, opérateur, message, essai à blanc
-TableExplorer.tsx   tables, contenu, sélection, tri, clés étrangères, plein écran
-Pagination.tsx      Précédent / Suivant + les numéros, avec coupures
-ResultTable.tsx     le tableau d'un jeu de résultats, et sa vue en grand
-RowDialog.tsx       ajout / modification d'une ligne, NULL explicite, colonnes auto
-StructureDialog.tsx colonnes, contraintes, index, copie mise en forme
-SearchDialog.tsx    critères colonne / opérateur / valeur
-TerminalDialog.tsx  instruction libre, aperçus cliquables, confirmation des écritures
-ExportDialog.tsx    portée, format, plages d'identifiants, estimation de taille
-rowKey.ts           ce qui identifie une ligne — la clé, jamais l'indice
-format.ts  DatabaseWidget.tsx  style.module.css
+index.tsx                clientEntry : Widget, Full, settingsPanels (general, alerts), providers
+api.ts                   featureApi(manifest)
+provider.tsx             ce que Projets compose (DATABASE_CLIENT_PROVIDER) : la liste des
+                         bases de l'espace, une base reliée autonome (LinkedDatabase), le
+                         dialogue de création
+Database.tsx             liste + détail ; possède le niveau live `l1`
+DatabaseList.tsx         les cartes + le glisser-déposer (useDragReorder du barrel)
+DatabaseHeader.tsx       l'en-tête d'une base (retour ou « Délier », titre, Tester, Relever,
+                         le bouton commun des réglages), partagé avec l'onglet d'un projet
+DatabaseDetail.tsx       état, alertes (leur état seulement), explorateur, projets liés
+DatabaseView.tsx         le contenu partagé avec l'onglet d'un projet
+DatabaseDialog.tsx       connexion et tunnel : l'identité d'une base, rien de plus
+DatabaseGeneralPanel.tsx Réglages → Général d'une base : relevé, cadence, tables à l'ouverture
+DatabaseAlertsPanel.tsx  Réglages → Alertes d'une base : la liste des règles, qui ouvre AlertDialog
+AlertDialog.tsx          conditions, opérateur, message, essai à blanc ; zone danger pour supprimer
+ProbeLine.tsx            « en cours », puis le résultat d'un essai, effacé après 10 s
+TableExplorer.tsx        tables, contenu, sélection, tri, clés étrangères, plein écran
+Pagination.tsx           Précédent / Suivant + les numéros, avec coupures
+ResultTable.tsx          le tableau d'un jeu de résultats, et sa vue en grand
+RowDialog.tsx            ajout / modification d'une ligne, NULL explicite, colonnes auto
+StructureDialog.tsx      colonnes, contraintes, index, copie mise en forme
+SearchDialog.tsx         critères colonne / opérateur / valeur
+TerminalDialog.tsx       instruction libre, aperçus cliquables, confirmation des écritures
+ExportDialog.tsx         portée, format, plages d'identifiants, estimation de taille
+DatabaseWidget.tsx       la carte d'accueil
+rowKey.ts format.ts style.module.css
 ```
 
 Deux composants de cette liste servent **deux écrans chacun**, et c'est
 volontaire : `ProbeLine` porte le retour d'un essai dans la fiche comme dans le
-pied de la popup de réglages (les deux doivent dire la même chose et s'effacer
+pied du dialogue de connexion (les deux doivent dire la même chose et s'effacer
 pareil), et `ResultTable` rend l'aperçu du terminal comme sa vue en grand — une
 ligne vue en petit est ainsi forcément la même que celle vue en grand.
+`DatabaseHeader` et `DatabaseView` le sont aussi, entre la feature et l'onglet
+d'un projet : ce qui diffère d'un contexte à l'autre entre par leurs props, le
+reste est identique et doit le rester.
 
-`Features/Projects/Database/Databases.tsx` est l'onglet d'un projet : une
-enveloppe mince sur `project.databaseList` / `databaseLink` / `databaseUnlink`.
-Il **n'apparaît qu'à partir de la première base reliée** ; sans liaison, il
-repart dans le menu « + » de la barre d'onglets, qui rouvre le même dialogue
-d'ajout — voir [PROJECTS.md](./PROJECTS.md) §2.
+L'onglet **Bases** d'un projet (`client/src/Features/Projects/Database/`) est
+une enveloppe mince sur `project.databaseList` / `databaseLink` /
+`databaseUnlink`, qui compose les composants du module par
+`moduleClientProvider(DATABASE_CLIENT_PROVIDER)` (la liste des bases de
+l'espace, une base reliée montrée en entier, le dialogue de déclaration : le
+vrai formulaire, jamais une copie réduite), et dégrade proprement quand le
+module est absent. Il **n'apparaît qu'à partir de la première base reliée** ;
+sans liaison, il repart dans le menu « + » de la barre d'onglets — voir
+[PROJECTS.md](./PROJECTS.md) §2.
 
 ---
 
@@ -342,12 +438,33 @@ d'ajout — voir [PROJECTS.md](./PROJECTS.md) §2.
 **pas** `database.alertAdd`, `alertUpdate`, `alertRemove`, ni
 `project.databaseLink`. Leurs `mutates` se relisent à la main.
 
+### `database.remove` ne ravive que son sujet
+
+La commande native déclarait `mutates: ['database', 'projects']` : les projets
+liés perdaient leur base, leur onglet devait suivre. Un module ne nomme que
+son sujet (`mutates: true`) : les écrans de Projets qui montrent une base
+suivent déjà `database.detail` / `database.list`, et ce qui n'est plus ravivé
+à la suppression, c'est le tableau d'un projet et les compteurs de ses onglets,
+qui se remettent à jour à leur prochaine lecture.
+
 ### Un relevé manuel et un relevé automatique suivent le même chemin
 
-`database.inspect` appelle `DatabaseMonitor.checkNow`, exactement comme
-l'ordonnanceur. Deux implémentations auraient divergé au premier ajustement, et
-c'est le genre de divergence qui ne se voit qu'en production — « ça marche quand
-je clique, mais pas la nuit ».
+`database.inspect` appelle `DatabaseMonitor.checkNow` (`src/server/service.ts`),
+exactement comme l'ordonnanceur, par le singleton que `createService` pose
+pour les handlers (`monitorOf()`, patron `setEngine` de CloudSync). Deux
+implémentations auraient divergé au premier ajustement, et c'est le genre de
+divergence qui ne se voit qu'en production — « ça marche quand je clique, mais
+pas la nuit ».
+
+### Une alerte s'écrit chez elle
+
+`database.alertAdd` range l'alerte dans l'espace **appelant**, sous sa clé, et
+le relevé n'évalue que les alertes du domicile de la base, lisibles sous la
+sienne : une alerte posée depuis une fenêtre sur une base projetée serait
+inerte, et la fiche (qui liste les alertes du domicile) ne la montrerait même
+pas. Le serveur la **refuse** donc (`forbidden`, comme `database.update`), et
+l'interface ne propose les réglages d'une base (Général, Alertes) qu'à son
+domicile. `alertTest` reste permis d'une fenêtre : il évalue sans rien écrire.
 
 ### `unknown` n'est pas `down`
 
@@ -366,10 +483,10 @@ mieux qu'un écran vide pendant une panne.
 ## 8. Vérification
 
 ```bash
-# Migrations, sur une copie du dump — elles tournent au boot, hors transaction
-mysql … -e "DROP DATABASE IF EXISTS DevEye_migtest; CREATE DATABASE DevEye_migtest"
-mysql … DevEye_migtest < Backups/<dump>.sql
-DB_DATABASE=DevEye_migtest LISTEN_PORT=3099 npx tsx index.ts   # ×2
+# Les tests du module, sur le harnais du SDK (aucune base, aucun réseau)
+DOTENV_CONFIG_PATH=.env.test npx tsx --test "features/database/src/**/*.test.ts"
+npm run typecheck && npx tsc -p features/tsconfig.server.json --noEmit
+npx eslint features/database/src/server features/database/src/contracts features/database/src/manifest.ts
 
 rsync -a --delete DevEye-Types/src/ DevEye/node_modules/@deveye/types/src/
 diff -rq DevEye-Types/src DevEye/node_modules/@deveye/types/src   # doit être vide
@@ -377,7 +494,22 @@ diff -rq DevEye-Types/src DevEye/node_modules/@deveye/types/src   # doit être v
 ```
 
 **Au démarrage** : zéro avertissement `mutates`, aucun « préfixe de commande
-inconnu ».
+inconnu », et les deux providers du module visibles de Projets et de
+Sauvegardes (relier une base à un projet, la choisir comme source de
+sauvegarde).
+
+**Vérifié sur le harnais du SDK** (`src/server/*.test.ts`), sans base ni
+réseau : les handlers (restrictions par élément, projections sous le codec
+d'origine, contrat de Projets présent ou absent, secrets conservés ou effacés,
+ménage à la suppression, dernières mesures conservées), les règles
+d'évaluation (une condition en échec ne franchit pas, en `and` et en `or`), le
+service (un échec conserve la version et la taille, les alertes notifient aux
+transitions dans les deux sens sur la route de la base, `last_fired_at` posé à
+la montée seulement, une alerte cassée n'arrête pas les autres), l'export
+(les trois formats sur des valeurs piégeuses, JSON valide sur une base entière
+avec une table vide, pagination par 3 sur 12 lignes, les deux plafonds, table
+inconnue et clé composite refusées avant le moteur) et les deux gardes
+d'instruction.
 
 **Vérifié contre un vrai serveur MySQL 8.0**, sur des bases jetables créées et
 détruites pour l'occasion — jamais sur les tables de DevEye :

@@ -1,0 +1,6 @@
+{
+  "id": "database",
+  "tables": ["database_connections", "database_alerts"],
+  "minTypesVersion": "0.15.2",
+  "$comment": "Tables historiques (migration 068 du socle, complétée par la 070, jamais déplacées) : l'allowlist les dispense du préfixe ft_database_. `project_database_links` (même migration) appartient à Projets, pas au module. Toute NOUVELLE table du module prendra le préfixe, via src/server/migrations/."
+}

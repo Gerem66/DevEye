@@ -316,6 +316,38 @@ du manifest, le « + » du dialogue de travail est le bouton commun
 `backup.testNotification` sort de `NON_MUTATING`, et le genre d'une
 destination se choisit en segments.
 
+**Les Bases de données** sont la neuvième native rapatriée
+(`features/database`, 28 août 2026), et la première dont un module et une
+native se lisent **mutuellement par contrat** : le module publie sur son
+service ce que l'app enregistrait pour lui (`DATABASE_BACKUP_PROVIDER`, lu
+par Sauvegardes : `registerNativeProvider` et `backupProvider.ts` ont
+disparu d'`app.ts`) et ce que Projets lui demande avant de relier une base
+(`DATABASE_ITEMS_PROVIDER`, le miroir d'`UPTIME_ITEMS_PROVIDER`, lu par
+`moduleProvider` dans `project/databaseLink.ts`) ; dans l'autre sens, l'app
+offre `PROJECTS_USAGE_PROVIDER` tant que Projets est native
+(`project/usageProvider.ts`, enregistré dans `app.ts` : les projets de
+l'espace qui relient un élément, avec leur titre, et combien par élément,
+clé par feature reliée), et le module ne lit plus aucune table de Projets
+(`project_count` a quitté son dépôt, `toDatabase` reçoit le compte ; la
+table de liaison `project_database_links` et ses lectures ont rejoint
+`db/repos/projectLinks.ts`, à côté des services surveillés). Le service de
+fond (`DatabaseMonitor` sur `FeatureServiceDeps` : un ticker, `cipherFor`
+mémoïsé par le SDK, `deveyeFor(ws).notify.send(alert, { itemId })` sur la
+route de chaque base, `live.changed` à chaque relevé) accepte une couture de
+test (`{ openSession }`), et ses fonctions pures (`compare`, `runConditions`,
+`isFiring`, `renderMessage`) vivent dans `rules.ts`, partagées avec l'essai à
+blanc. Ce que sa migration a réglé : la dette de la coquille (le relevé et
+sa cadence, le chargement des tables sont un panneau Général à l'échelle de
+la base, les alertes un onglet personnalisé `alerts` ; la fiche garde l'état
+des alertes, pas leur écriture), l'entrée native de `SHARE_WIRED_FEATURES`
+et les `case 'database'` des switchs de partage et de routage (l'entrée
+`items` du module les remplace), et le barrel client, élargi de `openFeature`
+et `useRequestPopupWidth` pour l'onglet d'un projet composé par
+`DATABASE_CLIENT_PROVIDER`. Ce que le SDK n'offre pas : un `mutates`
+multi-sujets (`database.remove` déclarait `['database', 'projects']` ; un
+module ne nomme que son sujet, le tableau d'un projet et ses compteurs
+d'onglets se remettent à jour à leur prochaine lecture).
+
 ## La désinstallation d'un module (22 août 2026)
 
 Le geste inverse de l'installation, conçu pour emporter TOUTES les traces :

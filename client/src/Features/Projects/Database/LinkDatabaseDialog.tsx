@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import type { Database } from '@deveye/types';
+import { DATABASE_CLIENT_PROVIDER } from '@deveye/types/sdk';
+import type { DatabaseClientProvider, DatabaseLinkedCandidate } from '@deveye/types/sdk/client';
 import { Button, Dialog, SelectInput } from '@/Components';
 import { ws } from '@/api/ws';
-import { DatabaseDialog } from '@/Features/Database/DatabaseDialog';
-import { ENGINE_LABELS } from '@/Features/Database/format';
+import { moduleClientProvider } from '@/sdk/registry';
 import { humanizeError } from '../api';
 import styles from '../style.module.css';
 
@@ -19,17 +19,20 @@ interface LinkDatabaseDialogProps {
 /**
  * Ajouter une base au projet : en choisir une de l'espace, ou en créer une.
  *
- * **La création passe par le vrai dialogue de la feature** (`DatabaseDialog`),
- * pas par une copie réduite. Une base a une adresse, un compte, un tunnel et une
- * surveillance ; en réécrire un formulaire ici garantirait qu'il diverge au
- * premier réglage ajouté. Ce dialogue-ci ne fait que l'ouvrir, puis relier ce
- * qu'il a créé — c'est aussi ce que fait l'onglet Git avec `RepoPicker`.
+ * **La création passe par le vrai dialogue de la feature** (`DatabaseDialog`,
+ * lu par le contrat client du module Bases de données), pas par une copie
+ * réduite. Une base a une adresse, un compte, un tunnel et une surveillance ;
+ * en réécrire un formulaire ici garantirait qu'il diverge au premier réglage
+ * ajouté. Ce dialogue-ci ne fait que l'ouvrir, puis relier ce qu'il a créé,
+ * c'est aussi ce que fait l'onglet Git avec `RepoPicker`. Module absent, le
+ * dialogue le dit et ne propose rien.
  *
  * Rien n'est exclusif : une base déjà utilisée par un autre projet peut être
  * choisie ici sans lui être retirée.
  */
 export function LinkDatabaseDialog({ open, projectId, linkedIds, onClose, onSaved }: LinkDatabaseDialogProps) {
-    const [databases, setDatabases] = useState<Database[]>([]);
+    const provider = moduleClientProvider<DatabaseClientProvider>(DATABASE_CLIENT_PROVIDER);
+    const [databases, setDatabases] = useState<readonly DatabaseLinkedCandidate[]>([]);
     const [picked, setPicked] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -40,15 +43,15 @@ export function LinkDatabaseDialog({ open, projectId, linkedIds, onClose, onSave
         if (!open) return;
         setPicked('');
         setError(null);
+        if (!provider) return;
         void (async () => {
             try {
-                const res = await ws.send('database.list', {});
-                setDatabases(res.databases);
+                setDatabases(await provider.listDatabases());
             } catch (e) {
                 setError(humanizeError(e, 'Impossible de charger les bases de l’espace.'));
             }
         })();
-    }, [open]);
+    }, [open, provider]);
 
     const free = databases.filter((d) => !linkedIds.includes(d.id));
 
@@ -84,37 +87,50 @@ export function LinkDatabaseDialog({ open, projectId, linkedIds, onClose, onSave
                 }
             >
                 <div className={styles.form}>
-                    <label className={styles.field}>
-                        <span className={styles.label}>Base de l’espace</span>
-                        <SelectInput
-                            value={picked}
-                            disabled={free.length === 0}
-                            onChange={(e) => setPicked(e.target.value)}
-                        >
-                            <option value=''>{free.length === 0 ? 'Aucune base à relier' : 'Choisir une base…'}</option>
-                            {free.map((d) => (
-                                <option key={d.id} value={d.id}>
-                                    {d.name} — {ENGINE_LABELS[d.engine]}
-                                    {d.projectCount > 0 &&
-                                        ` — ${d.projectCount} projet${d.projectCount > 1 ? 's' : ''}`}
-                                </option>
-                            ))}
-                        </SelectInput>
-                        <span className={styles.hint}>
-                            Une base peut servir plusieurs projets : en choisir une déjà utilisée ailleurs ne la retire
-                            à personne.
-                        </span>
-                    </label>
+                    {!provider ? (
+                        <p className={styles.hint}>Le module Bases de données n’est pas installé.</p>
+                    ) : (
+                        <>
+                            <label className={styles.field}>
+                                <span className={styles.label}>Base de l’espace</span>
+                                <SelectInput
+                                    value={picked}
+                                    disabled={free.length === 0}
+                                    onChange={(e) => setPicked(e.target.value)}
+                                >
+                                    <option value=''>
+                                        {free.length === 0 ? 'Aucune base à relier' : 'Choisir une base…'}
+                                    </option>
+                                    {free.map((d) => (
+                                        <option key={d.id} value={d.id}>
+                                            {d.name} — {d.engineLabel}
+                                            {d.projectCount > 0 &&
+                                                ` — ${d.projectCount} projet${d.projectCount > 1 ? 's' : ''}`}
+                                        </option>
+                                    ))}
+                                </SelectInput>
+                                <span className={styles.hint}>
+                                    Une base peut servir plusieurs projets : en choisir une déjà utilisée ailleurs ne la
+                                    retire à personne.
+                                </span>
+                            </label>
 
-                    <div className={styles.actions}>
-                        <Button variant='secondary' icon='add' onClick={() => setCreateOpen(true)} disabled={busy}>
-                            Créer une base
-                        </Button>
-                        <span className={styles.hint}>
-                            Elle rejoindra la feature « Bases de données », où elle sera visible et réutilisable par
-                            d’autres projets — et sera reliée à ce projet dans la foulée.
-                        </span>
-                    </div>
+                            <div className={styles.actions}>
+                                <Button
+                                    variant='secondary'
+                                    icon='add'
+                                    onClick={() => setCreateOpen(true)}
+                                    disabled={busy}
+                                >
+                                    Créer une base
+                                </Button>
+                                <span className={styles.hint}>
+                                    Elle rejoindra la feature « Bases de données », où elle sera visible et réutilisable
+                                    par d’autres projets — et sera reliée à ce projet dans la foulée.
+                                </span>
+                            </div>
+                        </>
+                    )}
 
                     {error && <p className={styles.error}>{error}</p>}
                 </div>
@@ -124,15 +140,16 @@ export function LinkDatabaseDialog({ open, projectId, linkedIds, onClose, onSave
                 immédiatement : sans cela, « Créer une base » depuis un projet
                 laisserait l'utilisateur devant une liste où il faut la
                 rechercher, ce qui est exactement le geste qu'on lui épargne. */}
-            <DatabaseDialog
-                open={createOpen}
-                database={null}
-                onClose={() => setCreateOpen(false)}
-                onSaved={(databaseId) => {
-                    setCreateOpen(false);
-                    void link(databaseId);
-                }}
-            />
+            {provider && (
+                <provider.DatabaseDialog
+                    open={createOpen}
+                    onClose={() => setCreateOpen(false)}
+                    onSaved={(databaseId) => {
+                        setCreateOpen(false);
+                        void link(databaseId);
+                    }}
+                />
+            )}
         </>
     );
 }

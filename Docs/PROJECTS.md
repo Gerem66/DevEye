@@ -271,7 +271,7 @@ Board/             kanban dnd-kit, dialogues carte et colonne, largeur naturelle
 Timeline/          frise horizontale, échelle dédiée, jalons
 Chat/              fil de discussion
 Git/               enveloppe mince autour de `Features/Git/RepoView`
-Database/          idem autour de `Features/Database/DatabaseView`
+Database/          compose le contrat client du module Bases de données (`DATABASE_CLIENT_PROVIDER`), dégrade sans lui
 Audience/          idem autour de `Features/Audience/SiteView`
 Deploy/            enveloppe mince autour de `Features/Deploy/TargetView`, + services surveillés
 History/           frise verticale, carte archivée en lecture seule

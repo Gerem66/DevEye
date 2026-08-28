@@ -11,7 +11,8 @@ import { useEffect, useRef, type ChangeEvent } from 'react';
 
 import { ws } from '@/api/ws';
 import { useLiveSegment } from '@/live/useLiveSegment';
-import type { LiveSegmentKind } from '@/stores/live';
+import { startTeleport, type LiveSegmentKind } from '@/stores/live';
+import { getActiveWorkspaceId } from '@/stores/workspace';
 
 export type { LiveSegmentKind };
 /** The change event of a text input, for handlers typed by hand. */
@@ -65,6 +66,26 @@ export { useTypers, useTypingSignal } from '@/live/useTyping';
 // ── Les droits et l'espace ─────────────────────────────────────────────────
 export { useActiveWorkspace, useWorkspacePermissions } from '@/stores/workspace';
 export { useFeatureLifecycle } from '@/Features/useFeatureLifecycle';
+/**
+ * Demander un cadre plus large à la popup de feature tant que le composant
+ * appelant est monté (`null` = rien demander) : la vue qui déborde du cadre
+ * par défaut, comme un explorateur de tables en mode agrandi.
+ */
+export { useRequestPopupWidth } from '@/stores/popupWidth';
+
+/**
+ * Ouvrir une autre feature de l'espace actif, sur l'un de ses éléments quand
+ * `itemId` est donné : la téléportation de l'hôte, la même mécanique que
+ * « rejoindre quelqu'un ». Le segment de présence d'un élément est son
+ * identifiant nu (`l1:<id>`), pour toutes les features ; le chemin n'est donc
+ * jamais écrit par un module. La garde d'accès reste celle de l'hôte, et une
+ * cible disparue s'ignore d'elle-même après dix secondes.
+ */
+export function openFeature(feature: string, itemId?: number): void {
+    const workspaceId = getActiveWorkspaceId();
+    if (workspaceId === null) return;
+    startTeleport(workspaceId, itemId === undefined ? [`view:${feature}`] : [`view:${feature}`, `l1:${itemId}`]);
+}
 
 // ── Le chiffrement par mot de passe ────────────────────────────────────────
 // L'état de verrou de la session, l'invite globale, et le patron « réessaie
