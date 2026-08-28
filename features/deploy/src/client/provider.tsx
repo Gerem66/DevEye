@@ -92,7 +92,7 @@ function LinkedTarget({ targetId, projectId, canWrite, onUnlink }: LinkedTargetP
                 onClose={() => setEditing(false)}
                 onSaved={() => {
                     setEditing(false);
-                    invalidate('project.board', 'deploy.list', 'deploy.detail');
+                    invalidate('projects.board', 'deploy.list', 'deploy.detail');
                 }}
             />
         </>

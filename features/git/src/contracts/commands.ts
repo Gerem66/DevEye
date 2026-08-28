@@ -24,7 +24,7 @@ import {
 /**
  * Commandes des dépôts git de l'espace.
  *
- * Préfixe unique `git.`, comme `project.` — d'où le camelCase derrière le point.
+ * Préfixe unique `git.`, comme `projects.` — d'où le camelCase derrière le point.
  *
  * ⚠️ Conséquence à connaître : le filet de démarrage (`MUTATION_VERB` dans
  * `src/features/_topics.ts`) cherche un verbe **juste après le point**. Il ne

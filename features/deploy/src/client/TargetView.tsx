@@ -138,7 +138,7 @@ export function TargetActions({ target, canWrite, projectId, onEdit, after }: Ta
                     setTriggerOpen(false);
                     // La liste, la fiche **et** l'onglet du projet qui la
                     // déploie montrent le même état : les trois se relisent.
-                    invalidate('deploy.list', 'deploy.detail', 'project.board');
+                    invalidate('deploy.list', 'deploy.detail', 'projects.board');
                 }}
             />
         </>

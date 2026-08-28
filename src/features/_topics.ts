@@ -44,7 +44,7 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     // camelCase derrière le point. Le filet `MUTATION_VERB` n'en voit donc
     // **aucune** ; les `mutates` de cette feature se relisent à la main.
     finance: 'finance',
-    // Même forme que `project` : préfixe unique, verbes en camelCase derrière le
+    // Même forme que `deploy` : préfixe unique, verbes en camelCase derrière le
     // point. Le filet `MUTATION_VERB` plus bas n'en verra donc **aucune** — les
     // `mutates` de cette feature se relisent à la main.
     git: 'git',
@@ -73,10 +73,13 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     // — les `mutates` de cette feature se relisent à la main.
     osint: 'osint',
     password: 'password',
-    // Un seul préfixe pour tout le module, donc un seul sujet par défaut. Les
-    // commandes de discussion déclarent explicitement `['projectsChat']` : un
-    // message ne doit pas faire re-solliciter le tableau et la frise entiers.
-    project: 'projects',
+    // Préfixe unique du module Projets (son id : l'ancien `project.` ne tenait
+    // qu'à l'usage natif), verbes en camelCase derrière le point, donc
+    // `mutates` à relire à la main (le test du module s'en charge). Les
+    // commandes de discussion nomment `['projectsChat']`, le sujet secondaire
+    // que son manifest déclare : un message ne doit pas faire re-solliciter
+    // le tableau et la frise entiers.
+    projects: 'projects',
     secrecy: 'account',
     // Sentinelle a son propre sujet, distinct de `devices` : ses constats
     // changent à une tout autre cadence que la liste d'appareils, et les

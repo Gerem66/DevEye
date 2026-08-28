@@ -4,9 +4,11 @@ DevEye savait superviser (appareils, uptime, mail, notes, coffre) mais pas
 **piloter le travail**. Ce module suit plusieurs dizaines de projets, de leurs
 premières phases au déclenchement d'un déploiement.
 
-Relu le 21 août 2026. Il est branché nativement sur les trois systèmes
-transverses du dépôt : [WORKSPACES.md](./WORKSPACES.md), [LIVE.md](./LIVE.md)
-et [SECURITY_MODEL.md](./SECURITY_MODEL.md).
+Relu le 28 août 2026, au rapatriement de la feature en module
+(`features/projects`, la quatorzième native portée sur le SDK des features,
+[FEATURE_SDK.md](./FEATURE_SDK.md)). Elle est branchée, par le SDK, sur les
+trois systèmes transverses du dépôt : [WORKSPACES.md](./WORKSPACES.md),
+[LIVE.md](./LIVE.md) et [SECURITY_MODEL.md](./SECURITY_MODEL.md).
 
 > ⚠️ **Les objets d'espace ne sont pas ici.** Dépôts ([GIT.md](./GIT.md)), bases
 > ([DATABASES.md](./DATABASES.md)), sites suivis ([AUDIENCE.md](./AUDIENCE.md))
@@ -31,8 +33,8 @@ Il n'existe **aucune commande de suppression** de projet, de carte ou de
 message. `archived_at` sort une ligne de l'espace de travail ; elle reste en
 base, consultable dans l'historique, restaurable.
 
-L'unique exception est bornée : `project.columnRemove` détruit une colonne, mais
-**refuse tant qu'elle porte la moindre carte**, archivées comprises. La
+L'unique exception est bornée : `projects.columnRemove` détruit une colonne,
+mais **refuse tant qu'elle porte la moindre carte**, archivées comprises. La
 contrainte SQL est en `CASCADE` ; sans cette garde, retirer une colonne
 détruirait des cartes que rien d'autre ne permet de supprimer.
 
@@ -57,9 +59,16 @@ l'usage le plus systématique (voir [GIT.md](./GIT.md) §2.2).
 ### 1.3 Le tier est choisi par projet, et tout son arbre le suit
 
 Sur le modèle du mail : `projects.security_tier` vaut `open` ou `guarded`, et
-**toutes** les lignes rattachées au projet sont chiffrées sous cet étage — pas
+**toutes** les lignes rattachées au projet sont chiffrées sous cet étage : pas
 de tier par carte. C'est ce qui rend la bascule atomique
 (`reencryptProjectTree`) et évite d'avoir à raisonner ligne par ligne.
+
+Dans le module, l'étage est le codec du SDK : `cipherFor(ctx, tier)` rend
+`ctx.cipher()` (l'étage ouvert, l'ex `ctx.secure.open`) ou
+`ctx.cipher('private')` (l'étage gardé, l'ex `ctx.secure`), et
+`assertProjectUnlocked` pose la question au verrou de la session
+(`ctx.secrecy.isUnlocked()`) avant toute écriture qui n'a pas besoin de lire.
+Choisir le codec **est** le contrôle d'accès.
 
 - `guarded` n'existe **qu'en espace personnel**. En espace partagé, cette clé
   serait celle du *propriétaire* : le projet deviendrait illisible pour les
@@ -67,6 +76,10 @@ de tier par carte. C'est ce qui rend la bascule atomique
   s'annonçant confidentiel. Les deux issues sont pires que le refus.
 - Un espace partagé n'est pas pour autant en clair : son arbre est chiffré sous
   la clé de l'espace, à l'étage ouvert.
+- Session scellée, un projet gardé **se liste masqué** (`masked: true`, ses
+  compteurs restent justes : ils sont en clair), **se lit `locked`** (le client
+  ouvre l'invite) et **s'écrit `locked`**, sauf ce qui ne touche aucun corps
+  chiffré : réordonner le portefeuille, déplacer une carte.
 
 ### 1.4 Un projet gardé n'a pas d'intégration externe
 
@@ -76,9 +89,10 @@ le service de fond tourne **sans session** et n'atteindra jamais l'étage gardé
 et une liaison est une ligne **en clair**, qui rattacherait un projet
 confidentiel à un dépôt nommé — exactement ce que le palier est censé cacher.
 
-`project.repoLink` refuse donc un projet gardé, et passer un projet en gardé
-**retire sa liaison** (`projectSetSecurityTierFeature`), avec un événement de
-frise. Le dépôt, lui, n'est pas touché : il appartient à l'espace.
+`projects.repoLink` refuse donc un projet gardé (et ses trois sœurs avec lui),
+et passer un projet en gardé **retire ses liaisons** (`projects.setSecurityTier`),
+avec un événement de frise par famille. Le dépôt, lui, n'est pas touché : il
+appartient à l'espace.
 
 > La règle vivait auparavant dans la requête `listDue` (`AND p.security_tier =
 > 'open'`), le cache git étant alors suspendu au projet. Depuis [GIT.md](./GIT.md),
@@ -117,11 +131,11 @@ d'ajout de cette feature — le même que son bouton « Ajouter un… », pas un
 copie. L'ajout abouti, l'onglet naît et s'ouvre dans la foulée ; annulé, rien ne
 bouge.
 
-Les compteurs viennent de `project.linkCounts`, une commande unique pour les
+Les compteurs viennent de `projects.linkCounts`, une commande unique pour les
 quatre : les demander séparément ferait quatre allers-retours pour dessiner une
 barre, et la ferait apparaître par morceaux. Ils sont la **seule** source de la
-barre — pas d'état d'affichage à réconcilier à côté — et se relisent sur la clé
-`project.board`, celle que toute liaison invalide déjà en écrivant et que les
+barre (pas d'état d'affichage à réconcilier à côté) et se relisent sur la clé
+`projects.board`, celle que toute liaison invalide déjà en écrivant et que les
 onglets eux-mêmes écoutent. Barre et contenu ne peuvent donc pas diverger.
 
 Trois conséquences à connaître :
@@ -168,11 +182,11 @@ réorganisation est **hors du flux**, logée dans cette marge, plutôt qu'en
 colonne comme dans les listes des autres features.
 
 L'**ordre est celui de l'utilisateur** (`projects.sort_order`), rangé au
-glisser-déposer par le geste partagé de `client/src/dragReorder.ts` — le même
-qu'Uptime, Git, Monitoring et les bases. Le portefeuille est sa seule liste à
+glisser-déposer par le geste de réordonnancement commun à Uptime, Git,
+Monitoring et les bases (`dragReorder`). Le portefeuille est sa seule liste à
 plusieurs colonnes, d'où son `layout: 'grid'` : les interstices y sont les
 gouttières verticales, et la barre d'insertion se dresse dans la rangée visée.
-`project.reorder` ne touche jamais au corps chiffré, si bien qu'un portefeuille
+`projects.reorder` ne touche jamais au corps chiffré, si bien qu'un portefeuille
 où dorment des projets confidentiels se range **sans rien déverrouiller**. Les
 archives, elles, ne se rangent pas : elles suivent `archived_at DESC`, et
 restaurer un projet le renvoie en fin de liste.
@@ -182,11 +196,11 @@ d'un projet, ce n'est pas un geste qui mérite d'être le plus accessible de
 l'écran. **Restaurer**, en revanche, reste sur la carte archivée — c'est le seul
 geste de cet écran-là.
 
-**Tableau et Frise réclament la largeur de leur contenu** (`stores/popupWidth`),
-entre le plancher commun de 1240 px et la fenêtre : un kanban de trois colonnes
-n'a aucune raison de s'étaler jusqu'aux bords. La demande est calculée, jamais
-mesurée — mesurer le `scrollWidth` reviendrait à lire une géométrie qui dépend
-de la largeur qu'on est en train de décider.
+**Tableau et Frise réclament la largeur de leur contenu** (`useRequestPopupWidth`
+du barrel client), entre le plancher commun de 1240 px et la fenêtre : un kanban
+de trois colonnes n'a aucune raison de s'étaler jusqu'aux bords. La demande est
+calculée, jamais mesurée : mesurer le `scrollWidth` reviendrait à lire une
+géométrie qui dépend de la largeur qu'on est en train de décider.
 
 Le fil de discussion vit **dans la carte** : messages en direct, groupement par
 auteur, « X est en train d'écrire… », badge de non-lus sur le kanban et la frise.
@@ -200,88 +214,205 @@ Le module consomme le moteur existant sans le modifier, à **une exception près
 **Ce qui est gratuit** : rafraîchissement par `mutates`, roster, contours de
 présence, téléportation.
 
-- `useLiveSegment('l1', 'project:<id>')` sur la vue projet ;
-- `useLiveSegment('l2', 'card:<id>')` sur la carte ouverte ;
+- `useLiveSegment('l1', '<id>')` sur la vue projet ;
+- `useLiveSegment('l2', '<onglet>')` puis `l3` (la carte ouverte) et `l4` (son
+  onglet) ;
 - `useLiveOutlines('l2')` sur les cartes du kanban et les barres de la frise.
 
 ⚠️ Règle **un seul déclarant par niveau** (voir `LIVE.md`) : le niveau `l1`
-appartient à `Features/Projects/index.tsx`, le `l2` à `ProjectDetail.tsx`. Ne
-pas en poser un second.
+appartient à `Projects.tsx`, le `l2` à `ProjectDetail.tsx`. Ne pas en poser un
+second.
 
 **Deux sujets pour une feature.** `projects` porte la structure, `projectsChat`
 les messages. Sans cette coupure, chaque message ferait re-solliciter le
-tableau, la frise et le portefeuille entiers. Les deux pointent la même feature
-dans `TOPIC_FEATURE`, donc le même droit.
+tableau, la frise et le portefeuille entiers. `projectsChat` est le premier
+**sujet secondaire de module** : déclaré par le manifest (`topics:
+[{ id: 'projectsChat', keys: ['projects.messages', 'projects.list'] }]`, le
+portefeuille suivant pour ses compteurs de non-lus), validé au boot par
+`buildTopicIndex` contre les manifests installés, et battu par les deux
+écritures de la discussion (`mutates: ['projectsChat']` sur
+`projects.messageSend` et `messageEdit`). Il relève de la feature qui le
+déclare, donc du même droit ; `projects.markRead` ne bat rien, une lecture
+étant personnelle. Le sujet fut longtemps inscrit en dur dans `@deveye/types`
+(`nativeLiveTopicSchema`, `TOPIC_FEATURE`) : un privilège natif que le SDK a
+rendu déclarable.
+
+**Les liaisons battent deux sujets** (`mutates: ['projects', 'git']`,
+`['projects', 'deploy']`, `['projects', 'database']`, `['projects', 'audience']`) :
+la fiche d'un dépôt montre les projets qui l'utilisent, et doit suivre. Dans
+l'autre sens, le module ravive `projects` lui-même quand un autre module écrit
+chez lui par son contrat (§4) : une frise qui reçoit un déploiement, une
+version qui suit une release (`deps.live.changed`).
 
 **L'exception : `live.typing`.** Voir `LIVE.md`, section « En train d'écrire ».
 
-**La téléportation est honorée.** `Features/Projects/index.tsx` consomme la cible
-`l1` que lui rend `useLiveSegment` : rejoindre quelqu'un qui regarde un projet
-l'ouvre pour de bon. C'est le même chemin (`view:projects l1:project:<id>`) que
-la feature Git emprunte pour son « ouvrir le projet » — un seul mécanisme pour
-les deux besoins, plutôt qu'un canal de navigation dédié à côté.
+**La téléportation est honorée.** `Projects.tsx` consomme la cible `l1` que lui
+rend `useLiveSegment` : rejoindre quelqu'un qui regarde un projet l'ouvre pour
+de bon. C'est le même chemin (`view:projects l1:<id>`) que la feature Git
+emprunte pour son « ouvrir le projet » : un seul mécanisme pour les deux
+besoins, plutôt qu'un canal de navigation dédié à côté.
 
 ---
 
 ## 4. Carte du code
 
-### Contrats — `DevEye-Types/src/`
+Tout le module vit dans `features/projects/` (package `deveye-feature-projects`,
+workspace npm de l'app, installé par `features.config.json` et
+`npm run gen:features`). Il importe `@deveye/types`, `@deveye/types/sdk` et le
+barrel client `deveye-sdk-client`, jamais l'app.
+
+### Ce que `@deveye/types` en garde
+
+L'identité seulement : `projects` dans les registres (feature, sujet live,
+droits, accueil), le descripteur du registre (`featureDescriptor('projects')`,
+étalé dans le manifest), `projectStatusSchema` (les autres modules parlent le
+statut d'un projet par le contrat d'usage), et les couplages déclarés dans
+`sdk/providers.ts` : `PROJECTS_USAGE_PROVIDER` (ce que Projets offre) et
+`UPTIME_ITEMS_PROVIDER`, `GIT_ITEMS_PROVIDER`, `DEPLOY_ITEMS_PROVIDER`,
+`DATABASE_ITEMS_PROVIDER`, `AUDIENCE_ITEMS_PROVIDER` (ce que Projets lit).
+
+### Contrats : `features/projects/src/contracts/`
 
 ```
-domain/project.ts        projet, tags, tier, statut, source de version
-domain/projectBoard.ts   colonnes, cartes, priorité, sous-tâches
-domain/projectChat.ts    messages
-domain/projectPlan.ts    jalons, dépendances
-domain/projectHistory.ts événements de la frise verticale
-domain/projectDeploy.ts  cible et déploiements
-domain/projectLink.ts    liens croisés, « mes tâches »
-features/project.ts      toutes les commandes (préfixe unique `project.`)
+project.ts    projet, tags, tier, source de version, ligne SQL
+board.ts      colonnes, cartes, priorité, sous-tâches
+chat.ts       messages
+plan.ts       jalons, dépendances
+history.ts    événements de la frise verticale (genres `projects.*`, `card.*`, `milestone.*`, `deploy.*`)
+link.ts       « mes tâches », compteurs d'onglets, lignes des cinq tables de liaison
+domain.ts     le barrel des six
+commands.ts   les cinquante et une commandes (préfixe unique `projects.`)
 ```
 
-Le git a son propre contrat (`features/git/src/contracts/{domain,commands}.ts`,
-dans son module) : voir [GIT.md](./GIT.md).
+`src/manifest.ts` étale le descripteur et déclare ce que le registre ne porte
+pas : `shareTier: 'never'` par-dessus le `'perItem'` publié (§4, « Le partage »),
+`category: 'work'`, les liens vers les cinq features reliées, les cinq clés de
+ressources (`projects.count`, `projects.list`, `projects.board`,
+`projects.myTasks`, `projects.messages`), les quatre que le sujet `projects`
+ravive, le sujet secondaire `projectsChat`, la capacité `members.read` (les
+assignés et les mentions sont des membres), et les commandes.
 
-### Serveur — `DevEye/src/`
-
-```
-db/migrations/060_projects_core.sql          9 tables du socle
-db/migrations/061_projects_integrations.sql  7 tables d'intégration
-db/migrations/064_git_repos.sql              sort le git du projet (voir GIT.md)
-db/repos/project*.ts                         un repo par agrégat
-features/project/_shared.ts                  ciphers, codecs, recordEvent, rekey
-features/project/{index,board,chat,timeline,history,repoLink,deployLink,links}.ts
-features/git/src/server/service.ts et features/deploy/src/server/service.ts   les services de fond des deux modules (l'ex IntegrationSyncService, scindé au rapatriement)
-Services/integrations/{github,dokploy}.ts
-```
-
-`features/project/repoLink.ts` et `deployLink.ts` ne portent que trois commandes
-chacun — poser et retirer un pointeur. Tout le reste vit dans `features/git/` et
-`features/deploy/`.
-
-### Client — `DevEye/client/src/Features/Projects/`
+### Serveur : `features/projects/src/server/`
 
 ```
-index.tsx          portefeuille en cartes rangeables, archives, « mes tâches »
+index.ts            serverEntry : createRepo, features, migrationsDir, createService (publie PROJECTS_USAGE_PROVIDER)
+handlers.ts         l'agrégat des dix fichiers de commandes, ce que serverEntry.features expose
+_shared.ts          Ctx, WRITE, cipherFor, codecs (projet, colonne, carte, événement), toProject / toSummary /
+                    toMaskedSummary, loadProject, assertGuardedAllowed, assertProjectUnlocked, isMember,
+                    recordEvent, reencryptProjectTree
+projects.ts         le portefeuille : list, count, get, add, update, setStatus, setVersion, setSecurityTier,
+                    archive, restore, reorder
+board.ts            colonnes et cartes
+chat.ts             le fil d'une carte (sujet `projectsChat`)
+timeline.ts         jalons et dépendances (détection de cycle)
+history.ts          la frise verticale, lecture seule
+links.ts            mes tâches, les compteurs d'onglets, les services surveillés (UPTIME_ITEMS_PROVIDER)
+repoLink.ts         le pointeur vers les dépôts (GIT_ITEMS_PROVIDER)
+deployLink.ts       le pointeur vers les cibles (DEPLOY_ITEMS_PROVIDER)
+databaseLink.ts     le pointeur vers les bases (DATABASE_ITEMS_PROVIDER)
+audienceLink.ts     le pointeur vers les sites (AUDIENCE_ITEMS_PROVIDER)
+usageProvider.ts    PROJECTS_USAGE_PROVIDER : usageOf, countByItem, recordEvent, applyVersion
+repo/index.ts       ProjectsRepo, createRepo(SdkQueryable) : les sept dépôts natifs, un fichier par agrégat
+repo/projects.ts    la table projects et ses compteurs en clair (statsByWorkspace)
+repo/board.ts       project_columns, project_cards, les non-lus
+repo/chat.ts        project_messages, project_card_reads
+repo/plan.ts        project_milestones, project_card_deps
+repo/history.ts     project_events
+repo/links.ts       les cinq tables de liaison, leurs lectures, leurs comptes et leurs usages
+repo/rekey.ts       la liste des cellules chiffrées suspendues à un projet (conversion d'étage)
+migrations/001_event_kinds.sql   les genres d'événements stockés passent de `project.*` à `projects.*`
+handlers.test.ts    les handlers sur le harnais du SDK (dépôt en mémoire)
+usageProvider.test.ts   le contrat publié, sur le harnais sessionless
+```
+
+Côté app, seules les migrations du socle : `060_projects_core.sql` (9 tables),
+`061_projects_integrations.sql`, `064_git_repos.sql` (sort le git du projet),
+`067` à `069`, `077` et `080` (les tables de liaison). Les treize tables sont
+dans l'allowlist de `deveye-feature.json` : historiques, jamais déplacées,
+dispensées du préfixe `ft_projects_`. Pas d'`uninstall.sql` : le module ne
+possède aucune table à lui, et le SQL de démontage ne peut pas toucher aux
+tables historiques (comme Mail).
+
+### Client : `features/projects/src/client/`
+
+```
+index.tsx          clientEntry : Widget, Full
+Projects.tsx       portefeuille en cartes rangeables, archives, « mes tâches » ; possède le niveau live `l1`
+ProjectsWidget.tsx la tuile d'accueil
+api.ts             les appels typés du module (featureApi)
 ProjectDetail.tsx  en-tête + onglets ; possède le niveau live `l2`
+ProjectDialog.tsx  créer et modifier un projet (archiver vit ici)
+MyTasks.tsx        mes cartes, tous projets confondus
 tabs.ts            les onglets, leur ordre, et la règle qui les fait paraître
-useProjectTabs.ts  les compteurs (`project.linkCounts`) qui alimentent la barre
+useProjectTabs.ts  les compteurs (`projects.linkCounts`) qui alimentent la barre
 ProjectTabs.tsx    la barre et son menu « + »
 AddFeatureDialog.tsx  les formulaires d'ajout du « + », montés hors des onglets
 Board/             kanban dnd-kit, dialogues carte et colonne, largeur naturelle
 Timeline/          frise horizontale, échelle dédiée, jalons
-Chat/              fil de discussion
+Chat/              fil de discussion, rendu markdown
+History/           frise verticale, carte archivée en lecture seule
 Git/               compose le contrat client du module Git (`GIT_CLIENT_PROVIDER`), dégrade sans lui
 Database/          compose le contrat client du module Bases de données (`DATABASE_CLIENT_PROVIDER`), dégrade sans lui
 Audience/          compose le contrat client du module Audience (`AUDIENCE_CLIENT_PROVIDER`), dégrade sans lui
 Deploy/            compose le contrat client du module Déploiement (`DEPLOY_CLIENT_PROVIDER`), dégrade sans lui, + services surveillés
-History/           frise verticale, carte archivée en lecture seule
+style.module.css   le module de style, et sa déclaration typée
 ```
 
 `AddFeatureDialog.tsx` monte les **mêmes** dialogues que les onglets, pas des
 copies : ajouter un dépôt depuis la barre ou depuis l'onglet Git doit être le
 même geste. Ils vivent au niveau du projet parce que l'onglet, lui, n'existe pas
-encore — c'est ce que l'ajout va faire naître. Les deux points d'entrée ne se
+encore : c'est ce que l'ajout va faire naître. Les deux points d'entrée ne se
 marchent jamais dessus : le menu ne propose que ce qui est absent de la barre.
+
+### Le renommage `project.*` → `projects.*`
+
+Un module parle sous son id : le préfixe de ses commandes est `projects`, et
+`commandPrefix` n'admet qu'une casse différente du même id. Les cinquante et
+une commandes, les cinq clés de ressources, les genres d'événements de la
+frise (`projects.created`, `projects.renamed`, `projects.version`,
+`projects.status`, `projects.securityTier`, `projects.archived`,
+`projects.restored`, plus les liaisons) et les actions d'audit portent donc
+`projects.` là où le natif écrivait `project.`. Les noms d'export TypeScript
+(`projectList`, `projectCommands`, `projectSchema`…) n'ont pas bougé. Les
+événements déjà stockés sont renommés par la migration `001` du module ; sans
+elle, le contrat les replierait sur son genre de repli (`projects.status`) et la
+frise mentirait.
+
+### Les contrats entre modules
+
+Projets **publie** un contrat et en **consomme** cinq, tous par `providers`
+(l'hôte les cherche à l'appel parmi les services des modules installés ; l'app
+n'en offre plus aucun elle-même depuis ce rapatriement, `registerNativeProvider`
+a disparu avec Projets natif).
+
+- **`PROJECTS_USAGE_PROVIDER`**, publié par `createService` : pour un élément
+  d'une autre feature, les projets ouverts de l'espace qui le relient avec leur
+  titre (`usageOf`), combien en relient chacun (`countByItem`), une ligne de
+  frise (`recordEvent`, un déploiement parti de l'onglet d'un projet) et la
+  version que porte un élément (`applyVersion`, la dernière release d'un dépôt,
+  pour les projets ouverts dont `versionSource` vaut `github_release`). Tout à
+  l'étage ouvert (`deps.cipherFor`), sans session : un projet gardé ne se relie
+  pas. Les deux écritures ravivent `projects` (`deps.live.changed`) quand
+  elles ont changé quelque chose, ce que les services natifs de Git et de
+  Déploiement faisaient en nommant `['git', 'projects']`.
+- **`*_ITEMS_PROVIDER`**, lus par `ctx.providers.get(KEY)` avant de poser une
+  liaison : « cet élément existe-t-il dans cet espace ? » (le domicile seul).
+  Module absent = refus propre (`validation`, « Le module X n'est pas
+  installé »), jamais une ligne écrite ; élément inconnu = `not_found`, sans
+  trahir l'existence d'un élément d'un autre espace. Les listes d'identifiants
+  liés se lisent, elles, sans contrat : les tables de liaison sont celles de
+  Projets, et la jointure sur la table de la feature visée, pour l'ordre
+  d'affichage seul, est admise.
+
+### Le partage
+
+Le descripteur publié dit `'perItem'` (un projet `open` vit à l'étage ouvert,
+le serveur saurait le servir ailleurs) ; le manifest déclare `shareTier: 'never'`
+par-dessus, comme les Notes et Mail, parce que le listage n'est pas branché sur
+le partage ([SHARING.md](./SHARING.md) §9) et qu'un module qui déclare autre
+chose s'engage à l'être (entrée `items`, `ctx.sharing.scope()`). Pas de
+restriction par élément non plus : le natif n'en appliquait aucune sur les
+projets, le module ne fait ni plus ni moins.
 
 ---
 
@@ -291,25 +422,27 @@ marchent jamais dessus : le menu ne propose que ce qui est absent de la barre.
 
 `MUTATION_VERB` (`src/features/_topics.ts`) cherche un verbe **juste après le
 point** (`notes.add`). Les commandes d'ici sont en camelCase sous un préfixe
-unique (`project.cardAdd`) : **il n'en verra aucune**. Un `mutates` oublié ne
+unique (`projects.cardAdd`) : **il n'en verra aucune**. Un `mutates` oublié ne
 produira donc aucun avertissement au démarrage, et la donnée restera figée chez
 les autres membres jusqu'au rechargement.
 
-→ **Relire `mutates` à la main** sur chaque écriture ajoutée.
+→ **Relire `mutates` à la main** sur chaque écriture ajoutée, et tenir à jour
+la liste des lectures dans `handlers.test.ts`, qui vérifie que tout le reste
+déclare `mutates` sous le droit `write`.
 
 ### La liste de rekey
 
 Toute nouvelle colonne chiffrée suspendue à un projet doit être inscrite dans
-`src/db/repos/projectRekey.ts` (conversion du **tier d'un projet**). Rien ne
-peut le détecter : un blob chiffré est indistinguable d'un autre. Elle ne cible
-une ligne que par **une seule** colonne identifiante — d'où les clés de
-substitution là où la paire naturelle serait composite.
+`features/projects/src/server/repo/rekey.ts` (conversion du **tier d'un
+projet**). Rien ne peut le détecter : un blob chiffré est indistinguable d'un
+autre. Elle ne cible une ligne que par **une seule** colonne identifiante, d'où
+les clés de substitution là où la paire naturelle serait composite.
 
 Ce qui est **toujours** sous l'étage ouvert ne relève jamais de la conversion
-d'un projet : les jetons (`workspace_credentials.secret_enc`,
-ex-`project_credentials`, renommée par le chantier Déploiement), et depuis la
-migration `064` **tout le cache git** (`git_*`), qui appartient à l'espace et n'a
-donc aucun tier de projet à suivre.
+d'un projet : les jetons des modules (`ft_git_credentials.secret_enc`,
+`ft_deploy_credentials.secret_enc`), et depuis la migration `064` **tout le
+cache git** (`git_*`), qui appartient à l'espace et n'a donc aucun tier de
+projet à suivre ; les cibles de déploiement de même depuis la `080`.
 
 ### La collision de classes CSS que rien ne signalait
 
@@ -361,18 +494,38 @@ les droits d'un rôle ne sont **jamais** intersectés avec cette colonne. Ne pas
 ## 6. Vérification
 
 ```bash
-./ci.sh    # lint + typecheck des trois dépôts + build client
+npm run ci            # l'app : lint, typecheck, tests, glue générée
+npm run ci:features   # les modules : lint, typecheck serveur et client, tests
 diff -rq DevEye-Types/src DevEye/node_modules/@deveye/types/src   # doit être vide
 ```
 
-Il n'existe aucun framework de test dans ce dépôt. Les parties à logique pure
-sont vérifiables directement avec `tsx` — c'est ainsi qu'ont été validés
-l'échelle de la frise (`Timeline/scale.ts`), la largeur naturelle du kanban
-(`Board/width.ts`) et les décodeurs Dokploy (`integrations/dokploy.ts`,
-tolérants aux formes de réponse inconnues).
+Le serveur du module se teste sans base ni réseau, sur le harnais du SDK
+(`@deveye/types/sdk/testing`, dépôt en mémoire) :
 
-**Migrations** : rejeu obligatoire sur une copie d'un dump avant livraison. Elles
-tournent au démarrage, hors transaction, et ne sont jamais rejouées.
+- `handlers.test.ts` : le registre (parité avec le contrat, `mutates` sur chaque
+  écriture, `projectsChat` et les sujets doubles des liaisons), le portefeuille
+  masqué ou révélé selon la session, `locked` en lecture de détail et en
+  écriture sur un projet gardé scellé, les deux étages à la création (codec
+  étiqueté), la conversion d'étage (tout l'arbre re-chiffré, les liaisons
+  retirées avec leur frise, le suivi des releases coupé, rien touché sans
+  session), le tableau et ses gardes (plafond de colonnes, colonne pleine,
+  carte d'un autre projet, assigné non membre), la discussion (mentions,
+  lecture d'office, pagination, mots d'autrui), la frise (cycle, jalon
+  atteint, jalon d'un autre projet), l'historique paginé, les liaisons par
+  contrat (absent, inconnu, gardé, idempotence), les compteurs d'onglets, mes
+  tâches masquées ;
+- `usageProvider.test.ts` : le contrat publié (usage et comptes par élément,
+  titre de secours, feature inconnue vide, frise d'un projet gardé ignorée,
+  version reportée sur les seuls suiveurs ouverts, le sujet ravivé seulement
+  quand quelque chose a changé).
+
+Les parties pures du client restent vérifiables directement avec `tsx` :
+l'échelle de la frise (`Timeline/scale.ts`), la largeur naturelle du kanban
+(`Board/width.ts`).
+
+**Migrations** : rejeu obligatoire sur une copie d'un dump avant livraison,
+`001_event_kinds.sql` du module comprise. Elles tournent au démarrage, hors
+transaction, et ne sont jamais rejouées.
 
 ### Points d'attention à l'essai manuel
 
@@ -380,7 +533,7 @@ tournent au démarrage, hors transaction, et ne sont jamais rejouées.
 2. **Espaces** — un projet de l'espace A est invisible depuis B.
 3. **Chiffrement** — `content` illisible en base ; un projet `guarded` en espace
    personnel avec chiffrement actif déclenche l'invite, et passer un projet en
-   `guarded` **retire sa liaison au dépôt** (qui, lui, survit — voir GIT.md).
+   `guarded` **retire ses liaisons** (les objets, eux, survivent).
 4. **Direct, à deux onglets** — carte déplacée, message reçu, « X écrit… » qui
    **disparaît** quand l'onglet se ferme, contours de présence, badge non-lus.
 5. **Archives** — une carte archivée quitte le tableau, apparaît dans
@@ -395,6 +548,9 @@ tournent au démarrage, hors transaction, et ne sont jamais rejouées.
    de » ne s'affiche pas du tout ; dès qu'il y a une autre tâche, il propose de
    la choisir. La popup prend la hauteur de son contenu et grandit avec la
    discussion jusqu'au bord de l'écran, sans second ascenseur.
+8. **Frise après migration** : un projet créé avant le rapatriement montre bien
+   « projet créé » et non « statut modifié » en bas de son historique (la
+   migration `001` a renommé les genres stockés).
 
 ---
 
@@ -402,8 +558,10 @@ tournent au démarrage, hors transaction, et ne sont jamais rejouées.
 
 - **Aucun webhook** : l'état d'un déploiement est obtenu par sondage, borné aux
   seuls déploiements non terminés.
-- **Un seul dépôt et une seule application par projet.** Au-delà, ce sont deux
-  projets. Un même dépôt peut en revanche servir plusieurs projets — c'est le
-  cas courant depuis [GIT.md](./GIT.md).
+- **Les liaisons aux services surveillés ne passent pas par le contrat
+  d'usage** : Uptime ne lit pas `PROJECTS_USAGE_PROVIDER`, seul l'onglet
+  Déploiement d'un projet montre ses services. Le jour venu, `LINKS` dans
+  `usageProvider.ts` gagne une entrée `uptime`.
+- **Le partage inter-espaces** : `shareTier: 'never'` en manifest, voir §4.
 - **Le live est local au processus** : deux instances derrière un proxy = salles
   silencieusement séparées. Vrai avant ce module, ça le reste.

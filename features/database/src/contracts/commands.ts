@@ -30,7 +30,7 @@ import {
 /**
  * Commandes des bases de données de l'espace.
  *
- * Préfixe unique `database.`, comme `git.` et `project.` — d'où le camelCase
+ * Préfixe unique `database.`, comme `git.` et `projects.` — d'où le camelCase
  * derrière le point.
  *
  * ⚠️ Conséquence à connaître : le filet de démarrage (`MUTATION_VERB` dans

@@ -1,14 +1,14 @@
 /**
  * L'échelle de temps du graphe des commits : ses étiquettes de dates.
  *
- * Une COPIE de `client/src/Features/Projects/Timeline/scale.ts`, l'échelle de
+ * Une COPIE de `features/projects/src/client/Timeline/scale.ts`, l'échelle de
  * la frise d'un projet, réduite à ce que `CommitGraph` consomme : `DAY_MS`,
  * `startOfDay`, `labelWidth`, `timelineTicks` et le type `Tick`. Les niveaux
  * de zoom de la frise n'ont pas suivi : le graphe n'a pas de zoom.
  *
- * Copiée et non importée, pour deux raisons. Un module n'importe pas l'app :
- * le SDK est la frontière, et l'échelle d'un axe n'est pas une surface que
- * l'app a vocation à publier. Et une frise de commits peut diverger d'une
+ * Copiée et non importée, pour deux raisons. Un module n'importe pas un autre
+ * module : le SDK est la frontière, et l'échelle d'un axe n'est pas une
+ * surface que Projets a vocation à publier. Et une frise de commits peut diverger d'une
  * frise de projet : le graphe tasse tout l'historique d'un dépôt dans la
  * largeur d'une carte et descend bien plus bas en pixels par jour qu'une
  * frise, d'où une échelle qui va du jour au siècle ; si l'une des deux

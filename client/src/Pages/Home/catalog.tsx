@@ -2,10 +2,8 @@ import type { ComponentType } from 'react';
 import type { HomeFeatureId, WorkspaceKind } from '@deveye/types';
 
 import { MonitoringWidget } from '@/Features/Monitoring';
-import { ProjectsWidget } from '@/Features/Projects/ProjectsWidget';
 
 import Monitoring from '@/Features/Monitoring';
-import FeatureProjects from '@/Features/Projects';
 
 import type { FeatureProps } from '@/Features/types';
 import { clientModules } from '@/sdk/registry';
@@ -108,27 +106,6 @@ const NATIVE_CATALOG: FeatureCatalogEntry[] = [
         cacheDurationMinutes: 5,
         preload: true,
         adminOnly: true
-    },
-    {
-        id: 'projects',
-        title: 'Projets',
-        icon: 'projects',
-        description: "Pilotage du travail : tableau, jalons, tâches, discussions. C'est là que le reste se raccroche.",
-        category: 'work',
-        links: [
-            { to: 'git', what: 'suit les dépôts du projet' },
-            { to: 'deploy', what: 'suit ses cibles de mise en production' },
-            { to: 'database', what: "suit les bases qu'il utilise" },
-            { to: 'audience', what: "suit les sites qu'il produit" },
-            { to: 'uptime', what: "suit les services qu'il fait tourner" }
-        ],
-        WidgetContent: ProjectsWidget,
-        FullComponent: FeatureProjects,
-        // Démonté dès la fermeture, comme Mail et Uptime : le portefeuille, les
-        // fils de discussion et la présence vivent en direct, une instance en
-        // cache continuerait de travailler sans être vue.
-        cacheDurationMinutes: 0,
-        holdSecrecy: true
     }
 ];
 

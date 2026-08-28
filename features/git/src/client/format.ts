@@ -5,9 +5,10 @@ import type { ProjectStatus } from '@deveye/types';
  * un dépôt.
  *
  * Une copie assumée des quatre libellés de Projets (`STATUS_LABELS` de
- * `Features/Projects/api.ts`), comme dans le module Bases de données : un
- * module n'importe pas l'app, et le SDK n'expose pas les libellés d'une
- * native. Quatre mots, tenus à la main.
+ * `features/projects/src/client/api.ts`), comme dans le module Bases de
+ * données : un module n'importe pas un autre module, et le SDK n'expose que
+ * le vocabulaire des statuts (`ProjectStatus`), pas ses libellés. Quatre
+ * mots, tenus à la main.
  */
 export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
     draft: 'Brouillon',

@@ -205,7 +205,7 @@ export function FeatureDatabase(_props: FeatureViewProps) {
             await api.send('database.remove', { databaseId });
             setDialog(null);
             setOpenedId(null);
-            invalidate('database.list', 'database.count', 'project.board');
+            invalidate('database.list', 'database.count', 'projects.board');
         } catch (e) {
             setError(humanizeError(e, 'La suppression a échoué.'));
         } finally {

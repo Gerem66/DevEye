@@ -77,7 +77,17 @@ Trois mécanismes font qu'aucun réglage n'est un mur :
 Il n'en reste qu'un :
 
 - **Monitoring** : la configuration de collecte est enfouie dans un menu
-  déroulant d'appareil ; `TerminalSettings` à part.
+  déroulant d'appareil (`ConfigDialog`) ; `TerminalSettings` à part.
+
+  Cette dette est liée à une décision qui n'est pas prise : `devices` est la
+  dernière feature native, tenue pour de l'infrastructure de l'app (ses
+  commandes sont des relais du hub des agents). Or la coquille n'a plus aucun
+  câblage natif depuis le rapatriement de Mail : les onglets viennent du
+  manifest d'un module. Deux issues, et une seule à choisir : migrer
+  `devices` en module (la configuration de collecte devient le panneau
+  `general` d'un appareil), ou accepter cette forme pour une feature
+  d'infrastructure et clore cette liste. Réintroduire un câblage natif pour
+  ce seul cas n'en est pas une (`feature_refonte.md`, section 9).
 
 Audience a quitté la liste au rapatriement : la mesure, la reconnaissance des
 visiteurs et la conservation d'un site vivent dans son panneau Général

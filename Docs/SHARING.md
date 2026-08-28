@@ -59,10 +59,13 @@ cocherait et rien n'apparaîtrait de l'autre côté.
 
 Aujourd'hui : **tout l'étage `'open'`** — Uptime, Bases de données,
 Déploiement, Git, Audience, Sauvegardes. Les `'perItem'` (Notes, Mail, Projets)
-sont refusés franchement, avec la vraie raison affichée. Brancher une
-fonctionnalité **native** de plus tient en trois gestes : `listVisible` /
-`findVisible` dans son dépôt, le codec par ligne dans son listage, une entrée
-dans `SHARE_WIRED`.
+sont refusés franchement, avec la vraie raison affichée : tous trois sont des
+modules désormais, et chacun déclare `shareTier: 'never'` dans son manifest
+par-dessus le `'perItem'` du descripteur publié. Le registre dit ce que le
+chiffrement autorise, le manifest ce que le code fait, et le boot refuse un
+module qui déclare autre chose que `'never'` sans offrir `items`. Plus aucune
+native n'a d'éléments à brancher : `SHARE_WIRED` ne sert plus qu'à lire la
+liste publiée.
 
 Brancher un **module** (Uptime, rapatrié, est le premier) : `shareTier` autre
 que `'never'` dans son manifest (étalé du descripteur pour une native), l'entrée
@@ -255,7 +258,10 @@ comme un bug.
 
 - Brancher les `'perItem'` (Notes, Mail, Projets) avec leur test de palier
   ligne à ligne — chacun est un chantier en soi : leurs objets sont des graphes
-  (dossiers, messages, cartes), pas des lignes.
+  (dossiers, messages, cartes), pas des lignes. Tous trois sont des modules :
+  brancher l'un d'eux, c'est retirer le `shareTier: 'never'` de son manifest,
+  offrir `items` sur son entrée serveur et lire `ctx.sharing.scope()` dans ses
+  listages.
 - L'ordonnanceur de fond n'a pas changé : il sonde les éléments **d'un espace**,
   pas ce qu'on y voit. C'est voulu — sonder deux fois le même service parce
   qu'il est projeté ailleurs doublerait requêtes et incidents.

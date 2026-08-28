@@ -187,7 +187,7 @@ export function toCredential(row: GitCredentialRow, useCount: number): GitCreden
 
 /**
  * Le contrat de Projets, relu à l'appel : offert par l'app tant que Projets
- * est native, par son module ensuite ; d'ici, aucune différence. Absent (rien
+ * était native, par son module depuis ; d'ici, aucune différence. Absent (rien
  * n'offre la clé), la feature dégrade proprement : zéro projet partout, aucune
  * commande ne casse.
  */

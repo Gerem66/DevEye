@@ -139,8 +139,8 @@ reste :
 
 | Contrat | Qui l'offre | Qui le lit | Ce qu'il dit |
 |---|---|---|---|
-| `DATABASE_ITEMS_PROVIDER` | le service du module | `project.databaseLink` (app) | « cette base existe-t-elle dans cet espace ? » (domicile seul), avant de relier ; module absent = liaison refusée proprement |
-| `PROJECTS_USAGE_PROVIDER` | l'app, tant que Projets est native (`src/features/project/usageProvider.ts`, `registerNativeProvider` dans `app.ts`) | `database.list` / `get` (module) | combien de projets de l'espace **appelant** relient chaque base, et lesquels, avec leur titre (étage ouvert, `'Sans titre'` à défaut) ; contrat absent = zéro projet, jamais une erreur |
+| `DATABASE_ITEMS_PROVIDER` | le service du module | `projects.databaseLink` (module Projets) | « cette base existe-t-elle dans cet espace ? » (domicile seul), avant de relier ; module absent = liaison refusée proprement |
+| `PROJECTS_USAGE_PROVIDER` | le service du module Projets (`features/projects/src/server/usageProvider.ts`) | `database.list` / `get` (module) | combien de projets de l'espace **appelant** relient chaque base, et lesquels, avec leur titre (étage ouvert, `'Sans titre'` à défaut) ; contrat absent = zéro projet, jamais une erreur |
 | `DATABASE_BACKUP_PROVIDER` | le service du module | Sauvegardes | ses bases nommées et un accès ouvert, tunnel compris (voir [BACKUP.md](BACKUP.md)) |
 
 Corollaire visible : les projets listés et comptés sur une base sont ceux de
@@ -340,9 +340,9 @@ commands.ts    24 commandes, préfixe unique `database.`
 
 `@deveye/types` ne garde que l'identité (`database` dans le registre, le
 descripteur : `notifies`, `hasItems`, `shareTier: 'open'`) et les trois
-contrats de `sdk/providers.ts` (§2.5). `project.databaseList` / `databaseLink`
-/ `databaseUnlink` restent des commandes de Projets (`features/project.ts` du
-package).
+contrats de `sdk/providers.ts` (§2.5). `projects.databaseList` / `databaseLink`
+/ `databaseUnlink` sont des commandes du module Projets
+(`features/projects/src/contracts/commands.ts`).
 
 ### Serveur — `src/server/`
 
@@ -368,12 +368,12 @@ notice.ts      la mise en page Discord d'une alerte
 *.test.ts      handlers, rules, explore (l'export), engine (les gardes), service
 ```
 
-Côté app, ce qui reste de la feature : la table de liaison de Projets et ses
-lectures (`src/db/repos/projectLinks.ts` : `listDatabaseIds`, `linkDatabase`,
+Côté Projets (le module `features/projects`) : la table de liaison et ses
+lectures (`src/server/repo/links.ts` : `listDatabaseIds`, `linkDatabase`,
 `unlinkDatabase`, `unlinkAllDatabases`, `listDatabaseUsage`,
-`countDatabaseLinks`), le pointeur d'un projet (`src/features/project/databaseLink.ts`)
-et le contrat de Projets offert aux modules (`src/features/project/usageProvider.ts`).
-Les migrations du socle : `068_databases.sql` (les trois tables),
+`countDatabaseLinks`), le pointeur d'un projet (`src/server/databaseLink.ts`)
+et le contrat offert aux modules (`src/server/usageProvider.ts`). Côté app, les
+migrations du socle : `068_databases.sql` (les trois tables),
 `070_database_response_time.sql` (`last_elapsed_ms`),
 `085_deploy_sync_notifications.sql` (la ligne `database` des canaux).
 
@@ -417,8 +417,8 @@ ligne vue en petit est ainsi forcément la même que celle vue en grand.
 d'un projet : ce qui diffère d'un contexte à l'autre entre par leurs props, le
 reste est identique et doit le rester.
 
-L'onglet **Bases** d'un projet (`client/src/Features/Projects/Database/`) est
-une enveloppe mince sur `project.databaseList` / `databaseLink` /
+L'onglet **Bases** d'un projet (`features/projects/src/client/Database/`) est
+une enveloppe mince sur `projects.databaseList` / `databaseLink` /
 `databaseUnlink`, qui compose les composants du module par
 `moduleClientProvider(DATABASE_CLIENT_PROVIDER)` (la liste des bases de
 l'espace, une base reliée montrée en entier, le dialogue de déclaration : le
@@ -436,13 +436,14 @@ sans liaison, il repart dans le menu « + » de la barre d'onglets — voir
 `MUTATION_VERB` cherche un verbe **juste après le point**. Il attrape donc
 `database.add`, `database.update`, `database.remove`, `database.reorder` — mais
 **pas** `database.alertAdd`, `alertUpdate`, `alertRemove`, ni
-`project.databaseLink`. Leurs `mutates` se relisent à la main.
+`projects.databaseLink`. Leurs `mutates` se relisent à la main.
 
 ### `database.remove` ne ravive que son sujet
 
 La commande native déclarait `mutates: ['database', 'projects']` : les projets
-liés perdaient leur base, leur onglet devait suivre. Un module ne nomme que
-son sujet (`mutates: true`) : les écrans de Projets qui montrent une base
+liés perdaient leur base, leur onglet devait suivre. Le module ne nomme que
+son sujet (`mutates: true` ; le SDK admet une liste depuis le rapatriement de
+Projets, ce module n'en use pas) : les écrans de Projets qui montrent une base
 suivent déjà `database.detail` / `database.list`, et ce qui n'est plus ravivé
 à la suppression, c'est le tableau d'un projet et les compteurs de ses onglets,
 qui se remettent à jour à leur prochaine lecture.

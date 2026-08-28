@@ -58,7 +58,7 @@ Trois conséquences, toutes bonnes :
   sa garde. Exactement ce qui était arrivé à `markSynced` en 064.
 
 Corollaire assumé : **un projet confidentiel n'a pas de déploiement.**
-`project.deployLink` le refuse, et passer un projet en confidentiel retire ses
+`projects.deployLink` le refuse, et passer un projet en confidentiel retire ses
 liaisons, avec un événement de frise.
 
 ### 2.2 Le droit de déployer est un droit à part
@@ -102,8 +102,10 @@ Telegram. L'état est donc **sondé**, par le service de fond du module
 déploiement d'`IntegrationSyncService`), qui diffuse sur le sujet `deploy` : la
 fiche de la cible et l'onglet du projet qui la déploie suivent tous deux
 `deploy.detail`, donc montrent le même état. (Le sujet `projects`, que le
-service natif nommait aussi, n'est pas nommable par un module : les compteurs
-d'onglets d'un projet se remettent à jour à leur prochaine lecture.)
+service natif nommait aussi, ne l'est plus par ce service : les compteurs
+d'onglets d'un projet se relisent à leur prochaine lecture, et c'est Projets
+qui ravive `projects` quand un déclenchement entre dans une frise, par son
+contrat `recordEvent`.)
 
 Ce sondage a changé de sujet en cours de route, et la nuance décide de ce qui est
 visible. Il portait sur les **lignes encore en vol** ; il porte désormais sur les
@@ -188,9 +190,9 @@ src/client/style.module.css         la feuille du module
 db/migrations/080_deploy_feature.sql             le renversement, données reprises
 db/migrations/085_deploy_sync_notifications.sql  le rapprochement de fond + les canaux
 db/migrations/099_deploy_credentials.sql         les clés Dokploy dans la table du module, la clé étrangère retirée
-db/repos/projectLinks.ts                         project_deploy_links : la table de Projets, ses lectures et ses comptes
-features/project/deployLink.ts                   les trois commandes de liaison ; l'existence d'une cible par DEPLOY_ITEMS_PROVIDER
-features/project/usageProvider.ts                PROJECTS_USAGE_PROVIDER : ce que le module demande à Projets (et la frise)
+features/projects/src/server/repo/links.ts       project_deploy_links : la table de Projets, ses lectures et ses comptes
+features/projects/src/server/deployLink.ts       les trois commandes de liaison ; l'existence d'une cible par DEPLOY_ITEMS_PROVIDER
+features/projects/src/server/usageProvider.ts    PROJECTS_USAGE_PROVIDER : ce que le module demande à Projets (et la frise)
 Services/notifications.ts                        la résolution des canaux et la livraison, derrière la façade `notify` du SDK
 Services/discord.ts                              publier ET modifier, derrière `notify.postLive`
 Services/notices/shared.ts                       les helpers Discord, importés par le module (privilège de native, commenté)
@@ -663,14 +665,16 @@ changé, en plus des chemins du §4 :
   historiques restent.
 - **Le module ne lit aucune table de Projets.** `project_deploy_links` et ses
   lectures (`listDeployTargetIds`, `linkDeployTarget`, `unlinkDeployTarget`,
-  `unlinkAllDeployTargets`, `listDeployUsage`, `countDeployLinks`) ont
-  rejoint `db/repos/projectLinks.ts`, à côté des services surveillés et des
-  bases ; `project_count` a quitté le dépôt du module, `toTarget` reçoit le
-  compte. Dans un sens, Projets demande au module si une cible existe avant
-  de la relier (`DEPLOY_ITEMS_PROVIDER`, publié par le service du module,
-  lu par `moduleProvider` dans `project/deployLink.ts`) ; dans l'autre, le
-  module lit le contrat de Projets (`PROJECTS_USAGE_PROVIDER`, offert par
-  l'app tant que Projets est native) : combien de projets déploient chaque
+  `unlinkAllDeployTargets`, `listDeployUsage`, `countDeployLinks`) sont
+  chez Projets (`features/projects/src/server/repo/links.ts`), à côté des
+  services surveillés et des bases ; `project_count` a quitté le dépôt du
+  module, `toTarget` reçoit le compte. Dans un sens, Projets demande au
+  module si une cible existe avant de la relier (`DEPLOY_ITEMS_PROVIDER`,
+  publié par le service du module, lu par `ctx.providers` dans
+  `features/projects/src/server/deployLink.ts`) ; dans l'autre, le module
+  lit le contrat de Projets (`PROJECTS_USAGE_PROVIDER`, offert par l'app
+  tant que Projets était native, publié par le service du module Projets
+  depuis) : combien de projets déploient chaque
   cible, lesquels (`deploy.get` liste les projets d'ICI, comme avant), et la
   **frise** d'un projet pour un déploiement parti de son onglet
   (`recordEvent`, élargissement du contrat pour ce module : l'ex
@@ -680,11 +684,14 @@ changé, en plus des chemins du §4 :
   ne voit ni URL de webhook ni canal résolu ; `hasChannel` n'a plus lieu
   d'être appelé, la façade ne fait rien sans canal routé (le même « toujours
   tenté : la route décide » qu'Uptime).
-- **Un seul sujet de diffusion**, `deploy` : un module ne nomme que le sien.
-  L'onglet d'un projet suit `deploy.detail`, donc voit l'état changer ; ses
-  compteurs d'onglets (le sujet `projects`) se relisent à leur prochaine
-  ouverture. `deploy.remove` et `deploy.trigger` déclaraient
-  `['deploy', 'projects']`.
+- **Un seul sujet de diffusion**, `deploy`. Le SDK admet depuis le
+  rapatriement de Projets une liste (`mutates: ['deploy', 'projects']`,
+  `live.changed(ws, topics)`), mais ce module n'en a pas besoin : l'onglet
+  d'un projet suit `deploy.detail`, donc voit l'état changer, ses compteurs
+  d'onglets se relisent à leur prochaine ouverture, et un déclenchement
+  inscrit dans une frise ravive `projects` par le contrat de Projets
+  lui-même. `deploy.remove` et `deploy.trigger` déclaraient
+  `['deploy', 'projects']` en natif.
 - **Le service accepte une couture de test** (`new DeploySync(deps, { listDeployments,
   listTargets, fetchDeploymentLog })`, patron `{ openSession }` de Bases de
   données) : `service.test.ts` rejoue le premier import silencieux, le message

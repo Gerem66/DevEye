@@ -18,7 +18,7 @@ import {
  * Commandes du déploiement.
  *
  * Feature d'espace de premier rang, sur le modèle de Git : une cible appartient
- * à l'espace, un projet n'y **pointe** (voir `project.deployLink`). Tout est à
+ * à l'espace, un projet n'y **pointe** (voir `projects.deployLink`). Tout est à
  * l'étage ouvert, donc aucune de ces commandes ne demande de session
  * déverrouillée.
  *

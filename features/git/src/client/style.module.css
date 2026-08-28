@@ -1,7 +1,7 @@
 /* Git — dépôts de l'espace, graphe des commits, diffs.
    Uniquement des variables de thème : aucune couleur en dur.
 
-   Module séparé de `Features/Projects/style.module.css`, et pas seulement
+   Module séparé de `features/projects/src/client/style.module.css`, et pas seulement
    parce que la feature l'est : un module CSS de 2000 lignes pour une douzaine
    d'écrans rend une collision de noms structurellement probable — c'est
    exactement comme ça que `.grid` a été défini deux fois et que la page

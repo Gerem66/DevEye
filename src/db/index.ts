@@ -7,13 +7,6 @@ import { itemSharingRepo, type ItemSharingRepo } from './repos/itemSharing';
 import { notificationChannelsRepo, type NotificationChannelsRepo } from './repos/notificationChannels';
 import { presenceRepo, type PresenceRepo } from './repos/presence';
 import { processSamplesRepo, type ProcessSamplesRepo } from './repos/processSamples';
-import { projectsRepo, type ProjectsRepo } from './repos/projects';
-import { projectRekeyRepo, type ProjectRekeyRepo } from './repos/projectRekey';
-import { projectBoardRepo, type ProjectBoardRepo } from './repos/projectBoard';
-import { projectChatRepo, type ProjectChatRepo } from './repos/projectChat';
-import { projectPlanRepo, type ProjectPlanRepo } from './repos/projectPlan';
-import { projectHistoryRepo, type ProjectHistoryRepo } from './repos/projectHistory';
-import { projectLinksRepo, type ProjectLinksRepo } from './repos/projectLinks';
 import { refreshTokensRepo, type RefreshTokensRepo } from './repos/refreshTokens';
 import { twoFactorRepo, type TwoFactorRepo } from './repos/twoFactor';
 import { userSecretKeysRepo, type UserSecretKeysRepo } from './repos/userSecretKeys';
@@ -43,14 +36,6 @@ export interface Database {
     userInvites: UserInvitesRepo;
     refreshTokens: RefreshTokensRepo;
     logs: LogsRepo;
-    projects: ProjectsRepo;
-    projectRekey: ProjectRekeyRepo;
-    projectBoard: ProjectBoardRepo;
-    projectChat: ProjectChatRepo;
-    projectPlan: ProjectPlanRepo;
-    projectHistory: ProjectHistoryRepo;
-    /** Les liaisons d'un projet vers les services surveillés, les bases de données, les cibles de déploiement, les dépôts git et les sites suivis. */
-    projectLinks: ProjectLinksRepo;
     devices: DevicesRepo;
     linkCodes: LinkCodesRepo;
     metrics: MetricsRepo;
@@ -76,13 +61,6 @@ export function createDatabase(q: Queryable): Database {
         userInvites: userInvitesRepo(q),
         refreshTokens: refreshTokensRepo(q),
         logs: logsRepo(q),
-        projects: projectsRepo(q),
-        projectRekey: projectRekeyRepo(q),
-        projectBoard: projectBoardRepo(q),
-        projectChat: projectChatRepo(q),
-        projectPlan: projectPlanRepo(q),
-        projectHistory: projectHistoryRepo(q),
-        projectLinks: projectLinksRepo(q),
         devices: devicesRepo(q),
         linkCodes: linkCodesRepo(q),
         metrics: metricsRepo(q),

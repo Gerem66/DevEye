@@ -184,6 +184,26 @@ defineFeature({ ...uptimeAdd, mutates: true, handler: … })
 désignent tous deux les appareils, et six préfixes ne correspondent à aucune feature d'espace. Un préfixe absent de
 la table **fait échouer le démarrage**.
 
+`mutates: true` bat le sujet de la feature ; une **liste** nomme les sujets à
+battre à la place : le sien, un sujet secondaire déclaré par le manifest du
+module (`topics`), ou celui d'une autre feature dont les écrans reflètent la
+donnée (`projects.repoLink` bat `['projects', 'git']` : la fiche d'un dépôt
+montre les projets qui l'utilisent). Le boot refuse un sujet inconnu
+(`buildTopicIndex`, qui lit les manifests installés par `moduleTopics()`). Un
+service de fond dispose du même choix : `deps.live.changed(workspaceId,
+topics?)`.
+
+### Les sujets secondaires d'un module
+
+Un module vaut un sujet, qui est son id. Il peut en déclarer d'autres
+(`manifest.topics`, chacun avec les clés de ressources qu'il ravive) : c'est ce
+que fait Projets pour `projectsChat`, le fil de discussion d'une carte changeant
+à une tout autre cadence que le tableau qui le porte. Longtemps un sujet natif
+inscrit en dur dans `@deveye/types` (`nativeLiveTopicSchema`, `TOPIC_FEATURE`),
+il est depuis le rapatriement de Projets le premier sujet secondaire de module :
+le droit d'accès est celui de la feature qui le déclare, et l'app ne le connaît
+que par le manifest (voir [PROJECTS.md](./PROJECTS.md) §3).
+
 ### Le filet, et pourquoi il est porteur
 
 Un contrôle au démarrage liste les commandes au nom mutant qui ne déclarent pas

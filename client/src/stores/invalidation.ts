@@ -66,11 +66,18 @@ export type ResourceKey =
      * — elle déclenche un `/me`, plus lourd, réservé à ce qui le vaut.
      */
     | 'workspace.session'
-    | 'project.count'
-    | 'project.list'
-    | 'project.board'
-    | 'project.myTasks'
-    | 'project.messages'
+    /**
+     * Projets : cinq clés déclarées par le manifest du module
+     * `features/projects`. Les quatre premières battent sur son sujet
+     * (`projects`), la cinquième et le portefeuille sur son sujet secondaire
+     * `projectsChat` (`manifest.topics`), pour qu'un message ne fasse pas
+     * re-solliciter le tableau, la frise et le portefeuille entiers.
+     */
+    | 'projects.count'
+    | 'projects.list'
+    | 'projects.board'
+    | 'projects.myTasks'
+    | 'projects.messages'
     | 'git.count'
     | 'git.list'
     | 'git.repo'
@@ -130,10 +137,10 @@ export type ExternalResourceKey = `x-${string}.${string}`;
  * Ce qu'un sujet du serveur invalide chez nous.
  *
  * La correspondance est explicite parce que les deux vocabulaires ne coïncident
- * pas : le serveur raisonne par feature (`projects`), le client par commande
- * (`project.count`, `project.list`). Un sujet sans entrée ici n'invalide rien — ce qui
- * est le bon défaut, mais explique pourquoi une nouvelle vue en cache doit
- * penser à s'y inscrire.
+ * pas : le serveur raisonne par feature (`workspace`), le client par commande
+ * (`workspace.roleList`, `workspace.session`). Un sujet sans entrée ici
+ * n'invalide rien — ce qui est le bon défaut, mais explique pourquoi une
+ * nouvelle vue en cache doit penser à s'y inscrire.
  */
 const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
     notify: ['notify.channelList', 'notify.routeGet'],
@@ -162,13 +169,14 @@ const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
     // (`sentinel` : sujet distinct de `devices`, ses constats bougent à une
     // tout autre cadence ; ses clés sont déclarées par le manifest du module
     // `features/sentinel` et enregistrées par la glue générée.)
-    // Deux sujets pour une seule feature : la structure d'un côté, les fils de
-    // discussion de l'autre. Un message ne doit pas faire re-solliciter le
-    // portefeuille entier — d'où la coupure côté serveur (`domain/live.ts`).
-    projects: ['project.count', 'project.list', 'project.board', 'project.myTasks'],
-    // Le portefeuille affiche le compte de non-lus : un message venu d'ailleurs
-    // doit donc le rafraîchir lui aussi.
-    projectsChat: ['project.messages', 'project.list'],
+    // (`projects` et `projectsChat` : deux sujets pour une seule feature, la
+    // structure d'un côté, les fils de discussion de l'autre, pour qu'un
+    // message ne fasse pas re-solliciter le portefeuille entier ; le second
+    // ravive aussi le portefeuille, qui affiche les comptes de non-lus. Les
+    // clés des deux sont déclarées par le manifest du module
+    // `features/projects` (`invalidatedByTopic` et `topics`) et enregistrées
+    // par la glue générée : `projectsChat` est le premier sujet secondaire
+    // d'un module.)
     // (`git` : ses trois clés sont déclarées par le manifest du module
     // `features/git` et enregistrées par la glue générée ; le sujet bat après
     // une écriture d'un membre et à chaque tour de synchronisation qui a

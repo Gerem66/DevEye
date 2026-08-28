@@ -324,10 +324,12 @@ par Sauvegardes : `registerNativeProvider` et `backupProvider.ts` ont
 disparu d'`app.ts`) et ce que Projets lui demande avant de relier une base
 (`DATABASE_ITEMS_PROVIDER`, le miroir d'`UPTIME_ITEMS_PROVIDER`, lu par
 `moduleProvider` dans `project/databaseLink.ts`) ; dans l'autre sens, l'app
-offre `PROJECTS_USAGE_PROVIDER` tant que Projets est native
-(`project/usageProvider.ts`, enregistré dans `app.ts` : les projets de
-l'espace qui relient un élément, avec leur titre, et combien par élément,
-clé par feature reliée), et le module ne lit plus aucune table de Projets
+offrait `PROJECTS_USAGE_PROVIDER` tant que Projets était native
+(`project/usageProvider.ts`, enregistré dans `app.ts` par
+`registerNativeProvider`, que le service du module Projets publie depuis son
+rapatriement : les projets de l'espace qui relient un élément, avec leur titre,
+et combien par élément, clé par feature reliée), et le module ne lit plus
+aucune table de Projets
 (`project_count` a quitté son dépôt, `toDatabase` reçoit le compte ; la
 table de liaison `project_database_links` et ses lectures ont rejoint
 `db/repos/projectLinks.ts`, à côté des services surveillés). Le service de
@@ -503,6 +505,55 @@ des routes). Comme les Notes, le manifest déclare `shareTier: 'never'`
 par-dessus le `'perItem'` du descripteur : le listage n'est pas branché sur
 le partage, aucune entrée `items`.
 
+**Projets** est la quatorzième native rapatriée (`features/projects`, 28
+août 2026), menée par deux agents en parallèle (serveur + app, client +
+écrans natifs), la deuxième sur les **deux étages par élément** (l'ex
+`cipherFor(ctx, tier)` de `_shared.ts` rend `ctx.cipher()` ou
+`ctx.cipher('private')`, `assertProjectUnlocked` par `ctx.secrecy.isUnlocked()`,
+un projet gardé se liste masqué et répond `locked` en détail et en écriture,
+sa conversion d'étage re-chiffre tout l'arbre dans le module, `repo/rekey.ts`)
+et la première à battre **deux sujets** : `projectsChat`, longtemps un sujet
+natif de `@deveye/types` (`nativeLiveTopicSchema`, `TOPIC_FEATURE`), est le
+premier sujet secondaire déclaré par un manifest (`topics: [{ id, keys }]`,
+validé au boot par `buildTopicIndex` contre `moduleTopics()`), et `mutates`
+admet une liste (`['projectsChat']` sur la discussion, `['projects', 'git']`
+sur une liaison : les siens, un secondaire, celui d'une autre feature), comme
+`deps.live.changed(workspaceId, topics?)` côté service. Ses commandes et ses
+clés sont passées de `project.*` à `projects.*` (un module parle sous son id ;
+les genres d'événements stockés suivent par la migration `001` du module, sur
+une table de l'allowlist), ses contrats vivent dans `src/contracts/` et
+`@deveye/types` n'en garde que `projectStatusSchema` et le descripteur. Le
+provider d'usage (`PROJECTS_USAGE_PROVIDER`) est **publié par le service du
+module** : `registerNativeProvider` et `NATIVE_PROVIDERS` ont disparu de
+`register.ts` avec leur dernier utilisateur, l'app n'offre plus aucun contrat
+elle-même, et `moduleProvider` ne cherche que parmi les services des modules.
+Dans l'autre sens, le module lit les cinq contrats d'éléments
+(`*_ITEMS_PROVIDER`) par `ctx.providers.get`. Ce que le SDK n'offrait pas aux
+quatre modules précédents (un `live.changed` sur le sujet `projects` après une
+release reportée ou un déploiement inscrit dans une frise), Projets le fait
+lui-même depuis son contrat (`applyVersion`, `recordEvent`), et les sept dépôts
+natifs (`db.projects`, `projectBoard`, `projectChat`, `projectPlan`,
+`projectHistory`, `projectLinks`, `projectRekey`) ont quitté `db/index.ts` pour
+`repo/*.ts` sur `SdkQueryable`, la jointure d'ordre sur la table d'une feature
+reliée admise comme avant. Les assignés et les mentions passent par
+`members.read`. Le module se teste sur le harnais (45 tests : handlers et
+contrat publié), là où la native n'en avait aucun. Comme les Notes et Mail, le
+manifest déclare `shareTier: 'never'` par-dessus le `'perItem'` du
+descripteur : aucune entrée `items`.
+
+**Appareils reste native**, et c'est une décision à confirmer, pas un reste.
+Ses 44 commandes `device.*` / `metrics.*` sont des relais du hub des agents
+(MonitorHub, abonnements et droits par socket, présence, appairage, flotte
+vue par l'admin global) : la capacité `agents` permettrait de la rapatrier,
+mais ce serait envelopper le hub 1:1 dans une façade réservée, sans rien
+isoler, et chaque évolution du protocole agent traverserait deux couches au
+lieu d'une. Tenue pour de l'infrastructure de l'app, au même titre que `live`
+ou `secrecy`, elle n'a pas de manifest ; la seule chose que cela laisse en
+suspens est le dialogue de configuration de collecte de Monitoring, qui ne
+peut pas rejoindre la coquille de réglages sans manifest ([SETTINGS.md]
+(./SETTINGS.md), dernier candidat). Migrer malgré tout, ou clore la liste :
+`feature_refonte.md` section 9.
+
 ## La désinstallation d'un module (22 août 2026)
 
 Le geste inverse de l'installation, conçu pour emporter TOUTES les traces :
@@ -559,8 +610,10 @@ Par service (`FeatureServiceDeps`, `_sdk/service.ts`) : `repo`,
 `listWorkspaceIds` (tous les espaces), `storeFor`/`cipherFor`/`deveyeFor`/
 `devicesFor` (sessionless, étage ouvert seul ; `devicesFor` est la vraie façade,
 gardée par `devices.read`, avec l'état en ligne du hub), `devices` (la flotte
-par identifiant, même garde), `telemetry`, `live.changed(workspaceId)` (le
-sujet du module, diffusé par le hub, projections comprises), `audit` (source
+par identifiant, même garde), `telemetry`, `live.changed(workspaceId, topics?)`
+(le sujet du module, ou ceux que le service nomme : les siens, un secondaire du
+manifest, celui d'une autre feature ; diffusé par le hub, projections
+comprises), `audit` (source
 système), `agents`, `keys` (`sealBytes`/`openBytes` sous la clé serveur,
 `derive(salt, info, length)` : HKDF sur la même clé, jamais stockée),
 `secrecy.redeem(ticket)` (le ticket d'un module rendu en `{ userId,
@@ -593,5 +646,6 @@ Pairs admis d'un module : `@deveye/types`, `react`, `zod`, `framer-motion`
   harnais de test qui les simulent par `shares` et `itemRestrictions`). Ce qui
   reste : les modules **externes** déclarent `shareTier: 'never'` tant
   qu'aucun module tiers n'a exercé le contrat (une ligne de `validateManifest`
-  à lever le jour venu), et les `'perItem'` natifs (Notes, Mail, Projets)
-  restent à brancher, chacun étant un chantier en soi (SHARING.md §9).
+  à lever le jour venu), et les trois `'perItem'` (Notes, Mail, Projets, tous
+  modules désormais, `shareTier: 'never'` en manifest) restent à brancher,
+  chacun étant un chantier en soi (SHARING.md §9).

@@ -212,7 +212,7 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
         setBusy(true);
         try {
             await api.send('deploy.remove', { targetId: target.id });
-            invalidate('deploy.list', 'deploy.count', 'project.board');
+            invalidate('deploy.list', 'deploy.count', 'projects.board');
             onRemoved?.();
         } catch (e) {
             setError(humanizeError(e, 'La suppression a échoué.'));

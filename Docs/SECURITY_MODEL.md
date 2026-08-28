@@ -206,22 +206,35 @@ Contrairement à Uptime (toujours ouvert) et au coffre (toujours gardé), les
 projets laissent le choix **par projet** : `projects.security_tier` vaut `open`
 ou `guarded`, exactement comme `mail_accounts.security_tier`.
 
+Les étages vivent dans le module (`features/projects/src/server/_shared.ts`) :
+`cipherFor(ctx, tier)` rend `ctx.cipher()` (l'étage ouvert) ou
+`ctx.cipher('private')` (l'étage gardé, qui n'existe que dans une session
+déverrouillée), `assertProjectUnlocked` interroge `ctx.secrecy.isUnlocked()`
+avant une écriture qui n'a pas besoin de lire, et le service du module ne
+connaît que `deps.cipherFor(ws)`, l'étage ouvert : ce qu'il offre aux autres
+modules (`PROJECTS_USAGE_PROVIDER`) ne touche jamais un projet gardé.
+
 Ce qui en découle :
 
-- **Tout l'arbre d'un projet suit l'étage de son projet** — cartes, messages,
-  jalons, événements d'historique, cache git, déploiements. Pas de tier par
-  ligne : c'est ce qui rend la bascule atomique (`reencryptProjectTree`), qui
-  lit et re-chiffre tout **avant** la moindre écriture et abandonne sans rien
-  toucher si une seule ligne résiste.
+- **Tout l'arbre d'un projet suit l'étage de son projet** : cartes, messages,
+  jalons, événements d'historique (la liste, à tenir à jour, est
+  `features/projects/src/server/repo/rekey.ts`). Pas de tier par ligne : c'est
+  ce qui rend la bascule atomique (`reencryptProjectTree`), qui lit et
+  re-chiffre tout **avant** la moindre écriture et abandonne sans rien toucher
+  si une seule ligne résiste. Le cache git et les cibles de déploiement n'en
+  font pas partie : objets d'espace, ils vivent à l'étage ouvert quel que
+  soit le tier des projets qui les relient.
 - **`guarded` n'existe qu'en espace personnel.** En espace partagé, les deux
   étages utilisent la clé de l'espace : le projet serait lisible par tous tout
   en s'annonçant confidentiel. Refus explicite plutôt que ce mensonge. Un
   espace partagé reste chiffré — sous la clé de l'espace, à l'étage ouvert.
 - **Un projet gardé perd ses intégrations.** La synchronisation git et le suivi
   de déploiement tournent sans session : ils n'atteindront jamais l'étage gardé.
-  La règle est portée par la requête d'ordonnancement elle-même, pas par une
-  garde applicative, pour qu'elle ne puisse pas être contournée par un nouvel
-  appelant.
+  La règle est portée par la liaison elle-même : `projects.repoLink` et ses
+  trois sœurs refusent un projet gardé, et passer un projet en gardé retire ses
+  liaisons. Les services des modules Git et Déploiement n'ont donc jamais un
+  projet gardé à lire, et les lectures d'usage que Projets leur offre filtrent
+  de toute façon sur l'étage ouvert.
 
 ### Ce qui reste en clair, et pourquoi
 

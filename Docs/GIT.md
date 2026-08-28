@@ -67,8 +67,8 @@ Trois conséquences, toutes bonnes :
   cause**, pas avec sa garde.
 
 Corollaire assumé : **un projet confidentiel n'a pas de dépôt.**
-`project.repoLink` le refuse, et passer un projet en confidentiel retire sa
-liaison (`projectSetSecurityTierFeature`). Ce n'est pas seulement que la
+`projects.repoLink` le refuse, et passer un projet en confidentiel retire sa
+liaison (`projects.setSecurityTier`). Ce n'est pas seulement que la
 synchronisation ne pourrait pas le lire : la liaison est une ligne en clair, et
 rattacher un projet confidentiel à un dépôt nommé montrerait précisément ce que
 le palier est censé cacher.
@@ -98,7 +98,8 @@ dépôt — et une clé sur `project_id` seul faisait *remplacer* là où l'on v
 Les liaisons d'un projet ont désormais la même forme — dépôts (069), services
 surveillés (067), bases de données (068), cibles de déploiement (080) — et
 c'est la forme juste : ce sont des objets d'espace, pas des propriétés d'un
-projet. Les quatre tables sont celles de **Projets** (`db/repos/projectLinks.ts`),
+projet. Les quatre tables sont celles de **Projets**
+(`features/projects/src/server/repo/links.ts`),
 et le module Git ne lit aucune d'elles : le nombre de projets qui utilisent un
 dépôt, et lesquels, lui viennent du contrat que Projets offre
 (`PROJECTS_USAGE_PROVIDER`, `usageOf` et `countByItem`), et c'est par ce même
@@ -195,15 +196,15 @@ src/client/style.module.css         la feuille du module
 db/migrations/064_git_repos.sql      table rase de l'ancien schéma, 7 tables
 db/migrations/100_git_credentials.sql  les jetons GitHub dans la table du module, la clé étrangère retirée,
                                        workspace_credentials supprimée
-db/repos/projectLinks.ts             project_repo_links : la table de Projets, ses lectures et ses comptes
-features/project/repoLink.ts         les trois commandes de liaison ; l'existence d'un dépôt par GIT_ITEMS_PROVIDER
-features/project/usageProvider.ts    PROJECTS_USAGE_PROVIDER : ce que le module demande à Projets, et la version
-                                     d'un projet qui suit une release (applyVersion)
+features/projects/src/server/repo/links.ts       project_repo_links : la table de Projets, ses lectures et ses comptes
+features/projects/src/server/repoLink.ts         les trois commandes de liaison ; l'existence d'un dépôt par GIT_ITEMS_PROVIDER
+features/projects/src/server/usageProvider.ts    PROJECTS_USAGE_PROVIDER : ce que le module demande à Projets, et la version
+                                                 d'un projet qui suit une release (applyVersion)
 ```
 
-`features/project.ts` (`@deveye/types`) n'en garde que trois commandes :
-`project.repoList` / `repoLink` / `repoUnlink`. Elles ne manipulent qu'un
-`repoId`. `Features/Projects/Git/` (client) se réduit à `Git.tsx` (enveloppe
+Le contrat de Projets (`features/projects/src/contracts/commands.ts`) n'en
+porte que trois : `projects.repoList` / `repoLink` / `repoUnlink`. Elles ne
+manipulent qu'un `repoId`. `features/projects/src/client/Git/` se réduit à `Git.tsx` (enveloppe
 mince) et `LinkRepoDialog.tsx` (choisir un dépôt existant, ou en créer un),
 composés sur `GIT_CLIENT_PROVIDER`.
 
@@ -226,7 +227,8 @@ un contrat, pas une heuristique.
 
 ### Le cache git ne suit aucun tier
 
-Le cache git ne figure pas dans `projectRekey.ts` : un dépôt appartient à
+Le cache git ne figure pas dans la liste de rekey de Projets
+(`features/projects/src/server/repo/rekey.ts`) : un dépôt appartient à
 l'espace et non à un projet, il est chiffré sous la clé de l'espace à l'étage
 ouvert, une fois pour toutes.
 
@@ -285,9 +287,9 @@ appel par tour qui a reçu des releases (un 304 ne le déclenche pas), et le
 tour échoue si l'écriture échoue : l'ETag des releases n'est alors pas
 retenu, et le tour suivant réessaie.
 
-Ce que le SDK n'offre pas : un `live.changed` sur le sujet `projects`. Le
-service ne ravive que `git` ; la version d'un projet se relit à sa prochaine
-lecture.
+Le service ne ravive que `git` ; c'est Projets qui ravive `projects` depuis
+son module, quand `applyVersion` a changé la version d'un projet
+(`deps.live.changed`, jamais sans changement).
 
 ### Désigner un dépôt : l'ordre des champs est le sujet
 
@@ -530,14 +532,16 @@ changé, en plus des chemins du §4 :
   les six tables historiques restent.
 - **Le module ne lit aucune table de Projets.** `project_repo_links` et ses
   lectures (`listRepoIds`, `linkRepo`, `unlinkRepo`, `unlinkAllRepos`,
-  `listRepoUsage`, `countRepoLinks`) ont rejoint `db/repos/projectLinks.ts`
-  (la jointure sur `git_repos` pour l'ordre d'affichage est admise) ;
-  `project_count` a quitté le dépôt du module, `toRepo` reçoit le compte. Dans
-  un sens, Projets demande au module si un dépôt existe avant de le relier
-  (`GIT_ITEMS_PROVIDER`, publié par le service du module, lu par
-  `moduleProvider` dans `project/repoLink.ts`) ; dans l'autre, le module lit le
-  contrat de Projets (`PROJECTS_USAGE_PROVIDER`, offert par l'app tant que
-  Projets est native) pour le compte, la liste des projets liés, et pour
+  `listRepoUsage`, `countRepoLinks`) sont chez Projets
+  (`features/projects/src/server/repo/links.ts`, la jointure sur `git_repos`
+  pour l'ordre d'affichage est admise) ; `project_count` a quitté le dépôt du
+  module, `toRepo` reçoit le compte. Dans un sens, Projets demande au module
+  si un dépôt existe avant de le relier (`GIT_ITEMS_PROVIDER`, publié par le
+  service du module, lu par `ctx.providers` dans
+  `features/projects/src/server/repoLink.ts`) ; dans l'autre, le module lit
+  le contrat de Projets (`PROJECTS_USAGE_PROVIDER`, offert par l'app tant que
+  Projets était native, publié par le service du module Projets depuis) pour
+  le compte, la liste des projets liés, et pour
   **dire** la version d'un projet (`applyVersion`, l'ex `applyReleaseVersion`
   du service natif, désormais chez Projets : c'est lui qui connaît sa règle,
   `github_release` étant la seule source suivie aujourd'hui).
@@ -557,9 +561,11 @@ changé, en plus des chemins du §4 :
   (`null` sur un compte jamais colorié), et Git déclare `members.read`, seule
   capacité du manifest (le rattachement d'un auteur vérifie l'appartenance par
   la même liste).
-- **Ce que le SDK n'offre pas**, comme pour Bases de données et Déploiement :
-  un `mutates` multi-sujets (`git.repoRemove` déclarait `['git', 'projects']`)
-  et un `live.changed` sur le sujet `projects` (le service natif le nommait
-  après un tour qui a pu changer la version d'un projet). L'onglet d'un projet
-  suit `git.repo` et voit le cache changer ; ses compteurs d'onglets et la
-  version d'un projet se relisent à leur prochaine lecture.
+- **Ce que le SDK n'offrait pas alors**, comme pour Bases de données et
+  Déploiement : un `mutates` multi-sujets (`git.repoRemove` déclarait
+  `['git', 'projects']`) et un `live.changed` sur le sujet `projects` (le
+  service natif le nommait après un tour qui a pu changer la version d'un
+  projet). Depuis le rapatriement de Projets, le SDK admet les deux, et c'est
+  Projets qui ravive `projects` quand `applyVersion` a changé une version ;
+  l'onglet d'un projet suit `git.repo` et voit le cache changer, ses compteurs
+  d'onglets se relisent à leur prochaine lecture.

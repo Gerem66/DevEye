@@ -25,13 +25,11 @@ import {
     createModuleServices,
     isModulePublicPath,
     moduleAgentHooks,
-    modulePublicRoutes,
-    registerNativeProvider
+    modulePublicRoutes
 } from '@/features/_sdk/register';
 import { setSdkHost } from '@/features/_sdk/host';
 import type { FeatureService } from '@deveye/types/sdk/server';
 import { createAuditLog } from '@/Services/AuditLog';
-import { createProjectsUsageProvider, PROJECTS_USAGE_PROVIDER } from '@/features/project/usageProvider';
 import { status } from '@/status';
 
 import type { Database } from '@/db';
@@ -175,14 +173,10 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     const moduleServices = createModuleServices({ db: deps.db, crypt: deps.crypt, audit, logger, live });
     for (const svc of moduleServices) await svc.start();
 
-    // Ce que les modules Bases de données, Déploiements, Git et Audience
-    // demandent à Projets (les projets de l'espace qui relient un élément, et
-    // combien par élément ; la frise d'un projet pour un déploiement parti de
-    // son onglet ; la version d'un projet qui suit les releases d'un dépôt),
-    // offert par l'app tant que Projets est native. Les modules le lisent par
-    // `providers.get` sans savoir qui l'offre ; le jour où Projets migre, son
-    // service publie la même clé et ce fichier disparaît.
-    registerNativeProvider(PROJECTS_USAGE_PROVIDER, createProjectsUsageProvider({ db: deps.db, crypt: deps.crypt }));
+    // (Ce que les modules Bases de données, Déploiements, Git et Audience
+    // demandent à Projets est un contrat publié par le service du module
+    // `features/projects` (`PROJECTS_USAGE_PROVIDER`), démarré avec les autres
+    // ci-dessus : l'app n'offre plus aucun contrat elle-même.)
     // (Le moteur de Sentinelle est un service du module `features/sentinel`,
     // démarré avec les autres ci-dessus ; ses relevés lui arrivent par les
     // hooks agent.)

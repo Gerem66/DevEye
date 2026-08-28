@@ -26,7 +26,7 @@ import {
 /**
  * Commandes de l'audience d'un espace.
  *
- * Préfixe unique `audience.`, comme `git.`, `database.` et `project.` — d'où le
+ * Préfixe unique `audience.`, comme `git.`, `database.` et `projects.` — d'où le
  * camelCase derrière le point.
  *
  * ⚠️ Conséquence à connaître : le filet de démarrage (`MUTATION_VERB` dans

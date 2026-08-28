@@ -1,0 +1,20 @@
+{
+  "id": "projects",
+  "tables": [
+    "projects",
+    "project_columns",
+    "project_cards",
+    "project_card_deps",
+    "project_card_reads",
+    "project_milestones",
+    "project_messages",
+    "project_events",
+    "project_repo_links",
+    "project_database_links",
+    "project_deploy_links",
+    "project_audience_links",
+    "project_uptime_links"
+  ],
+  "minTypesVersion": "0.15.2",
+  "$comment": "Tables historiques du socle, jamais déplacées : l'allowlist les dispense du préfixe ft_projects_. Toute NOUVELLE table du module prendra le préfixe, via src/server/migrations/."
+}

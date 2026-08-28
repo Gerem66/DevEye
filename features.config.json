@@ -39,6 +39,9 @@
     },
     {
       "package": "deveye-feature-mail"
+    },
+    {
+      "package": "deveye-feature-projects"
     }
   ]
 }

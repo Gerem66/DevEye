@@ -1,0 +1,701 @@
+import { z } from 'zod';
+import {
+    PROJECT_VERSION_MAX_LENGTH,
+    projectDraftSchema,
+    projectSchema,
+    projectSecurityTierSchema,
+    projectSummarySchema,
+    projectVersionSourceSchema
+} from './project';
+import { projectStatusSchema } from '@deveye/types';
+import {
+    PROJECT_COLUMN_NAME_MAX_LENGTH,
+    projectCardDraftSchema,
+    projectCardSchema,
+    projectColumnSchema
+} from './board';
+import { PROJECT_MESSAGE_MAX_LENGTH, PROJECT_MESSAGE_PAGE_SIZE, projectMessageSchema } from './chat';
+import { projectCardDepSchema, projectMilestoneDraftSchema, projectMilestoneSchema } from './plan';
+import { PROJECT_EVENT_PAGE_SIZE, projectEventSchema } from './history';
+import { myTaskSchema, projectLinkCountsSchema } from './link';
+
+/**
+ * Commandes des projets.
+ *
+ * L'espace visé n'apparaît dans aucune entrée : il voyage sur l'enveloppe WS
+ * (voir `protocol/envelope`) et le dispatcheur le résout, appartenance vérifiée,
+ * avant que le handler ne s'exécute.
+ *
+ * ⚠️ Toutes les commandes partagent le préfixe `projects.`, qui porte le sujet
+ * live `projects` (`src/features/_topics.ts`). Le contrôle de démarrage qui
+ * attrape un `mutates` oublié cherche un verbe **juste après le point**
+ * (`notes.add`) : avec des noms en camelCase il ne voit rien ici. `mutates` est
+ * donc à relire à la main sur chaque écriture ajoutée à ce fichier.
+ */
+
+const projectId = z.number().int().positive();
+
+/**
+ * Le portefeuille : tous les projets actifs de l'espace, avec leurs compteurs.
+ *
+ * Jamais verrouillée. Un projet `guarded` dont la session ne peut pas lire le
+ * corps revient **masqué** (`masked: true`) plutôt qu'absent : la liste doit
+ * dire ce qui existe même verrouillée. `archived: true` bascule sur l'ensemble
+ * disjoint des projets archivés.
+ */
+export const projectList = {
+    command: 'projects.list' as const,
+    input: z.object({ archived: z.boolean().optional() }),
+    output: z.object({ projects: z.array(projectSummarySchema) })
+};
+
+/**
+ * Compte les projets **actifs**. Métadonnée en clair pure : aucune ligne n'est
+ * déchiffrée, la tuile d'accueil affiche donc toujours un nombre, même session
+ * verrouillée.
+ */
+export const projectCount = {
+    command: 'projects.count' as const,
+    input: z.object({}),
+    output: z.object({ count: z.number().int().nonnegative() })
+};
+
+/**
+ * Un projet en entier. Sur un projet `guarded`, la session doit être
+ * déverrouillée : sinon le serveur répond `locked` et le client ouvre l'invite
+ * habituelle avant de rejouer l'appel.
+ */
+export const projectGet = {
+    command: 'projects.get' as const,
+    input: z.object({ projectId }),
+    output: z.object({ project: projectSchema })
+};
+
+/**
+ * Crée un projet. `securityTier` est figé à la création et ne se change ensuite
+ * que par {@link projectSetSecurityTier}, qui re-chiffre tout l'arbre.
+ */
+export const projectAdd = {
+    command: 'projects.add' as const,
+    input: z.object({
+        project: projectDraftSchema,
+        securityTier: projectSecurityTierSchema
+    }),
+    output: z.object({ project: projectSchema })
+};
+
+/**
+ * Modifie le profil d'un projet. Ne touche ni au tier ni à la source de version
+ * — deux bascules qui ont des effets de bord, et donc leurs propres commandes.
+ */
+export const projectUpdate = {
+    command: 'projects.update' as const,
+    input: z.object({ projectId, project: projectDraftSchema }),
+    output: z.object({ project: projectSchema })
+};
+
+/**
+ * Pose la version affichée, et d'où elle vient.
+ *
+ * `github_release` exige un dépôt lié et un projet `open` (un projet `guarded`
+ * ne se synchronise pas) ; `version` est alors ignorée et recalculée par le
+ * service de fond. En `manual`, la valeur passée fait foi.
+ */
+export const projectSetVersion = {
+    command: 'projects.setVersion' as const,
+    input: z.object({
+        projectId,
+        source: projectVersionSourceSchema,
+        version: z.string().max(PROJECT_VERSION_MAX_LENGTH)
+    }),
+    output: z.object({ project: projectSchema })
+};
+
+export const projectSetStatus = {
+    command: 'projects.setStatus' as const,
+    input: z.object({ projectId, status: projectStatusSchema }),
+    output: z.object({ project: projectSchema })
+};
+
+/**
+ * Bascule l'étage de chiffrement, et **re-chiffre tout l'arbre du projet**
+ * (cartes, messages, jalons, événements, cache git) sous la nouvelle clé, dans
+ * la foulée. Exige une session déverrouillée dans les deux sens : on ne
+ * re-chiffre pas ce qu'on ne peut pas lire.
+ *
+ * Passer en `guarded` **désactive les intégrations** du projet (synchronisation
+ * git, déploiement) : elles ont besoin de lire sans session.
+ */
+export const projectSetSecurityTier = {
+    command: 'projects.setSecurityTier' as const,
+    input: z.object({ projectId, securityTier: projectSecurityTierSchema }),
+    output: z.object({ project: projectSchema })
+};
+
+/**
+ * Archive un projet : il quitte le portefeuille sans que rien ne soit détruit.
+ * C'est ce que « supprimer » fait dans l'interface — il n'existe volontairement
+ * aucune commande de suppression dans ce module.
+ */
+export const projectArchive = {
+    command: 'projects.archive' as const,
+    input: z.object({ projectId }),
+    output: z.object({ projectId })
+};
+
+export const projectRestore = {
+    command: 'projects.restore' as const,
+    input: z.object({ projectId }),
+    output: z.object({ projectId })
+};
+
+/**
+ * Ordonne le portefeuille : `projectIds` en est le contenu **complet**, dans son
+ * ordre final (indice le plus bas en premier). Ne touche jamais au corps
+ * chiffré, donc fonctionne aussi sur des projets masqués.
+ */
+export const projectReorder = {
+    command: 'projects.reorder' as const,
+    input: z.object({ projectIds: z.array(projectId).min(1) }),
+    output: z.object({ projectIds: z.array(projectId) })
+};
+
+// ------------------------------------------------------------------ tableau
+
+const columnId = z.number().int().positive();
+const cardId = z.number().int().positive();
+
+/**
+ * Le tableau complet d'un projet : ses colonnes et ses cartes vivantes.
+ *
+ * Un seul aller-retour plutôt qu'un par colonne — le client ne tient aucun cache
+ * normalisé, il re-sollicite, et un tableau entier tient largement dans une
+ * trame. Sur un projet confidentiel, exige une session déverrouillée : les
+ * titres des cartes sont chiffrés au même étage que le projet.
+ *
+ * `archived: true` renvoie à la place les cartes archivées, sans les colonnes —
+ * c'est l'ensemble disjoint, lu par la page d'historique.
+ */
+export const projectBoard = {
+    command: 'projects.board' as const,
+    input: z.object({ projectId, archived: z.boolean().optional() }),
+    output: z.object({
+        columns: z.array(projectColumnSchema),
+        cards: z.array(projectCardSchema)
+    })
+};
+
+export const projectColumnAdd = {
+    command: 'projects.columnAdd' as const,
+    input: z.object({ projectId, name: z.string().min(1).max(PROJECT_COLUMN_NAME_MAX_LENGTH) }),
+    output: z.object({ column: projectColumnSchema })
+};
+
+export const projectColumnUpdate = {
+    command: 'projects.columnUpdate' as const,
+    input: z.object({
+        columnId,
+        name: z.string().min(1).max(PROJECT_COLUMN_NAME_MAX_LENGTH),
+        countsAsDone: z.boolean(),
+        wipLimit: z.number().int().positive().nullable()
+    }),
+    output: z.object({ column: projectColumnSchema })
+};
+
+/**
+ * Supprime une colonne — la seule suppression du module, et elle est bornée :
+ * refusée (`conflict`) tant que la colonne porte la moindre carte, archivée
+ * comprise. La contrainte SQL est en CASCADE ; sans cette garde, retirer une
+ * colonne détruirait silencieusement des cartes que rien ne permet de
+ * supprimer par ailleurs.
+ */
+export const projectColumnRemove = {
+    command: 'projects.columnRemove' as const,
+    input: z.object({ columnId }),
+    output: z.object({ columnId })
+};
+
+export const projectColumnReorder = {
+    command: 'projects.columnReorder' as const,
+    input: z.object({ projectId, columnIds: z.array(columnId).min(1) }),
+    output: z.object({ columnIds: z.array(columnId) })
+};
+
+export const projectCardAdd = {
+    command: 'projects.cardAdd' as const,
+    input: z.object({ projectId, columnId, card: projectCardDraftSchema }),
+    output: z.object({ card: projectCardSchema })
+};
+
+export const projectCardUpdate = {
+    command: 'projects.cardUpdate' as const,
+    input: z.object({ cardId, card: projectCardDraftSchema }),
+    output: z.object({ card: projectCardSchema })
+};
+
+/**
+ * Range une colonne : `cardIds` en est le contenu **complet** dans son ordre
+ * final, et chaque carte listée est versée dans `columnId` au passage. Une
+ * seule commande couvre donc le tri interne et le passage d'une colonne à
+ * l'autre — c'est le motif de `notes.reorder`.
+ *
+ * Ne touche jamais au corps chiffré : un glisser-déposer fonctionne donc sans
+ * déverrouiller quoi que ce soit.
+ */
+export const projectCardMove = {
+    command: 'projects.cardMove' as const,
+    input: z.object({ columnId, cardIds: z.array(cardId) }),
+    output: z.object({ columnId, cardIds: z.array(cardId) })
+};
+
+/**
+ * Archive une carte : elle quitte le tableau sans que rien ne soit détruit.
+ * C'est ce que « supprimer » fait dans l'interface — il n'existe volontairement
+ * aucune commande de suppression de carte.
+ */
+export const projectCardArchive = {
+    command: 'projects.cardArchive' as const,
+    input: z.object({ cardId }),
+    output: z.object({ cardId })
+};
+
+export const projectCardRestore = {
+    command: 'projects.cardRestore' as const,
+    input: z.object({ cardId }),
+    output: z.object({ cardId })
+};
+
+// ------------------------------------------------------------ planification
+
+const milestoneId = z.number().int().positive();
+
+/**
+ * Ce que le tableau ne dit pas : les jalons du projet et le graphe des
+ * dépendances entre ses cartes.
+ *
+ * Volontairement **séparé de `projects.board`** : la frise se compose des cartes
+ * (que le tableau a déjà chargées) et de ce complément. Les fusionner ferait
+ * payer les dépendances à chaque ouverture du kanban, qui n'en a que faire.
+ */
+export const projectPlan = {
+    command: 'projects.plan' as const,
+    input: z.object({ projectId }),
+    output: z.object({
+        milestones: z.array(projectMilestoneSchema),
+        deps: z.array(projectCardDepSchema)
+    })
+};
+
+export const projectMilestoneAdd = {
+    command: 'projects.milestoneAdd' as const,
+    input: z.object({ projectId, milestone: projectMilestoneDraftSchema }),
+    output: z.object({ milestone: projectMilestoneSchema })
+};
+
+export const projectMilestoneUpdate = {
+    command: 'projects.milestoneUpdate' as const,
+    input: z.object({ milestoneId, milestone: projectMilestoneDraftSchema }),
+    output: z.object({ milestone: projectMilestoneSchema })
+};
+
+/** Marque un jalon atteint (ou revient dessus). */
+export const projectMilestoneSetReached = {
+    command: 'projects.milestoneSetReached' as const,
+    input: z.object({ milestoneId, reached: z.boolean() }),
+    output: z.object({ milestone: projectMilestoneSchema })
+};
+
+/**
+ * Retire un jalon. Ses cartes ne sont pas touchées — elles se retrouvent
+ * simplement sans jalon (`ON DELETE SET NULL`). Un jalon n'est pas un « bloc » :
+ * il ne porte aucun travail, seulement une date, donc le retirer ne perd rien.
+ */
+export const projectMilestoneRemove = {
+    command: 'projects.milestoneRemove' as const,
+    input: z.object({ milestoneId }),
+    output: z.object({ milestoneId })
+};
+
+/** Rattache une carte à un jalon, ou l'en détache (`null`). */
+export const projectCardSetMilestone = {
+    command: 'projects.cardSetMilestone' as const,
+    input: z.object({ cardId, milestoneId: milestoneId.nullable() }),
+    output: z.object({ cardId, milestoneId: milestoneId.nullable() })
+};
+
+/**
+ * Déclare que `cardId` est bloquée par `blockedByCardId`.
+ *
+ * Refusée (`validation`) si elle fermerait un cycle : une carte ne peut pas
+ * dépendre d'elle-même, fût-ce par un chemin de dix arêtes. Le contrôle est
+ * fait côté serveur, là où le graphe complet est connu.
+ */
+export const projectDepAdd = {
+    command: 'projects.depAdd' as const,
+    input: projectCardDepSchema,
+    output: z.object({ dep: projectCardDepSchema })
+};
+
+export const projectDepRemove = {
+    command: 'projects.depRemove' as const,
+    input: projectCardDepSchema,
+    output: projectCardDepSchema
+};
+
+// ----------------------------------------------------------------- git
+
+/**
+ * La liaison du projet vers un dépôt de l'espace.
+ *
+ * Trois commandes seulement : **le dépôt n'appartient pas au projet.** Il vit
+ * dans la feature Git (`features/git.ts`), qui porte son cache, sa
+ * synchronisation et ses jetons. Ce qui suit ne fait que poser et retirer un
+ * pointeur — d'où le fait que tout y soit un `repoId` et rien d'autre.
+ */
+
+/**
+ * Les dépôts liés au projet, dans l'ordre de la feature Git.
+ *
+ * **Plusieurs**, et c'est le cas normal : un projet réel se compose souvent d'un
+ * client, d'un serveur et de contrats partagés, chacun dans son dépôt.
+ */
+export const projectRepoList = {
+    command: 'projects.repoList' as const,
+    input: z.object({ projectId }),
+    output: z.object({ repoIds: z.array(z.number().int().positive()) })
+};
+
+/**
+ * Ajoute un dépôt existant au projet. **Idempotente** : le relier deux fois
+ * n'est pas une erreur, c'est le même fait déclaré deux fois. Rend la liste
+ * complète, pour que l'appelant n'ait pas à la recomposer.
+ *
+ * Refusé sur un projet confidentiel : la synchronisation tourne sans session, et
+ * rattacher un projet gardé à une entité d'espace en clair révélerait par la
+ * bande ce qu'il contient. Le dire ici évite un réglage sans effet.
+ */
+export const projectRepoLink = {
+    command: 'projects.repoLink' as const,
+    input: z.object({ projectId, repoId: z.number().int().positive() }),
+    output: z.object({ repoIds: z.array(z.number().int().positive()) })
+};
+
+/**
+ * Retire une liaison.
+ *
+ * **Le dépôt et son cache survivent** : ils appartiennent à l'espace, et
+ * d'autres projets peuvent s'en servir. C'est le pointeur qui part, rien d'autre.
+ */
+export const projectRepoUnlink = {
+    command: 'projects.repoUnlink' as const,
+    input: z.object({ projectId, repoId: z.number().int().positive() }),
+    output: z.object({ repoIds: z.array(z.number().int().positive()) })
+};
+
+// ------------------------------------------------------------- transverse
+
+/**
+ * Toutes mes tâches, tous projets de l'espace confondus.
+ *
+ * Une seule requête, rendue possible par le fait qu'`assignee_user_id` est en
+ * clair. Les cartes d'un projet confidentiel verrouillé reviennent masquées
+ * plutôt qu'absentes : une liste de tâches incomplète serait pire qu'une liste
+ * qui dit ce qu'elle ne peut pas lire.
+ */
+export const projectMyTasks = {
+    command: 'projects.myTasks' as const,
+    input: z.object({}),
+    output: z.object({ tasks: z.array(myTaskSchema) })
+};
+
+/**
+ * Combien d'éléments chaque intégration du projet a à montrer.
+ *
+ * Une seule commande pour les quatre, parce qu'elle sert une seule décision :
+ * quels onglets la fiche du projet doit ouvrir. Les demander une par une ferait
+ * quatre allers-retours pour dessiner une barre d'onglets, et la ferait
+ * apparaître par morceaux.
+ *
+ * Ne déchiffre rien et ne demande aucune session : ce sont des liaisons en
+ * clair. Un projet confidentiel n'en a aucune par construction (voir
+ * {@link projectRepoLink}), et répond donc quatre zéros.
+ */
+export const projectLinkCounts = {
+    command: 'projects.linkCounts' as const,
+    input: z.object({ projectId }),
+    output: z.object({ counts: projectLinkCountsSchema })
+};
+
+/**
+ * Les services surveillés rattachés au projet, dans l'ordre d'Uptime.
+ *
+ * Ne rend que des identifiants : les nommer supposerait de lire Uptime au nom
+ * de l'appelant, alors que ce droit-là s'y vérifie déjà. Le client résout les
+ * noms et les états par `uptime.list`, et affiche des identifiants nus si son
+ * rôle ne lui ouvre pas cette feature — plutôt que de faire disparaître des
+ * liaisons qui existent.
+ */
+export const projectUptimeList = {
+    command: 'projects.uptimeList' as const,
+    input: z.object({ projectId }),
+    output: z.object({ serviceIds: z.array(z.number().int().positive()) })
+};
+
+/**
+ * Rattache un service surveillé au projet. **Idempotente** : rattacher deux
+ * fois le même service n'est pas une erreur, c'est le même fait déclaré deux
+ * fois. Rend la liste complète, pour que l'appelant n'ait pas à la recomposer.
+ */
+export const projectUptimeLink = {
+    command: 'projects.uptimeLink' as const,
+    input: z.object({ projectId, serviceId: z.number().int().positive() }),
+    output: z.object({ serviceIds: z.array(z.number().int().positive()) })
+};
+
+/** Retire la liaison. Le service, lui, n'est pas touché. */
+export const projectUptimeUnlink = {
+    command: 'projects.uptimeUnlink' as const,
+    input: z.object({ projectId, serviceId: z.number().int().positive() }),
+    output: z.object({ serviceIds: z.array(z.number().int().positive()) })
+};
+
+/**
+ * Les bases de données rattachées au projet, dans l'ordre de la feature Bases.
+ *
+ * Ne rend que des identifiants, pour la même raison que
+ * {@link projectUptimeList} : les nommer supposerait de lire la feature Bases au
+ * nom de l'appelant, alors que ce droit s'y vérifie déjà.
+ */
+export const projectDatabaseList = {
+    command: 'projects.databaseList' as const,
+    input: z.object({ projectId }),
+    output: z.object({ databaseIds: z.array(z.number().int().positive()) })
+};
+
+/**
+ * Rattache une base au projet. **Idempotente**, et refusée sur un projet
+ * confidentiel : la liaison est une ligne en clair, et la base vit à l'étage
+ * ouvert — exactement comme pour un dépôt git.
+ */
+export const projectDatabaseLink = {
+    command: 'projects.databaseLink' as const,
+    input: z.object({ projectId, databaseId: z.number().int().positive() }),
+    output: z.object({ databaseIds: z.array(z.number().int().positive()) })
+};
+
+/** Retire la liaison. La base, elle, n'est pas touchée. */
+export const projectDatabaseUnlink = {
+    command: 'projects.databaseUnlink' as const,
+    input: z.object({ projectId, databaseId: z.number().int().positive() }),
+    output: z.object({ databaseIds: z.array(z.number().int().positive()) })
+};
+
+/**
+ * Les sites suivis rattachés au projet, dans l'ordre de la feature Audience.
+ *
+ * Ne rend que des identifiants, pour la même raison que
+ * {@link projectDatabaseList} : les nommer supposerait de lire la feature
+ * Audience au nom de l'appelant, alors que ce droit s'y vérifie déjà.
+ */
+export const projectAudienceList = {
+    command: 'projects.audienceList' as const,
+    input: z.object({ projectId }),
+    output: z.object({ siteIds: z.array(z.number().int().positive()) })
+};
+
+/**
+ * Rattache un site au projet. **Idempotente**, et refusée sur un projet
+ * confidentiel : la liaison est une ligne en clair, et le site vit à l'étage
+ * ouvert — exactement comme un dépôt git ou une base.
+ */
+export const projectAudienceLink = {
+    command: 'projects.audienceLink' as const,
+    input: z.object({ projectId, siteId: z.number().int().positive() }),
+    output: z.object({ siteIds: z.array(z.number().int().positive()) })
+};
+
+/** Retire la liaison. Le site, lui, n'est pas touché. */
+export const projectAudienceUnlink = {
+    command: 'projects.audienceUnlink' as const,
+    input: z.object({ projectId, siteId: z.number().int().positive() }),
+    output: z.object({ siteIds: z.array(z.number().int().positive()) })
+};
+
+// ---------------------------------------------------------- déploiement
+
+/**
+ * La liaison du projet vers les cibles de déploiement de l'espace.
+ *
+ * Trois commandes, exactement comme pour un dépôt : **la cible n'appartient pas
+ * au projet.** Elle vit dans la feature Déploiement, avec son jeton, son
+ * historique et son suivi d'état, et plusieurs projets peuvent viser la même —
+ * le cas normal quand un client et un serveur partent dans la même pile compose.
+ * Ce qui suit ne fait que poser et retirer un pointeur.
+ *
+ * Déclencher ne se fait pas ici : c'est `deploy.trigger`, qui accepte un
+ * `projectId` facultatif pour inscrire le fait dans la frise du projet.
+ */
+export const projectDeployList = {
+    command: 'projects.deployList' as const,
+    input: z.object({ projectId }),
+    output: z.object({ targetIds: z.array(z.number().int().positive()) })
+};
+
+/**
+ * Rattache une cible au projet. **Idempotente**, et refusée sur un projet
+ * confidentiel : la liaison est une ligne en clair, la cible vit à l'étage
+ * ouvert et son suivi tourne sans session — exactement comme pour un dépôt.
+ */
+export const projectDeployLink = {
+    command: 'projects.deployLink' as const,
+    input: z.object({ projectId, targetId: z.number().int().positive() }),
+    output: z.object({ targetIds: z.array(z.number().int().positive()) })
+};
+
+/** Retire la liaison. La cible, son historique et les autres projets survivent. */
+export const projectDeployUnlink = {
+    command: 'projects.deployUnlink' as const,
+    input: z.object({ projectId, targetId: z.number().int().positive() }),
+    output: z.object({ targetIds: z.array(z.number().int().positive()) })
+};
+
+// -------------------------------------------------------------- historique
+
+/**
+ * La frise verticale d'un projet, du plus récent au plus ancien.
+ *
+ * Même pagination par curseur remontant que la discussion : `before` demande la
+ * page qui précède un événement donné. Sans lui, on obtient le haut de la frise.
+ */
+export const projectEventList = {
+    command: 'projects.eventList' as const,
+    input: z.object({
+        projectId,
+        before: z.number().int().positive().optional(),
+        limit: z.number().int().positive().max(PROJECT_EVENT_PAGE_SIZE).optional()
+    }),
+    output: z.object({
+        events: z.array(projectEventSchema),
+        hasMore: z.boolean()
+    })
+};
+
+// -------------------------------------------------------------- discussion
+
+const messageId = z.number().int().positive();
+
+/**
+ * Le fil d'une carte, du plus ancien au plus récent.
+ *
+ * Pagination par **curseur remontant** : `before` demande la page qui précède
+ * un message donné, ce qui est le seul ordre qui tienne dans un fil où l'on
+ * écrit par le bas. Sans `before`, on obtient la fin du fil — ce qu'on veut à
+ * l'ouverture.
+ */
+export const projectMessageList = {
+    command: 'projects.messageList' as const,
+    input: z.object({
+        cardId,
+        before: messageId.optional(),
+        limit: z.number().int().positive().max(PROJECT_MESSAGE_PAGE_SIZE).optional()
+    }),
+    output: z.object({
+        messages: z.array(projectMessageSchema),
+        /** Reste-t-il des messages plus anciens à charger ? */
+        hasMore: z.boolean()
+    })
+};
+
+/**
+ * Poste un message. Les `mentions` sont des identifiants de **membres de
+ * l'espace** ; le serveur refuse tout autre. Elles voyagent à part du texte
+ * plutôt que d'être ré-extraites côté serveur : celui-ci ne lit pas le texte
+ * pour le comprendre, seulement pour le stocker chiffré.
+ */
+export const projectMessageSend = {
+    command: 'projects.messageSend' as const,
+    input: z.object({
+        cardId,
+        text: z.string().min(1).max(PROJECT_MESSAGE_MAX_LENGTH),
+        mentions: z.array(z.number().int().positive()).max(32)
+    }),
+    output: z.object({ message: projectMessageSchema })
+};
+
+/** Retouche son propre message. Un autre auteur est refusé (`forbidden`). */
+export const projectMessageEdit = {
+    command: 'projects.messageEdit' as const,
+    input: z.object({
+        messageId,
+        text: z.string().min(1).max(PROJECT_MESSAGE_MAX_LENGTH),
+        mentions: z.array(z.number().int().positive()).max(32)
+    }),
+    output: z.object({ message: projectMessageSchema })
+};
+
+/**
+ * Pose le point d'eau haute de lecture de l'appelant sur une carte : tout
+ * message d'identifiant inférieur ou égal cesse d'être compté comme non lu.
+ *
+ * N'est **pas** une mutation diffusée : une lecture est personnelle, l'annoncer
+ * à l'espace ferait re-solliciter tout le monde pour rien.
+ */
+export const projectMarkRead = {
+    command: 'projects.markRead' as const,
+    input: z.object({ cardId, lastMessageId: messageId }),
+    output: z.object({ cardId, lastMessageId: messageId })
+};
+
+export const projectCommands = [
+    projectList,
+    projectCount,
+    projectGet,
+    projectAdd,
+    projectUpdate,
+    projectSetVersion,
+    projectSetStatus,
+    projectSetSecurityTier,
+    projectArchive,
+    projectRestore,
+    projectReorder,
+    projectBoard,
+    projectColumnAdd,
+    projectColumnUpdate,
+    projectColumnRemove,
+    projectColumnReorder,
+    projectCardAdd,
+    projectCardUpdate,
+    projectCardMove,
+    projectCardArchive,
+    projectCardRestore,
+    projectMessageList,
+    projectMessageSend,
+    projectMessageEdit,
+    projectMarkRead,
+    projectPlan,
+    projectMilestoneAdd,
+    projectMilestoneUpdate,
+    projectMilestoneSetReached,
+    projectMilestoneRemove,
+    projectCardSetMilestone,
+    projectDepAdd,
+    projectDepRemove,
+    projectEventList,
+    projectRepoList,
+    projectRepoLink,
+    projectRepoUnlink,
+    projectDeployList,
+    projectDeployLink,
+    projectDeployUnlink,
+    projectMyTasks,
+    projectLinkCounts,
+    projectUptimeList,
+    projectUptimeLink,
+    projectUptimeUnlink,
+    projectDatabaseList,
+    projectDatabaseLink,
+    projectDatabaseUnlink,
+    projectAudienceList,
+    projectAudienceLink,
+    projectAudienceUnlink
+] as const;

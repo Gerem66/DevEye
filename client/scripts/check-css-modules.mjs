@@ -2,7 +2,9 @@
 /**
  * Détecte les classes définies **deux fois** dans un même module CSS.
  *
- * Pourquoi ce contrôle existe : le module `Features/Projects/style.module.css`
+ * Pourquoi ce contrôle existe : le module CSS de Projets (aujourd'hui
+ * `features/projects/src/client/style.module.css`, du temps du natif
+ * `Features/Projects/style.module.css`)
  * a grandi jusqu'à couvrir huit écrans, et deux classes y portaient le même nom
  * — `.grid` pour la grille du portefeuille et pour la couche de fond de la
  * frise. La seconde, en `position: absolute; pointer-events: none`, écrasait la
@@ -18,14 +20,23 @@
  * Seules les redéfinitions d'une classe **seule dans son sélecteur** sont
  * signalées : c'est là qu'on écrase sans le vouloir.
  */
-import { readdirSync, readFileSync, statSync } from 'fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
 
-const ROOT = new URL('../src', import.meta.url).pathname;
+/**
+ * L'app, puis les modules du dépôt (`features/<id>/src/client`) : les natives
+ * rapatriées ont emporté leurs feuilles de style avec elles, Projets en tête,
+ * et le contrôle les suit. Un module vit sous `features/`, un dépôt de module
+ * externe passe par sa propre CI.
+ */
+const ROOTS = [new URL('../src', import.meta.url).pathname, new URL('../../features', import.meta.url).pathname].filter(
+    (dir) => existsSync(dir)
+);
 
 function walk(dir) {
     const out = [];
     for (const entry of readdirSync(dir)) {
+        if (entry === 'node_modules') continue;
         const full = join(dir, entry);
         if (statSync(full).isDirectory()) out.push(...walk(full));
         else if (entry.endsWith('.module.css')) out.push(full);
@@ -53,7 +64,7 @@ function preludes(css) {
 }
 
 let failures = 0;
-for (const file of walk(ROOT)) {
+for (const file of ROOTS.flatMap(walk)) {
     const css = readFileSync(file, 'utf8');
     const seen = new Map();
     for (const { text, index } of preludes(css)) {
@@ -69,7 +80,7 @@ for (const file of walk(ROOT)) {
         const line = css.slice(0, index).split('\n').length;
         const previous = seen.get(m[1]);
         if (previous !== undefined) {
-            const rel = file.slice(file.indexOf('/src/') + 1);
+            const rel = file.slice(file.lastIndexOf('/src/') + 1);
             console.error(`${rel}: « .${m[1]} » est défini deux fois (lignes ${previous} et ${line}).`);
             console.error('   La seconde écrase la première, en silence. Renommez-en une.');
             failures++;

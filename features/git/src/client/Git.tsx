@@ -245,7 +245,7 @@ export function FeatureGit(_props: FeatureViewProps) {
             await api.send('git.repoRemove', { repoId });
             setRepoDialog(null);
             setOpenedId(null);
-            invalidate('git.list', 'git.count', 'project.board');
+            invalidate('git.list', 'git.count', 'projects.board');
         } catch (e) {
             setError(humanizeError(e, 'La suppression a échoué.'));
         } finally {

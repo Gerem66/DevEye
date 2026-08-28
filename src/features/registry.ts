@@ -7,7 +7,6 @@ import { logsFeatures } from './logs';
 import { notifyFeatures } from './notify';
 import { sharingFeatures } from './sharing';
 import { metricsFeatures } from './metrics';
-import { projectFeatures } from './project';
 import { secrecyFeatures } from './secrecy';
 import { twoFactorFeatures } from './twofa';
 import { userSetAvatarFeature } from './user/setAvatar';
@@ -60,7 +59,6 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     userSetThemeFeature,
     userSetColorFeature,
     userSetSettingFeature,
-    ...projectFeatures,
     ...deviceFeatures,
     ...metricsFeatures,
     ...twoFactorFeatures,

@@ -392,8 +392,9 @@ src/contracts/commands.ts            16 commandes, préfixe unique `audience.`
 @deveye/types ne garde que l'**identité** (l'id dans les schémas d'espace, de
 sujet live et de registre) et les **couplages déclarés** :
 `AUDIENCE_ITEMS_PROVIDER` (serveur, lu par Projets avant de relier),
-`AUDIENCE_CLIENT_PROVIDER` (client, composé par l'onglet d'un projet), et
-`ProjectAudienceLinkRow` (`domain/projectLink.ts`, la table est à Projets).
+`AUDIENCE_CLIENT_PROVIDER` (client, composé par l'onglet d'un projet). La ligne
+de liaison (`ProjectAudienceLinkRow`) vit chez Projets
+(`features/projects/src/contracts/link.ts`, la table est à Projets).
 
 ### Serveur — `features/audience/src/server/`
 
@@ -437,10 +438,10 @@ Ce qui a changé de main au rapatriement, et pourquoi :
 db/migrations/076_audience.sql             5 tables (historiques, allowlist du module)
 db/migrations/077_project_audience_links.sql  la liaison (table de Projets)
 db/migrations/078_audience_funnels.sql     entonnoirs et marches
-db/repos/projectLinks.ts                   listSiteIds, linkSite, unlinkSite, unlinkAllSites,
-                                           listSiteUsage, countSiteLinks
-features/project/usageProvider.ts          l'entrée `audience` de PROJECTS_USAGE_PROVIDER
-features/project/audienceLink.ts           le pointeur d'un projet (existence par AUDIENCE_ITEMS_PROVIDER)
+features/projects/src/server/repo/links.ts listSiteIds, linkSite, unlinkSite, unlinkAllSites,
+                                           listSiteUsage, countSiteLinks (chez Projets)
+features/projects/src/server/usageProvider.ts   l'entrée `audience` de PROJECTS_USAGE_PROVIDER
+features/projects/src/server/audienceLink.ts    le pointeur d'un projet (existence par AUDIENCE_ITEMS_PROVIDER)
 features/_sdk/register.ts                  modulePublicRoutes(app), isModulePublicPath(url)
 features/_sdk/context.ts                   ctx.origins { app, public } (AUDIENCE_ORIGIN || PUBLIC_ORIGIN)
 app.ts                                     le délégateur CORS (isModulePublicPath), modulePublicRoutes(app)
@@ -467,7 +468,7 @@ AudienceWidget.tsx  format.ts  usage.ts  style.module.css
 provider.tsx        AUDIENCE_CLIENT_PROVIDER : ce que l'onglet d'un projet compose
 ```
 
-`client/src/Features/Projects/Audience/` se réduit à `Audience.tsx` (enveloppe
+`features/projects/src/client/Audience/` se réduit à `Audience.tsx` (enveloppe
 mince) et `LinkSiteDialog.tsx`, qui composent le contrat client du module par
 `moduleClientProvider(AUDIENCE_CLIENT_PROVIDER)`. L'onglet **n'apparaît qu'à
 partir du premier site relié** ; sans liaison, il repart dans le menu « + » de

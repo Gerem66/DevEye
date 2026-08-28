@@ -32,6 +32,8 @@ import { manifest as manifest11 } from 'deveye-feature-audience';
 import { clientEntry as client11 } from 'deveye-feature-audience/client';
 import { manifest as manifest12 } from 'deveye-feature-mail';
 import { clientEntry as client12 } from 'deveye-feature-mail/client';
+import { manifest as manifest13 } from 'deveye-feature-projects';
+import { clientEntry as client13 } from 'deveye-feature-projects/client';
 
 export const INSTALLED_CLIENT_FEATURES: readonly InstalledClientFeature[] = [
     { manifest: { ...manifest0, icon: 'cloud' }, client: client0 },
@@ -47,5 +49,6 @@ export const INSTALLED_CLIENT_FEATURES: readonly InstalledClientFeature[] = [
     { manifest: { ...manifest10, icon: 'branch' }, client: client10 },
     { manifest: { ...manifest11, icon: 'eye-open' }, client: client11 },
     { manifest: { ...manifest12, icon: 'mail' }, client: client12 },
+    { manifest: { ...manifest13, icon: 'projects' }, client: client13 },
     ...LOCAL_CLIENT_FEATURES
 ];

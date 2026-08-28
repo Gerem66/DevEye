@@ -7,7 +7,7 @@ import { gitReadFeatures } from './read';
  *
  * Elle est de premier rang, comme Notes ou Uptime — et non un onglet des
  * Projets. Un projet ne fait que **pointer** un de ces dépôts
- * (`project.repoLink`, dans l'app), et ce pointeur est tout ce que le module
+ * (`projects.repoLink`, dans le module Projets), et ce pointeur est tout ce que le module
  * Projets en connaît.
  *
  * Trois fichiers, trois natures :
