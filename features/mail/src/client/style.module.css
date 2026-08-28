@@ -1,0 +1,1477 @@
+/* ------------------------------------------------------------------ *
+ * Feature panel — a slim top toolbar, then two columns: accounts/folders
+ * and the message list. The reading pane is a popup (see MessagePopup),
+ * so the message list gets the rest of the width to itself.
+ * ------------------------------------------------------------------ */
+
+.root {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    height: 100%;
+    min-height: 0;
+}
+
+.toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+
+/* Takes the space between the (mobile-only) back arrow and the actions, rather
+   than being centred between them by the toolbar's `space-between`. */
+.headline {
+    margin: 0;
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.toolbarActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    flex-shrink: 0;
+}
+
+/* Steps back from the message list to the folders, on the one layout where the
+   two can't be shown side by side. Revealed by the media query at the bottom of
+   this file — never visible on a wide screen, where both columns are present
+   and stepping back would mean nothing.
+
+   Qualified with `.iconBtn` (which the button also carries) rather than written
+   alone: `.iconBtn` sets `display: inline-flex` further down the file and would
+   otherwise win on source order. The media query below is qualified for the same
+   reason. */
+.iconBtn.mobileBack {
+    display: none;
+    flex-shrink: 0;
+}
+
+.feature {
+    display: grid;
+    /* The width itself is set inline per-render (wider while panel A shows the
+       account list, narrower once it shows the compact selected-account +
+       folders — see index.tsx), but through a custom property rather than this
+       shorthand: an inline `grid-template-columns` would beat the media query
+       below, which is what collapses the two columns into one. */
+    grid-template-columns: var(--mail-sidebar-width, 300px) 1fr;
+    gap: var(--space-md);
+    flex: 1 1 auto;
+    min-height: 0;
+    transition: grid-template-columns var(--transition-normal);
+}
+
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    min-height: 0;
+    min-width: 0;
+}
+
+/* The selected-account card stays pinned above it; only the folder list itself scrolls. */
+.folderScroll {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.emptyState {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-sm);
+}
+
+.sidebarSubhead {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* Fixed head (search box + status) above the one part that scrolls, so the box
+   can't slide away under the results. */
+.messageColumnWrap {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    min-height: 0;
+    /* Grid items default to `min-width: auto`: without this a long subject
+       widens the `1fr` column past the popup. */
+    min-width: 0;
+    border-left: 1px solid var(--glass-border);
+    padding-left: var(--space-md);
+}
+
+.searchBar {
+    position: relative;
+    flex-shrink: 0;
+}
+
+/* The UA's search-cancel widget can't be styled (no pointer cursor, wrong
+   colour); `.searchClear` replaces it. */
+.searchBar input::-webkit-search-cancel-button,
+.searchBar input::-webkit-search-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+/* Keeps a long query from sliding underneath the clear button. */
+.searchBar input {
+    padding-right: 2.5rem;
+}
+
+.searchClear {
+    position: absolute;
+    top: 50%;
+    right: 0.25rem;
+    transform: translateY(-50%);
+}
+
+.searchStatus {
+    margin: 0;
+    flex-shrink: 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.messageColumn {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    /* Not redundant: one axis set to `auto` computes the other to `auto` too. */
+    overflow-x: hidden;
+}
+
+.messageColumnEmpty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    text-align: center;
+}
+
+.error {
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-sm);
+    background: var(--danger-bg);
+    color: var(--danger);
+    font-size: 0.875rem;
+}
+
+/* L'état de la boîte ouverte, distinct de `.error` : celui-ci ne dit pas
+   qu'une action vient d'échouer, mais que la boîte est en panne depuis un
+   moment — il reste affiché tant que rien n'a réussi, d'où le ton porté par
+   `data-tone` (une boîte injoignable se répare seule, un accès refusé non). */
+.accountAlert {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-sm);
+    background: var(--warning-bg);
+    color: var(--warning);
+    font-size: 0.875rem;
+}
+
+.accountAlert[data-tone='danger'] {
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+/* Le message brut du serveur, à la ligne : il est précis mais souvent aride,
+   et n'a pas à concurrencer la phrase qui dit quoi faire. */
+.accountAlertDetail {
+    display: block;
+    margin-top: 2px;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    overflow-wrap: anywhere;
+}
+
+.empty {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    max-width: 60ch;
+}
+
+/* ------------------------------------------------------------------ *
+ * Panel A — a two-slide horizontal track (see AccountPanel.tsx): the
+ * account list, and the selected account + its folders. `.panelA` clips
+ * the off-screen half; `.panelATrack` is 200% wide (each slide is 50% of
+ * it, i.e. 100% of the real panel) and its `transform` is set inline.
+ * ------------------------------------------------------------------ */
+
+.panelA {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.panelATrack {
+    display: flex;
+    width: 200%;
+    height: 100%;
+    transition: transform var(--transition-normal);
+}
+
+.panelASlide {
+    width: 50%;
+    flex-shrink: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    /* Keeps whatever is pinned at the bottom (the "add" button) off `.panelA`'s
+       `overflow: hidden` edge. Flush against it, a fractional layout height —
+       which is the norm once flex and percentages are involved — is enough to
+       shave the bottom border, and the button reads as cut off. */
+    padding-bottom: var(--space-xs);
+}
+
+.accountListScroll {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.accountAddBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    /* Sits below the scroll area rather than inside it, so it stays whole and
+       reachable however long the account list gets. */
+    margin-top: var(--space-xs);
+    flex-shrink: 0;
+    padding: var(--space-sm);
+    border: 1px dashed var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition:
+        color var(--transition-fast),
+        border-color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.accountAddBtn:hover {
+    color: var(--text-primary);
+    border-color: var(--glass-border-strong);
+    background: var(--surface-subtle);
+}
+
+/* The right slide's header: selected account + a leading back arrow, tapping
+   anywhere on it returns to the list without touching the selection itself. */
+.selectedAccountCard {
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: var(--space-sm);
+    margin-bottom: var(--space-sm);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    color: var(--text-primary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition:
+        border-color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.selectedAccountCard:hover,
+.selectedAccountCard:focus-visible {
+    border-color: var(--glass-border-strong);
+    background: var(--glass-bg-light);
+    outline: none;
+}
+
+.selectedAccountText {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.selectedAccountName {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.selectedAccountEmail {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Per-account options, between the selected-account header and its folders
+   (see AccountOptions.tsx). Direct actions on the left, settings on the right —
+   the one strip in the feature whose scope is unambiguously this mailbox. The
+   split keeps "do something now" apart from "change how it behaves". */
+.accountOptions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-xs);
+    flex-shrink: 0;
+    padding: var(--space-xs) var(--space-sm);
+    margin-bottom: var(--space-sm);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-subtle);
+}
+
+.accountOptionsActions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+/* Destructive, so it colours on approach rather than sitting red at rest —
+   the strip shouldn't read as a warning when nothing is wrong. */
+.accountOptionsDanger:hover:not(:disabled),
+.accountOptionsDanger:focus-visible {
+    color: var(--danger);
+    background: var(--danger-bg);
+}
+
+/* ------------------------------------------------------------------ *
+ * Account list (drag & drop, same technique as features/uptime/src/client/ServiceList)
+ * ------------------------------------------------------------------ */
+
+/* A grid, not a flex column, for one reason: `grid-auto-rows: 1fr` makes every
+   row exactly as tall as the tallest card, whatever any individual card happens
+   to contain. A flex column sizes each card to its own content, so any content
+   asymmetry (a decrypted-to-empty line, an extra badge, a wrapped label…) shows
+   up as mismatched tiles — chasing those one by one is a losing game. This costs
+   nothing visually: same width, same centring, same position as the flex version
+   it replaces, and still fully responsive — no height is pinned anywhere. */
+.accountList {
+    /* Never compressed to fit the column. As a flex item it shrinks by default,
+       and `grid-auto-rows: 1fr` obediently squeezes the rows below their content
+       — cards lose their last line to `overflow: hidden`, and the scroll height
+       stops matching what's actually laid out, which is what pushed the "add"
+       button past the bottom edge. The list keeps its natural height; the column
+       around it scrolls, which is its job. */
+    flex-shrink: 0;
+    display: grid;
+    /* Single full-width column; the cards cap themselves at 92% of it and
+       `justify-items` centers them on that axis, as `align-items: center` did. */
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: 1fr;
+    justify-items: center;
+    gap: calc(var(--space-xs) + 2px);
+    margin: 0;
+    /* `.dropBar` is centred *on* a gap, so at the first (and last) one it lands
+       half a gap outside the card stack — with no padding that's past the
+       list's own edge, where the scroll container clips it to a sliver. Needs
+       to be at least half the row gap plus the bar's half-height. */
+    padding: 6px 0;
+    position: relative;
+}
+
+.dropBar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent-glow);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.accountCard {
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 2px;
+    width: 100%;
+    max-width: 92%;
+    padding: var(--space-md) var(--space-xs) var(--space-sm);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    cursor: pointer;
+    transition:
+        border-color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.accountCard:hover,
+.accountCard:focus-visible {
+    border-color: var(--glass-border-strong);
+    background: var(--glass-bg-light);
+    outline: none;
+}
+
+.accountCardSelected {
+    border-color: var(--accent);
+}
+
+/* Same specificity as `.accountCard:hover` — source order alone would let
+   hover win and hide the selection outline; this makes the accent border
+   win instead, so the selected tile is always identifiable. */
+.accountCardSelected:hover,
+.accountCardSelected:focus-visible {
+    border-color: var(--accent);
+}
+
+/* Sync progress bar — a small inset pill near the top of a `position:
+   relative; overflow: hidden` container (the account card or the
+   selected-account header). Deliberately NOT a flush edge-to-edge line: that
+   read as just a stray colored line that vanished into the hover background
+   change; a bordered pill with its own resting track + glow stays legible
+   (and readable as "a progress bar", not a glitch) in every state.
+   See `SyncProgressBar.tsx`. */
+.syncProgressTrack {
+    position: absolute;
+    top: 4px;
+    left: 10%;
+    right: 10%;
+    height: 3px;
+    border-radius: var(--radius-pill);
+    background: var(--glass-border-strong);
+    overflow: hidden;
+    z-index: 2;
+}
+
+.syncProgressFill {
+    height: 100%;
+    width: 0;
+    border-radius: inherit;
+    background: var(--accent);
+    box-shadow: 0 0 4px var(--accent-glow);
+    transition: width 300ms ease;
+}
+
+.syncProgressIndeterminate {
+    width: 40% !important;
+    animation: mailSyncIndeterminate 1.1s ease-in-out infinite;
+}
+
+@keyframes mailSyncIndeterminate {
+    0% {
+        transform: translateX(-150%);
+    }
+    100% {
+        transform: translateX(350%);
+    }
+}
+
+.accountCardPaused {
+    opacity: 0.55;
+}
+
+.accountCardDragging {
+    opacity: 0.4;
+    cursor: grabbing;
+}
+
+/* Grab handle (top-left) and pause/edit (top-right, deliberately unobtrusive
+   — the one action that belongs at this level, delete, doesn't live here at
+   all, see AccountCard.tsx) both stay invisible at rest and fade in together,
+   so the tile reads as just an avatar + name until you actually reach for it. */
+.accountCardHandle,
+.accountCardCorner {
+    position: absolute;
+    top: var(--space-xs);
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+}
+
+.accountCard:hover .accountCardHandle,
+.accountCard:hover .accountCardCorner,
+.accountCard:focus-within .accountCardHandle,
+.accountCard:focus-within .accountCardCorner {
+    opacity: 1;
+}
+
+.accountCardHandle {
+    left: var(--space-xs);
+    width: 18px;
+    height: 18px;
+    color: var(--text-muted);
+    cursor: grab;
+}
+
+.accountCardCorner {
+    right: var(--space-xs);
+    display: flex;
+    gap: 2px;
+}
+
+.accountCardIcon {
+    width: 22px;
+    height: 22px;
+    color: var(--text-secondary);
+    margin-bottom: 2px;
+}
+
+/* Each text row keeps its line box even when the string is empty. `toAccountDTO`
+   falls back to '' for anything it can't decrypt (a "guarded" account outside an
+   unlocked session, an unreadable credentials blob…), and an empty <p> collapses
+   to zero height — which is what made otherwise-identical tiles different
+   heights. With this plus `.accountCardBadgeSlot`, nothing about a card's height
+   depends on its content any more. `min-height` matches `line-height` exactly, so
+   a filled row is unaffected. */
+.accountCardName,
+.accountCardEmail,
+.accountCardMeta {
+    line-height: 1.4;
+    min-height: 1.4em;
+}
+
+.accountCardName {
+    margin: 0;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.accountCardEmail {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Collapses entirely when there's no badge to show, so the address sits right
+   above the sync line instead of across a permanently reserved row. It used to
+   hold its height to keep every tile the same size; `.accountList`'s
+   `grid-auto-rows: 1fr` does that now, and does it for any content difference
+   rather than this one — so the reservation was only costing dead space. */
+.accountCardBadgeSlot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 100%;
+}
+
+.accountCardBadgeSlot:empty {
+    display: none;
+}
+
+.accountCardMeta {
+    margin: 0;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.iconBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition:
+        color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.iconBtn:hover:not(:disabled) {
+    color: var(--text-primary);
+    background: var(--surface-subtle);
+}
+
+.iconBtn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+/* ------------------------------------------------------------------ *
+ * Folder tree
+ * ------------------------------------------------------------------ */
+
+.folderTree {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.folderRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-xs) var(--space-sm);
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.folderRow:hover {
+    background: var(--surface-subtle);
+    color: var(--text-primary);
+}
+
+.folderRowSelected {
+    background: var(--glass-bg-light);
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.folderName {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.folderUnread {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--on-accent);
+    background: var(--accent);
+    border-radius: var(--radius-pill);
+    padding: 1px 6px;
+}
+
+/* ------------------------------------------------------------------ *
+ * Message list
+ * ------------------------------------------------------------------ */
+
+/* No `gap`: it belongs to neither neighbour, so it stayed unlit on hover.
+   `.messageRow`'s border separates the rows instead. */
+.messageList {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Zero-height IntersectionObserver target — invisible unless actually
+   loading, so it never reads as an extra empty row at rest. */
+.messageListSentinel {
+    text-align: center;
+    padding: 4px 0;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+
+.spinning {
+    animation: mailIconSpin 0.8s linear infinite;
+}
+
+@keyframes mailIconSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.messageRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm);
+    border-bottom: 1px solid var(--glass-border);
+    background: transparent;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.messageRow:hover,
+.messageRow:focus-visible {
+    background: var(--surface-subtle);
+    outline: none;
+}
+
+.messageRowSelected {
+    background: var(--glass-bg-light);
+}
+
+.messageRowMain {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* Sized by the date alone — `.messageRowActions` is taken out of flow (see
+   below) and contributes nothing to this box's width, so nothing here ever
+   animates and nothing shifts when it appears. `align-self: stretch`
+   (overriding `.messageRowHead`'s `align-items: center` for just this child)
+   makes this box the row's full height, not just the date text's own short
+   line-height — the absolutely positioned child below centers against THIS
+   box, so it needs the real row height to land on the row's actual center,
+   not the date's. */
+.messageMeta {
+    position: relative;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+/* Out of flow, anchored to sit just left of the date: `right: 100%` puts its
+   own right edge at `.messageMeta`'s left edge (where the date starts), and
+   it grows further left from there. Vertically centered against the full row
+   height (see `.messageMeta` above). A small `translateX` slide-in rides
+   along with the opacity fade — real motion, but on the icons themselves
+   only: it's a `transform`, so it never touches layout and nothing else in
+   the row moves. No background: it fades in directly over whatever's behind
+   it (the already-ellipsized tail of the sender name), same as any other
+   transparent icon button on hover elsewhere in this app. */
+.messageRowActions {
+    position: absolute;
+    top: 50%;
+    right: 100%;
+    transform: translateY(-50%) translateX(4px);
+    margin-right: 4px;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    opacity: 0;
+    pointer-events: none;
+    transition:
+        opacity 180ms ease-out,
+        transform 180ms ease-out;
+}
+
+/* Deliberately NOT tied to `.messageRowSelected` — that class sticks to
+   whichever message was last opened (until another one is), which used to
+   pin its actions visible forever, reading as a stuck hover state. Actual
+   hover/focus only. */
+.messageRow:hover .messageRowActions,
+.messageRow:focus-visible .messageRowActions,
+.messageRow:focus-within .messageRowActions {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(-50%) translateX(0);
+}
+
+.messageRowActions .iconBtn {
+    width: 20px;
+    height: 20px;
+}
+
+.messageRowUnread .messageFrom,
+.messageRowUnread .messageSubject {
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.messageRowHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.messageFrom {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.messageDate {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.messageRowBody {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.messageSubject {
+    /* `min-width: 0` is what lets the ellipsis below actually trigger. */
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ *
+ * Reading pane
+ * ------------------------------------------------------------------ */
+
+.messagePopupBody {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.messagePane {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.messagePaneActions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-xs);
+    flex-shrink: 0;
+}
+
+.messagePaneMeta {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+/* ------------------------------------------------------------------ *
+ * Alert banner — one thin, single-line strip covering every warning a
+ * message can carry (blocked remote images, suspicious links). Click to
+ * expand the full detail instead of stacking a separate box per warning.
+ * ------------------------------------------------------------------ */
+
+.alertBanner {
+    border-radius: var(--radius-sm);
+    background: var(--warning-bg);
+    overflow: hidden;
+}
+
+.alertBannerHeader {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    width: 100%;
+    padding: var(--space-xs) var(--space-sm);
+    border: none;
+    background: transparent;
+    color: var(--warning);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+}
+
+.alertBannerChevron {
+    width: 12px;
+    margin-left: auto;
+    flex-shrink: 0;
+    transition: transform var(--transition-fast);
+}
+
+.alertBannerChevronOpen {
+    transform: rotate(180deg);
+}
+
+.alertBannerBody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding: 0 var(--space-sm) var(--space-sm);
+}
+
+.linkWarnings {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.linkWarning {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    margin: 0;
+    color: var(--warning);
+    font-size: 0.78rem;
+}
+
+.linkWarning code {
+    word-break: break-all;
+}
+
+.imageBanner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+}
+
+.imageBannerActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    position: relative;
+}
+
+/* Portaled to <body> and positioned inline (top/left) from the trigger's
+   live rect — same technique as AccountSwitcher's panel, for the same
+   reason (WidgetPopup clips overflow). Its trigger lives inside MessagePopup,
+   a `Dialog` (`--z-modal`, higher than `--z-popup`) — has to clear that, not
+   just the plain popup layer, or it renders behind the reading pane. */
+.imageSourcesPopup {
+    position: fixed;
+    z-index: calc(var(--z-modal) + 10);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    /* Fits both action buttons on one line. Clamped: portaled to <body> and
+       positioned from its anchor, with no flipping if it runs off-screen. */
+    width: 380px;
+    max-width: calc(100vw - 2 * var(--space-md));
+    padding: var(--space-sm);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    box-shadow: var(--shadow-lg);
+}
+
+.imageSourcesTitle {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.imageSourcesList {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+/* Ne porte que ce qui lui est propre : la disposition, le curseur et la
+   typographie viennent du composant `Checkbox`. */
+.imageSourceRow {
+    padding: var(--space-xs);
+    border-radius: var(--radius-sm);
+}
+
+.imageSourceRow:hover {
+    background: var(--surface-subtle);
+}
+
+.imageSourcesActions {
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    gap: var(--space-xs);
+}
+
+.imageSourcesActions > * {
+    white-space: nowrap;
+}
+
+.attachments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+}
+
+.attachment {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-sm);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    cursor: pointer;
+}
+
+.attachment:hover {
+    color: var(--text-primary);
+    border-color: var(--glass-border-strong);
+}
+
+.attachmentSize {
+    color: var(--text-muted);
+}
+
+.messageBody {
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--text-primary);
+    /* The server already stripped everything unsafe (see src/mail/sanitize.ts) — this
+       just keeps a runaway table/image from stretching the reading column. */
+    overflow-x: auto;
+    word-break: break-word;
+}
+
+.messageBody img {
+    max-width: 100%;
+}
+
+/* `raw` render mode: a sandboxed, opaque-origin iframe (see MessagePane) —
+   it can't report its content height back to us, so it gets a generous fixed
+   height and scrolls internally rather than growing with the page. */
+.messageBodyFrame {
+    width: 100%;
+    height: 70vh;
+    /* The floor has to stay under the viewport it sits in, or on a short screen
+       it pushes the frame taller than the dialog containing it. */
+    min-height: min(400px, 55vh);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+}
+
+.messageBodyText {
+    font-family: inherit;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* ------------------------------------------------------------------ *
+ * Technical info popup (MessageInfoPopup) — a label/value list, then every
+ * header line verbatim. Values are selectable and wrap rather than
+ * ellipsize: the whole point is reading and copying them in full.
+ * ------------------------------------------------------------------ */
+
+.infoBody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    min-height: 0;
+}
+
+.infoRow {
+    display: grid;
+    grid-template-columns: 160px minmax(0, 1fr);
+    gap: var(--space-sm);
+    align-items: baseline;
+    font-size: 0.82rem;
+}
+
+.infoLabel {
+    color: var(--text-muted);
+}
+
+.infoValue {
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+    user-select: text;
+}
+
+.infoValue code {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+}
+
+.infoHeadersHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+
+/* Scrolls on its own: a message can carry dozens of `Received:` lines, and
+   they must not push the identity block above out of reach. */
+.infoHeaders {
+    display: flex;
+    flex-direction: column;
+    max-height: 40vh;
+    overflow-y: auto;
+    padding: var(--space-sm);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-subtle);
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    line-height: 1.5;
+    user-select: text;
+}
+
+.infoHeaderRow {
+    display: grid;
+    grid-template-columns: 200px minmax(0, 1fr);
+    gap: var(--space-sm);
+    padding: 2px 0;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.infoHeaderRow:last-child {
+    border-bottom: none;
+}
+
+.infoHeaderName {
+    color: var(--accent);
+    overflow-wrap: anywhere;
+}
+
+.infoHeaderValue {
+    color: var(--text-secondary);
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+/* ------------------------------------------------------------------ *
+ * Forms (account popup, compose)
+ * ------------------------------------------------------------------ */
+
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.formRow {
+    display: flex;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.fieldHint {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.sectionLabel {
+    margin: var(--space-sm) 0 0 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* Le palier à la création : le segment et la phrase du choix courant. */
+.tierChoice {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.settingsResetBtn {
+    align-self: flex-start;
+}
+
+
+
+.oauthButtons {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding: var(--space-sm);
+    border: 1px dashed var(--glass-border);
+    border-radius: var(--radius-sm);
+}
+
+/* Replaces the whole server-configuration area once a provider is connected. */
+.providerCard {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    border: 1px solid var(--success);
+    border-radius: var(--radius-sm);
+    background: var(--success-bg);
+}
+
+.providerCardCheck {
+    flex-shrink: 0;
+    color: var(--success);
+    font-size: 1.25rem;
+    line-height: 1.2;
+}
+
+.providerCardBody {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.providerCardTitle {
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.providerCardAddress {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    overflow-wrap: anywhere;
+}
+
+.tabBar {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-subtle);
+}
+
+.tabButton {
+    flex: 1 1 0;
+    padding: var(--space-xs) var(--space-sm);
+    border: none;
+    border-radius: calc(var(--radius-sm) - 2px);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.tabButton:hover {
+    color: var(--text-primary);
+}
+
+.tabButtonActive {
+    background: var(--glass-bg-light);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-sm);
+}
+
+/* Compact "De" / "À" / "Cc" / "Cci" rows — a single-line inline label instead
+   of a stacked block label keeps the header tight regardless of how many
+   rows the advanced-fields toggle reveals. */
+.composeHeader {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.composeRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: 2px 0;
+}
+
+.composeRowLabel {
+    flex: 0 0 28px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.composeRowInput {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* `TextInput` renders its <input> inside a wrapper div, so that wrapper — not
+   the input carrying `.composeRowInput` — is the row's flex child. Without this
+   it keeps its intrinsic width and the À/Cc/Cci fields end up narrower than the
+   `De` select, which is a plain <select> and stretches on its own. */
+.composeRow > div {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.composeAdvancedToggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    align-self: flex-start;
+    margin-top: 2px;
+    padding: 2px 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: color var(--transition-fast);
+}
+
+.composeAdvancedToggle:hover {
+    color: var(--text-secondary);
+}
+
+.composeAdvancedIcon {
+    width: 12px;
+    transition: transform var(--transition-fast);
+}
+
+.composeAdvancedToggleOpen .composeAdvancedIcon {
+    transform: rotate(180deg);
+}
+
+.composeBody {
+    resize: vertical;
+    min-height: 160px;
+    padding: var(--space-sm);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-subtle);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.88rem;
+}
+
+.attachmentsField {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-sm);
+}
+
+.attachmentRemove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    margin-left: 2px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.attachmentRemove:hover {
+    color: var(--text-primary);
+    background: var(--glass-bg-light);
+}
+
+.attachmentRemoveIcon {
+    width: 10px;
+}
+
+.status {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.popupActions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--glass-border);
+}
+
+.popupActionsLeft {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+/* ------------------------------------------------------------------ *
+ * Touch input
+ *
+ * The row actions live on hover, which a finger never produces — they
+ * were simply unreachable. Here they come back into the flow beside the
+ * date, permanently visible, which costs the sender and subject a little
+ * width (both already ellipsize) and nothing else: the absolute
+ * positioning and the fade exist purely to serve the hover reveal.
+ * ------------------------------------------------------------------ */
+
+@media (hover: none) {
+    .messageMeta {
+        gap: var(--space-xs);
+    }
+
+    .messageRowActions {
+        position: static;
+        transform: none;
+        margin-right: 0;
+        opacity: 1;
+        pointer-events: auto;
+        transition: none;
+    }
+}
+
+/* ------------------------------------------------------------------ *
+ * Phones (the client's usual breakpoint — see WidgetPopup, WidgetGrid)
+ *
+ * The sidebar alone is wider than the whole viewport, so the two columns
+ * become two steps of one journey instead: accounts → folders (panel A's
+ * own slide track, unchanged) → messages. Only one column is mounted at a
+ * time; `data-mobile-view` says which, and the toolbar's back arrow steps
+ * out of the messages — the same ← already used on the account card, so
+ * the gesture reads the same at every depth.
+ * ------------------------------------------------------------------ */
+
+@media (max-width: 640px) {
+    .feature {
+        grid-template-columns: 1fr;
+    }
+
+    .feature[data-mobile-view='messages'] .sidebar,
+    .feature[data-mobile-view='panel'] .messageColumnWrap {
+        display: none;
+    }
+
+    /* The divider separated two columns; with one there is nothing to divide. */
+    .messageColumnWrap {
+        border-left: none;
+        padding-left: 0;
+    }
+
+    .iconBtn.mobileBack {
+        display: inline-flex;
+    }
+}

@@ -201,7 +201,9 @@ Elles écrivent sans commande, donc sans socket : elles appellent
   `deps.live.changed`) : **uniquement sur une transition d'état**. La boucle tourne
   toutes les dix secondes sur tous les services ; diffuser sans condition ferait
   re-solliciter le serveur en permanence par tous les clients.
-- `MailSyncService` — après une synchro réussie.
+- la relève de fond de Mail (`features/mail/src/server/service.ts`, par
+  `deps.live.changed`) : après une relève qui a fait bouger quelque chose, et
+  quand l'état d'une boîte change (panne, retour au vert), jamais à l'horloge.
 - `agent/ws.ts` — un agent qui arrive ou part change la liste d'appareils.
 - `agent/routes.ts` — l'appairage passe par HTTP, pas par une commande WS : sans
   ce signal, rien n'en avertirait personne.

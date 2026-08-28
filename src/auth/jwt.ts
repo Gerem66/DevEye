@@ -1,7 +1,6 @@
 import { env } from '@/Utils/Env';
 import { randomUUID } from 'crypto';
 import { SignJWT, errors as joseErrors, jwtVerify } from 'jose';
-import type { MailOAuthProvider, MailSecurityTier } from '@deveye/types';
 
 const issuer = 'deveye';
 const audience = 'deveye-client';
@@ -128,98 +127,49 @@ export async function verifyTwoFactorChallenge(
     }
 }
 
-export interface MailOAuthStateClaims {
-    userId: number;
-    /** Espace dans lequel le compte mail sera créé — le callback n'a pas de contexte pour le déduire. */
-    workspaceId: number;
-    /** WS session id, so the callback route can reach the same live DEK for a "guarded" account. */
-    sessionId: string;
-    provider: MailOAuthProvider;
-    securityTier: MailSecurityTier;
-}
-
 /**
- * Short-lived state carried through the Google/Microsoft consent redirect —
- * the callback route is a plain HTTP GET with no WS context of its own, so
- * everything it needs to finish the flow (which user, which workspace, which
- * live session's DEK to use if "guarded", which provider/tier) travels signed
- * in `state`
- * rather than being guessed from cookies alone.
+ * Le ticket de session d'un module (`ctx.secrecy.ticket` du SDK) : ce qu'un
+ * module tend au navigateur pour une route publique de son service (une URL de
+ * téléchargement, un `state` OAuth), et que `deps.secrecy.redeem` lui rend
+ * contre les codecs de l'appelant. Signé par l'hôte avec le secret des jetons
+ * d'accès ; l'audience porte l'identifiant du module, de sorte qu'un ticket
+ * n'est rendu qu'au module qui l'a émis. La charge utile est celle du module,
+ * relue telle quelle ; l'identité (session, espace, compte) est celle de
+ * l'hôte, que le module n'a jamais vue.
  */
-export async function signMailOAuthState(claims: MailOAuthStateClaims): Promise<string> {
-    return new SignJWT({ ...claims, purpose: 'mail-oauth' })
-        .setProtectedHeader({ alg: 'HS256' })
-        .setIssuer(issuer)
-        .setAudience('deveye-mail-oauth')
-        .setIssuedAt()
-        .setExpirationTime('10m')
-        .sign(accessSecret);
-}
-
-export interface MailAttachmentClaims {
-    messageId: number;
-    attachmentId: string;
+export interface ModuleTicketClaims {
     userId: number;
-    /** Espace qui porte le compte : c'est lui qui cloisonne la lecture et qui indexe la clé, pas l'utilisateur. */
     workspaceId: number;
     sessionId: string;
+    payload: unknown;
 }
 
-/** Short-lived token backing `mail.attachmentDownload`'s signed URL — minted just before the client fetches it. */
-export async function signMailAttachmentToken(claims: MailAttachmentClaims): Promise<string> {
-    return new SignJWT({ ...claims, purpose: 'mail-attachment' })
+export async function signModuleTicket(
+    featureId: string,
+    claims: ModuleTicketClaims,
+    ttlSeconds: number
+): Promise<string> {
+    return new SignJWT({ ws: claims.workspaceId, sid: claims.sessionId, payload: claims.payload })
         .setProtectedHeader({ alg: 'HS256' })
+        .setSubject(String(claims.userId))
         .setIssuer(issuer)
-        .setAudience('deveye-mail-attachment')
+        .setAudience(`deveye-module:${featureId}`)
         .setIssuedAt()
-        .setExpirationTime('2m')
+        .setExpirationTime(`${ttlSeconds}s`)
         .sign(accessSecret);
 }
 
-export async function verifyMailAttachmentToken(token: string): Promise<MailAttachmentClaims | null> {
+export async function verifyModuleTicket(featureId: string, token: string): Promise<ModuleTicketClaims | null> {
     try {
-        const { payload } = await jwtVerify(token, accessSecret, { issuer, audience: 'deveye-mail-attachment' });
-        if (
-            payload.purpose !== 'mail-attachment' ||
-            typeof payload.messageId !== 'number' ||
-            typeof payload.attachmentId !== 'string' ||
-            typeof payload.userId !== 'number' ||
-            typeof payload.workspaceId !== 'number' ||
-            typeof payload.sessionId !== 'string'
-        ) {
+        const { payload } = await jwtVerify(token, accessSecret, { issuer, audience: `deveye-module:${featureId}` });
+        if (typeof payload.sub !== 'string' || typeof payload.ws !== 'number' || typeof payload.sid !== 'string') {
             return null;
         }
         return {
-            messageId: payload.messageId,
-            attachmentId: payload.attachmentId,
-            userId: payload.userId,
-            workspaceId: payload.workspaceId,
-            sessionId: payload.sessionId
-        };
-    } catch {
-        return null;
-    }
-}
-
-export async function verifyMailOAuthState(token: string): Promise<MailOAuthStateClaims | null> {
-    try {
-        const { payload } = await jwtVerify(token, accessSecret, { issuer, audience: 'deveye-mail-oauth' });
-        if (
-            payload.purpose !== 'mail-oauth' ||
-            typeof payload.userId !== 'number' ||
-            typeof payload.workspaceId !== 'number' ||
-            typeof payload.sessionId !== 'string' ||
-            (payload.provider !== 'google' && payload.provider !== 'microsoft') ||
-            (payload.securityTier !== 'open' && payload.securityTier !== 'guarded')
-        ) {
-            return null;
-        }
-        return {
-            userId: payload.userId,
-            workspaceId: payload.workspaceId,
-            sessionId: payload.sessionId,
-            provider: payload.provider,
-            securityTier: payload.securityTier
+            userId: Number(payload.sub),
+            workspaceId: payload.ws,
+            sessionId: payload.sid,
+            payload: payload.payload
         };
     } catch {
         return null;

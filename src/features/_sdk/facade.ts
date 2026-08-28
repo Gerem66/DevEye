@@ -1,6 +1,14 @@
-import type { AgentsFacade, DevEyeFacade, SdkCipher, SdkDevice, SdkTelemetry } from '@deveye/types/sdk/server';
+import type {
+    AgentsFacade,
+    DevEyeFacade,
+    SdkCipher,
+    SdkDevice,
+    SdkProviders,
+    SdkTelemetry
+} from '@deveye/types/sdk/server';
 import { FeatureError } from '@deveye/types/sdk/server';
-import type { FeatureManifest, NativeCapability } from '@deveye/types/sdk';
+import { MAIL_TRANSPORT_PROVIDER, type FeatureManifest, type NativeCapability } from '@deveye/types/sdk';
+import type { MailTransportProvider } from '@deveye/types/sdk';
 import type { DeviceRow, NotificationFeature } from '@deveye/types';
 
 import type { Database } from '@/db';
@@ -28,6 +36,8 @@ export interface FacadeDeps {
     workspaceKind: 'personal' | 'shared';
     manifest: FeatureManifest;
     logger: Logger;
+    /** Les contrats nommés que l'hôte tient : c'est par eux que `mail` lit le module Mail. */
+    providers: SdkProviders;
 }
 
 export function createFacade(deps: FacadeDeps): DevEyeFacade {
@@ -100,17 +110,14 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
         mail: {
             async listAccounts() {
                 gate('mail.accounts');
-                const rows = await deps.db.mailAccounts.listByWorkspace(deps.workspaceId);
-                // Palier « open » seulement : un compte gardé n'est pas lisible
-                // sans session, et un module n'a pas à savoir qu'il existe.
-                const open = rows.filter((r) => r.security_tier === 'open');
-                return Promise.all(
-                    open.map(async (r) => ({
-                        id: r.id,
-                        label: (await deps.cipher.tryDecrypt(r.display_name_enc)) ?? `Compte ${r.id}`,
-                        address: await deps.cipher.tryDecrypt(r.email_address_enc)
-                    }))
-                );
+                // Le contrat du module Mail (`MAIL_TRANSPORT_PROVIDER`), le même
+                // que lit `Services/notifications.ts` : les expéditeurs prêts,
+                // c'est-à-dire les comptes de l'étage ouvert (un compte gardé
+                // n'est pas lisible sans session, et un module n'a pas à
+                // savoir qu'il existe) et actifs. Sans module Mail, aucun.
+                const transport = deps.providers.get<MailTransportProvider>(MAIL_TRANSPORT_PROVIDER);
+                if (!transport) return [];
+                return transport.listSenders(deps.workspaceId);
             }
         },
         members: {

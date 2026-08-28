@@ -20,7 +20,10 @@ type CountCommand =
     | Exclude<Extract<ResourceKey, `${string}.count`>, 'uptime.count' | 'sentinel.count'>
     // Un module externe déclare sa propre clé `.count` dans son manifest ; le
     // registre des commandes la connaît au chargement, pas ce type.
-    | `x-${string}.count`;
+    | `x-${string}.count`
+    // Une commande de comptage au nom historique (`mail.accountCount`) : la
+    // même forme de réponse, `{ count }`, sous un autre nom.
+    | `${string}.${string}Count`;
 
 export type CountState = { kind: 'loading' } | { kind: 'ready'; count: number };
 
@@ -35,7 +38,10 @@ export type CountState = { kind: 'loading' } | { kind: 'ready'; count: number };
  */
 export function useWorkspaceCount(command: CountCommand): CountState {
     const workspace = useActiveWorkspace();
-    const version = useResourceVersion(command);
+    // Une commande de comptage au nom historique n'est pas une clé de ressource
+    // pour le type, mais elle en est une pour le bus : les natives rapatriées
+    // gardent leurs clés dans l'union, et un module externe déclare les siennes.
+    const version = useResourceVersion(command as ResourceKey);
     const [state, setState] = useState<CountState>({ kind: 'loading' });
 
     useEffect(() => {

@@ -37,6 +37,7 @@ quand elles ont été relues depuis, la date de relecture.
 | [DEPLOY.md](./DEPLOY.md)         | les mises en production via Dokploy                               |
 | [FINANCE.md](./FINANCE.md)       | le livre de comptes de l'espace                                   |
 | [GIT.md](./GIT.md)               | les dépôts de l'espace et leur cache                              |
+| [MAIL.md](./MAIL.md)             | les boîtes mail de l'espace, leurs deux paliers, les alertes      |
 | [MONITORING.md](./MONITORING.md) | la supervision des machines enrôlées                              |
 | [PROJECTS.md](./PROJECTS.md)     | le pilotage du travail, et ses liaisons vers les objets d'espace  |
 | [SENTINEL.md](./SENTINEL.md)     | la posture de sécurité des machines                               |

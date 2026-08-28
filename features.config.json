@@ -36,6 +36,9 @@
     },
     {
       "package": "deveye-feature-audience"
+    },
+    {
+      "package": "deveye-feature-mail"
     }
   ]
 }

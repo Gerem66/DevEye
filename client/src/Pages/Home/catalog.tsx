@@ -2,11 +2,9 @@ import type { ComponentType } from 'react';
 import type { HomeFeatureId, WorkspaceKind } from '@deveye/types';
 
 import { MonitoringWidget } from '@/Features/Monitoring';
-import { MailWidget } from '@/Features/Mail/MailWidget';
 import { ProjectsWidget } from '@/Features/Projects/ProjectsWidget';
 
 import Monitoring from '@/Features/Monitoring';
-import Mail from '@/Features/Mail';
 import FeatureProjects from '@/Features/Projects';
 
 import type { FeatureProps } from '@/Features/types';
@@ -129,19 +127,6 @@ const NATIVE_CATALOG: FeatureCatalogEntry[] = [
         // Démonté dès la fermeture, comme Mail et Uptime : le portefeuille, les
         // fils de discussion et la présence vivent en direct, une instance en
         // cache continuerait de travailler sans être vue.
-        cacheDurationMinutes: 0,
-        holdSecrecy: true
-    },
-    {
-        id: 'mail',
-        title: 'Mail',
-        icon: 'mail',
-        description: 'Vos boîtes de réception, et le canal par lequel les autres fonctionnalités alertent.',
-        category: 'work',
-        WidgetContent: MailWidget,
-        FullComponent: Mail,
-        // Unmounted as soon as it closes, like Uptime: folders/messages are
-        // fetched live and would go stale sitting in a cached instance.
         cacheDurationMinutes: 0,
         holdSecrecy: true
     }

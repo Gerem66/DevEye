@@ -1,5 +1,7 @@
 import type { SdkFeatureContext, SdkProviders, SdkSocketTransport } from '@deveye/types/sdk/server';
 import { env } from '@/Utils/Env';
+import { signModuleTicket } from '@/auth/jwt';
+import { serverKeysOf } from './host';
 import { FeatureError } from '@deveye/types/sdk/server';
 import { resolveExtras, type FeatureManifest } from '@deveye/types/sdk';
 import type { NotificationFeature } from '@deveye/types';
@@ -24,7 +26,7 @@ import { createFeatureStore } from './store';
  * une balise qui déduirait l'adresse du navigateur serait juste en
  * développement et fausse en production.
  */
-const ORIGINS = {
+export const ORIGINS = {
     app: env.PUBLIC_ORIGIN.replace(/\/+$/, ''),
     public: (env.AUDIENCE_ORIGIN || env.PUBLIC_ORIGIN).replace(/\/+$/, '')
 } as const;
@@ -56,13 +58,26 @@ export function createSdkContext(
             isAdmin: ctx.isAdmin,
             workspaceKind: ctx.workspace.kind,
             manifest,
-            logger: ctx.logger
+            logger: ctx.logger,
+            providers
         }),
         transport: socketTransport(ctx, manifest),
         // Le verrou de la session, tel que le magasin gardé le voit : la
         // question « puis-je lire l'étage gardé maintenant ? », posée AVANT
         // de lire quand la réponse change la forme de la réponse.
-        secrecy: { isUnlocked: () => ctx.secure.isUnlocked() },
+        secrecy: {
+            isUnlocked: () => ctx.secure.isUnlocked(),
+            // Signé par l'hôte, lié à la session de l'appelant et à CE module
+            // (l'audience) : le module tend le ticket au navigateur, son
+            // service le rend contre les codecs de l'appelant.
+            ticket: (payload, opts) =>
+                signModuleTicket(
+                    manifest.id,
+                    { userId: ctx.userId, workspaceId: ctx.workspaceId, sessionId: ctx.sessionId, payload },
+                    opts?.ttlSeconds ?? 120
+                )
+        },
+        keys: serverKeysOf(ctx.crypt),
         items: {
             // Les restrictions et la garde par élément sont celles du
             // dispatcheur, liées à LA feature du module : un module ne peut

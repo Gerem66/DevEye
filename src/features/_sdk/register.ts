@@ -1,4 +1,4 @@
-import { isExternalFeatureId, registerExternalFeature } from '@deveye/types';
+import { isExternalFeatureId, registerExternalFeature, type LiveTopic } from '@deveye/types';
 import { externalDescriptorOf, validateManifest, type FeatureManifest } from '@deveye/types/sdk';
 import type {
     FeatureAgentHooks,
@@ -117,7 +117,11 @@ export function moduleFeatureHandlers(): FeatureDefinition<string, never, never>
                 input: def.input as never,
                 output: def.output as never,
                 access: { feature: mod.manifest.id, level: def.access?.level ?? 'read' },
-                mutates: def.mutates ? true : undefined,
+                // Un booléen bat le sujet du module ; une liste nomme les
+                // sujets (les siens, un secondaire du manifest, celui d'une
+                // autre feature dont les écrans reflètent cette donnée) :
+                // `buildTopicIndex` refuse au boot un sujet inconnu.
+                mutates: def.mutates === true ? true : def.mutates ? (def.mutates as readonly LiveTopic[]) : undefined,
                 handler: async (ctx, input) => {
                     const sdkCtx = createSdkContext(ctx, mod.manifest, mod.repoFor(ctx.db), PROVIDERS);
                     for (const key of def.access?.extras ?? []) {
@@ -338,7 +342,7 @@ export function isModulePublicPath(url: string): boolean {
  * des balises, à la cadence des visites), plafond de débit par route quand
  * le module en demande un.
  */
-export function modulePublicRoutes(app: FastifyInstance): void {
+export function modulePublicRoutes(app: FastifyInstance, listener: 'app' | 'public'): void {
     for (const s of SERVICES) {
         const routes = s.service.publicRoutes;
         if (!routes) continue;
@@ -351,6 +355,10 @@ export function modulePublicRoutes(app: FastifyInstance): void {
             opts: SdkPublicRouteOptions,
             handler: SdkPublicHandler
         ) => {
+            // Une route qui n'a de sens que depuis l'origine de l'app (un
+            // téléchargement à ticket, un retour OAuth) ne s'ouvre pas sur la
+            // surface publique : ce port n'expose que ce qui doit l'être.
+            if ((opts.exposure ?? 'everywhere') === 'app' && listener === 'public') return;
             PUBLIC_PATHS.add(path);
             const route: RouteShorthandOptions = { logLevel: 'silent' };
             if (opts.rateLimit) route.config = { rateLimit: opts.rateLimit };
@@ -367,4 +375,14 @@ export function modulePublicRoutes(app: FastifyInstance): void {
         };
         routes.call(s.service, surface);
     }
+}
+
+/**
+ * Les sujets live que les modules installés peuvent battre : leur id et leurs
+ * sujets secondaires (`manifest.topics`). Lu par le filet de démarrage des
+ * sujets (`_topics.ts`) pour valider une liste `mutates` ; lu à l'appel, jamais
+ * au chargement, pour que l'ordre des imports ne compte pas.
+ */
+export function moduleTopics(): readonly string[] {
+    return MODULES.flatMap((m) => [m.manifest.id, ...(m.manifest.topics ?? []).map((t) => t.id)]);
 }

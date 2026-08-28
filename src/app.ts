@@ -31,10 +31,7 @@ import {
 import { setSdkHost } from '@/features/_sdk/host';
 import type { FeatureService } from '@deveye/types/sdk/server';
 import { createAuditLog } from '@/Services/AuditLog';
-import { MailSyncService } from '@/Services/MailSyncService';
 import { createProjectsUsageProvider, PROJECTS_USAGE_PROVIDER } from '@/features/project/usageProvider';
-import { mailAttachmentRoutes } from '@/mail/attachmentRoutes';
-import { mailOAuthRoutes } from '@/mail/oauthRoutes';
 import { status } from '@/status';
 
 import type { Database } from '@/db';
@@ -52,8 +49,6 @@ export interface BuiltApp {
     app: FastifyInstance;
     /** Services des modules installés — démarrés ici, arrêtés par index.ts. */
     moduleServices: readonly FeatureService[];
-    /** Synchro Mail en tâche de fond (comptes « open » uniquement) — démarrée/arrêtée par index.ts. */
-    mailSync: MailSyncService;
 }
 
 export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
@@ -180,7 +175,6 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     const moduleServices = createModuleServices({ db: deps.db, crypt: deps.crypt, audit, logger, live });
     for (const svc of moduleServices) await svc.start();
 
-    const mailSync = new MailSyncService({ db: deps.db, crypt: deps.crypt, logger, live });
     // Ce que les modules Bases de données, Déploiements, Git et Audience
     // demandent à Projets (les projets de l'espace qui relient un élément, et
     // combien par élément ; la frise d'un projet pour un déploiement parti de
@@ -202,16 +196,17 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // L'ingestion d'audience est un service du module `features/audience`,
     // la seule qui ne sonde rien : elle **reçoit**, par les routes publiques
     // montées ci-dessous, et son seul travail périodique est de vider ce
-    // qu'on lui a déposé.)
+    // qu'on lui a déposé. La relève des boîtes mail ouvertes est un service
+    // du module `features/mail`, qui offre aussi le transport des alertes
+    // e-mail (`MAIL_TRANSPORT_PROVIDER`) et ses deux routes à ticket.)
 
     await authRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
     await agentRoutes(app, { db: deps.db, hub, live, audit });
     // Les routes publiques des modules (capacité `routes.public`) : sur cet
     // écouteur-ci, et sur la surface publique quand elle existe
-    // (`publicApp.ts`). Après la création des services, qui les déclarent.
-    modulePublicRoutes(app);
-    await mailOAuthRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
-    await mailAttachmentRoutes(app, { db: deps.db, crypt: deps.crypt });
+    // (`publicApp.ts`, où celles à `exposure: 'app'`, comme les deux de Mail,
+    // ne montent pas). Après la création des services, qui les déclarent.
+    modulePublicRoutes(app, 'app');
     await registerWS(app, {
         db: deps.db,
         crypt: deps.crypt,
@@ -251,5 +246,5 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         app.log.debug({ clientDir }, 'No client build found; static serving disabled (host dev uses Vite)');
     }
 
-    return { app, mailSync, moduleServices };
+    return { app, moduleServices };
 }

@@ -1,16 +1,6 @@
 import type { Queryable } from './pool';
 import { devicesRepo, linkCodesRepo, type DevicesRepo, type LinkCodesRepo } from './repos/devices';
 import { logsRepo, type LogsRepo } from './repos/logs';
-import {
-    mailAccountsRepo,
-    mailFoldersRepo,
-    mailMessagesRepo,
-    mailSettingsRepo,
-    type MailAccountsRepo,
-    type MailFoldersRepo,
-    type MailMessagesRepo,
-    type MailSettingsRepo
-} from './repos/mail';
 import { metricsRepo, type MetricsRepo } from './repos/metrics';
 import { featureKvRepo, type FeatureKvRepo } from './repos/featureKv';
 import { itemSharingRepo, type ItemSharingRepo } from './repos/itemSharing';
@@ -73,10 +63,6 @@ export interface Database {
     /** Canaux d'alerte, par espace **et par feature** (voir `Services/notifications.ts`). */
     itemSharing: ItemSharingRepo;
     notificationChannels: NotificationChannelsRepo;
-    mailAccounts: MailAccountsRepo;
-    mailFolders: MailFoldersRepo;
-    mailMessages: MailMessagesRepo;
-    mailSettings: MailSettingsRepo;
 }
 
 export function createDatabase(q: Queryable): Database {
@@ -106,10 +92,6 @@ export function createDatabase(q: Queryable): Database {
         userSecretKeys: userSecretKeysRepo(q),
         featureKv: featureKvRepo(q),
         itemSharing: itemSharingRepo(q),
-        notificationChannels: notificationChannelsRepo(q),
-        mailAccounts: mailAccountsRepo(q),
-        mailFolders: mailFoldersRepo(q),
-        mailMessages: mailMessagesRepo(q),
-        mailSettings: mailSettingsRepo(q)
+        notificationChannels: notificationChannelsRepo(q)
     };
 }

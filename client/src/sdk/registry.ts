@@ -53,6 +53,12 @@ export function registerClientModules(installed: readonly InstalledClientFeature
         for (const cross of mod.manifest.alsoInvalidatedBy ?? []) {
             registerCrossTopicKeys(cross.topic, cross.keys as ResourceKey[]);
         }
+        // Les sujets secondaires du module (un fil de discussion battu à part
+        // du tableau) : chacun ravive les clés qu'il nomme, comme le sujet
+        // principal ravive `resources`.
+        for (const topic of mod.manifest.topics ?? []) {
+            registerFeatureResources(topic.id, topic.keys as ResourceKey[]);
+        }
         MODULES.push(mod);
         BY_ID.set(mod.manifest.id, mod);
     }

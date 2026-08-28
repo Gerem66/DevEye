@@ -3,28 +3,25 @@ import {
     NOTIFICATION_LABEL_MAX,
     NOTIFICATION_TARGET_MAX,
     featureDescriptor,
-    type MailAccount,
     type NotificationChannel,
     type NotificationChannelInput,
     type NotificationChannelKind,
     type NotificationFeature
 } from '@deveye/types';
+import { MAIL_CLIENT_PROVIDER } from '@deveye/types/sdk';
+import type { MailClientProvider } from '@deveye/types/sdk/client';
 
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';
 import Checkbox from '@/Components/Checkbox';
 import { Dialog } from '@/Components/Dialog';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
-import { OpenPopup } from '@/Components/Popup';
 import SelectInput from '@/Components/SelectInput';
 import TextInput from '@/Components/TextInput';
+import { moduleClientProvider } from '@/sdk/registry';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { useWorkspacePermissions } from '@/stores/workspace';
 import { accessibleWorkspaceName, goToItemSettings } from '../goToHome';
-/* Le vrai dialogue de la feature Mail, jamais une copie réduite (le patron des
-   dialogues de liaison des Projets). Chemins directs des deux côtés : ni lui ni
-   ses imports ne passent par le baril `@/Components`, pas de cycle. */
-import AccountPopup, { ACCOUNT_POPUP, type AccountPopupResult } from '@/Features/Mail/AccountPopup';
 
 import type { SettingsScope } from '../scope';
 import styles from '../FeatureSettings.module.css';
@@ -93,6 +90,9 @@ const KIND_ICON: Record<NotificationChannelKind, string> = {
 
 const EMPTY_DRAFT: NotificationChannelInput = { kind: 'discord', label: '', target: '', mailAccountId: null };
 
+/** Un expéditeur prêt, tel que le module Mail le rend : ouvert et actif, déjà filtré. */
+type MailSender = Awaited<ReturnType<MailClientProvider['listSenders']>>[number];
+
 interface Props {
     scope: SettingsScope;
     /**
@@ -108,6 +108,12 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
     const descriptor = featureDescriptor(scope.feature);
     const permissions = useWorkspacePermissions();
     const canManage = permissions.canChannels(scope.feature);
+    /**
+     * Le module Mail, par son contrat client : les expéditeurs d'un canal
+     * e-mail et le dialogue de compte. `undefined` sans le module, et le
+     * formulaire ne propose alors pas de canal e-mail.
+     */
+    const mail = moduleClientProvider<MailClientProvider>(MAIL_CLIENT_PROVIDER);
     // Le droit fin, pas `write` : c'est ce qui permet de confier le routage des
     // alertes sans confier la modification des services surveillés.
 
@@ -133,7 +139,7 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
     const [managedHere, setManagedHere] = useState(true);
     /** L'espace où la route se règle : le domicile de l'élément. */
     const [homeWorkspaceId, setHomeWorkspaceId] = useState<number | null>(null);
-    const [accounts, setAccounts] = useState<MailAccount[]>([]);
+    const [senders, setSenders] = useState<readonly MailSender[]>([]);
     const [selected, setSelected] = useState<number[]>([]);
     const [draft, setDraft] = useState<NotificationChannelInput | null>(null);
     const [editing, setEditing] = useState<number | null>(null);
@@ -193,19 +199,17 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
         void reload().catch(() => setStatus('Chargement impossible.'));
     }, [reload, channelsVersion, routeVersion]);
 
-    // Les comptes expéditeurs ne servent qu'au formulaire d'ajout, et seulement
-    // à qui peut en ajouter : les demander sinon serait une requête pour un
-    // champ que personne ne verra.
+    // Les expéditeurs ne servent qu'au formulaire d'ajout, et seulement à qui
+    // peut en ajouter : les demander sinon serait une requête pour un champ
+    // que personne ne verra. Le module les rend déjà filtrés : seuls les
+    // comptes « open » peuvent envoyer sans déverrouillage.
     useEffect(() => {
-        if (!canManage) return;
-        void ws
-            .send('mail.accountList', {})
-            .then((r) => setAccounts(r.accounts))
+        if (!canManage || !mail) return;
+        void mail
+            .listSenders()
+            .then(setSenders)
             .catch(() => undefined);
-    }, [canManage]);
-
-    /** Seuls les comptes « open » peuvent envoyer sans déverrouillage. */
-    const openAccounts = accounts.filter((a) => a.securityTier === 'open' && a.enabled);
+    }, [canManage, mail]);
 
     async function run(action: () => Promise<void>, failure: string): Promise<void> {
         setBusy(true);
@@ -301,36 +305,35 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
     };
 
     const openMailAdd = (): void => {
-        knownMailIds.current = new Set(accounts.map((a) => a.id));
+        knownMailIds.current = new Set(senders.map((s) => s.id));
         setMailAdd(true);
     };
 
-    /** Retour du dialogue Mail : relire les boîtes, adopter celle qui vient de naître. */
-    const onMailAddDone = useCallback((result: AccountPopupResult): void => {
+    /** Le dialogue Mail s'est refermé sans boîte nouvelle. */
+    const onMailAddClose = useCallback((): void => {
         setMailAdd(false);
-        // `saved` pour une connexion manuelle, `oauth-connected` pour un
-        // consentement Google/Microsoft abouti puis simplement refermé.
-        if (result !== 'saved' && result !== 'oauth-connected') {
-            knownMailIds.current = null;
-            return;
-        }
-        void ws
-            .send('mail.accountList', {})
-            .then((r) => {
-                setAccounts(r.accounts);
-                const fresh = r.accounts.find((a) => !knownMailIds.current?.has(a.id));
+        knownMailIds.current = null;
+    }, []);
+
+    /**
+     * Une boîte est sortie du dialogue Mail : relire les expéditeurs, adopter
+     * celui qui vient de naître. Une boîte créée au palier gardé n'est pas un
+     * expéditeur (le module ne rend que les boîtes prêtes) : rien à adopter
+     * alors, le sélecteur reste tel quel.
+     */
+    const onMailAddSaved = useCallback((): void => {
+        setMailAdd(false);
+        if (!mail) return;
+        void mail
+            .listSenders()
+            .then((list) => {
+                setSenders(list);
+                const fresh = list.find((s) => !knownMailIds.current?.has(s.id));
                 knownMailIds.current = null;
-                if (!fresh) return;
-                if (fresh.securityTier === 'open' && fresh.enabled) {
-                    setDraft((prev) => (prev ? { ...prev, mailAccountId: fresh.id } : prev));
-                } else {
-                    // Créée au palier gardé : sélectionnable nulle part ici, et
-                    // le dire vaut mieux qu'un sélecteur qui l'ignore en silence.
-                    setStatus('La boîte créée n’est pas au palier « ouvert » : elle ne peut pas expédier ces alertes.');
-                }
+                if (fresh) setDraft((prev) => (prev ? { ...prev, mailAccountId: fresh.id } : prev));
             })
             .catch(() => undefined);
-    }, []);
+    }, [mail]);
 
     return (
         <div className={styles.section}>
@@ -598,9 +601,17 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                             >
                                 <option value='discord'>Discord — mise en page riche, suivi vivant</option>
                                 <option value='webhook'>Webhook — POST JSON générique</option>
-                                <option value='email'>E-mail</option>
+                                {/* Un canal e-mail n'existe qu'avec le module Mail ; un
+                                    canal déjà déclaré garde son type affiché. */}
+                                {(mail || draft.kind === 'email') && <option value='email'>E-mail</option>}
                             </SelectInput>
                             <span className={styles.fieldHint}>{KIND_HINT[draft.kind]}</span>
+                            {!mail && (
+                                <span className={styles.fieldHint}>
+                                    Sans le module Mail, aucun canal e-mail : les alertes partent par Discord ou par
+                                    webhook.
+                                </span>
+                            )}
                         </label>
 
                         <label className={styles.field}>
@@ -629,9 +640,9 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                                             }
                                         >
                                             <option value=''>Aucun</option>
-                                            {openAccounts.map((a) => (
-                                                <option key={a.id} value={a.id}>
-                                                    {a.displayName} ({a.emailAddress})
+                                            {senders.map((s) => (
+                                                <option key={s.id} value={s.id}>
+                                                    {s.label} ({s.address})
                                                 </option>
                                             ))}
                                         </SelectInput>
@@ -643,12 +654,12 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                                             icon='plus'
                                             aria-label='Ajouter une boîte mail'
                                             title='Ajouter une boîte mail : elle sera sélectionnée ici une fois créée'
-                                            disabled={busy}
+                                            disabled={busy || !mail}
                                             onClick={openMailAdd}
                                         />
                                     </div>
                                     <span className={styles.fieldHint}>
-                                        {openAccounts.length === 0
+                                        {senders.length === 0
                                             ? 'Aucun compte mail « open » configuré : le « + » ci-contre en crée un.'
                                             : 'Seuls les comptes « open » peuvent envoyer sans intervention manuelle.'}
                                     </span>
@@ -692,41 +703,14 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
 
             {status && <p className={styles.notice}>{status}</p>}
 
-            {mailAdd && <MailAccountLauncher onDone={onMailAddDone} />}
+            {/* Le vrai dialogue de la feature Mail, jamais une copie réduite (le
+                patron des dialogues de liaison des Projets) : le module l'offre
+                par son contrat client, et le monte à la demande. */}
+            {mail && <mail.AccountDialog open={mailAdd} onClose={onMailAddClose} onSaved={onMailAddSaved} />}
 
             <ConfirmDialog request={confirm} busy={busy} onClose={() => setConfirm(null)} />
         </div>
     );
-}
-
-/**
- * Monte le dialogue de compte Mail **à la demande**, l'ouvre, rend le résultat.
- *
- * `AccountPopup` passe par le registre impératif des Popup : il faut qu'une
- * instance soit montée pour qu'`OpenPopup` la trouve, et la feature Mail n'est
- * pas forcément vivante quand on règle un canal. D'où ce lanceur : monter,
- * ouvrir, démonter au retour. Le registre est une pile, et l'instance de Mail
- * (si sa feature est gardée vivante en arrière-plan) reprend la main ensuite.
- *
- * L'ouverture vit dans l'effet du **parent** : React exécute les effets des
- * enfants d'abord, donc `AccountPopup` est déjà inscrit quand `OpenPopup` le
- * vise ; aucun tour d'attente à bricoler.
- */
-function MailAccountLauncher({ onDone }: { onDone: (result: AccountPopupResult) => void }) {
-    const doneRef = useRef(onDone);
-    doneRef.current = onDone;
-
-    useEffect(() => {
-        let live = true;
-        void OpenPopup<AccountPopupResult>(ACCOUNT_POPUP, null).then((result) => {
-            if (live) doneRef.current(result);
-        });
-        return () => {
-            live = false;
-        };
-    }, []);
-
-    return <AccountPopup />;
 }
 
 /**

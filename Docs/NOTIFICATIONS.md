@@ -92,6 +92,19 @@ discord  la mise en page riche (embeds, couleurs, champs) et, pour le
          déploiement, le suivi vivant — un message qui se met à jour
 ```
 
+### Le courriel passe par le module Mail
+
+Depuis le rapatriement de Mail en module (28 août 2026, [MAIL.md](./MAIL.md)),
+`Services/notifications.ts` ne lit plus `mail_accounts` et ne parle plus SMTP :
+tout ce qui touche à une boîte passe par le contrat que le service du module
+publie, `MAIL_TRANSPORT_PROVIDER` (`listSenders` : les expéditeurs prêts,
+c'est-à-dire les comptes **ouverts et actifs** de l'espace ; `isReady` : ce que
+`ready` affiche sur un canal e-mail ; `send` : l'envoi d'un texte, `false` sur
+échec, jamais de levée). Un canal e-mail résolu porte le destinataire et
+l'identifiant du compte expéditeur, plus aucun identifiant SMTP. **Sans module
+Mail installé, aucun canal e-mail n'est prêt**, et l'écran des canaux le dit
+plutôt que d'afficher un réglage qui ment.
+
 ### Discord n'est plus deviné
 
 `webhookBody` reniflait l'URL pour choisir entre embeds et texte. Ça marchait,

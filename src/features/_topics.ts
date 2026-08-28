@@ -1,6 +1,7 @@
-import { isExternalFeatureId, type LiveTopic } from '@deveye/types';
+import { isExternalFeatureId, nativeLiveTopicSchema, type LiveTopic } from '@deveye/types';
 
 import { logger } from '@/logger';
+import { moduleTopics } from './_sdk/register';
 import { featureHandlers } from './registry';
 
 /**
@@ -100,6 +101,17 @@ function prefixOf(command: string): string {
 const TOPICS_BY_COMMAND = new Map<string, readonly LiveTopic[]>();
 
 /**
+ * Un sujet qu'une commande peut battre : natif, ou déclaré par un module
+ * installé (son id, ses sujets secondaires). Les sujets des modules sont lus
+ * dans leur registre à l'appel : `buildTopicIndex` tourne après leur
+ * enregistrement, et un import au chargement ferait un cycle
+ * (`_topics → registry → _sdk/register`).
+ */
+function knownTopic(topic: string, modules: ReadonlySet<string>): boolean {
+    return nativeLiveTopicSchema.safeParse(topic).success || modules.has(topic) || isExternalFeatureId(topic);
+}
+
+/**
  * Commandes dont le nom porte un verbe mutant sans en être une. Maintenue à la
  * main, et c'est voulu : elle est courte, et elle rend le contrôle ci-dessous
  * utile — s'il reste à zéro avertissement, toute nouvelle commande mutante non
@@ -161,6 +173,7 @@ const MUTATION_VERB =
  */
 export function buildTopicIndex(): void {
     const suspects: string[] = [];
+    const modules = new Set(moduleTopics());
 
     for (const def of featureHandlers) {
         const prefix = prefixOf(def.command);
@@ -192,6 +205,14 @@ export function buildTopicIndex(): void {
             }
             TOPICS_BY_COMMAND.set(def.command, [topic]);
         } else {
+            for (const topic of def.mutates) {
+                if (!knownTopic(topic, modules)) {
+                    throw new Error(
+                        `« ${def.command} » déclare mutates: ['${topic}'], sujet inconnu : ni natif, ni déclaré par un module ` +
+                            '(son id, ou manifest.topics).'
+                    );
+                }
+            }
             TOPICS_BY_COMMAND.set(def.command, def.mutates);
         }
     }

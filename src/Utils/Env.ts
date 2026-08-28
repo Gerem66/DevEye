@@ -105,29 +105,8 @@ export const env = {
     // séparément ne produisait que des instants à moitié lisibles.
     MONITORING_RETENTION_DAYS: getEnvVar('MONITORING_RETENTION_DAYS', 'number', false) || DEFAULT_RETENTION_DAYS,
 
-    // (Les SENTINEL_* sont lues par le module Sentinelle lui-même, features/sentinel.)
-
-    // Mail background sync: same shape as the Uptime module's scheduler (whose
-    // UPTIME_* variables are read by the module itself), but only ever touches "open"
-    // tier accounts (guarded accounts sync on demand during a live session).
-    MAIL_SYNC_TICK_SECONDS: getEnvVar('MAIL_SYNC_TICK_SECONDS', 'number', false) || 120,
-    MAIL_SYNC_CONCURRENCY: getEnvVar('MAIL_SYNC_CONCURRENCY', 'number', false) || 4,
-    // Échéance au-delà de laquelle la relève d'un compte est abandonnée. Large,
-    // parce qu'une première synchro parcourt tous les dossiers d'une boîte : elle
-    // n'est pas là pour presser le travail, mais pour qu'un compte dont la
-    // connexion reste suspendue ne se retrouve pas retiré de la rotation pour
-    // toujours, sans erreur ni trace, jusqu'au prochain redémarrage.
-    MAIL_SYNC_ACCOUNT_TIMEOUT_SECONDS: getEnvVar('MAIL_SYNC_ACCOUNT_TIMEOUT_SECONDS', 'number', false) || 900,
-
-    // Mail OAuth (Gmail/Microsoft 365). Entirely optional per provider: with no
-    // client id/secret configured, that provider's "Connect with..." option is
-    // simply hidden — password/app-password auth still works regardless. The
-    // self-hosting admin registers their own OAuth app (Google Cloud Console /
-    // Azure Portal) with a redirect URI of `${PUBLIC_ORIGIN}/api/mail/oauth/callback`.
-    OAUTH_GOOGLE_CLIENT_ID: getEnvVar('OAUTH_GOOGLE_CLIENT_ID', 'string', false),
-    OAUTH_GOOGLE_CLIENT_SECRET: getEnvVar('OAUTH_GOOGLE_CLIENT_SECRET', 'string', false),
-    OAUTH_MICROSOFT_CLIENT_ID: getEnvVar('OAUTH_MICROSOFT_CLIENT_ID', 'string', false),
-    OAUTH_MICROSOFT_CLIENT_SECRET: getEnvVar('OAUTH_MICROSOFT_CLIENT_SECRET', 'string', false),
+    // (Les SENTINEL_* sont lues par le module Sentinelle lui-même, features/sentinel ;
+    // les MAIL_SYNC_* et OAUTH_* par le module Mail, features/mail.)
 
     COOKIE_DOMAIN: getEnvVar('COOKIE_DOMAIN', 'string', false),
 

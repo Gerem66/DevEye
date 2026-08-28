@@ -1,3 +1,6 @@
+import crypto from 'node:crypto';
+import type Encryption from '@/Services/Encryption';
+import type { SdkServerKeys } from '@deveye/types/sdk/server';
 import type { MonitorHub } from '@/agent/hub';
 import { agentConfigFor } from '@/agent/config';
 import type { Database } from '@/db';
@@ -48,4 +51,19 @@ export async function pushAgentConfig(deviceId: string): Promise<boolean> {
     const row = await sdkDb().devices.findById(deviceId);
     if (!row) return false;
     return hub.pushConfig(deviceId, await agentConfigFor(row));
+}
+
+/**
+ * Les dérivations de la clé serveur offertes à un module (`keys` du contexte
+ * et des services) : sceller/ouvrir des octets sous la clé serveur, et l'HKDF
+ * que `scripts/restore-backup.mjs` refait sans DevEye à partir des deux
+ * seules variables CRYPT_KEY_A / CRYPT_KEY_B. La clé elle-même ne sort jamais.
+ */
+export function serverKeysOf(crypt: Encryption): SdkServerKeys {
+    return {
+        sealBytes: (plain) => crypt.seal(Buffer.from(plain)),
+        openBytes: (sealed) => crypt.openRaw(sealed),
+        derive: (salt, info, length) =>
+            new Uint8Array(crypto.hkdfSync('sha256', crypt.serverKey(), Buffer.from(salt), Buffer.from(info), length))
+    };
 }

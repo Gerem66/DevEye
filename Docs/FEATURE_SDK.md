@@ -460,6 +460,49 @@ fois de plus : un `mutates` multi-sujets (`audience.siteRemove` déclarait
 `['audience', 'projects']`) ; les compteurs d'onglets d'un projet se relisent
 à leur prochaine ouverture.
 
+**Mail** est la treizième native rapatriée (`features/mail`, 28 août 2026),
+menée par deux agents en parallèle (serveur + app, client + écrans natifs),
+et la première à vivre sur les **deux étages par élément** : une boîte
+ouverte se lit sans session et se relève en fond, une boîte gardée exige le
+déverrouillage (`cipherFor(ctx, tier)` : `ctx.cipher()` ou
+`ctx.cipher('private')`, `assertMailUnlocked` par `ctx.secrecy.isUnlocked()`,
+`assertTierAllowed` par `ctx.workspace.kind`). Sa migration a élargi le SDK
+du **ticket de session** : `ctx.secrecy.ticket(payload, { ttlSeconds })`
+signe (par l'hôte, `signModuleTicket` dans `auth/jwt.ts`, l'audience liée au
+module) ce qu'un module tend au navigateur (l'URL d'une pièce jointe, le
+`state` OAuth), et `deps.secrecy.redeem(ticket)` le rend à une route publique
+du service en `{ userId, workspaceId, payload, cipher: { server, private |
+null } }`, l'étage gardé tant que la session est déverrouillée ; l'ex
+`signMailAttachmentToken` / `signMailOAuthState` de `auth/jwt.ts` et
+`cipherForTier` (qui reconstruisait le magasin gardé depuis l'identifiant de
+session) ont disparu. Avec lui : `keys` au contexte de requête (les mêmes
+dérivations qu'un service), `deps.origins` côté service (le `redirect_uri` et
+la cible du `postMessage` de la page de retour), `SdkPublicRouteOptions.exposure`
+(`'app'` : l'origine de l'app seulement, l'écouteur public ignore la route ;
+les deux de Mail le déclarent), `SdkPublicRequest.query` (la chaîne de
+requête décodée, `unknown` comme `body` : ce qu'un GET à ticket porte), et le
+harnais qui simule tout cela (`createTestContext().secrecy.ticket` pose un
+ticket lisible, `createTestServiceDeps().secrecy.redeem` le relit, verrou
+compris). Le **transport des alertes e-mail** est un provider : le service
+publie `MAIL_TRANSPORT_PROVIDER` (`listSenders`, `isReady`, `send`, les
+comptes ouverts et actifs sous le codec ouvert), `Services/notifications.ts`
+le relit à l'appel par `moduleProvider` (sans module, aucun canal e-mail
+n'est prêt) et la façade `mail.listAccounts` par `providers` (`FacadeDeps`
+en a gagné une entrée) ; `db.mailAccounts` et les trois autres dépôts natifs
+ont quitté `db/index.ts`, `MailSyncService` et les deux routes montées à la
+main ont quitté `app.ts` et `index.ts`, `MAIL_SYNC_*` et `OAUTH_*` ont quitté
+`Utils/Env` pour `features/mail/src/server/env.ts`. Le manifest inaugure
+l'onglet **`sync`** (échelle d'un élément : la cadence et la maintenance
+d'une boîte) à côté de `general` et `encryption`, et retire les trois tables
+de câblage natif de la coquille dont Mail était le dernier occupant ; le
+barrel client a gagné `WsError` et `touchSecrecy`. Le service (`MailSync`
+sur `FeatureServiceDeps` : un ticker, `deps.cipherFor`, `deps.live.changed`
+aux transitions, l'échéance par compte), les routes et le transport se
+testent sans réseau (couture `{ mailClient }` du service, `{ client, oauth }`
+des routes). Comme les Notes, le manifest déclare `shareTier: 'never'`
+par-dessus le `'perItem'` du descripteur : le listage n'est pas branché sur
+le partage, aucune entrée `items`.
+
 ## La désinstallation d'un module (22 août 2026)
 
 Le geste inverse de l'installation, conçu pour emporter TOUTES les traces :
@@ -500,7 +543,10 @@ complets : état, propriétaire, espace, cadence, rapport ; `list()` suit la rè
 de `device.list`, l'admin dans son espace personnel voit la flotte),
 `telemetry.read` (`snapshot`, `pinInstant`, réservée aux ids natifs) et
 `agents` (`requestScan`, `pushConfig`, les requêtes sync)), `transport` (socket
-appelant, `agents`), `secrecy.isUnlocked()` (le verrou de la session),
+appelant, `agents`), `secrecy.isUnlocked()` (le verrou de la session) et
+`secrecy.ticket(payload, { ttlSeconds })` (le ticket de session qu'une route
+publique du service rend contre les codecs de l'appelant), `keys` (les mêmes
+dérivations qu'un service),
 `items` (`restrictions()`, `assert(itemId, level)`, `forget(itemId)` : les
 restrictions du dispatcheur liées à LA feature du module, et le ménage d'un
 élément supprimé), `sharing.scope()` (les projections vers l'espace actif,
@@ -517,9 +563,13 @@ par identifiant, même garde), `telemetry`, `live.changed(workspaceId)` (le
 sujet du module, diffusé par le hub, projections comprises), `audit` (source
 système), `agents`, `keys` (`sealBytes`/`openBytes` sous la clé serveur,
 `derive(salt, info, length)` : HKDF sur la même clé, jamais stockée),
+`secrecy.redeem(ticket)` (le ticket d'un module rendu en `{ userId,
+workspaceId, payload, cipher: { server, private | null } }`), `origins`,
 `createTicker` (boucle avec garde de réentrance), `logger`. Un service peut
 aussi déclarer `publicRoutes(app: SdkPublicApp)` (capacité `'routes.public'`) :
-l'hôte monte ces routes sur chacun de ses écouteurs exposés, hors session. Les hooks agent
+l'hôte monte ces routes sur chacun de ses écouteurs exposés, hors session
+(`exposure: 'app'` pour n'en monter une que sur l'origine de l'app ; la
+requête porte `headers`, `body` et `query` décodés, `ip`). Les hooks agent
 d'un module (connexion, télémétrie après persistance, sync) qui échouent sont
 isolés et journalisés (`moduleAgentHooks`), deux modules offrant le même
 provider sont refusés au boot, et `validateGrantExtras` vérifie les extras

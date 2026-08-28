@@ -6,11 +6,12 @@ import type {
     NotificationFeature
 } from '@deveye/types';
 
-import { decryptCredentials } from '@/features/mail/_shared';
+import { MAIL_TRANSPORT_PROVIDER, type MailTransportProvider } from '@deveye/types/sdk';
+
 import type { DiscordMessage } from '@/Services/discord';
-import * as mailClient from '@/Services/MailAccountClient';
 import type { Cipher } from '@/Services/SecureStore';
 import type { Database } from '@/db';
+import { moduleProvider } from '@/features/_sdk/register';
 
 /**
  * L'acheminement des alertes : résoudre les canaux d'une cible, puis livrer.
@@ -33,7 +34,29 @@ import type { Database } from '@/db';
  * **type déclaré** du canal qui tranche. `isDiscordWebhook` survit, mais comme
  * contrôle de saisie : avertir que l'URL collée dans un canal « Discord » n'en
  * est pas une.
+ *
+ * ## Le courriel passe par le module Mail
+ *
+ * Ce module lisait `mail_accounts` et parlait SMTP lui-même (`readyMailAccount`,
+ * `decryptCredentials`, `sendMail`) tant que Mail était native. Depuis son
+ * rapatriement, tout ce qui touche à une boîte passe par le contrat que le
+ * module publie sur son service (`MAIL_TRANSPORT_PROVIDER` : les expéditeurs
+ * prêts, l'état d'un compte, l'envoi d'un texte), relu à l'appel par
+ * {@link mailTransport}. Sans module Mail installé, un canal e-mail n'est
+ * jamais prêt, et l'écran des canaux le dit.
  */
+
+/**
+ * Le transport des alertes e-mail, tel que le module Mail l'offre ; `undefined`
+ * sans module. Relu à chaque appel et non retenu : l'ordre du boot ne compte
+ * pas, et c'est ce que `moduleProvider` promet. (L'import de `_sdk/register`
+ * ferme un cycle avec `facade.ts`, qui importe ce fichier : assumé et sans
+ * effet, rien n'est évalué au chargement, deux fonctions qui s'appellent à
+ * l'exécution.)
+ */
+function mailTransport(): MailTransportProvider | undefined {
+    return moduleProvider<MailTransportProvider>(MAIL_TRANSPORT_PROVIDER);
+}
 
 /**
  * Un canal prêt à recevoir, tel que la livraison en a besoin.
@@ -47,8 +70,8 @@ export interface ResolvedChannel {
     id: number;
     kind: NotificationChannelKind;
     label: string;
-    /** Renseigné sur un canal `email`, `null` sinon. */
-    email: { to: string; credentials: mailClient.MailCredentials; fromEmail: string } | null;
+    /** Renseigné sur un canal `email`, `null` sinon : le destinataire, et le compte expéditeur du module Mail. */
+    email: { to: string; accountId: number; workspaceId: number } | null;
     /** Renseigné sur un canal `webhook` ou `discord`, `null` sinon. */
     webhookUrl: string | null;
 }
@@ -102,16 +125,12 @@ async function decodeChannel(
  * ne partira pas » plutôt que d'afficher un réglage qui ment : le compte doit
  * exister **dans cet espace**, être actif, et appartenir au palier « open » —
  * un compte gardé exige un déverrouillage que l'ordonnanceur de fond n'a jamais.
+ * Les trois sont la définition d'un expéditeur prêt chez le module Mail, qui
+ * répond ; sans module, personne n'est prêt.
  */
-async function readyMailAccount(
-    db: Database,
-    workspaceId: number,
-    mailAccountId: number | null
-): Promise<{ id: number; emailAddressEnc: string; credentialsEnc: string } | null> {
-    if (!mailAccountId) return null;
-    const account = await db.mailAccounts.findById(mailAccountId, workspaceId);
-    if (!account || account.enabled !== 1 || account.security_tier !== 'open') return null;
-    return { id: account.id, emailAddressEnc: account.email_address_enc, credentialsEnc: account.credentials_enc };
+async function readyMailAccount(workspaceId: number, mailAccountId: number | null): Promise<boolean> {
+    if (!mailAccountId) return false;
+    return (await mailTransport()?.isReady(mailAccountId, workspaceId)) ?? false;
 }
 
 /**
@@ -124,7 +143,6 @@ async function readyMailAccount(
  * deux besoins.
  */
 export async function describeChannel(
-    db: Database,
     cipher: Cipher,
     row: NotificationChannelRow,
     usageCount: number,
@@ -139,8 +157,7 @@ export async function describeChannel(
     reveal: boolean
 ): Promise<NotificationChannel> {
     const { label, target } = await decodeChannel(cipher, row);
-    const ready =
-        row.kind === 'email' ? (await readyMailAccount(db, row.workspace_id, row.mail_account_id)) !== null : !!target;
+    const ready = row.kind === 'email' ? await readyMailAccount(row.workspace_id, row.mail_account_id) : !!target;
     return {
         id: row.id,
         kind: row.kind,
@@ -155,39 +172,29 @@ export async function describeChannel(
 }
 
 /** Une ligne de canal, prête à livrer — ou `null` si rien ne peut en sortir. */
-async function resolveChannel(
-    db: Database,
-    cipher: Cipher,
-    row: NotificationChannelRow
-): Promise<ResolvedChannel | null> {
+async function resolveChannel(cipher: Cipher, row: NotificationChannelRow): Promise<ResolvedChannel | null> {
     if (row.enabled !== 1) return null;
     const { label, target } = await decodeChannel(cipher, row);
 
     if (row.kind === 'email') {
-        const account = await readyMailAccount(db, row.workspace_id, row.mail_account_id);
-        if (!account) return null;
-        const accountEmail = await cipher.tryDecrypt(account.emailAddressEnc);
-        if (!accountEmail) return null;
+        const transport = mailTransport();
+        if (!transport || !row.mail_account_id) return null;
+        // L'expéditeur tel que le module le liste : prêt (actif, étage ouvert,
+        // adresse lisible), ou absent de la liste, et alors rien ne peut
+        // partir de ce canal.
+        const senders = await transport.listSenders(row.workspace_id);
+        const sender = senders.find((s) => s.id === row.mail_account_id);
+        if (!sender) return null;
         // Destinataire vide = l'adresse du compte expéditeur lui-même, ce que
         // `notification_settings.email_enc IS NULL` voulait déjà dire.
-        const to = target?.trim() || accountEmail;
-        try {
-            return {
-                id: row.id,
-                kind: row.kind,
-                label,
-                email: {
-                    to,
-                    credentials: await decryptCredentials(cipher, account.credentialsEnc),
-                    fromEmail: accountEmail
-                },
-                webhookUrl: null
-            };
-        } catch {
-            // Identifiants illisibles : pas d'expéditeur, et surtout pas
-            // d'exception qui remonterait dans une boucle de fond.
-            return null;
-        }
+        const to = target?.trim() || sender.address;
+        return {
+            id: row.id,
+            kind: row.kind,
+            label,
+            email: { to, accountId: sender.id, workspaceId: row.workspace_id },
+            webhookUrl: null
+        };
     }
 
     if (!target) return null;
@@ -222,7 +229,7 @@ export async function resolveRoute(
 
     const rows = await db.notificationChannels.list(workspaceId, feature);
     const wanted = new Set(ids);
-    const resolved = await Promise.all(rows.filter((r) => wanted.has(r.id)).map((r) => resolveChannel(db, cipher, r)));
+    const resolved = await Promise.all(rows.filter((r) => wanted.has(r.id)).map((r) => resolveChannel(cipher, r)));
     return resolved.filter((c): c is ResolvedChannel => c !== null);
 }
 
@@ -246,7 +253,7 @@ export async function resolveChannelIds(
     if (ids.length === 0) return [];
     const rows = await Promise.all(ids.map((id) => db.notificationChannels.findById(id, workspaceId)));
     const resolved = await Promise.all(
-        rows.filter((r): r is NonNullable<typeof r> => r !== null).map((r) => resolveChannel(db, cipher, r))
+        rows.filter((r): r is NonNullable<typeof r> => r !== null).map((r) => resolveChannel(cipher, r))
     );
     return resolved.filter((c): c is ResolvedChannel => c !== null);
 }
@@ -341,18 +348,19 @@ export function webhookBody(kind: NotificationChannelKind, alert: Alert): Record
 /** Livre une alerte sur un seul canal, et dit s'il l'a acceptée. */
 async function deliverOne(channel: ResolvedChannel, alert: Alert, logger: Logger): Promise<boolean> {
     if (channel.email) {
-        try {
-            await mailClient.sendMail(channel.email.credentials, {
-                from: channel.email.fromEmail,
-                to: [{ name: null, address: channel.email.to }],
-                subject: alert.subject,
-                text: alert.body
-            });
-            return true;
-        } catch (e) {
-            logger.error({ err: e instanceof Error ? e.message : String(e), channel: channel.id }, 'Alert mail failed');
-            return false;
-        }
+        // Le module Mail envoie et journalise lui-même un échec ; il ne lève
+        // jamais, il répond. Sans module (retiré entre la résolution et la
+        // livraison), rien ne part, et le canal l'apprendra à la prochaine
+        // résolution.
+        const transport = mailTransport();
+        if (!transport) return false;
+        const sent = await transport.send(channel.email.accountId, channel.email.workspaceId, {
+            to: channel.email.to,
+            subject: alert.subject,
+            text: alert.body
+        });
+        if (!sent) logger.warn({ channel: channel.id }, 'Alert mail refused by the mail transport');
+        return sent;
     }
 
     if (!channel.webhookUrl) return false;

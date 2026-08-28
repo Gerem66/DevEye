@@ -1,11 +1,9 @@
-import crypto from 'crypto';
 import type {
     DevEyeFacade,
     FeatureService,
     FeatureServiceDeps,
     SdkCipher,
-    SdkProviders,
-    SdkServerKeys
+    SdkProviders
 } from '@deveye/types/sdk/server';
 import type { FeatureManifest } from '@deveye/types/sdk';
 import type { LiveTopic } from '@deveye/types';
@@ -13,7 +11,10 @@ import type { LiveTopic } from '@deveye/types';
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
 import { FeatureError } from '@deveye/types/sdk/server';
-import { createOpenCipher } from '@/Services/SecureStore';
+import { serverKeysOf } from './host';
+import { ORIGINS } from './context';
+import { createOpenCipher, createSecureStore } from '@/Services/SecureStore';
+import { verifyModuleTicket } from '@/auth/jwt';
 import type { Logger } from 'pino';
 import type { AuditLog } from '@/Services/AuditLog';
 import type { LiveHub } from '@/live/hub';
@@ -79,7 +80,8 @@ export function createServiceDeps(
             ownerUserId: 0,
             workspaceKind: 'shared',
             manifest,
-            logger: host.logger
+            logger: host.logger,
+            providers
         });
         facades.set(workspaceId, facade);
         return facade;
@@ -95,17 +97,7 @@ export function createServiceDeps(
     };
     const gateAgents = gate('agents');
     const gateDevices = gate('devices.read');
-    const keys: SdkServerKeys = {
-        sealBytes: (plain) => host.crypt.seal(Buffer.from(plain)),
-        openBytes: (sealed) => host.crypt.openRaw(sealed),
-        // HKDF sur la clé serveur : la dérivation même que
-        // `scripts/restore-backup.mjs` refait sans DevEye, à partir des deux
-        // seules variables CRYPT_KEY_A / CRYPT_KEY_B.
-        derive: (salt, info, length) =>
-            new Uint8Array(
-                crypto.hkdfSync('sha256', host.crypt.serverKey(), Buffer.from(salt), Buffer.from(info), length)
-            )
-    };
+    const keys = serverKeysOf(host.crypt);
 
     return {
         repo,
@@ -122,6 +114,26 @@ export function createServiceDeps(
                 guarded: null
             }),
         cipherFor,
+        // Le ticket d'un module, rendu contre les codecs de son porteur : la
+        // session est relue par l'hôte (jamais transmise au module), et l'étage
+        // gardé n'est tendu que si elle est encore déverrouillée.
+        secrecy: {
+            redeem: async (ticket) => {
+                const claims = await verifyModuleTicket(manifest.id, ticket);
+                if (!claims) return null;
+                const workspace = await host.db.workspaces.findById(claims.workspaceId);
+                if (!workspace) return null;
+                const { store } = createSecureStore(host.db, host.crypt, workspace, claims.sessionId);
+                const unlocked = await store.isUnlocked().catch(() => false);
+                return {
+                    userId: claims.userId,
+                    workspaceId: claims.workspaceId,
+                    payload: claims.payload,
+                    cipher: { server: cipherFor(claims.workspaceId), private: unlocked ? store : null }
+                };
+            }
+        },
+        origins: ORIGINS,
         deveyeFor: (workspaceId) => ({ notify: facadeFor(workspaceId).notify }),
         devicesFor: (workspaceId) => {
             const { list, isOnline } = facadeFor(workspaceId).devices;
@@ -142,7 +154,12 @@ export function createServiceDeps(
         // l'enregistrement) ; la diffusion traverse les projections d'une
         // feature branchée au partage, le hub s'en charge.
         live: {
-            changed: (workspaceId) => host.live.changed(workspaceId, [manifest.id as LiveTopic], null)
+            // Le sujet du module, ou ceux que le service nomme (les siens, un
+            // secondaire, celui d'une autre feature) : la même règle que
+            // `mutates` d'un handler, sans le filet du boot (un sujet inconnu
+            // n'a simplement aucun abonné).
+            changed: (workspaceId, topics) =>
+                host.live.changed(workspaceId, (topics ?? [manifest.id]) as LiveTopic[], null)
         },
         audit: (entry) => {
             host.audit.record({

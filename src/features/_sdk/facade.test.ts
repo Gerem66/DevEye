@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { Logger } from 'pino';
-import type { FeatureManifest, NativeCapability } from '@deveye/types/sdk';
+import { MAIL_TRANSPORT_PROVIDER, type FeatureManifest, type NativeCapability } from '@deveye/types/sdk';
+import type { MailTransportProvider } from '@deveye/types/sdk';
 import type { SdkCipher } from '@deveye/types/sdk/server';
 
 import type { MonitorHub } from '@/agent/hub';
@@ -16,7 +17,7 @@ import { setSdkHost } from './host';
  * Deux choses à tenir : la garde vient AVANT tout accès (une base vide ne
  * doit même pas être touchée sans la capacité), et derrière la garde chaque
  * membre projette ce qu'il promet : `notify` route par la feature du module,
- * `mail` ne révèle que l'étage ouvert, `devices.authorize` a la sémantique
+ * `mail` relit le contrat du module Mail, `devices.authorize` a la sémantique
  * d'`authorizeDevice` (introuvable, puis appartenance sauf admin), `agents`
  * délègue au hub sous le même nom.
  */
@@ -94,8 +95,13 @@ const OUTBOUND = [
 ] as const;
 const FANOUT = ['publishSyncProgress', 'publishSyncState'] as const;
 
-/** Une base partielle : seuls les repos que le test attend sont là. */
-function facadeWith(caps: readonly NativeCapability[], db: object = {}, isAdmin = false) {
+/** Une base partielle : seuls les repos que le test attend sont là ; de même pour les contrats tenus. */
+function facadeWith(
+    caps: readonly NativeCapability[],
+    db: object = {},
+    isAdmin = false,
+    providers: Readonly<Record<string, unknown>> = {}
+) {
     return createFacade({
         db: db as Database,
         cipher,
@@ -104,7 +110,8 @@ function facadeWith(caps: readonly NativeCapability[], db: object = {}, isAdmin 
         isAdmin,
         workspaceKind: isAdmin ? 'personal' : 'shared',
         manifest: manifest(caps),
-        logger
+        logger,
+        providers: { get: <T>(key: string) => providers[key] as T | undefined }
     });
 }
 
@@ -244,36 +251,25 @@ describe('createFacade : notify', () => {
 });
 
 describe('createFacade : mail.listAccounts', () => {
-    it("ne révèle que les comptes de l'étage ouvert, métadonnées seulement", async () => {
+    it("rend les expéditeurs prêts du module Mail, pour l'espace de la façade", async () => {
         const asked: number[] = [];
-        const db = {
-            mailAccounts: {
-                listByWorkspace: async (ws: number) => {
-                    asked.push(ws);
-                    return [
-                        {
-                            id: 1,
-                            security_tier: 'open',
-                            display_name_enc: 'enc:Perso',
-                            email_address_enc: 'enc:me@example.test'
-                        },
-                        {
-                            id: 2,
-                            security_tier: 'guarded',
-                            display_name_enc: 'enc:Pro',
-                            email_address_enc: 'enc:pro@example.test'
-                        },
-                        { id: 3, security_tier: 'open', display_name_enc: 'illisible', email_address_enc: 'illisible' }
-                    ];
-                }
-            }
+        const transport: MailTransportProvider = {
+            listSenders: async (ws) => {
+                asked.push(ws);
+                return [{ id: 1, label: 'Perso', address: 'me@example.test' }];
+            },
+            isReady: async () => true,
+            send: async () => true
         };
-        const accounts = await facadeWith(['mail.accounts'], db).mail.listAccounts();
+        const accounts = await facadeWith(['mail.accounts'], {}, false, {
+            [MAIL_TRANSPORT_PROVIDER]: transport
+        }).mail.listAccounts();
         assert.deepEqual(asked, [WS]);
-        assert.deepEqual(accounts, [
-            { id: 1, label: 'Perso', address: 'me@example.test' },
-            { id: 3, label: 'Compte 3', address: null }
-        ]);
+        assert.deepEqual(accounts, [{ id: 1, label: 'Perso', address: 'me@example.test' }]);
+    });
+
+    it('sans module Mail, aucun compte : la capacité dégrade, elle ne lève pas', async () => {
+        assert.deepEqual(await facadeWith(['mail.accounts']).mail.listAccounts(), []);
     });
 });
 
@@ -398,7 +394,8 @@ describe('createFacade : devices', () => {
             isAdmin: true,
             workspaceKind: 'shared',
             manifest: manifest(['devices.read']),
-            logger
+            logger,
+            providers: { get: () => undefined }
         }).devices.list();
         assert.deepEqual(
             shared.map((d) => d.id),

@@ -8,6 +8,7 @@ import { resetTheme, syncThemeFromServer } from '../stores/theme';
 import { resetHomeLayout, syncHomeLayoutFromServer } from '../stores/homeLayout';
 import { resetWorkspace, syncWorkspacesFromServer } from '../stores/workspace';
 import { resetLive } from '../stores/live';
+import { setCurrentUser } from '../stores/currentUser';
 import { resetDevices } from '../stores/devices';
 
 interface AuthState {
@@ -43,6 +44,11 @@ function applyBundle(bundle: SessionBundle): AuthState {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [state, setState] = useState<AuthState>({ status: 'unknown', user: null });
+    // Le magasin `currentUser` suit l'état : c'est par lui que le barrel des
+    // modules connaît l'utilisateur sans importer ce fournisseur.
+    useEffect(() => {
+        setCurrentUser(state.user);
+    }, [state.user]);
     const refreshing = useRef<Promise<void> | null>(null);
     const reauthLock = useRef(false);
 

@@ -6,12 +6,9 @@ import { Dialog } from '@/Components/Dialog';
 import { consumeItemSettings } from '@/stores/settingsRequest';
 import { getActiveWorkspaceId, useActiveWorkspace, useWorkspacePermissions } from '@/stores/workspace';
 
-import EncryptionSection, { ENCRYPTION_WIRED } from './sections/EncryptionSection';
-import GeneralSection, { GENERAL_WIRED } from './sections/GeneralSection';
 import NotificationsSection from './sections/NotificationsSection';
 import ItemPermissionsSection from './sections/ItemPermissionsSection';
 import SharingSection from './sections/SharingSection';
-import SyncSection, { SYNC_WIRED } from './sections/SyncSection';
 import SideNav, { type SideNavItem } from './SideNav';
 import { isModuleShareWired, moduleClient, moduleManifest } from '@/sdk/registry';
 import { scopeDescription, scopeTitle, type SettingsScope, type SettingsSectionId } from './scope';
@@ -113,10 +110,21 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
         const manifest = moduleManifest(scope.feature);
         if (manifest) {
             for (const tab of manifest.settings?.[scope.kind] ?? []) {
+                // Général : les réglages de la fonctionnalité qui ne sont ni
+                // des sources ni des notifications (l'affichage des messages
+                // de Mail, ses images approuvées). En tête chez qui le déclare
+                // en premier : c'est l'onglet le plus large.
                 if (tab === 'general') sections.push({ id: 'general', label: 'Général', icon: 'settings' });
                 else if (tab === 'sources' && scope.kind === 'feature') {
                     sections.push({ id: 'sources', label: 'Sources', icon: 'key' });
+                } else if (tab === 'sync' && scope.kind === 'item') {
+                    // Synchronisation : le rythme de relève d'un élément, et sa
+                    // maintenance. À l'échelle d'un élément seulement.
+                    sections.push({ id: 'sync', label: 'Synchronisation', icon: 'refresh' });
                 } else if (tab === 'encryption' && scope.kind === 'item') {
+                    // Chiffrement : sous quelle clé la donnée de l'élément vit,
+                    // quand la fonctionnalité laisse le choix. À l'échelle d'un
+                    // élément seulement.
                     sections.push({ id: 'encryption', label: 'Chiffrement', icon: 'lock' });
                 } else if (typeof tab === 'object') {
                     sections.push({ id: tab.id, label: tab.label, icon: tab.icon ?? 'settings' });
@@ -129,33 +137,16 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
             return sections;
         }
 
-        // Général : les réglages de la fonctionnalité qui ne sont ni des
-        // sources ni des notifications (l'affichage des messages de Mail, ses
-        // images approuvées). En tête : c'est l'onglet le plus large.
-        if (GENERAL_WIRED[scope.feature]?.[scope.kind]) {
-            sections.push({ id: 'general', label: 'Général', icon: 'settings' });
-        }
-
-        // Sources : plus aucune native n'en déclare. Les cinq features à
-        // sources (Météo, OSINT, Sauvegardes, Déploiement, Git) sont des
-        // modules, et l'onglet vient de leur manifest (plus haut).
+        // Une native n'a plus d'onglet propre : Général, Sources,
+        // Synchronisation et Chiffrement viennent tous du manifest d'un module
+        // (plus haut), depuis que Mail, dernier occupant des tables de câblage
+        // natif de la coquille, est un module. Il ne lui reste que ce que la
+        // coquille rend elle-même.
 
         // Notifications : réservé aux émetteurs, et à l'échelle d'un élément
         // seulement quand la fonctionnalité en a de réglables.
         if (descriptor.notifies && (scope.kind === 'feature' || descriptor.hasItems)) {
             sections.push({ id: 'notifications', label: 'Notifications', icon: 'mail' });
-        }
-
-        // Synchronisation : le rythme de relève d'un élément, et sa
-        // maintenance. À l'échelle d'un élément seulement.
-        if (scope.kind === 'item' && SYNC_WIRED[scope.feature]) {
-            sections.push({ id: 'sync', label: 'Synchronisation', icon: 'refresh' });
-        }
-
-        // Chiffrement : sous quelle clé la donnée de l'élément vit, quand la
-        // fonctionnalité laisse le choix. À l'échelle d'un élément seulement.
-        if (scope.kind === 'item' && ENCRYPTION_WIRED[scope.feature]) {
-            sections.push({ id: 'encryption', label: 'Chiffrement', icon: 'lock' });
         }
 
         pushSharingSections(sections);
@@ -230,9 +221,8 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection }: 
                         {/* Les trois sections génériques de la coquille, les
                             mêmes pour une native et pour un module : les
                             canaux, le partage, les restrictions. Le reste
-                            vient de la feature : ses panneaux (`settingsPanels`)
-                            pour un module, les dispatcheurs à table pour une
-                            native. */}
+                            vient du module : ses panneaux (`settingsPanels`).
+                            Une native n'en a plus. */}
                         {current === 'notifications' && (
                             <NotificationsSection
                                 scope={scope}
@@ -241,16 +231,7 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection }: 
                         )}
                         {current === 'permissions' && scope.kind === 'item' && <ItemPermissionsSection scope={scope} />}
                         {current === 'sharing' && <SharingSection scope={scope} />}
-                        {!GENERIC_SECTIONS.has(current) &&
-                            (moduleManifest(scope.feature) ? (
-                                <ModulePanel scope={scope} section={current} />
-                            ) : (
-                                <>
-                                    {current === 'general' && <GeneralSection scope={scope} />}
-                                    {current === 'sync' && <SyncSection scope={scope} />}
-                                    {current === 'encryption' && <EncryptionSection scope={scope} />}
-                                </>
-                            ))}
+                        {!GENERIC_SECTIONS.has(current) && <ModulePanel scope={scope} section={current} />}
                     </div>
                 </div>
             </Dialog>

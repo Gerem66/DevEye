@@ -1,4 +1,4 @@
-import { LIVE_CHANGED_EVENT, liveChangedPushSchema, type FeatureId, type LiveTopic } from '@deveye/types';
+import { LIVE_CHANGED_EVENT, liveChangedPushSchema, type LiveTopic } from '@deveye/types';
 import { useCallback, useSyncExternalStore } from 'react';
 
 import { ws } from '@/api/ws';
@@ -40,7 +40,7 @@ export type ResourceKey =
     | 'mail.getSettings'
     /** L'arborescence du compte ouvert — c'est elle qui porte les compteurs de non-lus. */
     | 'mail.folderList'
-    /** La tête de liste du dossier ouvert. Fusionnée, jamais rechargée en entier : voir `Features/Mail/index.tsx`. */
+    /** La tête de liste du dossier ouvert. Fusionnée, jamais rechargée en entier : voir `features/mail/src/client/Mail.tsx`. */
     | 'mail.messageList'
     | 'uptime.count'
     | 'uptime.list'
@@ -137,11 +137,13 @@ export type ExternalResourceKey = `x-${string}.${string}`;
  */
 const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
     notify: ['notify.channelList', 'notify.routeGet'],
-    // La relève de fond ne bouge pas que les cartes de comptes : elle fait entrer
-    // des messages, corrige des drapeaux et retire des lignes disparues. Sans les
-    // deux dernières clés, seule la date « il y a X min » se rafraîchissait, et
-    // une boîte laissée ouverte mentait jusqu'au prochain clic.
-    mail: ['mail.accountCount', 'mail.accountList', 'mail.folderList', 'mail.messageList', 'mail.getSettings'],
+    // (`mail` : ses cinq clés sont déclarées par le manifest du module
+    // `features/mail` et enregistrées par la glue générée. La relève de fond
+    // ne bouge pas que les cartes de comptes : elle fait entrer des messages,
+    // corrige des drapeaux et retire des lignes disparues. Sans les clés des
+    // dossiers et de la tête de liste, seule la date « il y a X min » se
+    // rafraîchissait, et une boîte laissée ouverte mentait jusqu'au prochain
+    // clic.)
     /*
      * `cloudSync.listShares` en second : la liste des partages embarque les
      * appareils ATTACHÉS, dont le statut d'attache et le dossier local. Ces
@@ -300,13 +302,13 @@ export function registerCrossTopicKeys(topic: string, keys: readonly ResourceKey
 }
 
 /**
- * Déclare les ressources d'un module : son sujet live (= son id) invalide les
- * clés listées. L'équivalent, pour un module, d'une entrée dans `TOPIC_KEYS` ;
+ * Déclare les ressources d'un module : son sujet live (= son id), ou l'un de
+ * ses sujets secondaires (`manifest.topics`), invalide les clés listées. L'équivalent, pour un module, d'une entrée dans `TOPIC_KEYS` ;
  * personne d'autre que la glue générée ne devrait l'appeler. Accepte aussi une
  * native rapatriée (Météo), dont l'entrée quitte alors la table.
  */
-export function registerFeatureResources(featureId: FeatureId, invalidatedByTopic: readonly ResourceKey[]): void {
-    EXTERNAL_TOPIC_KEYS.set(featureId, [...invalidatedByTopic]);
+export function registerFeatureResources(topic: string, invalidatedByTopic: readonly ResourceKey[]): void {
+    EXTERNAL_TOPIC_KEYS.set(topic, [...invalidatedByTopic]);
 }
 
 /**

@@ -1,0 +1,6 @@
+{
+  "id": "mail",
+  "tables": ["mail_accounts", "mail_folders", "mail_messages", "mail_settings"],
+  "minTypesVersion": "0.15.2",
+  "$comment": "Tables historiques du socle, jamais déplacées : l'allowlist les dispense du préfixe ft_mail_. Toute NOUVELLE table du module prendra le préfixe, via src/server/migrations/."
+}

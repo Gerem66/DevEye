@@ -54,6 +54,8 @@ export { useDragReorder } from '@/dragReorder';
 
 // ── Les données ────────────────────────────────────────────────────────────
 export { humanizeError, useResource } from '@/api/useResource';
+/** L'erreur d'une commande refusée : son code, son message, ses détails de validation. */
+export { WsError } from '@/api/ws';
 export { isSocketOpen, onServerEvent, onSocketOpen } from './events';
 export { formatBytesFr } from '@/format';
 export { invalidate, onResourceChange, useResourceVersion, type ExternalResourceKey } from '@/stores/invalidation';
@@ -79,6 +81,16 @@ export { Avatar } from '@/Components/Avatar/Avatar';
 export { userColorVar } from '@/Features/Profile/userColors';
 /** Deux bandeaux collants l'un sous l'autre : la mesure du haut, décalage du bas. */
 export { useStickyOffset, type StickyOffset } from '@/stickyOffset';
+/**
+ * Le contrat client qu'un AUTRE module offre (`FeatureClient.providers`) :
+ * la composition inter-modules, l'inverse de `providers` du manifest.
+ * `undefined` quand ce module n'est pas installé : dégrader, jamais supposer.
+ */
+export { moduleClientProvider } from '@/sdk/registry';
+/** L'utilisateur connecté, `null` tant que la session n'a pas répondu. */
+export { useCurrentUser } from '@/stores/currentUser';
+/** Une image choisie, ramenée à un carré en data URL bornée : l'icône d'un projet. */
+export { ACCEPTED_TYPES, MAX_INPUT_BYTES, fileToSquareDataUrl } from '@/imageResize';
 
 const NO_MEMBERS: readonly MinimalUser[] = [];
 
@@ -112,6 +124,7 @@ export function openFeature(feature: string, itemId?: number): void {
 // serveur) ; OSINT est la première migrée à s'en servir.
 export {
     ensureUnlocked as ensureSecrecyUnlocked,
+    touchSecrecy,
     UnlockCancelledError,
     useSecrecy,
     withSecrecy

@@ -32,9 +32,7 @@ export async function listChannels(ctx: FeatureContext, feature: NotificationFea
     // gestion des canaux de CETTE fonctionnalité (grant `channels`, 093) :
     // voir « Astreinte · e-mail » suffit pour cocher une case.
     const reveal = ctx.canChannels(feature);
-    return Promise.all(
-        rows.map((row) => describeChannel(ctx.db, ctx.secure.open, row, usage.get(row.id) ?? 0, reveal))
-    );
+    return Promise.all(rows.map((row) => describeChannel(ctx.secure.open, row, usage.get(row.id) ?? 0, reveal)));
 }
 
 /**
@@ -96,7 +94,7 @@ export async function createChannel(
     input: NotificationChannelInput
 ): Promise<NotificationChannel> {
     const row = await ctx.db.notificationChannels.create(ctx.workspaceId, feature, await encodeInput(ctx, input, true));
-    return describeChannel(ctx.db, ctx.secure.open, row, 0, true);
+    return describeChannel(ctx.secure.open, row, 0, true);
 }
 
 export async function updateChannel(
@@ -108,7 +106,7 @@ export async function updateChannel(
     const row = await ctx.db.notificationChannels.update(id, ctx.workspaceId, await encodeInput(ctx, input, enabled));
     if (!row) throw new FeatureError('not_found', 'Canal introuvable');
     const usage = await ctx.db.notificationChannels.usageCounts(ctx.workspaceId);
-    return describeChannel(ctx.db, ctx.secure.open, row, usage.get(row.id) ?? 0, true);
+    return describeChannel(ctx.secure.open, row, usage.get(row.id) ?? 0, true);
 }
 
 /**

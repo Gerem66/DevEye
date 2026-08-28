@@ -121,7 +121,7 @@ export async function buildPublicApp(): Promise<FastifyInstance> {
      */
     app.get('/api/health', { logLevel: 'silent' }, async () => ({ ok: true }));
 
-    modulePublicRoutes(app);
+    modulePublicRoutes(app, 'public');
 
     // Pas de repli SPA : tout ce qui n'est pas déclaré ci-dessus n'existe pas.
     // C'est la différence avec `app.ts`, où un GET inconnu rend `index.html`.

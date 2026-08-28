@@ -1,0 +1,195 @@
+import type { FeatureService, FeatureServiceDeps } from '@deveye/types/sdk/server';
+
+import * as mailClient from './client';
+import { env } from './env';
+import type { MailRepo } from './repo';
+import { syncAccountFolders, syncOneFolder, type SyncClient } from './sync';
+import { beginAccountSync, endAccountSync, markFolderSynced, reportFolderProgress } from './syncStatus';
+import { classifyMailError, decryptCredentials } from './_shared';
+
+/**
+ * Background sync loop (process singleton), the Mail equivalent of
+ * Uptime's monitor. Runs with **no session and no password**, so it can
+ * only ever reach "open"-tier accounts — `mail_accounts.listSyncDue` already
+ * filters to those; a "guarded" account's cipher needs a live session unlock
+ * and is structurally unreachable here, by design (see `Docs/SECURITY_MODEL.md`).
+ * Guarded accounts sync on demand instead, during a live unlocked WS session:
+ * `mail.folderList` et `mail.messageList` relèvent à l'ouverture, et le bouton
+ * de relève appelle `mail.folderSync`.
+ *
+ * Chaque passage fait deux choses, et pas une : rapatrier les messages arrivés,
+ * et réconcilier la fenêtre récente déjà en cache (drapeaux, disparus). Sans la
+ * seconde, une boîte lue depuis un téléphone dérivait sans fin — voir
+ * {@link syncOneFolder}.
+ *
+ * Depuis le rapatriement en module, le service tourne sur `FeatureServiceDeps` :
+ * la boucle est un ticker du SDK (`deps.createTicker`, le patron des services
+ * natifs), le codec ouvert d'un espace vient de `deps.cipherFor` (mémoïsé par
+ * l'hôte, la `Map` locale a disparu), le dépôt est celui du module, et la
+ * diffusion passe par `deps.live.changed` (l'ex `live.changed(ws, ['mail'],
+ * null)`). La cadence, la concurrence et l'échéance par compte se lisent dans
+ * `env.ts`, plus dans `Utils/Env` de l'app.
+ */
+
+/**
+ * `work`, mais abandonnée si l'échéance passe avant elle.
+ *
+ * La promesse sous-jacente n'est pas annulable — IMAP continuera jusqu'à ce que
+ * ses propres délais mordent — mais on cesse de l'attendre, ce qui est tout
+ * l'objet : la place qu'elle occupait dans la rotation est rendue. Une écriture
+ * tardive de la relève abandonnée reste inoffensive, le cache s'écrivant par
+ * upsert idempotent.
+ */
+async function withDeadline<T>(work: Promise<T>, deadline: number, message: string): Promise<T> {
+    let timer: NodeJS.Timeout | undefined;
+    try {
+        return await Promise.race([
+            work,
+            new Promise<never>((_, reject) => {
+                timer = setTimeout(() => reject(new Error(message)), Math.max(0, deadline - Date.now()));
+                timer.unref();
+            })
+        ]);
+    } finally {
+        if (timer) clearTimeout(timer);
+    }
+}
+
+/**
+ * La couture de test du service.
+ *
+ * Le vrai client IMAP (`client.ts`) et l'échéance de l'environnement par
+ * défaut ; un test injecte un client sans réseau, qui décide de ce que la boîte
+ * répond (dossiers, arrivées, panne, silence), et une échéance courte pour
+ * voir une relève suspendue rendue à la rotation. Rien d'autre n'est
+ * simulable ici, et c'est voulu : le reste du chemin (cache, état du compte,
+ * diffusion) est précisément ce qu'on veut voir tourner tel quel.
+ */
+export interface MailSyncSeam {
+    mailClient?: SyncClient;
+    accountTimeoutMs?: number;
+}
+
+export class MailSync {
+    /** La boucle de relève : un ticker du SDK. */
+    private readonly ticker: FeatureService;
+    private readonly client: SyncClient;
+    private readonly accountTimeoutMs: number;
+    private readonly inFlight = new Set<number>();
+
+    constructor(
+        private readonly deps: FeatureServiceDeps<MailRepo>,
+        seam: MailSyncSeam = {}
+    ) {
+        this.client = seam.mailClient ?? mailClient;
+        this.accountTimeoutMs = seam.accountTimeoutMs ?? env.MAIL_SYNC_ACCOUNT_TIMEOUT_SECONDS * 1000;
+        this.ticker = deps.createTicker({ intervalMs: env.MAIL_SYNC_TICK_SECONDS * 1000, tick: () => this.tick() });
+    }
+
+    start(): void {
+        this.ticker.start();
+        // Un premier tour tout de suite : une boîte due n'attend pas la cadence.
+        void this.tick();
+        this.deps.logger.info({ tickSeconds: env.MAIL_SYNC_TICK_SECONDS }, 'Mail sync service started');
+    }
+
+    stop(): void {
+        this.ticker.stop();
+    }
+
+    private async tick(): Promise<void> {
+        try {
+            const now = Math.floor(Date.now() / 1000);
+            const due = await this.deps.repo.accounts.listSyncDue(now, env.MAIL_SYNC_CONCURRENCY * 4);
+            for (let i = 0; i < due.length; i += env.MAIL_SYNC_CONCURRENCY) {
+                await Promise.all(due.slice(i, i + env.MAIL_SYNC_CONCURRENCY).map((row) => this.syncOne(row.id)));
+            }
+        } catch (e) {
+            this.deps.logger.error({ err: e instanceof Error ? e.message : String(e) }, 'Mail sync tick failed');
+        }
+    }
+
+    /**
+     * Sync one account's folders + each folder's new messages. Never throws.
+     *
+     * Sous échéance, parce que `inFlight` protège du double traitement mais ne
+     * rend jamais la main : une connexion suspendue retirait le compte de la
+     * rotation pour de bon, sans erreur enregistrée ni ligne de log — sa seule
+     * trace était une date de dernière relève qui vieillissait. Passé le délai,
+     * la relève est abandonnée et l'échec consigné comme n'importe quel autre,
+     * ce qui la fait simplement réessayer au tour suivant.
+     */
+    async syncOne(accountId: number): Promise<void> {
+        if (this.inFlight.has(accountId)) return;
+        this.inFlight.add(accountId);
+        const deadline = Date.now() + this.accountTimeoutMs;
+        try {
+            const row = await this.deps.repo.accounts.findByIdUnscoped(accountId);
+            if (!row || row.enabled !== 1 || row.security_tier !== 'open') return;
+            const cipher = this.deps.cipherFor(row.workspace_id);
+            try {
+                const credentials = await decryptCredentials(cipher, row.credentials_enc);
+                const folders = await withDeadline(
+                    syncAccountFolders(this.client, this.deps.repo, cipher, row, credentials),
+                    deadline,
+                    'Relève interrompue : la liste des dossiers n’a pas répondu à temps'
+                );
+                beginAccountSync(accountId, folders.length);
+                let moved = 0;
+                try {
+                    for (const folder of folders) {
+                        const outcome = await withDeadline(
+                            syncOneFolder(
+                                this.client,
+                                this.deps.repo,
+                                cipher,
+                                row,
+                                credentials,
+                                folder,
+                                (done, estimatedTotal) => reportFolderProgress(accountId, done / estimatedTotal)
+                            ),
+                            deadline,
+                            `Relève interrompue : le dossier « ${folder.imap_path} » n'a pas répondu à temps`
+                        );
+                        moved += outcome.newCount + outcome.changedCount + outcome.removedCount;
+                        markFolderSynced(accountId);
+                    }
+                } finally {
+                    endAccountSync(accountId);
+                }
+                await this.deps.repo.accounts.recordSync(row.id, Math.floor(Date.now() / 1000), null, 'ok');
+                this.deps.logger.debug({ accountId, moved }, 'Mail account synced');
+                // Une synchronisation a pu faire entrer des messages, en corriger
+                // les drapeaux ou en retirer : c'est le seul moment où le contenu
+                // bouge sans qu'aucun membre n'ait rien demandé. La boîte a pu
+                // aussi, tout simplement, se remettre à répondre — un retour au
+                // vert vaut d'être annoncé même quand rien n'est arrivé.
+                //
+                // Sous condition, parce que c'est la seule source de
+                // rafraîchissement de la vue ouverte : diffuser à chaque relève
+                // ferait resolliciter la liste de tout client connecté toutes les
+                // dix minutes par compte, pour rien. Le débit de l'événement doit
+                // rester celui des messages, pas celui de l'horloge.
+                if (moved > 0 || row.last_sync_status !== 'ok') {
+                    this.deps.live.changed(row.workspace_id);
+                }
+            } catch (e) {
+                const message = e instanceof Error ? e.message : String(e);
+                const status = classifyMailError(message);
+                this.deps.logger.warn({ accountId, status, err: message }, 'Mail account sync failed');
+                await this.deps.repo.accounts.recordSync(
+                    row.id,
+                    Math.floor(Date.now() / 1000),
+                    await cipher.encrypt(message),
+                    status
+                );
+                // Une boîte qui tombe en panne doit se signaler tout de suite :
+                // c'est le seul moment où quelqu'un peut l'apprendre sans avoir
+                // lui-même buté dessus.
+                if (row.last_sync_status !== status) this.deps.live.changed(row.workspace_id);
+            }
+        } finally {
+            this.inFlight.delete(accountId);
+        }
+    }
+}

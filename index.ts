@@ -32,7 +32,7 @@ async function main() {
     const db = createDatabase(getQueryable(pool));
     const crypt = new Encryption(env.CRYPT_KEY_A, env.CRYPT_KEY_B);
 
-    const { app, mailSync, moduleServices } = await buildApp({
+    const { app, moduleServices } = await buildApp({
         db,
         crypt
     });
@@ -53,7 +53,6 @@ async function main() {
     const shutdown = async (signal: string) => {
         logger.info({ signal }, 'Shutting down');
         try {
-            mailSync.stop();
             // Attendus, et AVANT la fermeture du pool : un module rend son état
             // par une écriture en base (CloudSync libère son bail d'instance).
             // Lancés en `void`, ces arrêts étaient coupés par `pool.end()` puis
@@ -105,17 +104,16 @@ async function main() {
     // registered synchronously so /api/status reports "not ready" right away.
     startAgentReconcile(agentDistDir());
 
-    // Synchro Mail en tâche de fond : boucle indépendante, sans session ni mot
-    // de passe, comptes « open » uniquement. (La sonde de disponibilité est un
-    // service du module Uptime, démarré avec les autres dans buildApp.)
-    mailSync.start();
-    // (Le relevé des bases de données est un service du module
-    // `features/database`, la synchronisation des dépôts git un service du
-    // module `features/git`, l'ingestion d'audience un service du module
-    // `features/audience` (la seule qui ne sonde rien : elle vide ce que les
-    // routes publiques ont déposé, et tient l'agrégat journalier + la
-    // rétention par site), les sauvegardes un service du module
-    // `features/backup` : tous démarrés avec les autres dans buildApp.)
+    // (La sonde de disponibilité est un service du module Uptime, le relevé
+    // des bases de données un service du module `features/database`, la
+    // synchronisation des dépôts git un service du module `features/git`,
+    // l'ingestion d'audience un service du module `features/audience` (la
+    // seule qui ne sonde rien : elle vide ce que les routes publiques ont
+    // déposé, et tient l'agrégat journalier + la rétention par site), les
+    // sauvegardes un service du module `features/backup`, la relève des
+    // boîtes mail ouvertes un service du module `features/mail` (sans session
+    // ni mot de passe, comptes « open » uniquement) : tous démarrés avec les
+    // autres dans buildApp.)
 
     await app.listen({ port: env.LISTEN_PORT, host: '0.0.0.0' });
     logger.info({ port: env.LISTEN_PORT }, 'DevEye server ready');

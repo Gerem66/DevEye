@@ -23,20 +23,23 @@ ordre :
 
 | Onglet | Échelle | Qui l'a | Contenu |
 |---|---|---|---|
-| Général | feature (et élément pour Mail, Uptime, CloudSync, Bases de données, Audience) | table `GENERAL_WIRED`, ou `settings` du manifest d'un module | les réglages qui ne sont ni sources ni notifications |
+| Général | feature (et élément pour Mail, Uptime, CloudSync, Bases de données, Audience) | `settings` du manifest d'un module (plus aucune native n'en déclare) | les réglages qui ne sont ni sources ni notifications |
 | Sources | feature | `settings.feature` du manifest d'un module (plus aucune native n'en déclare) | jetons, destinations, clés d'API (voir `SOURCES.md`) |
 | Notifications | feature + élément | registre `notifies` | canaux et sélection (voir `NOTIFICATIONS.md`) |
-| Synchronisation | élément | table `SYNC_WIRED` | cadence de relève, maintenance |
-| Chiffrement | élément | table `ENCRYPTION_WIRED`, ou `settings.item` du manifest d'un module | sous quelle clé (ou sous quelle forme) la donnée de l'élément vit |
+| Synchronisation | élément | `settings.item` du manifest d'un module (Mail) | cadence de relève, maintenance |
+| Chiffrement | élément | `settings.item` du manifest d'un module | sous quelle clé (ou sous quelle forme) la donnée de l'élément vit |
 | Partage | élément | `SHARE_WIRED_FEATURES` + écriture | où l'élément est visible (voir `SHARING.md`) |
 | Permissions | élément | `SHARE_WIRED_FEATURES` + `workspace.roles` | ce que chaque rôle voit de la ligne |
 
-Chaque section « à table » suit le même patron : la table dit qui est
-branché, le panneau est **autonome** (il se charge, se sauvegarde et
-s'invalide tout seul), et il importe ses composants par chemins directs,
-jamais par le baril `@/Components` (qui réexporte la coquille : cycle). Le
-panneau d'un module vient de son entrée client (`settingsPanels`), monté par
-`ModulePanel` ; la section Sources n'existe plus que sous cette forme.
+Général, Sources, Synchronisation et Chiffrement viennent tous du manifest
+d'un module : l'onglet est déclaré dans `settings.feature` ou `settings.item`,
+le panneau vient de son entrée client (`settingsPanels`, sur
+`SettingsPanelProps`), et `ModulePanel` le monte. Un panneau est **autonome**
+(il se charge, se sauvegarde et s'invalide tout seul) et respecte `canWrite`.
+Les tables de câblage natif (`GENERAL_WIRED`, `SYNC_WIRED`, `ENCRYPTION_WIRED`)
+et leurs dispatcheurs ont disparu avec le rapatriement de Mail, leur dernier
+occupant : une native n'a plus que les sections génériques (Notifications,
+Partage, Permissions).
 
 ## La navigation traverse les échelles et les espaces
 
@@ -60,10 +63,10 @@ Trois mécanismes font qu'aucun réglage n'est un mur :
 
 1. L'en-tête de la feature (et de ses fiches d'élément) monte
    `FeatureSettingsButton`, sans condition.
-2. Sources → `settings.feature: ['sources']` dans le manifest d'un module +
-   `settingsPanels.sources` (une native à sources n'existe plus).
-   Général / Synchronisation / Chiffrement → une entrée dans la table du
-   dispatcheur correspondant + un panneau autonome chez la feature.
+2. Général / Sources / Synchronisation / Chiffrement → l'onglet dans le
+   manifest du module (`settings.feature` ou `settings.item` ; `sync` et
+   `encryption` à l'échelle d'un élément seulement) + un panneau autonome dans
+   `settingsPanels`, sous le même id. Une native n'a plus d'onglet propre.
 3. Si la feature a des fiches d'élément rejoignables, elle déclare son segment
    de présence `l1` avec l'identifiant nu de l'élément
    (`useLiveSegment('l1', String(id))`) : c'est ce que `goToHome.ts` écrit
