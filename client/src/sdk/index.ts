@@ -18,7 +18,7 @@ import type { MinimalUser } from '@deveye/types';
 export type { LiveSegmentKind };
 /** The change event of a text input, for handlers typed by hand. */
 export type InputChange = ChangeEvent<HTMLInputElement>;
-import type { FeatureManifest } from '@deveye/types/sdk';
+import type { FeatureManifest, ManifestCommand } from '@deveye/types/sdk';
 import type { z, ZodType } from 'zod';
 
 // ── Le kit d'interface ─────────────────────────────────────────────────────
@@ -45,6 +45,13 @@ export { openInfo } from '@/Components/InfoPopup';
 export { FeatureSettingsButton } from '@/Components/FeatureSettings';
 export { DeviceFolderPicker } from '@/Components/DeviceFolderPicker';
 export { useDevices } from '@/stores/devices';
+// Le comptage des abonnements aux métriques vivantes (le hub abonne par
+// socket, le client n'en a qu'une : deux consommateurs du même appareil ne
+// doivent pas se désabonner l'un l'autre) et les chemins d'un appareil, tels
+// que `DeviceFolderPicker` les manipule : le module Appareils en a besoin
+// autant que lui.
+export { acquireMetrics } from '@/stores/metricsSubscription';
+export { isWinPath, joinPath } from '@/devicePath';
 /** Les classes de rangées canoniques des écrans de réglages (channelRow, etc.). */
 export { default as settingsStyles } from '@/Components/FeatureSettings/FeatureSettings.module.css';
 /** La carte de comptage de l'accueil, et le compte qui la nourrit. */
@@ -142,8 +149,32 @@ export type { SecrecyState } from '@/stores/secrecy';
  * par défaut reste celui du socket.
  */
 export function featureApi<const M extends FeatureManifest>(manifest: M) {
+    // Le corps de `commandsApi`, répété plutôt que délégué : passer par
+    // `manifest.commands` élargirait le type au contrat générique et
+    // perdrait le nom de chaque commande.
     type Commands = M['commands'][number];
     void manifest;
+    return {
+        send<N extends Commands['command']>(
+            name: N,
+            input: z.input<Extract<Commands, { command: N }>['input'] & ZodType>,
+            opts?: { timeoutMs?: number }
+        ): Promise<z.output<Extract<Commands, { command: N }>['output'] & ZodType>> {
+            return ws.send(name as never, input as never, opts) as never;
+        }
+    };
+}
+
+/**
+ * L'envoi typé d'une liste de contrats, quelle qu'elle soit : les commandes
+ * d'un manifest (`featureApi`), ou celles du transport des agents
+ * (`commandsApi(agentCommands)`, que chaque consommateur construit avec son
+ * propre import de `@deveye/types` : le barrel ne peut pas l'exporter tout
+ * fait, l'identité du type diffère selon qui résout le package).
+ */
+export function commandsApi<const C extends readonly ManifestCommand[]>(commands: C) {
+    type Commands = C[number];
+    void commands;
     return {
         send<N extends Commands['command']>(
             name: N,

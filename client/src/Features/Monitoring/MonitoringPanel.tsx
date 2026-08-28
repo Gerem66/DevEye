@@ -346,7 +346,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     // Which days have data (for the calendar + day arrows).
     useEffect(() => {
         const id = deviceId;
-        ws.send('metrics.availability', { deviceId: id, tzOffsetMinutes: new Date().getTimezoneOffset() })
+        ws.send('devices.availability', { deviceId: id, tzOffsetMinutes: new Date().getTimezoneOffset() })
             .then((res) => {
                 if (idRef.current === id) setDataDays(res.days);
             })
@@ -356,7 +356,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     // Storage footprint of the device's stored snapshots (count + DB bytes).
     useEffect(() => {
         const id = deviceId;
-        ws.send('metrics.storage', { deviceId: id })
+        ws.send('devices.storage', { deviceId: id })
             .then((res) => {
                 if (idRef.current === id)
                     setStorage({ snapshots: res.snapshots, processes: res.processes, bytes: res.bytes });
@@ -386,7 +386,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         // Même garde que pour la série : deux changements de zoom rapprochés
         // pouvaient laisser les marques d'une fenêtre sur une autre, et la frise
         // cessait alors de correspondre aux graphes.
-        ws.send('metrics.presence', { deviceId: id, from: start, to: end })
+        ws.send('devices.presence', { deviceId: id, from: start, to: end })
             .then((res) => {
                 if (!cancelled && idRef.current === id)
                     setPresence({ onlineAtStart: res.onlineAtStart, events: res.events });
@@ -394,7 +394,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             .catch(() => {
                 if (!cancelled) setReadError(true);
             });
-        ws.send('metrics.snapshots', { deviceId: id, from: start, to: end })
+        ws.send('devices.snapshots', { deviceId: id, from: start, to: end })
             .then((res) => {
                 if (cancelled || idRef.current !== id) return;
                 setSnapshotTimes(res.timestamps);
@@ -425,7 +425,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         // réponse n'est pas là, on montre le squelette plutôt que les points de
         // la précédente, qui ne veulent plus rien dire sur ce cadre.
         setMetricsReady(false);
-        ws.send('metrics.query', { deviceId: id, from: graphWindow.start, to: graphWindow.end, resolution })
+        ws.send('devices.metrics', { deviceId: id, from: graphWindow.start, to: graphWindow.end, resolution })
             .then((res) => {
                 if (cancelled || idRef.current !== id) return;
                 setPoints(res.points);
@@ -442,7 +442,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         // Historical focus only: in live focus the process list rides along with
         // each pushed snapshot, so there is nothing to fetch.
         if (processAt !== null) {
-            ws.send('metrics.processesAt', { deviceId: id, at: processAt })
+            ws.send('devices.processesAt', { deviceId: id, at: processAt })
                 .then((res) => {
                     if (!cancelled && idRef.current === id) setHistProc(res.sample);
                 })
@@ -531,7 +531,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     }, [deviceId, liveTail, spanMs]);
 
     // What a delete action would remove, per the current focus. Counted on the
-    // *process* instants only: `metrics.deleteSnapshots` removes process lists and
+    // *process* instants only: `devices.deleteSnapshots` removes process lists and
     // deliberately leaves the metric rows (the graphs) alone, so an instant with no
     // recorded process list has nothing to delete and must not offer the action.
     const procSet = useMemo(() => new Set(procTimes), [procTimes]);
@@ -569,7 +569,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     // Re-fetch the timeline's snapshot marks (incl. pin state) for the window.
     const refreshSnapshotMarks = useCallback(() => {
         const id = idRef.current;
-        ws.send('metrics.snapshots', { deviceId: id, from: windowRange.start, to: windowRange.end })
+        ws.send('devices.snapshots', { deviceId: id, from: windowRange.start, to: windowRange.end })
             .then((res) => {
                 if (idRef.current === id) {
                     setSnapshotTimes(res.timestamps);
@@ -584,7 +584,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     // Re-fetch the stored-snapshot footprint (count + DB bytes).
     const refreshStorage = useCallback(() => {
         const id = idRef.current;
-        ws.send('metrics.storage', { deviceId: id })
+        ws.send('devices.storage', { deviceId: id })
             .then((res) => {
                 if (idRef.current === id)
                     setStorage({ snapshots: res.snapshots, processes: res.processes, bytes: res.bytes });
@@ -598,7 +598,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         if (!deleteTarget) return;
         setDeleting(true);
         try {
-            await ws.send('metrics.deleteSnapshots', { deviceId: id, from: deleteTarget.from, to: deleteTarget.to });
+            await ws.send('devices.deleteSnapshots', { deviceId: id, from: deleteTarget.from, to: deleteTarget.to });
             setDeleteOpen(false);
             setFocus({ kind: 'live' });
             refreshSnapshotMarks();
@@ -618,7 +618,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             if (!pinTarget || pinning) return;
             setPinning(true);
             try {
-                const res = await ws.send('metrics.setSnapshotsPinned', {
+                const res = await ws.send('devices.setSnapshotsPinned', {
                     deviceId: id,
                     from: pinTarget.from,
                     to: pinTarget.to,
@@ -641,7 +641,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         const id = idRef.current;
         if (refreshing) return;
         setRefreshing(true);
-        ws.send('metrics.refresh', { deviceId: id })
+        ws.send('agent.collect', { deviceId: id })
             .catch(() => setReadError(true))
             .finally(() => setTimeout(() => setRefreshing(false), 1200));
     }, [refreshing]);
@@ -1031,7 +1031,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             ? [{ icon: 'icon-settings', label: 'Configurer la collecte', onClick: () => setConfigOpen(true) }]
             : []),
         // Les mises à jour système sont la seule entrée réservée à
-        // l'administrateur (`device.listPackages`/`upgradePackages`) : sans cette
+        // l'administrateur (`agent.listPackages`/`upgradePackages`) : sans cette
         // garde, tout titulaire du droit « appareils » l'ouvrait pour se heurter
         // à un refus du serveur.
         ...(online && !archived && user?.role === 'admin'

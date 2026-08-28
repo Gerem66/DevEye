@@ -118,7 +118,7 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
     const confirmDevice = async (id: string) => {
         setActionError(null);
         try {
-            await ws.send('device.confirm', { deviceId: id });
+            await ws.send('devices.confirm', { deviceId: id });
             await refresh();
         } catch {
             setActionError('Approbation impossible.');
@@ -128,7 +128,7 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
     const revokeDevice = async (id: string) => {
         setActionError(null);
         try {
-            await ws.send('device.revoke', { deviceId: id });
+            await ws.send('devices.revoke', { deviceId: id });
             await refresh();
         } catch {
             setActionError('Révocation impossible.');
@@ -138,7 +138,7 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
     const reactivateDevice = async (id: string) => {
         setActionError(null);
         try {
-            await ws.send('device.reactivate', { deviceId: id });
+            await ws.send('devices.reactivate', { deviceId: id });
             await refresh();
         } catch {
             setActionError('Réactivation impossible.');
@@ -172,7 +172,7 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
         // Abonné avant d'envoyer (voir `awaitServiceResult`).
         const verdict = awaitServiceResult(id);
         try {
-            await ws.send('device.setAutostart', { deviceId: id, enabled });
+            await ws.send('agent.setAutostart', { deviceId: id, enabled });
         } catch (e) {
             verdict.cancel();
             setServiceBusy(null);
@@ -235,7 +235,7 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
      */
     const changePrivilege = async (
         id: string,
-        command: 'device.elevate' | 'device.dropPrivileges',
+        command: 'agent.elevate' | 'agent.dropPrivileges',
         title: string,
         successLabel: string,
         errorLabel: string
@@ -273,7 +273,7 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
     const elevateDevice = (id: string) =>
         changePrivilege(
             id,
-            'device.elevate',
+            'agent.elevate',
             'Élever l’agent en root',
             'Agent élevé en service système (root).',
             'Élévation impossible.'
@@ -282,7 +282,7 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
     const dropPrivilegesDevice = (id: string) =>
         changePrivilege(
             id,
-            'device.dropPrivileges',
+            'agent.dropPrivileges',
             'Rétrograder l’agent',
             'Agent rétrogradé en service utilisateur.',
             'Rétrogradation impossible.'
@@ -294,7 +294,7 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
         setActionError(null);
         setStopping(true);
         try {
-            await ws.send('device.agentLifecycle', { deviceId: stopTarget.id, action: 'stop' });
+            await ws.send('agent.lifecycle', { deviceId: stopTarget.id, action: 'stop' });
             setStopTarget(null);
             // Presence pushes flip the card, but refresh anyway for the rest.
             await settle(2000);
@@ -310,7 +310,7 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
         setActionError(null);
         setRestartingId(id);
         try {
-            await ws.send('device.agentLifecycle', { deviceId: id, action: 'restart' });
+            await ws.send('agent.lifecycle', { deviceId: id, action: 'restart' });
             // Keep the spinner through the offline→online round trip.
             await settle(4000);
         } catch (e) {
@@ -336,7 +336,7 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
         setRenaming(true);
         setActionError(null);
         try {
-            await ws.send('device.rename', { deviceId: renameTarget.id, name });
+            await ws.send('devices.rename', { deviceId: renameTarget.id, name });
             setRenameTarget(null);
             await refresh();
         } catch {
@@ -353,7 +353,7 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
         setActionError(null);
         setDeleting(true);
         try {
-            await ws.send('device.requestDelete', { deviceId: deleteTarget.id });
+            await ws.send('devices.requestDelete', { deviceId: deleteTarget.id });
             setDeleteTarget(null);
             await refresh();
         } catch {
@@ -367,7 +367,7 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
     const cancelDeleteDevice = async (id: string) => {
         setActionError(null);
         try {
-            await ws.send('device.cancelDelete', { deviceId: id });
+            await ws.send('devices.cancelDelete', { deviceId: id });
             await refresh();
         } catch {
             setActionError('Annulation impossible.');
@@ -380,7 +380,7 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
         setActionError(null);
         setForcing(true);
         try {
-            await ws.send('device.forceDelete', { deviceId: forceTarget.id });
+            await ws.send('devices.forceDelete', { deviceId: forceTarget.id });
             setForceTarget(null);
             await refresh();
         } catch {

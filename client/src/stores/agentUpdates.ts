@@ -86,7 +86,7 @@ export async function startAgentUpdate(deviceId: string): Promise<void> {
     emit();
 
     try {
-        await ws.send('device.updateAgent', { deviceId });
+        await ws.send('agent.update', { deviceId });
         // Pull the list promptly so completion is detected without waiting a poll.
         void refreshDevices();
     } catch (e) {

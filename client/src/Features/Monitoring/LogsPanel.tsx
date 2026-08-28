@@ -148,7 +148,7 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
      */
     const requestSources = useCallback(() => {
         setSourcesLoading(true);
-        void ws.send('device.logSources', { deviceId }).catch(() => {
+        void ws.send('agent.logSources', { deviceId }).catch(() => {
             setSources([]);
             setSourcesLoading(false);
         });
@@ -210,7 +210,7 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
         if (levelMin) filter.levelMin = levelMin;
         if (unit.trim() && selectedSource?.kind === 'journald') filter.unit = unit.trim();
         if (sinceSec) filter.since = Math.floor(Date.now() / 1000) - sinceSec;
-        ws.send('device.logQuery', {
+        ws.send('agent.logQuery', {
             deviceId,
             sourceId,
             queryId,

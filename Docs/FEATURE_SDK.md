@@ -542,7 +542,7 @@ manifest déclare `shareTier: 'never'` par-dessus le `'perItem'` du
 descripteur : aucune entrée `items`.
 
 **Appareils reste native**, et c'est une décision à confirmer, pas un reste.
-Ses 44 commandes `device.*` / `metrics.*` sont des relais du hub des agents
+Ses 44 commandes `agent.*` (le transport) / `devices.*` (la feature) sont des relais du hub des agents
 (MonitorHub, abonnements et droits par socket, présence, appairage, flotte
 vue par l'admin global) : la capacité `agents` permettrait de la rapatrier,
 mais ce serait envelopper le hub 1:1 dans une façade réservée, sans rien
@@ -591,7 +591,7 @@ de l'appel (`userId`, `workspaceId`, `workspace`, `isOwner`, `canWrite`,
 `deveye` (façade gardée par `nativeCapabilities` : `notify` avec `embeds`
 Discord, `except`, et le suivi vivant `liveChannels` / `postLive`, `mail.accounts`, `members.read` (chaque membre avec la couleur de son compte), `devices.read` (des `SdkDevice`
 complets : état, propriétaire, espace, cadence, rapport ; `list()` suit la règle
-de `device.list`, l'admin dans son espace personnel voit la flotte),
+de `devices.list`, l'admin dans son espace personnel voit la flotte),
 `telemetry.read` (`snapshot`, `pinInstant`, réservée aux ids natifs) et
 `agents` (`requestScan`, `pushConfig`, les requêtes sync)), `transport` (socket
 appelant, `agents`), `secrecy.isUnlocked()` (le verrou de la session) et

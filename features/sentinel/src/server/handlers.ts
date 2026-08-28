@@ -328,7 +328,7 @@ export const sentinelHandlers = [
                 throw new FeatureError('conflict', "Sentinelle n'est pas active sur cet appareil");
             }
             // `requested: false` quand l'agent est hors ligne : c'est une réponse,
-            // pas une erreur, la même convention que `metrics.refresh`.
+            // pas une erreur, la même convention que `agent.collect`.
             return { deviceId: device.id, requested: ctx.deveye.agents.requestScan(device.id) };
         }
     }),

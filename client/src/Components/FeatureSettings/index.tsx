@@ -11,7 +11,7 @@ import ItemPermissionsSection from './sections/ItemPermissionsSection';
 import SharingSection from './sections/SharingSection';
 import SideNav, { type SideNavItem } from './SideNav';
 import { isModuleShareWired, moduleClient, moduleManifest } from '@/sdk/registry';
-import { scopeDescription, scopeTitle, type SettingsScope, type SettingsSectionId } from './scope';
+import { numericItemId, scopeDescription, scopeTitle, type SettingsScope, type SettingsSectionId } from './scope';
 import styles from './FeatureSettings.module.css';
 
 /**
@@ -312,7 +312,7 @@ export function FeatureSettingsButton({
      * pour toutes les features : monter le bouton suffit, aucune n'a de code à
      * écrire. L'intention périmée ou visant un autre élément rend `null`.
      */
-    const itemId = scope.kind === 'item' ? scope.itemId : null;
+    const itemId = numericItemId(scope);
     useEffect(() => {
         if (itemId === null) return;
         const wanted = consumeItemSettings(getActiveWorkspaceId(), scope.feature, itemId);
@@ -368,10 +368,14 @@ function ModulePanel({ scope, section }: { scope: SettingsScope; section: Settin
         <>
             {hint && <p className={styles.sectionHint}>{hint}</p>}
             <Panel
+                // L'id est un nombre ou un texte (un appareil est un UUID) ; le
+                // panneau d'un module se déclare pour l'un des deux
+                // (`SettingsPanelProps<number | string>`), et c'est ici, une
+                // fois, que la coquille lui remet ce qu'elle tient.
                 scope={
                     scope.kind === 'feature'
                         ? { kind: 'feature' }
-                        : { kind: 'item', itemId: scope.itemId, itemLabel: scope.itemLabel }
+                        : { kind: 'item', itemId: scope.itemId as never, itemLabel: scope.itemLabel }
                 }
                 canWrite={permissions.canFeature(scope.feature, 'write')}
             />

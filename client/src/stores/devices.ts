@@ -60,7 +60,7 @@ function createDeviceList(scope: Scope, { signalsHomeReady }: { signalsHomeReady
         // instead and let the onStateChange handler refresh once it opens.
         if (ws.state !== 'open') return;
         try {
-            const res = await ws.send('device.list', scope === 'fleet' ? { scope } : {});
+            const res = await ws.send('devices.list', scope === 'fleet' ? { scope } : {});
             emit({ devices: res.devices, loading: false, error: null });
         } catch {
             emit({ loading: false, error: 'Connexion indisponible' });
@@ -82,7 +82,7 @@ function createDeviceList(scope: Scope, { signalsHomeReady }: { signalsHomeReady
         refCount += 1;
         if (refCount !== 1) return;
         void refresh();
-        offInvalidate = onResourceChange('device.list', () => void refresh());
+        offInvalidate = onResourceChange('devices.list', () => void refresh());
         // Refresh as soon as the socket (re)opens, so the list appears without
         // waiting for the next poll and without an error flash during connect.
         offState = ws.onStateChange((s) => {

@@ -4,7 +4,14 @@ Surveillance des appareils (agent Rust → serveur Fastify → client React). Ce
 document décrit le **modèle de collecte** et liste les **décisions de conception
 à ne pas casser** lors des évolutions. Contrats partagés dans `@deveye/types`
 (`domain/metrics.ts`, `domain/report.ts`, `domain/device.ts`, `domain/presence.ts`,
-`protocol/agent.ts`, `features/metrics.ts`, `features/device.ts`).
+`protocol/agent.ts`, `features/agent.ts`, `features/device.ts`, `features/metrics.ts`).
+
+Deux préfixes de commandes, et c'est la coupure : `agent.*` est le **transport**
+(infrastructure, natif : des relais du `MonitorHub` vers l'agent d'un appareil,
+`features/agent.ts`, handlers dans `src/features/agent/`) ; `devices.*` est la
+**feature** Appareils (`features/device.ts` et `features/metrics.ts`, handlers
+dans `src/features/devices/` et `src/features/metrics/`), native pour l'instant,
+module `features/devices` en phase 2.
 
 ## Modèle à cadence unique (+ report + presence)
 
@@ -62,7 +69,7 @@ Ces choix sont volontaires ; les conserver garde la feature **stable et
 maintenable**.
 
 1. **Une seule source de vérité pour la config, poussée à l'agent.** La config
-   vit en base (colonnes `devices.*`), est exposée via `device.setConfig`
+   vit en base (colonnes `devices.*`), est exposée via `devices.setConfig`
    (bornée par zod), et **rejouée à la reconnexion** : un agent hors ligne au
    moment du changement applique quand même les bons réglages dès son retour
    (boucle « config-wait » de 2 s avant le 1er snapshot dans `runner.rs`).
@@ -78,7 +85,7 @@ maintenable**.
    `nullable` ; ne l'ajouter à `SPARSE_FIELDS` que s'il est *intermittent*.
 
    Corollaire côté types : `metricSnapshotSchema` (ce que l'agent envoie) porte
-   `processes`, `metricSeriesPointSchema` (ce que `metrics.query` relit) ne les
+   `processes`, `metricSeriesPointSchema` (ce que `devices.metrics` relit) ne les
    porte pas — une fenêtre de graphe contient des centaines de points et
    trimballer chaque liste coûterait des mégaoctets pour rien.
 
@@ -140,10 +147,10 @@ maintenable**.
 ## Cycle de vie d'un appareil & suppression
 
 Statuts (`devices.status`) : `pending` → `active`, `revoked` (réversible via
-`device.reactivate`), `pending_deletion`, `archived`.
+`devices.reactivate`), `pending_deletion`, `archived`.
 
-- **Révocation** (`device.revoke`) : l'agent est refusé à la connexion. Réactivable.
-- **Suppression gérée** (`device.requestDelete`, page Appareils) : passe en
+- **Révocation** (`devices.revoke`) : l'agent est refusé à la connexion. Réactivable.
+- **Suppression gérée** (`devices.requestDelete`, page Appareils) : passe en
   `pending_deletion` en mémorisant le statut précédent (`status_before_delete`).
   - Agent **en ligne** → ordre `agent.destroy` immédiat (`hub.requestDestroy`).
   - Agent **hors ligne** → l'ordre part à sa prochaine connexion (`agent/ws.ts`).
@@ -152,12 +159,12 @@ Statuts (`devices.status`) : `pending` → `active`, `revoked` (réversible via
     l'appareil (`devices.archive` : statut `archived`, `token_hash=''`).
   - En cas d'échec (`ok:false`) : `failDeletion` restaure le statut précédent et
     stocke `delete_error` (affiché sur la carte). La suppression est **interrompue**.
-  - Annulable (`device.cancelDelete`) tant que l'agent ne s'est pas reconnecté.
+  - Annulable (`devices.cancelDelete`) tant que l'agent ne s'est pas reconnecté.
 - **Archive** : l'appareil disparaît de la page Appareils mais reste **consultable
   en lecture seule** dans Monitoring (voyage temporel). Ses données sont **figées**
   (les balayages de rétention **excluent** `status='archived'`). Pas de config, pas
   d'approbation. L'agent est refusé définitivement.
-- **Purge dure** (`device.delete`, bouton de la page Monitoring) : supprime la
+- **Purge dure** (`devices.delete`, bouton de la page Monitoring) : supprime la
   ligne + tout l'historique (cascade FK). Disponible quel que soit l'état (agent
   connecté ou non) ; ne déclenche **pas** d'auto-destruction.
 

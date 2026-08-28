@@ -42,7 +42,7 @@ async function seed(deviceId: string): Promise<void> {
     if (ws.state !== 'open') return;
     try {
         const now = Date.now();
-        const res = await ws.send('metrics.query', {
+        const res = await ws.send('devices.metrics', {
             deviceId,
             from: now - WINDOW_MS,
             to: now,

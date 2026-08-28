@@ -20,7 +20,7 @@ rien oublier.
 > **Deux types de « feature » à ne pas confondre :**
 >
 > - **Feature-commande** (la plupart) : une ou plusieurs commandes WebSocket
->   (`uptime.add`, `device.list`, `logs.list`…) dispatchées par le serveur, avec
+>   (`uptime.add`, `devices.list`, `logs.list`…) dispatchées par le serveur, avec
 >   éventuellement une UI (widget de la grille d'accueil ou page de la topbar).
 > - **Page structurelle** : un écran qui fait partie de DevEye lui-même (Profil,
 >   Sécurité, Logs), atteint depuis le menu de la topbar, **sans** carte sur la

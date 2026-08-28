@@ -23,7 +23,7 @@ import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { useWorkspacePermissions } from '@/stores/workspace';
 import { accessibleWorkspaceName, goToItemSettings } from '../goToHome';
 
-import type { SettingsScope } from '../scope';
+import { numericItemId, type SettingsScope } from '../scope';
 import styles from '../FeatureSettings.module.css';
 
 /**
@@ -165,7 +165,7 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
     // qui distinguait le routage de l'écriture a été essayé puis retiré.
     const canRoute = permissions.canFeature(feature, 'write') && managedHere;
 
-    const itemId = scope.kind === 'item' ? scope.itemId : undefined;
+    const itemId = numericItemId(scope) ?? undefined;
 
     /**
      * La sélection se rend-elle ici ? Sur un élément toujours ; à l'échelle de
@@ -505,7 +505,7 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                                     type='button'
                                     className={styles.jumpBtn}
                                     onClick={() =>
-                                        goToItemSettings(homeWorkspaceId, feature, scope.itemId, 'notifications')
+                                        goToItemSettings(homeWorkspaceId, feature, itemId ?? 0, 'notifications')
                                     }
                                 >
                                     Régler dans « {accessibleWorkspaceName(homeWorkspaceId)} »

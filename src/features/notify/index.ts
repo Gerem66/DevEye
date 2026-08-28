@@ -46,7 +46,7 @@ import {
  * visée est une **donnée d'entrée** (l'argument `feature`, ou celle du canal
  * visé par son id), pas une constante de la commande. Le dispatcheur ne peut
  * donc pas la vérifier avant le handler ; chaque handler la vérifie en première
- * ligne, pour la même raison que `device.setConfig` : le contrôle dépend de ce
+ * ligne, pour la même raison que `devices.setConfig` : le contrôle dépend de ce
  * qu'on touche.
  */
 

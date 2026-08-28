@@ -44,7 +44,7 @@ export type ResourceKey =
     | 'mail.messageList'
     | 'uptime.count'
     | 'uptime.list'
-    | 'device.list'
+    | 'devices.list'
     | 'sentinel.count'
     | 'sentinel.overview'
     | 'sentinel.findings'
@@ -165,7 +165,7 @@ const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
      * au rendu depuis le store `devices` (`useShareDevices`), donc sans le
      * moindre aller-retour.
      */
-    devices: ['device.list'],
+    devices: ['devices.list'],
     // (`sentinel` : sujet distinct de `devices`, ses constats bougent à une
     // tout autre cadence ; ses clés sont déclarées par le manifest du module
     // `features/sentinel` et enregistrées par la glue générée.)

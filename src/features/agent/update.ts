@@ -1,19 +1,20 @@
-import { deviceUpdateAgent, isNewerVersion } from '@deveye/types';
+import { agentUpdate, isNewerVersion } from '@deveye/types';
 
 import { agentDistDir, readServedManifestCached } from '@/agent/sync';
+import { authorizeDevice, online, toDevice } from '@/agent/authorize';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
-import { authorizeDevice, online, toDevice } from './shared';
 
 /**
  * Push a signed self-update to a connected agent. The server resolves the newer
- * signed binary for the device's build target and sends `agent.update`.
+ * signed binary for the device's build target and sends the `agent.update`
+ * frame of the agent protocol (same name as this command, other socket).
  */
-export const deviceUpdateAgentFeature: FeatureDefinition<
-    typeof deviceUpdateAgent.command,
-    typeof deviceUpdateAgent.input,
-    typeof deviceUpdateAgent.output
+export const agentUpdateFeature: FeatureDefinition<
+    typeof agentUpdate.command,
+    typeof agentUpdate.input,
+    typeof agentUpdate.output
 > = defineFeature({
-    ...deviceUpdateAgent,
+    ...agentUpdate,
     access: { admin: true },
     handler: async (ctx, input) => {
         const row = await authorizeDevice(ctx, input.deviceId);
@@ -50,7 +51,7 @@ export const deviceUpdateAgentFeature: FeatureDefinition<
         if (!pushed) throw new FeatureError('conflict', 'Agent hors ligne');
 
         ctx.audit({
-            action: 'device.updateAgent',
+            action: 'agent.update',
             level: 'warning',
             description: `Mise à jour de l'agent demandée : « ${row.name} » ${row.agent_version ?? '?'} → ${manifest.version}`,
             metadata: {

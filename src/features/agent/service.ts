@@ -1,7 +1,7 @@
-import { deviceDropPrivileges, deviceElevate, deviceSetAutostart } from '@deveye/types';
+import { agentDropPrivileges, agentElevate, agentSetAutostart } from '@deveye/types';
 
+import { authorizeOnlineDevice, toDevice } from '@/agent/authorize';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
-import { authorizeOnlineDevice, toDevice } from './shared';
 
 /**
  * The exact command to run on the device when the agent can't pop an OS auth
@@ -20,12 +20,12 @@ function manualCommand(platform: string, action: 'elevate' | 'drop'): string {
         : 'sudo deveye-agent service uninstall && deveye-agent service install --user';
 }
 
-export const deviceSetAutostartFeature: FeatureDefinition<
-    typeof deviceSetAutostart.command,
-    typeof deviceSetAutostart.input,
-    typeof deviceSetAutostart.output
+export const agentSetAutostartFeature: FeatureDefinition<
+    typeof agentSetAutostart.command,
+    typeof agentSetAutostart.input,
+    typeof agentSetAutostart.output
 > = defineFeature({
-    ...deviceSetAutostart,
+    ...agentSetAutostart,
     access: { admin: true },
     mutates: true,
     handler: async (ctx, input) => {
@@ -35,7 +35,7 @@ export const deviceSetAutostartFeature: FeatureDefinition<
         });
         if (!pushed) throw new FeatureError('conflict', 'Agent hors ligne');
         ctx.audit({
-            action: 'device.setAutostart',
+            action: 'agent.setAutostart',
             description: `Démarrage automatique ${input.enabled ? 'activé' : 'désactivé'} : « ${row.name} »`,
             metadata: { deviceId: row.id, ownerId: row.owner_id, enabled: input.enabled }
         });
@@ -43,12 +43,12 @@ export const deviceSetAutostartFeature: FeatureDefinition<
     }
 });
 
-export const deviceElevateFeature: FeatureDefinition<
-    typeof deviceElevate.command,
-    typeof deviceElevate.input,
-    typeof deviceElevate.output
+export const agentElevateFeature: FeatureDefinition<
+    typeof agentElevate.command,
+    typeof agentElevate.input,
+    typeof agentElevate.output
 > = defineFeature({
-    ...deviceElevate,
+    ...agentElevate,
     access: { admin: true },
     mutates: true,
     handler: async (ctx, input) => {
@@ -56,7 +56,7 @@ export const deviceElevateFeature: FeatureDefinition<
         const pushed = ctx.monitor?.requestService(row.id, { action: 'elevate' });
         if (!pushed) throw new FeatureError('conflict', 'Agent hors ligne');
         ctx.audit({
-            action: 'device.elevate',
+            action: 'agent.elevate',
             level: 'warning',
             description: `Élévation root demandée : « ${row.name} »`,
             metadata: { deviceId: row.id, ownerId: row.owner_id }
@@ -65,12 +65,12 @@ export const deviceElevateFeature: FeatureDefinition<
     }
 });
 
-export const deviceDropPrivilegesFeature: FeatureDefinition<
-    typeof deviceDropPrivileges.command,
-    typeof deviceDropPrivileges.input,
-    typeof deviceDropPrivileges.output
+export const agentDropPrivilegesFeature: FeatureDefinition<
+    typeof agentDropPrivileges.command,
+    typeof agentDropPrivileges.input,
+    typeof agentDropPrivileges.output
 > = defineFeature({
-    ...deviceDropPrivileges,
+    ...agentDropPrivileges,
     access: { admin: true },
     mutates: true,
     handler: async (ctx, input) => {
@@ -78,7 +78,7 @@ export const deviceDropPrivilegesFeature: FeatureDefinition<
         const pushed = ctx.monitor?.requestService(row.id, { action: 'drop' });
         if (!pushed) throw new FeatureError('conflict', 'Agent hors ligne');
         ctx.audit({
-            action: 'device.dropPrivileges',
+            action: 'agent.dropPrivileges',
             level: 'warning',
             description: `Rétrogradation des privilèges demandée : « ${row.name} »`,
             metadata: { deviceId: row.id, ownerId: row.owner_id }

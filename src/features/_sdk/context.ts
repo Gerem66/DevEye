@@ -42,6 +42,7 @@ export function createSdkContext(
         workspaceId: ctx.workspaceId,
         workspace: { id: ctx.workspace.id, kind: ctx.workspace.kind, name: ctx.workspace.name },
         isOwner: ctx.isOwner,
+        isAdmin: ctx.isAdmin,
         canWrite: ctx.canFeature(manifest.id, 'write'),
         ...resolveExtras(manifest.extraPermissions, ctx.isOwner, ctx.extrasFor(manifest.id)),
         repo,

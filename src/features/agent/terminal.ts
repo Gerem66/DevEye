@@ -1,7 +1,7 @@
-import { deviceTermClose, deviceTermInput, deviceTermOpen, deviceTermResize } from '@deveye/types';
+import { agentTermClose, agentTermInput, agentTermOpen, agentTermResize } from '@deveye/types';
 
+import { authorizeReachableDevice } from '@/agent/authorize';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
-import { authorizeReachableDevice } from './shared';
 
 /**
  * Open an interactive terminal (PTY) on a device, running the agent user's shell.
@@ -10,12 +10,12 @@ import { authorizeReachableDevice } from './shared';
  * (the caller must be subscribed). A remote shell is a powerful action, so the open
  * is audited (warning).
  */
-export const deviceTermOpenFeature: FeatureDefinition<
-    typeof deviceTermOpen.command,
-    typeof deviceTermOpen.input,
-    typeof deviceTermOpen.output
+export const agentTermOpenFeature: FeatureDefinition<
+    typeof agentTermOpen.command,
+    typeof agentTermOpen.input,
+    typeof agentTermOpen.output
 > = defineFeature({
-    ...deviceTermOpen,
+    ...agentTermOpen,
     access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
@@ -27,7 +27,7 @@ export const deviceTermOpenFeature: FeatureDefinition<
         });
         if (!ok) throw new FeatureError('conflict', 'Agent hors ligne');
         ctx.audit({
-            action: 'device.terminal',
+            action: 'agent.terminal',
             level: 'warning',
             description: `Terminal distant ouvert : « ${row.name} »${input.user ? ` (utilisateur ${input.user})` : ''}`,
             metadata: { deviceId: row.id, ownerId: row.owner_id, sessionId: input.sessionId, user: input.user ?? null }
@@ -37,12 +37,12 @@ export const deviceTermOpenFeature: FeatureDefinition<
 });
 
 /** Send input (keystrokes / paste) to a terminal session. */
-export const deviceTermInputFeature: FeatureDefinition<
-    typeof deviceTermInput.command,
-    typeof deviceTermInput.input,
-    typeof deviceTermInput.output
+export const agentTermInputFeature: FeatureDefinition<
+    typeof agentTermInput.command,
+    typeof agentTermInput.input,
+    typeof agentTermInput.output
 > = defineFeature({
-    ...deviceTermInput,
+    ...agentTermInput,
     access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
@@ -53,12 +53,12 @@ export const deviceTermInputFeature: FeatureDefinition<
 });
 
 /** Resize a terminal session's PTY to match the client viewport. */
-export const deviceTermResizeFeature: FeatureDefinition<
-    typeof deviceTermResize.command,
-    typeof deviceTermResize.input,
-    typeof deviceTermResize.output
+export const agentTermResizeFeature: FeatureDefinition<
+    typeof agentTermResize.command,
+    typeof agentTermResize.input,
+    typeof agentTermResize.output
 > = defineFeature({
-    ...deviceTermResize,
+    ...agentTermResize,
     access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
@@ -73,12 +73,12 @@ export const deviceTermResizeFeature: FeatureDefinition<
 });
 
 /** Close a terminal session (kills the shell on the device). */
-export const deviceTermCloseFeature: FeatureDefinition<
-    typeof deviceTermClose.command,
-    typeof deviceTermClose.input,
-    typeof deviceTermClose.output
+export const agentTermCloseFeature: FeatureDefinition<
+    typeof agentTermClose.command,
+    typeof agentTermClose.input,
+    typeof agentTermClose.output
 > = defineFeature({
-    ...deviceTermClose,
+    ...agentTermClose,
     access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);

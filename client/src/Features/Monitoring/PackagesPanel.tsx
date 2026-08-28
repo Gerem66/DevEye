@@ -87,7 +87,7 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
             setRefreshing(false);
             setListError('L’agent n’a pas répondu — la détection a peut-être échoué sur l’appareil.');
         });
-        ws.send('device.listPackages', { deviceId }).catch((e: unknown) => {
+        ws.send('agent.listPackages', { deviceId }).catch((e: unknown) => {
             // La raison vient du serveur (agent hors ligne, droits…). L'afficher
             // telle quelle : un « aucun gestionnaire détecté » à sa place était
             // faux, et envoyait chercher le problème sur la machine.
@@ -171,7 +171,7 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
         // Optimiste et immédiat : le `package.started` du serveur confirmera, et
         // c'est lui qui fait foi — ceci n'est que la réponse au clic.
         setUpgrades((prev) => ({ ...prev, [manager]: { percent: null, line: 'Démarrage…', done: false } }));
-        ws.send('device.upgradePackages', { deviceId, manager }).catch((e: unknown) => {
+        ws.send('agent.upgradePackages', { deviceId, manager }).catch((e: unknown) => {
             // `conflict` = le verrou serveur a parlé : une mise à jour tourne
             // bel et bien, simplement pas la nôtre. L'afficher comme un échec
             // mentirait sur l'état de la machine — on montre celle qui tourne.

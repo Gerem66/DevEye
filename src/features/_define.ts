@@ -147,7 +147,7 @@ export { FeatureError } from '@deveye/types/sdk/server';
  * the guard" a visible omission instead of an invisible one.
  *
  * Commands whose check depends on the *row* being touched (owner-or-admin, e.g.
- * `device.setConfig`) keep their guard in the handler and read `ctx.isAdmin`.
+ * `devices.setConfig`) keep their guard in the handler and read `ctx.isAdmin`.
  */
 export interface FeatureAccessSpec {
     /**
@@ -188,11 +188,11 @@ export interface FeatureDefinition<Cmd extends string, I extends z.ZodTypeAny, O
      * (`_topics.ts`) est là pour l'attraper avant.
      *
      * `true` déduit le sujet du préfixe de la commande via `COMMAND_PREFIX_TOPIC`
-     * (`notes.add` → `notes`, et `metrics.*` comme `device.*` → `devices`, la
+     * (`notes.add` → `notes`, et `agent.*` comme `devices.*` → `devices`, la
      * table corrigeant le préfixe quand il ne dit pas la feature). Une liste
      * explicite sert aux commandes à double effet.
      *
-     * Absent = lecture, ou action sans écriture (`metrics.subscribe`,
+     * Absent = lecture, ou action sans écriture (`agent.subscribe`,
      * `secrecy.unlock`, un appel RPC vers un agent).
      */
     mutates?: true | readonly LiveTopic[];

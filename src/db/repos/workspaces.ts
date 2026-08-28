@@ -9,7 +9,7 @@ export interface WorkspacesRepo {
     findAccessibleByUser(userId: number): Promise<WorkspaceRow[]>;
     /**
      * Tous les espaces, appartenance ignorée. Réservé à l'administration de la
-     * flotte (`device.workspaceList`), qui doit pouvoir proposer le partage d'un
+     * flotte (`devices.workspaceList`), qui doit pouvoir proposer le partage d'un
      * appareil vers un espace dont l'administrateur n'est pas membre. Aucune
      * autre commande n'a de raison de franchir cette frontière.
      */

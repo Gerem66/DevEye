@@ -1,7 +1,7 @@
-import { devicePower, type AgentPowerAction } from '@deveye/types';
+import { agentPower, type AgentPowerAction } from '@deveye/types';
 
+import { authorizeReachableDevice } from '@/agent/authorize';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
-import { authorizeReachableDevice } from './shared';
 
 /** French label per power action, for the audit description. */
 const POWER_LABELS: Record<AgentPowerAction, string> = {
@@ -18,19 +18,19 @@ const POWER_LABELS: Record<AgentPowerAction, string> = {
  * agent applies it best-effort and the outcome streams back as a
  * `device.powerResult` push event (the caller must be subscribed to the device).
  */
-export const devicePowerFeature: FeatureDefinition<
-    typeof devicePower.command,
-    typeof devicePower.input,
-    typeof devicePower.output
+export const agentPowerFeature: FeatureDefinition<
+    typeof agentPower.command,
+    typeof agentPower.input,
+    typeof agentPower.output
 > = defineFeature({
-    ...devicePower,
+    ...agentPower,
     access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestPower(row.id, { action: input.action }) ?? false;
         if (!ok) throw new FeatureError('conflict', 'Agent hors ligne');
         ctx.audit({
-            action: 'device.power',
+            action: 'agent.power',
             level: 'warning',
             description: `Commande système « ${POWER_LABELS[input.action]} » demandée : « ${row.name} »`,
             metadata: { deviceId: row.id, ownerId: row.owner_id, powerAction: input.action }

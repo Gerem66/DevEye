@@ -1,22 +1,18 @@
 import {
-    metricsAvailability,
-    metricsDeleteSnapshots,
-    metricsPresence,
-    metricsProcessesAt,
-    metricsQuery,
-    metricsRefresh,
-    metricsSetSnapshotsPinned,
-    metricsSnapshots,
-    metricsStorage,
-    metricsSubscribe,
-    metricsUnsubscribe,
+    devicesAvailability,
+    devicesDeleteSnapshots,
+    devicesMetrics,
+    devicesPresence,
+    devicesProcessesAt,
+    devicesSetSnapshotsPinned,
+    devicesSnapshots,
+    devicesStorage,
     type DeviceRow
 } from '@deveye/types';
 
-import { parseDeviceReport } from '@/agent/mappers';
+import { authorizeDevice } from '@/agent/authorize';
 import { env } from '@/Utils/Env';
 import { defineFeature, type FeatureContext, type FeatureDefinition } from '../_define';
-import { authorizeDevice } from '../devices/shared';
 
 /**
  * De quel appareil parle-t-on, et m'est-il accessible ?
@@ -24,7 +20,7 @@ import { authorizeDevice } from '../devices/shared';
  * Délègue à `authorizeDevice`, garde unique des appareils : il n'y avait aucune
  * raison que la supervision porte sa propre copie de la règle — et le nom
  * `authorizeRead` qu'elle portait a laissé passer deux commandes destructrices
- * (`metrics.deleteSnapshots`, `metrics.setSnapshotsPinned`) sous une garde de
+ * (`devices.deleteSnapshots`, `devices.setSnapshotsPinned`) sous une garde de
  * lecture. Le *niveau* exigé est désormais déclaré par chaque commande dans son
  * `access`, appliqué par le dispatcheur avant le handler.
  */
@@ -32,12 +28,12 @@ async function device(ctx: FeatureContext, deviceId: string): Promise<DeviceRow>
     return authorizeDevice(ctx, deviceId);
 }
 
-export const metricsQueryFeature: FeatureDefinition<
-    typeof metricsQuery.command,
-    typeof metricsQuery.input,
-    typeof metricsQuery.output
+export const devicesMetricsFeature: FeatureDefinition<
+    typeof devicesMetrics.command,
+    typeof devicesMetrics.input,
+    typeof devicesMetrics.output
 > = defineFeature({
-    ...metricsQuery,
+    ...devicesMetrics,
     access: { feature: 'devices', level: 'read' },
     handler: async (ctx, input) => {
         await device(ctx, input.deviceId);
@@ -51,79 +47,12 @@ export const metricsQueryFeature: FeatureDefinition<
     }
 });
 
-export const metricsSubscribeFeature: FeatureDefinition<
-    typeof metricsSubscribe.command,
-    typeof metricsSubscribe.input,
-    typeof metricsSubscribe.output
+export const devicesPresenceFeature: FeatureDefinition<
+    typeof devicesPresence.command,
+    typeof devicesPresence.input,
+    typeof devicesPresence.output
 > = defineFeature({
-    ...metricsSubscribe,
-    access: { feature: 'devices', level: 'read' },
-    handler: async (ctx, input) => {
-        // Le schéma autorise 50 identifiants, et cette commande part à chaque
-        // changement d'appareil et à chaque réouverture de socket : la séquence
-        // d'origine (une autorisation, puis un `latest` + un `nearest` — trois
-        // requêtes à lui seul — par appareil, l'un après l'autre) valait jusqu'à
-        // deux cents allers-retours pour un seul appel. Tout est parallèle.
-        const allowed: { id: string; row: DeviceRow }[] = await Promise.all(
-            input.deviceIds.map(async (deviceId) => ({ id: deviceId, row: await device(ctx, deviceId) }))
-        );
-        const ids = allowed.map((a) => a.id);
-        ctx.monitor?.subscribe(ids);
-
-        // Push the latest stored instant + report straight away so the UI shows
-        // data immediately rather than waiting for the next live sample. The
-        // instant's process list is seeded too: it now travels with the metric
-        // stream, so without it the process table would stay empty for a whole
-        // collection cadence.
-        await Promise.all(
-            allowed.map(async ({ id, row }) => {
-                const point = await ctx.db.metrics.latest(id);
-                const sample = point ? await ctx.db.processSamples.nearest(id, point.timestamp) : null;
-                ctx.monitor?.sendInitial(id, point, sample, parseDeviceReport(row.report_json));
-            })
-        );
-        return { deviceIds: ids };
-    }
-});
-
-/**
- * Se désabonner ne demande aucun droit, à dessein : exiger `devices: read` pour
- * *cesser* de recevoir laisserait une souscription orpheline chez qui vient
- * justement de perdre l'accès. La diffusion, elle, est filtrée en continu par le
- * hub (voir `MonitorHub.rememberGrants`).
- */
-export const metricsUnsubscribeFeature: FeatureDefinition<
-    typeof metricsUnsubscribe.command,
-    typeof metricsUnsubscribe.input,
-    typeof metricsUnsubscribe.output
-> = defineFeature({
-    ...metricsUnsubscribe,
-    handler: async (ctx, input) => {
-        ctx.monitor?.unsubscribe(input.deviceIds);
-        return { deviceIds: input.deviceIds };
-    }
-});
-
-export const metricsRefreshFeature: FeatureDefinition<
-    typeof metricsRefresh.command,
-    typeof metricsRefresh.input,
-    typeof metricsRefresh.output
-> = defineFeature({
-    ...metricsRefresh,
-    access: { feature: 'devices', level: 'read' },
-    handler: async (ctx, input) => {
-        await device(ctx, input.deviceId);
-        const requested = ctx.monitor?.requestCollect(input.deviceId) ?? false;
-        return { deviceId: input.deviceId, requested };
-    }
-});
-
-export const metricsPresenceFeature: FeatureDefinition<
-    typeof metricsPresence.command,
-    typeof metricsPresence.input,
-    typeof metricsPresence.output
-> = defineFeature({
-    ...metricsPresence,
+    ...devicesPresence,
     access: { feature: 'devices', level: 'read' },
     handler: async (ctx, input) => {
         await device(ctx, input.deviceId);
@@ -135,12 +64,12 @@ export const metricsPresenceFeature: FeatureDefinition<
     }
 });
 
-export const metricsProcessesAtFeature: FeatureDefinition<
-    typeof metricsProcessesAt.command,
-    typeof metricsProcessesAt.input,
-    typeof metricsProcessesAt.output
+export const devicesProcessesAtFeature: FeatureDefinition<
+    typeof devicesProcessesAt.command,
+    typeof devicesProcessesAt.input,
+    typeof devicesProcessesAt.output
 > = defineFeature({
-    ...metricsProcessesAt,
+    ...devicesProcessesAt,
     access: { feature: 'devices', level: 'read' },
     handler: async (ctx, input) => {
         await device(ctx, input.deviceId);
@@ -149,12 +78,12 @@ export const metricsProcessesAtFeature: FeatureDefinition<
     }
 });
 
-export const metricsAvailabilityFeature: FeatureDefinition<
-    typeof metricsAvailability.command,
-    typeof metricsAvailability.input,
-    typeof metricsAvailability.output
+export const devicesAvailabilityFeature: FeatureDefinition<
+    typeof devicesAvailability.command,
+    typeof devicesAvailability.input,
+    typeof devicesAvailability.output
 > = defineFeature({
-    ...metricsAvailability,
+    ...devicesAvailability,
     access: { feature: 'devices', level: 'read' },
     handler: async (ctx, input) => {
         await device(ctx, input.deviceId);
@@ -163,12 +92,12 @@ export const metricsAvailabilityFeature: FeatureDefinition<
     }
 });
 
-export const metricsSnapshotsFeature: FeatureDefinition<
-    typeof metricsSnapshots.command,
-    typeof metricsSnapshots.input,
-    typeof metricsSnapshots.output
+export const devicesSnapshotsFeature: FeatureDefinition<
+    typeof devicesSnapshots.command,
+    typeof devicesSnapshots.input,
+    typeof devicesSnapshots.output
 > = defineFeature({
-    ...metricsSnapshots,
+    ...devicesSnapshots,
     access: { feature: 'devices', level: 'read' },
     handler: async (ctx, input) => {
         await device(ctx, input.deviceId);
@@ -182,7 +111,7 @@ export const metricsSnapshotsFeature: FeatureDefinition<
             ctx.db.processSamples.snapshotTimes(input.deviceId, input.from, input.to)
         ]);
         // Les épingles sont posées sur les deux tables dans une seule
-        // transaction (`metrics.setSnapshotsPinned`) : les instants métriques
+        // transaction (`devices.setSnapshotsPinned`) : les instants métriques
         // font foi, et il n'y a plus de moitié d'épingle à rattraper.
         return {
             deviceId: input.deviceId,
@@ -194,12 +123,12 @@ export const metricsSnapshotsFeature: FeatureDefinition<
     }
 });
 
-export const metricsStorageFeature: FeatureDefinition<
-    typeof metricsStorage.command,
-    typeof metricsStorage.input,
-    typeof metricsStorage.output
+export const devicesStorageFeature: FeatureDefinition<
+    typeof devicesStorage.command,
+    typeof devicesStorage.input,
+    typeof devicesStorage.output
 > = defineFeature({
-    ...metricsStorage,
+    ...devicesStorage,
     access: { feature: 'devices', level: 'read' },
     handler: async (ctx, input) => {
         await device(ctx, input.deviceId);
@@ -208,12 +137,12 @@ export const metricsStorageFeature: FeatureDefinition<
     }
 });
 
-export const metricsDeleteSnapshotsFeature: FeatureDefinition<
-    typeof metricsDeleteSnapshots.command,
-    typeof metricsDeleteSnapshots.input,
-    typeof metricsDeleteSnapshots.output
+export const devicesDeleteSnapshotsFeature: FeatureDefinition<
+    typeof devicesDeleteSnapshots.command,
+    typeof devicesDeleteSnapshots.input,
+    typeof devicesDeleteSnapshots.output
 > = defineFeature({
-    ...metricsDeleteSnapshots,
+    ...devicesDeleteSnapshots,
     mutates: true,
     // Effacer définitivement l'historique d'une machine n'est pas de la lecture,
     // et la garde qui couvrait cette commande s'appelait littéralement
@@ -226,7 +155,7 @@ export const metricsDeleteSnapshotsFeature: FeatureDefinition<
         if (snapshots > 0) {
             const single = input.from === input.to;
             ctx.audit({
-                action: 'metrics.deleteSnapshots',
+                action: 'devices.deleteSnapshots',
                 level: 'warning',
                 description: single
                     ? `Snapshot supprimé : « ${row.name} »`
@@ -238,12 +167,12 @@ export const metricsDeleteSnapshotsFeature: FeatureDefinition<
     }
 });
 
-export const metricsSetSnapshotsPinnedFeature: FeatureDefinition<
-    typeof metricsSetSnapshotsPinned.command,
-    typeof metricsSetSnapshotsPinned.input,
-    typeof metricsSetSnapshotsPinned.output
+export const devicesSetSnapshotsPinnedFeature: FeatureDefinition<
+    typeof devicesSetSnapshotsPinned.command,
+    typeof devicesSetSnapshotsPinned.input,
+    typeof devicesSetSnapshotsPinned.output
 > = defineFeature({
-    ...metricsSetSnapshotsPinned,
+    ...devicesSetSnapshotsPinned,
     mutates: true,
     // Épingler soustrait des relevés à la purge, désépingler les y rend — et
     // peut en supprimer sur-le-champ. Même niveau que la suppression.
@@ -273,7 +202,7 @@ export const metricsSetSnapshotsPinnedFeature: FeatureDefinition<
 
         if (snapshots > 0) {
             ctx.audit({
-                action: 'metrics.setSnapshotsPinned',
+                action: 'devices.setSnapshotsPinned',
                 description: pinned
                     ? `${snapshots} snapshot(s) épinglé(s) : « ${row.name} »`
                     : `${snapshots} snapshot(s) désépinglé(s) : « ${row.name} »`,
@@ -287,15 +216,12 @@ export const metricsSetSnapshotsPinnedFeature: FeatureDefinition<
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const metricsFeatures: FeatureDefinition<string, any, any>[] = [
-    metricsQueryFeature,
-    metricsSubscribeFeature,
-    metricsUnsubscribeFeature,
-    metricsRefreshFeature,
-    metricsPresenceFeature,
-    metricsProcessesAtFeature,
-    metricsAvailabilityFeature,
-    metricsSnapshotsFeature,
-    metricsStorageFeature,
-    metricsDeleteSnapshotsFeature,
-    metricsSetSnapshotsPinnedFeature
+    devicesMetricsFeature,
+    devicesPresenceFeature,
+    devicesProcessesAtFeature,
+    devicesAvailabilityFeature,
+    devicesSnapshotsFeature,
+    devicesStorageFeature,
+    devicesDeleteSnapshotsFeature,
+    devicesSetSnapshotsPinnedFeature
 ];

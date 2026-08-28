@@ -32,7 +32,7 @@ export type Ctx = SdkFeatureContext<SentinelRepo>;
  * `ctx.deveye.devices.authorize` (l'ex `authorizeDevice` de `devices/shared.ts`),
  * comme toutes les autres features qui touchent un appareil (invariant 9 de
  * Monitoring : aucune feature ne refait la logique d'accès). Le périmètre, lui,
- * est `ctx.deveye.devices.list()` : la même règle que `device.list`,
+ * est `ctx.deveye.devices.list()` : la même règle que `devices.list`,
  * l'administrateur dans son espace **personnel** voit la flotte entière.
  */
 

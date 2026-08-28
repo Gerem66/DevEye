@@ -30,7 +30,7 @@
  *    fonctionnalité visée arrive dans l'entrée (routes comme canaux, la
  *    gestion des canaux étant par fonctionnalité depuis la 093). Le
  *    dispatcheur ne peut pas vérifier avant le handler ce qu'il ne connaît pas
- *    encore ; le contrôle est en première ligne, comme pour `device.setConfig`.
+ *    encore ; le contrôle est en première ligne, comme pour `devices.setConfig`.
  *
  * Toute autre commande doit déclarer son `access`. Ajouter une entrée ici est un
  * geste délibéré, qui se voit en revue — c'est tout l'objet de la liste.
@@ -41,8 +41,8 @@ const ACCESS_EXEMPT = new Set([
     'workspace.leave',
     'workspace.delete',
     'workspace.roleList',
-    'device.list',
-    'metrics.unsubscribe',
+    'devices.list',
+    'agent.unsubscribe',
     'live.here',
     'notify.channelList',
     'notify.routeGet',

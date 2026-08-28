@@ -104,7 +104,7 @@ export function ConfigDialog({ open, device, onClose, onSaved }: ConfigDialogPro
         setSaving(true);
         setError(null);
         try {
-            await ws.send('device.setConfig', {
+            await ws.send('devices.setConfig', {
                 deviceId: device.id,
                 metricIntervalSeconds: clamp(Math.round(metricSec), 5, 3600),
                 processCapture: capture,

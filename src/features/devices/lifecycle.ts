@@ -1,33 +1,33 @@
 import {
-    deviceCancelDelete,
-    deviceConfirm,
-    deviceDelete,
-    deviceForceDelete,
-    deviceList,
-    deviceReactivate,
-    deviceRename,
-    deviceReorder,
-    deviceRequestDelete,
-    deviceRevoke,
-    deviceSetConfig,
-    deviceSetWorkspaces,
-    deviceWorkspaceList
+    devicesCancelDelete,
+    devicesConfirm,
+    devicesDelete,
+    devicesForceDelete,
+    devicesList,
+    devicesReactivate,
+    devicesRename,
+    devicesReorder,
+    devicesRequestDelete,
+    devicesRevoke,
+    devicesSetConfig,
+    devicesSetWorkspaces,
+    devicesWorkspaceList
 } from '@deveye/types';
 
 import { agentConfigFor } from '@/agent/config';
 import { computeAgentUpdate, deviceRowToDevice } from '@/agent/mappers';
 import { agentDistDir, readServedManifestCached } from '@/agent/sync';
+import { authorizeDevice, online, toDevice } from '@/agent/authorize';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
-import { authorizeDevice, online, toDevice } from './shared';
 
 /** Enrollment + status lifecycle of a device (the Appareils page actions). */
 
-export const deviceListFeature: FeatureDefinition<
-    typeof deviceList.command,
-    typeof deviceList.input,
-    typeof deviceList.output
+export const devicesListFeature: FeatureDefinition<
+    typeof devicesList.command,
+    typeof devicesList.input,
+    typeof devicesList.output
 > = defineFeature({
-    ...deviceList,
+    ...devicesList,
     handler: async (ctx, input) => {
         // Deux ensembles distincts : le plan de données (les appareils que
         // l'espace actif voit, ce qu'affichent l'accueil, la topbar et
@@ -71,12 +71,12 @@ export const deviceListFeature: FeatureDefinition<
     }
 });
 
-export const deviceConfirmFeature: FeatureDefinition<
-    typeof deviceConfirm.command,
-    typeof deviceConfirm.input,
-    typeof deviceConfirm.output
+export const devicesConfirmFeature: FeatureDefinition<
+    typeof devicesConfirm.command,
+    typeof devicesConfirm.input,
+    typeof devicesConfirm.output
 > = defineFeature({
-    ...deviceConfirm,
+    ...devicesConfirm,
     mutates: true,
     access: { admin: true },
     handler: async (ctx, input) => {
@@ -89,7 +89,7 @@ export const deviceConfirmFeature: FeatureDefinition<
         ctx.monitor?.resetAgentSession(row.id);
         const updated = await ctx.db.devices.findById(row.id);
         ctx.audit({
-            action: 'device.confirm',
+            action: 'devices.confirm',
             level: 'warning',
             description: `Appareil approuvé : « ${row.name} »`,
             metadata: { deviceId: row.id, ownerId: row.owner_id }
@@ -98,12 +98,12 @@ export const deviceConfirmFeature: FeatureDefinition<
     }
 });
 
-export const deviceRevokeFeature: FeatureDefinition<
-    typeof deviceRevoke.command,
-    typeof deviceRevoke.input,
-    typeof deviceRevoke.output
+export const devicesRevokeFeature: FeatureDefinition<
+    typeof devicesRevoke.command,
+    typeof devicesRevoke.input,
+    typeof devicesRevoke.output
 > = defineFeature({
-    ...deviceRevoke,
+    ...devicesRevoke,
     mutates: true,
     access: { admin: true },
     handler: async (ctx, input) => {
@@ -116,7 +116,7 @@ export const deviceRevokeFeature: FeatureDefinition<
         ctx.monitor?.disconnectAgent(row.id);
         const updated = await ctx.db.devices.findById(row.id);
         ctx.audit({
-            action: 'device.revoke',
+            action: 'devices.revoke',
             level: 'warning',
             description: `Appareil révoqué : « ${row.name} »`,
             metadata: { deviceId: row.id, ownerId: row.owner_id }
@@ -125,12 +125,12 @@ export const deviceRevokeFeature: FeatureDefinition<
     }
 });
 
-export const deviceReactivateFeature: FeatureDefinition<
-    typeof deviceReactivate.command,
-    typeof deviceReactivate.input,
-    typeof deviceReactivate.output
+export const devicesReactivateFeature: FeatureDefinition<
+    typeof devicesReactivate.command,
+    typeof devicesReactivate.input,
+    typeof devicesReactivate.output
 > = defineFeature({
-    ...deviceReactivate,
+    ...devicesReactivate,
     mutates: true,
     access: { admin: true },
     handler: async (ctx, input) => {
@@ -142,7 +142,7 @@ export const deviceReactivateFeature: FeatureDefinition<
         ctx.monitor?.resetAgentSession(row.id);
         const updated = (await ctx.db.devices.findById(row.id)) ?? { ...row, status: 'active' as const };
         ctx.audit({
-            action: 'device.reactivate',
+            action: 'devices.reactivate',
             description: `Appareil réactivé : « ${row.name} »`,
             metadata: { deviceId: row.id, ownerId: row.owner_id }
         });
@@ -150,12 +150,12 @@ export const deviceReactivateFeature: FeatureDefinition<
     }
 });
 
-export const deviceRenameFeature: FeatureDefinition<
-    typeof deviceRename.command,
-    typeof deviceRename.input,
-    typeof deviceRename.output
+export const devicesRenameFeature: FeatureDefinition<
+    typeof devicesRename.command,
+    typeof devicesRename.input,
+    typeof devicesRename.output
 > = defineFeature({
-    ...deviceRename,
+    ...devicesRename,
     mutates: true,
     access: { admin: true },
     handler: async (ctx, input) => {
@@ -163,7 +163,7 @@ export const deviceRenameFeature: FeatureDefinition<
         await ctx.db.devices.rename(row.id, input.name);
         const updated = await ctx.db.devices.findById(row.id);
         ctx.audit({
-            action: 'device.rename',
+            action: 'devices.rename',
             description: `Appareil renommé : « ${row.name} » → « ${input.name} »`,
             metadata: { deviceId: row.id, ownerId: row.owner_id }
         });
@@ -179,12 +179,12 @@ export const deviceRenameFeature: FeatureDefinition<
  * flotte, et un membre qui peut piloter ses machines doit pouvoir les ranger.
  * Aucun état d'agent n'est touché.
  */
-export const deviceReorderFeature: FeatureDefinition<
-    typeof deviceReorder.command,
-    typeof deviceReorder.input,
-    typeof deviceReorder.output
+export const devicesReorderFeature: FeatureDefinition<
+    typeof devicesReorder.command,
+    typeof devicesReorder.input,
+    typeof devicesReorder.output
 > = defineFeature({
-    ...deviceReorder,
+    ...devicesReorder,
     mutates: true,
     access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
@@ -200,12 +200,12 @@ export const deviceReorderFeature: FeatureDefinition<
  * le serveur enregistre d'elle et combien de temps il le garde — un membre qui
  * ne peut pas piloter les appareils de son espace n'a pas à en décider.
  */
-export const deviceSetConfigFeature: FeatureDefinition<
-    typeof deviceSetConfig.command,
-    typeof deviceSetConfig.input,
-    typeof deviceSetConfig.output
+export const devicesSetConfigFeature: FeatureDefinition<
+    typeof devicesSetConfig.command,
+    typeof devicesSetConfig.input,
+    typeof devicesSetConfig.output
 > = defineFeature({
-    ...deviceSetConfig,
+    ...devicesSetConfig,
     mutates: true,
     access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
@@ -214,7 +214,7 @@ export const deviceSetConfigFeature: FeatureDefinition<
         await ctx.db.devices.setConfig(row.id, patch);
         const updated = (await ctx.db.devices.findById(row.id)) ?? row;
         ctx.audit({
-            action: 'device.setConfig',
+            action: 'devices.setConfig',
             description: `Configuration modifiée : « ${row.name} »`,
             metadata: { deviceId: row.id, ...patch }
         });
@@ -227,12 +227,12 @@ export const deviceSetConfigFeature: FeatureDefinition<
     }
 });
 
-export const deviceRequestDeleteFeature: FeatureDefinition<
-    typeof deviceRequestDelete.command,
-    typeof deviceRequestDelete.input,
-    typeof deviceRequestDelete.output
+export const devicesRequestDeleteFeature: FeatureDefinition<
+    typeof devicesRequestDelete.command,
+    typeof devicesRequestDelete.input,
+    typeof devicesRequestDelete.output
 > = defineFeature({
-    ...deviceRequestDelete,
+    ...devicesRequestDelete,
     mutates: true,
     access: { admin: true },
     handler: async (ctx, input) => {
@@ -246,7 +246,7 @@ export const deviceRequestDeleteFeature: FeatureDefinition<
         await ctx.db.devices.requestDeletion(row.id, row.status);
         const isOnline = ctx.monitor?.requestDestroy(row.id) ?? false;
         ctx.audit({
-            action: 'device.requestDelete',
+            action: 'devices.requestDelete',
             level: 'warning',
             description: `Suppression demandée : « ${row.name} »${isOnline ? '' : ' (en attente de connexion)'}`,
             metadata: { deviceId: row.id, ownerId: row.owner_id, online: isOnline }
@@ -256,12 +256,12 @@ export const deviceRequestDeleteFeature: FeatureDefinition<
     }
 });
 
-export const deviceCancelDeleteFeature: FeatureDefinition<
-    typeof deviceCancelDelete.command,
-    typeof deviceCancelDelete.input,
-    typeof deviceCancelDelete.output
+export const devicesCancelDeleteFeature: FeatureDefinition<
+    typeof devicesCancelDelete.command,
+    typeof devicesCancelDelete.input,
+    typeof devicesCancelDelete.output
 > = defineFeature({
-    ...deviceCancelDelete,
+    ...devicesCancelDelete,
     mutates: true,
     access: { admin: true },
     handler: async (ctx, input) => {
@@ -269,7 +269,7 @@ export const deviceCancelDeleteFeature: FeatureDefinition<
         await ctx.db.devices.cancelDeletion(row.id);
         const updated = (await ctx.db.devices.findById(row.id)) ?? row;
         ctx.audit({
-            action: 'device.cancelDelete',
+            action: 'devices.cancelDelete',
             description: `Suppression annulée : « ${row.name} »`,
             metadata: { deviceId: row.id, ownerId: row.owner_id }
         });
@@ -277,12 +277,12 @@ export const deviceCancelDeleteFeature: FeatureDefinition<
     }
 });
 
-export const deviceForceDeleteFeature: FeatureDefinition<
-    typeof deviceForceDelete.command,
-    typeof deviceForceDelete.input,
-    typeof deviceForceDelete.output
+export const devicesForceDeleteFeature: FeatureDefinition<
+    typeof devicesForceDelete.command,
+    typeof devicesForceDelete.input,
+    typeof devicesForceDelete.output
 > = defineFeature({
-    ...deviceForceDelete,
+    ...devicesForceDelete,
     mutates: true,
     access: { admin: true },
     handler: async (ctx, input) => {
@@ -299,7 +299,7 @@ export const deviceForceDeleteFeature: FeatureDefinition<
         ctx.monitor?.disconnectAgent(row.id);
         const updated = (await ctx.db.devices.findById(row.id)) ?? row;
         ctx.audit({
-            action: 'device.forceDelete',
+            action: 'devices.forceDelete',
             level: 'warning',
             description: `Suppression forcée (archivé sans auto-destruction de l'agent) : « ${row.name} »`,
             metadata: { deviceId: row.id, ownerId: row.owner_id }
@@ -315,22 +315,22 @@ export const deviceForceDeleteFeature: FeatureDefinition<
  * action d'espace : elle détruit une machine et sa supervision pour **tous** les
  * espaces avec lesquels elle est partagée, définitivement.
  */
-export const deviceDeleteFeature: FeatureDefinition<
-    typeof deviceDelete.command,
-    typeof deviceDelete.input,
-    typeof deviceDelete.output
+export const devicesDeleteFeature: FeatureDefinition<
+    typeof devicesDelete.command,
+    typeof devicesDelete.input,
+    typeof devicesDelete.output
 > = defineFeature({
-    ...deviceDelete,
+    ...devicesDelete,
     mutates: true,
     access: { admin: true },
     handler: async (ctx, input) => {
         const row = await authorizeDevice(ctx, input.deviceId);
         // Hard purge (used by the Monitoring page): removes the device row and,
         // by FK cascade, all its monitoring history. Does NOT self-destruct the
-        // agent — that's `device.requestDelete` from the Appareils page.
+        // agent — that's `devices.requestDelete` from the Appareils page.
         await ctx.db.devices.delete(row.id);
         ctx.audit({
-            action: 'device.delete',
+            action: 'devices.delete',
             level: 'warning',
             description: `Appareil et données supprimés : « ${row.name} »`,
             metadata: { deviceId: row.id, ownerId: row.owner_id }
@@ -344,17 +344,17 @@ export const deviceDeleteFeature: FeatureDefinition<
  *
  * Seuls les espaces **partagés** sont proposés : ranger la machine d'autrui dans
  * l'espace personnel d'un tiers n'aurait pas de sens, et l'accueil personnel
- * d'un administrateur voit déjà toute la flotte sans partage (`device.list`).
+ * d'un administrateur voit déjà toute la flotte sans partage (`devices.list`).
  *
  * C'est la seule commande qui énumère des espaces dont l'appelant n'est pas
  * membre — d'où `admin: true`, et rien de plus que l'identité et le nom.
  */
-export const deviceWorkspaceListFeature: FeatureDefinition<
-    typeof deviceWorkspaceList.command,
-    typeof deviceWorkspaceList.input,
-    typeof deviceWorkspaceList.output
+export const devicesWorkspaceListFeature: FeatureDefinition<
+    typeof devicesWorkspaceList.command,
+    typeof devicesWorkspaceList.input,
+    typeof devicesWorkspaceList.output
 > = defineFeature({
-    ...deviceWorkspaceList,
+    ...devicesWorkspaceList,
     access: { admin: true },
     handler: async (ctx, input) => {
         const row = await authorizeDevice(ctx, input.deviceId);
@@ -382,12 +382,12 @@ export const deviceWorkspaceListFeature: FeatureDefinition<
  * d'office — le retirer laisserait un appareil dont plus personne ne répond de
  * l'origine, alors qu'il porte encore l'unicité de son empreinte.
  */
-export const deviceSetWorkspacesFeature: FeatureDefinition<
-    typeof deviceSetWorkspaces.command,
-    typeof deviceSetWorkspaces.input,
-    typeof deviceSetWorkspaces.output
+export const devicesSetWorkspacesFeature: FeatureDefinition<
+    typeof devicesSetWorkspaces.command,
+    typeof devicesSetWorkspaces.input,
+    typeof devicesSetWorkspaces.output
 > = defineFeature({
-    ...deviceSetWorkspaces,
+    ...devicesSetWorkspaces,
     mutates: true,
     access: { admin: true },
     handler: async (ctx, input) => {
@@ -403,7 +403,7 @@ export const deviceSetWorkspacesFeature: FeatureDefinition<
         const removed = [...before].filter((id) => !wanted.has(id));
         if (added.length > 0 || removed.length > 0) {
             ctx.audit({
-                action: 'device.setWorkspaces',
+                action: 'devices.setWorkspaces',
                 level: 'warning',
                 description: `Partage modifié : « ${row.name} » — ${wanted.size} espace(s)`,
                 metadata: { deviceId: row.id, added, removed, workspaceIds: [...wanted] }

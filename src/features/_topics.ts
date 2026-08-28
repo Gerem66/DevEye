@@ -9,7 +9,8 @@ import { featureHandlers } from './registry';
  * avertir après une écriture.
  *
  * **Table explicite, jamais le préfixe brut.** Plusieurs préfixes seraient
- * faux : `metrics.*` et `device.*` désignent tous deux les appareils, et
+ * faux : `agent.*` (le transport) et `devices.*` (la feature) désignent tous
+ * deux les appareils, et
  * `home`, `workspace`, `user`, `secrecy`, `twofa`, `admin` ne correspondent à
  * aucune feature d'espace. Un préfixe absent
  * de cette table **fait échouer le démarrage** plutôt que de diffuser un sujet
@@ -17,6 +18,10 @@ import { featureHandlers } from './registry';
  */
 const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     admin: 'workspace',
+    // Le transport des agents : des relais vers l'agent d'un appareil, sans
+    // état côté serveur, sauf trois `mutates` (autostart, élévation,
+    // rétrogradation) qui changent ce que la liste d'appareils affiche.
+    agent: 'devices',
     // Même forme que `git` et `database` : préfixe unique, verbes en camelCase
     // derrière le point. Le filet `MUTATION_VERB` n'en voit donc **aucune** —
     // les `mutates` de cette feature se relisent à la main.
@@ -39,7 +44,7 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     // au dernier module resté une propriété d'un projet (migration 080). Verbes
     // en camelCase derrière un préfixe unique, donc `mutates` à relire à la main.
     deploy: 'deploy',
-    device: 'devices',
+    devices: 'devices',
     // Même forme que `git`, `database` et `audience` : préfixe unique, verbes en
     // camelCase derrière le point. Le filet `MUTATION_VERB` n'en voit donc
     // **aucune** ; les `mutates` de cette feature se relisent à la main.
@@ -52,7 +57,6 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     live: null,
     logs: null,
     mail: 'mail',
-    metrics: 'devices',
     // Préfixe unique depuis le rapatriement en module : les dossiers, qui
     // avaient le leur (`folder.*`), sont passés en verbes camelCase derrière
     // le point (`notes.folderAdd`). Le filet `MUTATION_VERB` voit les verbes
@@ -125,12 +129,12 @@ const NON_MUTATING = new Set([
     'secrecy.hold',
     'secrecy.touch',
     'secrecy.lock',
-    'metrics.subscribe',
+    'agent.subscribe',
     // Relaie un ordre à l'agent, n'écrit rien côté serveur — même nature que
-    // `metrics.refresh`.
+    // `agent.collect`.
     'sentinel.scanNow',
-    'metrics.unsubscribe',
-    'metrics.refresh',
+    'agent.unsubscribe',
+    'agent.collect',
     'cloudSync.subscribe',
     'cloudSync.unsubscribe',
     'cloudSync.syncNow',
@@ -144,21 +148,21 @@ const NON_MUTATING = new Set([
     'mail.attachmentScan',
     'mail.attachmentDownload',
     'workspace.activate',
-    'device.updateAgent',
-    'device.upgradePackages',
-    'device.listPackages',
-    'device.power',
-    'device.agentLifecycle',
-    'device.termOpen',
-    'device.termInput',
-    'device.termResize',
-    'device.termClose',
-    'device.filesMutate',
-    'device.filesUpload',
-    'device.filesDownload',
-    'device.filesSearch',
-    'device.filesAnalyze',
-    'device.logQuery',
+    'agent.update',
+    'agent.upgradePackages',
+    'agent.listPackages',
+    'agent.power',
+    'agent.lifecycle',
+    'agent.termOpen',
+    'agent.termInput',
+    'agent.termResize',
+    'agent.termClose',
+    'agent.filesMutate',
+    'agent.filesUpload',
+    'agent.filesDownload',
+    'agent.filesSearch',
+    'agent.filesAnalyze',
+    'agent.logQuery',
     'admin.inviteCreate',
     'admin.inviteRevoke'
 ]);

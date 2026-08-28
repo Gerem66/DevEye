@@ -1,18 +1,18 @@
-import { deviceListPackages, deviceUpgradePackages } from '@deveye/types';
+import { agentListPackages, agentUpgradePackages } from '@deveye/types';
 
+import { authorizeOnlineDevice } from '@/agent/authorize';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
-import { authorizeOnlineDevice } from './shared';
 
 /**
  * Ask the agent to enumerate its package managers. The result streams back
  * asynchronously as a `package.list` push event (caller must be subscribed).
  */
-export const deviceListPackagesFeature: FeatureDefinition<
-    typeof deviceListPackages.command,
-    typeof deviceListPackages.input,
-    typeof deviceListPackages.output
+export const agentListPackagesFeature: FeatureDefinition<
+    typeof agentListPackages.command,
+    typeof agentListPackages.input,
+    typeof agentListPackages.output
 > = defineFeature({
-    ...deviceListPackages,
+    ...agentListPackages,
     access: { admin: true },
     handler: async (ctx, input) => {
         const row = await authorizeOnlineDevice(ctx, input.deviceId);
@@ -26,12 +26,12 @@ export const deviceListPackagesFeature: FeatureDefinition<
  * Apply a manager's updates. Progress streams back as `package.progress` then
  * `package.done` events.
  */
-export const deviceUpgradePackagesFeature: FeatureDefinition<
-    typeof deviceUpgradePackages.command,
-    typeof deviceUpgradePackages.input,
-    typeof deviceUpgradePackages.output
+export const agentUpgradePackagesFeature: FeatureDefinition<
+    typeof agentUpgradePackages.command,
+    typeof agentUpgradePackages.input,
+    typeof agentUpgradePackages.output
 > = defineFeature({
-    ...deviceUpgradePackages,
+    ...agentUpgradePackages,
     access: { admin: true },
     handler: async (ctx, input) => {
         const row = await authorizeOnlineDevice(ctx, input.deviceId);
@@ -51,7 +51,7 @@ export const deviceUpgradePackagesFeature: FeatureDefinition<
         // doivent griser le bouton dès maintenant.
         monitor.publishPackageStarted({ deviceId: row.id, manager: input.manager });
         ctx.audit({
-            action: 'device.upgradePackages',
+            action: 'agent.upgradePackages',
             level: 'warning',
             description: `Mise à jour « ${input.manager} » lancée : « ${row.name} »`,
             metadata: { deviceId: row.id, ownerId: row.owner_id, manager: input.manager }

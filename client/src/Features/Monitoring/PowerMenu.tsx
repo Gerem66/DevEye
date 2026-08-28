@@ -95,7 +95,7 @@ export function PowerMenu({ deviceId }: { deviceId: string }) {
         setArmed(null);
         setResult(null);
         setSending(def.action);
-        ws.send('device.power', { deviceId, action: def.action }).catch((e) => {
+        ws.send('agent.power', { deviceId, action: def.action }).catch((e) => {
             setResult({ action: def.action, ok: false, error: e instanceof Error ? e.message : 'Échec' });
             setSending(null);
         });

@@ -1,4 +1,5 @@
 import type { FeatureDefinition } from './_define';
+import { agentFeatures } from './agent';
 import { deviceFeatures } from './devices';
 import { homeFeatures } from './home';
 import { adminFeatures } from './admin';
@@ -59,6 +60,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     userSetThemeFeature,
     userSetColorFeature,
     userSetSettingFeature,
+    ...agentFeatures,
     ...deviceFeatures,
     ...metricsFeatures,
     ...twoFactorFeatures,

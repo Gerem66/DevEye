@@ -123,6 +123,9 @@ export function moduleFeatureHandlers(): FeatureDefinition<string, never, never>
                 // `buildTopicIndex` refuse au boot un sujet inconnu.
                 mutates: def.mutates === true ? true : def.mutates ? (def.mutates as readonly LiveTopic[]) : undefined,
                 handler: async (ctx, input) => {
+                    // L'administrateur global, en plus du droit de feature :
+                    // les gestes de flotte (appairer, révoquer, supprimer).
+                    if (def.access?.admin) ctx.assertAdmin();
                     const sdkCtx = createSdkContext(ctx, mod.manifest, mod.repoFor(ctx.db), PROVIDERS);
                     for (const key of def.access?.extras ?? []) {
                         if (!sdkCtx.canExtra(key)) {

@@ -30,7 +30,7 @@ import { isShareWired, shareBlockerFor } from '../_sharing';
  *
  * La fonctionnalité visée est une **donnée d'entrée**, que le dispatcheur ne
  * connaît pas avant d'appeler le handler. Même situation que `notify.route*` et
- * `device.setConfig`, même remède : la garde est la première ligne, et le
+ * `devices.setConfig`, même remède : la garde est la première ligne, et le
  * fichier figure dans `ACCESS_EXEMPT` avec sa raison.
  */
 

@@ -1,19 +1,19 @@
-import { deviceLogQuery, deviceLogSources } from '@deveye/types';
+import { agentLogQuery, agentLogSources } from '@deveye/types';
 
+import { authorizeReachableDevice } from '@/agent/authorize';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
-import { authorizeReachableDevice } from './shared';
 
 /**
  * Ask the agent to enumerate its log sources (system journal, Docker containers,
  * log files…). Owner-or-admin + agent online. The list streams back as a
  * `device.logSources` push event (caller must be subscribed to the device).
  */
-export const deviceLogSourcesFeature: FeatureDefinition<
-    typeof deviceLogSources.command,
-    typeof deviceLogSources.input,
-    typeof deviceLogSources.output
+export const agentLogSourcesFeature: FeatureDefinition<
+    typeof agentLogSources.command,
+    typeof agentLogSources.input,
+    typeof agentLogSources.output
 > = defineFeature({
-    ...deviceLogSources,
+    ...agentLogSources,
     access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
@@ -28,12 +28,12 @@ export const deviceLogSourcesFeature: FeatureDefinition<
  * `device.logLines` push events keyed by `queryId`. Read-only; the agent reads the
  * logs live (nothing is persisted server-side).
  */
-export const deviceLogQueryFeature: FeatureDefinition<
-    typeof deviceLogQuery.command,
-    typeof deviceLogQuery.input,
-    typeof deviceLogQuery.output
+export const agentLogQueryFeature: FeatureDefinition<
+    typeof agentLogQuery.command,
+    typeof agentLogQuery.input,
+    typeof agentLogQuery.output
 > = defineFeature({
-    ...deviceLogQuery,
+    ...agentLogQuery,
     access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);

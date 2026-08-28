@@ -1,14 +1,14 @@
 import {
-    deviceFilesAnalyze,
-    deviceFilesDownload,
-    deviceFilesList,
-    deviceFilesMutate,
-    deviceFilesSearch,
-    deviceFilesUpload
+    agentFilesAnalyze,
+    agentFilesDownload,
+    agentFilesList,
+    agentFilesMutate,
+    agentFilesSearch,
+    agentFilesUpload
 } from '@deveye/types';
 
+import { authorizeReachableDevice } from '@/agent/authorize';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
-import { authorizeReachableDevice } from './shared';
 
 /**
  * File explorer commands for a device. Owner-or-admin + agent online. Read ops
@@ -17,12 +17,12 @@ import { authorizeReachableDevice } from './shared';
  * audited (cleanup is destructive).
  */
 
-export const deviceFilesListFeature: FeatureDefinition<
-    typeof deviceFilesList.command,
-    typeof deviceFilesList.input,
-    typeof deviceFilesList.output
+export const agentFilesListFeature: FeatureDefinition<
+    typeof agentFilesList.command,
+    typeof agentFilesList.input,
+    typeof agentFilesList.output
 > = defineFeature({
-    ...deviceFilesList,
+    ...agentFilesList,
     access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
@@ -32,12 +32,12 @@ export const deviceFilesListFeature: FeatureDefinition<
     }
 });
 
-export const deviceFilesAnalyzeFeature: FeatureDefinition<
-    typeof deviceFilesAnalyze.command,
-    typeof deviceFilesAnalyze.input,
-    typeof deviceFilesAnalyze.output
+export const agentFilesAnalyzeFeature: FeatureDefinition<
+    typeof agentFilesAnalyze.command,
+    typeof agentFilesAnalyze.input,
+    typeof agentFilesAnalyze.output
 > = defineFeature({
-    ...deviceFilesAnalyze,
+    ...agentFilesAnalyze,
     access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
@@ -47,12 +47,12 @@ export const deviceFilesAnalyzeFeature: FeatureDefinition<
     }
 });
 
-export const deviceFilesSearchFeature: FeatureDefinition<
-    typeof deviceFilesSearch.command,
-    typeof deviceFilesSearch.input,
-    typeof deviceFilesSearch.output
+export const agentFilesSearchFeature: FeatureDefinition<
+    typeof agentFilesSearch.command,
+    typeof agentFilesSearch.input,
+    typeof agentFilesSearch.output
 > = defineFeature({
-    ...deviceFilesSearch,
+    ...agentFilesSearch,
     access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
@@ -73,12 +73,12 @@ const MUTATE_LABELS: Record<string, string> = {
     rename: 'Renommage'
 };
 
-export const deviceFilesMutateFeature: FeatureDefinition<
-    typeof deviceFilesMutate.command,
-    typeof deviceFilesMutate.input,
-    typeof deviceFilesMutate.output
+export const agentFilesMutateFeature: FeatureDefinition<
+    typeof agentFilesMutate.command,
+    typeof agentFilesMutate.input,
+    typeof agentFilesMutate.output
 > = defineFeature({
-    ...deviceFilesMutate,
+    ...agentFilesMutate,
     access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
@@ -90,7 +90,7 @@ export const deviceFilesMutateFeature: FeatureDefinition<
         });
         if (!ok) throw new FeatureError('conflict', 'Agent hors ligne');
         ctx.audit({
-            action: 'device.filesMutate',
+            action: 'agent.filesMutate',
             level: input.op === 'delete' ? 'warning' : 'info',
             description: `${MUTATE_LABELS[input.op]} : « ${row.name} » — ${input.path}${input.dest ? ` → ${input.dest}` : ''}`,
             metadata: {
@@ -106,12 +106,12 @@ export const deviceFilesMutateFeature: FeatureDefinition<
 });
 
 /** Download a file: chunks stream back as `device.filesChunk` push events. */
-export const deviceFilesDownloadFeature: FeatureDefinition<
-    typeof deviceFilesDownload.command,
-    typeof deviceFilesDownload.input,
-    typeof deviceFilesDownload.output
+export const agentFilesDownloadFeature: FeatureDefinition<
+    typeof agentFilesDownload.command,
+    typeof agentFilesDownload.input,
+    typeof agentFilesDownload.output
 > = defineFeature({
-    ...deviceFilesDownload,
+    ...agentFilesDownload,
     access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
@@ -125,12 +125,12 @@ export const deviceFilesDownloadFeature: FeatureDefinition<
  * Upload one chunk of a file. The first chunk (offset 0) is audited as the upload;
  * later chunks just stream the bytes. Completion arrives as a `device.filesOp` push.
  */
-export const deviceFilesUploadFeature: FeatureDefinition<
-    typeof deviceFilesUpload.command,
-    typeof deviceFilesUpload.input,
-    typeof deviceFilesUpload.output
+export const agentFilesUploadFeature: FeatureDefinition<
+    typeof agentFilesUpload.command,
+    typeof agentFilesUpload.input,
+    typeof agentFilesUpload.output
 > = defineFeature({
-    ...deviceFilesUpload,
+    ...agentFilesUpload,
     access: { feature: 'devices', level: 'write' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
@@ -144,7 +144,7 @@ export const deviceFilesUploadFeature: FeatureDefinition<
         if (!ok) throw new FeatureError('conflict', 'Agent hors ligne');
         if (input.offset === 0) {
             ctx.audit({
-                action: 'device.filesUpload',
+                action: 'agent.filesUpload',
                 description: `Téléversement : « ${row.name} » — ${input.path}`,
                 metadata: { deviceId: row.id, ownerId: row.owner_id, path: input.path }
             });

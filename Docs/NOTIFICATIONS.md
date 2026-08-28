@@ -210,7 +210,7 @@ pas les canaux de la fonctionnalité.
 Aucune commande du module n'a d'autorisation déclarative : la fonctionnalité
 visée est une donnée d'entrée (l'argument `feature`, ou celle du canal visé par
 son id), pas une constante de la commande. Le contrôle est donc en première
-ligne de chaque handler, comme pour `device.setConfig`, et pour la même raison.
+ligne de chaque handler, comme pour `devices.setConfig`, et pour la même raison.
 
 ---
 

@@ -134,7 +134,7 @@ export default function Monitoring() {
     const reorder = useCallback((ids: (string | number)[]) => {
         const byId = new Map(currentList.current.map((d) => [d.id, d]));
         setOrdered(ids.flatMap((id) => byId.get(String(id)) ?? []));
-        ws.send('device.reorder', { ids: ids.map(String) }).catch(() => setOrdered(null));
+        ws.send('devices.reorder', { ids: ids.map(String) }).catch(() => setOrdered(null));
     }, []);
 
     const drag = useDragReorder<HTMLDivElement, HTMLSpanElement>({

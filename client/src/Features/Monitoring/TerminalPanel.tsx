@@ -117,7 +117,7 @@ export function TerminalPanel({ deviceId, onClose }: { deviceId: string; onClose
                 term.refresh(0, term.rows - 1);
             });
             void ws
-                .send('device.termOpen', {
+                .send('agent.termOpen', {
                     deviceId,
                     sessionId,
                     cols: term.cols,
@@ -130,15 +130,13 @@ export function TerminalPanel({ deviceId, onClose }: { deviceId: string; onClose
         // Keystrokes / paste → agent.
         const onData = term.onData((d) => {
             void ws
-                .send('device.termInput', { deviceId, sessionId, data: bytesToBase64(new TextEncoder().encode(d)) })
+                .send('agent.termInput', { deviceId, sessionId, data: bytesToBase64(new TextEncoder().encode(d)) })
                 .catch(() => {});
         });
 
         // Viewport changes → resize the PTY to match.
         const pushResize = () => {
-            void ws
-                .send('device.termResize', { deviceId, sessionId, cols: term.cols, rows: term.rows })
-                .catch(() => {});
+            void ws.send('agent.termResize', { deviceId, sessionId, cols: term.cols, rows: term.rows }).catch(() => {});
         };
         const onResize = term.onResize(pushResize);
         const observer = new ResizeObserver(() => {
@@ -168,7 +166,7 @@ export function TerminalPanel({ deviceId, onClose }: { deviceId: string; onClose
             onData.dispose();
             onResize.dispose();
             observer.disconnect();
-            void ws.send('device.termClose', { deviceId, sessionId }).catch(() => {});
+            void ws.send('agent.termClose', { deviceId, sessionId }).catch(() => {});
             term.dispose();
         };
     }, [deviceId, generation]);

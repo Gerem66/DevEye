@@ -13,6 +13,7 @@ import type { DeviceRow, NotificationFeature } from '@deveye/types';
 
 import type { Database } from '@/db';
 import type { Logger } from 'pino';
+import { authorizeDevice } from '@/agent/authorize';
 import { parseDeviceReport } from '@/agent/mappers';
 import { editMessage, postMessage } from '@/Services/discord';
 import { deliver, discordChannels, hasChannel, resolveChannelIds, resolveRoute } from '@/Services/notifications';
@@ -140,19 +141,16 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
             }
         },
         devices: {
-            // Sémantique d'`authorizeDevice` (features/devices/shared) : la
-            // ligne doit exister ET appartenir à CET espace, l'admin global
-            // passant outre l'appartenance.
+            // La garde unique des appareils (`agent/authorize.ts`), celle du
+            // transport et de la feature : la ligne doit exister ET appartenir
+            // à CET espace, l'admin global passant outre l'appartenance. Elle
+            // ne demande que la base, l'espace et le statut, ce que la façade
+            // porte sans session ni socket.
             async authorize(deviceId) {
                 gate('devices.read');
-                const row = await deps.db.devices.findById(deviceId);
-                if (!row) throw new FeatureError('not_found', 'Appareil introuvable');
-                if (!deps.isAdmin && !(await deps.db.devices.hasWorkspace(row.id, deps.workspaceId))) {
-                    throw new FeatureError('forbidden', 'Cet appareil ne relève pas de cet espace');
-                }
-                return toSdkDevice(row);
+                return toSdkDevice(await authorizeDevice(deps, deviceId));
             },
-            // Même règle que `device.list` : l'administrateur dans son espace
+            // Même règle que `devices.list` : l'administrateur dans son espace
             // PERSONNEL voit la flotte entière (c'est là qu'il surveille ses
             // machines, et l'obliger à se partager chaque appareil à lui-même
             // n'aurait rien protégé) ; partout ailleurs, le partage explicite.
@@ -229,6 +227,9 @@ export function agentsFacade(gate: () => void): AgentsFacade {
         isOnline: (deviceId) => (gate(), sdkHub().isOnline(deviceId)),
         requestScan: (deviceId) => (gate(), sdkHub().requestScan(deviceId)),
         pushConfig: (deviceId) => (gate(), pushAgentConfig(deviceId)),
+        requestDestroy: (deviceId) => (gate(), sdkHub().requestDestroy(deviceId)),
+        disconnectAgent: (deviceId) => (gate(), sdkHub().disconnectAgent(deviceId)),
+        resetAgentSession: (deviceId) => (gate(), sdkHub().resetAgentSession(deviceId)),
         requestSyncConfig: (deviceId, payload) => (gate(), sdkHub().requestSyncConfig(deviceId, payload)),
         requestSyncScan: (deviceId, payload) => (gate(), sdkHub().requestSyncScan(deviceId, payload)),
         requestSyncPush: (deviceId, payload) => (gate(), sdkHub().requestSyncPush(deviceId, payload)),

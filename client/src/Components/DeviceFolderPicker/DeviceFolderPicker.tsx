@@ -34,7 +34,7 @@ interface DeviceFolderPickerProps {
 
 /**
  * Mini-explorateur de dossiers d'un appareil, sur les commandes de
- * l'explorateur de fichiers du Monitoring (`device.filesList` + push corrélé
+ * l'explorateur de fichiers du Monitoring (`agent.filesList` + push corrélé
  * par opId) — dossiers uniquement, avec « Choisir ce dossier », « Actualiser »
  * et « Nouveau dossier ».
  *
@@ -74,7 +74,7 @@ export function DeviceFolderPicker({
             listOp.current = opId;
             setLoading(true);
             setError(null);
-            void ws.send('device.filesList', { deviceId, opId, path: target }).catch((e) => {
+            void ws.send('agent.filesList', { deviceId, opId, path: target }).catch((e) => {
                 setLoading(false);
                 setError(e instanceof Error ? e.message : 'Échec');
             });
@@ -143,7 +143,7 @@ export function DeviceFolderPicker({
         mkdirTarget.current = joinPath(listing.path, name);
         setMkdirOpen(false);
         setError(null);
-        void ws.send('device.filesMutate', { deviceId, opId, op: 'mkdir', path: mkdirTarget.current }).catch((e) => {
+        void ws.send('agent.filesMutate', { deviceId, opId, op: 'mkdir', path: mkdirTarget.current }).catch((e) => {
             mkdirTarget.current = null;
             setError(e instanceof Error ? e.message : 'Création impossible');
         });

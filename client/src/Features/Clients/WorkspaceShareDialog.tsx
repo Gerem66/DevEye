@@ -40,7 +40,7 @@ export function WorkspaceShareDialog({ open, target, onClose, onSaved }: Workspa
         let cancelled = false;
         setLoading(true);
         setError(null);
-        ws.send('device.workspaceList', { deviceId: target.id })
+        ws.send('devices.workspaceList', { deviceId: target.id })
             .then((res) => {
                 if (cancelled) return;
                 setRows(res.workspaces);
@@ -72,7 +72,7 @@ export function WorkspaceShareDialog({ open, target, onClose, onSaved }: Workspa
         setSaving(true);
         setError(null);
         try {
-            await ws.send('device.setWorkspaces', { deviceId: target.id, workspaceIds: [...selected] });
+            await ws.send('devices.setWorkspaces', { deviceId: target.id, workspaceIds: [...selected] });
             onSaved();
             onClose();
         } catch (e) {

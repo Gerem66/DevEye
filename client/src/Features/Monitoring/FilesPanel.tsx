@@ -175,7 +175,7 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
             usageOp.current = opId;
             usagePath.current = target;
             setAnalyzing(true);
-            void ws.send('device.filesAnalyze', { deviceId, opId, path: target }).catch(() => setAnalyzing(false));
+            void ws.send('agent.filesAnalyze', { deviceId, opId, path: target }).catch(() => setAnalyzing(false));
         },
         [deviceId]
     );
@@ -190,7 +190,7 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
             // Optimistically show the indeterminate bars until the cache hit / fresh
             // analysis lands, so navigation never flashes misleading own-size bars.
             setAnalyzing(true);
-            void ws.send('device.filesList', { deviceId, opId, path: target }).catch((e) => {
+            void ws.send('agent.filesList', { deviceId, opId, path: target }).catch((e) => {
                 setLoading(false);
                 setAnalyzing(false);
                 setError(e instanceof Error ? e.message : 'Échec');
@@ -324,7 +324,7 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
             dlName.current = entry.kind === 'dir' ? `${entry.name}.tar.gz` : entry.name;
             setDownloading(entry.name);
             setError(null);
-            void ws.send('device.filesDownload', { deviceId, opId, path: joinPath(path, entry.name) }).catch((e) => {
+            void ws.send('agent.filesDownload', { deviceId, opId, path: joinPath(path, entry.name) }).catch((e) => {
                 setDownloading(null);
                 setError(e instanceof Error ? e.message : 'Échec');
             });
@@ -344,7 +344,7 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
                 for (let off = 0; off === 0 || off < bytes.length; off += UPLOAD_CHUNK) {
                     const slice = bytes.subarray(off, Math.min(off + UPLOAD_CHUNK, bytes.length));
                     const done = off + UPLOAD_CHUNK >= bytes.length;
-                    await ws.send('device.filesUpload', {
+                    await ws.send('agent.filesUpload', {
                         deviceId,
                         opId,
                         path: dest,
@@ -377,7 +377,7 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
             mkdirTarget.current = op === 'mkdir' ? target : null;
             setError(null);
             void ws
-                .send('device.filesMutate', { deviceId, opId, op, path: target, dest })
+                .send('agent.filesMutate', { deviceId, opId, op, path: target, dest })
                 .catch((e) => setError(e instanceof Error ? e.message : 'Échec'));
         },
         [deviceId]
@@ -404,7 +404,7 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
         setSearching(true);
         setMatches(null);
         setError(null);
-        void ws.send('device.filesSearch', { deviceId, opId, path, filter }).catch((e) => {
+        void ws.send('agent.filesSearch', { deviceId, opId, path, filter }).catch((e) => {
             setSearching(false);
             setError(e instanceof Error ? e.message : 'Échec');
         });

@@ -58,7 +58,7 @@ function send(socket: WebSocket, msg: ServerMessage): void {
  * parle pas d'un appareil, donc pour l'immense majorité d'entre elles.
  */
 async function deviceWorkspacesOf(db: Database, command: string, payload: unknown): Promise<number[]> {
-    if (!command.startsWith('device.') && !command.startsWith('metrics.')) return [];
+    if (!command.startsWith('agent.') && !command.startsWith('devices.')) return [];
     const deviceId = (payload as { deviceId?: unknown } | null)?.deviceId;
     if (typeof deviceId !== 'string' || deviceId.length === 0) return [];
     return db.devices.workspaceIdsOf(deviceId);
@@ -371,8 +371,8 @@ export async function registerWS(
                     // leur échapperait jusqu'au rechargement.
                     //
                     // L'union avant/après est nécessaire dans les deux sens :
-                    // `device.delete` efface les rattachements (seul « avant »
-                    // les connaît), `device.setWorkspaces` en crée (seul
+                    // `devices.delete` efface les rattachements (seul « avant »
+                    // les connaît), `devices.setWorkspaces` en crée (seul
                     // « après » les voit).
                     for (const wid of unionWorkspaces(sharedBefore, await deviceWorkspacesOf(db, command, payload))) {
                         if (wid !== auditWorkspaceId) liveHub.changed(wid, topics, session!.userId);

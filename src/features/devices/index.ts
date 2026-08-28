@@ -1,86 +1,41 @@
 import type { FeatureDefinition } from '../_define';
-import { deviceAgentLifecycleFeature } from './agentLifecycle';
-import { deviceUpdateAgentFeature } from './agentUpdate';
 import {
-    deviceCancelDeleteFeature,
-    deviceConfirmFeature,
-    deviceDeleteFeature,
-    deviceForceDeleteFeature,
-    deviceListFeature,
-    deviceReactivateFeature,
-    deviceRenameFeature,
-    deviceReorderFeature,
-    deviceRequestDeleteFeature,
-    deviceRevokeFeature,
-    deviceSetConfigFeature,
-    deviceSetWorkspacesFeature,
-    deviceWorkspaceListFeature
+    devicesCancelDeleteFeature,
+    devicesConfirmFeature,
+    devicesDeleteFeature,
+    devicesForceDeleteFeature,
+    devicesListFeature,
+    devicesReactivateFeature,
+    devicesRenameFeature,
+    devicesReorderFeature,
+    devicesRequestDeleteFeature,
+    devicesRevokeFeature,
+    devicesSetConfigFeature,
+    devicesSetWorkspacesFeature,
+    devicesWorkspaceListFeature
 } from './lifecycle';
-import {
-    deviceFilesAnalyzeFeature,
-    deviceFilesDownloadFeature,
-    deviceFilesListFeature,
-    deviceFilesMutateFeature,
-    deviceFilesSearchFeature,
-    deviceFilesUploadFeature
-} from './files';
-import { deviceLogQueryFeature, deviceLogSourcesFeature } from './logs';
-import { deviceListPackagesFeature, deviceUpgradePackagesFeature } from './packages';
-import { devicePowerFeature } from './power';
-import {
-    deviceTermCloseFeature,
-    deviceTermInputFeature,
-    deviceTermOpenFeature,
-    deviceTermResizeFeature
-} from './terminal';
-import { deviceDropPrivilegesFeature, deviceElevateFeature, deviceSetAutostartFeature } from './service';
 
 /**
- * The device (Appareils + Monitoring) feature handlers, grouped by concern:
- * - `lifecycle`  — enrollment/status (list, confirm, revoke, rename, delete…)
- *                 et le partage entre espaces (workspaceList, setWorkspaces)
- * - `agentUpdate` — signed self-update push
- * - `agentLifecycle` — stop / clean restart of the agent process
- * - `service`    — persistence/privileges (autostart, elevate, drop)
- * - `packages`   — update-manager detection + live upgrades
- * - `power`      — system power actions (shutdown, reboot, suspend, lock…)
- * - `logs`       — on-device log viewer (journald, Docker, files…)
- * - `terminal`   — interactive remote shell (PTY) sessions
- * - `files`      — file explorer (list, usage analysis, search, mutations)
+ * La feature Appareils (pages Appareils et Monitoring), part cycle de vie :
+ * appairage et statut (liste, approbation, révocation, renommage, suppression),
+ * configuration de collecte et partage entre espaces (workspaceList,
+ * setWorkspaces). L'historique lu en base est dans `../metrics`, sous le même
+ * préfixe `devices.*` ; tout ce qui relaie un ordre à l'agent est du transport,
+ * dans `../agent` (`agent.*`).
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const deviceFeatures: FeatureDefinition<string, any, any>[] = [
-    deviceListFeature,
-    deviceConfirmFeature,
-    deviceRevokeFeature,
-    deviceReactivateFeature,
-    deviceRenameFeature,
-    deviceReorderFeature,
-    deviceSetConfigFeature,
-    deviceWorkspaceListFeature,
-    deviceSetWorkspacesFeature,
-    deviceUpdateAgentFeature,
-    deviceSetAutostartFeature,
-    deviceElevateFeature,
-    deviceDropPrivilegesFeature,
-    deviceListPackagesFeature,
-    deviceUpgradePackagesFeature,
-    devicePowerFeature,
-    deviceAgentLifecycleFeature,
-    deviceLogSourcesFeature,
-    deviceLogQueryFeature,
-    deviceTermOpenFeature,
-    deviceTermInputFeature,
-    deviceTermResizeFeature,
-    deviceTermCloseFeature,
-    deviceFilesListFeature,
-    deviceFilesAnalyzeFeature,
-    deviceFilesSearchFeature,
-    deviceFilesMutateFeature,
-    deviceFilesDownloadFeature,
-    deviceFilesUploadFeature,
-    deviceRequestDeleteFeature,
-    deviceCancelDeleteFeature,
-    deviceForceDeleteFeature,
-    deviceDeleteFeature
+    devicesListFeature,
+    devicesConfirmFeature,
+    devicesRevokeFeature,
+    devicesReactivateFeature,
+    devicesRenameFeature,
+    devicesReorderFeature,
+    devicesSetConfigFeature,
+    devicesWorkspaceListFeature,
+    devicesSetWorkspacesFeature,
+    devicesRequestDeleteFeature,
+    devicesCancelDeleteFeature,
+    devicesForceDeleteFeature,
+    devicesDeleteFeature
 ];

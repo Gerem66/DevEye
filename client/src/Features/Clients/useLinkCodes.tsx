@@ -128,7 +128,7 @@ export function useLinkCodes(refresh: () => Promise<void> | void) {
     // va au moment exact où il est consommé plutôt qu'au tour suivant.
     useEffect(() => {
         if (!showLinkModal) return;
-        return onResourceChange('device.list', () => void fetchCodes());
+        return onResourceChange('devices.list', () => void fetchCodes());
     }, [showLinkModal]);
 
     return {
