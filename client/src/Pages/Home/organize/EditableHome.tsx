@@ -25,10 +25,11 @@ import {
     type SortingStrategy
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { Device, HomeFeatureId, HomeFolder, HomeSection, HomeTile, ShortcutItem } from '@deveye/types';
+import type { HomeFeatureId, HomeFolder, HomeSection, HomeTile, ShortcutItem } from '@deveye/types';
 import { homeTileId, isFeatureTile, isHomeFolder, isShortcutTile } from '@deveye/types';
+import type { SdkDeviceSummary } from '@deveye/types/sdk/client';
 
-import { useDevices } from '@/stores/devices';
+import { useDevices } from '@/devicesProvider';
 import {
     addFolder,
     addSection,
@@ -400,7 +401,7 @@ function SectionTiles({
     onRemoveFolder
 }: {
     section: HomeSection;
-    devices: Device[];
+    devices: readonly SdkDeviceSummary[];
     onAdd: () => void;
     onAddFolder: () => void;
     onOpenFolder: (folder: HomeFolder) => void;
@@ -473,7 +474,7 @@ function SortableSection({
     onRemove
 }: {
     section: HomeSection;
-    devices: Device[];
+    devices: readonly SdkDeviceSummary[];
     /** Le dossier déplié, quand il appartient à cette section. */
     openFolder: HomeFolder | null;
     onAdd: () => void;

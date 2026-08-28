@@ -9,10 +9,6 @@ import {
     enrollDeviceRequestSchema,
     enrollDeviceResponseSchema,
     err,
-    linkCodeRequestSchema,
-    linkCodeResponseSchema,
-    linkCodesListResponseSchema,
-    linkCodeUpdateSchema,
     ok,
     type AgentTarget,
     type DeviceRow
@@ -23,7 +19,6 @@ import { ACCESS_COOKIE } from '@/auth/cookies';
 import { signDeviceToken, verifyAccessToken, verifyDeviceToken } from '@/auth/jwt';
 import { isAdminUser } from '@/features/_access';
 import { sha256hex } from '@/Utils/hash';
-import { env } from '@/Utils/Env';
 import type { AuditLog } from '@/Services/AuditLog';
 import { agentDistDir, readSyncedManifest } from './sync';
 import { deviceRowToDevice } from './mappers';
@@ -68,108 +63,47 @@ async function serveBinary(reply: FastifyReply, target: AgentTarget): Promise<Fa
 }
 
 /**
- * HTTP endpoints for the device-linking handshake:
- *  - POST /api/devices/link   (auth user)  → mint a short-lived link code
- *  - POST /api/agent/enroll   (public)     → exchange code for a device token
+ * Les routes HTTP de l'infrastructure des agents :
+ *  - POST /api/agent/enroll          (public)  → échange un code de liaison
+ *    contre un jeton d'appareil ;
+ *  - GET  /api/agent/targets, /api/agent/download/:target (admin) et
+ *    /api/agent/self-update/:target (jeton d'appareil) → la distribution des
+ *    binaires.
+ *
+ * L'émission des codes de liaison (`devices.linkCode*`) est une commande du
+ * module `features/devices`, comme le reste de la flotte : seule leur
+ * consommation, publique et sans session, reste ici.
  */
 export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }: AgentRouteDeps): Promise<void> {
     /**
      * Resolve the caller as an admin for the fleet (Appareils) HTTP endpoints.
-     * Device pairing, link-code management and agent-binary distribution are
-     * reached only from the admin-only Appareils page, so they enforce the admin
-     * role server-side too — hiding the menu entry is not a boundary on its own.
-     * Returns the admin's user id, or `null` after already sending the 401/403.
+     * Agent-binary distribution is reached only from the admin-only Appareils
+     * page, so it enforces the admin role server-side too — hiding the menu
+     * entry is not a boundary on its own. Returns `false` after already sending
+     * the 401/403.
      */
-    const requireAdmin = async (req: FastifyRequest, reply: FastifyReply): Promise<number | null> => {
+    const requireAdmin = async (req: FastifyRequest, reply: FastifyReply): Promise<boolean> => {
         const accessToken = req.cookies[ACCESS_COOKIE];
         if (!accessToken) {
             void reply.code(401).send(err('auth_required', 'No session'));
-            return null;
+            return false;
         }
         const claims = await verifyAccessToken(accessToken);
         if (!claims) {
             void reply.code(401).send(err('auth_expired', 'Access token expired'));
-            return null;
+            return false;
         }
         if (!(await isAdminUser(db, Number(claims.sub)))) {
             void reply.code(403).send(err('forbidden', 'Réservé aux administrateurs'));
-            return null;
+            return false;
         }
-        return Number(claims.sub);
+        return true;
     };
-
-    app.post('/api/devices/link', async (req, reply) => {
-        const userId = await requireAdmin(req, reply);
-        if (userId === null) return;
-
-        const parsed = linkCodeRequestSchema.safeParse(req.body ?? {});
-        if (!parsed.success) {
-            return reply.code(400).send(err('validation', 'Invalid link options', parsed.error.flatten()));
-        }
-        // undefined → server default; null → never expires; number → custom.
-        const ttlSeconds = parsed.data.ttlSeconds === undefined ? env.LINK_CODE_TTL_SECONDS : parsed.data.ttlSeconds;
-
-        // L'espace de destination, à défaut celui de l'émetteur. L'appartenance
-        // est vérifiée : un code ne peut pas déposer une machine dans un espace
-        // que son émetteur ne fréquente pas.
-        const issuer = await db.users.findById(userId);
-        if (!issuer) return reply.code(401).send(err('auth_invalid', 'Unknown user'));
-        const workspaceId = parsed.data.workspaceId ?? issuer.personal_workspace_id;
-        if (!(await db.workspaceMembers.isMember(userId, workspaceId))) {
-            return reply.code(403).send(err('forbidden', 'Vous n’êtes pas membre de cet espace'));
-        }
-
-        const created = await db.linkCodes.create({
-            userId,
-            workspaceId,
-            ttlSeconds,
-            autoApprove: parsed.data.autoApprove
-        });
-        return reply.send(ok(linkCodeResponseSchema.parse(created)));
-    });
-
-    // Active (unconsumed, unexpired) link codes — lets the UI show the table of
-    // pending codes and re-grab one after the dialog was closed.
-    app.get('/api/devices/link-codes', async (req, reply) => {
-        const userId = await requireAdmin(req, reply);
-        if (userId === null) return;
-
-        const codes = await db.linkCodes.listActive(userId);
-        return reply.send(ok(linkCodesListResponseSchema.parse({ codes })));
-    });
-
-    // Toggle a still-active code's auto-approval (edited from the codes table).
-    app.patch<{ Params: { code: string } }>('/api/devices/link-codes/:code', async (req, reply) => {
-        const userId = await requireAdmin(req, reply);
-        if (userId === null) return;
-
-        const parsed = linkCodeUpdateSchema.safeParse(req.body ?? {});
-        if (!parsed.success) {
-            return reply.code(400).send(err('validation', 'Invalid update', parsed.error.flatten()));
-        }
-        const updated = await db.linkCodes.setAutoApprove(
-            userId,
-            req.params.code.trim().toUpperCase(),
-            parsed.data.autoApprove
-        );
-        if (!updated) return reply.code(404).send(err('not_found', 'Code not found'));
-        return reply.send(ok(linkCodeResponseSchema.parse(updated)));
-    });
-
-    // Manually invalidate a pending code (e.g. cancel one you no longer need).
-    app.delete<{ Params: { code: string } }>('/api/devices/link-codes/:code', async (req, reply) => {
-        const userId = await requireAdmin(req, reply);
-        if (userId === null) return;
-
-        const removed = await db.linkCodes.revoke(userId, req.params.code.trim().toUpperCase());
-        if (!removed) return reply.code(404).send(err('not_found', 'Code not found'));
-        return reply.send(ok({ code: req.params.code }));
-    });
 
     // Availability of each shippable agent binary, so the UI can grey out the
     // targets whose file isn't present (e.g. a dev box that only built its own).
     app.get('/api/agent/targets', async (req, reply) => {
-        if ((await requireAdmin(req, reply)) === null) return;
+        if (!(await requireAdmin(req, reply))) return;
 
         const targets = await Promise.all(
             AGENT_TARGETS.map(async (t) => {
@@ -191,7 +125,7 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }
     // Stream a prebuilt agent binary as a download. Admin-only like the rest of
     // the Appareils page (binaries aren't secret, but no non-admin enumeration).
     app.get<{ Params: { target: string } }>('/api/agent/download/:target', async (req, reply) => {
-        if ((await requireAdmin(req, reply)) === null) return;
+        if (!(await requireAdmin(req, reply))) return;
 
         const parsed = agentTargetSchema.safeParse(req.params.target);
         if (!parsed.success) return reply.code(400).send(err('validation', 'Unknown agent target'));
@@ -246,7 +180,7 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }
         return serveBinary(reply, parsed.data);
     });
 
-    // Seule route publique et sans session du module, et elle consomme un
+    // Seule route publique et sans session de ce fichier, et elle consomme un
     // secret de 8 caractères sur un alphabet de 31 — la deviner tient au nombre
     // d'essais qu'on laisse faire. Le plafond global ne suffit pas : il se
     // mesure sur toutes les routes confondues, alors qu'ici une adresse n'a

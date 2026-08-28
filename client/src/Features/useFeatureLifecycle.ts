@@ -18,7 +18,7 @@ import type { FeatureLifecycle } from './types';
  * useFeatureLifecycle({
  *     onUnmount: () => {
  *         saveDraft();
- *         ws.send('agent.unsubscribe', { id });
+ *         stopWatching(id);
  *     }
  * });
  */

@@ -1,7 +1,6 @@
 import { type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import type { FeatureId, HomeTopbarWidgetId, WorkspaceKind } from '@deveye/types';
 
-import { useDevices } from '@/stores/devices';
 import { useHomeLayout } from '@/stores/homeLayout';
 import { useActiveWorkspace, useWorkspacePermissions } from '@/stores/workspace';
 import { clientModules, moduleClient } from '@/sdk/registry';
@@ -25,7 +24,6 @@ export interface TopbarWidgetMeta {
 }
 
 const NATIVE_TOPBAR_WIDGETS: TopbarWidgetMeta[] = [
-    { id: 'devices', title: 'Appareils connectés', icon: 'server', description: "Nombre d'appareils en ligne" },
     { id: 'secrecy', title: 'Chiffrement', icon: 'lock', description: 'Minuteur du chiffrement par mot de passe' },
     { id: 'live', title: 'Présence', icon: 'user', description: 'Qui est dans cet espace, et où' }
 ];
@@ -94,31 +92,17 @@ export function usableTopbarWidgetIds(
     return ids.filter((id) => allowed.has(id));
 }
 
-/** Devices mini-widget: online / total connected devices (archived excluded). */
-export function DevicesStatus() {
-    const { devices: allDevices } = useDevices();
-    const devices = allDevices.filter((d) => d.status !== 'archived');
-    const onlineCount = devices.filter((d) => d.online).length;
-    return (
-        <span className={styles.statusItem} title='Appareils en ligne'>
-            <span className={`icon icon-server ${onlineCount > 0 ? styles.statusOk : ''}`} />
-            {onlineCount}/{devices.length}
-        </span>
-    );
-}
-
 /** Render a single topbar widget by id (shared by the live navbar and the editor). */
 export function renderTopbarWidget(id: HomeTopbarWidgetId, onOpenSecurity?: (e: ReactMouseEvent) => void): ReactNode {
     switch (id) {
-        case 'devices':
-            return <DevicesStatus />;
         case 'secrecy':
             return <SecrecyTimer onOpenSecurity={onOpenSecurity} />;
         case 'live':
             return <LivePresence />;
         default: {
-            // Widget d'un module (Météo et Uptime compris) : l'hôte fournit le cadre
-            // stylé et le titre, le module fournit le contenu, sans props.
+            // Widget d'un module (Météo, Uptime et Appareils compris) : l'hôte
+            // fournit le cadre stylé et le titre, le module fournit le contenu,
+            // sans props.
             const meta = topbarCatalog().find((w) => w.id === id);
             const Widget = moduleClient(id)?.TopbarWidget;
             if (!meta || !Widget) return null;

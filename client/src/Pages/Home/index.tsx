@@ -11,8 +11,8 @@ import {
 } from '@/stores/workspace';
 import { ws } from '@/api/ws';
 import { OpenPopup } from '@/Components/Popup';
-import { isHomeReady, onHomeReady } from '@/stores/homeReady';
-import { refreshDevices, resetDevices, useDevices } from '@/stores/devices';
+import { isHomeReady, markHomeReady, onHomeReady } from '@/stores/homeReady';
+import { devicesProvider, useDevices } from '@/devicesProvider';
 import { setPermissions, useWorkspacePermissions } from '@/stores/workspace';
 import { useResourceVersion } from '@/stores/invalidation';
 import { syncThemeFromServer } from '@/stores/theme';
@@ -39,24 +39,13 @@ import { InfoPopup, openInfo } from '@/Components/InfoPopup';
 import CreateWorkspacePopup, { CREATE_WORKSPACE_POPUP } from './popup-create-workspace';
 
 // Structural feature views (no grid card)
-import Clients from '@/Features/Clients';
 import Security from '@/Features/Security';
 import FeatureProfile from '@/Features/Profile';
 import FeatureLogs from '@/Features/Logs';
 import FeatureWorkspace from '@/Features/Workspace';
 import FeatureUsers from '@/Features/Users';
-// Device popup content (Monitoring panel without the sidebar)
-import MonitoringPanel from '@/Features/Monitoring/MonitoringPanel';
 
-import {
-    featureCatalog,
-    featureAllowed,
-    featureCatalogEntry,
-    featureIdAllowed,
-    folderFeatures,
-    usableFeatureIds,
-    type HomeAudience
-} from './catalog';
+import { featureCatalog, folderFeatures } from './catalog';
 import { isForceReload } from './forceReload';
 import {
     DEVICE_VIEW_PREFIX,
@@ -90,7 +79,7 @@ interface ViewConfig {
     holdSecrecy?: boolean;
     /** Static feature/page view component (typed to accept FeatureProps). */
     FullComponent?: ComponentType<FeatureProps>;
-    /** Custom render for a device view, bound to its deviceId. */
+    /** Custom render for a device view, bound to its deviceId (the module's panel). */
     renderDevice?: () => ReactNode;
 }
 
@@ -120,14 +109,6 @@ const buildStaticViews = (): ViewConfig[] => [
         cacheDurationMinutes: 0,
         hasCard: false,
         FullComponent: FeatureProfile
-    },
-    {
-        id: 'clients',
-        title: 'Appareils',
-        icon: 'server',
-        cacheDurationMinutes: 5,
-        hasCard: false,
-        FullComponent: Clients
     },
     {
         id: 'security',
@@ -172,8 +153,8 @@ const buildStaticViews = (): ViewConfig[] => [
  */
 function featureBehind(viewId: string): WorkspaceFeatureId | null {
     if (WORKSPACE_FEATURE_IDS.includes(viewId as WorkspaceFeatureId)) return viewId as WorkspaceFeatureId;
-    // La page Appareils et chaque vue d'appareil relèvent du même droit.
-    if (viewId === 'clients' || viewId.startsWith(DEVICE_VIEW_PREFIX)) return 'devices';
+    // Chaque vue d'appareil relève du droit de la feature Appareils.
+    if (viewId.startsWith(DEVICE_VIEW_PREFIX)) return 'devices';
     return null;
 }
 
@@ -194,13 +175,8 @@ function survivesWorkspaceSwitch(
     viewId: string,
     layout: HomeLayout,
     permissions: WorkspacePermissions,
-    views: readonly ViewConfig[],
-    audience: HomeAudience
+    views: readonly ViewConfig[]
 ): boolean {
-    // Une feature réservée à l'administration ne survit pas à l'arrivée dans un
-    // espace partagé : sa vue se referme au lieu de rester ouverte sur des
-    // données que la cible n'a pas le droit de montrer.
-    if (!featureIdAllowed(viewId, audience)) return false;
     const feature = featureBehind(viewId);
     if (feature !== null && !permissions.features.some((g) => g.feature === feature)) return false;
 
@@ -369,20 +345,17 @@ export default function HomePage() {
     const currentWorkspace = useActiveWorkspace();
     const layout = useHomeLayout();
     const { devices, loading: devicesLoading, error: devicesError } = useDevices();
+    // Ce que le module Appareils offre à l'accueil : la liste vivante, le
+    // panneau et la tuile d'un appareil. Lu au rendu, jamais à l'import (le
+    // registre est rempli par l'initialiseur, avant le premier rendu, et n'en
+    // bouge plus : la valeur est stable). `undefined` sans le module, et
+    // l'accueil ne connaît alors aucun appareil.
+    const devicesModule = devicesProvider();
     const { canFeature, can } = useWorkspacePermissions();
     // Deux réglages de l'espace, deux capacités. Lues en booléens (et non via
     // `can`, recréé à chaque rendu) pour servir de dépendances stables.
     const canAppearance = can('workspace.appearance');
     const canLayout = can('workspace.layout');
-    // Qui regarde, et depuis quel genre d'espace : ce que les widgets réservés à
-    // l'administration (Monitoring) consultent. Mémoïsé pour servir de
-    // dépendance stable aux gardes ci-dessous.
-    const isAdmin = user?.role === 'admin';
-    const workspaceKind = currentWorkspace?.kind;
-    const audience = useMemo<HomeAudience>(
-        () => ({ kind: workspaceKind, isAdmin: !!isAdmin }),
-        [workspaceKind, isAdmin]
-    );
 
     const [expandedWidget, setExpandedWidget] = useState<string | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
@@ -517,19 +490,17 @@ export default function HomePage() {
     /**
      * Le rôle courant ouvre-t-il cette vue ? La lecture suffit à l'ouvrir.
      *
-     * Deux règles s'y superposent : les droits de feature du rôle, et la
-     * restriction « administrateur, dans son espace personnel » que porte le
-     * catalogue. Cette fonction est le passage unique de `handleExpand`, donc du
-     * clic sur une tuile, du menu de la topbar et de la navigation
-     * inter-features : la poser ici les couvre toutes.
+     * La règle est celle des droits de feature du rôle, et cette fonction est
+     * le passage unique de `handleExpand`, donc du clic sur une tuile, du menu
+     * de la topbar et de la navigation inter-features : la poser ici les
+     * couvre toutes.
      */
     const allowedToOpen = useCallback(
         (viewId: string): boolean => {
-            if (!featureIdAllowed(viewId, audience)) return false;
             const feature = featureBehind(viewId);
             return feature === null || canFeature(feature);
         },
-        [canFeature, audience]
+        [canFeature]
     );
 
     const viewTitleOf = useCallback(
@@ -589,10 +560,7 @@ export default function HomePage() {
     const reconcileOpenView = useCallback(
         (permissions: WorkspacePermissions) => {
             const open = expandedWidgetRef.current;
-            if (
-                open &&
-                !survivesWorkspaceSwitch(open, getHomeLayout(), permissions, viewsRef.current, audienceRef.current)
-            ) {
+            if (open && !survivesWorkspaceSwitch(open, getHomeLayout(), permissions, viewsRef.current)) {
                 handleClose();
             }
         },
@@ -678,8 +646,8 @@ export default function HomePage() {
         if (!canAppearance) setSettingsOpen(false);
     }, [canAppearance]);
 
-    // Cross-feature navigation: a feature can ask to open another view (e.g.
-    // Monitoring's "Gérer les appareils" → the Appareils page).
+    // Cross-view navigation: a view can ask to open another one (e.g. the
+    // profile's link to the security page).
     useEffect(() => onOpenViewRequest((viewId) => handleExpand(viewId)), [handleExpand]);
 
     // Racine de l'arborescence de présence. Les niveaux plus profonds sont
@@ -710,9 +678,12 @@ export default function HomePage() {
     }, []);
 
     // Device views: one per device tile whose device still exists. Built here
-    // because they depend on the live device list.
+    // because they depend on the live device list; the panel is the module's
+    // (without the module the list is empty, so there is none).
     const deviceViews = useMemo<ViewConfig[]>(() => {
         const out: ViewConfig[] = [];
+        const DevicePanel = devicesModule?.DevicePanel;
+        if (!DevicePanel) return out;
         const seen = new Set<string>();
         for (const id of placedDeviceIds(layout)) {
             if (seen.has(id)) continue;
@@ -725,19 +696,15 @@ export default function HomePage() {
                 icon: 'server',
                 cacheDurationMinutes: 5,
                 hasCard: true,
-                renderDevice: () => <MonitoringPanel deviceId={device.id} />
+                renderDevice: () => <DevicePanel deviceId={device.id} />
             });
         }
         return out;
-    }, [layout, devices]);
+    }, [layout, devices, devicesModule]);
 
     const views = useMemo(() => [...staticViews(), ...deviceViews], [deviceViews]);
     const viewsRef = useRef(views);
     viewsRef.current = views;
-    // Même motif : lu depuis des effets qui ne doivent pas se relancer sur un
-    // simple changement de contexte.
-    const audienceRef = useRef(audience);
-    audienceRef.current = audience;
 
     /**
      * Le dossier déployé, relu dans la disposition courante à chaque rendu.
@@ -752,10 +719,7 @@ export default function HomePage() {
         () => (openFolder ? (findFolder(layout, openFolder.id)?.folder ?? null) : null),
         [openFolder, layout]
     );
-    const folderEntries = useMemo(
-        () => (folderView ? folderFeatures(folderView.items, audience) : []),
-        [folderView, audience]
-    );
+    const folderEntries = useMemo(() => (folderView ? folderFeatures(folderView.items) : []), [folderView]);
     useEffect(() => {
         if (openFolder !== null && folderEntries.length === 0) setOpenFolder(null);
     }, [openFolder, folderEntries.length]);
@@ -798,11 +762,25 @@ export default function HomePage() {
      *
      * Et l'élagage n'est de toute façon pas le sien : sans `workspace.layout` il
      * n'a pas à toucher à la composition de l'accueil, fût-ce pour la nettoyer.
+     *
+     * Sans le module Appareils, la liste est vide par construction, pas parce
+     * que les appareils ont disparu : rien à élaguer non plus.
      */
     useEffect(() => {
-        if (devicesLoading || devicesError !== null || !canLayout) return;
+        if (!devicesModule || devicesLoading || devicesError !== null || !canLayout) return;
         pruneMissingDevices(new Set(devices.map((d) => d.id)));
-    }, [devices, devicesLoading, devicesError, canLayout]);
+    }, [devices, devicesLoading, devicesError, canLayout, devicesModule]);
+
+    /**
+     * La liste d'appareils est le contenu principal au-dessus de la ligne de
+     * flottaison : une fois qu'elle a répondu (chargée ou en erreur), l'accueil
+     * est assez « prêt » pour que l'écran de connexion se fonde sur une vue
+     * peuplée. Sans le module, il n'y a rien à attendre. Sans effet après le
+     * premier signal, et remis à zéro à la déconnexion.
+     */
+    useEffect(() => {
+        if (!devicesModule || !devicesLoading || devicesError !== null) markHomeReady();
+    }, [devicesLoading, devicesError, devicesModule]);
 
     // Eagerly warm preload feature views that are on the grid, at idle, once the
     // home is ready — so the first open is instant without stealing the opening
@@ -812,13 +790,9 @@ export default function HomePage() {
         const mountPreloads = () => {
             if (preloadedRef.current || ws.state !== 'open') return;
             preloadedRef.current = true;
-            // Filtré par la même règle que la grille : sans ça, un widget
-            // réservé aux administrateurs serait *monté* — et enverrait ses
-            // requêtes — chez qui n'a pas le droit de le voir, simplement parce
-            // qu'il figure encore dans une disposition héritée.
-            const gridFeatureIds = new Set<string>(
-                usableFeatureIds(placedFeatureIds(getHomeLayout()), audienceRef.current)
-            );
+            // Seules les cartes posées sur la grille se préchauffent : une vue
+            // qu'aucune tuile n'ouvre n'a pas à envoyer ses requêtes.
+            const gridFeatureIds = new Set<string>(placedFeatureIds(getHomeLayout()));
             for (const config of viewsRef.current) {
                 const duration = config.cacheDurationMinutes;
                 if (!config.preload || duration === 0 || !gridFeatureIds.has(config.id)) continue;
@@ -915,7 +889,7 @@ export default function HomePage() {
         // ci-dessus tourne encore contre ceux de l'espace précédent alors que la
         // nouvelle disposition est déjà en place, et supprime définitivement ses
         // tuiles d'appareils.
-        resetDevices();
+        devicesModule?.resetDevices();
         // L'id est publié d'abord : `workspace.activate` part alors avec la
         // bonne enveloppe, et le dispatcheur en vérifie l'appartenance.
         setActiveWorkspace(workspaceId);
@@ -928,20 +902,12 @@ export default function HomePage() {
                 // Relancer tout de suite : `resetDevices` a vidé la liste, et
                 // plus rien ne la re-sollicite tant que rien ne change — les
                 // tuiles d'appareils resteraient vides indéfiniment.
-                void refreshDevices();
+                devicesModule?.refreshDevices();
 
                 if (!openView) return;
                 // `doExpand` avec remontage forcé : la vue reparaît vierge, sur
                 // les données de l'espace d'arrivée.
-                if (
-                    survivesWorkspaceSwitch(
-                        openView,
-                        getHomeLayout(),
-                        res.permissions,
-                        viewsRef.current,
-                        audienceRef.current
-                    )
-                ) {
+                if (survivesWorkspaceSwitch(openView, getHomeLayout(), res.permissions, viewsRef.current)) {
                     remountFeature(openView);
                 } else handleClose();
             } catch {
@@ -998,14 +964,13 @@ export default function HomePage() {
             if (isHomeFolder(tile)) {
                 const v = featureTileVisual(tile);
                 if (!v) continue;
-                // Un dossier **rempli** dont ce contexte ne verrait rien
-                // s'efface, comme une tuile réservée à l'administration :
-                // promettre un écran qui n'a rien à montrer serait pire que
-                // de ne rien montrer. Un dossier vraiment vide, lui, reste :
-                // on vient de le créer, et le voir disparaître de l'accueil
-                // se lirait comme une perte. Il est simplement inerte, et son
-                // corps dit où le remplir.
-                const visible = folderFeatures(tile.items, audience);
+                // Un dossier **rempli** dont plus rien n'est connu (modules
+                // retirés) s'efface : promettre un écran qui n'a rien à montrer
+                // serait pire que de ne rien montrer. Un dossier vraiment vide,
+                // lui, reste : on vient de le créer, et le voir disparaître de
+                // l'accueil se lirait comme une perte. Il est simplement
+                // inerte, et son corps dit où le remplir.
+                const visible = folderFeatures(tile.items);
                 if (visible.length === 0 && tile.items.length > 0) continue;
                 const folderId = tile.id;
                 tiles.push(
@@ -1043,11 +1008,6 @@ export default function HomePage() {
             }
 
             if (isFeatureTile(tile)) {
-                // Retirée, et non grisée : « pas accessible » n'est pas « visible
-                // mais verrouillé ». Une disposition héritée d'un contexte où le
-                // widget était offert ne doit pas le faire réapparaître.
-                const entry = featureCatalogEntry(tile);
-                if (entry && !featureAllowed(entry, audience)) continue;
                 const v = featureTileVisual(tile);
                 if (!v) continue;
                 // La tuile reste posée, en retrait : la retirer déplacerait les
@@ -1064,7 +1024,6 @@ export default function HomePage() {
                         widgetId={v.widgetId}
                         title={v.title}
                         icon={v.icon}
-                        adminOnly={entry?.adminOnly}
                         className={locked ? styles.lockedTile : undefined}
                         // Hidden while its popup is open so frequent re-renders can't
                         // make the source card flash behind the morphed popup.
@@ -1085,6 +1044,7 @@ export default function HomePage() {
             const device = devices.find((d) => d.id === tile);
             if (!device) continue;
             const v = deviceTileVisual(device);
+            if (!v) continue;
             tiles.push(
                 <Widget
                     key={tile}
@@ -1125,7 +1085,15 @@ export default function HomePage() {
                     onBack={expandedWidget ? handleClose : folderView ? closeFolder : undefined}
                     onOpenProfile={(e) => handleExpand('profile', isForceReload(e))}
                     onOpenSecurity={(e) => handleExpand('security', isForceReload(e))}
-                    onOpenDevices={user.role === 'admin' ? (e) => handleExpand('clients', isForceReload(e)) : undefined}
+                    // L'entrée « Appareils » de l'administrateur ouvre le module,
+                    // dont le segment « Flotte » n'existe que dans son espace
+                    // personnel : ailleurs, l'entrée n'a rien de plus à offrir
+                    // que la tuile.
+                    onOpenDevices={
+                        user.role === 'admin' && devicesModule && currentWorkspace.kind === 'personal'
+                            ? (e) => handleExpand('devices', isForceReload(e))
+                            : undefined
+                    }
                     onOpenLogs={user.role === 'admin' ? (e) => handleExpand('logs', isForceReload(e)) : undefined}
                     onOpenUsers={user.role === 'admin' ? (e) => handleExpand('users', isForceReload(e)) : undefined}
                     onOpenSettings={canAppearance ? () => setSettingsOpen(true) : undefined}

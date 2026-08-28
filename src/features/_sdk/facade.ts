@@ -18,6 +18,7 @@ import { parseDeviceReport } from '@/agent/mappers';
 import { editMessage, postMessage } from '@/Services/discord';
 import { deliver, discordChannels, hasChannel, resolveChannelIds, resolveRoute } from '@/Services/notifications';
 import { pushAgentConfig, sdkHub } from './host';
+import { agentDistDir, readServedManifestCached } from '@/agent/sync';
 
 /**
  * La façade des natives : le SEUL chemin d'un module vers les données des
@@ -119,6 +120,17 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
                 const transport = deps.providers.get<MailTransportProvider>(MAIL_TRANSPORT_PROVIDER);
                 if (!transport) return [];
                 return transport.listSenders(deps.workspaceId);
+            }
+        },
+        workspaces: {
+            async list() {
+                gate('workspaces.read');
+                // La capacité dit ce que le module PEUT demander ; l'appelant
+                // doit encore être l'administrateur global : la liste de tous
+                // les espaces n'appartient à aucun membre.
+                if (!deps.isAdmin) throw new FeatureError('forbidden', 'Réservé à l’administrateur');
+                const rows = await deps.db.workspaces.listAll();
+                return rows.map((w) => ({ id: w.id, name: w.name, kind: w.kind, ownerUserId: w.owner_user_id }));
             }
         },
         members: {
@@ -230,6 +242,10 @@ export function agentsFacade(gate: () => void): AgentsFacade {
         requestDestroy: (deviceId) => (gate(), sdkHub().requestDestroy(deviceId)),
         disconnectAgent: (deviceId) => (gate(), sdkHub().disconnectAgent(deviceId)),
         resetAgentSession: (deviceId) => (gate(), sdkHub().resetAgentSession(deviceId)),
+        // Le manifest des binaires servis (version, cibles signées) : ce que la
+        // flotte lit pour signaler un agent à mettre à jour. La distribution
+        // elle-même (`/api/agent/download/*`, `self-update`) reste à l'app.
+        servedManifest: () => (gate(), readServedManifestCached(agentDistDir())),
         requestSyncConfig: (deviceId, payload) => (gate(), sdkHub().requestSyncConfig(deviceId, payload)),
         requestSyncScan: (deviceId, payload) => (gate(), sdkHub().requestSyncScan(deviceId, payload)),
         requestSyncPush: (deviceId, payload) => (gate(), sdkHub().requestSyncPush(deviceId, payload)),

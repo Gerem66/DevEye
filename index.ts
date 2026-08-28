@@ -76,29 +76,6 @@ async function main() {
     process.on('SIGINT', () => void shutdown('SIGINT'));
     process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
-    // Hourly retention sweep: drop history past each device's retention
-    // (NULL → MONITORING_RETENTION_DAYS). One deadline for the three tables, so
-    // an instant is never half-expired. Runs once at boot, then every hour.
-    const prune = async () => {
-        try {
-            const days = env.MONITORING_RETENTION_DAYS;
-            const [metrics, presence, processes] = await Promise.all([
-                db.metrics.pruneByRetention(days),
-                db.presence.pruneByRetention(days),
-                db.processSamples.pruneByRetention(days)
-            ]);
-            if (metrics + presence + processes > 0) {
-                logger.info({ metrics, presence, processes }, 'Pruned old monitoring history');
-            }
-            // CloudSync : purge des versions par budget + sessions abandonnées.
-        } catch (e) {
-            logger.error({ err: (e as Error).message }, 'Retention sweep failed');
-        }
-    };
-    void prune();
-    const pruneTimer = setInterval(() => void prune(), 60 * 60 * 1000);
-    pruneTimer.unref();
-
     // Reconcile the agent binaries with the rolling release (the only runtime
     // GitHub touch, and only at boot). Non-blocking: the readiness task is
     // registered synchronously so /api/status reports "not ready" right away.
@@ -112,8 +89,9 @@ async function main() {
     // déposé, et tient l'agrégat journalier + la rétention par site), les
     // sauvegardes un service du module `features/backup`, la relève des
     // boîtes mail ouvertes un service du module `features/mail` (sans session
-    // ni mot de passe, comptes « open » uniquement) : tous démarrés avec les
-    // autres dans buildApp.)
+    // ni mot de passe, comptes « open » uniquement), le balayage horaire de
+    // rétention de l'historique des appareils un service du module
+    // `features/devices` : tous démarrés avec les autres dans buildApp.)
 
     await app.listen({ port: env.LISTEN_PORT, host: '0.0.0.0' });
     logger.info({ port: env.LISTEN_PORT }, 'DevEye server ready');

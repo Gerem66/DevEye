@@ -10,7 +10,7 @@ const DEV_PASSWORD = process.env.SEED_DEV_PASSWORD ?? 'devdevdev';
 // Only modular, per-workspace features belong here. Structural pages (profile,
 // security) are part of DevEye itself, reached from the navbar, and are never
 // stored in the features list.
-const DEV_FEATURES = ['monitoring', 'weather', 'password'];
+const DEV_FEATURES = ['devices', 'weather', 'password'];
 
 /**
  * Idempotently create a development account on an otherwise empty database.

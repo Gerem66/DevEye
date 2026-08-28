@@ -80,9 +80,18 @@ async function main(): Promise<void> {
         ...readFeatureConfig(ROOT, 'features.config.json'),
         ...readFeatureConfig(ROOT, 'features.local.json')
     ];
+    // `npm run ci:smoke -- devices mail` ne sonde que ces modules : le tour
+    // complet reste la norme, ceci sert à rejouer un échec sans attendre les autres.
+    const only = new Set(process.argv.slice(2).filter((a) => !a.startsWith('--')));
     const modules = [];
-    for (const entry of entries) modules.push(await moduleIdentity(entry));
-    if (modules.length === 0) fail('aucun module installé à sonder');
+    for (const entry of entries) {
+        const m = await moduleIdentity(entry);
+        if (only.size === 0 || only.has(m.id)) modules.push(m);
+    }
+    if (modules.length === 0)
+        fail(
+            only.size > 0 ? `aucun module installé parmi : ${[...only].join(', ')}` : 'aucun module installé à sonder'
+        );
     console.log(`ci:smoke — ${modules.length} module(s) : ${modules.map((m) => m.id).join(', ')}`);
 
     // La glue locale doit exister (le serveur l'importe statiquement) et le

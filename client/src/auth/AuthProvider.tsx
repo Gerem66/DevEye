@@ -9,7 +9,7 @@ import { resetHomeLayout, syncHomeLayoutFromServer } from '../stores/homeLayout'
 import { resetWorkspace, syncWorkspacesFromServer } from '../stores/workspace';
 import { resetLive } from '../stores/live';
 import { setCurrentUser } from '../stores/currentUser';
-import { resetDevices } from '../stores/devices';
+import { devicesProvider } from '../devicesProvider';
 
 interface AuthState {
     status: 'unknown' | 'authenticated' | 'anonymous';
@@ -63,7 +63,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         resetWorkspace();
         resetTheme();
         resetHomeLayout();
-        resetDevices();
+        // La liste d'appareils est celle du module Appareils, quand il est là.
+        devicesProvider()?.resetDevices();
         // Idem pour la presence : sans ca la session suivante repartirait avec le
         // roster et le lieu declare de la precedente.
         resetLive();

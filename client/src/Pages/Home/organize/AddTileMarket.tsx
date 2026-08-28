@@ -3,12 +3,10 @@ import type { HomeSection, ShortcutItem } from '@deveye/types';
 
 import { Dialog } from '@/Components/Dialog';
 import TextInput from '@/Components/TextInput';
-import { useAuth } from '@/auth/AuthProvider';
-import { useDevices } from '@/stores/devices';
-import { useActiveWorkspace } from '@/stores/workspace';
+import { useDevices } from '@/devicesProvider';
 import { addDevice, addFeature, placedDeviceIds, placedFeatureIds, useHomeLayout } from '@/stores/homeLayout';
 import {
-    availableFeatures,
+    featureCatalog,
     FEATURE_CATEGORIES,
     FEATURE_CATEGORY_ICON,
     FEATURE_CATEGORY_LABEL,
@@ -29,9 +27,13 @@ import styles from './organize.module.css';
  */
 type Rayon = 'all' | 'devices' | FeatureCategory | 'shortcut';
 
+// « Par appareil » et non « Appareils » : ce rayon range une tuile PAR machine,
+// et « Appareils » est le nom de la feature (le module, sa propre carte dans
+// le rayon Supervision). Deux boutons du même nom dans un même marché, c'est
+// un clic sur l'un pour l'autre.
 const RAYON_LABEL: Record<'all' | 'devices' | 'shortcut', string> = {
     all: 'Tout',
-    devices: 'Appareils',
+    devices: 'Par appareil',
     shortcut: 'Raccourcis'
 };
 
@@ -150,8 +152,6 @@ export interface AddTileMarketProps {
 export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketProps) {
     const layout = useHomeLayout();
     const { devices } = useDevices();
-    const { user } = useAuth();
-    const workspace = useActiveWorkspace();
     const [rayon, setRayon] = useState<Rayon>('all');
     const [query, setQuery] = useState('');
 
@@ -199,12 +199,11 @@ export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketP
             });
         }
 
-        // Un widget qu'on n'a pas le droit d'ouvrir ici n'est **pas** proposé,
-        // pas même éteint : le montrer reviendrait à annoncer une tuile que la
-        // grille refuserait ensuite de rendre. « Déjà posée » et « pas pour
-        // vous » sont deux choses différentes, et une seule des deux se montre.
+        // Tout le catalogue est proposé : le droit d'ouvrir une feature est
+        // celui du rôle, et la grille le dit tuile par tuile (« Accès
+        // restreint ») plutôt que de cacher ce qu'un autre membre a posé.
         const placedFeatures = new Set<string>(placedFeatureIds(layout));
-        for (const feature of availableFeatures({ kind: workspace?.kind, isAdmin: user?.role === 'admin' })) {
+        for (const feature of featureCatalog()) {
             items.push({
                 key: `feature:${feature.id}`,
                 rayon: feature.category,

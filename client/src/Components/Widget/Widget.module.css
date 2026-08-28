@@ -135,18 +135,6 @@
     color: var(--accent);
 }
 
-/* Le pendant du badge des entrées admin de la topbar, mêmes teinte et opacité. */
-.adminBadge {
-    width: 16px;
-    color: var(--text-muted);
-    opacity: 0.75;
-    transition: opacity var(--transition-fast);
-}
-
-.widget:hover .adminBadge {
-    opacity: 0;
-}
-
 .body {
     flex: 1;
     display: flex;

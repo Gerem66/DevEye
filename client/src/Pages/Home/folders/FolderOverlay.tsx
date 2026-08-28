@@ -313,7 +313,6 @@ export function FolderOverlay({
                                             widgetId={entry.id}
                                             title={entry.title}
                                             icon={entry.icon}
-                                            adminOnly={entry.adminOnly}
                                             className={locked ? styles.lockedCard : undefined}
                                             onExpand={(e) => onOpenFeature(entry.id, e)}
                                         >

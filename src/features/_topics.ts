@@ -44,6 +44,11 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     // au dernier module resté une propriété d'un projet (migration 080). Verbes
     // en camelCase derrière un préfixe unique, donc `mutates` à relire à la main.
     deploy: 'deploy',
+    // Module à id natif depuis son rapatriement (`features/devices`) : le
+    // préfixe reste dans la table parce que l'id n'est pas externe. Ses verbes
+    // simples (`confirm`, `revoke`, `rename`, `setConfig`...) tombent dans le
+    // filet `MUTATION_VERB` ; les autres (`requestDelete`, `forceDelete`,
+    // `linkCodeCreate`...) se relisent à la main, le test du module s'en charge.
     devices: 'devices',
     // Même forme que `git`, `database` et `audience` : préfixe unique, verbes en
     // camelCase derrière le point. Le filet `MUTATION_VERB` n'en voit donc

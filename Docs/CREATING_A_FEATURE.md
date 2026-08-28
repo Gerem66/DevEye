@@ -1,17 +1,25 @@
 # Créer une nouvelle fonctionnalité — checklist complète
 
-> **Une feature de tiers, ou une nouvelle feature « moderne » ?** Passe par le
+> **Une nouvelle feature se fait en module, sans exception.** Passe par le
 > **SDK des modules** : repo
 > [DevEye-Feature-Template](https://github.com/Gerem66/DevEye-Feature-Template)
 > (doc anglaise complète) côté développeur, [FEATURE_SDK.md](./FEATURE_SDK.md)
-> côté mainteneur. La checklist ci-dessous reste celle du chemin **natif
-> historique**, encore suivi par une feature sur seize (Appareils, tenue pour
-> de l'infrastructure de l'app et gardée native par décision, voir
-> [FEATURE_SDK.md](./FEATURE_SDK.md) ; Météo,
-> OSINT, Finances, le Coffre, les Notes, Uptime, Sentinelle, les Sauvegardes,
-> les Bases de données, les Déploiements, Git, Audience, Mail et Projets, soit
-> quatorze, sont passés au format module dans `features/*`, CloudSync en
-> module privé).
+> côté mainteneur. Les seize features (Météo, OSINT, Finances, le Coffre, les
+> Notes, Uptime, Sentinelle, les Sauvegardes, les Bases de données, les
+> Déploiements, Git, Audience, Mail, Projets et, en dernier, Appareils) sont
+> au format module dans `features/*`, CloudSync en module privé. **Plus
+> aucune feature n'est native.**
+>
+> La checklist ci-dessous décrit le chemin **natif** (`src/features/`,
+> `defineFeature`, `FeatureContext`). Il n'a plus d'occupant parmi les
+> features : il ne sert qu'aux **commandes transversales de l'app**, celles
+> qui ne relèvent d'aucune feature d'espace et gardent un accès à tout le
+> contexte (`workspace.*`, `user.*`, `admin.*`, `secrecy.*`, `twofa.*`,
+> `notify.*`, `share.*`, `logs.*`, `home.*`, `live.here`) et au **transport
+> des agents** (`agent.*`, des relais du hub, voir
+> [MONITORING.md](./MONITORING.md)). Suis-la pour ajouter une commande à
+> l'app elle-même ; pour tout ce qui a un widget, une page ou des données
+> d'espace, c'est un module.
 
 Ce document liste **tout** ce qu'implique l'ajout d'une fonctionnalité dans DevEye,
 dans l'ordre, à travers les trois bases de code. Suis-le de haut en bas pour ne
@@ -22,6 +30,8 @@ rien oublier.
 > - **Feature-commande** (la plupart) : une ou plusieurs commandes WebSocket
 >   (`uptime.add`, `devices.list`, `logs.list`…) dispatchées par le serveur, avec
 >   éventuellement une UI (widget de la grille d'accueil ou page de la topbar).
+>   Les deux premières sont des commandes de module, la troisième une commande
+>   transversale de l'app.
 > - **Page structurelle** : un écran qui fait partie de DevEye lui-même (Profil,
 >   Sécurité, Logs), atteint depuis le menu de la topbar, **sans** carte sur la
 >   grille. Peut quand même s'appuyer sur des commandes WS.
@@ -77,6 +87,11 @@ Tout passe par des schémas zod partagés. Le serveur **et** le client importent
 ---
 
 ## C. Handlers serveur — `DevEye/src/features/`
+
+> Chemin natif : seules les commandes transversales de l'app et le transport
+> des agents y vivent encore. Une feature d'espace écrit ses handlers dans
+> son module (`features/<id>/src/server/`, `defineSdkFeature`,
+> `SdkFeatureContext`), voir [FEATURE_SDK.md](./FEATURE_SDK.md).
 
 1. **Handlers** — `src/features/<feature>/index.ts` : un `defineFeature({ ...cmd,
 handler })` par commande. Le handler reçoit un `FeatureContext` (`ctx.db`,

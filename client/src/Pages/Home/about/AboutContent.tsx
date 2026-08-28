@@ -36,7 +36,7 @@ const LINK_PREVIEW_SERVICES = ['GitHub', 'npm', 'Spotify', 'SoundCloud', 'Twitch
  * est écrit à la main, faute d'un drapeau qui le dise — et c'est précisément
  * pour ça qu'il est le seul à pouvoir se démoder.
  */
-const AGENT_FEATURES: HomeFeatureId[] = ['monitoring', 'sentinel', 'cloudsync'];
+const AGENT_FEATURES: HomeFeatureId[] = ['devices', 'sentinel', 'cloudsync'];
 
 function chipList(ids: readonly HomeFeatureId[]) {
     return ids
@@ -73,13 +73,6 @@ function FeatureRow({ entry }: { entry: FeatureCatalogEntry }) {
                 <span className={styles.featureHead}>
                     <span className={`icon icon-${entry.icon} ${styles.featureIcon}`} aria-hidden='true' />
                     <strong className={styles.featureTitle}>{entry.title}</strong>
-                    {entry.adminOnly && (
-                        <span
-                            className={`icon icon-shield ${styles.featureAdmin}`}
-                            title='Réservé aux administrateurs'
-                            aria-label='Réservé aux administrateurs'
-                        />
-                    )}
                 </span>
                 <span className={styles.featureDesc}>{entry.description}</span>
                 {relations.length > 0 && (

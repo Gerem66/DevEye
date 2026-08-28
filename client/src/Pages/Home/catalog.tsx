@@ -1,9 +1,5 @@
 import type { ComponentType } from 'react';
-import type { HomeFeatureId, WorkspaceKind } from '@deveye/types';
-
-import { MonitoringWidget } from '@/Features/Monitoring';
-
-import Monitoring from '@/Features/Monitoring';
+import type { HomeFeatureId } from '@deveye/types';
 
 import type { FeatureProps } from '@/Features/types';
 import { clientModules } from '@/sdk/registry';
@@ -53,8 +49,8 @@ export interface FeatureLink {
 }
 
 /**
- * Static catalog of the built-in feature widgets that can live on the home grid.
- * The grid itself is composed from the user's saved layout (see `stores/homeLayout`);
+ * The catalog of the feature widgets that can live on the home grid. The grid
+ * itself is composed from the user's saved layout (see `stores/homeLayout`);
  * this is the source of truth for what each feature *is* (its card content, full
  * view, cache policy, rayon, liaisons) and is also what the add "marché" lists.
  */
@@ -79,35 +75,12 @@ export interface FeatureCatalogEntry {
     /**
      * Reads/writes password-encrypted data: hold the DEK alive while the view is
      * open so a long edit never trips the re-validation prompt (see WidgetPopup's
-     * `holdSecrecy`). Left unset for non-encrypted views (monitoring, weather).
+     * `holdSecrecy`). Left unset for non-encrypted views (devices, weather).
      */
     holdSecrecy?: boolean;
-    /**
-     * Réservée à l'administrateur global, et à son espace **personnel** seul.
-     *
-     * Pas un droit d'espace : aucun rôle ne l'accorde et aucun espace partagé ne
-     * la propose. La carte porte alors le bouclier des entrées d'administration
-     * de la topbar, pour que la restriction se voie sans avoir à cliquer.
-     */
-    adminOnly?: true;
     /** Carte basse (demi-hauteur), comme les tuiles d'appareil. Déclarée par les modules. */
     compact?: boolean;
 }
-
-const NATIVE_CATALOG: FeatureCatalogEntry[] = [
-    {
-        id: 'monitoring',
-        title: 'Monitoring',
-        icon: 'activity',
-        description: 'Supervision en direct de vos machines : charge, mémoire, disques, journaux, terminal.',
-        category: 'supervision',
-        WidgetContent: MonitoringWidget,
-        FullComponent: Monitoring,
-        cacheDurationMinutes: 5,
-        preload: true,
-        adminOnly: true
-    }
-];
 
 /**
  * L'adaptateur de vue d'un module : sa `Full` ne reçoit que `closeFeature`,
@@ -120,9 +93,10 @@ function moduleFull(Full: ComponentType<{ closeFeature(): void }>): ComponentTyp
 }
 
 /**
- * Le catalogue complet : les natives restantes, puis les modules installés,
- * projetés depuis leur manifest + leur entrée client. Même contrat partout :
- * la grille, le marché d'ajout et l'« À propos » ne savent pas qui est qui.
+ * Le catalogue complet : les modules installés, projetés depuis leur manifest
+ * + leur entrée client. Plus aucune native depuis le rapatriement des
+ * Appareils, la seizième : la grille, le marché d'ajout et l'« À propos »
+ * lisent le même contrat pour toutes.
  *
  * PARESSEUX, et c'est vital : figé au premier APPEL (toujours au rendu, donc
  * après l'enregistrement des modules), jamais à l'évaluation du module. Une
@@ -136,7 +110,6 @@ let MERGED: FeatureCatalogEntry[] | null = null;
 export function featureCatalog(): readonly FeatureCatalogEntry[] {
     if (MERGED === null) {
         MERGED = [
-            ...NATIVE_CATALOG,
             ...clientModules().map(({ manifest, client }): FeatureCatalogEntry => ({
                 // Un module est externe par construction (vérifié à
                 // l'enregistrement), et un id externe est une tuile d'accueil
@@ -166,66 +139,17 @@ export function featureCatalogEntry(id: HomeFeatureId): FeatureCatalogEntry | un
 }
 
 /**
- * Qui regarde, et depuis quel genre d'espace.
+ * Le contenu d'un dossier, dans l'ordre où il a été rangé.
  *
- * ⚠️ **`HomeAudience`, et non `Audience`** : depuis la feature du même nom, ce
- * mot désigne ailleurs dans le dépôt les visiteurs d'un site suivi. Deux sens à
- * quelques lignes d'écart — `FEATURE_CATALOG` porte les deux — sont le genre de
- * collision que rien ne signale et qu'on paye six mois plus tard.
+ * Un identifiant inconnu (disposition écrite par une version plus récente, ou
+ * module retiré depuis) est ignoré plutôt que de faire tomber l'écran : un
+ * dossier peut donc paraître vide alors qu'il ne l'est pas dans la
+ * disposition, le même choix que pour la grille.
  */
-export interface HomeAudience {
-    kind: WorkspaceKind | undefined;
-    isAdmin: boolean;
-}
-
-/**
- * Les widgets offerts à ce contexte.
- *
- * Une seule définition de la règle, sur le modèle de `availableTopbarWidgets` :
- * elle sert le rendu de la grille, le sélecteur d'ajout, la garde de navigation
- * et le préchargement. En avoir plusieurs, c'est en oublier une — et une seule
- * suffit à rouvrir la porte.
- */
-export function availableFeatures({ kind, isAdmin }: HomeAudience): FeatureCatalogEntry[] {
-    return featureCatalog().filter((f) => featureAllowed(f, { kind, isAdmin }));
-}
-
-/**
- * Le contenu visible d'un dossier, dans l'ordre où il a été rangé.
- *
- * La même règle que la grille, appliquée derrière une tuile : un widget que ce
- * contexte n'a pas le droit d'ouvrir n'est pas déployé non plus. Un identifiant
- * inconnu (disposition écrite par une version plus récente) est ignoré plutôt
- * que de faire tomber l'écran.
- *
- * Un dossier peut donc paraître vide alors qu'il ne l'est pas dans la
- * disposition : c'est voulu, et c'est le même choix que pour la grille, où une
- * tuile réservée à l'administration disparaît au lieu de se griser.
- */
-export function folderFeatures(items: readonly HomeFeatureId[], audience: HomeAudience): FeatureCatalogEntry[] {
+export function folderFeatures(items: readonly HomeFeatureId[]): FeatureCatalogEntry[] {
     return items
         .map((id) => featureCatalogEntry(id))
-        .filter((entry): entry is FeatureCatalogEntry => entry !== undefined && featureAllowed(entry, audience));
-}
-
-/** La même règle, appliquée à une entrée déjà connue. */
-export function featureAllowed(entry: FeatureCatalogEntry, { kind, isAdmin }: HomeAudience): boolean {
-    return !entry.adminOnly || (isAdmin && kind === 'personal');
-}
-
-/** La même règle encore, appliquée à des identifiants déjà épinglés (disposition héritée). */
-export function usableFeatureIds(ids: readonly HomeFeatureId[], audience: HomeAudience): HomeFeatureId[] {
-    const allowed = new Set(availableFeatures(audience).map((f) => f.id));
-    return ids.filter((id) => allowed.has(id));
-}
-
-/**
- * Ce widget est-il ouvrable ici ? Réponse par identifiant, pour les appelants
- * qui n'ont qu'une vue (`allowedToOpen`, la garde unique de navigation).
- */
-export function featureIdAllowed(id: string, audience: HomeAudience): boolean {
-    const entry = featureCatalog().find((f) => f.id === id);
-    return !entry || featureAllowed(entry, audience);
+        .filter((entry): entry is FeatureCatalogEntry => entry !== undefined);
 }
 
 /**

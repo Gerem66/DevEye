@@ -225,8 +225,10 @@ Elles écrivent sans commande, donc sans socket : elles appellent
   `deps.live.changed`) : après une relève qui a fait bouger quelque chose, et
   quand l'état d'une boîte change (panne, retour au vert), jamais à l'horloge.
 - `agent/ws.ts` — un agent qui arrive ou part change la liste d'appareils.
-- `agent/routes.ts` — l'appairage passe par HTTP, pas par une commande WS : sans
-  ce signal, rien n'en avertirait personne.
+- `agent/routes.ts` : l'enrôlement (`POST /api/agent/enroll`) passe par HTTP,
+  pas par une commande WS : sans ce signal, rien n'en avertirait personne.
+  L'émission des codes de liaison, elle, est une commande du module Appareils
+  (`devices.linkCode*`, `mutates: true`) depuis son rapatriement.
 - et tout service arrivé depuis suit la même règle — sauvegardes, Sentinelle,
   ingestion d'audience (`features/audience/src/server/service.ts`, coalescée
   à une fois par minute et par espace), relevés de bases : qui écrit sans

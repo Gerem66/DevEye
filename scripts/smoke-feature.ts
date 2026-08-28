@@ -64,6 +64,8 @@ const PASSWORD = process.env.SMOKE_PASSWORD ?? 'devdevdev';
 const BROWSER = process.env.SMOKE_BROWSER ?? 'chromium-browser';
 /** Le préfixe des commandes du module (casse historique tolérée : cloudSync.*). */
 const PREFIX = `${FEATURE.toLowerCase()}.`;
+/** La racine du dialogue du marché d'ajout (le composant `Dialog` de l'app). */
+const MARKET_SELECTOR = '[role="dialog"]';
 
 // ------------------------------------------------------------------ client CDP
 
@@ -144,6 +146,19 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  *  fois la session CDP ouverte, pour que tout échec dise CE QUE l'écran montrait. */
 let dumpPageText: () => Promise<string> = () => Promise.resolve('');
 
+/** La veille en cours, pour qu'un échec d'étape dise aussi CE QUE la console a vu. */
+let currentWatch: Watch | null = null;
+
+/** Les dernières exceptions et erreurs de console, mises en forme pour un échec. */
+function consoleTail(): string {
+    if (!currentWatch) return '';
+    const lines = [
+        ...currentWatch.exceptions.slice(-3).map((e) => `exception: ${e}`),
+        ...currentWatch.consoleErrors.slice(-3).map((e) => `console.error: ${e}`)
+    ];
+    return lines.length > 0 ? `\n  ${lines.join('\n  ').replace(/\s+/g, ' ').slice(0, 1200)}` : '';
+}
+
 /** Attend qu'un prédicat (évalué en boucle) devienne vrai, sinon échoue en nommant l'étape. */
 async function waitFor(step: string, timeoutMs: number, check: () => Promise<boolean>): Promise<void> {
     const deadline = Date.now() + timeoutMs;
@@ -152,7 +167,7 @@ async function waitFor(step: string, timeoutMs: number, check: () => Promise<boo
         await sleep(200);
     }
     const shown = (await dumpPageText().catch(() => '')).replace(/\s+/g, ' ').slice(0, 400);
-    fail(step, `délai de ${timeoutMs} ms dépassé\n  écran: ${shown}`);
+    fail(step, `délai de ${timeoutMs} ms dépassé\n  écran: ${shown}${consoleTail()}`);
 }
 
 // ------------------------------------------------------------------ la page pilotée
@@ -277,6 +292,7 @@ async function openPage(wsUrl: string): Promise<Page> {
 /** Collecte exceptions, console.error et trames WS de l'app, pour le verdict. */
 function watchPage(page: Page): Watch {
     const watch: Watch = { exceptions: [], consoleErrors: [], roundTrips: [], refusedLocally: 0 };
+    currentWatch = watch;
     /** requestId -> commande, pour les trames sorties portant le préfixe du module. */
     const sentByRequest = new Map<string, string>();
 
@@ -365,6 +381,16 @@ async function login(page: Page): Promise<void> {
     console.log('  ✓ connecté');
 }
 
+/**
+ * Le marché d'ajout, et lui seul : la carte d'une feature s'y cherche parmi SES
+ * boutons, jamais parmi ceux de toute la page. Derrière le dialogue, la grille
+ * porte les tuiles déjà posées, et l'une d'elles peut contenir le nom cherché
+ * (« Appareils » est à la fois une feature et un mot que d'autres tuiles
+ * écrivent). Une carte commence par son intitulé : `startsWith`, pas
+ * `includes`, pour ne pas prendre une description pour un titre.
+ */
+const MARKET_ROOT_JS = `const marketRoot = () => document.querySelector(${JSON.stringify(MARKET_SELECTOR)}) ?? document;`;
+
 /** 2. La feature est dans le marché d'ajout (mode organisation, bouton d'ajout d'une section). */
 async function checkCatalogue(page: Page): Promise<void> {
     await page.evaluate(`document.querySelector('[class*="profileBtn"]')?.click()`);
@@ -379,8 +405,9 @@ async function checkCatalogue(page: Page): Promise<void> {
 
     await waitFor(`« ${LABEL} » dans le marché d'ajout — la feature est-elle au catalogue ?`, 5_000, () =>
         page.evaluate<boolean>(`(() => {
+            ${MARKET_ROOT_JS}
             const norm = (s) => (s ?? '').replace(/\\s+/g, ' ').trim();
-            return [...document.querySelectorAll('button')].some((b) => norm(b.textContent).includes(${JSON.stringify(LABEL)}));
+            return [...marketRoot().querySelectorAll('button')].some((b) => norm(b.textContent).startsWith(${JSON.stringify(LABEL)}));
         })()`)
     );
     console.log('  ✓ au marché d’ajout');
@@ -389,8 +416,9 @@ async function checkCatalogue(page: Page): Promise<void> {
 /** Pose la tuile si elle ne l'est pas déjà (bouton désactivé = déjà posée), puis quitte le mode. */
 async function placeTile(page: Page): Promise<void> {
     const placedNow = await page.evaluate<string>(`(() => {
+        ${MARKET_ROOT_JS}
         const norm = (s) => (s ?? '').replace(/\\s+/g, ' ').trim();
-        const btn = [...document.querySelectorAll('button')].find((b) => norm(b.textContent).includes(${JSON.stringify(LABEL)}));
+        const btn = [...marketRoot().querySelectorAll('button')].find((b) => norm(b.textContent).startsWith(${JSON.stringify(LABEL)}));
         if (!btn) return 'introuvable';
         if (btn.disabled) return 'déjà posée';
         btn.click();
@@ -413,16 +441,33 @@ async function awaitFirstRoundTrip(watch: Watch): Promise<void> {
     console.log(`  ✓ premier aller-retour: ${watch.roundTrips[0]}`);
 }
 
-/** 4. La vue complète s'ouvre et déclenche un nouvel aller-retour. */
+/**
+ * 4. La vue complète s'ouvre : elle déclenche un nouvel aller-retour, OU elle
+ * est déjà là. Une vue `preload` (Appareils) est montée par l'accueil au repos
+ * dès que sa tuile est posée, et a donc déjà parlé au serveur avant le clic :
+ * la seule preuve qui reste est la barre du haut, qui porte le nom de la vue
+ * ouverte. Les deux issues valent ; laquelle a tranché est dit.
+ */
 async function openFullView(page: Page, watch: Watch): Promise<void> {
     const before = watch.roundTrips.length;
     await waitFor(`la tuile « ${LABEL} » sur la grille`, 10_000, () => page.clickByText(LABEL));
+    let opened = false;
     await waitFor(
-        `un aller-retour « ${PREFIX}* » depuis la vue complète`,
+        `la vue complète « ${LABEL} » (un aller-retour « ${PREFIX}* », ou son titre en barre du haut)`,
         20_000,
-        async () => watch.roundTrips.length > before
+        async () => {
+            if (watch.roundTrips.length > before) return true;
+            opened = await page.evaluate<boolean>(`(() => {
+            const norm = (s) => (s ?? '').replace(/\\s+/g, ' ').trim();
+            return [...document.querySelectorAll('[class*="viewTitle"]')].some((el) => norm(el.textContent) === ${JSON.stringify(LABEL)});
+        })()`);
+            return opened;
+        }
     );
-    console.log(`  ✓ vue complète: ${watch.roundTrips.slice(before).join(', ')}`);
+    const fresh = watch.roundTrips.slice(before);
+    console.log(
+        `  ✓ vue complète: ${fresh.length > 0 ? fresh.join(', ') : 'déjà chargée (préchauffée), titre en barre du haut'}`
+    );
 }
 
 /** Le verdict : un refus local ou une exception JS est un échec, un console.error un avertissement. */

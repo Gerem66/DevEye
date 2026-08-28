@@ -17,9 +17,6 @@ const gunzipAsync = promisify(gunzip);
  */
 const NEAREST_TOLERANCE_MS = 5 * 60 * 1000;
 
-/** Aligné sur `MAX_INSTANT_MARKS` du dépôt des métriques (voir son commentaire). */
-const MAX_SNAPSHOT_MARKS = 20_000;
-
 /** One stored instant: the process list lives in `payload` as gzipped JSON. */
 interface ProcessSampleRow {
     ts: number;
@@ -27,21 +24,15 @@ interface ProcessSampleRow {
     payload: Buffer;
 }
 
-export interface SnapshotStorage {
-    /** Snapshot instants stored (one row each). */
-    snapshots: number;
-    /** Total process entries recorded across those instants. */
-    processes: number;
-    /** Bytes the compressed blobs occupy — measured, not estimated. */
-    bytes: number;
-}
-
-/** Snapshot instants in a window, split into all vs the pinned subset. */
-export interface SnapshotTimes {
-    timestamps: number[];
-    pinned: number[];
-}
-
+/**
+ * Le dépôt du SOCLE : ce que l'ingestion écrit hors session (`insertSample`,
+ * le blob mesuré à l'écriture) et l'instant le plus proche que la socket agent
+ * pousse à l'ouverture d'un abonnement et que la façade `telemetry` lit pour
+ * Sentinelle (`nearest`). Les instants de la frise, l'empreinte de stockage,
+ * les suppressions et les purges sont les requêtes du module
+ * `features/devices`, dans son propre dépôt sur cette même table : deux
+ * lecteurs, un schéma, assumé.
+ */
 export interface ProcessSamplesRepo {
     /**
      * Store the process list captured at `ts`. The timestamp comes from the
@@ -51,24 +42,6 @@ export interface ProcessSamplesRepo {
     insertSample(deviceId: string, ts: number, kind: ProcessKind, processes: ReportProcess[]): Promise<void>;
     /** The process list captured nearest `at` (within tolerance), else null. */
     nearest(deviceId: string, at: number): Promise<ProcessSample | null>;
-    /** Snapshot timestamps within [from, to], ascending (timeline marks). */
-    snapshotTimes(deviceId: string, from: number, to: number): Promise<SnapshotTimes>;
-    /** Storage taken by a device's stored snapshots. */
-    storage(deviceId: string): Promise<SnapshotStorage>;
-    /** Delete snapshots whose `ts` falls in [from, to] (inclusive). */
-    deleteRange(deviceId: string, from: number, to: number): Promise<{ snapshots: number }>;
-    /**
-     * Delete unpinned instants in [from, to] already past the device's
-     * retention (used right after unpinning). Returns instants removed.
-     */
-    deleteExpiredInRange(
-        deviceId: string,
-        from: number,
-        to: number,
-        defaultDays: number
-    ): Promise<{ snapshots: number }>;
-    /** Delete samples past each device's retention (NULL → default); skips pinned. */
-    pruneByRetention(defaultDays: number): Promise<number>;
 }
 
 export function processSamplesRepo(pool: Q): ProcessSamplesRepo {
@@ -123,74 +96,6 @@ export function processSamplesRepo(pool: Q): ProcessSamplesRepo {
                 return null;
             }
             return { ts, kind: row.kind, processes };
-        },
-        async snapshotTimes(deviceId, from, to) {
-            // Même plafond et même sens que `metrics.instantTimes`, pour que les
-            // deux sources fusionnent sans qu'un côté ait à gérer une autre
-            // borne : les plus récents d'abord, remis dans l'ordre ensuite.
-            const r = await pool.query<{ ts: number; pinned: number }>(
-                `SELECT ts, pinned FROM device_process_samples
-                 WHERE device_id = ? AND ts BETWEEN ? AND ?
-                 ORDER BY ts DESC
-                 LIMIT ${MAX_SNAPSHOT_MARKS}`,
-                [deviceId, from, to]
-            );
-            const timestamps: number[] = [];
-            const pinned: number[] = [];
-            for (const row of r.rows.reverse()) {
-                const ts = Number(row.ts);
-                timestamps.push(ts);
-                if (Number(row.pinned) === 1) pinned.push(ts);
-            }
-            return { timestamps, pinned };
-        },
-        async storage(deviceId) {
-            const r = await pool.query<{ snapshots: number; processes: number; bytes: number }>(
-                `SELECT COUNT(*)                          AS snapshots,
-                        COALESCE(SUM(proc_count), 0)      AS processes,
-                        COALESCE(SUM(payload_bytes), 0)   AS bytes
-                 FROM device_process_samples WHERE device_id = ?`,
-                [deviceId]
-            );
-            const row = r.rows[0];
-            return {
-                snapshots: Number(row?.snapshots ?? 0),
-                processes: Number(row?.processes ?? 0),
-                bytes: Number(row?.bytes ?? 0)
-            };
-        },
-        async deleteRange(deviceId, from, to) {
-            const del = await pool.query(
-                'DELETE FROM device_process_samples WHERE device_id = ? AND ts BETWEEN ? AND ?',
-                [deviceId, from, to]
-            );
-            return { snapshots: del.rowCount };
-        },
-        async deleteExpiredInRange(deviceId, from, to, defaultDays) {
-            const del = await pool.query(
-                `DELETE s FROM device_process_samples s
-                 JOIN devices d ON d.id = s.device_id
-                 WHERE s.device_id = ? AND s.ts BETWEEN ? AND ?
-                   AND s.pinned = 0 AND d.status <> 'archived'
-                   AND s.ts < (UNIX_TIMESTAMP() * 1000) - COALESCE(d.retention_days, ?) * 86400000`,
-                [deviceId, from, to, defaultDays]
-            );
-            return { snapshots: del.rowCount };
-        },
-        async pruneByRetention(defaultDays) {
-            // Même échéance que les métriques et la présence : un relevé est un
-            // instant, et les faire expirer séparément ne produisait que des
-            // instants à moitié lisibles. Les lignes épinglées survivent quel
-            // que soit leur âge.
-            const r = await pool.query(
-                `DELETE s FROM device_process_samples s
-                 JOIN devices d ON d.id = s.device_id
-                 WHERE s.pinned = 0
-                   AND d.status <> 'archived'
-                   AND s.ts < (UNIX_TIMESTAMP() * 1000) - COALESCE(d.retention_days, ?) * 86400000`,
-                [defaultDays]
-            );
-            return r.rowCount;
         }
     };
 }

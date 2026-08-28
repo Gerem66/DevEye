@@ -1,13 +1,11 @@
 import type { FeatureDefinition } from './_define';
 import { agentFeatures } from './agent';
-import { deviceFeatures } from './devices';
 import { homeFeatures } from './home';
 import { adminFeatures } from './admin';
 import { liveHereFeature } from './live/here';
 import { logsFeatures } from './logs';
 import { notifyFeatures } from './notify';
 import { sharingFeatures } from './sharing';
-import { metricsFeatures } from './metrics';
 import { secrecyFeatures } from './secrecy';
 import { twoFactorFeatures } from './twofa';
 import { userSetAvatarFeature } from './user/setAvatar';
@@ -61,8 +59,6 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     userSetColorFeature,
     userSetSettingFeature,
     ...agentFeatures,
-    ...deviceFeatures,
-    ...metricsFeatures,
     ...twoFactorFeatures,
     ...secrecyFeatures,
     ...logsFeatures,

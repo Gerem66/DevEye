@@ -1,0 +1,2604 @@
+/* Widget compact view */
+.widgetContent {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    height: 100%;
+}
+
+/* Bottom-pinned muted line, matching the count widgets (notes / passwords). */
+.widgetFoot {
+    margin-top: auto;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+.stat {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-sm);
+}
+
+.statValue {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--accent);
+}
+
+.statLabel {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+/* Two columns rather than one: the card's height only affords two rows, and a
+   single column left half the width unused while pushing the fourth line out of
+   the card. `minmax(0, 1fr)` is what lets a cell shrink below its content so the
+   names below can actually ellipsize. Pinned to the bottom of the card. */
+.deviceList {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-xs) var(--space-sm);
+    margin-top: auto;
+}
+
+.deviceItem {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    /* Grid items default to `min-width: auto` — without this a long hostname
+       widens its track and spills past the card edge. */
+    min-width: 0;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.miniDot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.miniDot.online {
+    background: var(--success);
+}
+
+.miniDot.offline {
+    background: var(--text-muted);
+}
+
+.deviceName {
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Occupies the last slot of the grid when the fleet outgrows it, so it reads as
+   one more entry in the block rather than as a caption above it. */
+.moreDevices {
+    display: flex;
+    align-items: center;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* Full view */
+/* ------------------------------------------------------------------ *
+ * La vue complète : le segment (Monitoring | Flotte) au-dessus du contenu
+ * ------------------------------------------------------------------ */
+
+.view {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    height: 100%;
+    min-height: 0;
+}
+
+.viewBar {
+    display: flex;
+    justify-content: flex-start;
+    flex: none;
+}
+
+/* Le contenu du segment prend le reste de la hauteur et défile sous la barre
+   (Monitoring fait déjà défiler ses deux colonnes séparément ; la flotte, une
+   grille de cartes, défile ici). */
+.viewBody {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* ------------------------------------------------------------------ *
+ * Mini-widget de topbar
+ * ------------------------------------------------------------------ */
+
+/* L'icône porte l'identité (quel widget ?) et l'état. L'hôte la teinte en
+   accent par défaut (`.statusItem .icon`, deux classes) : la teinte « en
+   ligne » pèse trois classes pour l'emporter quel que soit l'ordre des
+   feuilles, avec le même jeton que les statuts natifs (`--success`). */
+:global(.icon).statusIcon.statusOk {
+    color: var(--success);
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-xs) 0;
+}
+
+.subtitle {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin: 0 0 var(--space-lg) 0;
+}
+
+/* Feature header: title block + general "how it works" info button. */
+.titleRow {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+
+/* Title on the left; actions (update-all + info) on the right, hugging the panel. */
+.titleHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    /* Le bouton Réglages s'ajoute aux icônes : dans la colonne de 260 px, la
+       rangée d'actions passe à la ligne plutôt que de déborder. */
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+
+.titleActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+/* Sidebar variant: compact, sits atop the device list (frees the full-width band). */
+.titleSidebar .title {
+    font-size: 1.25rem;
+}
+
+.titleSidebar .subtitle {
+    margin-bottom: var(--space-sm);
+    font-size: 0.8rem;
+}
+
+.loader {
+    color: var(--text-muted);
+    text-align: center;
+    padding: var(--space-xl);
+}
+
+.empty {
+    flex: 0.85;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-xl);
+    color: var(--text-muted);
+    text-align: center;
+    gap: var(--space-sm);
+    pointer-events: none;
+}
+
+.empty span {
+    font-size: 3rem;
+    opacity: 0.3;
+}
+
+.emptyIcon {
+    width: 52px;
+    height: 52px;
+    color: var(--text-secondary);
+    opacity: 0.45;
+}
+
+.hint {
+    font-size: 0.85rem;
+    opacity: 0.7;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    /* One row filling the view height, so each column scrolls on its own. */
+    grid-template-rows: minmax(0, 1fr);
+    gap: var(--space-lg);
+    flex: 1;
+    min-height: 0;
+}
+
+.deviceListFull {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* Right column: the per-device panel scrolls independently of the sidebar. */
+.panelScroll {
+    min-height: 0;
+    overflow-y: auto;
+}
+
+@media (max-width: 768px) {
+    /* Single column: back to one natural flow, the popup scrolls everything. */
+    .container {
+        height: auto;
+    }
+
+    .grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: none;
+    }
+
+    .deviceListFull,
+    .panelScroll {
+        overflow-y: visible;
+    }
+}
+
+/*
+ * Les cartes, dans leur propre boîte à l'intérieur du volet défilant.
+ *
+ * C'est elle qui ancre la barre d'insertion : `.deviceListFull` défile, donc un
+ * enfant absolu s'y positionnerait par rapport au *contenu* et non à ce qu'on
+ * voit. Ici, la boîte se déplace avec le défilement, et la barre suit sans
+ * qu'aucun code n'ait à corriger un `scrollTop`.
+ */
+.deviceCards {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+/*
+ * Où atterrirait la carte glissée. Traverse la liste et se tient dans
+ * l'interstice lui-même : aucune ligne n'est déplacée ni restylée pour montrer
+ * la cible. Pilotée par le DOM (voir `src/dragReorder.ts`), jamais par un état.
+ */
+.dropBar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent-glow);
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Poignée de réorganisation, comme dans Uptime, Git et les bases de données :
+   cachée jusqu'au survol, à la manière des éditeurs natifs. `touch-action: none`
+   est ce qui rend le geste possible au doigt — il empêche le défileur de
+   revendiquer le mouvement — et reste cantonné à ces 16 px, de sorte qu'une
+   pression ailleurs sur la carte fait toujours défiler la liste. */
+.grip {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: grab;
+    touch-action: none;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+}
+
+.deviceCard:hover .grip,
+.deviceCard:focus-within .grip {
+    opacity: 1;
+}
+
+.grip:active {
+    cursor: grabbing;
+}
+
+/* Aucun survol pour la révéler : elle doit être là d'emblée. */
+@media (pointer: coarse) {
+    .grip {
+        opacity: 1;
+    }
+}
+
+/* La carte en cours de déplacement : estompée plutôt que masquée, pour que sa
+   place reste un repère pendant que la barre montre la cible. */
+.deviceCardDragging {
+    filter: opacity(0.4);
+    cursor: grabbing;
+}
+
+.deviceCard {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast);
+    text-align: left;
+    color: var(--text-primary);
+}
+
+.deviceCard:hover {
+    background: var(--glass-bg);
+}
+
+.deviceCard.selected {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+}
+
+.statusDot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.statusDot.online {
+    background: var(--success);
+    box-shadow: 0 0 6px var(--success);
+}
+
+.statusDot.offline {
+    background: var(--text-muted);
+}
+
+.deviceCardInfo {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.deviceCardName {
+    font-size: 0.9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.deviceCardPlatform {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Per-device update affordance in the sidebar card (accent, right-aligned). */
+.cardUpdateBtn {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    background: transparent;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sm);
+    color: var(--accent);
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.cardUpdateBtn:hover:not(:disabled) {
+    background: var(--accent);
+    color: var(--on-accent);
+}
+
+.cardUpdateBtn:disabled {
+    cursor: default;
+    opacity: 0.7;
+}
+
+.metricsPanel {
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.metricsPanelHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+
+.metricsPanel h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.onlineBadge {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+}
+
+.onlineBadge.online {
+    background: var(--success-bg);
+    color: var(--success);
+    border: 1px solid var(--success);
+}
+
+.onlineBadge.offline {
+    background: var(--danger-bg);
+    color: var(--danger);
+    border: 1px solid var(--danger);
+}
+
+.onlineBadge.archived {
+    background: var(--accent-bg);
+    color: var(--text-muted);
+    border: 1px solid var(--glass-border);
+}
+
+.offlineMsg,
+.waitingMsg {
+    color: var(--text-muted);
+    font-style: italic;
+    padding: var(--space-md) 0;
+}
+
+/* ─── Mini graphs ─────────────────────────────────────────────────────────── */
+
+.graphsGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--space-sm);
+}
+
+.expandGraphsBtn {
+    align-self: center;
+    margin-top: var(--space-xs);
+    padding: 4px 12px;
+    font-size: 0.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--glass-bg);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition:
+        color 0.15s ease,
+        border-color 0.15s ease;
+}
+
+.expandGraphsBtn:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+.focusCaption {
+    margin: var(--space-xs) 0 0;
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Per-device collection config dialog (opened from the Monitoring panel). */
+.configGrid {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+/*
+ * Grille et non rangée flex : le libellé prend la place restante, le champ
+ * exactement la sienne, et la précision occupe une seconde ligne sur toute la
+ * largeur. En flex, elle se rangeait à côté du champ et sortait de la popup.
+ *
+ * `minmax(0, …)` des deux côtés : sans lui, `min-width: auto` empêche une
+ * colonne de descendre sous son contenu le plus large, et le débordement
+ * reprend dès que la fenêtre se resserre.
+ */
+.configRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+    align-items: center;
+    gap: var(--space-xs) var(--space-md);
+}
+
+.configLabel {
+    font-size: 0.85rem;
+    color: var(--text);
+    min-width: 0;
+}
+
+/*
+ * Compressible, et à la ligne au besoin : figé (`flex-shrink: 0`), ce bloc ne
+ * cédait jamais un pixel — tout ce qui dépassait la largeur utile de la popup
+ * en sortait et se faisait rogner par son `overflow-x: hidden`.
+ */
+.configField {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-sm);
+    min-width: 0;
+}
+
+.configField > select {
+    min-width: 150px;
+}
+
+.configCustom {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.configCustomInput {
+    width: 72px;
+}
+
+/* Précision sous un champ (coût de stockage projeté…), alignée à droite sur
+   toute la largeur de la ligne pour ne pas élargir la colonne du champ. */
+.configHint {
+    grid-column: 1 / -1;
+    justify-self: end;
+    text-align: right;
+    max-width: 100%;
+    margin: 0;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+}
+
+.configUnit {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.configError {
+    margin: var(--space-sm) 0 0;
+    color: var(--danger);
+    font-size: 0.82rem;
+}
+
+/* ── Clickable graph cards + detail popup ── */
+.graphCardClickable {
+    cursor: pointer;
+    transition:
+        border-color 0.15s ease,
+        transform 0.1s ease;
+}
+.graphCardClickable:hover {
+    border-color: var(--accent);
+}
+.graphCardClickable:active {
+    transform: scale(0.99);
+}
+.graphBodyTall {
+    height: 160px;
+}
+
+.graphDetail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+.graphDetailStats {
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: var(--space-xs) var(--space-md);
+}
+.graphDetailRow {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border);
+}
+.graphDetailRow dt {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+.graphDetailRow dd {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+/* Discreet label: total time span the graphs cover (live / zone / snapshot). */
+.graphsSpan {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 5px;
+    margin-bottom: calc(-1 * var(--space-xs));
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+.graphsSpan .icon {
+    font-size: 0.85em;
+    opacity: 0.8;
+}
+
+/* ── Detail chart: hour grid + hover readout (tall mode only) ── */
+.graphGridLine {
+    stroke: var(--glass-border);
+    stroke-width: 1;
+    opacity: 0.5;
+}
+.graphOverlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: visible;
+}
+.graphGridLabel {
+    position: absolute;
+    bottom: 2px;
+    transform: translateX(-50%);
+    font-size: 0.62rem;
+    line-height: 1;
+    color: var(--text-muted);
+    opacity: 0.65;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.graphCursor {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--text-secondary);
+    opacity: 0.4;
+}
+.graphHoverDot {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    border: 2px solid var(--surface-popup);
+    box-shadow: 0 0 0 1px var(--glass-border-strong);
+}
+.graphTooltip {
+    position: absolute;
+    top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 5px 8px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-popup);
+    border: 1px solid var(--glass-border-strong);
+    box-shadow: var(--shadow-md);
+    font-size: 0.72rem;
+    line-height: 1.25;
+    white-space: nowrap;
+    transform: translateX(10px);
+    z-index: 2;
+}
+.graphTooltip[data-side='left'] {
+    transform: translateX(-100%) translateX(-10px);
+}
+.graphTooltipTime {
+    color: var(--text-muted);
+    font-size: 0.66rem;
+    font-variant-numeric: tabular-nums;
+}
+.graphTooltipRow {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--text-primary);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+.graphTooltipDot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex: none;
+}
+
+/* ── Hardware / agent info dialog ── */
+.hwContent {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+.hwGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+.hwGroupTitle {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+.hwRows {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+}
+.hwRow {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-md);
+    padding: 5px 0;
+    border-bottom: 1px solid var(--border);
+}
+.hwRow:last-child {
+    border-bottom: none;
+}
+.hwRow dt {
+    flex-shrink: 0;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+}
+.hwRow dd {
+    margin: 0;
+    text-align: right;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+    font-variant-numeric: tabular-nums;
+}
+.hwLegacyNote {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* Update-available value inside the "Agent" group: accent text + leading glyph. */
+.agentVersionWarn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--accent);
+}
+.agentVersionWarn .icon {
+    width: 14px;
+    height: 14px;
+    color: var(--accent);
+}
+
+/* ── Activity hero (idle / normal / intensive) ── */
+.activityHero {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: 8px 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: linear-gradient(120deg, color-mix(in srgb, var(--activity-color) 14%, transparent), transparent 70%);
+    --activity-color: var(--text-muted);
+    /* Transitioning the tint (registered as a `<color>` in Styles/theme.css)
+       rather than any one property that uses it: it inherits, so the label, the
+       icon and the dot's halo below all cross-fade from this single line. */
+    transition: --activity-color var(--transition-slow);
+}
+.activityHero.muted {
+    opacity: 0.6;
+}
+.activityLabel {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--activity-color);
+}
+.activityIcon {
+    margin-left: auto;
+    color: var(--activity-color);
+    opacity: 0.85;
+}
+.activityDot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--activity-color);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--activity-color) 70%, transparent);
+}
+.actIdle {
+    --activity-color: var(--text-muted);
+}
+.actNormal {
+    --activity-color: var(--success, #3ecf8e);
+}
+.actIntense {
+    --activity-color: var(--warning);
+}
+.actIntense .activityDot {
+    animation: activityPulse 1.6s ease-out infinite;
+}
+.actNormal .activityDot {
+    animation: activityPulse 2.6s ease-out infinite;
+}
+@keyframes activityPulse {
+    0% {
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--activity-color) 65%, transparent);
+    }
+    70% {
+        box-shadow: 0 0 0 7px transparent;
+    }
+    100% {
+        box-shadow: 0 0 0 0 transparent;
+    }
+}
+
+/* ── Timeline zoom presets (discreet) ── */
+.zoomRow {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+.zoomLabel {
+    margin-right: auto;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+.zoomChip {
+    padding: 2px 8px;
+    font-size: 0.72rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition:
+        color 0.12s ease,
+        border-color 0.12s ease;
+}
+.zoomChip:hover {
+    color: var(--text);
+    border-color: var(--accent);
+}
+.zoomChipActive {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-bg);
+}
+
+.graphCard {
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.graphHead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+
+.graphTitle {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+}
+
+.graphStat {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.graphStatMuted {
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.graphBody {
+    position: relative;
+    height: 60px;
+}
+
+.graphSvg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.graphEmpty {
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+}
+
+/* ─── Loading skeletons (device switch / first load) ──────────────────────── */
+
+/* A shimmering placeholder block; sized by the modifier classes below. */
+.skelLine {
+    position: relative;
+    overflow: hidden;
+    background: var(--glass-bg-light);
+    border-radius: var(--radius-sm);
+}
+.skelLine::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+        90deg,
+        transparent,
+        color-mix(in srgb, var(--text-muted) 14%, transparent),
+        transparent
+    );
+    animation: monitoring-shimmer 1.2s ease-in-out infinite;
+}
+@keyframes monitoring-shimmer {
+    100% {
+        transform: translateX(100%);
+    }
+}
+.skelTitle {
+    width: 38%;
+    height: 0.7rem;
+}
+.skelStat {
+    width: 22%;
+    height: 0.7rem;
+}
+.skelGraphBody {
+    height: 60px;
+}
+.activityHeroLoading {
+    --activity-color: var(--text-muted);
+}
+.skelHeroLabel {
+    width: 130px;
+    height: 0.85rem;
+    border-radius: 999px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .skelLine::after {
+        animation: none;
+    }
+}
+
+/* ─── Info cards (current values) ─────────────────────────────────────────── */
+
+.infoCard {
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    text-align: center;
+}
+
+.infoLabel {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.infoVal {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Dimmed when showing last-known values for an offline device. */
+.infoCard.muted .infoVal {
+    color: var(--text-secondary);
+    opacity: 0.7;
+}
+
+/* Clickable KPI card (opens a detail popup, e.g. connections). */
+.infoCardBtn {
+    width: 100%;
+    font: inherit;
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast);
+}
+.infoCardBtn:hover {
+    background: var(--accent-bg);
+    border-color: var(--accent);
+}
+.infoCardIcon {
+    margin-left: 4px;
+    font-size: 0.7em;
+    opacity: 0.7;
+    vertical-align: middle;
+}
+
+.noMetrics.offline {
+    color: var(--danger);
+}
+
+.deviceMeta {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: var(--space-md);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--glass-border);
+}
+
+/* ─── Extended info grid (temp, load, uptime, processes, connections…) ─────── */
+
+.infoGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+    gap: var(--space-sm);
+}
+
+/* ─── Sections (security, processes) ──────────────────────────────────────── */
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.sectionTitle {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-sm);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 0;
+}
+
+.sectionMeta {
+    font-size: 0.7rem;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text-muted);
+}
+
+/* Snapshot footprint + delete controls (under the Processes title). */
+.snapshotBar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+
+.snapshotUsage {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.snapshotDeleteBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    font-size: 0.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--glass-bg);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition:
+        color 0.15s ease,
+        border-color 0.15s ease;
+}
+
+.snapshotDeleteBtn:hover {
+    color: var(--danger);
+    border-color: var(--danger);
+}
+
+.snapshotActions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.snapshotPinBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    font-size: 0.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--glass-bg);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition:
+        color 0.15s ease,
+        border-color 0.15s ease;
+}
+.snapshotPinBtn:hover:not(:disabled) {
+    color: var(--warning);
+    border-color: var(--warning);
+}
+.snapshotPinBtn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+/* Already conserved: filled state so it reads as "on". */
+.snapshotPinBtnActive {
+    color: var(--warning);
+    border-color: var(--warning);
+    background: var(--warning-bg);
+}
+
+.secGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: var(--space-sm);
+}
+
+.secChip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg-light);
+}
+
+.secLabel {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+.secVal {
+    font-size: 0.8rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.secGood {
+    border-color: var(--success);
+    color: var(--success);
+}
+
+.secBad {
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+.secWarn {
+    border-color: var(--warning);
+    color: var(--warning);
+}
+
+.secUnknown {
+    color: var(--text-muted);
+}
+
+/* Clickable security chip (e.g. agent privileges → explainer popup). */
+.secChipBtn {
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+    transition: border-color 0.15s ease;
+}
+
+.secChipBtn:hover {
+    border-color: var(--accent);
+}
+
+.secChipBtn .secVal {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* ─── Open listening ports ────────────────────────────────────────────────── */
+
+.portGrid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+}
+
+.portChip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 2px var(--space-sm);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg-light);
+    cursor: default;
+}
+
+.portNum {
+    font-size: 0.82rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.portMeta {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+}
+
+/* Owning program, when the agent could attribute the socket. */
+.portProc {
+    font-size: 0.68rem;
+    color: var(--text-secondary);
+    max-width: 12ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Badge marking one bubble that merged an IPv4 and an IPv6 listener. */
+.portFamily {
+    font-size: 0.58rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 4px;
+    border-radius: var(--radius-xs, 3px);
+    background: var(--glass-border);
+    color: var(--text-muted);
+}
+
+/* Externally reachable ports stand out; loopback is muted. */
+.portWorld {
+    border-color: var(--warning);
+}
+
+.portWorld .portNum {
+    color: var(--warning);
+}
+
+.portLocal {
+    opacity: 0.7;
+}
+
+.portBound .portNum {
+    color: var(--text-secondary);
+}
+
+/* Reachability sections: exposed first, then LAN, then loopback. */
+.portSection + .portSection {
+    margin-top: var(--space-sm);
+}
+
+.portSectionTitle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin: 0 0 var(--space-xs);
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+    cursor: help;
+}
+
+.portSectionCount {
+    font-size: 0.68rem;
+    font-weight: 400;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Per-interface split, shown only when a section spans several interfaces. */
+.portIfaceBlock + .portIfaceBlock {
+    margin-top: var(--space-xs);
+}
+
+.portIfaceLabel {
+    display: block;
+    margin-bottom: 2px;
+    font-size: 0.66rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono, monospace);
+}
+
+.portsNote {
+    margin-top: var(--space-sm);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+/* ─── Top processes table ─────────────────────────────────────────────────── */
+
+/* Disposition automatique : chaque colonne de données se dimensionne sur son
+   contenu (cf. .procNum) et le nom absorbe ce qui reste (cf. .procName). Une
+   disposition fixe donnait l'inverse — un nom démesuré, des chiffres repliés. */
+.procTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+
+.procTable th {
+    text-align: left;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    padding: 0 var(--space-sm) 4px;
+}
+
+.procTable td {
+    padding: var(--space-xs) var(--space-sm);
+    border-top: 1px solid var(--glass-border);
+}
+
+/* Numeric columns: right-aligned, tabular figures. `width: 1%` les réduit à
+   leur contenu, `nowrap` garantit qu'une valeur composée comme
+   « 923.5 MB / 22.5 MB » tienne sur une seule ligne. */
+.procNum {
+    text-align: right;
+    width: 1%;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Seule cellule au contenu non borné : une liste de ports peut être longue. On
+   la plafonne pour qu'elle n'élargisse pas le tableau au-delà du panneau, la
+   liste complète restant lisible au survol. */
+.procPorts {
+    max-width: 28ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* CPU column (2nd cell) in accent. */
+.procTable tbody td:nth-child(2) {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+/* Le nom prend toute la largeur restante ; `max-width: 0` est ce qui autorise
+   l'ellipse dans un tableau en disposition automatique. */
+.procName {
+    width: 100%;
+    min-width: 12ch;
+    max-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+}
+
+/* ── Established-connections dialog (from the Connexions KPI) ── */
+.connContent {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+.connTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+.connTable th {
+    text-align: left;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    padding: 0 var(--space-sm) 4px;
+}
+.connTable td {
+    padding: var(--space-xs) var(--space-sm);
+    border-top: 1px solid var(--glass-border);
+}
+.connAddr {
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+.connService {
+    color: var(--text-muted);
+    font-family: var(--font-sans);
+    font-size: 0.74rem;
+}
+
+/* ─── Header actions (refresh) ────────────────────────────────────────────── */
+
+.headerRight {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.iconHeaderBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    background: transparent;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.iconHeaderBtn:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.iconHeaderBtn:disabled {
+    cursor: default;
+    opacity: 0.8;
+}
+
+.iconHeaderDanger:hover:not(:disabled) {
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+/* ── "Fonctions" dropdown (device features: matériel, terminal, logs…) ── */
+
+.actionsMenuWrap {
+    position: relative;
+}
+
+/* The trigger reuses the header-button look but carries a label + chevron. */
+.actionsMenuBtn {
+    width: auto;
+    gap: 6px;
+    padding: 0 10px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.actionsMenuBtnOpen {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.actionsMenuChevron {
+    font-size: 0.7em;
+    opacity: 0.8;
+    transition: transform var(--transition-fast);
+}
+
+.actionsMenuBtnOpen .actionsMenuChevron {
+    transform: rotate(180deg);
+}
+
+.actionsMenu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 20;
+    min-width: 230px;
+    padding: var(--space-xs);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: var(--surface-popup);
+    border: 1px solid var(--glass-border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    backdrop-filter: blur(12px);
+}
+
+.actionsMenuItem {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: var(--space-xs) var(--space-sm);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.actionsMenuItem:hover {
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+.actionsMenuItemIcon {
+    flex-shrink: 0;
+    color: var(--text-secondary);
+}
+
+.actionsMenuItem:hover .actionsMenuItemIcon {
+    color: var(--accent);
+}
+
+/* Update-available button: accent by default so it stands out among the header icons. */
+.iconHeaderUpdate {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.spinning {
+    display: inline-block;
+    animation: monitoring-spin 0.7s linear infinite;
+}
+
+@keyframes monitoring-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ─── Offline banner ──────────────────────────────────────────────────────── */
+
+.offlineBanner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: var(--glass-bg-light);
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+}
+
+.offlineBanner .icon {
+    color: var(--text-muted);
+}
+
+/* ─── Timeline (uptime frieze + range selector) ───────────────────────────── */
+
+.timeline {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.timelineNav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.navBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    background: transparent;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.navBtn:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.navBtn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.timelineDay {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-transform: capitalize;
+    min-width: 120px;
+}
+
+.directBtn {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--accent);
+    background: var(--accent-bg);
+    color: var(--accent);
+    cursor: pointer;
+}
+
+.uptimeBadge {
+    margin-left: auto;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.timelineTrack {
+    position: relative;
+    height: 22px;
+    border-radius: var(--radius-sm);
+    background: var(--glass-bg);
+    overflow: hidden;
+    cursor: crosshair;
+    touch-action: none;
+}
+
+.segment {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+}
+
+.segOnline {
+    background: var(--success);
+    opacity: 0.55;
+}
+
+.segOffline {
+    background: transparent;
+}
+
+.selectionBox {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: var(--accent);
+    opacity: 0.22;
+    border-left: 2px solid var(--accent);
+    border-right: 2px solid var(--accent);
+    pointer-events: none;
+}
+
+/* Tick marks for process snapshots along the track. */
+.snapshotMark {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--text-muted);
+    opacity: 0.35;
+    pointer-events: none;
+}
+
+/* An instant that also carries a process list. Marks are metric instants, so
+   with `processCapture: 'off'` every tick is navigable but none is inspectable —
+   this keeps the difference readable instead of implicit. Declared before
+   .snapshotMarkPinned so pinning still wins the colour. */
+.snapshotMarkProc {
+    opacity: 0.75;
+}
+
+/* Continuous "data available" run, drawn instead of individual ticks once the
+   window holds more marks than are legible (see MAX_INDIVIDUAL_MARKS). */
+.snapshotBand {
+    position: absolute;
+    bottom: 0;
+    height: 3px;
+    background: var(--text-muted);
+    opacity: 0.3;
+    border-radius: 2px;
+    pointer-events: none;
+}
+
+/* Pinned (conservé) snapshot: stands out from the muted ticks. */
+.snapshotMarkPinned {
+    width: 2px;
+    background: var(--warning);
+    opacity: 0.9;
+    box-shadow: 0 0 4px var(--warning);
+}
+
+/* The currently focused single instant. */
+.pointMark {
+    position: absolute;
+    top: -2px;
+    bottom: -2px;
+    width: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 4px var(--accent);
+    pointer-events: none;
+}
+
+.timelineFooter {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.dragHint {
+    font-style: italic;
+}
+
+.resetSel {
+    background: transparent;
+    border: none;
+    color: var(--accent);
+    font-size: 0.72rem;
+    cursor: pointer;
+    padding: 0;
+}
+
+/* Prev/next snapshot stepper around the focused "Instant : hh:mm". */
+.instantNav {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+.instantArrow {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: var(--glass-bg-light);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition:
+        color 0.15s ease,
+        border-color 0.15s ease;
+}
+.instantArrow .icon {
+    font-size: 0.8em;
+}
+.instantArrow:hover:not(:disabled) {
+    color: var(--accent);
+    border-color: var(--accent);
+}
+.instantArrow:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+/* ─── Day picker (button + calendar popover) ──────────────────────────────── */
+
+.dayPickerWrap {
+    position: relative;
+}
+
+.dayButton {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: 4px 10px;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: var(--glass-bg-light);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: capitalize;
+    cursor: pointer;
+}
+
+.dayButton:hover {
+    border-color: var(--accent);
+}
+
+.dayButton .icon {
+    color: var(--text-muted);
+}
+
+.calendar {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 20;
+    width: 244px;
+    padding: var(--space-sm);
+    background: var(--surface, var(--glass-bg));
+    border: 1px solid var(--glass-border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(12px);
+}
+
+.calHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-sm);
+}
+
+.calMonth {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.calGrid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+}
+
+.calWeekday {
+    text-align: center;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    padding-bottom: 2px;
+}
+
+.calDay {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: var(--glass-bg-light);
+    color: var(--text-primary);
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.calDay:hover:not(:disabled) {
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+.calDay:disabled {
+    background: transparent;
+    color: var(--text-muted);
+    opacity: 0.35;
+    cursor: default;
+}
+
+.calToday {
+    outline: 1px solid var(--glass-border-strong);
+}
+
+.calSelected {
+    background: var(--accent);
+    color: var(--on-accent);
+}
+
+.calSelected:hover:not(:disabled) {
+    background: var(--accent);
+    color: var(--on-accent);
+}
+
+/* ── Package-update panel ─────────────────────────────────────────────── */
+.pkgHint {
+    color: var(--text-muted);
+    padding: var(--space-sm) 0;
+}
+.pkgList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+.pkgRow {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding: var(--space-sm);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+.pkgRowHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+.pkgName {
+    font-weight: 600;
+}
+.pkgCount {
+    flex: 1;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+.pkgRoot {
+    color: var(--text-muted);
+}
+.pkgProgress {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+.pkgBar {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--surface-2, var(--surface));
+    overflow: hidden;
+}
+.pkgBarFill {
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.2s ease;
+}
+.pkgBarIndet {
+    width: 35%;
+    animation: pkgIndet 1.1s ease-in-out infinite;
+}
+/* Une commande terminée : barre pleine, couleur de son issue. Sans ça une
+   progression sans pourcentage (le cas d'apt) laissait, une fois finie, une
+   barre affichée mais vide — un travail visiblement inachevé. */
+.pkgBarOk {
+    background: var(--success, var(--accent));
+}
+.pkgBarErr {
+    background: var(--danger);
+}
+@keyframes pkgIndet {
+    0% {
+        margin-left: -35%;
+    }
+    100% {
+        margin-left: 100%;
+    }
+}
+.pkgLine {
+    font-family: var(--font-mono, monospace);
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    word-break: break-all;
+}
+.pkgOk {
+    color: var(--success, var(--accent));
+    font-size: 0.85rem;
+}
+.pkgErr {
+    color: var(--danger);
+    font-size: 0.85rem;
+    word-break: break-word;
+}
+
+/* ── System power menu (device.power) ── */
+.powerMenu {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+.powerList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+.powerRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    width: 100%;
+    text-align: left;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text-primary);
+    transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast);
+}
+.powerRow:hover:not(:disabled) {
+    background: var(--glass-bg);
+    border-color: var(--accent);
+}
+.powerRow:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+.powerRowDanger:hover:not(:disabled) {
+    border-color: var(--danger);
+}
+.powerIcon {
+    flex-shrink: 0;
+    color: var(--text-secondary);
+}
+.powerRowDanger .powerIcon {
+    color: var(--danger);
+}
+.powerText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.powerLabel {
+    font-weight: 600;
+}
+.powerDesc {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+}
+.powerConfirm {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+}
+.powerConfirmText {
+    flex: 1;
+    min-width: 0;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+.powerConfirmActions {
+    display: flex;
+    gap: var(--space-sm);
+}
+.powerHint {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin: 0;
+}
+.powerOk {
+    color: var(--success);
+    font-size: 0.85rem;
+    margin: 0;
+}
+.powerErr {
+    color: var(--danger);
+    font-size: 0.85rem;
+    margin: 0;
+    word-break: break-word;
+}
+
+/* ── Device log viewer (device.logSources / device.logQuery) ── */
+.logsPanel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+.logToolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-sm);
+}
+.logSourceSelect {
+    flex: 1 1 180px;
+    min-width: 0;
+}
+.logSearch {
+    flex: 2 1 200px;
+    min-width: 0;
+}
+.logLevelSelect {
+    flex: 0 0 auto;
+}
+.logUnitInput {
+    flex: 1 1 160px;
+    min-width: 0;
+}
+.logToggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast),
+        border-color var(--transition-fast);
+}
+.logToggle:hover {
+    background: var(--glass-bg);
+}
+.logToggleOn {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-bg);
+}
+.logTimeRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+}
+.logTimeBtn {
+    padding: 2px var(--space-sm);
+    background: transparent;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast),
+        border-color var(--transition-fast);
+}
+.logTimeBtn:hover {
+    background: var(--glass-bg-light);
+}
+.logTimeBtnOn {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-bg);
+}
+.logCount {
+    margin-left: auto;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+.logView {
+    height: 52vh;
+    overflow: auto;
+    background: var(--surface-2, var(--surface));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm);
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+.logLine {
+    display: flex;
+    gap: var(--space-sm);
+    align-items: baseline;
+    padding: 1px 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.logLine:hover {
+    background: var(--glass-bg-light);
+}
+.logTs {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+.logLvl {
+    flex-shrink: 0;
+    text-transform: uppercase;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    min-width: 64px;
+}
+.logLvlDebug {
+    color: var(--text-muted);
+}
+.logLvlInfo {
+    color: var(--text-secondary);
+}
+.logLvlNotice {
+    color: var(--accent);
+}
+.logLvlWarning {
+    color: var(--warning);
+}
+.logLvlError,
+.logLvlCritical {
+    color: var(--danger);
+}
+.logUnit {
+    flex-shrink: 0;
+    color: var(--accent);
+    opacity: 0.85;
+}
+.logMsg {
+    flex: 1;
+    min-width: 0;
+    color: var(--text-primary);
+}
+.logHint {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    padding: var(--space-md);
+    text-align: center;
+}
+.logErr {
+    color: var(--danger);
+    font-size: 0.85rem;
+    padding: var(--space-md);
+    word-break: break-word;
+}
+
+/* ── Remote terminal (device.term*) ── */
+.terminalWrap {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+.terminalHost {
+    height: 58vh;
+    width: 100%;
+    background: var(--surface-2, var(--surface));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm);
+    overflow: hidden;
+}
+.terminalExit {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+.terminalExitActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+/* Relancer la session, et le bouton commun des réglages (les préférences du
+   terminal vivent dans la coquille, à l'échelle de la feature). */
+.terminalBar {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-xs);
+}
+
+/* ── File explorer (device.files*) ── */
+.filesPanel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+.filesPathBar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+.filesIconBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-xs);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+.filesIconBtn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+.filesBreadcrumb {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+    overflow: hidden;
+}
+.filesCrumb {
+    padding: 2px var(--space-xs);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+.filesCrumb:hover {
+    background: var(--glass-bg-light);
+}
+.filesToolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-sm);
+}
+.filesPathInput {
+    flex: 1 1 220px;
+    min-width: 0;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.82rem;
+}
+.filesUsageState {
+    margin-left: auto;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+.filesError {
+    color: var(--danger);
+    font-size: 0.85rem;
+    margin: 0;
+    word-break: break-word;
+}
+.filesList {
+    height: 50vh;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+}
+.filesRow {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid var(--glass-border);
+    cursor: default;
+}
+.filesRow:hover {
+    background: var(--glass-bg-light);
+}
+.filesRowClickable {
+    cursor: pointer;
+}
+.filesRowClickable:focus-visible {
+    outline: 1px solid var(--accent);
+    outline-offset: -1px;
+}
+.filesRowMain {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    min-width: 0;
+    padding: var(--space-xs) var(--space-sm);
+    color: var(--text-primary);
+    text-align: left;
+    font-size: 0.85rem;
+}
+.filesParentHint {
+    flex: 1;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+.filesRowIcon {
+    flex-shrink: 0;
+    color: var(--text-secondary);
+}
+.filesName {
+    flex: 0 1 auto;
+    min-width: 80px;
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.filesBarTrack {
+    flex: 1;
+    height: 8px;
+    min-width: 40px;
+    background: var(--surface-2, var(--surface));
+    border-radius: 4px;
+    overflow: hidden;
+}
+.filesBarFill {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    opacity: 0.8;
+    transition: width 0.25s ease;
+    /* Same radius as the track: below 100% the fill's right edge used to be a
+       raw vertical cut (the track's overflow only rounds it at full width). */
+    border-radius: inherit;
+}
+/* Indeterminate sweep shown while the recursive usage is still being computed —
+   kept very subtle so it reads as "loading", not as a real bar. */
+.filesBarIndet {
+    display: block;
+    height: 100%;
+    width: 45%;
+    border-radius: 4px;
+    background: var(--accent);
+    opacity: 0.15;
+    animation: filesIndet 1.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+@keyframes filesIndet {
+    0% {
+        margin-left: -45%;
+    }
+    100% {
+        margin-left: 100%;
+    }
+}
+.filesSize {
+    flex-shrink: 0;
+    width: 78px;
+    text-align: right;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+.filesMeta {
+    flex-shrink: 0;
+    width: 64px;
+    text-align: right;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+.filesPerm {
+    flex-shrink: 0;
+    width: 80px;
+    text-align: right;
+    color: var(--text-muted);
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.72rem;
+}
+.filesRowActions {
+    display: flex;
+    gap: 2px;
+    padding-right: var(--space-xs);
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+}
+.filesRow:hover .filesRowActions {
+    opacity: 1;
+}
+.filesRowActions button {
+    padding: var(--space-xs);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+.filesRowActions button:hover {
+    background: var(--glass-bg);
+}
+.filesDeleteBtn:hover {
+    color: var(--danger);
+}
+.filesSearch {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+.filesSearchRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--space-sm);
+}
+.filesSearchInput {
+    flex: 2 1 200px;
+    min-width: 0;
+}
+.filesField {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+.filesField input {
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 0.82rem;
+}
+.filesNum {
+    width: 80px;
+}
+.filesTruncated {
+    color: var(--warning);
+    font-size: 0.78rem;
+    padding: var(--space-xs) var(--space-sm);
+    margin: 0;
+}
+.filesMatch {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-xs) var(--space-sm);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--glass-border);
+    color: var(--text-primary);
+    cursor: pointer;
+    text-align: left;
+    font-size: 0.82rem;
+}
+.filesMatch:hover {
+    background: var(--glass-bg-light);
+}
+.filesMatchPath {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow: hidden;
+}
+.filesMatchPath .filesName {
+    max-width: none;
+    font-family: var(--font-mono, ui-monospace, monospace);
+}
+.filesPreview {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* "×3" marker: a program aggregating several PIDs (browsers, editors). */
+.procInstances {
+    margin-left: 4px;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}

@@ -82,7 +82,7 @@ export type ArtId = HomeFeatureId | 'device' | 'shortcut';
  */
 const ART: Record<ArtId, ReactNode> = {
     // Une courbe d'activité, et les trois jauges qui l'accompagnent partout.
-    monitoring: (
+    devices: (
         <>
             <path d='M16 54 36 42 54 48 72 28 90 36 110 18 128 26 144 16 144 62 16 62Z' fill={A} opacity='0.16' />
             <path d='M16 54 36 42 54 48 72 28 90 36 110 18 128 26 144 16' stroke={A} {...stroke} />

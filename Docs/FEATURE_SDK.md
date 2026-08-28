@@ -12,8 +12,8 @@ template), l'app le déclare dans `features.config.json`, et
 `npm run gen:features` écrit la glue (commitée, le serveur n'ayant pas de
 build). Rien ne se charge à chaud ; installer = dépendance npm + une entrée de
 config + une génération. Les features natives rapatriées vivent dans
-`features/*` (workspaces npm) et passent par le même chemin : Météo est la
-première, et la preuve que le contrat suffit.
+`features/*` (workspaces npm) et passent par le même chemin : Météo a été la
+première, la preuve que le contrat suffit ; Appareils la seizième et dernière.
 
 ## Les trois étages
 
@@ -541,18 +541,54 @@ contrat publié), là où la native n'en avait aucun. Comme les Notes et Mail, l
 manifest déclare `shareTier: 'never'` par-dessus le `'perItem'` du
 descripteur : aucune entrée `items`.
 
-**Appareils reste native**, et c'est une décision à confirmer, pas un reste.
-Ses 44 commandes `agent.*` (le transport) / `devices.*` (la feature) sont des relais du hub des agents
-(MonitorHub, abonnements et droits par socket, présence, appairage, flotte
-vue par l'admin global) : la capacité `agents` permettrait de la rapatrier,
-mais ce serait envelopper le hub 1:1 dans une façade réservée, sans rien
-isoler, et chaque évolution du protocole agent traverserait deux couches au
-lieu d'une. Tenue pour de l'infrastructure de l'app, au même titre que `live`
-ou `secrecy`, elle n'a pas de manifest ; la seule chose que cela laisse en
-suspens est le dialogue de configuration de collecte de Monitoring, qui ne
-peut pas rejoindre la coquille de réglages sans manifest ([SETTINGS.md]
-(./SETTINGS.md), dernier candidat). Migrer malgré tout, ou clore la liste :
-`feature_refonte.md` section 9.
+**Appareils** est la seizième native rapatriée (`features/devices`, 29
+août 2026), et la dernière : seize sur seize, la liste est close. Tenue pour
+de l'infrastructure jusque-là (44 commandes, un hub de mille lignes, des
+tables écrites hors session), elle a été migrée en coupant au bon endroit
+plutôt qu'en enveloppant le hub :
+
+- **Infrastructure, dans `src/`** : le hub, la socket agent, l'ingestion de la
+  télémétrie et la présence (qui écrivent `devices`, `device_metrics`,
+  `device_process_samples`, `device_presence` hors session, pour trois
+  consommateurs : l'app, Sentinelle, Sauvegardes), l'enrôlement et la
+  distribution des binaires, la composition de `agent.config`, la garde
+  `authorizeDevice` (une seule, `src/agent/authorize.ts`, que la façade SDK
+  ne duplique plus), et les **23 commandes de transport** `agent.*`
+  (`src/features/agent/`) qui ne font que relayer une méthode du hub :
+  natives, sous le droit `devices`.
+- **Module `features/devices`** : la flotte (liste, approbation, révocation,
+  renommage, rangement, configuration de collecte, partage par
+  `device_workspaces`, suppression), l'historique stocké (métriques,
+  présence, processus, disponibilité, instantanés, épinglage, stockage), les
+  **codes de liaison** (quatre routes HTTP de session devenues les commandes
+  `devices.linkCode*`, l'enrôlement public restant en HTTP), la rétention
+  (le balayage horaire d'`index.ts` devenu `RetentionSweep` sur
+  `deps.createTicker`, `MONITORING_RETENTION_DAYS` lue par le module), et
+  tout le client : Monitoring, la page Appareils, la tuile et les vues par
+  appareil de l'accueil, offertes par `DEVICES_CLIENT_PROVIDER`
+  (`useDevices`, `DevicePanel`, `DeviceWidget`). Le dialogue de configuration
+  de collecte est devenu le panneau `general` d'un appareil dans la coquille
+  de réglages, les réglages du terminal le panneau `general` de la feature :
+  la dernière dette de `SETTINGS.md` tombe avec lui.
+- **Tables partagées, assumé** : les dépôts du socle restent à
+  l'infrastructure, réduits à ce qu'elle écrit et à ce que la façade lit ; le
+  module a son dépôt sur les mêmes tables allowlistées, un fichier par table.
+  Deux lecteurs, un schéma.
+
+Ce que le SDK a gagné : `ctx.isAdmin` et `access: { admin: true }` (le
+dispatcheur exige l'administrateur global en plus du droit de feature : les
+gestes de flotte) ; la capacité `workspaces.read` (`ctx.deveye.workspaces.list`,
+administrateur seulement : tous les espaces, pour rattacher un appareil) ;
+sur la façade `agents`, les trois ordres du cycle de vie
+(`resetAgentSession`, `disconnectAgent`, `requestDestroy`) et
+`servedManifest()` (le manifest des binaires servis, pour signaler un agent
+à mettre à jour sans que le module ne lise le disque) ; côté client,
+`SettingsPanelProps<Id>` (la portée d'un élément de la coquille accepte un
+id texte, un appareil étant un UUID), `commandsApi` (les commandes `agent.*`
+typées), `acquireMetrics` / `releaseMetrics`, `joinPath`, et le contrat
+`DEVICES_CLIENT_PROVIDER`. Le module se teste sur le harnais (37 tests :
+handlers et service), là où la native n'en avait aucun. Voir
+[MONITORING.md](./MONITORING.md) pour la carte et les invariants.
 
 ## La désinstallation d'un module (22 août 2026)
 
@@ -585,16 +621,21 @@ config — le module doit rester résoluble).
 ## Ce que le contexte serveur expose, en une liste
 
 Par requête (`SdkFeatureContext`, construit dans `_sdk/context.ts`) : l'identité
-de l'appel (`userId`, `workspaceId`, `workspace`, `isOwner`, `canWrite`,
-`canExtra`/`extraValue` par `resolveExtras`, la même règle que le harnais),
+de l'appel (`userId`, `workspaceId`, `workspace`, `isOwner`, `isAdmin`,
+`canWrite`, `canExtra`/`extraValue` par `resolveExtras`, la même règle que le
+harnais ; une commande qui exige l'administrateur global le déclare par
+`access: { admin: true }`, appliqué par le dispatcheur),
 `repo`, `store` (KV chiffrable, `'server' | 'private' | 'none'`), `cipher(mode)`,
 `deveye` (façade gardée par `nativeCapabilities` : `notify` avec `embeds`
 Discord, `except`, et le suivi vivant `liveChannels` / `postLive`, `mail.accounts`, `members.read` (chaque membre avec la couleur de son compte), `devices.read` (des `SdkDevice`
-complets : état, propriétaire, espace, cadence, rapport ; `list()` suit la règle
-de `devices.list`, l'admin dans son espace personnel voit la flotte),
-`telemetry.read` (`snapshot`, `pinInstant`, réservée aux ids natifs) et
-`agents` (`requestScan`, `pushConfig`, les requêtes sync)), `transport` (socket
-appelant, `agents`), `secrecy.isUnlocked()` (le verrou de la session) et
+complets : état, propriétaire, espace, cadence, rapport ; `authorize` est LA
+garde de l'app, `list()` suit la règle de `devices.list`, l'admin dans son
+espace personnel voit la flotte), `workspaces.read` (`list()`, tous les
+espaces, administrateur seulement), `telemetry.read` (`snapshot`,
+`pinInstant`, réservée aux ids natifs) et `agents` (`requestScan`,
+`pushConfig`, les trois ordres du cycle de vie `resetAgentSession` /
+`disconnectAgent` / `requestDestroy`, `servedManifest`, les requêtes sync)),
+`transport` (socket appelant, `agents`), `secrecy.isUnlocked()` (le verrou de la session) et
 `secrecy.ticket(payload, { ttlSeconds })` (le ticket de session qu'une route
 publique du service rend contre les codecs de l'appelant), `keys` (les mêmes
 dérivations qu'un service),

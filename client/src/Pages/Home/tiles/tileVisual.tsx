@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
-import type { Device, HomeTile, ShortcutItem } from '@deveye/types';
+import type { HomeTile, ShortcutItem } from '@deveye/types';
 import { homeTileKind, isFeatureTile, isHomeFolder, isShortcutTile } from '@deveye/types';
-import { DeviceWidget } from '@/Features/Monitoring/DeviceWidget';
+import type { SdkDeviceSummary } from '@deveye/types/sdk/client';
+import { devicesProvider } from '@/devicesProvider';
 import { ShortcutTile } from './ShortcutTile';
 import { FolderTile, folderKey, folderTitle } from '../folders';
 import { featureCatalogEntry } from '../catalog';
@@ -57,7 +58,14 @@ export function featureTileVisual(tile: HomeTile): TileVisual | null {
     };
 }
 
-export function deviceTileVisual(device: Device, opts?: { editing?: boolean }): TileVisual {
+/**
+ * La carte d'un appareil : celle que le module Appareils fournit par son
+ * provider. `null` sans le module, mais on n'y arrive pas : sans lui, la
+ * liste d'appareils est vide et aucune tuile d'appareil ne se rend.
+ */
+export function deviceTileVisual(device: SdkDeviceSummary, opts?: { editing?: boolean }): TileVisual | null {
+    const DeviceWidget = devicesProvider()?.DeviceWidget;
+    if (!DeviceWidget) return null;
     // No Widget header — DeviceWidget owns the whole card (name + status + the
     // full-bleed activity background).
     return {
@@ -86,7 +94,11 @@ export function shortcutTileVisual(item: ShortcutItem, opts?: { editing?: boolea
  * version plus récente) ; l'appelant décide alors s'il l'escamote ou s'il pose
  * une carte « indisponible ».
  */
-export function homeTileVisual(tile: HomeTile, devices: Device[], opts?: { editing?: boolean }): TileVisual | null {
+export function homeTileVisual(
+    tile: HomeTile,
+    devices: readonly SdkDeviceSummary[],
+    opts?: { editing?: boolean }
+): TileVisual | null {
     if (homeTileKind(tile) === 'device') {
         const device = devices.find((d) => d.id === tile);
         return device ? deviceTileVisual(device, opts) : null;

@@ -1,9 +1,8 @@
 /**
- * Cross-feature view navigation: a feature rendered inside the home popup can
- * ask the home page to open another view (e.g. Monitoring's "Gérer les
- * appareils" entry opening the Appareils page). The home page registers the
- * single handler; requests made while none is registered are dropped (there is
- * nowhere to navigate to).
+ * Cross-feature view navigation: a view rendered inside the home popup can
+ * ask the home page to open another one (e.g. the profile's link to the
+ * security page). The home page registers the single handler; requests made
+ * while none is registered are dropped (there is nowhere to navigate to).
  */
 
 type OpenViewHandler = (viewId: string) => void;
@@ -18,7 +17,7 @@ export function onOpenViewRequest(fn: OpenViewHandler): () => void {
     };
 }
 
-/** Ask the home page to open a view by its id (e.g. `clients`, `profile`). */
+/** Ask the home page to open a view by its id (e.g. `security`, `profile`). */
 export function requestOpenView(viewId: string): void {
     handler?.(viewId);
 }

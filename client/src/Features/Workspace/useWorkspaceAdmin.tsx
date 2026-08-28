@@ -10,7 +10,7 @@ import { resetWorkspace, upsertWorkspace, useActiveWorkspace } from '@/stores/wo
 /**
  * Toute la logique de la page « Espace », séparée de son rendu.
  *
- * Même partage que `Features/Clients` : le composant décrit l'écran, ce hook
+ * Même partage que la flotte du module Appareils : le composant décrit l'écran, ce hook
  * porte l'état, les appels et les erreurs. Une seule chaîne d'erreur partagée,
  * affichée une fois en tête de page plutôt qu'une par action.
  */

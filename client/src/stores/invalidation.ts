@@ -151,21 +151,11 @@ const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
     // dossiers et de la tête de liste, seule la date « il y a X min » se
     // rafraîchissait, et une boîte laissée ouverte mentait jusqu'au prochain
     // clic.)
-    /*
-     * `cloudSync.listShares` en second : la liste des partages embarque les
-     * appareils ATTACHÉS, dont le statut d'attache et le dossier local. Ces
-     * champs-là appartiennent au partage, mais ils n'existent que pour des
-     * appareils qui, eux, peuvent disparaître, revenir ou être renommés.
-     *
-     * Sans cette clé, attacher un appareil depuis un autre onglet — ou en voir
-     * un redevenir attachable après une mise à jour d'agent — n'apparaissait
-     * qu'au rechargement complet de la page.
-     *
-     * Le nom et la présence, eux, ne passent PAS par là : ils sont recomposés
-     * au rendu depuis le store `devices` (`useShareDevices`), donc sans le
-     * moindre aller-retour.
-     */
-    devices: ['devices.list'],
+    // (`devices` : sa clé `devices.list` est déclarée par le manifest du
+    // module `features/devices` et enregistrée par la glue générée. Le sujet
+    // bat sur une écriture de flotte et sur chaque arête de présence d'un
+    // agent ; CloudSync le suit aussi, par `alsoInvalidatedBy`, parce que ses
+    // lignes de partage portent le nom de leurs appareils.)
     // (`sentinel` : sujet distinct de `devices`, ses constats bougent à une
     // tout autre cadence ; ses clés sont déclarées par le manifest du module
     // `features/sentinel` et enregistrées par la glue générée.)

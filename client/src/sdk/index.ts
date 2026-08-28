@@ -44,7 +44,13 @@ export { default as Popup, ClosePopup, OpenPopup } from '@/Components/Popup';
 export { openInfo } from '@/Components/InfoPopup';
 export { FeatureSettingsButton } from '@/Components/FeatureSettings';
 export { DeviceFolderPicker } from '@/Components/DeviceFolderPicker';
-export { useDevices } from '@/stores/devices';
+/**
+ * Les appareils de l'espace actif, tels que le module Appareils les offre à
+ * l'app (`DEVICES_CLIENT_PROVIDER`) : CloudSync et Sauvegardes les listent
+ * pour choisir une machine. Vide, chargée et sans erreur quand le module
+ * n'est pas installé.
+ */
+export { useDevices } from '@/devicesProvider';
 // Le comptage des abonnements aux métriques vivantes (le hub abonne par
 // socket, le client n'en a qu'une : deux consommateurs du même appareil ne
 // doivent pas se désabonner l'un l'autre) et les chemins d'un appareil, tels
@@ -52,6 +58,20 @@ export { useDevices } from '@/stores/devices';
 // autant que lui.
 export { acquireMetrics } from '@/stores/metricsSubscription';
 export { isWinPath, joinPath } from '@/devicePath';
+/**
+ * La version de DevEye dont cette interface est bâtie (celle du package.json
+ * racine, injectée au build) : ce à quoi un module compare la version qu'un
+ * agent rapporte, pour offrir une mise à jour.
+ */
+export const APP_VERSION: string = __APP_VERSION__;
+/**
+ * Les deux gestes HTTP qu'un module peut avoir à faire, parce que la socket
+ * ne porte pas de binaire : un GET validé sur une route de l'app (le cookie
+ * de session voyage, un jeton périmé est renouvelé et l'appel rejoué une
+ * fois), et le renouvellement explicite du cookie d'accès avant un `fetch`
+ * brut qui échappe au client (le téléchargement d'un agent).
+ */
+export { ensureFreshAccess, get as httpGet } from '@/api/http';
 /** Les classes de rangées canoniques des écrans de réglages (channelRow, etc.). */
 export { default as settingsStyles } from '@/Components/FeatureSettings/FeatureSettings.module.css';
 /** La carte de comptage de l'accueil, et le compte qui la nourrit. */

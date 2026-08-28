@@ -1,5 +1,4 @@
 import { getEnvVar } from 'dotenv-oxy';
-import { DEFAULT_RETENTION_DAYS } from '@deveye/types';
 
 export const env = {
     ENVIRONMENT: getEnvVar('ENVIRONMENT', 'enum', ['dev', 'test', 'prod']),
@@ -77,7 +76,6 @@ export const env = {
 
     // Device (agent) tokens — long-lived, signed with a dedicated secret.
     DEVICE_TOKEN_SECRET: getEnvVar('DEVICE_TOKEN_SECRET', 'string'),
-    LINK_CODE_TTL_SECONDS: getEnvVar('LINK_CODE_TTL_SECONDS', 'number', false) || 60 * 5,
 
     // Directory holding the agent binaries served by the download endpoints.
     // On a persistent volume in prod; defaults to `agent/dist` relative to the
@@ -99,14 +97,10 @@ export const env = {
     TWOFA_ISSUER: getEnvVar('TWOFA_ISSUER', 'string', false) || 'DevEye',
     TWOFA_CHALLENGE_TTL_SECONDS: getEnvVar('TWOFA_CHALLENGE_TTL_SECONDS', 'number', false) || 60 * 5,
 
-    // Conservation de l'historique de supervision (jours), pour les appareils
-    // qui n'ont rien choisi. Une seule durée : un relevé est un *instant* qui
-    // porte métriques, présence et processus ensemble, et les faire expirer
-    // séparément ne produisait que des instants à moitié lisibles.
-    MONITORING_RETENTION_DAYS: getEnvVar('MONITORING_RETENTION_DAYS', 'number', false) || DEFAULT_RETENTION_DAYS,
-
     // (Les SENTINEL_* sont lues par le module Sentinelle lui-même, features/sentinel ;
-    // les MAIL_SYNC_* et OAUTH_* par le module Mail, features/mail.)
+    // les MAIL_SYNC_* et OAUTH_* par le module Mail, features/mail ;
+    // MONITORING_RETENTION_DAYS et LINK_CODE_TTL_SECONDS par le module
+    // Appareils, features/devices.)
 
     COOKIE_DOMAIN: getEnvVar('COOKIE_DOMAIN', 'string', false),
 

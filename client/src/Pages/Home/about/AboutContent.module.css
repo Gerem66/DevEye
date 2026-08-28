@@ -92,12 +92,6 @@
     color: var(--text-primary);
 }
 
-.featureAdmin {
-    width: 13px;
-    color: var(--text-muted);
-    opacity: 0.75;
-}
-
 .featureDesc {
     font-size: 0.8rem;
     color: var(--text-secondary);

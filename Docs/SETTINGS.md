@@ -13,8 +13,8 @@ conditionnent jamais elles-mêmes.
 
 Un dialogue artisanal derrière un engrenage à part est une dette : Mail, Météo,
 OSINT, Finances, Uptime, Sentinelle, CloudSync, Bases de données, Déploiement,
-Git et Audience en ont été purgés, le candidat restant est listé en fin de
-fichier.
+Git, Audience et enfin Appareils en ont été purgés. La liste des candidats est
+close (voir en fin de fichier).
 
 ## Les sections
 
@@ -23,7 +23,7 @@ ordre :
 
 | Onglet | Échelle | Qui l'a | Contenu |
 |---|---|---|---|
-| Général | feature (et élément pour Mail, Uptime, CloudSync, Bases de données, Audience) | `settings` du manifest d'un module (plus aucune native n'en déclare) | les réglages qui ne sont ni sources ni notifications |
+| Général | feature (et élément pour Mail, Uptime, CloudSync, Bases de données, Audience, Appareils) | `settings` du manifest d'un module (plus aucune native n'en déclare) | les réglages qui ne sont ni sources ni notifications |
 | Sources | feature | `settings.feature` du manifest d'un module (plus aucune native n'en déclare) | jetons, destinations, clés d'API (voir `SOURCES.md`) |
 | Notifications | feature + élément | registre `notifies` | canaux et sélection (voir `NOTIFICATIONS.md`) |
 | Synchronisation | élément | `settings.item` du manifest d'un module (Mail) | cadence de relève, maintenance |
@@ -34,8 +34,12 @@ ordre :
 Général, Sources, Synchronisation et Chiffrement viennent tous du manifest
 d'un module : l'onglet est déclaré dans `settings.feature` ou `settings.item`,
 le panneau vient de son entrée client (`settingsPanels`, sur
-`SettingsPanelProps`), et `ModulePanel` le monte. Un panneau est **autonome**
-(il se charge, se sauvegarde et s'invalide tout seul) et respecte `canWrite`.
+`SettingsPanelProps<Id>` : un nombre pour toute feature à lignes, un texte pour
+un appareil, dont l'id est un UUID), et `ModulePanel` le monte. Un panneau est
+**autonome** (il se charge, se sauvegarde et s'invalide tout seul) et respecte
+`canWrite`. Les sections que la coquille rend elle-même (partage, permissions,
+notifications) restent à clé numérique : une feature dont les éléments sont
+des textes n'y est pas branchée, et n'en déclare pas.
 Les tables de câblage natif (`GENERAL_WIRED`, `SYNC_WIRED`, `ENCRYPTION_WIRED`)
 et leurs dispatcheurs ont disparu avec le rapatriement de Mail, leur dernier
 occupant : une native n'a plus que les sections génériques (Notifications,
@@ -72,25 +76,25 @@ Trois mécanismes font qu'aucun réglage n'est un mur :
    (`useLiveSegment('l1', String(id))`) : c'est ce que `goToHome.ts` écrit
    pour téléporter vers la fiche, sans table ni déclaration.
 
-## Candidat restant (dette connue)
+## La liste des candidats est close
 
-Il n'en reste qu'un :
+Plus aucune feature ne règle quoi que ce soit hors de la coquille.
 
-- **Monitoring** : la configuration de collecte est enfouie dans un menu
-  déroulant d'appareil (`ConfigDialog`) ; `TerminalSettings` à part.
+Appareils, le dernier candidat, l'a quittée à son rapatriement en module
+(`features/devices`) : la configuration de collecte d'un appareil (cadence,
+capture des processus, conservation, estimation du coût en base), autrefois
+un dialogue maison enfoui dans le menu « Fonctions » du panneau
+(`ConfigDialog`), est le panneau `general` d'un **appareil** (`ConfigPanel`,
+typé `SettingsPanelProps<string>`), ouvert par le bouton commun en dernière
+position de l'en-tête de la fiche ; les préférences du terminal distant
+(`TerminalSettings`, locales au navigateur), autrefois derrière l'engrenage
+du terminal, sont le panneau `general` de la **feature**. Un seul composant
+(`SettingsPanel.tsx`) rend l'un ou l'autre selon `scope.kind`. Le terminal
+garde un bouton « Relancer la session » à côté du bouton commun, pour
+appliquer un nouveau compte sans fermer le dialogue.
 
-  Cette dette est liée à une décision qui n'est pas prise : `devices` est la
-  dernière feature native, tenue pour de l'infrastructure de l'app (ses
-  commandes sont des relais du hub des agents). Or la coquille n'a plus aucun
-  câblage natif depuis le rapatriement de Mail : les onglets viennent du
-  manifest d'un module. Deux issues, et une seule à choisir : migrer
-  `devices` en module (la configuration de collecte devient le panneau
-  `general` d'un appareil), ou accepter cette forme pour une feature
-  d'infrastructure et clore cette liste. Réintroduire un câblage natif pour
-  ce seul cas n'en est pas une (`feature_refonte.md`, section 9).
-
-Audience a quitté la liste au rapatriement : la mesure, la reconnaissance des
-visiteurs et la conservation d'un site vivent dans son panneau Général
+Audience l'avait quittée avant : la mesure, la reconnaissance des visiteurs
+et la conservation d'un site vivent dans son panneau Général
 (`SiteGeneralPanel`), le dialogue « Modifier » ne garde que l'identité (nom,
 description, plateforme, origines), et la clé publique reste dans le dialogue
 d'installation, qui n'est pas un réglage mais un geste.

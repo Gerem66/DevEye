@@ -1,7 +1,5 @@
 import type { HomeFolder } from '@deveye/types';
 
-import { useAuth } from '@/auth/AuthProvider';
-import { useActiveWorkspace } from '@/stores/workspace';
 import { folderFeatures } from '../catalog';
 import styles from './folders.module.css';
 
@@ -16,14 +14,12 @@ const PREVIEW = 5;
  * Les pastilles portent l'icône **et** le nom de chaque fonctionnalité : c'est
  * ce qu'on retrouvera déployé au clic, dans cet ordre.
  *
- * Le contexte est lu ici plutôt que reçu en props, comme le font les autres
+ * Le contenu est relu ici plutôt que reçu en props, comme le font les autres
  * corps de tuiles : la même carte sert la grille et l'organiseur, et ni l'un ni
- * l'autre n'a à savoir qu'un dossier filtre son contenu.
+ * l'autre n'a à savoir qu'un dossier ignore les identifiants inconnus.
  */
 export function FolderTile({ folder }: { folder: HomeFolder }) {
-    const { user } = useAuth();
-    const workspace = useActiveWorkspace();
-    const entries = folderFeatures(folder.items, { kind: workspace?.kind, isAdmin: user?.role === 'admin' });
+    const entries = folderFeatures(folder.items);
 
     if (entries.length === 0) {
         return (

@@ -962,14 +962,6 @@ export interface MonitorTransport {
     requestCollect(deviceId: string): boolean;
     /** Demande un relevé Sentinelle (persistance + auth) ; false si hors ligne. */
     requestScan(deviceId: string): boolean;
-    /** Push updated collection config to the device's agent; false if offline. */
-    pushConfig(deviceId: string, config: AgentConfigPayload): boolean;
-    /** Tell the device's agent to self-destruct now; false if offline. */
-    requestDestroy(deviceId: string): boolean;
-    /** Coupe la session de l'agent : la révocation doit mordre tout de suite. */
-    disconnectAgent(deviceId: string): boolean;
-    /** Coupe la session pour qu'elle revienne avec un statut à jour (approbation). */
-    resetAgentSession(deviceId: string): boolean;
     /** Order the device's agent to self-update; false if offline. */
     requestUpdate(deviceId: string, payload: AgentUpdatePayload): boolean;
     /** Ask the device's agent to change its persistence/privilege install; false if offline. */
@@ -1030,10 +1022,6 @@ export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): Moni
         sendInitial: (deviceId, point, sample, report) => hub.sendInitial(socket, deviceId, point, sample, report),
         requestCollect: (deviceId) => hub.requestCollect(deviceId),
         requestScan: (deviceId) => hub.requestScan(deviceId),
-        pushConfig: (deviceId, config) => hub.pushConfig(deviceId, config),
-        requestDestroy: (deviceId) => hub.requestDestroy(deviceId),
-        disconnectAgent: (deviceId) => hub.disconnectAgent(deviceId),
-        resetAgentSession: (deviceId) => hub.resetAgentSession(deviceId),
         requestUpdate: (deviceId, payload) => hub.requestUpdate(deviceId, payload),
         requestService: (deviceId, payload) => hub.requestService(deviceId, payload),
         requestPkgList: (deviceId) => hub.requestPkgList(deviceId),

@@ -1,0 +1,21 @@
+declare const styles: {
+    readonly archived: string;
+    readonly bg: string;
+    readonly hint: string;
+    readonly lvlIdle: string;
+    readonly lvlIntense: string;
+    readonly lvlNormal: string;
+    readonly metric: string;
+    readonly metricLabel: string;
+    readonly metricValue: string;
+    readonly metrics: string;
+    readonly name: string;
+    readonly nameIcon: string;
+    readonly offline: string;
+    readonly online: string;
+    readonly status: string;
+    readonly statusDot: string;
+    readonly top: string;
+    readonly widget: string;
+};
+export = styles;
