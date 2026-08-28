@@ -39,6 +39,7 @@ quand elles ont été relues depuis, la date de relecture.
 | [GIT.md](./GIT.md)               | les dépôts de l'espace et leur cache                              |
 | [MAIL.md](./MAIL.md)             | les boîtes mail de l'espace, leurs deux paliers, les alertes      |
 | [MONITORING.md](./MONITORING.md) | la supervision des machines enrôlées                              |
+| [NOTES.md](./NOTES.md)           | les notes et leurs dossiers, la note privée, la note projetée     |
 | [PROJECTS.md](./PROJECTS.md)     | le pilotage du travail, et ses liaisons vers les objets d'espace  |
 | [SENTINEL.md](./SENTINEL.md)     | la posture de sécurité des machines                               |
 | [UPTIME.md](./UPTIME.md)         | la disponibilité des services externes                            |

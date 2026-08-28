@@ -8,7 +8,7 @@ import {
     type NoteRow,
     type NoteSummary
 } from '../contracts/domain';
-import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
+import { FeatureError, type SdkCipher, type SdkFeatureContext, type SdkShareScope } from '@deveye/types/sdk/server';
 
 import type { NotesRepo } from './repo';
 
@@ -22,16 +22,37 @@ export type Ctx = SdkFeatureContext<NotesRepo>;
 export const WRITE = { level: 'write' } as const;
 
 /**
- * The tier a note's body lives in: private notes use the password-protected DEK,
- * everything else the open one. Picking the cipher IS the access control: a
- * private note simply can't be read or written while the session is locked.
+ * The tier a NEW note's body lives in: private notes use the password-protected
+ * DEK, everything else the open one. Picking the cipher IS the access control:
+ * a private note simply can't be read or written while the session is locked.
  *
  * `ctx.cipher('private')` est l'ex `ctx.secure` (l'étage gardé),
  * `ctx.cipher()` l'ex `ctx.secure.open` (l'étage ouvert, celui des dossiers
- * et des notes ordinaires).
+ * et des notes ordinaires). Pour une note **existante**, voir {@link bodyCipher} :
+ * l'étage ouvert est celui de son domicile, pas forcément celui d'ici.
  */
 export function cipherFor(ctx: Ctx, isPrivate: boolean): SdkCipher {
     return isPrivate ? ctx.cipher('private') : ctx.cipher();
+}
+
+/**
+ * Le codec du corps d'une note existante, **choisi ligne à ligne**.
+ *
+ * Une note privée est toujours chez elle (elle ne se projette pas, et sa
+ * bascule oublie ses projections) : son corps passe par l'étage gardé d'ici.
+ * Une note ordinaire peut être projetée
+ * depuis un autre espace : elle reste chiffrée sous la clé ouverte de cet
+ * espace-là, et `scope.cipherFor` la rend (celle d'ici quand la note est
+ * locale). La déchiffrer avec la clé d'ici rendrait une ligne illisible, que
+ * la liste prendrait pour une ligne corrompue.
+ */
+export function bodyCipher(ctx: Ctx, scope: SdkShareScope, row: NoteRow): Promise<SdkCipher> {
+    return row.is_private === 1 ? Promise.resolve(ctx.cipher('private')) : scope.cipherFor(row.id);
+}
+
+/** Vrai quand la note vient d'un autre espace, qui la projette ici. */
+export function isForeign(ctx: Ctx, row: NoteRow): boolean {
+    return row.workspace_id !== ctx.workspaceId;
 }
 
 /**
@@ -46,10 +67,18 @@ export async function resolveFolderId(ctx: Ctx, folderId: number | null): Promis
     return folderId;
 }
 
-/** Load one note of the active workspace, or throw `not_found`. */
-export async function loadNote(ctx: Ctx, noteId: number): Promise<NoteRow> {
-    const row = await ctx.repo.findNote(noteId, ctx.workspaceId);
+/**
+ * Une note visible depuis cet espace : la sienne, ou une qu'un autre espace y
+ * projette. Lève `not_found` sinon.
+ *
+ * `level` décide de la garde : `ctx.items.assert` refuse en plus les notes
+ * qu'une restriction de rôle masque ou passe en lecture seule. La feature
+ * seule ne suffit plus à répondre « cette note-là m'est-elle ouverte ? ».
+ */
+export async function loadNote(ctx: Ctx, noteId: number, level: 'read' | 'write' = 'read'): Promise<NoteRow> {
+    const row = await ctx.repo.findVisible(noteId, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Note not found');
+    await ctx.items.assert(noteId, level);
     return row;
 }
 
@@ -137,15 +166,22 @@ export async function tryDecryptPayload(cipher: SdkCipher, content: string): Pro
     return plain === null ? null : parsePayload(plain);
 }
 
-/** Assemble the full client Note from a row + its decrypted payload. */
-export function toNote(row: NoteRow, payload: StoredPayload): Note {
+/**
+ * Assemble the full client Note from a row + its decrypted payload.
+ *
+ * `foreign` neutralise le dossier : il désigne un dossier de l'espace
+ * d'origine, que cet espace ne connaît pas, et l'annoncer ici ferait chercher
+ * la note dans une section qui n'existe pas.
+ */
+export function toNote(row: NoteRow, payload: StoredPayload, foreign: boolean): Note {
     return noteSchema.parse({
         id: row.id,
         title: payload.title,
-        folderId: row.folder_id,
+        folderId: foreign ? null : row.folder_id,
         blocks: payload.blocks,
         sortOrder: row.sort_order,
         private: row.is_private === 1,
+        foreign,
         updated: row.updated,
         created: row.created
     });
@@ -163,18 +199,19 @@ function buildPreview(blocks: NoteBlock[]): string {
 }
 
 /** Summary for a note whose body was successfully decrypted. */
-export function toSummary(row: NoteRow, payload: StoredPayload): NoteSummary {
+export function toSummary(row: NoteRow, payload: StoredPayload, foreign: boolean): NoteSummary {
     const checks = payload.blocks.filter((b) => b.type === 'check');
     return {
         id: row.id,
         title: payload.title,
-        folderId: row.folder_id,
+        folderId: foreign ? null : row.folder_id,
         sortOrder: row.sort_order,
         preview: buildPreview(payload.blocks),
         checkTotal: checks.length,
         checkDone: checks.filter((b) => b.type === 'check' && b.done).length,
         private: row.is_private === 1,
         masked: false,
+        foreign,
         archivedAt: row.archived_at,
         updated: row.updated,
         created: row.created
@@ -185,7 +222,8 @@ export function toSummary(row: NoteRow, payload: StoredPayload): NoteSummary {
  * Summary for a private note listed while the session is locked: clear metadata
  * only, no `title`/body-derived fields, so nothing sensitive leaks before the
  * password is entered. `folderId` is a clear column (not sensitive on its own),
- * so the note still groups under its folder while masked.
+ * so the note still groups under its folder while masked. Jamais projetée :
+ * une note privée n'est visible que chez elle.
  */
 export function toMaskedSummary(row: NoteRow): NoteSummary {
     return {
@@ -197,6 +235,7 @@ export function toMaskedSummary(row: NoteRow): NoteSummary {
         checkDone: 0,
         private: true,
         masked: true,
+        foreign: false,
         archivedAt: row.archived_at,
         updated: row.updated,
         created: row.created

@@ -19,11 +19,13 @@ import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 import {
     assertPrivateAllowed,
     assertPrivateUnlocked,
+    bodyCipher,
     cipherFor,
     decryptFolder,
     decryptPayload,
     encryptFolder,
     encryptPayload,
+    isForeign,
     loadNote,
     resolveFolderId,
     toFolder,
@@ -37,11 +39,17 @@ import {
 } from './_shared';
 
 /**
- * Notes et dossiers, scopés à l'espace actif.
+ * Notes et dossiers, scopés à l'espace actif, plus les notes qu'un autre
+ * espace y projette.
  *
  * L'espace vient de l'enveloppe WS et l'appartenance est déjà vérifiée par le
  * dispatcheur : les handlers filtrent sur `ctx.workspaceId`, sans garde ni
- * traduction d'id.
+ * traduction d'id. Une note projetée (`Docs/SHARING.md`) se lit et s'écrit
+ * **chez elle**, sous le codec ouvert de son domicile (`ctx.sharing.scope()`,
+ * ligne par ligne) ; les droits restent ceux de l'espace actif, restriction
+ * par élément comprise (`ctx.items.assert`). Depuis la fenêtre, tout se fait
+ * sauf ce qui n'a de sens que chez elle : la classer (dossier, rang), la
+ * passer en privé, la détruire.
  *
  * Quatorze commandes sous le seul préfixe `notes.` : neuf sur les notes, un
  * verbe simple derrière le point (le filet `MUTATION_VERB` de `_topics.ts`
@@ -59,8 +67,16 @@ export const notesHandlers = [
         ...notesList,
         handler: async (ctx: Ctx, input) => {
             const wantArchived = input.archived === true;
-            const rows = (await ctx.repo.listNotes(ctx.workspaceId)).filter(
-                (r) => (r.archived_at !== null) === wantArchived
+            const [visible, hidden, scope] = await Promise.all([
+                ctx.repo.listVisible(ctx.workspaceId),
+                ctx.items.restrictions(),
+                ctx.sharing.scope()
+            ]);
+            // Les notes qu'une restriction masque pour ce rôle disparaissent de
+            // la liste plutôt que d'y figurer grisées : une ligne qu'on voit
+            // sans pouvoir l'ouvrir apprend déjà qu'elle existe.
+            const rows = visible.filter(
+                (r) => hidden.get(r.id) !== 'none' && (r.archived_at !== null) === wantArchived
             );
             // The archive reads as a history: most recently archived first, rather
             // than in the user-defined order of the main list.
@@ -77,14 +93,16 @@ export const notesHandlers = [
                     rows.map(async (r) => {
                         const isPrivate = r.is_private === 1;
                         if (isPrivate && !canReadPrivate) return toMaskedSummary(r);
-                        const payload = await tryDecryptPayload(cipherFor(ctx, isPrivate), r.content);
+                        // Le codec est choisi ligne par ligne : une note projetée
+                        // reste chiffrée sous la clé de son espace d'origine.
+                        const payload = await tryDecryptPayload(await bodyCipher(ctx, scope, r), r.content);
                         if (!payload) {
                             // Corrupt row (or a key that no longer matches): drop it
                             // rather than fail the whole list.
                             skipped += 1;
                             return null;
                         }
-                        return toSummary(r, payload);
+                        return toSummary(r, payload, isForeign(ctx, r));
                     })
                 )
             ).filter((n): n is NonNullable<typeof n> => n !== null);
@@ -98,20 +116,27 @@ export const notesHandlers = [
     defineSdkFeature({
         ...notesCount,
         handler: async (ctx: Ctx) => {
-            // Pure row count from clear metadata: no DEK, no unlock gate, and private
-            // notes are counted like any other (no special case).
-            return { count: await ctx.repo.countActiveNotes(ctx.workspaceId) };
+            // Les mêmes lignes que la liste (projetées comprises, restrictions
+            // déduites), comptées sur les métadonnées claires : aucune DEK, aucun
+            // verrou, les privées comme les autres. Une carte qui compte autre
+            // chose que la liste qu'elle ouvre se lit comme un bug.
+            const [visible, hidden] = await Promise.all([
+                ctx.repo.listVisible(ctx.workspaceId),
+                ctx.items.restrictions()
+            ]);
+            return { count: visible.filter((r) => r.archived_at === null && hidden.get(r.id) !== 'none').length };
         }
     }),
     defineSdkFeature({
         ...notesGet,
         handler: async (ctx: Ctx, input) => {
             const row = await loadNote(ctx, input.noteId);
+            const scope = await ctx.sharing.scope();
             // A private note resolves the guarded DEK here, which throws `locked`
             // on its own when the session isn't unlocked.
-            const payload = await decryptPayload(cipherFor(ctx, row.is_private === 1), row.content);
+            const payload = await decryptPayload(await bodyCipher(ctx, scope, row), row.content);
             if (!payload) throw new FeatureError('internal', 'Failed to decrypt note content');
-            return { note: toNote(row, payload) };
+            return { note: toNote(row, payload, isForeign(ctx, row)) };
         }
     }),
     defineSdkFeature({
@@ -134,7 +159,7 @@ export const notesHandlers = [
                 description: 'Note créée',
                 metadata: { noteId: row.id, private: input.note.private }
             });
-            return { note: toNote(row, toPayload(input.note)) };
+            return { note: toNote(row, toPayload(input.note), false) };
         }
     }),
     defineSdkFeature({
@@ -142,25 +167,63 @@ export const notesHandlers = [
         mutates: true,
         access: WRITE,
         handler: async (ctx: Ctx, input) => {
-            const existing = await loadNote(ctx, input.noteId);
+            const existing = await loadNote(ctx, input.noteId, 'write');
+            const foreign = isForeign(ctx, existing);
+            if (foreign) {
+                // Depuis une fenêtre, le corps se réécrit ; le reste est à elle.
+                // En privé, elle serait chiffrée par le mot de passe d'un membre
+                // d'ici, donc illisible chez elle et pour tous ses autres
+                // espaces. Dans un dossier d'ici, elle relierait sa donnée à un
+                // classement que son domicile ne voit pas.
+                if (input.note.private) {
+                    throw new FeatureError(
+                        'validation',
+                        'Cette note appartient à un autre espace : elle ne peut pas devenir privée depuis ici.'
+                    );
+                }
+                if (input.note.folderId !== null) {
+                    throw new FeatureError(
+                        'validation',
+                        'Cette note appartient à un autre espace : elle ne se range pas dans un dossier d’ici.'
+                    );
+                }
+            }
             assertPrivateAllowed(ctx, input.note.private);
             await assertPrivateUnlocked(ctx, existing);
-            const folderId = await resolveFolderId(ctx, input.note.folderId);
+            // Relevé avant l'écriture : c'est la transition qui compte, pas
+            // l'état d'arrivée.
+            const becomesPrivate = input.note.private && existing.is_private === 0;
+            // Le dossier d'une note projetée est le sien, chez elle : on le garde
+            // tel quel plutôt que de l'écraser par le « sans dossier » que le
+            // client renvoie (c'est ce qu'il a reçu).
+            const folderId = foreign ? existing.folder_id : await resolveFolderId(ctx, input.note.folderId);
             // Re-encrypting with the draft's tier is what moves a note between
-            // public and private; the old ciphertext is replaced wholesale.
-            const content = await encryptPayload(cipherFor(ctx, input.note.private), toPayload(input.note));
-            const updated = await ctx.repo.updateNote(input.noteId, ctx.workspaceId, {
+            // public and private; the old ciphertext is replaced wholesale. Une
+            // note ordinaire est réécrite sous la clé ouverte de son domicile :
+            // la chiffrer avec celle d'ici la rendrait illisible chez elle.
+            const scope = await ctx.sharing.scope();
+            const cipher = input.note.private ? ctx.cipher('private') : await scope.cipherFor(input.noteId);
+            const content = await encryptPayload(cipher, toPayload(input.note));
+            const updated = await ctx.repo.updateNote(input.noteId, existing.workspace_id, {
                 folderId,
                 content,
                 isPrivate: input.note.private
             });
             if (!updated) throw new FeatureError('not_found', 'Note not found');
+            // Devenue privée, elle est chiffrée par le mot de passe de son
+            // auteur : plus aucun autre espace ne peut la lire. Ses projections
+            // partent, et ses restrictions avec (`ctx.items.forget`) : une note
+            // privée n'existe que dans un espace personnel, où aucune
+            // restriction de rôle n'a de sens. Ce qui garde l'invariant des
+            // deux côtés : `share.set` refuse d'entrée une privée
+            // (`items.shareable`), et la bascule oublie ce qui existait.
+            if (becomesPrivate) await ctx.items.forget(input.noteId);
             ctx.audit({
                 action: 'note.edit',
                 description: 'Note modifiée',
                 metadata: { noteId: input.noteId, private: input.note.private }
             });
-            return { note: toNote(updated, toPayload(input.note)) };
+            return { note: toNote(updated, toPayload(input.note), foreign) };
         }
     }),
     defineSdkFeature({
@@ -169,11 +232,25 @@ export const notesHandlers = [
         access: WRITE,
         handler: async (ctx: Ctx, input) => {
             const folderId = await resolveFolderId(ctx, input.folderId);
+            // Une note projetée n'a ni rang ni dossier ici : son classement est
+            // celui de son domicile. Refus franc plutôt qu'abandon silencieux :
+            // le client ne la propose pas au glisser, un appel qui l'inclut est
+            // une erreur qu'il vaut mieux voir.
+            const scope = await ctx.sharing.scope();
+            if (input.noteIds.some((id) => scope.foreignIds.has(id))) {
+                throw new FeatureError(
+                    'validation',
+                    'Une note partagée depuis un autre espace se classe chez elle, pas ici.'
+                );
+            }
             // Reorder only the caller's own active notes in this workspace; any
-            // foreign, archived or out-of-workspace id is dropped silently, the
-            // same tolerance as notes.folderReorder.
+            // archived, out-of-workspace or role-restricted id is dropped
+            // silently, the same tolerance as notes.folderReorder.
+            const hidden = await ctx.items.restrictions();
             const eligible = new Set(
-                (await ctx.repo.listNotes(ctx.workspaceId)).filter((r) => r.archived_at === null).map((r) => r.id)
+                (await ctx.repo.listNotes(ctx.workspaceId))
+                    .filter((r) => r.archived_at === null && !hidden.has(r.id))
+                    .map((r) => r.id)
             );
             const noteIds = input.noteIds.filter((id) => eligible.has(id));
             // Positioning never exposes nor rewrites a body, so a masked private
@@ -187,9 +264,11 @@ export const notesHandlers = [
         mutates: true,
         access: WRITE,
         handler: async (ctx: Ctx, input) => {
-            const existing = await loadNote(ctx, input.noteId);
+            const existing = await loadNote(ctx, input.noteId, 'write');
             await assertPrivateUnlocked(ctx, existing);
-            await ctx.repo.archiveNote(input.noteId, ctx.workspaceId, Math.floor(Date.now() / 1000));
+            // Chez elle, même depuis une fenêtre : archiver ne détruit rien, et
+            // la note disparaît de toutes ses fenêtres à la fois.
+            await ctx.repo.archiveNote(input.noteId, existing.workspace_id, Math.floor(Date.now() / 1000));
             ctx.audit({
                 action: 'note.archive',
                 description: 'Note archivée',
@@ -203,9 +282,10 @@ export const notesHandlers = [
         mutates: true,
         access: WRITE,
         handler: async (ctx: Ctx, input) => {
-            const existing = await loadNote(ctx, input.noteId);
+            const existing = await loadNote(ctx, input.noteId, 'write');
             await assertPrivateUnlocked(ctx, existing);
-            await ctx.repo.restoreNote(input.noteId, ctx.workspaceId);
+            // En fin de son dossier, chez elle.
+            await ctx.repo.restoreNote(input.noteId, existing.workspace_id);
             ctx.audit({
                 action: 'note.restore',
                 description: 'Note restaurée depuis les archives',
@@ -219,7 +299,16 @@ export const notesHandlers = [
         mutates: true,
         access: WRITE,
         handler: async (ctx: Ctx, input) => {
-            const existing = await loadNote(ctx, input.noteId);
+            const existing = await loadNote(ctx, input.noteId, 'write');
+            // Supprimer depuis un espace qui ne fait que la **voir** détruirait la
+            // donnée d'un autre. Retirer la projection, oui (c'est `share.set`) ;
+            // détruire l'élément, non, et pas depuis ici.
+            if (isForeign(ctx, existing)) {
+                throw new FeatureError(
+                    'forbidden',
+                    'Cette note appartient à un autre espace. Retirez-la d’ici depuis ses réglages de partage, ou supprimez-la depuis son espace d’origine.'
+                );
+            }
             // Two-step by construction: an active note is archived first, never
             // destroyed outright. Enforced here so no caller can shortcut it.
             if (existing.archived_at === null) {
@@ -227,6 +316,11 @@ export const notesHandlers = [
             }
             await assertPrivateUnlocked(ctx, existing);
             await ctx.repo.deleteNote(input.noteId, ctx.workspaceId);
+            // Projections et restrictions ne sont rattachées par aucune clé
+            // étrangère : la note vit dans une table différente des autres
+            // éléments. Sans ce ménage, une ligne orpheline s'appliquerait à la
+            // prochaine note à hériter de l'identifiant.
+            await ctx.items.forget(input.noteId);
             ctx.audit({
                 action: 'note.delete',
                 level: 'warning',
@@ -312,7 +406,9 @@ export const notesHandlers = [
             // The notes it holds are un-filed by the FK (ON DELETE SET NULL) with the
             // ranks they had inside the folder, which would interleave them into the
             // unfiled list. Append them at its end instead, so the user's order stays
-            // meaningful and every rank stays unique within its bucket.
+            // meaningful and every rank stays unique within its bucket. Les notes
+            // projetées ici n'entrent pas en ligne de compte : leur classement
+            // est celui de leur domicile.
             const active = (await ctx.repo.listNotes(ctx.workspaceId)).filter((r) => r.archived_at === null);
             const unfiled = active.filter((r) => r.folder_id === null).map((r) => r.id);
             const orphans = active.filter((r) => r.folder_id === input.folderId).map((r) => r.id);

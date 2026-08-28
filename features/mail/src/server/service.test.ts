@@ -20,8 +20,9 @@ import { createMailTransport } from './transport';
  * quand quelque chose a bougé ; une boîte qui ne répond pas est abandonnée à
  * l'échéance, consignée `unreachable`, annoncée, et rendue à la rotation ;
  * un compte gardé n'est jamais touché. Le transport ne liste que les comptes
- * ouverts et actifs, envoie depuis l'adresse du compte, et répond `false`
- * plutôt que de lever.
+ * ouverts et actifs visibles de l'espace (un compte projeté d'ailleurs en
+ * fait partie, lu sous le codec de son domicile), envoie depuis l'adresse du
+ * compte, et répond `false` plutôt que de lever.
  */
 
 interface FakeRepo extends MailRepo {
@@ -64,12 +65,18 @@ function account(over: Partial<MailAccountRow> & { id: number }): MailAccountRow
     };
 }
 
-/** Un dépôt en mémoire : ce que la relève et le transport traversent. */
-function fakeRepo(accountRows: MailAccountRow[]): FakeRepo {
+/**
+ * Un dépôt en mémoire : ce que la relève et le transport traversent.
+ * `projections` reproduit `item_shares` (`accountId → espaces où il est
+ * projeté`), la seconde branche de `listVisible` / `findVisible`.
+ */
+function fakeRepo(accountRows: MailAccountRow[], projections: Record<number, number[]> = {}): FakeRepo {
     let seq = 0;
     const folderRows: MailFolderRow[] = [];
     const messageRows: MailMessageRow[] = [];
     const synced: FakeRepo['synced'] = [];
+    const visible = (a: MailAccountRow, ws: number) =>
+        a.workspace_id === ws || (a.security_tier === 'open' && (projections[a.id] ?? []).includes(ws));
     const repo: FakeRepo = {
         accountRows,
         folderRows,
@@ -79,8 +86,13 @@ function fakeRepo(accountRows: MailAccountRow[]): FakeRepo {
             // Des copies, comme une lecture SQL : la ligne que le service tient
             // est un instantané, `recordSync` n'a pas à le faire bouger.
             listByWorkspace: async (ws) => accountRows.filter((a) => a.workspace_id === ws).map((a) => ({ ...a })),
+            listVisible: async (ws) => accountRows.filter((a) => visible(a, ws)).map((a) => ({ ...a })),
             findById: async (id, ws) => {
                 const row = accountRows.find((a) => a.id === id && a.workspace_id === ws);
+                return row ? { ...row } : null;
+            },
+            findVisible: async (id, ws) => {
+                const row = accountRows.find((a) => a.id === id && visible(a, ws));
                 return row ? { ...row } : null;
             },
             findByIdUnscoped: async (id) => {
@@ -92,7 +104,6 @@ function fakeRepo(accountRows: MailAccountRow[]): FakeRepo {
             setEnabled: unused,
             delete: unused,
             reorder: unused,
-            count: unused,
             // Comme la vraie requête : ouverts, actifs, à échéance.
             listSyncDue: async (now, limit) =>
                 accountRows
@@ -367,9 +378,17 @@ describe('la relève de fond', () => {
 });
 
 describe('le transport des alertes', () => {
-    function transportWith(accounts: MailAccountRow[], fail = false) {
-        const repo = fakeRepo(accounts);
+    function transportWith(accounts: MailAccountRow[], fail = false, projections: Record<number, number[]> = {}) {
+        const repo = fakeRepo(accounts, projections);
         const deps = createTestServiceDeps({ repo });
+        // Les espaces dont le codec ouvert a été demandé : le harnais rend
+        // l'identité pour tous, seul l'appel dit lequel le transport a choisi.
+        const ciphersAsked: number[] = [];
+        const cipherFor = deps.cipherFor;
+        deps.cipherFor = (workspaceId) => {
+            ciphersAsked.push(workspaceId);
+            return cipherFor(workspaceId);
+        };
         const sent: { credentials: MailCredentials; message: OutgoingMail }[] = [];
         const transport = createMailTransport(deps, {
             sendMail: async (credentials, message) => {
@@ -378,7 +397,7 @@ describe('le transport des alertes', () => {
                 return { messageId: '<id@exemple.fr>' };
             }
         });
-        return { transport, sent };
+        return { transport, sent, ciphersAsked };
     }
 
     it('ne liste que les comptes ouverts et actifs, avec leur libellé et leur adresse', async () => {
@@ -395,6 +414,39 @@ describe('le transport des alertes', () => {
         assert.equal(await transport.isReady(3, 1), false);
         // Un compte d'un autre espace n'est pas prêt ICI.
         assert.equal(await transport.isReady(4, 1), false);
+    });
+
+    it('voit un compte projeté comme expéditeur de l’espace où il est projeté, sous le codec de son domicile', async () => {
+        // Le compte 5 vit dans l'espace 42 et se projette vers l'espace 1 ; le
+        // compte 6 aussi, mais en pause : projeté ou non, il ne part pas seul.
+        const { transport, sent, ciphersAsked } = transportWith(
+            [
+                account({ id: 1 }),
+                account({ id: 5, workspace_id: 42 }),
+                account({ id: 6, workspace_id: 42, enabled: 0 })
+            ],
+            false,
+            { 5: [1], 6: [1] }
+        );
+        assert.deepEqual(await transport.listSenders(1), [
+            { id: 1, label: 'Compte 1', address: 'c1@exemple.fr' },
+            { id: 5, label: 'Compte 5', address: 'c5@exemple.fr' }
+        ]);
+        assert.equal(await transport.isReady(5, 1), true);
+        assert.equal(await transport.isReady(6, 1), false);
+        // Là où il n'est pas projeté, il n'est pas prêt.
+        assert.equal(await transport.isReady(5, 9), false);
+
+        ciphersAsked.length = 0;
+        assert.equal(
+            await transport.send(5, 1, { to: 'astreinte@exemple.fr', subject: 'Alerte', text: 'corps' }),
+            true
+        );
+        assert.equal(sent.length, 1);
+        assert.equal(sent[0].message.from, 'c5@exemple.fr');
+        // Lu sous le codec de SON espace, jamais sous celui du canal.
+        assert.ok(ciphersAsked.includes(42));
+        assert.ok(!ciphersAsked.includes(1));
     });
 
     it('envoie depuis l’adresse du compte, par le client, et répond vrai', async () => {

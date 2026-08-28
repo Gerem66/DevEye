@@ -44,7 +44,25 @@ export interface MailAccountConfig {
 
 export interface MailAccountsRepo {
     listByWorkspace(workspaceId: number): Promise<MailAccountRow[]>;
+    /**
+     * Les comptes **visibles** depuis cet espace : les siens, plus ceux qu'un
+     * autre espace y projette (`item_shares`), les locaux d'abord.
+     *
+     * La branche projetée ne retient que les comptes **ouverts**, en garde de
+     * cohérence : un compte gardé est chiffré par le mot de passe de son
+     * auteur, illisible dans tout autre espace. `share.set` refuse de le
+     * projeter (`items.shareable`), et un compte projeté qui passe au palier
+     * gardé perd ses projections (`rekeyTier`, par `ctx.items.forget`).
+     *
+     * Séparé de `listByWorkspace` plutôt que de le remplacer : la relève de
+     * fond tourne au domicile, sur les comptes d'un espace, pas sur ce qu'on
+     * y voit (relever deux fois la même boîte parce qu'elle est projetée
+     * ailleurs doublerait les requêtes IMAP).
+     */
+    listVisible(workspaceId: number): Promise<MailAccountRow[]>;
     findById(id: number, workspaceId: number): Promise<MailAccountRow | null>;
+    /** Comme `findById`, mais accepte aussi un compte ouvert projeté vers cet espace. */
+    findVisible(id: number, workspaceId: number): Promise<MailAccountRow | null>;
     /** Unscoped read for the background sync loop, which has no live user session. */
     findByIdUnscoped(id: number): Promise<MailAccountRow | null>;
     create(input: { userId: number; workspaceId: number } & MailAccountConfig): Promise<MailAccountRow>;
@@ -53,7 +71,6 @@ export interface MailAccountsRepo {
     delete(id: number, workspaceId: number): Promise<boolean>;
     /** Lay out the user's accounts in the given order — same convention as `uptime.reorder`. */
     reorder(workspaceId: number, ids: number[]): Promise<void>;
-    count(workspaceId: number): Promise<number>;
     /**
      * Write back a sync outcome (background loop or on-demand), horodatage de
      * relève compris — c'est ce qui remet le compte dans la rotation.
@@ -233,7 +250,38 @@ function accountsRepo(q: SdkQueryable): MailAccountsRepo {
                 [workspaceId]
             );
         },
+        async listVisible(workspaceId) {
+            // `sort_order` appartient à l'espace d'origine : un compte projeté
+            // se range après les locaux, par identifiant. Lui donner un ordre
+            // propre à chaque espace demanderait une colonne par projection.
+            return q.query<MailAccountRow>(
+                `SELECT v.* FROM (
+                     SELECT a.* FROM mail_accounts a WHERE a.workspace_id = ?
+                     UNION
+                     SELECT a.* FROM mail_accounts a
+                       JOIN item_shares sh
+                         ON sh.feature = 'mail' AND sh.item_id = a.id AND sh.home_workspace_id = a.workspace_id
+                      WHERE sh.workspace_id = ? AND a.security_tier = 'open'
+                 ) v
+                 ORDER BY v.workspace_id <> ?, v.sort_order ASC, v.id ASC`,
+                [workspaceId, workspaceId, workspaceId]
+            );
+        },
         findById: reload,
+        async findVisible(id, workspaceId) {
+            const rows = await q.query<MailAccountRow>(
+                `SELECT a.* FROM mail_accounts a
+                  WHERE a.id = ?
+                    AND (a.workspace_id = ?
+                         OR (a.security_tier = 'open'
+                             AND EXISTS (SELECT 1 FROM item_shares sh
+                                          WHERE sh.feature = 'mail' AND sh.item_id = a.id
+                                            AND sh.home_workspace_id = a.workspace_id
+                                            AND sh.workspace_id = ?)))`,
+                [id, workspaceId, workspaceId]
+            );
+            return rows[0] ?? null;
+        },
         async findByIdUnscoped(id) {
             const rows = await q.query<MailAccountRow>('SELECT * FROM mail_accounts WHERE id = ?', [id]);
             return rows[0] ?? null;
@@ -289,13 +337,6 @@ function accountsRepo(q: SdkQueryable): MailAccountsRepo {
                     workspaceId
                 ]);
             }
-        },
-        async count(workspaceId) {
-            const rows = await q.query<{ total: number }>(
-                'SELECT COUNT(*) AS total FROM mail_accounts WHERE workspace_id = ?',
-                [workspaceId]
-            );
-            return Number(rows[0]?.total ?? 0);
         },
         async recordSync(id, lastSyncAt, lastSyncErrorEnc, status) {
             await q.execute(

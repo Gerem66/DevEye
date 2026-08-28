@@ -30,6 +30,11 @@ import type { MailAccount, MailSecurityTier } from '../contracts/domain';
  *
  * La boîte est l'élément de la portée (`scope.itemId`) ; l'onglet n'existe
  * qu'à cette échelle, le manifest le dit.
+ *
+ * Une boîte projetée d'un autre espace n'a pas de palier à régler ici : il
+ * relie la boîte au mot de passe de son auteur, et le serveur refuse le
+ * changement depuis une fenêtre. L'onglet le dit plutôt que d'ouvrir sur un
+ * refus.
  */
 export default function MailEncryptionPanel({ scope, canWrite }: SettingsPanelProps) {
     const accountId = scope.kind === 'item' ? scope.itemId : null;
@@ -54,6 +59,14 @@ export default function MailEncryptionPanel({ scope, canWrite }: SettingsPanelPr
 
     if (accountId === null) return null;
     if (!account) return <p className={shell.notice}>{status ?? 'Chargement…'}</p>;
+    if (account.foreign) {
+        return (
+            <p className={shell.sectionHint}>
+                Cette boîte appartient à un autre espace, qui la partage ici. Son palier se règle depuis son espace
+                d’origine ; ici, elle est toujours ouverte.
+            </p>
+        );
+    }
     if (workspace?.kind !== 'personal') {
         return (
             <p className={shell.sectionHint}>

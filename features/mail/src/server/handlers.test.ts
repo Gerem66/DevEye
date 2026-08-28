@@ -5,10 +5,15 @@ import type { z, ZodType } from 'zod';
 import {
     mailAccountAdd,
     mailAccountCount,
+    mailAccountDelete,
     mailAccountList,
+    mailAccountSetEnabled,
+    mailAccountSetProfile,
+    mailAccountUpdate,
     mailAttachmentDownload,
     mailFolderList,
     mailGetSettings,
+    mailMessageList,
     mailOAuthStart,
     mailSetSettings
 } from '../contracts/commands';
@@ -34,8 +39,11 @@ import type { MailRepo } from './repo';
  * répond `locked` à une session scellée, et la liste des comptes masque au
  * lieu de lever), les **secrets** (jamais dans un DTO), les deux **tickets**
  * (l'URL d'une pièce jointe et le `state` OAuth portent la charge que les
- * routes relisent, et le retour OAuth vise l'origine de l'app), et les
- * réglages de l'espace.
+ * routes relisent, et le retour OAuth vise l'origine de l'app), les réglages
+ * de l'espace, et le **partage inter-espaces** (un compte projeté se liste
+ * avec `foreign: true` et se lit, dossiers et messages compris, sous le codec
+ * de son domicile ; supprimer, changer de palier et retoucher les identifiants
+ * restent chez lui ; un compte gardé ne se projette pas).
  *
  * `OAUTH_GOOGLE_*` est posé AVANT le chargement des handlers, parce que
  * `env.ts` lit l'environnement à l'import ; c'est la seule raison de l'import
@@ -46,6 +54,7 @@ process.env.OAUTH_GOOGLE_CLIENT_ID = 'google-client';
 process.env.OAUTH_GOOGLE_CLIENT_SECRET = 'google-secret';
 delete process.env.OAUTH_MICROSOFT_CLIENT_ID;
 const { mailHandlers } = await import('./handlers');
+const { serverEntry } = await import('./index');
 
 /** Le handler d'un contrat, typé par ce contrat (le registre est hétérogène). */
 function handlerFor<C extends { command: string; input: ZodType; output: ZodType }>(contract: C) {
@@ -72,27 +81,73 @@ async function unused(): Promise<never> {
     throw new Error('non attendu ici');
 }
 
+/** Un compte en base, tel que le vrai dépôt le rendrait ; le contenu est celui que le codec de son domicile lit. */
+function row(over: Partial<MailAccountRow> & { id: number; workspace_id: number }): MailAccountRow {
+    return {
+        user_id: 1,
+        sort_order: over.id,
+        display_name_enc: `Compte ${over.id}`,
+        email_address_enc: `c${over.id}@exemple.fr`,
+        security_tier: 'open',
+        auth_method: 'password',
+        enabled: 1,
+        sync_interval_seconds: 600,
+        last_sync_at: null,
+        last_sync_error_enc: null,
+        last_sync_status: 'ok',
+        last_error_at: null,
+        credentials_enc: JSON.stringify({
+            kind: 'password',
+            imap: { host: 'imap.ailleurs.fr', port: 993, username: 'x', password: 'x' },
+            smtp: { host: 'smtp.ailleurs.fr', port: 465, username: 'x', password: 'x' },
+            proxy: null
+        }),
+        created: 1,
+        ...over
+    };
+}
+
 /**
  * Un dépôt en mémoire, même contrat que le vrai : ce que ces tests traversent
  * (comptes, réglages, la chaîne message → dossier → compte) est implémenté,
  * le reste lève s'il est atteint.
+ *
+ * `projections` reproduit la table `item_shares` : `accountId → espaces où il
+ * est projeté`. C'est ce qui donne à `listVisible` / `findVisible` leur
+ * seconde branche (ouverts seulement, comme la requête), et ce que le harnais
+ * (`shares`) doit dire en écho pour que `ctx.sharing.scope()` connaisse le
+ * domicile.
  */
-function fakeRepo(): FakeRepo {
+function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
     let seq = 0;
     const accountRows: MailAccountRow[] = [];
     const folderRows: MailFolderRow[] = [];
     const messageRows: MailMessageRow[] = [];
     let settings: MailSettingsRow | null = null;
+    const projected = (a: MailAccountRow, ws: number) =>
+        a.security_tier === 'open' && (projections[a.id] ?? []).includes(ws);
+    const visible = (a: MailAccountRow, ws: number) => a.workspace_id === ws || projected(a, ws);
+    // Des copies, comme une lecture SQL : la ligne qu'un handler tient est un
+    // instantané, et une écriture ne doit pas la faire bouger sous lui (c'est
+    // ce qui décide, dans `accountSetProfile`, si le palier a changé).
+    const copy = (a: MailAccountRow | undefined): MailAccountRow | null => (a ? { ...a } : null);
     return {
         accountRows,
         folderRows,
         messageRows,
         accounts: {
-            listByWorkspace: async (ws) => accountRows.filter((a) => a.workspace_id === ws),
-            findById: async (id, ws) => accountRows.find((a) => a.id === id && a.workspace_id === ws) ?? null,
-            findByIdUnscoped: async (id) => accountRows.find((a) => a.id === id) ?? null,
+            listByWorkspace: async (ws) => accountRows.filter((a) => a.workspace_id === ws).map((a) => ({ ...a })),
+            // Les locaux d'abord, les projetés ensuite : l'ordre de la requête.
+            listVisible: async (ws) =>
+                [
+                    ...accountRows.filter((a) => a.workspace_id === ws),
+                    ...accountRows.filter((a) => projected(a, ws))
+                ].map((a) => ({ ...a })),
+            findById: async (id, ws) => copy(accountRows.find((a) => a.id === id && a.workspace_id === ws)),
+            findVisible: async (id, ws) => copy(accountRows.find((a) => a.id === id && visible(a, ws))),
+            findByIdUnscoped: async (id) => copy(accountRows.find((a) => a.id === id)),
             async create({ userId, workspaceId, ...c }) {
-                const row: MailAccountRow = {
+                const created = row({
                     id: ++seq,
                     user_id: userId,
                     workspace_id: workspaceId,
@@ -103,21 +158,40 @@ function fakeRepo(): FakeRepo {
                     auth_method: c.authMethod,
                     enabled: c.enabled ? 1 : 0,
                     sync_interval_seconds: c.syncIntervalSeconds,
-                    last_sync_at: null,
-                    last_sync_error_enc: null,
-                    last_sync_status: 'ok',
-                    last_error_at: null,
-                    credentials_enc: c.credentialsEnc,
-                    created: 1
-                };
-                accountRows.push(row);
-                return row;
+                    credentials_enc: c.credentialsEnc
+                });
+                accountRows.push(created);
+                return created;
             },
-            update: unused,
-            setEnabled: unused,
-            delete: unused,
+            // Comme la vraie requête : une mise à jour adressée au mauvais
+            // espace ne touche rien et rend `null`.
+            async update(id, ws, c) {
+                const target = accountRows.find((a) => a.id === id && a.workspace_id === ws);
+                if (!target) return null;
+                Object.assign(target, {
+                    display_name_enc: c.displayNameEnc,
+                    email_address_enc: c.emailAddressEnc,
+                    security_tier: c.securityTier,
+                    auth_method: c.authMethod,
+                    credentials_enc: c.credentialsEnc,
+                    enabled: c.enabled ? 1 : 0,
+                    sync_interval_seconds: c.syncIntervalSeconds
+                });
+                return { ...target };
+            },
+            async setEnabled(id, ws, enabled) {
+                const target = accountRows.find((a) => a.id === id && a.workspace_id === ws);
+                if (!target) return null;
+                target.enabled = enabled ? 1 : 0;
+                return { ...target };
+            },
+            async delete(id, ws) {
+                const index = accountRows.findIndex((a) => a.id === id && a.workspace_id === ws);
+                if (index === -1) return false;
+                accountRows.splice(index, 1);
+                return true;
+            },
             reorder: unused,
-            count: async (ws) => accountRows.filter((a) => a.workspace_id === ws).length,
             recordSync: unused,
             recordStatus: unused,
             updateCredentials: unused,
@@ -136,7 +210,11 @@ function fakeRepo(): FakeRepo {
         messages: {
             countByFolder: unused,
             minUidByFolder: unused,
-            listByFolder: unused,
+            listByFolder: async (folderId, _cursor, limit) =>
+                messageRows
+                    .filter((m) => m.folder_id === folderId)
+                    .sort((a, b) => b.date - a.date || b.id - a.id)
+                    .slice(0, limit),
             findById: async (id) => messageRows.find((m) => m.id === id) ?? null,
             listAllByFolder: unused,
             listForSearch: unused,
@@ -359,6 +437,239 @@ describe('mail.oauthStart', () => {
             handlerFor(mailOAuthStart)(ctx, { provider: 'google', securityTier: 'guarded' }),
             failsWith('validation')
         );
+    });
+});
+
+/** Un dossier en cache d'un compte, en clair : le codec de son domicile le lit tel quel. */
+function folderRow(id: number, accountId: number): MailFolderRow {
+    return {
+        id,
+        account_id: accountId,
+        imap_path: 'INBOX',
+        name_enc: 'Boîte de réception',
+        special_use: 'inbox',
+        sort_order: 0,
+        uid_validity: 1,
+        last_seen_uid: 5,
+        first_seen_uid: 1,
+        unread_count: 0,
+        total_count: 1
+    };
+}
+
+describe('le partage inter-espaces', () => {
+    it('liste un compte projeté avec sa pastille `foreign`, sous le codec de son domicile, et le compte', async () => {
+        // Le compte 7 vit dans l'espace 42 et se projette vers l'espace 1. La
+        // fenêtre chiffre avec un codec étiqueté : lire la ligne projetée avec
+        // lui rendrait « (compte verrouillé) », le codec du domicile (celui du
+        // harnais, l'identité) rend son nom.
+        const repo = fakeRepo({ 7: [1] });
+        repo.accountRows.push(row({ id: 7, workspace_id: 42, display_name_enc: 'Ailleurs' }));
+        const ctx = tagging(createTestContext({ repo, workspaceId: 1, shares: { 7: 42 } }));
+        await handlerFor(mailAccountAdd)(ctx, { draft: DRAFT });
+
+        const listed = await handlerFor(mailAccountList)(ctx, {});
+        assert.deepEqual(
+            listed.accounts.map((a) => [a.id, a.displayName, a.imapHost, a.foreign]),
+            [
+                [1, 'Perso', 'imap.exemple.fr', false],
+                [7, 'Ailleurs', 'imap.ailleurs.fr', true]
+            ]
+        );
+        assert.ok(!JSON.stringify(listed).includes('s3cret'));
+        assert.deepEqual(await handlerFor(mailAccountCount)(ctx, {}), { count: 2 });
+
+        // Un compte masqué pour ce rôle disparaît de la liste et du compte.
+        const hidden = tagging(
+            createTestContext({ repo, workspaceId: 1, shares: { 7: 42 }, itemRestrictions: { 7: 'none' } })
+        );
+        assert.deepEqual(
+            (await handlerFor(mailAccountList)(hidden, {})).accounts.map((a) => a.id),
+            [1]
+        );
+        assert.deepEqual(await handlerFor(mailAccountCount)(hidden, {}), { count: 1 });
+
+        // Depuis un espace où il n'est pas projeté, il n'existe pas.
+        const elsewhere = createTestContext({ repo, workspaceId: 9 });
+        assert.deepEqual((await handlerFor(mailAccountList)(elsewhere, {})).accounts, []);
+    });
+
+    it('lit les dossiers et les messages en cache d’un compte projeté, sous le codec de son domicile', async () => {
+        const repo = fakeRepo({ 7: [1] });
+        repo.accountRows.push(row({ id: 7, workspace_id: 42 }));
+        repo.folderRows.push(folderRow(10, 7));
+        repo.messageRows.push({
+            id: 20,
+            folder_id: 10,
+            uid: 5,
+            envelope_enc: JSON.stringify({ subject: 'Bonjour', from: null, to: [], snippet: '' }),
+            date: 1,
+            seen: 1,
+            flagged: 0,
+            answered: 0,
+            has_attachments: 0
+        });
+        const window = tagging(createTestContext({ repo, workspaceId: 1, shares: { 7: 42 } }));
+
+        // Le cache est servi tel quel (compte ouvert, dossiers présents) : rien
+        // ne part vers IMAP. Un mauvais codec rendrait le chemin IMAP en guise
+        // de nom, et « (verrouillé) » en guise d'objet.
+        const folders = await handlerFor(mailFolderList)(window, { accountId: 7 });
+        assert.deepEqual(
+            folders.folders.map((f) => [f.id, f.name]),
+            [[10, 'Boîte de réception']]
+        );
+        const messages = await handlerFor(mailMessageList)(window, { folderId: 10, cursor: null, limit: 50 });
+        assert.deepEqual(
+            messages.messages.map((m) => [m.id, m.accountId, m.subject]),
+            [[20, 7, 'Bonjour']]
+        );
+
+        // La chaîne message → dossier → compte remonte au compte : d'un espace
+        // qui ne le voit pas, le dossier n'existe pas non plus.
+        await assert.rejects(
+            handlerFor(mailFolderList)(createTestContext({ repo, workspaceId: 9 }), { accountId: 7 }),
+            failsWith('not_found')
+        );
+        await assert.rejects(
+            handlerFor(mailMessageList)(createTestContext({ repo, workspaceId: 9 }), {
+                folderId: 10,
+                cursor: null,
+                limit: 50
+            }),
+            failsWith('not_found')
+        );
+    });
+
+    it('depuis la fenêtre : le nom, la cadence et la pause se règlent sous le codec du domicile ; la restriction mord', async () => {
+        const repo = fakeRepo({ 7: [1] });
+        repo.accountRows.push(row({ id: 7, workspace_id: 42 }));
+        const window = tagging(createTestContext({ repo, workspaceId: 1, shares: { 7: 42 } }));
+
+        const renamed = await handlerFor(mailAccountSetProfile)(window, {
+            id: 7,
+            displayName: 'Renommée',
+            securityTier: 'open',
+            syncIntervalMinutes: 5
+        });
+        assert.equal(renamed.account.displayName, 'Renommée');
+        assert.equal(renamed.account.foreign, true);
+        // Réécrit chez lui (espace 42) et sous SON codec (l'identité du
+        // harnais), pas sous le codec étiqueté de la fenêtre.
+        assert.equal(repo.accountRows[0].workspace_id, 42);
+        assert.equal(repo.accountRows[0].display_name_enc, 'Renommée');
+        assert.equal(repo.accountRows[0].sync_interval_seconds, 300);
+
+        const paused = await handlerFor(mailAccountSetEnabled)(window, { id: 7, enabled: false });
+        assert.equal(paused.account.enabled, false);
+        assert.equal(paused.account.foreign, true);
+        assert.equal(repo.accountRows[0].enabled, 0);
+
+        // Un rôle en lecture seule sur la ligne ne la met pas en pause.
+        const readOnly = createTestContext({
+            repo,
+            workspaceId: 1,
+            shares: { 7: 42 },
+            itemRestrictions: { 7: 'read' }
+        });
+        await assert.rejects(
+            handlerFor(mailAccountSetEnabled)(readOnly, { id: 7, enabled: true }),
+            failsWith('forbidden')
+        );
+    });
+
+    it('refuse depuis la fenêtre de supprimer, de changer le palier et de retoucher les identifiants ; le domicile le peut', async () => {
+        const repo = fakeRepo({ 7: [1] });
+        repo.accountRows.push(row({ id: 7, workspace_id: 42 }));
+        const window = createTestContext({ repo, workspaceId: 1, shares: { 7: 42 } });
+
+        await assert.rejects(handlerFor(mailAccountDelete)(window, { id: 7 }), failsWith('validation'));
+        await assert.rejects(
+            handlerFor(mailAccountSetProfile)(window, {
+                id: 7,
+                displayName: 'Compte 7',
+                securityTier: 'guarded',
+                syncIntervalMinutes: 10
+            }),
+            failsWith('validation')
+        );
+        await assert.rejects(
+            handlerFor(mailAccountSetProfile)(window, {
+                id: 7,
+                displayName: 'Compte 7',
+                securityTier: 'open',
+                syncIntervalMinutes: 10,
+                proxy: null
+            }),
+            failsWith('validation')
+        );
+        await assert.rejects(handlerFor(mailAccountUpdate)(window, { id: 7, draft: DRAFT }), failsWith('validation'));
+        assert.equal(repo.accountRows.length, 1);
+        assert.equal(repo.accountRows[0].security_tier, 'open');
+        assert.deepEqual(window.forgotten, []);
+
+        // Chez lui : la ligne part, et avec elle projections, restrictions et
+        // route de notification (`ctx.items.forget`).
+        const home = createTestContext({ repo, workspaceId: 42 });
+        assert.deepEqual(await handlerFor(mailAccountDelete)(home, { id: 7 }), { id: 7 });
+        assert.equal(repo.accountRows.length, 0);
+        assert.deepEqual(home.forgotten, [7]);
+        assert.equal(home.recorded.audits.at(-1)?.action, 'mail.accountDelete');
+    });
+
+    it('un compte projeté qui passe au palier gardé chez lui perd ses projections ; rouvrir ne les rend pas', async () => {
+        const repo = fakeRepo({ 7: [1] });
+        repo.accountRows.push(row({ id: 7, workspace_id: 42 }));
+        const home = createTestContext({ repo, workspaceId: 42 });
+
+        const guarded = await handlerFor(mailAccountSetProfile)(home, {
+            id: 7,
+            displayName: 'Compte 7',
+            securityTier: 'guarded',
+            syncIntervalMinutes: 10
+        });
+        assert.equal(guarded.account.securityTier, 'guarded');
+        assert.equal(repo.accountRows[0].security_tier, 'guarded');
+        // Projections et restrictions par élément partent avec le palier
+        // (`ctx.items.forget`) : plus de ligne `item_shares` dormante.
+        assert.deepEqual(home.forgotten, [7]);
+
+        // Le retour à l'étage ouvert ne touche à rien : il n'y a plus rien à
+        // oublier, et un oubli de plus retirerait des restrictions posées depuis.
+        await handlerFor(mailAccountSetProfile)(home, {
+            id: 7,
+            displayName: 'Compte 7',
+            securityTier: 'open',
+            syncIntervalMinutes: 10
+        });
+        assert.equal(repo.accountRows[0].security_tier, 'open');
+        assert.deepEqual(home.forgotten, [7]);
+    });
+
+    it('`items` : le domicile d’un compte visible, son intitulé, et un compte gardé qui ne se projette pas', async () => {
+        const repo = fakeRepo({ 7: [1] });
+        repo.accountRows.push(
+            row({ id: 7, workspace_id: 42, display_name_enc: 'Ailleurs' }),
+            row({ id: 8, workspace_id: 42, security_tier: 'guarded' }),
+            row({ id: 9, workspace_id: 42, display_name_enc: '' })
+        );
+        const items = serverEntry.items;
+        assert.ok(items);
+        const open = createTestContext({ repo }).cipher('server');
+
+        assert.equal(await items.homeOf(repo, 7, 42), 42);
+        assert.equal(await items.homeOf(repo, 7, 1), 42);
+        assert.equal(await items.homeOf(repo, 7, 9), null);
+
+        assert.equal(await items.labelOf(repo, open, 7, 42), 'Ailleurs');
+        // Sans nom, l'adresse ; disparu, rien.
+        assert.equal(await items.labelOf(repo, open, 9, 42), 'c9@exemple.fr');
+        assert.equal(await items.labelOf(repo, open, 99, 42), null);
+
+        assert.ok(items.shareable);
+        assert.equal(await items.shareable(repo, 7, 42), true);
+        assert.equal(await items.shareable(repo, 8, 42), false);
+        assert.equal(await items.shareable(repo, 99, 42), false);
     });
 });
 

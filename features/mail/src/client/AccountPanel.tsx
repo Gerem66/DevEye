@@ -1,3 +1,5 @@
+import { StatusBadge } from 'deveye-sdk-client';
+
 import AccountList from './AccountList';
 import AccountOptions from './AccountOptions';
 import FolderTree from './FolderTree';
@@ -105,10 +107,19 @@ export function AccountPanel({
                                     <span className={styles.selectedAccountName}>{selected.displayName}</span>
                                     <span className={styles.selectedAccountEmail}>{selected.emailAddress}</span>
                                 </span>
+                                {/* La même pastille que sur sa carte : cette
+                                    face ne montre plus la liste, et c'est ici
+                                    que les gestes réservés au domicile manquent. */}
+                                {selected.foreign && (
+                                    <span title='Cette boîte appartient à un autre espace qui la partage ici'>
+                                        <StatusBadge tone='accent'>partagée</StatusBadge>
+                                    </span>
+                                )}
                             </button>
                             <AccountOptions
                                 canRefresh={selectedFolderId !== null}
                                 refreshing={refreshingFolder}
+                                foreign={selected.foreign}
                                 onEdit={() => onEdit(selected)}
                                 onRefresh={onRefreshFolder}
                                 onDelete={() => onDeleteAccount(selected)}

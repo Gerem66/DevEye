@@ -29,6 +29,13 @@ import { classifyMailError, decryptCredentials } from './_shared';
  * diffusion passe par `deps.live.changed` (l'ex `live.changed(ws, ['mail'],
  * null)`). La cadence, la concurrence et l'échéance par compte se lisent dans
  * `env.ts`, plus dans `Utils/Env` de l'app.
+ *
+ * La relève tourne **au domicile** du compte, et une seule fois : un compte
+ * projeté vers d'autres espaces (`Docs/SHARING.md`) n'y est pas relevé une
+ * seconde fois, `listSyncDue` lit les comptes, pas ce qu'on voit d'eux. La
+ * diffusion, elle, traverse la projection : `deps.live.changed(domicile)`
+ * est rejoué par l'hôte dans chaque espace relié par `item_shares`, sans que
+ * le service ait à connaître la règle (SHARING.md §8).
  */
 
 /**

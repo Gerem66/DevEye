@@ -241,8 +241,11 @@ export const uptimeHandlers = [
         access: { level: 'write' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
-            await loadService(ctx, input.id);
-            const row = await ctx.repo.services.setEnabled(input.id, ctx.workspaceId, input.enabled);
+            // Chez lui, pas ici : un service projeté vit dans son espace
+            // d'origine, et sa ligne ne se trouve que là. Le geste s'autorise
+            // avec les droits d'ici, restriction par élément comprise.
+            const existing = await loadService(ctx, input.id, 'write');
+            const row = await ctx.repo.services.setEnabled(input.id, existing.workspace_id, input.enabled);
             if (!row) throw new FeatureError('not_found', 'Uptime service not found');
             if (!input.enabled) {
                 // Close any ongoing outage: we stop watching, so leaving it open

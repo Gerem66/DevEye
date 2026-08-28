@@ -2,7 +2,15 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { z, ZodType } from 'zod';
 
-import { uptimeAdd, uptimeCheckNow, uptimeCount, uptimeList, uptimeRemove, uptimeUpdate } from '../contracts/commands';
+import {
+    uptimeAdd,
+    uptimeCheckNow,
+    uptimeCount,
+    uptimeList,
+    uptimeRemove,
+    uptimeSetEnabled,
+    uptimeUpdate
+} from '../contracts/commands';
 import type { UptimeCheckRow, UptimeIncidentRow, UptimeServiceRow } from '../contracts/domain';
 import { FeatureError, type SdkFeatureContext } from '@deveye/types/sdk/server';
 import { createTestContext } from '@deveye/types/sdk/testing';
@@ -260,6 +268,19 @@ describe('le partage inter-espaces', () => {
         assert.ok(asked.includes(7));
         assert.equal(repo.rows[0].workspace_id, 42);
         assert.equal(repo.rows[0].interval_seconds, 300);
+    });
+
+    it('met en pause une projection depuis la fenêtre, en écrivant chez elle', async () => {
+        // La ligne du service 7 n'existe que dans l'espace 42 : viser l'espace
+        // actif rendrait `not_found` pour un service pourtant sous les yeux.
+        const repo = seed(fakeRepo({ 7: [1] }), row({ id: 7, workspace_id: 42 }));
+        const window = createTestContext({ repo, workspaceId: 1, shares: { 7: 42 } });
+
+        const paused = await handlerFor(uptimeSetEnabled)(window, { id: 7, enabled: false });
+        assert.equal(paused.service.enabled, false);
+        assert.equal(paused.service.foreign, true);
+        assert.equal(repo.rows[0].workspace_id, 42);
+        assert.equal(repo.rows[0].enabled, 0);
     });
 
     it('refuse de détruire une projection depuis la fenêtre, et fait le ménage chez elle', async () => {

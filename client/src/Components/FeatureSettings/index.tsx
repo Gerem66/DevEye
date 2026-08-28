@@ -92,7 +92,7 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
         // pareil, seule la source du branchement diffère.
         const pushSharingSections = (into: SectionDef[]): void => {
             if (scope.kind !== 'item' || !isShareWired(scope.feature)) return;
-            if (permissions.canFeature(scope.feature, 'write')) {
+            if (permissions.canFeature(scope.feature, 'write') && scope.shareable !== false) {
                 into.push({ id: 'sharing', label: 'Partage', icon: 'users' });
             }
             if (canRestrict && isShared) {

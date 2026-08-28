@@ -11,8 +11,8 @@ import * as mailClient from './client';
 import type { MailRepo } from './repo';
 import { backfillFolder, resetFolder, syncAccountFolders, syncOneFolder } from './sync';
 import {
+    accountCipher,
     assertMailUnlocked,
-    cipherFor,
     imapFor,
     loadAccount,
     loadFolderWithAccount,
@@ -24,6 +24,10 @@ import {
  * Les dossiers d'un compte : leur liste, leur ordre, et les trois relèves à la
  * demande (incrémentale, vers le passé, à zéro), qui passent toutes par le
  * même `sync.ts` que le service de fond, avec le vrai client IMAP.
+ *
+ * Tout fonctionne sur un compte projeté d'un autre espace : le codec est
+ * celui du domicile (`accountCipher`), et une relève faite depuis la fenêtre
+ * écrit le cache du domicile, que la diffusion rafraîchit des deux côtés.
  */
 
 export const mailFolderListFeature = defineSdkFeature<
@@ -36,7 +40,7 @@ export const mailFolderListFeature = defineSdkFeature<
     handler: async (ctx, input) => {
         const account = await loadAccount(ctx, input.accountId);
         await assertMailUnlocked(ctx, account.security_tier);
-        const cipher = cipherFor(ctx, account.security_tier);
+        const cipher = await accountCipher(ctx, account);
 
         // "Open" accounts are kept fresh by the background tick of `service.ts` —
         // serving the cache instantly makes switching mailboxes feel instant
@@ -75,7 +79,7 @@ export const mailFolderReorderFeature = defineSdkFeature<
     access: WRITE,
     mutates: true,
     handler: async (ctx, input) => {
-        await loadAccount(ctx, input.accountId);
+        await loadAccount(ctx, input.accountId, 'write');
         await ctx.repo.folders.reorder(input.accountId, input.ids);
         return { ids: input.ids };
     }
@@ -91,9 +95,9 @@ export const mailFolderSyncFeature = defineSdkFeature<
     access: WRITE,
     mutates: true,
     handler: async (ctx, input) => {
-        const { folder, account } = await loadFolderWithAccount(ctx, input.folderId);
+        const { folder, account } = await loadFolderWithAccount(ctx, input.folderId, 'write');
         await assertMailUnlocked(ctx, account.security_tier);
-        const cipher = cipherFor(ctx, account.security_tier);
+        const cipher = await accountCipher(ctx, account);
         const outcome = await imapFor(ctx, account, (credentials) =>
             syncOneFolder(mailClient, ctx.repo, cipher, account, credentials, folder)
         );
@@ -111,9 +115,9 @@ export const mailFolderBackfillFeature = defineSdkFeature<
     access: WRITE,
     mutates: true,
     handler: async (ctx, input) => {
-        const { folder, account } = await loadFolderWithAccount(ctx, input.folderId);
+        const { folder, account } = await loadFolderWithAccount(ctx, input.folderId, 'write');
         await assertMailUnlocked(ctx, account.security_tier);
-        const cipher = cipherFor(ctx, account.security_tier);
+        const cipher = await accountCipher(ctx, account);
         return imapFor(ctx, account, (credentials) =>
             backfillFolder(mailClient, ctx.repo, cipher, account, credentials, folder, input.limit)
         );
@@ -130,9 +134,9 @@ export const mailFolderResetFeature = defineSdkFeature<
     access: WRITE,
     mutates: true,
     handler: async (ctx, input) => {
-        const { folder, account } = await loadFolderWithAccount(ctx, input.folderId);
+        const { folder, account } = await loadFolderWithAccount(ctx, input.folderId, 'write');
         await assertMailUnlocked(ctx, account.security_tier);
-        const cipher = cipherFor(ctx, account.security_tier);
+        const cipher = await accountCipher(ctx, account);
         return imapFor(ctx, account, (credentials) =>
             resetFolder(mailClient, ctx.repo, cipher, account, credentials, folder)
         );

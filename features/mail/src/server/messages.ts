@@ -17,8 +17,8 @@ import { parseAndSanitize } from './parse';
 import type { MailRepo } from './repo';
 import { cacheEnvelopes, refreshFolderCounts, syncOneFolder } from './sync';
 import {
+    accountCipher,
     assertMailUnlocked,
-    cipherFor,
     imapFor,
     loadAccount,
     loadFolderWithAccount,
@@ -35,6 +35,11 @@ import {
  * Les messages : la liste paginée d'un dossier, la recherche à deux jambes, le
  * corps lu en direct, les drapeaux, le déplacement, la suppression, la pièce
  * jointe à ticket, l'analyse externe, et l'envoi.
+ *
+ * Tout fonctionne sur un compte projeté d'un autre espace, sous le codec de
+ * son domicile (`accountCipher`) ; un compte projeté et actif est un
+ * expéditeur comme un autre. Les réglages d'affichage (domaines d'images,
+ * mode de rendu, analyse externe), eux, sont ceux de l'espace où l'on lit.
  */
 
 export const mailMessageListFeature = defineSdkFeature<
@@ -47,7 +52,7 @@ export const mailMessageListFeature = defineSdkFeature<
     handler: async (ctx, input) => {
         const { folder, account } = await loadFolderWithAccount(ctx, input.folderId);
         await assertMailUnlocked(ctx, account.security_tier);
-        const cipher = cipherFor(ctx, account.security_tier);
+        const cipher = await accountCipher(ctx, account);
         // "Guarded" accounts have no background sync — this is their only chance
         // to refresh, so the list is synced on every open. Best-effort: a sync
         // failure (offline, bad creds) still serves whatever is already cached.
@@ -99,7 +104,7 @@ export const mailMessageSearchFeature = defineSdkFeature<
     handler: async (ctx, input) => {
         const { folder, account } = await loadFolderWithAccount(ctx, input.folderId);
         await assertMailUnlocked(ctx, account.security_tier);
-        const cipher = cipherFor(ctx, account.security_tier);
+        const cipher = await accountCipher(ctx, account);
 
         const terms = searchTerms(input.query);
         // Zod already rejects an empty query, but a query of pure whitespace
@@ -177,7 +182,7 @@ export const mailMessageGetFeature = defineSdkFeature<
     handler: async (ctx, input) => {
         const { message, folder, account } = await loadMessageChain(ctx, input.messageId);
         await assertMailUnlocked(ctx, account.security_tier);
-        const cipher = cipherFor(ctx, account.security_tier);
+        const cipher = await accountCipher(ctx, account);
         const { credentials, refresh, raw } = await imapFor(ctx, account, async (creds) => {
             const refreshCb = refreshCallback(ctx, account, creds, cipher);
             return {
@@ -228,9 +233,9 @@ export const mailMessageSetFlagsFeature = defineSdkFeature<
     access: WRITE,
     mutates: true,
     handler: async (ctx, input) => {
-        const { message, folder, account } = await loadMessageChain(ctx, input.messageId);
+        const { message, folder, account } = await loadMessageChain(ctx, input.messageId, 'write');
         await assertMailUnlocked(ctx, account.security_tier);
-        const cipher = cipherFor(ctx, account.security_tier);
+        const cipher = await accountCipher(ctx, account);
         await imapFor(ctx, account, (credentials) =>
             mailClient.setFlags(
                 credentials,
@@ -256,12 +261,12 @@ export const mailMessageMoveFeature = defineSdkFeature<
     access: WRITE,
     mutates: true,
     handler: async (ctx, input) => {
-        const { message, folder, account } = await loadMessageChain(ctx, input.messageId);
+        const { message, folder, account } = await loadMessageChain(ctx, input.messageId, 'write');
         const target = await ctx.repo.folders.findById(input.toFolderId);
         if (!target || target.account_id !== account.id)
             throw new FeatureError('not_found', 'Dossier cible introuvable');
         await assertMailUnlocked(ctx, account.security_tier);
-        const cipher = cipherFor(ctx, account.security_tier);
+        const cipher = await accountCipher(ctx, account);
         const newUid = await imapFor(ctx, account, (credentials) =>
             mailClient.moveMessage(
                 credentials,
@@ -286,9 +291,9 @@ export const mailMessageDeleteFeature = defineSdkFeature<
     access: WRITE,
     mutates: true,
     handler: async (ctx, input) => {
-        const { message, folder, account } = await loadMessageChain(ctx, input.messageId);
+        const { message, folder, account } = await loadMessageChain(ctx, input.messageId, 'write');
         await assertMailUnlocked(ctx, account.security_tier);
-        const cipher = cipherFor(ctx, account.security_tier);
+        const cipher = await accountCipher(ctx, account);
         const folders = await ctx.repo.folders.listByAccount(account.id);
         const trash = folders.find((f) => f.special_use === 'trash');
 
@@ -370,9 +375,9 @@ export const mailSendFeature = defineSdkFeature<
     access: WRITE,
     mutates: true,
     handler: async (ctx, input) => {
-        const account = await loadAccount(ctx, input.accountId);
+        const account = await loadAccount(ctx, input.accountId, 'write');
         await assertMailUnlocked(ctx, account.security_tier);
-        const cipher = cipherFor(ctx, account.security_tier);
+        const cipher = await accountCipher(ctx, account);
         const fromEmail = (await cipher.tryDecrypt(account.email_address_enc)) ?? '';
 
         const result = await imapFor(ctx, account, (credentials) =>

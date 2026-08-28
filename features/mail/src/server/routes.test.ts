@@ -21,10 +21,11 @@ import { mailRoutes } from './routes';
  * Ce qui se tient ici est ce que l'hôte ne vérifie pas pour nous : les deux
  * routes ne montent que sur l'origine de l'app ; une pièce jointe ne sort que
  * contre un ticket valide, sous le codec du palier du compte (l'étage gardé
- * d'une session verrouillée entre-temps est un refus, pas une tentative) ; le
- * retour OAuth crée le compte sous le bon codec et referme sa fenêtre en
- * postant vers l'origine de l'app, et un `state` invalide rend la page
- * d'échec sans rien écrire.
+ * d'une session verrouillée entre-temps est un refus, pas une tentative), et
+ * celle d'un compte projeté d'un autre espace sous le codec ouvert de ce
+ * domicile-là, pas celui du ticket ; le retour OAuth crée le compte sous le
+ * bon codec et referme sa fenêtre en postant vers l'origine de l'app, et un
+ * `state` invalide rend la page d'échec sans rien écrire.
  */
 
 interface Route {
@@ -126,14 +127,22 @@ const MESSAGE: MailMessageRow = {
     has_attachments: 1
 };
 
-/** Un dépôt en mémoire : la chaîne message → dossier → compte, et la création d'un compte. */
-function fakeRepo(accountRows: MailAccountRow[]): FakeRepo {
+/**
+ * Un dépôt en mémoire : la chaîne message → dossier → compte, et la création
+ * d'un compte. `projections` reproduit `item_shares` (`accountId → espaces où
+ * il est projeté`), la seconde branche de `findVisible`.
+ */
+function fakeRepo(accountRows: MailAccountRow[], projections: Record<number, number[]> = {}): FakeRepo {
     let seq = 100;
+    const visible = (a: MailAccountRow, ws: number) =>
+        a.workspace_id === ws || (a.security_tier === 'open' && (projections[a.id] ?? []).includes(ws));
     return {
         accountRows,
         accounts: {
             listByWorkspace: unused,
+            listVisible: unused,
             findById: async (id, ws) => accountRows.find((a) => a.id === id && a.workspace_id === ws) ?? null,
+            findVisible: async (id, ws) => accountRows.find((a) => a.id === id && visible(a, ws)) ?? null,
             findByIdUnscoped: unused,
             async create({ userId, workspaceId, ...c }) {
                 const row = account({
@@ -155,7 +164,6 @@ function fakeRepo(accountRows: MailAccountRow[]): FakeRepo {
             setEnabled: unused,
             delete: unused,
             reorder: unused,
-            count: unused,
             recordSync: unused,
             recordStatus: unused,
             updateCredentials: unused,
@@ -196,7 +204,11 @@ function fakeRepo(accountRows: MailAccountRow[]): FakeRepo {
 /**
  * Un codec qui étiquette son étage : le harnais rend les deux étages d'un
  * ticket à l'identité, ce qui ne dit pas SOUS LEQUEL une route a lu ou écrit.
- * Le rendu du harnais est enveloppé pour étiqueter ses codecs, verrou compris.
+ * Le rendu du harnais est enveloppé pour étiqueter ses codecs, verrou compris,
+ * et `deps.cipherFor` étiquette par espace : `server` pour l'espace 1 (celui
+ * des fixtures, le même que l'étage ouvert d'un ticket posé là), `ws<n>` pour
+ * tout autre, de sorte qu'une pièce lue sous le codec du ticket plutôt que
+ * sous celui du domicile du compte se voit.
  */
 function taggedCipher(tag: string): SdkCipher {
     return {
@@ -221,6 +233,7 @@ function tagging(deps: TestServiceDeps<FakeRepo>): TestServiceDeps<FakeRepo> {
             };
         }
     };
+    deps.cipherFor = (workspaceId) => taggedCipher(workspaceId === 1 ? 'server' : `ws${workspaceId}`);
     return deps;
 }
 
@@ -253,8 +266,8 @@ const RAW = Buffer.from(
     ].join('\r\n')
 );
 
-function mount(accounts: MailAccountRow[] = [account({ id: 1 })]) {
-    const repo = fakeRepo(accounts);
+function mount(accounts: MailAccountRow[] = [account({ id: 1 })], projections: Record<number, number[]> = {}) {
+    const repo = fakeRepo(accounts, projections);
     const deps = tagging(
         createTestServiceDeps({ repo, origins: { app: 'https://app.test', public: 'https://p.test' } })
     );
@@ -345,6 +358,33 @@ describe('GET /api/mail/attachment', () => {
                 .status,
             404
         );
+    });
+
+    it('la pièce d’un compte projeté se sert sous le codec ouvert de son domicile, et seulement là où il est projeté', async () => {
+        // Le compte 1 vit dans l'espace 42 (contenu sous `ws42`) et se projette
+        // vers l'espace 1. Le ticket est posé dans l'espace 1 : son étage ouvert
+        // (`server`) ne lirait pas la boîte.
+        const home = account({ id: 1, workspace_id: 42 });
+        const projected: MailAccountRow = {
+            ...home,
+            display_name_enc: home.display_name_enc.replace(/^server:/, 'ws42:'),
+            email_address_enc: home.email_address_enc.replace(/^server:/, 'ws42:'),
+            credentials_enc: home.credentials_enc.replace(/^server:/, 'ws42:')
+        };
+        const window = mount([projected], { 1: [1] });
+        const served = await window.call('/api/mail/attachment', {
+            token: ticket({ messageId: 20, attachmentId: 'att-0' })
+        });
+        assert.equal(served.status, 200);
+        assert.deepEqual(window.fetched, [{ imapPath: 'INBOX', uid: 5 }]);
+        assert.equal((served.payload as Buffer).toString(), '%PDF-1.4 test');
+
+        const elsewhere = mount([projected], { 1: [1] });
+        const refused = await elsewhere.call('/api/mail/attachment', {
+            token: ticket({ messageId: 20, attachmentId: 'att-0' }, true, 9)
+        });
+        assert.equal(refused.status, 404);
+        assert.deepEqual(elsewhere.fetched, []);
     });
 
     it('un compte gardé se lit sous le codec gardé, et une session verrouillée entre-temps est refusée', async () => {

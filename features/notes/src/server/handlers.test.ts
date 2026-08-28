@@ -20,9 +20,10 @@ import {
 } from '../contracts/commands';
 import type { NoteBlock, NoteFolderRow, NoteRow } from '../contracts/domain';
 import { FeatureError, type SdkFeatureContext } from '@deveye/types/sdk/server';
-import { createTestContext } from '@deveye/types/sdk/testing';
+import { createTestContext, type TestContext } from '@deveye/types/sdk/testing';
 
 import { notesHandlers } from './handlers';
+import { serverEntry } from './index';
 import type { NotesRepo } from './repo';
 
 /**
@@ -32,10 +33,16 @@ import type { NotesRepo } from './repo';
  * privée listée session scellée ne livre ni titre ni corps, et ses chemins
  * d'écriture répondent `locked`), la **règle des espaces** (pas de note privée
  * hors de l'espace personnel), le **deux temps** de la suppression (archive
- * d'abord, `conflict` sinon) et le **rangement** des dossiers (une suppression
- * range les orphelines en fin de « Sans dossier »). Rien de tout cela ne lève
- * ailleurs : un masque qui fuit ne casse aucun autre test, il montre juste un
- * titre de trop.
+ * d'abord, `conflict` sinon), le **rangement** des dossiers (une suppression
+ * range les orphelines en fin de « Sans dossier »), le **partage
+ * inter-espaces** (une projection se liste avec `foreign: true` et sans
+ * dossier, se réécrit chez elle sous le codec de son domicile, et ne se
+ * classe, ne se privatise ni ne se détruit jamais depuis la fenêtre qui la
+ * voit ; une note qui devient privée est oubliée de ses fenêtres) et les
+ * **restrictions par
+ * élément** (une note masquée pour ce rôle disparaît de la liste). Rien de
+ * tout cela ne lève ailleurs : un masque qui fuit ne casse aucun autre test,
+ * il montre juste un titre de trop.
  *
  * Le verrou se teste par `unlocked: false` : le harnais répond alors non à
  * `secrecy.isUnlocked()` (la garde `assertPrivateUnlocked` des écritures) ET
@@ -69,8 +76,14 @@ const now = () => Math.floor(Date.now() / 1000);
  * reproduit ce que la base fait toute seule : le `ON DELETE SET NULL` de la
  * clé étrangère des dossiers, et le rang « en fin de dossier » d'une note
  * créée ou restaurée.
+ *
+ * `projections` reproduit la table `item_shares` : `noteId → espaces où elle
+ * est projetée`. C'est ce qui donne à `listVisible` / `findVisible` leur
+ * seconde branche, et ce que le harnais (`shares`) doit dire en écho pour que
+ * `ctx.sharing.scope()` connaisse le domicile. Lu à l'appel : un test qui
+ * mime le ménage de l'app (`items.forget`) le mute après coup.
  */
-function fakeRepo(): FakeRepo {
+function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
     let noteSeq = 0;
     let folderSeq = 0;
     const nextSortOrder = (rows: NoteRow[], workspaceId: number, folderId: number | null) => {
@@ -79,6 +92,8 @@ function fakeRepo(): FakeRepo {
             .map((r) => r.sort_order);
         return ranks.length === 0 ? 0 : Math.max(...ranks) + 1;
     };
+    const visible = (r: NoteRow, workspaceId: number) =>
+        r.workspace_id === workspaceId || (projections[r.id] ?? []).includes(workspaceId);
     return {
         notes: [],
         folders: [],
@@ -87,11 +102,16 @@ function fakeRepo(): FakeRepo {
                 .filter((r) => r.workspace_id === workspaceId)
                 .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id);
         },
-        async countActiveNotes(workspaceId) {
-            return this.notes.filter((r) => r.workspace_id === workspaceId && r.archived_at === null).length;
+        async listVisible(workspaceId) {
+            return this.notes
+                .filter((r) => visible(r, workspaceId))
+                .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id);
         },
         async findNote(id, workspaceId) {
             return this.notes.find((r) => r.id === id && r.workspace_id === workspaceId) ?? null;
+        },
+        async findVisible(id, workspaceId) {
+            return this.notes.find((r) => r.id === id && visible(r, workspaceId)) ?? null;
         },
         async createNote({ userId, workspaceId, folderId, content, isPrivate }) {
             const row: NoteRow = {
@@ -198,6 +218,29 @@ function isLocked(e: unknown): boolean {
 
 function isCode(code: FeatureError['code']): (e: unknown) => boolean {
     return (e) => e instanceof FeatureError && e.code === code;
+}
+
+/**
+ * Espionne `scope.cipherFor` : les identifiants pour lesquels le codec a été
+ * demandé. Le harnais rend l'identité quel que soit l'espace, donc seul
+ * l'appel prouve que le codec est choisi ligne par ligne.
+ */
+function spyCipherFor(ctx: TestContext<NotesRepo>): number[] {
+    const asked: number[] = [];
+    const scope = ctx.sharing.scope;
+    ctx.sharing = {
+        scope: async () => {
+            const real = await scope();
+            return {
+                ...real,
+                cipherFor: (itemId) => {
+                    asked.push(itemId);
+                    return real.cipherFor(itemId);
+                }
+            };
+        }
+    };
+    return asked;
 }
 
 const text = (t: string): NoteBlock => ({ type: 'text', text: t });
@@ -520,5 +563,200 @@ describe('les dossiers', () => {
         assert.deepEqual(await handlerFor(notesCount)(ctx, {}), { count: 4 });
 
         await assert.rejects(handlerFor(notesFolderDelete)(ctx, { folderId: folder.folder.id }), isCode('not_found'));
+    });
+});
+
+describe('les restrictions par élément', () => {
+    it("retire de la liste et du compte une note masquée pour ce rôle, et refuse d'écrire une note en lecture seule", async () => {
+        const repo = fakeRepo();
+        const owner = createTestContext({ repo, kind: 'shared' });
+        const a = await handlerFor(notesAdd)(owner, { note: { ...DRAFT, title: 'A' } });
+        const hidden = await handlerFor(notesAdd)(owner, { note: { ...DRAFT, title: 'Cachée' } });
+        const readOnly = await handlerFor(notesAdd)(owner, { note: { ...DRAFT, title: 'Lecture' } });
+
+        const member = createTestContext({
+            repo,
+            kind: 'shared',
+            isOwner: false,
+            itemRestrictions: { [hidden.note.id]: 'none', [readOnly.note.id]: 'read' }
+        });
+        const listed = await handlerFor(notesList)(member, {});
+        assert.deepEqual(
+            listed.notes.map((n) => n.title),
+            ['A', 'Lecture']
+        );
+        assert.deepEqual(await handlerFor(notesCount)(member, {}), { count: 2 });
+        await assert.rejects(handlerFor(notesGet)(member, { noteId: hidden.note.id }), isCode('forbidden'));
+
+        // Lecture seule : se lit, ne s'édite ni ne s'archive.
+        const read = await handlerFor(notesGet)(member, { noteId: readOnly.note.id });
+        assert.equal(read.note.title, 'Lecture');
+        await assert.rejects(
+            handlerFor(notesEdit)(member, { noteId: readOnly.note.id, note: DRAFT }),
+            isCode('forbidden')
+        );
+        await assert.rejects(handlerFor(notesArchive)(member, { noteId: readOnly.note.id }), isCode('forbidden'));
+        // Et le classement l'ignore, comme un id étranger.
+        const res = await handlerFor(notesReorder)(member, {
+            folderId: null,
+            noteIds: [readOnly.note.id, a.note.id]
+        });
+        assert.deepEqual(res.noteIds, [a.note.id]);
+    });
+});
+
+describe('le partage inter-espaces', () => {
+    /** Une note projetée : la note 1 vit dans l'espace 42 (dossier 1 chez elle), et se projette vers l'espace 1. */
+    async function projected() {
+        const repo = fakeRepo({ 1: [1] });
+        const home = createTestContext({ repo, workspaceId: 42, kind: 'shared' });
+        const folder = await handlerFor(notesFolderAdd)(home, { name: 'Chez moi' });
+        const note = await handlerFor(notesAdd)(home, {
+            note: { ...DRAFT, title: 'Partagée', folderId: folder.folder.id }
+        });
+        assert.equal(note.note.id, 1);
+        const window = createTestContext({ repo, workspaceId: 1, shares: { 1: 42 } });
+        return { repo, home, window, folderId: folder.folder.id };
+    }
+
+    it('liste une projection avec sa pastille, sans dossier ici, déchiffrée par le codec de son domicile, et la compte', async () => {
+        const { repo, window } = await projected();
+        const local = await handlerFor(notesAdd)(window, { note: { ...DRAFT, title: 'Locale' } });
+        const asked = spyCipherFor(window);
+
+        const listed = await handlerFor(notesList)(window, {});
+        assert.deepEqual(
+            listed.notes.map((n) => [n.title, n.foreign, n.folderId]),
+            [
+                ['Partagée', true, null],
+                ['Locale', false, null]
+            ]
+        );
+        assert.ok(asked.includes(1));
+        assert.ok(asked.includes(local.note.id));
+        // Le dossier n'a pas bougé chez elle : seul le DTO le tait.
+        assert.equal(repo.notes[0].folder_id, 1);
+        assert.deepEqual(await handlerFor(notesCount)(window, {}), { count: 2 });
+
+        const read = await handlerFor(notesGet)(window, { noteId: 1 });
+        assert.deepEqual([read.note.foreign, read.note.folderId, read.note.title], [true, null, 'Partagée']);
+    });
+
+    it('réécrit, archive et restaure une projection chez elle, sous son codec, sans toucher à son dossier', async () => {
+        const { repo, window, folderId } = await projected();
+        const asked = spyCipherFor(window);
+
+        const edited = await handlerFor(notesEdit)(window, {
+            noteId: 1,
+            note: { ...DRAFT, title: 'Partagée, relue', folderId: null }
+        });
+        assert.deepEqual(
+            [edited.note.title, edited.note.foreign, edited.note.folderId],
+            ['Partagée, relue', true, null]
+        );
+        assert.ok(asked.includes(1));
+        const row = repo.notes.find((r) => r.id === 1)!;
+        assert.equal(row.workspace_id, 42);
+        assert.equal(row.folder_id, folderId);
+        assert.deepEqual(JSON.parse(row.content).title, 'Partagée, relue');
+
+        await handlerFor(notesArchive)(window, { noteId: 1 });
+        assert.notEqual(row.archived_at, null);
+        assert.deepEqual(
+            (await handlerFor(notesList)(window, { archived: true })).notes.map((n) => [n.id, n.foreign]),
+            [[1, true]]
+        );
+        await handlerFor(notesRestore)(window, { noteId: 1 });
+        assert.equal(row.archived_at, null);
+        assert.equal(row.workspace_id, 42);
+        assert.equal(row.folder_id, folderId);
+    });
+
+    it('refuse depuis la fenêtre : un dossier d’ici, le classement, la bascule en privé, la destruction', async () => {
+        const { repo, home, window } = await projected();
+        const local = await handlerFor(notesFolderAdd)(window, { name: 'Ici' });
+        const mine = await handlerFor(notesAdd)(window, { note: { ...DRAFT, title: 'Locale' } });
+
+        await assert.rejects(
+            handlerFor(notesEdit)(window, { noteId: 1, note: { ...DRAFT, folderId: local.folder.id } }),
+            isCode('validation')
+        );
+        await assert.rejects(
+            handlerFor(notesEdit)(window, { noteId: 1, note: { ...DRAFT, private: true } }),
+            isCode('validation')
+        );
+        await assert.rejects(
+            handlerFor(notesReorder)(window, { folderId: null, noteIds: [1, mine.note.id] }),
+            isCode('validation')
+        );
+        const row = repo.notes.find((r) => r.id === 1)!;
+        assert.deepEqual([row.workspace_id, row.folder_id, row.is_private], [42, 1, 0]);
+
+        await handlerFor(notesArchive)(window, { noteId: 1 });
+        await assert.rejects(handlerFor(notesDelete)(window, { noteId: 1 }), isCode('forbidden'));
+        assert.equal(repo.notes.length, 2);
+        assert.deepEqual(window.forgotten, []);
+
+        // Chez elle : la ligne part, et avec elle projections et restrictions.
+        assert.deepEqual(await handlerFor(notesDelete)(home, { noteId: 1 }), { noteId: 1 });
+        assert.equal(repo.notes.length, 1);
+        assert.deepEqual(home.forgotten, [1]);
+    });
+
+    it('oublie les projections et les restrictions d’une note qui devient privée chez elle', async () => {
+        // La note 1 vit dans l'espace 1 (personnel) et se projette vers le 7.
+        const projections: Record<number, number[]> = { 1: [7] };
+        const repo = fakeRepo(projections);
+        const home = createTestContext({ repo });
+        await handlerFor(notesAdd)(home, { note: DRAFT });
+        const window = createTestContext({ repo, workspaceId: 7, kind: 'shared', shares: { 1: 1 } });
+        assert.deepEqual(
+            (await handlerFor(notesList)(window, {})).notes.map((n) => [n.id, n.foreign]),
+            [[1, true]]
+        );
+
+        // La bascule : le ménage est demandé à l'app, une seule fois, et
+        // seulement pour une note qui n'était pas privée.
+        await handlerFor(notesEdit)(home, { noteId: 1, note: { ...DRAFT, private: true } });
+        assert.deepEqual(home.forgotten, [1]);
+        assert.equal(repo.notes[0].is_private, 1);
+        await handlerFor(notesEdit)(home, { noteId: 1, note: { ...DRAFT, title: 'Toujours privée', private: true } });
+        await handlerFor(notesEdit)(home, { noteId: 1, note: { ...DRAFT, private: false } });
+        assert.deepEqual(home.forgotten, [1]);
+
+        // Ce que l'app a fait de l'oubli : la projection n'existe plus, et la
+        // fenêtre ne voit plus rien, ni en liste, ni au compte, ni par l'id.
+        projections[1] = [];
+        const after = createTestContext({ repo, workspaceId: 7, kind: 'shared' });
+        assert.deepEqual((await handlerFor(notesList)(after, {})).notes, []);
+        assert.deepEqual(await handlerFor(notesCount)(after, {}), { count: 0 });
+        await assert.rejects(handlerFor(notesGet)(after, { noteId: 1 }), isCode('not_found'));
+    });
+});
+
+describe("l'entrée items", () => {
+    it('donne le domicile d’une note visible, son titre à l’étage ouvert, et refuse de projeter une privée', async () => {
+        const repo = fakeRepo({ 1: [7] });
+        const home = createTestContext({ repo });
+        await handlerFor(notesAdd)(home, { note: DRAFT });
+        await handlerFor(notesAdd)(home, { note: { ...DRAFT, title: '' } });
+        await handlerFor(notesAdd)(home, { note: PRIVATE_DRAFT });
+        const items = serverEntry.items!;
+
+        // Chez elle, par sa fenêtre, et depuis un espace qui ne la voit pas.
+        assert.equal(await items.homeOf(repo, 1, 1), 1);
+        assert.equal(await items.homeOf(repo, 1, 7), 1);
+        assert.equal(await items.homeOf(repo, 1, 9), null);
+        assert.equal(await items.homeOf(repo, 99, 1), null);
+
+        const open = home.cipher();
+        assert.equal(await items.labelOf(repo, open, 1, 1), 'Courses');
+        assert.equal(await items.labelOf(repo, open, 2, 1), 'Sans titre');
+        assert.equal(await items.labelOf(repo, open, 3, 1), null);
+        assert.equal(await items.labelOf(repo, open, 99, 1), null);
+
+        assert.equal(await items.shareable!(repo, 1, 1), true);
+        assert.equal(await items.shareable!(repo, 3, 1), false);
+        assert.equal(await items.shareable!(repo, 99, 1), false);
     });
 });

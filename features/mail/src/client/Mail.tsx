@@ -850,7 +850,10 @@ export default function Mail(_props: FeatureViewProps) {
                         sélection : la fonctionnalité quand aucune boîte n'est
                         ouverte, la boîte sélectionnée sinon ; ses onglets
                         (Général, Synchronisation, Chiffrement) remplacent les
-                        deux popups artisanales d'avant. */}
+                        deux popups artisanales d'avant. Partage et Permissions
+                        viennent de la coquille ; l'onglet Partage n'est pas
+                        proposé pour une boîte protégée, que le serveur
+                        refuserait de projeter (chiffrée par le mot de passe). */}
                     <FeatureSettingsButton
                         scope={
                             selectedAccount
@@ -858,7 +861,8 @@ export default function Mail(_props: FeatureViewProps) {
                                       kind: 'item',
                                       feature: 'mail',
                                       itemId: selectedAccount.id,
-                                      itemLabel: selectedAccount.displayName
+                                      itemLabel: selectedAccount.displayName,
+                                      shareable: selectedAccount.securityTier === 'open'
                                   }
                                 : { kind: 'feature', feature: 'mail' }
                         }

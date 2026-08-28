@@ -13,30 +13,22 @@ import type { FeatureManifest } from '@deveye/types/sdk';
  * ticket de session signé par l'hôte), et le contrat par lequel les alertes
  * e-mail des autres features partent (`MAIL_TRANSPORT_PROVIDER`).
  *
- * Le descriptif (intitulé, icône, phrase des rôles, `hasItems`, `itemNoun`)
- * reste celui du registre publié, étalé plutôt que recopié : une native garde
- * son identité dans @deveye/types, le manifest n'ajoute que ce que le registre
- * ne porte pas (catégorie, ressources, capacités, onglets de réglages,
- * commandes).
+ * Le descriptif (intitulé, icône, phrase des rôles, `hasItems`, `itemNoun`,
+ * `shareTier: 'perItem'`) reste celui du registre publié, étalé plutôt que
+ * recopié : une native garde son identité dans @deveye/types, le manifest
+ * n'ajoute que ce que le registre ne porte pas (catégorie, ressources,
+ * capacités, onglets de réglages, commandes).
+ *
+ * `shareTier: 'perItem'` est un engagement, tenu compte par compte : l'entrée
+ * `items` du serveur (domicile, intitulé et palier d'un compte : une boîte
+ * ouverte se projette, une boîte gardée jamais), `ctx.sharing.scope()` dans
+ * le listage (le codec choisi ligne par ligne) et `ctx.items.restrictions()`
+ * sur ce qu'il rend. Le boot refuse un module qui déclare sans tenir.
  */
 const descriptor = featureDescriptor('mail');
 
 export const manifest = {
     ...descriptor,
-    /**
-     * Déclaré PAR-DESSUS le descripteur, qui dit `'perItem'`.
-     *
-     * Le descripteur dit ce que le chiffrement AUTORISE : une boîte ouverte
-     * vit à l'étage ouvert, le serveur saurait donc la servir dans un autre
-     * espace. Mais le listage n'est pas branché sur le partage
-     * (`Docs/SHARING.md` §9 : pas de `listVisible`, pas de codec par ligne),
-     * et un module qui déclare autre chose que `'never'` s'engage à l'être
-     * (entrée `items` côté serveur, `ctx.sharing.scope()` dans ses listages) :
-     * le boot le refuse sinon. Même décision que les Notes : le registre
-     * publié garde sa promesse, le manifest dit l'état du code. Brancher Mail,
-     * c'est retirer cette ligne et tenir l'engagement.
-     */
-    shareTier: 'never',
     category: 'work',
     /**
      * Cinq clés de cache, telles que les écrans les invalident : le compte de

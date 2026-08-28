@@ -154,6 +154,8 @@ export function moduleItems(
     | {
           homeOf(itemId: number, workspaceId: number): Promise<number | null>;
           labelOf(cipher: SdkCipher, itemId: number, workspaceId: number): Promise<string | null>;
+          /** Vrai par défaut : seule une feature à palier par élément répond parfois non. */
+          shareable(itemId: number, workspaceId: number): Promise<boolean>;
       }
     | undefined {
     const mod = BY_ID.get(featureId);
@@ -161,7 +163,9 @@ export function moduleItems(
     if (!mod || !items) return undefined;
     return {
         homeOf: (itemId, workspaceId) => items.homeOf(mod.repoFor(db), itemId, workspaceId),
-        labelOf: (cipher, itemId, workspaceId) => items.labelOf(mod.repoFor(db), cipher, itemId, workspaceId)
+        labelOf: (cipher, itemId, workspaceId) => items.labelOf(mod.repoFor(db), cipher, itemId, workspaceId),
+        shareable: (itemId, workspaceId) =>
+            items.shareable ? items.shareable(mod.repoFor(db), itemId, workspaceId) : Promise.resolve(true)
     };
 }
 

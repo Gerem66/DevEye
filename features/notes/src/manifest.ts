@@ -8,38 +8,31 @@ import type { FeatureManifest } from '@deveye/types/sdk';
  * et la première à cheval sur les deux étages du chiffrement (le corps d'une
  * note privée à l'étage gardé, tout le reste à l'étage ouvert).
  *
- * Le descriptif (intitulé, icône, nom de l'élément) reste celui du registre
- * publié, étalé plutôt que recopié : une native garde son identité dans
- * @deveye/types, le manifest n'ajoute que ce que le registre ne porte pas
- * (catégorie, ressources, commandes). Pas d'onglet de
- * réglages : les notes n'ont rien à régler. Pas de `nativeCapabilities` :
- * rien n'est appelé.
+ * Le descriptif (intitulé, icône, nom de l'élément, palier de partage) reste
+ * celui du registre publié, étalé plutôt que recopié : une native garde son
+ * identité dans @deveye/types, le manifest n'ajoute que ce que le registre ne
+ * porte pas (catégorie, ressources, commandes). Pas d'onglet de réglages
+ * propre : ce qu'une note règle (où elle est visible, ce qu'en voit chaque
+ * rôle) vient de la coquille commune. Pas de `nativeCapabilities` : rien
+ * n'est appelé.
+ *
+ * `shareTier: 'perItem'`, étalé du descripteur, engage le module : l'entrée
+ * `items` de son serveur (domicile, intitulé, et `shareable`, qui refuse une
+ * note privée), `ctx.sharing.scope()` dans ses listages (le codec choisi
+ * ligne par ligne) et `ctx.items.restrictions()` sur ce qu'ils rendent. Le
+ * boot refuse un module qui déclare sans offrir `items`.
  */
 const descriptor = featureDescriptor('notes');
 
 export const manifest = {
     ...descriptor,
-    /**
-     * Déclaré PAR-DESSUS le descripteur, qui dit `'perItem'`.
-     *
-     * Le descripteur dit ce que le chiffrement AUTORISE : le corps d'une note
-     * ordinaire vit à l'étage ouvert, le serveur saurait donc le servir dans
-     * un autre espace. Mais le listage n'est pas branché sur le partage
-     * (`Docs/SHARING.md` §9 : un graphe dossiers/notes, pas des lignes), et un
-     * module qui déclare autre chose que `'never'` s'engage à l'être (entrée
-     * `items` côté serveur, `ctx.sharing.scope()` dans ses listages) : le
-     * boot le refuse sinon. Le registre publié garde sa promesse ; le
-     * manifest dit l'état du code. Brancher les Notes, c'est retirer cette
-     * ligne et tenir l'engagement.
-     */
-    shareTier: 'never',
     category: 'daily',
     /**
      * Deux clés de cache : le compte de la carte d'accueil (métadonnées
      * claires, jamais verrouillé) et la liste de l'écran (les notes privées y
      * sont masquées tant que la session est scellée). Le sujet `notes` les
      * ravive toutes les deux après une écriture, chez tous les membres de
-     * l'espace.
+     * l'espace, et dans les espaces reliés par une projection.
      */
     resources: ['notes.count', 'notes.list'],
     commands: notesCommands

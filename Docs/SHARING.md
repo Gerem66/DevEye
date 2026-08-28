@@ -57,11 +57,18 @@ Un second garde-fou, dans `features/_sharing.ts`. Projeter suppose que le
 choisir le bon codec ligne par ligne. Tant que ce n'est pas fait, la case
 cocherait et rien n'apparaîtrait de l'autre côté.
 
-Aujourd'hui : **tout l'étage `'open'`** — Uptime, Bases de données,
-Déploiement, Git, Audience, Sauvegardes. Les `'perItem'` (Notes, Mail, Projets)
-sont refusés franchement, avec la vraie raison affichée : tous trois sont des
-modules désormais, et chacun déclare `shareTier: 'never'` dans son manifest
-par-dessus le `'perItem'` du descripteur publié. Le registre dit ce que le
+Aujourd'hui : **tout l'étage `'open'`** (Uptime, Bases de données,
+Déploiement, Git, Audience, Sauvegardes) et **deux des trois `'perItem'`** :
+Notes (la note ordinaire se projette, la note privée jamais) et Mail (le
+compte ouvert se projette, le compte gardé jamais), branchés le 29 août 2026
+avec le test de palier ligne à ligne : `items.shareable` refuse à l'entrée,
+et la bascule vers le palier gardé chez soi appelle `ctx.items.forget`, de
+sorte qu'aucune projection ne survit à un élément devenu illisible ailleurs.
+Projets reste refusé franchement : son manifest déclare `shareTier: 'never'`
+par-dessus le `'perItem'` du descripteur publié, parce que projeter un projet
+pose des questions de sens avant de code (assignés et auteurs membres de
+l'espace d'origine, non-lus et « mes tâches » par personne et par espace,
+liaisons vers des objets de l'espace d'origine). Le registre dit ce que le
 chiffrement autorise, le manifest ce que le code fait, et le boot refuse un
 module qui déclare autre chose que `'never'` sans offrir `items`. Plus aucune
 native n'a d'éléments à brancher : `SHARE_WIRED` ne sert plus qu'à lire la
@@ -70,7 +77,10 @@ liste publiée.
 Brancher un **module** (Uptime, rapatrié, est le premier) : `shareTier` autre
 que `'never'` dans son manifest (étalé du descripteur pour une native), l'entrée
 `items` de son serveur (`homeOf` : le domicile d'un élément visible d'ici,
-`labelOf` : son intitulé sous le codec ouvert de l'espace appelant),
+`labelOf` : son intitulé sous le codec ouvert de l'espace appelant,
+`shareable` : facultatif, `false` pour un élément que son palier interdit de
+projeter, une note privée ou un compte gardé, chiffrés par le mot de passe de
+leur auteur ; `share.set` le demande avec le domicile et refuse en le disant),
 `ctx.sharing.scope()` dans ses listages (`foreignIds`, `homeOf`, `cipherFor`
 ligne par ligne) et `ctx.items.restrictions()` sur ce qu'ils rendent. Pas
 d'entrée dans `SHARE_WIRED` : `isShareWired` lit le manifest, et le boot
@@ -90,6 +100,8 @@ gestes :
 | Git | commits, branches, PR, releases, **synchroniser** | réglages, supprimer, rattacher un auteur |
 | Audience | toutes les statistiques, entonnoirs en lecture | réglages, clé, entonnoirs, supprimer |
 | Sauvegardes | fiche, historique, **déclencher** | modifier, supprimer (destination et source vivent chez lui) |
+| Notes | lire, éditer le corps, archiver, restaurer (chez elle, sous sa clé ; rangée à la racine, hors classement d'ici) | classer (dossier, rang), passer en privée, détruire |
+| Mail | dossiers, lire, marquer, déplacer, envoyer, relever, renommer, cadence, pause | supprimer le compte, changer de palier, identifiants et proxy, reconnexion OAuth |
 
 Le critère n'est pas le goût : un geste reste au domicile quand il **référence
 d'autres objets de l'espace d'origine** (une clé d'API, une destination, les
@@ -256,12 +268,14 @@ comme un bug.
 
 ## 9. Reste à faire
 
-- Brancher les `'perItem'` (Notes, Mail, Projets) avec leur test de palier
-  ligne à ligne — chacun est un chantier en soi : leurs objets sont des graphes
-  (dossiers, messages, cartes), pas des lignes. Tous trois sont des modules :
-  brancher l'un d'eux, c'est retirer le `shareTier: 'never'` de son manifest,
-  offrir `items` sur son entrée serveur et lire `ctx.sharing.scope()` dans ses
-  listages.
+- Brancher Projets, le dernier `'perItem'` : retirer le `shareTier: 'never'`
+  de son manifest, offrir `items` (avec `shareable` : un projet gardé ne se
+  projette pas) et lire `ctx.sharing.scope()` dans ses listages, comme Notes
+  et Mail. Mais d'abord décider ce qu'un projet projeté montre : ses assignés
+  et ses auteurs sont des membres de l'espace d'origine, ses non-lus et « mes
+  tâches » sont par personne et par espace, ses liaisons pointent vers des
+  dépôts, cibles, bases et sites de l'espace d'origine que la fenêtre ne voit
+  pas.
 - L'ordonnanceur de fond n'a pas changé : il sonde les éléments **d'un espace**,
   pas ce qu'on y voit. C'est voulu — sonder deux fois le même service parce
   qu'il est projeté ailleurs doublerait requêtes et incidents.

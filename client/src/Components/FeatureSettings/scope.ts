@@ -17,7 +17,20 @@ import { featureDescriptor, type FeatureId } from '@deveye/types';
 // bouton commun doit pouvoir s'ouvrir sur `x-<slug>`. Le type disait natif
 // alors que l'exécution servait déjà les modules — attrapé par check:sdk.
 export type SettingsScope =
-    { kind: 'feature'; feature: FeatureId } | { kind: 'item'; feature: FeatureId; itemId: number; itemLabel: string };
+    | { kind: 'feature'; feature: FeatureId }
+    | {
+          kind: 'item';
+          feature: FeatureId;
+          itemId: number;
+          itemLabel: string;
+          /**
+           * `false` quand le serveur refuserait de projeter cet élément (un
+           * palier gardé par mot de passe) : l'onglet Partage n'est pas
+           * proposé, plutôt qu'ouvert sur un refus. Les permissions par
+           * élément, elles, restent réglables.
+           */
+          shareable?: boolean;
+      };
 
 /** Les sections que la coquille sait rendre, dans leur ordre d'affichage. */
 export type SettingsSectionId =

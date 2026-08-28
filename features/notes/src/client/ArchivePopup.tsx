@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 
 import styles from './style.module.css';
 
-import { Button, ClosePopup, humanizeError, OpenPopup, Popup, withSecrecy } from 'deveye-sdk-client';
+import { Button, ClosePopup, humanizeError, OpenPopup, Popup, StatusBadge, withSecrecy } from 'deveye-sdk-client';
 import { api } from './api';
 import { stripInline } from './markdown';
 import { NOTE_CONFIRM_POPUP, type ConfirmInput } from './ConfirmPopup';
@@ -25,7 +25,9 @@ function formatArchivedAt(time: number): string {
 /**
  * The archive: notes removed from the main list but not destroyed. Each row can
  * be restored or, only from here, deleted for good: the two-step the server
- * enforces (`notes.delete` refuses an active note).
+ * enforces (`notes.delete` refuses an active note). Une note projetée depuis
+ * un autre espace se restaure d'ici, mais ne s'y détruit pas : le serveur le
+ * refuse, et la rangée ne le propose pas.
  *
  * Owns its own fetch rather than receiving the list, so the archive stays a
  * self-contained view. Resolves OpenPopup with `true` when anything changed, so
@@ -120,6 +122,11 @@ export default function ArchivePopup() {
                             <span className={styles.archiveTitle}>
                                 {note.masked && <span className={`icon ${styles.badge} icon-lock`} />}
                                 {noteLabel(note)}
+                                {note.foreign && (
+                                    <span title='Cette note appartient à un autre espace qui la partage ici'>
+                                        <StatusBadge tone='accent'>partagée</StatusBadge>
+                                    </span>
+                                )}
                             </span>
                             {note.preview && <span className={styles.archivePreview}>{stripInline(note.preview)}</span>}
                             {note.archivedAt !== null && (
@@ -138,15 +145,17 @@ export default function ArchivePopup() {
                             >
                                 <span className={`icon ${styles.toggleIcon} icon-restart`} />
                             </button>
-                            <button
-                                type='button'
-                                className={`${styles.iconAction} ${styles.iconActionDanger}`}
-                                title='Supprimer définitivement'
-                                aria-label='Supprimer définitivement la note'
-                                onClick={() => void destroy(note)}
-                            >
-                                <span className={`icon ${styles.toggleIcon} icon-trash`} />
-                            </button>
+                            {!note.foreign && (
+                                <button
+                                    type='button'
+                                    className={`${styles.iconAction} ${styles.iconActionDanger}`}
+                                    title='Supprimer définitivement'
+                                    aria-label='Supprimer définitivement la note'
+                                    onClick={() => void destroy(note)}
+                                >
+                                    <span className={`icon ${styles.toggleIcon} icon-trash`} />
+                                </button>
+                            )}
                         </div>
                     </li>
                 ))}

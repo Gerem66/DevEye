@@ -40,6 +40,44 @@ export function cipherFor(ctx: Ctx, tier: MailSecurityTier): SdkCipher {
     return ctx.cipher(tier === 'open' ? 'server' : 'private');
 }
 
+/** Ce compte est vu d'ici par une fenêtre : il vit dans un autre espace, qui le projette. */
+export function isForeign(ctx: Ctx, account: MailAccountRow): boolean {
+    return account.workspace_id !== ctx.workspaceId;
+}
+
+/**
+ * Le codec sous lequel les données d'un compte **existant** sont écrites, où
+ * qu'il vive.
+ *
+ * Chez lui, c'est {@link cipherFor} par son palier. Projeté d'ailleurs, c'est
+ * le codec ouvert de son espace d'origine, que seul `ctx.sharing.scope()` sait
+ * rendre (`Docs/SHARING.md` §3) : le déchiffrer avec celui d'ici rendrait un
+ * nom vide plutôt qu'une erreur, une boîte qu'on croirait mal enregistrée. Un
+ * compte projeté est toujours ouvert (`findVisible` ne rend pas d'autre
+ * projection), donc l'étage ouvert du domicile est indispensable et suffisant.
+ */
+export async function accountCipher(ctx: Ctx, account: MailAccountRow): Promise<SdkCipher> {
+    if (!isForeign(ctx, account)) return cipherFor(ctx, account.security_tier);
+    return (await ctx.sharing.scope()).cipherFor(account.id);
+}
+
+/**
+ * Refuse un geste réservé au domicile sur un compte projeté.
+ *
+ * Une fenêtre lit et agit, le domicile configure : supprimer le compte,
+ * changer son palier ou retoucher ses identifiants touchent la donnée d'un
+ * autre espace, et le palier en particulier relie la boîte au mot de passe de
+ * son auteur, que la fenêtre ne voit pas. Le serveur refuse, et l'écran ne
+ * propose pas.
+ */
+export function assertAtHome(ctx: Ctx, account: MailAccountRow, gesture: string): void {
+    if (!isForeign(ctx, account)) return;
+    throw new FeatureError(
+        'validation',
+        `Cette boîte appartient à un autre espace, qui la partage ici : ${gesture} se fait depuis son espace d’origine.`
+    );
+}
+
 /**
  * Range un échec dans l'une des trois familles d'{@link MailAccountStatus}.
  *
@@ -220,7 +258,11 @@ export async function reencryptAccountTree(
     }
 }
 
-export async function toAccountDTO(cipher: SdkCipher, row: MailAccountRow): Promise<MailAccount> {
+/**
+ * Le DTO d'un compte, sous le codec de SON domicile (voir {@link accountCipher}) ;
+ * `foreign` dit à l'écran qu'il regarde une fenêtre sur un autre espace.
+ */
+export async function toAccountDTO(cipher: SdkCipher, row: MailAccountRow, foreign: boolean): Promise<MailAccount> {
     const displayName = (await cipher.tryDecrypt(row.display_name_enc)) ?? '(compte verrouillé)';
     const emailAddress = (await cipher.tryDecrypt(row.email_address_enc)) ?? '';
     const lastSyncError = row.last_sync_error_enc ? await cipher.tryDecrypt(row.last_sync_error_enc) : null;
@@ -259,6 +301,7 @@ export async function toAccountDTO(cipher: SdkCipher, row: MailAccountRow): Prom
     return {
         id: row.id,
         sortOrder: row.sort_order,
+        foreign,
         displayName,
         emailAddress,
         securityTier: row.security_tier,
@@ -391,41 +434,60 @@ export async function toMessageSummaryDTO(
     };
 }
 
-/** Load a caller-owned account row, or throw `not_found`. */
-export async function loadAccount(ctx: Ctx, id: number): Promise<MailAccountRow> {
-    const row = await ctx.repo.accounts.findById(id, ctx.workspaceId);
+/** Le niveau qu'une commande exige sur le compte qu'elle vise. */
+export type ItemLevel = 'read' | 'write';
+
+/**
+ * Un compte visible depuis cet espace : le sien, ou un qu'un autre espace y
+ * projette. Lève `not_found` sinon.
+ *
+ * `level` décide de la garde : `ctx.items.assert` refuse en plus les comptes
+ * qu'une restriction de rôle masque ou passe en lecture seule. La feature
+ * seule ne suffit pas à répondre « cette boîte-là m'est-elle ouverte ? ».
+ * Ses dossiers et ses messages en cache suivent son domicile : la chaîne
+ * message → dossier → compte remonte toujours jusqu'ici.
+ */
+export async function loadAccount(ctx: Ctx, id: number, level: ItemLevel = 'read'): Promise<MailAccountRow> {
+    const row = await ctx.repo.accounts.findVisible(id, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Compte mail introuvable');
+    await ctx.items.assert(id, level);
     return row;
 }
 
-/** Load a folder and its owning account, checking the caller owns it. */
+/** Load a folder and its account, checking the account is visible from here at `level`. */
 export async function loadFolderWithAccount(
     ctx: Ctx,
-    folderId: number
+    folderId: number,
+    level: ItemLevel = 'read'
 ): Promise<{ folder: MailFolderRow; account: MailAccountRow }> {
     const folder = await ctx.repo.folders.findById(folderId);
     if (!folder) throw new FeatureError('not_found', 'Dossier introuvable');
-    const account = await loadAccount(ctx, folder.account_id);
+    const account = await loadAccount(ctx, folder.account_id, level);
     return { folder, account };
 }
 
-/** Load a message with its folder + owning account, checking ownership. */
+/** Load a message with its folder + account, checking the account is visible from here at `level`. */
 export async function loadMessageChain(
     ctx: Ctx,
-    messageId: number
+    messageId: number,
+    level: ItemLevel = 'read'
 ): Promise<{ message: MailMessageRow; folder: MailFolderRow; account: MailAccountRow }> {
     const message = await ctx.repo.messages.findById(messageId);
     if (!message) throw new FeatureError('not_found', 'Message introuvable');
-    const { folder, account } = await loadFolderWithAccount(ctx, message.folder_id);
+    const { folder, account } = await loadFolderWithAccount(ctx, message.folder_id, level);
     return { message, folder, account };
 }
 
-/** Persist a refreshed OAuth token back onto the account, re-encrypted with the same cipher. */
+/**
+ * Persist a refreshed OAuth token back onto the account, re-encrypted with
+ * `cipher`, which must be the one the account is stored under
+ * ({@link accountCipher}: the home's, for a projected account).
+ */
 export function refreshCallback(
     ctx: Ctx,
     account: MailAccountRow,
     credentials: MailCredentials,
-    cipher = cipherFor(ctx, account.security_tier)
+    cipher: SdkCipher
 ): TokenRefreshCallback | undefined {
     return persistRefreshedToken(ctx.repo, account.id, credentials, cipher);
 }
@@ -443,7 +505,7 @@ export function mergeEndpoint(next: ServerEndpoint, stored: ServerEndpoint | und
 }
 
 export async function credentialsFor(ctx: Ctx, account: MailAccountRow): Promise<MailCredentials> {
-    return decryptCredentials(cipherFor(ctx, account.security_tier), account.credentials_enc);
+    return decryptCredentials(await accountCipher(ctx, account), account.credentials_enc);
 }
 
 /**
@@ -463,7 +525,7 @@ export async function imapFor<T>(
     account: MailAccountRow,
     work: (credentials: MailCredentials) => Promise<T>
 ): Promise<T> {
-    const cipher = cipherFor(ctx, account.security_tier);
+    const cipher = await accountCipher(ctx, account);
     // Rien à diffuser d'ici : les commandes qui écrivent le font déjà par
     // `mutates`, et celles qui lisent rendent l'échec à leur propre appelant,
     // qui relit la liste des comptes dans la foulée (voir le client du module).
@@ -488,6 +550,13 @@ export async function rekeyTier(
         await ctx.repo.accounts.updateSyncError(previous.id, error === null ? null : await to.encrypt(error));
     }
     await reencryptAccountTree(ctx.repo, from, to, previous.id);
+    // Une boîte gardée ne se lit que chez son auteur : ses projections vers
+    // d'autres espaces n'ont plus d'objet, et `ctx.items.forget` les retire
+    // avec les restrictions par élément, ce qui est juste ici puisqu'une
+    // boîte gardée n'existe que dans un espace personnel (`assertTierAllowed`),
+    // où aucune restriction de rôle n'a de sens. Sans ce ménage, une ligne
+    // `item_shares` dormante remontrerait la boîte le jour où elle rouvre.
+    if (nextTier === 'guarded') await ctx.items.forget(previous.id);
     ctx.logger.info(
         { accountId: previous.id, from: previous.security_tier, to: nextTier },
         'Mail account tier changed'

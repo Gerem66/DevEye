@@ -132,6 +132,16 @@ export type MailAccountEdit = z.infer<typeof mailAccountEditSchema>;
 export const mailAccountSchema = z.object({
     id: z.number().int().positive(),
     sortOrder: z.number().int().nonnegative(),
+    /**
+     * Ce compte vient d'un **autre espace**, qui le projette ici.
+     *
+     * Il se lit, se relève et expédie normalement (c'est tout l'objet de la
+     * projection), mais l'écran le signale et n'y propose pas les gestes qui
+     * restent au domicile : supprimer, changer de palier, retoucher les
+     * identifiants. Un compte projeté est toujours ouvert : une boîte gardée,
+     * chiffrée par le mot de passe de son auteur, ne se projette pas.
+     */
+    foreign: z.boolean(),
     displayName: z.string(),
     emailAddress: z.string(),
     securityTier: mailSecurityTierSchema,

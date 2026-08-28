@@ -23,11 +23,31 @@ export interface UpdateNoteInput {
  *
  * Les dossiers appartiennent à un **espace**. `user_id` ne subsiste que pour
  * dire qui a créé la ligne ; le cloisonnement est `workspace_id`.
+ *
+ * Toute écriture prend le `workspaceId` de la ligne visée : son **domicile**,
+ * qui n'est pas forcément l'espace actif quand la note est projetée. C'est
+ * le handler qui le résout ; le dépôt ne fait que refuser (`null`, `false`)
+ * une écriture adressée au mauvais espace.
  */
 export interface NotesRepo {
+    /** Les notes **de** cet espace, actives et archivées, dans son ordre. */
     listNotes(workspaceId: number): Promise<NoteRow[]>;
-    countActiveNotes(workspaceId: number): Promise<number>;
+    /**
+     * Les notes **visibles** depuis cet espace : les siennes, plus celles
+     * qu'un autre espace y projette (`item_shares`).
+     *
+     * Une projection ne vise jamais une note privée : `share.set` la refuse
+     * (`items.shareable`), et la bascule en privé oublie celles qui
+     * existaient (`ctx.items.forget`). Rien à filtrer ici.
+     *
+     * Séparé de `listNotes` plutôt que de le remplacer : le classement (rang,
+     * dossier) et le rangement à la suppression d'un dossier ne portent que
+     * sur les notes de l'espace.
+     */
+    listVisible(workspaceId: number): Promise<NoteRow[]>;
     findNote(id: number, workspaceId: number): Promise<NoteRow | null>;
+    /** Comme `findNote`, mais accepte aussi une note projetée vers cet espace. */
+    findVisible(id: number, workspaceId: number): Promise<NoteRow | null>;
     createNote(input: CreateNoteInput): Promise<NoteRow>;
     updateNote(id: number, workspaceId: number, input: UpdateNoteInput): Promise<NoteRow | null>;
     /**
@@ -70,18 +90,41 @@ export function createRepo(q: SdkQueryable): NotesRepo {
                 workspaceId
             ]);
         },
-        async countActiveNotes(workspaceId) {
-            const rows = await q.query<{ count: number }>(
-                'SELECT COUNT(*) AS count FROM notes WHERE workspace_id = ? AND archived_at IS NULL',
-                [workspaceId]
+        async listVisible(workspaceId) {
+            // `sort_order` et `folder_id` appartiennent à l'espace d'origine :
+            // le handler les neutralise sur une ligne projetée, et le client la
+            // range après les locales. Lui donner un rang propre à chaque
+            // espace demanderait une colonne par projection (un réglage
+            // d'affichage ne vaut pas cette table).
+            return q.query<NoteRow>(
+                `SELECT n.* FROM notes n WHERE n.workspace_id = ?
+                 UNION
+                 SELECT n.* FROM notes n
+                   JOIN item_shares sh
+                     ON sh.feature = 'notes' AND sh.item_id = n.id AND sh.home_workspace_id = n.workspace_id
+                  WHERE sh.workspace_id = ?
+                 ORDER BY sort_order ASC, id ASC`,
+                [workspaceId, workspaceId]
             );
-            return Number(rows[0]?.count ?? 0);
         },
         async findNote(id, workspaceId) {
             const rows = await q.query<NoteRow>('SELECT * FROM notes WHERE id = ? AND workspace_id = ?', [
                 id,
                 workspaceId
             ]);
+            return rows[0] ?? null;
+        },
+        async findVisible(id, workspaceId) {
+            const rows = await q.query<NoteRow>(
+                `SELECT n.* FROM notes n
+                  WHERE n.id = ?
+                    AND (n.workspace_id = ?
+                         OR EXISTS (SELECT 1 FROM item_shares sh
+                                     WHERE sh.feature = 'notes' AND sh.item_id = n.id
+                                       AND sh.home_workspace_id = n.workspace_id
+                                       AND sh.workspace_id = ?))`,
+                [id, workspaceId, workspaceId]
+            );
             return rows[0] ?? null;
         },
         async createNote({ userId, workspaceId, folderId, content, isPrivate }) {

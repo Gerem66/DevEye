@@ -247,6 +247,16 @@ const setFeature = defineFeature({
         }
 
         if (input.shared) {
+            // Le palier de l'élément, demandé à sa feature : un élément chiffré
+            // par le mot de passe de son auteur ne se lit dans aucun autre
+            // espace, et le refuser ici vaut mieux qu'une fenêtre vide là-bas.
+            const items = moduleItems(input.feature, ctx.db);
+            if (items && !(await items.shareable(input.itemId, home))) {
+                throw new FeatureError(
+                    'validation',
+                    'Cet élément est chiffré par votre mot de passe : il ne se lit que dans son espace et ne peut pas être projeté.'
+                );
+            }
             await ctx.db.itemSharing.share({
                 workspace_id: input.workspaceId,
                 feature: input.feature,

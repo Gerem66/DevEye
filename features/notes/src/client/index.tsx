@@ -4,8 +4,11 @@ import Notes from './Notes';
 import NotesWidget from './NotesWidget';
 
 /**
- * Pas de `settingsPanels` : les notes n'ont rien à régler, et leur manifest
- * ne déclare aucun onglet. Le bouton commun de réglages n'est donc pas monté.
+ * Pas de `settingsPanels` : les notes n'ont pas d'onglet propre, et leur
+ * manifest n'en déclare aucun. Le bouton commun de réglages n'est monté qu'à
+ * l'échelle d'une note, dans son éditeur, pour ce que la coquille rend
+ * elle-même : où elle est visible (Partage), ce qu'en voit chaque rôle
+ * (Permissions).
  */
 export const clientEntry: FeatureClient = {
     Widget: NotesWidget,

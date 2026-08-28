@@ -4,6 +4,12 @@ interface AccountOptionsProps {
     /** No folder selected yet — there is nothing for the refresh to act on. */
     canRefresh: boolean;
     refreshing: boolean;
+    /**
+     * Projetée d'un autre espace : modifier ses identifiants et la supprimer
+     * restent chez elle, et le serveur les refuse d'ici. Seule la relève, un
+     * geste de fenêtre, est proposée.
+     */
+    foreign: boolean;
     onEdit: () => void;
     onRefresh: () => void;
     onDelete: () => void;
@@ -25,19 +31,21 @@ interface AccountOptionsProps {
  * La reconstruction du cache, elle, vit dans l'onglet Synchronisation des
  * réglages de la boîte : deux gestes trop différents pour se ressembler.
  */
-export function AccountOptions({ canRefresh, refreshing, onEdit, onRefresh, onDelete }: AccountOptionsProps) {
+export function AccountOptions({ canRefresh, refreshing, foreign, onEdit, onRefresh, onDelete }: AccountOptionsProps) {
     return (
         <div className={styles.accountOptions}>
             <div className={styles.accountOptionsActions}>
-                <button
-                    type='button'
-                    className={styles.iconBtn}
-                    title='Modifier cette boîte mail'
-                    aria-label='Modifier cette boîte mail'
-                    onClick={onEdit}
-                >
-                    <span className='icon icon-edit' />
-                </button>
+                {!foreign && (
+                    <button
+                        type='button'
+                        className={styles.iconBtn}
+                        title='Modifier cette boîte mail'
+                        aria-label='Modifier cette boîte mail'
+                        onClick={onEdit}
+                    >
+                        <span className='icon icon-edit' />
+                    </button>
+                )}
                 <button
                     type='button'
                     className={styles.iconBtn}
@@ -48,15 +56,17 @@ export function AccountOptions({ canRefresh, refreshing, onEdit, onRefresh, onDe
                 >
                     <span className={`icon icon-refresh ${refreshing ? styles.spinning : ''}`} />
                 </button>
-                <button
-                    type='button'
-                    className={`${styles.iconBtn} ${styles.accountOptionsDanger}`}
-                    title='Supprimer cette boîte mail'
-                    aria-label='Supprimer cette boîte mail'
-                    onClick={onDelete}
-                >
-                    <span className='icon icon-trash' />
-                </button>
+                {!foreign && (
+                    <button
+                        type='button'
+                        className={`${styles.iconBtn} ${styles.accountOptionsDanger}`}
+                        title='Supprimer cette boîte mail'
+                        aria-label='Supprimer cette boîte mail'
+                        onClick={onDelete}
+                    >
+                        <span className='icon icon-trash' />
+                    </button>
+                )}
             </div>
         </div>
     );

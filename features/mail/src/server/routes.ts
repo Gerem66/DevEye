@@ -4,6 +4,7 @@ import {
     MAIL_SYNC_INTERVAL_DEFAULT_MINUTES,
     mailOAuthProviderSchema,
     mailSecurityTierSchema,
+    type MailAccountRow,
     type MailSecurityTier
 } from '../contracts/domain';
 import type { FeatureServiceDeps, SdkCipher, SdkPublicApp, SdkRedeemedTicket } from '@deveye/types/sdk/server';
@@ -29,8 +30,15 @@ import { decryptCredentials, encryptCredentials, persistRefreshedToken } from '.
  * le magasin gardé à partir de l'identifiant de session.
  */
 
-/** Ce que les routes lisent de l'hôte : le dépôt, le rendu des tickets, l'origine, le journal. */
-export type MailRouteDeps = Pick<FeatureServiceDeps<MailRepo>, 'repo' | 'secrecy' | 'origins' | 'logger' | 'audit'>;
+/**
+ * Ce que les routes lisent de l'hôte : le dépôt, le rendu des tickets, le
+ * codec ouvert d'un espace (celui du domicile d'un compte projeté), l'origine,
+ * le journal.
+ */
+export type MailRouteDeps = Pick<
+    FeatureServiceDeps<MailRepo>,
+    'repo' | 'secrecy' | 'cipherFor' | 'origins' | 'logger' | 'audit'
+>;
 
 /**
  * La couture de test des routes : le client IMAP (les octets d'un message) et
@@ -62,11 +70,23 @@ const oauthQuerySchema = z.object({
 });
 
 /**
- * Le codec d'un compte, tiré du ticket rendu : l'étage ouvert pour un compte
- * ouvert, l'étage gardé pour un compte gardé, `null` quand la session s'est
- * verrouillée entre l'émission du ticket et son usage (le ticket vit deux
- * minutes, le verrou peut tomber entre-temps).
+ * Le codec d'un compte visible depuis l'espace du ticket : l'étage ouvert de
+ * son **domicile** pour un compte ouvert (le sien quand il est chez lui, celui
+ * de l'espace qui le projette sinon : jamais celui du ticket, qui ne lirait
+ * pas une boîte projetée), l'étage gardé du ticket pour un compte gardé
+ * (toujours chez lui : une boîte gardée ne se projette pas), `null` quand la
+ * session s'est verrouillée entre l'émission du ticket et son usage (le
+ * ticket vit deux minutes, le verrou peut tomber entre-temps).
  */
+function ticketAccountCipher(
+    deps: MailRouteDeps,
+    ticket: SdkRedeemedTicket,
+    account: MailAccountRow
+): SdkCipher | null {
+    return account.security_tier === 'open' ? deps.cipherFor(account.workspace_id) : ticket.cipher.private;
+}
+
+/** Le codec du palier qu'un consentement OAuth va créer, sous l'espace du ticket. */
 function ticketCipher(ticket: SdkRedeemedTicket, tier: MailSecurityTier): SdkCipher | null {
     return tier === 'open' ? ticket.cipher.server : ticket.cipher.private;
 }
@@ -151,12 +171,14 @@ export function mailRoutes(app: SdkPublicApp, deps: MailRouteDeps, seam: MailRou
         if (!message) return reply.code(404).send({ error: 'not_found' });
         const folder = await deps.repo.folders.findById(message.folder_id);
         if (!folder) return reply.code(404).send({ error: 'not_found' });
-        const account = await deps.repo.accounts.findById(folder.account_id, ticket.workspaceId);
+        // Visible depuis l'espace du ticket : chez lui, ou projeté là. La pièce
+        // d'un compte projeté se sert comme son message se lit.
+        const account = await deps.repo.accounts.findVisible(folder.account_id, ticket.workspaceId);
         if (!account) return reply.code(404).send({ error: 'not_found' });
 
         // Un compte gardé dont la session s'est verrouillée entre-temps : le
         // même refus qu'une commande, sans rien tenter.
-        const cipher = ticketCipher(ticket, account.security_tier);
+        const cipher = ticketAccountCipher(deps, ticket, account);
         if (!cipher) return reply.code(401).send({ error: 'locked' });
 
         try {

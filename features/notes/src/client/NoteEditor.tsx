@@ -6,6 +6,7 @@ import {
     Button,
     ClosePopup,
     DialogCancelButton,
+    FeatureSettingsButton,
     openInfo,
     OpenPopup,
     Popup,
@@ -107,6 +108,13 @@ export default function NoteEditor() {
     const [isPrivate, setIsPrivate] = useState(false);
     const [created, setCreated] = useState<number | null>(null);
     const [updated, setUpdated] = useState<number | null>(null);
+    /**
+     * La note telle qu'elle est **enregistrée**, pour ce qui ne dépend pas du
+     * brouillon : son identifiant (les réglages de cette note), si elle est
+     * projetée depuis un autre espace, et si elle est privée en base, ce que
+     * le serveur regarde pour accepter ou non de la partager.
+     */
+    const [stored, setStored] = useState<{ id: number; private: boolean; foreign: boolean } | null>(null);
     // Snapshot of the editable state the editor opened with, to detect unsaved
     // edits (blocks compared structurally).
     const initial = useRef({ title: '', private: false, blocks: '' });
@@ -121,6 +129,7 @@ export default function NoteEditor() {
             setIsPrivate(false);
             setCreated(null);
             setUpdated(null);
+            setStored(null);
             initial.current = { title: '', private: false, blocks: JSON.stringify(emptyBlocks()) };
             return;
         }
@@ -132,6 +141,7 @@ export default function NoteEditor() {
         setIsPrivate(note.private);
         setCreated(note.created);
         setUpdated(note.updated);
+        setStored({ id: note.id, private: note.private, foreign: note.foreign });
         initial.current = { title: note.title, private: note.private, blocks: JSON.stringify(openBlocks) };
     }
 
@@ -193,15 +203,35 @@ export default function NoteEditor() {
             onSave={save}
             tall={expanded}
             headerAction={
-                <button
-                    type='button'
-                    className={styles.editorInfoBtn}
-                    aria-label='À propos des notes privées'
-                    title='Comment fonctionnent les notes privées ?'
-                    onClick={showPrivateInfo}
-                >
-                    <span className='icon icon-info' />
-                </button>
+                <>
+                    {/* Les réglages **de cette note** : où elle est visible
+                        (Partage) et ce qu'en voit chaque rôle (Permissions),
+                        rendus par la coquille commune. Une note privée n'est
+                        jamais projetable (elle est chiffrée par le mot de
+                        passe de son auteur) : l'onglet Partage ne lui est pas
+                        proposé, plutôt qu'ouvert sur un refus. */}
+                    {stored && (
+                        <FeatureSettingsButton
+                            variant='ghost'
+                            scope={{
+                                kind: 'item',
+                                feature: 'notes',
+                                itemId: stored.id,
+                                itemLabel: title.trim() || 'Sans titre',
+                                shareable: !stored.private
+                            }}
+                        />
+                    )}
+                    <button
+                        type='button'
+                        className={styles.editorInfoBtn}
+                        aria-label='À propos des notes privées'
+                        title='Comment fonctionnent les notes privées ?'
+                        onClick={showPrivateInfo}
+                    >
+                        <span className='icon icon-info' />
+                    </button>
+                </>
             }
         >
             <div className={`${styles.editor} ${expanded ? styles.editorFill : ''}`}>
@@ -246,9 +276,11 @@ export default function NoteEditor() {
                                 contrôle d'accès : son corps passe par la clé emballée par
                                 mot de passe. Dans un espace partagé, cette clé est celle du
                                 propriétaire ; la note serait donc illisible pour les autres
-                                membres, et trompeuse pour son auteur. Le serveur refuse ce
-                                cas ; on n'affiche simplement pas le bouton. */}
-                            {isPersonalWorkspace && (
+                                membres, et trompeuse pour son auteur. Même chose pour une
+                                note projetée depuis un autre espace : privée d'ici, elle
+                                serait illisible chez elle. Le serveur refuse ces deux cas ;
+                                on n'affiche simplement pas le bouton. */}
+                            {isPersonalWorkspace && !stored?.foreign && (
                                 <button
                                     type='button'
                                     className={`${styles.iconToggle} ${isPrivate ? styles.iconToggleActive : ''}`}

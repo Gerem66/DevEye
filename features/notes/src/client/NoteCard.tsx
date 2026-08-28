@@ -4,7 +4,7 @@ import styles from './style.module.css';
 import { stripInline } from './markdown';
 
 import type { NoteFolder, NoteSummary } from '../contracts/domain';
-import { useLiveOutline } from 'deveye-sdk-client';
+import { StatusBadge, useLiveOutline } from 'deveye-sdk-client';
 
 /**
  * Compact "last modified" label for a card corner: a short numeric date, or the
@@ -40,6 +40,10 @@ interface NoteCardProps {
  * Masked cards drag too: positioning never touches the body. The discreet folder
  * menu stays for long-distance moves (it appends to the target folder); at rest
  * its button is collapsed so the badges sit flush against the right edge.
+ *
+ * Une note **projetée** depuis un autre espace n'a ni le menu ni le glisser :
+ * son dossier et son rang sont ceux de son domicile, et le serveur refuse de
+ * la classer d'ici. Elle porte la pastille « partagée » à la place.
  */
 export default function NoteCard({ note, folders, draggable, onOpen, onMove, onDragStart, onDragEnd }: NoteCardProps) {
     const [menuOpen, setMenuOpen] = useState(false);
@@ -112,45 +116,56 @@ export default function NoteCard({ note, folders, draggable, onOpen, onMove, onD
             <div className={styles.cardHead}>
                 <h4 className={styles.cardTitle}>{note.title || 'Sans titre'}</h4>
                 <span className={styles.cardBadges}>
+                    {/* Projetée depuis un autre espace : elle se lit et se modifie
+                        comme les autres, mais ne se classe ni ne se détruit d'ici.
+                        Sans cette pastille, rien ne distingue une ligne locale
+                        d'une fenêtre sur l'espace voisin. */}
+                    {note.foreign && (
+                        <span title='Cette note appartient à un autre espace qui la partage ici'>
+                            <StatusBadge tone='accent'>partagée</StatusBadge>
+                        </span>
+                    )}
                     {note.private && <span className={`icon ${styles.badge} icon-lock`} aria-label='Privée' />}
-                    <div className={`${styles.cardMenu} ${menuOpen ? styles.menuOpen : ''}`} ref={menuRef}>
-                        <button
-                            type='button'
-                            className={styles.cardMenuBtn}
-                            aria-label='Options de la note'
-                            title='Déplacer…'
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setMenuOpen((v) => !v);
-                            }}
-                        >
-                            <span className={`icon ${styles.badge} icon-folder`} />
-                        </button>
-                        {menuOpen && (
-                            <div className={styles.menu} onClick={(e) => e.stopPropagation()}>
-                                <div className={styles.menuLabel}>Déplacer vers</div>
-                                <button
-                                    type='button'
-                                    className={`${styles.menuItem} ${note.folderId === null ? styles.menuItemActive : ''}`}
-                                    onClick={() => move(null)}
-                                >
-                                    Sans dossier
-                                </button>
-                                {folders.map((f) => (
+                    {!note.foreign && (
+                        <div className={`${styles.cardMenu} ${menuOpen ? styles.menuOpen : ''}`} ref={menuRef}>
+                            <button
+                                type='button'
+                                className={styles.cardMenuBtn}
+                                aria-label='Options de la note'
+                                title='Déplacer…'
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMenuOpen((v) => !v);
+                                }}
+                            >
+                                <span className={`icon ${styles.badge} icon-folder`} />
+                            </button>
+                            {menuOpen && (
+                                <div className={styles.menu} onClick={(e) => e.stopPropagation()}>
+                                    <div className={styles.menuLabel}>Déplacer vers</div>
                                     <button
-                                        key={f.id}
                                         type='button'
-                                        className={`${styles.menuItem} ${
-                                            note.folderId === f.id ? styles.menuItemActive : ''
-                                        }`}
-                                        onClick={() => move(f.id)}
+                                        className={`${styles.menuItem} ${note.folderId === null ? styles.menuItemActive : ''}`}
+                                        onClick={() => move(null)}
                                     >
-                                        {f.name}
+                                        Sans dossier
                                     </button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
+                                    {folders.map((f) => (
+                                        <button
+                                            key={f.id}
+                                            type='button'
+                                            className={`${styles.menuItem} ${
+                                                note.folderId === f.id ? styles.menuItemActive : ''
+                                            }`}
+                                            onClick={() => move(f.id)}
+                                        >
+                                            {f.name}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </span>
             </div>
 

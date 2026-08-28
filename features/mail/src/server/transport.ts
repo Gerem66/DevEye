@@ -14,10 +14,13 @@ import { decryptCredentials, persistRefreshedToken } from './_shared';
  * `sendMail`), inversé en contrat. Sans module, l'app n'a pas de canal e-mail
  * prêt, et l'écran des canaux le dit.
  *
- * Un expéditeur est un compte **ouvert et actif** de l'espace : un compte gardé
- * exige un déverrouillage que l'ordonnanceur de fond n'a jamais, et un compte
- * en pause ne doit pas partir tout seul. Tout se lit sous le codec ouvert de
- * l'espace (`deps.cipherFor`), sans session.
+ * Un expéditeur est un compte **ouvert et actif, visible de l'espace** : le
+ * sien, ou un qu'un autre espace y projette. Un compte gardé exige un
+ * déverrouillage que l'ordonnanceur de fond n'a jamais, et un compte en pause
+ * ne doit pas partir tout seul. Tout se lit sous le codec ouvert du
+ * **domicile** du compte (`deps.cipherFor(row.workspace_id)`), sans session :
+ * un compte projeté reste chiffré sous la clé de son espace d'origine, et le
+ * lire sous celle de l'espace du canal le ferait passer pour muet.
  *
  * `send` ne lève jamais : `false` et une ligne de journal, parce que l'appelant
  * est une boucle de fond (la livraison d'une alerte) qui n'a rien à faire
@@ -35,8 +38,8 @@ export function createMailTransport(
     deps: FeatureServiceDeps<MailRepo>,
     client: TransportClient = mailClient
 ): MailTransportProvider {
-    const senderOf = async (row: MailAccountRow, workspaceId: number): Promise<MailSender | null> => {
-        const cipher = deps.cipherFor(workspaceId);
+    const senderOf = async (row: MailAccountRow): Promise<MailSender | null> => {
+        const cipher = deps.cipherFor(row.workspace_id);
         const address = await cipher.tryDecrypt(row.email_address_enc);
         // Sans adresse lisible, rien ne peut partir de ce compte : il ne
         // figure pas parmi les expéditeurs plutôt que d'y figurer inerte.
@@ -47,20 +50,20 @@ export function createMailTransport(
 
     return {
         async listSenders(workspaceId) {
-            const rows = await deps.repo.accounts.listByWorkspace(workspaceId);
-            const senders = await Promise.all(rows.filter(isReadySender).map((row) => senderOf(row, workspaceId)));
+            const rows = await deps.repo.accounts.listVisible(workspaceId);
+            const senders = await Promise.all(rows.filter(isReadySender).map(senderOf));
             return senders.filter((s): s is MailSender => s !== null);
         },
         async isReady(accountId, workspaceId) {
-            return isReadySender(await deps.repo.accounts.findById(accountId, workspaceId));
+            return isReadySender(await deps.repo.accounts.findVisible(accountId, workspaceId));
         },
         async send(accountId, workspaceId, message) {
-            const row = await deps.repo.accounts.findById(accountId, workspaceId);
+            const row = await deps.repo.accounts.findVisible(accountId, workspaceId);
             if (!isReadySender(row)) return false;
             try {
-                const sender = await senderOf(row, workspaceId);
+                const sender = await senderOf(row);
                 if (!sender) return false;
-                const cipher = deps.cipherFor(workspaceId);
+                const cipher = deps.cipherFor(row.workspace_id);
                 const credentials = await decryptCredentials(cipher, row.credentials_enc);
                 await client.sendMail(
                     credentials,

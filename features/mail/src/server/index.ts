@@ -24,10 +24,13 @@ import { createMailTransport } from './transport';
  * Mail ne notifie personne (`notifies: false`) : aucune capacité `notify`. La
  * façade `mail.listAccounts` des autres modules lit le même contrat que l'app.
  *
- * Pas d'entrée `items` : le manifest déclare `shareTier: 'never'` par-dessus
- * le `'perItem'` du descripteur publié, parce que le listage n'est pas
- * branché sur le partage (voir `manifest.ts`). Le jour où il l'est, `items`
- * arrive ici en même temps que `ctx.sharing.scope()` dans `mail.accountList`.
+ * `items` est ce que le partage sait des comptes sans ouvrir la feature : le
+ * domicile d'un compte visible d'ici (le sien, ou l'espace qui le projette),
+ * son intitulé déchiffré par le codec ouvert de l'espace appelant, et son
+ * palier (`shareable` : une boîte ouverte se projette, une boîte gardée est
+ * chiffrée par le mot de passe de son auteur et ne se lit nulle part
+ * ailleurs). `shareTier: 'perItem'` l'exige ; le boot refuse un module qui
+ * déclare sans l'offrir.
  *
  * Pas de `migrationsDir` : les quatre tables du module datent du socle (039
  * et suivantes, rattachées à l'espace par la 050, jamais déplacées, allowlist
@@ -51,5 +54,23 @@ export const serverEntry: FeatureServer<MailRepo> = {
             // les ignore (`exposure: 'app'`).
             publicRoutes: (app) => mailRoutes(app, deps)
         };
+    },
+    items: {
+        homeOf: async (repo, itemId, workspaceId) =>
+            (await repo.accounts.findVisible(itemId, workspaceId))?.workspace_id ?? null,
+        // Le nom, ou à défaut l'adresse, sous le codec ouvert de l'espace
+        // appelant : un compte gardé ou disparu vaut `null`, ce que l'écran
+        // montre comme « une cible disparue ».
+        labelOf: async (repo, cipher, itemId, workspaceId) => {
+            const row = await repo.accounts.findById(itemId, workspaceId);
+            if (!row) return null;
+            const name = await cipher.tryDecrypt(row.display_name_enc);
+            if (name) return name;
+            return (await cipher.tryDecrypt(row.email_address_enc)) || null;
+        },
+        // Demandé avec le domicile du compte : seule une boîte ouverte se lit
+        // sous une clé que le serveur tient seul, donc dans un autre espace.
+        shareable: async (repo, itemId, workspaceId) =>
+            (await repo.accounts.findById(itemId, workspaceId))?.security_tier === 'open'
     }
 };

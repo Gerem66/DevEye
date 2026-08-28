@@ -628,7 +628,8 @@ isolés et journalisés (`moduleAgentHooks`), deux modules offrant le même
 provider sont refusés au boot, et `validateGrantExtras` vérifie les extras
 d'un rôle contre les manifests.
 
-Par entrée serveur (`FeatureServer`) : `items` (`homeOf`, `labelOf`), ce que
+Par entrée serveur (`FeatureServer`) : `items` (`homeOf`, `labelOf`,
+`shareable` facultatif pour une feature à palier par élément), ce que
 les commandes transversales de partage et de routage savent des éléments d'un
 module (`moduleItems` dans `register.ts`, consulté avant les switchs natifs),
 obligatoire dès que le manifest déclare un `shareTier` autre que `'never'`
@@ -646,6 +647,7 @@ Pairs admis d'un module : `@deveye/types`, `react`, `zod`, `framer-motion`
   harnais de test qui les simulent par `shares` et `itemRestrictions`). Ce qui
   reste : les modules **externes** déclarent `shareTier: 'never'` tant
   qu'aucun module tiers n'a exercé le contrat (une ligne de `validateManifest`
-  à lever le jour venu), et les trois `'perItem'` (Notes, Mail, Projets, tous
-  modules désormais, `shareTier: 'never'` en manifest) restent à brancher,
-  chacun étant un chantier en soi (SHARING.md §9).
+  à lever le jour venu) ; Notes et Mail sont branchés (`items.shareable`
+  pour le palier, `ctx.items.forget` à la bascule vers le palier gardé), et
+  Projets reste à brancher une fois décidé ce qu'un projet projeté montre
+  (SHARING.md §9).

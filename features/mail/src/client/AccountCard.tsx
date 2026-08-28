@@ -41,6 +41,12 @@ function formatAgo(epochSeconds: number | null): string {
  * felt wrong) — same pointer-events technique as `features/uptime/src/client/ServiceCard`
  * otherwise (see `AccountList` for why). Both corners fade in on hover/focus
  * so the tile stays calm at rest.
+ *
+ * Un compte **projeté** d'un autre espace (`foreign`) porte une pastille et
+ * perd le bouton d'édition : le formulaire qu'il ouvre réécrit les
+ * identifiants et porte la suppression, deux gestes que le serveur réserve au
+ * domicile. La pause, elle, reste : suspendre la relève de ce qu'on voit est
+ * un geste de fenêtre.
  */
 export function AccountCard({
     account,
@@ -87,15 +93,17 @@ export function AccountCard({
             />
 
             <div className={styles.accountCardCorner}>
-                <button
-                    type='button'
-                    className={styles.iconBtn}
-                    title='Modifier'
-                    aria-label='Modifier'
-                    onClick={action(onEdit)}
-                >
-                    <span className='icon icon-edit' />
-                </button>
+                {!account.foreign && (
+                    <button
+                        type='button'
+                        className={styles.iconBtn}
+                        title='Modifier'
+                        aria-label='Modifier'
+                        onClick={action(onEdit)}
+                    >
+                        <span className='icon icon-edit' />
+                    </button>
+                )}
                 <button
                     type='button'
                     className={styles.iconBtn}
@@ -114,6 +122,15 @@ export function AccountCard({
             <h4 className={styles.accountCardName}>{account.displayName}</h4>
             <p className={styles.accountCardEmail}>{account.emailAddress}</p>
             <span className={styles.accountCardBadgeSlot}>
+                {/* Projetée depuis un autre espace : elle se lit et se relève
+                    comme les autres, mais rien ne distinguerait sinon une boîte
+                    d'ici d'une fenêtre sur l'espace voisin. Même pastille que
+                    les services Uptime. */}
+                {account.foreign && (
+                    <span title='Cette boîte appartient à un autre espace qui la partage ici'>
+                        <StatusBadge tone='accent'>partagée</StatusBadge>
+                    </span>
+                )}
                 {status && <StatusBadge tone={status.tone}>{status.badge}</StatusBadge>}
             </span>
             <p className={styles.accountCardMeta}>

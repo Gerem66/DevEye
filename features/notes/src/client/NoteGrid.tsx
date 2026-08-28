@@ -167,7 +167,9 @@ export default function NoteGrid({
                     key={note.id}
                     note={note}
                     folders={folders}
-                    draggable={reorderable}
+                    // Une note projetée ne se classe pas ici : son rang est celui
+                    // de son domicile, et le serveur refuse un ordre qui l'inclut.
+                    draggable={reorderable && !note.foreign}
                     onOpen={onOpen}
                     onMove={onMove}
                     onDragStart={onDragStart}

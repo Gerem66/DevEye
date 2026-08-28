@@ -27,9 +27,14 @@ import NoteEditor, {
 import NoteGrid from './NoteGrid';
 import styles from './style.module.css';
 
-/** The user's manual order; the id only breaks ties. */
+/**
+ * The user's manual order; the id only breaks ties. Les notes projetées
+ * depuis un autre espace viennent après les locales : leur rang est celui de
+ * leur domicile, et les mêler au classement d'ici les ferait paraître
+ * déplaçables.
+ */
 function byOrder(a: NoteSummary, b: NoteSummary): number {
-    return a.sortOrder - b.sortOrder || a.id - b.id;
+    return Number(a.foreign) - Number(b.foreign) || a.sortOrder - b.sortOrder || a.id - b.id;
 }
 
 /**
@@ -241,11 +246,17 @@ function Notes() {
      * The server takes the destination folder's full new order; the note simply
      * leaves a gap behind in its previous folder, whose relative order is
      * untouched. Optimistic, with a rollback to the previous list on failure.
+     *
+     * Les notes projetées n'en font pas partie : ni comme source (leur carte
+     * ne se glisse pas) ni dans l'ordre envoyé (elles se classent chez elles,
+     * et le serveur refuse un ordre qui les inclut). Rangées en fin de racine,
+     * elles n'occupent aucun des rangs qu'un dépôt peut viser.
      */
     const dropInto = useCallback(
         async (dragged: NoteSummary, folderId: number | null, index: number) => {
+            if (dragged.foreign) return;
             setActionError(null);
-            const bucket = notes.filter((n) => n.folderId === folderId).sort(byOrder);
+            const bucket = notes.filter((n) => n.folderId === folderId && !n.foreign).sort(byOrder);
             const from = bucket.findIndex((n) => n.id === dragged.id);
             const noteIds = bucket.map((n) => n.id);
             if (from !== -1) noteIds.splice(from, 1);
@@ -335,7 +346,8 @@ function Notes() {
      * Notes filtered by search and bucketed by folder id. Masked notes stay in
      * their own folder (the clear `folderId` column), never pulled into a special
      * section. Search skips them since their title/preview aren't available
-     * client-side while locked.
+     * client-side while locked. Les notes projetées arrivent sans dossier
+     * (`folderId: null`) : elles se rangent à la racine, après les locales.
      */
     const { byFolder, unfiled, total } = useMemo(() => {
         const lower = search.trim().toLowerCase();
@@ -588,6 +600,7 @@ function toSummary(note: Note): NoteSummary {
         checkDone: checks.filter((b) => b.type === 'check' && b.done).length,
         private: note.private,
         masked: false,
+        foreign: note.foreign,
         // The editor only ever round-trips active notes.
         archivedAt: null,
         updated: note.updated,

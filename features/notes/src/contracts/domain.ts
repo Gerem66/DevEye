@@ -114,13 +114,29 @@ export const noteFolderSchema = z.object({
 export type NoteFolder = z.infer<typeof noteFolderSchema>;
 
 /**
+ * Ce que le client reçoit d'une note projetée depuis un **autre espace**.
+ *
+ * Elle se lit, s'édite, s'archive et se restaure comme les autres (c'est
+ * l'objet de la projection ; la ligne est réécrite chez elle, sous SA clé),
+ * mais elle n'a ni dossier ni rang ici : `folderId` vaut `null` et elle se
+ * range à la racine, après les notes locales, hors du classement de cet
+ * espace. Et deux gestes lui sont fermés depuis la fenêtre : la détruire, et
+ * la passer en privé (elle serait alors chiffrée par le mot de passe d'un
+ * membre d'ici, donc illisible chez elle). Sans ce drapeau, rien ne
+ * distinguerait une ligne locale d'une fenêtre sur l'espace voisin.
+ */
+const foreign = z.boolean();
+
+/**
  * A full note as exchanged with the client. `folderId` references a
- * {@link noteFolderSchema}; `null` means "no folder" (Sans dossier).
+ * {@link noteFolderSchema}; `null` means "no folder" (Sans dossier), which is
+ * also what a projected note always carries here (its folder lives at home).
  *
  * A **private** note is encrypted with the password-wrapped DEK, so reading or
  * writing it requires the session to be unlocked; a regular note is encrypted
  * with the user's open key, which the server can always resolve: that's what
- * lets the feature open without any prompt.
+ * lets the feature open without any prompt, and what lets an ordinary note be
+ * projected into another workspace while a private one never can.
  */
 export const noteSchema = z.object({
     id: z.number().int().nonnegative(),
@@ -131,6 +147,7 @@ export const noteSchema = z.object({
     sortOrder: z.number().int().nonnegative(),
     /** True when the note is encrypted with the password-protected key. */
     private: z.boolean(),
+    foreign,
     /** Epoch seconds; set by the server, surfaced for sorting/display. */
     updated: z.number().int().nonnegative(),
     /** Epoch seconds the note was first created. */
@@ -159,6 +176,7 @@ export const noteSummarySchema = z.object({
     private: z.boolean(),
     /** True when the body stayed encrypted for this response (private + locked). */
     masked: z.boolean(),
+    foreign,
     /** Epoch seconds the note was archived, or `null` while it is active. */
     archivedAt: z.number().int().nonnegative().nullable(),
     updated: z.number().int().nonnegative(),
@@ -171,7 +189,8 @@ export type NoteSummary = z.infer<typeof noteSummarySchema>;
 export interface NoteRow {
     id: number;
     user_id: number;
-    workspace_id: number | null;
+    /** L'espace qui détient la note : celui dont la clé la déchiffre (migration 048, non nul). */
+    workspace_id: number;
     folder_id: number | null;
     /**
      * Encrypted JSON payload (title + blocks), keyed by the private DEK when
@@ -194,7 +213,7 @@ export interface NoteRow {
 export interface NoteFolderRow {
     id: number;
     user_id: number;
-    workspace_id: number | null;
+    workspace_id: number;
     /** Encrypted JSON payload (`{ name }`). */
     content: string;
     /** Manual rank within the user's folders; lower comes first. */

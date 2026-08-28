@@ -8,7 +8,9 @@
 > Documents voisins : [SECURITY_MODEL.md](./SECURITY_MODEL.md) (les deux
 > étages), [AUTH_PROMPTS.md](./AUTH_PROMPTS.md) (l'invite de déverrouillage),
 > [NOTIFICATIONS.md](./NOTIFICATIONS.md) (le canal e-mail des alertes),
-> [SETTINGS.md](./SETTINGS.md) (la coquille de réglages), [LIVE.md](./LIVE.md).
+> [SHARING.md](./SHARING.md) (le partage inter-espaces, branché ici le 28 août
+> 2026), [SETTINGS.md](./SETTINGS.md) (la coquille de réglages),
+> [LIVE.md](./LIVE.md).
 
 Des boîtes IMAP/SMTP lues et écrites depuis DevEye : des comptes par espace,
 leurs dossiers et leurs enveloppes en cache, le corps d'un message lu en
@@ -32,7 +34,9 @@ palier** (`mail_accounts.security_tier`, une colonne en clair) :
 
 Le palier étant une colonne en clair, le serveur choisit le codec **avant** de
 lire quoi que ce soit (`cipherFor(ctx, tier)` : `ctx.cipher()` pour une boîte
-ouverte, `ctx.cipher('private')` pour une boîte gardée). Changer de palier
+ouverte, `ctx.cipher('private')` pour une boîte gardée ; et pour une boîte
+projetée d'un autre espace, `accountCipher` prend le codec ouvert de son
+domicile, voir §6). Changer de palier
 (`mail.accountSetProfile`, `mail.accountUpdate`) rechiffre tout l'arbre du
 compte, dossiers et enveloppes compris (`reencryptAccountTree`) : une ligne
 qui resterait sous l'ancien codec se lirait « (verrouillé) » pour toujours.
@@ -115,10 +119,12 @@ Côté serveur (`features/mail/src/server/`) :
 
 - `repo.ts` : les quatre dépôts natifs (comptes, dossiers, messages,
   réglages) en un seul `MailRepo` sur `SdkQueryable`, sections gardées ;
-- `_shared.ts` : `cipherFor`, `assertMailUnlocked`, `assertTierAllowed`,
-  `runWithAccountStatus`, les identifiants chiffrés, `persistRefreshedToken`,
-  `reencryptAccountTree`, les DTO, la chaîne message → dossier → compte,
-  `imapFor` ;
+- `_shared.ts` : `cipherFor`, `accountCipher` (le codec du domicile d'un
+  compte, projeté ou non), `assertAtHome`, `assertMailUnlocked`,
+  `assertTierAllowed`, `runWithAccountStatus`, les identifiants chiffrés,
+  `persistRefreshedToken`, `reencryptAccountTree`, les DTO, la chaîne message
+  → dossier → compte (`loadAccount` sur `findVisible`, avec
+  `ctx.items.assert`), `imapFor` ;
 - `accounts.ts`, `folders.ts`, `messages.ts`, `settings.ts`, agrégés par
   `handlers.ts` : les vingt-six commandes ;
 - `sync.ts` (la relève d'un dossier, la réconciliation de la fenêtre récente,
@@ -155,16 +161,83 @@ contrats de couplage (`MAIL_TRANSPORT_PROVIDER`, `MAIL_CLIENT_PROVIDER`). Les
 quatre tables `mail_*` datent du socle et sont en allowlist
 (`deveye-feature.json`) : aucune migration du module, aucun `uninstall.sql`.
 
-Le manifest déclare `shareTier: 'never'` par-dessus le `'perItem'` du
-descripteur publié : le listage n'est pas branché sur le partage
-(SHARING.md §9), et un module qui déclare autre chose s'engage à l'être. Même
-décision que les Notes.
+Le manifest garde le `shareTier: 'perItem'` du descripteur publié, et le
+tient : l'entrée `items` de `server/index.ts`, `listVisible` / `findVisible`
+dans le dépôt, `accountCipher` dans `_shared.ts`. C'est la section suivante.
 
-## 6. Les pièges
+## 6. Le partage : un compte, des fenêtres
 
-- **Le codec vient du palier du compte, jamais de la feature.** Une commande
-  qui prendrait `ctx.cipher()` par réflexe écrirait une boîte gardée sous la
-  clé de l'espace. Tout passe par `cipherFor(ctx, account.security_tier)`.
+L'élément que le partage projette est le **compte** (`mail_accounts`) ; ses
+dossiers et ses messages en cache le suivent, parce que la chaîne message →
+dossier → compte remonte toujours jusqu'à lui (`loadAccount`, sur
+`findVisible`). Un compte projeté vers un autre espace y apparaît dans la
+liste avec `foreign: true`, après les comptes locaux, et le compte de la carte
+d'accueil compte les mêmes lignes (SHARING.md §8 : une carte qui compte autre
+chose que la liste qu'elle ouvre se lit comme un bug). Les restrictions par
+élément s'appliquent (`ctx.items.restrictions()` sur la liste,
+`ctx.items.assert(id, level)` sur chaque commande qui vise un compte).
+
+**Le palier décide, compte par compte.** Seule une boîte **ouverte** se
+projette : ses données sont chiffrées sous la clé de son espace, que le
+serveur sait relire seul. Une boîte gardée est chiffrée par le mot de passe
+de son auteur, illisible partout ailleurs : `items.shareable` répond `false`,
+`share.set` refuse en le disant, et la coquille n'offre pas l'onglet Partage
+(`shareable: false` sur la portée du bouton commun). Une boîte projetée qui
+passe au palier gardé chez elle **perd ses projections** : `rekeyTier`
+appelle `ctx.items.forget`, qui retire aussi les restrictions par élément, ce
+qui est juste puisqu'une boîte gardée n'existe que dans un espace personnel,
+où aucune restriction de rôle n'a de sens. La requête de projection ne
+retient de toute façon que les comptes ouverts, en garde de cohérence.
+
+**Le codec est celui du domicile.** Un compte projeté reste chiffré sous la
+clé de son espace d'origine ; le lire avec celle d'ici le ferait passer pour
+verrouillé. `accountCipher(ctx, row)` choisit : le palier du compte chez lui,
+`ctx.sharing.scope().cipherFor(id)` (l'étage ouvert du domicile, le seul que
+`_sharing.ts` rende) quand il est projeté. Tout ce qui lit ou écrit un compte
+existant passe par là (`credentialsFor`, `imapFor`, les DTO) ; `cipherFor(ctx,
+tier)` ne sert plus qu'à la création et au changement de palier, qui n'ont
+lieu qu'au domicile.
+
+**Une fenêtre lit et agit, le domicile configure** (SHARING.md §2). Depuis
+la fenêtre : lister les dossiers, lire, marquer, déplacer, supprimer un
+message, envoyer, relever, rattraper, reconstruire un dossier, renommer la
+boîte, régler sa cadence, la mettre en pause. Au domicile seulement, refusé
+d'ici par `assertAtHome` (`validation`) et non proposé par l'écran : supprimer
+la boîte, changer son palier, retoucher ses identifiants ou son proxy
+(`mail.accountUpdate` en entier, `mail.accountSetProfile` dès que le palier ou
+le proxy bougent), reconnecter par OAuth (supprimer puis reconnecter, donc au
+domicile aussi). Le critère est celui de SHARING.md : ces gestes relient la
+boîte à des objets de son espace d'origine, le mot de passe de son auteur au
+premier chef.
+
+**La relève tourne au domicile, et une fois.** `listSyncDue` lit les comptes
+d'un espace, pas ce qu'on y voit : un compte projeté vers trois espaces n'est
+pas relevé quatre fois. La diffusion, elle, traverse la projection : le
+`deps.live.changed(domicile)` d'un tour est rejoué par l'hôte dans chaque
+espace relié par `item_shares` (SHARING.md §8), sans que le service ait à
+connaître la règle ; une relève faite depuis une fenêtre (`mail.folderSync`)
+écrit le cache du domicile et rafraîchit les deux côtés par `mutates`.
+
+**Un expéditeur projeté est un expéditeur.** `MAIL_TRANSPORT_PROVIDER`
+résout par `findVisible` / `listVisible` : un compte ouvert et actif projeté
+dans un espace y est un expéditeur légitime des canaux e-mail de cet espace,
+lu sous `deps.cipherFor(row.workspace_id)`, le codec de son domicile. La
+pièce jointe d'un message d'un compte projeté se sert de même (`routes.ts` :
+compte visible depuis l'espace du ticket, codec du domicile, jamais l'étage
+ouvert du ticket). Le retour OAuth, lui, crée toujours le compte dans l'espace
+du ticket : une boîte naît chez elle.
+
+## 7. Les pièges
+
+- **Le codec vient du compte, jamais de la feature ni de l'espace actif.**
+  Une commande qui prendrait `ctx.cipher()` par réflexe écrirait une boîte
+  gardée sous la clé de l'espace, et une qui prendrait `cipherFor(ctx,
+  account.security_tier)` sur un compte projeté le lirait sous la clé d'ici,
+  qui ne l'ouvre pas. Tout ce qui touche un compte existant passe par
+  `accountCipher(ctx, account)`.
+- **Un geste réservé au domicile se refuse des deux côtés.** `assertAtHome`
+  côté serveur, et l'écran ne le propose pas sur une boîte `foreign` : un
+  bouton qui ouvre sur un refus est un écran qui ment.
 - **`assertMailUnlocked` avant de lire, pas après.** Une boîte gardée lue à
   travers `tryDecrypt` sur une session scellée rend des dossiers sans nom et
   des enveloppes « (verrouillé) » : une réponse vide qui n'est pas vide.
