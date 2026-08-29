@@ -619,25 +619,6 @@ export default function Mail(_props: FeatureViewProps) {
         [reloadAccounts]
     );
 
-    const deleteAccount = useCallback(
-        async (account: MailAccount) => {
-            const confirmed = await OpenPopup<boolean>(MAIL_CONFIRM_POPUP, {
-                title: 'Supprimer cette boîte mail ?',
-                message: `« ${account.displayName} » et tout son cache local seront supprimés. Les messages restent intacts sur le serveur.`,
-                confirmLabel: 'Supprimer'
-            });
-            if (!confirmed) return;
-            try {
-                await api.send('mail.accountDelete', { id: account.id });
-                if (selectedAccountIdRef.current === account.id) setSelectedAccountId(null);
-                await reloadAfterAccountChange();
-            } catch (e) {
-                setError(humanizeError(e, 'Suppression impossible.'));
-            }
-        },
-        [reloadAfterAccountChange]
-    );
-
     const toggleAccountEnabled = useCallback(
         (a: MailAccount) =>
             void withAccountBusy(a.id, async () => {
@@ -805,6 +786,21 @@ export default function Mail(_props: FeatureViewProps) {
                 )}
                 <p className={styles.headline}>{headline}</p>
                 <div className={styles.toolbarActions}>
+                    {/* La relève du dossier ouvert, à côté du bouton commun : c'est
+                        un geste de fenêtre, pas un réglage, et il n'a plus de barre
+                        à lui sous la boîte. Elle fait le même travail que la synchro
+                        de fond, sans attendre son prochain passage ; la
+                        reconstruction du cache, elle, est dans l'onglet Avancé. */}
+                    <button
+                        type='button'
+                        className={styles.iconBtn}
+                        title='Relever le dossier ouvert maintenant'
+                        aria-label='Relever le dossier ouvert maintenant'
+                        disabled={selectedFolderId === null || refreshing}
+                        onClick={() => void syncFolder()}
+                    >
+                        <span className={`icon icon-refresh ${refreshing ? styles.spinning : ''}`} />
+                    </button>
                     {/* Le bouton commun, comme partout. Sa cible suit la
                         sélection : la fonctionnalité quand aucune boîte n'est
                         ouverte, la boîte sélectionnée sinon ; ses onglets
@@ -882,7 +878,6 @@ export default function Mail(_props: FeatureViewProps) {
                                 setSelectedAccountId(a.id);
                                 setShowAccountList(false);
                             }}
-                            onEdit={(a) => void openAccountForm(a)}
                             onToggle={toggleAccountEnabled}
                             onReorder={handleAccountReorder}
                             onDragStateChange={(active) => {
@@ -898,9 +893,6 @@ export default function Mail(_props: FeatureViewProps) {
                             }}
                             showList={showAccountList}
                             onShowList={() => setShowAccountList(true)}
-                            onDeleteAccount={(a) => void deleteAccount(a)}
-                            onRefreshFolder={() => void syncFolder()}
-                            refreshingFolder={refreshing}
                         />
                     )}
                 </div>

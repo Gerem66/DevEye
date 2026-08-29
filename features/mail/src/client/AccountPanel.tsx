@@ -1,7 +1,6 @@
 import { StatusBadge } from 'deveye-sdk-client';
 
 import AccountList from './AccountList';
-import AccountOptions from './AccountOptions';
 import FolderTree from './FolderTree';
 import SyncProgressBar from './SyncProgressBar';
 import styles from './style.module.css';
@@ -13,7 +12,6 @@ interface AccountPanelProps {
     selectedId: number | null;
     busy: ReadonlySet<number>;
     onSelect: (account: MailAccount) => void;
-    onEdit: (account: MailAccount) => void;
     onToggle: (account: MailAccount) => void;
     onReorder: (ids: number[]) => void;
     /** A card is being dragged — the host pauses its polling meanwhile. */
@@ -26,10 +24,6 @@ interface AccountPanelProps {
     /** Which slide shows — controlled by the host, which also sizes the column around it. */
     showList: boolean;
     onShowList: () => void;
-    /** Per-account actions, shown on slide 2 between the account header and its folders. */
-    onDeleteAccount: (account: MailAccount) => void;
-    onRefreshFolder: () => void;
-    refreshingFolder: boolean;
 }
 
 /**
@@ -49,7 +43,6 @@ export function AccountPanel({
     selectedId,
     busy,
     onSelect,
-    onEdit,
     onToggle,
     onReorder,
     onDragStateChange,
@@ -59,10 +52,7 @@ export function AccountPanel({
     selectedFolderId,
     onSelectFolder,
     showList,
-    onShowList,
-    onDeleteAccount,
-    onRefreshFolder,
-    refreshingFolder
+    onShowList
 }: AccountPanelProps) {
     const selected = accounts.find((a) => a.id === selectedId) ?? null;
 
@@ -76,7 +66,6 @@ export function AccountPanel({
                             selectedId={selectedId}
                             busy={busy}
                             onOpen={onSelect}
-                            onEdit={onEdit}
                             onToggle={onToggle}
                             onReorder={onReorder}
                             onDragStateChange={onDragStateChange}
@@ -110,14 +99,6 @@ export function AccountPanel({
                                     </span>
                                 )}
                             </button>
-                            <AccountOptions
-                                canRefresh={selectedFolderId !== null}
-                                refreshing={refreshingFolder}
-                                foreign={selected.foreign}
-                                onEdit={() => onEdit(selected)}
-                                onRefresh={onRefreshFolder}
-                                onDelete={() => onDeleteAccount(selected)}
-                            />
                             <div className={styles.folderScroll}>
                                 <h4 className={styles.sidebarSubhead}>Dossiers</h4>
                                 {foldersLoading ? (

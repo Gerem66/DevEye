@@ -33,11 +33,22 @@ export const manifest = {
      */
     nativeCapabilities: ['routes.public'],
     /**
-     * Général à l'échelle de la feature (l'affichage des messages, les images
-     * approuvées) et d'un compte ; Synchronisation (la cadence de relève d'une
-     * boîte, sa maintenance) et Chiffrement (le palier d'une boîte et son
-     * changement) à l'échelle d'un compte.
+     * À l'échelle d'un compte, Général est la boîte elle-même (nom, serveurs,
+     * proxy, suppression) : c'est ce que le bouton commun doit ouvrir en
+     * premier. Contenu porte l'affichage des messages, qui vaut pour l'espace
+     * entier et se règle donc aussi depuis la fonctionnalité. Synchronisation
+     * est la cadence de relève, Avancé la reconstruction du cache (rien d'un
+     * geste quotidien), Chiffrement le palier de la boîte.
      */
-    settings: { feature: ['general'], item: ['general', 'sync', 'encryption'] },
+    settings: {
+        feature: [{ id: 'content', label: 'Contenu', icon: 'eye-open' }],
+        item: [
+            'general',
+            { id: 'content', label: 'Contenu', icon: 'eye-open' },
+            'sync',
+            { id: 'advanced', label: 'Avancé', icon: 'details' },
+            'encryption'
+        ]
+    },
     commands: mailCommands
 } satisfies FeatureManifest;

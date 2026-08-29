@@ -2,8 +2,10 @@ import { MAIL_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { FeatureClient } from '@deveye/types/sdk/client';
 
 import Mail from './Mail';
+import MailAccountSettingsPanel from './MailAccountSettingsPanel';
+import MailAdvancedPanel from './MailAdvancedPanel';
+import MailContentPanel from './MailContentPanel';
 import MailEncryptionPanel from './MailEncryptionPanel';
-import MailGeneralPanel from './MailGeneralPanel';
 import MailSyncPanel from './MailSyncPanel';
 import MailWidget from './MailWidget';
 import { clientProvider } from './provider';
@@ -17,7 +19,13 @@ export const clientEntry: FeatureClient = {
      * Synchronisation et Chiffrement à l'échelle d'un compte. Le manifest déclare
      * les onglets, l'entrée fournit les panneaux.
      */
-    settingsPanels: { general: MailGeneralPanel, sync: MailSyncPanel, encryption: MailEncryptionPanel },
+    settingsPanels: {
+        general: MailAccountSettingsPanel,
+        content: MailContentPanel,
+        sync: MailSyncPanel,
+        advanced: MailAdvancedPanel,
+        encryption: MailEncryptionPanel
+    },
     // Unmounted as soon as it closes: folders and messages are fetched live and
     // would go stale sitting in a cached instance.
     cacheDurationMinutes: 0,

@@ -10,7 +10,6 @@ interface AccountListProps {
     selectedId: number | null;
     busy: ReadonlySet<number>;
     onOpen: (account: MailAccount) => void;
-    onEdit: (account: MailAccount) => void;
     onToggle: (account: MailAccount) => void;
     /** The complete new order after a drop. */
     onReorder: (ids: number[]) => void;
@@ -42,7 +41,6 @@ export function AccountList({
     selectedId,
     busy,
     onOpen,
-    onEdit,
     onToggle,
     onReorder,
     onDragStateChange
@@ -224,7 +222,6 @@ export function AccountList({
                         }
                         onOpen(account);
                     }}
-                    onEdit={() => onEdit(account)}
                     onToggle={() => onToggle(account)}
                     onDragPointerDown={(e) => handlePointerDown(e, account.id)}
                 />

@@ -12,7 +12,6 @@ interface AccountCardProps {
     busy: boolean;
     dragging: boolean;
     onOpen: () => void;
-    onEdit: () => void;
     onToggle: () => void;
     onDragPointerDown: (e: React.PointerEvent) => void;
 }
@@ -48,7 +47,6 @@ export function AccountCard({
     busy,
     dragging,
     onOpen,
-    onEdit,
     onToggle,
     onDragPointerDown
 }: AccountCardProps) {
@@ -87,17 +85,6 @@ export function AccountCard({
             />
 
             <div className={styles.accountCardCorner}>
-                {!account.foreign && (
-                    <button
-                        type='button'
-                        className={styles.iconBtn}
-                        title='Modifier'
-                        aria-label='Modifier'
-                        onClick={action(onEdit)}
-                    >
-                        <span className='icon icon-edit' />
-                    </button>
-                )}
                 <button
                     type='button'
                     className={styles.iconBtn}

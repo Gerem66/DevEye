@@ -26,11 +26,14 @@ const RENDER_MODE_HINT: Record<MailBodyRenderMode, string> = {
 };
 
 /**
- * Les réglages généraux de Mail : le panneau Général de la coquille commune, aux
- * deux échelles. Ce sont les réglages de l'ESPACE, que la coquille soit ouverte
- * sur la fonctionnalité ou sur une de ses boîtes : `scope` n'y change rien,
- * l'onglet étant offert depuis les réglages d'un compte pour que le bouton en
- * haut à droite porte tout d'un coup.
+ * Comment les messages s'affichent : le mode de rendu et les domaines dont les
+ * images sont approuvées. L'onglet Contenu, aux deux échelles.
+ *
+ * Ce sont les réglages de l'ESPACE, que la coquille soit ouverte sur la
+ * fonctionnalité ou sur une de ses boîtes : `scope` n'y change rien, l'onglet
+ * étant offert depuis les réglages d'un compte pour que le bouton en haut à
+ * droite porte tout d'un coup. D'où son nom : « Général » sur une boîte se
+ * lisait comme « les réglages de cette boîte », qui sont ailleurs.
  *
  * Chaque changement s'applique immédiatement, comme les autres panneaux de la
  * coquille. L'invalidation de `mail.getSettings` prévient l'écran Mail (le mode
@@ -39,7 +42,7 @@ const RENDER_MODE_HINT: Record<MailBodyRenderMode, string> = {
  * Sans le droit d'écriture, tout reste lisible mais rien ne se change : un
  * réglage que le serveur refuserait est un écran qui ment.
  */
-export default function MailGeneralPanel({ canWrite }: SettingsPanelProps) {
+export default function MailContentPanel({ canWrite }: SettingsPanelProps) {
     const version = useResourceVersion('mail.getSettings');
     const [settings, setSettings] = useState<MailSettings | null>(null);
     const [domainDraft, setDomainDraft] = useState('');

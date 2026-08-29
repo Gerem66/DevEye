@@ -142,9 +142,9 @@ export function AccountPopup() {
     function validate(): boolean {
         const name = draft.displayName.trim();
         setErrorName(name ? '' : 'Ce champ est obligatoire');
-        // The address of a provider-managed account is the provider's, not an
-        // input — there is nothing for the user to get wrong here.
-        if (providerManaged) {
+        // Le palier « fournisseur » n'a pas de champ adresse : celle d'un compte
+        // géré vient du fournisseur, et l'onglet Fournisseurs n'en demande aucune.
+        if (!showManualFields) {
             setErrorEmail('');
             return Boolean(name);
         }
@@ -224,16 +224,18 @@ export function AccountPopup() {
     }
 
     /**
-     * Waits for the consent window to finish, by message or by closing. Never
-     * rejects on close, and never trusts the message as the verdict: the callback
-     * page is served from the app origin, which is not necessarily the one the SPA
-     * was loaded from (in dev, the API port against Vite's), and `postMessage` to
-     * a mismatched target origin is dropped without a word. The message is only a
-     * way to stop waiting early; the account list decides.
+     * Attend la fin du consentement : le verdict du serveur s'il parvient à
+     * traverser, la fermeture de la fenêtre sinon.
+     *
+     * La page de callback est servie sur l'origine de l'app, qui n'est pas
+     * forcément celle d'où le SPA a été chargé (en développement, le port de
+     * l'API contre celui de Vite) : un `postMessage` dont l'origine cible ne
+     * correspond pas est jeté sans un mot. D'où `verdict: null` quand seule la
+     * fermeture a parlé : on ne sait pas, et l'appelant va demander à la liste.
      */
-    function awaitConsentWindow(popup: Window): Promise<{ error: string | null }> {
+    function awaitConsentWindow(popup: Window): Promise<{ verdict: { ok: boolean; error: string | null } | null }> {
         return new Promise((resolve) => {
-            const finish = (result: { error: string | null }) => {
+            const finish = (result: { verdict: { ok: boolean; error: string | null } | null }) => {
                 window.removeEventListener('message', onMessage);
                 clearInterval(poll);
                 resolve(result);
@@ -241,13 +243,28 @@ export function AccountPopup() {
             function onMessage(e: MessageEvent) {
                 const data = e.data as { source?: string; ok?: boolean; error?: string } | undefined;
                 if (data?.source !== 'deveye-mail-oauth') return;
-                finish({ error: data.ok ? null : (data.error ?? 'Échec de connexion') });
+                finish({ verdict: { ok: data.ok === true, error: data.error ?? null } });
             }
             const poll = window.setInterval(() => {
-                if (popup.closed) finish({ error: null });
+                if (popup.closed) finish({ verdict: null });
             }, 500);
             window.addEventListener('message', onMessage);
         });
+    }
+
+    /**
+     * Le compte que le consentement vient de créer. La liste peut ne pas encore
+     * le porter au premier appel : la fenêtre se ferme dès que le serveur a
+     * répondu, et l'écriture n'est pas forcément visible dans la foulée. On
+     * redemande quelques fois plutôt que de conclure à l'échec.
+     */
+    async function findNewAccount(before: Set<number>): Promise<MailAccount | undefined> {
+        for (let attempt = 0; attempt < 4; attempt++) {
+            const found = (await api.send('mail.accountList', {})).accounts.find((a) => !before.has(a.id));
+            if (found) return found;
+            await new Promise((r) => setTimeout(r, 300));
+        }
+        return undefined;
     }
 
     async function connectOAuth(provider: MailOAuthProvider): Promise<void> {
@@ -255,18 +272,37 @@ export function AccountPopup() {
         setTestResult(null);
         try {
             const before = new Set((await api.send('mail.accountList', {})).accounts.map((a) => a.id));
-            const res = await api.send('mail.oauthStart', { provider, securityTier: draft.securityTier });
+            const res = await api.send('mail.oauthStart', {
+                provider,
+                securityTier: draft.securityTier,
+                displayName: draft.displayName.trim()
+            });
             const popup = window.open(res.authUrl, 'deveye-mail-oauth', 'width=520,height=680');
             if (!popup) throw new Error('Fenêtre bloquée par le navigateur — autorisez les popups pour DevEye.');
 
-            const { error } = await awaitConsentWindow(popup);
-            // The server is the only thing that knows whether the account got
-            // created, so ask it rather than inferring from the window.
-            const created = (await api.send('mail.accountList', {})).accounts.find((a) => !before.has(a.id));
-            if (!created) throw new Error(error ?? 'La connexion n’a pas abouti.');
+            const { verdict } = await awaitConsentWindow(popup);
+            // Un échec annoncé par le serveur s'affiche tel quel : lui seul sait
+            // ce qui a manqué, et le paraphraser perdrait la seule information utile.
+            if (verdict && !verdict.ok) throw new Error(verdict.error ?? 'Échec de connexion.');
 
-            adopt(created);
-            setConnected(true);
+            const created = await findNewAccount(before);
+            if (created) {
+                adopt(created);
+                setConnected(true);
+                return;
+            }
+            // Le serveur a dit que c'était fait : la boîte existe, seule la liste
+            // tarde. Annoncer un échec ici enverrait rouvrir un compte qui vient
+            // d'être créé.
+            if (verdict?.ok) {
+                setConnected(true);
+                // Plus rien à sauver : sans cela, fermer demanderait de confirmer
+                // l'abandon d'un formulaire dont le travail est déjà fait.
+                initial.current = draft;
+                setTestResult('Boîte connectée. Fermez cette fenêtre pour la voir apparaître.');
+                return;
+            }
+            throw new Error('La fenêtre de connexion s’est fermée avant la fin.');
         } catch (e) {
             setTestResult(e instanceof Error ? e.message : 'Échec de connexion.');
         } finally {
@@ -292,9 +328,10 @@ export function AccountPopup() {
                     error={errorName}
                     onChange={(e) => set('displayName', e.target.value)}
                 />
-                {/* A provider-managed mailbox has its address shown on the card
-                    below, where it belongs. */}
-                {!providerManaged && (
+                {/* L'adresse ne se saisit que pour une connexion manuelle : chez un
+                    fournisseur, c'est le consentement qui la rend, et une boîte déjà
+                    connectée montre la sienne sur la carte plus bas. */}
+                {showManualFields && (
                     <TextInput
                         type='email'
                         placeholder='adresse@exemple.com'
