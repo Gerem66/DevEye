@@ -11,7 +11,9 @@ export interface SideNavItem<T extends string> {
 
 export interface SideNavProps<T extends string> {
     items: SideNavItem<T>[];
-    active: T;
+    /** `undefined` le temps qu'une liste vide se remplisse : aucune entrée n'est
+     *  alors marquée, plutôt qu'une entrée choisie au hasard. */
+    active: T | undefined;
     onSelect: (id: T) => void;
     /** Libellé lu par les lecteurs d'écran — « Réglages d'Uptime ». */
     label: string;

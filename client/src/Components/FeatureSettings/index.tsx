@@ -125,11 +125,14 @@ export interface FeatureSettingsDialogProps {
 
 export function FeatureSettingsDialog({ open, onClose, scope, initialSection }: FeatureSettingsDialogProps) {
     const sections = useSettingsSections(scope);
-    const [active, setActive] = useState<SettingsSectionId>(initialSection ?? 'notifications');
+    /** `undefined` = personne n'a choisi, et c'est la première section qui
+     *  s'ouvre. Nommer ici une section en dur la ferait gagner partout où elle
+     *  existe, quelle que soit sa place dans la nav. */
+    const [active, setActive] = useState<SettingsSectionId | undefined>(initialSection);
     /** « Gérer les canaux » d'un élément ouvre les réglages de sa fonctionnalité
      *  par-dessus ; la coquille d'une fonctionnalité ne propose pas ce saut. */
     const [manageChannels, setManageChannels] = useState(false);
-    const current = sections.some((s) => s.id === active) ? active : (sections[0]?.id ?? 'notifications');
+    const current = active && sections.some((s) => s.id === active) ? active : sections[0]?.id;
 
     // À chaque ouverture, revenir à la section demandée : un dialogue réutilisé
     // (celui du « + ») doit retomber sur Sources, pas sur le dernier onglet vu.
@@ -174,7 +177,7 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection }: 
                         )}
                         {current === 'permissions' && scope.kind === 'item' && <ItemPermissionsSection scope={scope} />}
                         {current === 'sharing' && <SharingSection scope={scope} />}
-                        {!GENERIC_SECTIONS.has(current) && <ModulePanel scope={scope} section={current} />}
+                        {current && !GENERIC_SECTIONS.has(current) && <ModulePanel scope={scope} section={current} />}
                     </div>
                 </div>
             </Dialog>
