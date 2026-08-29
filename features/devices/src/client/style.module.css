@@ -94,8 +94,17 @@
 
 .viewBar {
     display: flex;
-    justify-content: flex-start;
+    align-items: center;
+    gap: var(--space-md);
     flex: none;
+}
+
+/* Poussées à droite, et seules sur la ligne quand la flotte n'est pas offerte. */
+.viewBarActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-left: auto;
 }
 
 /* Le contenu du segment prend le reste de la hauteur et défile sous la barre. */

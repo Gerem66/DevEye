@@ -1,17 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Device } from '@deveye/types';
-import {
-    FeatureSettingsButton,
-    openInfo,
-    useDragReorder,
-    useLiveOutlines,
-    useLiveSegment,
-    useWorkspacePermissions
-} from 'deveye-sdk-client';
+import { useDragReorder, useLiveOutlines, useLiveSegment, useWorkspacePermissions } from 'deveye-sdk-client';
 
 import { agentUpdatable } from './agentVersion';
 import { api } from './api';
-import { MonitoringInfo } from './MonitoringInfo';
 import MonitoringPanel from './MonitoringPanel';
 import { useDevices } from './store';
 import { useAgentUpdate } from './useAgentUpdate';
@@ -51,18 +43,16 @@ export function MonitoringWidget() {
 }
 
 /**
- * The feature's header: title, "update all agents", info button and the common
- * settings button last. Rendered in the sidebar so it doesn't eat a full-width
- * band, or above the loading/empty states.
+ * L'en-tête de la colonne des appareils : le titre et la mise à jour de tous les
+ * agents, qui n'a de sens qu'en face de cette liste. L'aide et le bouton commun
+ * sont dans la barre du haut, avec ceux de la flotte (`Devices`).
  */
 function MonitoringTitle({
-    onInfo,
     sidebar,
     updatableIds,
     onUpdateAll,
     updating
 }: {
-    onInfo: () => void;
     sidebar?: boolean;
     updatableIds?: string[];
     onUpdateAll?: () => void;
@@ -84,10 +74,6 @@ function MonitoringTitle({
                             <span className={`icon ${updating ? `icon-spinner ${styles.spinning}` : 'icon-cloud'}`} />
                         </button>
                     )}
-                    <button className={styles.iconHeaderBtn} onClick={onInfo} title='Comment ça marche ?'>
-                        <span className='icon icon-info' />
-                    </button>
-                    <FeatureSettingsButton scope={{ kind: 'feature', feature: 'devices' }} />
                 </div>
             </div>
             <p className={styles.subtitle}>Surveillance et historique de vos appareils</p>
@@ -161,19 +147,16 @@ export default function Monitoring() {
         if (devices.some((d) => d.id === liveTarget.value)) setSelectedId(liveTarget.value);
     }, [liveTarget, devices]);
 
-    const showInfo = () =>
-        void openInfo({ title: 'Monitoring — comment ça marche', body: <MonitoringInfo />, width: 560 });
-
     return (
         <div className={styles.container}>
             {loading && devices.length === 0 ? (
                 <>
-                    <MonitoringTitle onInfo={showInfo} />
+                    <MonitoringTitle />
                     <div className={styles.loader}>Chargement...</div>
                 </>
             ) : devices.length === 0 ? (
                 <>
-                    <MonitoringTitle onInfo={showInfo} />
+                    <MonitoringTitle />
                     <div className={styles.empty}>
                         <span className={`icon icon-server ${styles.emptyIcon}`} />
                         <p>Aucun appareil configuré</p>
@@ -187,7 +170,6 @@ export default function Monitoring() {
                     {/* Left: title + device list */}
                     <div className={styles.deviceListFull}>
                         <MonitoringTitle
-                            onInfo={showInfo}
                             sidebar
                             updatableIds={updatableIds}
                             onUpdateAll={() => void updater.updateAll(updatableIds)}

@@ -4,12 +4,18 @@ import { ConfigPanel } from './ConfigPanel';
 import { TerminalSettings } from './TerminalSettings';
 
 /**
- * Le panneau Général de la coquille de réglages, aux deux échelles : les
- * préférences du terminal (feature) et la configuration de collecte d'un
- * appareil (élément, un UUID, d'où `SettingsPanelProps<string>`). Un seul
- * composant parce que l'entrée client fournit un panneau par id d'onglet.
+ * Les deux onglets de réglages de Monitoring. Ils ne partagent rien : la feature
+ * règle le terminal, un appareil règle ce que son agent collecte. Un onglet
+ * « Général » unique portait les deux et n'annonçait ni l'un ni l'autre.
  */
-export default function DevicesSettingsPanel({ scope, canWrite }: SettingsPanelProps<string>) {
-    if (scope.kind === 'item') return <ConfigPanel deviceId={scope.itemId} canWrite={canWrite} />;
+
+/** Les préférences du terminal, à l'échelle de la fonctionnalité. */
+export function DevicesTerminalPanel({ canWrite }: SettingsPanelProps<string>) {
     return <TerminalSettings canWrite={canWrite} />;
+}
+
+/** Ce que l'agent d'un appareil relève, et à quelle cadence. */
+export function DevicesCollectPanel({ scope, canWrite }: SettingsPanelProps<string>) {
+    if (scope.kind !== 'item') return null;
+    return <ConfigPanel deviceId={scope.itemId} canWrite={canWrite} />;
 }

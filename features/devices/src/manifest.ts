@@ -38,6 +38,14 @@ export const manifest = {
      * navigateur) et d'un appareil (cadence de collecte, capture des processus,
      * rétention).
      */
-    settings: { feature: ['general'], item: ['general'] },
+    /**
+     * Rien de commun entre les deux échelles : la feature règle le terminal, un
+     * appareil règle ce que son agent collecte. Un « Général » unique pour les
+     * deux ne disait ni l'un ni l'autre.
+     */
+    settings: {
+        feature: [{ id: 'terminal', label: 'Terminal', icon: 'terminal' }],
+        item: [{ id: 'collect', label: 'Collecte', icon: 'activity' }]
+    },
     commands: devicesCommands
 } satisfies FeatureManifest;

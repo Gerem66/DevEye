@@ -293,6 +293,7 @@ declare const styles: {
     readonly uptimeBadge: string;
     readonly view: string;
     readonly viewBar: string;
+    readonly viewBarActions: string;
     readonly viewBody: string;
     readonly waitingMsg: string;
     readonly widgetContent: string;

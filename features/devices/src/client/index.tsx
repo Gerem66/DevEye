@@ -5,7 +5,7 @@ import Devices from './Devices';
 import DeviceWidget from './DeviceWidget';
 import { MonitoringWidget } from './Monitoring';
 import MonitoringPanel from './MonitoringPanel';
-import DevicesSettingsPanel from './SettingsPanel';
+import { DevicesCollectPanel, DevicesTerminalPanel } from './SettingsPanel';
 import { refreshDevices, resetDevices, useDevices } from './store';
 import DevicesTopbarWidget from './TopbarWidget';
 
@@ -29,7 +29,7 @@ export const clientEntry: FeatureClient = {
      * du terminal (feature) et la configuration de collecte d'un appareil
      * (élément, un id texte).
      */
-    settingsPanels: { general: DevicesSettingsPanel },
+    settingsPanels: { terminal: DevicesTerminalPanel, collect: DevicesCollectPanel },
     TopbarWidget: DevicesTopbarWidget,
     cacheDurationMinutes: 5,
     preload: true,

@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react';
-import { SegmentedControl, useActiveWorkspace, useCurrentUser } from 'deveye-sdk-client';
+import {
+    FeatureSettingsButton,
+    openInfo,
+    SegmentedControl,
+    useActiveWorkspace,
+    useCurrentUser
+} from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
 
 import Fleet from './fleet/Fleet';
 import Monitoring from './Monitoring';
+import { MonitoringInfo } from './MonitoringInfo';
 import { takeFleetIntent, useFleetIntent } from './navigation';
 import styles from './style.module.css';
 
@@ -19,6 +26,11 @@ const SEGMENTS: readonly { value: Segment; label: string; title: string }[] = [
  * personnel un second segment, la flotte. Deux segments fixes, donc
  * `SegmentedControl` : la flotte est l'envers de la même feature, et ne
  * s'adresse qu'à l'administrateur global depuis le seul espace où elle a un sens.
+ *
+ * La barre du haut existe même sans second segment : c'est elle qui porte le
+ * bouton commun et l'aide, à la place où chaque feature les met. Les avoir
+ * rangés dans la colonne des appareils les faisait disparaître dès qu'on passait
+ * à la flotte, et les cherchait ailleurs que partout ailleurs.
  */
 export default function Devices(_props: FeatureViewProps) {
     const user = useCurrentUser();
@@ -39,14 +51,31 @@ export default function Devices(_props: FeatureViewProps) {
         if (!fleetOffered) setSegment('monitoring');
     }, [fleetOffered]);
 
-    if (!fleetOffered) return <Monitoring />;
-
     return (
         <div className={styles.view}>
             <div className={styles.viewBar}>
-                <SegmentedControl value={segment} options={SEGMENTS} onChange={setSegment} aria-label='Vue' />
+                {fleetOffered && (
+                    <SegmentedControl value={segment} options={SEGMENTS} onChange={setSegment} aria-label='Vue' />
+                )}
+                <div className={styles.viewBarActions}>
+                    <button
+                        type='button'
+                        className={styles.iconHeaderBtn}
+                        onClick={() =>
+                            void openInfo({
+                                title: 'Monitoring — comment ça marche',
+                                body: <MonitoringInfo />,
+                                width: 560
+                            })
+                        }
+                        title='Comment ça marche ?'
+                    >
+                        <span className='icon icon-info' />
+                    </button>
+                    <FeatureSettingsButton scope={{ kind: 'feature', feature: 'devices' }} />
+                </div>
             </div>
-            <div className={styles.viewBody}>{segment === 'fleet' ? <Fleet /> : <Monitoring />}</div>
+            <div className={styles.viewBody}>{fleetOffered && segment === 'fleet' ? <Fleet /> : <Monitoring />}</div>
         </div>
     );
 }
