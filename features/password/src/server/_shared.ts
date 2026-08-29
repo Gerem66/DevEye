@@ -8,38 +8,24 @@ import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/ty
 
 import type { PasswordRepo } from './repo';
 
-/** Le contexte d'une commande du Coffre : le contexte du SDK, sur le dépôt du module. */
 export type Ctx = SdkFeatureContext<PasswordRepo>;
 
-/**
- * Le socle du Coffre.
- *
- * **Un seul chiffre, toujours l'étage gardé.** C'est la promesse du coffre
- * (voir `SHAREABLE_FEATURES` dans le registre publié) : le serveur ne sait
- * lire une entrée que si le chiffrement par mot de passe est éteint, ou si la
- * session a été déverrouillée. `ctx.cipher('private')` est l'ex `ctx.secure` ;
- * une lecture sur une session scellée répond `locked`, et le client rouvre
- * l'invite (`withSecrecy`).
- *
- * Depuis le rapatriement, la lecture est implicite (le défaut du SDK) : seules
- * les écritures déclarent leur niveau.
- */
 export const WRITE = { level: 'write' } as const;
 
-/** L'étage gardé du chiffrement (`'private'`), l'ex `ctx.secure`. */
+/**
+ * Un seul chiffre, toujours l'étage gardé : le serveur ne lit une entrée que si
+ * le chiffrement par mot de passe est éteint ou la session déverrouillée. Une
+ * lecture sur une session scellée répond `locked`, et le client rouvre l'invite
+ * (`withSecrecy`).
+ */
 export function vaultCipher(ctx: Ctx): SdkCipher {
     return ctx.cipher('private');
 }
 
 /**
- * Ensure the password-based encryption DEK is available this session. No-op
- * when the feature is off; throws `locked` (client prompts for the password)
- * when it's on but the session hasn't been unlocked yet.
- *
- * L'ex `assertSecureUnlocked`, qui lisait `ctx.secure.isUnlocked()` : la même
- * question, posée au verrou du SDK. Elle se pose AVANT de lire, parce que la
- * réponse change la forme de la réponse : une liste vide n'est pas une liste
- * verrouillée.
+ * Throws `locked` (the client prompts for the password) when password-based
+ * encryption is on and the session is not unlocked; no-op when it is off. Asked
+ * BEFORE reading: an empty list is not a locked list.
  */
 export async function assertUnlocked(ctx: Ctx): Promise<void> {
     try {

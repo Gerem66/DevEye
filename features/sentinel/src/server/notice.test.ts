@@ -4,14 +4,9 @@ import { describe, it } from 'node:test';
 import { buildNotice } from './notice';
 
 /**
- * Le constat tel que Discord le reçoit.
- *
- * La mise en page se juge à l'œil dans Discord ; ce qui est vérifié ici, ce
- * sont les endroits où un avis peut **partir de travers sans que rien ne le
- * dise** : la gravité qui doit se lire avant le texte (pastille ET couleur, la
- * couleur seule disparaît en notification poussée), un détail de sonde qui
- * refermerait le bloc de code, et une remédiation absente qui ne doit pas
- * produire une case vide (Discord refuse alors le message entier).
+ * Ce qui part de travers sans que rien ne le dise : la gravité qui doit se lire
+ * avant le texte, un détail de sonde qui refermerait le bloc de code, une case
+ * vide que Discord refuserait.
  */
 
 type Embed = Record<string, unknown> & { fields: { name: string; value: string; inline?: boolean }[] };

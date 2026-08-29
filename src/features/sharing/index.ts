@@ -18,30 +18,15 @@ import { isShareWired, shareBlockerFor } from '../_sharing';
 
 /**
  * Rendre un élément visible depuis un autre espace, et restreindre qui le voit.
- *
- * ## Pourquoi un module transversal
- *
- * Ce que ces commandes prennent est toujours le même couple `(feature, itemId)`.
- * Les recopier par fonctionnalité aurait reproduit exactement ce que
- * l'unification des notifications vient de défaire — cinq jeux identiques dont
- * l'un finit par diverger.
- *
- * ## L'autorisation, et pourquoi elle est en tête de handler
- *
- * La fonctionnalité visée est une **donnée d'entrée**, que le dispatcheur ne
- * connaît pas avant d'appeler le handler. Même situation que `notify.route*` et
- * `devices.setConfig`, même remède : la garde est la première ligne, et le
- * fichier figure dans `ACCESS_EXEMPT` avec sa raison.
+ * Module transversal : le couple `(feature, itemId)` est le même partout.
+ * L'autorisation est en tête de handler (et le fichier dans `ACCESS_EXEMPT`) :
+ * la fonctionnalité visée est une donnée d'entrée.
  */
 
 /**
- * L'appelant peut-il régler ce que les rôles d'un espace voient ?
- *
- * La même réponse que `workspace.roles` dans cet espace-là — résolue à la
- * demande parce que l'espace visé n'est pas forcément l'actif : c'est ce qui
- * permet de gérer les permissions de toutes les fenêtres depuis l'onglet
- * Partage du domicile. Un espace personnel rend toujours `false` : il n'a pas
- * de rôles, donc rien à régler.
+ * L'appelant peut-il régler ce que les rôles d'un espace voient ? La réponse de
+ * `workspace.roles` dans cet espace-là, résolue à la demande parce que l'espace
+ * visé n'est pas forcément l'actif. Un espace personnel n'a pas de rôles.
  */
 async function canManageRolesIn(ctx: FeatureContext, workspaceId: number): Promise<boolean> {
     const workspace = await ctx.db.workspaces.findById(workspaceId);
@@ -52,15 +37,9 @@ async function canManageRolesIn(ctx: FeatureContext, workspaceId: number): Promi
 }
 
 /**
- * L'appelant peut-il **écrire** cet élément dans un espace donné — qui n'est
- * pas forcément l'actif ?
- *
- * La question se pose depuis une fenêtre : membre de B qui regarde un élément
- * de A, a-t-il le droit d'en régler le partage ? La réponse est celle qu'il
- * aurait EN A : membre, écriture sur la fonctionnalité, et aucune restriction
- * posée sur cette ligne pour son rôle. C'est la définition de « avoir accès à
- * l'élément racine » — et c'est elle qui décide, pas l'espace où l'on se
- * trouve.
+ * L'appelant peut-il écrire cet élément dans un espace donné, pas forcément
+ * l'actif ? La réponse est celle qu'il aurait là-bas : membre, écriture sur la
+ * fonctionnalité, et aucune restriction sur cette ligne pour son rôle.
  */
 async function canWriteItemIn(
     ctx: FeatureContext,
@@ -83,10 +62,9 @@ async function canWriteItemIn(
 
 /** Où vit cet élément, et l'appelant peut-il en disposer ? */
 async function loadHome(ctx: FeatureContext, feature: FeatureId, itemId: number): Promise<number> {
-    // L'élément doit être **chez l'appelant** pour qu'il en dispose : on ne
-    // re-projette pas depuis un espace où l'on ne fait que le voir. Sinon un
-    // membre de B pourrait diffuser vers C une donnée de A dont il n'est que
-    // spectateur, et l'espace A perdrait la maîtrise de sa donnée sans le savoir.
+    // L'élément doit être chez l'appelant : on ne re-projette pas depuis un
+    // espace où l'on ne fait que le voir, l'espace d'origine perdrait la
+    // maîtrise de sa donnée.
     const homeId = await itemHomeWorkspace(ctx, feature, itemId);
     if (homeId === null) throw new FeatureError('not_found', 'Élément introuvable');
     if (homeId !== ctx.workspaceId) {
@@ -99,15 +77,9 @@ async function loadHome(ctx: FeatureContext, feature: FeatureId, itemId: number)
 }
 
 /**
- * L'espace d'origine d'un élément, lu dans la table de sa fonctionnalité.
- *
- * Un module répond par son entrée `items` (son repo, sa requête). Il n'y a
- * plus de native branchée au partage depuis le rapatriement d'Audience (la
- * dernière) : le `switch` explicite qui les servait a disparu avec elle, et
- * une native encore chez elle (Notes, Mail, Projets, en `'perItem'`) tombe
- * sur `null`. `shareBlockerFor` l'a déjà refusée sur `shareTier`, donc ce cas
- * ne se produit que si le registre et les modules divergent, et il vaut
- * mieux « introuvable » qu'une projection vers rien.
+ * L'espace d'origine d'un élément, par l'entrée `items` du module. `null` sans
+ * module : `shareBlockerFor` a déjà refusé sur `shareTier`, et mieux vaut
+ * « introuvable » qu'une projection vers rien.
  */
 async function itemHomeWorkspace(ctx: FeatureContext, feature: FeatureId, itemId: number): Promise<number | null> {
     const items = moduleItems(feature, ctx.db);
@@ -121,30 +93,16 @@ async function shareState(
     feature: FeatureId,
     itemId: number,
     blocker: ShareBlocker | null,
-    /**
-     * Le **domicile de l'élément**, et non l'espace actif.
-     *
-     * Les deux coïncident presque toujours — sauf précisément dans le cas que
-     * cet écran doit savoir montrer : un élément qu'on regarde depuis une
-     * fenêtre. Les confondre marquait « espace d'origine » sur l'espace où l'on
-     * se trouve, c'est-à-dire l'inverse de la vérité.
-     */
+    /** Le domicile de l'élément, et non l'espace actif (un élément regardé depuis une fenêtre). */
     homeWorkspaceId: number
 ): Promise<ItemShareState> {
-    // Les espaces de l'appelant, et eux seuls. Partager vers un espace où l'on
-    // n'entre pas contournerait l'appartenance, qui est la frontière absolue du
-    // modèle — et déposerait une donnée dont on ne pourrait plus répondre.
+    // Les espaces de l'appelant, et eux seuls : partager vers un espace où l'on
+    // n'entre pas contournerait l'appartenance.
     const mine = await ctx.db.workspaces.findAccessibleByUser(ctx.userId);
-    // Les projections sont indexées par le DOMICILE — jamais par l'espace
-    // actif. Les lire par l'actif rendait l'écran instable : depuis une
-    // fenêtre, seule l'origine paraissait cochée, et la fenêtre où l'on se
-    // trouvait semblait ne pas exister.
-    //
-    // Elles se lisent aussi sous le blocage `forbidden` : qui ne peut pas
-    // régler le partage voit quand même OÙ l'élément est visible, parmi ses
-    // propres espaces (il l'y verrait de toute façon en s'y rendant), et
-    // l'écran en lecture seule n'a que ça à dire. Seul `feature` (partage non
-    // branché) n'a rien à lire.
+    // Les projections sont indexées par le domicile, jamais par l'espace actif.
+    // Elles se lisent aussi sous le blocage `forbidden` : qui ne peut pas régler
+    // le partage voit quand même où l'élément est visible parmi ses propres
+    // espaces. Seul `feature` (partage non branché) n'a rien à lire.
     const shares =
         blocker === 'feature'
             ? []
@@ -177,9 +135,7 @@ const getFeature = defineFeature({
         const blocker = shareBlockerFor(ctx, input.feature);
         if (blocker) {
             // Même bloqué, l'écran doit dire où l'élément est visible : le
-            // domicile est résolu pour de vrai, sinon un élément regardé
-            // depuis une fenêtre lirait ses projections sous le mauvais index
-            // et paraîtrait n'exister qu'ici.
+            // domicile est résolu pour de vrai.
             const share =
                 blocker === 'feature'
                     ? null
@@ -191,12 +147,9 @@ const getFeature = defineFeature({
         await ctx.assertItem(input.feature, input.itemId);
         const share = await ctx.db.itemSharing.findShare(ctx.workspaceId, input.feature, input.itemId);
         if (share && share.home_workspace_id !== ctx.workspaceId) {
-            // Depuis une fenêtre, c'est le droit AU DOMICILE qui décide : qui a
-            // l'écriture de l'élément chez lui règle son partage d'où il veut —
-            // c'est la même personne devant la même donnée. Sans ce droit, on
-            // répond quand même, cases inertes : lever afficherait
-            // « chargement impossible », qui se lit comme une panne alors que
-            // c'est une règle.
+            // Depuis une fenêtre, c'est le droit au domicile qui décide. Sans ce
+            // droit, on répond quand même, cases inertes : lever se lirait comme
+            // une panne alors que c'est une règle.
             const manageable = await canWriteItemIn(ctx, share.home_workspace_id, input.feature, input.itemId);
             return shareState(ctx, input.feature, input.itemId, manageable ? null : 'foreign', share.home_workspace_id);
         }
@@ -212,17 +165,13 @@ const setFeature = defineFeature({
         ctx.assertFeature(input.feature, 'write');
         const blocker = shareBlockerFor(ctx, input.feature);
         if (blocker) throw new FeatureError('validation', 'Cette fonctionnalité ne se partage pas entre espaces.');
-        // Partager exige l'accès **à l'élément**, pas seulement à la
-        // fonctionnalité : sans cette garde, un rôle restreint sur cette ligne
-        // (masquée, ou en lecture seule) pouvait la projeter vers son espace
-        // personnel et lire par la fenêtre ce que la restriction lui fermait.
+        // Partager exige l'accès à l'élément, pas seulement à la fonctionnalité :
+        // sinon un rôle restreint sur cette ligne pourrait la projeter vers son
+        // espace personnel et lire par la fenêtre ce que la restriction lui ferme.
         await ctx.assertItem(input.feature, input.itemId, 'write');
 
         // Le domicile réel : l'espace actif, ou celui d'une projection qu'on
-        // regarde. Depuis une fenêtre, c'est le droit AU DOMICILE qui autorise —
-        // membre de l'espace d'origine, écriture sur la fonctionnalité là-bas,
-        // aucune restriction sur la ligne. La même personne devant la même
-        // donnée n'a pas à retraverser pour cocher une case.
+        // regarde. Depuis une fenêtre, c'est le droit au domicile qui autorise.
         let home = await itemHomeWorkspace(ctx, input.feature, input.itemId);
         if (home === null) {
             const share = await ctx.db.itemSharing.findShare(ctx.workspaceId, input.feature, input.itemId);
@@ -280,18 +229,10 @@ const setFeature = defineFeature({
 });
 
 /**
- * L'espace **visé** par une lecture ou une écriture de restrictions, vérifié.
- *
- * Trois gardes, dans cet ordre :
- *
- *  1. l'appelant voit l'élément depuis son espace actif (`assertItem`) — un
- *     membre à qui une restriction le masque ne règle pas ce qu'en voient les
- *     autres ;
- *  2. l'espace visé est un des siens — on ne règle pas les rôles d'un espace
- *     où l'on n'entre pas ;
- *  3. l'élément y est réellement visible : son domicile, ou une projection.
- *     Une restriction posée là où l'élément n'apparaît pas serait une ligne
- *     morte qui mordrait le jour d'un futur partage, sans que rien ne le dise.
+ * L'espace visé par une lecture ou une écriture de restrictions, vérifié :
+ * l'appelant voit l'élément depuis son espace actif, l'espace visé est un des
+ * siens, et l'élément y est réellement visible (domicile ou projection), sinon
+ * la restriction serait une ligne morte qui mordrait à un futur partage.
  */
 async function resolveGrantTarget(
     ctx: FeatureContext,
@@ -332,8 +273,7 @@ async function resolveGrantTarget(
 
 /**
  * L'état complet des restrictions d'un élément dans un espace : chaque rôle,
- * ce que la fonctionnalité lui donne (l'hérité — affiché même sans exception,
- * pour que la vue d'ensemble n'oblige jamais à deviner), et l'exception posée.
+ * ce que la fonctionnalité lui donne, et l'exception posée.
  */
 async function grantState(
     ctx: FeatureContext,
@@ -391,8 +331,7 @@ const grantSetFeature = defineFeature({
     handler: async (ctx, input) => {
         const target = await resolveGrantTarget(ctx, input, 'write');
         // Poser une restriction, c'est régler ce qu'un rôle voit : la capacité
-        // de l'écran des rôles, **dans l'espace visé** — pas dans l'actif, qui
-        // peut être le domicile d'où l'on règle une fenêtre.
+        // de l'écran des rôles, dans l'espace visé et non dans l'actif.
         if (!(await canManageRolesIn(ctx, target.workspaceId))) {
             throw new FeatureError('forbidden', 'Vous ne gérez pas les rôles de cet espace.');
         }

@@ -20,17 +20,11 @@ import { uptimeHandlers } from './handlers';
 import type { UptimeRepo } from './repo';
 
 /**
- * Les handlers du module, sur le harnais du SDK.
- *
- * Ce qui mérite d'être tenu, c'est ce qu'Uptime inaugure côté module : les
- * **restrictions par élément** (un service masqué pour ce rôle disparaît de la
- * liste), le **partage inter-espaces** (une projection se liste avec
- * `foreign: true`, se réécrit sous le codec de son espace d'origine, et ne se
- * détruit jamais depuis la fenêtre qui la voit), le **ménage** à la
- * suppression (`ctx.items.forget`), et l'absence d'ordonnanceur (une commande
- * qui sonde répond `internal` sans lui). Rien de tout cela ne lève ailleurs :
- * une projection listée sans sa pastille, ou détruite d'une fenêtre, ne casse
- * aucun autre test, elle touche juste la donnée d'un autre espace.
+ * Ce qui se vérifie ici ne lève nulle part ailleurs : les restrictions par
+ * élément (un service masqué disparaît de la liste), le partage inter-espaces
+ * (une projection se liste `foreign`, se réécrit sous le codec de son espace
+ * d'origine, ne se détruit jamais depuis la fenêtre qui la voit), le ménage à
+ * la suppression et l'absence d'ordonnanceur.
  */
 
 /** Le handler d'un contrat, typé par ce contrat (le registre est hétérogène). */
@@ -74,12 +68,9 @@ function row(over: Partial<UptimeServiceRow> & { id: number; workspace_id: numbe
 }
 
 /**
- * Un dépôt en mémoire, même contrat que le vrai. Les tableaux sont mutés en
- * place, jamais réassignés : les tests lisent `repo.rows` après coup.
- *
- * `projections` reproduit la table `item_shares` : `serviceId → espaces où il
- * est projeté`. C'est ce qui donne à `listVisible` / `findVisible` leur
- * seconde branche, et ce que le harnais (`shares`) doit dire en écho pour que
+ * Un dépôt en mémoire, muté en place : les tests lisent `repo.rows` après coup.
+ * `projections` reproduit `item_shares` (`serviceId → espaces où il est
+ * projeté`), ce que le harnais (`shares`) doit dire en écho pour que
  * `ctx.sharing.scope()` connaisse le domicile.
  */
 function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {

@@ -48,10 +48,8 @@ function readAsBase64(file: File): Promise<string> {
 }
 
 /**
- * Plain-text compose (a rich HTML editor is a V2 nicety, not V1 scope). Cc/Cci
- * and attachments — both already supported by `mail.send` — sit behind an
- * "advanced fields" toggle so the default view stays to the essentials: from,
- * to, subject, body.
+ * Plain-text compose. Cc/Cci and attachments sit behind an "advanced fields"
+ * toggle so the default view stays to the essentials: from, to, subject, body.
  */
 export function ComposePopup() {
     const [accounts, setAccounts] = useState<MailAccount[]>([]);

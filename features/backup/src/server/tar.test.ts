@@ -10,14 +10,8 @@ import { describe, it } from 'node:test';
 import { tarEnd, tarHeader, tarPadding } from './tar';
 
 /**
- * L'archive `tar` d'un partage CloudSync n'a qu'une raison d'exister : pouvoir
- * s'extraire **sans DevEye**, sur une machine quelconque, avec l'outil du
- * système. Une vérification maison ne prouverait donc rien — elle relirait mon
- * format avec mon lecteur.
- *
- * Ces cas passent l'archive au vrai `tar` et comparent les fichiers extraits.
- * Ils sautent proprement là où le binaire n'existe pas plutôt que d'échouer sur
- * une absence d'outil.
+ * Passe l'archive au vrai `tar` du système : une vérification maison relirait
+ * son propre format. Saute si le binaire manque.
  */
 
 const exec = promisify(execFile);
@@ -74,9 +68,7 @@ describe('écriture tar', () => {
                 path: `partage/${'sous-dossier/'.repeat(6)}fichier.txt`,
                 content: Buffer.from('ustar')
             },
-            // > 100 octets sur le DERNIER segment : indécoupable, donc la voie
-            // `@LongLink`. C'est le cas que 100 octets de `name` ne couvrent pas
-            // et que la plupart des écrivains maison ratent.
+            // > 100 octets sur le dernier segment : indécoupable, donc `@LongLink`.
             {
                 path: `partage/${'x'.repeat(140)}.txt`,
                 content: Buffer.from('longlink')

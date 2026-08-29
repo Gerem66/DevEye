@@ -23,15 +23,10 @@ import type { AllowRow, DeviceConfigRow, FindingRow, SentinelRepo } from './repo
 import { setEngine } from './_shared';
 
 /**
- * Les handlers du module, sur le harnais du SDK.
- *
- * Ce qui mérite d'être tenu, c'est ce que le rapatriement a déplacé : le
- * périmètre et les noms d'appareils viennent de la façade (plus de jointure
- * SQL), la config par appareil vit dans la table du module (plus dans
- * `devices`), et la config de l'agent est poussée par la façade `agents`
- * (l'app la recompose). Et deux invariants d'avant, qui ne lèvent nulle part
- * s'ils se perdent : acquitter écrit une autorisation AVANT de clore, un
- * relevé immédiat se refuse à une machine non surveillée.
+ * Ce qui ne lève nulle part quand ça se dérègle : le périmètre et les noms
+ * d'appareils viennent de la façade, la config par appareil de la table du
+ * module, acquitter écrit l'autorisation avant de clore, et un relevé immédiat
+ * se refuse à une machine non surveillée.
  */
 
 /** Le handler d'un contrat, typé par ce contrat (le registre est hétérogène). */
@@ -48,7 +43,6 @@ interface FakeRepo extends SentinelRepo {
     findingRows: FindingRow[];
     allowRows: AllowRow[];
     configs: Map<string, DeviceConfigRow>;
-    /** Compte des remises à zéro de la ligne de base, par appareil. */
     resets: string[];
 }
 

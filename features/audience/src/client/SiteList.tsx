@@ -17,11 +17,9 @@ interface SiteListProps {
 }
 
 /**
- * La liste des sites suivis, réordonnable au glisser-déposer.
- *
- * Le geste vit dans `useDragReorder`, le seul du SDK pour ça, partagé avec
- * Uptime, Git, Monitoring et les bases. Ne restent ici que l'apparence de la
- * carte, celle de la poignée et celle de la barre d'insertion.
+ * La liste des sites suivis, réordonnable au glisser-déposer. Le geste vit dans
+ * `useDragReorder`, le seul du SDK pour ça : ne restent ici que l'apparence de
+ * la carte, de la poignée et de la barre d'insertion.
  */
 export function SiteList({ sites, outlineFor, canWrite, onOpen, onReorder, onDragStateChange }: SiteListProps) {
     const drag = useDragReorder<HTMLUListElement, HTMLLIElement>({
@@ -60,11 +58,9 @@ interface SiteCardProps {
 }
 
 /**
- * Trois états, et un seul est alarmant.
- *
- * « en attente » est l'état normal d'un site qu'on vient de déclarer, pas une
- * panne : le peindre en rouge ferait passer une installation en cours pour un
- * incident. C'est la même règle que l'état `unknown` d'une base de données.
+ * Trois états, un seul alarmant : « en attente » est l'état normal d'un site
+ * qu'on vient de déclarer, et le peindre en rouge ferait passer une
+ * installation en cours pour un incident.
  */
 function toneOf(site: AudienceSite): { label: string; tone: 'neutral' | 'online' | 'danger' } {
     if (!site.active) return { label: 'éteint', tone: 'danger' };
@@ -77,9 +73,8 @@ function SiteCard({ site, outline, dragging, onOpen, onDragPointerDown }: SiteCa
 
     return (
         <li className={`${styles.card} ${dragging ? styles.cardDragging : ''}`} data-site-card='' {...outline}>
-            {/* La poignée est sœur du corps cliquable, et non son enfant : un
-                clic parti d'ici ne peut donc pas remonter jusqu'à « ouvrir le
-                site », même sans le neutraliser. */}
+            {/* La poignée est sœur du corps cliquable et non son enfant : un clic parti
+                d'ici ne peut pas remonter jusqu'à « ouvrir le site ». */}
             {onDragPointerDown && (
                 <button
                     type='button'
@@ -136,9 +131,8 @@ function SiteCard({ site, outline, dragging, onOpen, onDragPointerDown }: SiteCa
                     </div>
                 </div>
 
-                {/* Les deux nombres qu'on vient lire en parcourant la liste. Le
-                    reste — provenances, appareils, entonnoirs — se regarde dans
-                    la fiche, pas de biais dans une carte. */}
+                {/* Les deux nombres qu'on vient lire en parcourant la liste ; le reste
+                    se regarde dans la fiche, pas de biais dans une carte. */}
                 <div className={styles.cardStats}>
                     <span className={styles.cardStatValue}>{formatCount(site.visitors24h)}</span>
                     <span className={styles.cardStatLabel}>visiteurs · 24 h</span>

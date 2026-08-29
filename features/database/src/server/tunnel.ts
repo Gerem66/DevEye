@@ -4,33 +4,15 @@ import { SocksClient } from 'socks';
 import type { DatabaseAccessKind, DatabaseSshAuth } from '../contracts/domain';
 
 /**
- * Joindre une base qui n'est pas directement accessible.
- *
- * Deux chemins, parce qu'ils répondent à deux situations qui ne se recouvrent
- * pas : un rebond **SSH** quand on a un compte sur une machine du réseau, un
- * proxy **SOCKS5** quand un tunnel VPN est déjà monté ailleurs et expose un
- * point d'entrée. Le troisième cas — l'accès direct — ne passe pas par ici du
- * tout.
- *
- * ## Pourquoi un écouteur local plutôt qu'une socket passée au pilote
- *
- * `mysql2` accepte une socket existante, `pg` non — il veut ouvrir la sienne
- * vers un hôte et un port. Un petit écouteur sur `127.0.0.1:0` (port libre
- * choisi par le noyau) donne aux deux pilotes exactement ce qu'ils savent
- * consommer, sans rien supposer de leur implémentation. Le coût est une socket
- * de plus par connexion, le temps de la connexion.
- *
- * ## Fermeture
- *
- * Un tunnel est **toujours** rendu avec son `close()`, et l'appelant le ferme
- * dans un `finally`. Un tunnel oublié laisserait derrière lui un écouteur, une
- * session SSH et un descripteur — sur un relevé périodique, quelques heures
- * suffiraient à épuiser le processus.
+ * Joindre une base par un rebond SSH ou un proxy SOCKS5. Un écouteur local sur
+ * `127.0.0.1:0` plutôt qu'une socket passée au pilote : `pg` n'en accepte pas.
+ * Un tunnel est toujours rendu avec son `close()`, que l'appelant appelle dans
+ * un `finally` ; oublié, il laisse un écouteur et une session SSH.
  */
 
 /** Un chemin ouvert vers l'hôte cible, et de quoi le refermer. */
 export interface Tunnel {
-    /** L'hôte à donner au pilote — l'écouteur local, ou l'hôte réel en direct. */
+    /** L'hôte à donner au pilote : l'écouteur local, ou l'hôte réel en direct. */
     host: string;
     port: number;
     close: () => Promise<void>;
@@ -47,11 +29,9 @@ export interface TunnelConfig {
     secret: string | null;
 }
 
-/** Ports par défaut, pour ne pas obliger à les saisir. */
 const SSH_DEFAULT_PORT = 22;
 const SOCKS_DEFAULT_PORT = 1080;
 
-/** Au-delà, on renonce : un tunnel qui ne s'ouvre pas doit le dire vite. */
 const CONNECT_TIMEOUT_MS = 12_000;
 
 /** Un tunnel qui ne fait rien : l'accès direct, sous la même forme. */
@@ -59,13 +39,7 @@ function direct(host: string, port: number): Tunnel {
     return { host, port, close: async () => {} };
 }
 
-/**
- * Ouvre le chemin décrit par `config` vers `target`.
- *
- * Ne lève que des `Error` au message déjà lisible : c'est ce message que
- * l'utilisateur verra, et « ECONNREFUSED » ne lui apprend rien sur ce qu'il doit
- * corriger.
- */
+/** Ouvre le chemin décrit par `config` vers `target` ; ne lève que des messages lisibles. */
 export async function openTunnel(config: TunnelConfig, target: { host: string; port: number }): Promise<Tunnel> {
     if (config.kind === 'direct') return direct(target.host, target.port);
     if (config.host.trim() === '') {
@@ -79,12 +53,8 @@ export async function openTunnel(config: TunnelConfig, target: { host: string; p
 }
 
 /**
- * Un écouteur local qui délègue chaque connexion entrante à `connect`.
- *
- * Le même squelette sert aux deux chemins : seule la façon d'obtenir la socket
- * distante change. Les erreurs d'une connexion **déjà établie** sont fatales à
- * cette connexion-là seulement — on détruit la socket cliente plutôt que de
- * laisser une exception non capturée abattre le processus.
+ * Un écouteur local qui délègue chaque connexion entrante à `connect`. Une
+ * erreur sur une connexion établie ne détruit que celle-ci, jamais le processus.
  */
 async function localForwarder(connect: () => Promise<Socket>, onClose: () => Promise<void>): Promise<Tunnel> {
     const server: Server = createServer((client) => {
@@ -108,9 +78,8 @@ async function localForwarder(connect: () => Promise<Socket>, onClose: () => Pro
 
     await new Promise<void>((resolve, reject) => {
         server.once('error', reject);
-        // `127.0.0.1` et non `0.0.0.0` : ce relais n'a aucune raison d'être
-        // joignable depuis l'extérieur, et l'exposer ouvrirait un accès à la
-        // base sans authentification.
+        // `127.0.0.1` et non `0.0.0.0` : exposé, ce relais ouvrirait un accès
+        // à la base sans authentification.
         server.listen(0, '127.0.0.1', () => resolve());
     });
 
@@ -147,8 +116,7 @@ async function openSshTunnel(config: TunnelConfig, target: { host: string; port:
             host: config.host,
             port: config.port ?? SSH_DEFAULT_PORT,
             username: config.username,
-            // La clé est passée en mémoire, jamais écrite sur disque — un
-            // fichier de clé temporaire survivrait à un arrêt brutal.
+            // La clé reste en mémoire, jamais écrite sur disque.
             ...(config.auth === 'key'
                 ? { privateKey: config.secret ?? undefined }
                 : { password: config.secret ?? undefined }),
@@ -160,16 +128,14 @@ async function openSshTunnel(config: TunnelConfig, target: { host: string; port:
         new Promise<Socket>((resolve, reject) => {
             client.forwardOut('127.0.0.1', 0, target.host, target.port, (err, stream) => {
                 if (err) reject(new Error(`Le rebond SSH a refusé la redirection : ${err.message}`));
-                // `forwardOut` rend un canal SSH, qui expose l'interface d'un
-                // flux duplex — c'est tout ce dont le relais a besoin.
+                // Un canal SSH expose l'interface d'un flux duplex : tout ce
+                // dont le relais a besoin.
                 else resolve(stream as unknown as Socket);
             });
         });
 
-    // Une première redirection tout de suite : c'est elle qui dit si le rebond
-    // accepte d'atteindre la cible. Sans cela, une cible injoignable
-    // n'apparaîtrait qu'au premier échec du pilote, avec un message bien moins
-    // clair.
+    // Une première redirection tout de suite : une cible injoignable se dit
+    // ici, avec les mots du rebond, pas au premier échec du pilote.
     const probe = await connect();
     probe.destroy();
 
@@ -196,8 +162,8 @@ async function openSocksTunnel(config: TunnelConfig, target: { host: string; por
         return socket;
     };
 
-    // Même raison que côté SSH : on veut savoir tout de suite si le proxy
-    // accepte la destination, et le dire avec ses mots.
+    // Même raison que côté SSH : savoir tout de suite si le proxy accepte la
+    // destination.
     try {
         const probe = await connect();
         probe.destroy();

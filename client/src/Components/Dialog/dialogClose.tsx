@@ -3,12 +3,9 @@ import { createContext, useContext } from 'react';
 import Button, { type ButtonProps } from '@/Components/Button';
 
 /**
- * Lets content inside a Dialog request a *guarded* close — the same path the
- * overlay click / Escape / × take. When the Dialog is marked dirty it routes the
- * request through the "unsaved changes" confirmation instead of closing outright,
- * so a feature's own "Annuler / Fermer" button gets the guard for free.
- *
- * Defaults to a no-op so a component that renders outside a Dialog still works.
+ * Lets content inside a Dialog request a guarded close, the same path the
+ * overlay click / Escape / × take: when the Dialog is dirty it routes through
+ * the unsaved-changes confirmation. Defaults to a no-op outside a Dialog.
  */
 export const DialogCloseContext = createContext<() => void>(() => {});
 
@@ -18,11 +15,9 @@ export function useDialogClose(): () => void {
 }
 
 /**
- * A feature's "Annuler / Fermer" button that closes through the enclosing
- * Dialog's guard, so it triggers the unsaved-changes prompt just like the ×,
- * overlay and Escape do. Must be rendered inside the Dialog (i.e. as Popup
- * content), not in the component that renders the Dialog. Defaults to a secondary
- * "Annuler"; pass `children` for a different label.
+ * A feature's "Annuler / Fermer" button closing through the enclosing Dialog's
+ * guard. Must be rendered inside the Dialog (as Popup content). Defaults to a
+ * secondary "Annuler".
  */
 export function DialogCancelButton({ variant = 'secondary', children = 'Annuler', ...rest }: ButtonProps) {
     const close = useDialogClose();

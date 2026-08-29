@@ -29,27 +29,13 @@ function statusBadge(service: UptimeService): { tone: 'online' | 'danger' | 'neu
 }
 
 /**
- * One service in the list: state, target, the last 24 h as a status strip,
- * availability over the three usual windows and its latest latency. Clicking
- * anywhere opens the detail view; the corner action stops the click so it
- * doesn't also navigate.
+ * One service in the list. Clicking anywhere opens the detail view; the corner
+ * action stops the click. Read-only on purpose: "test now" and "pause" live on
+ * the detail view and the form, not on every row.
  *
- * **Lire, pas piloter.** La carte portait aussi « tester maintenant » et « mettre
- * en pause ». Deux boutons par ligne, sur toute une liste, pour des gestes qu'on
- * fait une fois par mois, et qui vivent déjà là où l'on se rend pour les faire :
- * la fiche du service porte « Tester », son formulaire porte la pause. Ce qu'on
- * parcourt du regard, on le parcourt mieux sans.
- *
- * La bande d'état a pris leur place, au milieu. C'est elle qui répond à la
- * question qu'on se pose en survolant une liste (« et depuis quand ? »), là où
- * les trois pourcentages, seuls, disaient combien sans dire quand.
- *
- * Reordering hangs off the leading grip alone, like a note's block rows (see
- * `features/notes/src/client/BlockEditor.tsx`), not off the whole row. That keeps the card a
- * plain click target, and it is what makes reordering work under a finger: only
- * the grip opts out of touch scrolling (`touch-action: none`), so a drag started
- * anywhere else still scrolls the list. The gesture itself is `pointerdown`
- * rather than HTML5 `draggable`; see {@link ./ServiceList} for why.
+ * Reordering hangs off the leading grip alone: only the grip opts out of touch
+ * scrolling (`touch-action: none`), so a drag started anywhere else still
+ * scrolls the list.
  */
 export function ServiceCard({ service, onOpen, onEdit, dragging, onDragPointerDown }: ServiceCardProps) {
     const badge = statusBadge(service);
@@ -92,11 +78,9 @@ export function ServiceCard({ service, onOpen, onEdit, dragging, onDragPointerDo
                 <div className={styles.cardHead}>
                     <h4 className={styles.cardName}>{service.name}</h4>
                     <StatusBadge tone={badge.tone}>{badge.label}</StatusBadge>
-                    {/* Projeté depuis un autre espace : il se lit et se modifie
-                        comme les autres, mais le supprimer d'ici toucherait la
-                        donnée d'ailleurs, et le serveur le refuse. Sans cette
-                        pastille, rien ne distingue une ligne locale d'une
-                        fenêtre sur l'espace voisin. */}
+                    {/* Projeté depuis un autre espace : le serveur refuse de le
+                        supprimer d'ici, et rien d'autre ne le distingue d'une
+                        ligne locale. */}
                     {service.foreign && (
                         <span title='Ce service appartient à un autre espace qui le partage ici'>
                             <StatusBadge tone='accent'>partagé</StatusBadge>
@@ -111,10 +95,8 @@ export function ServiceCard({ service, onOpen, onEdit, dragging, onDragPointerDo
                 </p>
             </div>
 
-            {/* La bande ne capte pas le clic : elle n'a que du survol à offrir, et
-                le reste de la ligne mène au service. Cliquer une barre ouvre donc
-                la fiche, comme cliquer ailleurs, ce qui est exactement le geste
-                qu'on a en tête quand on vient de repérer un creux rouge. */}
+            {/* La bande ne capte pas le clic : cliquer une barre ouvre la fiche,
+                comme cliquer ailleurs. */}
             <div className={styles.cardGraph}>
                 <StatusBars points={points} from={axis.from} to={axis.to} resolution={resolution} variant='inline' />
             </div>

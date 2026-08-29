@@ -7,11 +7,7 @@ import { MemberAvatar, MemberName } from '../Member';
 import { renderMessage } from './markdown';
 import styles from '../style.module.css';
 
-/**
- * Regroupement des messages : au-delà de ce silence, un même auteur repart avec
- * son en-tête. Sans ça, deux messages écrits à trois heures d'écart se
- * colleraient comme s'ils formaient une seule prise de parole.
- */
+/** Au-delà de ce silence, un même auteur repart avec son en-tête. */
 const GROUP_WINDOW_SECONDS = 5 * 60;
 
 interface ChatProps {
@@ -22,15 +18,10 @@ interface ChatProps {
 }
 
 /**
- * Le fil de discussion d'une carte.
- *
- * L'en-tête (avatar + pseudo) n'apparaît que quand l'auteur **change**, ou après
- * un silence : répéter le même nom sur dix messages d'affilée n'apprend rien et
- * hache la lecture.
- *
- * La présence est déjà cadrée par le `l2` du dialogue de carte : le serveur ne
- * diffuse la frappe qu'aux pairs situés exactement là, donc ce composant n'a
- * rien à déclarer de plus.
+ * Le fil de discussion d'une carte. L'en-tête (avatar, pseudo) ne reparaît que
+ * quand l'auteur change ou après un silence. La présence est déjà cadrée par le
+ * niveau que déclare le dialogue de carte : le serveur ne diffuse la frappe qu'aux
+ * pairs situés exactement là, rien à déclarer de plus ici.
  */
 export function Chat({ cardId, members, meUserId, canWrite }: ChatProps) {
     const [messages, setMessages] = useState<ProjectMessage[] | null>(null);
@@ -89,9 +80,8 @@ export function Chat({ cardId, members, meUserId, canWrite }: ChatProps) {
         setBusy(true);
         stop();
         try {
-            // Les mentions sont extraites du texte au moment de l'envoi : le
-            // serveur ne lit jamais le corps pour le comprendre, il ne fait que
-            // le chiffrer.
+            // Les mentions sont extraites à l'envoi : le serveur ne lit jamais le
+            // corps pour le comprendre, il ne fait que le chiffrer.
             await withSecrecy(() =>
                 api.send('projects.messageSend', { cardId, text: body, mentions: findMentions(body, members) })
             );
@@ -113,9 +103,6 @@ export function Chat({ cardId, members, meUserId, canWrite }: ChatProps) {
 
     return (
         <div className={styles.chat}>
-            {/* L'intitulé est **dans** l'encart, comme celui des sous-tâches en
-                face : deux panneaux côte à côte dont l'un porte son titre au
-                dessus et l'autre dedans ne se lisent pas comme une paire. */}
             <div className={styles.chatHead}>
                 <span className={styles.label}>Discussion</span>
                 {messages !== null && messages.length > 0 && (
@@ -135,9 +122,8 @@ export function Chat({ cardId, members, meUserId, canWrite }: ChatProps) {
                 {messages === null && <p className={styles.empty}>Chargement…</p>}
                 {messages?.length === 0 && <p className={styles.empty}>Aucun message. Lancez la discussion.</p>}
 
-                {/* L'auteur passe par `Member` : sur un projet projeté, il peut
-                    être membre de l'espace d'origine et pas d'ici, auquel cas
-                    il s'affiche masqué plutôt que nommé. */}
+                {/* Sur un projet projeté, l'auteur peut être membre de l'espace
+                    d'origine et pas d'ici : `Member` l'affiche alors masqué. */}
                 {groups.map((group) => (
                     <div key={group.key} className={styles.msgGroup}>
                         <MemberAvatar userId={group.authorUserId} size={26} />
@@ -163,8 +149,8 @@ export function Chat({ cardId, members, meUserId, canWrite }: ChatProps) {
                 <div ref={bottomRef} />
             </div>
 
-            {/* Discret, et réservé à la place : la ligne existe toujours pour que
-                l'apparition d'un « écrit… » ne fasse pas sauter le composeur. */}
+            {/* La ligne existe toujours, pour que l'apparition d'un « écrit… » ne
+                fasse pas sauter le composeur. */}
             <p className={styles.typing}>
                 {uniqueTyping.length === 1 && `${uniqueTyping[0]} est en train d’écrire…`}
                 {uniqueTyping.length > 1 && `${uniqueTyping.join(', ')} sont en train d’écrire…`}
@@ -172,11 +158,9 @@ export function Chat({ cardId, members, meUserId, canWrite }: ChatProps) {
 
             {canWrite && (
                 <div className={styles.composer}>
-                    {/* Le champ grandit avec son texte **par le CSS seul** : ce
-                        conteneur superpose la saisie et une copie invisible du
-                        même texte, et c'est la copie qui donne la hauteur. Voir
-                        `.grow` — l'ancienne mesure en JavaScript arrondissait
-                        au pixel et laissait une barre de défilement à demeure. */}
+                    {/* Le champ grandit avec son texte par le CSS seul : `.grow`
+                        superpose la saisie et une copie invisible du même texte,
+                        et c'est la copie qui donne la hauteur. */}
                     <div className={styles.grow} data-value={text}>
                         <textarea
                             className={styles.textarea}
@@ -190,9 +174,8 @@ export function Chat({ cardId, members, meUserId, canWrite }: ChatProps) {
                             }}
                             onBlur={stop}
                             onKeyDown={(e) => {
-                                // Entrée envoie, Maj+Entrée passe à la ligne. Le
-                                // `onSubmit` du Dialog ne s'applique pas aux
-                                // textarea, on câble donc l'envoi ici.
+                                // Entrée envoie, Maj+Entrée passe à la ligne : le
+                                // `onSubmit` du Dialog ignore les textarea.
                                 if (e.key === 'Enter' && !e.shiftKey) {
                                     e.preventDefault();
                                     void send();
@@ -239,10 +222,8 @@ function groupMessages(messages: ProjectMessage[]): Group[] {
 }
 
 /**
- * Repère les `@pseudo` correspondant à un membre de l'espace.
- *
- * Le plus long pseudo d'abord : sans ça, `@marc` avalerait le début de
- * `@marc-antoine` et la mention viserait la mauvaise personne.
+ * Repère les `@pseudo` d'un membre de l'espace. Le plus long d'abord : sans ça,
+ * `@marc` avalerait le début de `@marc-antoine`.
  */
 function findMentions(text: string, members: readonly MinimalUser[]): number[] {
     const found = new Set<number>();

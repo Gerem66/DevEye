@@ -5,17 +5,12 @@ import type { FeatureClient } from '@deveye/types/sdk/client';
 import { registerCrossTopicKeys, registerFeatureResources, type ResourceKey } from '@/stores/invalidation';
 
 /**
- * Le registre des modules installés, côté client.
- *
- * Volontairement **sans dépendance vers le fichier généré** : ce module est
- * une feuille, que le catalogue, la coquille de réglages, RoleDialog et
- * goToHome peuvent importer depuis n'importe où. C'est l'initialiseur
- * (`sdk/modules.ts`), et lui seul, qui importe la glue générée et verse les
- * modules ici. Sans cette coupure, le graphe bouclait : le client d'un module
- * importe `deveye-sdk-client`, dont le barrel tire la coquille de réglages,
- * qui a besoin du registre... qui aurait importé le généré en train d'évaluer
- * ce même module (« Cannot access 'client0' before initialization », écran
- * blanc).
+ * Le registre des modules installés, côté client. Volontairement sans dépendance
+ * vers le fichier généré : ce module est une feuille, importable de partout, et
+ * l'initialiseur (`sdk/modules.ts`) est seul à importer la glue générée pour y
+ * verser les modules. Sans cette coupure le graphe boucle, le client d'un module
+ * important `deveye-sdk-client`, dont le barrel tire la coquille de réglages, qui
+ * a besoin du registre.
  */
 export interface InstalledClientFeature {
     manifest: FeatureManifest;
@@ -26,25 +21,21 @@ const MODULES: InstalledClientFeature[] = [];
 const BY_ID = new Map<string, InstalledClientFeature>();
 
 /**
- * Verse les modules installés dans le registre : descripteur (registre fusionné
- * de @deveye/types, dont vivent RoleDialog, la coquille et la présence) et
- * ressources d'invalidation. Appelée une fois, par l'initialiseur, avant tout
- * rendu.
+ * Verse les modules installés dans le registre : descripteur et ressources
+ * d'invalidation. Appelée une fois, par l'initialiseur, avant tout rendu.
  */
 export function registerClientModules(installed: readonly InstalledClientFeature[]): void {
     for (const mod of installed) {
-        // Même règle que le serveur (`registerModules`) : un id en double est
-        // une erreur de config, pas un doublon à ignorer.
+        // Même règle que le serveur : un id en double est une erreur de config, pas
+        // un doublon à ignorer.
         if (BY_ID.has(mod.manifest.id)) throw new Error(`Module « ${mod.manifest.id} » : déclaré deux fois`);
         validateManifest(mod.manifest);
-        // Une native rapatriée (Météo) garde son descripteur dans le registre
-        // publié : seuls les ids externes s'enregistrent ici.
+        // Un module à id natif a déjà son descripteur dans le registre publié :
+        // seuls les ids externes s'enregistrent ici.
         if (isExternalFeatureId(mod.manifest.id)) registerExternalFeature(externalDescriptorOf(mod.manifest));
-        // Les contrats du module dans le registre des commandes : c'est lui
-        // que `ws.send` consulte avant d'envoyer. Une native rapatriée y
-        // redéclare les mêmes objets (no-op) ; un module externe n'existe que
-        // par cet enregistrement : sans lui, chaque commande serait refusée
-        // localement (« Unknown command ») et l'UI resterait en chargement.
+        // Les contrats du module dans le registre que `ws.send` consulte avant
+        // d'envoyer. Un module externe n'existe que par cet enregistrement : sans
+        // lui, chaque commande serait refusée localement (« Unknown command »).
         registerFeatureCommands(mod.manifest.commands);
         registerFeatureResources(
             mod.manifest.id,
@@ -53,9 +44,8 @@ export function registerClientModules(installed: readonly InstalledClientFeature
         for (const cross of mod.manifest.alsoInvalidatedBy ?? []) {
             registerCrossTopicKeys(cross.topic, cross.keys as ResourceKey[]);
         }
-        // Les sujets secondaires du module (un fil de discussion battu à part
-        // du tableau) : chacun ravive les clés qu'il nomme, comme le sujet
-        // principal ravive `resources`.
+        // Les sujets secondaires du module : chacun ravive les clés qu'il nomme,
+        // comme le sujet principal ravive `resources`.
         for (const topic of mod.manifest.topics ?? []) {
             registerFeatureResources(topic.id, topic.keys as ResourceKey[]);
         }
@@ -81,9 +71,8 @@ export function moduleClient(featureId: string): FeatureClient | undefined {
 
 /**
  * Le contrat nommé qu'un module offre aux écrans de l'app (voir
- * `@deveye/types/sdk/providers`), le jumeau client de `moduleProvider` :
- * recherche au rendu, `undefined` quand le module est absent, et c'est à
- * l'écran de dégrader proprement.
+ * `@deveye/types/sdk/providers`), jumeau client de `moduleProvider` : recherche
+ * au rendu, `undefined` quand le module est absent, à l'écran de dégrader.
  */
 export function moduleClientProvider<T>(key: string): T | undefined {
     for (const mod of MODULES) {
@@ -94,9 +83,9 @@ export function moduleClientProvider<T>(key: string): T | undefined {
 }
 
 /**
- * Un module dont les éléments se projettent (`shareTier` autre que 'never') :
- * l'équivalent, pour un module, d'une entrée dans `SHARE_WIRED_FEATURES`. Le
- * serveur exige l'entrée `items` au boot, donc le manifest suffit ici.
+ * Un module dont les éléments se projettent (`shareTier` autre que 'never'),
+ * l'équivalent d'une entrée dans `SHARE_WIRED_FEATURES`. Le serveur exige
+ * l'entrée `items` au boot, donc le manifest suffit ici.
  */
 export function isModuleShareWired(featureId: string): boolean {
     const manifest = BY_ID.get(featureId)?.manifest;

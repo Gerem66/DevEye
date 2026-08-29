@@ -31,16 +31,7 @@ import { addMonths, today } from './_shared';
 import { financeHandlers } from './handlers';
 import type { FinanceRepo, FinanceTransactionFilter } from './repo';
 
-/**
- * Les handlers du module, sur le harnais du SDK.
- *
- * Ce qui mérite d'être tenu, ce sont les **gardes du livre** et le
- * **rattrapage des échéances** : un compte qui refuse de disparaître avec ses
- * opérations, une saisie incohérente refusée avant d'écrire, une échéance
- * automatique qui écrit ses occurrences dues à la première lecture, une fois
- * chacune. Rien de tout cela ne lève ailleurs : un contournement écrirait des
- * lignes fausses dans un livre de comptes, sans un bruit.
- */
+/** Les gardes du livre et le rattrapage des échéances : rien de tout cela ne lève ailleurs. */
 
 /** Le handler d'un contrat, typé par ce contrat (le registre est hétérogène). */
 function handlerFor<C extends { command: string; input: ZodType; output: ZodType }>(contract: C) {
@@ -74,11 +65,8 @@ function matches(t: FinanceTransactionRow, f: FinanceTransactionFilter): boolean
 }
 
 /**
- * Un dépôt en mémoire, même contrat que le vrai. Les tableaux sont mutés en
- * place, jamais réassignés : les tests lisent `repo.transactions` après coup.
- * L'index unique `(recurring_id, date)` est rejoué en levant l'erreur MySQL
- * que le rattrapage attend (`ER_DUP_ENTRY`) : c'est le contrat sur lequel
- * repose l'idempotence, il doit être vrai ici aussi.
+ * Dépôt en mémoire, tableaux mutés en place. L'index unique `(recurring_id,
+ * date)` est rejoué en levant `ER_DUP_ENTRY` : c'est le contrat de l'idempotence.
  */
 function fakeRepo(): FakeRepo {
     let seq = 0;

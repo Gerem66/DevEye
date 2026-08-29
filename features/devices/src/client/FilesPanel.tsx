@@ -49,7 +49,7 @@ function bytesToBase64(bytes: Uint8Array): string {
 /**
  * Clickable path segments. Windows roots stay whole: `C:` alone means « current
  * directory on C: », not the drive root, and a UNC share (`\\srv\partage`) is
- * indivisible — splitting either one gives a path the device cannot resolve.
+ * indivisible.
  */
 function crumbsOf(path: string): { label: string; full: string }[] {
     const acc: { label: string; full: string }[] = [];
@@ -126,11 +126,9 @@ const SHOW_HIDDEN_KEY = 'deveye.files.showHidden';
 const isHidden = (name: string) => name.startsWith('.');
 
 /**
- * Graphical file explorer for one device, in the spirit of ncdu: browse the
- * filesystem, visualise recursive disk usage as bars to find what to clean, run
- * advanced searches (name/extension/content + date & size windows), and tidy up
- * (new folder / rename / delete). All ops stream over the device push channel,
- * correlated by an `opId`.
+ * File explorer for one device, in the spirit of ncdu: browse, recursive disk
+ * usage as bars, advanced search, new folder / rename / delete. All ops stream
+ * over the device push channel, correlated by an `opId`.
  */
 export function FilesPanel({ deviceId }: { deviceId: string }) {
     const [path, setPath] = useState('/');
@@ -157,8 +155,8 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
 
     const listOp = useRef('');
     const usageOp = useRef('');
-    // The path the in-flight usage pass is for (to key its result into the cache),
-    // and the per-directory usage cache so navigating back is instant.
+    // The path the in-flight usage pass is for, and the per-directory usage
+    // cache so navigating back is instant.
     const usagePath = useRef('');
     const usageCache = useRef<Map<string, Map<string, FileUsageEntry>>>(new Map());
     const searchOp = useRef('');
@@ -191,8 +189,8 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
             setLoading(true);
             setError(null);
             setUsage(null);
-            // Optimistically show the indeterminate bars until the cache hit / fresh
-            // analysis lands, so navigation never flashes misleading own-size bars.
+            // Indeterminate bars until the cache hit / fresh analysis lands, so
+            // navigation never flashes misleading own-size bars.
             setAnalyzing(true);
             void agent.send('agent.filesList', { deviceId, opId, path: target }).catch((e) => {
                 setLoading(false);
@@ -203,15 +201,15 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
         [deviceId]
     );
 
-    // Drop the cached usage for a path and all its ancestors (whose recursive totals
-    // included it). Used after a mutation/upload and on manual refresh.
+    // Drop the cached usage for a path and its ancestors, whose recursive totals
+    // included it.
     const invalidateUsage = useCallback((p: string) => {
         usageCache.current.delete(p);
         let cur: string | null = p;
         while ((cur = parentOf(cur))) usageCache.current.delete(cur);
     }, []);
 
-    // Manual refresh: re-list and force a fresh usage pass for the current directory.
+    // Re-list and force a fresh usage pass.
     const refresh = useCallback(() => {
         invalidateUsage(path);
         navigate(path);
@@ -241,8 +239,7 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
                 setListing(d.listing);
                 setPath(d.listing.path);
                 setPathInput(d.listing.path);
-                // Use the cached recursive sizes if we have them (instant), otherwise
-                // run the bounded ncdu pass and cache its result.
+                // Cached recursive sizes if any, else the bounded ncdu pass.
                 const cached = usageCache.current.get(d.listing.path);
                 if (cached) {
                     setUsage(cached);
@@ -256,10 +253,9 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
                 setAnalyzing(false);
                 if (!d.error) {
                     const map = new Map(d.entries.map((e) => [e.name, e]));
-                    // Cache the result (partial ones included) so going back is
-                    // instant — a huge tree that hits the walk budget must not be
-                    // recomputed on every visit. Partial entries keep their "+"
-                    // marker, and the refresh button forces a fresh pass on demand.
+                    // Partial results are cached too: a huge tree that hits the
+                    // walk budget must not be recomputed on every visit. Partial
+                    // entries keep their "+" marker; refresh forces a fresh pass.
                     usageCache.current.set(usagePath.current, map);
                     setUsage(map);
                 }
@@ -314,10 +310,9 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
     }, [deviceId, analyze, navigate, invalidateUsage, path]);
 
     /**
-     * Télécharge une entrée. Un dossier arrive sous forme d'archive `.tar.gz`
-     * construite à la volée par l'agent (rien n'est écrit sur l'appareil) : seul
-     * le nom du fichier enregistré change ici, le flux est le même que pour un
-     * fichier — mêmes chunks, même réassemblage.
+     * Télécharge une entrée. Un dossier arrive en archive `.tar.gz` construite à
+     * la volée par l'agent (rien n'est écrit sur l'appareil) : seul le nom du
+     * fichier enregistré change ici.
      */
     const download = useCallback(
         (entry: FileEntry) => {
@@ -413,8 +408,8 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
         });
     }, [deviceId, path, form]);
 
-    // Visible entries (dotfiles per the toggle) with their display size
-    // (recursive when analysed) + the max for bars and the hidden count.
+    // Visible entries with their display size (recursive when analysed), the
+    // max for bars and the hidden count.
     const rows = useMemo(() => {
         const entries = listing?.entries ?? [];
         const visible = showHidden ? entries : entries.filter((e) => !isHidden(e.name));
@@ -427,8 +422,7 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
         return { withSize, max, hiddenCount: entries.length - visible.length };
     }, [listing, usage, showHidden]);
 
-    // True while the recursive-usage pass for the current directory is still running
-    // (drives the indeterminate bars). Cleared once the usage result lands.
+    // True while the recursive-usage pass is still running (indeterminate bars).
     const computing = analyzing && usage === null;
 
     // Keyboard activation for the row-as-button (Enter / Space → open the directory).
@@ -568,7 +562,7 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
                 />
             ) : (
                 <div className={styles.filesList}>
-                    {/* ".." — always on top for an easy step back (the arrow also does it). */}
+                    {/* ".." always on top for an easy step back. */}
                     {listing?.parent && (
                         <div
                             className={`${styles.filesRow} ${styles.filesRowClickable}`}

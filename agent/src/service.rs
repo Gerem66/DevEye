@@ -7,15 +7,12 @@
 //! different HOME than the enrolling user) still finds the enrolled config, and
 //! `--managed` tells a self-update to just exit and let the manager relaunch it.
 //!
-//! **Les deux pièges d'une installation système, tous deux invisibles en dev.**
-//! Elle tourne sous `pkexec`/`sudo`, donc dans l'environnement de root : le
-//! chemin de config calculé là désigne le foyer de root, pas celui de la machine
-//! enrôlée — d'où [`invoking_config_path`], et un `--config` explicite quand
-//! l'appelant le connaît. Et sur un système à SELinux (toute la famille Fedora),
-//! `init` n'a pas le droit d'exécuter un fichier étiqueté `user_home_t` : un
-//! service dont l'`ExecStart` pointe dans un `/home` échoue en boucle sur
-//! `203/EXEC`. L'exécutable est donc recopié dans un emplacement système avant
-//! d'être désigné (voir `stage_system_exe` sous Linux).
+//! Deux pièges d'une installation système. Elle tourne sous `pkexec`/`sudo`,
+//! donc dans l'environnement de root : le chemin de config calculé là désigne le
+//! foyer de root, d'où [`invoking_config_path`] et un `--config` explicite quand
+//! l'appelant le connaît. Et sous SELinux (famille Fedora), `init` n'a pas le
+//! droit d'exécuter un fichier étiqueté `user_home_t` : l'exécutable est recopié
+//! dans un emplacement système avant d'être désigné (`stage_system_exe`).
 
 use std::process::Command;
 
@@ -53,31 +50,18 @@ fn config_path() -> String {
     Config::path().to_string_lossy().into_owned()
 }
 
-/// Le foyer de l'utilisateur **derrière** un éventuel `sudo`.
-///
-/// `dirs::home_dir()` suit `$HOME`, que `sudo` réécrit en `/root` sur une bonne
-/// partie des distributions (`always_set_home`) — et pas sur les autres, d'où un
-/// comportement qui change d'une machine à l'autre. Conséquence : un agent lancé
-/// avec `sudo` cherchait l'unité *utilisateur* dans le foyer de root, ne l'y
-/// trouvait pas, et annonçait `serviceScope = none` alors qu'un service
-/// utilisateur était bel et bien installé — le bouton « Démarrage auto » de
-/// l'interface s'en trouvait décoché, et l'élévation partait d'un état faux.
-///
-/// `SUDO_USER` nomme l'appelant d'origine ; on résout son foyer par `getent`, qui
-/// interroge la vraie base de comptes (y compris LDAP), et on retombe sur
-/// `/home/<user>` puis sur `$HOME` si rien ne répond.
+/// L'appelant d'origine derrière un `sudo`. `dirs::home_dir()` suit `$HOME`,
+/// que `sudo` réécrit en `/root` sur une partie des distributions
+/// (`always_set_home`) : sans cela un agent lancé sous `sudo` cherche l'unité
+/// utilisateur dans le foyer de root et annonce `serviceScope = none` à tort.
 #[cfg(unix)]
 fn sudo_user() -> Option<String> {
     std::env::var("SUDO_USER").ok().filter(|s| !s.is_empty())
 }
 
-/// La clé `getent passwd` de l'appelant d'origine — son nom sous `sudo`, son uid
-/// sous `pkexec`.
-///
-/// **`pkexec` ne pose pas `SUDO_USER`.** C'est pourtant lui qui élève l'agent sur
-/// Linux (voir `elevate.rs`), et ne regarder que `SUDO_USER` revenait donc à ne
-/// jamais reconnaître l'appelant sur le seul chemin qu'emprunte l'interface.
-/// `PKEXEC_UID` est son équivalent, et `getent passwd` accepte les deux formes.
+/// La clé `getent passwd` de l'appelant d'origine : son nom sous `sudo`, son uid
+/// sous `pkexec`, qui ne pose pas `SUDO_USER` mais `PKEXEC_UID`. C'est `pkexec`
+/// qui élève l'agent sur Linux (voir `elevate.rs`).
 #[cfg(unix)]
 fn invoking_key() -> Option<String> {
     sudo_user().or_else(|| {
@@ -88,8 +72,8 @@ fn invoking_key() -> Option<String> {
 }
 
 /// Le foyer de l'appelant d'origine sous `sudo`/`pkexec`, quand on peut le
-/// nommer. Public au crate : le retrait doit balayer *son* dossier de config,
-/// pas celui de root (voir `uninstall::config_dirs`).
+/// nommer. Le retrait doit balayer son dossier de config, pas celui de root
+/// (voir `uninstall::config_dirs`).
 #[cfg(unix)]
 pub(crate) fn invoking_home() -> Option<std::path::PathBuf> {
     let key = invoking_key()?;
@@ -104,15 +88,11 @@ pub(crate) fn invoking_home() -> Option<std::path::PathBuf> {
 
 /// Le fichier de config à graver dans la définition du service.
 ///
-/// **Le nôtre est le mauvais dès qu'on est élevé.** `Config::path()` suit
-/// `dirs::config_dir()`, donc `$HOME` — que `pkexec` et `sudo` remplacent par
-/// celui de root. Une installation système gravait ainsi
-/// `/root/.config/deveye/agent.toml`, un fichier qui n'existe pas : le service
-/// démarrait, ne trouvait pas d'enrôlement, et la machine ne revenait jamais en
-/// ligne. On vise donc le foyer de l'appelant d'origine quand on peut le nommer.
-///
-/// `DEVEYE_CONFIG` reste prioritaire : c'est un choix explicite, et c'est aussi
-/// ce que l'agent supervisé se transmet à lui-même lors d'un relais.
+/// `Config::path()` suit `$HOME`, que `pkexec` et `sudo` remplacent par celui de
+/// root : une installation système graverait `/root/.config/deveye/agent.toml`,
+/// qui n'existe pas. On vise donc le foyer de l'appelant d'origine.
+/// `DEVEYE_CONFIG` reste prioritaire : choix explicite, et ce que l'agent
+/// supervisé se transmet lors d'un relais.
 #[cfg(unix)]
 fn invoking_config_path() -> String {
     if let Ok(explicit) = std::env::var("DEVEYE_CONFIG") {
@@ -156,9 +136,7 @@ fn run_checked(cmd: &mut Command, what: &str) -> Result<()> {
 }
 
 /// Une seule définition de « suis-je root », partagée avec ce que le rapport
-/// annonce à l'interface. En avoir deux, c'était pouvoir refuser une installation
-/// système en se disant non privilégié pendant que l'interface affichait root —
-/// ou l'inverse.
+/// annonce à l'interface.
 #[cfg(unix)]
 fn is_root() -> bool {
     crate::report::is_privileged()
@@ -166,19 +144,15 @@ fn is_root() -> bool {
 
 /// Install (or reinstall) the autostart service. `system` requires privilege.
 ///
-/// **Installe sans lancer.** Le démarrage est une étape à part ([`start`]) parce
-/// que l'ordre arrive *par* l'agent déjà en marche : demander au gestionnaire de
-/// service de démarrer tout de suite faisait naître un second agent, aussitôt
-/// refusé par la garde d'instance unique. Sous systemd la commande rendait
-/// pourtant la main sans erreur (le processus est forké avant d'échouer), si
-/// bien que l'installation se déclarait réussie tandis que l'unité rebouclait
-/// indéfiniment ; sous launchd le travail respawnait toutes les dix secondes.
-/// Le relais est donc explicite : on installe, on rend la main, puis l'appelant
-/// cède la place (voir `commands::handle_service`).
+/// Installe sans lancer : l'ordre arrive par l'agent déjà en marche, et
+/// démarrer tout de suite ferait naître un second agent, refusé par la garde
+/// d'instance unique (sous systemd sans erreur visible, l'unité rebouclant ;
+/// sous launchd un respawn toutes les dix secondes). Le relais est explicite :
+/// installer, rendre la main, puis l'appelant cède la place ([`start`],
+/// `commands::handle_service`).
 ///
-/// `config` grave un fichier d'enrôlement précis dans la définition. L'appelant
-/// qui élève l'agent le connaît — c'est le sien, il tourne dessus — là où le
-/// processus élevé, lui, ne peut que le deviner (voir [`invoking_config_path`]).
+/// `config` grave un fichier d'enrôlement précis : l'appelant qui élève l'agent
+/// le connaît, le processus élevé ne peut que le deviner ([`invoking_config_path`]).
 pub fn install(system: bool, config: Option<&str>) -> Result<()> {
     if system {
         require_privilege()?;
@@ -233,7 +207,6 @@ fn require_privilege() -> Result<()> {
     Ok(())
 }
 
-// ───────────────────────────── macOS (launchd) ─────────────────────────────
 #[cfg(target_os = "macos")]
 mod imp {
     use super::*;
@@ -321,13 +294,9 @@ mod imp {
 
     /// Retire le travail du domaine, sans le marquer désactivé.
     ///
-    /// `bootout` défait ce que `bootstrap` a fait. `unload -w`, qu'on utilisait,
-    /// faisait *en plus* basculer le label dans la base des travaux désactivés de
-    /// l'utilisateur — un état qui survit à la suppression du plist et que seul
-    /// un `enable` explicite efface. Un `load -w` en échec laissait donc le
-    /// démarrage automatique éteint pour de bon : launchd sautait le plist à
-    /// chaque ouverture de session, alors que sa présence sur le disque suffisait
-    /// à faire afficher « activé » côté interface.
+    /// `bootout` défait ce que `bootstrap` a fait. `unload -w` basculerait en
+    /// plus le label dans la base des travaux désactivés, un état qui survit à
+    /// la suppression du plist et que seul un `enable` explicite efface.
     fn bootout(system: bool) {
         let _ = Command::new("launchctl")
             .args(["bootout", &service_target(system)])
@@ -346,9 +315,8 @@ mod imp {
         }
         std::fs::write(&path, plist_xml(&cfg)?)
             .with_context(|| format!("writing {}", path.display()))?;
-        // Lève un éventuel « désactivé » hérité d'un `unload -w` (le nôtre, ou
-        // celui d'une version antérieure) : sans ça le travail est enregistré
-        // mais jamais lancé.
+        // Lève un éventuel « désactivé » hérité d'un `unload -w` : sans ça le
+        // travail est enregistré mais jamais lancé.
         let _ = Command::new("launchctl")
             .args(["enable", &service_target(system)])
             .output();
@@ -408,7 +376,6 @@ mod imp {
     }
 }
 
-// ───────────────────────────── Linux (systemd) ─────────────────────────────
 #[cfg(target_os = "linux")]
 mod imp {
     use super::*;
@@ -424,7 +391,7 @@ mod imp {
             .join(UNIT)
     }
 
-    /// Emplacements où une unité utilisateur peut *déjà* exister — le foyer
+    /// Emplacements où une unité utilisateur peut déjà exister : le foyer
     /// courant, et celui de l'appelant quand on tourne sous `sudo`.
     fn user_units() -> Vec<PathBuf> {
         let mut paths = vec![user_unit()];
@@ -447,16 +414,10 @@ mod imp {
 
     /// Recopie l'exécutable hors du foyer de l'utilisateur, pour le service système.
     ///
-    /// **Sans elle, l'unité boucle sur `203/EXEC` sur toute machine à SELinux.**
-    /// L'agent se télécharge dans un `/home`, où il porte l'étiquette
-    /// `user_home_t` ; `init_t` n'a pas le droit de l'exécuter, et refuse — un
-    /// refus qui ne se voit que dans le journal d'audit, pendant que `systemctl
-    /// status` répète « Permission denied » sur un fichier pourtant en `0755`.
-    /// Une machine sans SELinux, elle, marchait très bien : d'où un bogue qui
-    /// n'existait que sur Fedora et ses dérivés.
-    ///
-    /// Accessoirement, cela détache le service du fichier téléchargé : le
-    /// déplacer ou l'effacer ne casse plus le démarrage automatique.
+    /// Sans elle, l'unité boucle sur `203/EXEC` sur toute machine à SELinux :
+    /// dans un `/home` le binaire porte l'étiquette `user_home_t`, que `init_t`
+    /// n'a pas le droit d'exécuter (refus visible seulement dans le journal
+    /// d'audit). Cela détache aussi le service du fichier téléchargé.
     fn stage_system_exe() -> Result<String> {
         use std::os::unix::fs::PermissionsExt;
 
@@ -464,7 +425,7 @@ mod imp {
         let dest = PathBuf::from(SYSTEM_EXE);
         // `current_exe` rend un chemin résolu (`/proc/self/exe`) : la comparaison
         // doit résoudre la destination aussi, sans quoi `/usr/local/bin` et
-        // `/var/usrlocal/bin` — le même répertoire sur ostree — passeraient pour
+        // `/var/usrlocal/bin` (le même répertoire sur ostree) passeraient pour
         // deux endroits, et on se recopierait par-dessus soi-même.
         if std::fs::canonicalize(&dest)
             .map(|d| d == src)
@@ -515,30 +476,19 @@ mod imp {
         )
     }
 
-    /// Une unité *utilisateur* n'est lancée qu'à l'ouverture d'une session, sauf
-    /// si l'utilisateur est en « linger » — auquel cas systemd démarre son
-    /// gestionnaire dès l'amorçage. C'est exactement la différence entre « au
-    /// démarrage de ma session » et « au démarrage de la machine », donc toute la
-    /// promesse de la fonction sur un serveur sans écran.
-    ///
-    /// L'appel visait `$USER`, variable absente d'un processus lancé par un
-    /// gestionnaire de service ou détaché d'un terminal : sur une machine sans
-    /// écran, le linger n'était alors jamais demandé, et l'agent ne revenait
-    /// jamais après un redémarrage. On nomme donc l'utilisateur réel, et on
-    /// **vérifie** — polkit peut refuser en session non active.
+    /// Une unité utilisateur n'est lancée qu'à l'ouverture d'une session, sauf
+    /// « linger », où systemd démarre le gestionnaire dès l'amorçage : toute la
+    /// promesse de la fonction sur un serveur sans écran. On vérifie l'état
+    /// plutôt que de faire confiance à la commande : polkit peut refuser.
     fn linger_enabled(user: &str) -> bool {
         crate::report::run("loginctl", &["show-user", user, "--property=Linger"])
             .map(|out| out.trim() == "Linger=yes")
             .unwrap_or(false)
     }
 
-    /// L'utilisateur dont le linger nous concerne.
-    ///
-    /// `current_user()` est l'utilisateur *effectif* : sous `sudo`, il dit
-    /// « root ». Or le service utilisateur qu'on installe (ou qu'on retire) est
-    /// celui de l'appelant, et son linger aussi — allumer celui de root ne fait
-    /// pas démarrer sa session à lui, et l'éteindre à la désinstallation
-    /// couperait le linger d'un compte auquel on n'a jamais touché.
+    /// L'utilisateur dont le linger nous concerne : l'appelant, pas l'utilisateur
+    /// effectif (« root » sous `sudo`). Allumer celui de root ne démarre pas la
+    /// session de l'appelant, et l'éteindre couperait un compte jamais touché.
     fn linger_user() -> String {
         sudo_user().unwrap_or_else(crate::report::current_user)
     }
@@ -564,13 +514,9 @@ mod imp {
         );
     }
 
-    /// Éteint le linger allumé par [`ensure_linger`].
-    ///
-    /// Rien ne le faisait, et il survivait donc à l'agent : un compte que
-    /// l'installation avait rendu « toujours actif au démarrage » le restait
-    /// pour de bon, longtemps après la disparition du service qui l'exigeait.
-    /// Appelé par le retrait, et **seulement** quand un service utilisateur
-    /// était installé : c'est le seul cas où le linger est de notre fait.
+    /// Éteint le linger allumé par [`ensure_linger`]. Appelé par le retrait, et
+    /// seulement quand un service utilisateur était installé : le seul cas où
+    /// le linger est de notre fait.
     pub fn disable_linger_impl() -> Result<bool> {
         let user = linger_user();
         if user.is_empty() || !linger_enabled(&user) {
@@ -589,13 +535,12 @@ mod imp {
     }
 
     pub fn install_impl(system: bool, config: Option<&str>) -> Result<()> {
-        // Le chemin de config **avant** la désinstallation : elle peut arrêter
-        // l'unité qui nous supervise, et `invoking_config_path` lit encore
-        // l'environnement à ce moment-là.
+        // Le chemin de config avant la désinstallation : elle peut arrêter
+        // l'unité qui nous supervise, et `invoking_config_path` lit l'environnement.
         let cfg = unit_config_path(config);
         let _ = uninstall_impl();
-        // La recopie vient après le ménage, qui efface justement l'ancienne
-        // copie quand elle ne sert plus (voir `uninstall_impl`).
+        // La recopie vient après le ménage, qui efface l'ancienne copie quand
+        // elle ne sert plus (voir `uninstall_impl`).
         let target_exe = if system { stage_system_exe()? } else { exe()? };
         let path = if system { system_unit() } else { user_unit() };
         if let Some(parent) = path.parent() {
@@ -647,11 +592,9 @@ mod imp {
             std::fs::remove_file(system_unit()).ok();
             let _ = Command::new("systemctl").arg("daemon-reload").output();
         }
-        // Notre copie part avec le service qu'elle servait — **sauf** si c'est
-        // elle qui tourne en ce moment : l'arrêt du démarrage automatique passe
-        // le relais à une copie autonome relancée depuis `current_exe()`, et
-        // effacer le fichier sous ses pieds ferait disparaître la machine de la
-        // supervision au lieu de la sortir du seul service.
+        // Notre copie part avec le service qu'elle servait, sauf si c'est elle
+        // qui tourne : l'arrêt du démarrage automatique passe le relais à une
+        // copie autonome relancée depuis `current_exe()`.
         let staged = PathBuf::from(SYSTEM_EXE);
         let running_here = std::env::current_exe()
             .ok()
@@ -663,23 +606,18 @@ mod imp {
         uninstall_user_impl()
     }
 
-    /// Retire l'autostart utilisateur, **où qu'il soit**.
-    ///
-    /// Ne regarder que le foyer courant laissait, après une élévation lancée sous
-    /// `sudo`, l'unité de l'appelant en place : le service système et le service
-    /// utilisateur tournaient alors tous les deux sur le même enrôlement, et le
-    /// hub ne garde qu'une session par appareil — les deux se chassaient l'un
-    /// l'autre en boucle. D'où une élévation qui « ne prend pas », par
-    /// intermittence, selon celui des deux qui s'était reconnecté en dernier.
+    /// Retire l'autostart utilisateur, où qu'il soit : après une élévation sous
+    /// `sudo`, l'unité de l'appelant resterait sinon en place, et service système
+    /// et service utilisateur se chasseraient l'un l'autre sur le même enrôlement
+    /// (le hub ne garde qu'une session par appareil).
     pub fn uninstall_user_impl() -> Result<()> {
         for path in user_units() {
             if !path.exists() {
                 continue;
             }
-            // Arrêter l'unité demande de viser le bus de *son* utilisateur : en
+            // Arrêter l'unité demande de viser le bus de son utilisateur : en
             // root, `systemctl --user` parle au bus de root, qui ne la connaît
-            // pas. `runuser` rebascule sur le bon. Au pire l'arrêt échoue, mais
-            // le fichier part et l'unité ne reviendra pas au redémarrage.
+            // pas. Au pire l'arrêt échoue, mais le fichier part.
             match sudo_user().filter(|_| is_root()) {
                 Some(user) => {
                     let _ = Command::new("runuser")
@@ -723,9 +661,8 @@ mod imp {
     mod tests {
         use super::*;
 
-        /// L'unité ne recalcule **rien** : elle grave l'exécutable et la config
-        /// qu'on lui donne. C'est toute la correction — elle les devinait, et sous
-        /// `pkexec` elle devinait le foyer de root.
+        /// L'unité ne recalcule rien : elle grave l'exécutable et la config
+        /// qu'on lui donne.
         #[test]
         fn unit_bakes_the_paths_it_is_given() {
             let unit = unit_text(
@@ -743,7 +680,7 @@ mod imp {
         }
 
         /// Un service système ne doit jamais désigner un exécutable resté dans un
-        /// foyer : SELinux refuse à `init` de l'exécuter, en boucle et en silence.
+        /// foyer : SELinux refuse à `init` de l'exécuter.
         #[test]
         fn system_exe_lands_outside_any_home() {
             assert!(!SYSTEM_EXE.starts_with("/home/"));
@@ -753,7 +690,6 @@ mod imp {
     }
 }
 
-// ─────────────────────────── Windows (Task Scheduler) ───────────────────────
 #[cfg(target_os = "windows")]
 mod imp {
     use super::*;
@@ -834,9 +770,7 @@ use imp::{
 mod tests {
     use super::*;
 
-    /// Un `--config` explicite l'emporte sur toute déduction. C'est le chemin que
-    /// prend l'élévation : l'agent en marche connaît son enrôlement, le processus
-    /// élevé ne pourrait que le deviner depuis l'environnement de root.
+    /// Un `--config` explicite l'emporte sur toute déduction.
     #[test]
     fn explicit_config_wins_and_empty_falls_back() {
         assert_eq!(
@@ -844,8 +778,7 @@ mod tests {
             "/etc/deveye/agent.toml"
         );
 
-        // Vide ou absent : on retombe sur une déduction, jamais sur du vide —
-        // une définition de service sans fichier de config ne démarre nulle part.
+        // Vide ou absent : on retombe sur une déduction, jamais sur du vide.
         for guessed in [unit_config_path(None), unit_config_path(Some(""))] {
             assert!(guessed.ends_with("agent.toml"), "deviné : {guessed}");
         }

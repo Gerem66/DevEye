@@ -1,7 +1,7 @@
 import { Resolver } from 'dns/promises';
 import { isIPv4 } from 'net';
 
-// Privilège de native rapatriée : le garde SSRF est partagé par toute l'app, pas propre au module.
+// Le garde SSRF est celui de l'app, partagé, pas propre au module.
 import { fetchJson, isPublicIp } from '@/Services/netFetch';
 import { field, mapLimit, tag, type OsintProbeAdapter, type OsintTag } from './shared';
 
@@ -51,10 +51,8 @@ export const ptrProbe: OsintProbeAdapter = {
 /* ------------------------------ Géolocalisation ---------------------------- */
 
 /**
- * `ipwho.is` : libre, HTTPS, sans clé ni inscription, et — contrairement à la
- * plupart des offres gratuites — il rend un bloc `security` avec les drapeaux
- * VPN / proxy / Tor. C'est ce bloc qui fait l'intérêt de la carte : savoir
- * qu'une adresse est à Francfort compte moins que savoir qu'elle sort d'un VPN.
+ * `ipwho.is` : libre, HTTPS, sans clé, et il rend un bloc `security` avec les
+ * drapeaux VPN / proxy / Tor, ce qui fait l'intérêt de la carte.
  */
 interface IpWhoIs {
     success?: boolean;
@@ -128,12 +126,8 @@ export const geoipProbe: OsintProbeAdapter = {
 /* -------------------------------- Réputation ------------------------------- */
 
 /**
- * Listes noires, interrogées en **DNS pur**.
- *
- * Le protocole DNSBL est resté d'une simplicité rare : on inverse les octets de
- * l'adresse, on suffixe la zone, et une réponse A signifie « listée ». Aucune
- * clé, aucun quota d'API, aucune inscription — et une latence de quelques
- * dizaines de millisecondes.
+ * Listes noires en DNS pur : octets inversés, zone suffixée, une réponse A
+ * signifie « listée ». Aucune clé, aucun quota.
  */
 const DNSBL_ZONES: { zone: string; label: string }[] = [
     { zone: 'zen.spamhaus.org', label: 'Spamhaus ZEN' },
@@ -149,13 +143,10 @@ function reverseOctets(ip: string): string {
 type BlVerdict = 'listed' | 'clean' | 'refused';
 
 /**
- * Traduit la réponse d'une DNSBL.
- *
- * ⚠️ **Toute réponse A ne vaut pas signalement.** Les zones Spamhaus répondent
- * `127.255.255.x` pour dire « je refuse cette requête » — typiquement parce
- * qu'elle vient d'un résolveur public, ou parce que le quota est dépassé. Prendre
- * ça pour un signalement rendait « listée sur Spamhaus » pour *n'importe quelle*
- * adresse, y compris 8.8.8.8. Seul le bloc `127.0.0.x` est un vrai verdict.
+ * Toute réponse A ne vaut pas signalement : les zones Spamhaus répondent
+ * `127.255.255.x` pour refuser la requête (résolveur public, quota dépassé), ce
+ * qui listait n'importe quelle adresse, 8.8.8.8 comprise. Seul le bloc
+ * `127.0.0.x` est un vrai verdict.
  */
 function readVerdict(answers: string[]): BlVerdict {
     if (answers.length === 0) return 'clean';
@@ -186,7 +177,7 @@ export const blocklistProbe: OsintProbeAdapter = {
                 const answers = await r.resolve4(`${rev}.${zone}`);
                 return { label, verdict: readVerdict(answers), codes: answers.join(', ') };
             } catch {
-                // NXDOMAIN — le cas normal, et le seul qu'on espère.
+                // NXDOMAIN : le cas normal.
                 return { label, verdict: 'clean' as BlVerdict, codes: '' };
             }
         });

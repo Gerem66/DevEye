@@ -6,15 +6,9 @@ import { api } from './api';
 import styles from './style.module.css';
 
 /**
- * L'inventaire appris d'une machine : ce que Sentinelle tient pour normal.
- *
- * C'est ce qui rend le détecteur explicable. Sans lui, « nouveau programme » est
- * une affirmation qu'on ne peut ni vérifier ni contredire ; avec lui, on voit ce
- * qui est connu, depuis quand, sous quel compte.
- *
- * **Repliée par défaut**, et chargée seulement à l'ouverture : c'est cinq cents
- * lignes qu'on ne consulte qu'en cas de doute, et les faire descendre sous les
- * constats à chaque visite noierait ce qu'on est venu voir.
+ * L'inventaire appris d'une machine : ce qui rend le détecteur explicable.
+ * Repliée par défaut et chargée à l'ouverture : cinq cents lignes qu'on ne
+ * consulte qu'en cas de doute.
  */
 
 const KIND_LABEL: Record<BaselineKind, string> = {
@@ -34,9 +28,8 @@ export default function BaselineSection({ device }: { device: DeviceSentinelStat
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // Se referme quand on change de machine : laisser la section ouverte sur
-    // l'inventaire de la précédente ferait lire des chiffres qui ne sont plus
-    // ceux de la machine affichée.
+    // Se referme en changeant de machine : garder l'inventaire de la
+    // précédente ferait lire des chiffres qui ne sont plus les siens.
     useEffect(() => {
         setOpen(false);
         setEntries([]);

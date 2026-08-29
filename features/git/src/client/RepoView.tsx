@@ -26,16 +26,10 @@ import styles from './style.module.css';
 const POLL_MS = 700;
 
 /**
- * Combien de temps on attend qu'une synchronisation **démarre** avant de
- * renoncer à l'afficher.
- *
- * Sans ce délai, le voile ne s'affichait pas du tout après un « Tout
- * resynchroniser » : la commande rend la main dès qu'elle a vidé le cache et
- * réveillé l'ordonnanceur, mais celui-ci n'a pas encore inscrit l'étape en cours
- * quand le premier sondage arrive. Le sondage lisait donc « rien en cours »,
- * concluait qu'il n'y avait rien à regarder, et s'arrêtait — alors que la
- * synchronisation démarrait une fraction de seconde plus tard. Revenir sur le
- * dépôt remontait la vue et retrouvait, lui, une synchronisation bien en cours.
+ * Combien de temps on attend qu'une synchronisation démarre avant de renoncer à
+ * l'afficher. La commande rend la main dès qu'elle a réveillé l'ordonnanceur, qui
+ * n'a pas encore inscrit d'étape quand le premier sondage arrive : sans ce délai,
+ * le sondage lirait « rien en cours » et s'arrêterait avant le démarrage.
  */
 const START_GRACE_MS = 12_000;
 
@@ -55,23 +49,15 @@ interface RepoViewProps {
     members: readonly MinimalUser[];
     canWrite: boolean;
     /**
-     * Une synchronisation est-elle en cours ?
-     *
-     * L'en-tête vit chez l'appelant (`RepoDetail`, l'onglet Git d'un projet),
-     * mais c'est cette vue qui sonde l'avancement. On le lui remonte plutôt que
-     * de dupliquer le sondage : sans ça, « Synchroniser » et « Modifier »
-     * restaient cliquables pendant que le contenu était déjà voilé.
+     * Une synchronisation est-elle en cours ? L'en-tête vit chez l'appelant, mais
+     * c'est cette vue qui sonde : on le lui remonte plutôt que de dupliquer le
+     * sondage, sans quoi ses boutons resteraient cliquables sous le voile.
      */
     onSyncingChange?: (syncing: boolean) => void;
     /**
-     * Compteur que l'appelant incrémente après avoir demandé une
-     * synchronisation.
-     *
-     * L'en-tête portant le bouton vit chez lui, c'est donc lui qui sait qu'une
-     * synchronisation vient d'être réclamée. Sans ce signal, le voile ne
-     * s'affichait que sur un dépôt **jamais** synchronisé : presser
-     * « Synchroniser » sur un dépôt déjà à jour ne montrait rien du tout, alors
-     * que le tour peut durer plusieurs minutes.
+     * Compteur que l'appelant incrémente après avoir demandé une synchronisation :
+     * lui seul porte le bouton. Sans ce signal, le voile ne se poserait que sur un
+     * dépôt jamais synchronisé, alors qu'un tour peut durer plusieurs minutes.
      */
     syncRequest?: number;
     /** Rendu entre l'en-tête et le contenu (les projets liés, par exemple). */
@@ -80,20 +66,13 @@ interface RepoViewProps {
 
 /**
  * Le contenu d'un dépôt : graphe des commits, branches, releases, pull requests
- * et derniers commits.
+ * et derniers commits. Partagé entre la feature Git et l'onglet Git d'un projet,
+ * qui montrent la même chose du même dépôt.
  *
- * **Partagé** entre la feature Git (`RepoDetail`) et l'onglet Git d'un projet.
- * C'est la raison d'être du composant : les deux montrent exactement la même
- * chose du même dépôt, et une seconde implémentation aurait divergé au premier
- * ajustement.
- *
- * Tout ce qui s'affiche ici vient du **cache local** alimenté par le service de
- * fond — l'ouverture est donc instantanée et ne consomme aucun quota.
- * « Synchroniser » ne fait que réveiller l'ordonnanceur ; c'est
- * `git.repoSyncStatus` qui dit ensuite où il en est.
- *
- * Une seule exception, délibérée : le diff d'un commit (`CommitDialog`) est lu
- * chez GitHub à l'ouverture, parce qu'un diff ne se met pas en cache.
+ * Tout vient du cache local alimenté par le service de fond : l'ouverture est
+ * instantanée et ne consomme aucun quota, et « Synchroniser » ne fait que
+ * réveiller l'ordonnanceur. Seule exception, le diff d'un commit, lu chez GitHub
+ * à l'ouverture parce qu'il ne se met pas en cache.
  */
 export function RepoView({ repo, members, canWrite, onSyncingChange, syncRequest = 0, children }: RepoViewProps) {
     const [graph, setGraph] = useState<GraphState | null>(null);
@@ -140,11 +119,8 @@ export function RepoView({ repo, members, canWrite, onSyncingChange, syncRequest
     }, [load, version]);
 
     /**
-     * La vue est-elle encore montée ?
-     *
-     * Quitter la vue arrête le sondage : sans ça, une vue démontée continuerait
-     * d'interroger le serveur toutes les 700 ms jusqu'à la fin de la
-     * synchronisation.
+     * La vue est-elle encore montée ? Quitter arrête le sondage, qu'une vue démontée
+     * poursuivrait sinon jusqu'à la fin de la synchronisation.
      */
     const alive = useRef(true);
     useEffect(() => {
@@ -157,28 +133,21 @@ export function RepoView({ repo, members, canWrite, onSyncingChange, syncRequest
     /**
      * Sonde l'avancement tant qu'une synchronisation tourne.
      *
-     * Sondage plutôt que diffusion `live` : les six étapes d'un tour feraient
-     * sinon re-solliciter tout l'écran six fois d'affilée chez **tous** les
-     * membres de l'espace, pour une information qui n'intéresse que celui qui a
-     * pressé le bouton. La fin du sondage, elle, re-sollicite une fois — et
-     * c'est bien la seule chose que les autres ont besoin de voir.
+     * Sondage plutôt que diffusion `live` : les six étapes d'un tour feraient sinon
+     * re-solliciter tout l'écran six fois d'affilée chez tous les membres, pour une
+     * information qui n'intéresse que celui qui a pressé le bouton. La fin, elle,
+     * re-sollicite une fois.
      *
-     * **Aucune limite de durée.** Il y en avait une — trois minutes — et elle
-     * était fausse : la relecture complète d'un dépôt de plusieurs milliers de
-     * commits dure plus longtemps, et la barre disparaissait alors en plein
-     * travail, pour ne revenir qu'en ressortant du dépôt et en y rentrant. Le
-     * serveur reste la seule autorité sur « c'est fini » : il retire l'entrée
-     * d'avancement dans un `finally`, échec compris, donc la boucle s'arrête
-     * toujours — et jamais avant l'heure.
+     * Aucune limite de durée : la relecture complète d'un gros dépôt dépasse tout
+     * plafond qu'on se fixerait. Le serveur est seul juge du « c'est fini », il
+     * retire l'entrée d'avancement dans un `finally`, échec compris.
      */
     const poll = useCallback(async () => {
         const startBy = Date.now() + START_GRACE_MS;
         /**
-         * A-t-on réellement vu tourner quelque chose ?
-         *
-         * Sans ce drapeau, un sondage qui ne trouve jamais rien re-solliciterait
-         * quand même — une invalidation pour rien à chaque ouverture d'un dépôt
-         * jamais synchronisé. On ne re-sollicite que si le service a pu écrire.
+         * A-t-on réellement vu tourner quelque chose ? On ne re-sollicite que si le
+         * service a pu écrire, sinon chaque ouverture d'un dépôt jamais synchronisé
+         * invaliderait pour rien.
          */
         let sawRunning = false;
 
@@ -239,23 +208,18 @@ export function RepoView({ repo, members, canWrite, onSyncingChange, syncRequest
     }, [poll]);
 
     /**
-     * Une synchronisation lancée ailleurs — l'ajout d'un dépôt, la liaison d'un
-     * projet — pose son voile ici sans que l'appelant ait à l'orchestrer.
-     *
-     * Conditions cumulées : jamais synchronisé **et** en état de l'être. Un dépôt
-     * sans jeton ou suspendu n'attend rien, et le sonder ne ferait qu'un
-     * aller-retour inutile à chaque ouverture.
+     * Une synchronisation lancée ailleurs (l'ajout d'un dépôt, la liaison d'un
+     * projet) pose son voile ici. Conditions cumulées : jamais synchronisé et en
+     * état de l'être, un dépôt sans jeton ou suspendu n'attendant rien.
      */
     useEffect(() => {
         if (repo.lastSyncAt === null && repo.enabled && repo.credentialId !== null) startPolling();
     }, [repo.lastSyncAt, repo.enabled, repo.credentialId, startPolling]);
 
     /**
-     * Une synchronisation vient d'être demandée depuis l'en-tête.
-     *
-     * `> 0` plutôt qu'un simple changement de valeur : le compteur part de zéro
-     * et vit chez l'appelant, qui monte et démonte avec cette vue — l'effet ne
-     * se déclenche donc qu'après une vraie pression, jamais au montage.
+     * Une synchronisation vient d'être demandée depuis l'en-tête. `> 0` plutôt qu'un
+     * simple changement de valeur : le compteur part de zéro, l'effet ne se
+     * déclenche donc qu'après une vraie pression, jamais au montage.
      */
     useEffect(() => {
         if (syncRequest > 0) startPolling();
@@ -273,11 +237,9 @@ export function RepoView({ repo, members, canWrite, onSyncingChange, syncRequest
     if (!loaded) return <p className={styles.empty}>Chargement…</p>;
 
     /**
-     * Racine du dépôt chez le fournisseur.
-     *
-     * Reconstruite à partir de `owner`/`repo` plutôt que lue quelque part : les
-     * URL ne sont stockées que sur les objets (commit, release, PR), jamais sur
-     * le dépôt lui-même, et un dépôt fraîchement ajouté n'a encore aucun objet.
+     * Racine du dépôt chez le fournisseur, reconstruite : les URL ne sont stockées
+     * que sur les objets (commit, release, PR), et un dépôt fraîchement ajouté n'en
+     * a encore aucun.
      */
     const repoUrl = `https://github.com/${repo.owner}/${repo.repo}`;
 
@@ -294,10 +256,9 @@ export function RepoView({ repo, members, canWrite, onSyncingChange, syncRequest
                         members={members}
                         groupByMember={prefs.groupAuthorsByMember}
                         onOpenCommit={(sha) => setOpenSha(sha)}
-                        // Pas de garde sur le droit d'écriture : le dialogue
-                        // porte aussi un réglage d'affichage personnel, qu'un
-                        // membre en lecture seule doit pouvoir atteindre. C'est
-                        // le rattachement lui-même qui s'y désactive.
+                        // Pas de garde sur le droit d'écriture : le dialogue porte
+                        // aussi un réglage d'affichage personnel. C'est le
+                        // rattachement lui-même qui s'y désactive.
                         onConfigure={graph && graph.authors.length > 0 ? () => setAuthorMapOpen(true) : undefined}
                     />
 
@@ -462,18 +423,9 @@ interface PanelProps {
 }
 
 /**
- * Une carte autour d'une liste.
- *
- * Deux sorties, et elles ne mènent pas au même endroit — c'est tout l'intérêt
- * de les avoir séparées :
- *
- * - le **titre** ouvre la liste complète *dans DevEye*. C'est le geste courant,
- *   il mérite la grande cible ;
- * - la **petite icône GitHub**, à droite des compteurs, mène chez le
- *   fournisseur. C'est le geste rare, il mérite une cible discrète.
- *
- * Auparavant le titre faisait la seconde chose, ce qui obligeait à quitter
- * l'application pour voir la seizième branche.
+ * Une carte autour d'une liste, avec deux sorties distinctes : le titre ouvre la
+ * liste complète dans l'application, le geste courant, donc la grande cible ;
+ * l'icône GitHub mène chez le fournisseur, le geste rare.
  */
 function Panel({ title, count, href, onSeeAll, hasMore, wide, children }: PanelProps) {
     return (
@@ -505,15 +457,12 @@ function Panel({ title, count, href, onSeeAll, hasMore, wide, children }: PanelP
 }
 
 /**
- * Le voile de chargement, avec l'étape en cours.
+ * Le voile de chargement, avec l'étape en cours. La barre avance par étapes
+ * nommées et non par objets traités (voir `gitSyncStatusSchema`) : c'est le seul
+ * comptage dont on connaisse le total d'avance.
  *
- * La barre avance par **étapes nommées** et non par objets traités : voir
- * `gitSyncStatusSchema`. C'est le seul comptage dont on connaisse le total
- * d'avance, donc le seul qui ne mente pas.
- *
- * Le voile couvre toute la boîte, mais son panneau est **collant** : sur une
- * page plus haute que la fenêtre, un simple `inset: 0` centrait le texte au
- * milieu du contenu — c'est-à-dire hors écran. Voir `.syncPanel`.
+ * Son panneau est collant : sur une page plus haute que la fenêtre, un `inset: 0`
+ * centrerait le texte au milieu du contenu, donc hors écran.
  */
 function SyncOverlay({ status }: { status: GitSyncStatus }) {
     const ratio = status.stepCount > 0 ? Math.min(1, status.step / status.stepCount) : 0;

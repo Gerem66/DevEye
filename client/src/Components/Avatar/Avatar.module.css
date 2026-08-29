@@ -1,6 +1,5 @@
 /* La pastille d'identité d'un membre : avatar, ou initiale sur sa couleur de
-   compte. Les deux classes viennent de la feuille de Projets, où le composant
-   est né. */
+   compte. */
 .avatar {
     display: inline-flex;
     align-items: center;

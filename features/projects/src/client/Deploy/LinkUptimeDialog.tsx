@@ -16,15 +16,9 @@ interface LinkUptimeDialogProps {
 
 /**
  * Rattacher un service surveillé au projet : en choisir un de l'espace, ou en
- * déclarer un.
- *
- * **La déclaration passe par le vrai dialogue de la feature** (`ServiceDialog`,
- * lu par le contrat client du module Uptime), pas par une copie réduite ; même
- * parti pris que `LinkTargetDialog` pour une cible de déploiement. Surveiller
- * une URL suppose des réglages (méthode, seuils, notifications) qu'il faut
- * régler une bonne fois ; en réécrire un résumé ici garantirait qu'il diverge
- * au premier réglage ajouté à Uptime. Module absent, le dialogue le dit et ne
- * propose rien.
+ * déclarer un. La déclaration ouvre le dialogue de la feature (`ServiceDialog`,
+ * par le contrat client d'Uptime) plutôt qu'un résumé de ses réglages, qui
+ * divergerait au premier ajouté ; module absent, rien n'est proposé.
  */
 export function LinkUptimeDialog({ open, projectId, linkedIds, onClose, onSaved }: LinkUptimeDialogProps) {
     const uptime = moduleClientProvider<UptimeClientProvider>(UPTIME_CLIENT_PROVIDER);

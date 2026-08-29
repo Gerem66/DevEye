@@ -34,14 +34,11 @@ export interface WidgetPopupProps {
 }
 
 /**
- * Full-screen feature panel that animates from the originating Widget via
- * framer-motion's `layoutId`. It deliberately has no header of its own: the
- * TopNavbar stays above it (higher z-index) and owns the back action + title,
- * so the topbar always provides the main context. Closes on Escape / overlay.
- *
- * The panel itself mounts/unmounts with `open` (so the shared-element morph
- * plays both ways). Feature *content* is kept alive across opens by portaling
- * it into `bodyRef` from the dashboard, rather than being a normal child here.
+ * Full-screen feature panel that morphs from the originating Widget via
+ * framer-motion's `layoutId`. No header of its own: the TopNavbar stays above
+ * and owns the back action + title. The panel mounts/unmounts with `open` so
+ * the morph plays both ways; feature content is kept alive by being portaled
+ * into `bodyRef` from the dashboard.
  */
 export default function WidgetPopup({
     layoutId,
@@ -59,12 +56,10 @@ export default function WidgetPopup({
     // Keep the encrypted DEK alive for sensitive feature views while open.
     useSecrecyHold(Boolean(open && holdSecrecy));
 
-    // Horizontal views (kanban, timeline…) ask for the width their content
-    // actually needs — see `stores/popupWidth`. The store clamps it to what the
-    // viewport allows, so the CSS transition never animates past a value the
-    // insets would cap. It rides a transition rather than an animated style prop
-    // so framer-motion — which owns this element through `layoutId` — sees no
-    // layout jump to reconcile at render time.
+    // Horizontal views ask for the width they need (see `stores/popupWidth`),
+    // clamped to the viewport. A CSS transition rather than an animated style
+    // prop, so framer-motion (which owns this element through `layoutId`) sees
+    // no layout jump to reconcile.
     const maxWidth = usePopupMaxWidth();
 
     return (
@@ -88,13 +83,9 @@ export default function WidgetPopup({
                         className={styles.popup}
                         /*
                          * Une prise pour le contenu qui doit se mesurer contre le
-                         * cadre : une vue qui demande une largeur (voir
-                         * `stores/popupWidth`) a besoin de savoir combien de
-                         * pixels séparent son tableau du bord de la popup, et elle
-                         * y arrive par un portail — aucune prop ne descend
-                         * jusqu'à elle. Un attribut plutôt qu'une classe : ce
-                         * n'est pas du style, et un nom de classe de module CSS
-                         * n'est pas un contrat stable.
+                         * cadre (voir `stores/popupWidth`), atteint par un portail.
+                         * Un attribut plutôt qu'une classe : un nom de classe de
+                         * module CSS n'est pas un contrat stable.
                          */
                         data-popup-frame=''
                         style={{ maxWidth }}

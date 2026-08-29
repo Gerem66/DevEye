@@ -21,27 +21,14 @@ interface SearchDialogProps {
 
 const EMPTY: DatabaseFilter = { column: '', operator: 'contains', value: '' };
 
-/** Les deux façons de relier les critères, en segments : deux choix fixes. */
 const COMBINATORS: { value: DatabaseCombinator; label: string; title: string }[] = [
     { value: 'and', label: 'Tous (ET)', title: 'Tous les critères sont remplis' },
     { value: 'or', label: 'Au moins un (OU)', title: 'Au moins un critère est rempli' }
 ];
 
 /**
- * Chercher dans une table, précisément.
- *
- * Un critère est un triplet **colonne / opérateur / valeur**, et non un morceau
- * de SQL : la colonne est choisie dans celles de la table, l'opérateur dans une
- * liste fermée, et la valeur reste une valeur — liée en paramètre, jamais
- * recollée dans la requête. C'est ce qui permet d'offrir la recherche sans
- * ouvrir une porte, et de la proposer aux mêmes conditions sur les deux moteurs.
- *
- * Les jokers d'un `LIKE` gardent leur sens : `%` remplace n'importe quelle
- * suite, `_` un caractère, `\%` un pourcentage littéral. C'est le comportement
- * de SQL, et l'écran n'a rien à en dire — une phrase pour prévenir du contraire
- * était le signe qu'on avait pris une liberté de trop.
- *
- * Le terminal, lui, est là pour ce que cette grille ne sait pas exprimer.
+ * Chercher dans une table par triplets colonne / opérateur / valeur, jamais du
+ * SQL : la valeur est liée en paramètre. Les jokers d'un `LIKE` gardent leur sens.
  */
 export function SearchDialog({ open, structure, filters, combinator, onClose, onApply }: SearchDialogProps) {
     const [draft, setDraft] = useState<DatabaseFilter[]>([]);
@@ -49,8 +36,7 @@ export function SearchDialog({ open, structure, filters, combinator, onClose, on
 
     useEffect(() => {
         if (!open) return;
-        // Repartir de ce qui est appliqué : on vient souvent affiner, pas
-        // recommencer.
+        // Repartir de ce qui est appliqué : on vient affiner.
         setDraft(filters.length > 0 ? filters : [{ ...EMPTY, column: structure.columns[0]?.name ?? '' }]);
         setMode(combinator);
     }, [open, filters, combinator, structure]);

@@ -2,14 +2,7 @@ import type { AudienceDimension, AudienceFunnelRow, AudienceFunnelStepRow, Audie
 import { AUDIENCE_FUNNEL_MAX_STEPS } from '../contracts/domain';
 import type { SdkQueryable } from '@deveye/types/sdk/server';
 
-/**
- * Un site, plus ce que ses tables voisines en disent.
- *
- * Le nombre de projets qui s'en servent n'en fait plus partie : la table de
- * liaison (`project_audience_links`) appartient à Projets, et le module ne lit
- * aucune table de Projets. Le compte vient de son contrat
- * (`PROJECTS_USAGE_PROVIDER`), et `toSite` le reçoit en paramètre.
- */
+/** Un site, plus ce que ses tables voisines en disent. */
 export interface AudienceSiteWithStatsRow extends AudienceSiteRow {
     views_24h: number;
     visitors_24h: number;
@@ -49,14 +42,12 @@ export interface ResolvedStep {
     labelId: number | null;
 }
 
-/** Une session ouverte, telle que l'ingestion a besoin de la connaître. */
 export interface OpenSessionRow {
     id: number;
     views: number;
     identity_id: number | null;
 }
 
-/** Ce qu'on sait d'un visiteur au moment où sa session s'ouvre. */
 export interface NewSessionInput {
     siteId: number;
     visitorRef: string;
@@ -73,7 +64,6 @@ export interface NewSessionInput {
     screenWidth: number | null;
 }
 
-/** Un fait, prêt à être écrit. */
 export interface PendingEventRow {
     siteId: number;
     sessionId: number;
@@ -83,7 +73,6 @@ export interface PendingEventRow {
     nameId: number | null;
 }
 
-/** Ce que la maintenance a besoin de savoir d'un site, et rien de plus. */
 export interface AudienceMaintenanceRow {
     id: number;
     workspace_id: number;
@@ -93,22 +82,14 @@ export interface AudienceMaintenanceRow {
 /**
  * Où vit chaque dimension, et sous quelle colonne.
  *
- * ⚠️ **C'est la seule table qui nomme une colonne dans une requête**, et c'est
- * délibérément une constante fermée : un nom de colonne ne peut pas être un
- * paramètre lié, il faut bien l'écrire dans le texte SQL. La discipline est
- * celle de `features/database/src/server/explore.ts` — on n'utilise jamais l'identifiant
- * reçu, on s'en sert pour choisir celui que le serveur détient déjà. Le contrat
- * zod borne déjà l'entrée aux neuf valeurs ; ceci la borne une seconde fois, là
- * où la chaîne devient du code.
+ * Seule table qui nomme une colonne dans une requête, constante fermée à
+ * dessein : un nom de colonne ne peut pas être un paramètre lié, il faut
+ * l'écrire dans le texte SQL. On n'utilise donc jamais l'identifiant reçu, il
+ * sert à choisir celui que le serveur détient déjà.
  *
- * Deux familles, parce qu'elles ne se comptent pas au même endroit :
- *
- * - `session` — le navigateur, le fuseau, le référent ne changent pas en cours
- *   de visite. Les porter sur la session divise le volume et rend « visiteurs
- *   uniques par navigateur » lisible d'une seule table.
- * - `event` — le chemin et le nom d'un événement changent à chaque coup ; ils
- *   vivent donc sur le fait, et se comptent en le joignant à sa session pour
- *   savoir *qui* l'a produit.
+ * Deux familles : ce qui ne change pas en cours de visite (navigateur, fuseau,
+ * référent) est porté par la session, ce qui change à chaque coup (chemin, nom
+ * d'événement) par le fait, joint à sa session pour savoir qui l'a produit.
  */
 const DIMENSION_SOURCE: Record<AudienceDimension, { table: 'session' | 'event'; column: string; kind?: number }> = {
     path: { table: 'event', column: 'path_id', kind: 0 },
@@ -126,27 +107,14 @@ const DIMENSION_SOURCE: Record<AudienceDimension, { table: 'session' | 'event'; 
  * Les sites suivis de l'espace, tout ce qu'on lit d'eux, leurs entonnoirs, et
  * ce que l'ingestion publique écrit.
  *
- * Trois dépôts natifs (`db/repos/audience.ts`, `audienceFunnels.ts`,
- * `audienceIngest.ts`) réunis en un seul contrat depuis le rapatriement en
- * module, parce que le SDK n'en construit qu'un par module ; les trois
- * sections gardent leur frontière, et il faut la connaître.
+ * Le chemin froid (sites et lectures agrégées) sert les écrans, quelques fois
+ * par minute au plus. Le chemin chaud (la section « ingestion ») tourne à
+ * chaque page vue de chaque site, sans session utilisateur, depuis une requête
+ * HTTP anonyme : rien n'y déchiffre, le service qui l'appelle tient les caches
+ * et ces méthodes ne manipulent que des entiers et des condensés.
  *
- * **Le chemin froid** (sites et lectures agrégées) sert les écrans, quelques
- * fois par minute au plus. **Le chemin chaud** (la section « ingestion ») tourne
- * à chaque page vue de chaque site de chaque espace, sans session utilisateur,
- * depuis une requête HTTP anonyme : les mêmes tables, mais aucune des mêmes
- * contraintes. Les mélanger aurait fait cohabiter des requêtes qu'on optimise
- * et des requêtes qu'on écrit pour être lues. Rien n'y déchiffre : le service
- * qui l'appelle tient les caches, et ces méthodes ne manipulent que des
- * entiers et des condensés.
- *
- * Tout est à l'étage **ouvert** : un site appartient à l'espace, sert des
- * projets de paliers différents, et ne peut donc suivre aucun d'eux.
- *
- * Les liaisons vers les projets (`project_audience_links`) et la liste des
- * projets qui suivent un site ont rejoint `db/repos/projectLinks.ts` dans
- * l'app : c'est une table de Projets, que le module ne lit pas. Ce qu'il a
- * besoin d'en savoir lui vient du contrat `PROJECTS_USAGE_PROVIDER`.
+ * Tout est à l'étage ouvert. Les liaisons vers les projets appartiennent à
+ * Projets : le module ne lit aucune de ses tables, il passe par son contrat.
  */
 export interface AudienceRepo {
     // -- sites --------------------------------------------------------------
@@ -193,15 +161,10 @@ export interface AudienceRepo {
     /** Le bandeau : sessions, visiteurs, durée, rebonds. Les vues à part. */
     metrics(siteId: number, from: number, to: number): Promise<AudienceMetricsRow>;
     /**
-     * Visiteurs de la période qui étaient **déjà venus avant**.
-     *
-     * N'a de sens qu'en mode persistant : en anonyme, `visitor_ref` change de
-     * sel chaque jour, donc personne n'est jamais « déjà venu » et la requête
-     * rendrait toujours zéro. L'appelant ne la pose donc pas dans ce cas.
-     *
-     * ⚠️ Bornée par la conservation du site : quelqu'un dont la dernière visite
-     * a expiré repasse pour un nouveau. Conséquence de la rétention, pas une
-     * erreur de comptage.
+     * Visiteurs de la période qui étaient déjà venus avant. N'a de sens qu'en
+     * mode persistant : en anonyme, le sel de `visitor_ref` change chaque jour
+     * et la requête rendrait toujours zéro. Bornée par la conservation du site :
+     * quelqu'un dont la dernière visite a expiré repasse pour un nouveau.
      */
     returningVisitors(siteId: number, from: number, to: number): Promise<number>;
     /** La courbe. `origin` aligne les seaux sur le début de la fenêtre. */
@@ -215,17 +178,10 @@ export interface AudienceRepo {
     ): Promise<AudienceBreakdownRow[]>;
     /** La carte jour × heure, en heure **locale du visiteur**. */
     activity(siteId: number, from: number, to: number): Promise<AudienceActivityRow[]>;
-    /** Visiteurs distincts vus depuis `since`, et les pages qu'ils regardent. */
     liveVisitors(siteId: number, since: number): Promise<number>;
     livePages(siteId: number, since: number, limit: number): Promise<AudienceBreakdownRow[]>;
 
     // -- entonnoirs ---------------------------------------------------------
-    /**
-     * Les entonnoirs d'un site : leur définition, et la rétention marche par
-     * marche. Une section à part parce que sa seule requête intéressante l'est
-     * vraiment — voir {@link AudienceRepo.retention}. Le reste n'est que du
-     * rangement.
-     */
     listFunnels(siteId: number): Promise<AudienceFunnelRow[]>;
     listFunnelSteps(siteId: number): Promise<AudienceFunnelStepRow[]>;
     /** L'entonnoir **et** son espace : la frontière d'accès de la feature. */
@@ -238,10 +194,8 @@ export interface AudienceRepo {
     /**
      * Remplace **toutes** les marches d'un entonnoir.
      *
-     * Remplacer plutôt que rapiécer : une marche n'a pas d'identité propre — on
-     * ne renomme pas la troisième marche, on redéfinit le parcours. Un `UPDATE`
-     * ligne à ligne aurait demandé de suivre des identifiants que personne ne
-     * regarde, pour le même résultat.
+     * Remplacer plutôt que rapiécer : une marche n'a pas d'identité propre, on
+     * ne renomme pas la troisième marche, on redéfinit le parcours.
      */
     replaceFunnelSteps(
         funnelId: number,
@@ -255,32 +209,24 @@ export interface AudienceRepo {
 
     // -- ingestion (le chemin chaud) ----------------------------------------
     /**
-     * Le site derrière une clé publique. **Sans espace en paramètre** — c'est
-     * tout l'objet de la clé : l'ingestion arrive sans session, sans cookie et
-     * sans enveloppe, elle n'a que ça pour savoir où écrire.
+     * Le site derrière une clé publique, sans espace en paramètre : l'ingestion
+     * arrive sans session ni cookie, la clé est tout ce qu'elle a pour savoir
+     * où écrire.
      */
     findByPublicKey(publicKey: string): Promise<AudienceSiteRow | null>;
     /**
-     * L'identifiant d'un libellé, créé au besoin.
-     *
-     * `ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)` rend l'identifiant
-     * existant sans seconde requête ni course entre deux requêtes simultanées.
-     * `content` n'est **jamais** réécrit : le chiffrement étant non
-     * déterministe, le réécrire produirait un octet différent à chaque visite
-     * pour exactement la même valeur.
+     * L'identifiant d'un libellé, créé au besoin. `ON DUPLICATE KEY UPDATE id =
+     * LAST_INSERT_ID(id)` rend l'existant sans seconde requête ni course.
+     * `content` n'est jamais réécrit : le chiffrement étant non déterministe,
+     * le réécrire produirait un octet différent à chaque visite.
      */
     resolveLabel(siteId: number, kind: string, labelRef: string, content: string): Promise<number>;
-    /** La session encore ouverte de ce visiteur, s'il y en a une. */
     findOpenSession(siteId: number, visitorRef: string, since: number): Promise<OpenSessionRow | null>;
     createSession(input: NewSessionInput): Promise<number>;
-    /** Prolonge une session et lui ajoute ses vues. */
     touchSession(id: number, at: number, viewsDelta: number): Promise<void>;
     /**
-     * Rattache une identité à une session déjà ouverte.
-     *
-     * Le cas courant : on arrive anonyme, on se connecte, et le site ne peut
-     * nommer son utilisateur qu'à partir de là. Sans ceci, toute visite
-     * commencerait anonyme et le resterait.
+     * Rattache une identité à une session déjà ouverte : on arrive anonyme, on
+     * se connecte, et sans ceci toute visite resterait anonyme.
      */
     setSessionIdentity(id: number, identityId: number): Promise<void>;
     insertEvents(rows: PendingEventRow[]): Promise<void>;
@@ -301,19 +247,15 @@ export interface AudienceRepo {
     pruneEvents(siteId: number, before: number): Promise<number>;
     pruneSessions(siteId: number, before: number): Promise<number>;
     /**
-     * Les libellés que plus aucun fait ne cite.
-     *
-     * Sans ce ménage, la table de dimensions ne décroîtrait jamais : un chemin
-     * disparu du site y resterait pour toujours.
+     * Les libellés que plus aucun fait ne cite : sans ce ménage, un chemin
+     * disparu du site resterait pour toujours dans la table de dimensions.
      */
     pruneOrphanLabels(siteId: number): Promise<number>;
 }
 
 /**
  * La fenêtre de « 24 h » des cartes de la liste, calculée en SQL pour que
- * ranger la liste ne demande pas un aller-retour par site. Le nombre de
- * projets, qui était la première colonne, vient désormais du contrat de
- * Projets.
+ * ranger la liste ne demande pas un aller-retour par site.
  */
 const SELECT_WITH_STATS = `
     SELECT s.*,
@@ -472,10 +414,9 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
 
         // -- lectures agrégées ----------------------------------------------
         async metrics(siteId, from, to) {
-            // Les vues se comptent sur les **faits** et non sur `sessions.views` :
-            // une session ouverte avant la fenêtre porterait sinon toutes ses
-            // vues dedans, ou aucune, selon le bord. Les trois autres mesures
-            // sont par nature de la session, d'où deux requêtes plutôt qu'une.
+            // Les vues se comptent sur les faits et non sur `sessions.views` : une session
+            // ouverte avant la fenêtre porterait sinon toutes ses vues dedans, ou aucune,
+            // selon le bord. Les autres mesures sont par nature de la session.
             const [viewsRows, sessionRows] = await Promise.all([
                 q.query<{ views: number }>(
                     `SELECT COUNT(*) AS views FROM audience_events
@@ -502,9 +443,8 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
             };
         },
         async returningVisitors(siteId, from, to) {
-            // `idx_audience_sessions_window (site_id, started_at, visitor_ref)`
-            // couvre les deux côtés : la fenêtre comme l'antériorité se lisent
-            // dans l'index, sans toucher une seule ligne.
+            // `idx_audience_sessions_window (site_id, started_at, visitor_ref)` couvre les
+            // deux côtés : fenêtre et antériorité se lisent dans l'index seul.
             const rows = await q.query<{ total: number }>(
                 `SELECT COUNT(DISTINCT s.visitor_ref) AS total
                    FROM audience_sessions s
@@ -516,9 +456,9 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
             return Number(rows[0]?.total ?? 0);
         },
         async points(siteId, from, to, bucket, origin) {
-            // Les seaux sont alignés sur le **début de la fenêtre**, pas sur
-            // l'époque : sans ça, un pas hebdomadaire tomberait un jeudi (epoch
-            // 0) et la première colonne serait toujours tronquée.
+            // Les seaux sont alignés sur le début de la fenêtre, pas sur l'époque : sans
+            // ça, un pas hebdomadaire tomberait un jeudi (epoch 0) et la première colonne
+            // serait toujours tronquée.
             const rows = await q.query<AudiencePointRow>(
                 `SELECT FLOOR((e.ts - ?) / ?) * ? + ? AS at,
                         COUNT(*) AS views,
@@ -569,11 +509,9 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
             }));
         },
         async activity(siteId, from, to) {
-            // `tz_offset` est celui de `Date.getTimezoneOffset()` : **positif à
-            // l'ouest**. L'heure locale est donc `ts - offset * 60`, et non
-            // l'inverse. Le jour 0 de l'époque étant un jeudi, `+3` ramène
-            // lundi en tête — la semaine à l'européenne, comme partout ailleurs
-            // dans l'interface.
+            // `tz_offset` est celui de `Date.getTimezoneOffset()`, positif à l'ouest :
+            // l'heure locale est `ts - offset * 60`, et non l'inverse. Le jour 0 de
+            // l'époque étant un jeudi, `+3` ramène lundi en tête.
             const rows = await q.query<AudienceActivityRow>(
                 `SELECT MOD(FLOOR((e.ts - COALESCE(s.tz_offset, 0) * 60) / 86400) + 3, 7) AS day,
                         FLOOR(MOD(e.ts - COALESCE(s.tz_offset, 0) * 60, 86400) / 3600) AS hour,
@@ -631,8 +569,8 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
             );
         },
         async findFunnelInWorkspace(funnelId, workspaceId) {
-            // La jointure **est** la garde : un entonnoir d'un autre espace n'a
-            // pas à exister pour l'appelant, pas même comme refus distinct.
+            // La jointure est la garde : un entonnoir d'un autre espace n'a pas à exister
+            // pour l'appelant, pas même comme refus distinct.
             const rows = await q.query<AudienceFunnelRow>(
                 `SELECT f.* FROM audience_funnels f
                    JOIN audience_sites s ON s.id = f.site_id
@@ -674,8 +612,8 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
             ]);
         },
         async removeFunnel(funnelId) {
-            // Les marches partent en CASCADE. Aucune mesure n'est touchée : un
-            // entonnoir ne collecte rien, il relit.
+            // Les marches partent en CASCADE. Aucune mesure n'est touchée : un entonnoir
+            // ne collecte rien, il relit.
             const res = await q.execute('DELETE FROM audience_funnels WHERE id = ?', [funnelId]);
             return res.affectedRows > 0;
         },
@@ -701,9 +639,8 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
                   WHERE site_id = ? AND label_ref IN (${placeholders})`,
                 [siteId, ...refs.map((ref) => ref.labelRef)]
             );
-            // Indexé sur `kind:ref` et non sur le seul condensé : le même texte
-            // peut parfaitement être à la fois un chemin et un nom d'événement,
-            // et ce sont alors deux libellés distincts.
+            // Indexé sur `kind:ref` et non sur le seul condensé : le même texte peut être
+            // à la fois un chemin et un nom d'événement, soit deux libellés distincts.
             const byKey = new Map<string, number>();
             for (const row of rows) byKey.set(`${row.kind}:${row.label_ref}`, Number(row.id));
             return byKey;
@@ -711,19 +648,15 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
         async retention(siteId, steps, from, to) {
             if (steps.length === 0) return [];
 
-            // Une marche sans libellé n'a jamais été atteinte : elle vaut zéro,
-            // et tout ce qui la suit aussi. On coupe ici plutôt que de laisser
-            // la requête le découvrir, ce qui revient au même en moins clair.
+            // Une marche sans libellé n'a jamais été atteinte : elle vaut zéro, et tout ce
+            // qui la suit aussi.
             const firstMissing = steps.findIndex((step) => step.labelId === null);
             const measurable = firstMissing === -1 ? steps : steps.slice(0, firstMissing);
             if (measurable.length === 0) return steps.map(() => 0);
 
-            // ⚠️ Les seules parties **interpolées** sont un indice de colonne
-            // (`t1`, `t2`…) et le nom d'une colonne d'événement, tirés d'un
-            // vocabulaire fermé et bornés par `AUDIENCE_FUNNEL_MAX_STEPS`. Les
-            // identifiants de libellés, eux, sont liés. C'est la discipline de
-            // `DIMENSION_SOURCE` : on ne met dans le texte de la requête que ce
-            // que le serveur a lui-même écrit.
+            // Les seules parties interpolées sont un indice de colonne (`t1`, `t2`…) et un
+            // nom de colonne d'événement, tirés d'un vocabulaire fermé et bornés par
+            // `AUDIENCE_FUNNEL_MAX_STEPS` ; les identifiants de libellés sont liés.
             const n = Math.min(measurable.length, AUDIENCE_FUNNEL_MAX_STEPS);
             const params: unknown[] = [];
 
@@ -731,24 +664,18 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
                 const column = step.kind === 'path' ? 'path_id' : 'name_id';
                 const eventKind = step.kind === 'path' ? 0 : 1;
                 params.push(eventKind, step.labelId);
-                // La **première** occurrence de chaque marche : c'est la règle,
-                // et elle doit être dite. Un visiteur qui revient en arrière puis
-                // repart peut donc ne pas être compté comme converti — le prix
-                // d'une définition déterministe qui tient en une requête.
+                // La première occurrence de chaque marche : un visiteur qui revient en
+                // arrière puis repart peut donc ne pas être compté comme converti.
                 return `MIN(CASE WHEN e.kind = ? AND e.${column} = ? THEN e.ts END) AS t${i + 1}`;
             });
 
-            // La condition de la marche i : toutes les précédentes présentes, et
-            // dans l'ordre. Construite par accumulation, exactement comme on la
-            // lit — « arrivé jusqu'ici » veut dire « et pas autrement ».
+            // La condition de la marche i : toutes les précédentes présentes, et dans
+            // l'ordre.
             //
-            // ⚠️ **`>=` et non `>`, et ce n'est pas une facilité.** Nos
-            // horodatages sont à la seconde, et le script groupe ses envois sur
-            // une demi-seconde : un même clic produit couramment une vue et un
-            // événement **dans la même seconde**. Avec `>`, tout entonnoir dont
-            // deux marches consécutives naissent du même geste — « ouvrir
-            // /devis » puis « devis-ouvert » — compterait zéro conversion, sans
-            // rien pour l'expliquer.
+            // `>=` et non `>` : les horodatages sont à la seconde et le script groupe ses
+            // envois, donc un même clic produit couramment une vue et un événement dans la
+            // même seconde. Avec `>`, deux marches nées du même geste (« ouvrir /devis »
+            // puis « devis-ouvert ») compteraient zéro conversion.
             const conditions: string[] = [];
             let chain = 't1 IS NOT NULL';
             conditions.push(chain);
@@ -909,20 +836,13 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
             return res.affectedRows;
         },
         async pruneOrphanLabels(siteId) {
-            // Dix colonnes peuvent citer un libellé. La forme naturelle —
-            // `NOT EXISTS (… WHERE e.path_id = l.id OR …)` — est un piège : la
-            // sous-requête est **corrélée**, donc rejouée pour chaque libellé,
-            // et sur des colonnes qu'aucun index ne couvre. Un site à trois
-            // cents libellés y parcourrait trois cents fois sa table de faits.
+            // Dix colonnes peuvent citer un libellé. La forme naturelle,
+            // `NOT EXISTS (… WHERE e.path_id = l.id OR …)`, est un piège : la sous-requête
+            // est corrélée, donc rejouée pour chaque libellé, sur des colonnes qu'aucun
+            // index ne couvre. La forme ensembliste ci-dessous est matérialisée une fois.
             //
-            // La forme ensembliste ci-dessous est matérialisée **une fois** :
-            // chaque sous-requête est bornée par `site_id`, et les deux plus
-            // grosses sont servies entièrement par `idx_audience_events_window`
-            // (qui porte `path_id` et `name_id` justement pour ça).
-            //
-            // ⚠️ `IS NOT NULL` dans chaque sous-requête n'est pas décoratif :
-            // `NOT IN` face à un seul NULL ne rend **jamais** vrai, et le ménage
-            // ne supprimerait alors rien, en silence et pour toujours.
+            // `IS NOT NULL` n'est pas décoratif : `NOT IN` face à un seul NULL ne rend
+            // jamais vrai, et le ménage ne supprimerait plus rien, en silence.
             const res = await q.execute(
                 `DELETE l FROM audience_labels l
                   WHERE l.site_id = ?

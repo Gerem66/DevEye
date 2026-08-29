@@ -27,30 +27,15 @@ import { serverEntry } from './index';
 import type { NotesRepo } from './repo';
 
 /**
- * Les handlers du module, sur le harnais du SDK.
- *
- * Ce qui mérite d'être tenu, c'est le **masque** et le **verrou** (une note
- * privée listée session scellée ne livre ni titre ni corps, et ses chemins
- * d'écriture répondent `locked`), la **règle des espaces** (pas de note privée
- * hors de l'espace personnel), le **deux temps** de la suppression (archive
- * d'abord, `conflict` sinon), le **rangement** des dossiers (une suppression
- * range les orphelines en fin de « Sans dossier »), le **partage
- * inter-espaces** (une projection se liste avec `foreign: true` et sans
- * dossier, se réécrit chez elle sous le codec de son domicile, et ne se
- * classe, ne se privatise ni ne se détruit jamais depuis la fenêtre qui la
- * voit ; une note qui devient privée est oubliée de ses fenêtres) et les
- * **restrictions par
- * élément** (une note masquée pour ce rôle disparaît de la liste). Rien de
- * tout cela ne lève ailleurs : un masque qui fuit ne casse aucun autre test,
- * il montre juste un titre de trop.
+ * Les handlers du module, sur le harnais du SDK : le masque et le verrou, la
+ * règle des espaces, le deux temps de la suppression, le rangement des
+ * dossiers, le partage inter-espaces et les restrictions par élément.
  *
  * Le verrou se teste par `unlocked: false` : le harnais répond alors non à
- * `secrecy.isUnlocked()` (la garde `assertPrivateUnlocked` des écritures) ET
- * scelle son cipher `'private'` comme le vrai (`decrypt` lève `locked`,
- * `tryDecrypt` rend `null`), parce que c'est le cipher, et non une garde, qui
- * refuse `notes.get` sur une note privée scellée (« picking the cipher IS the
- * access control »). L'étage ouvert reste l'identité : les dossiers et les
- * notes ordinaires se lisent toujours.
+ * `secrecy.isUnlocked()` ET scelle son cipher `'private'` (`decrypt` lève
+ * `locked`, `tryDecrypt` rend `null`), parce que c'est le cipher, et non une
+ * garde, qui refuse `notes.get` sur une note privée scellée. L'étage ouvert
+ * reste l'identité.
  */
 
 /** Le handler d'un contrat, typé par ce contrat (le registre est hétérogène). */
@@ -71,17 +56,12 @@ interface FakeRepo extends NotesRepo {
 const now = () => Math.floor(Date.now() / 1000);
 
 /**
- * Un dépôt en mémoire, même contrat que le vrai. Les tableaux sont mutés en
- * place, jamais réassignés : les tests lisent `repo.notes` après coup. Il
- * reproduit ce que la base fait toute seule : le `ON DELETE SET NULL` de la
- * clé étrangère des dossiers, et le rang « en fin de dossier » d'une note
- * créée ou restaurée.
- *
- * `projections` reproduit la table `item_shares` : `noteId → espaces où elle
- * est projetée`. C'est ce qui donne à `listVisible` / `findVisible` leur
- * seconde branche, et ce que le harnais (`shares`) doit dire en écho pour que
- * `ctx.sharing.scope()` connaisse le domicile. Lu à l'appel : un test qui
- * mime le ménage de l'app (`items.forget`) le mute après coup.
+ * Un dépôt en mémoire, même contrat que le vrai ; les tableaux sont mutés en
+ * place, les tests lisent `repo.notes` après coup. Il reproduit ce que la base
+ * fait seule : le `ON DELETE SET NULL` des dossiers, le rang en fin de dossier
+ * d'une note créée ou restaurée. `projections` reproduit `item_shares`
+ * (`noteId → espaces où elle est projetée`), lu à l'appel pour qu'un test
+ * puisse le muter après coup ; le harnais (`shares`) doit le dire en écho.
  */
 function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
     let noteSeq = 0;
@@ -211,7 +191,6 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
     };
 }
 
-/** Le refus attendu d'une session scellée : `locked`, et rien d'autre. */
 function isLocked(e: unknown): boolean {
     return e instanceof FeatureError && e.code === 'locked';
 }
@@ -221,9 +200,8 @@ function isCode(code: FeatureError['code']): (e: unknown) => boolean {
 }
 
 /**
- * Espionne `scope.cipherFor` : les identifiants pour lesquels le codec a été
- * demandé. Le harnais rend l'identité quel que soit l'espace, donc seul
- * l'appel prouve que le codec est choisi ligne par ligne.
+ * Espionne `scope.cipherFor` : le harnais rend l'identité quel que soit
+ * l'espace, donc seul l'appel prouve que le codec est choisi ligne par ligne.
  */
 function spyCipherFor(ctx: TestContext<NotesRepo>): number[] {
     const asked: number[] = [];

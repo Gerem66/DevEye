@@ -35,27 +35,11 @@ import {
 } from './transactions';
 
 /**
- * Les finances de l'espace: comptes, opérations, budgets, échéances.
- *
- * Sept fichiers, sept natures. `../_shared.ts` porte le socle (chiffre,
- * calendrier, cohérence d'une saisie, rattrapage des échéances); `config.ts`
- * les réglages et la carte de l'accueil; `accounts.ts`, `categories.ts`,
- * `transactions.ts`, `budgets.ts` et `recurring.ts` chacun leur objet;
- * `overview.ts` ne fait que lire, en composant les agrégats des autres.
- *
- * ⚠️ Préfixe unique `finance.` et verbes en camelCase, comme `git`, `database`
- * et `audience`: le filet `MUTATION_VERB` de `_topics.ts` ne voit **aucune** de
- * ces commandes, donc les `mutates` se relisent à la main. Vingt écritures le
- * déclarent, et les huit lectures (`config`, `summary`, `accountList`,
- * `categoryList`, `transactionList`, `budgetList`, `recurringList`, `overview`)
- * n'en déclarent aucune, ce qui est juste.
- *
- * ⚠️ Les six lectures qui montrent des montants appellent `postDueRecurring` en
- * tête. C'est ce qui remplace la tâche de fond des échéances automatiques (voir
- * `_shared.ts`). En ajoutant une lecture qui montre un solde, un journal ou un
- * budget, il faut l'appeler aussi, sans quoi elle montrera un état d'avant les
- * échéances du jour. `config` et `categoryList` s'en passent: aucune des deux ne
- * porte de montant.
+ * Préfixe `finance.` et verbes en camelCase : le filet `MUTATION_VERB` de
+ * `_topics.ts` ne voit aucune de ces commandes, donc les `mutates` se relisent
+ * à la main. Toute lecture qui montre un montant appelle `postDueRecurring`
+ * en tête (voir `_shared.ts`), sinon elle montrerait un état d'avant les
+ * échéances du jour.
  */
 export const financeHandlers: ReadonlyArray<SdkFeatureDefinition<FinanceRepo>> = [
     financeConfigFeature,

@@ -50,11 +50,9 @@ function themeColors() {
 }
 
 /**
- * Interactive remote terminal for one device, backed by an agent-side PTY. Opens a
- * session on mount, bridges xterm.js ⇄ the device over the WS push channel
- * (`device.termOutput` / `device.termExit`), keeps the PTY sized to the viewport,
- * and closes the session on unmount. Keystrokes and output are base64 so any raw
- * bytes survive the JSON transport.
+ * Interactive remote terminal for one device, backed by an agent-side PTY:
+ * xterm.js bridged over the WS push channel, PTY sized to the viewport, session
+ * closed on unmount. Keystrokes and output are base64 so raw bytes survive JSON.
  */
 export function TerminalPanel({ deviceId, onClose }: { deviceId: string; onClose?: () => void }) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -62,8 +60,7 @@ export function TerminalPanel({ deviceId, onClose }: { deviceId: string; onClose
     // Bumped to force a full remount of the effect (a fresh session) on "restart".
     const [generation, setGeneration] = useState(0);
     const relaunch = () => setGeneration((g) => g + 1);
-    // Kept in a ref so the session effect never re-runs just because the parent
-    // re-rendered (closing the dialog mid-session would tear the shell down twice).
+    // In a ref so the session effect never re-runs on a parent re-render.
     const onCloseRef = useRef(onClose);
     onCloseRef.current = onClose;
 
@@ -78,10 +75,8 @@ export function TerminalPanel({ deviceId, onClose }: { deviceId: string; onClose
 
         const term = new Terminal({
             cursorBlink: true,
-            // Lead with our bundled Powerline-patched Meslo (see terminalFont.css) so
-            // oh-my-zsh / powerline / p10k prompt separators render instead of tofu
-            // boxes, for every viewer. Then any locally-installed Nerd Font (for full
-            // icon coverage), then plain monospace.
+            // The bundled Powerline-patched Meslo first (see terminalFont.css), so
+            // prompt separators render for every viewer; then any local Nerd Font.
             fontFamily:
                 "'MesloLGS', 'MesloLGS NF', 'FiraCode Nerd Font', 'Hack Nerd Font', 'JetBrainsMono Nerd Font', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
             fontSize: 13,
@@ -106,9 +101,8 @@ export function TerminalPanel({ deviceId, onClose }: { deviceId: string; onClose
             if (disposed) return;
             safeFit();
             term.focus();
-            // xterm measures glyph-cell size eagerly; if the bundled font isn't loaded
-            // yet the first paint uses fallback metrics and looks misaligned. Re-fit and
-            // repaint once 'MesloLGS' is ready.
+            // xterm measures glyph-cell size eagerly: re-fit and repaint once the
+            // bundled font is loaded, or the first paint looks misaligned.
             void document.fonts.load("13px 'MesloLGS'").then(() => {
                 if (disposed) return;
                 safeFit();
@@ -150,8 +144,7 @@ export function TerminalPanel({ deviceId, onClose }: { deviceId: string; onClose
         });
         const offExit = onServerEvent(DEVICE_TERM_EXIT_EVENT, deviceTermExitPushSchema, (d) => {
             if (d.deviceId !== deviceId || d.sessionId !== sessionId) return;
-            // Default: end of shell → close the popup. Otherwise keep it open
-            // with the relaunch/close banner.
+            // End of shell closes the popup, or keeps it open with the banner.
             if (getTerminalPrefs().closeOnExit) onCloseRef.current?.();
             else setExited({ code: d.code ?? null, error: d.error });
         });
@@ -170,10 +163,8 @@ export function TerminalPanel({ deviceId, onClose }: { deviceId: string; onClose
 
     return (
         <div className={styles.terminalWrap}>
-            {/* Les préférences (compte, fin de session) vivent dans la coquille
-                de réglages, à l'échelle de la feature : le bouton commun, et à
-                côté de quoi appliquer un nouveau compte à une session déjà
-                ouverte. */}
+            {/* Les préférences vivent dans la coquille de réglages, à l'échelle
+                de la feature ; relancer applique un nouveau compte. */}
             <div className={styles.terminalBar}>
                 <Button variant='ghost' icon='refresh' onClick={relaunch} title='Relancer la session'>
                     Relancer la session

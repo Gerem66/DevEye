@@ -6,24 +6,15 @@ import TextInput from '@/Components/TextInput';
 import { useAuth } from '@/auth/AuthProvider';
 import './style.css';
 
-/**
- * Jeton d'inscription présent dans l'URL, ou `null`.
- *
- * Même mécanique que les invitations d'espace : lu une fois au chargement, puis
- * effacé de la barre d'adresse une fois le compte créé.
- */
+/** Jeton d'inscription présent dans l'URL, ou `null` : lu une fois au
+ *  chargement, effacé de la barre d'adresse une fois le compte créé. */
 export function readRegisterToken(): string | null {
     const m = /^\/register\/([A-Za-z0-9_-]+)\/?$/.exec(window.location.pathname);
     return m ? m[1] : null;
 }
 
-/**
- * Durée de l'effondrement de la carte en barre, puis du remplissage.
- *
- * Doit rester égale à la somme des timings de `style.css` (0,3 s de délai + 1 s
- * de balayage) : c'est ce qui fait que la bascule vers l'accueil tombe pile à la
- * fin de l'animation, sans la couper ni la faire attendre.
- */
+/** Effondrement de la carte puis remplissage : doit rester égal à la somme des
+ *  timings de `style.css` (0,3 s de délai + 1 s de balayage). */
 const PROGRESS_MS = 1300;
 
 const MIN_PASSWORD = 8;
@@ -47,13 +38,8 @@ function humanize(e: unknown): string {
 }
 
 /**
- * Création d'un compte à partir d'une invitation.
- *
- * L'inscription libre n'existe pas : cet écran n'est atteignable que par un lien
- * émis depuis la page Utilisateurs. Il reprend volontairement la scène du login
- * — même fond, même carte, même effondrement en barre de progression — parce que
- * c'est le même moment du parcours : on entre dans DevEye. Un écran d'aspect
- * différent donnerait l'impression d'avoir atterri ailleurs.
+ * Création d'un compte à partir d'une invitation ; l'inscription libre n'existe
+ * pas. Reprend la scène du login : c'est le même moment du parcours.
  */
 export default function RegisterPage({ token, onDone }: { token: string; onDone: () => void }) {
     const { refresh } = useAuth();
@@ -101,9 +87,8 @@ export default function RegisterPage({ token, onDone }: { token: string; onDone:
         void (async () => {
             try {
                 await post('/api/auth/register', parsed.data, loginResponseSchema);
-                // Le serveur a ouvert la session. On laisse la barre finir sa
-                // course avant de basculer : couper l'animation en plein vol
-                // donnerait un à-coup au moment le plus visible du parcours.
+                // La session est ouverte ; on laisse la barre finir sa course
+                // avant de basculer.
                 await refresh();
                 setTimeout(onDone, PROGRESS_MS);
             } catch (err) {

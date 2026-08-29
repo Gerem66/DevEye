@@ -61,7 +61,7 @@ export function MonthPicker({ dataDays, selectedDay, onPick, onClose }: MonthPic
     const prevM = view.month === 0 ? { year: view.year - 1, month: 11 } : { year: view.year, month: view.month - 1 };
     const nextM = view.month === 11 ? { year: view.year + 1, month: 0 } : { year: view.year, month: view.month + 1 };
     const prevDisabled = !monthsWithData.has(monthKey(prevM.year, prevM.month));
-    // No navigating into the future; forward only while it stays ≤ current month.
+    // No navigating into the future.
     const nextDisabled =
         view.year > today.getFullYear() || (view.year === today.getFullYear() && view.month >= today.getMonth());
 

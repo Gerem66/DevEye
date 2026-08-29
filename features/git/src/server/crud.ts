@@ -33,15 +33,13 @@ import {
 /**
  * Les dépôts de l'espace : ajout, réglages, suppression, synchronisation.
  *
- * Rien ici n'appelle GitHub directement — même `repoSyncNow` ne fait que
- * réveiller le service de fond. C'est ce qui garde une commande WS courte et
- * prévisible : aucune ne dépend de la latence d'une API tierce. Une seule
- * exception, `repoCandidates`, qui interroge le fournisseur au moment de la
- * demande : c'est une liste qu'on regarde une fois, au moment d'ajouter.
+ * Rien ici n'appelle GitHub directement, même `repoSyncNow` ne fait que réveiller
+ * le service de fond : aucune commande ne dépend de la latence d'une API tierce.
+ * Seule exception, `repoCandidates`, une liste qu'on regarde au moment d'ajouter.
  *
- * ⚠️ Préfixe unique `git.` avec des noms en camelCase : le contrôle de
- * démarrage de `_topics.ts` cherche un verbe **juste après le point** et n'en
- * verra donc aucun. `mutates` est à relire à la main sur chaque écriture.
+ * Le filet de démarrage ne reconnaît aucune de ces commandes : il cherche un verbe
+ * juste après le point, et les noms sont en camelCase. `mutates` se relit donc à
+ * la main sur chaque écriture.
  */
 
 /** L'état « rien en cours », ce que rend `syncStatus` hors service. */
@@ -105,9 +103,9 @@ export const gitCrudFeatures = [
         access: { level: 'write' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
-            // Le jeton existe-t-il, et dans **cet** espace ? Sans cette garde on
-            // relierait un dépôt au jeton d'un autre espace, dont l'existence
-            // même n'a pas à fuiter.
+            // Le jeton existe-t-il, et dans cet espace ? Sans cette garde on
+            // relierait un dépôt au jeton d'un autre espace, dont l'existence même
+            // n'a pas à fuiter.
             if (input.credentialId !== null) {
                 const credential = await ctx.repo.findCredential(input.credentialId, ctx.workspaceId);
                 if (!credential) throw new FeatureError('not_found', 'Jeton introuvable');
@@ -117,11 +115,10 @@ export const gitCrudFeatures = [
             const repo = input.repo.trim();
             const ref = slugRef(owner, repo);
 
-            // **Idempotence.** Le même dépôt déjà présent rend sa ligne, avec le
-            // jeton mis à jour — jamais un doublon. C'est ce qui permet à un projet
-            // de « créer » un dépôt sans savoir s'il existe déjà ailleurs dans
-            // l'espace, et ce qui garantit qu'un dépôt n'est jamais synchronisé deux
-            // fois sous deux quotas.
+            // Idempotence : le même dépôt déjà présent rend sa ligne avec le jeton
+            // mis à jour, jamais un doublon. Un projet peut donc « créer » un dépôt
+            // sans savoir s'il existe ailleurs dans l'espace, et aucun dépôt n'est
+            // synchronisé deux fois sous deux quotas.
             const existing = await ctx.repo.findRepoBySlug(ctx.workspaceId, ref);
             if (existing) {
                 await ctx.repo.updateRepo(existing.id, ctx.workspaceId, {
@@ -145,23 +142,20 @@ export const gitCrudFeatures = [
                 description: 'Dépôt ajouté à l’espace',
                 metadata: { repoId: row.id, provider: input.provider }
             });
-            // Première lecture tout de suite : attendre deux minutes pour voir
-            // apparaître quoi que ce soit donnerait l'impression que ça n'a pas
-            // fonctionné.
+            // Première lecture tout de suite : attendre le tour de l'ordonnanceur
+            // donnerait l'impression que l'ajout n'a pas fonctionné.
             requestSync(row.id);
             return { repo: await reloadRepo(ctx, row.id) };
         }
     }),
     /**
-     * Les dépôts d'un propriétaire, chez le fournisseur.
+     * Les dépôts d'un propriétaire, chez le fournisseur. Elle n'écrit rien mais reste
+     * sous le droit d'écriture : elle consomme le quota d'un jeton de l'espace et
+     * sonde des organisations.
      *
-     * Pas de `mutates` — elle n'écrit rien — mais sous le droit d'**écriture** : elle
-     * consomme le quota d'un jeton de l'espace et sonde des organisations, ce qui
-     * n'a de sens que pour qui s'apprête à ajouter un dépôt.
-     *
-     * Les dépôts déjà connus de l'espace sont marqués `known` plutôt qu'écartés :
-     * `git.repoAdd` étant idempotente, les rechoisir est sans danger, et les faire
-     * disparaître de la liste ferait croire qu'ils n'existent pas chez GitHub.
+     * Les dépôts déjà connus sont marqués `known` plutôt qu'écartés : `git.repoAdd`
+     * étant idempotente, les rechoisir est sans danger, et les masquer ferait croire
+     * qu'ils n'existent pas chez GitHub.
      */
     defineSdkFeature({
         ...gitRepoCandidates,
@@ -169,10 +163,9 @@ export const gitCrudFeatures = [
         handler: async (ctx: Ctx, input) => {
             const owner = input.owner.trim();
 
-            // Sans jeton, la découverte reste possible : GitHub rend le public à
-            // qui le demande. C'est ce qui permet de chercher un dépôt **avant**
-            // d'avoir enregistré le moindre jeton — le moment précis où l'on en a
-            // besoin.
+            // Sans jeton, la découverte reste possible, GitHub rendant le public à
+            // qui le demande : on peut chercher un dépôt avant d'avoir enregistré
+            // le moindre jeton.
             let token: string | null = null;
             if (input.credentialId !== null) {
                 const credential = await ctx.repo.findCredential(input.credentialId, ctx.workspaceId);
@@ -196,17 +189,12 @@ export const gitCrudFeatures = [
                         pushedAt: r.pushedAt,
                         known: knownSlugs.has(slugRef(owner, r.name))
                     }))
-                    // Par ordre alphabétique, et non par date de dernier push.
-                    //
-                    // Les deux tris ne répondent pas à la même question, et il faut
-                    // les deux : `sort=pushed` côté fournisseur décide **quels**
-                    // dépôts on reçoit quand il y en a plus de cent — les plus
-                    // vivants d'abord. Celui-ci décide **comment on les lit** dans
-                    // un sélecteur, où l'on cherche un nom qu'on connaît déjà.
-                    //
-                    // `localeCompare` et non `<` : les accents et la casse ne
+                    // Les deux tris se complètent : `sort=pushed` côté fournisseur
+                    // décide quels dépôts on reçoit au-delà de cent, celui-ci
+                    // comment on les lit dans un sélecteur, où l'on cherche un nom
+                    // connu. `localeCompare` et non `<` : les accents et la casse ne
                     // doivent pas éparpiller la liste, et `numeric` range `api-2`
-                    // avant `api-10` au lieu de l'inverse.
+                    // avant `api-10`.
                     .sort((a, b) => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base', numeric: true }))
             };
         }
@@ -238,24 +226,21 @@ export const gitCrudFeatures = [
     defineSdkFeature({
         ...gitRepoRemove,
         access: { level: 'write' },
-        // Un seul sujet, celui du module : l'onglet Git d'un projet qui montre
-        // un dépôt suit déjà `git.repo` / `git.list`. Ce que la suppression ne
-        // ravive plus, ce sont les compteurs d'onglets d'un projet (le sujet
-        // `projects`, qu'un module ne peut pas nommer) : ils se remettent à
-        // jour à leur prochaine lecture.
+        // Un seul sujet, celui du module : les compteurs d'onglets d'un projet
+        // dépendent du sujet `projects`, qu'un module ne peut pas nommer, et se
+        // remettent à jour à leur prochaine lecture.
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             // Domicile seulement : une fenêtre ne supprime pas la donnée d'un
             // autre espace.
             await loadHomeRepo(ctx, input.repoId);
-            // Le cache et les liaisons partent en CASCADE. Les projets, eux, ne
-            // perdent qu'un pointeur — c'est tout l'intérêt d'avoir séparé les deux.
+            // Le cache et les liaisons partent en CASCADE ; les projets, eux, ne
+            // perdent qu'un pointeur.
             const ok = await ctx.repo.deleteRepo(input.repoId, ctx.workspaceId);
             if (!ok) throw new FeatureError('not_found', 'Dépôt introuvable');
             // Projections et restrictions ne tiennent à aucune clé étrangère : sans
             // ce ménage, elles s'appliqueraient au prochain dépôt à hériter de
-            // l'identifiant. `ctx.items.forget` fait le ménage (l'ex
-            // `itemSharing.forgetItem`, plus la route de notification).
+            // l'identifiant.
             await ctx.items.forget(input.repoId);
             ctx.audit({
                 action: 'git.repoRemove',
@@ -266,16 +251,9 @@ export const gitCrudFeatures = [
         }
     }),
     /**
-     * Range les dépôts de l'espace.
-     *
-     * `mutates` sans audit : c'est une disposition, pas une configuration — elle ne
-     * change ni accès, ni cache, ni synchronisation. Les autres membres doivent en
-     * revanche la voir, l'ordre étant une propriété de l'espace et non du navigateur
-     * qui l'a posé.
-     *
-     * ⚠️ Le filet de démarrage ne voit pas cette commande : `MUTATION_VERB` cherche
-     * un verbe juste après le point, et « repoReorder » n'en est pas un. Le
-     * `mutates` ci-dessous se relit à la main, comme tout le module.
+     * Range les dépôts de l'espace. `mutates` sans audit : c'est une disposition, qui
+     * ne change ni accès, ni cache, ni synchronisation, mais que les autres membres
+     * doivent voir, l'ordre étant une propriété de l'espace.
      */
     defineSdkFeature({
         ...gitRepoReorder,
@@ -300,11 +278,9 @@ export const gitCrudFeatures = [
         }
     }),
     /**
-     * Repart de zéro : le cache est jeté, tout sera relu.
-     *
-     * `mutates` — contrairement à `repoSyncNow`, qui ne fait que réveiller
-     * l'ordonnanceur, celle-ci **écrit** : elle supprime des lignes, et l'écran des
-     * autres membres doit s'en apercevoir.
+     * Repart de zéro : le cache est jeté, tout sera relu. `mutates`, contrairement à
+     * `repoSyncNow` : celle-ci supprime des lignes, et l'écran des autres membres
+     * doit s'en apercevoir.
      */
     defineSdkFeature({
         ...gitRepoResync,
@@ -325,13 +301,9 @@ export const gitCrudFeatures = [
         }
     }),
     /**
-     * Où en est la synchronisation de ce dépôt.
-     *
-     * Pas de `mutates` — elle n'écrit rien — et volontairement **très bon marché** :
-     * elle ne lit qu'une table en mémoire du service. C'est ce qui permet à
-     * l'interface de la sonder pendant qu'une synchronisation tourne, plutôt que de
-     * diffuser une invalidation `live` à chaque étape, laquelle ferait re-solliciter
-     * tout l'écran six fois d'affilée chez tous les membres de l'espace.
+     * Où en est la synchronisation de ce dépôt. Volontairement très bon marché, elle
+     * ne lit qu'une table en mémoire du service : l'interface peut la sonder au lieu
+     * de diffuser une invalidation `live` à chaque étape, chez tous les membres.
      */
     defineSdkFeature({
         ...gitRepoSyncStatus,
@@ -343,12 +315,9 @@ export const gitCrudFeatures = [
         }
     }),
     /**
-     * Toutes les synchronisations en cours de l'espace, d'un coup.
-     *
-     * Ni `mutates` ni requête : elle ne lit qu'une table en mémoire du service. À ce
-     * prix-là, la liste des dépôts peut la sonder à la seconde pour animer une bande
-     * de progression par carte — c'est le même arbitrage que la barre d'une synchro
-     * mail, et la même raison (voir LIVE.md).
+     * Toutes les synchronisations en cours de l'espace, d'un coup. Aucune requête,
+     * une table en mémoire : à ce prix-là, la liste des dépôts peut la sonder à la
+     * seconde pour animer une bande de progression par carte.
      */
     defineSdkFeature({
         ...gitSyncStatuses,

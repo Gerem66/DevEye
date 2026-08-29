@@ -2,9 +2,9 @@ import type { PresenceEvent, PresenceRow } from '@deveye/types';
 import type { SdkQueryable } from '@deveye/types/sdk/server';
 
 /**
- * La table `device_presence`, en lecture et en purge : les transitions
- * en ligne / hors ligne que la frise de disponibilité rejoue. L'écriture d'une
- * transition est le fait de la socket agent (`src/agent/ws.ts`), hors session.
+ * La table `device_presence`, en lecture et en purge : les transitions en
+ * ligne / hors ligne de la frise. L'écriture est le fait de la socket agent
+ * (`src/agent/ws.ts`), hors session.
  */
 export interface PresenceRepo {
     /** Transitions within [from, to] for the device, ascending by ts. */

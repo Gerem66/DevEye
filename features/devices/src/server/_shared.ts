@@ -22,15 +22,9 @@ export const ADMIN = { admin: true } as const;
 
 /**
  * De quel appareil parle-t-on, et m'est-il accessible ? Puis sa ligne entière.
- *
- * La garde est celle de l'app (`ctx.deveye.devices.authorize`, la fonction
- * `authorizeDevice` de `src/agent/authorize.ts`) : la ligne doit exister et
- * être partagée avec CET espace, l'administrateur global passant outre. Le
- * module ne la refait pas ; il relit ensuite la ligne par son dépôt, parce
- * que la façade ne révèle qu'un résumé (`SdkDevice`) et que la flotte a
- * besoin de tout (empreinte, cible de build, configuration, comptabilité de
- * suppression). Le *niveau* exigé (`read`, `write`, `admin`) est déclaré par
- * chaque commande dans son `access`, appliqué par le dispatcheur avant.
+ * La garde est celle de l'app (`ctx.deveye.devices.authorize` : la ligne existe
+ * et est partagée avec CET espace, l'administrateur passant outre) ; la ligne
+ * se relit par le dépôt parce que la façade ne révèle qu'un résumé.
  */
 export async function loadDevice(ctx: DevicesContext, deviceId: string): Promise<DeviceRow> {
     await ctx.deveye.devices.authorize(deviceId);
@@ -48,10 +42,9 @@ export interface AgentUpdateInfo {
 }
 
 /**
- * Resolve a device's self-update status against the served manifest. `available`
- * requires a known build target whose binary is both present *and signed* (no
- * signature ⇒ never self-updatable) and a served version that is **strictly newer**
- * than what's running, so a server lagging a running agent never offers a downgrade.
+ * Resolve a device's self-update status against the served manifest.
+ * `available` requires a signed binary for the device's build target and a
+ * served version strictly newer than what's running (never a downgrade).
  */
 export function computeAgentUpdate(row: DeviceRow, manifest: AgentManifest | null): AgentUpdateInfo {
     if (!manifest) return { latest: null, available: false };
@@ -74,12 +67,9 @@ export function parseDeviceReport(reportJson: string | null): DeviceReport | nul
 }
 
 /**
- * Map a persisted device row to the client-facing domain shape.
- *
- * Le même passage de ligne à `Device` que `src/agent/mappers.ts` fait pour
- * l'infrastructure (l'enrôlement, les commandes de transport `agent.*` qui
- * rendent l'appareil) : deux lecteurs d'un même schéma, tenus d'accord par
- * `deviceSchema`, que le dispatcheur valide en sortie.
+ * Map a persisted device row to the client-facing domain shape. Le même passage
+ * que `src/agent/mappers.ts` fait pour l'infrastructure : deux lecteurs d'un
+ * même schéma, tenus d'accord par `deviceSchema`.
  */
 export function rowToDevice(row: DeviceRow, online: boolean, update: AgentUpdateInfo, workspaceIds: number[]): Device {
     return {

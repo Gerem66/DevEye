@@ -1,36 +1,22 @@
 import { createHash } from 'crypto';
 
 /**
- * Le script que les pages suivies embarquent.
+ * Le script que les pages suivies embarquent : une vue à l'ouverture puis une
+ * par changement de route, `window.deveye.event` / `identify`, et un
+ * regroupement des envois vidé par `sendBeacon` quand l'onglet part.
  *
- * Servi tel quel, sans minification et avec ses commentaires : il pèse environ
- * trois kilo-octets, un de moins une fois compressé, et c'est le seul morceau
- * de DevEye que quelqu'un d'autre lira un jour dans son propre navigateur. Le
- * rendre illisible pour gagner un kilo-octet serait un mauvais échange — un
- * script de mesure qu'on ne peut pas relire est un script qu'on n'installe pas.
+ * Servi tel quel, sans minification et avec ses commentaires : c'est le seul
+ * morceau de DevEye que quelqu'un d'autre lira dans son propre navigateur, et
+ * un script de mesure qu'on ne peut pas relire est un script qu'on n'installe
+ * pas. Une chaîne dans un fichier TypeScript, et non un `.js` à côté : rien à
+ * copier au build, rien à retrouver selon le répertoire de travail, et l'ETag
+ * se calcule sur ce qui sera réellement servi.
  *
- * Une chaîne dans un fichier TypeScript, et non un fichier `.js` à côté : il
- * n'y a alors rien à copier au build, rien à retrouver à l'exécution selon le
- * répertoire de travail, et l'empreinte de l'ETag se calcule sur ce qui sera
- * réellement servi.
- *
- * ## Ce qu'il fait
- *
- * - une vue à l'ouverture, puis une par changement de route (SPA comprises) ;
- * - `window.deveye.event(nom)` et `window.deveye.identify(id)` ;
- * - un regroupement des envois, vidé par `sendBeacon` quand l'onglet part.
- *
- * ## Ce qu'il ne fait pas, sauf demande explicite
- *
- * Aucune empreinte de navigateur, jamais. Par défaut il n'écrit **rien** chez
- * le visiteur : celui-ci est reconstitué côté serveur par un condensé tournant,
- * donc il n'y a rien à faire accepter.
- *
- * `data-visitor="persistent"` change cela, et seulement cela : le script range
- * alors un identifiant tiré au sort dans `localStorage` pour que la même
- * personne soit reconnue d'une visite à l'autre. Il faut aussi que le site soit
- * réglé en mode persistant côté DevEye, faute de quoi le serveur ignore
- * l'identifiant. Ce mode relève du consentement, comme un cookie.
+ * Aucune empreinte de navigateur, jamais, et par défaut rien n'est écrit chez
+ * le visiteur : il est reconstitué côté serveur par un condensé tournant.
+ * `data-visitor="persistent"` seul change cela, en rangeant un identifiant tiré
+ * au sort dans `localStorage` ; il faut aussi que le site soit réglé en mode
+ * persistant, et ce mode relève du consentement, comme un cookie.
  */
 export const TRACKER_SCRIPT = `(function () {
     'use strict';
@@ -210,10 +196,8 @@ export const TRACKER_SCRIPT = `(function () {
 `;
 
 /**
- * L'empreinte du script, pour l'ETag.
- *
- * Calculée une fois au chargement du module : le contenu est une constante, la
- * recalculer à chaque requête serait payer un sha256 pour toujours obtenir la
- * même réponse.
+ * L'empreinte du script, pour l'ETag. Calculée une fois au chargement : le
+ * contenu est une constante, la recalculer à chaque requête paierait un sha256
+ * pour toujours obtenir la même réponse.
  */
 export const TRACKER_SCRIPT_ETAG = `"${createHash('sha256').update(TRACKER_SCRIPT).digest('hex').slice(0, 16)}"`;

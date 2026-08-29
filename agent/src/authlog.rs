@@ -1,21 +1,12 @@
 //! Issues d'authentification : qui a essayé d'entrer, et depuis où.
 //!
-//! # La frontière de la feature
+//! On remonte des issues (tentative réussie ou échouée, adresse, compte visé),
+//! jamais l'activité d'une session : les journaux lus ici contiennent commandes
+//! sudo, services démarrés, chemins ouverts, et rien de cela ne sort de la
+//! machine. Ce module n'émet que des compteurs plus deux listes bornées.
 //!
-//! On remonte des **issues** — une tentative a réussi ou échoué, depuis quelle
-//! adresse, contre quel compte — et **jamais** l'activité d'une session. Les
-//! journaux lus ici contiennent bien plus : commandes sudo intégrales, services
-//! démarrés, chemins ouverts. Rien de tout cela ne sort de la machine.
-//!
-//! Concrètement, ce module n'émet que des **compteurs** plus deux listes bornées
-//! (adresses fautives, connexions réussies). Ce n'est pas une optimisation de
-//! taille : un flux brut aurait remonté ce que les gens font de leur journée, et
-//! ce n'est pas ce qu'on cherche à savoir.
-//!
-//! # Une fenêtre glissante
-//!
-//! Chaque relevé part de la fin du précédent. Les fenêtres sont donc additives
-//! côté serveur, et aucune tentative n'est comptée deux fois ni perdue.
+//! Chaque relevé part de la fin du précédent : les fenêtres sont additives côté
+//! serveur, aucune tentative n'est comptée deux fois ni perdue.
 
 use std::collections::HashMap;
 
@@ -25,11 +16,9 @@ use serde::Serialize;
 const MAX_SOURCES: usize = 50;
 const MAX_LOGINS: usize = 50;
 
-/// Lignes lues au maximum par relevé.
-///
-/// Une machine sous balayage produit des dizaines de milliers de lignes d'échec
-/// par heure. On en lit assez pour compter juste sans jamais charger un journal
-/// entier en mémoire — et les compteurs, eux, restent exacts jusqu'à ce plafond.
+/// Lignes lues au maximum par relevé : une machine sous balayage produit des
+/// dizaines de milliers de lignes d'échec par heure, et un journal entier ne
+/// doit jamais être chargé en mémoire.
 const MAX_LINES: usize = 20_000;
 
 /// Une adresse et ce qu'elle a tenté.
@@ -70,11 +59,9 @@ pub struct AuthWindow {
     #[serde(rename = "topSources")]
     pub top_sources: Vec<AuthSource>,
     pub logins: Vec<AuthLogin>,
-    /// La source n'a pas pu être lue.
-    ///
-    /// Distingue « zéro tentative » de « je n'ai pas pu regarder » : sans ce
-    /// drapeau, une machine aveugle passerait pour une machine tranquille, ce
-    /// qui est la pire chose qu'un tableau de bord de sécurité puisse afficher.
+    /// La source n'a pas pu être lue : distingue « zéro tentative » de « je
+    /// n'ai pas pu regarder », sans quoi une machine aveugle passerait pour
+    /// une machine tranquille.
     pub unavailable: bool,
 }
 
@@ -114,9 +101,8 @@ impl Tally {
 /// Relève la fenêtre `[from, now]`. Ne lève jamais.
 ///
 /// `from` est la fin du relevé précédent, en unix ms ; `0` au premier passage,
-/// auquel cas on se limite à la dernière heure — rejouer l'intégralité d'un
-/// journal au premier démarrage produirait un pic de constats sur des tentatives
-/// vieilles de plusieurs mois, déjà sans objet.
+/// auquel cas on se limite à la dernière heure : rejouer un journal entier
+/// produirait un pic de constats sur des tentatives vieilles de plusieurs mois.
 pub fn collect(from: i64) -> AuthWindow {
     let now = now_millis();
     let from = if from <= 0 {
@@ -231,10 +217,7 @@ fn parse_line(line: &str, now: i64, tally: &mut Tally) {
     }
 
     // `sudo: gerem : TTY=pts/0 ; PWD=/home ; USER=root ; COMMAND=/bin/ls`
-    //
-    // On compte, et **rien d'autre**. La commande est là, juste après, et elle
-    // ne sort pas de la machine : c'est précisément la ligne de démarcation
-    // entre surveiller les accès et surveiller les gens.
+    // On compte, et rien d'autre : la commande ne sort pas de la machine.
     if line.contains("sudo:") && line.contains("COMMAND=") {
         tally.sudo += 1;
         return;
@@ -312,8 +295,7 @@ fn read_lines(from: i64) -> Option<Vec<String>> {
 
     // Sans journald : les fichiers classiques. Pas de filtrage par date (leur
     // horodatage n'a pas d'année), donc on lit la queue et le serveur absorbe le
-    // recouvrement — les compteurs d'une fenêtre qui déborde un peu se corrigent
-    // d'eux-mêmes, alors qu'une fenêtre trouée perdrait des tentatives.
+    // recouvrement ; une fenêtre trouée perdrait des tentatives.
     for path in ["/var/log/auth.log", "/var/log/secure"] {
         if let Ok(text) = std::fs::read_to_string(path) {
             let lines: Vec<String> = text.lines().map(str::to_string).collect();
@@ -468,12 +450,9 @@ mod tests {
         assert!(t.sources.is_empty());
     }
 
-    /// Le relevé complet sur la machine qui exécute les tests.
-    ///
-    /// Comme pour la persistance, on vérifie la **forme** et les invariants, pas
-    /// le contenu. Le plus important : `unavailable` et des compteurs non nuls
-    /// sont mutuellement exclusifs — c'est ce qui garantit qu'une machine
-    /// aveugle ne peut jamais passer pour une machine tranquille.
+    /// Le relevé complet sur la machine qui exécute les tests : on vérifie la
+    /// forme et les invariants, pas le contenu. `unavailable` et des compteurs
+    /// non nuls sont mutuellement exclusifs.
     #[test]
     fn collect_yields_a_coherent_window() {
         let w = collect(0);

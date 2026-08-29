@@ -1,40 +1,30 @@
--- Les bases de données, entités de l'espace.
---
--- Même forme que les dépôts git (migration 064), et pour les mêmes raisons :
--- une base ne se lie pas à un projet, plusieurs projets peuvent viser la même,
--- et certaines ne servent aucun projet. Elle vit donc à l'étage **ouvert** du
--- chiffrement — un projet confidentiel ne peut pas en lier, puisque le relevé
--- périodique tourne sans session.
---
--- Deux secrets vivent ici, chacun dans sa colonne et jamais dans `content` :
--- le mot de passe de la base, et celui du tunnel (mot de passe SSH ou clé
--- privée). Aucun des deux ne sort du serveur — les DTO n'en portent qu'un
--- booléen.
+-- Les bases de données, entités de l'espace (même forme que les dépôts git,
+-- 064) : plusieurs projets peuvent viser la même, certaines ne servent aucun
+-- projet. Elles vivent à l'étage ouvert du chiffrement, le relevé périodique
+-- tournant sans session : un projet confidentiel ne peut pas en lier.
+-- Deux secrets vivent ici, chacun dans sa colonne et jamais dans `content` : le
+-- mot de passe de la base et celui du tunnel. Aucun ne sort du serveur.
 
--- ⚠️ `database_connections`, et non `databases` : ce dernier est un mot réservé
+-- `database_connections`, et non `databases` : ce dernier est un mot réservé
 -- de MySQL (`SHOW DATABASES`) et `CREATE TABLE databases` échoue à l'analyse.
--- Le contourner à coups de guillemets obliques dans chaque requête reviendrait
--- à confier la correction à la vigilance ; un nom libre la rend inutile.
 CREATE TABLE IF NOT EXISTS database_connections (
     id              INT AUTO_INCREMENT PRIMARY KEY,
     workspace_id    INT          NOT NULL,
     -- 'mysql' | 'postgres'
     engine          VARCHAR(16)  NOT NULL DEFAULT 'mysql',
-    -- 16 premiers caractères du sha256 du nom en minuscules. Le chiffrement
-    -- étant non déterministe, `content` ne peut porter aucune contrainte
-    -- d'unicité — même motif que `slug_ref` sur les dépôts git.
+    -- 16 premiers caractères du sha256 du nom en minuscules : le chiffrement
+    -- étant non déterministe, `content` ne peut porter l'unicité (cf. `slug_ref`).
     name_ref        CHAR(16)     NOT NULL,
     -- Rang dans la liste, entièrement défini par l'utilisateur.
     sort_order      INT          NOT NULL DEFAULT 0,
-    -- Le relevé périodique est **éteint par défaut** : rien ne joint une base
-    -- tant que personne ne l'a demandé. C'est ce drapeau, et lui seul, qui fait
-    -- entrer une base dans la boucle de fond — et qui rend ses alertes vivantes.
+    -- Le relevé périodique est éteint par défaut : rien ne joint une base tant
+    -- que personne ne l'a demandé. Ce drapeau seul fait entrer une base dans la
+    -- boucle de fond.
     monitor_enabled TINYINT      NOT NULL DEFAULT 0,
     interval_seconds INT         NOT NULL DEFAULT 300,
     last_check_at   BIGINT       NULL,
     -- 'unknown' | 'up' | 'down'. « unknown » est l'état normal d'une base
-    -- jamais jointe, pas une panne : les confondre ferait passer une feature au
-    -- repos pour une feature en alerte.
+    -- jamais jointe, pas une panne.
     status          VARCHAR(16)  NOT NULL DEFAULT 'unknown',
     -- Message du dernier échec, chiffré ; NULL après un succès.
     last_error      TEXT         NULL,
@@ -58,10 +48,8 @@ CREATE TABLE IF NOT EXISTS database_connections (
 );
 
 -- Une alerte : des conditions SQL, un opérateur qui les relie, un message.
---
--- `firing` porte l'état **courant**, en clair : c'est ce qui permet de ne
--- notifier qu'aux transitions (comme les incidents d'Uptime) plutôt qu'à chaque
--- relevé, et de compter les alertes franchies d'un espace sans rien déchiffrer.
+-- `firing` porte l'état courant, en clair : ne notifier qu'aux transitions
+-- plutôt qu'à chaque relevé, et compter les alertes franchies sans déchiffrer.
 CREATE TABLE IF NOT EXISTS database_alerts (
     id            INT AUTO_INCREMENT PRIMARY KEY,
     database_id   INT         NOT NULL,
@@ -83,10 +71,8 @@ CREATE TABLE IF NOT EXISTS database_alerts (
     CONSTRAINT fk_database_alert_workspace FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
 );
 
--- La liaison projet → base, non exclusive dans les deux sens : un projet peut
--- suivre plusieurs bases, une base peut servir plusieurs projets. Les FK sont
--- en CASCADE, donc supprimer un projet **ou** une base ne fait tomber que cette
--- ligne de liaison.
+-- La liaison projet → base, non exclusive dans les deux sens. Les FK sont en
+-- CASCADE : supprimer un projet ou une base ne fait tomber que la liaison.
 CREATE TABLE IF NOT EXISTS project_database_links (
     project_id   INT    NOT NULL,
     database_id  INT    NOT NULL,

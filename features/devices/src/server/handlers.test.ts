@@ -42,23 +42,12 @@ import {
 import type { DevicesRepo, LinkCode } from './repo';
 
 /**
- * Les handlers du module, sur le harnais du SDK.
- *
- * Ce qui mérite d'être tenu, c'est ce qui ne lève nulle part quand ça se
- * dérègle : les **deux portées** de la liste (l'espace suit la façade, la
- * flotte exige l'administrateur), les **ordres au hub** que chaque geste de
- * flotte donne (une approbation remet la session à zéro, une révocation la
- * coupe, une demande de suppression fait s'auto-détruire l'agent, une cadence
- * changée se pousse), le **partage entre espaces** (un espace inconnu est
- * ignoré, l'espace d'appairage réintégré d'office), les **codes de liaison**
- * (émis dans l'espace actif ou tout espace existant, relus par leur
- * émetteur seul, comparés en majuscules), l'**historique** (fenêtres,
- * présence, instants, épinglage et ce qu'un désépinglage efface tout de
- * suite), et la **table des accès** que chaque commande déclare.
+ * Les handlers du module, sur le harnais du SDK : les deux portées de la
+ * liste, les ordres au hub que chaque geste de flotte donne, le partage entre
+ * espaces, les codes de liaison, l'historique et la table des accès.
  *
  * `LINK_CODE_TTL_SECONDS` est posée AVANT le chargement des handlers, parce
- * que `env.ts` lit l'environnement à l'import ; c'est la seule raison de
- * l'import dynamique ci-dessous.
+ * que `env.ts` lit l'environnement à l'import : d'où l'import dynamique.
  */
 
 process.env.LINK_CODE_TTL_SECONDS = '120';
@@ -170,10 +159,8 @@ interface FakeRepo extends DevicesRepo {
 }
 
 /**
- * Un dépôt en mémoire, même contrat que le vrai : ce que ces tests traversent
- * est implémenté ; les purges globales ne font que se consigner (elles sont
- * l'affaire du test du service). Les lignes rendues sont des copies, comme
- * une lecture SQL : la ligne qu'un handler tient est un instantané.
+ * Un dépôt en mémoire, même contrat que le vrai ; les purges globales ne font
+ * que se consigner. Les lignes rendues sont des copies, comme une lecture SQL.
  */
 function fakeRepo(deviceRows: DeviceRow[], shares: Record<string, number[]> = {}): FakeRepo {
     let seq = 0;

@@ -1,9 +1,8 @@
 import type { NetInterface, OpenPort } from '@deveye/types';
 
 /**
- * Port naming, address classification and bubble grouping — shared by the
- * listening-ports view and the connections view, which used to carry two
- * diverging copies of the well-known table.
+ * Port naming, address classification and bubble grouping, shared by the
+ * listening-ports view and the connections view.
  */
 
 /** Common ports labelled, to make a raw port number readable at a glance. */
@@ -64,13 +63,10 @@ export function serviceName(port: number): string | null {
 export type AddressScope = 'any' | 'public' | 'private' | 'linkLocal' | 'multicast' | 'loopback';
 
 /**
- * Where a listening socket can be reached from. Deliberately coarser than the
- * scope: what a reader needs to know is "can something outside this machine
- * reach it, and how far outside".
- *
- * `external` means *the socket listens on a routable interface* — the agent
- * knows nothing about the NAT or firewall in front of it, so this must never be
- * presented as verified Internet reachability.
+ * Where a listening socket can be reached from, coarser than the scope.
+ * `external` means the socket listens on a routable interface: the agent knows
+ * nothing about the NAT or firewall in front of it, never present it as
+ * verified Internet reachability.
  */
 export type Reachability = 'external' | 'lan' | 'local';
 
@@ -159,14 +155,10 @@ function sortUnique<T>(values: T[], compare?: (a: T, b: T) => number): T[] {
 }
 
 /**
- * Merge raw listening sockets into display bubbles.
- *
- * The agent reports one entry per bind address, which is correct but makes a
- * plain list unreadable: a dual-stack sshd yields `0.0.0.0:22` *and* `:::22`,
- * and systemd-resolved opens port 53 on several loopback addresses — all
- * rendering as visually identical chips. Sockets are therefore merged when they
- * share a port, a reachability bucket and an interface; protocols and IP
- * families are unioned rather than duplicated.
+ * Merge raw listening sockets into display bubbles: the agent reports one entry
+ * per bind address (a dual-stack sshd yields `0.0.0.0:22` and `:::22`), so
+ * sockets are merged when they share a port, a reachability bucket and an
+ * interface; protocols and IP families are unioned.
  */
 export function groupPorts(ports: OpenPort[], interfaces: NetInterface[]): PortGroup[] {
     const groups = new Map<string, PortGroup>();

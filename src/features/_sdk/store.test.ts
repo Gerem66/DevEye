@@ -7,14 +7,10 @@ import type { FeatureKvRepo, FeatureKvRow } from '@/db/repos/featureKv';
 import { createFeatureStore } from './store';
 
 /**
- * Le FeatureStore du SDK : la règle de chiffrement, tenue par le store seul.
- *
- * Ce qui mérite d'être verrouillé : le mode est figé sur la ligne à l'écriture
- * et c'est LUI qui choisit le déchiffrement à la lecture (pas l'appelant) ;
- * sans cipher gardé (services d'arrière-plan), une ligne 'private' lève
- * `locked` plutôt que de rendre un blob ; et le schéma zod produit deux
- * erreurs typées selon le côté fautif (`validation` à l'écriture, `internal`
- * à la lecture), jamais un ZodError brut que le dispatcheur rendrait opaque.
+ * Le FeatureStore du SDK : le mode figé sur la ligne choisit le déchiffrement
+ * à la lecture ; sans cipher gardé, une ligne 'private' lève `locked` ; le
+ * schéma zod produit deux erreurs typées selon le côté fautif, jamais un
+ * ZodError brut.
  */
 
 const WS = 3;

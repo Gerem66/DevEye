@@ -3,11 +3,9 @@ import type { ProjectStatus } from '@deveye/types';
 import type { SdkQueryable } from '@deveye/types/sdk/server';
 
 /**
- * Compteurs d'un projet, calculés **uniquement sur les colonnes en clair**.
- *
- * C'est ce qui permet au portefeuille d'afficher l'avancement, les retards et
- * les non-lus d'une quarantaine de projets sans déchiffrer une seule ligne, et
- * donc de rester juste même quand un projet gardé est verrouillé.
+ * Compteurs d'un projet, calculés uniquement sur les colonnes en clair : le
+ * portefeuille affiche avancement, retards et non-lus sans déchiffrer une ligne, et
+ * reste donc juste quand un projet gardé est verrouillé.
  */
 export interface ProjectStats {
     project_id: number;
@@ -19,31 +17,22 @@ export interface ProjectStats {
 }
 
 /**
- * La table `projects` : le portefeuille de l'espace, et ce qu'un autre espace
- * y projette.
- *
- * Toute écriture prend le `workspaceId` de la ligne visée : son **domicile**,
- * qui n'est pas forcément l'espace actif quand le projet est projeté. C'est le
- * handler qui le résout (`loadProject`) ; le dépôt ne fait que refuser
- * (`null`, `false`) une écriture adressée au mauvais espace.
+ * La table `projects` : le portefeuille de l'espace, et ce qu'un autre espace y
+ * projette. Toute écriture prend le `workspaceId` de la ligne visée, son domicile,
+ * qui n'est pas l'espace actif quand le projet est projeté ; c'est le handler qui le
+ * résout, le dépôt ne fait que refuser une écriture adressée au mauvais espace.
  */
 export interface ProjectRepo {
     /**
-     * Les projets **visibles** depuis cet espace : les siens, plus ceux qu'un
-     * autre espace y projette (`item_shares`). Actifs ou archivés, deux
-     * ensembles disjoints : les vivants dans l'ordre choisi, les locaux
-     * d'abord (le rang d'un projet projeté est celui de son domicile, le
-     * client le range après) ; les archivés du plus récemment archivé au plus
-     * ancien, d'où qu'ils viennent, l'archive se lisant comme une histoire.
-     *
-     * La branche projetée ne retient que les projets **ouverts**, en garde de
-     * cohérence : un projet gardé est chiffré par le mot de passe de son
-     * auteur, illisible dans tout autre espace. `share.set` refuse de le
-     * projeter (`items.shareable`), et sa conversion en gardé retire ses
-     * projections (`ctx.items.forget`).
+     * Les projets visibles depuis cet espace : les siens, plus ceux qu'un autre
+     * espace y projette. Actifs ou archivés, deux ensembles disjoints : les vivants
+     * dans l'ordre choisi, locaux d'abord ; les archivés du plus récemment archivé au
+     * plus ancien, d'où qu'ils viennent. La branche projetée ne retient que les
+     * projets ouverts, en garde de cohérence : un projet gardé est chiffré par le mot
+     * de passe de son auteur, illisible dans tout autre espace.
      */
     listVisible(workspaceId: number, archived: boolean): Promise<ProjectRow[]>;
-    /** Un projet **de** cet espace : son domicile, jamais une fenêtre. */
+    /** Un projet de cet espace : son domicile, jamais une fenêtre. */
     findById(id: number, workspaceId: number): Promise<ProjectRow | null>;
     /** Comme `findById`, mais accepte aussi un projet ouvert projeté vers cet espace. */
     findVisible(id: number, workspaceId: number): Promise<ProjectRow | null>;
@@ -64,7 +53,7 @@ export interface ProjectRepo {
     setStatus(id: number, workspaceId: number, status: ProjectStatus): Promise<ProjectRow | null>;
     /** Pose la source de version ; le numéro lui-même vit dans `content`. */
     setVersionSource(id: number, workspaceId: number, source: ProjectVersionSource): Promise<ProjectRow | null>;
-    /** Bascule le tier **après** que l'arbre a été re-chiffré par l'appelant. */
+    /** Bascule le palier après que l'arbre a été re-chiffré par l'appelant. */
     setSecurityTier(
         id: number,
         workspaceId: number,
@@ -75,10 +64,8 @@ export interface ProjectRepo {
     restore(id: number, workspaceId: number): Promise<boolean>;
     reorder(workspaceId: number, projectIds: number[]): Promise<void>;
     /**
-     * Les compteurs des projets donnés (ceux que le portefeuille liste, où
-     * qu'ils vivent), pour l'appelant donné : ses non-lus sont les siens,
-     * chez lui comme par une fenêtre. Les archivés n'en ont pas : un projet
-     * rangé n'a plus d'avancement à montrer.
+     * Les compteurs des projets donnés, pour l'appelant donné : les non-lus sont les
+     * siens. Les archivés n'en ont pas, un projet rangé n'a plus d'avancement.
      */
     statsFor(projectIds: number[], userId: number, now: number): Promise<ProjectStats[]>;
 }
@@ -96,10 +83,9 @@ async function nextSortOrder(q: SdkQueryable, workspaceId: number): Promise<numb
 export function projectRepo(q: SdkQueryable): ProjectRepo {
     return {
         async listVisible(workspaceId, archived) {
-            // `sort_order` appartient à l'espace d'origine : un projet projeté
-            // se range après les locaux, dans l'ordre de chez lui. Lui donner
-            // un rang propre à chaque espace demanderait une colonne par
-            // projection (un réglage d'affichage ne vaut pas cette table).
+            // `sort_order` appartient à l'espace d'origine : un projet projeté se
+            // range après les locaux, dans l'ordre de chez lui. Un rang par espace
+            // demanderait une colonne par projection.
             return q.query<ProjectRow>(
                 `SELECT v.* FROM (
                      SELECT p.* FROM projects p WHERE p.workspace_id = ?
@@ -189,8 +175,8 @@ export function projectRepo(q: SdkQueryable): ProjectRepo {
             return res.affectedRows > 0;
         },
         async restore(id, workspaceId) {
-            // Son ancien rang appartenait à une liste qui a bougé : on l'ajoute
-            // à la fin, comme les notes.
+            // Son ancien rang appartenait à une liste qui a bougé : il repart de la
+            // fin.
             const sortOrder = await nextSortOrder(q, workspaceId);
             const res = await q.execute(
                 'UPDATE projects SET archived_at = NULL, sort_order = ? WHERE id = ? AND workspace_id = ?',
@@ -199,9 +185,9 @@ export function projectRepo(q: SdkQueryable): ProjectRepo {
             return res.affectedRows > 0;
         },
         async reorder(workspaceId, projectIds) {
-            // Chaque id prend le rang de son indice ; seules les lignes de cet
-            // espace bougent, un id étranger est donc ignoré en silence.
-            // `updated` ne bouge pas : réordonner n'est pas modifier.
+            // Chaque id prend le rang de son indice, et seules les lignes de cet
+            // espace bougent : un id étranger est ignoré en silence. `updated` ne
+            // bouge pas, réordonner n'est pas modifier.
             for (let i = 0; i < projectIds.length; i++) {
                 await q.execute('UPDATE projects SET sort_order = ? WHERE id = ? AND workspace_id = ?', [
                     i,
@@ -212,14 +198,13 @@ export function projectRepo(q: SdkQueryable): ProjectRepo {
         },
         async statsFor(projectIds, userId, now) {
             if (projectIds.length === 0) return [];
-            // Une seule requête pour tout le portefeuille plutôt qu'une par
-            // projet : il en affiche plusieurs dizaines. Par identifiant et non
-            // par espace : un projet projeté ici vit ailleurs, et ses compteurs
-            // se lisent de la même façon que ceux d'un projet d'ici.
+            // Une seule requête pour tout le portefeuille, qui affiche plusieurs
+            // dizaines de projets. Par identifiant et non par espace : un projet
+            // projeté ici vit ailleurs, ses compteurs se lisent pareil.
             //
-            // Les non-lus se comptent contre le point d'eau haute de l'appelant
-            // (`project_card_reads`) ; une carte jamais ouverte n'a pas de ligne,
-            // d'où le COALESCE à 0 qui compte alors tous ses messages.
+            // Les non-lus se comptent contre le point d'eau haute de l'appelant ; une
+            // carte jamais ouverte n'a pas de ligne, d'où le COALESCE à 0 qui compte
+            // alors tous ses messages.
             const placeholders = projectIds.map(() => '?').join(', ');
             const rows = await q.query<ProjectStats>(
                 `SELECT p.id AS project_id,

@@ -1,16 +1,12 @@
 /**
- * Les exemples d'intégration montrés dans la fenêtre d'installation.
+ * Les exemples d'intégration montrés dans la fenêtre d'installation, bâtis
+ * depuis la vraie clé du site et la vraie adresse d'ingestion : un exemple
+ * qu'il faut adapter avant de s'en servir est un exemple qu'on adapte mal.
  *
- * Sortis du composant, et bâtis depuis la **vraie** clé du site et la **vraie**
- * adresse d'ingestion : un exemple qu'il faut adapter avant de s'en servir est
- * un exemple qu'on adapte mal. Ils sont donc copiables tels quels.
- *
- * Des fonctions et non des constantes, pour la même raison, et du texte brut
- * et non du JSX : ce sont des blocs qu'on sélectionne d'un geste, et les
- * balises y auraient glissé des espaces invisibles.
+ * Du texte brut et non du JSX : ce sont des blocs qu'on sélectionne d'un geste,
+ * et les balises y auraient glissé des espaces invisibles.
  */
 
-/** Un onglet de la fenêtre : sa langue, et ce que sa langue permet vraiment. */
 export interface UsageExample {
     id: string;
     label: string;
@@ -20,24 +16,16 @@ export interface UsageExample {
 }
 
 /**
- * Les six intégrations.
- *
- * Trois vivent dans le navigateur et passent par la balise ; les trois autres
- * sont **côté serveur** et ne peuvent pas y toucher : elles postent directement
- * sur l'ingestion. C'est la distinction qui compte, et la raison pour laquelle
- * l'onglet PHP n'est pas « le même code dans une autre langue ».
+ * Les six intégrations : trois vivent dans le navigateur et passent par la
+ * balise, les trois autres sont côté serveur et postent directement sur
+ * l'ingestion. C'est la distinction qui compte.
  */
 export function usageExamples(publicKey: string, origin: string, persistent = false): UsageExample[] {
     /**
-     * Ce qu'un appel serveur doit ajouter, et ce qu'il se passe sans.
-     *
      * Un serveur n'a ni l'IP ni le navigateur de la personne : sans identifiant,
-     * son événement est rattaché à un visiteur distinct, celui du serveur. Cela
-     * ne se voit pas dans un total, mais cela casse un entonnoir qui commence
-     * dans le navigateur et finit par une confirmation de paiement.
-     *
-     * En mode persistant on a de quoi recoller les deux : le navigateur possède
-     * un identifiant, il suffit de le transmettre au serveur avec la commande.
+     * son événement est rattaché à un visiteur distinct, ce qui casse un
+     * entonnoir commencé dans le navigateur. En mode persistant, transmettre
+     * l'identifiant du navigateur recolle les deux.
      */
     const serverVisitorNote = persistent
         ? ' Ce site étant en mode persistant, transmettez le visitorId du navigateur pour que l’événement soit rattaché à la bonne personne.'
@@ -274,12 +262,9 @@ curl_close($ch);`
 }
 
 /**
- * Le mémo destiné à un agent de code.
- *
- * Écrit pour être **collé tel quel** dans une conversation : tout ce qu'il faut
- * pour brancher la mesure et ne pas se tromper, et rien d'autre. Les trois
- * pièges qui coûtent une session de débogage y sont en tête, parce qu'un agent
- * lit le début d'un contexte avec plus d'attention que sa fin.
+ * Le mémo destiné à un agent de code, écrit pour être collé tel quel dans une
+ * conversation. Les trois pièges qui coûtent une session de débogage sont en
+ * tête, un agent lisant le début d'un contexte avec plus d'attention que la fin.
  */
 export function agentBrief(publicKey: string, origin: string, persistent = false): string {
     return `# Mesure d'audience DevEye : mémo d'intégration

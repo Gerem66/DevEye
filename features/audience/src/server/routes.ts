@@ -5,65 +5,44 @@ import { TRACKER_SCRIPT, TRACKER_SCRIPT_ETAG } from './script';
 import type { AudienceIngest, IngestRequest } from './service';
 
 /**
- * La porte publique de DevEye — la seule.
+ * La porte publique de DevEye, la seule : tout le reste du serveur suppose une
+ * session, un cookie ou un jeton d'appareil. Ces trois routes sont appelées par
+ * des navigateurs qui ne savent rien de DevEye, depuis des sites qui ne lui
+ * appartiennent pas. D'où :
  *
- * Tout le reste du serveur suppose une session, un cookie ou un jeton
- * d'appareil. Ces trois routes-ci sont appelées par des navigateurs qui ne
- * savent rien de DevEye, depuis des sites qui ne lui appartiennent pas, sans
- * personne derrière. Trois conséquences les façonnent :
+ * 1. elles répondent toujours `204`, quel que soit le motif du refus : un
+ *    endpoint public qui distingue ses refus dit à qui le sonde quelles clés
+ *    existent, et laquelle vient d'être révoquée ;
+ * 2. elles n'attendent pas la base, `accept()` range en mémoire et rend la main ;
+ * 3. elles ont leur propre plafond de débit, celui du serveur étant dimensionné
+ *    pour une interface humaine.
  *
- * 1. **Elles répondent toujours `204`.** Clé inconnue, origine refusée, site
- *    éteint, charge utile invalide : la réponse est la même. Un endpoint public
- *    qui distingue ses refus est un oracle — il dirait à qui le sonde quelles
- *    clés existent, et laquelle vient d'être révoquée.
- * 2. **Elles n'attendent pas la base.** `accept()` range en mémoire et rend la
- *    main ; l'écriture a lieu une fois par seconde, en lot (voir `service.ts`).
- * 3. **Elles ont leur propre plafond de débit.** Celui du serveur (200/min) est
- *    dimensionné pour une interface humaine et couperait un site un peu
- *    fréquenté au bout de trois visiteurs.
+ * Leur CORS est ouvert à toute origine, et ce n'est pas un relâchement : la
+ * protection est la liste d'origines par site, appliquée côté serveur où le
+ * client ne peut pas mentir, et non un en-tête que le navigateur s'applique.
  *
- * ⚠️ Le CORS de ces routes est ouvert à toute origine, par le délégateur
- * installé dans `app.ts` (il reconnaît les chemins publics des modules). Ce
- * n'est pas un relâchement : la protection est la liste d'origines **par
- * site**, appliquée côté serveur où le client ne peut pas mentir, et non un
- * en-tête que le navigateur applique pour lui-même.
- *
- * Depuis le rapatriement en module, ces routes sont déclarées sur la surface
- * publique du SDK (`SdkPublicApp`, capacité `routes.public`) : l'hôte les
- * monte sur chacun de ses écouteurs exposés (l'app, et le second écouteur
- * quand `PUBLIC_LISTEN_PORT` est réglé), journal silencieux, sans session. Le
- * corps arrive déjà décodé (`req.body`) : ce sont les analyseurs `text/plain`
- * et `application/json` de l'hôte qui le lisent, un corps illisible valant
- * `undefined`, que la validation zod écarte comme le reste.
+ * Le corps arrive déjà décodé par les analyseurs de l'hôte, un corps illisible
+ * valant `undefined`, que la validation zod écarte comme le reste.
  */
 
 /**
- * Le plafond, par IP.
- *
- * Généreux, parce qu'il borne un **visiteur** et non un site : 600 par minute
- * laisse passer une navigation soutenue et arrête une boucle. La clé du site
- * n'y entre pas — le plafond est appliqué avant que le corps ne soit analysé,
- * donc elle n'est pas encore connue à ce moment-là.
+ * Le plafond, par IP. Généreux parce qu'il borne un visiteur et non un site.
+ * La clé du site n'y entre pas : le plafond s'applique avant l'analyse du
+ * corps, donc elle n'est pas encore connue.
  */
 const INGEST_RATE_LIMIT = { max: 600, timeWindow: '1 minute' };
 
 /**
- * Rendre une réponse chargeable depuis une **autre** origine.
+ * Rendre une réponse chargeable depuis une autre origine : helmet pose
+ * `Cross-Origin-Resource-Policy: same-origin` sur tout le reste, ce qui est le
+ * bon défaut pour une application mais pas pour ces routes.
  *
- * `@fastify/helmet` pose `Cross-Origin-Resource-Policy: same-origin` sur tout
- * ce que le serveur renvoie, et c'est le bon défaut pour une application. Mais
- * ces trois routes-ci existent précisément pour être atteintes d'ailleurs.
- *
- * ⚠️ **CORP n'est pas CORS, et sa panne ne ressemble à rien de connu.** Le
- * serveur répond `200`, la réponse arrive complète, puis le navigateur la jette
- * et écrit `ERR_BLOCKED_BY_RESPONSE.NotSameOrigin` — aucun en-tête CORS n'est en
- * cause, et les régler mieux n'y change rien. C'est le cas d'un `<script src>`
- * (requête `no-cors`, où CORP est appliqué), qui est exactement la façon dont
- * une page tierce charge `/t.js`.
- *
- * Posé aussi sur l'ingestion, par précaution : ses requêtes sont en mode `cors`
- * — donc hors du champ de CORP aujourd'hui — mais rien ne garantit qu'un client
- * futur, natif ou non, les émettra de la même façon.
+ * CORP n'est pas CORS et sa panne ne ressemble à rien de connu : le serveur
+ * répond `200`, la réponse arrive complète, puis le navigateur la jette avec
+ * `ERR_BLOCKED_BY_RESPONSE.NotSameOrigin`, sans qu'aucun en-tête CORS soit en
+ * cause. C'est le cas d'un `<script src>`, la façon dont une page tierce charge
+ * `/t.js`. Posé aussi sur l'ingestion par précaution, ses requêtes étant en
+ * mode `cors` aujourd'hui mais rien ne le garantit d'un client futur.
  */
 function allowCrossOrigin(reply: SdkPublicReply): void {
     reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
@@ -71,24 +50,22 @@ function allowCrossOrigin(reply: SdkPublicReply): void {
 
 export function audienceRoutes(app: SdkPublicApp, ingest: AudienceIngest): void {
     /**
-     * Le script de mesure.
-     *
-     * Hors de `/api` volontairement : c'est cette adresse-là qu'on colle dans
-     * une page, et `/t.js` se retient. Le repli SPA ne l'attrape pas — une
-     * route déclarée l'emporte toujours sur le gestionnaire de 404.
+     * Le script de mesure, hors de `/api` volontairement : c'est cette adresse
+     * qu'on colle dans une page. Le repli SPA ne l'attrape pas, une route
+     * déclarée l'emporte sur le gestionnaire de 404.
      */
     app.get('/t.js', {}, async (req, reply) => {
         allowCrossOrigin(reply);
         reply.header('Content-Type', 'application/javascript; charset=utf-8');
-        // Une heure : assez pour que la balise ne coûte rien à la visite
-        // suivante, assez peu pour qu'un correctif se propage dans la journée.
+        // Une heure : assez pour que la balise ne coûte rien à la visite suivante,
+        // assez peu pour qu'un correctif se propage dans la journée.
         reply.header('Cache-Control', 'public, max-age=3600');
         reply.header('ETag', TRACKER_SCRIPT_ETAG);
         if (req.headers['if-none-match'] === TRACKER_SCRIPT_ETAG) return reply.code(304).send();
         return reply.send(TRACKER_SCRIPT);
     });
 
-    /** Un lot d'événements — la voie normale, celle qu'emprunte le script. */
+    /** Un lot d'événements : la voie normale, celle qu'emprunte le script. */
     app.post('/api/t/b', { rateLimit: INGEST_RATE_LIMIT }, async (req, reply) => {
         allowCrossOrigin(reply);
         const parsed = audienceIngestSchema.safeParse(req.body);
@@ -99,11 +76,9 @@ export function audienceRoutes(app: SdkPublicApp, ingest: AudienceIngest): void 
     });
 
     /**
-     * Un événement isolé.
-     *
-     * Le script ne s'en sert pas — il groupe toujours. Elle existe pour ce qui
-     * n'a pas de file d'attente : une commande `curl` de vérification, un
-     * appel depuis un serveur, un client minimal qu'on écrit en dix lignes.
+     * Un événement isolé. Le script ne s'en sert pas, il groupe toujours : elle
+     * existe pour ce qui n'a pas de file d'attente, un `curl` de vérification,
+     * un appel depuis un serveur, un client minimal.
      */
     app.post('/api/t/e', { rateLimit: INGEST_RATE_LIMIT }, async (req, reply) => {
         allowCrossOrigin(reply);
@@ -117,7 +92,6 @@ export function audienceRoutes(app: SdkPublicApp, ingest: AudienceIngest): void 
     });
 }
 
-/** Le peu qu'il reste à faire une fois la charge utile validée. */
 async function submit(
     req: SdkPublicRequest,
     ingest: AudienceIngest,

@@ -3,11 +3,9 @@ import { openInfo } from 'deveye-sdk-client';
 import { startAgentUpdate, useAgentUpdates } from './agentUpdates';
 
 /**
- * Trigger signed agent self-updates for the Monitoring surfaces (panel header,
- * sidebar per-device button, "update all"). In-flight state is backed by the
- * socket-global {@link useAgentUpdates} store, so every surface (here and the
- * fleet card) spins in lock-step for the whole update, not just while the
- * order is sent.
+ * Trigger agent self-updates from the Monitoring surfaces. In-flight state is
+ * the socket-global {@link useAgentUpdates} store, so every surface spins in
+ * lock-step.
  */
 export function useAgentUpdate() {
     const { isUpdating, anyUpdating } = useAgentUpdates();
@@ -25,12 +23,8 @@ export function useAgentUpdate() {
     };
 
     /**
-     * Met à jour plusieurs agents (le bouton « tout mettre à jour »).
-     *
-     * En parallèle, et **un seul** message d'échec : la boucle séquentielle
-     * d'origine ouvrait une popup bloquante par appareil en défaut — sur une
-     * flotte qui vient de repartir, c'était une dizaine de popups à fermer une
-     * par une. Même comportement que la flotte, qui procédait déjà ainsi.
+     * Met à jour plusieurs agents, en parallèle et avec un seul message
+     * d'échec : une popup par appareil en défaut serait une dizaine à fermer.
      */
     const updateAll = async (deviceIds: string[]) => {
         const results = await Promise.allSettled(deviceIds.map((id) => startAgentUpdate(id)));

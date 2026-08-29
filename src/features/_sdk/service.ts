@@ -32,18 +32,13 @@ export interface ModuleServiceHost {
     crypt: Encryption;
     audit: AuditLog;
     logger: Logger;
-    /**
-     * Présence en direct : un service écrit sans commande utilisateur, donc
-     * sans socket pour diffuser, et c'est le hub qu'il avertit directement.
-     */
+    /** Un service écrit sans socket pour diffuser : c'est le hub qu'il avertit. */
     live: LiveHub;
 }
 
 /**
- * L'alias de catégorie d'audit : la continuité des lignes persistées prime
- * sur la convention (les audits CloudSync ont toujours porté `cloudSync`,
- * l'id de la feature est `cloudsync`). Table courte, côté app exprès : le SDK
- * n'expose pas la catégorie.
+ * Alias de catégorie d'audit : la continuité des lignes persistées prime sur
+ * la convention (les audits CloudSync portent `cloudSync`).
  */
 const AUDIT_CATEGORY: Record<string, string> = { cloudsync: 'cloudSync' };
 
@@ -57,17 +52,15 @@ export function createServiceDeps(
     const cipherFor = (workspaceId: number): SdkCipher => {
         const hit = ciphers.get(workspaceId);
         if (hit) return hit;
-        // Même mémoïsation par espace que les services de fond : la résolution de la
-        // clé ouverte coûte une lecture, pas plus, mais un tick n'a pas à la
-        // repayer à chaque ligne.
+        // Mémoïsé par espace : un tick n'a pas à repayer la résolution de la
+        // clé à chaque ligne.
         const cipher = createOpenCipher(host.db, host.crypt, workspaceId);
         ciphers.set(workspaceId, cipher);
         return cipher;
     };
 
-    // La façade sessionless d'un espace : notify et devices, gardés par les
-    // capacités du manifest comme dans une requête. Sans session, le
-    // propriétaire n'entre pas en jeu (members n'est pas exposé ici).
+    // La façade sessionless d'un espace, gardée par les capacités du manifest
+    // comme dans une requête.
     const facades = new Map<number, DevEyeFacade>();
     const facadeFor = (workspaceId: number): DevEyeFacade => {
         const hit = facades.get(workspaceId);
@@ -87,8 +80,7 @@ export function createServiceDeps(
         return facade;
     };
 
-    // La même faute, la même erreur qu'en requête (`facade.ts`) : typée, et
-    // nommant la capacité manquante.
+    // La même erreur qu'en requête (`facade.ts`), nommant la capacité manquante.
     const capabilities = new Set(manifest.nativeCapabilities ?? []);
     const gate = (cap: 'agents' | 'devices.read' | 'telemetry.read') => (): void => {
         if (!capabilities.has(cap)) {
@@ -105,9 +97,7 @@ export function createServiceDeps(
             const r = await host.db.queryable.query<{ id: number }>('SELECT id FROM workspaces ORDER BY id');
             return r.rows.map((row) => row.id);
         },
-        // La variante sessionless du store : le type du SDK interdit déjà
-        // d'écrire en 'private', et le store lève `locked` si un tick tente
-        // d'en LIRE une (guarded: null).
+        // Variante sessionless du store : lire une ligne 'private' lève `locked`.
         storeFor: (workspaceId) =>
             createFeatureStore(host.db.featureKv, manifest.id, workspaceId, {
                 open: cipherFor(workspaceId),
@@ -115,8 +105,8 @@ export function createServiceDeps(
             }),
         cipherFor,
         // Le ticket d'un module, rendu contre les codecs de son porteur : la
-        // session est relue par l'hôte (jamais transmise au module), et l'étage
-        // gardé n'est tendu que si elle est encore déverrouillée.
+        // session est relue par l'hôte, et l'étage gardé n'est tendu que si
+        // elle est encore déverrouillée.
         secrecy: {
             redeem: async (ticket) => {
                 const claims = await verifyModuleTicket(manifest.id, ticket);
@@ -139,8 +129,8 @@ export function createServiceDeps(
             const { list, isOnline } = facadeFor(workspaceId).devices;
             return { list, isOnline };
         },
-        // La flotte entière, par identifiant : ce qu'un moteur qui reçoit les
-        // trames de tous les appareils a besoin de relire, sans espace.
+        // La flotte entière, par identifiant, sans espace : pour un moteur qui
+        // reçoit les trames de tous les appareils.
         devices: {
             find: async (deviceId) => {
                 gateDevices();
@@ -150,14 +140,10 @@ export function createServiceDeps(
             isOnline: (deviceId) => (gateDevices(), sdkHub().isOnline(deviceId))
         },
         telemetry: createTelemetry(host.db, gate('telemetry.read')),
-        // Le sujet d'un module EST son id (contrat du manifest, validé à
-        // l'enregistrement) ; la diffusion traverse les projections d'une
-        // feature branchée au partage, le hub s'en charge.
         live: {
-            // Le sujet du module, ou ceux que le service nomme (les siens, un
-            // secondaire, celui d'une autre feature) : la même règle que
-            // `mutates` d'un handler, sans le filet du boot (un sujet inconnu
-            // n'a simplement aucun abonné).
+            // Le sujet du module (son id), ou ceux que le service nomme : la même
+            // règle que `mutates`, sans le filet du boot (un sujet inconnu n'a
+            // simplement aucun abonné).
             changed: (workspaceId, topics) =>
                 host.live.changed(workspaceId, (topics ?? [manifest.id]) as LiveTopic[], null)
         },
@@ -178,8 +164,7 @@ export function createServiceDeps(
         keys,
         providers,
         createTicker: ({ intervalMs, tick }): FeatureService => {
-            // Le patron des sept services natifs : setInterval + garde de
-            // réentrance + unref, et rien d'autre. Pas de cron, pas de file.
+            // setInterval + garde de réentrance + unref, rien d'autre.
             let timer: ReturnType<typeof setInterval> | null = null;
             let ticking = false;
             const run = async (): Promise<void> => {

@@ -6,12 +6,8 @@ import type { FinanceConfig } from '../contracts/domain';
 import { api, refreshFinance } from './api';
 
 /**
- * Les devises proposées.
- *
- * Une liste courte et non les cent soixante codes ISO: le sélecteur sert à
- * choisir la devise de l'espace, une fois, et faire défiler cent soixante lignes
- * pour trouver EUR n'aide personne. Le champ reste un code ISO côté contrat, donc
- * élargir cette liste ne demande rien d'autre qu'une ligne ici.
+ * Une liste courte plutôt que les cent soixante codes ISO ; le contrat reste un
+ * code ISO, élargir ne demande qu'une ligne ici.
  */
 const CURRENCIES = [
     { code: 'EUR', label: 'Euro (€)' },
@@ -22,21 +18,9 @@ const CURRENCIES = [
 ];
 
 /**
- * Les réglages de la feature, et le seul commutateur qui la fait passer du foyer
- * à l'entreprise : le panneau Général de la coquille de réglages.
- *
- * Le mode entreprise n'ajoute pas un écran: il fait apparaître la TVA sur les
- * saisies et son récapitulatif sur le tableau de bord. Rien d'autre ne change,
- * parce que rien d'autre n'a besoin de changer: un livre de comptes est le même
- * objet des deux côtés.
- *
- * Autonome, comme tous les panneaux de la coquille : il se charge et se
- * sauvegarde tout seul, la coquille ne lui passe que la portée et le droit
- * d'écriture. Après l'enregistrement il ravive toutes les clés de la feature
- * (`refreshFinance`) : le socle de l'écran porte la devise et le mode
- * entreprise, tout l'écran en dépend, jusqu'au symbole de chaque montant. Sans
- * le droit d'écriture, les champs restent lisibles mais figés : un formulaire
- * que le serveur refuserait est un écran qui ment.
+ * Panneau Général : devise et mode entreprise (la TVA sur les saisies et son
+ * récapitulatif). Après l'enregistrement, `refreshFinance` : tout l'écran
+ * dépend de la devise, jusqu'au symbole de chaque montant.
  */
 export default function FinanceGeneralPanel({ canWrite }: SettingsPanelProps) {
     const [draft, setDraft] = useState<FinanceConfig | null>(null);

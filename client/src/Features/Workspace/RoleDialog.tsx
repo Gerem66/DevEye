@@ -20,25 +20,16 @@ import shell from '@/Components/FeatureSettings/FeatureSettings.module.css';
 import styles from './Workspace.module.css';
 
 /**
- * Édition d'un rôle : son identité **et** ses droits, dans une seule popup.
+ * Édition d'un rôle : son identité et ses droits, dans une seule popup. Un rôle
+ * se règle entier, là où on l'a créé, plutôt que réparti sur deux écrans.
  *
- * Un détour a existé : l'identité ici, les droits dans une matrice globale
- * rôles × droits sous un onglet Permissions. Retiré : la grille répondait à
- * « qui peut ceci ? » mais l'usage réel est « configurer CE rôle », et couper un
- * rôle en deux écrans obligeait à savoir lequel des deux détenait quoi. Un rôle
- * se règle entier, là où on l'a créé.
+ * La forme est celle de la coquille de réglages (mêmes classes que
+ * `FeatureSettings`) : en tête « Espace », le gouvernement de l'espace lui-même ;
+ * sous le trait, une entrée par fonctionnalité, dont le panneau porte le niveau
+ * d'accès et ses réglages propres.
  *
- * La forme est celle de la **coquille de réglages** (mêmes classes que
- * `FeatureSettings` : navigation à gauche, panneau à droite), parce que c'est
- * la même chose : des catégories qui s'énumèrent de haut en bas. En tête,
- * « Espace », le gouvernement de l'espace lui-même ; sous le trait, une entrée
- * par fonctionnalité, dont le panneau porte le niveau d'accès ET ses réglages
- * propres, à commencer par la gestion de ses canaux d'alerte, par
- * fonctionnalité depuis la migration 093.
- *
- * Les intitulés des features viennent du **registre** (`FEATURE_REGISTRY`),
- * plus d'une table locale : c'est ce qui garantit qu'une fonctionnalité ajoutée
- * apparaît ici sans qu'on y pense.
+ * Les intitulés viennent du registre (`FEATURE_REGISTRY`) et non d'une table
+ * locale, pour qu'une fonctionnalité ajoutée apparaisse ici sans qu'on y pense.
  */
 
 /** Intitulés en clair : l'enum technique ne se montre pas à l'utilisateur. */
@@ -51,8 +42,8 @@ const CAPABILITY_LABELS: Record<WorkspaceCapability, string> = {
 };
 
 /**
- * Trois niveaux, toujours les mêmes : des boutons collés plutôt qu'un menu
- * déroulant, qui cachait trois choix connus d'avance derrière un clic.
+ * Trois niveaux, toujours les mêmes : des boutons collés plutôt qu'un déroulant,
+ * qui cacherait trois choix connus d'avance derrière un clic.
  */
 const ACCESS_OPTIONS = [
     { value: 'none', label: 'Aucun', title: 'La fonctionnalité n’apparaît pas' },
@@ -94,11 +85,9 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
 
     /**
      * La navigation s'ouvre sur les fonctionnalités que l'accueil de l'espace
-     * montre (dossiers compris) : c'est presque toujours là-dessus qu'un rôle
-     * se règle. Le filtre est l'accueil, et lui seul : les droits accordés hors
-     * accueil ne sont pas cachés en silence, le bouton de dépliage en donne le
-     * compte. Seul garde-fou : un accueil qui ne montre rien déplie tout
-     * d'office, une liste vide d'où rien ne se règle n'aidant personne.
+     * montre, dossiers compris. Rien n'est caché en silence : le bouton de dépliage
+     * compte les droits accordés hors accueil, et un accueil qui ne montre rien
+     * déplie tout d'office.
      */
     const layout = useHomeLayout();
     // Le registre fusionné : les natives, puis les modules externes installés.
@@ -141,9 +130,9 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
         setCapabilities((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
 
     /**
-     * Les extras à écrire pour cette feature : seules les clés que son manifest
-     * déclare encore, avec leur valeur choisie. Le serveur revalide de toute
-     * façon (`validateGrantExtras`), ceci évite juste d'envoyer des restes.
+     * Les extras à écrire : seules les clés que le manifest déclare encore, avec
+     * leur valeur choisie, pour ne pas envoyer de restes. Le serveur revalide de
+     * toute façon (`validateGrantExtras`).
      */
     const grantExtras = (featureId: string): Record<string, boolean | string> => {
         const specs = moduleManifest(featureId)?.extraPermissions ?? [];
@@ -162,9 +151,8 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
             features: allFeatureDescriptors().flatMap<WorkspaceFeatureGrant>((f) => {
                 const a = features[f.id];
                 if (a !== 'read' && a !== 'write') return [];
-                // Les canaux ne se gèrent pas sur une fonctionnalité qui n'en
-                // émet pas, ni sur une qu'on ne voit pas : le champ est alors
-                // rangé à false plutôt que laissé à un état sans objet.
+                // Les canaux ne se gèrent pas sur une fonctionnalité qui n'en émet
+                // pas : le champ est rangé à false plutôt qu'à un état sans objet.
                 return [
                     {
                         feature: f.id,

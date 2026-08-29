@@ -1,27 +1,18 @@
 -- Les espaces personnels deviennent de vraies lignes de `workspaces`.
 --
--- Jusqu'ici l'espace personnel était virtuel : exposé au client sous l'id 0,
--- absent de la table, sa liste de features portée par `users.features` et ses
--- données rangées avec `workspace_id = NULL`. Résultat, chaque feature devait
--- traduire 0 ↔ NULL à la main (`toDbWorkspaceId`/`rowInWorkspace`, dupliqué dans
--- trois fichiers) et aucune requête ne filtrait réellement par espace.
+-- Jusqu'ici l'espace personnel était virtuel (id 0 côté client, `workspace_id`
+-- NULL en base, features portées par `users.features`). Après cette migration,
+-- tout espace est une ligne et l'id 0 n'existe plus.
 --
--- Après cette migration, tout espace est une ligne, `workspace_id` est un entier
--- ordinaire, et l'id 0 n'existe plus nulle part.
+-- Le chiffrement n'est PAS touché : l'espace personnel appartient à son
+-- propriétaire et continue de résoudre la DEK de cet utilisateur.
 --
--- IMPORTANT — le chiffrement n'est PAS touché : l'espace personnel appartient à
--- son propriétaire et continue de résoudre la DEK de cet utilisateur. Aucun blob
--- n'est re-chiffré ici, ni dans les migrations suivantes.
---
--- Toutes les additions de colonnes passent par INFORMATION_SCHEMA + SQL
--- dynamique et jamais par `ADD COLUMN IF NOT EXISTS` : cette clause (extension
--- MariaDB) a déjà fait tomber la production au démarrage, cf. 038.
+-- Ajouts de colonnes via INFORMATION_SCHEMA + SQL dynamique, jamais
+-- `ADD COLUMN IF NOT EXISTS` (extension MariaDB, cf. 038).
 
--- 1. `workspace_members.roles` disparaît d'abord : la colonne est `JSON NOT NULL`
---    sans valeur par défaut, donc l'insertion des adhésions personnelles
---    (étape 6) échouerait tant qu'elle existe. Elle n'a jamais contenu autre
---    chose que `["owner"]`, et la propriété est désormais portée par
---    `workspaces.owner_user_id` ; les vrais rôles auront leur propre table.
+-- 1. `workspace_members.roles` part d'abord : `JSON NOT NULL` sans défaut, elle
+--    ferait échouer l'insertion des adhésions personnelles (étape 6). Elle n'a
+--    jamais contenu que `["owner"]`, la propriété passe sur `owner_user_id`.
 SET @c = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'workspace_members' AND COLUMN_NAME = 'roles');
 SET @s = IF(@c > 0, 'ALTER TABLE workspace_members DROP COLUMN roles', 'SELECT 1');
@@ -59,8 +50,8 @@ SET @s = IF(@c = 0,
     'SELECT 1');
 PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
--- 3. Propriétaire des espaces partagés existants : le membre le plus ancien.
---    C'est celui qui l'a créé — `workspace.add` ajoutait son auteur aussitôt.
+-- 3. Propriétaire des espaces partagés existants : le membre le plus ancien,
+--    c'est-à-dire son créateur (`workspace.add` ajoutait son auteur aussitôt).
 UPDATE workspaces w
 SET w.owner_user_id = (
     SELECT m.user_id FROM workspace_members m
@@ -68,10 +59,8 @@ SET w.owner_user_id = (
 )
 WHERE w.owner_user_id IS NULL;
 
--- 4. Un espace sans aucun membre n'est atteignable par personne (aucune UI ne
---    peut le produire aujourd'hui ; `findAccessibleByUser` passe par
---    `workspace_members`). Il resterait sans propriétaire et bloquerait le
---    NOT NULL de l'étape 7 : on le supprime. Vérifié à 0 avant migration.
+-- 4. Un espace sans aucun membre n'est atteignable par personne et resterait
+--    sans propriétaire, bloquant le NOT NULL de l'étape 7 : on le supprime.
 DELETE FROM workspaces WHERE owner_user_id IS NULL;
 
 -- 5. Un espace personnel par compte, reprenant ce que l'utilisateur portait :
@@ -114,10 +103,9 @@ SET @s = IF(@c = 0,
     'SELECT 1');
 PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
--- 8. Colonnes mortes de `workspaces` : jamais lues nulle part.
---    `password_hash` n'a jamais servi (le déverrouillage passe par le compte) et
---    `re_auth_interval` était exposé au client sans qu'aucun code ne le lise —
---    la fenêtre de re-validation réellement utilisée est `users.re_auth_interval`.
+-- 8. Colonnes mortes de `workspaces` : `password_hash` n'a jamais servi (le
+--    déverrouillage passe par le compte) et `re_auth_interval` n'était lu par
+--    aucun code (la fenêtre utilisée est `users.re_auth_interval`).
 SET @c = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'workspaces' AND COLUMN_NAME = 'password_hash');
 SET @s = IF(@c > 0, 'ALTER TABLE workspaces DROP COLUMN password_hash', 'SELECT 1');

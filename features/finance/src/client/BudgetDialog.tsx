@@ -27,13 +27,7 @@ interface BudgetDialogProps {
     onSaved: () => void;
 }
 
-/**
- * Poser ou retirer une enveloppe.
- *
- * La catégorie ne se change pas sur une enveloppe existante: ce serait retirer
- * celle-ci et en poser une autre, en gardant l'apparence d'une modification. Le
- * sélecteur ne propose donc que les catégories libres, à la création.
- */
+/** La catégorie ne se change pas sur une enveloppe existante : ce serait en retirer une et en poser une autre. */
 export function BudgetDialog({ base, open, budget, available, onClose, onSaved }: BudgetDialogProps) {
     const initial = useMemo(
         () => ({

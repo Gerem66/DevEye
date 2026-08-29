@@ -20,30 +20,19 @@ import { DEFAULT_SENTINEL_INTEGRITY_MINUTES } from '@deveye/types/sdk';
 import type { SentinelEngine } from './engine';
 import type { AllowRow, DeviceConfigRow, FindingRow, SentinelRepo } from './repo';
 
-/** Le contexte d'une commande de Sentinelle : le contexte du SDK, sur le dépôt du module. */
 export type Ctx = SdkFeatureContext<SentinelRepo>;
 
 /**
- * Briques partagées par les commandes de Sentinelle : le calcul de posture, la
- * mise en forme des constats et des états, et la résolution des noms
- * d'appareils.
- *
- * L'autorisation, elle, n'est **pas** ici : elle passe par
- * `ctx.deveye.devices.authorize` (l'ex `authorizeDevice` de `devices/shared.ts`),
- * comme toutes les autres features qui touchent un appareil (invariant 9 de
- * Monitoring : aucune feature ne refait la logique d'accès). Le périmètre, lui,
- * est `ctx.deveye.devices.list()` : la même règle que `devices.list`,
- * l'administrateur dans son espace **personnel** voit la flotte entière.
+ * Briques partagées par les commandes : posture, mise en forme des constats et
+ * des états, noms d'appareils. L'accès à un appareil ne se décide pas ici : il
+ * passe par `ctx.deveye.devices.authorize`, et le périmètre par
+ * `ctx.deveye.devices.list()`.
  */
 
 /**
- * Le moteur du module, posé par `createService` au démarrage : le remplaçant
- * du `ctx.sentinel` natif. Un singleton d'étendue module, assumé (patron
- * `setEngine` de CloudSync) : le moteur est unique par processus, exactement
- * comme avant le rapatriement. Une seule commande lui parle
- * (`sentinel.resetBaseline`, pour lui faire oublier sa ligne de base en
- * mémoire) ; toutes les lectures passent par les dépôts, jamais par lui, de
- * sorte qu'une réponse ne dépende jamais de l'état d'un tour de boucle.
+ * Le moteur, posé par `createService` au démarrage : unique par processus.
+ * Seule `sentinel.resetBaseline` lui parle ; les lectures passent par les
+ * dépôts, jamais par lui, pour qu'une réponse ne dépende pas d'un tour de boucle.
  */
 let engineRef: SentinelEngine | null = null;
 
@@ -58,24 +47,21 @@ export function engine(): SentinelEngine {
 }
 
 /**
- * Les noms des appareils que cet espace voit, par identifiant.
- *
- * Les dépôts du module ne joignent plus `devices` : c'est ici que les constats
- * et les autorisations retrouvent un nom, en une lecture par requête. Un
- * appareil disparu, ou hors du périmètre de l'appelant, se nomme par son
- * identifiant tronqué plutôt que par un blanc : une ligne sans nom se lirait
- * comme une donnée cassée, alors qu'elle dit seulement que la machine n'est
- * plus là.
+ * Les noms des appareils que cet espace voit, par identifiant : les dépôts ne
+ * joignent pas `devices`, constats et autorisations retrouvent leur nom ici.
  */
 export function deviceNames(devices: readonly SdkDevice[]): Map<string, string> {
     return new Map(devices.map((d) => [d.id, d.name]));
 }
 
+/**
+ * Un appareil disparu ou hors périmètre se nomme par son identifiant tronqué :
+ * un blanc se lirait comme une donnée cassée.
+ */
 export function nameOf(names: ReadonlyMap<string, string>, deviceId: string): string {
     return names.get(deviceId) ?? deviceId.slice(0, 8);
 }
 
-/** Rend le DTO d'un constat depuis sa ligne, avec le nom de son appareil. */
 export function toFinding(row: FindingRow, deviceName: string): Finding {
     return {
         id: row.id,
@@ -95,7 +81,7 @@ export function toFinding(row: FindingRow, deviceName: string): Finding {
     };
 }
 
-/** Rend le DTO d'une autorisation ; `deviceName` est `null` pour une portée flotte. */
+/** `deviceName` est `null` pour une autorisation à portée flotte. */
 export function toAllow(row: AllowRow, deviceName: string | null): AllowEntry {
     return {
         id: row.id,
@@ -109,11 +95,7 @@ export function toAllow(row: AllowRow, deviceName: string | null): AllowEntry {
     };
 }
 
-/**
- * L'état d'une machine dans la vue de flotte : ce que l'appareil dit de lui
- * (nom, rapport) et ce que le module en a réglé (`config`, `null` sans ligne :
- * non surveillée, défauts).
- */
+/** L'état d'une machine dans la vue de flotte ; `config` à `null` : machine non surveillée, valeurs par défaut. */
 export function stateOf(device: SdkDevice, config: DeviceConfigRow | null, open: SeverityCounts): DeviceSentinelState {
     const learningUntil = config?.learning_until ?? null;
     return {
@@ -144,10 +126,7 @@ const POSTURE_ORDER: SentinelRuleId[] = [
 ];
 
 /**
- * Traduit un booléen de sonde en état de contrôle.
- *
- * `null` devient `unknown`, jamais `ok`. C'est la règle qui compte dans tout ce
- * fichier : un tableau de bord qui affiche un vert sur une sonde absente donne
+ * `null` devient `unknown`, jamais `ok` : un vert sur une sonde absente donne
  * une assurance que rien ne soutient.
  */
 function fromProbe(value: boolean | null | undefined, failWhen: boolean): PostureStatus {
@@ -156,14 +135,9 @@ function fromProbe(value: boolean | null | undefined, failWhen: boolean): Postur
 }
 
 /**
- * La posture d'une machine, contrôle par contrôle, avec son score.
- *
- * Le score ne porte que sur les contrôles **concluants**. Diluer les `unknown`
- * dans la moyenne reviendrait à récompenser une machine qui ne mesure rien, ce
- * qui est l'exact opposé de ce qu'un score de posture doit encourager.
- *
- * Le rapport arrive déjà analysé : la façade des appareils le décode depuis
- * `devices.report_json`, un blob illisible valant `null`.
+ * La posture d'une machine, contrôle par contrôle, avec son score. Le score ne
+ * porte que sur les contrôles concluants : diluer les `unknown` reviendrait à
+ * récompenser une machine qui ne mesure rien.
  */
 export function posturize(device: SdkDevice): DevicePosture {
     const report: DeviceReport | null = device.report;
@@ -181,8 +155,7 @@ export function posturize(device: SdkDevice): DevicePosture {
             case 'posture.disk_unencrypted':
                 return { rule, status: fromProbe(security.diskEncryption, false), label, detail: null };
             case 'posture.sip_off':
-                // SIP n'existe que sur macOS : ailleurs, ce n'est pas « inconnu »,
-                // c'est sans objet, et les deux ne se disent pas pareil.
+                // SIP n'existe que sur macOS : ailleurs c'est sans objet, pas « inconnu ».
                 return {
                     rule,
                     status: isMac ? fromProbe(security.sip, false) : ('not_applicable' as const),
@@ -236,35 +209,29 @@ export function posturize(device: SdkDevice): DevicePosture {
 }
 
 /**
- * Les sondes dont on a réellement reçu de la donnée.
- *
- * Sert à l'interface pour distinguer « rien à signaler » de « pas encore
- * mesuré ». Une machine dont l'agent n'a pas encore la version qui remonte les
- * chemins d'exécutables doit le **dire**, plutôt que de laisser croire que les
- * règles `exec.*` l'ont blanchie.
+ * Les sondes dont on a reçu de la donnée : l'interface distingue « rien à
+ * signaler » d'un agent trop ancien pour avoir mesuré quoi que ce soit.
  */
 export function probesOf(device: SdkDevice, config: DeviceConfigRow | null): RuleProbe[] {
     const report = device.report;
     const probes: RuleProbe[] = ['snapshot'];
     if (report) probes.push('report');
 
-    // Ce que l'agent **déclare** savoir faire, et non ce qu'on déduirait de ses
-    // valeurs : une sonde en échec rend `null` exactement comme une sonde
-    // absente, et les confondre reviendrait à conseiller d'aller inspecter une
-    // machine dont l'agent a simplement besoin d'être mis à jour.
+    // Ce que l'agent déclare savoir faire, et non ce qu'on déduirait de ses
+    // valeurs : une sonde en échec rend `null` comme une sonde absente.
     const declared = new Set(report?.agent?.probes ?? []);
     for (const probe of ['execPath', 'posture', 'integrity', 'auth'] as const) {
         if (declared.has(probe)) probes.push(probe);
     }
 
-    // `integrity` se confirme à la réception d'un manifeste : un agent peut la
-    // déclarer et n'avoir pas encore relevé (premier cycle, 6 h par défaut).
+    // `integrity` ne se confirme qu'à la réception d'un manifeste : un agent peut
+    // la déclarer sans avoir encore relevé (premier cycle, 6 h par défaut).
     if (config === null || config.last_integrity_at === null) {
         const i = probes.indexOf('integrity');
         if (i !== -1) probes.splice(i, 1);
     }
-    // Idem pour l'authentification : déclarée par l'agent, mais désactivable
-    // côté serveur. L'interrupteur du serveur fait foi.
+    // L'authentification est déclarée par l'agent mais désactivable côté serveur :
+    // l'interrupteur du serveur fait foi.
     if (config === null || config.auth_events !== 1) {
         const i = probes.indexOf('auth');
         if (i !== -1) probes.splice(i, 1);

@@ -4,15 +4,9 @@ import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/ty
 import type { UptimeRepo } from './repo';
 import type { UptimeMonitor } from './service';
 
-/** Le contexte d'une commande d'Uptime : le contexte du SDK, sur le dépôt du module. */
 export type Ctx = SdkFeatureContext<UptimeRepo>;
 
-/**
- * L'ordonnanceur du module, posé par `createService` au démarrage : le
- * remplaçant du `ctx.uptime` natif. Un singleton d'étendue module, assumé
- * (patron `setEngine` de CloudSync) : l'ordonnanceur est unique par processus,
- * exactement comme avant le rapatriement.
- */
+/** L'ordonnanceur, posé par `createService` au démarrage : un singleton par processus. */
 let monitorRef: UptimeMonitor | null = null;
 
 export function setMonitor(monitor: UptimeMonitor | null): void {

@@ -43,7 +43,6 @@ export interface WeatherRepo {
     deleteKey(workspaceId: number, provider: WeatherProvider): Promise<void>;
 }
 
-/** Même dépôt qu'avant le rapatriement, porté sur le `SdkQueryable` du module. */
 export function createRepo(q: SdkQueryable): WeatherRepo {
     return {
         async listLocations(workspaceId) {

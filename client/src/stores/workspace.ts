@@ -3,18 +3,15 @@ import type { Workspace } from '@deveye/types';
 import { useSyncExternalStore } from 'react';
 
 /**
- * L'espace de travail actif.
- *
- * Deux rôles distincts, d'où deux états :
- *  - `activeId` est lu **synchroniquement** par `api/ws.ts` pour estampiller
- *    chaque commande. Il doit donc exister avant tout rendu React, y compris au
- *    tout premier paint après un rechargement — d'où sa persistance en
- *    localStorage et sa lecture au chargement du module.
- *  - `workspaces` est la liste servie par la session, pour l'affichage.
+ * L'espace de travail actif. `activeId` est lu synchroniquement par `api/ws.ts`
+ * pour estampiller chaque commande : il doit exister avant tout rendu React, y
+ * compris au premier paint après un rechargement, d'où sa persistance en
+ * localStorage et sa lecture au chargement du module. `workspaces` est la liste
+ * servie par la session, pour l'affichage.
  *
  * L'`epoch` s'incrémente à chaque bascule : les vues qui doivent se reconstruire
- * (features montées, listes en cache) l'utilisent comme clé de remontage plutôt
- * que de s'abonner chacune au changement d'espace.
+ * l'utilisent comme clé de remontage plutôt que de s'abonner chacune au
+ * changement d'espace.
  */
 
 const ACTIVE_KEY = 'deveye:activeWorkspace';
@@ -64,9 +61,8 @@ function subscribe(fn: () => void): () => void {
 }
 
 /**
- * Lu par `ws.send` pour estampiller l'enveloppe. `null` laisse le serveur
- * choisir l'espace personnel — ce qui est exactement le bon repli avant que la
- * session n'ait répondu.
+ * Lu par `ws.send` pour estampiller l'enveloppe. `null` laisse le serveur choisir
+ * l'espace personnel, le bon repli avant que la session n'ait répondu.
  */
 export function getActiveWorkspaceId(): number | null {
     return state.activeId;
@@ -86,22 +82,15 @@ export function useActiveWorkspace(): Workspace | null {
     return s.workspaces.find((w) => w.id === s.activeId) ?? s.workspaces[0] ?? null;
 }
 
-/**
- * Applique ce que la session vient de livrer (connexion, `/me`, rafraîchissement).
- */
+/** Applique ce que la session vient de livrer (connexion, `/me`, rafraîchissement). */
 export function syncWorkspacesFromServer(
     workspaces: Workspace[],
     activeWorkspaceId: number,
     permissions: WorkspacePermissions
 ): void {
-    // Le choix de l'utilisateur prime tant qu'il y a accès : le serveur ne
-    // *propose* une valeur (le favori, sinon l'espace personnel) que pour amorcer
-    // une session neuve — après une déconnexion, `resetWorkspace` a vidé l'état —
-    // ou pour corriger un espace devenu inaccessible (supprimé, accès révoqué).
-    //
-    // Sans cette règle, tout rafraîchissement de session (`/api/auth/me`, qui
-    // part aussi à la reconnexion de la socket) ramènerait l'utilisateur sur son
-    // espace favori et annulerait la bascule qu'il vient de faire.
+    // Le choix de l'utilisateur prime tant qu'il y a accès : la valeur du serveur
+    // n'amorce qu'une session neuve ou corrige un espace devenu inaccessible. Sinon
+    // tout rafraîchissement de session annulerait la bascule qu'il vient de faire.
     const accessible = new Set(workspaces.map((w) => w.id));
     const activeId = state.activeId !== null && accessible.has(state.activeId) ? state.activeId : activeWorkspaceId;
 
@@ -112,17 +101,14 @@ export function syncWorkspacesFromServer(
 }
 
 /**
- * Bascule vers un autre espace.
- *
- * Publie l'id immédiatement, pour que les commandes suivantes l'estampillent —
- * `workspace.activate` compris, dont c'est ainsi la cible. L'appelant enchaîne
- * sur cette commande pour récupérer l'apparence et la disposition de l'espace.
+ * Bascule vers un autre espace. Publie l'id immédiatement pour que les commandes
+ * suivantes l'estampillent, `workspace.activate` compris : l'appelant enchaîne
+ * sur elle pour récupérer l'apparence et la disposition.
  */
 export function setActiveWorkspace(id: number): void {
     if (state.activeId === id) return;
-    // Les droits de la cible ne sont pas encore connus : on repart de zéro
-    // plutôt que de laisser croire, l'espace d'un instant, que ceux de l'espace
-    // précédent s'appliquent ici.
+    // Les droits de la cible ne sont pas encore connus : ceux de l'espace
+    // précédent ne doivent pas sembler s'appliquer, même un instant.
     state = { ...state, activeId: id, permissions: NO_PERMISSIONS, epoch: state.epoch + 1 };
     persistActiveId(id);
     emit();
@@ -141,9 +127,8 @@ export function upsertWorkspace(workspace: Workspace): void {
 }
 
 /**
- * Remet le store à zéro à la déconnexion. Sans ça, la session suivante — un
- * autre compte sur la même machine — hériterait de l'espace du précédent et
- * estampillerait ses commandes avec un id auquel elle n'a pas accès.
+ * Remet le store à zéro : la session suivante ne doit pas estampiller ses
+ * commandes avec un espace auquel elle n'a pas accès.
  */
 export function resetWorkspace(): void {
     state = { activeId: null, workspaces: [], permissions: NO_PERMISSIONS, epoch: state.epoch + 1 };
@@ -158,22 +143,21 @@ export function setPermissions(permissions: WorkspacePermissions): void {
 }
 
 /**
- * Droits de l'appelant dans l'espace actif, sous une forme directement
- * interrogeable. Sert à masquer ce qui n'est pas accordé — le serveur vérifie
- * de toute façon chaque commande.
+ * Droits de l'appelant dans l'espace actif. Sert à masquer ce qui n'est pas
+ * accordé ; le serveur vérifie de toute façon chaque commande.
  */
 export function useWorkspacePermissions(): {
     isOwner: boolean;
     can: (c: WorkspaceCapability) => boolean;
     canFeature: (f: FeatureId, level?: FeatureAccess) => boolean;
-    /** Gérer les canaux d'alerte de CETTE feature (grant `channels`, 093). */
+    /** Gérer les canaux d'alerte de cette feature (grant `channels`). */
     canChannels: (f: FeatureId) => boolean;
     /** Permission déclarée de type `toggle` : absente = refusée, propriétaire = accordée. */
     canExtra: (f: FeatureId, key: string) => boolean;
     /**
-     * Permission déclarée de type `choice`. Le défaut (le moins privilégié) et
-     * la valeur du propriétaire viennent des specs du manifest, que l'appelant
-     * fournit : ce magasin ne connaît pas les modules.
+     * Permission déclarée de type `choice`. Le défaut, le moins privilégié, et la
+     * valeur du propriétaire viennent des specs que l'appelant fournit : ce magasin
+     * ne connaît pas les modules.
      */
     extraValue: (f: FeatureId, key: string, spec: { default: string; ownerValue: string }) => string;
 } {

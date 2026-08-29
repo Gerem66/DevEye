@@ -7,16 +7,9 @@ import { buildNotice, estimateFromHistory, firstLine, progressBar, tailOf } from
 type DiscordNotice = ReturnType<typeof buildNotice>;
 
 /**
- * Le message de suivi d'un déploiement.
- *
- * Ce qui est vérifié ici, ce n'est pas la mise en page — elle se juge à l'œil
- * dans Discord — mais les trois calculs qui peuvent **mentir en silence** :
- * l'estimation, le bornage de la barre, et le nettoyage du journal. Une erreur
- * dans l'un des trois ne casse rien : elle produit un message plausible et faux,
- * ce qui est précisément le mode de panne qu'on ne remarquerait jamais.
- *
- * Le reste (couleurs, ordre des champs) est du câblage visible à la lecture, et
- * le tester reviendrait à recopier la fonction dans son propre test.
+ * Le message de suivi d'un déploiement : non la mise en page, mais les trois
+ * calculs qui peuvent mentir en silence (l'estimation, le bornage de la barre,
+ * le nettoyage du journal).
  */
 
 function row(over: Partial<DeploymentRow> & { id: number }): DeploymentRow {
@@ -44,10 +37,8 @@ describe('estimateFromHistory — la durée de référence', () => {
     });
 
     it('écarte les échecs', () => {
-        // Le point de tout le calcul : un échec s'arrête à la première étape qui
-        // casse, souvent en quelques secondes. L'inclure ferait chuter
-        // l'estimation à chaque build raté, et la barre d'un déploiement sain
-        // sauterait à 100 % au bout de dix secondes.
+        // Un échec s'arrête en quelques secondes : l'inclure ferait chuter
+        // l'estimation à chaque build raté.
         const history = [
             row({ id: 1, started_at: 100, finished_at: 160 }),
             row({ id: 2, status: 'failed', started_at: 200, finished_at: 203 })
@@ -63,8 +54,7 @@ describe('estimateFromHistory — la durée de référence', () => {
     });
 
     it('rend null sans mesure exploitable', () => {
-        // Une cible neuve : pas de barre du tout, plutôt qu'une barre calée sur
-        // une valeur inventée.
+        // Une cible neuve : pas de barre du tout.
         assert.equal(estimateFromHistory([], 1), null);
         assert.equal(estimateFromHistory([row({ id: 1, started_at: 100, finished_at: 100 })], 9), null);
     });
@@ -88,9 +78,8 @@ describe('progressBar — bornée à [0, 100] %', () => {
     });
 
     it('ne déborde jamais', () => {
-        // Un déploiement plus long que la moyenne dépasse le ratio de 1. Sans
-        // bornage, `repeat()` d'un négatif lèverait — au milieu d'une boucle de
-        // fond, sur un message qu'on ne pourrait plus conclure.
+        // Un déploiement plus long que la moyenne dépasse le ratio de 1, et
+        // `repeat()` d'un négatif lèverait.
         assert.equal(progressBar(3).length, 10);
         assert.equal(progressBar(-1), '▱▱▱▱▱▱▱▱▱▱');
         assert.equal(progressBar(Number.NaN).length, 10);
@@ -99,8 +88,8 @@ describe('progressBar — bornée à [0, 100] %', () => {
 
 describe('tailOf — la queue du journal', () => {
     it('retire les séquences ANSI', () => {
-        // Dokploy colore sa sortie ; un bloc de code Discord les rendrait telles
-        // quelles et le journal arriverait noyé sous des `[0m`.
+        // Dokploy colore sa sortie ; un bloc de code Discord rendrait les
+        // séquences telles quelles.
         assert.equal(tailOf('\u001b[32mok\u001b[0m'), 'ok');
     });
 
@@ -109,8 +98,7 @@ describe('tailOf — la queue du journal', () => {
     });
 
     it('ignore les lignes vides de fin', () => {
-        // Sans cela le bloc s'ouvrirait sur du vide à chaque rafraîchissement,
-        // la sortie d'un build se terminant presque toujours par un saut.
+        // La sortie d'un build se termine presque toujours par un saut de ligne.
         assert.equal(tailOf('fin\n\n\n', 2), 'fin');
     });
 
@@ -121,15 +109,12 @@ describe('tailOf — la queue du journal', () => {
 
 describe('firstLine — le sujet d’un message de commit', () => {
     it('ne garde que la première ligne', () => {
-        // Dokploy range le message de commit ENTIER dans le titre : sujet, ligne
-        // vide, puis le corps. Sans coupe, un commit bavard remplissait le haut
-        // du message Discord et repoussait tout le reste.
+        // Dokploy range le message de commit ENTIER dans le titre.
         assert.equal(firstLine('feat: le sujet\n\nUn corps\nsur deux lignes.'), 'feat: le sujet');
     });
 
     it('n’ajoute pas de points de suspension pour un simple corps', () => {
-        // Signaler qu'un commit a un corps n'apprend rien à qui lit un avis de
-        // déploiement : les points ne disent que « cette ligne a été coupée ».
+        // Les points ne disent que « cette ligne a été coupée ».
         assert.equal(firstLine('chore: bump to v0.14.2\n\ndétails'), 'chore: bump to v0.14.2');
     });
 
@@ -174,10 +159,8 @@ describe('buildNotice — ce que le lecteur voit', () => {
     });
 
     it('annonce le dépassement plutôt qu’une fin imminente', () => {
-        // Le cœur du parti pris : passé la moyenne, la barre est pleine et le
-        // texte le dit. Un « 100 % » nu sur un déploiement qui continue ferait
-        // croire à une fin, et le lecteur se demanderait pourquoi le message ne
-        // conclut pas.
+        // Passé la moyenne, la barre est pleine et le texte le dit : un « 100 % »
+        // nu ferait croire à une fin.
         const notice = buildNotice({ ...base, status: 'running', finishedAt: null, now: 1_500 });
         const description = String((notice.embeds?.[0] as { description: string }).description);
         assert.match(description, /Plus long que d’habitude/);
@@ -197,10 +180,8 @@ describe('buildNotice — ce que le lecteur voit', () => {
     });
 
     it('garde l’erreur en description et sort le journal en champ', () => {
-        // Discord rend les champs APRÈS la description : c'est le seul moyen de
-        // faire remonter projet / service / durée au-dessus de la sortie de
-        // build. L'erreur, elle, doit rester tout en haut — c'est la ligne qui
-        // dit *pourquoi*.
+        // Discord rend les champs APRÈS la description : le journal en champ
+        // fait remonter projet / service / durée ; l'erreur reste tout en haut.
         const embed = buildNotice({
             ...base,
             status: 'failed',
@@ -239,10 +220,9 @@ describe('buildNotice — ce que le lecteur voit', () => {
     });
 
     it('rogne un journal trop long par le haut, pour tenir dans un champ', () => {
-        // Discord plafonne la valeur d'un champ à 1024 caractères là où une
-        // description en accepte 4096 : sans ce rognage, le message ENTIER
-        // serait rejeté. On retire les lignes les plus anciennes, jamais les
-        // dernières — ce sont elles qui portent l'erreur.
+        // Discord plafonne un champ à 1024 caractères, sinon le message ENTIER
+        // est rejeté. On retire les lignes les plus anciennes, jamais les
+        // dernières, qui portent l'erreur.
         const log = Array.from({ length: 8 }, (_, i) => `${i} ${'x'.repeat(105)}`).join('\n');
         const embed = buildNotice({ ...base, status: 'failed', finishedAt: 1_100, log }).embeds![0] as {
             fields: { name: string; value: string }[];
@@ -253,8 +233,7 @@ describe('buildNotice — ce que le lecteur voit', () => {
     });
 
     it('remplace « Écoulé » par « Durée » à la conclusion, à la même place', () => {
-        // Le même message se transforme : l'œil ne doit pas avoir à rechercher
-        // le temps ailleurs au moment où le déploiement se conclut.
+        // Le même message se transforme : le temps garde sa place.
         const encours = buildNotice({ ...base, status: 'running', finishedAt: null });
         const fini = buildNotice({ ...base, status: 'success', finishedAt: 1_100 });
         const nameAt = (n: DiscordNotice, i: number) => (n.embeds![0] as { fields: { name: string }[] }).fields[i].name;
@@ -263,8 +242,7 @@ describe('buildNotice — ce que le lecteur voit', () => {
     });
 
     it('ajoute le lien Dokploy seulement quand il est reconstructible', () => {
-        // Un lien faux enverrait le lecteur sur une page d'erreur au moment
-        // précis où il cherche à comprendre un échec.
+        // Un lien faux serait pire que pas de lien.
         const sans = buildNotice({ ...base, status: 'success', finishedAt: 1_100 });
         const avec = buildNotice({ ...base, status: 'success', finishedAt: 1_100, url: 'https://x/y' });
         const names = (n: DiscordNotice) => (n.embeds![0] as { fields: { name: string }[] }).fields.map((f) => f.name);

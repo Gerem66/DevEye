@@ -81,11 +81,7 @@ interface AgentWSDeps {
     hub: MonitorHub;
     /** Présence en direct : un agent qui arrive ou part change la liste d'appareils. */
     live: LiveHub;
-    /**
-     * Les hooks agent des modules installés (voir moduleAgentHooks) : la
-     * télémétrie persistée leur est tendue (Sentinelle), la synchro aussi
-     * (CloudSync).
-     */
+    /** Les hooks agent des modules installés (voir `moduleAgentHooks`). */
     hooks: Required<FeatureAgentHooks>;
     audit: AuditLog;
 }
@@ -173,16 +169,13 @@ export async function registerAgentWS(
 ): Promise<void> {
     app.get('/agent', { websocket: true }, async (socket, req) => {
         // Stealth: every authentication/authorization failure ends the connection
-        // the exact same way, with no distinguishing code or reason. An outsider
-        // probing the endpoint can't tell a missing/invalid token from an unknown,
-        // revoked or archived device — it all looks like "nothing here".
+        // the same way, so a probe can't tell an invalid token from an unknown,
+        // revoked or archived device.
         const deny = () => socket.close(1008);
 
-        // The agent fires `agent.hello` the instant the socket opens — i.e. while
-        // we're still in the async auth + connect-time DB writes below, before any
-        // real `message` handler exists. Attach a listener synchronously from t=0
-        // that buffers frames until the handler is wired, then replay them; without
-        // this the first frame (the hello carrying the agent version) is dropped.
+        // The agent fires `agent.hello` the instant the socket opens, while the
+        // async auth below is still running. Buffer frames from t=0 until the real
+        // handler is wired, then replay them; otherwise the hello is dropped.
         const earlyFrames: Buffer[] = [];
         let onMessage: ((raw: Buffer) => void) | null = null;
         socket.on('message', (raw: Buffer) => {
@@ -214,27 +207,22 @@ export async function registerAgentWS(
             reqLogger.info('Agent connected');
             const wasOnlineInHub = hub.isOnline(deviceId);
             hub.agentOnline(deviceId, socket);
-            // Tell the agent its collection cadences + capture mode straight away
-            // (recomposée avec la part des modules : les sondes de Sentinelle).
             send(socket, { command: AGENT_CONFIG, payload: await agentConfigFor(device) });
             // Les modules (CloudSync) poussent leurs assignations et rattrapent
-            // le retard éventuel ; l'agrégat isole déjà chaque module.
+            // le retard éventuel.
             void Promise.resolve(hooks.onAgentConnect(deviceId)).catch((err: unknown) => {
                 reqLogger.warn({ err }, 'Module onAgentConnect failed');
             });
-            // A transient DB error here must not reject the route handler: the
-            // fresh, authenticated socket would be torn down, and an agent
-            // retrying against a briefly unhealthy DB becomes an accept-then-
-            // close reconnect storm. Log and keep the session alive instead.
+            // A transient DB error must not tear down the fresh socket: an agent
+            // retrying against a briefly unhealthy DB would become an
+            // accept-then-close reconnect storm.
             try {
                 await db.devices.touchSeen(deviceId, Math.floor(Date.now() / 1000));
                 await recordAgentOnline(db, device, wasOnlineInHub);
             } catch (err) {
                 reqLogger.warn({ err }, 'Connect-time presence bookkeeping failed (socket kept open)');
             }
-            // Un appareil vient de passer en ligne : c'est ce qui remplace le
-            // sondage de la liste d'appareils côté client. `device.presence`
-            // existe déjà, mais ne part qu'aux abonnés d'un appareil précis —
+            // `device.presence` ne part qu'aux abonnés d'un appareil précis ;
             // l'accueil, lui, n'est abonné à rien.
             await notifyDeviceWorkspaces(db, live, deviceId);
             audit.record({
@@ -271,10 +259,9 @@ export async function registerAgentWS(
                 return;
             }
             if (!parsed.success) {
-                // Journalisé, et pas seulement renvoyé à l'agent : un agent dont
-                // les trames ne valident plus n'apparaissait nulle part côté
-                // serveur. De l'extérieur, la machine était « en ligne » et
-                // muette, sans le moindre indice de la cause.
+                // Journalisé, et pas seulement renvoyé à l'agent : sinon une
+                // machine dont les trames ne valident plus paraît en ligne et
+                // muette, sans indice.
                 reqLogger.warn(
                     {
                         command: (parsed.error.flatten().fieldErrors as { command?: string[] })?.command,
@@ -289,9 +276,8 @@ export async function registerAgentWS(
                 return;
             }
             // A throwing handler must neither crash the process (the dispatch
-            // promise is fire-and-forget, so a rejection here is *unhandled* and
-            // fatal on modern Node — the restart then disconnects every agent)
-            // nor take the socket down with it.
+            // promise is fire-and-forget: an unhandled rejection is fatal on
+            // modern Node) nor take the socket down with it.
             try {
                 await dispatch(session, parsed.data);
             } catch (err) {
@@ -308,14 +294,12 @@ export async function registerAgentWS(
 
         socket.on('close', () => {
             hub.agentOffline(deviceId, socket);
-            // Une fermeture tardive d'un VIEUX socket (reconnexion rapide) ne doit
-            // pas interrompre les sessions du nouveau — ni écrire une transition
-            // « offline » fantôme dans la présence : le hub reste l'autorité.
+            // Une fermeture tardive d'un vieux socket (reconnexion rapide) ne doit
+            // ni interrompre le nouveau, ni écrire un « offline » fantôme.
             if (!hub.isOnline(deviceId)) {
                 hooks.onAgentOffline(deviceId);
-                // Plus personne pour envoyer le `pkg.done` attendu : on clôt les
-                // mises à jour restées ouvertes, sans quoi leur verrou — et le
-                // bouton grisé qui va avec — survivrait à l'appareil.
+                // Plus personne pour envoyer le `pkg.done` attendu : sans ça le
+                // verrou survivrait à l'appareil.
                 hub.failRunningUpgrades(deviceId, 'Agent déconnecté pendant la mise à jour');
                 if (device.status !== 'pending_deletion') {
                     void recordAgentOffline(db, deviceId).catch(() => {});

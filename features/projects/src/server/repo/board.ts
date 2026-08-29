@@ -8,19 +8,15 @@ export interface CardUnread {
 }
 
 /**
- * Les tables `project_columns` et `project_cards` : le tableau d'un projet.
- *
- * Les lectures par projet et toutes les écritures prennent le `workspaceId`
- * du projet : son **domicile**, qui n'est pas forcément l'espace actif quand
- * le projet est projeté (`Docs/SHARING.md`). Les lectures par identifiant
- * seul (`findColumn`, `findCard`) ne le connaissent pas encore : la ligne
- * porte l'espace de son projet par construction, et c'est le projet que le
- * handler vérifie (`loadProject`) avant d'agir, parce que c'est lui
- * l'élément, visible d'ici chez lui ou par une fenêtre.
+ * Les tables `project_columns` et `project_cards` : le tableau d'un projet. Les
+ * lectures par projet et toutes les écritures prennent le `workspaceId` du projet,
+ * son domicile, qui n'est pas l'espace actif quand le projet est projeté. Les
+ * lectures par identifiant seul ne le connaissent pas encore : la ligne porte
+ * l'espace de son projet par construction, et c'est le projet, l'élément gardé, que
+ * le handler vérifie avant d'agir.
  */
 export interface ProjectBoardRepo {
     listColumns(projectId: number, workspaceId: number): Promise<ProjectColumnRow[]>;
-    /** Par identifiant seul : l'appelant remonte au projet, et c'est lui qu'il garde. */
     findColumn(columnId: number): Promise<ProjectColumnRow | null>;
     createColumn(input: {
         projectId: number;
@@ -33,13 +29,12 @@ export interface ProjectBoardRepo {
         workspaceId: number,
         input: { content: string; countsAsDone: boolean; wipLimit: number | null }
     ): Promise<ProjectColumnRow | null>;
-    /** Nombre de cartes portées par la colonne, **archivées comprises**. */
+    /** Nombre de cartes portées par la colonne, archivées comprises. */
     countCardsInColumn(columnId: number, workspaceId: number): Promise<number>;
     deleteColumn(columnId: number, workspaceId: number): Promise<boolean>;
     reorderColumns(projectId: number, workspaceId: number, columnIds: number[]): Promise<void>;
 
     listCards(projectId: number, workspaceId: number, archived: boolean): Promise<ProjectCardRow[]>;
-    /** Par identifiant seul : l'appelant remonte au projet, et c'est lui qu'il garde. */
     findCard(cardId: number): Promise<ProjectCardRow | null>;
     createCard(input: {
         projectId: number;
@@ -72,11 +67,8 @@ export interface ProjectBoardRepo {
 
     unreadByProject(projectId: number, workspaceId: number, userId: number): Promise<CardUnread[]>;
     /**
-     * Toutes les cartes vivantes attribuées à quelqu'un dans les projets
-     * donnés : ceux que le portefeuille voit d'ici, les projetés compris, déjà
-     * triés sur leur archivage par l'appelant. Une seule requête : c'est
-     * exactement ce que la colonne claire `assignee_user_id` sert à rendre
-     * possible.
+     * Toutes les cartes vivantes attribuées à quelqu'un dans les projets donnés, en
+     * une requête : c'est ce que la colonne claire `assignee_user_id` rend possible.
      */
     listAssignedIn(projectIds: number[], userId: number): Promise<ProjectCardRow[]>;
 }
@@ -127,8 +119,8 @@ export function projectBoardRepo(q: SdkQueryable): ProjectBoardRepo {
             return this.findColumn(columnId);
         },
         async countCardsInColumn(columnId, workspaceId) {
-            // Archivées comprises : elles sont toujours là, et la contrainte SQL
-            // les emporterait avec la colonne.
+            // Archivées comprises : la contrainte SQL les emporterait avec la
+            // colonne.
             const rows = await q.query<{ count: number }>(
                 'SELECT COUNT(*) AS count FROM project_cards WHERE column_id = ? AND workspace_id = ?',
                 [columnId, workspaceId]
@@ -207,8 +199,8 @@ export function projectBoardRepo(q: SdkQueryable): ProjectBoardRepo {
             return this.findCard(cardId);
         },
         async moveCards(workspaceId, columnId, cardIds) {
-            // `updated` ne bouge pas : ranger une carte n'est pas la modifier.
-            // Une carte d'un autre espace est ignorée en silence par le WHERE.
+            // `updated` ne bouge pas, ranger une carte n'est pas la modifier. Une
+            // carte d'un autre espace est ignorée en silence par le WHERE.
             for (let i = 0; i < cardIds.length; i++) {
                 await q.execute(
                     'UPDATE project_cards SET column_id = ?, sort_order = ? WHERE id = ? AND workspace_id = ?',
@@ -227,8 +219,8 @@ export function projectBoardRepo(q: SdkQueryable): ProjectBoardRepo {
         async restoreCard(cardId, workspaceId) {
             const existing = await this.findCard(cardId);
             if (!existing || existing.workspace_id !== workspaceId) return false;
-            // Son ancien rang appartenait à une colonne qui a bougé : on l'ajoute
-            // à la fin, comme les notes restaurées.
+            // Son ancien rang appartenait à une colonne qui a bougé : elle repart de
+            // la fin.
             const sortOrder = await nextCardOrder(q, existing.column_id);
             const res = await q.execute(
                 'UPDATE project_cards SET archived_at = NULL, sort_order = ? WHERE id = ? AND workspace_id = ?',
@@ -239,8 +231,8 @@ export function projectBoardRepo(q: SdkQueryable): ProjectBoardRepo {
 
         async listAssignedIn(projectIds, userId) {
             if (projectIds.length === 0) return [];
-            // Les tâches sans échéance en dernier, puis les plus urgentes : c'est
-            // l'ordre dans lequel on veut lire sa propre liste.
+            // Les tâches sans échéance en dernier, puis les plus urgentes : l'ordre
+            // dans lequel on lit sa propre liste.
             const placeholders = projectIds.map(() => '?').join(', ');
             return q.query<ProjectCardRow>(
                 `SELECT c.* FROM project_cards c
@@ -250,9 +242,9 @@ export function projectBoardRepo(q: SdkQueryable): ProjectBoardRepo {
             );
         },
         async unreadByProject(projectId, workspaceId, userId) {
-            // Un COUNT contre le point d'eau haute de l'appelant. Une carte
-            // jamais ouverte n'a pas de ligne de lecture : tous ses messages
-            // comptent alors comme non lus, d'où le LEFT JOIN.
+            // Un COUNT contre le point d'eau haute de l'appelant. Une carte jamais
+            // ouverte n'a pas de ligne de lecture, tous ses messages comptent alors
+            // comme non lus : d'où le LEFT JOIN.
             const rows = await q.query<CardUnread>(
                 `SELECT c.id AS card_id,
                         COUNT(m.id) AS unread

@@ -2,19 +2,12 @@ import { z } from 'zod';
 import { projectStatusSchema, type ProjectStatus } from '@deveye/types';
 
 /**
- * Projets : le suivi d'un travail, de ses premières phases à son déploiement.
- *
- * Découpage du stockage (voir `Docs/SECURITY_MODEL.md`). En **clair** tout ce
- * dont le serveur a besoin pour lister, trier, compter et router sans rien
- * déchiffrer — `workspace_id`, `status`, `security_tier`, `sort_order`, les
- * dates, `archived_at`. **Chiffré** tout ce qui identifie : titre, description,
- * étiquettes, version.
- *
- * Comme le mail, et contrairement à Uptime ou au coffre, l'étage de chiffrement
- * n'est pas fixé par la feature mais **choisi par projet** (`securityTier`) :
- * un projet `open` peut être synchronisé en tâche de fond (dépôt git,
- * déploiement) ; un projet `guarded` ne se déchiffre que pendant une session
- * vivante et déverrouillée, et perd donc ses intégrations automatiques.
+ * Projets : le suivi d'un travail, de ses premières phases à son déploiement. Reste
+ * en clair ce qui sert à lister, trier, compter et router sans déchiffrer (espace,
+ * statut, palier, rang, dates) ; tout ce qui identifie est chiffré. L'étage de
+ * chiffrement n'est pas fixé par la feature mais choisi par projet
+ * (`securityTier`) : un projet `open` se synchronise en tâche de fond, un projet
+ * `guarded` ne se déchiffre qu'en session déverrouillée et perd ces automatismes.
  */
 
 export const PROJECT_TITLE_MAX_LENGTH = 120;
@@ -24,17 +17,13 @@ export const PROJECT_TAG_LABEL_MAX_LENGTH = 32;
 export const PROJECT_MAX_TAGS = 24;
 
 /**
- * Borne de l'icône d'un projet, en caractères de son URL de données.
- *
- * ~400 ko : de quoi loger confortablement une vignette carrée redimensionnée
- * par le client, sans laisser une charge utile WS grossir au gré de ce qu'on
- * dépose. L'icône vit **dans le payload chiffré** comme le titre : elle
- * identifie le projet autant qu'un nom, et un projet confidentiel ne doit pas
- * la laisser lire.
+ * Borne de l'icône, en caractères de son URL de données : de quoi loger une
+ * vignette redimensionnée par le client sans laisser grossir la charge utile WS.
+ * L'icône vit dans le payload chiffré, elle identifie le projet autant qu'un nom.
  */
 export const PROJECT_ICON_MAX_LENGTH = 400_000;
 
-/** Vide = icône par défaut. Sinon, une URL de données d'image. */
+/** Vide = icône par défaut. */
 export const projectIconSchema = z
     .string()
     .max(PROJECT_ICON_MAX_LENGTH)
@@ -42,29 +31,23 @@ export const projectIconSchema = z
         message: 'L’icône doit être une image encodée en base64.'
     });
 
-/** Quel coffre chiffre l'arbre du projet. Voir l'en-tête de ce fichier. */
+/** Quel coffre chiffre l'arbre du projet. */
 export const projectSecurityTierSchema = z.enum(['open', 'guarded']);
 export type ProjectSecurityTier = z.infer<typeof projectSecurityTierSchema>;
 
 /**
- * D'où vient le numéro de version affiché.
- *  - `manual` — saisi à la main dans le profil du projet ;
- *  - `github_release` — la dernière release publiée du dépôt lié. Le champ
- *    devient alors en lecture seule dans l'interface, et un projet `guarded` ne
- *    peut pas le choisir (sa synchronisation de fond est impossible).
+ * D'où vient le numéro de version affiché. Sous `github_release`, la dernière
+ * release publiée du dépôt lié : le champ passe en lecture seule, et un projet
+ * `guarded` ne peut pas le choisir faute de synchronisation de fond.
  */
 export const projectVersionSourceSchema = z.enum(['manual', 'github_release']);
 export type ProjectVersionSource = z.infer<typeof projectVersionSourceSchema>;
 
 /**
- * Les deux familles d'étiquettes, cumulables sur un même projet :
- *  - `type` — ce que le projet *est* (app mobile, site web, service…) ;
- *  - `tech` — ce avec quoi il est fait (react, react native, express, vite…).
- *
- * Le libellé est libre plutôt qu'énuméré : une pile technique se renouvelle plus
- * vite qu'un schéma, et une valeur inconnue ne doit jamais faire disparaître un
- * projet de la liste. Les étiquettes voyagent **dans le payload chiffré** — le
- * filtrage se fait donc côté client, ce qui suffit largement à cette échelle.
+ * Les deux familles d'étiquettes, cumulables : ce que le projet est (`type`) et ce
+ * avec quoi il est fait (`tech`). Le libellé reste libre, une pile technique se
+ * renouvelle plus vite qu'un schéma. Les étiquettes voyageant dans le payload
+ * chiffré, le filtrage se fait côté client.
  */
 export const projectTagKindSchema = z.enum(['type', 'tech']);
 export type ProjectTagKind = z.infer<typeof projectTagKindSchema>;
@@ -78,7 +61,6 @@ export type ProjectTag = z.infer<typeof projectTagSchema>;
 export const projectSchema = z.object({
     id: z.number().int().positive(),
     title: z.string().max(PROJECT_TITLE_MAX_LENGTH),
-    /** Vignette du projet ; vide = l'icône par défaut de la feature. */
     icon: projectIconSchema,
     description: z.string().max(PROJECT_DESCRIPTION_MAX_LENGTH),
     tags: z.array(projectTagSchema).max(PROJECT_MAX_TAGS),
@@ -86,26 +68,22 @@ export const projectSchema = z.object({
     versionSource: projectVersionSourceSchema,
     status: projectStatusSchema,
     securityTier: projectSecurityTierSchema,
-    /** Bornes de la fenêtre du projet, en secondes unix. Facultatives. */
+    /** Bornes de la fenêtre du projet, en secondes unix. */
     startDate: z.number().int().nullable(),
     dueDate: z.number().int().nullable(),
     sortOrder: z.number().int().nonnegative(),
     /**
-     * Qui l'a créé : attribution, jamais une frontière d'accès. `null` quand le
-     * compte a été supprimé depuis — un départ n'emporte pas le travail d'un
-     * espace partagé (cf. `ON DELETE SET NULL` dans la migration).
+     * Attribution, jamais une frontière d'accès. `null` quand le compte a été
+     * supprimé depuis : un départ n'emporte pas le travail d'un espace partagé.
      */
     authorUserId: z.number().int().positive().nullable(),
     archived: z.boolean(),
     /**
-     * Vrai quand le projet vit dans un autre espace, qui le projette ici
-     * (`Docs/SHARING.md`) : l'écran regarde une fenêtre sur un domicile. Il se
-     * lit et tout son arbre s'écrit d'ici, chez lui, sous la clé de son espace
-     * d'origine ; ce qui référence d'autres objets de cet espace (liaisons,
-     * palier, suivi des releases, classement du portefeuille) se règle là-bas,
-     * le serveur le refuse d'ici et l'écran ne le propose pas. Ses assignés et
-     * ses auteurs sont des identifiants d'utilisateurs : nommés s'ils sont
-     * membres de l'espace actif, masqués sinon.
+     * Vrai quand le projet vit dans un autre espace qui le projette ici
+     * (`Docs/SHARING.md`). Tout son arbre se lit et s'écrit chez lui, sous la clé de
+     * son espace d'origine ; ce qui référence d'autres objets de cet espace
+     * (liaisons, palier, suivi des releases, classement) se règle là-bas, le serveur
+     * le refuse d'ici et l'écran ne le propose pas.
      */
     foreign: z.boolean(),
     created: z.number().int(),
@@ -114,23 +92,17 @@ export const projectSchema = z.object({
 export type Project = z.infer<typeof projectSchema>;
 
 /**
- * La ligne du portefeuille : le projet, plus ce que le serveur sait compter
- * **sans déchiffrer** (colonnes en clair uniquement).
- *
- * `masked: true` désigne un projet `guarded` dont le corps n'a pas pu être
- * déchiffré parce que la session est verrouillée. La ligne reste listée, avec
- * ses compteurs — on doit pouvoir voir qu'un projet existe, et le déverrouiller
- * en connaissance de cause, sans que la liste entière disparaisse. Même parti
- * pris que les notes privées.
+ * La ligne du portefeuille : le projet, plus ce que le serveur sait compter sans
+ * déchiffrer. `masked` désigne un projet `guarded` que la session verrouillée n'a
+ * pas pu ouvrir ; la ligne reste listée avec ses compteurs, pour qu'on puisse le
+ * déverrouiller en connaissance de cause plutôt que le voir disparaître.
  */
 export const projectSummarySchema = z.object({
     project: projectSchema,
     masked: z.boolean(),
     /**
-     * Le même drapeau que `project.foreign`, relevé sur la ligne comme
-     * `masked` : le portefeuille range et filtre ses lignes sans ouvrir le
-     * projet. Une ligne projetée compte dans les compteurs comme les autres,
-     * et ses non-lus sont ceux de l'appelant.
+     * Le même drapeau que `project.foreign`, relevé sur la ligne comme `masked` : le
+     * portefeuille range et filtre ses lignes sans ouvrir le projet.
      */
     foreign: z.boolean(),
     /** Cartes actives (non archivées) et celles assises dans une colonne de fin. */
@@ -138,7 +110,6 @@ export const projectSummarySchema = z.object({
     cardDone: z.number().int().nonnegative(),
     /** Cartes actives dont l'échéance est dépassée. */
     cardOverdue: z.number().int().nonnegative(),
-    /** Prochaine échéance à venir, toutes cartes confondues. */
     nextDueDate: z.number().int().nullable(),
     /** Messages non lus par l'appelant sur tout le projet. */
     unread: z.number().int().nonnegative()
@@ -165,7 +136,6 @@ export type ProjectDraft = z.infer<typeof projectDraftSchema>;
 export interface ProjectRow {
     id: number;
     workspace_id: number;
-    /** Auteur. En espace partagé il dit qui a créé la ligne, rien de plus. */
     user_id: number | null;
     status: ProjectStatus;
     security_tier: ProjectSecurityTier;

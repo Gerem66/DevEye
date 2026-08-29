@@ -53,12 +53,9 @@ export interface TopNavbarProps {
     /** Ouvrir la page de gestion de l'espace courant. */
     onManageWorkspace?: (e: React.MouseEvent) => void;
     /**
-     * Le corps de la fiche « À propos », ouverte par la pastille de version.
-     *
-     * Reçu plutôt qu'importé : cette fiche décrit les fonctionnalités et leurs
-     * liaisons, donc elle lit le catalogue de l'accueil. Un composant partagé qui
-     * remonterait vers une page serait la première inversion de couches du
-     * dépôt, pour une chaîne de caractères.
+     * Le corps de la fiche « À propos ». Reçu plutôt qu'importé : la fiche lit
+     * le catalogue de l'accueil, un composant partagé qui remonterait vers une
+     * page inverserait les couches.
      */
     aboutBody?: ReactNode;
 }
@@ -181,10 +178,9 @@ export default function TopNavbar({
                 </div>
             </div>
 
-            {/* Center: home-organization banner. Lives in the (always sticky) navbar
-                so the instructions stay reachable while scrolling the edit grid.
-                Text + "Terminer" form one centered block; only opacity is animated
-                so the CSS centering transform survives. */}
+            {/* Center: home-organization banner, in the always-sticky navbar so the
+                instructions stay reachable while scrolling. Only opacity is
+                animated so the CSS centering transform survives. */}
             <AnimatePresence>
                 {organizing && (
                     <motion.div
@@ -235,8 +231,7 @@ export default function TopNavbar({
                         )}
                         <span className={styles.identity}>
                             <span className={styles.username}>{user.username}</span>
-                            {/* Seuls les espaces partagés se nomment ici : dire « chez soi »
-                                à quelqu'un qui y est déjà n'apprend rien, c'est l'ailleurs
+                            {/* Seuls les espaces partagés se nomment ici : c'est l'ailleurs
                                 qui mérite d'être annoncé. */}
                             {workspace?.kind === 'shared' && (
                                 <span className={styles.workspaceLabel} title={workspace.name}>
@@ -258,9 +253,7 @@ export default function TopNavbar({
                             transition={{ duration: 0.15 }}
                         >
                             {/* Section « Espaces » en tête : elle dit où l'on est, et
-                                tout ce qui suit — apparence, accueil, données — en
-                                dépend. Un réglage se lit après le contexte auquel il
-                                s'applique, pas avant. */}
+                                tout ce qui suit en dépend. */}
                             {onSelectWorkspace && onCreateWorkspace && onManageWorkspace && (
                                 <WorkspaceSwitcher
                                     onSelect={(id) => {
@@ -296,10 +289,9 @@ export default function TopNavbar({
                                 <span className='icon icon-shield' /> Sécurité
                             </button>
                             {/* Apparence et disposition sont des réglages de
-                                l'**espace**, pas du compte : sans le droit
-                                correspondant l'entrée disparaît, comme pour les
-                                features. La popup ouverte, elle, est refermée par
-                                l'accueil quand le droit tombe en cours de route. */}
+                                l'espace : sans le droit, l'entrée disparaît. La
+                                popup ouverte est refermée par l'accueil quand le
+                                droit tombe. */}
                             {onOpenSettings && (
                                 <button
                                     className={styles.menuItem}

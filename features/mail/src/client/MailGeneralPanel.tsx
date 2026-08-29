@@ -26,24 +26,15 @@ const RENDER_MODE_HINT: Record<MailBodyRenderMode, string> = {
 };
 
 /**
- * Les réglages généraux de Mail : le panneau Général de la coquille commune,
- * aux deux échelles. Ce sont les réglages de l'ESPACE, que la coquille soit
- * ouverte sur la fonctionnalité ou sur une de ses boîtes : `scope` n'y change
- * rien, l'onglet est offert depuis les réglages d'un compte pour que le bouton
- * en haut à droite porte tout d'un coup.
+ * Les réglages généraux de Mail : le panneau Général de la coquille commune, aux
+ * deux échelles. Ce sont les réglages de l'ESPACE, que la coquille soit ouverte
+ * sur la fonctionnalité ou sur une de ses boîtes : `scope` n'y change rien,
+ * l'onglet étant offert depuis les réglages d'un compte pour que le bouton en
+ * haut à droite porte tout d'un coup.
  *
- * Remplace l'ancienne popup « Paramètres Mail » qui vivait derrière un
- * engrenage à part : mêmes réglages, même commande (`mail.get/setSettings`),
- * mais dans la coquille que toutes les features partagent.
- *
- * Chaque changement s'applique **immédiatement**, comme les autres panneaux de
- * la coquille : un bouton Enregistrer sur trois réglages n'était qu'une étape
- * de plus. L'invalidation de `mail.getSettings` prévient l'écran Mail (le mode
+ * Chaque changement s'applique immédiatement, comme les autres panneaux de la
+ * coquille. L'invalidation de `mail.getSettings` prévient l'écran Mail (le mode
  * d'affichage sert au prochain message ouvert) et les autres onglets.
- *
- * Nouveauté au passage : un champ pour **ajouter** un domaine approuvé. Il
- * n'existait pas : on ne pouvait approuver que depuis un message reçu, et
- * retirer ici, la moitié d'une liste.
  *
  * Sans le droit d'écriture, tout reste lisible mais rien ne se change : un
  * réglage que le serveur refuserait est un écran qui ment.

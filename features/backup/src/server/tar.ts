@@ -1,22 +1,8 @@
 /**
- * Un écrivain `tar` minimal, au format USTAR.
- *
- * Écrit ici plutôt qu'importé pour la même raison que le client S3 : le format
- * tient en un en-tête de 512 octets par entrée, il est figé depuis POSIX.1-1988,
- * et une archive de sauvegarde doit pouvoir se rouvrir avec le `tar` de
- * n'importe quel système — surtout un système où DevEye n'existe pas.
- *
- * Ne gère que ce dont une sauvegarde CloudSync a besoin : des fichiers et des
- * dossiers. Ni liens, ni périphériques, ni attributs étendus — CloudSync ne
- * synchronise pas ces objets, donc les écrire serait inventer des données.
- *
- * ## Les noms longs
- *
- * USTAR découpe un chemin en `prefix` (155) + `name` (100). Au-delà, ou quand la
- * coupure ne tombe pas sur un `/`, on émet une entrée `L` du format GNU
- * (`@LongLink`), que GNU tar et bsdtar lisent tous les deux. C'est le seul écart
- * à USTAR strict, et il est nécessaire : des chemins de plus de 100 octets sont
- * la norme, pas l'exception.
+ * Un écrivain `tar` USTAR minimal (fichiers et dossiers), pour qu'une archive
+ * se rouvre avec le `tar` de n'importe quel système. Seul écart : les chemins
+ * que `prefix` (155) + `name` (100) ne tiennent pas passent par une entrée `L`
+ * GNU (`@LongLink`), lue par GNU tar et bsdtar.
  */
 
 const BLOCK = 512;
@@ -78,10 +64,7 @@ function padding(size: number): Buffer {
     return rest === 0 ? Buffer.alloc(0) : Buffer.alloc(BLOCK - rest);
 }
 
-/**
- * Découpe un chemin en (prefix, name) USTAR, ou rend `null` si c'est
- * impossible — auquel cas l'appelant émet un `@LongLink`.
- */
+/** Découpe en (prefix, name) USTAR, ou `null` si impossible : l'appelant émet alors un `@LongLink`. */
 function split(path: string): { name: string; prefix: string } | null {
     const bytes = Buffer.byteLength(path, 'utf8');
     if (bytes <= 100) return { name: path, prefix: '' };

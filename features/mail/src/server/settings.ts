@@ -5,10 +5,9 @@ import type { MailRepo } from './repo';
 import { toSettingsDTO, WRITE } from './_shared';
 
 /**
- * Les réglages de l'espace (l'onglet Général de la feature) : l'analyse
- * externe, les domaines d'images approuvés, le mode de rendu des corps. Des
- * colonnes en clair (`mail_settings`) : des hôtes et des drapeaux, pas des
- * secrets.
+ * Les réglages de l'espace (l'onglet Général) : l'analyse externe, les domaines
+ * d'images approuvés, le mode de rendu des corps. Des colonnes en clair : des
+ * hôtes et des drapeaux, pas des secrets.
  */
 
 export const mailGetSettingsFeature = defineSdkFeature<

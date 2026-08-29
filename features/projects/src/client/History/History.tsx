@@ -30,13 +30,9 @@ interface HistoryProps {
 }
 
 /**
- * L'historique d'un projet : une frise **verticale**, tenue par un trait fin sur
- * la gauche.
- *
- * Volontairement sobre. C'est une page qu'on ouvre rarement, pour répondre à une
- * question précise — « quand a-t-on archivé ça ? », « depuis quand est-on en
- * v2 ? ». Elle ne cherche donc pas à attirer l'œil, seulement à être lisible
- * quand on la consulte.
+ * L'historique d'un projet : une frise verticale, tenue par un trait fin à
+ * gauche. Volontairement sobre : on l'ouvre rarement, pour une question précise
+ * (quand a-t-on archivé ceci, depuis quand est-on en v2).
  */
 export function History({ projectId, archivedCards, onOpenArchived }: HistoryProps) {
     const [events, setEvents] = useState<ProjectEvent[] | null>(null);

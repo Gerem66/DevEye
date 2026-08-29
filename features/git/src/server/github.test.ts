@@ -3,15 +3,7 @@ import { afterEach, describe, it } from 'node:test';
 
 import { authorRef, fetchPullRequests, fetchRepoInfo, GitHubError, nameRef } from './github';
 
-/**
- * Les fonctions pures de l'adaptateur GitHub, et ses décodeurs.
- *
- * Ce qui mérite d'être tenu : les **condensés** portent l'unicité que le
- * chiffré ne peut pas porter (une adresse d'auteur se normalise, un nom de
- * branche non), l'**état d'une pull request** se déduit de `merged_at` et non
- * du `state` du fournisseur, qui confond fusionnée et fermée, et un **304**
- * rend `data: null` avec l'ETag fourni, sans rien coûter au quota.
- */
+/** Les fonctions pures de l'adaptateur GitHub, et ses décodeurs. */
 
 const realFetch = globalThis.fetch;
 

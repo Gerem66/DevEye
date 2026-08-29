@@ -1,11 +1,8 @@
 import type { DeploymentRow } from '../contracts/domain';
 import type { SdkRichMessage } from '@deveye/types/sdk/server';
 
-// Privilège de native rapatriée, commenté à chaque usage : les helpers Discord
-// (`moment`, `duration`, `block`, `trim`, la charte des couleurs, `FIELD_MAX`)
-// sont réellement partagés par les émetteurs de l'app, et deux copies avaient
-// déjà divergé une fois (voir l'en-tête de `Services/notices/shared.ts`). Ils
-// restent donc à l'app, et le module les importe plutôt que de les recopier.
+// Les helpers Discord sont partagés avec les émetteurs de l'app : importés
+// plutôt que recopiés, deux copies ayant déjà divergé une fois.
 import {
     COLOR_DANGER,
     COLOR_INFO,
@@ -18,30 +15,14 @@ import {
 } from '@/Services/notices/shared';
 
 /**
- * Le message de suivi d'un déploiement : ce qu'il montre, et comment il le dit.
+ * Le message de suivi d'un déploiement : transforme un état en objet Discord,
+ * sans base ni réseau.
  *
- * Séparé du service qui l'envoie parce que ce sont deux métiers : celui-ci ne
- * connaît ni la base ni le réseau, il transforme un état en un objet Discord.
- * C'est aussi ce qui le rend lisible d'un coup d'œil — toute la mise en forme du
- * message est ici, et nulle part ailleurs.
- *
- * ## Le seul point délicat : il n'y a pas de progression à afficher
- *
- * Dokploy n'en publie aucune. La réponse de `deployment.all` a été relevée sur
- * l'instance de référence, champ par champ : `status`, `createdAt`, `startedAt`,
- * `finishedAt`, `errorMessage`, `logPath`, et des identifiants. Rien qui
- * ressemble à un pourcentage ou à une étape.
- *
- * La barre est donc une **estimation**, calculée sur la durée moyenne des dix
- * derniers déploiements réussis de **cette cible** — ce qui n'est possible que
- * depuis que le rapprochement de fond garde l'historique en base (migration
- * 085). Elle est présentée comme telle : le libellé dit « estimé », et quand le
- * temps écoulé dépasse la moyenne la barre reste pleine en annonçant « plus long
- * que d'habitude » plutôt que de laisser croire à une fin imminente. Une barre
- * qui ment est pire qu'une barre absente.
- *
- * Sans historique exploitable — une cible neuve, un premier déploiement — il n'y
- * a pas de barre du tout, seulement le temps écoulé. C'est le cas honnête.
+ * Dokploy ne publie aucune progression (`deployment.all` rend statut, dates,
+ * message d'erreur, chemin du journal, rien d'autre). La barre est donc une
+ * estimation sur la durée moyenne des derniers déploiements réussis de la
+ * cible, présentée comme telle : « estimé », et « plus long que d'habitude »
+ * passé la moyenne plutôt qu'un 100 % trompeur. Sans historique, pas de barre.
  */
 
 /** Segments de la barre. Dix : lisible sur mobile, sans passer à la ligne. */
@@ -60,12 +41,9 @@ const LOG_LINE_MAX = 110;
 const DESCRIPTION_MAX = 4000;
 
 /**
- * Longueur au-delà de laquelle un intitulé de déploiement est coupé.
- *
- * Le titre vient de Dokploy, qui y met le **message de commit** — donc son sujet
- * *et* son corps. Un commit correctement écrit tient son sujet sous 72
- * caractères ; cent laisse de la marge à ceux qui n'en font qu'à leur tête, sans
- * qu'une seule ligne mange l'écran d'un téléphone.
+ * Coupe de l'intitulé : Dokploy y met le message de commit entier. Cent laisse
+ * de la marge au-delà des 72 caractères d'un sujet bien écrit, sans manger
+ * l'écran d'un téléphone.
  */
 const TITLE_MAX = 100;
 
@@ -95,15 +73,9 @@ export interface NoticeState {
 }
 
 /**
- * La durée moyenne des derniers déploiements **réussis** d'une cible.
- *
- * Les échecs sont écartés, et c'est le point : un échec s'arrête à la première
- * étape qui casse, souvent en quelques secondes. Les mêler à la moyenne ferait
- * chuter l'estimation à chaque build raté, et la barre d'un déploiement sain
- * sauterait à 100 % au bout de dix secondes.
- *
- * `null` quand il n'y a rien à moyenner : l'appelant n'affiche alors pas de
- * barre, plutôt qu'une barre calée sur une valeur inventée.
+ * La durée moyenne des derniers déploiements réussis d'une cible. Les échecs
+ * sont écartés : un échec s'arrête en quelques secondes et ferait chuter
+ * l'estimation. `null` quand il n'y a rien à moyenner : pas de barre.
  */
 export function estimateFromHistory(rows: DeploymentRow[], excludeId: number): number | null {
     const durations: number[] = [];
@@ -121,29 +93,19 @@ export function estimateFromHistory(rows: DeploymentRow[], excludeId: number): n
 
 /** `▰▰▰▰▰▱▱▱▱▱`, borné à [0, 100] % — jamais négatif, jamais au-delà. */
 export function progressBar(ratio: number): string {
-    // `Number.isFinite` d'abord : `Math.min`/`Math.max` **laissent passer NaN**,
-    // et `repeat(NaN)` rend une chaîne vide sans lever. La barre disparaissait
-    // donc au lieu d'être bornée — exactement le genre de panne qu'un bornage
-    // est censé empêcher.
+    // `Number.isFinite` d'abord : `Math.min`/`Math.max` laissent passer NaN, et
+    // `repeat(NaN)` rend une chaîne vide sans lever.
     const clamped = Number.isFinite(ratio) ? Math.min(1, Math.max(0, ratio)) : 0;
     const filled = Math.round(clamped * BAR_SEGMENTS);
     return `${'▰'.repeat(filled)}${'▱'.repeat(BAR_SEGMENTS - filled)}`;
 }
 
-/**
- * Les séquences ANSI, qu'un bloc de code Discord rendrait telles quelles.
- *
- * Dokploy colore sa sortie de build. Sans ce nettoyage, le journal arrive noyé
- * sous des `[0m` et devient illisible — le contraire de ce qu'on affiche un
- * journal pour obtenir.
- */
+/** Les séquences ANSI de la sortie de build, qu'un bloc de code Discord rendrait telles quelles. */
 const ANSI = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
 
 /**
- * La queue d'un journal, débarrassée de ce qui ne se voit pas dans Discord.
- *
- * Les lignes vides de fin partent aussi, sans quoi le bloc s'ouvrirait sur du
- * vide à chaque rafraîchissement.
+ * La queue d'un journal, débarrassée de ce qui ne se voit pas dans Discord. Les
+ * lignes vides de fin partent aussi, sans quoi le bloc s'ouvrirait sur du vide.
  */
 export function tailOf(log: string, lines = LOG_LINES): string {
     if (!log) return '';
@@ -158,21 +120,10 @@ export function tailOf(log: string, lines = LOG_LINES): string {
 }
 
 /**
- * Le sujet d'un message de commit : sa **première ligne**, et rien d'autre.
- *
- * Dokploy range le message de commit entier dans le titre du déploiement. Un
- * commit bavard — sujet, ligne vide, quinze lignes de justification — remplissait
- * donc le haut du message Discord et repoussait tout le reste vers le bas, à
- * chaque rafraîchissement.
- *
- * Le corps n'est pas déplacé ailleurs, il est **abandonné** : Discord n'a aucune
- * infobulle dans un embed (le seul survol possible passe par un lien masqué,
- * ce qui obligerait à transformer l'intitulé en lien, et le lien vers Dokploy
- * existe déjà dans son propre champ). Qui veut le message complet l'ouvre là-bas.
- *
- * Les points de suspension ne sont ajoutés que si la **ligne elle-même** a été
- * coupée : signaler l'existence d'un corps de commit n'apprendrait rien à qui
- * regarde un avis de déploiement.
+ * Le sujet d'un message de commit : sa première ligne. Dokploy range le message
+ * entier dans le titre, et un corps de commit repousserait tout le message. Le
+ * corps est abandonné (un embed Discord n'a pas d'infobulle) ; les points de
+ * suspension ne signalent qu'une ligne coupée.
  */
 export function firstLine(text: string, max = TITLE_MAX): string {
     const line = text.replace(/\r/g, '').split('\n')[0].trim();
@@ -181,18 +132,10 @@ export function firstLine(text: string, max = TITLE_MAX): string {
 }
 
 /**
- * Le journal, en **champ** et non dans la description.
- *
- * Discord rend toujours les `fields` **après** la `description` : tant que le
- * journal vivait dans la seconde, projet, service et durée se retrouvaient
- * dessous, c'est-à-dire loin du titre et séparés de lui par dix lignes de build.
- * Le déplacer est le seul moyen de les faire remonter — l'ordre des deux blocs
- * n'est pas réglable.
- *
- * D'où le budget : la valeur d'un champ est plafonnée par Discord (1024
- * caractères) là où une description en accepte 4096. On retire donc des lignes
- * **par le haut** — les plus anciennes, les moins utiles — jusqu'à tenir, plutôt
- * que de laisser Discord rejeter le message entier.
+ * Le journal en champ et non dans la description : Discord rend les `fields`
+ * après la `description`, et c'est le seul moyen de garder projet, service et
+ * durée près du titre. Un champ est plafonné à 1024 caractères : on retire des
+ * lignes par le haut jusqu'à tenir.
  */
 function logField(log: string): string | null {
     const tail = tailOf(log);
@@ -209,26 +152,18 @@ function logField(log: string): string | null {
 }
 
 /**
- * Le message, dans l'état où il doit être vu maintenant.
- *
- * **Une seule fonction pour les trois états**, et c'est délibéré : c'est le même
- * message qui est modifié du début à la fin, donc le lecteur doit y retrouver
- * les mêmes repères aux mêmes places. Trois constructeurs séparés auraient
- * dérivé, et l'on aurait vu des champs se déplacer au moment de la conclusion.
- *
- * Rendu sous la forme que la façade `notify.postLive` du SDK prend
- * (`SdkRichMessage`, ce que l'API des webhooks Discord accepte) : le module ne
- * publie pas lui-même, il confie le message vivant à la façade, qui le poste
- * puis le modifie sur un canal Discord de la feature.
+ * Le message, dans l'état où il doit être vu maintenant. Une seule fonction pour
+ * les trois états : c'est le même message qui est modifié du début à la fin, le
+ * lecteur doit y retrouver les mêmes repères. Rendu sous la forme que
+ * `notify.postLive` prend (`SdkRichMessage`).
  */
 export function buildNotice(state: NoticeState): SdkRichMessage {
     const running = state.status === 'queued' || state.status === 'running';
     const failed = state.status === 'failed';
     const elapsed = Math.max(0, (state.finishedAt ?? state.now) - state.startedAt);
 
-    // Trois par ligne : c'est ce que Discord place côte à côte, et c'est le
-    // rythme des avis de Dokploy — projet, service, environnement d'abord, ce
-    // qui répond à « où ? » avant de répondre à « quand ? ».
+    // Trois par ligne, ce que Discord place côte à côte : projet, service,
+    // environnement d'abord (« où ? » avant « quand ? »).
     const fields: Record<string, unknown>[] = [
         { name: '🛠️ Projet', value: trim(state.project ?? '—'), inline: true },
         { name: '⚙️ Service', value: trim(state.service), inline: true },
@@ -237,19 +172,16 @@ export function buildNotice(state: NoticeState): SdkRichMessage {
         { name: '📅 Démarré', value: moment(state.startedAt, 'f'), inline: true }
     ];
 
-    // La troisième colonne de la seconde ligne dit le temps — écoulé tant que ça
-    // tourne, total une fois conclu. Le même emplacement dans les deux états :
-    // c'est le même message qui se transforme, l'œil ne doit pas avoir à le
-    // rechercher au moment de la conclusion.
+    // Le temps (écoulé tant que ça tourne, total une fois conclu) garde le même
+    // emplacement dans les deux états.
     fields.push(
         running
             ? { name: '⏳ Écoulé', value: duration(elapsed), inline: true }
             : { name: '⏱️ Durée', value: duration(elapsed), inline: true }
     );
 
-    // Le journal **après** les six cases d'identité et de temps, et le lien
-    // après lui : on lit « quoi, où, combien de temps » avant d'entrer dans la
-    // sortie de build.
+    // Le journal après les six cases d'identité et de temps, et le lien après
+    // lui.
     const tail = logField(state.log);
     if (tail) fields.push({ name: '📄 Journal', value: tail, inline: false });
 
@@ -257,8 +189,8 @@ export function buildNotice(state: NoticeState): SdkRichMessage {
         fields.push({ name: '🔗 Dokploy', value: `[Ouvrir la fiche du service](${state.url})`, inline: false });
     }
 
-    // La description ne garde que ce qui doit être lu **avant** tout le reste :
-    // le titre, l'avancement, et la raison d'un échec.
+    // La description ne garde que ce qui doit être lu avant tout le reste : le
+    // titre, l'avancement, et la raison d'un échec.
     const parts: string[] = [`**${firstLine(state.title) || 'Déploiement'}**`];
     if (running) parts.push(progressLine(state, elapsed));
     if (failed && state.error) parts.push(`⚠️ ${state.error.slice(0, FIELD_MAX)}`);
@@ -271,10 +203,9 @@ export function buildNotice(state: NoticeState): SdkRichMessage {
                 color: running ? COLOR_INFO : failed ? COLOR_DANGER : COLOR_SUCCESS,
                 fields,
                 footer: { text: 'DevEye · suivi de déploiement' },
-                // L'horodatage du pied : Discord le rend dans le fuseau du
-                // lecteur, et il marque l'instant du **dernier** état connu —
-                // donc il avance à chaque modification, ce qui donne à voir que
-                // le message est vivant.
+                // Discord rend l'horodatage du pied dans le fuseau du lecteur ;
+                // il avance à chaque modification, ce qui montre que le message
+                // est vivant.
                 timestamp: new Date((state.finishedAt ?? state.now) * 1000).toISOString()
             }
         ]
@@ -282,13 +213,9 @@ export function buildNotice(state: NoticeState): SdkRichMessage {
 }
 
 /**
- * La ligne de barre, ou le simple temps écoulé quand rien ne permet d'estimer.
- *
- * Le dépassement est **dit**, pas masqué : passé la moyenne, la barre reste
- * pleine et le texte annonce « plus long que d'habitude ». Laisser un « 100 % »
- * nu sur un déploiement qui continue serait exactement le mensonge qu'on veut
- * éviter — le lecteur croirait à une fin, et se demanderait pourquoi le message
- * ne conclut pas.
+ * La ligne de barre, ou le simple temps écoulé sans estimation. Passé la
+ * moyenne, la barre reste pleine et le texte dit « plus long que d'habitude » :
+ * un 100 % nu ferait croire à une fin.
  */
 function progressLine(state: NoticeState, elapsed: number): string {
     if (state.estimateSeconds === null || state.estimateSeconds <= 0) {

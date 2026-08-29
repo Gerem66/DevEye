@@ -32,14 +32,12 @@ import {
 } from './_shared';
 
 /**
- * Les messages : la liste paginée d'un dossier, la recherche à deux jambes, le
- * corps lu en direct, les drapeaux, le déplacement, la suppression, la pièce
- * jointe à ticket, l'analyse externe, et l'envoi.
+ * Les messages : liste paginée d'un dossier, recherche à deux jambes, corps lu
+ * en direct, drapeaux, déplacement, suppression, pièce jointe à ticket, envoi.
  *
- * Tout fonctionne sur un compte projeté d'un autre espace, sous le codec de
- * son domicile (`accountCipher`) ; un compte projeté et actif est un
- * expéditeur comme un autre. Les réglages d'affichage (domaines d'images,
- * mode de rendu, analyse externe), eux, sont ceux de l'espace où l'on lit.
+ * Tout fonctionne sur un compte projeté d'un autre espace, sous le codec de son
+ * domicile (`accountCipher`). Les réglages d'affichage (domaines d'images, mode
+ * de rendu, analyse externe), eux, sont ceux de l'espace où l'on lit.
  */
 
 export const mailMessageListFeature = defineSdkFeature<
@@ -79,17 +77,15 @@ export const mailMessageListFeature = defineSdkFeature<
 });
 
 /**
- * Ceiling on how many cached envelopes one search decrypts. Everything in
- * `mail_messages` is encrypted, so a search is inherently a linear scan — this
- * keeps its cost bounded no matter how deeply a folder has been backfilled.
- * The response reports `scanned` so the UI can say when it hit this wall.
+ * Ceiling on how many cached envelopes one search decrypts: everything in
+ * `mail_messages` is encrypted, so a search is inherently a linear scan. The
+ * response reports `scanned` so the UI can say when it hit this wall.
  */
 const SEARCH_SCAN_LIMIT = 5000;
 
 /**
- * Ceiling on envelopes pulled from IMAP for remote hits the cache doesn't hold.
- * A broad query against a large mailbox can match thousands; fetching all of
- * them would turn a keystroke into a very long round trip, and the results are
+ * Ceiling on envelopes pulled from IMAP for remote hits the cache doesn't hold:
+ * a broad query against a large mailbox can match thousands, and the results are
  * capped for display anyway.
  */
 const REMOTE_FETCH_LIMIT = 200;
@@ -318,12 +314,9 @@ export const mailMessageDeleteFeature = defineSdkFeature<
 });
 
 /**
- * L'URL à ticket d'une pièce jointe : un ticket de session du SDK
- * (`ctx.secrecy.ticket`, deux minutes, le temps que le navigateur suive le
- * lien) qui porte le message et la pièce, rendu par la route publique du
- * module (`routes.ts`) contre les codecs de l'appelant. L'ex
- * `signMailAttachmentToken` de `auth/jwt.ts`, sans plus rien de propre à Mail
- * chez l'hôte.
+ * L'URL à ticket d'une pièce jointe : un ticket de session de deux minutes (le
+ * temps que le navigateur suive le lien) qui porte le message et la pièce, rendu
+ * par la route publique du module (`routes.ts`) contre les codecs de l'appelant.
  */
 export const mailAttachmentDownloadFeature = defineSdkFeature<
     MailRepo,
@@ -355,8 +348,7 @@ export const mailAttachmentScanFeature = defineSdkFeature<
         if (!settings || settings.external_scan_enabled_default !== 1) {
             throw new FeatureError('forbidden', "L'analyse externe n'est pas activée pour ce compte");
         }
-        // No concrete scan provider wired yet (opt-in placeholder — see plan's
-        // V2 note on ExternalScanProvider). Never fabricates a verdict.
+        // No scan provider is wired: this never fabricates a verdict.
         return { status: 'unknown' as const, provider: null };
     }
 });

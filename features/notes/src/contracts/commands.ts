@@ -16,12 +16,8 @@ const folderId = z.number().int().positive();
  *
  * L'espace visé n'apparaît dans aucune entrée : il voyage sur l'enveloppe WS
  * (voir `protocol/envelope`) et le dispatcheur le résout avant le handler.
- *
- * Un seul préfixe, `notes.`, celui de l'id de la feature : c'est le contrat du
- * manifest (`commandPrefix` ne sert qu'à une casse différente du même id).
- * Les dossiers, qui avaient leur préfixe à eux (`folder.*`) avant le
- * rapatriement, passent en verbes camelCase derrière ce préfixe unique
- * (`notes.folderAdd`), la forme de Git et des Projets.
+ * Un seul préfixe, `notes.`, celui de l'id de la feature ; les dossiers
+ * passent en verbes camelCase derrière lui (`notes.folderAdd`).
  */
 
 /** The editable shape of a note: everything the client may set. */
@@ -34,11 +30,8 @@ const noteDraftSchema = z.object({
 });
 
 /**
- * List the notes of the active workspace. Never gated: regular notes are decrypted with the
- * open key, and private notes come back **masked** (metadata only,
- * `masked: true`) while the session is locked. Unlocking and re-listing reveals
- * them; no per-command password is involved.
- *
+ * Never gated: regular notes are decrypted with the open key, and private
+ * notes come back **masked** (metadata only) while the session is locked.
  * `archived` swaps the two disjoint sets: the active notes (default) or the
  * archive, most recently archived first.
  */
@@ -49,10 +42,8 @@ export const notesList = {
 };
 
 /**
- * Count the **active** notes of the active workspace. Pure clear metadata: every
- * row is counted the same way (private notes included, no special case)
- * without decrypting anything, so the dashboard widget always shows a number
- * even when the session is locked. Archived notes are excluded.
+ * Count the **active** notes. Clear metadata only (private notes included,
+ * nothing decrypted), so the widget always shows a number even when locked.
  */
 export const notesCount = {
     command: 'notes.count' as const,
@@ -121,13 +112,9 @@ export const notesDelete = {
 
 /**
  * Lay out one folder: `noteIds` is its **complete** content in its final order
- * (lower index first), and every listed note is filed into `folderId` on the way.
- * One command covers both reordering inside a folder and moving a note across
- * folders: the destination's new order is all the server needs.
- *
- * Notes carry no automatic ordering: this, plus appending new notes at the end,
- * is the only thing that positions them. Never touches the encrypted body, so it
- * works on masked private notes too.
+ * (lower index first), and every listed note is filed into `folderId` on the
+ * way, so one command covers both reordering and moving across folders.
+ * Never touches the encrypted body, so it works on masked private notes too.
  */
 export const notesReorder = {
     command: 'notes.reorder' as const,
@@ -160,10 +147,7 @@ export const notesFolderRename = {
     output: z.object({ folder: noteFolderSchema })
 };
 
-/**
- * Reorder all of the active workspace's folders; `folderIds` is the new
- * full order (lower index = listed first). Used by the move up/down controls.
- */
+/** `folderIds` is the new full order (lower index = listed first). */
 export const notesFolderReorder = {
     command: 'notes.folderReorder' as const,
     input: z.object({ folderIds: z.array(folderId).min(1) }),

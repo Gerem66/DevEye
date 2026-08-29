@@ -14,12 +14,8 @@ interface ArchivedCardDialogProps {
 }
 
 /**
- * Un bloc archivé, **en lecture seule**.
- *
- * Rien n'y est modifiable : une carte archivée est un fait passé, et la
- * modifier réécrirait l'histoire que la frise vient de raconter. La seule
- * action possible est de la restaurer — ce qui la fait redevenir vivante, et
- * laisse à son tour une trace.
+ * Un bloc archivé, en lecture seule : le modifier réécrirait l'histoire que la
+ * frise raconte. Seule la restauration est possible, et laisse sa propre trace.
  */
 export function ArchivedCardDialog({ open, card, canWrite, busy, onClose, onRestore }: ArchivedCardDialogProps) {
     const done = card?.checklist.filter((i) => i.done).length ?? 0;

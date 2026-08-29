@@ -33,18 +33,9 @@ import type { BackupEngine } from './service';
 import { setEngine } from './_shared';
 
 /**
- * Les handlers du module, sur le harnais du SDK.
- *
- * Ce qui mérite d'être tenu, c'est ce qui ne lève nulle part quand ça se
- * dérègle : l'appartenance d'un appareil à l'espace avant d'en faire une
- * destination (sinon on écrit des archives sur la machine d'un autre espace en
- * devinant un identifiant), le refus de retirer une destination encore visée
- * (en disant combien), les **restrictions par élément** (un travail masqué
- * pour ce rôle disparaît de la liste) et le **partage** (une projection se
- * liste avec `foreign: true` et ne se modifie jamais depuis la fenêtre), le
- * **ménage** à la suppression (`ctx.items.forget`), et les deux contrats
- * consommés (`providers.get`) : une source dont le contrat manque disparaît du
- * sélecteur au lieu de casser la commande.
+ * Ce qui ne lève nulle part quand ça se dérègle : l'appartenance d'un appareil
+ * à l'espace, le refus de retirer une destination visée, les restrictions par
+ * élément, le partage, le ménage à la suppression, les contrats consommés.
  */
 
 /** Le handler d'un contrat, typé par ce contrat (le registre est hétérogène). */
@@ -103,11 +94,8 @@ function job(over: Partial<BackupJobRow> & { id: number; workspace_id: number })
 }
 
 /**
- * Un dépôt en mémoire, même contrat que le vrai. `projections` reproduit la
- * table `item_shares` : `jobId → espaces où il est projeté`, ce qui donne à
- * `listVisibleJobs` / `findVisibleJob` leur seconde branche, et ce que le
- * harnais (`shares`) doit dire en écho pour que `ctx.sharing.scope()`
- * connaisse le domicile.
+ * Dépôt en mémoire. `projections` reproduit `item_shares` (`jobId → espaces où
+ * il est projeté`), ce que le harnais (`shares`) doit dire en écho.
  */
 function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
     let seq = 100;

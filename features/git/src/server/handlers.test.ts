@@ -30,21 +30,13 @@ import type { GitSync } from './service';
 import { setSync, slugRef } from './_shared';
 
 /**
- * Les handlers du module, sur le harnais du SDK.
- *
- * Ce qui mérite d'être tenu, c'est ce qui ne lève nulle part quand ça se
- * dérègle : les **restrictions par élément** (un dépôt masqué pour ce rôle
- * disparaît de la liste et du compte), le **partage inter-espaces** (une
- * projection se liste avec `foreign: true` sous le codec de son espace
- * d'origine, et ne se règle ni ne se supprime jamais depuis la fenêtre), le
- * **contrat de Projets** (le compte et la liste des projets viennent du
- * provider, et son absence vaut zéro plutôt qu'une erreur), l'**idempotence**
- * de l'ajout (même `owner/repo` = même ligne, jeton mis à jour, et le service
- * de fond réveillé), le **ménage** à la suppression (`ctx.items.forget`), les
- * **jetons GitHub** dans la table du module (secret jamais rendu, absent =
- * conservé ; retirer un jeton met ses dépôts à NULL, le ménage explicite qui
- * remplace la contrainte retirée par la 100), et l'**absence du service**
- * (rien en cours, aucune erreur).
+ * Ce qui se vérifie ici ne lève nulle part ailleurs : les restrictions par
+ * élément (un dépôt masqué disparaît de la liste et du compte), le partage
+ * inter-espaces (une projection se liste `foreign`, ne se règle ni ne se
+ * supprime depuis la fenêtre), le contrat de Projets (absent, il vaut zéro
+ * plutôt qu'une erreur), l'idempotence de l'ajout, le ménage à la suppression,
+ * les jetons GitHub (secret jamais rendu, retrait qui met ses dépôts à NULL)
+ * et l'absence de service de fond.
  */
 
 /** Le handler d'un contrat, typé par ce contrat (le registre est hétérogène). */
@@ -94,11 +86,9 @@ function credential(over: Partial<GitCredentialRow> & { id: number; workspace_id
 }
 
 /**
- * Un dépôt en mémoire, même contrat que le vrai. `projections` reproduit la
- * table `item_shares` : `repoId → espaces où il est projeté`, ce qui donne à
- * `listVisibleRepos` / `findVisibleRepo` leur seconde branche, et ce que le
- * harnais (`shares`) doit dire en écho pour que `ctx.sharing.scope()`
- * connaisse le domicile.
+ * Un dépôt en mémoire, même contrat que le vrai. `projections` reproduit
+ * `item_shares` (dépôt → espaces où il est projeté) et doit correspondre au
+ * `shares` du harnais, sinon `ctx.sharing.scope()` ignore le domicile.
  */
 function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
     let seq = 100;

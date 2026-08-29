@@ -15,14 +15,10 @@ import type { SdkProviders } from '@deveye/types/sdk/server';
 const NO_PROVIDERS: SdkProviders = { get: () => undefined };
 
 /**
- * Les dépendances d'un service d'arrière-plan : tout y est résolu SANS
- * session.
- *
- * Ce qui mérite d'être tenu : le ticker (le patron des natives : intervalle,
- * garde de réentrance, arrêt franc, un tick qui échoue ne tue pas la boucle),
- * `devicesFor` qui passe par la même façade gardée qu'une requête, et
- * `audit` qui signe système (uid 0 sauf attribution) sous la catégorie de la
- * feature, avec l'alias historique de CloudSync.
+ * Les dépendances d'un service d'arrière-plan, résolues sans session : le
+ * ticker (intervalle, réentrance, arrêt, un tick qui échoue ne tue pas la
+ * boucle), `devicesFor` par la même façade gardée qu'une requête, et `audit`
+ * qui signe système sous la catégorie de la feature.
  */
 
 const ID: FeatureId = 'x-servicetest';

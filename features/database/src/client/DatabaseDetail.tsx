@@ -13,9 +13,7 @@ interface DatabaseDetailProps {
     alerts: DatabaseAlert[];
     canWrite: boolean;
     busy: boolean;
-    /** Un essai de connexion est en cours. */
     testing: boolean;
-    /** Le dernier essai de connexion, s'il y en a eu un dans cette vue. */
     probe: DatabaseProbe | null;
     onBack: () => void;
     onEdit: () => void;
@@ -25,20 +23,8 @@ interface DatabaseDetailProps {
 }
 
 /**
- * Une base ouverte dans sa feature : le retour à la liste, son en-tête, son
- * contenu, et les projets qui s'en servent.
- *
- * Le contenu est `DatabaseView`, partagé mot pour mot avec l'onglet « Bases de
- * données » d'un projet — c'est la même base, il n'y a aucune raison qu'elle se
- * présente autrement selon la porte par laquelle on entre.
- *
- * ## Le mode agrandi
- *
- * Quand l'explorateur passe en plein écran, cet écran-ci s'efface : l'en-tête
- * part avec le reste et la racine prend toute la hauteur de la popup, ce qui est
- * la condition pour que le panneau puisse la remplir. C'est le seul endroit qui
- * puisse le faire — le composant qui déclenche l'agrandissement est trois
- * niveaux plus bas et ne possède ni l'en-tête ni la racine.
+ * Une base ouverte dans sa feature. En plein écran, l'en-tête s'efface et la
+ * racine prend toute la hauteur de la popup : seul cet écran possède les deux.
  */
 export function DatabaseDetail({
     database,
@@ -82,11 +68,6 @@ export function DatabaseDetail({
                 probe={probe}
                 onExpandChange={setExpanded}
             >
-                {/*
-                 * Les projets qui s'en servent — le second sens de
-                 * l'interconnexion. Masqué quand il n'y en a aucun : un panneau
-                 * vide n'apprend rien.
-                 */}
                 {usage.length > 0 && (
                     <section className={styles.panel}>
                         <h3 className={styles.panelTitle}>

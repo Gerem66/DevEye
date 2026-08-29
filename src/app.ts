@@ -35,7 +35,6 @@ import { status } from '@/status';
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
 
-/** Ce que le délégateur CORS rend pour une requête donnée. */
 type FastifyCorsDelegateCallback = (error: Error | null, options: FastifyCorsOptions) => void;
 
 export interface AppDeps {
@@ -57,24 +56,12 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
 
     await app.register(fastifyHelmet, { contentSecurityPolicy: false });
 
-    // CORS **délégué par requête**, et non fixé une fois pour toutes.
-    //
-    // Tout DevEye n'accepte que `PUBLIC_ORIGIN`, avec les cookies de session.
-    // Les routes publiques des modules (capacité `routes.public` : l'ingestion
-    // d'audience et son script), elles, sont appelées depuis des sites tiers
-    // qu'on ne connaît pas d'avance : elles doivent accepter n'importe quelle
-    // origine, et surtout **sans** identifiants, il n'y a aucune session à y
-    // transporter. `isModulePublicPath` connaît leurs chemins : ce sont ceux
-    // que `modulePublicRoutes` a montés ci-dessous.
-    //
-    // Le délégateur est la seule forme qui reçoive la requête ; `origin` seul ne
-    // voit pas le chemin, et une instance encapsulée aurait fait vivre les
-    // routes publiques dans un contexte Fastify séparé pour un seul en-tête.
-    //
-    // ⚠️ Ce n'est pas la protection de ces routes. Le CORS est un mécanisme
-    // que le navigateur applique à lui-même ; ce qui filtre réellement, c'est
-    // la liste d'origines **par site** vérifiée côté serveur par le module
-    // (`originAllowed`, dans `features/audience`).
+    // CORS délégué par requête : tout DevEye n'accepte que `PUBLIC_ORIGIN` avec
+    // les cookies, sauf les routes publiques des modules (capacité
+    // `routes.public`), appelées depuis des sites tiers : toute origine, sans
+    // identifiants. Le délégateur est la seule forme qui voie le chemin.
+    // Ce n'est pas la protection de ces routes : ce qui filtre, c'est la liste
+    // d'origines par site vérifiée côté serveur par le module.
     await app.register(fastifyCors, () => (req: FastifyRequest, callback: FastifyCorsDelegateCallback) => {
         if (isModulePublicPath(req.url ?? '')) {
             callback(null, { origin: '*', credentials: false, methods: ['GET', 'POST'] });
@@ -107,10 +94,8 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     });
 
     // Turn any uncaught route error into the app's standard {ok:false,error}
-    // envelope. Fastify's default {statusCode,error,message} body matches neither
-    // the web client's decoder nor the agent's (the agent crashed on it with
-    // "invalid type: string, expected struct ApiError"). 5xx are logged with the
-    // stack so the real cause is visible; their message is kept generic (no leak).
+    // envelope: Fastify's default body matches neither the web client's decoder
+    // nor the agent's. 5xx are logged with the stack; their message stays generic.
     app.setErrorHandler((error: FastifyError, req, reply) => {
         const explicit = typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 500;
         const status = explicit ? (error.statusCode as number) : 500;
@@ -121,12 +106,9 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         return reply.code(status).send(err(code, message));
     });
 
-    // `text/plain` porteur de JSON : c'est ce que `navigator.sendBeacon` sait
-    // envoyer sans déclencher de requête préalable OPTIONS, et donc la seule
-    // forme qui traverse une page tierce en un aller simple. Seules les routes
-    // publiques des modules (l'ingestion d'audience) reçoivent ce type ; un
-    // corps illisible rend `undefined`, que leur validation zod écarte comme
-    // le reste.
+    // `text/plain` porteur de JSON : la forme qu'émet `navigator.sendBeacon`
+    // sans requête préalable OPTIONS. Un corps illisible rend `undefined`, que
+    // la validation zod des routes publiques écarte comme le reste.
     app.addContentTypeParser('text/plain', { parseAs: 'string' }, (_req, body, done) => {
         if (!body) {
             done(null, undefined);
@@ -159,47 +141,22 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // Résout « quelle commande touche à quoi » une fois pour toutes, et signale
     // les commandes mutantes qui auraient oublié de le déclarer.
     buildTopicIndex();
-    // Et le contrôle d'autorisation : aucune commande sans garde déclarée.
-    // Lever ici plutôt qu'avertir — un `access` oublié ouvre une commande en
-    // silence, et l'interface qui masque la donnée fait croire à une garde.
+    // Aucune commande sans garde déclarée : lever plutôt qu'avertir, un `access`
+    // oublié ouvre une commande en silence.
     assertAccessDeclared(featureHandlers);
     const audit = createAuditLog(deps.db);
-    // Le hub se dépose pour l'assemblage SDK (façade agents des modules),
-    // puis les services des modules installés démarrent ICI, awaités, avant
-    // l'enregistrement des sockets : un module d'infrastructure (bail, clés)
-    // doit être prêt avant la première trame d'agent, exactement comme le
-    // moteur d'un module d'infrastructure (CloudSync) l'exige.
+    // Les services des modules démarrent ici, awaités, avant l'enregistrement
+    // des sockets : un module d'infrastructure (bail, clés) doit être prêt
+    // avant la première trame d'agent.
     setSdkHost(hub, deps.db);
     const moduleServices = createModuleServices({ db: deps.db, crypt: deps.crypt, audit, logger, live });
     for (const svc of moduleServices) await svc.start();
 
-    // (Ce que les modules Bases de données, Déploiements, Git et Audience
-    // demandent à Projets est un contrat publié par le service du module
-    // `features/projects` (`PROJECTS_USAGE_PROVIDER`), démarré avec les autres
-    // ci-dessus : l'app n'offre plus aucun contrat elle-même.)
-    // (Le moteur de Sentinelle est un service du module `features/sentinel`,
-    // démarré avec les autres ci-dessus ; ses relevés lui arrivent par les
-    // hooks agent.)
-    // (Les sauvegardes sont un service du module `features/backup` : la flotte
-    // d'agents par sa façade, CloudSync et les bases par leurs contrats. Le
-    // relevé des bases est un service du module `features/database`, qui
-    // publie ces contrats lui-même. Le rapprochement des cibles de déploiement
-    // est un service du module `features/deploy`, la synchronisation des
-    // dépôts git un service du module `features/git` : l'ex
-    // `IntegrationSyncService`, rendu moitié par moitié à ses deux features.
-    // L'ingestion d'audience est un service du module `features/audience`,
-    // la seule qui ne sonde rien : elle **reçoit**, par les routes publiques
-    // montées ci-dessous, et son seul travail périodique est de vider ce
-    // qu'on lui a déposé. La relève des boîtes mail ouvertes est un service
-    // du module `features/mail`, qui offre aussi le transport des alertes
-    // e-mail (`MAIL_TRANSPORT_PROVIDER`) et ses deux routes à ticket.)
-
     await authRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
     await agentRoutes(app, { db: deps.db, hub, live, audit });
-    // Les routes publiques des modules (capacité `routes.public`) : sur cet
-    // écouteur-ci, et sur la surface publique quand elle existe
-    // (`publicApp.ts`, où celles à `exposure: 'app'`, comme les deux de Mail,
-    // ne montent pas). Après la création des services, qui les déclarent.
+    // Routes publiques des modules (capacité `routes.public`), aussi montées
+    // sur la surface publique quand elle existe (`publicApp.ts`). Après la
+    // création des services, qui les déclarent.
     modulePublicRoutes(app, 'app');
     await registerWS(app, {
         db: deps.db,

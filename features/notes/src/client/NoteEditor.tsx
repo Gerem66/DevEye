@@ -20,7 +20,6 @@ import { NOTE_TITLE_MAX_LENGTH, type Note, type NoteBlock } from '../contracts/d
 
 export const NOTE_EDITOR_POPUP = 'popup-note-editor';
 
-/** The editable subset of a note returned by the editor on save. */
 export interface NoteDraft {
     title: string;
     folderId: number | null;
@@ -32,10 +31,8 @@ export interface NoteDraft {
 export type NoteEditorResult = NoteDraft | 'delete' | null;
 
 /**
- * Input handed to OpenPopup. `note` is the note to edit (or null to create);
- * `folderId` is the folder a *new* note should be filed into (the section the
- * user clicked "+"); ignored when editing. Folder management lives in the main
- * screen, never in this form.
+ * `note` is the note to edit, or null to create. `folderId` files a *new* note
+ * into the section whose "+" was clicked; it is ignored when editing.
  */
 export interface NoteEditorInput {
     note: Note | null;
@@ -46,7 +43,6 @@ function emptyBlocks(): NoteBlock[] {
     return [{ type: 'text', text: '' }];
 }
 
-/** Human date+time (epoch seconds) for the editor's metadata line. */
 function formatStamp(time: number): string {
     return new Date(time * 1000).toLocaleDateString('fr-FR', {
         day: 'numeric',
@@ -57,17 +53,14 @@ function formatStamp(time: number): string {
     });
 }
 
-/** Date only (no time), used for the PDF's neutral metadata line. */
 function formatDate(time: number): string {
     return new Date(time * 1000).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-/** Drop empty text blocks but keep structural ones (dividers). */
 function normalizeBlocks(blocks: NoteBlock[]): NoteBlock[] {
     return blocks.filter((b) => b.type === 'divider' || b.text.trim() !== '');
 }
 
-/** Open the shared, root-level explainer about private notes. */
 function showPrivateInfo() {
     void openInfo({
         title: 'Notes privées',
@@ -90,29 +83,24 @@ function showPrivateInfo() {
 }
 
 /**
- * The single note editor surface, driven imperatively via OpenPopup. Handles
- * both create and edit: a prominent title, the modular block body, and an
- * understated "private" toggle. The note's folder and position are set from the
- * main screen. Deletion is confirmed via a popup over the editor; the editor only
- * closes once confirmed.
+ * Create and edit share this surface, driven imperatively via OpenPopup. The
+ * note's folder and position are set from the main screen, never here.
  */
 export default function NoteEditor() {
-    // Le drapeau « privée » n'existe que dans l'espace personnel (cf. le bouton
-    // plus bas et `assertPrivateAllowed` côté serveur).
+    // Le drapeau « privée » n'existe que dans l'espace personnel, ce que le
+    // serveur revérifie (`assertPrivateAllowed`).
     const isPersonalWorkspace = useActiveWorkspace()?.kind === 'personal';
     const [mode, setMode] = useState<'add' | 'edit'>('add');
     const [title, setTitle] = useState('');
     const [folderId, setFolderId] = useState<number | null>(null);
     const [blocks, setBlocks] = useState<NoteBlock[]>(emptyBlocks);
-    /** Whether the note will be encrypted with the password-protected key. */
     const [isPrivate, setIsPrivate] = useState(false);
     const [created, setCreated] = useState<number | null>(null);
     const [updated, setUpdated] = useState<number | null>(null);
     /**
-     * La note telle qu'elle est **enregistrée**, pour ce qui ne dépend pas du
-     * brouillon : son identifiant (les réglages de cette note), si elle est
-     * projetée depuis un autre espace, et si elle est privée en base, ce que
-     * le serveur regarde pour accepter ou non de la partager.
+     * La note telle qu'elle est enregistrée, pour ce qui ne dépend pas du
+     * brouillon : son identifiant, sa provenance, et si elle est privée en base,
+     * ce que le serveur regarde pour accepter de la partager.
      */
     const [stored, setStored] = useState<{ id: number; private: boolean; foreign: boolean } | null>(null);
     // Snapshot of the editable state the editor opened with, to detect unsaved
@@ -180,10 +168,9 @@ export default function NoteEditor() {
         if (confirmed === true) close('delete');
     }
 
-    // Past ~10 lines of content the compact dialog gets cramped, so the editor
-    // switches, in one step, to a large, feature-sized surface: a fixed tall
-    // popup whose title and footer stay pinned while only the block list scrolls.
-    // It snaps back to the compact size once the content drops below again.
+    // Past ~10 lines the compact dialog gets cramped: the editor switches to a
+    // tall popup whose title and footer stay pinned while only the block list
+    // scrolls, and snaps back once the content drops below again.
     const lineCount = blocks.reduce(
         (n, b) => n + (b.type === 'divider' ? 1 : Math.max(1, b.text.split('\n').length)),
         0
@@ -204,12 +191,9 @@ export default function NoteEditor() {
             tall={expanded}
             headerAction={
                 <>
-                    {/* Les réglages **de cette note** : où elle est visible
-                        (Partage) et ce qu'en voit chaque rôle (Permissions),
-                        rendus par la coquille commune. Une note privée n'est
-                        jamais projetable (elle est chiffrée par le mot de
-                        passe de son auteur) : l'onglet Partage ne lui est pas
-                        proposé, plutôt qu'ouvert sur un refus. */}
+                    {/* Une note privée est chiffrée par le mot de passe de son
+                        auteur, donc jamais projetable : l'onglet Partage ne lui est
+                        pas proposé, plutôt qu'ouvert sur un refus. */}
                     {stored && (
                         <FeatureSettingsButton
                             variant='ghost'
@@ -272,14 +256,11 @@ export default function NoteEditor() {
                                     <span className={`icon ${styles.toggleIcon} icon-trash`} />
                                 </button>
                             )}
-                            {/* Une note privée est protégée par le chiffrement, pas par un
-                                contrôle d'accès : son corps passe par la clé emballée par
-                                mot de passe. Dans un espace partagé, cette clé est celle du
-                                propriétaire ; la note serait donc illisible pour les autres
-                                membres, et trompeuse pour son auteur. Même chose pour une
-                                note projetée depuis un autre espace : privée d'ici, elle
-                                serait illisible chez elle. Le serveur refuse ces deux cas ;
-                                on n'affiche simplement pas le bouton. */}
+                            {/* « Privée » est du chiffrement, pas un contrôle d'accès :
+                                la clé est celle du propriétaire, donc la note serait
+                                illisible pour les autres membres d'un espace partagé, et
+                                illisible chez elle si elle vient d'un autre espace. Le
+                                serveur refuse les deux, le bouton ne s'affiche pas. */}
                             {isPersonalWorkspace && !stored?.foreign && (
                                 <button
                                     type='button'

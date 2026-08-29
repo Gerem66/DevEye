@@ -11,11 +11,10 @@ use serde::{Deserialize, Serialize};
 
 /// Nom du fichier de config, quand rien ne l'impose via `DEVEYE_CONFIG`.
 pub const CONFIG_FILE: &str = "agent.toml";
-/// Les fichiers que l'agent pose **à côté** de sa config. Nommés ici plutôt
-/// qu'aux quatre coins du code parce que le retrait (`uninstall`) doit les
-/// balayer dans un dossier qui n'est pas forcément le sien — celui de
-/// l'utilisateur derrière un `sudo` —, où `Config::pid_path()` et consorts ne
-/// pointent pas.
+/// Les fichiers que l'agent pose à côté de sa config. Nommés ici parce que le
+/// retrait (`uninstall`) doit les balayer dans un dossier qui n'est pas
+/// forcément le sien (celui de l'utilisateur derrière un `sudo`), où
+/// `Config::pid_path()` et consorts ne pointent pas.
 pub const SIBLING_FILES: [&str; 3] = ["agent.pid", "agent.log", "agent.state"];
 /// Encadrement du nom d'un cache de scan CloudSync : `sync-<shareId>.index.json`.
 /// Un partage par fichier, donc un balayage par motif et non par nom.
@@ -112,13 +111,12 @@ impl Config {
     }
 
     /// Wipe every local trace of this agent: the config (which holds the device
-    /// token), the PID and log files, and — best effort — the executable itself.
+    /// token), the PID, log and state files, and best-effort the executable.
     ///
-    /// Only the config removal is mandatory: if it fails (e.g. permissions), we
-    /// return an error so the server aborts the deletion and surfaces it. The
-    /// rest is best-effort (their failure must not block a deletion). On Unix a
-    /// running process can unlink its own binary (the inode lives until exit);
-    /// Windows locks a running executable, so the binary there is left in place.
+    /// Only the config removal is mandatory: on failure the error is returned so
+    /// the server aborts the deletion. On Unix a running process can unlink its
+    /// own binary (the inode lives until exit); Windows locks a running
+    /// executable, so the binary is left in place there.
     pub fn self_destruct() -> Result<()> {
         let config = Self::path();
         if config.exists() {

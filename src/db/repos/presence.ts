@@ -4,11 +4,9 @@ import type { Queryable } from '../pool';
 type Q = Queryable;
 
 /**
- * Le dépôt du SOCLE : la transition que la socket agent enregistre hors
- * session, et l'état qu'elle relit pour ne pas en écrire deux fois la même
+ * Le dépôt du socle : la transition enregistrée par la socket agent
  * (`agent/presence.ts`). La frise de disponibilité et la purge sont les
- * requêtes du module `features/devices`, dans son propre dépôt sur cette même
- * table : deux lecteurs, un schéma, assumé.
+ * requêtes du module `features/devices`, sur cette même table.
  */
 export interface PresenceRepo {
     /** Record an online/offline transition (unix ms). */

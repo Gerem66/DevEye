@@ -11,16 +11,12 @@ import type { DeployRepo } from './repo';
 import { DeploySync } from './service';
 
 /**
- * Le rapprochement de fond du module, sur le harnais de service du SDK.
- *
- * Aucun réseau : l'adaptateur Dokploy est injecté, et le test décide de ce que
- * l'instance répond. Ce qui mérite d'être tenu, c'est ce qui ne lève nulle part
- * quand ça se dérègle : le **premier import** garnit sans prévenir, un
- * déploiement **en vol** ouvre un message vivant puis le modifie (jamais un
- * second), l'**atterrissage** conclut le message et n'envoie l'avis en texte
- * qu'aux canaux qui ne l'ont pas déjà dit (`except`), un canal sans message
- * vivant reçoit l'avis seul, un **suivi perdu** passe à `failed` sans avis, et
- * l'espace est prévenu (`live.changed`) à chaque changement, jamais à vide.
+ * Le rapprochement de fond du module, sur le harnais de service du SDK, avec un
+ * adaptateur Dokploy injecté : le premier import garnit sans prévenir, un
+ * déploiement en vol ouvre un message vivant puis le modifie (jamais un second),
+ * l'atterrissage conclut et n'envoie l'avis en texte qu'aux autres canaux
+ * (`except`), un suivi perdu passe à `failed` sans avis, et `live.changed` ne
+ * part qu'à un changement.
  */
 
 interface FakeRepo extends DeployRepo {
@@ -106,8 +102,8 @@ function fakeRepo(
         updateCredential: unused,
         removeCredential: unused,
         countCredentialUses: unused,
-        // La requête du vrai dépôt, en mémoire : la jointure sur la clé, le
-        // compte des déploiements en vol, les deux régimes et l'ordre.
+        // La requête du vrai dépôt, en mémoire : jointure sur la clé, compte des
+        // déploiements en vol, les deux régimes et l'ordre.
         listTargetsDue: async (limit, staleBefore) =>
             targets
                 .map((t) => {
@@ -221,9 +217,8 @@ describe('la boucle', () => {
         });
         await tick();
 
-        // Tout l'historique entre en base, du plus récent au plus ancien, marqué
-        // annoncé : rien ne part, ni avis, ni message vivant, et le premier
-        // import est fait.
+        // Tout l'historique entre en base marqué annoncé : rien ne part, et le
+        // premier import est fait.
         assert.deepEqual(
             repo.deployments.map((d) => [d.external_id, d.status, d.notified]),
             [
@@ -252,8 +247,8 @@ describe('le message vivant', () => {
         const repo = fakeRepo([target()], [credential()]);
         const { deps, tick, answer } = syncWith(repo, { liveChannels: [7] });
 
-        // Découvert en vol : la ligne entre non annoncée, et le message s'ouvre
-        // (publication sans identifiant), dont l'identifiant est retenu.
+        // Découvert en vol : la ligne entre non annoncée, le message s'ouvre et
+        // son identifiant est retenu.
         answer({ remote: [entry()], log: 'étape 1\n' });
         await tick();
         assert.deepEqual(
@@ -274,7 +269,7 @@ describe('le message vivant', () => {
         assert.deepEqual(deps.recorded.liveChanges, [1]);
 
         // Atterrissage : l'édition finale du même message, puis l'avis en texte
-        // sur la route de LA cible, sauf le canal qui a déjà tout dit.
+        // sauf au canal qui a déjà tout dit.
         const finishedAt = NOW();
         answer({ remote: [entry({ status: 'success', finishedAt })] });
         await tick();

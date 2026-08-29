@@ -1,18 +1,9 @@
--- Une seule duree de conservation par appareil.
---
--- La collecte est unifiee depuis 042 : un tick d'agent produit un *instant*
--- portant les metriques ET la liste des processus sous un seul horodatage. Les
--- durees de conservation, elles, etaient restees separees — au point que le
--- code annoncait 30 jours pour les processus pendant que `.env.prod` fixait
--- `PROCESS_RETENTION_DAYS=1`. `devices.retention_days` regit desormais les
--- trois tables filles, et la colonne dediee aux processus disparait.
---
--- L'historique repart de zero (decision produit). C'est ce qui permet de poser
--- au passage la cle unique et les index de purge sans dedoublonner quoi que ce
--- soit — voir chaque bloc pour la raison.
---
--- Les trois tables sont du cote *enfant* de leur cle etrangere vers `devices`
--- et ne sont referencees par personne : TRUNCATE y est autorise.
+-- Une seule duree de conservation par appareil : `devices.retention_days` regit
+-- les trois tables filles (la collecte est unifiee depuis 042), et la colonne
+-- dediee aux processus disparait. L'historique repart de zero, ce qui permet de
+-- poser la cle unique et les index de purge sans dedoublonner.
+-- Les trois tables sont du cote enfant de leur FK vers `devices` et ne sont
+-- referencees par personne : TRUNCATE y est autorise.
 
 TRUNCATE TABLE device_process_samples;
 TRUNCATE TABLE device_metrics;
@@ -23,11 +14,8 @@ SET @c = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
 SET @s = IF(@c > 0, 'ALTER TABLE devices DROP COLUMN process_retention_days', 'SELECT 1');
 PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
--- Ingestion idempotente. `device_process_samples` a sa cle primaire
--- (device_id, ts) et son INSERT ... ON DUPLICATE KEY UPDATE ; `device_metrics`
--- n'avait qu'un index ordinaire et un INSERT nu, donc un lot rejoue par un
--- agent apres un accuse perdu dupliquait les points du graphe.
---
+-- Ingestion idempotente : `device_metrics` n'avait qu'un index ordinaire, donc
+-- un lot rejoue par un agent apres un accuse perdu dupliquait les points.
 -- Le nouvel index est pose AVANT que l'ancien parte : `fk_metrics_device`
 -- exige un index commencant par `device_id`, et celui-ci prend le relais.
 SET @c = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS

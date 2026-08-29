@@ -67,7 +67,6 @@ const ARCHIVE_MAX_ENTRIES: u64 = 200_000;
 /// the client's limit, not the device's.
 const ARCHIVE_MAX_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
-// ───────────────────────────── metadata helpers ───────────────────────────
 fn kind_of(ft: &std::fs::FileType) -> &'static str {
     if ft.is_symlink() {
         "symlink"
@@ -112,14 +111,11 @@ fn display_path(p: &Path) -> String {
 
 /// `\\?\C:\dir` → `C:\dir`, `\\?\UNC\srv\share` → `\\srv\share`.
 ///
-/// Windows' `canonicalize` always answers with a verbatim path. That prefix is an
-/// API detail (it exists to bypass MAX_PATH and name parsing), and it leaks all
-/// the way to the UI: the client splits paths on the separator to build its
-/// breadcrumbs, so `\\?\` became a phantom `?` directory and every crumb above it
-/// pointed at a path the device could not resolve. std re-adds the prefix
-/// internally when it needs it, so the plain form still opens long paths.
-///
-/// Device paths (`\\?\Volume{…}`) have no plain form and are left untouched.
+/// Windows' `canonicalize` always answers with a verbatim path. The prefix is an
+/// API detail that leaks to the UI: the client splits paths on the separator for
+/// its breadcrumbs, so `\\?\` becomes a phantom `?` directory. std re-adds the
+/// prefix when it needs it, so the plain form still opens long paths. Device
+/// paths (`\\?\Volume{…}`) have no plain form and are left untouched.
 fn strip_verbatim(s: String) -> String {
     let Some(rest) = s.strip_prefix(r"\\?\") else {
         return s;
@@ -144,7 +140,6 @@ fn dir_first(a: &FileEntry, b: &FileEntry) -> Ordering {
         .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
 }
 
-// ─────────────────────────────────── list ─────────────────────────────────
 /// List a directory (resolved to an absolute, symlink-free path).
 pub fn list(path: &str) -> Result<FileListing> {
     let canon = std::fs::canonicalize(path).with_context(|| format!("résolution de {path}"))?;
@@ -177,11 +172,8 @@ pub fn list(path: &str) -> Result<FileListing> {
     })
 }
 
-// ───────────────────────────────── analyze ────────────────────────────────
-
-/// Virtual (kernel) filesystems whose apparent sizes are meaningless — and
-/// sometimes absurd (`/proc/kcore` reports ~128 TiB): never walk them. Without
-/// this, analysing `/` on Linux produced garbage totals.
+/// Virtual (kernel) filesystems whose apparent sizes are meaningless, and
+/// sometimes absurd (`/proc/kcore` reports ~128 TiB): never walk them.
 #[cfg(target_os = "linux")]
 fn is_virtual_fs(path: &Path) -> bool {
     matches!(path.to_str(), Some("/proc" | "/sys" | "/dev" | "/run"))
@@ -193,12 +185,9 @@ fn is_virtual_fs(_path: &Path) -> bool {
 
 /// Recursive size of each immediate child of `path`, biggest first (the ncdu view).
 ///
-/// A single shared walk budget across all children (kept large enough that only
-/// pathological trees ever hit it): the ordering is fine for the intended use,
-/// and — crucially — it keeps most results *complete* so the client can cache
-/// them. A per-child fair split was tried and backfired: each child got a small
-/// slice, far more results came back `partial`, and the client (which won't
-/// cache partial results) then recomputed on every navigation.
+/// One shared walk budget across all children, large enough that only
+/// pathological trees hit it: it keeps most results complete, which the client
+/// only caches when they are (a per-child split returns far more `partial`).
 pub fn analyze(path: &str) -> Result<Vec<FileUsageEntry>> {
     let canon = std::fs::canonicalize(path).with_context(|| format!("résolution de {path}"))?;
     let mut budget = ANALYZE_BUDGET;
@@ -210,7 +199,6 @@ pub fn analyze(path: &str) -> Result<Vec<FileUsageEntry>> {
         let Ok(ft) = entry.file_type() else { continue };
         let path = entry.path();
         let (total_size, partial) = if ft.is_dir() && !ft.is_symlink() {
-            // Kernel filesystems have meaningless (sometimes absurd) sizes.
             if is_virtual_fs(&path) {
                 (0, false)
             } else {
@@ -268,7 +256,6 @@ fn dir_size(root: &Path, budget: &mut u64) -> (u64, bool) {
     (total, partial)
 }
 
-// ───────────────────────────────── search ─────────────────────────────────
 enum Matcher {
     Re(regex::Regex),
     Sub(String),
@@ -429,7 +416,6 @@ pub fn search(path: &str, filter: &FileSearchFilter) -> Result<(Vec<FileMatch>, 
     Ok((matches, truncated))
 }
 
-// ───────────────────────────────── mutate ─────────────────────────────────
 /// Apply a filesystem mutation. `delete` removes files and directories (recursive);
 /// `mkdir` creates the directory (and parents); `rename` moves `path` to `dest`.
 pub fn mutate(op: &str, path: &str, dest: Option<&str>) -> Result<()> {
@@ -452,7 +438,6 @@ pub fn mutate(op: &str, path: &str, dest: Option<&str>) -> Result<()> {
     }
 }
 
-// ──────────────────────────────── transfer ────────────────────────────────
 /// Write one chunk of an uploaded file at `offset`. Offset 0 creates/truncates the
 /// file; later offsets seek and overwrite — so chunks must arrive in order (the
 /// session loop processes them sequentially).
@@ -531,10 +516,9 @@ impl std::io::Write for ChunkSink {
 /// Write `root` into `sink` as a gzipped tar, entries prefixed with the folder's
 /// own name so extracting never scatters files into the current directory.
 ///
-/// Iterative DFS with the same discipline as {@link dir_size}: symlinks are stored
-/// as symlinks (never followed, so no loop), kernel filesystems are skipped, and an
-/// entry the agent can't read is skipped rather than failing the whole archive —
-/// a single root-owned file in a home directory would otherwise sink it.
+/// Same discipline as `dir_size`: symlinks stored as symlinks (never followed),
+/// kernel filesystems skipped, and an unreadable entry skipped rather than
+/// failing the whole archive (a single root-owned file would otherwise sink it).
 fn archive_dir(root: &Path, sink: &mut ChunkSink) -> Result<()> {
     use flate2::write::GzEncoder;
     use flate2::Compression;
@@ -685,7 +669,6 @@ pub fn spawn_download(op_id: String, path: String, tx: Sender<FilesEvent>) {
     });
 }
 
-// ───────────────────────────────── tasks ──────────────────────────────────
 pub async fn list_task(op_id: String, path: String, tx: Sender<FilesEvent>) {
     let res = tokio::task::spawn_blocking(move || list(&path)).await;
     let ev = match res {
@@ -833,9 +816,8 @@ mod tests {
         assert!(!m.is_match("readme.md"));
     }
 
-    /// The archive is only ever seen as a stream of chunks, so this walks the
-    /// whole path: build a small tree, archive it into the channel, reassemble the
-    /// frames and read the result back as a real `.tar.gz`.
+    /// Build a small tree, archive it into the channel, reassemble the frames
+    /// and read the result back as a real `.tar.gz`.
     #[test]
     fn archive_dir_streams_a_readable_targz() {
         use std::io::Read;

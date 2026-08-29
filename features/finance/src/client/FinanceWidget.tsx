@@ -3,16 +3,8 @@ import { formatMoney } from './format';
 import styles from './style.module.css';
 
 /**
- * La carte de l'accueil: le solde, et le mois en cours.
- *
- * Le solde plutôt qu'un décompte, parce que « 3 comptes » ne dit rien qu'on
- * veuille savoir d'un coup d'œil, là où « 4 210,50 € » dit exactement ce pour
- * quoi on ouvre la feature. Les deux flux du mois tiennent sur la ligne du bas:
- * un solde seul ne dit pas s'il monte ou s'il descend.
- *
- * Aucune animation de valeur: cette carte est sur la page d'accueil, et un
- * nombre qui s'anime à chaque ouverture attire l'œil pour une information dont
- * on ne fait rien à cet endroit.
+ * La carte de l'accueil : le solde plutôt qu'un décompte, et les deux flux du
+ * mois. Aucune animation de valeur.
  */
 export function FinanceWidget() {
     const { summary, loading } = useFinanceSummary();

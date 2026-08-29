@@ -4,14 +4,10 @@ import { useConnectionState } from '@/stores/connection';
 import styles from './ConnectionStatus.module.css';
 
 /**
- * Topbar chip shown only when an *established* WebSocket connection drops. The
- * whole chip is a single danger button: the leading icon carries the state, the
- * label the message, and a retry icon slides in on hover. Clicking it reconnects —
- * the socket also auto-retries on its backoff timer and on tab focus, so it often
- * flips to the spinner on its own.
- *
- * Gated on `ws.hasConnected` (true only once the socket has opened): the chip never
- * flashes during the first connect/splash, nor after an intentional close (logout).
+ * Topbar chip shown only when an established WebSocket connection drops;
+ * clicking it reconnects (the socket also auto-retries). Gated on
+ * `ws.hasConnected`: never flashes during the first connect nor after an
+ * intentional close (logout).
  */
 export function ConnectionStatus() {
     const state = useConnectionState();

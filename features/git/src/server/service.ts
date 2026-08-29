@@ -19,24 +19,12 @@ import type { GitRepo } from './repo';
 import { readJson } from './_shared';
 
 /**
- * La synchronisation des **dépôts git de l'espace**, en tâche de fond.
+ * La synchronisation des dépôts git de l'espace, en tâche de fond : un ticker du
+ * SDK, une garde de ré-entrance, une carte de promesses en vol pour ne jamais
+ * traiter deux fois le même dépôt, et des chiffres mémoïsés par espace.
  *
- * C'était la moitié git de l'`IntegrationSyncService` de l'app, qui
- * l'hébergeait à côté du rapprochement des cibles de déploiement parce que les
- * deux ont exactement la même forme — un minuteur, un budget d'appels, un
- * fournisseur tiers qui répond quand il veut — et non parce qu'ils parlent de
- * la même chose. Déploiement a emporté sa moitié dans son module
- * (`features/deploy/src/server/service.ts`, `DeploySync`) ; celle-ci a suivi
- * Git dans le sien. Structure calquée sur `UptimeMonitor` : un ticker du SDK,
- * une garde de ré-entrance, une carte de promesses en vol pour ne jamais
- * traiter deux fois le même dépôt, et des chiffres mémoïsés par espace
- * (`deps.cipherFor`).
- *
- * **Tout est lu et écrit à l'étage ouvert.** Depuis la migration `064`, un dépôt
- * appartient à l'espace : il n'a plus de palier de confidentialité à suivre, et
- * ce service — qui tourne sans session — peut donc toujours le lire. C'est ce
- * qui a fait disparaître la garde atomique sur `security_tier` que portait
- * l'ancien `markSynced`, et avec elle toute une classe de courses.
+ * Tout est lu et écrit à l'étage ouvert : un dépôt appartient à l'espace, il n'a
+ * pas de palier de confidentialité à suivre, et ce service tourne sans session.
  */
 
 /** Cadence de l'ordonnanceur. */
@@ -52,84 +40,60 @@ const MIN_INTERVAL_SECONDS = 600;
 const RATE_LIMIT_BACKOFF_SECONDS = 3600;
 
 /**
- * Pages de commits lues par tour, en régime établi.
- *
- * Cinq cents commits d'un coup couvrent très largement ce qui a pu arriver en
- * dix minutes ; au-delà, c'est du backfill, qui a son propre budget.
+ * Pages de commits lues par tour, en régime établi : cinq cents commits couvrent
+ * largement dix minutes ; au-delà, c'est du backfill, qui a son propre budget.
  */
 const HEAD_PAGES = 5;
 
 /**
- * Pages lues par tour pour rapatrier l'historique ancien.
- *
- * Trois mille commits par tranche : assez pour qu'un dépôt de vingt mille
- * commits soit complet en une poignée de tours, assez peu pour qu'un tour reste
- * court et que le quota (5 000 requêtes/heure) ne soit jamais en cause — trente
- * requêtes par tranche.
+ * Pages lues par tour pour rapatrier l'historique ancien. Trois mille commits par
+ * tranche : assez pour qu'un dépôt de vingt mille soit complet en quelques tours,
+ * assez peu pour que le quota horaire ne soit jamais en cause.
  */
 const BACKFILL_PAGES = 30;
 
 /**
- * Délai avant de reprendre un backfill inachevé.
- *
- * Court, et volontairement : tant que l'historique est incomplet, le graphe
- * ment sur l'âge du dépôt. On enchaîne donc les tranches au lieu d'attendre la
- * cadence ordinaire, jusqu'à toucher le premier commit — après quoi ce dépôt
- * repasse au régime commun.
+ * Délai avant de reprendre un backfill inachevé. Court volontairement : tant que
+ * l'historique est incomplet, le graphe ment sur l'âge du dépôt, on enchaîne donc
+ * les tranches au lieu d'attendre la cadence ordinaire.
  */
 const BACKFILL_GAP_MS = 3_000;
 
 /**
  * Branches dont on lit les commits par tour, et profondeur de cette lecture.
+ * `/commits` sans référence ne rend que la branche par défaut : tout ce qui ne vit
+ * que sur une branche de travail resterait invisible, d'où cette passe.
  *
- * ⚠️ `/commits` sans référence ne rend que la branche **par défaut** : tout ce
- * qui ne vit que sur une branche de travail resterait invisible. On repasse donc
- * derrière, branche par branche.
- *
- * Le coût est nul en régime établi — une branche dont on connaît déjà la tête
- * est sautée sans requête (voir `hasCommit`). Il ne se paie qu'au premier import
- * et quand une branche bouge, où deux pages couvrent très largement une
- * divergence ordinaire.
+ * Le coût est nul en régime établi, une branche dont on connaît déjà la tête étant
+ * sautée sans requête ; il ne se paie qu'au premier import et quand une branche bouge.
  */
 const BRANCHES_PER_RUN = 10;
 const BRANCH_PAGES = 2;
 
 /**
- * Les étapes d'une synchronisation, dans l'ordre.
- *
- * Elles sont l'**unité de progression** rendue à l'interface : on ne sait pas
- * combien de commits le distant va rendre avant de les avoir lus, donc une
- * barre calée sur un total deviné mentirait. Une barre qui avance d'étape
- * nommée en étape nommée dit exactement où on en est.
+ * Les étapes d'une synchronisation, dans l'ordre : c'est l'unité de progression
+ * rendue à l'interface. On ignore combien de commits le distant va rendre avant de
+ * les lire, donc une barre calée sur un total deviné mentirait.
  */
 const SYNC_PHASES = ['Dépôt', 'Branches', 'Commits', 'Comparaison des branches', 'Releases', 'Pull requests'] as const;
 
 /**
- * L'étape affichée entre deux tranches de rapatriement d'historique.
- *
- * C'est bien à celle-là qu'un backfill reprend : le dépôt, les branches et les
- * comparaisons sont déjà à jour, seule la lecture des commits anciens continue.
+ * L'étape affichée entre deux tranches de rapatriement d'historique : le dépôt, les
+ * branches et les comparaisons sont déjà à jour, seuls les commits anciens restent.
  */
 const COMMITS_STEP = SYNC_PHASES.indexOf('Commits');
 
 /**
- * Branches comparées par tour à la branche par défaut.
- *
- * Chaque comparaison est un appel : un dépôt à cinquante branches ne doit pas
- * consommer cinquante requêtes par tour. Celles dont le sha n'a pas bougé sont
- * de toute façon sautées ; cette borne ne concerne que le premier tour et les
- * rafales de nouvelles branches, qui rattraperont au tour suivant.
+ * Branches comparées par tour à la branche par défaut. Chaque comparaison est un
+ * appel : un dépôt à cinquante branches ne doit pas coûter cinquante requêtes par
+ * tour. Le surplus rattrape au tour suivant.
  */
 const MAX_COMPARISONS_PER_RUN = 12;
 
 /**
- * La couture de test du service : l'adaptateur GitHub, injectable.
- *
- * Les vraies fonctions de `github.ts` par défaut ; un test en simule un dépôt
- * distant, sans réseau, et décide de ce qu'il répond (branches, commits,
- * releases, pull requests, comparaisons, 304, quota épuisé). Rien d'autre
- * n'est simulable ici, et c'est voulu : le reste du chemin (tranches de
- * backfill, écritures, version des projets, réveil de l'espace) est
+ * La couture de test du service : l'adaptateur GitHub, injectable. Les vraies
+ * fonctions de `github.ts` par défaut, qu'un test remplace par un dépôt distant
+ * simulé. Rien d'autre n'est simulable, et c'est voulu : le reste du chemin est
  * précisément ce qu'on veut voir tourner tel quel.
  */
 export interface GitHubClient {
@@ -145,30 +109,25 @@ export class GitSync {
     /** La boucle de l'ordonnanceur : un ticker du SDK. */
     private readonly ticker: FeatureService;
     /**
-     * Garde de ré-entrance, en plus de celle du ticker : `requestSync()`
-     * déclenche un tour hors cadence, et deux tours concurrents se
-     * disputeraient les mêmes dépôts.
+     * Garde de ré-entrance, en plus de celle du ticker : `requestSync()` déclenche
+     * un tour hors cadence, et deux tours concurrents se disputeraient les dépôts.
      */
     private ticking = false;
     private readonly inFlight = new Map<number, Promise<void>>();
     /** Dépôts à traiter en priorité, demandés à la main par `git.repoSyncNow`. */
     private readonly forced = new Set<number>();
     /**
-     * L'étape en cours par dépôt, pour les synchronisations en vol.
-     *
-     * En mémoire et non en base : c'est un état de quelques secondes, lu par
-     * sondage depuis l'interface qui a lancé la synchronisation. L'écrire en
-     * base coûterait six écritures par tour pour une information périmée avant
-     * d'être relue. Corollaire assumé, et vrai de tout le direct : derrière
-     * deux instances, seule celle qui synchronise connaît l'avancement.
+     * L'étape en cours par dépôt, pour les synchronisations en vol. En mémoire et
+     * non en base : c'est un état de quelques secondes, et l'écrire coûterait six
+     * écritures par tour pour une information périmée avant d'être relue.
+     * Corollaire assumé : derrière deux instances, seule celle qui synchronise
+     * connaît l'avancement.
      */
     private readonly progress = new Map<number, { step: number; startedAt: number; workspaceId: number }>();
 
     /**
-     * Dépôts dont l'historique n'est pas encore complet.
-     *
-     * Rempli par `runSync`, consommé à la fin de `syncOne` : c'est ce qui
-     * enchaîne les tranches de backfill sans attendre la cadence ordinaire.
+     * Dépôts dont l'historique n'est pas encore complet : rempli par `runSync` et
+     * consommé à la fin de `syncOne`, c'est ce qui enchaîne les tranches.
      */
     private readonly backfilling = new Set<number>();
 
@@ -183,8 +142,7 @@ export class GitSync {
             fetchPullRequests
         }
     ) {
-        // Son propre minuteur : un dépôt git se suit à la dizaine de minutes,
-        // là où un déploiement se suit à la dizaine de secondes (`DeploySync`).
+        // Son propre minuteur : un dépôt git se suit à la dizaine de minutes.
         this.ticker = deps.createTicker({ intervalMs: TICK_SECONDS * 1000, tick: () => this.tick() });
     }
 
@@ -207,10 +165,8 @@ export class GitSync {
     }
 
     /**
-     * Où en est la synchronisation de ce dépôt.
-     *
-     * `running: false` avec une étape nulle est la réponse normale hors
-     * synchronisation — ce n'est pas une erreur, et l'interface s'en sert pour
+     * Où en est la synchronisation de ce dépôt. `running: false` avec une étape nulle
+     * est la réponse normale hors synchronisation, et l'interface s'en sert pour
      * savoir qu'elle peut cesser de sonder.
      */
     syncStatus(repoId: number): GitSyncStatus {
@@ -228,15 +184,10 @@ export class GitSync {
     }
 
     /**
-     * Les synchronisations en cours dans un espace, toutes d'un coup.
-     *
-     * Lecture **purement mémoire** : aucune requête, aucun déchiffrement — d'où
-     * le `workspaceId` mémorisé à côté de l'étape, qui évite d'avoir à demander
-     * à la base quels dépôts appartiennent à qui. C'est ce qui rend la liste des
-     * dépôts sondable à la seconde sans rien coûter, exactement comme la barre
-     * de progression d'une synchro mail (voir LIVE.md, « les sondages
-     * supprimés » : celui-ci lit un compteur qui ne vit qu'en mémoire le temps
-     * de la synchro, et s'arrête avec elle).
+     * Les synchronisations en cours dans un espace, toutes d'un coup. Lecture
+     * purement mémoire, d'où le `workspaceId` mémorisé à côté de l'étape, qui évite
+     * de demander à la base quels dépôts appartiennent à qui : la liste des dépôts
+     * est sondable à la seconde sans rien coûter.
      */
     runningIn(workspaceId: number): { repoId: number; phase: string; step: number; stepCount: number }[] {
         const out: { repoId: number; phase: string; step: number; stepCount: number }[] = [];

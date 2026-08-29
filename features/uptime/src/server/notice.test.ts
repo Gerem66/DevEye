@@ -1,27 +1,17 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-// Privilège de native rapatriée, commenté à chaque usage : `webhookBody` est la
-// fonction de l'app qui décide, pour chaque type de canal, si l'embed remplace
-// le texte. Elle est partagée par les cinq émetteurs, et c'est précisément ce
-// partage qui se vérifie ici depuis le point de vue d'Uptime.
+// `webhookBody` est la fonction de l'app qui décide, par type de canal, si
+// l'embed remplace le texte.
 import { webhookBody, type Alert } from '@/Services/notifications';
 
 import { buildNotice } from './notice';
 
 /**
- * L'avis de disponibilité tel que Discord le reçoit.
- *
- * Comme pour l'avis de déploiement, la mise en page se juge à l'œil dans
- * Discord ; ce qui est vérifié ici, ce sont les endroits où un avis peut
- * **partir de travers sans que rien ne le dise** : une valeur de champ trop
- * longue (Discord rejette le message entier, donc l'alerte n'arrive jamais), un
- * lien Markdown cassé par l'adresse surveillée, et le choix entre texte et
- * embed selon le webhook réglé.
- *
- * Ce dernier point est le plus traître : se tromper de branche n'échoue pas, ça
- * envoie deux fois la même chose à Discord, ou du texte perdu vers un point
- * d'entrée maison qui attendait ses champs.
+ * La mise en page se juge à l'œil dans Discord ; ce qui est vérifié ici, ce sont
+ * les endroits où un avis part de travers sans que rien ne le dise : un champ
+ * trop long (Discord rejette le message entier), un lien Markdown cassé par
+ * l'adresse, et le choix texte / embed selon le webhook.
  */
 
 type Embed = Record<string, unknown> & { fields: { name: string; value: string; inline?: boolean }[] };
@@ -187,9 +177,6 @@ describe('webhookBody : quel canal reçoit quoi', () => {
     });
 
     it('ne décide plus d’après l’URL, mais d’après le type déclaré', () => {
-        // Le reniflage d'URL décidait à la place de l'utilisateur : un point
-        // d'entrée maison servi depuis un domaine Discord recevait des embeds
-        // au lieu de son texte, et rien ne permettait de demander l'inverse.
         // Un canal déclaré `webhook` garde son texte, quelle que soit son URL.
         const body = webhookBody('webhook', alert);
         assert.equal(body.content, 'le corps en clair');

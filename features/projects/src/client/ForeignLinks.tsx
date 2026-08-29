@@ -3,25 +3,15 @@ import styles from './style.module.css';
 
 interface ForeignLinksProps {
     labels: readonly ProjectLinkLabel[];
-    /** La phrase du vide, propre à ce qu'on relie. */
     empty: string;
-    /**
-     * Rappeler que les liaisons se règlent au domicile. Une fois par onglet :
-     * l'onglet Déploiement porte deux sections, seule la dernière le dit.
-     */
+    /** Le rappel « ça se règle au domicile », affiché une seule fois par onglet. */
     note?: boolean;
 }
 
 /**
- * Les liaisons d'un projet projeté depuis un autre espace, **en lecture**.
- *
- * Une rangée nommée par liaison, et rien d'autre : ni le bloc du module (qui
- * chargerait l'élément et porterait ses gestes), ni « Ouvrir », ni « Délier »,
- * ni le « + ». Relier et délier sont des gestes du domicile, que le serveur
- * refuse depuis une fenêtre ; et l'élément visé vit dans l'espace d'origine,
- * où le lecteur d'ici n'a pas nécessairement ses entrées. Le nom vient donc du
- * serveur, résolu par le module visé, et suffit à répondre à « à quoi ce
- * projet est-il relié ? » sans ouvrir une porte qui ne mène nulle part.
+ * Les liaisons d'un projet projeté depuis un autre espace, en lecture seule :
+ * ni « Ouvrir », ni « Délier », ni « + ». Relier et délier sont des gestes du
+ * domicile, que le serveur refuse depuis une fenêtre.
  */
 export function ForeignLinks({ labels, empty, note = true }: ForeignLinksProps) {
     return (

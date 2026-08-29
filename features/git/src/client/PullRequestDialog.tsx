@@ -18,19 +18,12 @@ interface PullRequestDialogProps {
 }
 
 /**
- * Une pull request, en dialogue.
+ * Une pull request, en dialogue plutôt qu'en sous-page : un dialogue se referme
+ * là où on l'a ouvert, une sous-page ne se signale que par une flèche de retour
+ * et laisse croire qu'on est encore dans l'onglet.
  *
- * Dialogue et non sous-page de l'onglet : une sous-page ne se signale que par
- * une flèche de retour, et rien ne dit qu'on a quitté l'onglet Git — on croit
- * y être encore. Un dialogue, lui, se referme là où on l'a ouvert, et la pile
- * `useDismissLayer` fait qu'Échap le ferme d'abord, la popup de feature ensuite.
- *
- * La description reste du **texte brut préformaté** : le rendu Markdown du dépôt
- * (`features/notes/src/client/BlockText`) est une surface éditable, pas un afficheur, et en
- * écrire un pour l'occasion reviendrait à embarquer un analyseur complet —
- * listes, tableaux, blocs de code, cases à cocher — pour un écran de
- * consultation. Retours à la ligne et indentation sont préservés, ce qui suffit
- * à lire une description de PR.
+ * La description reste du texte brut préformaté : l'afficher en Markdown
+ * demanderait un analyseur complet pour un écran de consultation.
  */
 export function PullRequestDialog({ open, pull, onClose }: PullRequestDialogProps) {
     const fmt = (t: number | null) => (t === null ? null : new Date(t * 1000).toLocaleString('fr-FR'));

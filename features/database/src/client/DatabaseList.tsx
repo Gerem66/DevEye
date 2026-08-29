@@ -16,13 +16,7 @@ interface DatabaseListProps {
     onDragStateChange: (dragging: boolean) => void;
 }
 
-/**
- * La liste des bases, réordonnable au glisser-déposer.
- *
- * Le geste vit dans le SDK (`useDragReorder`), partagé avec Uptime, Git et
- * Monitoring. Ne restent ici que l'apparence de la carte, celle de la poignée et
- * celle de la barre d'insertion.
- */
+/** La liste des bases, réordonnable au glisser-déposer (`useDragReorder` du SDK). */
 export function DatabaseList({
     databases,
     outlineFor,
@@ -50,9 +44,8 @@ export function DatabaseList({
                     onDragPointerDown={canWrite ? (e) => drag.onGripPointerDown(e, database.id) : undefined}
                 />
             ))}
-            {/* Un `<li>` et non un `<span>` : dans une `<ul>`, seul un `<li>` est
-                un enfant valide. Sorti du flux par `position: absolute`, il
-                n'occupe aucune cellule de la grille. */}
+            {/* Un `<li>` : seul enfant valide d'une `<ul>` ; sorti du flux, il
+                n'occupe aucune cellule. */}
             <li ref={drag.barRef} className={styles.dropBar} aria-hidden='true' />
         </ul>
     );
@@ -71,9 +64,8 @@ function DatabaseCard({ database, outline, dragging, onOpen, onDragPointerDown }
 
     return (
         <li className={`${styles.card} ${dragging ? styles.cardDragging : ''}`} data-database-card='' {...outline}>
-            {/* La poignée est sœur du corps cliquable, et non son enfant : un
-                clic parti d'ici ne peut donc pas remonter jusqu'à « ouvrir la
-                base », même sans le neutraliser. */}
+            {/* Sœur du corps cliquable, pas son enfant : un clic parti d'ici ne
+                remonte pas jusqu'à « ouvrir la base ». */}
             {onDragPointerDown && (
                 <button
                     type='button'
@@ -86,8 +78,7 @@ function DatabaseCard({ database, outline, dragging, onOpen, onDragPointerDown }
             )}
 
             {/* `div role="button"` et non `<button>` : la carte contient des
-                paragraphes, c'est-à-dire du contenu de flux, interdit dans un
-                bouton dont le modèle de contenu est phrasé. */}
+                paragraphes, interdits dans un bouton. */}
             <div
                 className={styles.cardBody}
                 role='button'
@@ -122,17 +113,14 @@ function DatabaseCard({ database, outline, dragging, onOpen, onDragPointerDown }
                         )}
                     </p>
                     <div className={styles.cardFoot}>
-                        {/* L'état d'abord : c'est la seule chose qu'on vient
-                            lire quand on parcourt la liste. */}
                         <span className={styles.statusTag} data-tone={status.tone}>
                             {status.label}
                         </span>
                         {database.monitorEnabled ? (
                             <span className={styles.tag}>relevée {formatAgo(database.lastCheckAt)}</span>
                         ) : (
-                            // Dit explicitement que rien ne tourne : sans cela,
-                            // « jamais testée » se lirait comme une panne alors
-                            // que c'est le réglage par défaut.
+                            // Dit que rien ne tourne : « jamais testée » se lirait
+                            // comme une panne.
                             <span className={styles.tag}>à la demande</span>
                         )}
                         {database.sizeBytes !== null && (
@@ -151,8 +139,6 @@ function DatabaseCard({ database, outline, dragging, onOpen, onDragPointerDown }
                     </div>
                 </div>
 
-                {/* Calée en haut : la flèche annonce que la carte s'ouvre, elle
-                    n'appartient pas à la ligne d'état du bas. */}
                 <span className={styles.openArrow} aria-hidden='true'>
                     <span className='icon icon-arrow' />
                 </span>

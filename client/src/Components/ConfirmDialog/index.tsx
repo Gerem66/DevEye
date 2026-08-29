@@ -4,33 +4,19 @@ import Button from '@/Components/Button';
 import { Dialog } from '@/Components/Dialog';
 
 /**
- * La confirmation d'une action destructive — **une seule pour toute l'app**.
- *
- * Il en existait quatre quasi identiques : `Features/Osint/ConfirmDialog`, et
- * les `ConfirmPopup` de Notes, Mail et CloudSync, plus des `Dialog` posés à la
- * main dans Backup et Clients. Toutes disaient la même chose de la même façon,
- * à ceci près que certaines avaient le garde-fou d'animation ci-dessous et
- * d'autres non — c'est-à-dire que le titre y clignotait à la fermeture.
- *
- * Forme reprise de celle d'Osint, la plus aboutie : `Dialog` statique, Entrée
- * câblée sur l'action principale via `onSubmit`, « Annuler » en secondaire et
- * l'action en `danger`. `Dialog` passe par un portail en `z-modal` et s'inscrit
- * dans la pile `useDismissLayer`, donc la boîte se pose au-dessus de ce qui
- * l'ouvre et Échap ferme d'abord la confirmation.
+ * La confirmation d'une action destructive, une seule pour toute l'app :
+ * `Dialog` statique, Entrée câblée sur l'action principale via `onSubmit`,
+ * « Annuler » en secondaire et l'action en `danger`. `Dialog` s'inscrit dans
+ * la pile `useDismissLayer`, donc Échap ferme d'abord la confirmation.
  */
 
 export interface ConfirmRequest {
     title: string;
-    /**
-     * Ce que l'action va faire, et à quoi.
-     *
-     * `ReactNode` et non `string` : une suppression qui emporte des liens doit
-     * pouvoir les **nommer** dans une liste. « Êtes-vous sûr ? » sans dire de
-     * quoi ne fait pas confirmer, il fait cliquer.
-     */
+    /** Ce que l'action va faire, et à quoi. `ReactNode` et non `string` : une
+     *  suppression qui emporte des liens doit pouvoir les nommer dans une liste. */
     description?: ReactNode;
     confirmLabel?: string;
-    /** `secondary` pour une action réversible ; `danger` par défaut. */
+    /** `primary` pour une action réversible ; `danger` par défaut. */
     tone?: 'danger' | 'primary';
     onConfirm: () => void;
 }
@@ -43,13 +29,8 @@ export interface ConfirmDialogProps {
 }
 
 export function ConfirmDialog({ request, onClose, busy = false }: ConfirmDialogProps): React.ReactElement {
-    /**
-     * La dernière demande, gardée le temps de la fermeture.
-     *
-     * `Dialog` a une animation de sortie : rendre directement `request` ferait
-     * clignoter un titre vide pendant les ~200 ms où la boîte s'efface, puisque
-     * l'état repasse à `null` avant la fin de l'animation.
-     */
+    /** La dernière demande, gardée le temps de l'animation de sortie : rendre
+     *  `request` directement ferait clignoter un titre vide. */
     const shown = useRef<ConfirmRequest | null>(request);
     if (request) shown.current = request;
     const view = request ?? shown.current;

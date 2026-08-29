@@ -4,27 +4,12 @@ import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 import { toCredential, type Ctx } from './_shared';
 
 /**
- * Les jetons **GitHub** de l'espace.
+ * Les jetons GitHub de l'espace, et non d'un projet : un même jeton ouvre en
+ * général plusieurs dépôts, le ressaisir par projet serait pénible et plus risqué.
  *
- * Ils vivent ici et non dans un projet : un même jeton ouvre en général
- * plusieurs dépôts, et le ressaisir par projet serait à la fois pénible et plus
- * risqué.
- *
- * Les clés **Dokploy** ont quitté cet écran : elles appartiennent à la feature
- * Déploiement (`features/deploy/src/server/handlers.ts`). Elles n'avaient
- * atterri ici que parce que ce module fut le premier à savoir gérer un secret,
- * à une époque où le déploiement n'était qu'un onglet de projet sans place pour
- * le sien.
- *
- * Le comportement était dans `_credentials.ts`, partagé avec l'autre porte sur
- * une table à deux propriétaires. Le rapatriement en module a donné aux jetons
- * leur table (`ft_git_credentials`, migration 100 du socle) et leurs quatre
- * gestes ICI, sur le dépôt du module. Aucun `baseUrl` : l'API GitHub est
- * publique, il n'y a pas d'instance à désigner.
- *
- * ⚠️ Les secrets ne sortent **jamais** : le DTO ne porte qu'un `hasSecret`.
- * Toujours chiffrés à l'étage **ouvert**, quel que soit le palier des projets
- * qui s'en servent : le service de fond doit les lire sans session.
+ * Les secrets ne sortent jamais, le DTO ne porte qu'un `hasSecret`. Ils sont
+ * toujours chiffrés à l'étage ouvert, quel que soit le palier des projets qui
+ * s'en servent : le service de fond doit les lire sans session.
  */
 
 export const gitCredentialFeatures = [
@@ -78,11 +63,9 @@ export const gitCredentialFeatures = [
         access: { level: 'write' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
-            // Ce qui s'en servait garde son lien mais perd son accès (le dépôt
-            // met les dépôts du jeton à NULL avant de retirer la ligne : le
-            // ménage explicite qui remplace la clé étrangère retirée par la
-            // 100) : la synchronisation s'arrête proprement et le dit, au lieu
-            // de disparaître avec le jeton.
+            // Ce qui s'en servait garde son lien mais perd son accès : le dépôt met
+            // les dépôts du jeton à NULL avant de retirer la ligne, faute de clé
+            // étrangère, et la synchronisation s'arrête en le disant.
             const ok = await ctx.repo.removeCredential(input.credentialId, ctx.workspaceId);
             if (!ok) throw new FeatureError('not_found', 'Jeton introuvable');
             ctx.audit({

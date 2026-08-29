@@ -7,11 +7,9 @@ interface StatBandProps {
     metrics: AudienceMetrics;
     previous: AudienceMetrics;
     /**
-     * Le site reconnaît-il ses visiteurs d'une visite à l'autre ?
-     *
-     * En mode anonyme la tuile « Déjà venus » vaudrait toujours zéro, et un
-     * zéro se lit comme une mesure. Mieux vaut ne pas montrer une case que
-     * montrer une case qui ment.
+     * Le site reconnaît-il ses visiteurs d'une visite à l'autre ? En mode
+     * anonyme la tuile « Déjà venus » vaudrait toujours zéro, et un zéro se lit
+     * comme une mesure.
      */
     tracksReturning: boolean;
 }
@@ -21,39 +19,27 @@ interface Tile {
     label: string;
     value: string;
     /**
-     * La définition, montrée au survol.
-     *
-     * Portée par `title` et non par `aria-label` : le second est lu par les
-     * lecteurs d'écran mais **ne s'affiche pas** au survol, alors que c'est
-     * précisément ce qu'on veut ici. `title` fait les deux.
-     *
-     * Les cinq en ont une, pas seulement « Rebond ». « Visiteurs » et
-     * « Visites » sont exactement le même piège — deux mots proches pour deux
-     * choses différentes — et n'expliquer que le plus obscur laisserait croire
-     * que les autres vont de soi.
+     * La définition, montrée au survol. Portée par `title` et non par
+     * `aria-label`, qui est lu par les lecteurs d'écran mais ne s'affiche pas au
+     * survol. Les cinq en ont une : n'expliquer que le plus obscur laisserait
+     * croire que les autres vont de soi.
      */
     hint: string;
     current: number;
     previous: number;
     /**
-     * `true` quand une hausse est une **mauvaise** nouvelle.
-     *
-     * Le taux de rebond est le seul du lot. Sans cette distinction, un rebond
-     * qui grimpe de dix points s'afficherait en vert, ce qui est exactement le
-     * contraire de ce qu'il faut comprendre.
+     * `true` quand une hausse est une mauvaise nouvelle. Le taux de rebond est
+     * le seul du lot : sans cette distinction, un rebond qui grimpe de dix
+     * points s'afficherait en vert.
      */
     inverted?: boolean;
 }
 
 /**
  * Le bandeau d'un site : cinq nombres, chacun avec son écart à la période
- * précédente.
- *
- * L'écart est la moitié de l'information. « 1 240 vues » ne dit pas s'il faut
- * regarder de plus près ; « 1 240 vues, +18 % » le dit. La période de
- * comparaison est de même longueur et immédiatement antérieure — c'est le
- * serveur qui la calcule, pour que les deux chiffres viennent de la même
- * requête et ne puissent pas diverger.
+ * précédente, qui est la moitié de l'information. La période de comparaison est
+ * de même longueur et immédiatement antérieure, calculée par le serveur pour
+ * que les deux chiffres viennent de la même requête.
  */
 export function StatBand({ metrics, previous, tracksReturning }: StatBandProps) {
     const tiles: Tile[] = [
@@ -128,9 +114,8 @@ export function StatBand({ metrics, previous, tracksReturning }: StatBandProps) 
                         <dt className={styles.bandLabel}>{tile.label}</dt>
                         <dd className={styles.bandValue}>
                             {tile.value}
-                            {/* Pas d'écart affiché quand la période précédente
-                                est vide : « +100 % » sur un site qui démarre
-                                serait une information inventée. */}
+                            {/* Pas d'écart quand la période précédente est vide :
+                                « +100 % » sur un site qui démarre serait inventé. */}
                             {change !== null && (
                                 <span className={styles.bandDelta} data-tone={tone}>
                                     {formatDelta(change)}

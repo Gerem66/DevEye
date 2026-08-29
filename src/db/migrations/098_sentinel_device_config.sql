@@ -1,32 +1,19 @@
--- Sentinelle devient un module : ses réglages par appareil quittent la table
--- `devices` (cinq colonnes posées par la 074) pour une table à elle,
--- `ft_sentinel_device_config`, au préfixe des modules.
+-- Sentinelle devient un module : ses réglages par appareil quittent `devices`
+-- (cinq colonnes posées par la 074) pour `ft_sentinel_device_config`.
 --
--- C'est le socle qui crée cette table et copie les colonnes, pas une
--- migration du module : au démarrage, les migrations du socle tournent AVANT
--- celles des modules, et une copie faite par le module trouverait des
--- colonnes déjà supprimées. Une seule migration, un seul boot, les deux
--- gestes dans l'ordre. Le module possède la table ensuite (préfixe
--- `ft_sentinel_`, son `uninstall.sql` peut la détruire) ; il n'a rien à rejouer.
+-- C'est le socle qui crée la table et copie les colonnes : au démarrage, les
+-- migrations du socle tournent AVANT celles des modules, et une copie faite par
+-- le module trouverait des colonnes déjà supprimées. Le module possède la table
+-- ensuite (préfixe `ft_sentinel_`).
+-- Une ligne par appareil surveillé ou l'ayant été : l'absence vaut « sondes
+-- éteintes ». `ON DELETE CASCADE` : la config meurt avec l'appareil.
 --
--- Une ligne par appareil surveillé ou l'ayant été : les appareils qui n'ont
--- jamais eu Sentinelle (colonnes aux défauts) n'en reçoivent pas, l'absence
--- vaut « sondes éteintes ». `ON DELETE CASCADE` : la config meurt avec
--- l'appareil, comme la ligne de base et les constats.
+-- Rejouable : copie et suppression gardées par la présence de `sentinel_enabled`.
 --
--- Rejouable : la copie et la suppression des colonnes sont gardées par la
--- présence de `sentinel_enabled` (voir la 049 pour le patron), donc une base
--- laissée à mi-chemin par un échec se répare en relançant.
---
--- La collation de `device_id` est celle de `devices.id`, lue au moment de
--- créer la table, jamais écrite en dur : une clé étrangère exige que les deux
--- colonnes partagent jeu de caractères et collation, et `devices.id` (004) est
--- un `CHAR(36)` nu qui porte le défaut de la base où il est né (voir la 074).
--- Hériter du défaut courant, comme la 074, ne suffit plus : sur une base
--- restaurée d'un dump, `devices` arrive avec sa collation d'origine épinglée
--- alors que le défaut de la base d'accueil peut être un autre. Lire la
--- collation dans INFORMATION_SCHEMA rend la table juste sur n'importe quel
--- hôte, copie comprise.
+-- La collation de `device_id` est lue dans INFORMATION_SCHEMA, jamais écrite en
+-- dur : une FK exige la même collation, et sur une base restaurée d'un dump
+-- `devices` arrive avec sa collation d'origine épinglée, qui peut différer du
+-- défaut de la base d'accueil.
 
 SET @cs = (SELECT CHARACTER_SET_NAME FROM INFORMATION_SCHEMA.COLUMNS
            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'devices' AND COLUMN_NAME = 'id');

@@ -24,22 +24,17 @@ import {
 import type { MailAccount, MailFolder } from '../contracts/domain';
 
 /**
- * La synchronisation d'une boîte : l'onglet Synchronisation de ses réglages.
- *
- * Reprend ce que portait l'ancienne popup « Paramètres de cette boîte »
- * (cadence de relève, reconstruction du cache d'un dossier) et y range aussi
- * la pause de la boîte, qui n'était accessible que par l'icône de sa carte :
- * suspendre la relève est un réglage de synchronisation, pas une action de
- * liste.
+ * La synchronisation d'une boîte : l'onglet Synchronisation de ses réglages,
+ * soit la cadence de relève, la pause, et la reconstruction du cache d'un
+ * dossier.
  *
  * Enregistre par `mail.accountSetProfile`, en resoumettant le nom et le palier
  * tels quels : la commande possède le profil entier, ce panneau n'est que la
  * surface de sa cadence.
  *
- * La boîte est l'élément de la portée (`scope.itemId`) ; l'onglet n'existe
- * qu'à cette échelle, le manifest le dit. Sans le droit d'écriture, la cadence
- * et la pause se lisent mais ne se changent pas, et la maintenance (qui
- * réécrit le cache) n'est pas proposée.
+ * La boîte est l'élément de la portée (`scope.itemId`) ; l'onglet n'existe qu'à
+ * cette échelle. Sans le droit d'écriture, la cadence et la pause se lisent mais
+ * ne se changent pas, et la maintenance n'est pas proposée.
  */
 export default function MailSyncPanel({ scope, canWrite }: SettingsPanelProps) {
     const accountId = scope.kind === 'item' ? scope.itemId : null;

@@ -8,12 +8,8 @@ import type { PageRequest, Session } from './engine';
 import { buildExport, DEFAULT_EXPORT_LIMITS, type ExportLimits } from './explore';
 
 /**
- * L'export, sur une session factice : la seule logique du fichier qui mérite
- * d'être vérifiée sur pièces. Trois formats sur des valeurs piégeuses, un
- * document JSON qui reste valide sur une base entière (table vide comprise),
- * une pagination sans perte ni doublon, les deux plafonds, et les deux refus
- * (table inconnue, plages sur une clé composite) qui n'atteignent jamais le
- * moteur.
+ * L'export sur une session factice : trois formats sur des valeurs piégeuses,
+ * un JSON valide sur une base entière, la pagination, les plafonds, les refus.
  */
 
 interface FakeTable {

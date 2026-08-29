@@ -32,8 +32,7 @@ import { workspaceDeleteFeature } from './workspace/delete';
 import { INSTALLED_MODULES } from './_generated/installed';
 import { moduleFeatureHandlers, registerModules } from './_sdk/register';
 
-// Les modules installés s'enregistrent au chargement du registre : manifests
-// validés, descripteurs déclarés, définitions projetées en natives. Une
+// Les modules installés s'enregistrent au chargement du registre ; une
 // violation lève ici, avant même les sentinelles du boot.
 registerModules(INSTALLED_MODULES);
 

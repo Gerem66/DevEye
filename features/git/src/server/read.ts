@@ -30,14 +30,10 @@ function colorForRef(ref: string): UserColor {
 }
 
 /**
- * Borne de sécurité, pas une limite de confort.
- *
- * Le graphe transporte **tout** l'historique : c'est ce qu'on lui demande, et la
- * forme colonnaire (voir `gitCommitPointsSchema`) le rend possible — cent mille
- * points pèsent ~2,3 Mo, là où autant d'objets JSON en pèseraient dix. Ce
- * plafond n'existe que pour qu'un dépôt monstrueux (un noyau, un miroir) ne
- * fasse pas exploser une trame WebSocket ; l'interface annonce alors combien de
- * points sont affichés plutôt que de laisser croire à un dépôt plus petit.
+ * Borne de sécurité, pas une limite de confort : le graphe transporte tout
+ * l'historique, et la forme colonnaire le permet (cent mille points pèsent ~2,3 Mo).
+ * Ce plafond n'existe que pour qu'un dépôt monstrueux ne fasse pas exploser une
+ * trame WebSocket ; l'interface annonce alors combien de points sont affichés.
  */
 const GRAPH_MAX_POINTS = 100_000;
 
@@ -53,9 +49,8 @@ export const gitReadFeatures = [
             const branches = await Promise.all(
                 rows.map(async (row) => {
                     // Les compteurs ne valent que pour le couple de sha qui les a
-                    // produits. Dès qu'un des deux côtés a bougé, ils sont périmés :
-                    // on rend `null` plutôt qu'un chiffre faux, et la
-                    // synchronisation suivante les recalculera.
+                    // produits : dès qu'un côté bouge, on rend `null` plutôt qu'un
+                    // chiffre faux, et la synchronisation suivante recalculera.
                     const fresh =
                         row.compared_sha !== null &&
                         base?.head_sha != null &&
@@ -129,9 +124,8 @@ export const gitReadFeatures = [
             const repoRow = await loadRepo(ctx, input.repoId);
             const cipher = await repoCipher(ctx, input.repoId);
 
-            // Les points ne coûtent aucun déchiffrement : ce sont trois colonnes
-            // claires. C'est tout l'intérêt d'avoir gardé `committed_at` et
-            // `author_ref` en clair.
+            // Les points ne coûtent aucun déchiffrement : `committed_at` et
+            // `author_ref` sont restés en clair pour cela.
             const [points, stats, counts, authorRows] = await Promise.all([
                 ctx.repo.listCommitPoints(input.repoId, repoRow.workspace_id, GRAPH_MAX_POINTS),
                 ctx.repo.commitStats(input.repoId, repoRow.workspace_id),
@@ -140,22 +134,18 @@ export const gitReadFeatures = [
             ]);
 
             const countByRef = new Map(counts.map((c) => [c.author_ref, c.commit_count]));
-            // Un seul aller-retour pour les comptes rattachés, plutôt qu'un par
-            // auteur : la liste des membres est courte, et c'est la façade
-            // (`members.read`) qui la rend, couleur comprise. Demandée seulement
-            // si un auteur est rattaché : sans rattachement, rien à colorier
-            // par un compte.
+            // Un seul aller-retour pour les comptes rattachés, et seulement si un
+            // auteur l'est : sans rattachement, rien à colorier par un compte.
             const linked = authorRows.some((a) => a.user_id !== null);
             const members = new Map((linked ? await ctx.deveye.members.list() : []).map((m) => [m.userId, m.color]));
 
             const authors = await Promise.all(
                 authorRows.map(async (row) => {
                     const body = await readJson<{ name?: string; email?: string }>(cipher, row.content);
-                    // Un auteur rattaché prend la couleur de son compte — la même
-                    // que sa présence en direct, pour qu'une personne n'ait qu'une
-                    // seule couleur dans toute l'application. La façade rend
-                    // `null` sur un compte jamais colorié : on retombe alors sur
-                    // la couleur dérivée de son identifiant, comme partout ailleurs.
+                    // Un auteur rattaché prend la couleur de son compte, la même que
+                    // sa présence en direct : une personne n'a qu'une couleur dans
+                    // toute l'application. Un compte jamais colorié retombe sur celle
+                    // dérivée de son identifiant.
                     const stored = row.user_id !== null ? members.get(row.user_id) : undefined;
                     const color =
                         row.user_id !== null ? (stored ?? defaultUserColor(row.user_id)) : colorForRef(row.author_ref);
@@ -170,15 +160,11 @@ export const gitReadFeatures = [
                 })
             );
 
-            // Forme **colonnaire** : trois tableaux parallèles plutôt qu'un tableau
-            // d'objets. À vingt mille commits, les accolades et les noms de champs
-            // répétés dominaient la charge utile, et le client devait allouer autant
-            // d'objets qu'il y avait de points. Voir `gitCommitPointsSchema`.
-            //
-            // Les sha sont concaténés en une seule chaîne de `GIT_GRAPH_SHA_LEN`
-            // caractères par point : le graphe n'en fait que deux usages —
-            // l'info-bulle, qui en montre sept, et l'ouverture d'un commit, que le
-            // fournisseur accepte abrégée.
+            // Forme colonnaire : à vingt mille commits, les accolades et les noms de
+            // champs répétés dominent la charge utile, et le client alloue autant
+            // d'objets qu'il y a de points. Les sha sont concaténés en une chaîne de
+            // `GIT_GRAPH_SHA_LEN` caractères par point, le graphe n'en montrant que
+            // sept et le fournisseur acceptant un sha abrégé.
             const authorSlot = new Map(authors.map((a, i) => [a.authorRef, i]));
             const shas: string[] = [];
             const committedAt: number[] = [];
@@ -206,8 +192,7 @@ export const gitReadFeatures = [
             // Domicile seulement : le rattachement lie un auteur aux MEMBRES de
             // l'espace du dépôt, que la fenêtre ne connaît pas.
             await loadHomeRepo(ctx, input.repoId);
-            // L'appartenance par la façade (`members.read`, propriétaire
-            // compris) : l'ex `workspaceMembers.isMember`, sans lire la table.
+            // L'appartenance par la façade `members.read`, propriétaire compris.
             if (input.userId !== null) {
                 const members = await ctx.deveye.members.list();
                 if (!members.some((m) => m.userId === input.userId)) {
@@ -284,13 +269,10 @@ export const gitReadFeatures = [
         }
     }),
     /**
-     * Le diff d'un commit, lu chez le fournisseur **au moment de la demande**.
-     *
-     * C'est la seule lecture du module qui sorte du cache local, et donc la seule
-     * dont la latence dépend d'une API tierce. Le parti pris est assumé : un diff
-     * pèse des ordres de grandeur de plus que la ligne qui le résume, on ne le
-     * regarde qu'une fois, et le conserver chiffré ferait grossir la base sans
-     * contrepartie.
+     * Le diff d'un commit, lu chez le fournisseur au moment de la demande : la seule
+     * lecture du module qui sorte du cache local. Un diff pèse bien plus que la
+     * ligne qui le résume, on ne le regarde qu'une fois, et le conserver chiffré
+     * ferait grossir la base sans contrepartie.
      */
     defineSdkFeature({
         ...gitCommitDetail,
@@ -304,9 +286,8 @@ export const gitReadFeatures = [
             const target = await readJson<Partial<StoredRepo>>(cipher, repoRow.content);
             if (!target?.owner || !target.repo) throw new FeatureError('internal', 'Dépôt illisible');
 
-            // Le jeton du **domicile** du dépôt, scellé sous sa clé : il vit
-            // dans l'espace du dépôt, et le chercher ici répondrait
-            // « introuvable » sur un dépôt projeté parfaitement configuré.
+            // Le jeton du domicile du dépôt, scellé sous sa clé : le chercher ici
+            // répondrait « introuvable » sur un dépôt projeté bien configuré.
             const credential = await ctx.repo.findCredential(repoRow.credential_id, repoRow.workspace_id);
             if (!credential) throw new FeatureError('not_found', 'Jeton introuvable');
             const token = await cipher.decrypt(credential.secret_enc);

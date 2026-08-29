@@ -1,37 +1,25 @@
 /**
- * Smoke E2E du chemin CLIENT d'un module de feature — au navigateur piloté (CDP).
+ * Smoke E2E du chemin client d'un module de feature, au navigateur piloté
+ * (CDP) : seul un navigateur réel voit un module dont les commandes sont
+ * refusées côté client (« Unknown command ») ou une page blanche par cycle
+ * d'imports.
  *
- * Pourquoi ce script existe : le bug du registre des commandes (un module dont
- * chaque commande était refusée côté client, « Unknown command », interface en
- * chargement pour toujours) a traversé typechecks, tests, sentinelles de boot
- * et smoke WS. Seul un navigateur réel l'a vu. Ce script rejoue ce chemin-là,
- * et il s'exécute À CHAQUE migration de feature vers le SDK.
+ * Vérifie, dans l'ordre : la connexion (compte seedé) aboutit sans exception
+ * JS ; la feature est dans le marché d'ajout ; sa tuile posée, une commande du
+ * module part sur le fil et reçoit `ok` ; la vue complète s'ouvre.
  *
- * Ce qu'il vérifie, dans l'ordre :
- *  1. l'app se charge et la connexion (compte seedé) aboutit — sans exception
- *     JS (le bug de la page blanche par cycle d'imports lèverait ici) ;
- *  2. la feature est dans le marché d'ajout (le bug « Météo absente du
- *     catalogue » lèverait ici) ;
- *  3. sa tuile posée, une commande du module part sur le fil ET reçoit une
- *     réponse `ok` (le bug du registre des commandes lèverait ici) ;
- *  4. la vue complète s'ouvre et déclenche un nouvel aller-retour.
- *
- * Prérequis : le serveur tourne et sert le client CONSTRUIT
- * (`npm run build` puis `npm start`, ou un dev complet), avec un compte seedé
- * (`SEED_DEV=true`, identifiants par défaut dev / devdevdev).
+ * Prérequis : le serveur sert le client construit, avec un compte seedé
+ * (`SEED_DEV=true`, dev / devdevdev par défaut).
  *
  * Usage :
  *   npm run smoke:feature -- <featureId> <label> [--url=http://localhost:3000] [--headed]
- *   npm run smoke:feature -- osint OSINT
- *   npm run smoke:feature -- weather Météo
  *
  * Env : SMOKE_USERNAME / SMOKE_PASSWORD (défaut : le seed dev),
  *       SMOKE_BROWSER (défaut : chromium-browser).
  *
  * Aucune dépendance : Chromium est piloté en CDP brut sur le WebSocket global
  * de Node (>= 22). Les sélecteurs s'appuient sur les textes de l'interface et
- * les noms locaux des classes CSS modules (conservés au build par Vite) — si
- * l'un d'eux casse, le message d'échec nomme l'étape.
+ * les noms locaux des classes CSS modules, conservés au build par Vite.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -193,7 +181,7 @@ interface Watch {
     consoleErrors: string[];
     /** Allers-retours ACCOMPLIS (réponse ok) des commandes du module. */
     roundTrips: string[];
-    /** Refus LOCAUX « Unknown command » : le bug historique, que seule la console trahit. */
+    /** Refus locaux « Unknown command », que seule la console trahit. */
     refusedLocally: number;
 }
 
@@ -309,8 +297,7 @@ function watchPage(page: Page): Watch {
             if (d.type === 'error') {
                 const text = (d.args ?? []).map((a) => a.value ?? a.description ?? '').join(' ');
                 watch.consoleErrors.push(text);
-                // Le bug historique : refus LOCAL avant la socket. Il ne produit
-                // aucune trame, donc seule la console le trahit.
+                // Refus local avant la socket : aucune trame, seule la console le trahit.
                 if (text.includes('Unknown command')) watch.refusedLocally++;
             }
         }
@@ -356,11 +343,9 @@ async function login(page: Page): Promise<void> {
     );
 
     if (!(await page.exists('[class*="profileBtn"]'))) {
-        // Re-remplir les DEUX champs à CHAQUE tentative : un échec de connexion
-        // vide le mot de passe côté client, donc un simple re-clic soumettrait
-        // du vide. Et le budget par tentative est large : la vérification du
-        // mot de passe passe par argon2 (lent à dessein), et le premier login
-        // après le seed, sur un runner froid et chargé, peut dépasser 10 s.
+        // Re-remplir les deux champs à chaque tentative : un échec vide le mot de
+        // passe côté client. Budget large : argon2 est lent à dessein, et le
+        // premier login sur un runner froid peut dépasser 10 s.
         for (let attempt = 1; ; attempt++) {
             if (!(await page.setInput('input[placeholder*="utilisateur"]', USERNAME))) {
                 fail('connexion', 'champ « Nom d’utilisateur » introuvable');
@@ -382,12 +367,9 @@ async function login(page: Page): Promise<void> {
 }
 
 /**
- * Le marché d'ajout, et lui seul : la carte d'une feature s'y cherche parmi SES
- * boutons, jamais parmi ceux de toute la page. Derrière le dialogue, la grille
- * porte les tuiles déjà posées, et l'une d'elles peut contenir le nom cherché
- * (« Appareils » est à la fois une feature et un mot que d'autres tuiles
- * écrivent). Une carte commence par son intitulé : `startsWith`, pas
- * `includes`, pour ne pas prendre une description pour un titre.
+ * Le marché d'ajout, et lui seul : derrière le dialogue, une tuile déjà posée
+ * peut contenir le nom cherché. Une carte commence par son intitulé :
+ * `startsWith`, pas `includes`.
  */
 const MARKET_ROOT_JS = `const marketRoot = () => document.querySelector(${JSON.stringify(MARKET_SELECTOR)}) ?? document;`;
 
@@ -442,11 +424,8 @@ async function awaitFirstRoundTrip(watch: Watch): Promise<void> {
 }
 
 /**
- * 4. La vue complète s'ouvre : elle déclenche un nouvel aller-retour, OU elle
- * est déjà là. Une vue `preload` (Appareils) est montée par l'accueil au repos
- * dès que sa tuile est posée, et a donc déjà parlé au serveur avant le clic :
- * la seule preuve qui reste est la barre du haut, qui porte le nom de la vue
- * ouverte. Les deux issues valent ; laquelle a tranché est dit.
+ * 4. La vue complète s'ouvre : un nouvel aller-retour, ou son titre en barre du
+ * haut (une vue `preload` a déjà parlé au serveur avant le clic).
  */
 async function openFullView(page: Page, watch: Watch): Promise<void> {
     const before = watch.roundTrips.length;

@@ -7,20 +7,14 @@ import type {
 } from '../contracts/domain';
 import type { ProjectStatus } from '@deveye/types';
 
-/** Le nom d'usage d'un moteur, celui que l'utilisateur reconnaît. */
 export const ENGINE_LABELS: Record<DatabaseEngine, string> = {
     mysql: 'MySQL / MariaDB',
     postgres: 'PostgreSQL'
 };
 
 /**
- * Les libellés des états d'un projet, pour la liste des projets qui utilisent
- * une base.
- *
- * Une copie assumée des quatre libellés de Projets (`STATUS_LABELS` de
- * `features/projects/src/client/api.ts`) : un module n'importe pas un autre
- * module, et le SDK n'expose que le vocabulaire des statuts
- * (`ProjectStatus`), pas ses libellés. Quatre mots, tenus à la main.
+ * Copie des libellés de Projets (`STATUS_LABELS` de
+ * `features/projects/src/client/api.ts`) : un module n'importe pas un autre module.
  */
 export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
     draft: 'Brouillon',
@@ -29,7 +23,6 @@ export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
     done: 'Terminé'
 };
 
-/** Port par défaut du moteur : on le propose, sans jamais l'imposer. */
 export const ENGINE_PORTS: Record<DatabaseEngine, number> = {
     mysql: 3306,
     postgres: 5432
@@ -44,12 +37,7 @@ export const COMPARATOR_LABELS: Record<DatabaseComparator, string> = {
     ne: '≠'
 };
 
-/**
- * Les conditions de recherche, dites en français plutôt qu'en SQL.
- *
- * L'ordre n'est pas alphabétique mais celui de l'usage : on cherche d'abord un
- * texte contenu, ensuite une égalité, et les comparaisons en dernier.
- */
+/** Dans l'ordre d'usage, pas alphabétique. */
 export const FILTER_OPERATOR_LABELS: Record<DatabaseFilterOperator, string> = {
     contains: 'contient',
     eq: 'est égal à',
@@ -64,7 +52,6 @@ export const FILTER_OPERATOR_LABELS: Record<DatabaseFilterOperator, string> = {
     notNull: 'n’est pas NULL'
 };
 
-/** Deux conditions ne prennent pas de valeur : le champ disparaît alors. */
 export const OPERATOR_NEEDS_VALUE: Record<DatabaseFilterOperator, boolean> = {
     contains: true,
     eq: true,
@@ -79,20 +66,14 @@ export const OPERATOR_NEEDS_VALUE: Record<DatabaseFilterOperator, boolean> = {
     notNull: false
 };
 
-/**
- * Ce que l'état d'une base dit à l'écran.
- *
- * `unknown` est neutre, jamais alarmant : c'est l'état normal d'une base qu'on
- * n'a pas encore jointe, ce qui est le cas par défaut de toutes. Le peindre en
- * rouge ferait passer une feature au repos pour une feature en panne.
- */
+/** `unknown` est neutre, jamais alarmant : l'état normal d'une base jamais jointe. */
 export const STATUS_META: Record<DatabaseStatus, { label: string; tone: 'neutral' | 'online' | 'danger' }> = {
     unknown: { label: 'jamais testée', tone: 'neutral' },
     up: { label: 'joignable', tone: 'online' },
     down: { label: 'injoignable', tone: 'danger' }
 };
 
-/** « 4,2 Go », « 812 Mo » — une taille de base se lit en ordre de grandeur. */
+/** « 4,2 Go », « 812 Mo ». */
 export function formatBytes(bytes: number | null): string {
     if (bytes === null) return '—';
     const units = ['o', 'ko', 'Mo', 'Go', 'To'];
@@ -105,12 +86,12 @@ export function formatBytes(bytes: number | null): string {
     return `${value.toLocaleString('fr-FR', { maximumFractionDigits: value < 10 && unit > 0 ? 1 : 0 })} ${units[unit]}`;
 }
 
-/** « 1 284 » — un nombre de lignes se lit par tranches de mille. */
+/** « 1 284 ». */
 export function formatCount(value: number | null): string {
     return value === null ? '—' : value.toLocaleString('fr-FR');
 }
 
-/** « il y a 4 min » — la fraîcheur d'un relevé, pas sa date exacte. */
+/** « il y a 4 min ». */
 export function formatAgo(epochSeconds: number | null): string {
     if (epochSeconds === null) return 'jamais relevée';
     const seconds = Math.max(0, Math.floor(Date.now() / 1000) - epochSeconds);
@@ -122,7 +103,7 @@ export function formatAgo(epochSeconds: number | null): string {
     return `il y a ${Math.floor(hours / 24)} j`;
 }
 
-/** « 42 ms », « 1,8 s » — un temps de réponse se lit dans son ordre de grandeur. */
+/** « 42 ms », « 1,8 s ». */
 export function formatMs(ms: number | null): string {
     if (ms === null) return '—';
     if (ms < 1000) return `${ms} ms`;
@@ -130,13 +111,8 @@ export function formatMs(ms: number | null): string {
 }
 
 /**
- * L'ordre alphabétique des tables, celui dans lequel on les cherche.
- *
- * Trié **ici** et non laissé au moteur : `ORDER BY` suit la collation du
- * serveur, qui range volontiers les majuscules avant les minuscules et ignore
- * les accents à sa façon. `localeCompare` donne le même ordre partout, quels que
- * soient le moteur et sa configuration — et c'est le seul ordre qu'on puisse
- * annoncer sans mentir.
+ * Trié ici et non par le moteur : `ORDER BY` suit la collation du serveur,
+ * `localeCompare` donne le même ordre partout.
  */
 export function compareTables(a: DatabaseTable, b: DatabaseTable): number {
     return (
@@ -145,7 +121,7 @@ export function compareTables(a: DatabaseTable, b: DatabaseTable): number {
     );
 }
 
-/** « 5 min », « 1 h » — une cadence de relevé. */
+/** « 5 min », « 1 h ». */
 export function formatInterval(seconds: number): string {
     if (seconds < 3600) return `${Math.round(seconds / 60)} min`;
     if (seconds % 3600 === 0) return `${seconds / 3600} h`;

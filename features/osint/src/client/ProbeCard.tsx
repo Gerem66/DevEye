@@ -6,12 +6,8 @@ import { internalPivot } from './api';
 import styles from './Osint.module.css';
 
 /**
- * Le rendu **unique** d'un résultat de sonde.
- *
- * Toutes les sondes rendent la même forme (`OsintProbeResult`), donc ce
- * composant les affiche toutes — DNS, WHOIS, téléphone, registre du commerce.
- * C'est ce qui fait qu'ajouter une sonde côté serveur ne coûte pas une ligne
- * ici : elle apparaît dans la grille dès que le serveur la déclare.
+ * Le rendu unique d'un résultat de sonde : toutes rendent la même forme
+ * (`OsintProbeResult`), donc ajouter une sonde côté serveur ne coûte rien ici.
  */
 
 export type ProbeCardState =

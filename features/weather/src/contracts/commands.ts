@@ -64,12 +64,7 @@ export const weatherGet = {
     output: z.object({ report: weatherReportSchema })
 };
 
-/**
- * L'état des clés d'espace, par fournisseur — jamais les clés elles-mêmes.
- *
- * Le panneau Sources de la Météo a besoin de dire « clé enregistrée » ou
- * « aucune clé » : le fait, pas le secret, exactement comme `osint.keyList`.
- */
+/** L'état des clés d'espace par fournisseur, jamais les clés elles-mêmes. */
 export const weatherKeyList = {
     command: 'weather.keyList' as const,
     input: z.object({}),

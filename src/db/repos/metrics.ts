@@ -4,13 +4,10 @@ import type { Queryable } from '../pool';
 type Q = Queryable;
 
 /**
- * Le dépôt du SOCLE : ce que l'ingestion écrit hors session (`insertBatch`),
- * ce que la socket agent pousse à l'ouverture d'un abonnement (`latest`) et ce
- * que la façade `telemetry` du SDK lit et épingle pour Sentinelle. Les
- * fenêtres relues par les graphes, les instants de la frise, les jours
- * disponibles et les purges sont les requêtes du module `features/devices`,
- * dans son propre dépôt sur cette même table : deux lecteurs, un schéma,
- * assumé.
+ * Le dépôt du socle : l'ingestion (`insertBatch`), l'instant poussé à
+ * l'ouverture d'un abonnement (`latest`) et ce que la façade `telemetry` du
+ * SDK lit et épingle. Les fenêtres des graphes, la frise et les purges sont les
+ * requêtes du module `features/devices`, sur cette même table.
  */
 export interface MetricsRepo {
     insertBatch(deviceId: string, snapshots: MetricSnapshot[]): Promise<void>;
@@ -36,10 +33,9 @@ const BUCKET_SECONDS: Record<MetricsResolution, number> = {
 };
 
 /**
- * Plafond de lecture d'une fenêtre. Les points de graphe sont déjà réduits par
- * la résolution choisie selon la largeur de fenêtre : ce plafond n'est qu'un
- * garde-fou. La sélection prend les plus **récents** : tronquer par le début
- * rendait la queue de la fenêtre — celle qu'on regarde — invisible.
+ * Plafond de lecture d'une fenêtre, simple garde-fou (la résolution réduit
+ * déjà). La sélection prend les plus récents : la queue de la fenêtre est
+ * celle qu'on regarde.
  */
 const MAX_SERIES_POINTS = 5_000;
 
@@ -113,12 +109,9 @@ export function metricsRepo(pool: Q): MetricsRepo {
                     s.batteryCharging === null || s.batteryCharging === undefined ? null : s.batteryCharging ? 1 : 0
                 );
             }
-            // Idempotent, comme l'insertion des processus : un agent qui rejoue
-            // un lot après un accusé perdu réécrit l'instant au lieu de le
-            // dédoubler. Sans ça, le même relevé apparaissait deux fois dans le
-            // graphe et comptait double dans la moyenne d'un intervalle.
-            // `pinned` est délibérément absent de la clause de mise à jour :
-            // un réenvoi ne doit pas désépingler un instant conservé.
+            // Idempotent : un agent qui rejoue un lot après un accusé perdu
+            // réécrit l'instant au lieu de le dédoubler. `pinned` est absent de
+            // la clause de mise à jour : un réenvoi ne doit pas désépingler.
             await pool.query(
                 `INSERT INTO device_metrics
                     (device_id, ts, cpu_percent, mem_used_bytes, mem_total_bytes,
@@ -203,17 +196,10 @@ export function metricsRepo(pool: Q): MetricsRepo {
             return r.rows[0] ? rowToSnapshot(r.rows[0]) : null;
         },
         async setInstantsPinned(deviceId, from, to, pinned) {
-            // Les deux tables en **une seule instruction**, et non deux requêtes
-            // parallèles : un instant à moitié épinglé est un instant dont la
-            // moitié disparaît à la purge suivante, et rien ne rattraperait
-            // l'échec d'une des deux moitiés. La jointure est extérieure parce
-            // que la capture des processus est facultative — un appareil en
-            // `processCapture: 'off'` a des instants sans liste, et ils doivent
-            // s'épingler quand même.
-            //
-            // Le compte porte sur les lignes *concernées* et non modifiées :
-            // ré-épingler un intervalle déjà épinglé reste une action, et
-            // l'appelant s'en sert pour son journal.
+            // Une seule instruction pour les deux tables : un instant à moitié
+            // épinglé perd sa moitié à la purge suivante. Jointure extérieure :
+            // la capture des processus est facultative. Le compte porte sur les
+            // lignes concernées, pas modifiées : ré-épingler reste une action.
             const count = await pool.query<{ n: number }>(
                 'SELECT COUNT(*) AS n FROM device_metrics WHERE device_id = ? AND ts BETWEEN ? AND ?',
                 [deviceId, from, to]

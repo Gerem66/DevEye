@@ -17,26 +17,21 @@ import { FeatureError, type SdkCipher, type SdkFeatureContext, type SdkShareScop
 
 import type { ProjectsRepo, ProjectStats } from './repo';
 
-/** Le contexte d'une commande de Projets : le contexte du SDK, sur le dépôt du module. */
 export type Ctx = SdkFeatureContext<ProjectsRepo>;
 
-/**
- * Depuis le rapatriement, la lecture est implicite (le défaut du SDK) : seules
- * les écritures déclarent leur niveau.
- */
+/** La lecture est le défaut du SDK : seules les écritures déclarent leur niveau. */
 export const WRITE = { level: 'write' } as const;
 
 /** Le niveau qu'une commande exige sur le projet qu'elle vise. */
 export type ItemLevel = 'read' | 'write';
 
 /**
- * Payload chiffré d'un projet (`projects.content`). N'y vit que ce qui
- * identifie ; `status`, `security_tier`, `sort_order` et les dates restent en
- * colonnes claires pour que le portefeuille se liste et se trie sans clé.
+ * Payload chiffré d'un projet (`projects.content`) : n'y vit que ce qui identifie,
+ * le reste est en colonnes claires pour que le portefeuille se liste sans clé.
  */
 export interface StoredProject {
     title: string;
-    /** URL de données de la vignette, ou chaîne vide. Chiffrée comme le titre. */
+    /** URL de données de la vignette, ou chaîne vide. */
     icon: string;
     description: string;
     tags: ProjectTag[];
@@ -44,20 +39,14 @@ export interface StoredProject {
 }
 
 /**
- * L'étage sous lequel vit l'arbre d'un projet **d'ici**, par son palier.
- * Choisir le chiffre **est** le contrôle d'accès : un projet gardé ne se lit
- * ni ne s'écrit tant que la session n'est pas déverrouillée, sans qu'aucune
- * garde n'ait à le dire.
+ * L'étage sous lequel vit l'arbre d'un projet d'ici, par son palier. Choisir le
+ * chiffre est le contrôle d'accès : un projet gardé ne se lit ni ne s'écrit tant que
+ * la session n'est pas déverrouillée, sans qu'aucune garde n'ait à le dire, et le
+ * palier est une colonne en clair pour que ce choix précède toute lecture.
  *
- * `ctx.cipher()` est l'ex `ctx.secure.open` (l'étage ouvert, celui que le
- * service du module sait relire seul), `ctx.cipher('private')` l'ex
- * `ctx.secure` (l'étage gardé, qui n'existe que dans une session
- * déverrouillée). Le palier est une colonne en clair précisément pour que ce
- * choix se fasse avant de lire quoi que ce soit.
- *
- * Pour un projet **existant**, voir {@link projectCipher} : l'étage ouvert est
- * celui de son domicile, pas forcément celui d'ici. Ceci ne sert qu'à la
- * création et à la conversion d'étage, deux gestes du domicile.
+ * Pour un projet existant, voir {@link projectCipher} : l'étage ouvert est celui de
+ * son domicile, pas forcément celui d'ici. Ceci ne sert qu'à la création et à la
+ * conversion d'étage, deux gestes du domicile.
  */
 export function cipherFor(ctx: Ctx, tier: ProjectSecurityTier): SdkCipher {
     return tier === 'guarded' ? ctx.cipher('private') : ctx.cipher();
@@ -69,19 +58,13 @@ export function isForeign(ctx: Ctx, row: ProjectRow): boolean {
 }
 
 /**
- * Le codec sous lequel l'arbre d'un projet **existant** est écrit, où qu'il
- * vive, **choisi projet par projet**.
- *
- * Chez lui, c'est {@link cipherFor} par son palier. Projeté d'ailleurs, c'est
- * le codec ouvert de son espace d'origine, que seul `ctx.sharing.scope()` sait
- * rendre (`Docs/SHARING.md` §3) : le déchiffrer avec celui d'ici rendrait des
- * lignes illisibles, que les listes prendraient pour des lignes corrompues. Un
- * projet projeté est toujours ouvert (`findVisible` ne rend pas d'autre
- * projection, et un projet gardé se projette d'autant moins qu'il est chiffré
- * par le mot de passe de son auteur), donc l'étage ouvert du domicile est
- * indispensable et suffisant.
- *
- * `scope` évite de recharger les projections dans un listage qui les a déjà.
+ * Le codec sous lequel l'arbre d'un projet existant est écrit, choisi projet par
+ * projet : chez lui {@link cipherFor} par son palier, projeté d'ailleurs le codec
+ * ouvert de son espace d'origine que seul `ctx.sharing.scope()` sait rendre. Le
+ * déchiffrer avec celui d'ici rendrait des lignes que les listes prendraient pour
+ * corrompues. Un projet projeté est toujours ouvert, l'étage ouvert du domicile
+ * suffit donc. `scope` évite de recharger les projections dans un listage qui les a
+ * déjà.
  */
 export async function projectCipher(ctx: Ctx, row: ProjectRow, scope?: SdkShareScope): Promise<SdkCipher> {
     if (!isForeign(ctx, row)) return cipherFor(ctx, row.security_tier);
@@ -89,16 +72,10 @@ export async function projectCipher(ctx: Ctx, row: ProjectRow, scope?: SdkShareS
 }
 
 /**
- * Refuse un geste réservé au domicile sur un projet projeté.
- *
- * Une fenêtre lit et agit, le domicile configure (`Docs/SHARING.md` §2) : un
- * geste reste chez lui quand il **référence d'autres objets de l'espace
- * d'origine** que la fenêtre ne voit pas. Relier ou délier une liaison (un
- * dépôt, une base, un site, une cible, un service de là-bas), changer le
- * palier (le mot de passe d'un membre de là-bas), suivre les releases (un
- * dépôt de là-bas), classer le portefeuille (le rang de là-bas). Lui proposer
- * les objets d'ici relierait le projet à un autre monde. Le serveur refuse, et
- * l'écran ne propose pas.
+ * Refuse un geste réservé au domicile sur un projet projeté. Une fenêtre lit et
+ * agit, le domicile configure (`Docs/SHARING.md` §2) : un geste reste chez lui dès
+ * qu'il référence d'autres objets de l'espace d'origine, que la fenêtre ne voit pas
+ * et auxquels elle substituerait les siens.
  */
 export function assertAtHome(ctx: Ctx, row: ProjectRow, gesture: string): void {
     if (!isForeign(ctx, row)) return;
@@ -139,10 +116,8 @@ export async function tryDecryptProject(cipher: SdkCipher, content: string): Pro
 }
 
 /**
- * Le DTO d'un projet ; `foreign` dit à l'écran qu'il regarde une fenêtre sur
- * un autre espace. Les identifiants d'utilisateurs (auteur) voyagent tels
- * quels : c'est le client qui nomme, parmi les membres de l'espace actif, et
- * masque un identifiant qu'il n'y trouve pas.
+ * Le DTO d'un projet. Les identifiants d'utilisateurs voyagent tels quels : c'est le
+ * client qui nomme, parmi les membres de l'espace actif, et masque le reste.
  */
 export function toProject(row: ProjectRow, payload: StoredProject, foreign: boolean): Project {
     return projectSchema.parse({
@@ -167,15 +142,14 @@ export function toProject(row: ProjectRow, payload: StoredProject, foreign: bool
 }
 
 /**
- * La ligne de portefeuille d'un projet illisible : ses compteurs, et un corps
- * vide marqué `masked`. La liste doit dire qu'un projet existe même
- * verrouillée : le faire disparaître laisserait croire à une perte. Même parti
- * pris que les notes privées. Jamais projeté : un projet gardé n'est visible
- * que chez lui.
+ * La ligne de portefeuille d'un projet illisible : ses compteurs, et un corps vide
+ * marqué `masked`. La liste doit dire qu'un projet existe même verrouillée, le faire
+ * disparaître laisserait croire à une perte. Jamais projeté, un projet gardé n'étant
+ * visible que chez lui.
  */
 export function toMaskedSummary(row: ProjectRow, stats: ProjectStats | undefined): ProjectSummary {
-    // Icône vide comprise : une vignette est aussi identifiante qu'un titre, et
-    // la laisser passer sur un projet verrouillé viderait la garde de son sens.
+    // Icône vide comprise : une vignette identifie autant qu'un titre, la laisser
+    // passer sur un projet verrouillé viderait la garde de son sens.
     return withStats(
         toProject(row, { title: '', icon: '', description: '', tags: [], version: '' }, false),
         true,
@@ -212,16 +186,12 @@ function withStats(
 }
 
 /**
- * Un projet visible depuis cet espace : le sien, ou un qu'un autre espace y
- * projette. Lève `not_found` sinon, sans trahir l'existence d'un projet qu'on
- * ne voit pas d'ici.
- *
- * `level` décide de la garde : `ctx.items.assert` refuse en plus les projets
- * qu'une restriction de rôle masque ou passe en lecture seule. La feature
- * seule ne suffit pas à répondre « ce projet-là m'est-il ouvert ? ». Tout son
- * arbre (colonnes, cartes, jalons, messages, événements, liaisons) suit son
- * domicile : la chaîne carte → projet remonte toujours jusqu'ici, et c'est
- * `row.workspace_id`, jamais l'espace actif, que les écritures prennent.
+ * Un projet visible depuis cet espace : le sien, ou un qu'un autre espace y projette.
+ * Lève `not_found` sinon, sans trahir l'existence d'un projet invisible d'ici.
+ * `ctx.items.assert` refuse en plus, au niveau demandé, les projets qu'une
+ * restriction de rôle masque ou passe en lecture seule. Tout l'arbre suit le
+ * domicile du projet : c'est `row.workspace_id`, jamais l'espace actif, que les
+ * écritures prennent.
  */
 export async function loadProject(ctx: Ctx, projectId: number, level: ItemLevel = 'read'): Promise<ProjectRow> {
     const row = await ctx.repo.projects.findVisible(projectId, ctx.workspaceId);
@@ -231,20 +201,12 @@ export async function loadProject(ctx: Ctx, projectId: number, level: ItemLevel 
 }
 
 /**
- * Le tier `guarded` n'a de sens que dans un espace personnel.
- *
- * Ce qui protège un projet confidentiel n'est pas un contrôle d'accès mais le
- * chiffrement : son arbre passe par l'étage gardé, c'est-à-dire la DEK emballée
- * par le mot de passe. Dans un espace partagé, les deux étages utilisent la clé
- * de l'espace : le projet serait lisible par tous tout en s'annonçant
- * confidentiel, ce qui est pire que le refus.
- *
- * Un espace partagé n'est pas pour autant en clair : son arbre est chiffré sous
- * la clé de l'espace, à l'étage ouvert.
- *
- * Corollaire pour le partage : un projet gardé ne vit que dans un espace
- * personnel, où aucune restriction de rôle n'a de sens ; sa conversion peut
- * donc oublier projections et restrictions d'un seul geste (`ctx.items.forget`).
+ * Le palier `guarded` n'a de sens que dans un espace personnel : ce qui protège un
+ * projet confidentiel n'est pas un contrôle d'accès mais la DEK emballée par le mot
+ * de passe, et dans un espace partagé les deux étages utilisent la clé de l'espace.
+ * Le projet y serait lisible par tous tout en s'annonçant confidentiel, ce qui est
+ * pire que le refus. Corollaire : un projet gardé ne connaît aucune restriction de
+ * rôle, sa conversion peut tout oublier d'un geste (`ctx.items.forget`).
  */
 export function assertGuardedAllowed(ctx: Ctx, tier: ProjectSecurityTier): void {
     if (tier !== 'guarded' || ctx.workspace.kind === 'personal') return;
@@ -257,13 +219,9 @@ export function assertGuardedAllowed(ctx: Ctx, tier: ProjectSecurityTier): void 
 
 /**
  * Garde les chemins qui écrivent ou détruisent un projet gardé. Le chiffrement
- * protège les lectures, mais une archive ou un renommage n'a jamais besoin de
- * *lire* le corps : sans ça, une session verrouillée pourrait écraser un projet
- * qu'elle ne peut pas voir. Lève `locked`, que le client transforme en invite.
- * Sans effet sur un projet projeté, toujours ouvert.
- *
- * `ctx.secrecy.isUnlocked()` est l'ex `ctx.secure.isUnlocked()` : la même
- * question, posée au verrou du SDK.
+ * protège les lectures, mais une archive ou un renommage n'a pas besoin de lire le
+ * corps : sans cette garde, une session verrouillée écraserait un projet qu'elle ne
+ * peut pas voir. Lève `locked`, que le client transforme en invite.
  */
 export async function assertProjectUnlocked(ctx: Ctx, row: ProjectRow): Promise<void> {
     if (row.security_tier !== 'guarded') return;
@@ -276,12 +234,10 @@ export async function assertProjectUnlocked(ctx: Ctx, row: ProjectRow): Promise<
 }
 
 /**
- * Un membre de l'espace **actif**, propriétaire compris : l'ex
- * `workspaceMembers.isMember`, lu par la façade (`members.read`) plutôt que
- * dans la table. Les assignés d'une carte et les mentions d'un message ne
- * peuvent viser que des membres d'ici, même sur un projet projeté : c'est
- * parmi les gens qu'on voit qu'on assigne, et un identifiant que l'espace
- * d'origine ne connaît pas s'y affiche masqué.
+ * Un membre de l'espace actif, propriétaire compris. Les assignés d'une carte et les
+ * mentions d'un message ne peuvent viser que des membres d'ici, même sur un projet
+ * projeté : c'est parmi les gens qu'on voit qu'on assigne, et un identifiant que
+ * l'espace d'origine ne connaît pas s'y affiche masqué.
  */
 export async function isMember(ctx: Ctx, userId: number): Promise<boolean> {
     const members = await ctx.deveye.members.list();
@@ -296,14 +252,10 @@ interface ItemLabeller {
 }
 
 /**
- * Les intitulés d'objets d'espace reliés, une entrée par identifiant, par le
- * contrat d'éléments de la feature visée, TOUJOURS remplis (chez soi comme
- * depuis une fenêtre : deux écrans, une seule source de noms).
- *
- * `homeWorkspaceId` est le domicile du projet, jamais l'espace actif : les
- * liaisons y vivent, et un dépôt de là-bas ne se nomme que sous le codec
- * ouvert de là-bas. Module absent ou élément disparu : `null`, que l'écran
- * montre comme « un élément disparu », jamais un numéro.
+ * Les intitulés d'objets d'espace reliés, une entrée par identifiant, toujours
+ * remplie. `homeWorkspaceId` est le domicile du projet, jamais l'espace actif : les
+ * liaisons y vivent, et un dépôt de là-bas ne se nomme que sous le codec ouvert de
+ * là-bas. Module absent ou élément disparu valent `null`.
  */
 export async function linkLabels(
     provider: ItemLabeller | undefined,
@@ -361,8 +313,8 @@ function parseCard(plain: string): StoredCard {
 
 /**
  * Déchiffre une colonne sans jamais lever : une colonne dont le nom résiste doit
- * rester affichable (et ses cartes déplaçables) plutôt que de faire disparaître
- * le tableau entier. Même parti pris que `decryptService` côté Uptime.
+ * rester affichable, et ses cartes déplaçables, plutôt que de faire disparaître le
+ * tableau entier.
  */
 export async function decryptColumn(cipher: SdkCipher, content: string): Promise<StoredColumn> {
     const plain = await cipher.tryDecrypt(content);
@@ -385,7 +337,7 @@ export function toColumn(row: ProjectColumnRow, payload: StoredColumn): ProjectC
     });
 }
 
-/** L'indice dans `PROJECT_PRIORITIES` **est** la valeur stockée (TINYINT). */
+/** L'indice dans `PROJECT_PRIORITIES` est la valeur stockée (TINYINT). */
 export function priorityFromDb(value: number): ProjectPriority {
     return PROJECT_PRIORITIES[value] ?? 'none';
 }
@@ -430,16 +382,11 @@ export interface StoredEvent {
 }
 
 /**
- * Inscrit un fait dans l'histoire du projet, chez lui : la ligne porte le
- * domicile du projet et son codec, même quand le geste vient d'une fenêtre.
- * L'acteur reste l'appelant, membre d'ici : l'espace d'origine le nommera
- * s'il le connaît, et le masquera sinon.
- *
- * **Ne lève jamais** : la mutation qui l'appelle a déjà eu lieu, et perdre une
- * ligne de frise ne doit pas transformer un succès en erreur pour l'utilisateur.
- * Même posture que `ctx.audit`, dont c'est le pendant fonctionnel : l'audit
- * répond à « qui a fait quoi » du point de vue sécurité, la frise à « qu'est-il
- * arrivé à ce projet » du point de vue métier.
+ * Inscrit un fait dans l'histoire du projet, chez lui : la ligne porte le domicile du
+ * projet et son codec, même quand le geste vient d'une fenêtre. L'acteur reste
+ * l'appelant, que l'espace d'origine nommera s'il le connaît. Ne lève jamais, la
+ * mutation qui l'appelle a déjà eu lieu et perdre une ligne de frise ne doit pas
+ * transformer un succès en erreur.
  */
 export async function recordEvent(
     ctx: Ctx,
@@ -475,16 +422,13 @@ export async function recordEvent(
 }
 
 /**
- * Re-chiffre l'arbre entier d'un projet d'un étage vers l'autre. Un geste du
- * domicile : les deux codecs sont ceux d'ici, et l'arbre est lu chez lui.
+ * Re-chiffre l'arbre entier d'un projet d'un étage vers l'autre, un geste du
+ * domicile. Tout est lu et re-chiffré avant la moindre écriture : si une seule ligne
+ * résiste, on abandonne sans rien avoir touché plutôt que de laisser un projet à
+ * moitié converti, dont la seconde moitié serait définitivement illisible.
  *
- * Tout est lu et re-chiffré **avant** la moindre écriture : si une seule ligne
- * résiste, on abandonne sans avoir rien touché, plutôt que de laisser un projet
- * à moitié converti dont la seconde moitié serait définitivement illisible.
- *
- * Renvoie le `content` du projet lui-même, ré-encodé : la ligne `projects` est
- * écrite par l'appelant en même temps que `security_tier`, pour que le tier et
- * le corps ne puissent jamais diverger.
+ * Renvoie le `content` du projet lui-même, ré-encodé : l'appelant l'écrit en même
+ * temps que `security_tier`, pour que le palier et le corps ne divergent jamais.
  */
 export async function reencryptProjectTree(ctx: Ctx, row: ProjectRow, from: SdkCipher, to: SdkCipher): Promise<string> {
     const plain = await from.tryDecrypt(row.content);

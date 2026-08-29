@@ -18,13 +18,8 @@ interface ServiceListProps {
 }
 
 /**
- * The service list, with drag & drop ordering.
- *
- * The gesture itself lives in the app (`useDragReorder`, served by the SDK
- * barrel): it is shared with Git, Monitoring and the databases, and the reasons
- * it is written on pointer events rather than the HTML5 `draggable` API are
- * documented there. What stays here is only what makes this list look like
- * itself: the card, its grip, and the insertion bar.
+ * The service list, with drag & drop ordering. The gesture lives in the app
+ * (`useDragReorder`); what stays here is the card, its grip and the insertion bar.
  */
 export function ServiceList({ services, onOpen, onEdit, onReorder, onDragStateChange }: ServiceListProps) {
     /** A real drag just ended: the click the browser still fires afterwards

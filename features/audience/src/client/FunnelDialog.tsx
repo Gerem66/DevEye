@@ -26,17 +26,15 @@ const EMPTY: AudienceFunnelStepDraft[] = [
 ];
 
 /**
- * Définir un entonnoir à partir de ce que le site a **déjà** émis.
+ * Définir un entonnoir à partir de ce que le site a déjà émis.
  *
- * Les deux listes déroulantes de suggestions sont le cœur de ce dialogue, pas
- * un confort : un entonnoir se compose de signaux dont le nom exact vit dans le
- * code du site suivi, et les retaper de mémoire est le meilleur moyen de définir
- * une marche qui ne comptera jamais rien — sans que rien ne le signale, puisque
- * zéro est une réponse valable.
+ * Les deux listes de suggestions sont le cœur de ce dialogue : un entonnoir se
+ * compose de signaux dont le nom exact vit dans le code du site suivi, et les
+ * retaper de mémoire définit une marche qui ne comptera jamais rien, sans que
+ * rien ne le signale puisque zéro est une réponse valable.
  *
- * La saisie libre reste possible malgré tout : on peut vouloir déclarer une
- * marche **avant** que le site ne l'émette, pour que la mesure soit prête le
- * jour de la mise en ligne.
+ * La saisie libre reste possible : on peut déclarer une marche avant que le
+ * site ne l'émette, pour que la mesure soit prête le jour de la mise en ligne.
  */
 export function FunnelDialog({ open, siteId, funnel, onClose, onSaved }: FunnelDialogProps) {
     const [name, setName] = useState('');
@@ -205,11 +203,9 @@ export function FunnelDialog({ open, siteId, funnel, onClose, onSaved }: FunnelD
                                         <option value='path'>Page vue</option>
                                         <option value='event'>Événement</option>
                                     </SelectInput>
-                                    {/* `TextInput` rend un conteneur sans largeur
-                                        propre : dans une ligne flex il se réduit
-                                        à son contenu et tronque la saisie alors
-                                        que la place est libre. C'est cette
-                                        enveloppe qui la lui donne. */}
+                                    {/* `TextInput` rend un conteneur sans largeur propre :
+                                        dans une ligne flex il se réduit à son contenu et
+                                        tronque la saisie alors que la place est libre. */}
                                     <div className={styles.stepValue}>
                                         <TextInput
                                             value={step.value}

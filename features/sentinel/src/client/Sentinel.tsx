@@ -17,34 +17,12 @@ import { refreshSentinel } from './store';
 import styles from './style.module.css';
 
 /**
- * Sentinelle : la flotte, puis une machine.
- *
- * **Deux niveaux, et aucun onglet.** On entre par « qu'est-ce qui ne va pas, et
- * où », les constats de tout l'espace, au pire d'abord, et on descend sur une
- * machine, qui se lit alors d'une seule traite : ce qu'on lui reproche, sa
- * posture, puis ce qu'on a appris d'elle.
- *
- * Les onglets d'une première version rangeaient ces trois choses derrière trois
- * clics, alors qu'elles se lisent ensemble et dans cet ordre : on ne consulte
- * pas la posture d'une machine *ou* ses constats, on regarde les constats et on
- * se demande aussitôt si sa configuration les explique. Les réglages, eux, sont
- * une action et non une lecture : depuis le rapatriement, ils vivent dans la
- * coquille commune (bouton Réglages, onglet Appareils), plus dans un dialogue
- * maison derrière un second engrenage.
- *
- * Aucun sondage : la vue se relit quand le sujet `sentinel` bouge, c'est-à-dire
- * quand le moteur ouvre un constat. Elle est donc muette tant que rien ne se
- * passe, ce qui est l'état normal d'un détecteur.
- *
- * Depuis le rapatriement, l'espace vient de `useActiveWorkspace()` et non
- * d'une prop : la vue d'un module ne reçoit que `closeFeature`.
+ * Sentinelle : la flotte, puis une machine, qui se lit d'une seule traite
+ * (constats, posture, ligne de base). Aucun sondage : la vue se relit quand
+ * le sujet `sentinel` bouge.
  */
 
-/**
- * Largeur du panneau de détail. Vit ici, en une seule constante, parce que deux
- * choses en dépendent : la largeur qu'anime framer-motion, et celle que le
- * contenu garde pendant qu'elle change (voir plus bas).
- */
+/** Une seule constante : la largeur qu'anime framer-motion et celle que le contenu garde pendant qu'elle change. */
 const DETAIL_WIDTH = 360;
 
 export default function Sentinel(_props: FeatureViewProps) {
@@ -62,10 +40,7 @@ export default function Sentinel(_props: FeatureViewProps) {
     const workspaceId = useActiveWorkspace()?.id ?? null;
     const device = devices.find((d) => d.deviceId === deviceId) ?? null;
 
-    // Le niveau profond de Sentinelle : la machine ouverte, par son uuid. La
-    // racine `view:sentinel` vient de l'accueil ; cette feature n'annonce que
-    // le sien. Sentinelle n'a pas d'éléments au sens de la coquille : ses
-    // « éléments » sont des appareils.
+    // La machine ouverte est le niveau profond ; la racine `view:sentinel` vient de l'accueil.
     const liveTarget = useLiveSegment('l1', deviceId);
     useEffect(() => {
         if (!liveTarget) return;
@@ -94,11 +69,9 @@ export default function Sentinel(_props: FeatureViewProps) {
             setDevices(overview.devices);
             setFleetScore(overview.fleetScore);
             setFindings(list.findings);
-            // Le constat ouvert se resynchronise sur la liste fraîche : sans
-            // cela le panneau garderait l'objet capté au clic, et afficherait
-            // « ouvert » sur un constat qu'un collègue vient d'acquitter. Il
-            // disparaît du filtre courant ⇒ on referme, plutôt que de laisser un
-            // détail orphelin de sa liste.
+            // Resynchronisé sur la liste fraîche : sinon le panneau afficherait
+            // « ouvert » sur un constat qu'un collègue vient d'acquitter. Disparu
+            // du filtre, on referme.
             setSelected((cur) => (cur ? (list.findings.find((f) => f.id === cur.id) ?? null) : null));
             setError(null);
         } catch {
@@ -109,10 +82,7 @@ export default function Sentinel(_props: FeatureViewProps) {
         // Relu quand l'espace change : la liste est celle d'un espace.
     }, [workspaceId, minSeverity, showSettled]);
 
-    // Relecture à chaque (re)connexion (tout de suite si la socket est déjà
-    // ouverte) et quand le sujet `sentinel` bouge : une écriture d'un autre
-    // membre, un réglage fait dans le panneau des appareils, ou un constat que
-    // le moteur vient d'ouvrir.
+    // Relecture à chaque (re)connexion et quand le sujet `sentinel` bouge.
     useEffect(() => {
         const offInvalidate = onResourceChange('sentinel.findings', () => void reload());
         const offOpen = onSocketOpen(() => void reload());
@@ -162,10 +132,8 @@ export default function Sentinel(_props: FeatureViewProps) {
     const resolve = useCallback(async () => {
         if (!selected) return;
         await api.send('sentinel.resolve', { findingId: selected.id });
-        // Sans `setSelected` : la relecture s'en charge, et elle seule sait quoi
-        // faire des deux cas. Le constat quitte le filtre par défaut, le détail
-        // se referme ; il reste sous « voir les constats réglés », le détail se
-        // met à jour. Le forcer ici aurait tranché à sa place.
+        // Sans `setSelected` : la relecture seule sait s'il faut refermer (le
+        // constat quitte le filtre) ou mettre à jour.
         await afterWrite();
     }, [selected, afterWrite]);
 
@@ -234,10 +202,7 @@ export default function Sentinel(_props: FeatureViewProps) {
                                 d.enabled ? '' : styles.navRowOff
                             }`}
                             onClick={() => {
-                                // Toujours la lecture, jamais les réglages : arriver
-                                // dans un formulaire parce que la machine n'est pas
-                                // encore surveillée était le contraire de ce qu'on
-                                // attend d'un clic sur son nom.
+                                // Toujours la lecture, jamais les réglages.
                                 setDeviceId(d.deviceId);
                                 setSelected(null);
                             }}
@@ -324,13 +289,7 @@ export default function Sentinel(_props: FeatureViewProps) {
                             <AllowlistSection deviceId={deviceId} onChanged={() => void afterWrite()} />
                         </div>
 
-                        {/*
-                         * Le détail n'occupe la droite **que lorsqu'on en veut un**.
-                         * Une colonne vide en permanence prenait un tiers de
-                         * l'écran pour n'y afficher qu'une invitation, alors que
-                         * la liste est ce qu'on vient lire. Il entre et sort par
-                         * la droite, comme le reste des surfaces de l'application.
-                         */}
+                        {/* Le détail n'occupe la droite que lorsqu'on en veut un. */}
                         <AnimatePresence>
                             {selected && (
                                 <motion.aside
@@ -343,25 +302,15 @@ export default function Sentinel(_props: FeatureViewProps) {
                                         type: 'spring',
                                         stiffness: 380,
                                         damping: 34,
-                                        // L'opacité ne suit pas le ressort : elle
-                                        // doit avoir fini bien avant la largeur.
-                                        // Le ressort passe ses dernières dizaines
-                                        // de pixels à approcher zéro, et c'est là
-                                        // que le contenu, encore visible, se
-                                        // réduit à ses aplats de couleur.
+                                        // L'opacité doit avoir fini bien avant la
+                                        // largeur : le ressort passe ses derniers
+                                        // pixels à approcher zéro, contenu visible.
                                         opacity: { type: 'tween', duration: 0.12, ease: 'easeOut' }
                                     }}
                                 >
-                                    {/*
-                                     * Le contenu garde sa largeur pendant que le
-                                     * panneau perd la sienne : `overflow: hidden`
-                                     * le rogne au lieu de le remettre en page.
-                                     * Sans ça, la fermeture rejouait à toute
-                                     * vitesse une mise en page de 360 px à 0 :
-                                     * liseré de gravité, séparations et boutons
-                                     * écrasés en barres horizontales et
-                                     * verticales, l'espace de quelques images.
-                                     */}
+                                    {/* Le contenu garde sa largeur pendant que le
+                                        panneau perd la sienne : `overflow: hidden`
+                                        le rogne au lieu de le remettre en page. */}
                                     <div className={styles.detailInner} style={{ width: DETAIL_WIDTH }}>
                                         <FindingDetail
                                             finding={selected}

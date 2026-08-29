@@ -263,13 +263,8 @@
     opacity: 0.55;
 }
 
-/*
- * Le sélecteur de rôle garde sa largeur, le texte du compte prend le reste.
- *
- * Sans ça le `width: 100%` de SelectInput réclame toute la ligne : le nom et
- * l'adresse se font écraser jusqu'aux points de suspension, et il ne reste que
- * les avatars pour distinguer deux comptes.
- */
+/* Le sélecteur garde sa largeur, le texte du compte prend le reste : sans ça
+   le `width: 100%` de SelectInput écrase nom et adresse. */
 .roleSelect {
     width: auto;
     flex-shrink: 0;

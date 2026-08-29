@@ -22,24 +22,18 @@ interface NoteGridProps {
     onDropAt: (folderId: number | null, index: number) => void;
 }
 
-/** Half the grid's column gap, where the insertion bar is centred. */
 function halfGap(grid: HTMLElement): number {
     return (parseFloat(getComputedStyle(grid).columnGap) || 0) / 2;
 }
 
 /**
- * One folder's cards plus the trailing "add" card, and the drop plumbing that
- * positions notes.
+ * The whole grid is the drop target (events bubble up from the cards) and the
+ * landing spot is a bar standing in the gap, the cards themselves never move.
  *
- * The whole grid is the drop target (events bubble up from the cards), and the
- * landing spot is shown as a bar standing in the gap the note would fall into,
- * the cards themselves are never restyled or moved, so what you see is exactly
- * where it lands.
- *
- * **The bar is driven straight through the DOM, never React state.** `dragover`
- * fires continuously while the pointer moves; re-rendering the cards under it
- * makes the browser re-fire drag events on the replaced nodes, which feeds back
- * into another render and locks the tab up. Refs keep the drag render-free.
+ * The bar is driven straight through the DOM, never React state: `dragover`
+ * fires continuously, and re-rendering the cards under the pointer makes the
+ * browser re-fire drag events on the replaced nodes, which loops back into
+ * another render and locks the tab up.
  */
 export default function NoteGrid({
     notes,
@@ -58,7 +52,6 @@ export default function NoteGrid({
     /** Gap the bar currently marks, or null while it is hidden. */
     const gapRef = useRef<number | null>(null);
 
-    /** The rendered note cards, in order. */
     const cardEls = useCallback(
         () => Array.from(gridRef.current?.querySelectorAll<HTMLElement>('[data-note-card]') ?? []),
         []
@@ -78,9 +71,9 @@ export default function NoteGrid({
             if (!grid || !bar || gapRef.current === index) return;
 
             // Every gap is "just ahead of" something: the card the note would land
-            // before, or the add card when it lands at the end. Anchoring on a
-            // single, always-leading edge is what keeps the bar centred, measuring
-            // the last card's *trailing* edge instead would offset it by a gap.
+            // before, or the add card at the end. Anchoring on an always-leading
+            // edge keeps the bar centred; the last card's trailing edge would
+            // offset it by a gap.
             const anchor = cardEls()[index] ?? grid.querySelector<HTMLElement>('[data-add-card]');
             if (!anchor) return;
 
@@ -91,8 +84,8 @@ export default function NoteGrid({
             const gridBox = grid.getBoundingClientRect();
             const box = anchor.getBoundingClientRect();
             // Middle of the gap ahead of the anchor, less half the bar's own width
-            // (read from the DOM so the width stays defined only in the CSS).
-            // Clamped so the very first gap stays inside the grid.
+            // (read from the DOM so it stays defined only in the CSS), clamped so
+            // the very first gap stays inside the grid.
             const x = Math.max(box.left - gridBox.left - halfGap(grid) - bar.offsetWidth / 2, 0);
             bar.style.transform = `translate(${x}px, ${box.top - gridBox.top}px)`;
             bar.style.height = `${box.height}px`;
@@ -102,9 +95,8 @@ export default function NoteGrid({
     );
 
     /**
-     * Gap nearest to the pointer. Both vertical edges of every card are candidate
-     * gaps, picked by plain distance, which handles a wrapping grid without
-     * having to reason about rows.
+     * Both vertical edges of every card are candidate gaps, picked by plain
+     * distance, which handles a wrapping grid without reasoning about rows.
      */
     const gapAt = useCallback(
         (clientX: number, clientY: number): number => {
@@ -167,8 +159,8 @@ export default function NoteGrid({
                     key={note.id}
                     note={note}
                     folders={folders}
-                    // Une note projetée ne se classe pas ici : son rang est celui
-                    // de son domicile, et le serveur refuse un ordre qui l'inclut.
+                    // Une note projetée garde le rang de son domicile : le serveur
+                    // refuse un ordre qui l'inclut.
                     draggable={reorderable && !note.foreign}
                     onOpen={onOpen}
                     onMove={onMove}

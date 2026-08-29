@@ -16,15 +16,9 @@ import { ack, reply, type AgentSession, type PayloadOf } from './session';
  * True (and acks an empty receipt) when the device isn't yet allowed to persist.
  *
  * `s.device` est l'instantané pris à la connexion, et un agent reste connecté
- * des semaines : s'y fier seul faisait qu'un appareil approuvé *pendant* que son
- * agent était en ligne restait à jamais « pending » pour cette session. Tout ce
- * qu'il envoyait était accusé — donc jamais réémis — puis jeté. De l'extérieur :
- * une machine en ligne, sa version d'agent affichée (`agent.hello`, lui, n'est
- * pas filtré), et pas un seul relevé ni rapport. Silencieux des deux côtés.
- *
- * On relit donc le statut avant de refuser, et **seulement** dans ce cas : le
- * chemin normal (déjà `active`) ne coûte rien. Une fois relu actif, l'instantané
- * est corrigé pour de bon, la requête ne se repose plus.
+ * des semaines : un appareil approuvé pendant que son agent est en ligne
+ * resterait « pending » pour toute la session. On relit donc le statut avant
+ * de refuser, et seulement dans ce cas : le chemin normal ne coûte rien.
  */
 async function gated(s: AgentSession): Promise<boolean> {
     if (s.device.status === 'active') return false;
@@ -36,9 +30,8 @@ async function gated(s: AgentSession): Promise<boolean> {
         return false;
     }
 
-    // Dire pourquoi on jette. Sans cette trace, un appareil jamais approuvé se
-    // diagnostique à l'aveugle : rien ne distingue « pas encore autorisé » de
-    // « l'agent ne collecte pas ».
+    // Sans cette trace, rien ne distingue « pas encore autorisé » de « l'agent
+    // ne collecte pas ».
     s.logger.warn({ status: s.device.status }, 'Telemetry dropped: device is not active');
     ack(s, 0);
     return true;
@@ -68,11 +61,8 @@ export async function handleReport(s: AgentSession, payload: PayloadOf<typeof AG
         await s.db.devices.setReport(s.device.id, JSON.stringify(payload.report));
         s.hub.publishReport(s.device.id, payload.report);
         await s.db.devices.touchSeen(s.device.id, Math.floor(Date.now() / 1000));
-        // Les modules reçoivent le rapport APRÈS sa persistance : le moteur de
-        // Sentinelle le relira par la façade des appareils, qu'on vient
-        // justement d'écrire, d'où l'ordre. Ils empilent, ils n'évaluent pas ;
-        // et c'est à eux de décider si l'appareil est surveillé, l'app ne
-        // garde plus rien sur leurs réglages.
+        // Les modules reçoivent le rapport après sa persistance : ils le relisent
+        // par la façade des appareils. Ils empilent, ils n'évaluent pas.
         s.hooks.onReport(s.device.id, payload.report);
         ack(s, 1);
     } catch (e) {
@@ -95,10 +85,8 @@ export async function handleMetricsBatch(
             s.hub.publishMetric(s.device.id, snapshot);
         }
         await s.db.devices.touchSeen(s.device.id, Math.floor(Date.now() / 1000));
-        // Le lot entier, du plus ancien au plus récent, aux modules qui
-        // écoutent : c'est le moteur de Sentinelle qui n'en retient que le
-        // dernier instant (un lot peut en porter cent, agent revenu après une
-        // coupure), et qui empile sans évaluer, hors du chemin le plus chaud.
+        // Le lot entier, du plus ancien au plus récent : les modules empilent
+        // sans évaluer, hors du chemin le plus chaud.
         s.hooks.onMetricsBatch(s.device.id, snapshots);
         ack(s, snapshots.length);
     } catch (e) {

@@ -590,9 +590,8 @@
     gap: var(--space-sm);
 }
 
-/* Un <button>, et non plus un <a> : le téléchargement passe par `fetch` pour
-   pouvoir vérifier la réponse avant d'enregistrer (voir DownloadAgent). D'où la
-   remise à zéro des styles propres au bouton natif. */
+/* Un <button> : le téléchargement passe par `fetch` (voir DownloadAgent), d'où
+   la remise à zéro des styles du bouton natif. */
 .archRow {
     display: flex;
     width: 100%;
@@ -634,9 +633,7 @@
 .archRowDisabled,
 .archRowDisabled:hover {
     cursor: not-allowed;
-    /* `filter` plutôt qu'`opacity` : les surfaces animées par framer-motion
-       revendiquent l'opacity inline, et un état désactivé ne doit pas dépendre
-       d'une propriété qu'un autre système écrase. */
+    /* `filter` plutôt qu'`opacity` : framer-motion revendique l'opacity inline. */
     filter: opacity(0.5);
     border-color: var(--glass-border);
     background: var(--glass-bg-light);
@@ -670,9 +667,8 @@
     background-color: var(--warning);
 }
 
-/* Auto-approval toggle (icon-only) in the codes table: a filled accent ✓ when
-   on, a muted ✗ when off — distinct shape + colour to read the state at a glance.
-   Compound selector so it overrides `.iconBtn`'s border regardless of order. */
+/* Auto-approval toggle in the codes table. Compound selector so it overrides
+   `.iconBtn`'s border regardless of order. */
 .iconBtn.iconApprove,
 .iconBtn.iconApprove:hover {
     color: var(--accent);
@@ -752,8 +748,7 @@
     color: var(--text-primary);
 }
 
-/* Disabled (e.g. an offline device's persistence/privilege toggles): greyed and
-   inert, keeping the last-known state readable without inviting interaction. */
+/* Disabled (an offline device's toggles): greyed and inert, last-known state readable. */
 .iconBtn:disabled {
     opacity: 0.45;
     cursor: not-allowed;
@@ -799,8 +794,8 @@
 
 /* ── Partage d'un appareil entre espaces (popup depuis la carte) ── */
 
-/* Le compte d'espaces, collé à l'icône du bouton de partage. Le bouton s'élargit
-   de lui-même (largeur fixe → auto) plutôt que de comprimer son icône. */
+/* Le compte d'espaces, collé à l'icône : le bouton s'élargit plutôt que de
+   comprimer son icône. */
 .actionBtn:has(.actionCount) {
     width: auto;
     padding: 0 var(--space-sm);

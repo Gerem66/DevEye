@@ -217,13 +217,9 @@
     gap: var(--space-sm);
 }
 
-/*
- * `TextInput` enveloppe son `<input>` dans un conteneur qui ne reçoit pas de
- * `className` : le `width: 100%` de l'input se résout donc contre une boîte
- * laissée à sa largeur intrinsèque — une vingtaine de caractères, quelle que
- * soit la place disponible. C'est ce conteneur qu'il faut étirer, d'où le
- * sélecteur d'enfant.
- */
+/* `TextInput` enveloppe son `<input>` dans un conteneur qui ne reçoit pas de
+   `className` : c'est lui qu'il faut étirer, sinon le `width: 100%` de l'input
+   se résout contre une boîte à la largeur intrinsèque. */
 .nameRow > div {
     flex: 1;
     min-width: 0;
@@ -249,19 +245,11 @@
     flex-shrink: 0;
 }
 
-/*
- * Case à cocher maison : la native ignore le thème (fond blanc, coche système)
- * et jure au milieu du reste. L'input réel est masqué mais conservé — il porte
- * l'état, le focus clavier et l'accessibilité ; seule l'icône est peinte.
- */
-/*
- * Liste de lignes séparées par un trait, dans une carte.
- *
- * Annule le `gap` de `.card` : combiné à la bordure de séparation, il ajoutait
- * un espace d'un seul côté du trait, si bien que chaque ligne paraissait poussée
- * vers le bas et son contenu désaligné. Ici les lignes se touchent, et c'est
- * leur propre padding — symétrique — qui donne le rythme.
- */
+/* Case à cocher maison : la native ignore le thème. L'input réel est masqué
+   mais conservé, il porte l'état, le focus clavier et l'accessibilité. */
+/* Liste de lignes séparées par un trait. Annule le `gap` de `.card` : combiné
+   à la bordure, il décalait chaque ligne d'un seul côté du trait. Le rythme
+   vient du padding symétrique des lignes. */
 .rowList {
     gap: 0;
     /* Les lignes portent déjà leur propre respiration : la carte se contente du
@@ -364,11 +352,8 @@
     text-decoration: underline;
 }
 
-/*
- * Sélecteur de rôle d'un membre : garde sa largeur, le texte du compte prend le
- * reste. Sans ça le `width: 100%` de SelectInput réclame toute la ligne et le
- * pseudo comme l'adresse tombent à zéro — il ne reste que l'avatar.
- */
+/* Le sélecteur garde sa largeur, le texte du compte prend le reste : sans ça
+   le `width: 100%` de SelectInput écrase pseudo et adresse. */
 .memberRole {
     width: auto;
     max-width: 12rem;

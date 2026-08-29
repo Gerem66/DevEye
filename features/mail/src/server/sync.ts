@@ -6,19 +6,11 @@ import type { MailRepo } from './repo';
 import { encryptEnvelope, persistRefreshedToken } from './_shared';
 
 /**
- * Sync logic shared between the on-demand commands (live WS session) and
- * the background tick of `service.ts` for "open"-tier accounts (no
- * session). Both sides already hold the right cipher for the account's tier and
- * its decrypted credentials — this module only talks to IMAP and writes the
- * metadata cache, nothing about auth/gating.
- *
- * Côté commandes, trois appelants : `mail.folderSync` (le bouton de relève),
- * `mail.messageList` et `mail.folderList` (qui synchronisent à l'ouverture pour
- * les comptes « guarded », lesquels n'ont aucune relève de fond).
- *
- * Depuis le rapatriement, le client IMAP est un paramètre (`SyncClient`, les
- * fonctions de `client.ts`) : les handlers passent le vrai, le service de fond
- * celui de sa couture de test, et ce fichier ne sait pas lequel il tient.
+ * Sync logic shared between the on-demand commands (live WS session) and the
+ * background tick of `service.ts` for "open"-tier accounts (no session). Both
+ * sides already hold the right cipher for the account's tier and its decrypted
+ * credentials: this module only talks to IMAP and writes the metadata cache,
+ * nothing about auth/gating.
  */
 
 /** Ce que la relève demande au client IMAP : le sous-ensemble de `client.ts` qu'un test simule. */
@@ -28,9 +20,8 @@ export type SyncClient = Pick<typeof import('./client'), 'listFolders' | 'syncFo
 export const INITIAL_SYNC_LIMIT = 200;
 
 /**
- * Ce qu'une relève a appris d'un dossier : des arrivées, des drapeaux corrigés,
- * des lignes retirées. La somme des trois est ce qui décide si le contenu a
- * bougé — et donc s'il faut prévenir les clients connectés.
+ * Ce qu'une relève a appris d'un dossier ; la somme des trois décide si le
+ * contenu a bougé, et donc s'il faut prévenir les clients connectés.
  */
 export interface SyncFolderOutcome {
     newCount: number;
@@ -38,7 +29,7 @@ export interface SyncFolderOutcome {
     removedCount: number;
 }
 
-/** Cache one folder's worth of fetched envelopes — identical for a forward sync, a backfill and a remote search. */
+/** Cache one folder's worth of fetched envelopes, for a forward sync, a backfill or a remote search. */
 export async function cacheEnvelopes(
     repo: MailRepo,
     cipher: SdkCipher,
@@ -49,8 +40,7 @@ export async function cacheEnvelopes(
         await repo.messages.upsertEnvelope({
             folderId,
             uid: msg.uid,
-            // Snippet needs the body, which is never fetched during a sync and
-            // never stored — it stays empty by design (see `039_mail.sql`).
+            // The snippet needs the body, which a sync never fetches: empty by design.
             envelopeEnc: await encryptEnvelope(cipher, {
                 subject: msg.subject,
                 from: msg.from,
@@ -68,10 +58,10 @@ export async function cacheEnvelopes(
 
 /**
  * Recompute a folder's cached counts and low-water mark after rows were added
- * outside a forward sync — a backfill or a remote search, both of which write
- * *older* messages into the cache and so can only move `first_seen_uid` down.
- * `last_seen_uid`/`uid_validity` are deliberately carried through untouched:
- * neither operation learns anything new about the top of the mailbox.
+ * outside a forward sync (a backfill or a remote search), which write *older*
+ * messages and so can only move `first_seen_uid` down. `last_seen_uid` and
+ * `uid_validity` are carried through untouched: neither operation learns
+ * anything about the top of the mailbox.
  */
 export async function refreshFolderCounts(repo: MailRepo, folder: MailFolderRow): Promise<void> {
     const counts = await repo.messages.countByFolder(folder.id);
@@ -106,17 +96,14 @@ export async function syncAccountFolders(
 }
 
 /**
- * Pull new envelopes for one folder, reconcile the recent window already
- * cached, and refresh the folder's counts. Detects a `UIDVALIDITY` change
- * (mailbox recreated server-side) by re-checking after the first fetch and, if
- * it moved, drops the stale cache and re-fetches fresh — a folder never ends up
- * mixing two UID spaces.
+ * Pull new envelopes for one folder, reconcile the recent window already cached,
+ * and refresh the folder's counts. A `UIDVALIDITY` change (mailbox recreated
+ * server-side) drops the stale cache and re-fetches, so a folder never mixes two
+ * UID spaces.
  *
  * Le fetch avant n'apprend que les arrivées : un message déjà connu n'y
- * réapparaît jamais, quoi qu'il lui soit arrivé ailleurs. La réconciliation est
- * l'autre moitié du travail — elle relit les drapeaux de la fenêtre récente et
- * retire ce que le serveur n'a plus, ce qui est la seule façon d'apprendre
- * qu'un mail a été lu, marqué ou supprimé depuis un autre client.
+ * réapparaît jamais. La réconciliation est l'autre moitié du travail, et la
+ * seule façon d'apprendre qu'un mail a été lu, marqué ou supprimé ailleurs.
  */
 export async function syncOneFolder(
     client: SyncClient,
@@ -125,16 +112,15 @@ export async function syncOneFolder(
     account: MailAccountRow,
     credentials: MailCredentials,
     folder: MailFolderRow,
-    /** Message-level progress within this one folder — see `service.ts`/`syncStatus.ts`. */
+    /** Message-level progress within this one folder. */
     onProgress?: (done: number, estimatedTotal: number) => void
 ): Promise<SyncFolderOutcome> {
     const refresh = persistRefreshedToken(repo, account.id, credentials, cipher);
     let sinceUid = folder.last_seen_uid;
 
-    // Fenêtre à réconcilier, lue avant tout fetch : elle porte sur ce qui est
-    // déjà en cache. Bornée par le plus haut UID **du cache** et non par
-    // `last_seen_uid`, parce qu'une recherche distante (`mail.messageSearch`)
-    // peut avoir inséré des lignes au-dessus de ce repère sans le faire bouger.
+    // Fenêtre à réconcilier, lue avant tout fetch. Bornée par le plus haut UID
+    // du cache et non par `last_seen_uid` : une recherche distante peut avoir
+    // inséré des lignes au-dessus de ce repère sans le faire bouger.
     let window =
         folder.uid_validity === null ? [] : await repo.messages.listFlagsWindow(folder.id, MAIL_MESSAGE_PAGE_SIZE);
     const reconcile = window.length > 0 ? { fromUid: window[window.length - 1].uid, toUid: window[0].uid } : null;
@@ -154,8 +140,7 @@ export async function syncOneFolder(
         // The mailbox was recreated: our cached UIDs no longer mean anything.
         await repo.messages.deleteByFolder(folder.id);
         sinceUid = null;
-        // Le cache vient d'être détruit et l'ancien espace d'UID ne veut plus
-        // rien dire : il n'y a plus rien à réconcilier, ni ici ni au retour.
+        // Cache détruit : plus rien à réconcilier, ni ici ni au retour.
         window = [];
         result = await client.syncFolder({
             credentials,
@@ -188,9 +173,8 @@ export async function syncOneFolder(
             }
         }
         // Un UID de la fenêtre que le serveur ne rend plus n'existe plus là-bas :
-        // supprimé, ou déplacé ailleurs (un MOVE lui donne un UID neuf dans le
-        // dossier d'arrivée). Le garder, c'est afficher un mail fantôme jusqu'au
-        // prochain rechargement complet.
+        // supprimé, ou déplacé (un MOVE lui donne un UID neuf dans le dossier
+        // d'arrivée). Le garder, c'est afficher un mail fantôme.
         removedCount = await repo.messages.deleteByFolderUids(
             folder.id,
             window.filter((row) => !remote.has(row.uid)).map((row) => row.uid)
@@ -199,16 +183,14 @@ export async function syncOneFolder(
 
     const counts = await repo.messages.countByFolder(folder.id);
     // Repère haut, et non « le plus récent qui existe » : une suppression en tête
-    // ne le fait pas redescendre, sans quoi les mêmes UID rentreraient au tick
-    // suivant, précisément ceux que la réconciliation vient de retirer.
+    // ne le fait pas redescendre, sans quoi les UID que la réconciliation vient
+    // de retirer rentreraient au tick suivant.
     const lastSeenUid =
         result.messages.length > 0 ? Math.max(...result.messages.map((m) => m.uid)) : folder.last_seen_uid;
-    // `first_seen_uid` never needs moving on a normal incremental sync — only
-    // set when unknown (a brand new folder, or a UIDVALIDITY reset that just
-    // wiped the cache), backstopped by what's actually in the DB so a folder
-    // synced before this column existed still gets a correct floor. Une
-    // réconciliation qui a supprimé des lignes fait exception : elle a pu
-    // emporter le plancher lui-même.
+    // `first_seen_uid` never moves on a normal incremental sync: it is only set
+    // when unknown (a brand new folder, or a UIDVALIDITY reset that wiped the
+    // cache). Une réconciliation qui a supprimé des lignes fait exception : elle
+    // a pu emporter le plancher lui-même.
     const firstSeenUid =
         removedCount === 0 &&
         validityKnown &&
@@ -229,16 +211,12 @@ export async function syncOneFolder(
 
 /**
  * Throws a folder's cache away and rebuilds it from the mailbox as it stands
- * right now. The UID high/low-water marks go with it, so the rebuild takes the
- * same path as a brand new folder — the newest `INITIAL_SYNC_LIMIT` messages —
- * rather than trying to reconcile against marks that are, by assumption, the
+ * right now, UID marks included, so the rebuild takes the same path as a brand
+ * new folder rather than reconciling against marks that are, by assumption, the
  * reason the caller is here. Nothing on the IMAP server is touched.
  *
- * La réparation de dernier recours, depuis que {@link syncOneFolder} réconcilie
- * la fenêtre récente à chaque passage : elle reste la seule à pouvoir remettre
- * d'aplomb ce qui a dérivé **au-delà** de cette fenêtre, au prix de tout
- * reprendre. Le cache vidé d'abord, `syncOneFolder` n'a rien à réconcilier et
- * repart du chemin d'un dossier neuf.
+ * Réparation de dernier recours : la seule à remettre d'aplomb ce qui a dérivé
+ * au-delà de la fenêtre que {@link syncOneFolder} réconcilie à chaque passage.
  */
 export async function resetFolder(
     client: SyncClient,
@@ -256,10 +234,9 @@ export async function resetFolder(
 
 /**
  * Fetches one older batch for a folder, extending its cache backward from
- * `first_seen_uid` — the "force refetch" counterpart to `syncOneFolder`,
- * which only ever moves forward. Never touches `last_seen_uid`. The caller
- * (`mail.folderBackfill`, client-driven) decides whether to call this again
- * based on `reachedStart`.
+ * `first_seen_uid`, the counterpart to `syncOneFolder`, which only ever moves
+ * forward. Never touches `last_seen_uid`. The caller decides whether to call
+ * this again based on `reachedStart`.
  */
 export async function backfillFolder(
     client: SyncClient,

@@ -1,17 +1,9 @@
 /**
- * La largeur que le kanban réclame de la popup.
- *
- * Calculée et non mesurée, à dessein. Mesurer le `scrollWidth` du tableau
- * reviendrait à lire une géométrie qui dépend de la largeur qu'on est en train
- * de décider : la popup grandit, le tableau grandit, la mesure repart — une
- * boucle qu'il faudrait ensuite amortir. Les colonnes ayant une largeur fixe
- * (`.column { flex: 0 0 288px }`, `.addColumn { flex: 0 0 160px }`), le calcul
- * est exact et stable.
- *
- * ⚠️ Ces trois constantes doublent le CSS. Elles sont voisines du fichier qui
- * les porte, et un écart ne produit qu'une popup un peu large ou un peu
- * étroite — jamais une mise en page cassée : le tableau défile dans sa propre
- * boîte, quoi qu'il arrive.
+ * La largeur que le kanban réclame de la popup, calculée et non mesurée : lire le
+ * `scrollWidth` du tableau reviendrait à lire une géométrie qui dépend de la
+ * largeur qu'on est en train de décider. Ces constantes doublent le CSS, mais un
+ * écart ne donne qu'une popup un peu large ou un peu étroite, le tableau défilant
+ * dans sa propre boîte.
  */
 
 const COLUMN_WIDTH = 288;

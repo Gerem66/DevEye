@@ -22,11 +22,7 @@ import { workspaceRolesRepo, type WorkspaceRolesRepo } from './repos/workspaceRo
 import { userInvitesRepo, type UserInvitesRepo } from './repos/userInvites';
 
 export interface Database {
-    /**
-     * Le Queryable brut, pour les fabriques de repos des MODULES uniquement :
-     * un repo de module se construit avec, un handler natif n'a aucune raison
-     * d'y toucher (ses repos sont déjà là).
-     */
+    /** Le Queryable brut, pour les fabriques de repos des modules uniquement. */
     queryable: Queryable;
     users: UsersRepo;
     workspaces: WorkspacesRepo;
@@ -45,8 +41,8 @@ export interface Database {
     userSecretKeys: UserSecretKeysRepo;
     /** Le magasin clé-valeur des modules de features (SDK). */
     featureKv: FeatureKvRepo;
-    /** Canaux d'alerte, par espace **et par feature** (voir `Services/notifications.ts`). */
     itemSharing: ItemSharingRepo;
+    /** Canaux d'alerte, par espace et par feature (voir `Services/notifications.ts`). */
     notificationChannels: NotificationChannelsRepo;
 }
 

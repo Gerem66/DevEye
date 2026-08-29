@@ -1,15 +1,14 @@
-/* Projets — portefeuille et formulaire de profil.
-   Uniquement des variables de thème : aucune couleur en dur. */
+/* Projets : portefeuille et formulaire de profil.
+   Uniquement des variables de thème, aucune couleur en dur. */
 
-/* La popup fournit une boîte défilante en `flex: 1` ; la racine d'une feature
-   doit l'occuper entièrement, sinon son contenu se tasse en haut à gauche.
-   Même contrat que `features/notes/src/client` (`.container`). */
+/* La popup fournit une boîte défilante en `flex: 1` ; la racine d'une feature doit
+   l'occuper entièrement, sinon son contenu se tasse en haut à gauche. */
 .root {
     display: flex;
     flex-direction: column;
     gap: var(--space-lg);
-    /* `min-height` et non `height` : la racine remplit la boîte quand le
-       contenu est court, et grandit avec lui quand il déborde. */
+    /* `min-height` et non `height` : la racine remplit la boîte quand le contenu est
+       court, et grandit avec lui quand il déborde. */
     min-height: 100%;
 }
 
@@ -54,25 +53,9 @@
 /* ------------------------------------------------------------ portefeuille */
 
 /*
- * Une ligne par projet.
- *
- * C'était une grille de cartes (`repeat(auto-fit, minmax(300px, 1fr))`), ce qui
- * imposait deux compromis : une hauteur minimale commune que la plupart des
- * projets ne remplissaient pas, et un avancement coincé dans une colonne de
- * 300 px. En ligne, la barre prend toute la place restante et la densité suit
- * le contenu réel.
- */
-/*
- * Des cartes, plus des lignes.
- *
- * En pleine largeur, tout le milieu d'un projet restait vide : le titre à
- * gauche, l'avancement à l'autre bout, et rien entre les deux. Une grille
- * auto-ajustée en fait des cartes qui se remplissent, et l'écran en montre
- * plusieurs par rangée au lieu d'une seule ligne creuse.
- *
+ * Des cartes plutôt que des lignes pleine largeur, dont le milieu restait vide.
  * `auto-fill` et non `auto-fit` : sur un espace à deux projets, `auto-fit`
- * étirerait les deux cartes sur toute la largeur — on retomberait exactement
- * sur les lignes vides qu'on cherche à quitter.
+ * étirerait les deux cartes sur toute la largeur, et l'on y retomberait.
  */
 .grid {
     display: grid;
@@ -87,13 +70,10 @@
 }
 
 /*
- * Barre d'insertion du glisser-déposer — **verticale**, contrairement aux
- * autres features.
- *
- * Le portefeuille est la seule liste à plusieurs colonnes : un trait horizontal
- * y désignerait une rangée entière alors qu'une carte se dépose entre deux
- * voisines. Sa hauteur est posée par le geste, qui la met à celle de la rangée
- * visée ; la feuille de style ne garde que son épaisseur.
+ * Barre d'insertion du glisser-déposer, verticale contrairement aux autres
+ * features : le portefeuille est la seule liste à plusieurs colonnes, où un trait
+ * horizontal désignerait une rangée entière alors qu'une carte se dépose entre deux
+ * voisines. Sa hauteur est posée par le geste, la feuille ne garde que l'épaisseur.
  */
 .dropBar {
     position: absolute;
@@ -127,32 +107,26 @@
 
 .card:hover {
     border-color: var(--glass-border-strong);
-    /* Un seul pixel : sur une liste dense, le décalage de deux pixels de
-       l'ancienne grille se lisait comme un sursaut. */
+    /* Un seul pixel : sur une liste dense, deux se lisent comme un sursaut. */
     transform: translateY(-1px);
 }
 
-/* La carte qu'on déplace s'efface derrière la barre d'insertion, sans quitter
-   sa place : ce qu'on voit reste la liste telle qu'elle est encore. */
+/* La carte qu'on déplace s'efface derrière la barre d'insertion sans quitter sa
+   place : ce qu'on voit reste la liste telle qu'elle est encore. */
 .cardDragging {
     filter: opacity(0.4);
     cursor: grabbing;
 }
 
 /*
- * Poignée de réorganisation, comme dans Uptime, Git, Monitoring et les bases.
+ * Poignée de réorganisation, sœur du corps cliquable et non son enfant : un clic
+ * parti d'ici ne remonte donc pas jusqu'à « ouvrir le projet ». Elle seule renonce
+ * au défilement tactile (`touch-action: none`), de sorte qu'une pression ailleurs
+ * sur la carte fait toujours défiler la page.
  *
- * Sœur du corps cliquable et non son enfant : un clic parti d'ici ne peut donc
- * pas remonter jusqu'à « ouvrir le projet », même sans le neutraliser. Elle
- * seule renonce au défilement tactile (`touch-action: none`), de sorte qu'une
- * pression ailleurs sur la carte fait toujours défiler la page.
- *
- * **Hors du flux**, contrairement aux autres features, et logée dans la marge
- * gauche de la carte : en colonne flex elle aurait décalé le corps vers la
- * droite, et la barre d'avancement — qui court d'un bord à l'autre de ce corps
- * — se serait retrouvée plus près du bord droit que du gauche. C'est exactement
- * l'asymétrie qu'on venait de corriger. Ici elle ne déplace rien, et la carte au
- * repos est au pixel près celle d'avant.
+ * Hors du flux et logée dans la marge gauche : en colonne flex elle décalerait le
+ * corps vers la droite, et la barre d'avancement, qui court d'un bord à l'autre de
+ * ce corps, se retrouverait plus près du bord droit que du gauche.
  */
 .grip {
     position: absolute;
@@ -163,9 +137,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    /* La largeur du gabarit d'icône ; les six points, eux, n'en occupent que le
-       tiers central — ils tiennent donc dans les 16 px de marge sans jamais
-       toucher la vignette du projet. */
+    /* La largeur du gabarit d'icône ; les six points n'en occupent que le tiers
+       central, ils tiennent donc dans les 16 px de marge sans toucher la vignette. */
     width: 18px;
     height: 24px;
     padding: 0;
@@ -174,8 +147,8 @@
     color: var(--text-muted);
     cursor: grab;
     touch-action: none;
-    /* `filter` et non `opacity` : celle-ci est revendiquée en style inline par
-       les surfaces animées de l'application. */
+    /* `filter` et non `opacity` : celle-ci est revendiquée en style inline par les
+       surfaces animées de l'application. */
     filter: opacity(0);
     transition: filter var(--transition-fast);
 }
@@ -197,25 +170,12 @@
 }
 
 /*
- * Trois colonnes : l'identité, l'avancement, les indicateurs de fin de ligne.
- *
- * Une grille et non une ligne flex, pour une raison précise : la colonne du
- * milieu a une **largeur fixe**, donc la barre d'avancement commence et finit au
- * même endroit sur toutes les lignes. En flex elle absorbait la place restante
- * et changeait de taille à chaque projet selon la longueur du titre — on ne
- * pouvait plus comparer deux avancements d'un coup d'œil, ce qui est pourtant
- * la seule chose qu'on lui demande.
- *
- * Deux lignes de contenu (titre, puis description) plutôt qu'une seule : la
- * version tout-en-une était trop dense pour se lire, la grille de cartes
- * d'avant trop aérée. Le juste milieu tient dans un `padding` moyen et une
- * description qui garde sa ligne.
- */
-/*
- * Deux rangées : identité en haut (vignette, statut, titre, description), état
+ * Deux rangées : l'identité en haut (vignette, statut, titre, description), l'état
  * en bas (avancement, tâches, échéance). La flèche et les non-lus occupent une
- * colonne de droite qui traverse les deux, de sorte qu'ils restent calés dans
- * le coin quelle que soit la hauteur du texte.
+ * colonne de droite qui traverse les deux, de sorte qu'ils restent calés dans le
+ * coin quelle que soit la hauteur du texte. Une grille et non une ligne flex : la
+ * barre d'avancement commence et finit alors au même endroit sur toutes les cartes,
+ * et deux avancements se comparent d'un coup d'œil.
  */
 .cardBody {
     flex: 1;
@@ -224,14 +184,10 @@
     grid-template-rows: auto auto;
     align-items: start;
     /*
-     * `align-content: center` répartit l'espace libre **autour** des rangées.
-     *
-     * Les cartes d'une même rangée de la grille s'étirent sur la hauteur de la
-     * plus grande ; sans cela, une carte courte collait son contenu en haut et
-     * gardait tout son vide en bas — d'où l'impression d'un rembourrage
-     * asymétrique alors que le padding, lui, l'était à peine. `align-items`
-     * reste à `start` : il gouverne l'intérieur d'une rangée, pas leur
-     * répartition.
+     * `align-content` répartit l'espace libre autour des rangées : les cartes d'une
+     * même rangée s'étirant sur la hauteur de la plus grande, une carte courte
+     * garderait sinon tout son vide en bas. `align-items` reste à `start`, il
+     * gouverne l'intérieur d'une rangée et non leur répartition.
      */
     align-content: center;
     gap: var(--space-xs) var(--space-sm);
@@ -243,16 +199,11 @@
     min-width: 0;
 }
 
-/* Vignette du projet : une image déposée, ou l'icône par défaut de la feature.
-   Taille fixe — une carte ne doit pas changer de hauteur selon l'image.
-
-   Le liseré détache l'image du fond de la carte : sans lui, un logo à fond clair
-   ou sombre se fondait dans la carte et perdait ses bords. Il est posé sur la
-   boîte et non sur l'image, pour cerner aussi l'icône par défaut.
-
-   À demi-opacité : il doit cerner sans dessiner. `color-mix` plutôt qu'une
-   couleur en dur — le liseré suit ainsi le thème, ce qu'un `rgba()` figé ne
-   ferait pas. */
+/* Vignette du projet, de taille fixe : une carte ne doit pas changer de hauteur
+   selon l'image. Le liseré détache l'image du fond de la carte, sans quoi un logo à
+   fond clair ou sombre y perd ses bords ; posé sur la boîte et non sur l'image, il
+   cerne aussi l'icône par défaut. À demi-opacité et en `color-mix` pour suivre le
+   thème, ce qu'un `rgba()` figé ne ferait pas. */
 .cardIcon {
     grid-column: 1;
     grid-row: 1;
@@ -295,12 +246,9 @@
 /* Rangée 2 : l'avancement et ses chiffres, sur toute la largeur du texte. */
 .cardProgress {
     /*
-     * Jusqu'au bord droit : la barre traverse **les trois** colonnes.
-     *
-     * Bornée à la deuxième, elle s'arrêtait avant la place réservée à la flèche
-     * — qui occupe sa boîte même invisible au repos — et se retrouvait donc plus
-     * loin du bord droit que du gauche. Les deux marges sont maintenant celles
-     * du rembourrage de la carte, et rien d'autre.
+     * La barre traverse les trois colonnes : bornée à la deuxième, elle s'arrêterait
+     * avant la place réservée à la flèche, qui occupe sa boîte même invisible, et
+     * serait plus loin du bord droit que du gauche.
      */
     grid-column: 1 / -1;
     grid-row: 2;
@@ -369,9 +317,9 @@
     text-align: center;
 }
 
-/* Le titre se tronque plutôt que de pousser la barre d'avancement hors de la
-   ligne. `flex-shrink` sans `flex-grow` : il garde sa largeur naturelle tant
-   qu'il y a la place, et cède avant l'avancement. */
+/* Le titre se tronque plutôt que de pousser la barre d'avancement hors de la carte.
+   `flex-shrink` sans `flex-grow` : il garde sa largeur naturelle tant qu'il y a la
+   place, et cède avant l'avancement. */
 .title {
     flex: 0 1 auto;
     min-width: 0;
@@ -388,8 +336,8 @@
     font-style: italic;
 }
 
-/* Sur une ligne, la description est un complément du titre : une seule ligne,
-   tronquée, et la première à disparaître quand la place manque. */
+/* La description est un complément du titre : une seule ligne, tronquée, et la
+   première à disparaître quand la place manque. */
 .description {
     flex: 0 1 auto;
     min-width: 0;
@@ -428,14 +376,6 @@
     color: var(--accent);
 }
 
-/*
- * Le seul élément élastique de la ligne : il absorbe toute la place que les
- * autres n'ont pas prise, avec des marges égales de part et d'autre.
- *
- * `min-width` non nul : sans lui, une ligne chargée (titre long, description,
- * étiquettes) le comprimerait jusqu'à zéro et l'avancement disparaîtrait sans
- * que rien ne le signale.
- */
 .progress {
     height: 5px;
     border-radius: var(--radius-pill);
@@ -450,13 +390,10 @@
     transition: width var(--transition-normal);
 }
 
-/* Les chiffres sous la barre. `flex-wrap` plutôt que `nowrap` : la colonne a
-   une largeur fixe, un projet très en retard doit pouvoir passer à la ligne
-   plutôt que de déborder sur ses voisines. */
-/* Au-dessus de la barre : le reste à gauche, le décompte des tâches calé à
-   droite contre l'extrémité de la barre. `space-between` et non une marge
-   automatique — la partie gauche est souvent vide, et elle doit alors laisser
-   le décompte seul à droite sans que rien ne se décale. */
+/* Au-dessus de la barre : le reste à gauche, le décompte des tâches calé à droite
+   contre l'extrémité de la barre. `space-between` et non une marge automatique : la
+   partie gauche est souvent vide, et doit alors laisser le décompte seul à droite
+   sans que rien ne se décale. */
 .meta {
     display: flex;
     align-items: baseline;
@@ -482,12 +419,9 @@
 }
 
 /*
- * Restaurer, dans la vue des archives — et seulement là.
- *
- * « Archiver » a quitté la carte du portefeuille pour « Modifier le projet » :
- * c'est un geste rare, il n'avait pas à être le plus accessible de l'écran.
- * Restaurer, lui, est **le** geste des archives : l'enfouir dans une popup
- * ajouterait trois clics à la seule action qu'on vient y faire.
+ * Restaurer, dans la vue des archives et seulement là : c'est le geste des archives,
+ * l'enfouir dans une popup ajouterait trois clics à la seule action qu'on y fait.
+ * Archiver, lui, est rare et vit dans « Modifier le projet ».
  */
 .restore {
     align-self: center;
@@ -498,8 +432,8 @@
     border-radius: var(--radius-sm);
     color: var(--text-muted);
     cursor: pointer;
-    /* framer-motion possède l'`opacity` en ligne sur les surfaces animées :
-       on atténue par un filtre, jamais par la propriété elle-même. */
+    /* framer-motion possède l'`opacity` en ligne sur les surfaces animées : on
+       atténue par un filtre, jamais par la propriété elle-même. */
     filter: opacity(0.6);
     transition:
         filter var(--transition-fast),
@@ -511,16 +445,10 @@
     color: var(--success);
 }
 
-/* Symbole de fin de ligne : il dit que toute la ligne est cliquable, il ne se
-   clique pas lui-même. */
 /*
- * Symbole, pas bouton : il dit que toute la carte est cliquable.
- *
- * Absent au repos, il n'apparaît qu'au survol en glissant d'un cheveu vers la
- * droite — sur une grille de cartes, une flèche affichée en permanence sur
- * chacune n'apprend plus rien et ne fait qu'ajouter du bruit. L'atténuation
- * passe par `filter: opacity()` et non par la propriété `opacity`, revendiquée
- * en style inline par les surfaces animées de l'application.
+ * Symbole et non bouton : il dit que toute la carte est cliquable. Absent au repos,
+ * il n'apparaît qu'au survol en glissant d'un cheveu vers la droite ; sur une grille
+ * de cartes, une flèche permanente sur chacune n'ajoute que du bruit.
  */
 .openArrow {
     flex: 0 0 auto;
@@ -543,14 +471,9 @@
 }
 
 /*
- * Sous cette largeur, une ligne unique n'a plus la place de tout porter : on
- * repasse en pile. L'avancement reprend alors toute la largeur, et la méta
- * passe dessous plutôt que d'écraser le titre.
- */
-/*
- * Sous cette largeur, la colonne fixe de 260 px ne tient plus à côté du titre :
- * on empile. L'avancement passe alors pleine largeur sous l'identité, et la
- * flèche rejoint la première ligne.
+ * Sous cette largeur, la colonne fixe ne tient plus à côté du titre : on empile.
+ * L'avancement passe pleine largeur sous l'identité, la flèche rejoint la première
+ * ligne.
  */
 @media (max-width: 720px) {
     .cardBody {
@@ -577,9 +500,8 @@
     min-width: 0;
 }
 
-/* Titre, statut, version et cadenas sur une même ligne de base.
-   `baseline` et non `center` : le pastillage du statut doit s'asseoir sur le
-   texte du titre, sinon il flotte visiblement trop haut à côté d'un h2. */
+/* `baseline` et non `center` : la pastille de statut doit s'asseoir sur le texte du
+   titre, sinon elle flotte visiblement trop haut à côté d'un h2. */
 .detailTitle {
     display: flex;
     align-items: baseline;
@@ -588,8 +510,8 @@
     min-width: 0;
 }
 
-/* Le cadenas n'a pas de ligne de base propre (c'est un masque) : sans ça il
-   pendrait sous le titre. */
+/* Le cadenas est un masque, sans ligne de base propre : sans cela il pendrait sous
+   le titre. */
 .detailTitle .lock {
     align-self: center;
 }
@@ -599,12 +521,10 @@
     color: var(--text-muted);
 }
 
-/* Collant sur le corps défilant de la popup, comme la fiche d'un site suivi.
-   Il porte l'en-tête **et** les onglets : deux blocs collants distincts se
-   seraient recouverts au défilement, faute de savoir la hauteur du premier.
-   Le fond doit être opaque, sans quoi le contenu défilerait visiblement
-   dessous ; l'espacement vertical remplace le `gap` de `.root`, que ce
-   conteneur intermédiaire interrompt. */
+/* Collant sur le corps défilant de la popup, et portant l'en-tête comme les
+   onglets : deux blocs collants distincts se recouvriraient au défilement, faute de
+   savoir la hauteur du premier. Le fond doit être opaque, sans quoi le contenu
+   défilerait visiblement dessous. */
 .detailSticky {
     position: sticky;
     top: 0;
@@ -636,8 +556,8 @@
 }
 
 /* Le « + » de bout de barre, et le menu des features qui n'y sont pas.
-   `margin-left: auto` le pousse à droite sans imposer de `justify-content` à
-   `.tabs`, que le dialogue de liaison des dépôts emprunte pour ses deux modes. */
+   `margin-left: auto` le pousse à droite sans imposer de `justify-content` à `.tabs`,
+   que le dialogue de liaison des dépôts emprunte pour ses deux modes. */
 .tabAddWrap {
     position: relative;
     margin-left: auto;
@@ -729,9 +649,8 @@
     min-width: 0;
 }
 
-/* Ce que le clic va faire, sous le nom de la feature : il n'ouvre pas un onglet
-   vide, il ouvre le formulaire d'ajout. Le dire évite la seule surprise que ce
-   menu pouvait produire. */
+/* Ce que le clic va faire, sous le nom de la feature : il ouvre le formulaire
+   d'ajout, pas un onglet vide. */
 .tabMenuHint {
     font-size: 0.75rem;
     color: var(--text-muted);
@@ -746,18 +665,16 @@
 
 .board {
     display: flex;
-    /* `stretch` : les colonnes prennent toute la hauteur disponible, ce qui
-       donne une cible de dépôt franche même quand elles sont presque vides. Le
-       bouton « Carte », lui, reste dans la zone défilante juste sous la dernière
-       carte — il ne descend pas au pied de la colonne. */
+    /* `stretch` : les colonnes prennent toute la hauteur disponible, ce qui donne
+       une cible de dépôt franche même quand elles sont presque vides. */
     align-items: stretch;
     gap: var(--space-md);
-    /* Le tableau défile horizontalement dans sa propre boîte : la page, elle,
-       ne doit jamais partir en travers. */
+    /* Le tableau défile horizontalement dans sa propre boîte : la page ne doit
+       jamais partir en travers. */
     overflow-x: auto;
     padding-bottom: var(--space-sm);
-    /* Occupe la hauteur restante de la feature ; `min-height: 0` est ce qui
-       autorise les colonnes à défiler au lieu de pousser la page. */
+    /* Occupe la hauteur restante ; `min-height: 0` autorise les colonnes à défiler
+       au lieu de pousser la page. */
     flex: 1;
     min-height: 0;
 }
@@ -845,8 +762,8 @@
 .columnBody {
     display: flex;
     flex-direction: column;
-    /* `flex-start` : les cartes et le bouton « Carte » restent en haut ; sans
-       ça, `stretch` étirerait le bouton sur toute la hauteur libre. */
+    /* `flex-start` : sans cela, `stretch` étirerait le bouton « Carte » sur toute
+       la hauteur libre. */
     align-items: stretch;
     justify-content: flex-start;
     gap: var(--space-sm);
@@ -950,13 +867,10 @@
 }
 
 /*
- * Le début de la description, sous le titre.
- *
- * Trois lignes puis coupe : c'est ce qu'il faut pour reconnaître une tâche d'un
- * coup d'œil, et pas assez pour qu'une carte bavarde chasse ses voisines hors
- * de la colonne. `-webkit-box` reste le seul moyen portable de tronquer sur un
- * nombre de lignes ; `line-clamp` sans préfixe le double pour les moteurs qui
- * l'implémentent déjà.
+ * Trois lignes puis coupe : de quoi reconnaître une tâche d'un coup d'œil, pas assez
+ * pour qu'une carte bavarde chasse ses voisines hors de la colonne. `-webkit-box`
+ * reste le seul moyen portable de tronquer sur un nombre de lignes, `line-clamp`
+ * sans préfixe le double pour les moteurs qui l'implémentent déjà.
  */
 .card2Desc {
     display: -webkit-box;
@@ -980,11 +894,9 @@
 }
 
 /*
- * Une pastille de la ligne du bas : icône + chiffre.
- *
- * En ligne, l'icône (18 px, `inline-block`) s'assoit sur la ligne de base d'un
- * texte de 0,72 rem : son centre passait donc bien au-dessus du chiffre, qui
- * paraissait tomber. En `inline-flex`, les deux se centrent l'un sur l'autre.
+ * Une pastille de la ligne du bas, icône et chiffre. En `inline-block`, l'icône de
+ * 18 px s'assoit sur la ligne de base d'un texte de 0,72 rem et son centre passe
+ * au-dessus du chiffre ; en `inline-flex`, les deux se centrent l'un sur l'autre.
  */
 .card2Chip {
     display: inline-flex;
@@ -992,9 +904,9 @@
     gap: 4px;
 }
 
-/* À cette taille de texte, l'icône pleine taille pèse deux fois trop lourd.
-   Double sélecteur pour battre le `.icon { width: 18px }` global d'icons.css
-   quel que soit l'ordre d'injection des feuilles (spécificité 0,2,0). */
+/* À cette taille de texte, l'icône pleine taille pèse deux fois trop lourd. Double
+   sélecteur pour battre le `.icon { width: 18px }` global d'icons.css quel que soit
+   l'ordre d'injection des feuilles. */
 .card2Chip .chipIcon {
     width: 14px;
 }
@@ -1012,12 +924,9 @@
 }
 
 /*
- * Le contenu de l'onglet ouvert, dont la hauteur s'anime.
- *
- * Les deux onglets n'ont pas la même taille, et la popup passait de l'une à
- * l'autre d'un coup sec. La hauteur mesurée du contenu est reportée ici par
- * framer-motion (voir `CardDialog`), qui la fait glisser ; `overflow: hidden`
- * est ce qui permet de tenir une hauteur inférieure au contenu le temps du
+ * Le contenu de l'onglet ouvert, dont la hauteur s'anime : les deux onglets n'ont
+ * pas la même taille, et la popup passerait de l'une à l'autre d'un coup sec.
+ * `overflow: hidden` permet de tenir une hauteur inférieure au contenu le temps du
  * mouvement.
  */
 .tabPanel {
@@ -1055,13 +964,9 @@
 }
 
 /*
- * Toute zone de texte du module.
- *
- * `--field-line` est la hauteur d'une ligne, marges intérieures et bordures
- * comprises : la plus petite hauteur qui ait un sens pour un champ de texte.
- * Elle sert de plancher ici, et de pas au plafond du composeur — descendre en
- * dessous ne montre plus une ligne entière, ce que la poignée de
- * redimensionnement permettait pourtant.
+ * Toute zone de texte du module. `--field-line` est la hauteur d'une ligne, marges
+ * intérieures et bordures comprises : la plus petite qui ait un sens pour un champ
+ * de texte. Elle sert de plancher ici, et de pas au plafond du composeur.
  */
 .textarea {
     --field-line: calc(1.5em + 2 * var(--space-sm) + 2px);
@@ -1110,15 +1015,10 @@
 }
 
 /*
- * Les sous-tâches, dans leur propre encart.
- *
- * Empilées à la suite des autres champs, elles se lisaient comme un champ de
- * plus alors qu'on ne les remplit pas : on les coche. L'encart les détache du
- * formulaire, et sa largeur est bornée — une sous-tâche tient en quelques mots,
- * la pleine largeur du dialogue la laissait seule au milieu du vide.
- *
- * Centré, et non calé à gauche : borné en largeur au milieu d'une colonne de
- * champs pleine largeur, il laissait sinon toute la place vide du même côté.
+ * Les sous-tâches, dans leur propre encart : à la suite des autres champs elles se
+ * lisent comme un champ de plus, alors qu'on ne les remplit pas, on les coche. La
+ * largeur est bornée, une sous-tâche tenant en quelques mots, et l'encart centré :
+ * calé à gauche, il laisserait toute la place vide du même côté.
  */
 .checkPanel {
     align-self: center;
@@ -1133,8 +1033,8 @@
     background: var(--surface-subtle);
 }
 
-/* Intitulé à gauche, décompte calé à droite : une seule ligne sert de titre
-   d'encart et de jauge d'avancement. */
+/* Intitulé à gauche, décompte à droite : une seule ligne sert de titre d'encart et
+   de jauge d'avancement. */
 .checkHead {
     display: flex;
     align-items: baseline;
@@ -1180,10 +1080,8 @@
 }
 
 /*
- * Le seul élément élastique de la ligne : c'est lui qui pousse la croix contre
- * le bord droit. Ce `flex` vivait sur `.checkDone`, donc ne s'appliquait qu'une
- * fois la sous-tâche cochée — la croix sautait du texte au bord au premier
- * clic, et deux voisines ne l'avaient pas au même endroit.
+ * Le seul élément élastique de la ligne : c'est lui qui pousse la croix contre le
+ * bord droit, à toutes les sous-tâches, cochées ou non.
  */
 .checkLabel {
     flex: 1;
@@ -1196,9 +1094,8 @@
     color: var(--text-muted);
 }
 
-/* Saisie + « Ajouter » sur une seule ligne : l'encart est trop étroit pour
-   qu'un retour à la ligne y soit lisible, le champ prend donc ce que le bouton
-   laisse. */
+/* Saisie et « Ajouter » sur une seule ligne : l'encart est trop étroit pour qu'un
+   retour à la ligne y soit lisible, le champ prend ce que le bouton laisse. */
 .checkAdd {
     display: flex;
     align-items: center;
@@ -1211,38 +1108,22 @@
 }
 
 /*
- * Discussion et sous-tâches côte à côte, sur une tâche déjà créée.
- *
- * Ce sont les deux choses qu'on regarde en même temps : empilées, cocher une
- * sous-tâche demandait de remonter au-dessus du fil, et le fil lui-même n'avait
- * plus que la moitié basse de la popup.
- *
- * Le partage est laissé au flex plutôt que dicté : chacun annonce la largeur
- * qu'il lui faut pour rester lisible (`flex-basis`), et le `wrap` les empile
- * dès que les deux ne tiennent plus. Aucun point de rupture à choisir, aucune
- * requête média — la règle vaut pour une popup étroite comme pour un écran
- * qu'on redimensionne en cours de route.
+ * Discussion et sous-tâches côte à côte, les deux choses qu'on regarde en même
+ * temps. Le partage est laissé au flex plutôt que dicté : chacun annonce la largeur
+ * qu'il lui faut pour rester lisible (`flex-basis`) et le `wrap` les empile dès que
+ * les deux ne tiennent plus, sans point de rupture à choisir.
  */
 .workRow {
     /*
-     * Les bornes de hauteur des deux encarts — posées sur **les encarts**, et
-     * non sur la rangée qui les porte. La distinction n'est pas cosmétique.
+     * Les bornes de hauteur des deux encarts, posées sur les encarts et non sur la
+     * rangée : une boîte flex de hauteur automatique étire d'abord ses enfants à la
+     * hauteur de leur contenu puis se laisse rogner par le plafond, et les encarts
+     * déborderaient sans qu'aucun ascenseur n'apparaisse. Sur l'encart, le plafond
+     * agit sur l'axe principal de sa propre colonne, et le contenu défile chez lui.
      *
-     * Un `max-height` sur la rangée ne pouvait pas marcher : une boîte flex de
-     * hauteur automatique étire d'abord ses enfants à la hauteur de *leur*
-     * contenu, puis se laisse rogner par le plafond — les encarts débordaient
-     * donc par le haut et par le bas, sans qu'aucun ascenseur n'apparaisse
-     * nulle part. Sur l'encart lui-même, le plafond agit sur l'axe principal de
-     * sa propre colonne : le fil et la liste se laissent comprimer et défilent
-     * chez eux.
-     *
-     * Entre les deux bornes, la hauteur suit le contenu : un fil de trois
-     * messages fait une popup courte, un fil de cinquante la fait monter
-     * jusqu'à ce que la fenêtre l'arrête. Le plafond n'est donc pas un choix de
-     * mise en page, c'est ce que la fenêtre laisse une fois retiré tout ce que
-     * la popup occupe autour (ses marges, son cadre, son entête, ses onglets,
-     * ses gouttières). Large plutôt que juste : le sous-estimer ne coûte qu'un
-     * peu d'air en bas, le surestimer redonnerait un ascenseur à la popup.
+     * Le plafond est ce que la fenêtre laisse une fois retiré tout ce que la popup
+     * occupe autour. Large plutôt que juste : le sous-estimer ne coûte qu'un peu
+     * d'air en bas, le surestimer redonnerait un ascenseur à la popup.
      */
     --work-min: 350px;
     --work-max: calc(100vh - 260px);
@@ -1253,8 +1134,8 @@
     gap: var(--space-md);
 }
 
-/* La discussion prend la part du lion de la place en trop — mais toutes deux
-   grandissent, sans quoi celle qui reste seule sur sa ligne, une fois empilées,
+/* La discussion prend la part du lion de la place en trop, mais toutes deux
+   grandissent : sinon celle qui reste seule sur sa ligne, une fois empilées,
    garderait sa largeur de colonne au milieu du vide. */
 .workRow .chat {
     flex: 3 1 22rem;
@@ -1273,24 +1154,18 @@
 }
 
 /*
- * L'onglet qui n'est pas au premier plan : hors de la mise en page, mais
- * toujours monté.
- *
- * `display: none` et non un démontage : la discussion garde ses messages et son
- * abonnement pendant qu'on est sur « Modifier », là où un remontage rejouait un
- * « Chargement… » au retour — juste le temps que la popup change de taille, ce
- * qui se voyait d'autant plus. Hors mise en page, elle ne pèse rien sur la
- * hauteur mesurée pour l'animation.
- *
- * Déclarée après `.workRow` : à spécificité égale, c'est la dernière qui gagne.
+ * L'onglet qui n'est pas au premier plan : hors de la mise en page, mais toujours
+ * monté. `display: none` et non un démontage, pour que la discussion garde ses
+ * messages et son abonnement pendant qu'on est sur « Modifier » ; hors mise en page,
+ * elle ne pèse rien sur la hauteur mesurée pour l'animation. Déclarée après
+ * `.workRow` : à spécificité égale, c'est la dernière qui gagne.
  */
 .tabHidden {
     display: none;
 }
 
-/* Empilés faute de largeur, les deux encarts se partagent la hauteur au lieu de
-   la réclamer chacun. Le seuil est celui où le `wrap` se déclenche, la popup
-   étant large de 980 px au plus. */
+/* Empilés faute de largeur, les deux encarts se partagent la hauteur au lieu de la
+   réclamer chacun. Le seuil est celui où le `wrap` se déclenche. */
 @media (max-width: 720px) {
     .workRow {
         --work-min: 260px;
@@ -1368,17 +1243,16 @@
     padding: var(--space-sm) 0;
 }
 
-/* Couche de fond de la frise : graduations et jalons, sous les barres.
-   Préfixée `tl` — une classe `.grid` générique entrait en collision avec la
-   grille du portefeuille, plus haut dans ce même module, et l'écrasait. */
+/* Couche de fond de la frise : graduations et jalons, sous les barres. Préfixée
+   `tl`, une classe `.grid` entrant en collision avec la grille du portefeuille,
+   plus haut dans ce même module. */
 .tlGrid {
     position: absolute;
     inset: var(--space-sm) 0 auto 0;
     pointer-events: none;
-    /* Une ligne par jour, toujours : un motif de fond dont la largeur de tuile
-       est posée en ligne (`backgroundSize: <dayWidth>px`). Un dégradé plutôt que
-       N éléments — le pas est exact, il ne saute jamais un jour, et une frise
-       d'un an ne coûte pas 365 nœuds. */
+    /* Une ligne par jour, toujours : un motif de fond dont la largeur de tuile est
+       posée en ligne (`backgroundSize`). Un dégradé plutôt que N éléments, le pas
+       est exact et une frise d'un an ne coûte pas 365 nœuds. */
     background-image: linear-gradient(
         to right,
         color-mix(in srgb, var(--glass-border) 55%, transparent) 0 1px,
@@ -1418,10 +1292,9 @@
     filter: opacity(0.55);
 }
 
-/* Sous les étiquettes de dates, avec de l'air : à 12 px la pastille venait
-   toucher le bas des graduations, et sa bordure se lisait comme un soulignement
-   de la date au-dessus. La bande d'en-tête (`HEAD_H` dans `Timeline.tsx`) est
-   dimensionnée pour ce décalage. */
+/* Sous les étiquettes de dates, avec de l'air : plus haut, la bordure de la pastille
+   se lit comme un soulignement de la date au-dessus. La bande d'en-tête (`HEAD_H`
+   dans `Timeline.tsx`) est dimensionnée pour ce décalage. */
 .milestone,
 .milestoneDone {
     position: absolute;
@@ -1449,9 +1322,8 @@
     color: var(--success);
 }
 
-/* L'étoile à l'échelle du texte qu'elle accompagne : à 18 px elle touchait les
-   deux bordures de la pastille. Double sélecteur pour battre le `.icon` global
-   (spécificité 0,2,0). */
+/* L'étoile à l'échelle du texte qu'elle accompagne : à 18 px elle touche les deux
+   bordures de la pastille. Double sélecteur pour battre le `.icon` global. */
 .milestone .milestoneIcon,
 .milestoneDone .milestoneIcon {
     width: 11px;
@@ -1470,23 +1342,18 @@
 }
 
 /*
- * Un lien de dépendance.
- *
- * Trait plein et non pointillé : sur une grille quotidienne, les tirets se
- * confondaient avec les lignes verticales qu'ils croisent. La discrétion vient
- * de la couleur — un gris de texte secondaire, atténué — et non de la texture.
- * Les jointures et extrémités arrondies achèvent le trajet dessiné plutôt que
- * construit (voir `depPath`).
+ * Un lien de dépendance, en trait plein et non pointillé : sur une grille
+ * quotidienne, les tirets se confondent avec les lignes verticales qu'ils croisent.
+ * La discrétion vient de la couleur, pas de la texture.
  */
 .dep {
     stroke: var(--text-muted);
     stroke-width: 1.5;
     stroke-linecap: round;
     stroke-linejoin: round;
-    /* `stroke-opacity` et non `filter: opacity()` comme ailleurs dans ce
-       fichier : un filtre définit une région de rendu calée sur la boîte
-       englobante, et celle d'un tracé horizontal est haute de zéro — le trait
-       s'en trouve rogné. Sur du SVG, la propriété native est aussi la sûre. */
+    /* `stroke-opacity` et non `filter: opacity()` comme ailleurs : un filtre définit
+       une région de rendu calée sur la boîte englobante, et celle d'un tracé
+       horizontal est haute de zéro, ce qui rogne le trait. */
     stroke-opacity: 0.55;
 }
 
@@ -1495,9 +1362,8 @@
     fill-opacity: 0.55;
 }
 
-/* Une dépendance qui remonte le temps : le bloqueur finit après le début du
-   bloqué. C'est un vrai problème de planning, il se voit — plus franc que les
-   autres, sans pour autant crier. */
+/* Une dépendance qui remonte le temps, le bloqueur finissant après le début du
+   bloqué : un vrai problème de planning, qui se voit. */
 .depLate {
     composes: dep;
     stroke: var(--danger);
@@ -1513,7 +1379,7 @@
     position: relative;
 }
 
-/* Idem : `.row` est déjà la ligne de formulaire, plus haut. */
+/* Préfixée aussi : `.row` est déjà la ligne de formulaire, plus haut. */
 .tlRow {
     position: relative;
 }
@@ -1554,11 +1420,9 @@
 }
 
 /*
- * Les deux lisières d'étirement.
- *
- * Purement visuelles : elles ne portent aucun gestionnaire, c'est la position
- * du pointeur dans la barre qui décide du mode. Elles existent parce qu'un
- * curseur ne se déclare pas par région en CSS — il faut un élément.
+ * Les deux lisières d'étirement, purement visuelles : elles ne portent aucun
+ * gestionnaire, c'est la position du pointeur dans la barre qui décide du mode.
+ * Elles existent parce qu'un curseur ne se déclare pas par région en CSS.
  *
  * `z-index` : posées au-dessus du libellé, sinon un titre long recouvrirait la
  * lisière et le curseur redeviendrait celui du déplacement au bord même.
@@ -1643,13 +1507,6 @@
 
 /* ------------------------------------------------------------ déploiement */
 
-/*
- * Ces classes portaient des noms en `git*` du temps où l'onglet Déploiement
- * empruntait la feuille de style de l'onglet Git. Le git ayant sa propre
- * feature (et son propre module), l'emprunt n'était plus possible — et il était
- * de toute façon trompeur : rien ici ne parle de dépôt.
- */
-
 /* Le geste d'ajout au pied de la page, comme dans les trois autres onglets. */
 .addRow {
     display: flex;
@@ -1686,12 +1543,9 @@
 }
 
 /*
- * Le texte de la zone, et lui seul.
- *
- * C'était `.dangerZone > div`, ce qui frappait aussi le groupe de boutons de
- * confirmation — enfant direct lui aussi. « Annuler / Confirmer » héritaient
- * donc de `flex-direction: column` et s'empilaient, étirés, au lieu de rester
- * côte à côte. Une classe nommée ne peut pas se tromper de cible.
+ * Le texte de la zone, et lui seul : une classe nommée plutôt qu'un sélecteur
+ * d'enfant, qui frapperait aussi le groupe de boutons de confirmation et
+ * l'empilerait au lieu de le laisser en ligne.
  */
 .dangerText {
     display: flex;
@@ -1867,12 +1721,9 @@
 }
 
 /*
- * Le fil, seule zone défilante de l'encart.
- *
- * `min-height: 0` et non une valeur en pixels : l'encart a désormais une
- * hauteur définie (`--work-height`), donc ce qui reste après l'entête et le
- * composeur revient ici, quelle qu'en soit la taille. Un plancher en pixels ne
- * ferait que redonner à la boîte de quoi déborder de son parent.
+ * Le fil, seule zone défilante de l'encart. `min-height: 0` et non une valeur en
+ * pixels : l'encart ayant une hauteur bornée, ce qui reste après l'entête et le
+ * composeur revient ici, et un plancher en pixels lui redonnerait de quoi déborder.
  */
 .chatScroll {
     display: flex;
@@ -1924,12 +1775,9 @@
 }
 
 /*
- * Le corps d'un message.
- *
- * `pre-wrap` reste, et ce n'est pas redondant avec les blocs : à l'intérieur
- * d'un paragraphe, les retours à la ligne sont conservés tels quels (voir
- * `Chat/markdown.tsx`), de sorte qu'un message reste fidèle à la façon dont il a
- * été tapé.
+ * Le corps d'un message. `pre-wrap` n'est pas redondant avec les blocs : à
+ * l'intérieur d'un paragraphe, les retours à la ligne sont conservés tels quels, de
+ * sorte qu'un message reste fidèle à la façon dont il a été tapé.
  */
 .msgText {
     margin: 2px 0 0;
@@ -1940,11 +1788,9 @@
 }
 
 /*
- * Les blocs d'un message : discrets.
- *
- * Un titre dans une bulle de discussion n'a pas à peser comme un titre de page —
- * il sépare deux idées dans un paragraphe de trois lignes. D'où des tailles à
- * peine au-dessus du texte courant, et de la graisse plutôt que de la taille.
+ * Les blocs d'un message, discrets : un titre dans une bulle de discussion sépare
+ * deux idées d'un paragraphe de trois lignes, il n'a pas à peser comme un titre de
+ * page. D'où de la graisse plutôt que de la taille.
  */
 .msgText > * {
     margin: 0;
@@ -1973,7 +1819,7 @@
 
 .msgText ul,
 .msgText ol {
-    /* La puce vit dans la marge du texte, pas dans une gouttière à elle : une
+    /* La puce vit dans la marge du texte et non dans une gouttière à elle : une
        liste de deux points ne doit pas se détacher du fil comme un encart. */
     padding-left: 1.35em;
 }
@@ -1982,8 +1828,8 @@
     margin-top: 2px;
 }
 
-/* `u` est bien un soulignement ici : c'est ce que la marque `_texte_` demande,
-   et non l'emphase que porte déjà l'italique. */
+/* `u` est bien un soulignement : c'est ce que la marque `_texte_` demande, et non
+   l'emphase que porte déjà l'italique. */
 .msgText u {
     text-decoration-thickness: 1px;
     text-underline-offset: 2px;
@@ -1994,8 +1840,8 @@
     color: var(--text-muted);
 }
 
-/* Ligne toujours présente, même vide : l'apparition d'un « écrit… » ne doit
-   pas faire sauter le composeur d'une ligne sous le curseur. */
+/* Ligne toujours présente, même vide : l'apparition d'un « écrit… » ne doit pas
+   faire sauter le composeur d'une ligne sous le curseur. */
 .typing {
     margin: 0;
     min-height: 1.1em;
@@ -2011,41 +1857,24 @@
 }
 
 /*
- * Le champ de saisie : une ligne au repos, qui grandit avec le texte.
+ * Le champ de saisie : une ligne au repos, qui grandit avec le texte, sans
+ * JavaScript. La grille superpose deux boîtes dans la même cellule, la zone de
+ * saisie et un `::after` qui rejoue le même texte, invisible ; c'est la copie qui
+ * donne sa hauteur à la rangée, au pixel exact puisque le navigateur mesure du vrai
+ * texte au lieu qu'on lui pose un nombre. Les deux boîtes doivent se superposer au
+ * réglage près, sans quoi la copie ment sur la hauteur qu'il faut.
  *
- * Sans JavaScript, et c'est le point. La hauteur était auparavant mesurée
- * (`height = scrollHeight`) : `scrollHeight` est un entier, la hauteur réelle
- * du texte ne l'est pas, et la fraction perdue à l'arrondi suffisait à faire
- * apparaître une barre de défilement — de façon apparemment capricieuse, selon
- * que la police retombait ou non sur un compte rond.
- *
- * Ici, la grille superpose deux boîtes dans la même cellule : la zone de saisie
- * et un `::after` qui rejoue le même texte, invisible. C'est la copie qui donne
- * sa hauteur à la rangée, la saisie s'y étire — au pixel exact, puisque le
- * navigateur mesure du vrai texte au lieu qu'on lui pose un nombre.
- *
- * Les deux boîtes doivent se superposer **au réglage près** : même police, même
- * interligne, mêmes marges intérieures, même épaisseur de bordure. Un écart, et
- * la copie ment sur la hauteur qu'il faut.
- */
-/*
- * C'est le **conteneur** qui porte l'apparence du champ — bordure, fond, coins,
- * marges intérieures — et non la zone de saisie qu'il enveloppe.
- *
- * C'est ce qui remet le défilement à sa place. Tant que la bordure appartenait à
- * la saisie, celle-ci défilait avec le texte : arrivé en haut ou en bas, le
- * liseré sortait du cadre, et l'ascenseur — posé sur le conteneur, donc au-delà
- * du trait — semblait flotter à côté du champ. Ici, le cadre ne bouge plus et
- * l'ascenseur court à l'intérieur.
+ * C'est le conteneur qui porte l'apparence du champ, et non la zone de saisie :
+ * sinon le liseré défile avec le texte et l'ascenseur, posé au-delà du trait,
+ * semble flotter à côté du champ.
  */
 .grow {
     display: grid;
     flex: 1;
     min-width: 0;
-    /* Cinq lignes, marges et bordures comprises, puis c'est le composeur qui
-       défile — et non la discussion qui disparaît dessous. Un plafond en lignes
-       et non en `vh` : ce qu'on borne, c'est la place que prend un message en
-       train de s'écrire, pas une fraction d'écran. */
+    /* Cinq lignes, marges et bordures comprises, puis c'est le composeur qui défile
+       et non la discussion qui disparaît dessous. Un plafond en lignes et non en
+       `vh` : on borne la place que prend un message, pas une fraction d'écran. */
     max-height: calc(5 * 1.5em + 2 * var(--space-sm) + 2px);
     overflow-y: auto;
     padding: var(--space-sm) var(--space-md);
@@ -2063,10 +1892,9 @@
 }
 
 /*
- * Les deux boîtes superposées : la saisie et la copie qui lui donne sa hauteur.
- * Dépouillées de tout — le cadre est au-dessus d'elles maintenant. Il ne leur
- * reste que ce qui doit être rigoureusement identique des deux côtés : la
- * police et l'interligne.
+ * Les deux boîtes superposées, la saisie et la copie qui lui donne sa hauteur : le
+ * cadre étant porté par le conteneur, il ne leur reste que ce qui doit être
+ * rigoureusement identique des deux côtés, la police et l'interligne.
  */
 .grow > .textarea,
 .grow > .textarea:focus,
@@ -2088,10 +1916,9 @@
     overflow-wrap: anywhere;
 }
 
-/* `resize: none` : la hauteur appartient au contenu. Une poignée donnerait deux
-   autorités concurrentes sur la même valeur, et la frappe suivante écraserait
-   ce que l'utilisateur vient de régler à la main. `overflow: hidden` parce que
-   le défilement, lui, appartient au conteneur. */
+/* `resize: none` : la hauteur appartient au contenu, et une poignée donnerait deux
+   autorités concurrentes sur la même valeur. `overflow: hidden` parce que le
+   défilement appartient au conteneur. */
 .composer .textarea {
     resize: none;
     overflow: hidden;
@@ -2153,10 +1980,8 @@
 
 /*
  * Les services surveillés rattachés au projet, dans l'onglet Déploiement.
- *
- * `padding-bottom` égale le `gap` du conteneur qui suit (`.linkedTargets`,
- * `--space-md`) : sans ça, la ligne du bas se retrouvait deux fois plus près
- * des uptimes que des déploiements.
+ * `padding-bottom` égale le `gap` du conteneur qui suit : sans cela, le trait du bas
+ * se retrouve deux fois plus près des services que des déploiements.
  */
 .uptimeLinks {
     display: flex;
@@ -2167,9 +1992,8 @@
 }
 
 /*
- * Les cibles de déploiement reliées au projet, juste en dessous — même forme
- * que `.uptimeLinks` (titre, puis contenu), sans le trait du bas : rien ne la
- * sépare plus de ce qui suit, c'est la dernière section de l'onglet.
+ * Les cibles reliées, juste en dessous : même forme que `.uptimeLinks`, sans le
+ * trait du bas, c'est la dernière section de l'onglet.
  */
 .deployLinks {
     display: flex;
@@ -2199,9 +2023,8 @@
 /* ------------------------------------------------- onglet « Déploiement » */
 
 /* La colonne de l'onglet : les services surveillés, puis les blocs de cibles
-   reliées, rendus par le module (`LinkedTarget`). Même hauteur minimale que
-   toute racine de feature (la boîte défilante de la popup), comme l'onglet
-   des bases. */
+   reliées, rendus par le module. Même hauteur minimale que toute racine de
+   feature, la boîte défilante de la popup. */
 .linkedTargets {
     display: flex;
     flex-direction: column;
@@ -2210,16 +2033,10 @@
 }
 
 /*
- * Le bloc encadré d'un service surveillé.
- *
- * Les rangées d'uptime empruntaient ces classes à la feuille de la feature
- * Déploiement, pour porter la même forme que la cible reliée juste en dessous.
- * La feature devenue module, sa feuille n'est plus importable d'ici : les
- * classes sont recopiées telles quelles, et la forme reste la même des deux
- * côtés. Le cadre ne sert pas qu'à séparer deux services : il dit **où finit
- * ce que la vue montre**. Sans lui, un service seul se confondrait avec le
- * fond de la popup, c'est la règle qu'appliquent déjà les onglets Git, Bases
- * et Audience.
+ * Le bloc encadré d'un service surveillé, de même forme que la cible reliée juste
+ * en dessous, dont le module porte sa propre copie. Le cadre ne sépare pas seulement
+ * deux services, il dit où finit ce que la vue montre : sans lui, un service seul se
+ * confondrait avec le fond de la popup.
  */
 .block {
     display: flex;
@@ -2305,11 +2122,9 @@
 
 /* ------------------------------------------------------- onglet « Git » */
 
-/* Les blocs de dépôts reliés, rendus par le module (`LinkedRepo`) : ce qui
-   reste à l'onglet est la colonne qui les empile, le vide et la rangée
-   d'ajout, avec la même hauteur minimale que toute racine de feature (la
-   boîte défilante de la popup). La colonne empruntait `.git` à la feuille de
-   la feature ; devenue module, sa feuille n'est plus importable d'ici. */
+/* Les blocs de dépôts reliés sont rendus par le module : ce qui reste à l'onglet
+   est la colonne qui les empile, le vide et la rangée d'ajout, avec la même hauteur
+   minimale que toute racine de feature. */
 .linkedRepos {
     display: flex;
     flex-direction: column;
@@ -2319,9 +2134,9 @@
 
 /* --------------------------------------------- onglet « Bases de données » */
 
-/* Les blocs de bases reliées, rendus par le module (`LinkedDatabase`) : ce
-   qui reste à l'onglet est la colonne qui les empile, et la même hauteur
-   minimale que toute racine de feature (la boîte défilante de la popup). */
+/* Les blocs de bases reliées sont rendus par le module : ce qui reste à l'onglet
+   est la colonne qui les empile, et la même hauteur minimale que toute racine de
+   feature. */
 .linkedDatabases {
     display: flex;
     flex-direction: column;
@@ -2349,11 +2164,9 @@
 
 /* ------------------------------------------------------ onglet « Audience » */
 
-/* Les blocs de sites reliés, rendus par le module (`LinkedSite`) : ce qui
-   reste à l'onglet est la colonne qui les empile, et la même hauteur minimale
-   que toute racine de feature. La colonne empruntait `.detail` à la feuille de
-   la feature Audience ; devenue module, sa feuille n'est plus importable
-   d'ici. */
+/* Les blocs de sites reliés sont rendus par le module : ce qui reste à l'onglet est
+   la colonne qui les empile, et la même hauteur minimale que toute racine de
+   feature. */
 .linkedSites {
     display: flex;
     flex-direction: column;
@@ -2364,11 +2177,9 @@
 /* --------------------------------------------- partage entre espaces */
 
 /*
- * La pastille « partagé » d'un projet projeté depuis un autre espace, sur la
- * carte du portefeuille et dans l'en-tête de la fiche. Un `span` autour de la
- * pastille commune : c'est lui qui porte l'infobulle, et qui refuse de se
- * tasser quand le titre manque de place. Même pastille que les notes, les
- * boîtes mail et les services Uptime.
+ * La pastille « partagé » d'un projet projeté depuis un autre espace. Un `span`
+ * autour de la pastille commune : c'est lui qui porte l'infobulle, et qui refuse de
+ * se tasser quand le titre manque de place.
  */
 .shared {
     display: inline-flex;
@@ -2381,15 +2192,15 @@
     align-self: center;
 }
 
-/* Un membre que l'espace actif ne connaît pas (voir `Member.tsx`) : le
-   libellé se distingue d'un pseudo, pour qu'on ne le prenne pas pour un. */
+/* Un membre que l'espace actif ne connaît pas : le libellé se distingue d'un
+   pseudo, pour qu'on ne le prenne pas pour un. */
 .memberHidden {
     color: var(--text-muted);
     font-style: italic;
 }
 
-/* Les liaisons d'un projet projeté, en lecture (voir `ForeignLinks.tsx`) :
-   une rangée nommée par liaison, sans le bloc du module ni ses gestes. */
+/* Les liaisons d'un projet projeté, en lecture : une rangée nommée par liaison,
+   sans le bloc du module ni ses gestes. */
 .foreignLinks {
     display: flex;
     flex-direction: column;

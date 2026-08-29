@@ -15,19 +15,12 @@ interface LinkTargetDialogProps {
 }
 
 /**
- * Ajouter une cible de déploiement au projet : en choisir une de l'espace, ou en
- * déclarer une.
- *
- * **La déclaration passe par le vrai dialogue de la feature** (`TargetDialog`,
- * lu par le contrat client du module Déploiement), pas par une copie réduite :
- * même parti pris que `LinkDatabaseDialog` et `LinkSiteDialog`. Une cible a une
- * instance, un type et un identifiant externe qu'il faut aller lire chez le
- * fournisseur ; en réécrire un formulaire ici garantirait qu'il diverge au
- * premier réglage ajouté. Module absent, le dialogue le dit et ne propose rien.
- *
- * Rien n'est exclusif : une cible déjà déployée par un autre projet peut être
- * choisie ici sans lui être retirée — c'est même le cas normal quand un client
- * et un serveur partent dans la même pile compose.
+ * Ajouter une cible de déploiement au projet : en choisir une de l'espace, ou
+ * en déclarer une. La déclaration ouvre le dialogue de la feature
+ * (`TargetDialog`, par le contrat client du module) plutôt qu'une copie
+ * réduite, qui divergerait au premier réglage ajouté ; module absent, rien
+ * n'est proposé. Rien n'est exclusif, et deux projets partageant une pile
+ * compose sont le cas normal.
  */
 export function LinkTargetDialog({ open, projectId, linkedIds, onClose, onSaved }: LinkTargetDialogProps) {
     const provider = moduleClientProvider<DeployClientProvider>(DEPLOY_CLIENT_PROVIDER);

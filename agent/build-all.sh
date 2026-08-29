@@ -1,22 +1,19 @@
 #!/usr/bin/env bash
 #
-# Build the DevEye agent for the full 8-target matrix in one go, into agent/dist/.
-# Lets you smoke-test locally before tagging a release. The CI builds the same set
-# natively per OS — see ../.github/workflows/agent-build.yml. The matrix mirrors the
-# web UI ("Télécharger l'agent") and @deveye/types `AGENT_TARGETS`; keep all three
-# in sync.
+# Build the DevEye agent for the full 8-target matrix into agent/dist/, to
+# smoke-test locally before tagging a release. CI builds the same set natively
+# per OS (../.github/workflows/agent-build.yml). The matrix mirrors the web UI
+# ("Télécharger l'agent") and @deveye/types `AGENT_TARGETS`; keep all three in sync.
 #
-# This is a *best-effort local cross-build*: Linux is built as static musl and
-# Windows via the MinGW (gnu) toolchain so it cross-compiles from a Mac/Linux box
-# (the shipped Windows binaries are MSVC, built natively in CI). The output file
-# names are identical to the release assets regardless.
+# Best-effort local cross-build: Linux as static musl, Windows via MinGW (gnu),
+# so it cross-compiles from a Mac/Linux box (the shipped Windows binaries are
+# MSVC, built natively in CI). Output file names match the release assets.
 #
-# Cross-compiling needs rustup (Homebrew Rust ships only the host target) plus
-# Zig as the cross-linker. One-time setup:
+# Needs rustup (Homebrew Rust ships only the host target) plus Zig as the
+# cross-linker:
 #
 #   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 #   brew install zig && cargo install cargo-zigbuild
-#   # target std is added automatically below.
 #
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -33,7 +30,6 @@ TARGETS=(
     "aarch64-pc-windows-gnullvm      deveye-agent-windows-arm64.exe  deveye-agent.exe"
 )
 
-# ── Preflight: fail early, with the exact fix for whatever is missing ────────
 missing=0
 note() { echo "  ✗ $1"; missing=1; }
 

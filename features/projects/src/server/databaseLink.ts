@@ -5,21 +5,10 @@ import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 import { assertAtHome, linkLabels, loadProject, WRITE, type Ctx } from './_shared';
 
 /**
- * Le pointeur d'un projet vers des bases de données.
- *
- * Exactement la même forme que `repoLink.ts` pour les dépôts git, et pour les
- * mêmes raisons : la base appartient à l'espace, le projet n'en garde qu'une
- * liaison, et supprimer l'un ne supprime jamais l'autre.
- *
- * Gardé sous `projects: write` : c'est le projet qu'on modifie ici, pas la base.
- * Lire le détail d'une base relève, lui, du droit `database`.
- *
- * La table de liaison (`project_database_links`) est celle de Projets, lue par
- * `ctx.repo.links` à côté des services surveillés : Projets ne lit pas la
- * table des bases, et ne les connaît que par le contrat que le module Bases de
- * données offre, qui les nomme aussi (`labelOf`, sous le codec du domicile du
- * projet). Domicile seulement pour poser et retirer (`assertAtHome`), comme
- * toute liaison.
+ * Le pointeur d'un projet vers des bases de données, même forme que `repoLink.ts` :
+ * la base appartient à l'espace, le projet n'en garde qu'une liaison, et supprimer
+ * l'un ne supprime jamais l'autre. Gardé sous `projects: write` : c'est le projet
+ * qu'on modifie ici, le détail d'une base relevant du droit `database`.
  */
 
 export const projectDatabaseListFeature = defineSdkFeature({
@@ -40,10 +29,8 @@ export const projectDatabaseLinkFeature = defineSdkFeature({
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'relier une base de données');
 
-        // Un projet confidentiel ne peut pas être lié : la liaison est une ligne
-        // en clair, la base vit à l'étage ouvert, et le relevé périodique tourne
-        // sans session. Accepter la liaison reviendrait à promettre une
-        // confidentialité qu'on ne tient pas.
+        // La liaison est une ligne en clair, la base vit à l'étage ouvert et son
+        // relevé périodique tourne sans session : même refus que pour un dépôt.
         if (project.security_tier === 'guarded') {
             throw new FeatureError(
                 'validation',
@@ -51,15 +38,10 @@ export const projectDatabaseLinkFeature = defineSdkFeature({
             );
         }
 
-        // La base existe-t-elle, et dans **cet** espace ? Sans cette garde on
-        // lierait n'importe quel identifiant, y compris celui d'une base d'un
-        // autre espace, dont l'existence même n'a pas à fuiter. On ne vérifie
-        // que l'existence : le **droit** de l'ouvrir reste celui de Bases de
-        // données, vérifié au moment où on l'ouvre.
-        //
-        // La question passe par le contrat que le module Bases de données offre
-        // (`DATABASE_ITEMS_PROVIDER`) : Projets ne lit pas sa table, et dégrade
-        // proprement quand le module est absent.
+        // Seule l'existence est vérifiée, et par le contrat qu'offre le module : le
+        // droit d'ouvrir la base reste celui de Bases de données. Sans cette garde on
+        // lierait l'identifiant d'une base d'un autre espace, dont l'existence n'a
+        // pas à fuiter.
         const databases = ctx.providers.get<DatabaseItemsProvider>(DATABASE_ITEMS_PROVIDER);
         if (!databases) throw new FeatureError('validation', 'Le module Bases de données n’est pas installé.');
         if (!(await databases.exists(input.databaseId, project.workspace_id))) {

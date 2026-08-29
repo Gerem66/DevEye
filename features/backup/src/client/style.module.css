@@ -1,14 +1,6 @@
 /*
- * Sauvegardes — l'apparence.
- *
- * Aucune couleur en dur : tout passe par les variables du thème, donc l'écran
- * suit l'apparence de l'espace sans une ligne de plus.
- *
- * La liste reprend la forme des cartes de Déploiement, Git et Audience : c'est
- * la même chose montrée — des objets d'espace — et deux listes voisines n'ont
- * pas à se distinguer par leur géométrie.
- *
- * ⚠️ Une classe ne doit être définie **qu'une fois** seule dans son sélecteur —
+ * Sauvegardes. Aucune couleur en dur : tout passe par les variables du thème.
+ * Une classe ne doit être définie qu'une fois seule dans son sélecteur :
  * `client/scripts/check-css-modules.mjs` échoue sinon.
  */
 
@@ -18,8 +10,6 @@
     gap: var(--space-md);
     min-height: 0;
 }
-
-/* ------------------------------------------------------------------ en-tête */
 
 .toolbar {
     display: flex;
@@ -51,8 +41,6 @@
     font-size: 0.82rem;
     color: var(--text-muted);
 }
-
-/* ------------------------------------------------------------- états communs */
 
 .error {
     margin: 0;
@@ -106,8 +94,6 @@
     color: var(--danger);
     background: var(--danger-bg);
 }
-
-/* ----------------------------------------------------------- liste des travaux */
 
 .grid {
     display: grid;
@@ -172,8 +158,6 @@
     color: var(--text-muted);
 }
 
-/* ------------------------------------------------------- fiche d'un travail */
-
 .detail {
     display: flex;
     flex-direction: column;
@@ -196,9 +180,7 @@
     flex-wrap: wrap;
 }
 
-/* Dans la rangée d'en-tête, entre le retour et les actions : la même place
-   que dans les fiches des autres features. `min-width: 0` + ellipse pour qu'un
-   nom long rétrécisse, jamais ne pousse les boutons. */
+/* `min-width: 0` + ellipse : un nom long rétrécit, jamais ne pousse les boutons. */
 .detailTitle {
     margin: 0;
     flex: 1;
@@ -250,8 +232,6 @@
     color: var(--text-secondary);
 }
 
-/* ------------------------------------------------------------- exécutions */
-
 .runs {
     display: flex;
     flex-direction: column;
@@ -290,8 +270,7 @@
     overflow-wrap: anywhere;
 }
 
-/* Le condensé du clair : long, mais c'est ce qui permet de vérifier une
-   restauration. On le laisse sélectionnable et repliable plutôt que tronqué. */
+/* Sélectionnable et repliable plutôt que tronqué : c'est le condensé qui vérifie une restauration. */
 .runHash {
     margin: 2px 0 0;
     font-family: var(--font-mono);
@@ -312,8 +291,6 @@
     color: var(--danger);
     overflow-wrap: anywhere;
 }
-
-/* ------------------------------------------------------------- formulaires */
 
 .form {
     display: flex;
@@ -345,9 +322,7 @@
     color: var(--text-muted);
 }
 
-/* Le champ de chemin et son bouton « Parcourir », sur une seule ligne.
-   `flex-end` aligne le bouton sur le bas du champ, et non sur le milieu du
-   couple libellé + champ. */
+/* `flex-end` aligne le bouton sur le bas du champ, pas sur le milieu du couple libellé + champ. */
 .pathRow {
     display: flex;
     align-items: flex-end;
@@ -365,9 +340,7 @@
     min-width: 0;
 }
 
-/* Un sélecteur de source et son « + » : le champ prend la place, le geste qui
-   mène à Réglages → Sources reste collé à ce qu'il complète. `min-width: 0`
-   pour qu'un intitulé long rétrécisse le champ, jamais ne pousse le bouton. */
+/* `min-width: 0` : un intitulé long rétrécit le champ, jamais ne pousse le bouton. */
 .fieldWithAction {
     display: flex;
     align-items: center;
@@ -379,9 +352,7 @@
     min-width: 0;
 }
 
-/* Bloc d'action destructrice au pied d'un dialogue : il se signale de lui-même
-   plutôt que de côtoyer les boutons ordinaires. Même forme que celui des
-   dialogues de cible et de dépôt. */
+/* Zone destructrice au pied du dialogue, à l'écart des boutons ordinaires. */
 .dangerZone {
     display: flex;
     align-items: center;

@@ -3,18 +3,10 @@ import { get } from '@/api/http';
 import { serverStatusSchema, type ServerStatus } from '@deveye/types';
 
 /**
- * Server readiness store. Polls `GET /api/status` **only while a boot task is
- * still in flight**, and stops for good once everything has **settled** (every
- * task `done`, `warning` or `error`) — no steady-state polling, and no infinite
- * polling after a terminal state. Powers the discreet topbar deployment zone,
- * which stays visible while not `ready` (so a warning/error remains on screen)
- * but no longer triggers requests.
- *
- * The cadence is adaptive: a light **10s** beat while the server is building or
- * waiting (no live numbers to show), tightening to **1s** as soon as a download
- * is streaming (a `running` task with numeric `progress`) so the topbar bar
- * advances in near real time. Self-rescheduling via `setTimeout` (not a fixed
- * `setInterval`) makes that switch trivial and avoids overlapping requests.
+ * Server readiness store. Polls `GET /api/status` only while a boot task is still
+ * in flight, and stops for good once every task has settled. The cadence adapts to
+ * what is happening, and a self-rescheduling `setTimeout` rather than
+ * `setInterval` keeps requests from overlapping.
  */
 const SLOW_MS = 10_000; // building / waiting: nothing live to watch yet
 const FAST_MS = 1_000; // a download is streaming: show it advance
@@ -43,8 +35,7 @@ async function poll(): Promise<void> {
     try {
         const status = await get('/api/status', serverStatusSchema);
         emit(status);
-        // Settled = every task reached a terminal state. Stop polling for good
-        // (all `done` hides the zone; a terminal `warning`/`error` stays shown, frozen).
+        // Settled = every task reached a terminal state: stop polling for good.
         const settled = status.tasks.every((t) => t.state === 'done' || t.state === 'warning' || t.state === 'error');
         if (settled) {
             stop();
@@ -53,17 +44,15 @@ async function poll(): Promise<void> {
     } catch {
         // Transient (e.g. server still coming up): keep polling, retry.
     }
-    // Reschedule on the cadence the *current* state warrants: fast while a
-    // download streams, slow otherwise.
+    // Reschedule on the cadence the current state warrants.
     timer = setTimeout(() => void poll(), isDownloading(current) ? FAST_MS : SLOW_MS);
 }
 
 function startOnce(): void {
     if (started) return;
     started = true;
-    // In the Vite dev server (`npm run dev`) the agents aren't built — CI/releases
-    // build them — so the boot status never settles. Skip the polling entirely;
-    // `current` stays null and the topbar deployment zone never shows.
+    // In the Vite dev server the agents aren't built, so the boot status never
+    // settles: skip the polling entirely.
     if (import.meta.env.DEV) return;
     void poll();
 }

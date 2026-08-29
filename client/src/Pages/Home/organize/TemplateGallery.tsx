@@ -6,9 +6,8 @@ import { ShortcutTile } from '../tiles/ShortcutTile';
 import styles from './organize.module.css';
 
 /**
- * One known, real example per coded template — used by the test gallery so each
- * adapter can be checked in real conditions: the actual final tile is rendered
- * below a small test header (name / status / link to the real page).
+ * One real example per coded template, so each adapter can be checked in real
+ * conditions: the final tile is rendered below a small test header.
  */
 const EXAMPLES: { template: ShortcutTemplate; label: string; url: string }[] = [
     { template: 'github', label: 'GitHub — dépôt', url: 'https://github.com/facebook/react' },

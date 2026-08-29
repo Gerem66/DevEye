@@ -27,9 +27,8 @@ export const workspaceAddFeature: FeatureDefinition<
         // c'est ici, et ici seulement, qu'elle est posée.
         await ctx.secretKeys.createWorkspaceDek(workspace.id);
 
-        // L'appelant vient de gagner un accès : les scopes mémoïsés de sa
-        // connexion doivent être rebâtis pour que le nouvel espace soit
-        // immédiatement adressable.
+        // L'appelant vient de gagner un accès : les scopes mémoïsés doivent être
+        // rebâtis pour que le nouvel espace soit adressable.
         invalidateAccess();
 
         ctx.audit({

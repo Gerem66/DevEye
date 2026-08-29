@@ -1,34 +1,12 @@
--- Git : le dépôt devient une entité de l'espace, le projet n'en garde qu'un lien.
+-- Git : le dépôt devient une entité de l'espace, le projet n'en garde qu'un
+-- lien. Un dépôt partagé par deux projets était synchronisé deux fois, un dépôt
+-- sans projet n'avait pas de place, et le cache suivait le `security_tier` du
+-- projet. Le cache git vit désormais toujours à l'étage ouvert, sous la clé de
+-- l'espace : un projet confidentiel n'a pas de dépôt.
 --
--- Jusqu'ici un dépôt était une propriété d'un projet : `project_repos` était clé
--- sur `project_id`, et tout le cache (commits, branches, releases, PR, auteurs)
--- l'était aussi. Trois conséquences, qui sont la raison de cette migration :
---
---   1. **Un dépôt partagé par deux projets était synchronisé deux fois**, dans
---      deux caches distincts, sous deux quotas de fournisseur.
---   2. Un dépôt qu'on veut seulement **regarder**, sans projet autour, n'avait
---      pas de place.
---   3. Le cache suivait le `security_tier` du projet, ce qui n'a aucun sens pour
---      une donnée que plusieurs projets se partagent — et obligeait à une garde
---      atomique dans `markSynced` contre la course « le projet passe en gardé
---      pendant que le service de fond écrit ».
---
--- Le cache git vit désormais **toujours à l'étage ouvert**, sous la clé de
--- l'espace. C'est ce qui fait disparaître le point 3 avec sa cause : un dépôt
--- n'a plus de tier à suivre. Corollaire assumé : un projet confidentiel n'a
--- simplement pas de dépôt (`project.repoLink` le refuse, et passer un projet en
--- confidentiel retire sa liaison).
---
--- ⚠️ Table rase, pas de conversion. `owner/repo` est chiffré, donc aucune
--- requête SQL ne peut en dériver le `slug_ref` qui porte désormais l'unicité :
--- une migration de données était mécaniquement impossible. Rien n'ayant été
--- déployé, on supprime et on recrée — conforme à la règle « aucune
--- rétro-compatibilité » du dépôt. Les dépôts se re-lient en quelques clics et
--- le service de fond refait tout le cache au tour suivant.
---
--- `project_credentials` est **conservée** : un secret ne se retrouve pas. Elle
--- reste sous ce nom parce qu'elle sert aussi Dokploy, donc les deux
--- intégrations — seule son interface déménage dans la feature Git.
+-- Table rase, pas de conversion : `owner/repo` est chiffré, donc aucune requête
+-- SQL ne peut en dériver le `slug_ref` qui porte l'unicité. `project_credentials`
+-- est conservée (un secret ne se retrouve pas) et sert aussi Dokploy.
 
 -- L'ancien cache, clé sur le projet. Les FK partent avec les tables.
 DROP TABLE IF EXISTS project_pull_requests;
@@ -46,11 +24,9 @@ CREATE TABLE IF NOT EXISTS git_repos (
     -- lieu de disparaître avec lui.
     credential_id   INT          NULL,
     provider        VARCHAR(16)  NOT NULL DEFAULT 'github',
-    -- 16 premiers caractères du sha256 de `owner/repo` en minuscules. Le
+    -- 16 premiers caractères du sha256 de `owner/repo` en minuscules : le
     -- chiffrement étant non déterministe, `content` ne peut porter aucune
-    -- contrainte d'unicité — même motif que `name_ref` sur les branches. C'est
-    -- ce condensé qui rend `git.repoAdd` idempotente, et donc qui garantit
-    -- qu'un dépôt n'est jamais synchronisé deux fois dans le même espace.
+    -- contrainte d'unicité. C'est ce condensé qui rend `git.repoAdd` idempotente.
     slug_ref        CHAR(16)     NOT NULL,
     enabled         TINYINT      NOT NULL DEFAULT 1,
     -- Branche par défaut, telle que le fournisseur la déclare.
@@ -72,12 +48,9 @@ CREATE TABLE IF NOT EXISTS git_repos (
     CONSTRAINT fk_git_repo_credential FOREIGN KEY (credential_id) REFERENCES project_credentials(id) ON DELETE SET NULL
 );
 
--- La liaison projet → dépôt.
---
--- `project_id` en clé primaire : un projet, un dépôt (au-delà, ce sont deux
--- projets — invariant conservé). Rien n'empêche en revanche plusieurs projets de
--- pointer le même dépôt : c'est le cas normal. Les deux FK sont en CASCADE, donc
--- supprimer un projet **ou** un dépôt ne fait tomber que cette ligne de liaison.
+-- La liaison projet → dépôt. `project_id` en clé primaire : un projet, un
+-- dépôt, mais plusieurs projets peuvent pointer le même dépôt. Les deux FK sont
+-- en CASCADE : supprimer un projet ou un dépôt ne fait tomber que la liaison.
 CREATE TABLE IF NOT EXISTS project_repo_links (
     project_id   INT    NOT NULL PRIMARY KEY,
     workspace_id INT    NOT NULL,
@@ -95,8 +68,7 @@ CREATE TABLE IF NOT EXISTS project_repo_links (
 -- une fois et vaut pour tous les commits de la personne, passés comme à venir.
 CREATE TABLE IF NOT EXISTS git_commit_authors (
     -- Clé de substitution, et non la paire (repo_id, author_ref) : une ligne se
-    -- cible par **une seule** colonne identifiante, même forme que les autres
-    -- tables de contenu chiffré.
+    -- cible par une seule colonne identifiante.
     id           INT AUTO_INCREMENT PRIMARY KEY,
     repo_id      INT      NOT NULL,
     -- 16 premiers caractères du sha256 de l'adresse e-mail : identité stable,
@@ -178,8 +150,8 @@ CREATE TABLE IF NOT EXISTS git_releases (
     CONSTRAINT fk_git_release_workspace FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
 );
 
--- `number` porte l'unicité : c'est l'identité publique et stable d'une PR chez
--- le fournisseur, et elle est déjà un entier — pas besoin d'un condensé `*_ref`.
+-- `number` porte l'unicité : identité publique et stable d'une PR, déjà un
+-- entier, pas besoin d'un condensé `*_ref`.
 CREATE TABLE IF NOT EXISTS git_pull_requests (
     id           INT AUTO_INCREMENT PRIMARY KEY,
     repo_id      INT         NOT NULL,

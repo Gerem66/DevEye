@@ -4,33 +4,22 @@ import { projectStatusSchema } from '@deveye/types';
 /**
  * L'audience d'un espace : ce que les gens font des projets une fois livrés.
  *
- * Même renversement que pour les dépôts git et les bases de données : un **site
- * suivi** appartient à l'espace, pas à un projet, et plusieurs projets peuvent
- * pointer le même. Il vit donc à l'étage **ouvert** du chiffrement — un projet
- * confidentiel ne peut pas en lier.
+ * Un site suivi appartient à l'espace et non à un projet, plusieurs projets
+ * peuvent pointer le même, et il vit donc à l'étage ouvert du chiffrement.
  *
- * ## Pourquoi si peu de choses sont chiffrées ici
- *
- * Une statistique est un `GROUP BY`. Rien de ce sur quoi on agrège ne peut donc
- * être chiffré, le chiffrement étant non déterministe. La sortie est celle que
- * le dépôt emploie déjà — les colonnes `*_ref` — poussée jusqu'à une **table de
- * dimensions** : `audience_labels` porte le libellé chiffré, et tout le reste ne
- * manipule que son identifiant entier. On agrège sans clé, on ne déchiffre que
- * les quelques dizaines de libellés effectivement affichés.
- *
- * Restent **en clair** sur le site lui-même sa clé publique, ses origines
- * autorisées, son état et sa plateforme : ce sont exactement les champs dont
- * l'ingestion a besoin pour router une requête *sans session ni clé*, et la clé
- * comme les origines sont de toute façon lisibles dans la page suivie.
- *
- * ## Aucun cookie, aucun identifiant persistant
+ * Une statistique est un `GROUP BY` : rien de ce sur quoi on agrège ne peut être
+ * chiffré, le chiffrement étant non déterministe. D'où la table de dimensions,
+ * `audience_labels`, qui porte le libellé chiffré pendant que tout le reste ne
+ * manipule que son identifiant entier ; on ne déchiffre que les quelques
+ * dizaines de libellés affichés. Restent en clair sur le site sa clé publique,
+ * ses origines, son état et sa plateforme : les champs dont l'ingestion a besoin
+ * pour router une requête sans session ni clé, et qui sont de toute façon
+ * lisibles dans la page suivie.
  *
  * Un visiteur est un condensé `(clé du site, IP, user-agent, sel du jour)` : ni
  * l'IP ni le user-agent ne sont stockés, et l'identifiant ne traverse pas les
- * jours. Rien à faire accepter par un bandeau de consentement.
- *
- * Le « par qui » nominatif vient d'ailleurs, et seulement si le site le veut :
- * un `identity` que **lui** envoie pour ses propres utilisateurs connectés.
+ * jours. Le « par qui » nominatif vient d'ailleurs, et seulement si le site le
+ * veut : un `identity` que lui envoie pour ses utilisateurs connectés.
  */
 
 export const AUDIENCE_SITE_NAME_MAX_LENGTH = 96;
@@ -39,9 +28,8 @@ export const AUDIENCE_ORIGIN_MAX_LENGTH = 255;
 export const AUDIENCE_MAX_ORIGINS = 20;
 
 /**
- * Longueur d'un libellé de dimension : un chemin, un référent, un nom
- * d'événement. Généreuse pour les chemins, qui portent parfois une requête
- * entière — c'est le serveur qui tronque, jamais le client.
+ * Longueur d'un libellé de dimension (chemin, référent, nom d'événement),
+ * généreuse pour les chemins ; c'est le serveur qui tronque, jamais le client.
  */
 export const AUDIENCE_LABEL_MAX_LENGTH = 512;
 
@@ -61,67 +49,51 @@ export const AUDIENCE_BREAKDOWN_MAX = 50;
 export const AUDIENCE_FUNNEL_NAME_MAX_LENGTH = 96;
 
 /**
- * Marches d'un entonnoir, et entonnoirs par site.
- *
- * Dix marches est déjà beaucoup : au-delà, la lecture d'un entonnoir devient un
- * exercice de comptage plutôt qu'un coup d'œil. La borne sert aussi de garde
- * technique — le nombre de marches entre dans la **forme** de la requête de
+ * Marches d'un entonnoir, et entonnoirs par site. La borne sert aussi de garde
+ * technique : le nombre de marches entre dans la forme de la requête de
  * rétention, et une borne connue est ce qui rend cette construction sûre.
  */
 export const AUDIENCE_FUNNEL_MAX_STEPS = 10;
 export const AUDIENCE_MAX_FUNNELS = 20;
 
 /**
- * Inactivité au-delà de laquelle une nouvelle visite ouvre une **autre**
- * session. Trente minutes est la convention du domaine ; ce qui compte est
- * surtout qu'elle soit unique et connue, puisque la durée moyenne et le taux de
- * rebond en découlent tous les deux.
+ * Inactivité au-delà de laquelle une visite ouvre une autre session. Trente
+ * minutes est la convention du domaine ; ce qui compte est qu'elle soit unique
+ * et connue, la durée moyenne et le taux de rebond en découlant tous deux.
  */
 export const AUDIENCE_SESSION_GAP_SECONDS = 30 * 60;
 
 /**
- * Ce qu'un site est capable d'envoyer, et donc ce qu'on est en droit d'exiger
- * de lui.
+ * Ce qu'un site est capable d'envoyer, et donc ce qu'on peut exiger de lui.
  *
- * `web` — une page dans un navigateur : elle envoie un en-tête `Origin`, qui est
- * confronté à la liste des origines autorisées.
- * `app` — un client natif (React Native, binaire) : il n'en envoie aucun, la
- * confrontation est donc désactivée pour ce site.
- * `both` — les deux voies pour un même produit ; l'`Origin`, quand il est
- * présent, doit être autorisé, mais son absence n'est pas un refus.
+ * `web` : une page dans un navigateur, dont l'`Origin` est confronté à la liste
+ * des origines autorisées. `app` : un client natif, qui n'en envoie aucun, donc
+ * la confrontation est désactivée. `both` : l'`Origin` présent doit être
+ * autorisé, mais son absence n'est pas un refus.
  *
- * ⚠️ À dire franchement : la clé d'un site `app` est extractible du binaire, et
- * seuls elle et le plafond de débit le protègent. Il n'existe pas mieux sans
- * imposer un compte utilisateur à chaque visiteur.
+ * La clé d'un site `app` est extractible du binaire, et seuls elle et le
+ * plafond de débit le protègent : il n'existe pas mieux sans imposer un compte
+ * utilisateur à chaque visiteur.
  */
 export const audiencePlatformSchema = z.enum(['web', 'app', 'both']);
 export type AudiencePlatform = z.infer<typeof audiencePlatformSchema>;
 
 /**
- * Comment un visiteur est reconnu. C'est le seul réglage de la feature qui
- * change ce que la mesure *est*, et non ce qu'elle affiche.
+ * Comment un visiteur est reconnu : le seul réglage de la feature qui change ce
+ * que la mesure est, et non ce qu'elle affiche.
  *
  * `anonymous` (défaut) : un condensé de l'IP, du user-agent et d'un sel qui
- * tourne chaque jour. Rien n'est écrit chez le visiteur, donc rien à faire
- * accepter. Le prix est qu'une même personne revenant le lendemain compte pour
- * une nouvelle, ce qui rend « visiteurs récurrents » impossible par
- * construction.
+ * tourne chaque jour. Rien n'est écrit chez le visiteur, au prix qu'une même
+ * personne revenant le lendemain compte pour une nouvelle.
  *
  * `persistent` : le site range un identifiant tiré au sort dans le stockage du
- * navigateur et le renvoie à chaque mesure. La même personne est alors reconnue
- * d'un jour à l'autre, ce qui ouvre les visiteurs connus et le nombre de
- * visites par personne.
- *
- * ⚠️ **Ce mode relève du consentement.** Écrire un identifiant durable chez le
- * visiteur, que ce soit un cookie ou du `localStorage`, tombe sous la directive
- * ePrivacy exactement de la même façon. L'interface le dit à l'endroit où on
- * l'active ; il appartient au site de recueillir ce consentement avant de poser
- * `data-visitor="persistent"` sur sa balise.
+ * navigateur, ce qui ouvre les visiteurs connus. Ce mode relève du consentement,
+ * `localStorage` tombant sous la directive ePrivacy comme un cookie, et c'est au
+ * site de le recueillir avant de poser l'attribut sur sa balise.
  *
  * Les deux côtés doivent être d'accord : le serveur ignore un identifiant reçu
  * si le site est en `anonymous`, et la balise n'en envoie aucun sans son
- * attribut. Éteindre le réglage suffit donc à revenir en arrière, sans toucher
- * aux pages.
+ * attribut, donc éteindre le réglage suffit à revenir en arrière.
  */
 export const audienceVisitorModeSchema = z.enum(['anonymous', 'persistent']);
 export type AudienceVisitorMode = z.infer<typeof audienceVisitorModeSchema>;
@@ -130,12 +102,9 @@ export type AudienceVisitorMode = z.infer<typeof audienceVisitorModeSchema>;
 export const AUDIENCE_VISITOR_ID_MAX_LENGTH = 64;
 
 /**
- * Les axes selon lesquels on peut ventiler.
- *
- * **Un seul vocabulaire pour deux usages** : c'est à la fois le `kind` d'une
- * ligne d'`audience_labels` et l'axe demandé par `audience.breakdown`. Les
- * séparer aurait produit deux listes à garder synchrones à la main, pour
- * exactement le même ensemble de valeurs.
+ * Les axes selon lesquels on peut ventiler : un seul vocabulaire pour le `kind`
+ * d'une ligne d'`audience_labels` et pour l'axe demandé par `audience.breakdown`,
+ * les séparer aurait produit deux listes à garder synchrones à la main.
  */
 export const audienceDimensionSchema = z.enum([
     /** Le chemin de la page, ou le nom de l'écran d'un client natif. */
@@ -146,7 +115,7 @@ export const audienceDimensionSchema = z.enum([
     'os',
     /** `desktop` | `mobile` | `tablet`, déduit du user-agent ou envoyé tel quel. */
     'device',
-    /** Le fuseau déclaré par le client (`Europe/Paris`) — pas un pays. */
+    /** Le fuseau déclaré par le client (`Europe/Paris`), pas un pays. */
     'timezone',
     'language',
     /** Le nom d'un événement nommé (`inscription`, `paiement`…). */
@@ -199,15 +168,12 @@ export const audienceSiteSchema = z.object({
     /** De quoi ranger la liste sans ouvrir chaque fiche. */
     views24h: z.number().int().nonnegative(),
     visitors24h: z.number().int().nonnegative(),
-    /** Combien de projets s'en servent — l'interconnexion, comme pour un dépôt. */
+    /** Combien de projets s'en servent, pour l'interconnexion. */
     projectCount: z.number().int().nonnegative(),
     /**
-     * Cet élément vient d'un **autre espace**, qui le projette ici.
-     *
-     * L'écran le signale d'une pastille : sans elle, rien ne distingue une
-     * ligne locale d'une fenêtre sur l'espace voisin — et les gestes réservés
-     * au domicile (supprimer, re-partager) sembleraient cassés au lieu de
-     * s'expliquer.
+     * Cet élément vient d'un autre espace, qui le projette ici. L'écran le
+     * signale d'une pastille, sans quoi les gestes réservés au domicile
+     * sembleraient cassés au lieu de s'expliquer.
      */
     foreign: z.boolean(),
     created: z.number().int()
@@ -215,11 +181,9 @@ export const audienceSiteSchema = z.object({
 export type AudienceSite = z.infer<typeof audienceSiteSchema>;
 
 /**
- * Un projet qui suit ce site.
- *
- * Ne remonte que des projets à l'étage ouvert — un projet confidentiel ne peut
- * pas être lié, donc le titre est toujours lisible sans session. Même forme que
- * `DatabaseUsage` et `GitRepoUsage`, pour que les trois écrans se ressemblent.
+ * Un projet qui suit ce site. Ne remonte que des projets à l'étage ouvert, un
+ * projet confidentiel ne pouvant pas être lié : le titre est donc toujours
+ * lisible sans session.
  */
 export const audienceUsageSchema = z.object({
     projectId: z.number().int().positive(),
@@ -239,16 +203,10 @@ export const audienceMetricsSchema = z.object({
     /** Part des sessions d'une seule vue, entre 0 et 1. */
     bounceRate: z.number().min(0).max(1),
     /**
-     * Visiteurs déjà venus avant la période.
-     *
-     * Toujours `0` en mode anonyme : personne n'y est jamais reconnu d'un jour
-     * à l'autre, et afficher une part de récurrents serait mentir. Ne remonte
-     * donc que sur un site en mode persistant, et l'écran ne montre la tuile
-     * que dans ce cas.
-     *
-     * ⚠️ Borné par la conservation du site : quelqu'un dont la dernière visite
-     * a expiré repasse pour un nouveau. C'est une conséquence de la rétention,
-     * pas une erreur de comptage.
+     * Visiteurs déjà venus avant la période. Toujours `0` en mode anonyme, où
+     * personne n'est reconnu d'un jour à l'autre : l'écran ne montre la tuile
+     * que sur un site persistant. Borné par la conservation du site, quelqu'un
+     * dont la dernière visite a expiré repassant pour un nouveau.
      */
     returningVisitors: z.number().int().nonnegative()
 });
@@ -263,12 +221,9 @@ export const audiencePointSchema = z.object({
 export type AudiencePoint = z.infer<typeof audiencePointSchema>;
 
 /**
- * Le bandeau d'un site, et la courbe dessous.
- *
- * `previous` porte les **mêmes** mesures sur la fenêtre précédente de même
- * longueur. C'est ce qui transforme un nombre en information : « 1 240 vues »
- * ne dit rien, « 1 240 vues, +18 % » dit s'il faut regarder de plus près. Le
- * coût est la même requête sur une fenêtre décalée, ce qui est peu cher payé.
+ * Le bandeau d'un site, et la courbe dessous. `previous` porte les mêmes
+ * mesures sur la fenêtre précédente de même longueur, ce qui transforme un
+ * nombre en information : « 1 240 vues » ne dit rien, « +18 % » si.
  */
 export const audienceOverviewSchema = z.object({
     metrics: audienceMetricsSchema,
@@ -287,11 +242,9 @@ export const audienceBreakdownItemSchema = z.object({
 export type AudienceBreakdownItem = z.infer<typeof audienceBreakdownItemSchema>;
 
 /**
- * Une case de la carte d'activité : un jour de la semaine, une heure.
- *
- * L'heure est **locale au visiteur**, reconstituée depuis le décalage qu'il a
- * déclaré. C'est la seule qui réponde à « quand mes utilisateurs sont-ils là ? » :
- * en heure serveur, une audience répartie sur trois continents ne dessine rien.
+ * Une case de la carte d'activité : un jour de la semaine, une heure. L'heure
+ * est locale au visiteur, reconstituée depuis le décalage qu'il a déclaré ; en
+ * heure serveur, une audience répartie sur trois continents ne dessine rien.
  */
 export const audienceActivityCellSchema = z.object({
     /** 0 = lundi. Semaine à l'européenne, comme le reste de l'interface. */
@@ -303,7 +256,7 @@ export type AudienceActivityCell = z.infer<typeof audienceActivityCellSchema>;
 
 export const audienceActivitySchema = z.object({
     cells: z.array(audienceActivityCellSchema),
-    /** Les fuseaux les plus représentés — la « zone de temps » la plus active. */
+    /** Les fuseaux les plus représentés, la « zone de temps » la plus active. */
     timezones: z.array(audienceBreakdownItemSchema)
 });
 export type AudienceActivity = z.infer<typeof audienceActivitySchema>;
@@ -318,14 +271,10 @@ export type AudienceLive = z.infer<typeof audienceLiveSchema>;
 // ------------------------------------------------------------ entonnoirs
 
 /**
- * Ce qu'une marche reconnaît.
- *
- * `path` — une page vue. `event` — un événement nommé, posé par le site avec
- * `deveye.event('…')`.
- *
- * Ce sont exactement deux des dimensions déjà collectées, et c'est tout l'objet
- * du découpage : **le site émet des signaux, l'entonnoir se compose ici**. Sans
- * lui, mesurer autre chose demanderait de redéployer le site.
+ * Ce qu'une marche reconnaît : `path`, une page vue, ou `event`, un événement
+ * nommé posé par le site. Deux des dimensions déjà collectées, et c'est l'objet
+ * du découpage : le site émet des signaux, l'entonnoir se compose ici, sans
+ * quoi mesurer autre chose demanderait de redéployer le site.
  */
 export const audienceFunnelStepKindSchema = z.enum(['path', 'event']);
 export type AudienceFunnelStepKind = z.infer<typeof audienceFunnelStepKindSchema>;
@@ -354,16 +303,11 @@ export type AudienceFunnel = z.infer<typeof audienceFunnelSchema>;
 // --------------------------------------------------------- l'ingestion
 
 /**
- * Un événement tel qu'un client l'envoie.
- *
- * **Rien ici ne suppose un navigateur** : aucun champ propre au web n'est
- * requis, `path` désigne une route *ou* un écran, et les trois champs
- * d'appareil peuvent être renseignés explicitement par un client natif qui les
- * connaît, au lieu d'être devinés d'un user-agent qu'il n'a pas. C'est ce qui
- * permettra à un module React Native de se brancher sans toucher au serveur.
- *
- * Tout est optionnel sauf le type et le chemin : un client qui ne sait pas
- * remplir un champ doit pouvoir l'omettre, jamais mentir.
+ * Un événement tel qu'un client l'envoie. Rien ici ne suppose un navigateur :
+ * `path` désigne une route ou un écran, et les champs d'appareil peuvent être
+ * renseignés par un client natif au lieu d'être devinés d'un user-agent qu'il
+ * n'a pas. Tout est optionnel sauf le type et le chemin : un client qui ne sait
+ * pas remplir un champ doit pouvoir l'omettre, jamais mentir.
  */
 export const audienceEventInputSchema = z.object({
     type: z.enum(['view', 'event']),
@@ -381,21 +325,18 @@ export const audienceEventInputSchema = z.object({
     /** Ce que le site appelle son utilisateur connecté. Chiffré au repos. */
     identity: z.string().max(AUDIENCE_LABEL_MAX_LENGTH).optional(),
     /**
-     * L'identifiant que le client garde d'une visite à l'autre.
-     *
-     * Ignoré si le site n'est pas en mode persistant. Jamais stocké tel quel :
-     * le serveur n'en garde qu'un condensé, propre au site, pour qu'un même
-     * identifiant sur deux sites ne permette aucun recoupement.
+     * L'identifiant que le client garde d'une visite à l'autre, ignoré si le
+     * site n'est pas en mode persistant. Jamais stocké tel quel : le serveur
+     * n'en garde qu'un condensé propre au site, pour interdire tout recoupement.
      */
     visitorId: z.string().max(AUDIENCE_VISITOR_ID_MAX_LENGTH).optional(),
     browser: z.string().max(64).optional(),
     os: z.string().max(64).optional(),
     device: z.string().max(32).optional(),
     /**
-     * Horodatage client, en secondes epoch — pour un client natif qui a mis des
-     * événements de côté hors ligne. Le serveur le **borne** à sa propre
-     * fenêtre : une horloge fausse ne doit pas pouvoir dater une visite de 2038
-     * et écraser tous les graphes de l'espace.
+     * Horodatage client, en secondes epoch, pour un client natif qui a mis des
+     * événements de côté hors ligne. Le serveur le borne à sa propre fenêtre :
+     * une horloge fausse ne doit pas dater une visite de 2038.
      */
     at: z.number().int().optional()
 });
@@ -405,8 +346,7 @@ export const audienceIngestSchema = z.object({
     key: z.string().length(AUDIENCE_PUBLIC_KEY_LENGTH),
     /**
      * Porté par le lot et non par chaque événement : c'est une propriété du
-     * client, pas de la mesure. Le répéter vingt fois dans une trame aurait
-     * coûté plus que tout le reste du corps.
+     * client, pas de la mesure.
      */
     visitorId: z.string().max(AUDIENCE_VISITOR_ID_MAX_LENGTH).optional(),
     events: z.array(audienceEventInputSchema).min(1).max(AUDIENCE_BATCH_MAX)
@@ -418,10 +358,7 @@ export type AudienceIngestBody = z.infer<typeof audienceIngestSchema>;
 export interface AudienceSiteRow {
     id: number;
     workspace_id: number;
-    /**
-     * En clair : c'est la seule chose dont l'ingestion dispose pour retrouver le
-     * site, et elle tourne sans session ni clé.
-     */
+    /** En clair : la seule chose dont l'ingestion, sans session ni clé, dispose. */
     public_key: string;
     /** Condensé du nom en minuscules : porte l'unicité dans l'espace. */
     name_ref: string;
@@ -430,8 +367,8 @@ export interface AudienceSiteRow {
     visitor_mode: string;
     /**
      * Hôtes autorisés, séparés par des sauts de ligne. En clair pour la même
-     * raison que la clé — et ils sont publics de toute façon, puisqu'ils
-     * nomment les pages où la balise est posée.
+     * raison que la clé, et publics de toute façon puisqu'ils nomment les pages
+     * où la balise est posée.
      */
     origins: string | null;
     active: number;
@@ -444,10 +381,9 @@ export interface AudienceSiteRow {
 }
 
 /**
- * Un libellé de dimension, chiffré, dédoublonné par son condensé.
- *
- * C'est la table qui rend tout le reste possible : un chemin vu mille fois est
- * stocké **une** fois, et les tables de faits ne portent que son `id`.
+ * Un libellé de dimension, chiffré et dédoublonné par son condensé : un chemin
+ * vu mille fois est stocké une fois, et les tables de faits ne portent que son
+ * `id`.
  */
 export interface AudienceLabelRow {
     id: number;
@@ -492,9 +428,8 @@ export interface AudienceEventRow {
 }
 
 /**
- * L'agrégat journalier. **Jamais purgé** — c'est lui qui fait survivre les
- * courbes longues à l'expiration des événements bruts, exactement comme
- * l'agrégat journalier d'Uptime.
+ * L'agrégat journalier, jamais purgé : c'est lui qui fait survivre les courbes
+ * longues à l'expiration des événements bruts.
  */
 export interface AudienceDailyRow {
     site_id: number;
@@ -524,13 +459,10 @@ export interface AudienceFunnelStepRow {
     /** Une valeur d'`audienceFunnelStepKindSchema`. */
     match_kind: string;
     /**
-     * Condensé de la valeur reconnue — le **même** que celui d'`audience_labels`,
-     * ce qui permet de retrouver le libellé sans jamais déchiffrer pour
-     * comparer.
-     *
-     * Une marche peut parfaitement ne correspondre à aucun libellé : c'est le
-     * cas d'un événement qu'on a prévu mais que le site n'a encore jamais posé.
-     * Elle compte alors zéro, ce qui est la vérité.
+     * Condensé de la valeur reconnue, le même que celui d'`audience_labels` :
+     * on retrouve le libellé sans jamais déchiffrer pour comparer. Une marche
+     * peut ne correspondre à aucun libellé (un événement prévu que le site n'a
+     * jamais posé) et compte alors zéro, ce qui est la vérité.
      */
     label_ref: string;
     /** La valeur lisible, chiffrée : la marche se décrit toute seule. */

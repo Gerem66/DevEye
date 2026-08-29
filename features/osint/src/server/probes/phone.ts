@@ -1,23 +1,17 @@
 import { parsePhoneNumberFromString, type PhoneNumber } from 'libphonenumber-js/max';
 
-// Privilège de native rapatriée : le garde SSRF est partagé par toute l'app, pas propre au module.
+// Le garde SSRF est celui de l'app, partagé, pas propre au module.
 import { fetchJson } from '@/Services/netFetch';
 import { field, tag, type OsintProbeAdapter, type OsintScore, type OsintTag } from './shared';
 
 /**
- * Analyse d'un numéro, et **fiabilité déduite**.
+ * Analyse d'un numéro, hors-ligne : `libphonenumber-js` embarque les plages
+ * d'attribution, aucun appel réseau pour la donnée la plus sensible de la feature.
  *
- * Entièrement hors-ligne : `libphonenumber-js` embarque les plages d'attribution
- * officielles de tous les pays. Aucun appel réseau, donc aucune fuite du numéro
- * analysé vers un tiers — ce qui compte pour la donnée la plus sensible que
- * cette feature manipule.
+ * Import de `/max` et non du paquet racine : seul ce jeu de métadonnées porte le
+ * type de ligne (mobile / fixe / VoIP / surtaxé), dont le score dépend.
  *
- * ⚠️ Import de `/max` et non du paquet racine : seul ce jeu de métadonnées porte
- * le **type de ligne** (mobile / fixe / VoIP / surtaxé). Le bundle par défaut
- * rend `getType()` vide, et le score qui en dépend serait toujours le même.
- *
- * Numverify, si une clé est posée, ajoute l'opérateur *réel* — au-delà de la
- * plage d'attribution, qui ne dit rien des portages de numéro.
+ * Numverify, si une clé est posée, ajoute l'opérateur réel (portages compris).
  */
 
 const TYPE_LABELS: Record<string, string> = {
@@ -35,11 +29,8 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 /**
- * Le barème.
- *
- * Chaque signal est affiché avec sa contribution : un score de fiabilité qui ne
- * montre pas son calcul ne peut pas être contredit, donc ne vaut rien. Le total
- * part de 50 (« on ne sait rien ») et se déplace.
+ * Chaque signal est affiché avec sa contribution : un score qui ne montre pas
+ * son calcul ne peut pas être contredit. Le total part de 50.
  */
 function scoreOf(parsed: PhoneNumber | undefined, type: string | undefined): OsintScore {
     const signals: { label: string; delta: number }[] = [];

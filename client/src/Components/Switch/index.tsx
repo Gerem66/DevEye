@@ -16,12 +16,9 @@ export interface SwitchProps {
 }
 
 /**
- * Un interrupteur on/off aux couleurs du projet.
- *
- * Un `<button role="switch">` plutôt qu'une case native habillée : contrairement
- * à la case à cocher, il n'y a rien à récupérer du rendu du navigateur ici — pas
- * de coche, pas de forme héritée — et `role="switch"` dit exactement ce que
- * l'objet est. Le clavier (Entrée, Espace) et le focus restent ceux du bouton.
+ * Un interrupteur on/off aux couleurs du projet. Un `<button role="switch">`
+ * plutôt qu'une case native habillée : rien à récupérer du rendu du navigateur
+ * ici, et `role="switch"` dit ce que l'objet est.
  */
 export function Switch({ checked, onChange, label, hint, disabled, className, ...aria }: SwitchProps) {
     return (

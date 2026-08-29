@@ -34,11 +34,9 @@ export const DIMENSION_LABELS: Record<AudienceDimension, string> = {
 };
 
 /**
- * Ce qu'un panneau dit quand il n'a rien à montrer.
- *
- * Un texte par axe plutôt qu'un « Aucune donnée » générique : sur la plupart de
- * ces axes, le vide a une **cause** qu'on peut nommer, et la nommer évite de
- * chercher une panne là où il n'y en a pas.
+ * Ce qu'un panneau dit quand il n'a rien à montrer. Un texte par axe plutôt
+ * qu'un « Aucune donnée » générique : le vide y a souvent une cause qu'on peut
+ * nommer, ce qui évite de chercher une panne là où il n'y en a pas.
  */
 export const DIMENSION_EMPTY: Record<AudienceDimension, string> = {
     path: 'Aucune page vue sur cette période.',
@@ -59,11 +57,9 @@ export const PLATFORM_LABELS: Record<AudiencePlatform, string> = {
 };
 
 /**
- * Ce que la plateforme change, dit à l'endroit où on la choisit.
- *
- * C'est le seul réglage de cet écran dont la conséquence n'est pas devinable :
- * il décide si les origines autorisées sont **appliquées**, et se tromper laisse
- * soit une porte ouverte, soit une application qui n'arrive pas à écrire.
+ * Ce que la plateforme change, dit à l'endroit où on la choisit : elle décide
+ * si les origines autorisées sont appliquées, et se tromper laisse soit une
+ * porte ouverte, soit une application qui n'arrive pas à écrire.
  */
 export const PLATFORM_HINTS: Record<AudiencePlatform, string> = {
     web: 'Les origines autorisées sont vérifiées à chaque mesure.',
@@ -77,10 +73,8 @@ export const VISITOR_LABELS: Record<AudienceVisitorMode, string> = {
 };
 
 /**
- * Ce que le mode change, dit là où on le choisit.
- *
- * Le second est le seul réglage de la feature qui crée une obligation légale
- * pour le site suivi : le taire aurait été le pire des raccourcis.
+ * Ce que le mode change, dit là où on le choisit : le second crée une
+ * obligation légale pour le site suivi.
  */
 export const VISITOR_HINTS: Record<AudienceVisitorMode, string> = {
     anonymous:
@@ -172,17 +166,12 @@ export function formatAgo(epochSeconds: number | null): string {
 }
 
 /**
- * Les abandons d'un entonnoir, et celui qui coûte le plus.
+ * Les abandons d'un entonnoir, et celui qui coûte le plus. `drops[i]` est la
+ * part perdue en arrivant sur la marche `i`, rapportée à la précédente ; `null`
+ * sur la première, et quand la marche d'avant est à zéro faute de dénominateur.
  *
- * `drops[i]` est la part perdue **en arrivant** sur la marche `i`, rapportée à
- * la marche précédente. `null` sur la première — on n'y perd personne, on y
- * entre — et `null` aussi quand la marche d'avant est à zéro, faute de
- * dénominateur.
- *
- * `worst` désigne **une seule** marche : deux « plus coûteuses » ne
- * désigneraient plus rien. À égalité la première l'emporte, parce que c'est
- * celle qu'on rencontre en premier. `-1` quand il n'y a rien à désigner — un
- * entonnoir sans visite, ou dont personne n'abandonne.
+ * `worst` désigne une seule marche, la première à égalité, et vaut `-1` quand
+ * il n'y a rien à désigner (aucune visite, ou personne n'abandonne).
  */
 export function funnelDrops(sessions: readonly number[]): { drops: (number | null)[]; worst: number } {
     const drops = sessions.map((count, i) => {
@@ -215,15 +204,12 @@ export interface FunnelSegment {
 }
 
 /**
- * Un entonnoir ramené à **une seule barre**.
+ * Un entonnoir ramené à une seule barre : le tout vaut les visites entrées,
+ * chaque part est ce qui s'est perdu en chemin et la dernière ce qui est arrivé
+ * au bout. Les parts sommant à 1, la barre se lit sans comparer des hauteurs.
  *
- * Le tout vaut les visites entrées ; chaque part est ce qui s'est perdu en
- * chemin, la dernière ce qui est arrivé au bout. Les parts somment donc à 1, et
- * la barre se lit d'un coup d'œil sans comparer des hauteurs entre elles —
- * c'est ce qu'une suite de barres décroissantes ne sait pas faire.
- *
- * Vide quand personne n'est entré : il n'y a alors rien à répartir, et dessiner
- * une barre pleine de zéros laisserait croire à une mesure.
+ * Vide quand personne n'est entré : dessiner une barre pleine de zéros
+ * laisserait croire à une mesure.
  */
 export function funnelSegments(sessions: readonly number[]): FunnelSegment[] {
     const entered = sessions[0] ?? 0;
@@ -233,8 +219,8 @@ export function funnelSegments(sessions: readonly number[]): FunnelSegment[] {
     const segments: FunnelSegment[] = [];
 
     for (let i = 0; i < sessions.length - 1; i++) {
-        // `max(0)` : la règle ordonnée interdit qu'une marche remonte, mais une
-        // part négative déformerait toute la barre si cela arrivait un jour.
+        // `max(0)` : la règle ordonnée interdit qu'une marche remonte, mais une part
+        // négative déformerait toute la barre si cela arrivait un jour.
         const lost = Math.max(0, sessions[i] - sessions[i + 1]);
         if (lost > 0) segments.push({ kind: 'lost', share: lost / entered, step: i, worst: i + 1 === worst });
     }
@@ -250,16 +236,12 @@ export function funnelSegments(sessions: readonly number[]): FunnelSegment[] {
 export const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
 /**
- * La balise à coller dans une page.
+ * La balise à coller dans une page. `origin` vient du serveur et jamais du
+ * navigateur, les deux adresses différant par construction.
  *
- * `origin` vient **du serveur** (`AUDIENCE_ORIGIN`, à défaut `PUBLIC_ORIGIN`),
- * jamais du navigateur : l'application est derrière le VPN et l'ingestion doit
- * être joignable sans lui, donc les deux adresses diffèrent par construction.
- *
- * `data-visitor` n'apparaît que si le site est réglé en persistant. C'est le
- * point : les deux côtés doivent être d'accord, et donner une balise sans
- * l'attribut à qui vient d'activer le mode reviendrait à lui laisser croire que
- * les visiteurs connus vont se mesurer alors que rien ne serait posé.
+ * `data-visitor` n'apparaît que si le site est réglé en persistant : les deux
+ * côtés doivent être d'accord, et une balise sans l'attribut laisserait croire
+ * que les visiteurs connus se mesurent alors que rien ne serait posé.
  */
 export function snippetFor(publicKey: string, origin: string, persistent = false): string {
     const visitor = persistent ? ' data-visitor="persistent"' : '';

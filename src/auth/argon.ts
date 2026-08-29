@@ -14,7 +14,7 @@ export async function hashPassword(plain: string): Promise<string> {
 
 export async function verifyPassword(hash: string, plain: string): Promise<boolean> {
     try {
-        // Legacy bcrypt hashes from the previous app ($2a/$2b/$2y).
+        // Legacy bcrypt hashes ($2a/$2b/$2y).
         if (hash.startsWith('$2')) {
             return await bcrypt.compare(plain, hash);
         }

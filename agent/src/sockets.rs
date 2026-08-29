@@ -1,14 +1,10 @@
 //! One socket probe per collection tick.
 //!
 //! Listening ports, established connections, the `activeConnections` count and
-//! the per-process connection counts all come from the *same* enumeration. That
-//! replaces three separate shell-outs (`ss -tulnH` for ports, `ss -tn state
-//! established` twice — once for the count, once for the connection list) with a
-//! single `ss -tuanpH`, which measured faster than the three it supersedes even
-//! though it additionally maps every socket to its owning process.
+//! the per-process connection counts all come from the same enumeration.
 //!
-//! Process attribution needs privileges for *other users'* sockets: unprivileged
-//! agents simply get `None` there, never a wrong owner.
+//! Process attribution needs privileges for other users' sockets: unprivileged
+//! agents get `None` there, never a wrong owner.
 
 use std::collections::HashMap;
 
@@ -282,10 +278,9 @@ fn collect_raw(_deep: bool) -> Vec<RawSocket> {
     v
 }
 
-/// macOS: `netstat` gives states but never owners, and `lsof` — the only tool
-/// that does — takes hundreds of milliseconds, so owners are resolved only on
-/// the `deep` (report) pass. `netstat -an` also covers UDP, which the previous
-/// TCP-only probe missed entirely.
+/// macOS: `netstat` gives states but never owners, and `lsof`, the only tool
+/// that does, takes hundreds of milliseconds, so owners are resolved only on
+/// the `deep` (report) pass. `netstat -an` also covers UDP.
 #[cfg(target_os = "macos")]
 fn collect_raw(deep: bool) -> Vec<RawSocket> {
     let out = match crate::report::run("netstat", &["-an"]) {
@@ -387,9 +382,9 @@ fn attach_macos_owners(sockets: &mut [RawSocket]) {
     }
 }
 
-/// Windows: `netstat -ano` already reports the owning pid in its last column
-/// (the previous parser threw it away). Names come from the process scan via
-/// [`SocketMap::resolve_names`], so no extra tool is spawned.
+/// Windows: `netstat -ano` reports the owning pid in its last column. Names
+/// come from the process scan via [`SocketMap::resolve_names`], so no extra
+/// tool is spawned.
 #[cfg(target_os = "windows")]
 fn collect_raw(_deep: bool) -> Vec<RawSocket> {
     let out = match crate::report::run("netstat", &["-ano"]) {
@@ -501,8 +496,7 @@ mod tests {
     #[test]
     fn build_merges_nothing_but_identical_rows() {
         let raw = vec![
-            // Dual-stack sshd: two genuinely distinct sockets that used to render
-            // as two identical "22 tcp · SSH" bubbles.
+            // Dual-stack sshd: two genuinely distinct sockets.
             mk("tcp", true, false, "0.0.0.0", 22, Some(1)),
             mk("tcp", true, false, "::", 22, Some(1)),
             // Byte-identical duplicate (mDNS reports one per interface): dropped.

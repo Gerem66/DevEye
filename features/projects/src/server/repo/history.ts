@@ -3,11 +3,7 @@ import type { SdkQueryable } from '@deveye/types/sdk/server';
 
 /** La table `project_events` : la frise verticale d'un projet. */
 export interface ProjectHistoryRepo {
-    /**
-     * Une page de la frise, **du plus récent au plus ancien** : c'est l'ordre où
-     * l'on pagine et celui où l'on lit une histoire de projet. `before` exclu ;
-     * `limit + 1` lignes sont lues pour savoir s'il en reste.
-     */
+    /** Une page de la frise, du plus récent au plus ancien, `before` exclu. */
     listByProject(
         projectId: number,
         workspaceId: number,

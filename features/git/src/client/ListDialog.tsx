@@ -7,11 +7,8 @@ import { CommitRow } from './Rows';
 import styles from './style.module.css';
 
 /**
- * Le « voir tout » d'un panneau.
- *
- * Un dialogue, et non une sous-page d'onglet : une sous-page ne se signale que
- * par une flèche de retour, et rien ne dirait qu'on a quitté la vue du dépôt.
- * Même choix que pour le détail d'une pull request.
+ * Le « voir tout » d'un panneau, en dialogue comme le détail d'une pull request :
+ * une sous-page ne dirait pas qu'on a quitté la vue du dépôt.
  */
 
 interface ListDialogProps {
@@ -30,7 +27,6 @@ export function ListDialog({ open, title, onClose, children }: ListDialogProps) 
     );
 }
 
-/** Combien de commits par page dans le dialogue — le panneau, lui, en montre 15. */
 const PAGE = 50;
 
 interface CommitListDialogProps {
@@ -41,12 +37,8 @@ interface CommitListDialogProps {
 }
 
 /**
- * Tous les commits, paginés.
- *
- * Le seul des quatre panneaux dont la liste complète ne tient pas dans la
- * réponse déjà chargée : branches, releases et PR sont rendues intégralement
- * par le serveur, les commits se comptent en milliers. On repart donc du
- * curseur `before` déjà porté par `git.commitList`, plutôt que de tout demander.
+ * Tous les commits, paginés : le seul des quatre panneaux dont la liste complète
+ * ne tient pas dans la réponse déjà chargée, les commits se comptant en milliers.
  */
 export function CommitListDialog({ open, repoId, onClose, onOpenCommit }: CommitListDialogProps) {
     const [commits, setCommits] = useState<GitCommit[]>([]);
@@ -57,10 +49,7 @@ export function CommitListDialog({ open, repoId, onClose, onOpenCommit }: Commit
     const sentinelRef = useRef<HTMLDivElement | null>(null);
 
     /**
-     * Le curseur de la page suivante, dérivé du dernier commit reçu.
-     *
-     * Une **référence** et non un état : il est lu par l'observateur de
-     * défilement, qui ne doit pas se ré-abonner à chaque page — et le remettre
+     * Le curseur de la page suivante. Une référence et non un état : le mettre
      * dans les dépendances de l'effet relancerait l'observateur en boucle.
      */
     const cursor = useRef<GitCommitCursor | null>(null);
@@ -107,13 +96,9 @@ export function CommitListDialog({ open, repoId, onClose, onOpenCommit }: Commit
     }, [open, load]);
 
     /**
-     * Le défilement infini.
-     *
-     * `IntersectionObserver` sur une sentinelle plutôt qu'un écouteur de
-     * `scroll` : le navigateur nous prévient quand le bas de la liste **entre
-     * dans la zone visible**, sans qu'on ait à mesurer une position à chaque
-     * pixel parcouru. La marge anticipe l'arrivée pour que la page suivante soit
-     * là avant qu'on y soit.
+     * Le défilement infini : `IntersectionObserver` sur une sentinelle plutôt
+     * qu'un écouteur de `scroll`, sans mesure de position à chaque pixel. La
+     * marge anticipe l'arrivée pour que la page suivante soit là avant qu'on y soit.
      */
     useEffect(() => {
         const sentinel = sentinelRef.current;

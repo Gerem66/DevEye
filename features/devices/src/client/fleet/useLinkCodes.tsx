@@ -7,10 +7,8 @@ import { LinkInfo } from './LinkInfo';
 
 /**
  * Link-code management for the "Ajouter un appareil" dialog: list active codes,
- * generate new ones (with a validity preset + optional auto-approval), and
- * edit/revoke/copy them. Self-contained from device-management actions. The
- * four `devices.linkCode*` commands replaced the HTTP routes the page used
- * to call: session gestures like the others, on the socket.
+ * generate new ones (validity preset, optional auto-approval), edit, revoke,
+ * copy.
  */
 export function useLinkCodes(refresh: () => Promise<void> | void) {
     const [codes, setCodes] = useState<LinkCodeResponse[]>([]);
@@ -34,15 +32,14 @@ export function useLinkCodes(refresh: () => Promise<void> | void) {
             return res.codes;
         } catch (e) {
             // Ne PAS retomber sur une liste vide en silence : « Aucun code
-            // actif » se lit comme une certitude, et c'est trompeur dans un
-            // dialogue de sécurité — un code encore valide peut circuler.
+            // actif » se lit comme une certitude, et un code encore valide peut
+            // circuler.
             setCodesError(e instanceof Error ? e.message : 'Codes actifs indisponibles.');
             return [];
         }
     };
 
-    // Resolve the chosen preset to a request payload. Returns `undefined` on an
-    // invalid custom value (caller shows an error).
+    // `undefined` on an invalid custom value (caller shows an error).
     const resolveTtlSeconds = (): { ttlSeconds: number | null } | undefined => {
         if (ttlPreset === 'none') return { ttlSeconds: null };
         if (ttlPreset === 'custom') {
@@ -92,7 +89,7 @@ export function useLinkCodes(refresh: () => Promise<void> | void) {
         }
     };
 
-    // Manual generation only: open the dialog and show the current codes table.
+    // Open the dialog and show the current codes table.
     const openLinkModal = async () => {
         setGenError(null);
         setCopiedCode(null);
@@ -103,7 +100,7 @@ export function useLinkCodes(refresh: () => Promise<void> | void) {
 
     const closeModal = () => {
         setShowLinkModal(false);
-        // A device may have paired while the dialog was open — reflect it now.
+        // A device may have paired while the dialog was open.
         void refresh();
     };
 
@@ -119,10 +116,8 @@ export function useLinkCodes(refresh: () => Promise<void> | void) {
 
     const showLinkInfo = () => void openInfo({ title: 'Lier un appareil', body: <LinkInfo />, width: 460 });
 
-    // Tant que le dialogue est ouvert, un code consommé par un appareil en train
-    // de s'appairer doit disparaître du tableau. Pas de sondage : la route
-    // d'enrôlement signale le changement au moteur de présence, et le code s'en
-    // va au moment exact où il est consommé plutôt qu'au tour suivant.
+    // Dialogue ouvert, un code consommé par un appareil qui s'appaire doit
+    // disparaître du tableau : la route d'enrôlement signale le changement.
     useEffect(() => {
         if (!showLinkModal) return;
         return onResourceChange('devices.list', () => void fetchCodes());

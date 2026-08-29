@@ -73,7 +73,7 @@ function userLabel(uid: number, username: string | null): string {
     return username ?? `#${uid}`;
 }
 
-/** Full date + time down to the second — "voir précisément les horaires". */
+/** Full date and time down to the second: an audit line is read by its timing. */
 function formatDate(unixSeconds: number): string {
     return new Date(unixSeconds * 1000).toLocaleString('fr-FR', {
         year: 'numeric',
@@ -182,7 +182,6 @@ function FeatureLogs() {
         }
     }, [filter, logs.length]);
 
-    // Initial load.
     useEffect(() => {
         void loadFacets();
     }, [loadFacets]);

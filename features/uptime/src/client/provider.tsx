@@ -10,14 +10,8 @@ import { useServiceHistory } from './useServiceHistory';
 
 /**
  * Ce que le module offre aux écrans de l'app (`UPTIME_CLIENT_PROVIDER`) :
- * l'onglet Déploiement d'un projet compose la bande d'état, les taux et le
- * dialogue de déclaration d'un service, sans importer le module.
- *
- * Les composants du module sont des sur-ensembles compatibles du contrat : la
- * bande et les taux lisent des champs que `UptimeLinkedService` porte, le
- * hook d'historique rend des points de la forme attendue. Seul le dialogue
- * demande plus (la méthode, le mot-clé, les réglages qu'il conserve), d'où
- * l'adaptateur ci-dessous.
+ * l'onglet Déploiement d'un projet compose bande d'état, taux et dialogue sans
+ * importer le module.
  */
 
 interface LinkedServiceDialogProps {
@@ -28,15 +22,10 @@ interface LinkedServiceDialogProps {
 }
 
 /**
- * Le dialogue de la feature, ouvert par l'hôte sur un service réduit.
- *
- * Le contrat tend un `UptimeLinkedService` ; le dialogue, lui, réécrit le
- * service entier et a donc besoin de sa fiche complète (méthode, mot-clé, et
- * les quatre réglages qu'il ne montre plus mais conserve). Plutôt qu'un
- * formulaire réduit qui divergerait au premier réglage ajouté, l'adaptateur
- * recharge la fiche par `uptime.list` et n'ouvre le vrai dialogue qu'avec
- * elle. `service: null` (une déclaration, le seul cas de Projets aujourd'hui)
- * n'a rien à charger.
+ * Le contrat tend un `UptimeLinkedService` ; le dialogue réécrit le service
+ * entier et a besoin de sa fiche complète. L'adaptateur la recharge par
+ * `uptime.list` et n'ouvre le dialogue qu'avec elle ; `service: null` (une
+ * déclaration) n'a rien à charger.
  */
 function LinkedServiceDialog({ open, service, onClose, onSaved }: LinkedServiceDialogProps) {
     const [full, setFull] = useState<UptimeService | null>(null);

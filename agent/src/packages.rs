@@ -33,13 +33,9 @@ pub enum PkgEvent {
     },
 }
 
-/// Échéance d'une sonde de détection.
-///
-/// Large — `softwareupdate -l` interroge les serveurs d'Apple, `apt-get -s
-/// upgrade` attend le verrou dpkg — mais finie. `Command::output()`, qu'on
-/// utilisait, attend son fils sans limite : un gestionnaire bloqué figeait la
-/// détection entière, et l'écran restait sur « détection en cours… » sans que
-/// rien n'arrive jamais.
+/// Échéance d'une sonde de détection. Large (`softwareupdate -l` interroge les
+/// serveurs d'Apple, `apt-get -s upgrade` attend le verrou dpkg) mais finie : un
+/// gestionnaire bloqué figerait sinon la détection entière.
 const DETECT_TIMEOUT: Duration = Duration::from_secs(45);
 
 /// Run a detection command; `None` when the binary is absent (spawn error) or the
@@ -100,7 +96,6 @@ fn reboot_required(_id: &str) -> bool {
     }
 }
 
-// ───────────────────────────────── detection ───────────────────────────────
 /// Enumerate the package managers present on this host + their pending counts.
 /// Synchronous (shells out); the caller runs it off the runtime via spawn_blocking.
 pub fn detect() -> Vec<PackageManagerInfo> {
@@ -185,7 +180,6 @@ pub fn detect() -> Vec<PackageManagerInfo> {
     out
 }
 
-// ───────────────────────────────── upgrade ─────────────────────────────────
 struct UpgradeSpec {
     program: &'static str,
     args: Vec<&'static str>,

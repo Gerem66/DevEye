@@ -74,27 +74,16 @@ import { serverEntry } from './index';
 import type { ProjectsRepo } from './repo';
 
 /**
- * Les handlers du module, sur le harnais du SDK.
- *
- * Ce qui mérite d'être tenu, c'est ce qui ne lève nulle part quand ça se
- * dérègle : les **deux étages par projet** (un projet gardé s'écrit sous le
- * codec gardé, n'existe pas dans un espace partagé, et sa conversion
- * re-chiffre tout son arbre en retirant ses liaisons), le **verrou** (le
- * portefeuille et mes tâches masquent au lieu de lever, une lecture de détail
- * et toute écriture sur un projet gardé répondent `locked` à une session
- * scellée, sauf ce qui ne touche aucun corps chiffré), les **sujets** (chaque
- * écriture déclare `mutates`, la discussion bat `projectsChat` et pas
- * `projects`, une liaison bat aussi la feature visée : le filet de démarrage
- * de l'app ne voit aucune commande de ce module), les **liaisons** par les
- * contrats d'éléments (absents = refus propre, jamais une ligne écrite), les
- * gardes de forme (une carte ne change pas de projet, une dépendance ne forme
- * pas de cycle, une colonne pleine ne se retire pas, un assigné ou une
- * mention est un membre), la frise posée par les mutations elles-mêmes, et le
- * **partage inter-espaces** (un projet projeté se liste avec `foreign: true`
- * sous le codec de son domicile, son arbre se lit et s'écrit chez lui depuis
- * la fenêtre, ses liaisons s'y nomment mais ne s'y posent pas, son palier, son
- * suivi des releases et son rang restent chez lui, et un projet qui devient
- * gardé est oublié de ses fenêtres).
+ * Les handlers du module, sur le harnais du SDK. Ce qui mérite d'être tenu, c'est ce
+ * qui ne lève nulle part quand ça se dérègle : les deux étages par projet et la
+ * conversion qui re-chiffre tout l'arbre, le verrou (masquer plutôt que lever dans
+ * les listes, `locked` sur un projet gardé, sauf quand aucun corps chiffré n'est
+ * touché), les sujets battus par chaque écriture, les liaisons passées par les
+ * contrats d'éléments, les gardes de forme (pas de carte qui change de projet, pas
+ * de cycle, pas de colonne pleine retirée, un assigné ou une mention qui est un
+ * membre), la frise posée par les mutations elles-mêmes, et le partage
+ * inter-espaces (l'arbre se lit et s'écrit chez le domicile, la configuration s'y
+ * refuse depuis une fenêtre).
  */
 
 /** Le handler d'un contrat, typé par ce contrat (le registre est hétérogène). */
@@ -223,16 +212,14 @@ function event(over: Partial<ProjectEventRow> & { id: number; project_id: number
 }
 
 /**
- * Un dépôt en mémoire, même contrat que le vrai, sur des tableaux que les
- * tests lisent après coup. Les listes d'identifiants liés rendent l'ordre
- * d'insertion : la jointure d'ordre du vrai dépôt n'a rien à prouver ici.
+ * Un dépôt en mémoire, même contrat que le vrai, sur des tableaux que les tests
+ * lisent après coup. Les listes d'identifiants liés rendent l'ordre d'insertion, la
+ * jointure d'ordre du vrai dépôt n'ayant rien à prouver ici.
  *
- * `projections` reproduit la table `item_shares` : `projectId → espaces où il
- * est projeté`. C'est ce qui donne à `listVisible` / `findVisible` leur
- * seconde branche (les projets ouverts seulement, comme la vraie requête), et
- * ce que le harnais (`shares`) doit dire en écho pour que
- * `ctx.sharing.scope()` connaisse le domicile. Lu à l'appel : un test qui
- * mime le ménage de l'app (`items.forget`) le mute après coup.
+ * `projections` reproduit `item_shares` : `projectId → espaces où il est projeté`,
+ * la seconde branche de `listVisible` / `findVisible`, que le harnais (`shares`)
+ * doit dire en écho pour que `ctx.sharing.scope()` connaisse le domicile. Lu à
+ * l'appel, un test qui mime `items.forget` le mute après coup.
  */
 function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
     let seq = 100;
@@ -247,17 +234,17 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         events: [],
         links: { uptime: [], database: [], deploy: [], repo: [], site: [] }
     };
-    // `locate` rend la ligne vivante, pour les mutations ; `find` en rend une
-    // copie, comme une base rend une ligne fraîche : un handler qui relit une
-    // ligne après l'avoir écrite ne doit pas voir sa lecture d'avant changer.
+    // `locate` rend la ligne vivante, pour les mutations ; `find` en rend une copie,
+    // comme une base rend une ligne fraîche : un handler qui relit une ligne après
+    // l'avoir écrite ne doit pas voir sa lecture d'avant changer.
     const locate = <T extends { id: number; workspace_id: number }>(list: T[], id: number, ws: number): T | null =>
         list.find((r) => r.id === id && r.workspace_id === ws) ?? null;
     const find = <T extends { id: number; workspace_id: number }>(list: T[], id: number, ws: number): T | null => {
         const row = locate(list, id, ws);
         return row ? { ...row } : null;
     };
-    // Par identifiant seul, comme les lectures d'une ligne de l'arbre dont le
-    // handler remonte au projet avant d'agir.
+    // Par identifiant seul, comme les lectures d'une ligne de l'arbre dont le handler
+    // remonte au projet avant d'agir.
     const findAny = <T extends { id: number }>(list: T[], id: number): T | null => {
         const row = list.find((r) => r.id === id);
         return row ? { ...row } : null;
@@ -698,9 +685,9 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
 }
 
 /**
- * Un codec qui étiquette son étage : le harnais chiffre à l'identité, ce qui
- * ne dit pas SOUS QUEL codec une ligne a été écrite. Posé sur `ctx.cipher`, il
- * rend visible le choix du palier, qui est toute la question ici.
+ * Un codec qui étiquette son étage : le harnais chiffre à l'identité, ce qui ne dit
+ * pas sous quel codec une ligne a été écrite. Posé sur `ctx.cipher`, il rend visible
+ * le choix du palier, qui est toute la question ici.
  */
 function taggedCipher(tag: string): SdkCipher {
     return {
@@ -716,11 +703,10 @@ function tagging(ctx: TestContext<FakeRepo>): TestContext<FakeRepo> {
 }
 
 /**
- * Le même étiquetage, vu d'une fenêtre : l'étage ouvert d'ici porte `server:`,
- * et le codec d'un projet projeté (`scope.cipherFor`) porte l'étiquette de son
- * domicile (`home:` par défaut). C'est ce qui prouve qu'une ligne écrite depuis
- * la fenêtre l'est sous la clé de l'espace d'origine, et qu'une ligne lue l'est
- * avec elle : à l'identité, le harnais ne saurait pas distinguer les deux.
+ * Le même étiquetage vu d'une fenêtre : l'étage ouvert d'ici porte `server:`, celui
+ * d'un projet projeté l'étiquette de son domicile. C'est ce qui prouve qu'une ligne
+ * écrite depuis la fenêtre l'est sous la clé de l'espace d'origine, et lue avec
+ * elle ; à l'identité, le harnais ne distinguerait pas les deux.
  */
 function windowTagging(ctx: TestContext<FakeRepo>, homeTag = 'home'): TestContext<FakeRepo> {
     tagging(ctx);
@@ -737,7 +723,7 @@ function windowTagging(ctx: TestContext<FakeRepo>, homeTag = 'home'): TestContex
     return ctx;
 }
 
-/** Chez lui : l'étage ouvert de l'espace d'origine porte `home:`, celui que ses fenêtres voient par `scope.cipherFor`. */
+/** Chez lui : l'étage ouvert de l'espace d'origine porte `home:`. */
 function homeTagging(ctx: TestContext<FakeRepo>): TestContext<FakeRepo> {
     ctx.cipher = (mode) => taggedCipher(mode === 'private' ? 'private' : 'home');
     return ctx;
@@ -790,8 +776,8 @@ describe('le registre des commandes', () => {
             'projects.get',
             'projects.board',
             'projects.messageList',
-            // Une lecture est personnelle : la diffuser ferait re-solliciter
-            // tout l'espace parce qu'une seule personne a ouvert une carte.
+            // Une lecture est personnelle : la diffuser ferait re-solliciter tout
+            // l'espace parce qu'une personne a ouvert une carte.
             'projects.markRead',
             'projects.plan',
             'projects.eventList',
@@ -824,8 +810,8 @@ describe('le registre des commandes', () => {
         assert.deepEqual(topicsOf('projects.databaseUnlink'), ['projects', 'database']);
         assert.deepEqual(topicsOf('projects.audienceLink'), ['projects', 'audience']);
         assert.equal(topicsOf('projects.cardAdd'), true);
-        // Aucune liste ne nomme un sujet que le boot refuserait : les nôtres
-        // (l'id, le secondaire du manifest) et ceux des quatre features reliées.
+        // Aucune liste ne nomme un sujet que le boot refuserait : les nôtres et ceux
+        // des quatre features reliées.
         const known = new Set(['projects', 'projectsChat', 'git', 'deploy', 'database', 'audience']);
         for (const h of projectsHandlers) {
             if (Array.isArray(h.mutates)) {
@@ -1002,8 +988,8 @@ describe('projects.update / setStatus / setVersion : le profil', () => {
             handlerFor(projectSetVersion)(ctx, { projectId: 2, source: 'github_release', version: '' }),
             failsWith('validation')
         );
-        // En `github_release`, le numéro appartient au module Git : celui
-        // demandé est ignoré, celui en place est gardé.
+        // En `github_release`, le numéro appartient au module Git : celui demandé est
+        // ignoré, celui en place est gardé.
         const followed = await handlerFor(projectSetVersion)(ctx, {
             projectId: 1,
             source: 'github_release',
@@ -1057,8 +1043,8 @@ describe('projects.setSecurityTier : la conversion d’étage', () => {
         assert.equal(converted.project.title, 'Projet 1');
         assert.equal(converted.project.versionSource, 'manual');
 
-        // Chaque cellule de l'arbre est relue sous le codec gardé, et rien
-        // ne reste sous l'ancien.
+        // Chaque cellule de l'arbre est relue sous le codec gardé, rien ne reste sous
+        // l'ancien.
         const tree = [
             repo.rows.projects[0].content,
             repo.rows.columns[0].content,
@@ -1071,8 +1057,8 @@ describe('projects.setSecurityTier : la conversion d’étage', () => {
             tree.join('\n')
         );
 
-        // Les liaisons aux objets d'espace tombent ; les services surveillés,
-        // que le module ne relie pas par un contrat d'espace ouvert, restent.
+        // Les liaisons aux objets d'espace tombent ; les services surveillés, que le
+        // module ne relie pas par un contrat d'espace ouvert, restent.
         assert.deepEqual(
             [repo.rows.links.repo, repo.rows.links.database, repo.rows.links.site, repo.rows.links.deploy].map(
                 (l) => l.length
@@ -1081,8 +1067,8 @@ describe('projects.setSecurityTier : la conversion d’étage', () => {
         );
         assert.equal(repo.rows.links.uptime.length, 1);
 
-        // Les événements de déliaison sont écrits sous l'ANCIEN étage, puis
-        // convertis avec le reste ; la conversion elle-même sous le nouveau.
+        // Les événements de déliaison sont écrits sous l'ancien étage puis convertis
+        // avec le reste ; la conversion elle-même l'est sous le nouveau.
         const kinds = repo.rows.events.map((e) => e.kind);
         assert.deepEqual(kinds, [
             'projects.status',
@@ -1564,10 +1550,9 @@ describe('projects.myTasks : mes tâches à travers les projets', () => {
 
 describe('le partage inter-espaces', () => {
     /**
-     * Un projet projeté : le projet 1 vit dans l'espace 42 (partagé), avec sa
-     * colonne 10 et sa carte 11, tout son arbre sous le codec ouvert de son
-     * domicile (`home:`) ; il se projette vers l'espace 1, où vit le projet 2
-     * (`server:`, colonne 20, carte 21).
+     * Un projet projeté : le projet 1 vit dans l'espace 42, avec sa colonne 10 et sa
+     * carte 11, tout son arbre sous le codec ouvert de son domicile (`home:`) ; il se
+     * projette vers l'espace 1, où vit le projet 2 (`server:`, colonne 20, carte 21).
      */
     function projected(over: Omit<TestContextOverrides<FakeRepo>, 'repo' | 'workspaceId' | 'shares'> = {}) {
         const repo = fakeRepo({ 1: [1] });
@@ -1623,8 +1608,8 @@ describe('le partage inter-espaces', () => {
             })
         );
 
-        // Les locaux d'abord, puis les projetés ; les compteurs et les non-lus
-        // du projet projeté sont ceux de l'appelant, comme chez lui.
+        // Les locaux d'abord, puis les projetés ; les compteurs et les non-lus d'un
+        // projet projeté sont ceux de l'appelant, comme chez lui.
         const listed = await handlerFor(projectList)(window, {});
         assert.deepEqual(
             listed.projects.map((p) => [
@@ -1708,8 +1693,8 @@ describe('le partage inter-espaces', () => {
             plan.milestones.map((m) => m.name),
             ['Bêta']
         );
-        // Les acteurs et les auteurs voyagent en identifiants : c'est le client
-        // qui nomme parmi les membres d'ici, et masque les autres.
+        // Les acteurs et les auteurs voyagent en identifiants : c'est le client qui
+        // nomme parmi les membres d'ici, et masque les autres.
         const history = await handlerFor(projectEventList)(window, { projectId: 1 });
         assert.deepEqual(
             history.events.map((e) => [e.label, e.actorUserId]),
@@ -1732,8 +1717,8 @@ describe('le partage inter-espaces', () => {
         });
         const row = repo.rows.cards.find((c) => c.id === added.card.id)!;
         assert.deepEqual([row.workspace_id, row.assignee_user_id, row.content.startsWith('home:')], [42, 2, true]);
-        // Chez lui, où 2 n'est pas membre, le même assigné est refusé : la
-        // garde est celle de l'espace actif.
+        // Chez lui, où 2 n'est pas membre, le même assigné est refusé : la garde est
+        // celle de l'espace actif.
         await assert.rejects(
             handlerFor(projectCardAdd)(home, { projectId: 1, columnId: 10, card: { ...CARD, assigneeUserId: 2 } }),
             failsWith('validation')
@@ -1761,8 +1746,7 @@ describe('le partage inter-espaces', () => {
             failsWith('validation')
         );
 
-        // La frise de l'archivage est écrite chez lui, sous son codec, par
-        // l'appelant d'ici.
+        // La frise de l'archivage est écrite chez lui, sous son codec.
         await handlerFor(projectCardArchive)(window, { cardId: 11 });
         const archived = repo.rows.events.at(-1)!;
         assert.deepEqual(
@@ -1893,8 +1877,8 @@ describe('le partage inter-espaces', () => {
                 labels: [{ id: 9, label: 'Service 9' }]
             });
         }
-        // Sans module : les identifiants restent, les noms valent `null` ; et
-        // les compteurs d'onglets se lisent au domicile, depuis la fenêtre.
+        // Sans module, les identifiants restent et les noms valent `null` ; les
+        // compteurs d'onglets se lisent au domicile, depuis la fenêtre.
         const bare = contextWith(repo, { workspaceId: 1, shares: { 1: 42 } });
         assert.deepEqual(await handlerFor(projectRepoList)(bare, { projectId: 1 }), {
             repoIds: [5],
@@ -1980,20 +1964,20 @@ describe('le partage inter-espaces', () => {
             [[1, true]]
         );
 
-        // La bascule : le ménage est demandé à l'app, une seule fois, et
-        // seulement vers le palier gardé.
+        // Le ménage est demandé à l'app une seule fois, et seulement vers le palier
+        // gardé.
         await handlerFor(projectSetSecurityTier)(home, { projectId: 1, securityTier: 'guarded' });
         assert.deepEqual(home.forgotten, [1]);
         assert.equal(repo.rows.projects[0].security_tier, 'guarded');
-        // Avant même le ménage de l'app, la fenêtre ne voit plus un projet
-        // gardé : la projection ne rend que l'étage ouvert.
+        // Avant même le ménage de l'app, la fenêtre ne voit plus un projet gardé : la
+        // projection ne rend que l'étage ouvert.
         assert.deepEqual((await handlerFor(projectList)(window, {})).projects, []);
         await assert.rejects(handlerFor(projectGet)(window, { projectId: 1 }), failsWith('not_found'));
         await handlerFor(projectSetSecurityTier)(home, { projectId: 1, securityTier: 'open' });
         assert.deepEqual(home.forgotten, [1]);
 
-        // Ce que l'app a fait de l'oubli : la projection n'existe plus, et la
-        // fenêtre ne voit plus rien, ni en liste, ni au compte, ni par l'id.
+        // Après l'oubli, la projection n'existe plus et la fenêtre ne voit plus rien,
+        // ni en liste, ni au compte, ni par l'id.
         projections[1] = [];
         const after = windowTagging(contextWith(repo, { workspaceId: 7, kind: 'shared' }), 'server');
         assert.deepEqual((await handlerFor(projectList)(after, {})).projects, []);
@@ -2018,8 +2002,8 @@ describe("l'entrée items", () => {
         assert.equal(await items.homeOf(repo, 1, 9), null);
         assert.equal(await items.homeOf(repo, 99, 1), null);
 
-        // Le titre à l'étage ouvert, demandé avec le domicile ; un projet
-        // gardé, disparu ou d'ailleurs vaut `null`.
+        // Le titre à l'étage ouvert, demandé avec le domicile ; un projet gardé,
+        // disparu ou d'ailleurs vaut `null`.
         const open = contextWith(repo).cipher();
         assert.equal(await items.labelOf(repo, open, 1, 1), 'Projet 1');
         assert.equal(await items.labelOf(repo, open, 2, 1), 'Sans titre');

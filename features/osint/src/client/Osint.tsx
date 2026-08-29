@@ -28,19 +28,9 @@ import { HistoryPanel } from './HistoryPanel';
 import styles from './Osint.module.css';
 
 /**
- * OSINT — un champ, et des cartes.
- *
- * ## Le déroulé
- *
- * 1. `osint.lookup` reconnaît la cible et rend la **liste** des sondes. C'est
- *    instantané : il ne sonde rien.
- * 2. Une carte squelette apparaît par sonde, aussitôt.
- * 3. Un `osint.probe` part **par carte**, toutes en parallèle. Chacune se
- *    remplit dès que sa réponse arrive.
- *
- * Attendre le tout dans une seule commande aurait laissé l'écran vide pendant la
- * plus lente des sondes (crt.sh, ~3 s). Là, le DNS et les pivots sont là en
- * 100 ms, et le reste se pose derrière.
+ * Un champ, et des cartes. `osint.lookup` rend la liste des sondes sans rien
+ * sonder ; une carte squelette apparaît par sonde, et un `osint.probe` part par
+ * carte, en parallèle. Chacune se remplit dès que sa réponse arrive.
  */
 
 const KIND_LABELS: Record<OsintTargetKind, string> = {
@@ -81,12 +71,8 @@ export default function Osint(): React.ReactElement {
     const historyVersion = useResourceVersion('osint.history');
 
     /**
-     * L'état de verrou de la session, depuis le store que le widget de la
-     * topbar, l'invite de mot de passe et toutes les features partagent.
-     *
-     * C'est la seule source de vérité : peu importe *où* le mot de passe a été
-     * saisi — la pastille de la barre, une autre feature, l'invite déclenchée
-     * par un déverrouillage explicite — l'historique se relit tout seul.
+     * Le verrou de la session, depuis le store partagé : où que le mot de passe
+     * ait été saisi, l'historique se relit tout seul.
      */
     const { unlocked, enabled } = useSecrecy();
     const wasUnlocked = useRef(unlocked);
@@ -107,12 +93,9 @@ export default function Osint(): React.ReactElement {
     }, []);
 
     /**
-     * Charge l'historique **sans jamais réclamer le mot de passe**.
-     *
-     * Volontairement sans `withSecrecy` : ouvrir l'écran OSINT ne doit pas
-     * déclencher une invite. Les entrées que le coffre ne peut pas ouvrir
-     * reviennent avec `query: null`, le panneau les montre comme chiffrées, et
-     * le déverrouillage reste un geste explicite.
+     * Sans `withSecrecy`, délibérément : ouvrir l'écran ne doit pas déclencher
+     * une invite. Les entrées que le coffre ne peut pas ouvrir reviennent avec
+     * `query: null`, et le déverrouillage reste un geste explicite.
      */
     const loadHistory = useCallback(async () => {
         try {
@@ -208,14 +191,9 @@ export default function Osint(): React.ReactElement {
     );
 
     /**
-     * Rejoue une entrée d'historique : **réaffiche** ses résultats sans créer de
-     * doublon.
-     *
-     * Aucun `osint.lookup` n'est émis — c'est lui qui enregistre. La cible est
-     * redérivée localement par la fonction partagée `detectTarget`, et la liste
-     * des sondes lue dans la table partagée : le serveur aurait rendu exactement
-     * les mêmes. Les cartes se remplissent alors depuis son cache mémoire, donc
-     * instantanément tant que l'entrée est fraîche.
+     * Rejoue une entrée sans créer de doublon : aucun `osint.lookup` (c'est lui
+     * qui enregistre). Cible et sondes sont redérivées localement par les mêmes
+     * fonctions que le serveur.
      */
     const replay = useCallback(
         (entry: OsintHistoryEntry) => {
@@ -263,11 +241,7 @@ export default function Osint(): React.ReactElement {
         }
     }, []);
 
-    /**
-     * Les deux suppressions sont irréversibles et **silencieuses** une fois
-     * faites : rien ne se rejoue, et une recherche effacée est perdue. Elles
-     * passent donc par une confirmation, comme la suppression d'un appareil.
-     */
+    /** Irréversibles et silencieuses une fois faites : confirmation obligatoire. */
     const askClearHistory = useCallback(() => {
         setConfirm({
             title: 'Effacer tout l’historique ?',
@@ -338,9 +312,6 @@ export default function Osint(): React.ReactElement {
                     <span className='icon icon-clock' aria-hidden />
                     {historyLocked && <span className={styles.iconBadge} aria-hidden />}
                 </button>
-                {/* Le bouton commun, comme partout : il ouvre la coquille de
-                    réglages, dont l'onglet Sources porte les clés des
-                    fournisseurs (l'ancien dialogue derrière l'icône de clé). */}
                 <FeatureSettingsButton scope={{ kind: 'feature', feature: 'osint' }} />
             </form>
 

@@ -6,17 +6,8 @@ import { SENTINEL_RULES, type DeviceSentinelState, type RuleProbe } from '../con
 import styles from './style.module.css';
 
 /**
- * L'en-tête d'une machine : son état, ce qu'on sait mesurer d'elle, et les deux
- * actions qui la concernent.
- *
- * Les sondes manquantes sont **affichées** plutôt que tues. Une machine dont
- * l'agent ne remonte pas encore les chemins d'exécutables n'a pas « rien à se
- * reprocher » : elle n'a pas été regardée sur ce point, et la différence décide
- * s'il faut aller l'inspecter ou simplement mettre son agent à jour.
- *
- * Les réglages sont ceux de la coquille commune, ouverts sur l'onglet
- * Appareils (le même bouton que dans l'en-tête de la flotte) : plus de second
- * engrenage vers un dialogue maison.
+ * L'en-tête d'une machine. Les sondes manquantes sont affichées plutôt que
+ * tues : une machine non regardée sur un point n'a pas « rien à se reprocher ».
  */
 
 const PROBE_LABEL: Record<RuleProbe, string> = {
@@ -93,8 +84,7 @@ export default function DeviceHeader({ device, onScanNow }: Props) {
                             Relever maintenant
                         </Button>
                     )}
-                    {/* Le bouton commun, en dernier, ouvert sur l'onglet Appareils :
-                        une machine non surveillée l'affiche en primaire, avec le
+                    {/* Une machine non surveillée l'affiche en primaire, avec le
                         seul geste qu'elle attend. */}
                     <FeatureSettingsButton
                         scope={{ kind: 'feature', feature: 'sentinel' }}

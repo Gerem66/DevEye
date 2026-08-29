@@ -2,13 +2,11 @@ import type { MailOAuthProvider } from '../contracts/domain';
 import { env } from './env';
 
 /**
- * OAuth2 authorization-code flow for Gmail/Microsoft 365 mailboxes, used to
- * obtain the tokens that let `client.ts` authenticate to
- * standard IMAP/SMTP via SASL XOAUTH2 — no Gmail API / Graph API involved, so
- * the rest of the app has exactly one code path for every account regardless
- * of auth method. Entirely optional per provider: with no client id/secret
- * configured, `isConfigured` is false and the caller hides that provider's
- * "Connect with..." option rather than erroring.
+ * OAuth2 authorization-code flow for Gmail/Microsoft 365 mailboxes, to obtain
+ * the tokens that let `client.ts` authenticate to standard IMAP/SMTP via SASL
+ * XOAUTH2, no Gmail API / Graph API involved. Entirely optional per provider:
+ * with no client id/secret configured, `isOAuthConfigured` is false and the
+ * caller hides that provider's "Connect with..." option rather than erroring.
  */
 
 interface ProviderConfig {
@@ -69,10 +67,9 @@ export function oauthProviderEndpoints(provider: MailOAuthProvider) {
 
 /**
  * Le retour du consentement : la route publique du module, sur l'origine de
- * l'app (`ctx.origins.app` / `deps.origins.app`, l'ex `PUBLIC_ORIGIN` que le
- * module ne lit pas). La même adresse doit être donnée à l'autorisation et à
- * l'échange du code : le fournisseur refuse un échange dont le `redirect_uri`
- * ne redit pas celui de l'autorisation.
+ * l'app. La même adresse doit être donnée à l'autorisation et à l'échange du
+ * code, le fournisseur refusant un échange dont le `redirect_uri` ne redit pas
+ * celui de l'autorisation.
  */
 function redirectUri(appOrigin: string): string {
     return `${appOrigin}/api/mail/oauth/callback`;
@@ -115,11 +112,10 @@ interface TokenResponse {
 }
 
 /**
- * Pull the `email` claim out of the id_token. Not signature-verified: the
- * token just arrived directly from the provider's token endpoint over a
- * TLS + client-secret-authenticated request, which already establishes trust
- * — this is only reading a claim out of a response we already trust, not
- * accepting a bearer token from an untrusted party.
+ * Pull the `email` claim out of the id_token. Not signature-verified: the token
+ * just arrived from the provider's token endpoint over a TLS +
+ * client-secret-authenticated request, so this reads a claim out of a response
+ * already trusted, not a bearer token from an untrusted party.
  */
 function emailFromIdToken(idToken: string | undefined): string | null {
     if (!idToken) return null;

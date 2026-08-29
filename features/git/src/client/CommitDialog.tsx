@@ -13,7 +13,6 @@ interface CommitDialogProps {
     onClose: () => void;
 }
 
-/** Libellé court de l'état d'un fichier. */
 const STATUS_LABELS: Record<GitDiffFile['status'], string> = {
     added: 'ajouté',
     modified: 'modifié',
@@ -27,13 +26,12 @@ const STATUS_LABELS: Record<GitDiffFile['status'], string> = {
 /**
  * Le détail d'un commit : son message, ses compteurs, et son diff.
  *
- * Le diff est lu **chez le fournisseur à l'ouverture**, jamais dans le cache
- * local : voir `gitCommitDetailSchema` pour la raison. C'est donc le seul
- * écran du module dont l'attente dépend d'une API tierce, et il l'annonce.
+ * Le diff est lu chez le fournisseur à l'ouverture, jamais dans le cache local
+ * (voir `gitCommitDetailSchema`) : c'est le seul écran du module dont l'attente
+ * dépend d'une API tierce, et il l'annonce.
  *
- * Les fichiers sont repliés par défaut : un commit de fusion touche parfois cent
- * fichiers, et dérouler cent diffs pour en lire un serait absurde. Le premier
- * s'ouvre seul quand il n'y en a qu'un — le cas le plus fréquent.
+ * Les fichiers sont repliés par défaut, un commit de fusion en touchant parfois
+ * cent ; le premier s'ouvre seul quand il n'y en a qu'un.
  */
 export function CommitDialog({ open, repoId, sha, onClose }: CommitDialogProps) {
     const [detail, setDetail] = useState<GitCommitDetail | null>(null);
@@ -41,13 +39,9 @@ export function CommitDialog({ open, repoId, sha, onClose }: CommitDialogProps) 
     const [error, setError] = useState<string | null>(null);
     const [expanded, setExpanded] = useState<Set<string>>(new Set());
     /**
-     * Les fichiers déjà ouverts au moins une fois.
-     *
-     * Un diff ne se monte qu'au premier dépliage — un commit de fusion en
-     * touche parfois trois cents, et les rendre tous d'emblée coûterait cher
-     * pour n'en lire qu'un. Mais il reste monté ensuite : sans ça, le repli
-     * démonterait le contenu avant que l'animation n'ait le temps de jouer, et
-     * la fermeture redeviendrait le à-coup qu'on cherche à supprimer.
+     * Les fichiers déjà ouverts au moins une fois : un diff ne se monte qu'au
+     * premier dépliage, et reste monté ensuite, sans quoi le repli démonterait le
+     * contenu avant que l'animation ait joué.
      */
     const [mounted, setMounted] = useState<Set<string>>(new Set());
 
@@ -124,9 +118,8 @@ export function CommitDialog({ open, repoId, sha, onClose }: CommitDialogProps) 
                 {detail && (
                     <>
                         <div className={styles.commitHead}>
-                            {/* Le sha **entier**, et non les dix caractères
-                                affichés : ce qu'on copie doit être ce qu'un
-                                `git checkout` accepte sans ambiguïté. */}
+                            {/* Le sha entier, et non les dix caractères affichés :
+                                ce qu'on copie doit passer un `git checkout`. */}
                             <CopySha sha={detail.sha} />
                             <span className={styles.hint}>
                                 {detail.authorName || 'Auteur inconnu'}
@@ -201,14 +194,11 @@ export function CommitDialog({ open, repoId, sha, onClose }: CommitDialogProps) 
 const COPIED_MS = 1600;
 
 /**
- * Le sha du commit, cliquable pour le copier.
+ * Le sha du commit, cliquable pour le copier. La confirmation est sur le bouton
+ * lui-même, là où l'on regarde déjà, plutôt que dans un toast.
  *
- * Le retour est **sur le bouton lui-même** plutôt que dans un toast : c'est un
- * geste minuscule dont on veut la confirmation là où l'on regarde déjà, et un
- * toast pour une copie de presse-papiers serait disproportionné.
- *
- * `navigator.clipboard` n'existe qu'en contexte sécurisé (HTTPS ou localhost).
- * Ailleurs on ne prétend pas avoir copié : le bouton le dit.
+ * `navigator.clipboard` n'existe qu'en contexte sécurisé (HTTPS ou localhost) :
+ * ailleurs on ne prétend pas avoir copié, le bouton le dit.
  */
 function CopySha({ sha }: { sha: string }) {
     const [state, setState] = useState<'idle' | 'done' | 'failed'>('idle');
@@ -245,12 +235,9 @@ function CopySha({ sha }: { sha: string }) {
 }
 
 /**
- * Un diff unifié, colorisé ligne à ligne.
- *
- * Analyse volontairement minimale — le premier caractère suffit à classer une
- * ligne, et un vrai analyseur de patch n'apporterait rien de plus à l'écran.
- * `patch` absent n'est pas une panne : GitHub l'omet pour les binaires et les
- * fichiers trop gros, et le dire vaut mieux qu'afficher un vide inexpliqué.
+ * Un diff unifié, colorisé ligne à ligne. Analyse volontairement minimale : le
+ * premier caractère suffit à classer une ligne. `patch` absent n'est pas une
+ * panne, GitHub l'omet pour les binaires et les fichiers trop gros.
  */
 function Patch({ patch }: { patch: string | null }) {
     const lines = useMemo(() => (patch === null ? [] : patch.split('\n')), [patch]);

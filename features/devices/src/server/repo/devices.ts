@@ -10,18 +10,13 @@ export interface DeviceConfigPatch {
 }
 
 /**
- * La table `devices` et sa jonction `device_workspaces`, vues de la flotte :
- * ce que la page Appareils et Monitoring lisent et changent d'une machine.
- * L'enrôlement (création, jeton, ré-appairage) et ce que l'agent rapporte
- * (`last_seen`, version, rapport) restent au socle, qui les écrit sans session.
+ * La table `devices` et sa jonction `device_workspaces`, vues de la flotte.
+ * L'enrôlement et ce que l'agent rapporte (`last_seen`, version, rapport)
+ * restent au socle, qui les écrit sans session.
  */
 export interface DeviceRepo {
     findById(id: string): Promise<DeviceRow | null>;
-    /**
-     * Les lignes des identifiants donnés, dans l'ordre demandé : la liste de
-     * l'espace vient de la façade (qui porte la garde et le rang), les lignes
-     * entières d'ici. Un identifiant inconnu est simplement absent.
-     */
+    /** Les lignes des identifiants donnés, dans l'ordre demandé ; un inconnu est absent. */
     findByIds(ids: string[]): Promise<DeviceRow[]>;
     /** La flotte entière, du plus récent au plus ancien : la page Appareils. */
     listAll(): Promise<DeviceRow[]>;
@@ -36,18 +31,12 @@ export interface DeviceRepo {
     archive(id: string): Promise<void>;
     /** Hard purge: the row and, by FK cascade, all its history. */
     delete(id: string): Promise<boolean>;
-    /**
-     * Range les appareils d'un espace : `ids` est la liste complète, rang =
-     * indice. Ne touche aucun état d'agent.
-     */
+    /** Range les appareils d'un espace : `ids` est la liste complète, rang = indice. */
     reorder(workspaceId: number, ids: string[]): Promise<void>;
 
     /** Les espaces ayant accès à cet appareil. */
     workspaceIdsOf(deviceId: string): Promise<number[]>;
-    /**
-     * Idem pour plusieurs appareils d'un coup : la page Appareils affiche la
-     * flotte entière, et une requête par carte serait un N+1 pur.
-     */
+    /** Idem pour plusieurs appareils d'un coup : une requête par carte serait un N+1. */
     workspaceIdsFor(deviceIds: string[]): Promise<Map<string, number[]>>;
     /**
      * Fixe l'ensemble des espaces ayant accès. La liste est complète : un espace
@@ -82,7 +71,7 @@ export function deviceRepo(q: SdkQueryable): DeviceRepo {
             await q.execute('UPDATE devices SET name = ? WHERE id = ?', [name, id]);
         },
         async setConfig(id, patch) {
-            // Map each provided field to its column; only update what's present.
+            // Only update the fields present.
             const columns: Record<keyof DeviceConfigPatch, string> = {
                 metricIntervalSeconds: 'metric_interval_seconds',
                 processCapture: 'process_capture',
@@ -118,8 +107,7 @@ export function deviceRepo(q: SdkQueryable): DeviceRepo {
             );
         },
         async archive(id) {
-            // Keep the row (and its monitoring history) but neutralise the device:
-            // wipe the token so it can never reconnect, and clear deletion bookkeeping.
+            // Keep the row and its history, wipe the token so it can never reconnect.
             await q.execute(
                 `UPDATE devices
                  SET status = 'archived', token_hash = '', status_before_delete = NULL, delete_error = NULL
@@ -132,13 +120,10 @@ export function deviceRepo(q: SdkQueryable): DeviceRepo {
             return r.affectedRows > 0;
         },
         async reorder(workspaceId, ids) {
-            // Rang = indice ; un appareil que cet espace ne voit pas est ignoré
-            // en silence, la clause `workspace_id` s'en charge. Rien d'autre
-            // n'est touché : ranger n'est pas administrer une machine.
-            //
             // Un seul UPDATE : une boucle laisserait un rangement à moitié
             // appliqué si une requête échouait, et deux rangements simultanés
-            // s'entrelaceraient.
+            // s'entrelaceraient. Un appareil que cet espace ne voit pas est
+            // ignoré par la clause `workspace_id`.
             if (ids.length === 0) return;
             const cases = ids.map(() => 'WHEN ? THEN ?').join(' ');
             const params: (string | number)[] = [];
@@ -174,8 +159,7 @@ export function deviceRepo(q: SdkQueryable): DeviceRepo {
             return out;
         },
         async setWorkspaces(deviceId, workspaceIds) {
-            // Retirer d'abord, ajouter ensuite : les espaces conservés ne sont
-            // pas touchés, donc leur rang survit au partage.
+            // Les espaces conservés ne sont pas touchés : leur rang survit.
             if (workspaceIds.length === 0) {
                 await q.execute('DELETE FROM device_workspaces WHERE device_id = ?', [deviceId]);
                 return;

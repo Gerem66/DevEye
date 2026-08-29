@@ -29,11 +29,10 @@ function waitUntil(startedAt: number, minMs: number): Promise<void> {
 }
 
 /**
- * `CardPhase` drives the card's geometry/content (kept in React state — this part
- * is purely declarative and reliable):
+ * The card's geometry/content:
  * - `form`      : open card showing the login or 2FA form.
  * - `collapsing`: card animates down to a 3px bar (a submit is in progress).
- * - `auto`      : auto-login on boot — instantly collapsed, no transition, no form.
+ * - `auto`      : auto-login on boot, instantly collapsed, no transition, no form.
  */
 type CardPhase = 'form' | 'collapsing' | 'auto';
 
@@ -43,9 +42,6 @@ const CARD_PHASE_CLASS: Record<CardPhase, string> = {
     collapsing: ' card-to-progressbar',
     auto: ' card-to-progressbar auto-login'
 };
-
-// The fill's own timing (0.3s delay + 1s sweep) lives in style.css; PROGRESS_MS
-// above must stay equal to their sum so the splash fades exactly as it completes.
 
 function LoginPage() {
     const { status, login, refresh } = useAuth();
@@ -58,8 +54,8 @@ function LoginPage() {
     // Start collapsed when the app is still resolving the session (`unknown`), so
     // an auto-login lands directly on the bar with no flash of the open card.
     const [phase, setPhase] = useState<CardPhase>(status === 'unknown' ? 'auto' : 'form');
-    // Whether the progress bar is filling. This is the ONLY state behind the fill:
-    // a single boolean → a `filling` class → a CSS transition on `transform`.
+    // The only state behind the fill: a boolean, a `filling` class, a CSS
+    // transition on `transform`.
     const [filling, setFilling] = useState(false);
 
     const cardRef = useRef<HTMLDivElement | null>(null);
@@ -71,11 +67,9 @@ function LoginPage() {
 
     const [hide, setHide] = useState(false);
 
-    // The fill is a CSS transition on `transform: scaleX` (see style.css), toggled
-    // by the `filling` class. `transform` runs on the compositor, so the fill keeps
-    // animating even while a successful login mounts the (heavy) HomePage on the
-    // main thread — a JS/rAF fill froze there. It also can't leak state between
-    // attempts (it's pure declarative state) and behaves the same in every engine.
+    // The fill is a CSS transition on `transform: scaleX` (see style.css), which
+    // runs on the compositor: it keeps animating while a successful login mounts
+    // the heavy HomePage on the main thread (a JS/rAF fill froze there).
     const startProgress = () => {
         animStartRef.current = Date.now();
         setFilling(true);
@@ -88,14 +82,12 @@ function LoginPage() {
             setPhase('auto');
             setFilling(true);
         } else if (status === 'anonymous') {
-            // Reset the card only when the form is (re)shown. When authenticated the
-            // login page is fading out, so keep the card collapsed — reverting it here
-            // would flash the card back open during the fade.
+            // Reset the card only when the form is (re)shown: when authenticated the
+            // login page is fading out, reverting would flash the card open.
             setPhase('form');
             setFilling(false);
-            // LoginPage is never unmounted (only hidden), so wipe any residual form
-            // state when the user lands back here — otherwise a previous 2FA prompt,
-            // typed code or error would resurface after logout / session expiry.
+            // LoginPage is never unmounted, only hidden: wipe residual form state
+            // (a previous 2FA prompt, code or error) on landing back here.
             setTwoFaRequired(false);
             setTwoFaCode('');
             setPassword('');
@@ -105,9 +97,8 @@ function LoginPage() {
     }, [status]);
 
     // Pin the card's height to its measured content so it can animate between the
-    // login and (taller) 2FA layouts — and collapse to the progress bar — without
-    // magic numbers or clipping. ResizeObserver keeps it correct if the content
-    // reflows (font load, viewport change…).
+    // login and 2FA layouts, and collapse to the bar, without magic numbers.
+    // ResizeObserver keeps it correct on reflow.
     useLayoutEffect(() => {
         const card = cardRef.current;
         const content = contentRef.current;
@@ -119,11 +110,9 @@ function LoginPage() {
         return () => ro.disconnect();
     }, [twoFaRequired]);
 
-    // Fade to the homepage only once authenticated, the progress-bar animation has
-    // fully played, AND the home has its first data — so the transition always
-    // lands on a clean, populated dashboard instead of a half-empty grid. The
-    // animation is never cut short (we always wait out its remaining time), and a
-    // cap keeps a stalled first load from trapping the user on the splash.
+    // Fade to the homepage only once authenticated, the progress-bar animation
+    // has fully played, and the home has its first data. A cap keeps a stalled
+    // first load from trapping the user on the splash.
     useEffect(() => {
         if (status !== 'authenticated') {
             setHide(false);
@@ -166,10 +155,9 @@ function LoginPage() {
         };
     }, [status]);
 
-    // Whenever the card (re)opens to a form — first show, after an error, on Back —
-    // return focus to that form's primary field, once it's interactive again
-    // (`loading` gates this so we never try to focus the disabled 2FA input). One
-    // place for it, so every reopen path behaves the same.
+    // Whenever the card (re)opens to a form, return focus to its primary field
+    // once interactive (`loading` gates this so the disabled 2FA input is never
+    // focused).
     useEffect(() => {
         if (phase !== 'form' || loading) return;
         // `username` is read but intentionally NOT a dependency: we only refocus on a
@@ -211,14 +199,12 @@ function LoginPage() {
         try {
             const result = await login(username, password);
             if (result.twoFactorRequired) {
-                // Let the whole collapse-and-fill animation finish before re-opening
-                // the card as the 2FA prompt — like every other transition (success,
-                // error), we never reveal the next view mid-fill. Consistent and clean.
+                // Let the collapse-and-fill animation finish before re-opening the
+                // card as the 2FA prompt: the next view is never revealed mid-fill.
                 await waitUntil(startedAt, PROGRESS_MS);
                 stopAnim();
-                // The username/password already authenticated against the server, so
-                // clear them now: going Back must return to a fresh form, and they
-                // must never linger past this first step whatever the 2FA outcome.
+                // Already authenticated against the server: clear them now, Back
+                // must return to a fresh form.
                 setUsername('');
                 setPassword('');
                 setTwoFaRequired(true);
@@ -268,10 +254,9 @@ function LoginPage() {
     };
 
     /**
-     * Leave the 2FA prompt ("Back"): reset the form and tell the server to drop
-     * the pending challenge (and any DEK stashed at the password step). The
-     * server call is best-effort — a network error here must not trap the user
-     * on the 2FA card, so we reset the UI regardless.
+     * Leave the 2FA prompt: reset the form and tell the server to drop the
+     * pending challenge (and any DEK stashed at the password step). Best-effort:
+     * a network error must not trap the user on the 2FA card.
      */
     const onCancel2FA = () => {
         setTwoFaRequired(false);

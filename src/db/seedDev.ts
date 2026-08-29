@@ -7,9 +7,8 @@ import { getQueryable, type DbPool } from './pool';
 const DEV_USERNAME = process.env.SEED_DEV_USERNAME ?? 'dev';
 const DEV_EMAIL = process.env.SEED_DEV_EMAIL ?? 'dev@deveye.local';
 const DEV_PASSWORD = process.env.SEED_DEV_PASSWORD ?? 'devdevdev';
-// Only modular, per-workspace features belong here. Structural pages (profile,
-// security) are part of DevEye itself, reached from the navbar, and are never
-// stored in the features list.
+// Only modular, per-workspace features belong here; structural pages (profile,
+// security) are never stored in the features list.
 const DEV_FEATURES = ['devices', 'weather', 'password'];
 
 /**
@@ -17,9 +16,8 @@ const DEV_FEATURES = ['devices', 'weather', 'password'];
  * Runs only when SEED_DEV=true (set by docker-compose.dev.yml), so it never
  * touches a real database.
  *
- * Passe par les repos plutôt que par du SQL brut : créer un compte est
- * indissociable de créer son espace personnel, et dupliquer cette séquence ici
- * la ferait diverger de l'inscription dès la première évolution.
+ * Passe par les repos plutôt que par du SQL brut, pour ne pas diverger de
+ * l'inscription (compte + espace personnel).
  */
 export async function seedDevAccount(pool: DbPool): Promise<void> {
     const db: Database = createDatabase(getQueryable(pool));

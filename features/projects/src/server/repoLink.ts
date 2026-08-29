@@ -5,32 +5,18 @@ import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 import { assertAtHome, linkLabels, loadProject, recordEvent, WRITE, type Ctx } from './_shared';
 
 /**
- * Le pointeur d'un projet vers des dépôts de l'espace.
+ * Le pointeur d'un projet vers des dépôts de l'espace : le dépôt n'appartient pas au
+ * projet, il vit dans la feature Git avec son cache, sa synchronisation et ses
+ * jetons. La liaison est non exclusive dans les deux sens, un projet réel se
+ * composant souvent d'un client, d'un serveur et de contrats partagés.
  *
- * Trois commandes seulement : **le dépôt n'appartient pas au projet.** Il vit
- * dans la feature Git, qui porte son cache, sa synchronisation et ses jetons.
- * Ce qui suit ne fait que poser et retirer un pointeur, d'où le fait que tout
- * y soit un `repoId` et rien d'autre.
+ * Gardé sous `projects: write` : c'est le projet qu'on modifie ici, pas le dépôt,
+ * dont le contenu relève du droit `git`. La table de liaison appartient à Projets,
+ * qui ne lit pas la table des dépôts et ne les connaît que par le contrat qu'offre
+ * le module Git, lequel les nomme aussi.
  *
- * **Plusieurs dépôts par projet** depuis la migration 069 : un projet réel se
- * compose souvent d'un client, d'un serveur et de contrats partagés, chacun dans
- * son dépôt. La liaison est donc non exclusive dans les deux sens, comme celle
- * aux bases de données et aux services surveillés.
- *
- * Gardé sous `projects: write` : c'est le projet qu'on modifie ici, pas le
- * dépôt. Lire son contenu relève, lui, du droit `git`.
- *
- * La table de liaison (`project_repo_links`) est celle de Projets, lue par
- * `ctx.repo.links` à côté des services surveillés, des bases et des cibles :
- * Projets ne lit pas la table des dépôts, et ne les connaît que par le contrat
- * que le module Git offre, qui les nomme aussi (`labelOf`, sous le codec du
- * domicile du projet, pour une fenêtre qui ne les verrait pas autrement).
- *
- * Domicile seulement pour poser et retirer (`assertAtHome`) : une liaison
- * référence un dépôt de l'espace d'origine, que la fenêtre ne voit pas.
- *
- * Ces liaisons battent deux sujets (`['projects', 'git']`) : la fiche d'un
- * dépôt montre les projets qui l'utilisent, et doit suivre.
+ * Ces liaisons battent deux sujets (`['projects', 'git']`) : la fiche d'un dépôt
+ * montre les projets qui l'utilisent, et doit suivre.
  */
 
 export const projectRepoListFeature = defineSdkFeature({
@@ -51,21 +37,18 @@ export const projectRepoLinkFeature = defineSdkFeature({
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'relier un dépôt');
 
-        // Un projet confidentiel ne peut pas être lié : la liaison est une ligne
-        // en clair, le dépôt vit à l'étage ouvert, et la synchronisation tourne
-        // sans session. Accepter reviendrait à promettre une confidentialité
-        // qu'on ne tient pas.
+        // La liaison est une ligne en clair, le dépôt vit à l'étage ouvert et la
+        // synchronisation tourne sans session : accepter un projet confidentiel
+        // promettrait une confidentialité qu'on ne tient pas.
         if (project.security_tier === 'guarded') {
             throw new FeatureError('validation', 'Un projet confidentiel ne peut pas être relié à un dépôt.');
         }
 
-        // Le dépôt existe-t-il, et dans **cet** espace ? Sans cette garde on
-        // lierait n'importe quel identifiant, y compris celui d'un dépôt d'un
-        // autre espace, dont l'existence même n'a pas à fuiter.
-        //
-        // La question passe par le contrat que le module Git offre
-        // (`GIT_ITEMS_PROVIDER`) : Projets ne lit pas sa table, et dégrade
-        // proprement quand le module est absent.
+        // Le dépôt existe-t-il, et dans cet espace ? Sans cette garde on lierait
+        // n'importe quel identifiant, dont celui d'un dépôt d'un autre espace, dont
+        // l'existence n'a pas à fuiter. La question passe par le contrat qu'offre le
+        // module Git : Projets ne lit pas sa table, et dégrade proprement quand il
+        // est absent.
         const repos = ctx.providers.get<GitItemsProvider>(GIT_ITEMS_PROVIDER);
         if (!repos) throw new FeatureError('validation', 'Le module Git n’est pas installé.');
         if (!(await repos.exists(input.repoId, project.workspace_id))) {

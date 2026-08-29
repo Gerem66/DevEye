@@ -1,39 +1,27 @@
 -- Déploiement devient un module : ses clés Dokploy quittent
--- `workspace_credentials` (une table à deux propriétaires depuis la 061,
--- distingués par `provider`) pour une table à lui, `ft_deploy_credentials`,
--- au préfixe des modules.
+-- `workspace_credentials` (deux propriétaires distingués par `provider`) pour
+-- `ft_deploy_credentials`.
 --
--- C'est le socle qui crée la table et copie les lignes, pas une migration du
--- module : au démarrage, les migrations du socle tournent AVANT celles des
--- modules, et une migration de module ne peut pas écrire dans une table du
--- socle (`gen-features` borne ses instructions à son préfixe et à son
--- allowlist). Une seule migration, un seul boot, les gestes dans l'ordre
--- (patron de la 098). Le module possède la table ensuite ; son
--- `uninstall.sql` peut la détruire.
---
--- Les identifiants sont CONSERVÉS : `deploy_targets.credential_id` reste
--- valable tel quel, aucune ligne de cible n'est réécrite.
+-- C'est le socle qui crée la table et copie les lignes : les migrations du socle
+-- tournent AVANT celles des modules, et une migration de module ne peut pas
+-- écrire dans une table du socle (patron de la 098). Les identifiants sont
+-- CONSERVÉS : `deploy_targets.credential_id` reste valable tel quel.
 --
 -- La clé étrangère `fk_deploy_target_credential` (080, `ON DELETE SET NULL`)
--- est retirée et N'EST PAS recréée vers la nouvelle table. Répétée sur une
--- copie de la base le 28 août 2026, la suppression d'un espace échouait sur
--- elle : InnoDB revalide la ligne mise à NULL contre un parent que la même
--- cascade est en train de supprimer. Le ménage est désormais explicite, dans
--- le code du module (retirer une clé met à NULL les cibles qui la désignaient),
--- ce que la contrainte faisait sans le dire.
+-- est retirée et N'EST PAS recréée : la suppression d'un espace échouait sur
+-- elle, InnoDB revalidant la ligne mise à NULL contre un parent que la même
+-- cascade est en train de supprimer. Le ménage est explicite dans le module.
 --
--- Rejouable : la table se crée si elle manque, la copie ignore les doublons,
--- la clé étrangère ne se retire que si elle existe, les lignes copiées ne se
--- suppriment qu'après. Une base laissée à mi-chemin se répare en relançant.
+-- Rejouable : table créée si elle manque, copie qui ignore les doublons, FK
+-- retirée si elle existe, lignes copiées supprimées après.
 
 CREATE TABLE IF NOT EXISTS ft_deploy_credentials (
     id           INT AUTO_INCREMENT PRIMARY KEY,
     workspace_id INT          NOT NULL,
-    -- Étiquette lisible, choisie par l'utilisateur ; en clair, elle ne dit rien
-    -- de plus que « quelle clé » et sert à les distinguer dans un sélecteur.
+    -- Étiquette lisible, en clair : elle ne dit rien de plus que « quelle clé ».
     label        VARCHAR(64)  NOT NULL,
-    -- Racine de l'instance Dokploy, auto-hébergée par définition. NULL sur une
-    -- ligne d'époque saisie sans adresse ; le module refuse alors de s'en servir.
+    -- Racine de l'instance Dokploy. NULL sur une ligne d'époque saisie sans
+    -- adresse : le module refuse alors de s'en servir.
     base_url     VARCHAR(255) NULL,
     -- La clé d'API, chiffrée à l'étage ouvert. Jamais renvoyée au client.
     secret_enc   TEXT         NOT NULL,

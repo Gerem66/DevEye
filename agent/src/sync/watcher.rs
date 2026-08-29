@@ -19,23 +19,17 @@ use crate::sync::SyncEvent;
 
 /// Fenêtre de silence avant d'émettre (une rafale de writes = un seul event).
 ///
-/// 750 ms, et surtout pas moins de ~500 ms. Tirer plus tôt attrape un fichier à
-/// moitié écrit : on le hache, on l'envoie, puis on le renvoie à l'événement
-/// suivant, en laissant une version parasite dans `sync_versions` et dans la
-/// corbeille de chaque pair. 750 ms passe au-dessus de tous les motifs
-/// d'enregistrement atomique (écrire un temporaire puis renommer est
-/// instantané) et de l'écart d'un « fichier annexe puis fichier principal ».
-///
-/// C'est le SEUL coût que le scan incrémental ne rend pas gratuit : une session
-/// à vide ne coûte plus rien, mais une session déclenchée trop tôt sur un
-/// fichier en cours d'écriture coûte un vrai transfert, puis un second.
+/// Pas moins de ~500 ms : tirer plus tôt attrape un fichier à moitié écrit, qu'on
+/// hache et envoie, puis renvoie à l'événement suivant, en laissant une version
+/// parasite dans `sync_versions` et dans la corbeille de chaque pair. 750 ms
+/// couvre les enregistrements atomiques (temporaire puis rename) et l'écart
+/// d'un « fichier annexe puis fichier principal ».
 const QUIET: Duration = Duration::from_millis(750);
 /// Émission forcée si ça bouge sans interruption depuis aussi longtemps.
 ///
-/// INCHANGÉ, volontairement : c'est le plafond pendant une activité CONTINUE,
-/// pas le bouton de latence. Le descendre transformerait une compilation d'une
-/// minute dans un dossier synchronisé en six sessions au lieu de deux, et
-/// celles-là sont réellement sales, donc réellement coûteuses.
+/// C'est le plafond pendant une activité continue, pas le bouton de latence :
+/// le descendre transformerait une compilation d'une minute dans un dossier
+/// synchronisé en six sessions au lieu de deux, toutes réellement coûteuses.
 const MAX_WAIT: Duration = Duration::from_secs(30);
 /// Cadence de la boucle de debounce.
 const POLL: Duration = Duration::from_millis(250);
@@ -57,13 +51,10 @@ pub struct ShareWatcher {
 impl ShareWatcher {
     /// Compteur monotone des événements vus depuis le démarrage du watcher.
     ///
-    /// C'est la SEULE chose que le watcher ait le droit d'affirmer, et elle
-    /// survit à tout : un débordement de la file inotify l'incrémente aussi (on
-    /// a perdu des événements, donc « quelque chose a bougé »). Comparé à la
-    /// valeur relevée avant le dernier scan, il répond à la seule question qui
-    /// compte : « est-ce que quoi que ce soit a pu bouger depuis ? ».
-    ///
-    /// Il ne dit PAS quoi a bougé, et c'est délibéré — voir l'en-tête du module.
+    /// Un débordement de la file inotify l'incrémente aussi (des événements ont
+    /// été perdus, donc « quelque chose a bougé »). Comparé à la valeur relevée
+    /// avant le dernier scan, il dit si quoi que ce soit a pu bouger depuis ;
+    /// il ne dit pas quoi, et c'est délibéré (voir l'en-tête du module).
     pub fn events(&self) -> Arc<AtomicU64> {
         Arc::clone(&self.events)
     }
@@ -102,18 +93,15 @@ pub fn start(share_id: i64, root: PathBuf, tx: Sender<SyncEvent>) -> Result<Shar
     let handler_root = root.clone();
     let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
         // Une erreur du backend (débordement de la file inotify, typiquement)
-        // veut dire qu'on a PERDU des événements : c'est le moment de re-scanner,
-        // surtout pas de se taire. On tombe donc volontairement dans le cas
-        // « quelque chose a bougé » sans filtrer sur les chemins.
+        // veut dire des événements PERDUS : on re-scanne, sans filtrer sur les
+        // chemins.
         if let Ok(event) = &res {
             if !event.paths.is_empty() && !event.paths.iter().any(|p| relevant(&handler_root, p)) {
                 return;
             }
         }
-        // Incrémenté AVANT le débounce, et sans lui : le débounce sert à ne pas
-        // déclencher trop de sessions, le compteur sert à savoir si le disque a
-        // pu bouger. Confondre les deux ferait rater une modification arrivée
-        // pendant un scan, qui serait alors marqué propre à tort.
+        // Incrémenté avant le débounce et sans lui : le débounce limite les
+        // sessions, le compteur dit si le disque a pu bouger pendant un scan.
         handler_events.fetch_add(1, Ordering::Relaxed);
         let mut p = handler_pending.lock().expect("pending lock");
         let now = Instant::now();

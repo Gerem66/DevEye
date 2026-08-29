@@ -11,9 +11,8 @@ const gunzipAsync = promisify(gunzip);
 
 /**
  * Don't return a process sample further than this from the requested instant.
- * Metric rows and process samples now share the exact same `ts` (both come from
- * one agent tick), so this only absorbs the case where the requested instant
- * falls between two stored ones — a couple of cadences is plenty.
+ * Metric rows and process samples share the same `ts`, so this only absorbs a
+ * requested instant falling between two stored ones.
  */
 const NEAREST_TOLERANCE_MS = 5 * 60 * 1000;
 
@@ -25,13 +24,10 @@ interface ProcessSampleRow {
 }
 
 /**
- * Le dépôt du SOCLE : ce que l'ingestion écrit hors session (`insertSample`,
- * le blob mesuré à l'écriture) et l'instant le plus proche que la socket agent
- * pousse à l'ouverture d'un abonnement et que la façade `telemetry` lit pour
- * Sentinelle (`nearest`). Les instants de la frise, l'empreinte de stockage,
- * les suppressions et les purges sont les requêtes du module
- * `features/devices`, dans son propre dépôt sur cette même table : deux
- * lecteurs, un schéma, assumé.
+ * Le dépôt du socle : l'ingestion (`insertSample`) et l'instant le plus proche
+ * (`nearest`), poussé à l'ouverture d'un abonnement et lu par la façade
+ * `telemetry`. La frise, l'empreinte de stockage et les purges sont les
+ * requêtes du module `features/devices`, sur cette même table.
  */
 export interface ProcessSamplesRepo {
     /**

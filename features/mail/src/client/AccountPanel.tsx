@@ -33,21 +33,16 @@ interface AccountPanelProps {
 }
 
 /**
- * Panel A: a two-slide horizontal track, twice this panel's width with half
- * of it always off to the side. The left slide is the full account list
- * (drag & drop reorder included) — always where you land when nothing (or
- * nothing anymore, via the back arrow) is selected. The right slide is the
- * selected account, as a small card with a back arrow, plus its folder tree
- * underneath — a dedicated area that never competes with the account list
- * for space, unlike the old hover panel this replaces.
+ * Panel A: a two-slide horizontal track, twice this panel's width with half of
+ * it always off to the side. The left slide is the full account list (drag & drop
+ * reorder included), where you land when nothing is selected; the right slide is
+ * the selected account, as a small card with a back arrow, plus its folder tree.
  *
- * Which slide shows is controlled by the host (`index.tsx`), independent of
- * the actual selection: picking an account always slides right, but the
- * back arrow only changes the view — the account stays selected (panel B
- * keeps showing its messages) until another one is actually picked. The
- * host uses the same bit of state to widen the column while the list is
- * showing (its content — full names + addresses — needs more room than the
- * compact selected-account-card + folder tree does).
+ * Which slide shows is controlled by the host, independent of the actual
+ * selection: picking an account always slides right, but the back arrow only
+ * changes the view, the account staying selected (panel B keeps showing its
+ * messages) until another one is picked. The host uses the same bit of state to
+ * widen the column while the list is showing, its content needing more room.
  */
 export function AccountPanel({
     accounts,
@@ -107,9 +102,8 @@ export function AccountPanel({
                                     <span className={styles.selectedAccountName}>{selected.displayName}</span>
                                     <span className={styles.selectedAccountEmail}>{selected.emailAddress}</span>
                                 </span>
-                                {/* La même pastille que sur sa carte : cette
-                                    face ne montre plus la liste, et c'est ici
-                                    que les gestes réservés au domicile manquent. */}
+                                {/* La même pastille que sur sa carte : cette face ne
+                                    montre plus la liste. */}
                                 {selected.foreign && (
                                     <span title='Cette boîte appartient à un autre espace qui la partage ici'>
                                         <StatusBadge tone='accent'>partagée</StatusBadge>

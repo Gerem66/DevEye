@@ -25,19 +25,13 @@ import type { ModuleServiceHost } from './service';
 
 /**
  * L'assemblage des modules : sentinelles d'enregistrement, projection des
- * commandes en définitions natives (extras appliqués par l'enveloppe), et les
- * regards transverses sur les services (hooks agent isolés, providers).
+ * commandes en définitions natives, hooks agent isolés, providers.
  *
- * Le registre est un état de module (MODULES / SERVICES, sans remise à zéro) :
- * tout s'enregistre UNE fois en tête de fichier, avec des ids propres à ce
- * fichier, et chaque test lit sans écrire ; l'ordre des tests ne compte pas.
- * Le cas « deux modules offrent le même provider » fait avorter
- * `createModuleServices` à mi-course : il vit dans `register.providers.test.ts`,
- * donc dans son propre processus.
- *
- * La capacité 'agents' est réservée aux ids natifs (validateManifest) : les
- * modules à hooks empruntent des ids de l'enum. Rien d'autre n'est enregistré
- * dans ce processus.
+ * Le registre est un état de module sans remise à zéro : tout s'enregistre une
+ * fois en tête de fichier, chaque test lit sans écrire. Le cas « deux modules
+ * offrent le même provider » avorte à mi-course : il vit dans
+ * `register.providers.test.ts`. La capacité 'agents' est réservée aux ids
+ * natifs : les modules à hooks empruntent des ids de l'enum.
  */
 
 type Extra = Partial<Pick<FeatureManifest, 'nativeCapabilities' | 'extraPermissions'>>;

@@ -14,22 +14,16 @@ export type DeviceNote = { id: string; tone: 'ok' | 'error'; message: string };
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /**
- * Délai au-delà duquel on cesse d'attendre le verdict de l'agent.
- *
- * Une installation de service enchaîne plusieurs commandes système (`systemctl`,
- * `launchctl`, `loginctl`), et une élévation attend une autorisation humaine sur
- * la machine. Large, donc — mais fini : « l'agent n'a pas répondu » est une
- * réponse, l'attente muette n'en est pas une.
+ * Délai au-delà duquel on cesse d'attendre le verdict de l'agent. Large (une
+ * élévation attend une autorisation humaine sur la machine) mais fini :
+ * « l'agent n'a pas répondu » est une réponse.
  */
 const SERVICE_RESULT_TIMEOUT = 20_000;
 
 /**
  * Attend le résultat que l'agent renvoie pour l'action en cours, ou `null` au
- * bout de {@link SERVICE_RESULT_TIMEOUT}.
- *
- * L'abonnement est pris **avant** l'envoi de la commande : l'agent peut répondre
- * en quelques dizaines de millisecondes, et un abonnement pris après coup
- * manquerait la réponse — l'échec redeviendrait silencieux.
+ * bout de {@link SERVICE_RESULT_TIMEOUT}. L'abonnement est pris AVANT l'envoi :
+ * l'agent peut répondre en quelques dizaines de millisecondes.
  */
 function awaitServiceResult(deviceId: string): {
     result: Promise<DeviceServicePush | null>;
@@ -57,34 +51,30 @@ function awaitServiceResult(deviceId: string): {
 }
 
 /**
- * All device-management actions for the fleet segment (approve/revoke/rename,
- * self-update, persistence & privileges, deletion), with their in-flight state.
- * Returned as one object so `DeviceCard` and the dialogs share it.
+ * All device-management actions for the fleet segment, with their in-flight
+ * state, as one object shared by `DeviceCard` and the dialogs.
  */
 export function useDeviceActions(refresh: () => Promise<void> | void) {
-    // Refresh now, wait for the agent to apply the change and re-report its scope,
-    // then refresh again — so a toggle/privilege only settles on the *confirmed*
-    // state, never the merely-requested one. Shared by the service actions below.
+    // Refresh, wait for the agent to re-report its scope, refresh again: a
+    // toggle only settles on the confirmed state, never the requested one.
     const settle = async (ms: number) => {
         await refresh();
         await sleep(ms);
         await refresh();
     };
     const [actionError, setActionError] = useState<string | null>(null);
-    // In-flight self-updates live in the socket-global store so this card spins in
-    // lock-step with the Monitoring surfaces, for the whole update (not just the order).
+    // Socket-global, so the card spins in lock-step with the Monitoring surfaces.
     const { isUpdating } = useAgentUpdates();
     // Which toggle (per device) is mid-change, so only that one shows a loader.
     const [serviceBusy, setServiceBusy] = useState<{ id: string; kind: 'autostart' | 'privilege' } | null>(null);
-    // Verdict de la dernière action de service, affiché **sur la carte visée**.
-    // Le bandeau d'erreur de la page vit tout en haut : sur une flotte, celui qui
-    // clique sur la dixième carte ne le voit jamais.
+    // Verdict de la dernière action de service, sur la carte visée : le bandeau
+    // d'erreur de la page est trop loin de la dixième carte.
     const [deviceNote, setDeviceNote] = useState<DeviceNote | null>(null);
     const noteTimer = useRef<number | null>(null);
     /**
-     * Pose le verdict. Une réussite s'efface d'elle-même — l'état confirmé est
-     * déjà lisible sur les bascules ; un échec reste, parce qu'il est la seule
-     * trace de ce qui s'est passé sur la machine.
+     * Pose le verdict. Une réussite s'efface d'elle-même (l'état confirmé est
+     * lisible sur les bascules) ; un échec reste, seule trace de ce qui s'est
+     * passé sur la machine.
      */
     const showNote = (note: DeviceNote | null) => {
         if (noteTimer.current !== null) window.clearTimeout(noteTimer.current);
@@ -104,13 +94,12 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
     const [renameTarget, setRenameTarget] = useState<Target>(null);
     const [renameValue, setRenameValue] = useState('');
     const [renaming, setRenaming] = useState(false);
-    // Agent process lifecycle: stopping goes through a confirmation dialog (the
-    // consequences depend on autostart); restarting runs directly with a spinner.
+    // Stopping goes through a confirmation dialog (the consequences depend on
+    // autostart); restarting runs directly.
     const [stopTarget, setStopTarget] = useState<Target>(null);
     const [stopping, setStopping] = useState(false);
     const [restartingId, setRestartingId] = useState<string | null>(null);
-    // Partage entre espaces : la popup charge et enregistre elle-même, on ne
-    // retient ici que l'appareil visé.
+    // La popup de partage charge et enregistre elle-même.
     const [shareTarget, setShareTarget] = useState<Target>(null);
 
     const confirmDevice = async (id: string) => {
@@ -197,15 +186,14 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
                     : 'Démarrage auto désactivé.'
             });
         }
-        // La bascule ne se fie qu'à la portée *re-rapportée* par l'agent : après
-        // une activation il redémarre sous le service, on lui laisse le temps de
-        // se reconnecter avant de relire.
+        // Après une activation l'agent redémarre sous le service : on lui laisse
+        // le temps de se reconnecter avant de relire sa portée.
         await settle(3000);
         setServiceBusy(null);
     };
 
-    // Show the guided fallback command (hybrid elevation): if no OS prompt appears
-    // on the device, the user runs this. The change confirms via the next report.
+    // The guided fallback command: if no OS prompt appears on the device, the
+    // user runs this.
     const showManualCommand = (title: string, command: string) =>
         void openInfo({
             title,
@@ -221,15 +209,10 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
         });
 
     /**
-     * Elevate / drop privileges — behaves exactly like the autostart toggle: a
-     * loader runs until the agent has said what happened.
-     *
-     * C'est l'agent qui tranche, et non plus une déduction : il annonce
-     * lui-même `needsManualCommand` quand aucune session interactive ne lui
-     * permet d'ouvrir la fenêtre d'autorisation. On lisait auparavant la portée
-     * re-rapportée quatre secondes plus tard, ce qui confondait « l'appareil a
-     * besoin de toi » avec « ça a échoué » — et, l'agent redémarrant sous sa
-     * nouvelle portée, avec « le rapport n'est pas encore arrivé ».
+     * Elevate / drop privileges, like the autostart toggle: a loader runs until
+     * the agent has said what happened. C'est l'agent qui tranche : il annonce
+     * `needsManualCommand` quand aucune session interactive ne lui permet
+     * d'ouvrir la fenêtre d'autorisation.
      */
     const changePrivilege = async (
         id: string,
@@ -294,7 +277,7 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
         try {
             await agent.send('agent.lifecycle', { deviceId: stopTarget.id, action: 'stop' });
             setStopTarget(null);
-            // Presence pushes flip the card, but refresh anyway for the rest.
+            // Presence pushes flip the card; refresh for the rest.
             await settle(2000);
         } catch (e) {
             setActionError(e instanceof Error ? e.message : 'Interruption impossible.');
@@ -344,8 +327,7 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
         }
     };
 
-    // Managed deletion: ask the agent to self-destruct, then archive (keeping the
-    // monitoring history). Confirmed via the explanatory dialog.
+    // Managed deletion: the agent self-destructs, then the device is archived.
     const confirmRemoveDevice = async () => {
         if (!deleteTarget) return;
         setActionError(null);
@@ -372,7 +354,7 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
         }
     };
 
-    // Force the deletion now (archive) without waiting for the agent to self-destruct.
+    // Archive now without waiting for the agent to self-destruct.
     const confirmForceDelete = async () => {
         if (!forceTarget) return;
         setActionError(null);

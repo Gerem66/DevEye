@@ -17,14 +17,8 @@ export interface WidgetProps extends Omit<HTMLMotionProps<'div'>, 'children'> {
     onExpand?: (e: React.MouseEvent<HTMLDivElement>) => void;
     /** Additional className for the outer wrapper. */
     className?: string;
-    /**
-     * Carte courte : appareils et raccourcis, dont le contenu est plus léger.
-     *
-     * Une seule hauteur pour les deux. Depuis que les sections tiennent
-     * n'importe quelle tuile, une ligne peut mêler une carte d'appareil et un
-     * raccourci : deux cartes courtes de hauteurs différentes côte à côte se
-     * lisaient comme un défaut d'alignement, pas comme une intention.
-     */
+    /** Carte courte : appareils et raccourcis, à une seule hauteur puisqu'une
+     *  même ligne peut les mêler. */
     compact?: boolean;
     /**
      * Interactive (default): morphs via `layoutId`, lifts on hover, opens on
@@ -49,15 +43,13 @@ const Widget = forwardRef<HTMLDivElement, WidgetProps>(function Widget(
     ref
 ) {
     // Présence : la tuile s'entoure de la couleur de qui se trouve dans la
-    // feature qu'elle ouvre. Posé ici plutôt que chez chaque appelant — le
-    // `widgetId` **est** le segment de vue — ce qui donne le comportement à
-    // toutes les tuiles de l'accueil sans une ligne par feature.
+    // feature qu'elle ouvre. Posé ici pour toutes les tuiles, le `widgetId`
+    // étant le segment de vue.
     const outline = useLiveOutline('view', widgetId);
 
-    // L'identité de morphe est **portée par l'espace**. Deux éléments ne peuvent
-    // pas partager une identité chez framer-motion : sans ce préfixe, une tuile
-    // remontée après une bascule d'espace reprenait celle d'une popup restée
-    // ouverte, et la popup se retrouvait projetée dans la tuile.
+    // L'identité de morphe est portée par l'espace : sans ce préfixe, une tuile
+    // remontée après une bascule reprenait celle d'une popup restée ouverte, et
+    // framer-motion projetait la popup dans la tuile.
     const { epoch: workspaceEpoch } = useWorkspaceState();
     const layoutKey = `${workspaceEpoch}:${widgetId}`;
 

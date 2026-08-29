@@ -138,10 +138,9 @@ where
     S::Error: std::error::Error + Send + Sync + 'static,
 {
     use crate::elevate::Outcome;
-    // Disabling autostart removes the very service that supervises us, which on
-    // launchd/systemd would terminate this process — dropping the device offline
-    // with autostart gone and nothing to relaunch it. Handle it specially so the
-    // agent keeps running (see `handle_disable_autostart`).
+    // Disabling autostart removes the very service that supervises us, which
+    // would terminate this process with nothing to relaunch it (see
+    // `handle_disable_autostart`).
     if action == "uninstall-user" {
         return handle_disable_autostart(sink, device_id).await;
     }
@@ -164,10 +163,9 @@ where
                 let _ = sink.flush().await;
                 tokio::time::sleep(Duration::from_millis(400)).await;
                 let _ = crate::service::uninstall_user();
-                // Le service système, lancé par l'installation privilégiée, s'est
-                // heurté à notre verrou et attend sa relance. On le libère avant
-                // de partir plutôt que de compter sur le balayage du fichier :
-                // le gestionnaire réessaie dans les secondes qui suivent.
+                // Le service système s'est heurté à notre verrou et attend sa
+                // relance : on le libère avant de partir, le gestionnaire
+                // réessaie dans les secondes qui suivent.
                 crate::state::clear();
                 let _ = std::fs::remove_file(crate::config::Config::pid_path());
                 std::process::exit(0);
@@ -199,16 +197,14 @@ where
 
 /// Céder la place au service qu'on vient d'installer.
 ///
-/// L'ordre arrive par l'agent en marche, et c'est lui qui tient le verrou
-/// d'instance unique : démarrer le service pendant ce temps ne produisait qu'un
-/// second agent aussitôt refusé, en boucle. On libère donc le verrou, on lance
-/// le service, on lui laisse le temps d'ouvrir sa session, puis on s'efface —
-/// exactement le mouvement inverse de [`handle_disable_autostart`].
+/// L'agent en marche tient le verrou d'instance unique : démarrer le service
+/// pendant ce temps ne produirait qu'un second agent aussitôt refusé. On libère
+/// le verrou, on lance le service, on lui laisse le temps d'ouvrir sa session,
+/// puis on s'efface (l'inverse de [`handle_disable_autostart`]).
 ///
-/// En cas d'échec du démarrage, on **reste en vie** : l'autostart est bien
-/// installé (il prendra au prochain amorçage) et la machine ne doit pas
-/// disparaître de la supervision entre-temps. Le résultat déjà envoyé est alors
-/// corrigé par un second, qui porte la raison.
+/// Si le démarrage échoue, on reste en vie : l'autostart prendra au prochain
+/// amorçage, et la machine ne doit pas disparaître entre-temps. Un second
+/// résultat porte la raison.
 async fn handoff_to_service<S>(sink: &mut S, device_id: &str)
 where
     S: SinkExt<Message> + Unpin,
@@ -244,15 +240,11 @@ where
 
 /// Disable autostart (`uninstall-user`) while keeping the agent running.
 ///
-/// On launchd/systemd the running agent often *is* the service we're removing, so
-/// a plain uninstall would SIGTERM us and leave the device offline with nothing to
-/// relaunch it. When we're that supervised process, we hand monitoring off to a
-/// standalone (unmanaged) background copy that reconnects — the hub swaps to it —
-/// before tearing the service down, then exit. The orphan's fresh report carries
-/// the new `serviceScope = none`, which is what the UI confirms the change from.
-///
-/// When we're *not* supervised (a foreground/detached agent that merely has a
-/// service installed), removing it can't kill us, so we just report as usual.
+/// The running agent is often the very service being removed, so a plain
+/// uninstall would SIGTERM us with nothing to relaunch. When supervised, we hand
+/// monitoring off to a standalone (unmanaged) background copy that reconnects
+/// (the hub swaps to it), then exit; its fresh report carries `serviceScope =
+/// none`. When not supervised, removing the service can't kill us.
 async fn handle_disable_autostart<S>(sink: &mut S, device_id: &str)
 where
     S: SinkExt<Message> + Unpin,
@@ -263,9 +255,8 @@ where
         Ok(()) => {
             info!(supervised, "autostart disabled");
             if supervised {
-                // Spawn the standalone successor immediately — the unload that just
-                // happened will SIGTERM us shortly. It inherits our config via
-                // DEVEYE_CONFIG and reconnects with `serviceScope = none`.
+                // The unload that just happened will SIGTERM us shortly: spawn the
+                // successor now. It inherits our config via DEVEYE_CONFIG.
                 match std::env::current_exe() {
                     Ok(exe) => {
                         if let Err(e) = crate::update::relaunch_detached(&exe) {
@@ -334,9 +325,8 @@ where
     S: SinkExt<Message> + Unpin,
     S::Error: std::error::Error + Send + Sync + 'static,
 {
-    // Security probes shell out — run them off the runtime. This is a one-off
-    // out-of-band report (a service scope just changed), so it probes sockets
-    // itself rather than reusing a tick's map like the periodic report does.
+    // Security probes shell out: run off the runtime. A one-off out-of-band
+    // report, so it probes sockets itself rather than reusing a tick's map.
     let Ok(report) = tokio::task::spawn_blocking(|| {
         let sockets = crate::sockets::read_sockets(true);
         crate::report::collect(sockets.listening, sockets.established)
@@ -376,10 +366,9 @@ where
     }
     let _ = send_power_result(sink, device_id, action, ok, error).await;
     if ok && matches!(action, "shutdown" | "reboot") {
-        // Adieu explicite, comme le fait la mise à jour : la machine s'en va, et
-        // sans trame de fermeture le serveur ne l'apprend que par expiration —
-        // la socket d'une machine éteinte n'est jamais refermée par le réseau,
-        // et l'appareil restait affiché « en ligne » très longtemps.
+        // Adieu explicite : la socket d'une machine éteinte n'est jamais
+        // refermée par le réseau, et sans trame de fermeture le serveur ne
+        // l'apprend que par expiration.
         let _ = sink.send(Message::Close(None)).await;
     }
     let _ = sink.flush().await;

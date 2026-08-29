@@ -6,14 +6,9 @@ import type { SeverityCounts } from '../contracts/domain';
 import { api } from './api';
 
 /**
- * Le décompte de constats ouverts, partagé par la carte de l'accueil et la
- * pastille de Monitoring, une seule requête pour deux affichages.
- *
- * Comme celui d'Uptime, il ne sonde pas : le moteur diffuse `live.changed` sur
- * le sujet `sentinel` à chaque constat ouvert, et c'est ce qui déclenche la
- * relecture (`sentinel.count` est une ressource du manifest, ravivée par le
- * sujet). La feature appelle {@link refreshSentinel} après ses propres
- * mutations, dont le serveur ne lui renvoie pas l'écho.
+ * Le décompte partagé par la carte de l'accueil et la pastille de Monitoring.
+ * Pas de sondage : le sujet `sentinel` ravive `sentinel.count` ; la feature
+ * appelle {@link refreshSentinel} après ses propres mutations.
  */
 
 export interface SentinelCountState {
@@ -106,12 +101,7 @@ export function totalOpen(counts: SeverityCounts): number {
     return counts.info + counts.low + counts.high + counts.critical;
 }
 
-/**
- * La pire gravité présente, ou `null` si rien n'est ouvert.
- *
- * Sert à teinter la carte : ce qu'on veut lire d'un coup d'œil n'est pas
- * « combien » mais « à quel point ».
- */
+/** La pire gravité présente, ou `null` : ce qu'on lit d'un coup d'œil est « à quel point ». */
 export function worstSeverity(counts: SeverityCounts): keyof SeverityCounts | null {
     if (counts.critical > 0) return 'critical';
     if (counts.high > 0) return 'high';

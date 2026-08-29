@@ -1,17 +1,11 @@
--- Un appareil peut etre partage entre plusieurs espaces.
+-- Un appareil peut etre partage entre plusieurs espaces : la frontiere d'acces
+-- devient la table de jonction `device_workspaces`.
 --
--- Jusqu'ici `devices.workspace_id` etait a la fois l'espace d'appairage et la
--- frontiere d'acces, donc une machine n'existait que pour un espace. La
--- frontiere devient la table de jonction `device_workspaces` ; un
--- administrateur decide, depuis la page Appareils, quels espaces y ont acces.
---
--- `devices.workspace_id` est CONSERVE, et ce n'est pas un vestige : il reste
--- l'espace d'**appairage**. C'est lui qui porte `uniq_workspace_fingerprint` et
--- qui sert `findByWorkspaceFingerprint` lors du re-enrolement, depuis une route
--- publique qui n'a pas de session pour dire d'ou elle vient. Le supprimer et
--- rendre `fingerprint` globalement unique laisserait n'importe quel detenteur
--- d'un code de liaison se rattacher a un appareil existant en devinant son
--- empreinte.
+-- `devices.workspace_id` est CONSERVE : il reste l'espace d'appairage, porte
+-- `uniq_workspace_fingerprint` et sert `findByWorkspaceFingerprint` lors du
+-- re-enrolement (route publique, sans session). Rendre `fingerprint`
+-- globalement unique laisserait n'importe quel detenteur d'un code de liaison
+-- se rattacher a un appareil existant en devinant son empreinte.
 
 CREATE TABLE IF NOT EXISTS device_workspaces (
     device_id    CHAR(36) NOT NULL,
@@ -36,12 +30,9 @@ SET @c = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
 SET @s = IF(@c > 0, 'ALTER TABLE devices DROP COLUMN sort_order', 'SELECT 1');
 PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
--- `fk_device_workspace` etait en ON DELETE CASCADE : supprimer un espace
--- supprimait l'appareil et, par cascade, tout son historique. C'etait deja
--- brutal ; c'est faux des qu'il est partage ailleurs. En SET NULL, l'appareil
--- survit a la disparition de son espace d'appairage : il perd son origine, pas
--- son existence, et reste joignable par les espaces de la jonction (dont les
--- lignes, elles, tombent bien en cascade).
+-- `fk_device_workspace` passe de CASCADE a SET NULL : supprimer un espace ne
+-- doit plus emporter un appareil partage ailleurs. L'appareil perd son origine,
+-- pas son existence, et reste joignable par les espaces de la jonction.
 SET @c = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'devices'
             AND CONSTRAINT_NAME = 'fk_device_workspace');
@@ -58,13 +49,10 @@ SET @s = IF(@c = 0,
     'SELECT 1');
 PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
--- `monitoring` n'est plus un droit d'espace accordable : la carte d'agregat du
--- meme nom est reservee a l'administrateur global dans son espace personnel,
--- donc aucun role ne peut plus l'ouvrir. On retire la valeur des roles
--- existants pour qu'aucun ne porte un droit qui ne veut plus rien dire.
+-- `monitoring` n'est plus un droit d'espace accordable (la carte d'agregat est
+-- reservee a l'administrateur global) : on retire la valeur des roles existants.
 -- JSON_SEARCH rend le chemin de l'entree (`$[2].feature`), dont on retire le
--- suffixe pour viser l'element entier, et JSON_REMOVE l'enleve. Une entree au
--- plus par role, donc un seul passage suffit.
+-- suffixe pour viser l'element entier. Une entree au plus par role.
 UPDATE workspace_roles
    SET features = JSON_REMOVE(
          features,

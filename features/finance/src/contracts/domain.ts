@@ -1,33 +1,12 @@
 import { z } from 'zod';
 
 /**
- * Finances: le grand livre d'un espace, pour un particulier comme pour une PME.
- *
- * ## Les montants sont des entiers de centimes
- *
- * Jamais un flottant, nulle part: ni en base, ni sur le fil, ni dans le client.
- * `0.1 + 0.2 !== 0.3` est une curiosité amusante partout sauf sur un solde, où
- * l'écart s'accumule silencieusement à chaque écriture jusqu'à ce que la somme
- * des opérations ne retombe plus sur le solde affiché. Le formatage en devise
- * est la toute dernière étape, faite à l'affichage seul.
- *
- * ## Les dates sont des jours, pas des instants
- *
- * Une opération appartient à un jour civil (`AAAA-MM-JJ`), pas à un instant.
- * Un horodatage epoch se décalerait d'un fuseau à l'autre et ferait basculer une
- * dépense du 31 janvier au 1er février selon qui la regarde, ce qui déplacerait
- * un mois comptable entier. La colonne SQL est un `DATE`, et la chaîne voyage
- * telle quelle.
- *
- * ## Ce qui est chiffré, et ce qui ne peut pas l'être
- *
- * Le chiffrement de DevEye est non déterministe: rien de ce sur quoi on agrège
- * ne peut le traverser. Un solde, un budget et une répartition par catégorie
- * sont des `SUM(...) GROUP BY`, donc les **nombres, dates et rattachements**
- * restent en clair, et le **texte libre** (intitulé, tiers, note, nom de compte,
- * nom de catégorie) est chiffré. C'est le même partage que l'audience, et pour
- * la même raison: sans lui, calculer un solde imposerait de télécharger toutes
- * les opérations depuis le début dans le navigateur.
+ * Le grand livre d'un espace. Les montants sont des entiers de centimes,
+ * jamais un flottant : l'écart s'accumulerait à chaque écriture. Les dates
+ * sont des jours civils (`AAAA-MM-JJ`), pas des instants : un epoch
+ * déplacerait une dépense d'un jour selon le fuseau. Nombres, dates et
+ * rattachements restent en clair (on agrège dessus en SQL), le texte libre
+ * est chiffré.
  */
 
 /** Plafond d'un montant, en centimes: mille milliards d'unités. */
@@ -38,12 +17,7 @@ export const FINANCE_NAME_MAX_LENGTH = 80;
 export const FINANCE_NOTE_MAX_LENGTH = 2_000;
 export const FINANCE_COUNTERPARTY_MAX_LENGTH = 120;
 
-/**
- * Un montant, en centimes, toujours **positif**. Le sens (entrée ou sortie) est
- * porté par le `kind` de l'opération et non par le signe: un montant signé
- * laisse exister « une dépense de -30 € », qui est une recette écrite de
- * travers, et oblige chaque écran à se demander ce qu'il regarde.
- */
+/** Toujours positif : le sens est porté par le `kind`, pas par le signe. */
 export const financeAmountSchema = z.number().int().nonnegative().max(FINANCE_AMOUNT_MAX);
 
 /** Un solde, lui, est signé: un compte peut être à découvert. */
@@ -55,59 +29,30 @@ export const financeDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date a
 /** Un mois civil, `AAAA-MM`, tel que le rendent les séries du tableau de bord. */
 export const financeMonthSchema = z.string().regex(/^\d{4}-\d{2}$/);
 
-/**
- * Palette nommée des comptes et des catégories, adossée aux jetons de thème
- * `--finance-<nom>`. Nommée plutôt que libre en hexadécimal: la valeur stockée
- * reste liée au thème, donc elle suit ses réglages au lieu de jurer avec eux le
- * jour où la palette est retouchée. Élargir cet enum ajoute une couleur.
- */
+/** Palette nommée, adossée aux jetons `--finance-<nom>` : la valeur stockée suit le thème. */
 export const financeColorSchema = z.enum(['red', 'orange', 'yellow', 'green', 'blue', 'indigo', 'purple', 'pink']);
 export type FinanceColor = z.infer<typeof financeColorSchema>;
 
 export const FINANCE_COLORS = financeColorSchema.options;
 
-/**
- * Devise de l'espace, code ISO 4217. Une seule par espace, et c'est délibéré:
- * le multidevise n'est pas un champ de plus mais un taux de change daté par
- * opération, sans quoi tout total additionnerait des euros et des dollars.
- */
+/** Code ISO 4217. Une seule devise par espace : le multidevise serait un taux de change daté par opération. */
 export const financeCurrencySchema = z.string().regex(/^[A-Z]{3}$/);
 
-/**
- * Réglages de la feature pour l'espace.
- *
- * `vatEnabled` est le seul commutateur entre l'usage particulier et l'usage
- * PME: il fait apparaître la TVA sur les opérations et le récapitulatif
- * collectée / déductible du tableau de bord. Rien d'autre ne change, parce que
- * rien d'autre n'a besoin de changer: un livre de comptes est le même objet des
- * deux côtés.
- */
+/** `vatEnabled` est le seul commutateur entre usage particulier et PME : il fait apparaître la TVA. */
 export const financeConfigSchema = z.object({
     currency: financeCurrencySchema,
     vatEnabled: z.boolean()
 });
 export type FinanceConfig = z.infer<typeof financeConfigSchema>;
 
-/**
- * Nature d'un compte. Sert à deux choses seulement: l'icône de la carte, et le
- * fait qu'une **épargne** soit comptée à part du disponible sur le tableau de
- * bord (avoir 8 000 € dont 7 000 bloqués sur un livret n'est pas la même
- * situation que 8 000 € sur un compte courant).
- */
+/** Sert à l'icône, et à compter l'épargne à part du disponible sur le tableau de bord. */
 export const financeAccountKindSchema = z.enum(['checking', 'savings', 'cash', 'card', 'business', 'other']);
 export type FinanceAccountKind = z.infer<typeof financeAccountKindSchema>;
 
 /**
- * Un compte, tel que le client le reçoit.
- *
- * Les trois soldes répondent à trois questions distinctes, et les confondre est
- * la source d'erreur la plus courante d'un livre de comptes:
- *  - `balance`: ce qu'il y a aujourd'hui, opérations datées d'aujourd'hui ou
- *    d'avant comprises. C'est le solde, sans autre qualificatif.
- *  - `projected`: le même en tenant compte des opérations déjà saisies à une
- *    date future (un loyer prélevé le 5, saisi le 2).
- *  - `cleared`: seulement ce qui a été **pointé**, c'est-à-dire vu sur le relevé
- *    de la banque. C'est celui-là que l'on compare au relevé, et lui seul.
+ * `balance` : aujourd'hui compris. `projected` : avec les opérations déjà
+ * datées plus tard. `cleared` : seulement le pointé, le seul comparable au
+ * relevé de la banque.
  */
 export const financeAccountSchema = z.object({
     id: z.number().int().positive(),
@@ -129,11 +74,7 @@ export const financeAccountSchema = z.object({
 });
 export type FinanceAccount = z.infer<typeof financeAccountSchema>;
 
-/**
- * Sens d'une catégorie. Une catégorie ne sert qu'un sens: « Salaire » ne classe
- * pas une dépense, et proposer les deux dans un seul sélecteur transforme le
- * choix en fouille.
- */
+/** Une catégorie ne sert qu'un sens. */
 export const financeFlowSchema = z.enum(['expense', 'income']);
 export type FinanceFlow = z.infer<typeof financeFlowSchema>;
 
@@ -149,12 +90,7 @@ export const financeCategorySchema = z.object({
 export type FinanceCategory = z.infer<typeof financeCategorySchema>;
 
 /**
- * Nature d'une opération.
- *
- * Un **virement** est une seule ligne et non deux: il porte son compte de
- * départ (`accountId`) et son compte d'arrivée (`transferAccountId`), et les
- * deux soldes en tiennent compte. Le représenter par une paire de lignes
- * obligerait à les garder cohérentes à chaque modification, et une paire à
+ * Un virement est une seule ligne portant ses deux comptes : une paire à
  * moitié supprimée ferait apparaître de l'argent.
  */
 export const financeTransactionKindSchema = z.enum(['expense', 'income', 'transfer']);
@@ -173,12 +109,7 @@ export const financeTransactionSchema = z.object({
     /** Qui a été payé, ou qui a payé. Texte libre, chiffré. */
     counterparty: z.string().max(FINANCE_COUNTERPARTY_MAX_LENGTH),
     note: z.string().max(FINANCE_NOTE_MAX_LENGTH),
-    /**
-     * Part de TVA du montant, en centimes, ou `null` quand la question ne se
-     * pose pas. Le **taux** n'est pas stocké: il se déduit, et le stocker
-     * ouvrirait la porte à un couple taux / montant incohérent, que rien ne
-     * pourrait ensuite départager.
-     */
+    /** Part de TVA en centimes, ou `null`. Le taux n'est pas stocké : un couple taux / montant pourrait être incohérent. */
     vatAmount: financeAmountSchema.nullable(),
     /** Vue sur le relevé de la banque. C'est ce que compte `cleared`. */
     cleared: z.boolean(),
@@ -193,14 +124,7 @@ export type FinanceTransaction = z.infer<typeof financeTransactionSchema>;
 export const financeBudgetPeriodSchema = z.enum(['monthly', 'quarterly', 'yearly']);
 export type FinanceBudgetPeriod = z.infer<typeof financeBudgetPeriodSchema>;
 
-/**
- * Une enveloppe posée sur une catégorie.
- *
- * `spent` et `remaining` sont calculés pour la période **en cours** au moment de
- * la lecture, jamais stockés: un budget est une règle, pas un compteur, et
- * mémoriser le compteur le ferait diverger dès qu'une opération passée est
- * corrigée.
- */
+/** `spent` et `remaining` sont calculés à la lecture, jamais stockés : un budget est une règle, pas un compteur. */
 export const financeBudgetSchema = z.object({
     id: z.number().int().positive(),
     categoryId: z.number().int().positive(),
@@ -222,17 +146,10 @@ export const financeFrequencySchema = z.enum(['weekly', 'monthly', 'quarterly', 
 export type FinanceFrequency = z.infer<typeof financeFrequencySchema>;
 
 /**
- * Une opération qui revient: loyer, salaire, abonnement, échéance de prêt.
- *
- * `automatic` décide de ce qui se passe quand la date arrive:
- *  - vrai: l'opération est écrite d'elle-même à la première lecture qui suit,
- *    parce qu'un salaire tombe qu'on regarde ou non;
- *  - faux: elle est proposée, et attend un clic. C'est ce qu'on veut d'une
- *    dépense dont le montant varie (électricité), qu'on ne veut pas voir
- *    apparaître à un montant faux.
- *
- * Voir `postDueRecurring` côté serveur pour le mécanisme, qui est une
- * matérialisation paresseuse et non une tâche de fond.
+ * Une opération qui revient. `automatic` : écrite d'elle-même à la première
+ * lecture qui suit la date ; sinon proposée, et attend un clic (montant
+ * variable). Voir `postDueRecurring` : matérialisation paresseuse, pas de
+ * tâche de fond.
  */
 export const financeRecurringSchema = z.object({
     id: z.number().int().positive(),
@@ -300,13 +217,7 @@ export const financeUpcomingSchema = z.object({
 });
 export type FinanceUpcoming = z.infer<typeof financeUpcomingSchema>;
 
-/**
- * Tout ce que montre le tableau de bord, en une réponse.
- *
- * Une seule commande et non six: ces chiffres se lisent ensemble et doivent
- * être cohérents entre eux. Six allers-retours indépendants laisseraient un
- * écran où le solde vient d'avant une écriture et la répartition d'après.
- */
+/** Tout le tableau de bord en une réponse : ces chiffres doivent être cohérents entre eux. */
 export const financeOverviewSchema = z.object({
     currency: financeCurrencySchema,
     /** Bornes de la fenêtre analysée (`to` exclu). */
@@ -352,9 +263,7 @@ export const financeSummarySchema = z.object({
 });
 export type FinanceSummary = z.infer<typeof financeSummarySchema>;
 
-/* ------------------------------------------------------------------ *
- * Lignes SQL (serveur uniquement)
- * ------------------------------------------------------------------ */
+/* Lignes SQL (serveur uniquement). */
 
 export interface FinanceConfigRow {
     workspace_id: number;
@@ -405,11 +314,7 @@ export interface FinanceTransactionRow {
     kind: FinanceTransactionKind;
     amount: number;
     vat_amount: number | null;
-    /**
-     * `AAAA-MM-JJ`. La colonne est un vrai `DATE`, dont le pilote rendrait un
-     * objet `Date`: le dépôt la projette systématiquement par `DATE_FORMAT`,
-     * pour qu'aucun fuseau ne s'interpose entre la base et l'écran.
-     */
+    /** `AAAA-MM-JJ`. La colonne est un `DATE` que le pilote rendrait en `Date` : le dépôt la projette par `DATE_FORMAT`. */
     date: string;
     cleared: number;
     /** `{ label, counterparty, note }` chiffré, étage ouvert. */
@@ -440,9 +345,8 @@ export interface FinanceRecurringRow {
     interval_count: number;
     next_date: string;
     /**
-     * Jour du mois de la série (1 à 31), `null` pour une cadence hebdomadaire.
-     * Dérivé de `next_date` à l'écriture, jamais fourni par le client: c'est ce
-     * qui empêche une échéance au 31 de dériver au 28 après un février.
+     * Jour du mois de la série, `null` en hebdomadaire. Dérivé de `next_date` à
+     * l'écriture : empêche une échéance au 31 de dériver au 28 après un février.
      */
     anchor_day: number | null;
     end_date: string | null;

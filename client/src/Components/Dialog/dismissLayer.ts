@@ -1,14 +1,10 @@
 import { useEffect, useRef } from 'react';
 
 /**
- * Global LIFO stack of dismissible overlays — every Dialog/Popup, the feature
- * panel (WidgetPopup) and the settings panel register here while open. A single
- * window keydown listener routes Escape to the *topmost* layer only, so nested
- * overlays close one at a time in tree order — the innermost (most recently
- * opened) first — instead of every layer reacting to the same keystroke.
- *
- * A layer registered with a `null` handler *absorbs* Escape (does nothing) so it
- * never leaks to a layer underneath — used by non-dismissible dialogs.
+ * Global LIFO stack of dismissible overlays. A single window keydown listener
+ * routes Escape to the topmost layer only, so nested overlays close one at a
+ * time, innermost first. A layer registered with a `null` handler absorbs
+ * Escape (non-dismissible dialogs).
  */
 type Layer = { onEscape: (() => void) | null };
 

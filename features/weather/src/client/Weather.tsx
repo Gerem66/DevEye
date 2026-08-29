@@ -25,10 +25,7 @@ const PROVIDER_LABELS: Record<WeatherProvider, string> = {
     openweathermap: 'OpenWeatherMap'
 };
 
-/**
- * Providers offered in the settings popup. To support another provider, add a
- * row here and a matching adapter server-side — no other client change needed.
- */
+/** Providers offered in the settings popup: add a row here and a matching server adapter. */
 const PROVIDERS: { value: WeatherProvider; label: string; needsKey: boolean }[] = [
     { value: 'open-meteo', label: 'Open-Meteo', needsKey: false },
     { value: 'openweathermap', label: 'OpenWeatherMap', needsKey: true }
@@ -73,11 +70,9 @@ function isCurrentHour(time: string, tz: string): boolean {
 const NOW_ALIGN_OFFSET = 8;
 
 /**
- * Hour-by-hour row. On the first reveal for a location the current hour is
- * aligned near the left edge (so "now" + upcoming hours read first); afterwards
- * the user's own scroll position is remembered and restored across popup
- * open/close — the feature stays mounted but the DOM's `scrollLeft` is lost when
- * the host is hidden, so we persist it ourselves.
+ * Hour-by-hour row. On first reveal the current hour is aligned near the left
+ * edge; afterwards the user's scroll position is restored across popup
+ * open/close (the DOM's `scrollLeft` is lost while the host is hidden).
  */
 function HourlyRow({ report }: { report: WeatherReport }) {
     const rowRef = useRef<HTMLDivElement>(null);
@@ -513,9 +508,6 @@ export default function Weather() {
 
     return (
         <div className={styles.container}>
-            {/* L'en-tête commun à toutes les features : le titre à gauche, les
-                actions à droite, dont le bouton de réglages commun. Ses clés
-                d'espace n'avaient aucun écran ; elles vivent dans Sources. */}
             <div className={styles.header}>
                 <h2 className={styles.title}>Météo</h2>
                 <FeatureSettingsButton scope={{ kind: 'feature', feature: 'weather' }} />
@@ -548,7 +540,6 @@ export default function Weather() {
                 </div>
             ) : (
                 <div className={styles.weatherContent}>
-                    {/* Location tabs — draggable to reorder, star to pick primary */}
                     <Reorder.Group
                         axis='x'
                         values={locations}
@@ -568,7 +559,6 @@ export default function Weather() {
                         ))}
                     </Reorder.Group>
 
-                    {/* Report */}
                     {loadingReport ? (
                         <div className={styles.loader}>Chargement du rapport…</div>
                     ) : report?.current ? (

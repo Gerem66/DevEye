@@ -51,18 +51,14 @@ export function usersRepo(pool: Q): UsersRepo {
         },
         async create({ email, username, passwordHash, role = 'user' }) {
             // `personal_workspace_id` est NOT NULL mais l'espace ne peut pas
-            // exister avant le compte (sa FK propriétaire le référence) : on pose
-            // 0 le temps de créer l'espace, puis `setPersonalWorkspace` referme
-            // le cycle. L'appelant unique de `create` est l'inscription, qui
-            // enchaîne les deux — voir `auth/routes.ts`.
+            // exister avant le compte (FK propriétaire) : 0 le temps de créer
+            // l'espace, puis `setPersonalWorkspace` referme le cycle.
             const res = await pool.query(
                 `INSERT INTO users (email, username, password_hash, role, settings, personal_workspace_id)
                  VALUES (?, ?, ?, ?, CAST('[]' AS JSON), 0)`,
                 [email, username, passwordHash, role]
             );
-            // La migration 059 n'a colorié que les comptes déjà en base, et la
-            // colonne a un défaut vide : c'est ici qu'un compte neuf prend sa
-            // teinte, par la même formule, pour qu'aucun ne naisse sans couleur.
+            // La colonne a un défaut vide : un compte neuf prend sa teinte ici.
             await pool.query('UPDATE users SET color = ? WHERE id = ?', [
                 defaultUserColor(Number(res.insertId)),
                 res.insertId

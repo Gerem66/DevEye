@@ -41,13 +41,10 @@ export async function recordAgentOnline(db: Database, device: DeviceRow, wasOnli
  * Record the "agent offline" edge. Call only once the hub confirms no live
  * socket remains for the device (see module doc).
  *
- * Le front est daté sur la **dernière preuve de vie** et non sur l'instant de la
- * découverte. Les deux coïncidaient tant qu'une déconnexion propre était le seul
- * chemin ; depuis que le balayage de vivacité rattrape les machines éteintes
- * sans un mot, dater sur `Date.now()` sur-déclarerait la disponibilité de tout
- * l'intervalle de balayage — jusqu'à une minute de vert qui n'a pas existé.
- * `devices.last_seen` est rafraîchi à chaque relevé : la donnée était là, rien
- * ne la lisait.
+ * Le front est daté sur la dernière preuve de vie (`devices.last_seen`) et non
+ * sur l'instant de la découverte : le balayage de vivacité rattrape une machine
+ * éteinte avec jusqu'à une minute de retard, qui ne doit pas compter comme
+ * disponibilité.
  */
 export async function recordAgentOffline(db: Database, deviceId: string): Promise<void> {
     const now = Date.now();
@@ -57,12 +54,9 @@ export async function recordAgentOffline(db: Database, deviceId: string): Promis
 }
 
 /**
- * Avertit **tous** les espaces qui voient cet appareil qu'il vient de changer.
- *
- * Un appareil est partageable : ne prévenir que son espace d'appairage
- * laisserait tous les autres destinataires sur une présence figée jusqu'à leur
- * prochain rechargement. La liste vient de la table de jonction, seule autorité
- * sur « qui voit cette machine ».
+ * Avertit tous les espaces qui voient cet appareil (table de jonction, seule
+ * autorité) : ne prévenir que l'espace d'appairage laisserait les autres sur
+ * une présence figée.
  */
 export async function notifyDeviceWorkspaces(db: Database, live: LiveHub, deviceId: string): Promise<void> {
     for (const workspaceId of await db.devices.workspaceIdsOf(deviceId)) {

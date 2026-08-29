@@ -10,39 +10,27 @@ import { describeChannel, resolveRoute, type ResolvedChannel } from '@/Services/
 import { FeatureError, type FeatureContext } from './_define';
 
 /**
- * Les canaux d'alerte vus depuis un handler.
- *
- * Le module ne fait qu'une chose que `Services/notifications.ts` ne fait pas :
- * il connaît `ctx`, donc l'espace visé et le codec de son étage ouvert. Toute la
- * mécanique — déchiffrement, résolution, héritage — vit dans le service, parce
- * que les boucles de fond en ont besoin **sans session** et ne peuvent donc pas
- * passer par ici.
- *
- * L'étage ouvert, et pas le gardé : ce sont ces boucles qui relisent les canaux,
- * sans mot de passe. Un secret rangé au palier gardé y serait illisible et
- * l'alerte ne partirait jamais, en silence (voir `Docs/SECURITY_MODEL.md`).
+ * Les canaux d'alerte vus depuis un handler : la mécanique vit dans
+ * `Services/notifications.ts`, que les boucles de fond appellent sans session.
+ * L'étage ouvert, et pas le gardé : ces boucles relisent les canaux sans mot de
+ * passe, un secret au palier gardé rendrait l'alerte muette (voir
+ * `Docs/SECURITY_MODEL.md`).
  */
 
 /** Les canaux d'une fonctionnalité, avec leur nombre d'usages, prêts pour l'écran. */
 export async function listChannels(ctx: FeatureContext, feature: NotificationFeature): Promise<NotificationChannel[]> {
     const rows = await ctx.db.notificationChannels.list(ctx.workspaceId, feature);
     const usage = await ctx.db.notificationChannels.usageCounts(ctx.workspaceId);
-    // La liste s'ouvre avec la fonctionnalité : on ne peut pas router vers des
-    // destinations qu'on ne voit pas. Les adresses, elles, restent derrière la
-    // gestion des canaux de CETTE fonctionnalité (grant `channels`, 093) :
-    // voir « Astreinte · e-mail » suffit pour cocher une case.
+    // La liste s'ouvre avec la fonctionnalité (on ne route pas vers ce qu'on ne
+    // voit pas) ; les adresses restent derrière le grant `channels`.
     const reveal = ctx.canChannels(feature);
     return Promise.all(rows.map((row) => describeChannel(ctx.secure.open, row, usage.get(row.id) ?? 0, reveal)));
 }
 
 /**
- * Ce qu'une saisie de canal doit respecter, avant d'atteindre la base.
- *
- * Les trois refus sont explicites plutôt que silencieux : un canal `email` sans
- * compte expéditeur, un webhook sans URL ou une URL qui n'en est pas une
- * produiraient tous les trois une ligne qui **paraît** réglée et ne part jamais.
- * C'est exactement le mensonge d'écran que l'ancien dialogue laissait passer, et
- * qu'il ne signalait que dans Uptime.
+ * Refus explicites plutôt que silencieux : un canal `email` sans compte
+ * expéditeur ou un webhook sans URL valide produiraient une ligne qui paraît
+ * réglée et ne part jamais.
  */
 function validate(input: NotificationChannelInput): void {
     if (input.kind === 'email') {
@@ -67,13 +55,7 @@ function validate(input: NotificationChannelInput): void {
     }
 }
 
-/**
- * Chiffre puis écrit un canal.
- *
- * Le libellé passe par le chiffre comme la cible : il porte souvent le nom d'une
- * équipe ou d'un salon, ce qui en dit autant sur l'organisation que l'adresse
- * elle-même. Il n'y a pas de raison de le traiter autrement.
- */
+/** Le libellé est chiffré comme la cible : il en dit autant sur l'organisation. */
 async function encodeInput(ctx: FeatureContext, input: NotificationChannelInput, enabled: boolean) {
     validate(input);
     const target = input.target.trim();
@@ -110,24 +92,17 @@ export async function updateChannel(
 }
 
 /**
- * La route d'une cible, telle que l'écran la montre : sa sélection, ou rien.
- *
- * Pas d'héritage (092) : un élément sans route a une sélection vide, point.
- * `itemId` absent lit la route de la fonctionnalité elle-même — le cas des
- * émetteurs sans éléments (Sentinelle).
+ * La route d'une cible : sa sélection, ou rien (pas d'héritage). `itemId`
+ * absent lit la route de la fonctionnalité elle-même (émetteurs sans éléments).
  */
 export async function getRoute(
     ctx: FeatureContext,
     feature: NotificationFeature,
     itemId?: number,
     /**
-     * L'espace où vit réellement l'élément.
-     *
-     * Différent de l'espace actif quand on regarde un élément **projeté depuis
-     * ailleurs**. Ses canaux appartiennent alors à cet autre espace : les lire
-     * ici donnerait une liste vide, et l'écran ferait croire qu'aucune alerte ne
-     * part — alors qu'elles partent, vers des destinations qu'on n'a pas à
-     * connaître. C'est le cas « relié à un mail inaccessible ».
+     * L'espace où vit réellement l'élément, quand il est projeté depuis
+     * ailleurs : ses canaux appartiennent à cet autre espace, les lire ici
+     * ferait croire qu'aucune alerte ne part.
      */
     homeWorkspaceId?: number
 ): Promise<NotificationRoute> {
@@ -138,15 +113,9 @@ export async function getRoute(
 }
 
 /**
- * Les canaux d'un **autre** espace, tels qu'un étranger peut les voir.
- *
- * Ni leur libellé ni leur adresse : seulement leur existence et leur type. Un
- * membre qui regarde un élément projeté doit savoir qu'il prévient quelqu'un —
- * sans quoi il le re-réglerait par-dessus — sans apprendre qui.
- *
- * Ils sont rendus avec `usageCount: 0` et `ready: false` : ces deux nombres
- * parlent de l'espace d'origine, et les recopier ici les ferait lire comme des
- * chiffres locaux.
+ * Les canaux d'un autre espace, tels qu'un étranger peut les voir : leur
+ * existence et leur type, ni libellé ni adresse. `usageCount: 0` et
+ * `ready: false` : ces nombres parlent de l'espace d'origine.
  */
 export async function foreignChannels(
     ctx: FeatureContext,
@@ -178,11 +147,8 @@ const LABEL_OF: Record<NotificationChannel['kind'], string> = {
 };
 
 /**
- * Écrit la sélection d'une cible.
- *
- * Une sélection **vide** efface la ligne : depuis la 092, une route vide et une
- * route absente disent la même chose (le silence), et garder des lignes mortes
- * ne ferait que compter des fantômes dans « utilisé par N ».
+ * Écrit la sélection d'une cible. Une sélection vide efface la ligne : route
+ * vide et route absente disent la même chose (le silence).
  */
 export async function setRoute(
     ctx: FeatureContext,

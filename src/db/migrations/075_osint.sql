@@ -1,21 +1,11 @@
 -- OSINT : historique des recherches, et clés des fournisseurs optionnels.
 --
--- ## Ce qui est chiffré, et pourquoi c'est l'inverse de l'intuition
---
--- Les *résultats* d'une recherche OSINT sont publics par construction — un
--- enregistrement WHOIS, un bloc réseau, un certificat. Ils ne sont donc pas
--- stockés du tout : ils se relisent à la demande et vivent dans un cache mémoire
--- à durée courte (`Services/osint/shared.ts`).
---
--- Ce qui est sensible, c'est **la question posée**. « Qui a cherché ce nom, ce
--- numéro, cette adresse » en dit bien plus long que n'importe laquelle des
--- réponses. `query_enc` passe donc par `ctx.secure` (zero-knowledge, même
--- chemin que les notes et les mots de passe) et le serveur ne le voit jamais en
--- clair.
---
--- `kind` reste en clair : il ne désigne aucune cible, seulement une famille
--- ('domain', 'phone'…), et il permet de grouper et d'icôner la liste sans avoir
--- à ouvrir le coffre — donc sans exiger le mot de passe pour afficher l'écran.
+-- Les résultats sont publics par construction et ne sont pas stockés (cache
+-- mémoire court, `Services/osint/shared.ts`). Ce qui est sensible, c'est la
+-- question posée : `query_enc` passe par `ctx.secure` (zero-knowledge, même
+-- chemin que les notes) et le serveur ne le voit jamais en clair. `kind` reste
+-- en clair : il ne désigne aucune cible et permet de grouper la liste sans
+-- ouvrir le coffre.
 
 CREATE TABLE IF NOT EXISTS osint_lookups (
     id           CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
@@ -33,15 +23,10 @@ CREATE TABLE IF NOT EXISTS osint_lookups (
     CONSTRAINT fk_osint_lookup_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Clés des fournisseurs optionnels (Pappers, Numverify, HIBP, Shodan,
--- VirusTotal). Calque de `weather_provider_keys` : une clé par (espace,
--- fournisseur), chiffrée par la clé serveur.
---
--- `ctx.crypt` et non `ctx.secure`, délibérément, et pour la même raison que la
--- météo : une clé d'API est un secret **d'installation**, pas un secret
--- d'utilisateur. La passer par le coffre obligerait à réclamer le mot de passe
--- pour exécuter une sonde, ce qui n'a aucun sens pour interroger un registre
--- public.
+-- Clés des fournisseurs optionnels, calque de `weather_provider_keys` : une clé
+-- par (espace, fournisseur), chiffrée par la clé serveur (`ctx.crypt`, pas
+-- `ctx.secure`). Une clé d'API est un secret d'installation, pas d'utilisateur :
+-- réclamer le mot de passe pour interroger un registre public n'a pas de sens.
 CREATE TABLE IF NOT EXISTS osint_provider_keys (
     workspace_id INT          NOT NULL,
     provider     VARCHAR(32)  NOT NULL,

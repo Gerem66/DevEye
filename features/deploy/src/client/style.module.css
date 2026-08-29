@@ -1,14 +1,6 @@
 /*
- * Déploiement — l'apparence.
- *
- * Aucune couleur en dur : tout passe par les variables du thème, donc l'écran
- * suit l'apparence de l'espace sans une ligne de plus.
- *
- * La liste reprend la forme des cartes d'Audience et de Git : c'est la même
- * chose montrée — des objets d'espace rangeables à la main — et deux listes
- * voisines n'ont pas à se distinguer par leur géométrie.
- *
- * ⚠️ Une classe ne doit être définie **qu'une fois** seule dans son sélecteur —
+ * Déploiement. Aucune couleur en dur : tout passe par les variables du thème.
+ * Une classe ne doit être définie qu'une fois seule dans son sélecteur :
  * `client/scripts/check-css-modules.mjs` échoue sinon.
  */
 
@@ -243,8 +235,7 @@
 
 /* ------------------------------------------------- la cible, et son histoire */
 
-/* Sépare l'en-tête (identité + action) de l'historique : deux cartes, et non
-   plus une seule (voir `.historyBlock` plus bas). */
+/* L'en-tête (identité + action) et l'historique : deux cartes. */
 .targetGroup {
     display: flex;
     flex-direction: column;
@@ -252,13 +243,8 @@
     min-width: 0;
 }
 
-/*
- * Le bloc encadré, partagé par la fiche de la feature et l'onglet d'un projet.
- *
- * Le cadre ne sert pas qu'à séparer deux cibles : il dit **où finit ce que la
- * vue montre**. Sans lui, une cible seule se confondrait avec le fond de la
- * popup — c'est la règle qu'appliquent déjà les onglets Git, Bases et Audience.
- */
+/* Le bloc encadré, partagé par la fiche de la feature et l'onglet d'un projet :
+   sans cadre, une cible seule se confondrait avec le fond de la popup. */
 .block {
     display: flex;
     flex-direction: column;
@@ -309,14 +295,9 @@
     margin: var(--space-xs) 0 0;
 }
 
-/*
- * Le titre du dernier déploiement, entre la pastille d'état et la date.
- *
- * Pas `.itemName` : celui-là est taillé pour une ligne de liste, où il prend
- * `flex: 1` pour rejeter la date à droite. Ici c'est l'inverse qu'on veut :
- * les trois éléments se suivent, et c'est le titre (le seul de longueur
- * imprévisible) qui se tronque quand la place manque, pas la date qui s'en va.
- */
+/* Le titre du dernier déploiement, entre la pastille d'état et la date. Pas
+   `.itemName` (`flex: 1`, qui rejette la date à droite) : ici les trois se
+   suivent et c'est le titre qui se tronque. */
 .lastDeployName {
     min-width: 0;
     overflow: hidden;
@@ -337,9 +318,7 @@
     gap: var(--space-sm);
 }
 
-/* L'historique est maintenant sa propre carte (`.block` + `.historyBlock`),
-   pas un appendice sous l'en-tête : plus de respiration, surtout sensible sur
-   la page dédiée de la feature, bien plus large qu'un onglet de projet. */
+/* L'historique en carte à part : plus de respiration sur la page dédiée. */
 .historyBlock {
     padding: var(--space-lg);
     gap: var(--space-md);
@@ -362,8 +341,7 @@
     list-style: none;
 }
 
-/* Colonne, et non plus une seule ligne : `.itemError` s'y ajoute en dessous
-   pour les déploiements en échec, sans reprendre toute la géométrie. */
+/* Colonne : `.itemError` s'ajoute en dessous pour les déploiements en échec. */
 .itemList li {
     display: flex;
     flex-direction: column;
@@ -394,12 +372,8 @@
     white-space: nowrap;
 }
 
-/*
- * `.itemRow` rendu comme un <button> quand un journal existe pour la ligne —
- * toute la ligne devient la cible du clic, pas une icône à part. N'ajoute que
- * ce qu'il faut pour effacer les à-plats par défaut d'un bouton et poser le
- * survol ; l'apparence au repos reste celle de `.itemRow` seul.
- */
+/* `.itemRow` rendu comme un <button> quand un journal existe pour la ligne :
+   efface les à-plats par défaut d'un bouton et pose le survol. */
 .itemRowClickable {
     width: 100%;
     margin: 0;
@@ -445,12 +419,8 @@
     color: var(--text-secondary);
 }
 
-/*
- * Même forme que les champs de texte (`TextInput`) et que le textarea des
- * Projets : `--input-border` au repos, `--input-focus` (l'accent) au focus.
- * `--field-line` borne la hauteur minimale à une seule ligne — sans elle, le
- * textarea démarrait plus bas qu'un `TextInput` voisin sur le même formulaire.
- */
+/* Même forme que `TextInput`. `--field-line` borne la hauteur minimale à une
+   ligne : sans elle, le textarea démarre plus bas qu'un champ voisin. */
 .textarea {
     --field-line: calc(1.5em + 2 * var(--space-sm) + 2px);
 
@@ -489,9 +459,8 @@
     background: var(--danger-bg);
 }
 
-/* Le texte de la zone, et lui seul : viser `.dangerZone > div` frapperait aussi
-   le groupe de boutons de confirmation, qui s'empilerait au lieu de rester en
-   ligne. */
+/* Le texte de la zone seul : `.dangerZone > div` frapperait aussi le groupe de
+   boutons de confirmation, qui s'empilerait. */
 .dangerText {
     display: flex;
     flex-direction: column;
@@ -520,9 +489,8 @@
     overflow: auto;
 }
 
-/* Un sélecteur de source et son « + » : le champ prend la place, le geste qui
-   mène à Réglages → Sources reste collé à ce qu'il complète. `min-width: 0`
-   pour qu'un intitulé long rétrécisse le champ, jamais ne pousse le bouton. */
+/* Un sélecteur de source et son « + ». `min-width: 0` pour qu'un intitulé long
+   rétrécisse le champ, jamais ne pousse le bouton. */
 .fieldWithAction {
     display: flex;
     align-items: center;

@@ -3,22 +3,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { ws, WsError } from '@/api/ws';
 import { useResourceVersion, type ResourceKey } from '@/stores/invalidation';
 
-/**
- * Traduit un échec WS en une phrase courte pour un bandeau d'erreur.
- *
- * Née dans Finance, promue ici avec `useResource` : la traduction vaut pour
- * toutes les features, celles du dépôt comme les modules.
- */
+/** Traduit un échec WS en une phrase courte pour un bandeau d'erreur. */
 export function humanizeError(error: unknown, fallback: string): string {
     if (error instanceof WsError) {
         if (error.code === 'forbidden') return 'Accès refusé.';
-        // Le serveur renvoie déjà une phrase en français sur ces deux codes, et
-        // elle est plus précise que tout ce qu'on pourrait écrire ici (quel
-        // compte, combien d'opérations, quelle date déjà prise).
+        // Le serveur renvoie déjà une phrase en français sur ces deux codes, plus
+        // précise que tout ce qu'on pourrait écrire ici.
         if (error.code === 'validation' || error.code === 'conflict') return error.message;
         if (error.code === 'not_found') return 'Introuvable: la donnée a peut-être été supprimée entre-temps.';
-        // Les deux codes que les copies locales (OSINT en tête) traduisaient
-        // déjà : verrou du chiffrement par mot de passe, et sonde trop lente.
         if (error.code === 'locked') return 'Déverrouillage requis.';
         if (error.code === 'timeout') return 'Délai dépassé.';
     }
@@ -26,15 +18,12 @@ export function humanizeError(error: unknown, fallback: string): string {
 }
 
 /**
- * Un chargement qui se relit tout seul. LE hook de données des features.
+ * Un chargement qui se relit tout seul, le hook de données des features.
  *
  * Trois déclencheurs, et pas un de plus: le montage, la (re)connexion de la
  * socket, et l'invalidation de la ressource (locale après une écriture, ou
  * distante quand quelqu'un d'autre écrit dans l'espace). Aucun minuteur: une
  * donnée d'espace ne bouge que si quelqu'un l'écrit, et il le dit.
- *
- * Écrit pour Finance (`useFinanceResource`), promu tel quel quand le SDK des
- * modules a eu besoin du même patron.
  */
 export function useResource<T>(
     key: ResourceKey,
@@ -77,10 +66,9 @@ export function useResource<T>(
             cancelled = true;
             off();
         };
-        // `load` est recréé à chaque rendu par ses appelants (il capture des
-        // filtres): l'inscrire ici relancerait la requête en boucle. Ce sont
-        // `version`, `nonce` et les dépendances annoncées qui décident de
-        // relire, et elles seules.
+        // `load` est recréé à chaque rendu par ses appelants, qui capturent des
+        // filtres: l'inscrire ici relancerait la requête en boucle. Seuls `version`,
+        // `nonce` et les dépendances annoncées décident de relire.
     }, [version, nonce, ...deps]);
 
     return { data, error, loading, reload };

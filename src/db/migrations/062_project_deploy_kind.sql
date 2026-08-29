@@ -1,18 +1,10 @@
--- Type de cible de déploiement : application ou pile compose.
+-- Type de cible de déploiement : application ou pile compose. Les deux n'ont
+-- ni la même procédure de déclenchement (`application.deploy` /
+-- `compose.deploy`) ni la même d'historique : une cible sans son type est
+-- indéployable.
 --
--- Constaté sur une instance Dokploy réelle : la majorité des services y sont
--- des piles **compose**, pas des applications. Or les deux n'ont ni la même
--- procédure de déclenchement (`application.deploy` / `compose.deploy`) ni la
--- même procédure d'historique (`deployment.all` / `deployment.allByCompose`).
--- Une cible sans son type est donc indéployable.
---
--- La 061 est déjà passée : on ajoute une migration plutôt que de la retoucher
--- (`_migrations` ne rejoue jamais un nom déjà vu — une retouche serait un no-op
--- silencieux là où elle est déjà appliquée).
---
--- Ajout conditionnel via INFORMATION_SCHEMA + SQL dynamique, JAMAIS via
--- `ADD COLUMN IF NOT EXISTS` : cette clause a fait tomber la production au
--- démarrage (voir 038_uptime_order.sql).
+-- Ajout conditionnel via INFORMATION_SCHEMA + SQL dynamique, jamais
+-- `ADD COLUMN IF NOT EXISTS` (extension MariaDB, cf. 038).
 
 SET @kind_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'project_deploy_targets' AND COLUMN_NAME = 'target_kind');

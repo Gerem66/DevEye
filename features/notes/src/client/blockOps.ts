@@ -4,20 +4,16 @@ import type { BlockPoint, BlockRange } from './selection';
 
 /**
  * The note body's editing primitives: pure functions from a block list (plus a
- * caret or a selection) to the next block list and where the caret lands.
- *
- * Keeping them here, free of DOM and of React, is what lets the editor stay a
- * thin layer: read the selection, call one of these, commit the result. It is
- * also what makes undo trivial, since every edit produces a fresh list.
+ * caret or a selection) to the next block list and where the caret lands. No DOM
+ * and no React here, so the editor stays a thin layer: read the selection, call
+ * one of these, commit the result.
  */
 
-/** The outcome of an edit: the new blocks and the caret that follows them. */
 export interface Edit {
     blocks: NoteBlock[];
     caret: BlockPoint;
 }
 
-/** Whether a block kind carries editable text (i.e. renders a text surface). */
 export function isEditable(block: NoteBlock): boolean {
     return block.type !== 'divider';
 }
@@ -26,20 +22,18 @@ export function textOf(block: NoteBlock): string {
     return 'text' in block ? block.text : '';
 }
 
-/** A block's text replaced, its kind and attributes (done, colour…) preserved.
- *  Only meaningful for editable blocks, a divider carries no text. */
+/** Text replaced, kind and attributes (done, colour…) kept. */
 function withText(block: NoteBlock, text: string): NoteBlock {
     return { ...block, text } as NoteBlock;
 }
 
 const paragraph = (text: string): NoteBlock => ({ type: 'text', text });
 
-/** `blocks` with block `index`'s text replaced. */
 export function setText(blocks: NoteBlock[], index: number, text: string): NoteBlock[] {
     return blocks.map((b, i) => (i === index ? withText(b, text) : b));
 }
 
-/** A fresh block to follow `b` when Enter splits it (a heading yields a paragraph). */
+/** What Enter creates after `b`: the same kind, except a heading yields a paragraph. */
 function siblingBlock(b: NoteBlock, text: string): NoteBlock {
     switch (b.type) {
         case 'check':
@@ -54,15 +48,11 @@ function siblingBlock(b: NoteBlock, text: string): NoteBlock {
 }
 
 /**
- * Replace everything the selection covers with `insert`.
- *
- * Blocks entirely inside the range vanish; the partial ends are stitched into a
- * single block that keeps the *first* one's kind, select from mid-A through
- * mid-D and what remains is A's head followed by D's tail, still an A. A divider
- * touched by such a range is atomic, so it goes with it.
- *
- * A collapsed range makes this a plain insertion, which is why the same function
- * serves typing over a selection, Ctrl+Enter and paste.
+ * Replace everything the selection covers with `insert`. Blocks entirely inside
+ * the range vanish and the partial ends are stitched into one block, which keeps
+ * the *first* one's kind; a divider the range touches is atomic, so it goes with
+ * it. A collapsed range makes this a plain insertion, hence typing over a
+ * selection, Ctrl+Enter and paste all land here.
  */
 export function replaceRange(blocks: NoteBlock[], range: BlockRange, insert: string): Edit {
     const { start, end } = range;
@@ -90,8 +80,7 @@ export function splitBlock(blocks: NoteBlock[], point: BlockPoint): Edit {
     };
 }
 
-/** Pull block `index` into the one above (Backspace at its very start): the
- *  inverse of {@link splitBlock}. An atomic divider above is simply removed. */
+/** Backspace at a block's very start. An atomic divider above is simply removed. */
 export function mergeBackward(blocks: NoteBlock[], index: number): Edit | null {
     if (index <= 0) return null;
     const previous = blocks[index - 1];
@@ -112,14 +101,12 @@ export function mergeBackward(blocks: NoteBlock[], index: number): Edit | null {
     };
 }
 
-/** Pull the next block into this one (Delete at its very end), the same merge,
- *  seen from the block above. */
+/** Delete at a block's very end: the same merge, seen from the block above. */
 export function mergeForward(blocks: NoteBlock[], index: number): Edit | null {
     return index < blocks.length - 1 ? mergeBackward(blocks, index + 1) : null;
 }
 
-/** Drop a block entirely (the row's delete button), landing on the previous one.
- *  The list never empties: a lone block is replaced by a blank paragraph. */
+/** The list never empties: a lone block is replaced by a blank paragraph. */
 export function removeBlock(blocks: NoteBlock[], index: number): Edit {
     if (blocks.length <= 1) return { blocks: [paragraph('')], caret: { index: 0, offset: 0 } };
     const next = blocks.filter((_, i) => i !== index);
@@ -127,7 +114,7 @@ export function removeBlock(blocks: NoteBlock[], index: number): Edit {
     return { blocks: next, caret: { index: landing, offset: textOf(next[landing]).length } };
 }
 
-/** Turn a typed item / heading back into a plain paragraph, keeping its text. */
+/** Back to a plain paragraph, keeping the text. */
 export function demote(blocks: NoteBlock[], index: number): Edit {
     return {
         blocks: blocks.map((b, i) => (i === index ? paragraph(textOf(b)) : b)),
@@ -135,31 +122,24 @@ export function demote(blocks: NoteBlock[], index: number): Edit {
     };
 }
 
-/**
- * Markdown-ish prefix that turns a paragraph into a checklist item as soon as
- * it is typed at the very start of a line: `[]`, `[ ]`, `- []`, `- [ ]`
- * (optionally followed by a space). Only the prefix is stripped, any text
- * already on the line is preserved as the item's content.
- */
+/** `[]`, `[ ]`, `- []` or `- [ ]` at the very start of a line, space optional. */
 const CHECK_TRIGGER = /^(?:- )?\[ ?\] ?/;
 
-/** `- ` (or `* `) at the very start turns a paragraph into a bullet list item. */
+/** `- ` or `* ` at the very start. */
 const BULLET_TRIGGER = /^[-*] /;
 
-/** `1. ` / `1) ` (any number) at the start turns it into a numbered list item. */
+/** `1. ` or `1) `, any number. */
 const NUMBER_TRIGGER = /^\d+[.)] /;
 
-/** `# `…`##### ` at the start turns a paragraph into a heading of that level. */
+/** `# ` to `##### `: the heading's level is the marker's length. */
 const HEADING_TRIGGER = /^(#{1,5}) /;
 
-/** A whole-line `---` turns the paragraph into a horizontal divider. */
 const DIVIDER_TRIGGER = '---';
 
 /**
  * Convert paragraph `index` if what was just typed starts with one of the
  * markdown-ish prefixes, keeping the rest of the line and carrying the caret
- * (given as an offset in the *current* text) over the stripped prefix.
- * Null when nothing matches, which is the common case.
+ * (an offset in the *current* text) over the stripped prefix.
  */
 export function applyTrigger(blocks: NoteBlock[], index: number, offset: number): Edit | null {
     const block = blocks[index];

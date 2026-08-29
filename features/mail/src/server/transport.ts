@@ -7,24 +7,19 @@ import type { MailRepo } from './repo';
 import { decryptCredentials, persistRefreshedToken } from './_shared';
 
 /**
- * Le transport des alertes e-mail des autres features (`MAIL_TRANSPORT_PROVIDER`),
- * publié par le service du module : ce que `Services/notifications.ts` de
- * l'app demandait directement à la table `mail_accounts` et au client IMAP
- * quand Mail était native (`readyMailAccount`, `decryptCredentials`,
- * `sendMail`), inversé en contrat. Sans module, l'app n'a pas de canal e-mail
- * prêt, et l'écran des canaux le dit.
+ * Le transport des alertes e-mail des autres features
+ * (`MAIL_TRANSPORT_PROVIDER`), publié par le service du module. Sans module,
+ * l'app n'a pas de canal e-mail prêt, et l'écran des canaux le dit.
  *
- * Un expéditeur est un compte **ouvert et actif, visible de l'espace** : le
- * sien, ou un qu'un autre espace y projette. Un compte gardé exige un
- * déverrouillage que l'ordonnanceur de fond n'a jamais, et un compte en pause
- * ne doit pas partir tout seul. Tout se lit sous le codec ouvert du
- * **domicile** du compte (`deps.cipherFor(row.workspace_id)`), sans session :
- * un compte projeté reste chiffré sous la clé de son espace d'origine, et le
- * lire sous celle de l'espace du canal le ferait passer pour muet.
+ * Un expéditeur est un compte ouvert et actif, visible de l'espace : un compte
+ * gardé exige un déverrouillage que l'ordonnanceur de fond n'a jamais, et un
+ * compte en pause ne doit pas partir tout seul. Tout se lit sous le codec ouvert
+ * du domicile du compte, sans session : un compte projeté reste chiffré sous la
+ * clé de son espace d'origine, et le lire sous celle de l'espace du canal le
+ * ferait passer pour muet.
  *
- * `send` ne lève jamais : `false` et une ligne de journal, parce que l'appelant
- * est une boucle de fond (la livraison d'une alerte) qui n'a rien à faire
- * d'une exception, seulement à savoir si ce canal a accepté.
+ * `send` ne lève jamais : `false` et une ligne de journal, l'appelant étant une
+ * boucle de fond qui a seulement besoin de savoir si ce canal a accepté.
  */
 
 /** Ce que la livraison demande au client : l'envoi, et rien d'autre. */

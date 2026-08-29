@@ -10,11 +10,9 @@ export const CREATE_WORKSPACE_POPUP = 'popup-create-workspace';
 const NAME_MAX = 120;
 
 /**
- * Création d'un espace de travail.
- *
- * Se résout avec le nom saisi, ou `null` si l'utilisateur annule — l'appelant
- * (le menu de la topbar) se charge de l'appel serveur et de la bascule, pour que
- * cette popup ne connaisse rien du réseau.
+ * Création d'un espace de travail. Se résout avec le nom saisi, ou `null` si
+ * l'utilisateur annule ; l'appelant se charge de l'appel serveur et de la
+ * bascule.
  */
 export default function CreateWorkspacePopup() {
     const [name, setName] = useState('');

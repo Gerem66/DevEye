@@ -14,11 +14,10 @@ function pickPrimary(tasks: BootTask[]): BootTask | null {
 }
 
 /**
- * Discreet topbar zone shown **only while the server isn't 100% ready** — the
- * agent sync (and any future boot step). It surfaces progress and, crucially,
- * errors/warnings *before* the related feature is used. Once everything is `done`
- * it disappears for good (the store stops polling too); a terminal `warning`
- * (e.g. this deploy's agent build never landed) stays as a calm amber chip.
+ * Discreet topbar zone shown only while the server isn't ready: progress and,
+ * crucially, errors/warnings before the related feature is used. Once
+ * everything is `done` it disappears; a terminal `warning` stays as a calm
+ * amber chip.
  */
 export function DeploymentStatus() {
     const status = useServerStatus();

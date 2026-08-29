@@ -2,11 +2,9 @@ import type { MetricRow, MetricSeriesPoint, MetricsResolution } from '@deveye/ty
 import type { SdkQueryable } from '@deveye/types/sdk/server';
 
 /**
- * La table `device_metrics`, en lecture et en entretien : les fenêtres que
- * les graphes relisent, les instants de la frise, l'épinglage et les purges.
- * L'insertion d'un lot est le fait de l'ingestion (`src/agent/ws.ts`, dépôt du
- * socle), hors session ; la façade `telemetry` de l'app lit la même table
- * pour Sentinelle.
+ * La table `device_metrics`, en lecture et en entretien : les fenêtres des
+ * graphes, les instants de la frise, l'épinglage et les purges. L'insertion est
+ * le fait de l'ingestion (`src/agent/ws.ts`), hors session.
  */
 export interface MetricRepo {
     query(input: {
@@ -21,11 +19,9 @@ export interface MetricRepo {
      */
     availableDays(deviceId: string, tzOffsetMinutes: number): Promise<string[]>;
     /**
-     * Timestamps of the stored instants within [from, to], ascending, split into
-     * all vs the pinned subset: the timeline's marks. Keyed on the metric rows
-     * (one per collection tick) rather than on the process samples, which are
-     * optional: a device with `processCapture: 'off'` still has instants to
-     * navigate.
+     * Timestamps of the stored instants within [from, to], ascending, plus the
+     * pinned subset: the timeline's marks. Keyed on the metric rows, not the
+     * optional process samples.
      */
     instantTimes(
         deviceId: string,
@@ -54,16 +50,10 @@ const BUCKET_SECONDS: Record<MetricsResolution, number> = {
 };
 
 /**
- * Plafonds de lecture, et pourquoi ils diffèrent.
- *
- * Un relevé toutes les 5 s (la cadence la plus rapide configurable) produit
- * 17 280 instants par jour. Les marques de la frise doivent donc pouvoir
- * couvrir une journée entière, sinon la navigation par ‹ › s'arrête au milieu
- * sans le dire. Les points de graphe, eux, sont déjà réduits par la résolution
- * choisie selon la largeur de fenêtre : leur plafond n'est qu'un garde-fou.
- *
- * Dans les deux cas la sélection prend les plus **récents** : tronquer par le
- * début rendait la queue de la fenêtre, celle qu'on regarde, invisible.
+ * Plafonds de lecture. Un relevé toutes les 5 s produit 17 280 instants par
+ * jour : les marques de la frise doivent couvrir une journée entière. Les
+ * points de graphe sont déjà réduits par la résolution : leur plafond n'est
+ * qu'un garde-fou. Dans les deux cas la sélection prend les plus récents.
  */
 const MAX_INSTANT_MARKS = 20_000;
 const MAX_SERIES_POINTS = 5_000;
@@ -110,9 +100,8 @@ export function metricRepo(q: SdkQueryable): MetricRepo {
     return {
         async query({ deviceId, from, to, resolution }) {
             if (resolution === 'raw') {
-                // Les plus récents, puis remis dans l'ordre : au-delà du
-                // plafond, c'est le début de la fenêtre qui doit manquer, pas
-                // sa fin.
+                // Les plus récents, puis remis dans l'ordre : au-delà du plafond,
+                // c'est le début de la fenêtre qui manque, pas sa fin.
                 const rows = await q.query<MetricRow>(
                     `SELECT * FROM device_metrics
                      WHERE device_id = ? AND ts BETWEEN ? AND ?
@@ -123,9 +112,8 @@ export function metricRepo(q: SdkQueryable): MetricRepo {
                 return rows.reverse().map(rowToPoint);
             }
 
-            // Downsample by time bucket (averages for gauges, max for counters).
-            // Le SELECT bucketisé et le GROUP BY portent la même expression
-            // (sinon `only_full_group_by`).
+            // Averages for gauges, max for counters. Le SELECT et le GROUP BY
+            // portent la même expression (sinon `only_full_group_by`).
             const bucketMs = BUCKET_SECONDS[resolution] * 1000;
             const rows = await q.query<MetricRow>(
                 `SELECT
@@ -158,30 +146,25 @@ export function metricRepo(q: SdkQueryable): MetricRepo {
             return rows.reverse().map(rowToPoint);
         },
         async availableDays(deviceId, tzOffsetMinutes) {
-            // Bucket by *local* day using pure integer math so the result is
-            // independent of the MySQL/Node session timezone. `getTimezoneOffset`
-            // is (UTC - local) in minutes, so local-ms = ts - offset*60000.
+            // Bucket by local day in pure integer math, independent of the
+            // session timezone: local-ms = ts - offset*60000.
             const offsetMs = tzOffsetMinutes * 60000;
             const dayMs = 86400000;
-            // Volontairement sans borne temporelle. Un plancher à la rétention
-            // ferait disparaître du calendrier les journées ne contenant plus
-            // que des instants **épinglés**, dont tout l'objet est justement de
-            // survivre à la rétention : la navigation ne pourrait plus les
-            // atteindre. Le coût reste un parcours d'index seul sur
-            // `uq_metrics_device_ts`, borné à un appareil.
+            // Sans borne temporelle : un plancher à la rétention ferait
+            // disparaître du calendrier les journées ne contenant plus que des
+            // instants épinglés. Parcours d'index seul, borné à un appareil.
             const rows = await q.query<{ d: number }>(
                 `SELECT DISTINCT FLOOR((ts - ?) / ?) AS d
                  FROM device_metrics WHERE device_id = ?
                  ORDER BY d ASC`,
                 [offsetMs, dayMs, deviceId]
             );
-            // Day index → 'YYYY-MM-DD': index*dayMs is local midnight expressed as
-            // a UTC instant, so formatting it as UTC yields the local calendar day.
+            // index*dayMs is local midnight as a UTC instant: formatting it as
+            // UTC yields the local calendar day.
             return rows.map((row) => new Date(Number(row.d) * dayMs).toISOString().slice(0, 10));
         },
         async instantTimes(deviceId, from, to) {
-            // Same shape and bound as `processSamples.snapshotTimes`, so the two
-            // sources merge without either side having to handle a different cap.
+            // Same shape and bound as `processSamples.snapshotTimes`.
             const rows = await q.query<{ ts: number; pinned: number }>(
                 `SELECT ts, pinned FROM device_metrics
                  WHERE device_id = ? AND ts BETWEEN ? AND ?
@@ -189,9 +172,8 @@ export function metricRepo(q: SdkQueryable): MetricRepo {
                  LIMIT ${MAX_INSTANT_MARKS + 1}`,
                 [deviceId, from, to]
             );
-            // Une ligne de plus que le plafond a été demandée : si elle existe,
-            // la fenêtre en contenait davantage, et on le dit au lieu de rendre
-            // une frise silencieusement amputée.
+            // Une ligne de plus que le plafond : si elle existe, la fenêtre en
+            // contenait davantage, et on le dit.
             const truncated = rows.length > MAX_INSTANT_MARKS;
             const kept = truncated ? rows.slice(0, MAX_INSTANT_MARKS) : rows;
             const timestamps: number[] = [];
@@ -204,17 +186,10 @@ export function metricRepo(q: SdkQueryable): MetricRepo {
             return { timestamps, pinned, truncated };
         },
         async setInstantsPinned(deviceId, from, to, pinned) {
-            // Les deux tables en **une seule instruction**, et non deux requêtes
-            // parallèles : un instant à moitié épinglé est un instant dont la
-            // moitié disparaît à la purge suivante, et rien ne rattraperait
-            // l'échec d'une des deux moitiés. La jointure est extérieure parce
-            // que la capture des processus est facultative : un appareil en
-            // `processCapture: 'off'` a des instants sans liste, et ils doivent
-            // s'épingler quand même.
-            //
-            // Le compte porte sur les lignes *concernées* et non modifiées :
-            // ré-épingler un intervalle déjà épinglé reste une action, et
-            // l'appelant s'en sert pour son journal.
+            // Les deux tables en une seule instruction : un instant à moitié
+            // épinglé perd sa moitié à la purge suivante. Jointure extérieure :
+            // la capture des processus est facultative. Le compte porte sur les
+            // lignes concernées et non modifiées : ré-épingler reste une action.
             const count = await q.query<{ n: number }>(
                 'SELECT COUNT(*) AS n FROM device_metrics WHERE device_id = ? AND ts BETWEEN ? AND ?',
                 [deviceId, from, to]

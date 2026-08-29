@@ -19,17 +19,12 @@ function tone(service: UptimeLinkedService): 'online' | 'down' | 'neutral' {
 }
 
 /**
- * Un service surveillé, sous la même forme qu'une cible de déploiement : un
- * bloc bordé, pas une puce ; c'est ce que montrent déjà Git, Bases de données
- * et Audience pour tout objet d'espace relié à un projet.
- *
- * Le corps porte les barres des dernières 24 h et, en face de leur légende, la
- * disponibilité sur les trois fenêtres usuelles (`StatusBars` et `Ratios`, les
- * composants du module Uptime eux-mêmes, lus par son contrat client
- * `UPTIME_CLIENT_PROVIDER` : cet écran n'importe pas le module) : latence,
- * incidents et journal restent dans la fiche complète, une porte plus loin.
- * Ce bloc ne répond qu'à « est-ce en ligne, depuis quand, et à quel prix sur
- * la durée ? ». Module absent, il le dit à la place des barres.
+ * Un service surveillé, en bloc bordé comme tout objet d'espace relié à un
+ * projet. Il ne répond qu'à « est-ce en ligne, depuis quand, à quel prix sur la
+ * durée » : les barres des dernières 24 h et la disponibilité sur les trois
+ * fenêtres, rendues par les composants du module Uptime
+ * (`UPTIME_CLIENT_PROVIDER`, jamais un import). Latence, incidents et journal
+ * restent dans la fiche complète.
  */
 export function UptimeLinkRow({ service, canWrite, busy, onUnlink }: UptimeLinkRowProps) {
     const uptime = moduleClientProvider<UptimeClientProvider>(UPTIME_CLIENT_PROVIDER);
@@ -71,12 +66,10 @@ export function UptimeLinkRow({ service, canWrite, busy, onUnlink }: UptimeLinkR
 }
 
 /**
- * Les barres disent « quand », les pourcentages disent « combien ». Les
- * seconds se lisent en face de la légende parce qu'ils la chiffrent : sans
- * eux, un incident d'une heure et un incident d'un jour se ressemblent à cette
- * échelle. Ils viennent de la liste du module, déjà chargée par la section :
- * aucune requête de plus. Un composant à part parce que le hook d'historique
- * est celui du module, et ne s'appelle que si le module est là.
+ * Les pourcentages en face de la légende : à cette échelle, un incident d'une
+ * heure et un d'un jour se ressemblent sans eux. Ils viennent de la liste déjà
+ * chargée par la section, sans requête de plus. Composant à part parce que le
+ * hook d'historique est celui du module, appelé seulement s'il est là.
  */
 function LinkedStrip({ uptime, service }: { uptime: UptimeClientProvider; service: UptimeLinkedService }) {
     const { points, resolution, axis } = uptime.useServiceHistory(service.id, service.lastCheckedAt);

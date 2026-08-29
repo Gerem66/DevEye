@@ -1,18 +1,11 @@
-// Privilège de native rapatriée : le garde SSRF est partagé par toute l'app, pas propre au module.
+// Le garde SSRF est celui de l'app, partagé, pas propre au module.
 import { fetchJson } from '@/Services/netFetch';
 import { daysUntil, field, formatDate, tag, type OsintProbeAdapter, type OsintTag } from './shared';
 
 /**
- * RDAP — le successeur structuré de WHOIS.
- *
- * Préféré à WHOIS partout où il répond : c'est du JSON, donc lisible sans
- * deviner le format de sortie de chaque registre. `rdap.org` fait le
- * routage vers le bon serveur (registre du TLD, RIR pour les IP), ce qui évite
- * d'embarquer une table de correspondance à maintenir.
- *
- * La sonde WHOIS reste servie **à côté**, pas en remplacement : beaucoup de
- * ccTLD (l'AFNIC pour `.fr` au premier chef) publient en WHOIS des champs que
- * leur RDAP omet.
+ * RDAP, le successeur structuré de WHOIS : du JSON, routé par `rdap.org` vers le
+ * bon serveur. WHOIS reste servi à côté : beaucoup de ccTLD (l'AFNIC pour `.fr`)
+ * publient en WHOIS des champs que leur RDAP omet.
  */
 
 interface RdapVcardEntity {
@@ -44,10 +37,7 @@ interface RdapResponse {
     cidr0_cidrs?: { v4prefix?: string; v6prefix?: string; length?: number }[];
 }
 
-/**
- * Extrait une valeur d'un vCard jCard (RFC 7095). La structure est
- * `['vcard', [['fn', {}, 'text', 'ACME Inc'], …]]` — pénible mais stable.
- */
+/** Extrait une valeur d'un jCard (RFC 7095) : `['vcard', [['fn', {}, 'text', 'ACME Inc'], …]]`. */
 function vcardValue(entity: RdapVcardEntity, key: string): string | null {
     const arr = entity.vcardArray;
     if (!Array.isArray(arr) || arr.length < 2 || !Array.isArray(arr[1])) return null;

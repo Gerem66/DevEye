@@ -1,24 +1,16 @@
 //! `deveye-agent uninstall` : le retrait complet, en une commande.
 //!
-//! Le désinstalleur vit **dans l'agent** parce que l'agent est le seul à savoir
-//! où il a écrit : le service peut être dans deux foyers différents, la config
-//! ailleurs encore (`DEVEYE_CONFIG`), le binaire système n'est pas celui qu'on a
-//! téléchargé, et les dossiers réservés d'un partage CloudSync ne sont nommés
-//! nulle part hors ligne. Documenter la liste ne suffit pas : elle se périme au
-//! premier fichier ajouté, et c'est l'utilisateur qui hérite du reliquat.
+//! Le désinstalleur vit dans l'agent parce que lui seul sait où il a écrit : le
+//! service peut être dans deux foyers, la config ailleurs (`DEVEYE_CONFIG`), le
+//! binaire système n'est pas celui téléchargé, et les dossiers réservés d'un
+//! partage CloudSync ne sont nommés nulle part hors ligne.
 //!
-//! **L'ordre n'est pas cosmétique.** Le démarrage automatique part en premier,
-//! avant tout effacement. Une unité systemd est en `Restart=always` avec
-//! `StartLimitIntervalSec=0` : effacer le binaire sans retirer l'unité la fait
-//! reboucler toutes les deux secondes sur un `ExecStart` qui n'existe plus,
-//! indéfiniment et sans que rien ne l'arrête. C'est exactement ce que produit
-//! une suppression d'appareil depuis l'interface quand un service est installé
-//! (`commands::handle_destroy` efface la config et le binaire, jamais l'unité).
+//! L'ordre compte : le démarrage automatique part en premier. Une unité systemd
+//! en `Restart=always` avec `StartLimitIntervalSec=0` reboucle indéfiniment sur
+//! un `ExecStart` effacé si on retire le binaire avant l'unité.
 //!
-//! **Ce que le retrait ne touche pas, volontairement** : la corbeille locale
-//! d'un partage CloudSync (`.deveye-trash`) contient des fichiers de
-//! l'utilisateur, pas de l'agent. Elle n'est effacée que sur demande explicite
-//! (`--purge-shares`) ; par défaut elle est signalée, avec son chemin.
+//! La corbeille locale d'un partage (`.deveye-trash`) contient des fichiers de
+//! l'utilisateur : elle n'est effacée que sur `--purge-shares`, sinon signalée.
 
 use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
@@ -57,9 +49,8 @@ impl Report {
         println!("  · {}", what.as_ref());
     }
 
-    /// Une étape qui n'a pas abouti : affichée sur-le-champ **et** reprise dans
-    /// l'épilogue. Un retrait partiel qui ne le dit qu'au milieu d'une page de
-    /// sortie est un retrait qu'on croit complet.
+    /// Une étape qui n'a pas abouti : affichée sur-le-champ et reprise dans
+    /// l'épilogue, sans quoi un retrait partiel passe pour complet.
     fn warn(&mut self, what: impl Into<String>) {
         let what = what.into();
         println!("  ! {what}");
@@ -70,9 +61,8 @@ impl Report {
 pub fn run(opts: Options) -> Result<()> {
     let scope = service::installed_scope();
 
-    // Un service système ne se retire pas sans droits — et le retrait partiel
-    // est pire que pas de retrait du tout (voir l'en-tête de module). On refuse
-    // donc **avant** d'avoir touché quoi que ce soit.
+    // Un service système ne se retire pas sans droits, et le retrait partiel est
+    // pire que pas de retrait du tout : on refuse avant d'avoir touché quoi que ce soit.
     if scope == ServiceScope::System && !crate::report::is_privileged() {
         bail!(
             "un service système est installé : relancez avec les droits root\n  \
@@ -99,7 +89,7 @@ pub fn run(opts: Options) -> Result<()> {
     let mut report = Report::default();
     println!("\nRetrait :");
 
-    // 1. Le démarrage automatique d'abord, toujours.
+    // Le démarrage automatique d'abord (voir l'en-tête du module).
     match service::uninstall() {
         Ok(()) if scope == ServiceScope::None => {
             report.skip("aucun démarrage automatique installé")
@@ -108,8 +98,7 @@ pub fn run(opts: Options) -> Result<()> {
         Err(e) => report.warn(format!("service non retiré : {e}")),
     }
 
-    // 2. Le « linger » ne nous revient que si nous avions posé un service
-    //    utilisateur : c'est là, et là seulement, qu'on l'a allumé.
+    // Le « linger » ne nous revient que si nous avions posé un service utilisateur.
     if scope == ServiceScope::User {
         match service::disable_linger() {
             Ok(true) => report.done("« linger » désactivé"),
@@ -118,32 +107,26 @@ pub fn run(opts: Options) -> Result<()> {
         }
     }
 
-    // 3. Ce qui tourne encore : un `run --detach` lancé à la main survit au
-    //    retrait du service, qui ne le connaît pas.
+    // Un `run --detach` lancé à la main survit au retrait du service.
     for dir in &dirs {
         stop_agent(dir, &mut report);
     }
 
-    // 4. Config, jeton, journal, état, caches de scan — puis le dossier lui-même.
     for dir in &dirs {
         wipe_config_dir(dir, &mut report);
     }
 
-    // 5. Les dossiers réservés laissés dans les partages CloudSync.
     for root in &shares {
         clean_share(root, opts.purge_shares, &mut report);
     }
 
-    // 6. Les binaires : les résidus d'abord, le nôtre en dernier — après lui,
-    //    plus rien ne s'exécute.
+    // Le nôtre en dernier : après lui, plus rien ne s'exécute.
     remove_update_leftovers(&mut report);
     remove_self(&mut report);
 
     epilogue(&report);
     Ok(())
 }
-
-// ─────────────────────────────── Ce qu'on va faire ───────────────────────────
 
 fn confirm(
     dirs: &[PathBuf],
@@ -188,22 +171,17 @@ fn confirm(
     Ok(answer == "o" || answer == "oui" || answer == "y" || answer == "yes")
 }
 
-// ─────────────────────────────── Où l'agent a écrit ──────────────────────────
-
 /// Le sous-chemin du dossier de config sous un foyer, par plateforme. Miroir de
 /// ce que `dirs::config_dir()` rend pour l'utilisateur courant, appliqué à un
-/// **autre** foyer — celui de l'appelant derrière un `sudo`.
+/// autre foyer : celui de l'appelant derrière un `sudo`.
 #[cfg(target_os = "linux")]
 const CONFIG_SUBPATH: &str = ".config/deveye";
 #[cfg(target_os = "macos")]
 const CONFIG_SUBPATH: &str = "Library/Application Support/deveye";
 
-/// Tous les dossiers de config à balayer.
-///
-/// Il y en a deux quand le retrait tourne élevé : `dirs::config_dir()` suit
-/// `$HOME`, que `sudo` et `pkexec` réécrivent en celui de root. Ne regarder que
-/// le nôtre, c'est effacer `/root/.config/deveye` (souvent vide) en laissant
-/// intact le vrai enrôlement, jeton compris.
+/// Tous les dossiers de config à balayer : deux quand le retrait tourne élevé,
+/// `dirs::config_dir()` suivant `$HOME`, que `sudo` et `pkexec` réécrivent en
+/// celui de root. Ne regarder que le nôtre laisserait le vrai enrôlement intact.
 fn config_dirs() -> Vec<PathBuf> {
     let mut candidates: Vec<PathBuf> = Vec::new();
     if let Some(dir) = Config::path().parent() {
@@ -214,7 +192,7 @@ fn config_dirs() -> Vec<PathBuf> {
         candidates.push(home.join(CONFIG_SUBPATH));
     }
 
-    // Dédoublonnage par chemin **résolu** : sur un système ostree `/home` est un
+    // Dédoublonnage par chemin résolu : sur un système ostree `/home` est un
     // lien vers `/var/home`, et le même dossier se présenterait deux fois.
     let mut seen: Vec<PathBuf> = Vec::new();
     let mut out: Vec<PathBuf> = Vec::new();
@@ -231,10 +209,8 @@ fn config_dirs() -> Vec<PathBuf> {
     out
 }
 
-/// Les dossiers de partage CloudSync connus, lus dans les caches de scan.
-///
-/// Hors ligne, c'est la seule source : la liste des partages vient du serveur à
-/// la connexion et n'est persistée nulle part ailleurs.
+/// Les dossiers de partage CloudSync connus, lus dans les caches de scan : hors
+/// ligne, c'est la seule source (la liste des partages vient du serveur).
 fn share_roots(dirs: &[PathBuf]) -> Vec<PathBuf> {
     let mut roots: Vec<PathBuf> = Vec::new();
     for path in dirs.iter().flat_map(|dir| sync_index_files(dir)) {
@@ -271,12 +247,9 @@ fn sync_index_files(dir: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
-// ─────────────────────────────── Les étapes ──────────────────────────────────
-
 /// Arrête l'agent enregistré dans un dossier de config, s'il tourne encore.
-///
-/// Le fichier de pid, et non le service : le service est déjà parti à ce
-/// stade, et un `run --detach` lancé à la main n'a jamais été supervisé.
+/// Par le fichier de pid : le service est déjà parti, et un `run --detach`
+/// lancé à la main n'a jamais été supervisé.
 fn stop_agent(dir: &Path, report: &mut Report) {
     let pid_path = dir.join(SIBLING_FILES[0]);
     let Ok(raw) = std::fs::read_to_string(&pid_path) else {
@@ -297,11 +270,9 @@ fn stop_agent(dir: &Path, report: &mut Report) {
 /// Efface les fichiers de l'agent dans un dossier de config, puis le dossier
 /// s'il ne reste rien.
 ///
-/// On efface **par nom**, jamais en récursif : `DEVEYE_CONFIG` peut désigner un
-/// fichier posé dans un dossier partagé avec autre chose, et un `remove_dir_all`
-/// y emporterait ce qui ne nous appartient pas. Le dossier lui-même n'est retiré
-/// que s'il s'appelle `deveye` et qu'il est vide — `remove_dir` échoue sinon, ce
-/// qui est exactement la garde qu'on veut.
+/// Par nom, jamais en récursif : `DEVEYE_CONFIG` peut désigner un fichier posé
+/// dans un dossier partagé avec autre chose. Le dossier n'est retiré que s'il
+/// s'appelle `deveye` et qu'il est vide (`remove_dir` échoue sinon).
 fn wipe_config_dir(dir: &Path, report: &mut Report) {
     let mut names: Vec<String> = vec![CONFIG_FILE.to_string()];
     names.extend(SIBLING_FILES.iter().map(|n| n.to_string()));
@@ -365,12 +336,9 @@ fn remaining(dir: &Path) -> Vec<String> {
         .collect()
 }
 
-/// Retire les dossiers réservés d'un partage CloudSync.
-///
-/// `.deveye-tmp` part toujours : ce sont des fragments d'un transfert
-/// interrompu, sans valeur hors d'une session. `.deveye-trash` contient des
-/// fichiers **de l'utilisateur**, supprimés côté partage mais gardés ici
-/// exprès : on ne l'efface que sur demande, et sinon on dit où il est.
+/// Retire les dossiers réservés d'un partage CloudSync. `.deveye-tmp` part
+/// toujours (fragments d'un transfert interrompu) ; `.deveye-trash` contient des
+/// fichiers de l'utilisateur : effacé sur demande seulement, sinon signalé.
 fn clean_share(root: &Path, purge: bool, report: &mut Report) {
     let scratch = root.join(SHARE_SCRATCH);
     if scratch.is_dir() {
@@ -400,8 +368,7 @@ fn clean_share(root: &Path, purge: bool, report: &mut Report) {
 
 /// Balaie les binaires qu'une mise à jour interrompue a pu laisser à côté du
 /// nôtre : le temporaire d'un échange atomique sous Unix, le `.old` mis de côté
-/// sous Windows (que seul un démarrage suivant nettoie d'ordinaire — et il n'y
-/// en aura pas).
+/// sous Windows (nettoyé d'ordinaire au démarrage suivant, qui n'aura pas lieu).
 fn remove_update_leftovers(report: &mut Report) {
     let Ok(exe) = std::env::current_exe() else {
         return;
@@ -423,11 +390,9 @@ fn remove_update_leftovers(report: &mut Report) {
     }
 }
 
-/// Supprime le binaire en cours d'exécution, en dernier.
-///
-/// Sous Unix un processus peut délier son propre exécutable : l'inode survit
-/// jusqu'à la sortie, le programme finit normalement, le nom a disparu. Windows
-/// verrouille l'image d'un processus vivant : là, on ne peut que le dire.
+/// Supprime le binaire en cours d'exécution. Sous Unix un processus peut délier
+/// son propre exécutable (l'inode survit jusqu'à la sortie) ; Windows verrouille
+/// l'image d'un processus vivant, on ne peut que le dire.
 fn remove_self(report: &mut Report) {
     let Ok(exe) = std::env::current_exe() else {
         return;
@@ -470,10 +435,8 @@ fn epilogue(report: &Report) {
 mod tests {
     use super::*;
 
-    /// Le dossier de config n'est retiré que s'il est **vide** et qu'il porte
-    /// notre nom. `DEVEYE_CONFIG` peut désigner un fichier dans un dossier
-    /// partagé avec autre chose : un effacement récursif y emporterait ce qui
-    /// ne nous appartient pas.
+    /// Le dossier de config n'est retiré que s'il est vide et qu'il porte notre
+    /// nom : `DEVEYE_CONFIG` peut désigner un fichier dans un dossier partagé.
     #[test]
     fn a_foreign_config_dir_survives_its_content() {
         let dir = std::env::temp_dir().join(format!("deveye-uninst-{}", std::process::id()));
@@ -512,7 +475,7 @@ mod tests {
     }
 
     /// La corbeille d'un partage est de la donnée utilisateur : elle ne part que
-    /// sur demande, et son maintien est **signalé**, jamais silencieux.
+    /// sur demande, et son maintien est signalé.
     #[test]
     fn share_trash_is_kept_unless_asked() {
         let root = std::env::temp_dir().join(format!("deveye-share-{}", std::process::id()));

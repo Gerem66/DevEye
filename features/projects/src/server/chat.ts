@@ -7,23 +7,13 @@ import { loadCard } from './board';
 import { assertProjectUnlocked, isMember, loadProject, projectCipher, WRITE, type Ctx } from './_shared';
 
 /**
- * Les fils de discussion des cartes.
- *
- * Sujet live **`projectsChat`**, distinct de `projects` : un message ne doit pas
- * faire re-solliciter le tableau, la frise et le portefeuille entiers. C'est la
- * seule raison de cette coupure. Le sujet est déclaré par le manifest
- * (`topics`, le premier sujet secondaire d'un module) et nommé ici par
- * `mutates: ['projectsChat']` ; il relève de la même feature, donc du même
- * droit d'accès.
- *
- * Sur un projet projeté (`Docs/SHARING.md`), le fil se lit et s'écrit chez
- * lui, sous le codec de son domicile ; les auteurs voyagent en identifiants,
- * nommés par le client parmi les membres de l'espace actif, masqués sinon ;
- * les mentions ne visent que des membres d'ici ; et le point de lecture
- * reste celui de l'appelant, par personne, où qu'il regarde.
- *
- * L'indicateur « en train d'écrire » ne passe **pas** par ici : c'est une trame
- * éphémère du moteur live (`live.typing`), sans écriture ni audit.
+ * Les fils de discussion des cartes. Sujet live `projectsChat`, distinct de
+ * `projects` pour qu'un message ne fasse pas re-solliciter le tableau, la frise et
+ * le portefeuille entiers ; il est déclaré par le manifest et relève de la même
+ * feature, donc du même droit d'accès. Sur un projet projeté, le fil se lit et
+ * s'écrit chez lui, sous le codec de son domicile, mais le point de lecture reste
+ * celui de l'appelant. L'indicateur « en train d'écrire » ne passe pas par ici,
+ * c'est une trame éphémère du moteur live (`live.typing`).
  */
 
 /** Le sujet des messages, déclaré explicitement plutôt que déduit du préfixe. */
@@ -50,9 +40,8 @@ function parseMentions(raw: string | null): number[] {
 }
 
 /**
- * Déchiffre un message sans jamais lever : un message illisible reste dans le
- * fil, avec un corps vide, plutôt que de faire disparaître la conversation
- * entière. Même parti pris que les autres listes du module.
+ * Déchiffre un message sans jamais lever : un message illisible reste dans le fil,
+ * le corps vide, plutôt que de faire disparaître la conversation entière.
  */
 async function toMessage(cipher: SdkCipher, row: ProjectMessageRow): Promise<ProjectMessage> {
     const plain = await cipher.tryDecrypt(row.content);
@@ -95,8 +84,7 @@ export const projectMessageListFeature = defineSdkFeature({
         const page = hasMore ? rows.slice(0, limit) : rows;
 
         const cipher = await projectCipher(ctx, project);
-        // Le repo pagine du plus récent au plus ancien ; l'affichage veut
-        // l'inverse.
+        // Le repo pagine du plus récent au plus ancien, l'affichage veut l'inverse.
         const messages = await Promise.all([...page].reverse().map((row) => toMessage(cipher, row)));
         return { messages, hasMore };
     }
@@ -120,8 +108,8 @@ export const projectMessageSendFeature = defineSdkFeature({
             content: await cipher.encrypt(JSON.stringify({ text: input.text }))
         });
 
-        // Son propre message est lu d'office : sans ça, l'auteur verrait un
-        // badge de non-lu apparaître sur sa propre carte.
+        // Son propre message est lu d'office : sinon l'auteur verrait un badge de
+        // non-lu apparaître sur sa propre carte.
         await ctx.repo.chat.markRead(input.cardId, project.workspace_id, ctx.userId, row.id);
 
         return { message: await toMessage(cipher, row) };
@@ -135,11 +123,10 @@ export const projectMessageEditFeature = defineSdkFeature({
     handler: async (ctx: Ctx, input) => {
         const existing = await ctx.repo.chat.findById(input.messageId);
         if (!existing) throw new FeatureError('not_found', 'Message introuvable');
-        // Le projet d'abord : un message qu'on ne voit pas d'ici est introuvable,
-        // pas « à quelqu'un d'autre ».
+        // Le projet d'abord : un message qu'on ne voit pas d'ici est introuvable, pas
+        // « à quelqu'un d'autre ».
         const project = await loadProject(ctx, existing.project_id, 'write');
-        // On ne retouche que ses propres mots, y compris en tant que
-        // propriétaire de l'espace : réécrire ceux d'autrui n'est pas un droit.
+        // On ne retouche que ses propres mots, propriétaire de l'espace compris.
         if (existing.author_user_id !== ctx.userId) {
             throw new FeatureError('forbidden', 'Vous ne pouvez modifier que vos propres messages.');
         }
@@ -157,9 +144,8 @@ export const projectMessageEditFeature = defineSdkFeature({
 
 export const projectMarkReadFeature = defineSdkFeature({
     ...projectMarkRead,
-    // Pas de `mutates` : une lecture est personnelle. La diffuser ferait
-    // re-solliciter tout l'espace parce qu'une seule personne a ouvert une
-    // carte. Le client rafraîchit ses propres compteurs localement.
+    // Pas de `mutates` : une lecture est personnelle, la diffuser ferait
+    // re-solliciter tout l'espace parce qu'une personne a ouvert une carte.
     handler: async (ctx: Ctx, input) => {
         const { project } = await loadCard(ctx, input.cardId);
         await ctx.repo.chat.markRead(input.cardId, project.workspace_id, ctx.userId, input.lastMessageId);

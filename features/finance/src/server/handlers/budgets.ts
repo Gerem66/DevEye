@@ -4,14 +4,7 @@ import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
 import { periodBounds, postDueRecurring, today, WRITE, type Ctx } from '../_shared';
 
-/**
- * Les budgets: une enveloppe posée sur une catégorie de dépenses.
- *
- * `spent` et `remaining` ne sont **jamais stockés**. Un budget est une règle,
- * pas un compteur: mémoriser le compteur le ferait diverger dès qu'une opération
- * passée est corrigée ou supprimée, et plus rien ne dirait laquelle des deux
- * valeurs est la vraie. On recalcule à la lecture, sur la période en cours.
- */
+/** `spent` et `remaining` ne sont jamais stockés : un budget est une règle, pas un compteur. */
 
 /** Habille une ligne de budget de ce que la période en cours en a consommé. */
 async function withConsumption(ctx: Ctx, row: FinanceBudgetRow): Promise<FinanceBudget> {
@@ -45,9 +38,7 @@ export const financeBudgetSetFeature = defineSdkFeature({
     handler: async (ctx: Ctx, input) => {
         const category = await ctx.repo.findCategory(input.categoryId, ctx.workspaceId);
         if (!category) throw new FeatureError('not_found', 'Catégorie introuvable');
-        // Une enveloppe borne une dépense. En poser une sur une catégorie de
-        // recettes reviendrait à se fixer un plafond de revenus, ce qui n'est
-        // pas une notion de gestion mais un contresens.
+        // Une enveloppe sur une catégorie de recettes serait un plafond de revenus : un contresens.
         if (category.flow !== 'expense') {
             throw new FeatureError('validation', 'Un budget se pose sur une catégorie de dépenses.');
         }

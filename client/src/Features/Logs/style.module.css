@@ -80,7 +80,6 @@
     color: var(--accent);
 }
 
-/* Filter bar */
 .filters {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -138,7 +137,6 @@
     margin-bottom: var(--space-md);
 }
 
-/* Table */
 .tableWrap {
     flex: 1 1 auto;
     min-height: 0;
@@ -258,7 +256,6 @@
     border-color: var(--danger);
 }
 
-/* Expanded metadata */
 .metaRow td {
     padding: 0 var(--space-md) var(--space-sm);
     background: var(--glass-bg-light);
@@ -278,7 +275,6 @@
     word-break: break-word;
 }
 
-/* Empty & loading */
 .empty {
     display: flex;
     flex-direction: column;
@@ -318,7 +314,6 @@
     }
 }
 
-/* Footer */
 .footer {
     display: flex;
     align-items: center;

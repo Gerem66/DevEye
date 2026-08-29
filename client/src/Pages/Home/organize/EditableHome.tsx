@@ -73,17 +73,10 @@ interface FolderRemoval {
 }
 
 /**
- * Les deux identifiants de glissé que porte un dossier, et pourquoi il en faut
- * deux.
- *
- * - `into:` est la **cible d'ajout** : une zone en retrait à l'intérieur de la
- *   carte fermée. La viser range la carte tirée dans le dossier ; viser les
- *   bords de la tuile continue de l'insérer avant ou après, comme n'importe
- *   quelle voisine. Un seul identifiant pour les deux gestes aurait rendu
- *   « ranger dedans » et « poser à côté » indiscernables.
- * - `zone:` est le **contenant ouvert** : la rangée dépliée sous la section,
- *   traitée comme une section de plus par tout le mécanisme de glissé. C'est ce
- *   qui fait qu'en sortir se fait exactement comme on change de section.
+ * Deux identifiants de glissé par dossier : `into:` est la cible « ranger
+ * dedans » (zone en retrait dans la carte fermée, ses bords restant des points
+ * d'insertion), `zone:` le contenant déplié sous la section, traité comme une
+ * section de plus par le mécanisme.
  */
 const FOLDER_ZONE_PREFIX = 'zone:';
 const FOLDER_DROP_PREFIX = 'into:';
@@ -92,10 +85,7 @@ const folderDropId = (folderId: string) => `${FOLDER_DROP_PREFIX}${folderId}`;
 
 /**
  * Un contenant de tuiles pour le glissé : une section, ou le dossier déplié.
- *
- * Les deux se comportent pareil — on y entre, on y réordonne, on en sort — donc
- * le mécanisme ne les distingue qu'au moment d'écrire. C'est ce qui évite un
- * second système de glissé rien que pour les dossiers.
+ * Les deux se comportent pareil, le mécanisme ne les distingue qu'à l'écriture.
  */
 type DropZone =
     | { kind: 'section'; id: string; tileIds: string[]; section: HomeSection }
@@ -125,20 +115,15 @@ function buildZones(sections: HomeSection[], openFolderId: string | null): DropZ
 }
 
 /**
- * The usual grid sorting, but inert for a zone the drag has nothing to do with
- * — the one the tile just left. `overIndex` is -1 there, which the default
- * strategy reads as a move and would answer by shuffling that zone's own tiles
- * for nothing.
+ * The usual grid sorting, but inert for the zone the tile just left: `overIndex`
+ * is -1 there, which the default strategy would answer by shuffling that zone's
+ * own tiles for nothing.
  */
 const sortInZone: SortingStrategy = (args) => (args.overIndex < 0 ? null : rectSortingStrategy(args));
 
 /**
- * Où se trouve une tuile.
- *
- * Rend le **contenant**, jamais un rang : un indice lu ici décrit la disposition
- * telle qu'elle était au dernier rendu, or un glissé émet bien plus d'événements
- * que React ne rend. C'est le store qui résout les positions, sur l'état courant,
- * au moment où il écrit (voir `moveSectionItem`).
+ * Le contenant d'une tuile, jamais un rang : un glissé émet plus d'événements
+ * que React ne rend, c'est le store qui résout les positions sur l'état courant.
  */
 function zoneOf(zones: DropZone[], tileId: string): DropZone | null {
     return zones.find((z) => z.tileIds.includes(tileId)) ?? null;
@@ -157,11 +142,9 @@ function resolveDropTarget(zones: DropZone[], overId: string): { zone: DropZone;
 }
 
 /**
- * Écrit un déplacement d'un contenant vers un autre.
- *
- * Le seul endroit qui sache que les dossiers ne prennent que des
- * fonctionnalités : une carte d'appareil ou un raccourci tiré sur un dossier ne
- * fait rien, et reste donc visiblement à sa place au lieu de disparaître.
+ * Déplacement d'un contenant vers un autre. Seul endroit qui sache que les
+ * dossiers ne prennent que des fonctionnalités : un appareil ou un raccourci
+ * tiré sur un dossier reste à sa place.
  */
 function transferBetween(from: DropZone, to: DropZone, tileId: string, beforeId: string | null): void {
     if (to.kind === 'folder') {
@@ -222,12 +205,9 @@ function TileCard({ visual }: { visual: TileVisual | null }) {
 }
 
 /**
- * La cible « ranger dedans » d'une carte de dossier.
- *
- * En retrait dans la carte, pour que ses bords restent des points d'insertion
- * ordinaires. Décorative au clic (`pointer-events: none`) : dnd-kit compare des
- * coordonnées à un rectangle mesuré, il n'a pas besoin que l'élément reçoive
- * quoi que ce soit, et l'ouverture du dossier reste un clic sur la carte.
+ * La cible « ranger dedans » d'une carte de dossier, en retrait pour que les
+ * bords restent des points d'insertion. `pointer-events: none` : dnd-kit compare
+ * des coordonnées à un rectangle mesuré, et ouvrir le dossier reste un clic.
  */
 function FolderDropTarget({ folderId }: { folderId: string }) {
     const { setNodeRef, isOver } = useDroppable({ id: folderDropId(folderId) });
@@ -240,10 +220,9 @@ function FolderDropTarget({ folderId }: { folderId: string }) {
     );
 }
 
-/** One draggable tile inside a zone. The whole card is the drag handle; the
- *  corner × removes it (no confirmation — re-adding is trivial). While it is
- *  being dragged the card itself rides in the overlay, so what stays here is just
- *  the hole it will drop into. */
+/** One draggable tile. The whole card is the drag handle; the corner × removes
+ *  it without confirmation. While dragged, the card rides in the overlay: what
+ *  stays here is the hole it will drop into. */
 function SortableTile({
     id,
     visual,
@@ -268,13 +247,9 @@ function SortableTile({
         transition
     };
     /**
-     * D'où le doigt est parti, pour distinguer un clic d'un glissé.
-     *
-     * Le navigateur émet un `click` au relâchement **même quand le pointeur a
-     * parcouru la moitié de l'écran** : sans cette mesure, lâcher une carte de
-     * dossier après l'avoir déplacée l'ouvrirait dans la foulée. Le seuil est
-     * celui du capteur (8 px), pour que les deux gestes se séparent exactement
-     * là où dnd-kit les sépare.
+     * D'où le doigt est parti : le navigateur émet un `click` au relâchement
+     * même après un glissé, qui ouvrirait le dossier. Seuil = celui du capteur
+     * (8 px), pour se séparer exactement là où dnd-kit sépare les deux gestes.
      */
     const pressAt = useRef<{ x: number; y: number } | null>(null);
     const startPress = (e: React.PointerEvent) => {
@@ -336,13 +311,9 @@ function SortableTile({
 }
 
 /**
- * Le dossier déplié, sous la section qui le porte.
- *
- * C'est un contenant de glissé comme une section : on y tire une carte pour la
- * ranger, on en tire une dehors pour la reposer sur l'accueil. Il n'y a donc
- * plus de fiche à ouvrir pour remplir ou vider un dossier — le geste est celui
- * de l'écran d'accueil d'un téléphone, et il se fait à l'endroit même où l'on
- * voit le résultat.
+ * Le dossier déplié, sous sa section : un contenant de glissé comme une
+ * section, on y tire une carte pour la ranger, on en tire une dehors pour la
+ * reposer sur l'accueil.
  */
 function FolderPanel({ folder, onClose }: { folder: HomeFolder; onClose: () => void }) {
     const { setNodeRef, isOver } = useDroppable({ id: folderZoneId(folder.id) });
@@ -434,16 +405,9 @@ function SectionTiles({
         <SortableContext items={ids} strategy={sortInZone}>
             <div className={styles.tileGrid}>
                 {ids.map(renderTile)}
-                {/*
-                 * Deux boutons dans l'emprise d'une seule carte pleine hauteur.
-                 *
-                 * Le premier ouvre le marché, qui range appareils, fonctionnalités
-                 * et raccourcis par rayons. Le second pose un dossier, et il est
-                 * **ici** plutôt qu'au marché : un dossier ne se remplit qu'en y
-                 * tirant des cartes déjà posées, donc il n'a de sens qu'à côté
-                 * d'elles. Empilés, ils occupent la place d'une carte au lieu de
-                 * laisser un demi-vide au bout de la rangée.
-                 */}
+                {/* Deux boutons dans l'emprise d'une carte. Le dossier se pose ici
+                    et non au marché : il ne se remplit qu'en y tirant des cartes
+                    déjà posées. */}
                 <div className={styles.addStack}>
                     <button type='button' className={styles.addTile} onClick={onAdd}>
                         <span className={`icon icon-plus ${styles.addTileIcon}`} />
@@ -519,13 +483,8 @@ function SortableSection({
                     maxLength={40}
                     aria-label='Titre de la section'
                 />
-                {/*
-                 * Deux réglages, et le second dépend du premier : « démarre
-                 * repliée » n'apparaît que si la section peut l'être. Une
-                 * section qu'on ne peut pas déplier mais qui démarre repliée
-                 * serait simplement invisible, et le store retire d'ailleurs le
-                 * second drapeau avec le premier.
-                 */}
+                {/* « Repliée au départ » n'apparaît que si la section est repliable ;
+                    le store retire le second drapeau avec le premier. */}
                 <Checkbox
                     className={styles.sectionToggle}
                     checked={section.collapsible === true}
@@ -542,8 +501,6 @@ function SortableSection({
                         Repliée au départ
                     </Checkbox>
                 )}
-                {/* Plus de pastille de genre : une section n'en a plus. Reste le
-                    nombre de tuiles, qui dit quelque chose de vrai. */}
                 <span className={styles.sectionCount}>{section.items.length}</span>
                 <button
                     className={`${styles.tileAction} ${styles.tileRemove} ${styles.sectionRemove}`}
@@ -569,20 +526,15 @@ function SortableSection({
 }
 
 export interface EditableHomeProps {
-    /**
-     * Entré depuis un accueil vide : poser une première section et ouvrir le
-     * marché dessus, sans rien demander. Il n'y a plus de genre à choisir, donc
-     * plus rien à faire confirmer avant de montrer ce qu'on peut ajouter.
-     */
+    /** Entré depuis un accueil vide : poser une première section et ouvrir le
+     *  marché dessus. */
     autoOpenAdd?: boolean;
 }
 
 /**
- * Edit mode rendered straight onto the grid: the same tiles as the home, grouped
- * by section. A single DndContext drives every level — sections reorder by their
- * header handle, tiles reorder inside their zone *and* can be dragged into any
- * other section, into a folder, or back out of one. A trailing "+" per section
- * opens the marché; a final "+" adds a whole section, sur-le-champ.
+ * Edit mode rendered straight onto the grid. A single DndContext drives every
+ * level: sections reorder by their header handle, tiles reorder inside their
+ * zone and can be dragged into any other section, into a folder, or out of one.
  */
 export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
     const layout = useHomeLayout();
@@ -598,12 +550,8 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
     const [activeTileId, setActiveTileId] = useState<string | null>(null);
     /** Where that tile started, so a cancelled drag puts it back. */
     const dragOrigin = useRef<{ zoneId: string; beforeId: string | null } | null>(null);
-    /**
-     * Le déplacement du pointeur au moment du dernier changement de contenant.
-     *
-     * C'est ce qui empêche la boucle décrite dans `onDragOver` : tant que le
-     * pointeur n'a pas bougé, il n'a rien demandé de nouveau.
-     */
+    /** Le déplacement du pointeur au dernier changement de contenant : tant
+     *  qu'il n'a pas bougé, il n'a rien demandé de nouveau (voir `onDragOver`). */
     const lastHandover = useRef<string | null>(null);
 
     const sections = layout.sections;
@@ -619,12 +567,8 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
     }, [openFolderId, openFolder]);
 
     /**
-     * Pose un dossier, et ne le déplie que s'il y a de quoi le remplir.
-     *
-     * Un dossier ne se garnit qu'en y tirant une carte **déjà posée** sur
-     * l'accueil. Sur un accueil qui n'en porte aucune, l'ouvrir montrerait une
-     * rangée vide et une consigne impossible à suivre : le dossier est alors
-     * simplement ajouté, et attendra la première fonctionnalité.
+     * Pose un dossier, et ne le déplie que s'il y a des cartes posées à y tirer :
+     * sinon la rangée vide et sa consigne seraient impossibles à suivre.
      */
     const startFolder = useCallback((sectionId: string) => {
         const folderId = addFolder(sectionId);
@@ -635,13 +579,8 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
         if (onGrid.length > 0) setOpenFolderId(folderId);
     }, []);
 
-    /**
-     * L'entrée « accueil vide », jouée une fois.
-     *
-     * Le garde-fou n'est pas décoratif : cet effet **écrit** dans la disposition,
-     * et un second passage (montage-démontage-remontage) poserait une deuxième
-     * section vide sans que rien ne l'ait demandé.
-     */
+    // Jouée une fois : cet effet écrit dans la disposition, un second passage
+    // poserait une deuxième section vide.
     const seeded = useRef(false);
     useEffect(() => {
         if (!autoOpenAdd || seeded.current) return;
@@ -661,17 +600,12 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
     const editTarget = editShortcut ? (sections.find((s) => s.id === editShortcut.sectionId) ?? null) : null;
 
     /**
-     * Sections, zones and tiles share one DndContext (that's what lets a tile
-     * cross into another section or into a folder), so targets are filtered per
-     * drag:
-     *  - dragging a section → only other sections are candidates;
-     *  - dragging a **feature** over the inside of a folder card → that card wins
-     *    outright, which is what makes « ranger dedans » distinct from « poser à
-     *    côté »;
-     *  - otherwise → the zone under the pointer wins first (a folder panel before
-     *    the section that carries it, since the panel sits inside it), then the
-     *    closest tile inside that zone, so an empty zone is still droppable and a
-     *    tile can never land where the pointer isn't.
+     * One DndContext for sections, zones and tiles, so targets are filtered per
+     * drag: a section only sees other sections; a feature over the inside of a
+     * folder card lands there outright; otherwise the zone under the pointer
+     * wins (a folder panel before the section carrying it), then the closest
+     * tile inside it, so an empty zone stays droppable and a tile never lands
+     * where the pointer isn't.
      */
     const collisionDetection = useCallback<CollisionDetection>(
         (args) => {
@@ -698,10 +632,8 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
             }
 
             if (isFeatureTile(activeId)) {
-                // La carte du dossier **déplié** est exclue : sa rangée est
-                // ouverte juste en dessous, et pendant qu'on en tire une carte
-                // dehors, repasser au-dessus de sa tuile rallumerait « ranger
-                // dedans » en plein geste de sortie.
+                // La carte du dossier déplié est exclue : en tirer une carte dehors
+                // rallumerait « ranger dedans » en repassant sur sa tuile.
                 const openTile = openFolderId === null ? null : folderDropId(openFolderId);
                 const intoFolder = pointerWithin({
                     ...args,
@@ -751,9 +683,8 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
         if (sections.some((s) => s.id === id)) return;
         lastHandover.current = null;
         const owner = zoneOf(zones, id);
-        // La tuile devant laquelle elle se trouvait : c'est ce qui la remet
-        // exactement où elle était si le glissé est abandonné. Un rang aurait
-        // désigné une place qui a bougé entre-temps.
+        // La tuile devant laquelle elle se trouvait, pour la remettre en place si
+        // le glissé est abandonné ; un rang aurait pu bouger entre-temps.
         const tiles = owner ? owner.tileIds : [];
         const at = tiles.indexOf(id);
         dragOrigin.current = owner ? { zoneId: owner.id, beforeId: at >= 0 ? (tiles[at + 1] ?? null) : null } : null;
@@ -761,30 +692,16 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
     };
 
     /**
-     * A tile joins the hovered zone as soon as it enters it, rather than on drop.
-     * That's what makes the move feel like the in-zone sort: the tile is really
-     * part of the target grid, so its neighbours slide aside to open the slot, and
-     * the zone it left closes up behind it.
+     * A tile joins the hovered zone on entry, not on drop: its neighbours slide
+     * aside and the zone it left closes up. Rien n'est lu ici que des identités :
+     * l'événement part du pointeur, plus souvent que React ne rend, et `zones`
+     * décrit un état d'avant ; le store résout les positions sur l'état courant.
      *
-     * Rien n'est lu ici que des **identités** : cet événement part du pointeur,
-     * donc bien plus souvent que React ne rend, et `zones` décrit toujours un
-     * état d'avant. Le store, lui, résout les positions sur l'état courant.
-     *
-     * ## Un changement de contenant par mouvement du pointeur, pas davantage
-     *
-     * Changer une tuile de contenant **change la hauteur des deux** : la source se
-     * referme, la cible s'ouvre, et tout ce qui suit remonte. Sous un pointeur
-     * resté immobile, ce n'est donc plus le même contenant qui se trouve. dnd-kit
-     * remesure (la mesure est en continu, elle doit l'être pour qu'un lâcher tombe
-     * juste), rappelle cet événement, et l'on rend la tuile — ce qui défait la
-     * reflow, ramène le contenant d'origine sous le curseur, et recommence. Une
-     * boucle qui ne tient à aucun geste, et que React finit par arrêter en
-     * dépilant l'application entière (« Maximum update depth »).
-     *
-     * `delta` est le déplacement du pointeur depuis le début du glissé : deux
-     * événements qui le partagent décrivent le **même** geste. Le second n'a donc
-     * rien de neuf à demander, et un changement de contenant par position borne la
-     * réaction en chaîne à un seul tour.
+     * Un changement de contenant par mouvement du pointeur, pas davantage : le
+     * changement modifie la hauteur des deux contenants, sous un pointeur
+     * immobile un autre contenant se trouve, dnd-kit remesure et rappelle, jusqu'à
+     * « Maximum update depth ». `delta` est le déplacement depuis le début du
+     * glissé : deux événements qui le partagent décrivent le même geste.
      */
     const onDragOver = (e: DragOverEvent) => {
         const { active, over, delta } = e;
@@ -820,9 +737,8 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
             return;
         }
 
-        // Lâchée dans une carte de dossier fermée : elle s'y range. Le seul cas
-        // qui n'a pas eu lieu au survol — la carte n'aurait eu nulle part où
-        // s'afficher entre-temps, le dossier étant justement fermé.
+        // Lâchée dans une carte de dossier fermée : le seul cas qui n'a pas eu
+        // lieu au survol, le dossier étant fermé.
         if (overId.startsWith(FOLDER_DROP_PREFIX)) {
             if (isFeatureTile(activeId)) fileInFolder(overId.slice(FOLDER_DROP_PREFIX.length), activeId, null);
             return;
@@ -862,11 +778,8 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
         setConfirmRemove(null);
     };
 
-    /**
-     * Un dossier vide s'en va sans rien demander (le recréer est un clic) ; un
-     * dossier plein prévient, parce que son retrait emporte aussi les tuiles
-     * qu'il tenait hors de l'accueil.
-     */
+    /** Un dossier vide s'en va sans demander ; un dossier plein prévient, son
+     *  retrait emporte aussi ses tuiles hors de l'accueil. */
     const requestRemoveFolder = (sectionId: string, folder: HomeFolder) => {
         if (folder.items.length === 0) removeTile(sectionId, folder.id);
         else setConfirmFolder({ sectionId, folder });
@@ -919,9 +832,8 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
                 </DragOverlay>
             </DndContext>
 
-            {/* Ajoutée sur-le-champ : il n'y a plus de genre à choisir, donc plus
-                de question à poser. Le marché s'ouvre dans la foulée sur la
-                section neuve, qui n'a par définition rien à montrer. */}
+            {/* Ajoutée sur-le-champ, et le marché s'ouvre dans la foulée sur la
+                section neuve. */}
             <button type='button' className={styles.addSection} onClick={() => setAddTarget(addSection())}>
                 <span className={`icon icon-plus ${styles.addTileIcon}`} />
                 <span className={styles.addTileLabel}>Ajouter une section</span>

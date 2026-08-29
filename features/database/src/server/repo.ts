@@ -1,41 +1,20 @@
 import type { DatabaseAlertRow, DatabaseRow } from '../contracts/domain';
 import type { SdkQueryable } from '@deveye/types/sdk/server';
 
-/**
- * Une base, plus ce que ses tables voisines en disent.
- *
- * Le nombre de projets qui s'en servent n'en fait plus partie : la table de
- * liaison (`project_database_links`) appartient à Projets, et le module ne
- * lit aucune table de Projets. Le compte vient de son contrat
- * (`PROJECTS_USAGE_PROVIDER`), et `toDatabase` le reçoit en paramètre.
- */
+/** Une base et ses compteurs d'alertes ; le compte de projets vient du contrat de Projets. */
 export interface DatabaseWithStatsRow extends DatabaseRow {
     alert_count: number;
     firing_count: number;
 }
 
 /**
- * Les bases de données de l'espace.
- *
- * Deux secrets par ligne — le mot de passe de la base et celui du tunnel — dans
- * leurs propres colonnes, jamais dans `content`. Aucune méthode ici ne les rend
- * autrement qu'à travers la ligne brute, que seule la couche feature manipule ;
- * les DTO n'en portent qu'un booléen.
- *
- * ⚠️ La table s'appelle `database_connections` : `databases` est un mot réservé
- * de MySQL, et `CREATE TABLE databases` échoue à l'analyse (migration 068).
+ * Les bases de données de l'espace. Les deux secrets (mot de passe, secret du
+ * tunnel) ont leurs propres colonnes et ne sortent que par la ligne brute.
+ * La table s'appelle `database_connections` : `databases` est réservé par MySQL.
  */
 export interface DatabaseRepo {
     list(workspaceId: number): Promise<DatabaseWithStatsRow[]>;
-    /**
-     * Les bases **visibles** depuis cet espace : les siennes, plus celles qu'un
-     * autre espace y projette (`item_shares`).
-     *
-     * Séparé de `list` plutôt que de le remplacer : l'ordonnanceur de relevé
-     * parcourt les bases d'un espace, pas ce qu'on y voit — relever deux fois la
-     * même parce qu'elle est projetée ailleurs doublerait les connexions
-     * sortantes et les alertes.
-     */
+    /** Les siennes, plus celles qu'un autre espace y projette (`item_shares`). */
     listVisible(workspaceId: number): Promise<DatabaseWithStatsRow[]>;
     find(id: number, workspaceId: number): Promise<DatabaseRow | null>;
     /** Comme `find`, mais accepte aussi une base projetée vers cet espace. */
@@ -73,12 +52,11 @@ export interface DatabaseRepo {
     ): Promise<DatabaseRow | null>;
     remove(id: number, workspaceId: number): Promise<boolean>;
     reorder(workspaceId: number, ids: number[]): Promise<void>;
-    /** Le résultat d'un relevé : succès (erreur nulle) ou échec. */
     recordCheck(
         id: number,
         input: {
             at: number;
-            /** Durée du relevé, en ms — écrite aussi quand il a échoué. */
+            /** En ms ; écrite aussi sur un échec. */
             elapsedMs: number;
             status: 'up' | 'down';
             error: string | null;
@@ -90,7 +68,6 @@ export interface DatabaseRepo {
     /** Les bases surveillées dont le relevé est dû, les plus en retard d'abord. */
     listDue(now: number, limit: number): Promise<DatabaseRow[]>;
 
-    // -- alertes -----------------------------------------------------------
     listAlerts(databaseId: number, workspaceId: number): Promise<DatabaseAlertRow[]>;
     /** Les alertes actives d'une base, pour le relevé périodique. */
     listEnabledAlerts(databaseId: number): Promise<DatabaseAlertRow[]>;
@@ -108,7 +85,7 @@ export interface DatabaseRepo {
         input: { enabled: boolean; combinator: string; content: string }
     ): Promise<DatabaseAlertRow | null>;
     removeAlert(alertId: number, workspaceId: number): Promise<boolean>;
-    /** L'issue d'une évaluation ; `firedAt` n'est posé qu'à la transition. */
+    /** `firedAt` n'est posé qu'à la transition. */
     recordAlertCheck(
         alertId: number,
         input: { at: number; firing: boolean; firedAt: number | null; error: string | null; content: string }
@@ -116,16 +93,8 @@ export interface DatabaseRepo {
 }
 
 export function createRepo(q: SdkQueryable): DatabaseRepo {
-    /**
-     * Le tronc commun des lectures enrichies.
-     *
-     * Des sous-requêtes plutôt que des jointures : chacune agrège sur une
-     * table voisine, et les combiner en jointures multiplierait les lignes
-     * avant de les regrouper — un compte faussé par le nombre d'alertes est
-     * exactement le genre de chiffre faux qui ne se voit pas. Le compte de
-     * projets, qui en était la troisième, vient désormais du contrat de
-     * Projets : le module ne lit aucune table de Projets.
-     */
+    // Des sous-requêtes plutôt que des jointures : combinées, celles-ci
+    // multiplieraient les lignes avant de les regrouper.
     const SELECT_WITH_STATS = `
         SELECT d.*,
                (SELECT COUNT(*) FROM database_alerts a WHERE a.database_id = d.id) AS alert_count,
@@ -164,8 +133,7 @@ export function createRepo(q: SdkQueryable): DatabaseRepo {
         },
         async listVisible(workspaceId) {
             // `sort_order` appartient à l'espace d'origine : une base projetée
-            // se range donc après les locales. Lui donner un ordre propre à
-            // chaque espace demanderait une colonne par projection.
+            // se range après les locales.
             const rows = await q.query<DatabaseWithStatsRow>(
                 `${SELECT_WITH_STATS}
                   WHERE d.workspace_id = ?
@@ -229,7 +197,7 @@ export function createRepo(q: SdkQueryable): DatabaseRepo {
             return Number(rows[0]?.total ?? 0);
         },
         async create(input) {
-            // Une nouvelle base atterrit à la fin de la liste, jamais au milieu.
+            // Une nouvelle base atterrit à la fin de la liste.
             const posRows = await q.query<{ next: number }>(
                 'SELECT COALESCE(MAX(sort_order) + 1, 0) AS next FROM database_connections WHERE workspace_id = ?',
                 [input.workspaceId]
@@ -256,8 +224,7 @@ export function createRepo(q: SdkQueryable): DatabaseRepo {
             return rows[0];
         },
         async update(id, workspaceId, input) {
-            // Un secret absent est **conservé** : le client ne le reçoit jamais,
-            // il ne peut donc pas le renvoyer inchangé. `null` explicite l'efface.
+            // Un secret absent est conservé ; `null` explicite l'efface.
             const sets = [
                 'name_ref = ?',
                 'content = ?',
@@ -289,8 +256,7 @@ export function createRepo(q: SdkQueryable): DatabaseRepo {
             return find(id, workspaceId);
         },
         async remove(id, workspaceId) {
-            // Alertes et liaisons partent en CASCADE ; les projets liés, eux, ne
-            // perdent qu'un pointeur.
+            // Alertes et liaisons partent en CASCADE.
             const res = await q.execute('DELETE FROM database_connections WHERE id = ? AND workspace_id = ?', [
                 id,
                 workspaceId
@@ -326,8 +292,6 @@ export function createRepo(q: SdkQueryable): DatabaseRepo {
         },
         async listDue(now, limit) {
             // Jamais relevée d'abord (NULL trie en tête), puis la plus en retard.
-            // Une base non surveillée n'entre jamais ici : c'est ce qui fait que
-            // « à la demande » est bien le comportement par défaut.
             return q.query<DatabaseRow>(
                 `SELECT * FROM database_connections
                   WHERE monitor_enabled = 1
@@ -376,9 +340,8 @@ export function createRepo(q: SdkQueryable): DatabaseRepo {
             return res.affectedRows > 0;
         },
         async recordAlertCheck(alertId, input) {
-            // `last_fired_at` n'est écrit qu'à la transition : le laisser
-            // s'écraser à chaque relevé effacerait la seule date qui dise quand
-            // le problème a commencé.
+            // `last_fired_at` n'est écrit qu'à la transition : c'est la date du
+            // début du problème.
             const sets = ['last_check_at = ?', 'firing = ?', 'last_error = ?', 'content = ?'];
             const params: unknown[] = [input.at, input.firing ? 1 : 0, input.error, input.content];
             if (input.firedAt !== null) {

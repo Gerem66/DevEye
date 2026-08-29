@@ -1,27 +1,9 @@
-/*
- * Feature « Bases de données ».
- *
- * Module à part, comme celui de Git : une feature, une feuille. C'est ce qui
- * évite les collisions de noms de classe qu'un module partagé finit toujours par
- * produire (voir la note de PROJECTS.md sur `.grid`).
- */
+/* Feature « Bases de données » : une feature, une feuille, pour éviter les
+   collisions de noms de classe. */
 
-/*
- * La racine d'une fiche, et le ressort qui remplit la popup.
- *
- * `min-height: 100%` est tout ce qu'il faut pour obtenir « prends la place qui
- * reste, sinon ne bouge pas ». La zone défilante de la popup a une hauteur
- * définie ; la racine vaut donc **au moins** cette hauteur :
- *
- * - contenu plus court → la racine est étirée à 100 %, il y a de l'espace libre,
- *   et le seul enfant qui grandit (le panneau des tables) le prend. Aucune barre
- *   de défilement n'apparaît : rien ne dépasse ;
- * - contenu déjà plus haut → la racine suit le contenu, l'espace libre vaut zéro,
- *   `flex-grow` ne distribue rien, et tout garde sa taille par défaut, barre de
- *   défilement comprise.
- *
- * Les deux cas que demandait l'écran, sans mesurer quoi que ce soit.
- */
+/* `min-height: 100%` : la racine vaut au moins la zone défilante de la popup.
+   Contenu plus court, le panneau des tables prend l'espace libre ; contenu plus
+   haut, tout garde sa taille. */
 .root {
     display: flex;
     flex-direction: column;
@@ -29,28 +11,17 @@
     min-height: 100%;
 }
 
-/*
- * La racine en mode « une table, et rien d'autre ».
- *
- * `height: 100%` est tout ce que le mode agrandi demande à cet étage : la
- * feature est posée dans la zone défilante de la popup, qui a une hauteur
- * définie (colonne flex bornée par les insets du panneau). La racine prend donc
- * exactement la hauteur visible, et le panneau qui reste peut la remplir avec un
- * simple `flex: 1`. Aucun positionnement absolu, aucune mesure en JavaScript.
- *
- * `overflow: hidden` supprime la barre de défilement de la popup pendant ce
- * temps-là : ce qui déborde, désormais, c'est le tableau, dans sa propre boîte.
- */
+/* Mode « une table, et rien d'autre » : `height: 100%` donne la hauteur visible,
+   que le panneau restant remplit en `flex: 1`. `overflow: hidden` : ce qui
+   déborde est le tableau, dans sa propre boîte. */
 .rootExpanded {
     composes: root;
     height: 100%;
     overflow: hidden;
 }
 
-/* L'en-tête d'une base reste en vue tant qu'on parcourt son bloc : un projet
-   peut en relier plusieurs, et l'explorateur est haut. Il se pose sous
-   l'en-tête du projet via `--sticky-head` ; le repli à 0 vaut dans la feature
-   elle-même, où il n'a rien au-dessus de lui. */
+/* L'en-tête d'une base reste en vue tant qu'on parcourt son bloc, sous
+   l'en-tête du projet (`--sticky-head`) ; le repli à 0 vaut dans la feature. */
 .header {
     position: sticky;
     top: var(--sticky-head, 0px);
@@ -87,13 +58,7 @@
     color: var(--text-muted);
 }
 
-/*
- * Le mot d'explication d'un écran qu'on ne peut que consulter.
- *
- * Centré, parce qu'il ne commente aucune ligne en particulier : il vaut pour
- * tout ce qui est au-dessus de lui. Calé à gauche sous une liste pleine
- * largeur, il se lisait comme la légende du dernier élément.
- */
+/* Centré : il vaut pour tout ce qui est au-dessus, pas pour la dernière ligne. */
 .hintCentered {
     composes: hint;
     display: block;
@@ -110,9 +75,8 @@
     color: var(--success);
 }
 
-/* Une connexion en cours : ni un succès, ni un échec — l'orange dit « on
-   attend », et occupe la place où la réponse s'écrira, pour que l'écran ne
-   sursaute pas quand elle arrive. */
+/* Une connexion en cours occupe la place où la réponse s'écrira, pour que
+   l'écran ne sursaute pas. */
 .pending {
     font-size: 0.82rem;
     color: var(--warning);
@@ -142,11 +106,8 @@
     position: relative;
 }
 
-/*
- * Où atterrirait la carte glissée. Traverse la liste et se tient dans
- * l'interstice lui-même : aucune ligne n'est déplacée ni restylée pour montrer
- * la cible. Pilotée par le DOM (voir `src/dragReorder.ts`), jamais par un état.
- */
+/* Où atterrirait la carte glissée : dans l'interstice, aucune ligne déplacée.
+   Pilotée par le DOM (`useDragReorder`), jamais par un état. */
 .dropBar {
     position: absolute;
     left: 0;
@@ -177,16 +138,14 @@
     transform: translateY(-1px);
 }
 
-/* La carte en cours de déplacement : estompée plutôt que masquée, pour que sa
-   place reste un repère pendant que la barre montre la cible. `filter:
-   opacity()` et non `opacity` — la propriété est revendiquée par les surfaces
-   animées de l'application. */
+/* Estompée plutôt que masquée : sa place reste un repère. `filter: opacity()`
+   et non `opacity`, propriété que framer-motion revendique. */
 .cardDragging {
     filter: opacity(0.4);
     cursor: grabbing;
 }
 
-/* Poignée de réorganisation, comme dans Uptime, Git et Monitoring. */
+/* Poignée de réorganisation. */
 .grip {
     flex-shrink: 0;
     align-self: center;
@@ -292,11 +251,7 @@
 
 /* --------------------------------------------------------------- état */
 
-/*
- * Trois tons, et « neutre » est le défaut assumé : une base jamais jointe n'est
- * pas en panne, c'est le réglage par défaut de la feature. La peindre en rouge
- * ferait passer un inventaire au repos pour un incident.
- */
+/* « neutre » est le défaut : une base jamais jointe n'est pas en panne. */
 .statusDot {
     width: 8px;
     height: 8px;
@@ -415,31 +370,16 @@
     min-width: 0;
 }
 
-/*
- * Le panneau des tables hors plein écran : le seul bloc de la fiche qui grandit.
- *
- * `flex: 1 1 auto` — et non `flex: 1`, qui vaut `1 1 0%` : la base doit rester
- * la hauteur naturelle du panneau, sinon il partirait de zéro et se replierait
- * dès que la place manque. Ici il part de ce qu'il vaut, et ne fait que prendre
- * ce qui reste.
- *
- * Les autres panneaux (alertes, projets) gardent leur taille : ce qu'on veut
- * voir en plus grand, ce sont des lignes, pas une liste d'alertes espacée.
- */
+/* Le seul bloc de la fiche qui grandit. `flex: 1 1 auto` et non `flex: 1`
+   (`1 1 0%`) : la base reste la hauteur naturelle du panneau, qui ne fait que
+   prendre ce qui reste. */
 .panelGrow {
     composes: panel;
     flex: 1 1 auto;
     min-height: 0;
 }
 
-/*
- * Le panneau des tables quand il occupe tout.
- *
- * Il ne change ni de forme ni de couleur : il prend simplement la place que la
- * racine lui laisse (`flex: 1`), ses voisins ayant disparu. C'est ce qui rend
- * l'animation de framer-motion lisible — un seul rectangle bouge, et il reste
- * reconnaissable d'un bout à l'autre.
- */
+/* En plein écran : la place que la racine lui laisse, ses voisins ayant disparu. */
 .panelExpanded {
     composes: panel;
     flex: 1;
@@ -482,14 +422,13 @@
     background: var(--surface-subtle);
 }
 
-/* Une alerte franchie se voit sans être lue : c'est tout son intérêt. */
+/* Une alerte franchie se voit sans être lue. */
 .alertRowOn {
     composes: alertRow;
     border-color: var(--warning);
 }
 
-/* Une alerte se lit, elle ne s'ouvre plus d'ici : son écriture vit dans
-   l'onglet Alertes des réglages de la base, derrière le bouton commun. */
+/* Une alerte se lit ; son écriture vit dans l'onglet Alertes des réglages. */
 .alertEntry {
     display: flex;
     flex-direction: column;
@@ -507,11 +446,8 @@
 
 /* ---------------------------------------------------------- exploration */
 
-/*
- * Deux colonnes : la liste des tables, et le contenu de celle qu'on a choisie.
- * `minmax(0, 1fr)` sur la seconde, sinon un tableau large la pousserait au-delà
- * du panneau au lieu de défiler dedans.
- */
+/* `minmax(0, 1fr)` sur la colonne du contenu : sinon un tableau large la
+   pousserait au-delà du panneau au lieu de défiler dedans. */
 .explorer {
     display: grid;
     grid-template-columns: 240px minmax(0, 1fr);
@@ -530,13 +466,8 @@
         gap var(--transition-slow);
 }
 
-/*
- * En plein écran, la colonne des tables se referme.
- *
- * Une largeur nulle plutôt qu'un `display: none` : la liste reste dans le DOM,
- * sa boîte se rétrécit, et le contenu suit le mouvement. La démonter aurait fait
- * sauter la grille d'un état à l'autre au milieu de l'animation du panneau.
- */
+/* En plein écran, une largeur nulle plutôt qu'un `display: none` : la liste
+   reste dans le DOM et suit l'animation. */
 .explorerExpanded {
     composes: explorer;
     grid-template-columns: 0 minmax(0, 1fr);
@@ -560,32 +491,12 @@
     }
 }
 
-/*
- * La boîte qui donne sa hauteur à la liste.
- *
- * Elle s'étire à la hauteur de la ligne de grille — donc à celle du contenu de
- * la table, sa voisine — et la liste la remplit en défilant dedans. C'est le
- * seul montage qui donne « aussi haute que la carte » sans hauteur en dur :
- * `max-height: 320px` laissait un vide sous une liste courte et coupait
- * arbitrairement une liste longue, et sans plafond du tout, quatre-vingts tables
- * repoussaient la carte entière sur trois écrans.
- *
- * `position: absolute` sur la liste est ce qui casse la circularité : sans lui,
- * le contenu de la liste participerait au calcul de la hauteur de la ligne
- * qu'il est justement censé subir.
- */
+/* S'étire à la hauteur de la ligne de grille, et la liste la remplit en
+   défilant. `position: absolute` sur la liste casse la circularité : sinon son
+   contenu participerait au calcul de la hauteur qu'il doit subir. */
 .tableListPane {
     position: relative;
-    /*
-     * Le plancher de la colonne, et non son plafond : elle s'étire au-delà dès
-     * que sa voisine est plus haute.
-     *
-     * 240 px n'en montraient que cinq, ce qui est trop peu pour choisir dans un
-     * inventaire — et c'est le cas courant dans l'onglet d'un projet, où aucune
-     * table n'est encore ouverte et où la voisine ne tire donc rien vers le bas.
-     * 360 px en montrent une dizaine, assez pour parcourir sans faire défiler
-     * dès la première seconde.
-     */
+    /* Un plancher, pas un plafond : 360 px montrent une dizaine de tables. */
     min-height: 360px;
     min-width: 0;
     overflow: hidden;
@@ -604,8 +515,7 @@
 }
 
 @media (max-width: 720px) {
-    /* Une seule colonne : la liste reprend le fil, et son plafond avec — ici
-       elle n'a plus de voisine à laquelle s'aligner. */
+    /* Une seule colonne : la liste reprend le fil, sans voisine à suivre. */
     .tableListPane {
         min-height: 0;
     }
@@ -616,14 +526,8 @@
     }
 }
 
-/*
- * Le cadre de la table ouverte.
- *
- * Sa seule fonction est de dire à qui appartiennent les boutons : « Ajouter »,
- * « Supprimer », « Structure » agissent sur *cette* table, pas sur la base. Sans
- * lui, ils flottaient entre la liste de gauche et le tableau, à égale distance
- * des deux, et rien ne tranchait.
- */
+/* Le cadre de la table ouverte dit à qui appartiennent les boutons : à cette
+   table, pas à la base. */
 .tablePanel {
     position: relative;
     display: flex;
@@ -693,21 +597,8 @@
     flex-wrap: wrap;
 }
 
-/*
- * Le voile d'un chargement de table.
- *
- * Il **couvre**, il ne remplace pas : le contenu précédent reste dessous, la
- * hauteur du panneau ne bouge pas, et le contenu suivant s'installe d'un coup au
- * lieu de passer par un panneau vide qui se replie puis se redéploie.
- *
- * Il capte aussi les clics — tout n'est pas grisé dessous (un en-tête de colonne
- * trie, une clé étrangère s'ouvre), et un clic sur des lignes qui vont
- * disparaître ne peut que porter à faux.
- *
- * Volontairement léger : on doit reconnaître ce qu'il y a derrière, sans quoi le
- * geste ressemble à un écran qui s'éteint plutôt qu'à un contenu qui se
- * rafraîchit.
- */
+/* Le voile d'un chargement couvre le contenu précédent (la hauteur ne bouge
+   pas), capte les clics sur des lignes qui vont disparaître, et reste léger. */
 .tableVeil {
     position: absolute;
     inset: 0;
@@ -725,18 +616,9 @@
     animation: veilIn 420ms ease-out both;
 }
 
-/*
- * Le voile ne paraît qu'après un délai, tenu par l'image-clé à 66 %.
- *
- * Une lecture qui revient en 40 ms — le cas ordinaire d'une base locale — ne
- * doit produire aucun clignotement : le voile se lèverait avant d'avoir fini de
- * paraître, et l'écran donnerait l'impression de sauter. Passé ~280 ms, en
- * revanche, il faut dire que quelque chose part, sinon un clic sur une base
- * lointaine reste une demi-seconde sans réponse visible.
- *
- * Un délai porté par l'animation, et non par un `setTimeout` : c'est un fait
- * d'affichage, il n'a pas à devenir un état de plus à tenir dans le composant.
- */
+/* Le voile ne paraît qu'après un délai (image-clé à 66 %) : une lecture de
+   40 ms ne doit pas clignoter, une de 300 ms doit se voir. Porté par
+   l'animation, pas par un `setTimeout`. */
 @keyframes veilIn {
     0%,
     66% {
@@ -782,9 +664,7 @@
     border: 1px solid var(--glass-border);
 }
 
-/* La même boîte, mais qui prend toute la hauteur restante : le plein écran, et
-   la vue d'un résultat de terminal. Pas de plafond ici — c'est justement ce
-   qu'on est venu chercher. */
+/* La même boîte, sans plafond : le plein écran et la vue d'un résultat. */
 .rowsScrollFill {
     composes: rowsScroll;
     flex: 1;
@@ -792,23 +672,9 @@
     max-height: none;
 }
 
-/*
- * La boîte du tableau dans l'explorateur : 360 px **de préférence**, pas 360 px
- * au maximum.
- *
- * La nuance fait tout. Un `max-height` borne aussi la croissance : le panneau
- * pouvait gagner deux cents pixels sans que le tableau en profite, et ils
- * restaient en blanc sous lui. Une `height` sert de base à `flex-basis: auto`,
- * que `flex-grow` dépasse librement quand il y a de la place — et qui reste
- * exactement 360 px quand il n'y en a pas.
- *
- * Contrepartie assumée : une table de trois lignes occupe quand même le cadre.
- * C'est ce que « la hauteur actuelle est un plancher » veut dire, et un cadre de
- * taille stable d'une table à l'autre vaut mieux qu'un cadre qui saute.
- *
- * Les autres usages de `.rowsScroll` — la structure, l'aperçu d'un résultat —
- * gardent le plafond : ils n'ont rien à remplir.
- */
+/* `height` et non `max-height` : `flex-basis: auto` part de 360 px et
+   `flex-grow` dépasse librement quand il y a de la place. Une table de trois
+   lignes occupe quand même le cadre, qui reste stable d'une table à l'autre. */
 .rowsScrollPane {
     composes: rowsScroll;
     flex: 1 1 auto;
@@ -836,13 +702,9 @@
     text-overflow: ellipsis;
 }
 
-/*
- * L'en-tête colle en haut du défilement — il faut donc qu'il **couvre** les
- * lignes qui passent dessous. `--surface-widget` est à 0,62 d'opacité : les
- * valeurs se lisaient en filigrane derrière les noms de colonnes, et sur une
- * table dense on ne savait plus quel mot appartenait à quoi. `--surface-popup`
- * (0,92) laisse encore deviner le fond de verre sans rien laisser traverser.
- */
+/* L'en-tête collant doit couvrir les lignes qui passent dessous :
+   `--surface-widget` (0,62) laissait lire les valeurs en filigrane,
+   `--surface-popup` (0,92) non. */
 .dataTable th {
     position: sticky;
     top: 0;
@@ -861,13 +723,7 @@
     font-style: italic;
 }
 
-/*
- * La barre d'outils d'une table.
- *
- * Les trois gestes qui écrivent à gauche, ceux qui regardent à droite, séparés
- * par un vide qui pousse les seconds au bout de la ligne. « Supprimer » garde sa
- * teinte d'alerte : c'est le seul bouton de l'écran qui ne se rattrape pas.
- */
+/* Les gestes qui écrivent à gauche, ceux qui regardent à droite. */
 .toolbar {
     display: flex;
     align-items: center;
@@ -900,13 +756,8 @@
     color: var(--accent);
 }
 
-/*
- * Une valeur qui porte une clé étrangère.
- *
- * Soulignée en pointillé plutôt qu'en plein : c'est un lien vers une autre
- * table, pas un lien de navigation ordinaire, et une table entière de liens
- * pleins deviendrait illisible.
- */
+/* Une clé étrangère : pointillé, un lien vers une autre table et non un lien
+   ordinaire. */
 .foreignLink {
     padding: 0;
     border: none;
@@ -922,13 +773,7 @@
     text-decoration: underline solid;
 }
 
-/*
- * Le halo d'une ligne qu'on vient de rejoindre par une clé étrangère.
- *
- * Il s'éteint tout seul : sa raison d'être est de dire « c'est celle-ci » à
- * l'arrivée, pas de marquer durablement une ligne. L'animation part vive et
- * finit fondue, de sorte que l'œil l'attrape sans que l'écran clignote.
- */
+/* Le halo d'une ligne rejointe par une clé étrangère s'éteint tout seul. */
 @keyframes rowHalo {
     from {
         background: var(--accent-bg);
@@ -1139,16 +984,8 @@
     max-width: 160px;
 }
 
-/*
- * Les proportions ne valent **que dans une ligne**.
- *
- * Portées par `.field` lui-même, elles s'appliquaient aussi quand il est enfant
- * direct du formulaire ou d'une section — qui sont des colonnes : la base de
- * 200 px y devenait une *hauteur*. Le champ « Chemin » de la section Accès
- * mesurait donc 200 px à lui seul, ses voisins autant, et la popup se retrouvait
- * à la hauteur de l'écran pour six champs. C'est toute l'origine des blancs
- * démesurés autour de « Accès ».
- */
+/* Ne vaut que dans une ligne : porté par `.field`, la base de 200 px devenait
+   une hauteur dans les colonnes du formulaire. */
 .fieldRow > .field {
     flex: 1 1 200px;
 }
@@ -1167,18 +1004,8 @@
     color: var(--text-secondary);
 }
 
-/*
- * Un bloc du formulaire, et le rythme de toute la popup.
- *
- * **Un seul écart, partout** : `--space-md`. Entre deux champs, entre un titre
- * et son premier champ, de part et d'autre du trait de séparation. Ce qui varie
- * n'est pas l'espace mais le trait, et c'est lui qui dit où un bloc finit. Deux
- * écarts différents suffisaient à donner l'impression que certaines sections
- * respiraient plus que d'autres alors qu'elles ne portaient qu'un champ de plus.
- *
- * Seule exception, d'un autre ordre : les 4 px entre une étiquette et son
- * champ, qui ne séparent pas deux choses mais en désignent une seule.
- */
+/* Un seul écart partout, `--space-md` : c'est le trait qui dit où un bloc
+   finit. Seule exception, les 4 px entre une étiquette et son champ. */
 .section {
     display: flex;
     flex-direction: column;
@@ -1200,14 +1027,8 @@
     color: var(--text-muted);
 }
 
-/*
- * Une zone de saisie multiligne : requête SQL, clé privée, message d'alerte.
- *
- * `min-height` est calé sur **une ligne pleine**, rembourrage compris. Sans
- * lui, la poignée de redimensionnement permettait de réduire le champ à un
- * filet où plus aucune ligne n'était lisible entière — un état qu'aucun
- * utilisateur ne cherche et dont on ne ressort qu'en tâtonnant.
- */
+/* `min-height` calé sur une ligne pleine : la poignée de redimensionnement ne
+   peut pas réduire le champ à un filet. */
 .sqlField,
 .keyField {
     width: 100%;
@@ -1245,16 +1066,8 @@
     padding-right: 32px;
 }
 
-/*
- * Retirer cette condition — dans **le coin du bloc**, pas dans le fil des
- * champs.
- *
- * En bout de ligne, la croix s'alignait sur la hauteur des champs et se
- * retrouvait à mi-hauteur du bloc, sans dire à quoi elle se rapportait : au
- * champ qui la précédait ? à la ligne ? Posée dans le coin supérieur droit, elle
- * appartient visiblement au panneau entier — c'est la convention de toutes les
- * cartes fermables, et elle se lit sans réfléchir.
- */
+/* Dans le coin du bloc, pas dans le fil des champs : la croix appartient au
+   panneau entier. */
 .conditionRemove {
     position: absolute;
     top: var(--space-xs);
@@ -1290,19 +1103,13 @@
     border-top: 1px solid var(--glass-border);
 }
 
-/* Une action de pied qui n'est pas une issue de la popup (« Tester ») : elle
-   part à gauche, loin du couple Annuler / Enregistrer. */
+/* Une action de pied qui n'est pas une issue de la popup : à gauche. */
 .footerLead {
     margin-right: auto;
 }
 
-/*
- * Un pied à deux étages : un message au-dessus, les boutons en dessous.
- *
- * Le pied du Dialog est une ligne alignée à droite ; un unique enfant pleine
- * largeur en fait une colonne sans rien changer au composant partagé. Sert à ce
- * qui se lit **juste avant de cliquer** — le résultat d'un essai de connexion.
- */
+/* Un unique enfant pleine largeur fait du pied du Dialog une colonne : le
+   résultat d'un essai au-dessus des boutons. */
 .footerStack {
     display: flex;
     flex-direction: column;
@@ -1318,23 +1125,16 @@
     gap: var(--space-sm);
 }
 
-/* Une indication, et non une action, à gauche du pied : l'estimation de taille
-   d'un export. Elle pousse les boutons au bout de la ligne comme le ferait un
-   bouton de tête, mais sans en avoir le poids. */
+/* Une indication, pas une action, à gauche du pied : elle pousse les boutons
+   sans le poids d'un bouton. */
 .footerNote {
     margin-right: auto;
     font-size: 0.78rem;
     color: var(--text-muted);
 }
 
-/*
- * Les onglets d'une popup de réglages.
- *
- * Même dessin que ceux des comptes mail : un segment posé sur le fond, l'onglet
- * actif surélevé plutôt que souligné. Deux features à l'écrire deux fois valent
- * mieux qu'un composant partagé prématuré — mais si un troisième arrive, c'est
- * là qu'il faudra le sortir.
- */
+/* Même dessin que les onglets des comptes mail ; à sortir en composant partagé
+   si un troisième usage arrive. */
 .tabBar {
     display: flex;
     gap: 2px;
@@ -1370,14 +1170,8 @@
     box-shadow: var(--shadow-sm);
 }
 
-/*
- * Une colonne que le moteur remplit, à la place de son champ.
- *
- * Un bouton, et pas un champ grisé : un champ désactivé dit « pas maintenant »,
- * ce bouton dit « quelqu'un d'autre s'en charge, et tu peux reprendre la main ».
- * La colonne garde son rang dans le formulaire — c'est tout l'intérêt par
- * rapport à la retirer de la liste.
- */
+/* Une colonne que le moteur remplit : un bouton et non un champ grisé, la
+   colonne garde son rang et on peut reprendre la main. */
 .autoField {
     display: flex;
     align-items: center;
@@ -1421,13 +1215,8 @@
 
 /* ------------------------------------------------------------ résultats */
 
-/*
- * L'aperçu d'un résultat, dans le fil du terminal.
- *
- * Cliquable en entier plutôt que suivi d'un lien : la cible du geste est ce
- * qu'on est déjà en train de regarder. Le dégradé en pied dit que la suite
- * existe sans avoir à écrire « … » — et le pied, lui, dit où l'on va.
- */
+/* L'aperçu d'un résultat, cliquable en entier ; le dégradé en pied dit que la
+   suite existe. */
 .resultPreview {
     display: flex;
     flex-direction: column;
@@ -1466,15 +1255,8 @@
 
 /* ---------------------------------------------------------- pagination */
 
-/*
- * Parcourir les pages.
- *
- * Les deux boutons aux extrémités — le geste courant garde sa place et sa
- * taille — et les numéros au milieu, en petit : ils servent aux sauts, qui sont
- * rares mais qu'aucun « Suivant » ne remplace. Ils s'enroulent sur plusieurs
- * lignes plutôt que de déborder, une table de mille pages en nommant une
- * douzaine.
- */
+/* Les boutons aux extrémités, les numéros au milieu ; ils s'enroulent plutôt
+   que de déborder. */
 .pager {
     display: flex;
     align-items: center;
@@ -1528,8 +1310,7 @@
     font-size: 0.78rem;
 }
 
-/* Le « i » d'une explication : présent, mais sans le poids d'un bouton — il ne
-   fait rien à la base, il raconte ce que font ses voisins. */
+/* Le « i » d'une explication : sans le poids d'un bouton, il ne fait rien. */
 .infoButton {
     display: inline-flex;
     align-items: center;
@@ -1560,14 +1341,7 @@
 
 /* ------------------------------------------------- un objet dans un projet */
 
-/*
- * Un dépôt / une base à l'intérieur de l'onglet d'un projet.
- *
- * Sans cadre tant qu'il n'y en a qu'un : une boîte dans une boîte n'apporterait
- * rien. À partir de deux, un contour sobre — pas une carte pleine — dit
- * simplement où l'un finit et où l'autre commence, entre deux graphes et huit
- * panneaux qui se ressembleraient sinon.
- */
+/* Une base dans l'onglet d'un projet : un contour sobre, pas une carte pleine. */
 .linkedBlock {
     display: flex;
     flex-direction: column;
@@ -1576,19 +1350,9 @@
 }
 
 .linkedBlockFramed {
-    /*
-     * Le fond que doit porter le bandeau collant de ce bloc, **opaque**.
-     *
-     * La teinte du bloc ne l'est pas : `--surface-subtle` vaut 4 % de blanc et
-     * `--surface-widget` 62 %. Posée telle quelle sur un en-tête collant, elle
-     * laissait défiler le contenu au travers, ce qui est le contraire de ce
-     * qu'on lui demande.
-     *
-     * On empile donc la teinte du bloc **sur** le jumeau opaque du fond de
-     * popup (`linear-gradient` d'une seule couleur sert de calque). Le résultat
-     * a exactement la couleur apparente du bloc, sans rien laisser passer. La
-     * peindre en dur aurait figé une valeur que le thème peut changer.
-     */
+    /* Le fond du bandeau collant doit être opaque, et la teinte du bloc ne
+       l'est pas : on l'empile (`linear-gradient` d'une seule couleur) sur le
+       jumeau opaque du fond de popup, pour suivre le thème. */
     --block-bg: linear-gradient(var(--surface-subtle), var(--surface-subtle)), var(--surface-popup-solid);
     composes: linkedBlock;
     padding: var(--space-md);
@@ -1597,8 +1361,7 @@
     background: var(--surface-subtle);
 }
 
-/* Le geste d'ajout, en pied d'onglet : centré, parce qu'il ne prolonge aucune
-   colonne de texte — il conclut la liste au lieu de la continuer. */
+/* Le geste d'ajout, centré : il conclut la liste au lieu de la continuer. */
 .addRow {
     display: flex;
     justify-content: center;

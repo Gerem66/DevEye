@@ -44,21 +44,14 @@ const QUEUE_CAPACITY: usize = 2880;
 /// which is ~30x heavier — stays bounded to a few hours of memory.
 const PROCESS_QUEUE_LIMIT: usize = 240;
 const MIN_BACKOFF: Duration = Duration::from_secs(1);
-/// Plafond du recul exponentiel. Trente secondes et non soixante : un agent qui
-/// n'arrive pas à se connecter est un agent INVISIBLE, donc ce plafond est la
-/// durée maximale d'aveuglement du tableau de bord. Le prix payé est une
-/// tentative de connexion échouée de plus par minute et par agent injoignable,
-/// ce qui n'est rien.
+/// Plafond du recul exponentiel : un agent qui n'arrive pas à se connecter est
+/// invisible, donc ce plafond est la durée maximale d'aveuglement du tableau
+/// de bord.
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
-/// Pause after a *clean* close (server restart, network blip) before dialing
-/// again. Without it a server that accepts-then-closes puts the agent in a
-/// tight connect loop, and each connect used to fire a full snapshot +
-/// process sample — flooding the server with one snapshot per second.
-///
-/// Tirée au hasard dans cet intervalle, et c'est le point : le chemin qui crée
-/// réellement un troupeau n'est pas le recul exponentiel mais celui-ci. Après un
-/// redémarrage du serveur, TOUS les agents de la flotte revenaient exactement à
-/// la même seconde.
+/// Pause after a clean close (server restart, network blip) before dialing
+/// again, drawn at random in this interval: after a server restart, every agent
+/// of the fleet would otherwise come back at the same second, each firing a
+/// connect-time snapshot.
 const RECONNECT_DELAY_MIN: Duration = Duration::from_secs(1);
 const RECONNECT_DELAY_MAX: Duration = Duration::from_secs(4);
 /// The connect-time instant is skipped when the previous one is fresher than
@@ -70,14 +63,10 @@ const MIN_CONNECT_SNAPSHOT_GAP: Duration = Duration::from_secs(60);
 /// qu'un vrai démarrage perde quoi que ce soit (le jalon est alors `None`).
 /// Détail dans `Docs/SENTINEL.md`.
 const MIN_CONNECT_WORK_GAP: Duration = Duration::from_secs(15 * 60);
-/// Échelle de reprise après un VRAI refus du serveur (appareil révoqué, inconnu,
+/// Échelle de reprise après un vrai refus du serveur (appareil révoqué, inconnu
 /// ou pas encore approuvé), doublée à chaque refus consécutif et remise à zéro
-/// dès qu'une session s'établit.
-///
-/// Une heure ferme, comme avant, punissait surtout le cas le plus fréquent : un
-/// appareil qu'on vient d'approuver dans l'interface restait absent jusqu'à une
-/// heure sans que rien ne l'explique. Un refus permanent, lui, finit à un essai
-/// par quart d'heure, ce qui reste discret.
+/// dès qu'une session s'établit : un appareil qu'on vient d'approuver revient
+/// en une minute, un refus permanent finit à un essai par quart d'heure.
 const REJECTED_MIN: Duration = Duration::from_secs(60);
 const REJECTED_MAX: Duration = Duration::from_secs(15 * 60);
 /// How often to send the OS/security report.
@@ -87,22 +76,14 @@ const REPORT_INTERVAL: Duration = Duration::from_secs(60 * 60);
 const DEFAULT_CAPTURE: &str = "all";
 /// Silence du serveur au-delà duquel l'agent considère le lien mort.
 ///
-/// L'agent n'émet AUCUN ping. C'est délibéré, et c'est ce qui rend son coût
-/// réseau permanent nul : le serveur le pingue déjà (`AGENT_HEARTBEAT_MS`), donc
-/// l'agent reçoit forcément une trame à intervalle régulier et il lui suffit de
-/// constater qu'elle n'arrive plus. Un battement dans chaque sens doublait les
-/// trames sans rien apprendre de plus — sur une flotte au repos, c'était
-/// l'essentiel du trafic, en permanence.
+/// L'agent n'émet aucun ping : le serveur le pingue déjà (`AGENT_HEARTBEAT_MS`),
+/// il suffit de constater que la trame n'arrive plus. Ne pas réintroduire un
+/// ping émis d'ici : le délai de silence couvre aussi le cas d'un serveur
+/// disparu sans fermer la socket (sinon bloqué dans `stream.next()` jusqu'au
+/// keepalive TCP, plus de deux heures), sans envoyer un octet.
 ///
-/// Ce qu'il ne faut PAS refaire : revenir à un ping émis d'ici. Le problème
-/// d'origine était que l'agent restait bloqué dans `stream.next()` jusqu'au
-/// keepalive TCP du noyau (plus de deux heures) quand le serveur disparaissait
-/// sans fermer la socket. Un délai de silence le résout aussi bien, sans
-/// envoyer un octet.
-///
-/// Doit rester au-dessus de deux fois `AGENT_HEARTBEAT_MS` côté serveur (60 s),
-/// sinon un balayage en retard sous charge ferait reconnecter des agents
-/// parfaitement sains. 150 s laisse une marge de trente secondes.
+/// Doit rester au-dessus de deux fois `AGENT_HEARTBEAT_MS` (60 s), sinon un
+/// balayage en retard sous charge ferait reconnecter des agents sains.
 const SERVER_SILENCE_LIMIT: Duration = Duration::from_secs(150);
 
 /// Cadence du contrôle de sortie de veille, et écart au-delà duquel on conclut
@@ -111,8 +92,8 @@ const WAKE_CHECK_INTERVAL: Duration = Duration::from_secs(1);
 const WAKE_SKEW_THRESHOLD: Duration = Duration::from_secs(10);
 
 /// Cadence par défaut du manifeste de persistance, jusqu'à ce que le serveur
-/// pousse la sienne. Six heures : empreinter cinq cents fichiers ne se fait pas
-/// au rythme d'un relevé CPU, et une porte dérobée installée reste installée.
+/// pousse la sienne : empreinter cinq cents fichiers ne se fait pas au rythme
+/// d'un relevé CPU.
 const DEFAULT_INTEGRITY_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 
 /// Cadence du relevé d'authentification. Plus serrée que la persistance : une
@@ -120,11 +101,9 @@ const DEFAULT_INTEGRITY_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 /// étant glissante, rien n'est perdu entre deux relevés.
 const AUTH_INTERVAL: Duration = Duration::from_secs(60 * 60);
 
-/// Tirage uniforme dans `[min, max]`, pour désynchroniser une flotte entière.
-///
-/// Sans lui, tous les agents reviennent à la même seconde après un redémarrage
-/// du serveur, et le recul exponentiel les garde en phase au lieu de les
-/// disperser (chacun double au même instant que les autres).
+/// Tirage uniforme dans `[min, max]`, pour désynchroniser une flotte entière :
+/// un recul exponentiel nu garde les agents en phase (chacun double au même
+/// instant que les autres).
 fn jittered(min: Duration, max: Duration) -> Duration {
     if max <= min {
         return min;
@@ -133,20 +112,15 @@ fn jittered(min: Duration, max: Duration) -> Duration {
     min + Duration::from_millis(rand::Rng::gen_range(&mut rand::thread_rng(), 0..=span))
 }
 
-/// Un travail périodique fait À LA CONNEXION doit-il être rejoué ?
+/// Un travail périodique fait à la connexion doit-il être rejoué ?
 ///
-/// `None` veut dire « jamais fait dans ce processus », donc au démarrage : on le
-/// fait, c'est tout l'intérêt du travail de connexion. Sinon on ne le refait que
-/// si le précédent a dépassé `gap`, ce qui empêche une boucle de reconnexion de
-/// multiplier un travail coûteux.
+/// `None` = jamais fait dans ce processus (démarrage) : on le fait. Sinon
+/// seulement si le précédent a dépassé `gap`, ce qui empêche une boucle de
+/// reconnexion de multiplier un travail coûteux. `now` est un paramètre pour
+/// que la décision soit testable.
 ///
-/// Prend `now` en paramètre plutôt que d'appeler `Instant::now()` : c'est ce qui
-/// rend la décision vérifiable sans attendre quinze minutes ni ouvrir de socket.
-///
-/// **Limite assumée** : `Instant` est relatif au processus. Un agent qui *plante*
-/// en boucle repart de `None` et rejoue. Le garde couvre les reconnexions, pas
-/// les redémarrages — c'est déjà vrai du garde de l'instant de métriques, et le
-/// plancher côté serveur est ce qui rattrape ce cas.
+/// `Instant` est relatif au processus : un agent qui plante en boucle repart de
+/// `None` et rejoue ; le plancher côté serveur rattrape ce cas.
 fn due_at(last: Option<Instant>, now: Instant, gap: Duration) -> bool {
     match last {
         None => true,
@@ -154,12 +128,9 @@ fn due_at(last: Option<Instant>, now: Instant, gap: Duration) -> bool {
     }
 }
 
-/// Ce que ce processus a déjà fait, conservé d'une session à l'autre.
-///
-/// Regroupé en une structure plutôt que passé en trois paramètres : c'est un seul
-/// concept, et c'est ce qui permet aux gardes de reconnaître une reconnexion.
-/// Vit dans la boucle externe, jamais dans la session — ce qui doit survivre à
-/// une déconnexion ne peut pas mourir avec elle.
+/// Ce que ce processus a déjà fait, conservé d'une session à l'autre : vit dans
+/// la boucle externe, jamais dans la session, pour que les gardes reconnaissent
+/// une reconnexion.
 #[derive(Default)]
 struct ConnectMarks {
     /// Dernier instant complet (métriques + liste de processus).
@@ -170,11 +141,8 @@ struct ConnectMarks {
     scan: Option<Instant>,
 }
 
-/// Attend un ordre d'arrêt du système (SIGTERM) ou du terminal (Ctrl-C).
-///
-/// SIGTERM est celui que systemd et launchd envoient : sans le traiter, un arrêt
-/// propre de la machine tuait l'agent avant qu'il n'ait pu fermer sa socket, et
-/// le serveur ne l'apprenait que bien plus tard.
+/// Attend un ordre d'arrêt du système (SIGTERM, celui que systemd et launchd
+/// envoient) ou du terminal (Ctrl-C), pour fermer la socket avant de mourir.
 async fn shutdown_signal() {
     #[cfg(unix)]
     {
@@ -217,13 +185,8 @@ pub async fn run(config: Config, opts: RunOptions) -> Result<()> {
     let mut collector = Collector::new();
     let mut queue: VecDeque<MetricSnapshot> = VecDeque::with_capacity(QUEUE_CAPACITY);
     let mut backoff = MIN_BACKOFF;
-    // Refus consécutifs, pour l'échelle `REJECTED_MIN` → `REJECTED_MAX`. Remis à
-    // zéro dès qu'une session s'établit : un appareil qu'on vient d'approuver ne
-    // doit pas hériter du recul accumulé pendant qu'il ne l'était pas.
+    // Refus consécutifs, pour l'échelle `REJECTED_MIN` → `REJECTED_MAX`.
     let mut rejected_streak: u32 = 0;
-    // Quand chaque travail de connexion a été fait pour la dernière fois, gardé
-    // d'une session à l'autre pour qu'une boucle de reconnexion ne les multiplie
-    // pas (voir `ConnectMarks` et les constantes de garde).
     let mut marks = ConnectMarks::default();
 
     info!(device_id = %device_id, metric_interval_secs = opts.interval.as_secs(), "DevEye agent starting");
@@ -299,11 +262,8 @@ enum SessionOutcome {
     Established,
     /// The server closed us at the handshake (auth/authorization refused) before
     /// we ever received config → back off hard (`REJECTED_MIN`..`REJECTED_MAX`).
-    ///
     /// Réservé à une fermeture 1008, le SEUL code par lequel le serveur refuse un
-    /// agent (voir `deny()` dans `src/agent/ws.ts`). Confondre ce cas avec une
-    /// fermeture de transport coûtait une heure de silence à chaque « session
-    /// remplacée » ou redémarrage de serveur mal tombé.
+    /// agent (`deny()` dans `src/agent/ws.ts`).
     Rejected,
     /// La machine sort de veille : la socket est presque certainement morte, et
     /// on le sait sans attendre le prochain ping → reconnexion immédiate.
@@ -372,16 +332,13 @@ async fn stream_session(
     // connect, almost immediately) and on any later change.
     let mut interval = initial_interval;
     let mut capture = DEFAULT_CAPTURE.to_string();
-    // Sentinelle : éteinte tant que le serveur ne l'a pas demandée. Un agent qui
-    // relèverait « par défaut » lirait les journaux d'une machine que personne
-    // n'a choisi de surveiller.
+    // Sentinelle : éteinte tant que le serveur ne l'a pas demandée, pour ne pas
+    // lire les journaux d'une machine que personne n'a choisi de surveiller.
     let mut sentinel = false;
     let mut integrity_interval = DEFAULT_INTEGRITY_INTERVAL;
     let mut auth_enabled = true;
-    // Fin du dernier relevé d'authentification, en unix ms. La fenêtre suivante
-    // repart d'ici : additive, donc aucune tentative n'est comptée deux fois ni
-    // perdue. `0` au premier passage — `authlog::collect` se limite alors à la
-    // dernière heure plutôt que de rejouer un journal entier.
+    // Fin du dernier relevé d'authentification, en unix ms ; la fenêtre suivante
+    // repart d'ici. `0` au premier passage (voir `authlog::collect`).
     let mut auth_cursor: i64 = 0;
 
     // Briefly wait for the server's pushed config so the very first instant
@@ -426,19 +383,11 @@ async fn stream_session(
             Ok(Some(Ok(Message::Ping(payload)))) => {
                 sink.send(Message::Pong(payload)).await.ok();
             }
-            // Une fermeture pendant la fenêtre de config : c'est ICI que se
-            // décide « refusé » contre « incident de transport », et la
-            // distinction vaut cher. `1008` est le SEUL code par lequel le
-            // serveur refuse un agent (`deny()` dans `src/agent/ws.ts`, identique
-            // pour révoqué / inconnu / non approuvé — la discrétion voulue est
-            // préservée, un observateur extérieur ne distingue toujours pas les
-            // trois). Tout autre code est un accident : `1012` « session
-            // remplacée » quand une seconde instance évince celle-ci, `1001`
-            // quand le serveur s'arrête.
-            //
-            // Avant, cette trame tombait dans le fourre-tout ci-dessous, puis le
-            // tour suivant rendait `Ok(None)` qu'on lisait comme un refus : se
-            // faire remplacer coûtait UNE HEURE de silence.
+            // C'est ici que se décide « refusé » contre « incident de
+            // transport » : `1008` est le SEUL code par lequel le serveur refuse
+            // un agent (`deny()` dans `src/agent/ws.ts`, identique pour révoqué /
+            // inconnu / non approuvé). Tout autre code est un accident : `1012`
+            // « session remplacée », `1001` arrêt du serveur.
             Ok(Some(Ok(Message::Close(frame)))) => {
                 let code = frame.map(|f| f.code);
                 let rejected = code == Some(CloseCode::Policy);
@@ -460,9 +409,8 @@ async fn stream_session(
     }
 
     // On connect: one immediate instant (so a fresh dashboard isn't blank),
-    // skipped when the last one is recent — a reconnect loop must not mint an
-    // instant per connection. Its socket probe then feeds the report, and the
-    // queue flush replays anything buffered while offline.
+    // skipped when the last one is recent (a reconnect loop must not mint an
+    // instant per connection). Its socket probe then feeds the report.
     let due = due_at(marks.snapshot, Instant::now(), MIN_CONNECT_SNAPSHOT_GAP);
     let sockets = if due {
         let (snapshot, sockets) = collect(collector, &capture, true).await?;
@@ -472,15 +420,13 @@ async fn stream_session(
     } else {
         sockets::read_sockets(true)
     };
-    // Les métriques partent **avant** le rapport : elles sont ce que l'interface
+    // Les métriques partent avant le rapport : elles sont ce que l'interface
     // attend, et le rapport peut être lent (voir `spawn_report`).
     flush_queue(&mut sink, device_id, queue).await?;
 
-    // Le rapport voyage par ce canal, construit hors de la boucle.
-    //
-    // Borné par le même garde que l'instant ci-dessus, et pour une raison plus
-    // forte encore : c'est le travail le plus lourd de la connexion, et le
-    // serveur réévalue ses règles de sécurité à chaque rapport reçu.
+    // Le rapport voyage par ce canal, construit hors de la boucle. Borné par le
+    // même garde que l'instant : c'est le travail le plus lourd de la connexion,
+    // et le serveur réévalue ses règles de sécurité à chaque rapport reçu.
     let (report_tx, mut report_rx) = tokio::sync::mpsc::channel::<DeviceReport>(4);
     if due_at(marks.report, Instant::now(), MIN_CONNECT_WORK_GAP) {
         spawn_report(&report_tx, &sockets);
@@ -488,15 +434,11 @@ async fn stream_session(
     }
 
     // Les relevés Sentinelle voyagent par ce canal, comme le rapport : ils
-    // empreintent des centaines de fichiers et lisent des journaux, donc ils
-    // tournent hors de la boucle, qui reste disponible pour les pings et les
-    // métriques.
+    // empreintent des centaines de fichiers, donc ils tournent hors de la boucle.
     let (scan_tx, mut scan_rx) = tokio::sync::mpsc::channel::<ScanResult>(4);
     if sentinel && due_at(marks.scan, Instant::now(), MIN_CONNECT_WORK_GAP) {
-        // À la connexion : une machine qu'on vient d'allumer doit rendre son
-        // état sans attendre le premier tour d'horloge. Le garde préserve
-        // exactement ça (aucun relevé encore fait ⇒ `None` ⇒ on relève) tout en
-        // refusant de le rejouer à chaque reconnexion.
+        // Une machine qu'on vient d'allumer rend son état sans attendre le
+        // premier tour d'horloge ; le garde refuse de le rejouer à chaque reconnexion.
         spawn_scan(&scan_tx, auth_enabled, auth_cursor);
         marks.scan = Some(Instant::now());
     }
@@ -505,27 +447,22 @@ async fn stream_session(
     let mut report_ticker = new_ticker(REPORT_INTERVAL);
     let mut integrity_ticker = new_ticker(integrity_interval);
     let mut auth_ticker = new_ticker(AUTH_INTERVAL);
-    // Dernière trame REÇUE du serveur, quelle qu'elle soit. C'est la seule mesure
-    // de vivacité du lien côté agent, et elle ne coûte rien à produire.
+    // Dernière trame REÇUE du serveur, quelle qu'elle soit : la seule mesure de
+    // vivacité du lien côté agent.
     let mut last_seen = Instant::now();
-    // Détection de sortie de veille. `Instant` est monotone (CLOCK_MONOTONIC sur
-    // Linux, `mach_absolute_time` sur macOS) et n'avance PAS pendant la
-    // suspension ; `SystemTime` est relue de l'horloge matérielle au réveil.
-    // L'écart entre les deux est donc, à la seconde près, la durée du sommeil —
-    // sans dépendance système, sans code par plateforme, et sans avoir à
-    // s'abonner à logind, IOPMrootDomain ou WM_POWERBROADCAST.
+    // Détection de sortie de veille. `Instant` est monotone et n'avance PAS
+    // pendant la suspension ; `SystemTime` est relue de l'horloge matérielle au
+    // réveil. L'écart entre les deux est donc la durée du sommeil, sans code par
+    // plateforme ni abonnement à logind, IOPMrootDomain ou WM_POWERBROADCAST.
     let mut wake_ticker = new_ticker(WAKE_CHECK_INTERVAL);
     let mut last_mono = Instant::now();
     let mut last_wall = std::time::SystemTime::now();
-    // Remis à `true` par chaque `Pong` ; deux tours sans réponse ferment la
-    // session, qui se rétablit par la boucle de reconnexion habituelle.
     // The socket map of the latest tick, reused by the next report so a report
     // never re-probes what a tick just enumerated.
     let mut last_sockets = sockets;
 
-    // Package list/upgrade tasks run off the loop (an upgrade can take minutes) and
-    // stream their results back through this channel, so the loop stays responsive
-    // (pings, metrics) and forwards each event to the server as it arrives.
+    // Package list/upgrade tasks run off the loop (an upgrade can take minutes)
+    // and stream their results back through this channel.
     let (pkg_tx, mut pkg_rx) = tokio::sync::mpsc::channel::<crate::packages::PkgEvent>(256);
     // Gestionnaires dont une mise à jour tourne, pour ne jamais en lancer deux.
     let mut pkg_running: HashSet<String> = HashSet::new();
@@ -553,10 +490,9 @@ async fn stream_session(
                     send_integrity(&mut sink, device_id, integrity).await?;
                 }
                 if let Some(auth) = result.auth {
-                    // Le curseur n'avance qu'une fois la fenêtre **envoyée** :
-                    // avancer à la collecte perdrait la fenêtre si la session
-                    // tombait entre les deux, et avec elle les tentatives
-                    // qu'elle comptait.
+                    // Le curseur n'avance qu'une fois la fenêtre envoyée : avancer
+                    // à la collecte perdrait la fenêtre si la session tombait
+                    // entre les deux.
                     auth_cursor = auth.to;
                     send_auth(&mut sink, device_id, auth).await?;
                 }
@@ -592,19 +528,16 @@ async fn stream_session(
                 flush_queue(&mut sink, device_id, queue).await?;
             }
             _ = shutdown_signal() => {
-                // Arrêt demandé (systemd, Ctrl-C) : on ferme proprement pour que
-                // le serveur enregistre le départ tout de suite. Sans ça l'agent
-                // mourait sans trame de fermeture, et l'appareil restait affiché
-                // « en ligne » jusqu'à expiration.
+                // Fermeture propre pour que le serveur enregistre le départ tout
+                // de suite, plutôt qu'à l'expiration.
                 info!("shutdown signal — closing the session");
                 let _ = sink.send(Message::Close(None)).await;
                 let _ = sink.flush().await;
                 return Ok(SessionOutcome::Stop);
             }
             _ = wake_ticker.tick() => {
-                // Contrôle de silence, logé dans le ticker du réveil plutôt que
-                // dans le sien : il n'émet rien, donc il n'a pas besoin d'une
-                // cadence à lui, et un timer de moins est un timer de moins.
+                // Contrôle de silence, logé dans le ticker du réveil : il n'émet
+                // rien, donc pas besoin d'une cadence à lui.
                 if last_seen.elapsed() > SERVER_SILENCE_LIMIT {
                     warn!(
                         silent_secs = last_seen.elapsed().as_secs(),
@@ -616,39 +549,30 @@ async fn stream_session(
                 let now_wall = std::time::SystemTime::now();
                 let mono = now_mono.saturating_duration_since(last_mono);
                 // Un saut d'horloge EN ARRIÈRE (NTP qui recule) rend une erreur :
-                // on retombe alors sur l'écart monotone, donc on ne conclut rien.
-                // C'est le seul comportement honnête — reculer ne prouve pas une
-                // veille, et traiter le cas comme un réveil ferait reconnecter à
-                // chaque correction d'horloge.
+                // on retombe sur l'écart monotone et on ne conclut rien, sinon
+                // chaque correction d'horloge ferait reconnecter.
                 let wall = now_wall.duration_since(last_wall).unwrap_or(mono);
                 last_mono = now_mono;
                 last_wall = now_wall;
                 if wall > mono + WAKE_SKEW_THRESHOLD {
                     warn!(slept_secs = (wall - mono).as_secs(), "wake from sleep detected");
-                    // Le tableau de bord affiche encore l'état d'AVANT la veille :
-                    // on rouvre le droit à l'instant de connexion, que
-                    // MIN_CONNECT_SNAPSHOT_GAP supprimerait sinon pour une minute
-                    // de plus. On ne touche NI `marks.report` NI `marks.scan` :
-                    // un portable ouvert dix fois par jour rejouerait sinon dix
-                    // rapports lourds et dix passes Sentinelle, alors que la
-                    // machine dormait et que rien n'a bougé.
+                    // Le tableau de bord affiche encore l'état d'avant la veille :
+                    // on rouvre le droit à l'instant de connexion. Ni `marks.report`
+                    // ni `marks.scan` : un portable ouvert dix fois par jour
+                    // rejouerait sinon dix rapports lourds alors que rien n'a bougé.
                     marks.snapshot = None;
                     // Rien ne garantit qu'une surveillance inotify / FSEvents ait
-                    // survécu à la suspension : on force un parcours complet au
-                    // prochain scan de chaque partage. Un scan de trop ne coûte
-                    // que du temps, un événement raté coûte une divergence.
+                    // survécu à la suspension (voir `mark_all_dirty`).
                     sync_mgr.mark_all_dirty();
-                    // On ne tente PAS d'envoyer une trame de fermeture : `send`
-                    // sur une socket à moitié morte peut bloquer jusqu'au délai
-                    // de retransmission TCP. Sortir suffit — le sink et le stream
-                    // sont droppés, donc le descripteur est fermé.
+                    // Pas de trame de fermeture : `send` sur une socket à moitié
+                    // morte peut bloquer jusqu'au délai de retransmission TCP.
+                    // Sortir suffit, le descripteur est fermé au drop.
                     return Ok(SessionOutcome::Woke);
                 }
             }
             _ = integrity_ticker.tick(), if sentinel => {
-                // Les tickers POSENT le jalon eux aussi : sans ça un relevé fait
-                // à l'horloge, suivi d'une reconnexion, serait immédiatement
-                // rejoué par le travail de connexion.
+                // Les tickers posent le jalon eux aussi, sinon un relevé fait à
+                // l'horloge serait rejoué par la reconnexion suivante.
                 spawn_scan(&scan_tx, false, auth_cursor);
                 marks.scan = Some(Instant::now());
             }
@@ -667,10 +591,8 @@ async fn stream_session(
                 marks.report = Some(Instant::now());
             }
             incoming = stream.next() => {
-                // AVANT le tri : ping, pong, texte ou binaire, tout prouve
-                // également que le lien est vivant. Ne rafraîchir que sur
-                // certaines trames rendrait le témoin faux dès qu'un serveur
-                // silencieux mais sain se contente de pinguer.
+                // AVANT le tri : ping, pong, texte ou binaire, toute trame prouve
+                // que le lien est vivant.
                 if matches!(incoming, Some(Ok(_))) {
                     last_seen = Instant::now();
                 }
@@ -683,9 +605,8 @@ async fn stream_session(
                                 push_bounded(queue, snapshot);
                                 marks.snapshot = Some(Instant::now());
                                 flush_queue(&mut sink, device_id, queue).await?;
-                                // Demandé explicitement par l'utilisateur : jamais
-                                // borné. On pose quand même le jalon, pour qu'une
-                                // reconnexion juste après ne le refasse pas.
+                                // Demandé explicitement : jamais borné, mais le
+                                // jalon est posé pour qu'une reconnexion ne le refasse pas.
                                 spawn_report(&report_tx, &sockets);
                                 marks.report = Some(Instant::now());
                                 last_sockets = sockets;
@@ -710,25 +631,16 @@ async fn stream_session(
                                     let next = Duration::from_millis(ms.max(60_000));
                                     if next != integrity_interval {
                                         integrity_interval = next;
-                                        // Un changement d'intervalle **recrée** le
-                                        // ticker : sans cela le nouveau réglage
-                                        // n'aurait d'effet qu'au tour suivant, qui
-                                        // peut être dans six heures.
+                                        // Recréer le ticker : sinon le nouveau réglage
+                                        // n'aurait d'effet qu'au tour suivant, dans six heures.
                                         integrity_ticker = new_ticker(integrity_interval);
                                     }
                                 }
                                 // Vient d'être allumée : on relève tout de suite,
-                                // sinon la première mesure attendrait six heures et
-                                // l'utilisateur croirait la sonde en panne.
-                                //
-                                // Borné, parce que ce chemin est AUSSI celui d'une
-                                // config arrivée après le délai de l'accueil : sur un
-                                // lien lent, `was_on` est alors faux à chaque
-                                // connexion, et rien ne distinguerait ici « l'humain
-                                // vient de l'allumer » de « la config a traîné ». Le
-                                // pire cas sur un allumage réel devient quinze
-                                // minutes d'attente au lieu de six heures, et le
-                                // serveur peut toujours forcer par `agent.scan`.
+                                // sinon la première mesure attendrait six heures.
+                                // Borné, parce que ce chemin est aussi celui d'une
+                                // config arrivée après le délai de l'accueil, où
+                                // `was_on` est faux à chaque connexion.
                                 if sentinel
                                     && !was_on
                                     && due_at(marks.scan, Instant::now(), MIN_CONNECT_WORK_GAP)
@@ -962,13 +874,11 @@ async fn stream_session(
                                 });
                             }
                             // Apply a manager's updates (off-loop; streams via pkg_rx).
-                            //
-                            // Dernière barrière contre les exécutions doublées :
-                            // le serveur tient le verrou, mais il le perd s'il
-                            // redémarre pendant une mise à jour. Une demande en
-                            // double est ignorée plutôt que refusée, et surtout
-                            // pas terminée par un `Done` — celui-ci relâcherait
-                            // le verrou de la mise à jour qui, elle, tourne.
+                            // Dernière barrière contre les exécutions doublées (le
+                            // serveur perd son verrou s'il redémarre pendant une mise
+                            // à jour) : une demande en double est ignorée, jamais
+                            // terminée par un `Done`, qui relâcherait le verrou de
+                            // celle qui tourne.
                             Ok(ServerMessage::PkgUpgrade { manager }) => {
                                 if pkg_running.insert(manager.clone()) {
                                     tokio::spawn(crate::packages::run_upgrade(
@@ -989,8 +899,7 @@ async fn stream_session(
                     Some(Ok(Message::Ping(payload))) => {
                         sink.send(Message::Pong(payload)).await.ok();
                     }
-                    // Le pong ne porte plus rien de particulier : c'est le
-                    // rafraîchissement de `last_seen` ci-dessus qui compte.
+                    // Le pong ne porte rien de particulier : `last_seen` ci-dessus compte.
                     Some(Ok(Message::Pong(_))) => {}
                     Some(Ok(Message::Close(_))) | None => return Ok(SessionOutcome::Established),
                     Some(Ok(_)) => {}
@@ -1002,16 +911,11 @@ async fn stream_session(
 }
 
 /// A skip-on-miss interval ticker whose first tick fires one full period from
-/// now (the connect-time sample/report has already been sent), avoiding the
-/// immediate first tick of a plain `interval`.
+/// now (the connect-time sample/report has already been sent).
 ///
-/// `MissedTickBehavior::Skip` n'est PAS qu'une propreté : c'est lui qui rend la
-/// sortie de veille supportable. Les horloges de tokio n'avancent pas pendant la
-/// suspension, donc au réveil chaque ticker a un arriéré égal à la durée du
-/// sommeil. Avec le comportement par défaut (`Burst`), le contrôle de réveil
-/// cadencé à la seconde émettrait ~3600 tics d'affilée après une heure de veille,
-/// et le ticker de métriques autant de relevés. `Skip` réduit l'arriéré à un
-/// seul tic et réaligne l'échéance suivante sur maintenant.
+/// `Skip` est ce qui rend la sortie de veille supportable : les horloges de
+/// tokio n'avancent pas pendant la suspension, et avec `Burst` chaque ticker
+/// rattraperait tout son arriéré au réveil (~3600 tics pour une heure).
 fn new_ticker(period: Duration) -> tokio::time::Interval {
     let mut t = interval_at(Instant::now() + period, period);
     t.set_missed_tick_behavior(MissedTickBehavior::Skip);
@@ -1038,19 +942,7 @@ where
     Ok(())
 }
 
-/// Lance la construction du rapport **sans l'attendre**, et l'achemine par le
-/// canal à la boucle, qui l'enverra.
-///
-/// Les sondes de sécurité sortent du processus, et l'une d'elles peut être très
-/// lente : `apt-get -s upgrade` attend le verrou dpkg, ce qui se compte en
-/// minutes sur une carte SD. Tant que le rapport était *attendu* avant d'entrer
-/// dans la boucle, une telle machine ne remontait rien du tout — pas de
-/// métriques, aucune commande traitée — tout en restant affichée « en ligne ».
-///
-/// Même schéma que les paquets, les journaux et les fichiers : la tâche vit
-/// hors de la boucle, qui reste disponible pendant ce temps.
-/// Ce qu'un relevé Sentinelle rapporte. Les deux sondes voyagent ensemble parce
-/// qu'elles partent souvent ensemble (connexion, ordre `agent.scan`), mais
+/// Ce qu'un relevé Sentinelle rapporte. Les deux sondes voyagent ensemble, mais
 /// chacune peut manquer : la persistance est sautée par le relevé horaire
 /// d'authentification, et l'authentification l'est quand elle est désactivée.
 struct ScanResult {
@@ -1058,11 +950,9 @@ struct ScanResult {
     auth: Option<crate::authlog::AuthWindow>,
 }
 
-/// Lance un relevé complet hors de la boucle.
-///
-/// `spawn_blocking` et non une tâche async : les deux sondes lisent des fichiers
-/// et attendent des commandes externes. Les laisser sur le runtime bloquerait
-/// les pings et les métriques pendant plusieurs secondes.
+/// Lance un relevé complet hors de la boucle. `spawn_blocking` et non une tâche
+/// async : les deux sondes lisent des fichiers et attendent des commandes
+/// externes, ce qui bloquerait les pings et les métriques.
 fn spawn_scan(tx: &tokio::sync::mpsc::Sender<ScanResult>, with_auth: bool, auth_from: i64) {
     let tx = tx.clone();
     tokio::task::spawn_blocking(move || {
@@ -1075,12 +965,8 @@ fn spawn_scan(tx: &tokio::sync::mpsc::Sender<ScanResult>, with_auth: bool, auth_
     });
 }
 
-/// Le relevé d'authentification seul, à sa propre cadence.
-///
-/// Séparé parce que les deux sondes n'ont pas le même prix : lire une fenêtre de
-/// journal coûte quelques dizaines de millisecondes, empreinter les surfaces de
-/// persistance en coûte cent fois plus. Les faire battre ensemble reviendrait à
-/// payer la seconde toutes les heures pour rien.
+/// Le relevé d'authentification seul, à sa propre cadence : lire une fenêtre de
+/// journal coûte cent fois moins qu'empreinter les surfaces de persistance.
 fn spawn_scan_auth_only(tx: &tokio::sync::mpsc::Sender<ScanResult>, auth_from: i64) {
     let tx = tx.clone();
     tokio::task::spawn_blocking(move || {
@@ -1129,14 +1015,20 @@ where
     Ok(())
 }
 
+/// Lance la construction du rapport sans l'attendre ; la boucle l'enverra.
+///
+/// Les sondes de sécurité sortent du processus, et `apt-get -s upgrade` peut
+/// attendre le verrou dpkg pendant des minutes : attendre le rapport avant
+/// d'entrer dans la boucle rendrait la machine muette (ni métriques ni
+/// commandes) tout en restant affichée « en ligne ».
 fn spawn_report(tx: &tokio::sync::mpsc::Sender<DeviceReport>, sockets: &SocketMap) {
     let listening = sockets.listening.clone();
     let established = sockets.established.clone();
     let tx = tx.clone();
     tokio::task::spawn_blocking(move || {
         let report = report::collect(listening, established);
-        // `blocking_send` et non `send` : on est hors du runtime. Un canal plein
-        // ou fermé signifie une session finie — rien à rattraper.
+        // `blocking_send` : on est hors du runtime. Un canal plein ou fermé
+        // signifie une session finie, rien à rattraper.
         let _ = tx.blocking_send(report);
     });
 }
@@ -1146,7 +1038,7 @@ where
     S: SinkExt<Message> + Unpin,
     S::Error: std::error::Error + Send + Sync + 'static,
 {
-    // Security probes shell out — run off the runtime. The socket picture is
+    // Security probes shell out: run off the runtime. The socket picture is
     // handed in (a tick already probed it), so no socket tool runs here.
     let listening = sockets.listening.clone();
     let established = sockets.established.clone();
@@ -1260,15 +1152,11 @@ fn log_server_text(txt: &str) {
 mod tests {
     use super::*;
 
-    /// Le garde des travaux de connexion : c'est lui qui empêche une boucle de
-    /// reconnexion de multiplier rapports et relevés, donc de gonfler les constats
-    /// du serveur. `now` est construit **en avant** d'une base, jamais en arrière :
-    /// un `Instant` fraîchement lu peut être proche de l'origine de la plateforme,
-    /// et lui soustraire une heure déborderait.
+    /// `now` est construit en avant d'une base, jamais en arrière : un `Instant`
+    /// fraîchement lu peut être proche de l'origine de la plateforme, et lui
+    /// soustraire une heure déborderait.
     #[test]
     fn connect_work_runs_when_never_done() {
-        // Démarrage du processus : c'est ce qui préserve « une machine qu'on vient
-        // d'allumer rend son état sans attendre son premier tour d'horloge ».
         assert!(due_at(None, Instant::now(), MIN_CONNECT_WORK_GAP));
     }
 
@@ -1297,9 +1185,8 @@ mod tests {
 
     #[test]
     fn a_clock_going_backwards_does_not_unlock_the_gap() {
-        // `saturating_duration_since` rend zéro plutôt que de paniquer. Un `now`
-        // antérieur au jalon doit donc SAUTER le travail, jamais l'autoriser :
-        // c'est le sens sûr, celui qui ne peut pas inonder le serveur.
+        // `saturating_duration_since` rend zéro : un `now` antérieur au jalon
+        // doit SAUTER le travail, le sens qui ne peut pas inonder le serveur.
         let base = Instant::now();
         assert!(!due_at(
             Some(base + Duration::from_secs(600)),
@@ -1310,21 +1197,17 @@ mod tests {
 
     #[test]
     fn the_gaps_stay_ordered() {
-        // L'instant de métriques est léger et attendu par l'interface, le rapport
-        // et le relevé sont lourds ; et un garde plus long que la cadence qu'il
-        // borne empêcherait le travail au lieu de le dédoublonner. Si l'un de ces
-        // deux ordres s'inversait, le correctif perdrait son sens.
+        // Un garde plus long que la cadence qu'il borne empêcherait le travail
+        // au lieu de le dédoublonner.
         assert!(MIN_CONNECT_SNAPSHOT_GAP < MIN_CONNECT_WORK_GAP);
         assert!(MIN_CONNECT_WORK_GAP < REPORT_INTERVAL);
     }
 
     #[test]
     fn the_silence_limit_leaves_room_for_two_server_beats() {
-        // Le serveur balaie toutes les 60 s (`AGENT_HEARTBEAT_MS`). Sous ce
-        // seuil, un balayage en retard sous charge suffirait à faire reconnecter
-        // un agent parfaitement sain — et une tempête de reconnexions coûte
-        // infiniment plus cher que le ping qu'on aurait cru économiser. La marge
-        // est de trente secondes ; la réduire demande de relire hub.ts.
+        // Le serveur balaie toutes les 60 s (`AGENT_HEARTBEAT_MS`) ; sous deux
+        // battements plus une marge, un balayage en retard sous charge ferait
+        // reconnecter un agent sain. Réduire la marge demande de relire hub.ts.
         assert!(SERVER_SILENCE_LIMIT >= Duration::from_secs(150));
         assert!(WAKE_CHECK_INTERVAL < WAKE_SKEW_THRESHOLD);
         assert!(REJECTED_MIN < REJECTED_MAX);

@@ -16,17 +16,12 @@ export type { ProjectBoardRepo, ProjectChatRepo, ProjectHistoryRepo, ProjectLink
 export type { ProjectRekeyRepo };
 
 /**
- * Le dépôt du module : les sept dépôts natifs (`db.projects`,
- * `db.projectBoard`, `db.projectChat`, `db.projectPlan`, `db.projectHistory`,
- * `db.projectLinks`, `db.projectRekey`) réunis en un seul contrat sur
- * `SdkQueryable`, un fichier par agrégat comme avant le rapatriement, sections
- * gardées parce que leurs verbes se répètent d'une table à l'autre (`findById`,
- * `reorder`, `archive`). Les treize tables `project*` datent du socle (060,
- * 061 et leurs suites, jamais déplacées) : l'allowlist de `deveye-feature.json`
- * les dispense du préfixe `ft_projects_`.
+ * Le dépôt du module : un fichier par agrégat, réunis en un seul contrat sur
+ * `SdkQueryable`. Les treize tables `project*` datent du socle, l'allowlist de
+ * `deveye-feature.json` les dispense du préfixe `ft_projects_`.
  *
- * Les dépôts ne chiffrent jamais : les handlers passent des valeurs déjà
- * scellées par `ctx.cipher(...)`, le service par `deps.cipherFor(ws)`.
+ * Les dépôts ne chiffrent jamais : les handlers passent des valeurs déjà scellées
+ * par `ctx.cipher(...)`, le service par `deps.cipherFor(ws)`.
  */
 export interface ProjectsRepo {
     projects: ProjectRepo;

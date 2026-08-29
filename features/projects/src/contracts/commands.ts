@@ -20,32 +20,19 @@ import { PROJECT_EVENT_PAGE_SIZE, projectEventSchema } from './history';
 import { myTaskSchema, projectLinkCountsSchema, projectLinkLabelSchema } from './link';
 
 /**
- * Commandes des projets.
- *
- * L'espace visé n'apparaît dans aucune entrée : il voyage sur l'enveloppe WS
- * (voir `protocol/envelope`) et le dispatcheur le résout, appartenance vérifiée,
- * avant que le handler ne s'exécute.
- *
- * ⚠️ Toutes les commandes partagent le préfixe `projects.`, qui porte le sujet
- * live `projects` (`src/features/_topics.ts`). Le contrôle de démarrage qui
- * attrape un `mutates` oublié cherche un verbe **juste après le point**
- * (`notes.add`) : avec des noms en camelCase il ne voit rien ici. `mutates` est
- * donc à relire à la main sur chaque écriture ajoutée à ce fichier.
+ * Commandes des projets. L'espace visé n'apparaît dans aucune entrée : il voyage sur
+ * l'enveloppe WS et le dispatcheur le résout, appartenance vérifiée, avant le
+ * handler.
  */
 
 const projectId = z.number().int().positive();
 
 /**
- * Le portefeuille : tous les projets actifs visibles d'ici, avec leurs
- * compteurs. Ceux de l'espace d'abord, puis ceux qu'un autre espace y
- * projette (`foreign: true`, lus sous le codec de leur domicile, voir
- * `Docs/SHARING.md`) ; un projet qu'une restriction de rôle masque n'y figure
- * pas.
- *
- * Jamais verrouillée. Un projet `guarded` dont la session ne peut pas lire le
- * corps revient **masqué** (`masked: true`) plutôt qu'absent : la liste doit
- * dire ce qui existe même verrouillée. `archived: true` bascule sur l'ensemble
- * disjoint des projets archivés.
+ * Le portefeuille : les projets actifs visibles d'ici avec leurs compteurs, ceux de
+ * l'espace puis ceux qu'un autre espace y projette (`foreign`, lus sous le codec de
+ * leur domicile). Jamais verrouillée : un projet `guarded` dont le corps ne se lit
+ * pas revient `masked` plutôt qu'absent, la liste doit dire ce qui existe.
+ * `archived: true` bascule sur l'ensemble disjoint des projets archivés.
  */
 export const projectList = {
     command: 'projects.list' as const,
@@ -54,10 +41,8 @@ export const projectList = {
 };
 
 /**
- * Compte les projets **actifs** visibles d'ici, les mêmes lignes que la liste
- * (projetés compris, restrictions déduites). Métadonnée en clair pure : aucune
- * ligne n'est déchiffrée, la tuile d'accueil affiche donc toujours un nombre,
- * même session verrouillée.
+ * Compte les projets actifs visibles d'ici, les mêmes lignes que la liste. Aucune
+ * ligne n'est déchiffrée : la tuile d'accueil affiche un nombre même verrouillée.
  */
 export const projectCount = {
     command: 'projects.count' as const,
@@ -66,9 +51,8 @@ export const projectCount = {
 };
 
 /**
- * Un projet en entier. Sur un projet `guarded`, la session doit être
- * déverrouillée : sinon le serveur répond `locked` et le client ouvre l'invite
- * habituelle avant de rejouer l'appel.
+ * Un projet en entier. Sur un projet `guarded` verrouillé, le serveur répond
+ * `locked` et le client ouvre l'invite habituelle avant de rejouer l'appel.
  */
 export const projectGet = {
     command: 'projects.get' as const,
@@ -90,8 +74,8 @@ export const projectAdd = {
 };
 
 /**
- * Modifie le profil d'un projet. Ne touche ni au tier ni à la source de version
- * — deux bascules qui ont des effets de bord, et donc leurs propres commandes.
+ * Modifie le profil d'un projet. Ne touche ni au palier ni à la source de version,
+ * deux bascules à effets de bord qui ont leurs propres commandes.
  */
 export const projectUpdate = {
     command: 'projects.update' as const,
@@ -100,13 +84,10 @@ export const projectUpdate = {
 };
 
 /**
- * Pose la version affichée, et d'où elle vient.
- *
- * `github_release` exige un dépôt lié et un projet `open` (un projet `guarded`
- * ne se synchronise pas) ; `version` est alors ignorée et recalculée par le
- * service de fond. En `manual`, la valeur passée fait foi, d'ici ou depuis une
- * fenêtre. Suivre les releases, lui, référence un dépôt de l'espace d'origine :
- * refusé (`validation`) sur un projet projeté, il se règle chez lui.
+ * Pose la version affichée, et d'où elle vient. `github_release` exige un dépôt lié
+ * et un projet `open` ; `version` est alors ignorée et recalculée par le service de
+ * fond. Suivre les releases référence un dépôt de l'espace d'origine : refusé
+ * (`validation`) sur un projet projeté, cela se règle chez lui.
  */
 export const projectSetVersion = {
     command: 'projects.setVersion' as const,
@@ -125,17 +106,12 @@ export const projectSetStatus = {
 };
 
 /**
- * Bascule l'étage de chiffrement, et **re-chiffre tout l'arbre du projet**
- * (cartes, messages, jalons, événements, cache git) sous la nouvelle clé, dans
- * la foulée. Exige une session déverrouillée dans les deux sens : on ne
- * re-chiffre pas ce qu'on ne peut pas lire.
- *
- * Passer en `guarded` **désactive les intégrations** du projet (synchronisation
- * git, déploiement) : elles ont besoin de lire sans session. Et retire ses
- * projections : un projet gardé est chiffré par le mot de passe de son auteur,
- * aucun autre espace ne peut le lire. Domicile seulement (`validation` depuis
- * une fenêtre) : le palier relie l'arbre au mot de passe d'un membre de
- * l'espace d'origine.
+ * Bascule l'étage de chiffrement et re-chiffre dans la foulée tout l'arbre du projet
+ * sous la nouvelle clé. Exige une session déverrouillée dans les deux sens : on ne
+ * re-chiffre pas ce qu'on ne peut pas lire. Passer en `guarded` désactive les
+ * intégrations, qui ont besoin de lire sans session, et retire les projections du
+ * projet, chiffré dès lors par le mot de passe de son auteur. Domicile seulement
+ * (`validation` depuis une fenêtre).
  */
 export const projectSetSecurityTier = {
     command: 'projects.setSecurityTier' as const,
@@ -144,9 +120,9 @@ export const projectSetSecurityTier = {
 };
 
 /**
- * Archive un projet : il quitte le portefeuille sans que rien ne soit détruit.
- * C'est ce que « supprimer » fait dans l'interface — il n'existe volontairement
- * aucune commande de suppression dans ce module.
+ * Archive un projet : il quitte le portefeuille sans que rien ne soit détruit. C'est
+ * ce que « supprimer » fait dans l'interface, il n'existe volontairement aucune
+ * commande de suppression dans ce module.
  */
 export const projectArchive = {
     command: 'projects.archive' as const,
@@ -161,14 +137,10 @@ export const projectRestore = {
 };
 
 /**
- * Ordonne le portefeuille : `projectIds` en est le contenu **complet**, dans son
- * ordre final (indice le plus bas en premier). Ne touche jamais au corps
- * chiffré, donc fonctionne aussi sur des projets masqués.
- *
- * Les projets d'ici seulement : un projet projeté se classe chez lui, et un
- * identifiant projeté dans la liste est refusé (`validation`) plutôt
- * qu'ignoré, le client ne le propose pas au glisser. Un projet que ce rôle ne
- * peut pas écrire est laissé de côté.
+ * Ordonne le portefeuille : `projectIds` en est le contenu complet, dans son ordre
+ * final. Ne touche jamais au corps chiffré, donc fonctionne sur des projets masqués.
+ * Les projets d'ici seulement : un identifiant projeté est refusé (`validation`)
+ * plutôt qu'ignoré, un projet que le rôle ne peut pas écrire est laissé de côté.
  */
 export const projectReorder = {
     command: 'projects.reorder' as const,
@@ -182,15 +154,10 @@ const columnId = z.number().int().positive();
 const cardId = z.number().int().positive();
 
 /**
- * Le tableau complet d'un projet : ses colonnes et ses cartes vivantes.
- *
- * Un seul aller-retour plutôt qu'un par colonne — le client ne tient aucun cache
- * normalisé, il re-sollicite, et un tableau entier tient largement dans une
- * trame. Sur un projet confidentiel, exige une session déverrouillée : les
- * titres des cartes sont chiffrés au même étage que le projet.
- *
- * `archived: true` renvoie à la place les cartes archivées, sans les colonnes —
- * c'est l'ensemble disjoint, lu par la page d'historique.
+ * Le tableau complet d'un projet, colonnes et cartes vivantes, en un aller-retour :
+ * le client ne tient aucun cache normalisé, il re-sollicite. Exige une session
+ * déverrouillée sur un projet confidentiel. `archived: true` renvoie à la place les
+ * cartes archivées sans les colonnes, l'ensemble disjoint que lit l'historique.
  */
 export const projectBoard = {
     command: 'projects.board' as const,
@@ -219,11 +186,9 @@ export const projectColumnUpdate = {
 };
 
 /**
- * Supprime une colonne — la seule suppression du module, et elle est bornée :
- * refusée (`conflict`) tant que la colonne porte la moindre carte, archivée
- * comprise. La contrainte SQL est en CASCADE ; sans cette garde, retirer une
- * colonne détruirait silencieusement des cartes que rien ne permet de
- * supprimer par ailleurs.
+ * Supprime une colonne, la seule suppression du module : refusée (`conflict`) tant
+ * qu'elle porte la moindre carte, archivée comprise. La contrainte SQL est en
+ * CASCADE, sans cette garde des cartes disparaîtraient en silence.
  */
 export const projectColumnRemove = {
     command: 'projects.columnRemove' as const,
@@ -250,13 +215,10 @@ export const projectCardUpdate = {
 };
 
 /**
- * Range une colonne : `cardIds` en est le contenu **complet** dans son ordre
- * final, et chaque carte listée est versée dans `columnId` au passage. Une
- * seule commande couvre donc le tri interne et le passage d'une colonne à
- * l'autre — c'est le motif de `notes.reorder`.
- *
- * Ne touche jamais au corps chiffré : un glisser-déposer fonctionne donc sans
- * déverrouiller quoi que ce soit.
+ * Range une colonne : `cardIds` en est le contenu complet dans son ordre final, et
+ * chaque carte listée est versée dans `columnId` au passage, tri interne et passage
+ * d'une colonne à l'autre d'un seul geste. Ne touche jamais au corps chiffré, un
+ * glisser-déposer fonctionne donc sans rien déverrouiller.
  */
 export const projectCardMove = {
     command: 'projects.cardMove' as const,
@@ -265,9 +227,8 @@ export const projectCardMove = {
 };
 
 /**
- * Archive une carte : elle quitte le tableau sans que rien ne soit détruit.
- * C'est ce que « supprimer » fait dans l'interface — il n'existe volontairement
- * aucune commande de suppression de carte.
+ * Archive une carte : elle quitte le tableau sans que rien ne soit détruit. Il
+ * n'existe volontairement aucune commande de suppression de carte.
  */
 export const projectCardArchive = {
     command: 'projects.cardArchive' as const,
@@ -286,12 +247,9 @@ export const projectCardRestore = {
 const milestoneId = z.number().int().positive();
 
 /**
- * Ce que le tableau ne dit pas : les jalons du projet et le graphe des
- * dépendances entre ses cartes.
- *
- * Volontairement **séparé de `projects.board`** : la frise se compose des cartes
- * (que le tableau a déjà chargées) et de ce complément. Les fusionner ferait
- * payer les dépendances à chaque ouverture du kanban, qui n'en a que faire.
+ * Les jalons du projet et le graphe des dépendances entre ses cartes. Séparé de
+ * `projects.board` : les fusionner ferait payer les dépendances à chaque ouverture
+ * du kanban, qui n'en a que faire.
  */
 export const projectPlan = {
     command: 'projects.plan' as const,
@@ -314,7 +272,6 @@ export const projectMilestoneUpdate = {
     output: z.object({ milestone: projectMilestoneSchema })
 };
 
-/** Marque un jalon atteint (ou revient dessus). */
 export const projectMilestoneSetReached = {
     command: 'projects.milestoneSetReached' as const,
     input: z.object({ milestoneId, reached: z.boolean() }),
@@ -322,9 +279,8 @@ export const projectMilestoneSetReached = {
 };
 
 /**
- * Retire un jalon. Ses cartes ne sont pas touchées — elles se retrouvent
- * simplement sans jalon (`ON DELETE SET NULL`). Un jalon n'est pas un « bloc » :
- * il ne porte aucun travail, seulement une date, donc le retirer ne perd rien.
+ * Retire un jalon. Ses cartes se retrouvent simplement sans jalon (`ON DELETE SET
+ * NULL`) : un jalon ne porte aucun travail, seulement une date.
  */
 export const projectMilestoneRemove = {
     command: 'projects.milestoneRemove' as const,
@@ -332,7 +288,6 @@ export const projectMilestoneRemove = {
     output: z.object({ milestoneId })
 };
 
-/** Rattache une carte à un jalon, ou l'en détache (`null`). */
 export const projectCardSetMilestone = {
     command: 'projects.cardSetMilestone' as const,
     input: z.object({ cardId, milestoneId: milestoneId.nullable() }),
@@ -340,11 +295,9 @@ export const projectCardSetMilestone = {
 };
 
 /**
- * Déclare que `cardId` est bloquée par `blockedByCardId`.
- *
- * Refusée (`validation`) si elle fermerait un cycle : une carte ne peut pas
- * dépendre d'elle-même, fût-ce par un chemin de dix arêtes. Le contrôle est
- * fait côté serveur, là où le graphe complet est connu.
+ * Déclare que `cardId` est bloquée par `blockedByCardId`. Refusée (`validation`) si
+ * elle fermerait un cycle, fût-ce par un chemin de dix arêtes ; le contrôle est fait
+ * côté serveur, là où le graphe complet est connu.
  */
 export const projectDepAdd = {
     command: 'projects.depAdd' as const,
@@ -361,21 +314,15 @@ export const projectDepRemove = {
 // ----------------------------------------------------------------- git
 
 /**
- * La liaison du projet vers un dépôt de l'espace.
- *
- * Trois commandes seulement : **le dépôt n'appartient pas au projet.** Il vit
- * dans la feature Git (`features/git.ts`), qui porte son cache, sa
- * synchronisation et ses jetons. Ce qui suit ne fait que poser et retirer un
- * pointeur — d'où le fait que tout y soit un `repoId` et rien d'autre.
+ * La liaison du projet vers un dépôt de l'espace : le dépôt n'appartient pas au
+ * projet, il vit dans la feature Git avec son cache, sa synchronisation et ses
+ * jetons. Ce qui suit ne fait que poser et retirer un pointeur.
  */
 
 /**
- * Les dépôts liés au projet, dans l'ordre de la feature Git, et leur nom
- * (`labels`, une entrée par identifiant, par le contrat d'éléments du module
- * Git sous le codec du domicile du projet ; `null` sans module ou sans dépôt).
- *
- * **Plusieurs**, et c'est le cas normal : un projet réel se compose souvent d'un
- * client, d'un serveur et de contrats partagés, chacun dans son dépôt.
+ * Les dépôts liés au projet, dans l'ordre de la feature Git, et leur nom (`labels`,
+ * une entrée par identifiant, `null` sans module ou sans dépôt). Plusieurs est le
+ * cas normal : client, serveur et contrats partagés vivent chacun dans le sien.
  */
 export const projectRepoList = {
     command: 'projects.repoList' as const,
@@ -387,17 +334,12 @@ export const projectRepoList = {
 };
 
 /**
- * Ajoute un dépôt existant au projet. **Idempotente** : le relier deux fois
- * n'est pas une erreur, c'est le même fait déclaré deux fois. Rend la liste
- * complète, pour que l'appelant n'ait pas à la recomposer.
- *
- * Refusé sur un projet confidentiel : la synchronisation tourne sans session, et
- * rattacher un projet gardé à une entité d'espace en clair révélerait par la
- * bande ce qu'il contient. Le dire ici évite un réglage sans effet.
- *
- * Domicile seulement (`validation` depuis une fenêtre) : une liaison référence
- * un dépôt de l'espace d'origine, que la fenêtre ne voit pas ; lui proposer
- * les dépôts d'ici relierait le projet à un autre monde.
+ * Ajoute un dépôt existant au projet. Idempotente, et rend la liste complète pour
+ * que l'appelant n'ait pas à la recomposer. Refusée sur un projet confidentiel : la
+ * synchronisation tourne sans session, et relier un projet gardé à une entité
+ * d'espace en clair révélerait par la bande ce qu'il contient. Domicile seulement
+ * (`validation` depuis une fenêtre), une fenêtre ne voit pas les dépôts de l'espace
+ * d'origine.
  */
 export const projectRepoLink = {
     command: 'projects.repoLink' as const,
@@ -406,10 +348,8 @@ export const projectRepoLink = {
 };
 
 /**
- * Retire une liaison. Domicile seulement, comme la pose.
- *
- * **Le dépôt et son cache survivent** : ils appartiennent à l'espace, et
- * d'autres projets peuvent s'en servir. C'est le pointeur qui part, rien d'autre.
+ * Retire une liaison, domicile seulement. Le dépôt et son cache survivent : ils
+ * appartiennent à l'espace, et d'autres projets peuvent s'en servir.
  */
 export const projectRepoUnlink = {
     command: 'projects.repoUnlink' as const,
@@ -420,14 +360,11 @@ export const projectRepoUnlink = {
 // ------------------------------------------------------------- transverse
 
 /**
- * Toutes mes tâches, tous projets visibles d'ici confondus : ceux de l'espace
- * et ceux qu'un autre espace y projette, chacun lu sous son codec. Un projet
- * projeté compte dans « mes tâches » de la fenêtre comme chez lui.
- *
- * Une seule requête, rendue possible par le fait qu'`assignee_user_id` est en
- * clair. Les cartes d'un projet confidentiel verrouillé reviennent masquées
- * plutôt qu'absentes : une liste de tâches incomplète serait pire qu'une liste
- * qui dit ce qu'elle ne peut pas lire.
+ * Toutes mes tâches, tous projets visibles d'ici confondus, chacun lu sous son
+ * codec. Une seule requête, que rend possible `assignee_user_id` en clair. Les
+ * cartes d'un projet confidentiel verrouillé reviennent masquées plutôt qu'absentes,
+ * une liste de tâches incomplète serait pire qu'une liste qui dit ce qu'elle ne peut
+ * pas lire.
  */
 export const projectMyTasks = {
     command: 'projects.myTasks' as const,
@@ -436,16 +373,11 @@ export const projectMyTasks = {
 };
 
 /**
- * Combien d'éléments chaque intégration du projet a à montrer.
- *
- * Une seule commande pour les quatre, parce qu'elle sert une seule décision :
- * quels onglets la fiche du projet doit ouvrir. Les demander une par une ferait
- * quatre allers-retours pour dessiner une barre d'onglets, et la ferait
- * apparaître par morceaux.
- *
- * Ne déchiffre rien et ne demande aucune session : ce sont des liaisons en
- * clair. Un projet confidentiel n'en a aucune par construction (voir
- * {@link projectRepoLink}), et répond donc quatre zéros.
+ * Combien d'éléments chaque intégration du projet a à montrer. Une seule commande
+ * pour les quatre : elle sert une seule décision, quels onglets la fiche ouvre, et
+ * les demander une par une ferait apparaître la barre d'onglets par morceaux. Ne
+ * déchiffre rien et ne demande aucune session, ce sont des liaisons en clair ; un
+ * projet confidentiel n'en a aucune et répond quatre zéros.
  */
 export const projectLinkCounts = {
     command: 'projects.linkCounts' as const,
@@ -454,16 +386,11 @@ export const projectLinkCounts = {
 };
 
 /**
- * Les services surveillés rattachés au projet, dans l'ordre d'Uptime.
- *
- * Des identifiants, et leur nom (`labels`, une entrée par identifiant, rendu
- * par le contrat d'éléments d'Uptime sous le codec du domicile du projet ;
- * `null` sans module ou sans service). Le nom seul : les états relèvent
- * d'Uptime, que le client lit par `uptime.list` quand son rôle le lui ouvre,
- * et il montre sinon le nom, ce qui suffit à dire ce qui est relié, plutôt
- * que de faire disparaître des liaisons qui existent. Depuis une fenêtre sur
- * un projet projeté, c'est même la seule façon de nommer un service d'un
- * autre espace.
+ * Les services surveillés rattachés au projet, dans l'ordre d'Uptime, et leur nom
+ * seulement (`labels`, `null` sans module ou sans service) : les états relèvent
+ * d'Uptime, que le client lit par `uptime.list` quand son rôle le lui ouvre. Le nom
+ * suffit à dire ce qui est relié, et depuis une fenêtre c'est la seule façon de
+ * nommer un service d'un autre espace.
  */
 export const projectUptimeList = {
     command: 'projects.uptimeList' as const,
@@ -475,10 +402,8 @@ export const projectUptimeList = {
 };
 
 /**
- * Rattache un service surveillé au projet. **Idempotente** : rattacher deux
- * fois le même service n'est pas une erreur, c'est le même fait déclaré deux
- * fois. Rend la liste complète, pour que l'appelant n'ait pas à la recomposer.
- * Domicile seulement (`validation` depuis une fenêtre), comme toute liaison.
+ * Rattache un service surveillé au projet. Idempotente, rend la liste complète, et
+ * domicile seulement (`validation` depuis une fenêtre) comme toute liaison.
  */
 export const projectUptimeLink = {
     command: 'projects.uptimeLink' as const,
@@ -494,9 +419,8 @@ export const projectUptimeUnlink = {
 };
 
 /**
- * Les bases de données rattachées au projet, dans l'ordre de la feature Bases,
- * et leur nom (`labels`, comme {@link projectUptimeList} : par le contrat
- * d'éléments du module, sous le codec du domicile du projet).
+ * Les bases de données rattachées au projet, dans l'ordre de la feature Bases, et
+ * leur nom (`labels`, comme {@link projectUptimeList}).
  */
 export const projectDatabaseList = {
     command: 'projects.databaseList' as const,
@@ -508,9 +432,9 @@ export const projectDatabaseList = {
 };
 
 /**
- * Rattache une base au projet. **Idempotente**, et refusée sur un projet
- * confidentiel : la liaison est une ligne en clair, et la base vit à l'étage
- * ouvert, exactement comme pour un dépôt git. Domicile seulement.
+ * Rattache une base au projet. Idempotente, et refusée sur un projet confidentiel :
+ * la liaison est une ligne en clair et la base vit à l'étage ouvert, exactement
+ * comme pour un dépôt git. Domicile seulement.
  */
 export const projectDatabaseLink = {
     command: 'projects.databaseLink' as const,
@@ -526,9 +450,8 @@ export const projectDatabaseUnlink = {
 };
 
 /**
- * Les sites suivis rattachés au projet, dans l'ordre de la feature Audience,
- * et leur nom (`labels`, comme {@link projectUptimeList} : par le contrat
- * d'éléments du module, sous le codec du domicile du projet).
+ * Les sites suivis rattachés au projet, dans l'ordre de la feature Audience, et leur
+ * nom (`labels`, comme {@link projectUptimeList}).
  */
 export const projectAudienceList = {
     command: 'projects.audienceList' as const,
@@ -540,9 +463,9 @@ export const projectAudienceList = {
 };
 
 /**
- * Rattache un site au projet. **Idempotente**, et refusée sur un projet
- * confidentiel : la liaison est une ligne en clair, et le site vit à l'étage
- * ouvert, exactement comme un dépôt git ou une base. Domicile seulement.
+ * Rattache un site au projet. Idempotente, et refusée sur un projet confidentiel :
+ * la liaison est une ligne en clair et le site vit à l'étage ouvert, exactement
+ * comme un dépôt git ou une base. Domicile seulement.
  */
 export const projectAudienceLink = {
     command: 'projects.audienceLink' as const,
@@ -560,21 +483,14 @@ export const projectAudienceUnlink = {
 // ---------------------------------------------------------- déploiement
 
 /**
- * La liaison du projet vers les cibles de déploiement de l'espace.
- *
- * Trois commandes, exactement comme pour un dépôt : **la cible n'appartient pas
- * au projet.** Elle vit dans la feature Déploiement, avec son jeton, son
- * historique et son suivi d'état, et plusieurs projets peuvent viser la même —
- * le cas normal quand un client et un serveur partent dans la même pile compose.
- * Ce qui suit ne fait que poser et retirer un pointeur.
- *
- * Déclencher ne se fait pas ici : c'est `deploy.trigger`, qui accepte un
- * `projectId` facultatif pour inscrire le fait dans la frise du projet.
+ * La liaison du projet vers les cibles de déploiement de l'espace : comme un dépôt,
+ * la cible n'appartient pas au projet et plusieurs projets peuvent viser la même.
+ * Déclencher ne se fait pas ici mais par `deploy.trigger`, qui accepte un `projectId`
+ * facultatif pour inscrire le fait dans la frise du projet.
  */
 /**
- * Les cibles reliées, dans l'ordre de la feature Déploiement, et leur nom
- * (`labels`, comme {@link projectUptimeList} : par le contrat d'éléments du
- * module, sous le codec du domicile du projet).
+ * Les cibles reliées, dans l'ordre de la feature Déploiement, et leur nom (`labels`,
+ * comme {@link projectUptimeList}).
  */
 export const projectDeployList = {
     command: 'projects.deployList' as const,
@@ -586,10 +502,9 @@ export const projectDeployList = {
 };
 
 /**
- * Rattache une cible au projet. **Idempotente**, et refusée sur un projet
- * confidentiel : la liaison est une ligne en clair, la cible vit à l'étage
- * ouvert et son suivi tourne sans session — exactement comme pour un dépôt.
- * Domicile seulement.
+ * Rattache une cible au projet. Idempotente, et refusée sur un projet confidentiel :
+ * la liaison est une ligne en clair, la cible vit à l'étage ouvert et son suivi
+ * tourne sans session. Domicile seulement.
  */
 export const projectDeployLink = {
     command: 'projects.deployLink' as const,
@@ -597,7 +512,7 @@ export const projectDeployLink = {
     output: z.object({ targetIds: z.array(z.number().int().positive()) })
 };
 
-/** Retire la liaison, domicile seulement. La cible, son historique et les autres projets survivent. */
+/** Retire la liaison, domicile seulement. La cible et son historique survivent. */
 export const projectDeployUnlink = {
     command: 'projects.deployUnlink' as const,
     input: z.object({ projectId, targetId: z.number().int().positive() }),
@@ -607,10 +522,9 @@ export const projectDeployUnlink = {
 // -------------------------------------------------------------- historique
 
 /**
- * La frise verticale d'un projet, du plus récent au plus ancien.
- *
- * Même pagination par curseur remontant que la discussion : `before` demande la
- * page qui précède un événement donné. Sans lui, on obtient le haut de la frise.
+ * La frise verticale d'un projet, du plus récent au plus ancien. Pagination par
+ * curseur remontant : `before` demande la page qui précède un événement donné, sans
+ * lui on obtient le haut de la frise.
  */
 export const projectEventList = {
     command: 'projects.eventList' as const,
@@ -630,12 +544,9 @@ export const projectEventList = {
 const messageId = z.number().int().positive();
 
 /**
- * Le fil d'une carte, du plus ancien au plus récent.
- *
- * Pagination par **curseur remontant** : `before` demande la page qui précède
- * un message donné, ce qui est le seul ordre qui tienne dans un fil où l'on
- * écrit par le bas. Sans `before`, on obtient la fin du fil — ce qu'on veut à
- * l'ouverture.
+ * Le fil d'une carte, du plus ancien au plus récent. Pagination par curseur
+ * remontant : `before` demande la page qui précède un message donné, le seul ordre
+ * qui tienne dans un fil où l'on écrit par le bas. Sans lui, la fin du fil.
  */
 export const projectMessageList = {
     command: 'projects.messageList' as const,
@@ -646,16 +557,14 @@ export const projectMessageList = {
     }),
     output: z.object({
         messages: z.array(projectMessageSchema),
-        /** Reste-t-il des messages plus anciens à charger ? */
         hasMore: z.boolean()
     })
 };
 
 /**
- * Poste un message. Les `mentions` sont des identifiants de **membres de
- * l'espace** ; le serveur refuse tout autre. Elles voyagent à part du texte
- * plutôt que d'être ré-extraites côté serveur : celui-ci ne lit pas le texte
- * pour le comprendre, seulement pour le stocker chiffré.
+ * Poste un message. Les `mentions` sont des identifiants de membres de l'espace, le
+ * serveur refuse tout autre ; elles voyagent à part du texte, que le serveur ne lit
+ * jamais pour le comprendre mais seulement pour le stocker chiffré.
  */
 export const projectMessageSend = {
     command: 'projects.messageSend' as const,
@@ -679,11 +588,9 @@ export const projectMessageEdit = {
 };
 
 /**
- * Pose le point d'eau haute de lecture de l'appelant sur une carte : tout
- * message d'identifiant inférieur ou égal cesse d'être compté comme non lu.
- *
- * N'est **pas** une mutation diffusée : une lecture est personnelle, l'annoncer
- * à l'espace ferait re-solliciter tout le monde pour rien.
+ * Pose le point d'eau haute de lecture de l'appelant sur une carte : tout message
+ * d'identifiant inférieur ou égal cesse d'être compté comme non lu. N'est pas une
+ * mutation diffusée, une lecture est personnelle.
  */
 export const projectMarkRead = {
     command: 'projects.markRead' as const,

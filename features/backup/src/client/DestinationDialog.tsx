@@ -32,17 +32,9 @@ const KIND_HINTS: Record<BackupDestinationKind, string> = {
 };
 
 /**
- * Déclarer ou modifier une destination.
- *
- * **Un seul formulaire pour les trois genres**, dont les champs apparaissent
- * selon le genre choisi. Trois dialogues auraient obligé à choisir avant de
- * savoir ce que chacun demande, et un formulaire de plus par genre à venir.
- * Trois choix fixes : des segments, tous visibles, plutôt qu'un déroulant.
- *
- * Le genre n'est pas modifiable après coup : changer un dossier local en bucket
- * S3 ne conserve rien de ce qui précède, et les archives déjà écrites resteraient
- * pointées par des exécutions devenues introuvables. Créer une seconde
- * destination est plus honnête, et laisse l'ancienne se vider par rétention.
+ * Un seul formulaire pour les trois genres, champs selon le genre choisi. Le
+ * genre n'est pas modifiable après coup : les archives déjà écrites resteraient
+ * pointées par des exécutions devenues introuvables.
  */
 export default function DestinationDialog({ open, destination, onClose, onSaved }: DestinationDialogProps) {
     const { devices } = useDevices();
@@ -193,17 +185,14 @@ export default function DestinationDialog({ open, destination, onClose, onSaved 
                 )}
 
                 <div className={styles.field}>
-                    {/* Le bouton est **frère** du libellé, pas son enfant : dans
-                        un `<label>`, un clic sur le bouton activerait aussi le
-                        champ associé. Même découpage que le sélecteur de dossier
-                        de CloudSync. */}
+                    {/* Frère du libellé, pas enfant : dans un `<label>`, un clic
+                        sur le bouton activerait aussi le champ. */}
                     <div className={styles.pathRow}>
                         <label className={styles.pathLabel}>
                             <span className={styles.fieldLabel}>{kind === 's3' ? 'Préfixe' : 'Dossier'}</span>
-                            {/* Le champ reste saisissable même avec le sélecteur :
-                                coller un chemin qu'on connaît déjà ne doit pas
-                                obliger à naviguer, et la machine peut être hors
-                                ligne au moment où l'on déclare la destination. */}
+                            {/* Reste saisissable : coller un chemin connu ne doit
+                                pas obliger à naviguer, et la machine peut être
+                                hors ligne. */}
                             <TextInput
                                 value={path}
                                 maxLength={512}
@@ -297,16 +286,11 @@ export default function DestinationDialog({ open, destination, onClose, onSaved 
                     </>
                 )}
 
-                {/* Le chiffrement n'est pas ici : c'est chaque TRAVAIL qui
-                    choisit la forme de ses archives, dans l'onglet Chiffrement
-                    de ses réglages (094). Une destination dit où écrire. */}
-
                 {error && <p className={styles.error}>{error}</p>}
             </div>
 
-            {/* Empilé au-dessus du formulaire : il possède alors la couche de
-                fermeture, donc Échap referme le sélecteur sans perdre la saisie
-                derrière. Monté seulement quand une machine est choisie : il
+            {/* Empilé au-dessus du formulaire : Échap referme le sélecteur sans
+                perdre la saisie. Monté seulement avec une machine choisie : il
                 s'abonne aux métriques de l'appareil dès l'ouverture. */}
             {kind === 'device' && selectedDevice && (
                 <DeviceFolderPicker

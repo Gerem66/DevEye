@@ -70,12 +70,9 @@ export const uptimeServiceSchema = z.object({
     /** Rank in the list; only the user's drag & drop changes it. */
     sortOrder: z.number().int().nonnegative(),
     /**
-     * Ce service vient d'un **autre espace**, qui le projette ici.
-     *
-     * Il se lit et se modifie normalement (c'est tout l'objet de la projection),
-     * mais l'écran le signale : sans ça, le supprimer depuis l'espace où on le
-     * voit donnerait l'impression de retirer une ligne locale, alors qu'on
-     * toucherait la donnée d'ailleurs.
+     * Projeté depuis un autre espace : il se lit et se modifie normalement,
+     * mais l'écran le signale, parce que le supprimer d'ici toucherait la
+     * donnée d'ailleurs.
      */
     foreign: z.boolean(),
 

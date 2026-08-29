@@ -3,7 +3,6 @@ import { Button, Dialog } from 'deveye-sdk-client';
 import type { DatabaseStructure } from '../contracts/domain';
 import styles from './style.module.css';
 
-/** Combien de temps la confirmation « copié » reste affichée. */
 const COPIED_MS = 1600;
 
 interface StructureDialogProps {
@@ -14,16 +13,7 @@ interface StructureDialogProps {
     onOpenTable: (schema: string, table: string) => void;
 }
 
-/**
- * La structure d'une table, en texte aligné.
- *
- * Ce qu'on colle dans un ticket, un message, un fichier de notes — d'où le choix
- * du texte brut plutôt que du CSV ou du JSON : la question qu'on pose en
- * partageant une structure est « à quoi ressemble cette table », et un tableau
- * aligné y répond sans outil pour le relire. Les colonnes sont calées sur la
- * plus longue de chaque champ, ce qui reste lisible dans n'importe quelle police
- * à chasse fixe.
- */
+/** La structure en texte aligné, à coller dans un ticket ou un message. */
 export function structureAsText(structure: DatabaseStructure): string {
     const lines: string[] = [];
     lines.push(`Table ${structure.schema}.${structure.table}`);
@@ -70,19 +60,7 @@ export function structureAsText(structure: DatabaseStructure): string {
     return `${lines.join('\n')}\n`;
 }
 
-/**
- * La structure d'une table : ce qu'elle contient, et ce à quoi elle est reliée.
- *
- * Trois blocs dans l'ordre où l'on s'y intéresse — les colonnes, ce qui pointe
- * ailleurs, ce qui accélère les recherches. Les clés étrangères y sont
- * cliquables : lire qu'une colonne pointe `clients.id` donne aussitôt envie
- * d'aller voir `clients`, et l'y emmener est le seul geste utile qu'on puisse
- * offrir depuis cet écran.
- *
- * Le second est **la copie**. Décrire une table dans un message se faisait
- * jusqu'ici en la recopiant colonne par colonne depuis cet écran ; un bouton
- * dans le coin en fait un geste de deux secondes, mis en forme.
- */
+/** Colonnes, clés étrangères (cliquables) et index d'une table, avec une copie en texte. */
 export function StructureDialog({ open, structure, onClose, onOpenTable }: StructureDialogProps) {
     const [copied, setCopied] = useState(false);
 
@@ -113,9 +91,7 @@ export function StructureDialog({ open, structure, onClose, onOpenTable }: Struc
             }
             width={820}
             headerAction={
-                /* Dans le coin de la popup, que le Dialog possède : posé à côté
-                   d'un titre de section, il aurait fallu deviner s'il ne copiait
-                   que ce bloc. Ici, il copie la fiche. */
+                /* Dans le coin de la popup : il copie la fiche entière, pas un bloc. */
                 <button
                     type='button'
                     className={styles.infoButton}

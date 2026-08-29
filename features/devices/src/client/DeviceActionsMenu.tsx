@@ -10,11 +10,9 @@ export interface DeviceAction {
 }
 
 /**
- * "Fonctions" dropdown of the per-device panel header: one labelled entry
- * (icon + text) per device feature (hardware sheet, system updates, file
- * explorer, terminal, logs, power...), replacing the old row of bare icon
- * buttons; the collection config left it for the settings shell. Closes on pick, outside click, or Escape (through
- * the shared dismiss-layer stack, so nested overlays keep their order).
+ * "Fonctions" dropdown of the per-device panel header: one labelled entry per
+ * device feature. Closes on pick, outside click, or Escape (through the shared
+ * dismiss-layer stack, so nested overlays keep their order).
  */
 export function DeviceActionsMenu({ actions }: { actions: DeviceAction[] }) {
     const [open, setOpen] = useState(false);

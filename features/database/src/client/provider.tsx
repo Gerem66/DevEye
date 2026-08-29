@@ -11,15 +11,9 @@ import { ENGINE_LABELS } from './format';
 import styles from './style.module.css';
 
 /**
- * Ce que le module offre aux écrans de l'app (`DATABASE_CLIENT_PROVIDER`) :
- * l'onglet « Bases de données » d'un projet compose la liste des bases de
- * l'espace, une base reliée montrée en entier, et le dialogue de création,
- * sans importer le module.
- *
- * `LinkedDatabase` est autonome, et c'est la différence avec l'ancien bloc
- * que Projets écrivait lui-même : l'hôte ne lui tend qu'un identifiant, et
- * le bloc charge sa base, suit les invalidations de la feature et gère son
- * mode agrandi. L'hôte ne connaît ni la forme d'une base, ni ses commandes.
+ * Ce que le module offre à l'onglet « Bases de données » d'un projet
+ * (`DATABASE_CLIENT_PROVIDER`). `LinkedDatabase` est autonome : l'hôte ne lui
+ * tend qu'un identifiant et ne connaît ni la forme d'une base, ni ses commandes.
  */
 
 interface LinkedDatabaseProps {
@@ -63,10 +57,7 @@ function LinkedDatabase({ databaseId, canWrite, onUnlink }: LinkedDatabaseProps)
         }
     };
 
-    /**
-     * Relever n'écrit rien à l'écran : son résultat est le bandeau d'état, juste
-     * en dessous. La phrase de connexion appartient aux essais seuls.
-     */
+    // Relever n'écrit rien dans `probe` : son résultat est le bandeau d'état.
     const inspect = async () => {
         setBusy(true);
         setError(null);
@@ -80,10 +71,8 @@ function LinkedDatabase({ databaseId, canWrite, onUnlink }: LinkedDatabaseProps)
         }
     };
 
-    // Toujours encadré, y compris sur une base unique : le cadre ne fait pas
-    // que séparer deux blocs, il dit où finit ce que l'onglet montre. Seul
-    // l'explorateur en plein écran le retire, parce qu'il prend toute la place
-    // et qu'un cadre autour n'aurait plus rien à délimiter.
+    // Toujours encadré, sauf en plein écran : le cadre dit où finit ce que
+    // l'onglet montre.
     return (
         <section className={expanded ? styles.linkedBlock : styles.linkedBlockFramed}>
             {!expanded && (
@@ -94,18 +83,10 @@ function LinkedDatabase({ databaseId, canWrite, onUnlink }: LinkedDatabaseProps)
                     onTest={() => void test()}
                     onInspect={() => void inspect()}
                     onEdit={() => setDialogOpen(true)}
-                    // Le sens qui manquait : la feature sait déjà mener aux
-                    // projets d'une base, l'onglet d'un projet ne savait pas
-                    // mener à la base. Par la téléportation, comme partout :
-                    // `openFeature` écrit le chemin `view:database l1:7`, qui
-                    // dit « ouvre la feature, et dedans, cette base-là », garde
-                    // d'accès comprise.
                     onOpenInFeature={() => openFeature('database', database.id)}
                     after={
-                        // Destructeur, donc à part et confirmé : il ne doit pas
-                        // côtoyer « Tester », qu'on presse souvent. La
-                        // confirmation et le déliement sont à l'hôte, qui seul
-                        // tient le pointeur.
+                        // La confirmation et le déliement sont à l'hôte, qui
+                        // seul tient le pointeur.
                         <Button variant='ghost' onClick={onUnlink} disabled={busy}>
                             Délier
                         </Button>
@@ -124,8 +105,6 @@ function LinkedDatabase({ databaseId, canWrite, onUnlink }: LinkedDatabaseProps)
                 onExpandChange={setExpanded}
             />
 
-            {/* Le vrai formulaire de la feature, pas une copie : régler une base
-                depuis un projet ou depuis sa feature doit être le même geste. */}
             <DatabaseDialog
                 open={dialogOpen}
                 database={database}
@@ -145,11 +124,7 @@ interface LinkedDatabaseDialogProps {
     onSaved: (databaseId: number) => void;
 }
 
-/**
- * Le dialogue de la feature, en mode création seulement : c'est le seul cas
- * de Projets, qui relie ce qui vient d'être créé. La modification passe par
- * `LinkedDatabase`, qui tient la base chargée.
- */
+/** Le dialogue en mode création seulement ; la modification passe par `LinkedDatabase`. */
 function LinkedDatabaseDialog({ open, onClose, onSaved }: LinkedDatabaseDialogProps) {
     return <DatabaseDialog open={open} database={null} onClose={onClose} onSaved={onSaved} />;
 }

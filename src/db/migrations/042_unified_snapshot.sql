@@ -1,14 +1,10 @@
--- Unified collection cadence: one agent tick now produces one *instant* carrying
--- both the graph signals and the process list, under a single timestamp. The
--- separate "heavy snapshot" cadence disappears, so `snapshot_interval_seconds`
--- has no meaning anymore.
---
--- Process storage changes shape accordingly: at a one-minute cadence the old
--- one-row-per-process layout would cost ~120 MB/day/device (584 distinct program
--- names x 1440 samples). One gzipped JSON blob per instant costs ~7 MB/day for
--- the same data — and nothing ever aggregates processes by name across time,
--- every query (nearest, snapshotTimes, storage, delete, pin, prune) works on
--- `ts` alone. Process history restarts from scratch; metrics are untouched.
+-- Unified collection cadence: one agent tick produces one *instant* carrying
+-- both the graph signals and the process list under a single timestamp, so
+-- `snapshot_interval_seconds` has no meaning anymore.
+-- Process storage becomes one gzipped JSON blob per instant (~7 MB/day/device
+-- instead of ~120 MB with one row per process): nothing ever aggregates
+-- processes by name, every query works on `ts` alone. Process history restarts
+-- from scratch, metrics are untouched.
 
 DROP TABLE IF EXISTS device_process_samples;
 

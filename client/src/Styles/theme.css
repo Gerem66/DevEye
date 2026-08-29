@@ -1,26 +1,18 @@
 /* Glassmorphism design tokens */
 :root {
-  /* Base palette */
   --glass-bg: rgba(18, 26, 38, 0.62);
   --glass-bg-light: rgba(38, 52, 68, 0.5);
   --glass-border: rgba(255, 255, 255, 0.09);
   --glass-border-strong: rgba(255, 255, 255, 0.16);
   --glass-blur: 16px;
   /*
-   * Le verre d'une surface, en un jeton plutôt qu'en dur.
-   *
-   * `backdrop-filter` filtre l'image du **backdrop root**, et la spec (Filter
-   * Effects 2) fait de tout élément portant un `filter` un nouveau backdrop
-   * root. Une surface de verre posée sous un ancêtre flouté échantillonne donc
-   * un fond vide : dans le meilleur des cas elle perd son verre, dans Gecko elle
-   * s'efface pour de bon, et de façon inégale d'une carte à l'autre selon la
-   * découpe en couches. Passer par un jeton laisse à un tel ancêtre le moyen de
-   * couper le verre net (voir `.recessed`, `Pages/Home/Dashboard.module.css`)
-   * au lieu de s'en remettre au moteur.
+   * Le verre d'une surface en un jeton, pour qu'un ancêtre puisse le couper net
+   * (voir `.recessed`, `Pages/Home/Dashboard.module.css`) : tout élément portant
+   * un `filter` devient un backdrop root, et une surface de verre posée dessous
+   * échantillonne un fond vide, jusqu'à disparaître dans Gecko.
    */
   --glass-backdrop: blur(var(--glass-blur));
 
-  /* Surfaces */
   --surface-widget: var(--glass-bg);
   --surface-popup: rgba(14, 21, 32, 0.92);
   /* Opaque twin of --surface-popup, for surfaces that must not let anything
@@ -29,7 +21,6 @@
   --surface-navbar: rgba(9, 14, 22, 0.78);
   --surface-subtle: rgba(255, 255, 255, 0.04);
 
-  /* Text */
   --text-primary: rgba(255, 255, 255, 0.95);
   --text-secondary: rgba(255, 255, 255, 0.66);
   --text-muted: rgba(255, 255, 255, 0.42);
@@ -42,7 +33,6 @@
   --accent-bg: rgba(34, 211, 238, 0.14);
   --on-accent: #05222a;
 
-  /* Status */
   --success: #2ed8b6;
   --success-bg: rgba(46, 216, 182, 0.14);
   --warning: #ffb64d;
@@ -50,12 +40,11 @@
   --danger: #ff5370;
   --danger-bg: rgba(255, 83, 112, 0.13);
 
-  /* Finance colours : la palette nommée des comptes et des catégories
-     (`--finance-<nom>`, miroir de financeColorSchema dans @deveye/types). Huit
-     teintes séparées, parce qu'un camembert de catégories en demande plus que
-     les six des notes, et sans cyan pour la même raison que --user-* : c'est
-     celui de --accent, et une part de cette couleur se lirait comme un élément
-     de l'interface plutôt que comme une catégorie. */
+  /* La palette nommée des comptes et des catégories (`--finance-<nom>`, miroir
+     de financeColorSchema dans @deveye/types). Huit teintes, parce qu'un
+     camembert de catégories en demande beaucoup, et sans cyan : c'est celui de
+     --accent, et une part de cette couleur se lirait comme un élément de
+     l'interface. */
   --finance-red: #ff6b81;
   --finance-orange: #ff9f43;
   --finance-yellow: #ffd54a;
@@ -65,13 +54,11 @@
   --finance-purple: #b088ff;
   --finance-pink: #ff7ac6;
 
-  /* User colours — l'identité visuelle d'un compte dans la présence en direct
-     (`--user-<nom>`, miroir de userColorSchema dans @deveye/types) : son curseur
-     chez les autres, sa bulle, la bordure du nœud où il se trouve.
-     Palette distincte de celle des Notes (--note-*, déclarée par le module
-     features/notes, avec sa feature) : huit teintes bien séparées, et surtout
-     PAS de cyan — c'est celui de --accent, un curseur de cette couleur se
-     lirait comme un élément de l'interface plutôt que comme quelqu'un. */
+  /* L'identité visuelle d'un compte dans la présence en direct (`--user-<nom>`,
+     miroir de userColorSchema dans @deveye/types) : son curseur chez les autres,
+     sa bulle, la bordure du nœud où il se trouve. Huit teintes bien séparées, et
+     surtout pas de cyan : c'est celui de --accent, un curseur de cette couleur
+     se lirait comme un élément de l'interface plutôt que comme quelqu'un. */
   --user-red: #ff6b81;
   --user-orange: #ff9f43;
   --user-yellow: #ffd54a;
@@ -81,46 +68,37 @@
   --user-purple: #b088ff;
   --user-pink: #ff7ac6;
 
-  /* Inputs */
   --input-bg: rgba(255, 255, 255, 0.04);
   --input-border: var(--glass-border);
   --input-focus: var(--accent);
   --input-placeholder: var(--text-muted);
 
-  /* Shadows */
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
   --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.28);
   --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.42);
   --shadow-glow: 0 0 0 1px var(--accent-bg), 0 8px 32px var(--accent-glow);
 
-  /* Radii */
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 18px;
   --radius-xl: 26px;
   --radius-pill: 999px;
 
-  /* Spacing */
   --space-xs: 4px;
   --space-sm: 8px;
   --space-md: 16px;
   --space-lg: 24px;
   --space-xl: 32px;
 
-  /* Typography */
   --font-sans: 'Open Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 
-  /* Layout */
   --navbar-height: 56px;
-  /* Hauteur commune des pastilles de la barre du haut (Présence, Chiffrement).
-     Fixée, et surtout pas déduite du texte qu'elles contiennent : déduite, elle
-     dépendait des métriques de la police — donc du navigateur — et rendait des
-     valeurs fractionnaires (28,22 px ici, autre chose ailleurs), si bien que deux
-     pastilles voisines ne s'alignaient plus tout à fait. */
+  /* Hauteur commune des pastilles de la barre du haut. Fixée, et surtout pas
+     déduite de leur texte : elle dépendrait alors des métriques de la police,
+     donc du navigateur, et deux pastilles voisines ne s'aligneraient plus. */
   --topbar-pill-height: 28px;
 
-  /* Z-index scale */
   --z-wallpaper: -1;
   --z-base: 1;
   --z-popup-overlay: 900;
@@ -129,55 +107,43 @@
   --z-modal: 1400;
   --z-toast: 1600;
 
-  /* Transitions */
   --transition-fast: 150ms ease;
   --transition-normal: 250ms ease;
   /*
-   * La lente est la seule dont la **durée** se lit séparément, parce qu'elle est
-   * la seule sur laquelle un autre réglage doit se caler : le retour du verre
-   * des tuiles doit tomber après le flou de l'accueil, jamais pendant (voir
-   * `--glass-backdrop-delay`, `Pages/Home/Dashboard.module.css`). Un jeton qui
-   * porte sa courbe en plus de sa durée n'entre pas dans un `calc`, et le délai
-   * était donc écrit en dur, à charge d'un commentaire de rappeler qu'il fallait
-   * le suivre. Scindé, le couplage est mécanique et ne peut plus se désaccorder.
+   * La durée de la lente se lit séparément parce qu'un autre réglage doit s'y
+   * caler par `calc` (voir `--glass-backdrop-delay`,
+   * `Pages/Home/Dashboard.module.css`), et qu'un jeton portant sa courbe en plus
+   * de sa durée n'entre pas dans un `calc`.
    */
   --transition-slow-ms: 400ms;
   --transition-slow: var(--transition-slow-ms) ease;
 }
 
-/* Monitoring's activity tint (idle grey → normal green → intensive orange). It
-   drives a gradient, a label colour, a dot and its halo all at once, so the whole
-   hero fades as one from this single declaration.
+/* Monitoring's activity tint (idle grey to normal green to intensive orange),
+   driving a gradient, a label colour, a dot and its halo as one.
 
-   Registered rather than merely declared, because that is the whole point: an
-   unregistered custom property is an untyped token stream, hence not
-   interpolable — and a declaration that changes only through `var()` substitution
-   flips instantly, which is why the `transition` sitting on those gradients never
-   did anything. Typed as `<color>`, it animates; `inherits: true` carries the
-   animated value down to the label and dot, which read it from their ancestor.
-
-   Lives here, not in the feature's CSS module: at-rules aren't scoped by CSS
-   Modules, so this registration is global wherever it is written — better stated
-   once, next to the tokens it interpolates between. */
+   Registration is the point: an unregistered custom property is not interpolable,
+   so the `transition` on those gradients did nothing. Typed as `<color>` it
+   animates, and `inherits: true` carries the animated value down to the label and
+   dot. It sits here rather than in the feature's CSS module because at-rules are
+   not scoped by CSS Modules, so the registration is global wherever written. */
 @property --activity-color {
   syntax: '<color>';
   inherits: true;
   initial-value: transparent;
 }
 
-/* Global box model: border-box everywhere. Several components used to opt in
-   locally (with comments lamenting "unlike the rest of the app"); this makes it
-   the default so `width`/`min-height` + padding never overflow their box. */
+/* Global box model: border-box everywhere, so `width`/`min-height` + padding
+   never overflow their box. */
 *,
 *::before,
 *::after {
   box-sizing: border-box;
 }
 
-/* Global page reset. Lives here (not in a page stylesheet) so it always applies.
-   `height: 100%` rather than `100vh` — 100vh includes the vertical scrollbar and
-   mobile browser chrome, which caused a few-pixel horizontal scroll and layout
-   jumps. `overflow-x: hidden` is a final guard against any stray overflow. */
+/* Global page reset. `height: 100%` rather than `100vh`: the latter includes the
+   vertical scrollbar and mobile browser chrome, causing a few-pixel horizontal
+   scroll and layout jumps. `overflow-x: hidden` guards against stray overflow. */
 html,
 body {
   height: 100%;
@@ -199,7 +165,6 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Global glass card utility */
 .glass {
   background: var(--glass-bg);
   backdrop-filter: blur(var(--glass-blur));
@@ -208,7 +173,6 @@ body {
   border-radius: var(--radius-md);
 }
 
-/* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;

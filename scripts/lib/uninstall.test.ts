@@ -4,12 +4,9 @@ import { describe, it } from 'node:test';
 import { forbiddenUninstallTargets, scrubHomeLayout, scrubRoleGrants } from './uninstall';
 
 /**
- * La part pure de la désinstallation d'un module.
- *
- * Ce qui mérite d'être tenu : la sentinelle du `uninstall.sql` (un module ne
- * détruit QUE ses tables, l'allowlist des tables historiques ne s'applique
- * pas ici), et les deux nettoyages de JSON — un bug silencieux y corromprait
- * les rôles ou les accueils de TOUS les espaces d'un coup.
+ * La part pure de la désinstallation d'un module : la sentinelle du
+ * `uninstall.sql`, et les deux nettoyages de JSON, où un bug silencieux
+ * corromprait les rôles ou les accueils de tous les espaces d'un coup.
  */
 
 describe('forbiddenUninstallTargets', () => {

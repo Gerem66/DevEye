@@ -23,26 +23,13 @@ interface DatabasesProps {
 }
 
 /**
- * L'onglet « Bases de données » d'un projet : celles qu'il pointe.
+ * L'onglet « Bases de données » d'un projet : celles qu'il pointe. La base
+ * n'appartient pas au projet, qui n'en tient qu'un pointeur ; tout l'affichage
+ * vient du bloc du module (`DATABASE_CLIENT_PROVIDER`), rendu ici plutôt que
+ * derrière un renvoi, chaque base dans un cadre qui la sépare de la suivante.
  *
- * Enveloppe mince, exactement comme l'onglet Git. **La base n'appartient pas au
- * projet** : elle vit dans sa feature, avec ses alertes et son relevé, et
- * plusieurs projets peuvent viser la même. Cet onglet ne possède qu'un pointeur
- * (`projects.databaseList` / `databaseLink` / `databaseUnlink`) et délègue tout
- * l'affichage au module Bases de données, par son contrat client
- * (`DATABASE_CLIENT_PROVIDER`) : cet écran n'importe pas le module.
- *
- * Le contenu est rendu **ici**, et non derrière un renvoi vers la feature : une
- * base reliée à un projet se consulte depuis le projet, sinon la liaison ne sert
- * qu'à ranger. Chaque base reçoit un cadre discret, sans lequel deux jeux de
- * statistiques, d'alertes et de tables s'enchaîneraient sans qu'on sache où
- * l'un finit ; c'est le bloc du module (`LinkedDatabase`), qui charge sa base
- * lui-même et suit les invalidations de la feature.
- *
- * Corollaire à connaître : lire une base relève du droit `database`, pas de
- * `projects`. Un membre qui a l'un sans l'autre voit qu'il y a des bases
- * rattachées sans pouvoir les ouvrir, et l'écran le dit. Module absent : même
- * lecture, des identifiants nus, et une phrase qui le dit.
+ * Lire une base relève du droit `database`, pas de `projects` : sans lui, ou
+ * sans le module, les bases se listent en identifiants nus.
  */
 export function Databases({ project, canWrite }: DatabasesProps) {
     const permissions = useWorkspacePermissions();

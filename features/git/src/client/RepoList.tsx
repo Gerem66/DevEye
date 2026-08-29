@@ -19,11 +19,9 @@ interface RepoListProps {
 }
 
 /**
- * La liste des dépôts, réordonnable au glisser-déposer.
- *
- * Le geste vit dans `useDragReorder`, du SDK : il est le même ici, dans Uptime,
- * dans Monitoring et dans les bases de données. Ne restent ici que l'apparence
- * de la carte, celle de la poignée et celle de la barre d'insertion.
+ * La liste des dépôts, réordonnable au glisser-déposer. Le geste vit dans
+ * `useDragReorder`, du SDK ; ne restent ici que l'apparence de la carte, celle
+ * de la poignée et celle de la barre d'insertion.
  */
 export function RepoList({
     repos,
@@ -54,9 +52,8 @@ export function RepoList({
                     onDragPointerDown={canWrite ? (e) => drag.onGripPointerDown(e, repo.id) : undefined}
                 />
             ))}
-            {/* Un `<li>` et non un `<span>` : dans une `<ul>`, seul un `<li>` est
-                un enfant valide. Sorti du flux par `position: absolute`, il
-                n'occupe aucune cellule de la grille. */}
+            {/* Un `<li>` et non un `<span>` : dans une `<ul>`, seul un `<li>` est un
+                enfant valide. `position: absolute` le sort de la grille. */}
             <li ref={drag.barRef} className={styles.dropBar} aria-hidden='true' />
         </ul>
     );
@@ -75,8 +72,8 @@ interface RepoCardProps {
 }
 
 function RepoCard({ repo, sync, outline, dragging, onOpen, onDragPointerDown }: RepoCardProps) {
-    // Ce qui empêche ce dépôt de se tenir à jour, s'il y a lieu. Une seule ligne
-    // à l'écran : deux causes concurrentes ne s'affichent pas mieux à deux.
+    // Ce qui empêche ce dépôt de se tenir à jour. Une seule cause à l'écran :
+    // deux ne s'afficheraient pas mieux.
     const stalled =
         repo.credentialId === null
             ? 'jeton retiré'
@@ -88,9 +85,8 @@ function RepoCard({ repo, sync, outline, dragging, onOpen, onDragPointerDown }: 
 
     return (
         <li className={`${styles.repoCard} ${dragging ? styles.repoCardDragging : ''}`} data-repo-card='' {...outline}>
-            {/* Une bande fine en tête de carte, comme sur un compte mail en
-                cours de synchronisation : elle dit qu'il se passe quelque chose
-                sans déplacer quoi que ce soit dans la carte. */}
+            {/* Une bande fine en tête de carte : elle dit qu'il se passe quelque
+                chose sans rien déplacer dans la carte. */}
             {sync && (
                 <div className={styles.syncStrip} aria-hidden='true'>
                     <div
@@ -115,9 +111,8 @@ function RepoCard({ repo, sync, outline, dragging, onOpen, onDragPointerDown }: 
             )}
 
             {/* `div role="button"` et non `<button>` : la carte contient des
-                paragraphes, c'est-à-dire du contenu de flux, interdit dans un
-                bouton dont le modèle de contenu est phrasé. Même motif que la
-                carte de projet. */}
+                paragraphes, du contenu de flux, interdit dans un bouton dont le
+                modèle de contenu est phrasé. */}
             <div
                 className={styles.repoCardBody}
                 role='button'
@@ -163,9 +158,9 @@ function RepoCard({ repo, sync, outline, dragging, onOpen, onDragPointerDown }: 
                     </div>
                 </div>
 
-                {/* Sœur du bloc de texte, calée en haut : la flèche annonce que
-                    la carte s'ouvre, elle n'appartient pas à la ligne d'état du
-                    bas où elle se lisait comme un indicateur de plus. */}
+                {/* Sœur du bloc de texte, calée en haut : la flèche annonce que la
+                    carte s'ouvre ; dans la ligne d'état du bas, elle se lisait
+                    comme un indicateur de plus. */}
                 <span className={styles.openArrow} aria-hidden='true'>
                     <span className='icon icon-arrow' />
                 </span>

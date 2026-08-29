@@ -5,10 +5,7 @@ import type { DatabaseRows } from '../contracts/domain';
 
 import { assertReadOnly, assertSingleStatement, singleNumber } from './engine';
 
-/**
- * Les deux gardes d'instruction et la lecture d'un nombre : ce qui sépare une
- * condition d'alerte d'un client SQL, et un seuil comparable d'un `NaN`.
- */
+/** Les deux gardes d'instruction et la lecture d'un nombre. */
 
 function rows(columns: string[], values: (string | null)[][]): DatabaseRows {
     return { columns, rows: values, total: null, elapsedMs: 0 };

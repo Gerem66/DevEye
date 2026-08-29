@@ -5,24 +5,10 @@ import { api } from './api';
 import styles from './Osint.module.css';
 
 /**
- * Carte de la grille : combien de sondes sont opérationnelles, et combien de
- * clés fournisseurs restent à poser.
- *
- * Ne dépend **jamais** du mot de passe en cache, à la différence de l'ancienne
- * version (dernière cible cherchée, nombre de recherches récentes) : ces deux-là
- * exigeaient le coffre déverrouillé pour se déchiffrer, donc la vignette
- * changeait de contenu selon qu'on venait d'ouvrir la session ailleurs — un état
- * qui n'a rien à faire sur une carte d'accueil. `osint.keyList` ne rend qu'un
- * booléen par fournisseur (la clé elle-même ne sort jamais), donc les deux
- * comptes sont toujours les mêmes, verrouillé ou non.
- *
- * Les deux nombres répondent à deux questions différentes, d'où les montrer
- * tous les deux plutôt que d'en choisir un. Le compte de sondes part du
- * **registre des sondes** : la plupart (DNS, WHOIS, TLS, crt.sh…) ne demandent
- * aucune clé et répondent déjà à froid, donc il reste élevé même sur un espace
- * tout neuf — il ne dit pas « qu'est-ce qu'il me reste à poser ? ». C'est le
- * compte de clés qui répond à celle-là, sur le total des fournisseurs proposés
- * dans les réglages.
+ * Carte de la grille : sondes opérationnelles, et clés fournisseurs restant à
+ * poser. Ne dépend jamais du mot de passe en cache : `osint.keyList` ne rend
+ * qu'un booléen par fournisseur, donc les deux comptes sont les mêmes,
+ * verrouillé ou non.
  */
 export function OsintWidget(): React.ReactElement {
     const workspace = useActiveWorkspace();

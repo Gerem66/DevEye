@@ -21,23 +21,9 @@ import DatabaseList from './DatabaseList';
 import styles from './style.module.css';
 
 /**
- * Bases de données — celles de l'espace actif.
- *
- * Feature de premier rang, et non un onglet des Projets : une base appartient à
- * l'espace, plusieurs projets peuvent s'en servir, et certaines ne servent aucun
- * projet. Un projet ne fait qu'y **pointer**. C'est exactement la forme de la
- * feature Git, et pour les mêmes raisons.
- *
- * **Rien ne se connecte à l'ouverture.** La liste et la fiche lisent le dernier
- * relevé enregistré ; joindre un serveur demande un geste — « Tester »,
- * « Relever », « Charger les tables ». Le relevé périodique existe, mais il est
- * éteint par défaut et s'active base par base.
- *
- * Rien ici n'est chiffré à l'étage gardé : les bases vivent sous la clé de
- * l'espace, donc cette feature ne demande jamais de mot de passe.
- *
- * Depuis le rapatriement, l'espace vient de `useActiveWorkspace()` et non
- * d'une prop : la vue d'un module ne reçoit que `closeFeature`.
+ * Les bases de données de l'espace actif. Rien ne se connecte à l'ouverture :
+ * la liste et la fiche lisent le dernier relevé, joindre un serveur demande un
+ * geste. Rien n'est chiffré à l'étage gardé : jamais d'invite de mot de passe.
  */
 export function FeatureDatabase(_props: FeatureViewProps) {
     const permissions = useWorkspacePermissions();
@@ -54,10 +40,9 @@ export function FeatureDatabase(_props: FeatureViewProps) {
         usage: DatabaseUsage[];
         alerts: DatabaseAlert[];
     } | null>(null);
-    /** Le dernier essai de connexion, propre à la vue ouverte. */
     const [probe, setProbe] = useState<DatabaseProbe | null>(null);
 
-    /** Un essai de connexion est en cours — distinct de `busy`, qui grise tout. */
+    /** Un essai de connexion est en cours ; distinct de `busy`, qui grise tout. */
     const [testing, setTesting] = useState(false);
 
     const [dialog, setDialog] = useState<{ database: Database | null } | null>(null);
@@ -71,16 +56,9 @@ export function FeatureDatabase(_props: FeatureViewProps) {
     const pendingReload = useRef(false);
 
     /**
-     * Présence : « qui regarde quelle base ». Un seul déclarant par niveau —
-     * ce composant possède `l1`, et rien d'autre dans la feature n'y touche.
-     *
-     * Le même hook applique ce qu'une téléportation demande à ce niveau :
-     * rejoindre quelqu'un, ou venir de l'onglet d'un projet, ouvre la feature
-     * ET la base visée, au lieu de s'arrêter sur la liste. La cible est rendue
-     * tant qu'elle n'est pas atteinte, jamais consommée : on attend donc que la
-     * liste soit chargée (`ready`) pour vérifier que la base existe, et on
-     * l'ignore sans rien avoir à acquitter si elle a disparu. Le segment est
-     * l'identifiant nu de la base, comme pour toute fiche d'élément.
+     * Présence et téléportation au niveau `l1` (ce composant en est le seul
+     * déclarant). La cible est rendue tant qu'elle n'est pas atteinte : on
+     * attend la liste pour vérifier que la base existe, et on l'ignore sinon.
      */
     useLiveItemTarget('l1', openedId === null ? null : String(openedId), databases !== null, (value) => {
         if (value === null) {
@@ -104,8 +82,7 @@ export function FeatureDatabase(_props: FeatureViewProps) {
     }, []);
 
     useEffect(() => {
-        // Une relecture réordonne la liste sous le pointeur : jamais pendant un
-        // glissé. Elle est retenue et rejouée au relâchement.
+        // Jamais de relecture pendant un glissé : elle est rejouée au relâchement.
         if (dragging.current) {
             pendingReload.current = true;
             return;
@@ -126,8 +103,7 @@ export function FeatureDatabase(_props: FeatureViewProps) {
 
     const reorder = useCallback(
         (ids: number[]) => {
-            // On range d'abord localement, pour que la carte reste là où on l'a
-            // lâchée sans aller-retour, puis on persiste.
+            // Rangé localement d'abord, pour que la carte reste où on l'a lâchée.
             setDatabases((prev) => {
                 if (!prev) return prev;
                 const byId = new Map(prev.map((d) => [d.id, d]));
@@ -162,7 +138,6 @@ export function FeatureDatabase(_props: FeatureViewProps) {
         void loadOpened(openedId);
     }, [openedId, loadOpened, detailVersion]);
 
-    /** Essaie la connexion, sans rien enregistrer. */
     const test = async (databaseId: number) => {
         setBusy(true);
         setTesting(true);
@@ -178,15 +153,8 @@ export function FeatureDatabase(_props: FeatureViewProps) {
         }
     };
 
-    /**
-     * Relève l'inventaire — le même chemin que l'ordonnanceur, alertes comprises.
-     *
-     * **Ne touche pas à `probe`** : le résultat d'un relevé s'écrit dans le
-     * bandeau « État / Temps de réponse / … » juste en dessous, et le redire en
-     * une phrase au-dessus ne ferait que doubler la même information. La phrase
-     * de connexion est réservée aux essais, qui n'ont, eux, aucun autre endroit
-     * où s'afficher.
-     */
+    // Ne touche pas à `probe` : le résultat d'un relevé s'écrit dans le
+    // bandeau d'état, la phrase de connexion est réservée aux essais.
     const inspect = async (databaseId: number) => {
         setBusy(true);
         try {
@@ -213,14 +181,6 @@ export function FeatureDatabase(_props: FeatureViewProps) {
         }
     };
 
-    /**
-     * Ouvre un projet qui utilise cette base, dans la feature Projets.
-     *
-     * Par la **téléportation**, comme la feature Git : `openFeature` écrit le
-     * chemin `view:projects l1:12`, qui dit exactement « ouvre Projets, et
-     * dedans, ce projet-là », et l'accueil sait déjà l'appliquer, garde d'accès
-     * comprise. Le module n'écrit jamais le chemin lui-même.
-     */
     const openProject = (projectId: number) => {
         openFeature('projects', projectId);
     };
@@ -270,13 +230,8 @@ export function FeatureDatabase(_props: FeatureViewProps) {
                     )}
                 </div>
                 <div className={styles.actions}>
-                    {/* Réglage d'espace, pas d'une base : les alertes de
-                        toutes les bases partent sur les mêmes canaux, d'où
-                        sa place en tête de la feature. Hors du `canWrite` :
-                        le bouton se garde de lui-même (aucune section
-                        accessible ⇒ il ne s'affiche pas), et un lecteur a le
-                        droit de voir où partent les alertes, comme dans les
-                        autres features. */}
+                    {/* Hors du `canWrite` : le bouton se garde lui-même, et un
+                        lecteur a le droit de voir où partent les alertes. */}
                     <FeatureSettingsButton scope={{ kind: 'feature', feature: 'database' }} />
                     {canWrite && (
                         <Button icon='add' onClick={() => setDialog({ database: null })}>
@@ -316,8 +271,7 @@ export function FeatureDatabase(_props: FeatureViewProps) {
                 onSaved={(databaseId) => {
                     setDialog(null);
                     invalidate('database.list', 'database.count');
-                    // Une base qu'on vient d'ajouter s'ouvre : c'est ce qu'on
-                    // voulait faire, et son premier test est à un clic.
+                    // Une base qu'on vient d'ajouter s'ouvre.
                     setOpenedId(databaseId);
                 }}
                 onRemove={canWrite && dialog?.database ? () => void remove(dialog.database!.id) : undefined}

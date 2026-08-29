@@ -16,7 +16,7 @@ import { looksLikeBot, parseUserAgent } from './userAgent';
 /**
  * Les règles pures de l'ingestion : ce sont elles qui décident si deux visites
  * comptent pour la même page, et une erreur s'y traduirait par des statistiques
- * fausses plutôt que par une panne. Court, et sur les fonctions livrées.
+ * fausses plutôt que par une panne.
  */
 
 describe('normalizePath', () => {

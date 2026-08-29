@@ -9,59 +9,29 @@ interface RowDialogProps {
     open: boolean;
     databaseId: number;
     structure: DatabaseStructure;
-    /**
-     * La ligne modifiée, valeurs dans l'ordre de `columns` ; `null` = ajout.
-     * Sa clé primaire sert à la désigner, et n'est donc pas modifiable.
-     */
+    /** La ligne modifiée, valeurs dans l'ordre de `columns` ; `null` = ajout. */
     row: { columns: string[]; values: (string | null)[] } | null;
     onClose: () => void;
     onSaved: () => void;
 }
 
-/** Ce qu'un champ tient : une valeur, ou la marque explicite d'un `NULL`. */
 interface Field {
     value: string;
     isNull: boolean;
-    /**
-     * Le moteur s'en charge, et on le laisse faire.
-     *
-     * Vrai au départ pour toute colonne qu'il remplit seul — l'auto-incrément,
-     * l'horodatage par défaut. Le champ n'est alors pas envoyé du tout, ce qui
-     * n'est pas la même chose que d'envoyer une chaîne vide.
-     */
+    /** Laissée au moteur : le champ n'est pas envoyé du tout. */
     auto: boolean;
 }
 
-/** Une longue valeur mérite une zone multiligne plutôt qu'un champ d'une ligne. */
+/** Mérite une zone multiligne. */
 function isLongText(column: DatabaseColumn): boolean {
     return /text|json|blob|bytea|xml/i.test(column.type);
 }
 
 /**
- * Ajouter ou modifier une ligne.
- *
- * Un champ par colonne réelle de la table, dans l'ordre de la table : c'est la
- * seule disposition qui permette de retrouver une colonne sans la chercher, et
- * elle vient du serveur, pas d'une liste tenue à la main ici.
- *
- * ## `NULL` n'est pas la chaîne vide
- *
- * Les deux existent, et les confondre viderait une colonne au lieu de la laisser
- * nulle — ou l'inverse. Chaque colonne nullable porte donc sa case « NULL »,
- * qui grise le champ tant qu'elle est cochée.
- *
- * ## Les colonnes que le moteur remplit
- *
- * Identifiant auto-incrémenté, horodatage de création : elles sont **à leur
- * place**, dans l'ordre de la table, mais fermées — un bouton dit que le moteur
- * s'en charge, et l'ouvre si l'on veut malgré tout imposer une valeur. Elles
- * étaient auparavant retirées du formulaire, avec une phrase pour l'expliquer :
- * l'ordre des champs ne correspondait plus à celui de la table, et rien ne
- * permettait de forcer un identifiant lors d'une reprise de données. Ouvrir un
- * champ ne le rend pas obligatoire : laissé fermé, il n'est pas envoyé du tout.
- *
- * La clé primaire à la **modification** reste, elle, hors du formulaire : c'est
- * elle qui désigne la ligne qu'on est en train de changer.
+ * Ajouter ou modifier une ligne : un champ par colonne, dans l'ordre de la
+ * table. `NULL` a sa case, distincte de la chaîne vide. Une colonne que le
+ * moteur remplit reste à sa place, fermée, et s'ouvre si l'on veut imposer une
+ * valeur. À la modification, la clé primaire reste hors du formulaire.
  */
 export function RowDialog({ open, databaseId, structure, row, onClose, onSaved }: RowDialogProps) {
     const [fields, setFields] = useState<Record<string, Field>>({});
@@ -80,9 +50,8 @@ export function RowDialog({ open, databaseId, structure, row, onClose, onSaved }
             const auto = !editing && column.generated;
             next[column.name] = {
                 value: current ?? '',
-                // À l'ajout, une colonne nullable part sur `NULL` plutôt que sur
-                // une chaîne vide : c'est ce que fait le moteur sans nous. Une
-                // colonne qu'il remplit seul n'a, elle, aucun `NULL` à porter.
+                // À l'ajout, une colonne nullable part sur `NULL`, comme le
+                // ferait le moteur.
                 isNull: !auto && (current === null || (current === undefined && column.nullable)),
                 auto
             };
@@ -90,10 +59,9 @@ export function RowDialog({ open, databaseId, structure, row, onClose, onSaved }
         setFields(next);
     }, [open, structure, row, editing]);
 
-    /** Les colonnes qu'on peut réellement renseigner dans ce contexte. */
     const editable = structure.columns.filter((c) => !editing || !structure.primaryKey.includes(c.name));
 
-    /** Celles qui partiront vraiment : une colonne laissée au moteur n'y est pas. */
+    /** Une colonne laissée au moteur ne part pas. */
     const submitted = editable.filter((c) => !(fields[c.name]?.auto ?? false));
 
     const cellsOf = (columns: DatabaseColumn[]): DatabaseCell[] =>
@@ -129,9 +97,8 @@ export function RowDialog({ open, databaseId, structure, row, onClose, onSaved }
             }
             onSaved();
         } catch (e) {
-            // Le message du moteur passe tel quel : « champ obligatoire »,
-            // « doublon », « clé étrangère absente » sont des réponses utiles,
-            // bien plus qu'un « échec » générique.
+            // Le message du moteur passe tel quel : « doublon », « clé
+            // étrangère absente » sont des réponses utiles.
             setError(humanizeError(e, 'L’écriture a échoué.'));
         } finally {
             setBusy(false);
@@ -189,9 +156,6 @@ export function RowDialog({ open, databaseId, structure, row, onClose, onSaved }
                                 </span>
 
                                 {field.auto ? (
-                                    /* À la place du champ, et non à la place de
-                                       la ligne : la colonne garde son rang dans
-                                       la table, on voit juste qui la remplit. */
                                     <button
                                         type='button'
                                         className={styles.autoField}

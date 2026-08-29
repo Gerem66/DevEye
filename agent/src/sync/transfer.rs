@@ -48,8 +48,7 @@ pub const LOCKED_HINT: &str =
 
 /// `rename` avec réessais sur verrou. Sur Unix un rename ne bute jamais sur un
 /// fichier ouvert ; sous Windows si, et l'échec est presque toujours transitoire
-/// (sauvegarde d'un document en cours). Sans ces réessais, le fichier restait
-/// durablement divergent sur la machine Windows.
+/// (sauvegarde d'un document en cours).
 fn rename_with_retry(src: &Path, dest: &Path) -> Result<()> {
     let mut last = match std::fs::rename(src, dest) {
         Ok(()) => return Ok(()),
@@ -89,11 +88,10 @@ pub struct HeldPrefix {
 }
 
 /// Relit les `want` premiers octets d'un partiel pour reconstituer le SHA-256
-/// courant. `want` est le point de reprise DÉCIDÉ PAR LE SERVEUR : l'agent ne
-/// choisit pas, il obéit — c'est ce qui garantit que les deux côtés comptent
-/// les mêmes octets. Toute anomalie (partiel trop court, illisible) rend un
-/// préfixe VIDE : repartir de zéro ne coûte que du temps, alors que bâtir sur
-/// des octets douteux livrerait un fichier faux.
+/// courant. `want` est le point de reprise DÉCIDÉ PAR LE SERVEUR, ce qui garantit
+/// que les deux côtés comptent les mêmes octets. Toute anomalie (partiel trop
+/// court, illisible) rend un préfixe vide : repartir de zéro ne coûte que du
+/// temps, bâtir sur des octets douteux livrerait un fichier faux.
 pub fn resumable_prefix(tmp_path: &Path, want: u64) -> HeldPrefix {
     let empty = HeldPrefix {
         bytes: 0,
@@ -170,8 +168,6 @@ impl UploadThrottle {
     }
 }
 
-// ─── Push (upload vers le serveur) ──────────────────────────────────────────
-
 /// Lit un fichier local en chunks sur un thread dédié et les streame.
 pub fn spawn_push(
     op_id: String,
@@ -213,8 +209,8 @@ fn push(
     let mut hasher = Sha256::new();
     let mut size: u64 = 0;
     // Reprise : le serveur détient déjà `start_offset` octets vérifiables. On
-    // les relit quand même EN LOCAL pour reconstituer le hash — c'est de l'I/O
-    // disque, pas du réseau, et ça garde la vérification finale exacte.
+    // les relit quand même en local pour reconstituer le hash (I/O disque, pas
+    // réseau), ce qui garde la vérification finale exacte.
     if start_offset > 0 && start_offset <= meta.len() {
         let mut buf = vec![0u8; PUSH_CHUNK];
         while size < start_offset {
@@ -268,8 +264,6 @@ fn push(
     Ok(())
 }
 
-// ─── Apply (download depuis le serveur, install atomique) ───────────────────
-
 /// Un download en cours d'installation (chunks séquentiels, vérifiés à la fin).
 struct ApplyState {
     file: std::fs::File,
@@ -285,14 +279,13 @@ struct ApplyState {
 }
 
 /// Installe les downloads chunk par chunk. Les frames d'une même op arrivent
-/// séquentiellement (traitées inline par la boucle) — pas de course possible.
+/// séquentiellement (traitées inline par la boucle) : pas de course possible.
 #[derive(Default)]
 pub struct Applier {
     ops: HashMap<String, ApplyState>,
-    /// Cache de scan par partage, mémorisé le temps d'une session de synchro.
-    /// Le relire à chaque fichier installé revenait à parser tout le JSON une
-    /// fois par fichier — rédhibitoire sur un gros partage. Invalidé au début
-    /// de chaque scan (`SyncManager::start_scan`), qui est justement ce qui
+    /// Cache de scan par partage, mémorisé le temps d'une session de synchro
+    /// (le relire par fichier installé serait rédhibitoire sur un gros partage).
+    /// Invalidé au début de chaque scan (`SyncManager::start_scan`), qui
     /// réécrit le fichier.
     caches: HashMap<i64, IndexCache>,
 }
@@ -374,15 +367,11 @@ impl Applier {
                 bail!("premier chunk inattendu (seq {seq})");
             }
             // Temporaire nommé par HASH et non par `opId` : c'est ce qui permet
-            // de le retrouver au cycle suivant et de reprendre. `sync.applyStart`
-            // a déjà annoncé au serveur combien d'octets valides s'y trouvent, et
-            // ce qui suit se contente d'y ajouter la suite.
+            // de le retrouver au cycle suivant et de reprendre.
             let tmp_path = partial_path(root, expected_hash)?;
-            // `resume_from` vient du SERVEUR, qui l'a décidé à partir de ce que
-            // l'agent avait annoncé. On s'y conforme au lieu de relire notre
-            // propre taille : si les deux ne sont pas d'accord (le serveur a pu
-            // décider de repartir de zéro), c'est le serveur qui a raison — il
-            // sait ce qu'il envoie. Le temporaire est tronqué en conséquence.
+            // `resume_from` vient du SERVEUR : on s'y conforme au lieu de relire
+            // notre propre taille (il a pu décider de repartir de zéro), et le
+            // temporaire est tronqué en conséquence.
             let held = resumable_prefix(&tmp_path, resume_from);
             let mut file = std::fs::OpenOptions::new()
                 .create(true)
@@ -439,12 +428,10 @@ impl Applier {
 
         let dest = safe_join(&state.root, &state.rel_path)?;
 
-        // Garde anti-écrasement : si la cible existe et a changé depuis le scan
-        // qui a mené à ce download (taille/mtime ≠ cache d'index), une modif
-        // locale non encore synchronisée serait perdue. On refuse l'install : le
-        // prochain scan verra cette divergence et la traitera en conflit (le
-        // perdant sera archivé côté serveur — l'invariant anti-perte tient).
-        // Même critère de fraîcheur que le scanner (size+mtime).
+        // Garde anti-écrasement : si la cible a changé depuis le scan qui a mené
+        // à ce download (taille/mtime ≠ cache d'index), une modif locale non
+        // synchronisée serait perdue. On refuse l'install ; le prochain scan
+        // traitera la divergence en conflit, le perdant archivé côté serveur.
         if let Ok(meta) = std::fs::symlink_metadata(&dest) {
             if meta.is_file() {
                 let fresh = self
@@ -494,8 +481,6 @@ impl Applier {
     }
 }
 
-// ─── Dossiers vides & copies locales ─────────────────────────────────────────
-
 /// Applique les permissions Unix. Sans effet sous Windows, qui n'en a pas.
 #[cfg(unix)]
 fn apply_mode(path: &Path, mode: Option<u32>) {
@@ -508,18 +493,13 @@ fn apply_mode(path: &Path, mode: Option<u32>) {
 #[cfg(not(unix))]
 fn apply_mode(_path: &Path, _mode: Option<u32>) {}
 
-/// Rend un fichier installé au propriétaire du DOSSIER DU PARTAGE.
+/// Rend un fichier installé au propriétaire du dossier du partage.
 ///
-/// L'agent tourne le plus souvent en root (service système). Tout ce qu'il crée
-/// appartient donc à root — et l'utilisateur se retrouve avec, dans son propre
-/// dossier, des fichiers qu'il ne peut ni modifier ni supprimer. Un fichier
-/// simplement DÉPLACÉ garde son propriétaire, ce qui rend le symptôme sournois :
-/// seuls les fichiers réellement téléchargés basculent, et le dossier paraît
-/// sain jusqu'à ce qu'on bute sur l'un d'eux.
-///
-/// La racine du partage sert de référence : c'est elle qui dit à qui ce dossier
-/// appartient réellement. Best-effort — sans privilège, `chown` échoue, mais
-/// dans ce cas l'agent n'est pas root et le fichier a déjà le bon propriétaire.
+/// L'agent tourne le plus souvent en root : tout ce qu'il crée appartient à
+/// root, et l'utilisateur se retrouve avec des fichiers qu'il ne peut ni
+/// modifier ni supprimer dans son propre dossier. La racine du partage dit à
+/// qui le dossier appartient. Best-effort : sans privilège `chown` échoue, mais
+/// le fichier a alors déjà le bon propriétaire.
 #[cfg(unix)]
 fn adopt_owner(root: &Path, path: &Path) {
     use std::ffi::CString;
@@ -533,13 +513,13 @@ fn adopt_owner(root: &Path, path: &Path) {
         return;
     };
     if current.uid() == reference.uid() && current.gid() == reference.gid() {
-        return; // Déjà au bon propriétaire : rien à faire, et pas de syscall.
+        return;
     }
     let Ok(raw) = CString::new(path.as_os_str().as_bytes()) else {
         return;
     };
-    // `lchown` et non `chown` : ne jamais suivre un lien symbolique, même si le
-    // scan les ignore — on ne veut pas changer le propriétaire de sa cible.
+    // `lchown` et non `chown` : ne jamais suivre un lien symbolique, on ne veut
+    // pas changer le propriétaire de sa cible.
     unsafe {
         libc::lchown(raw.as_ptr(), reference.uid(), reference.gid());
     }
@@ -577,21 +557,18 @@ fn create_parents_owned(root: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Pose les métadonnées d'un chemin sans transférer un seul octet. Deux usages,
-/// volontairement réunis parce qu'ils font exactement le même travail :
+/// Pose les métadonnées d'un chemin sans transférer un seul octet. Deux usages :
 ///  - une entrée `dir` de l'index (dossier VIDE) : le dossier est créé ;
 ///  - un `chmod` seul sur un chemin déjà en place, fichier OU dossier.
 ///
-/// D'où l'ordre : si le chemin existe, on ne touche QUE le mode, quelle que soit
-/// sa nature. Ce n'est que s'il manque qu'on le crée comme dossier — un fichier
-/// absent, lui, arrive toujours par `applyChunk` ou `applyLocal`.
+/// Si le chemin existe, on ne touche QUE le mode, quelle que soit sa nature ;
+/// un fichier absent arrive toujours par `applyChunk` ou `applyLocal`.
 pub fn apply_dir(root: &Path, rel_path: &str, kind: &str, mode: Option<u32>) -> Result<()> {
     let dest = safe_join(root, rel_path)?;
     if std::fs::symlink_metadata(&dest).is_err() {
-        // Un `chmod` sur un FICHIER momentanément absent ne doit surtout pas
-        // faire naître un dossier à sa place : le planner écarterait ensuite ce
-        // chemin pour toujours en « conflit de nature ». On ne fait rien, et le
-        // prochain cycle téléchargera le fichier normalement.
+        // Un `chmod` sur un FICHIER momentanément absent ne doit pas faire
+        // naître un dossier à sa place : le planner écarterait ensuite ce chemin
+        // pour toujours en « conflit de nature ».
         if kind != "dir" {
             return Ok(());
         }
@@ -658,10 +635,10 @@ fn uuid_like(rel_path: &str, mtime: i64) -> String {
 /// Renomme un fichier sur place : un déplacement, pas une copie suivie d'une
 /// suppression.
 ///
-/// Le hash de la source est VÉRIFIÉ d'abord — sans quoi un fichier modifié
-/// entre le scan et l'ordre serait déplacé sous un nom que le serveur croit
-/// porter un autre contenu. En cas de doute on refuse, et le serveur retombe
-/// sur le chemin ordinaire (téléchargement puis corbeille), qui reste sûr.
+/// Le hash de la source est VÉRIFIÉ d'abord, sans quoi un fichier modifié entre
+/// le scan et l'ordre serait déplacé sous un nom que le serveur croit porter un
+/// autre contenu. En cas de doute on refuse, et le serveur retombe sur le
+/// chemin ordinaire (téléchargement puis corbeille).
 #[allow(clippy::too_many_arguments)]
 pub fn move_file(
     root: &Path,
@@ -701,8 +678,6 @@ pub fn move_file(
     Ok(())
 }
 
-// ─── Corbeille locale ────────────────────────────────────────────────────────
-
 /// Déplace un fichier vers `.deveye-trash/<horodatage>/<relPath>` (jamais unlink).
 pub fn delete_to_trash(root: &Path, rel_path: &str) -> Result<()> {
     let src = safe_join(root, rel_path)?;
@@ -725,12 +700,10 @@ pub fn delete_to_trash(root: &Path, rel_path: &str) -> Result<()> {
     Ok(())
 }
 
-/// Retire les dossiers devenus vides en remontant vers la racine du partage.
-/// Sans ça, supprimer le dernier fichier d'une arborescence laissait la coquille
-/// de dossiers chez tous les pairs alors qu'elle a disparu à la source : les
-/// dossiers n'auraient plus été identiques. `remove_dir` échoue (et arrête la
-/// remontée) dès qu'un dossier n'est pas vide, ce qui est exactement la garde
-/// voulue. La racine elle-même n'est jamais touchée.
+/// Retire les dossiers devenus vides en remontant vers la racine du partage,
+/// sans quoi supprimer le dernier fichier d'une arborescence laisserait sa
+/// coquille chez tous les pairs. `remove_dir` échoue (et arrête la remontée)
+/// dès qu'un dossier n'est pas vide. La racine elle-même n'est jamais touchée.
 fn prune_empty_parents(root: &Path, from: &Path) {
     let mut current = from.parent();
     while let Some(dir) = current {
@@ -826,8 +799,7 @@ mod tests {
         std::fs::write(&path, b"bonjour tout le monde").unwrap();
 
         // Le serveur décide de reprendre à 7 : on ne relit QUE ces 7 octets,
-        // même si le temporaire en contient davantage. Les deux côtés comptent
-        // ainsi rigoureusement les mêmes octets.
+        // même si le temporaire en contient davantage.
         let held = resumable_prefix(&path, 7);
         assert_eq!(held.bytes, 7);
         let expected = format!("{:x}", Sha256::digest(b"bonjour"));
@@ -843,9 +815,8 @@ mod tests {
 
     #[test]
     fn created_parents_stay_under_the_share_root() {
-        // `create_parents_owned` doit créer l'arborescence manquante ET ne
-        // jamais remonter au-dessus de la racine du partage (sans quoi un
-        // `chown` toucherait des dossiers qui ne nous appartiennent pas).
+        // Créer l'arborescence manquante sans jamais remonter au-dessus de la
+        // racine du partage (un `chown` toucherait des dossiers étrangers).
         let root = std::env::temp_dir().join(format!("deveye-parents-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
 
@@ -865,9 +836,6 @@ mod tests {
 
     #[test]
     fn apply_dir_never_creates_a_directory_for_a_missing_file() {
-        // Un `chmod` sur un fichier momentanément absent ne doit PAS faire naître
-        // un dossier : le planner écarterait ensuite ce chemin pour toujours en
-        // « conflit de nature ».
         let root = std::env::temp_dir().join(format!("deveye-applydir-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
 

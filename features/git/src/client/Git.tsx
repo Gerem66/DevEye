@@ -22,28 +22,20 @@ import RepoList from './RepoList';
 import styles from './style.module.css';
 
 /**
- * Cadence du sondage d'avancement de la liste.
- *
- * La commande sondée ne lit qu'une table en mémoire du service : ni requête, ni
- * déchiffrement. À ce prix-là, une seconde et demie donne une barre qui avance
- * visiblement sans rien coûter — même cadence, et même raison, que celle d'une
- * synchro mail.
+ * Cadence du sondage d'avancement de la liste. La commande sondée ne lit qu'une
+ * table en mémoire du service, ni requête ni déchiffrement : à ce prix-là, une
+ * seconde et demie donne une barre qui avance visiblement sans rien coûter.
  */
 const SYNC_POLL_MS = 1_500;
 
 /**
- * Git — les dépôts de l'espace actif.
+ * Les dépôts de l'espace actif.
  *
- * Feature de premier rang, et non un onglet des Projets : un dépôt appartient à
- * l'espace, plusieurs projets peuvent s'en servir, et certains ne servent aucun
- * projet du tout. Un projet ne fait qu'y **pointer**.
+ * Feature de premier rang et non un onglet des Projets : un dépôt appartient à
+ * l'espace, plusieurs projets peuvent s'en servir, et certains n'en servent aucun.
  *
  * Rien ici n'est chiffré à l'étage gardé : le dépôt et son cache vivent sous la
  * clé de l'espace, donc cette feature ne demande jamais de mot de passe.
- *
- * Depuis le rapatriement, l'espace vient de `useActiveWorkspace()` et ses
- * membres de `useWorkspaceMembers()`, non d'une prop : la vue d'un module ne
- * reçoit que `closeFeature`.
  */
 export function FeatureGit(_props: FeatureViewProps) {
     const permissions = useWorkspacePermissions();
@@ -64,13 +56,9 @@ export function FeatureGit(_props: FeatureViewProps) {
     const [busy, setBusy] = useState(false);
 
     /**
-     * Les synchronisations en cours, par dépôt.
-     *
-     * Sondées et non diffusées : les six étapes d'un tour feraient sinon
-     * re-solliciter toute la liste six fois d'affilée chez **tous** les membres
-     * de l'espace. La commande ne lit qu'une table en mémoire du service —
-     * aucune requête, aucun déchiffrement — ce qui rend cette cadence
-     * négligeable. Même arbitrage que la barre d'une synchro mail (LIVE.md).
+     * Les synchronisations en cours, par dépôt. Sondées et non diffusées : les six
+     * étapes d'un tour feraient sinon re-solliciter toute la liste six fois
+     * d'affilée chez tous les membres de l'espace.
      */
     const [syncing, setSyncing] = useState<Map<number, GitRepoSyncState>>(new Map());
 
@@ -84,17 +72,11 @@ export function FeatureGit(_props: FeatureViewProps) {
     const pendingReload = useRef(false);
 
     /**
-     * Présence : « qui regarde quel dépôt ». Un seul déclarant par niveau —
-     * ce composant possède `l1`, et rien d'autre dans la feature n'y touche.
-     *
-     * Le même hook applique ce qu'une téléportation demande à ce niveau :
-     * rejoindre quelqu'un, ou venir de l'onglet d'un projet (« Ouvrir Git »),
-     * ouvre la feature ET le dépôt visé, au lieu de s'arrêter sur la liste.
-     * La cible est rendue tant qu'elle n'est pas atteinte, jamais consommée :
-     * on attend donc que la liste soit chargée (`ready`) pour vérifier que le
-     * dépôt existe, et on l'ignore sans rien avoir à acquitter s'il a disparu.
-     * Le segment est l'identifiant nu du dépôt, comme pour toute fiche
-     * d'élément.
+     * Présence : « qui regarde quel dépôt ». Un seul déclarant par niveau, ce
+     * composant possède `l1`. Le même hook applique une téléportation vers un
+     * dépôt : la cible est rendue tant qu'elle n'est pas atteinte, jamais
+     * consommée, d'où l'attente de la liste (`ready`) pour vérifier qu'il existe
+     * et l'ignorer s'il a disparu.
      */
     useLiveItemTarget('l1', openedId === null ? null : String(openedId), repos !== null, (value) => {
         if (value === null) {
@@ -139,8 +121,8 @@ export function FeatureGit(_props: FeatureViewProps) {
         }
         setRepos(null);
         void reload();
-        // `listVersion` rejoue l'effet quand la ressource est invalidée — par
-        // notre propre écriture, ou par `live.changed` venu d'ailleurs.
+        // `listVersion` rejoue l'effet quand la ressource est invalidée, par notre
+        // propre écriture ou par `live.changed` venu d'ailleurs.
     }, [reload, workspaceId, listVersion]);
 
     const onDragStateChange = useCallback(
@@ -155,9 +137,9 @@ export function FeatureGit(_props: FeatureViewProps) {
     );
 
     /**
-     * Applique un dépôt : on range d'abord localement, pour que la carte reste
-     * là où on l'a lâchée sans aller-retour, puis on persiste. Un échec revient
-     * au serveur, seul détenteur de l'ordre réellement enregistré.
+     * Applique un ordre : on range d'abord localement, pour que la carte reste là
+     * où on l'a lâchée, puis on persiste. Un échec revient au serveur, seul
+     * détenteur de l'ordre réellement enregistré.
      */
     const reorder = useCallback(
         (ids: number[]) => {
@@ -228,8 +210,8 @@ export function FeatureGit(_props: FeatureViewProps) {
         setBusy(true);
         try {
             await api.send('git.repoSyncNow', { repoId });
-            // La vue du dépôt prend le relais : elle sonde l'avancement et pose
-            // son voile. Ici on ne fait que déclencher.
+            // La vue du dépôt prend le relais : elle sonde l'avancement et pose son
+            // voile ; ici on ne fait que déclencher.
             invalidate('git.repo');
             setError(null);
         } catch (e) {
@@ -254,15 +236,9 @@ export function FeatureGit(_props: FeatureViewProps) {
     };
 
     /**
-     * Ouvre un projet qui utilise ce dépôt, dans la feature Projets.
-     *
-     * Par la **téléportation** — le mécanisme que la présence utilise déjà pour
-     * « rejoindre quelqu'un » — plutôt que par un canal de navigation dédié :
-     * un chemin `view:projects l1:12` dit exactement « ouvre Projets, et
-     * dedans, ce projet-là », et l'accueil sait déjà l'appliquer, garde d'accès
-     * comprise. Écrire un second mécanisme pour le même besoin aurait été en
-     * maintenir deux. `openFeature` écrit le chemin ; le module ne l'écrit
-     * jamais lui-même.
+     * Ouvre un projet qui utilise ce dépôt, par la téléportation plutôt que par un
+     * canal de navigation dédié : l'accueil sait déjà appliquer un chemin, garde
+     * d'accès comprise. `openFeature` l'écrit ; le module ne l'écrit jamais.
      */
     const openProject = (projectId: number) => {
         openFeature('projects', projectId);
@@ -311,8 +287,7 @@ export function FeatureGit(_props: FeatureViewProps) {
                 <div className={styles.actions}>
                     {/* Les jetons sont une propriété de l'espace, pas d'un dépôt :
                         ils vivent dans Réglages → Sources, comme les sources de
-                        toute feature. Ils avaient leur propre bouton « Jetons
-                        GitHub », un endroit de plus à connaître. */}
+                        toute feature. */}
                     <FeatureSettingsButton scope={{ kind: 'feature', feature: 'git' }} />
                     {canWrite && (
                         <Button icon='add' onClick={() => setRepoDialog({ repo: null })}>

@@ -14,16 +14,9 @@ interface CategoryBarsProps {
 }
 
 /**
- * La répartition d'un sens, en barres horizontales.
- *
- * Des barres et non un camembert, pour trois raisons qui se cumulent: on compare
- * des longueurs bien mieux que des angles, les intitulés tiennent en clair à
- * côté de leur part au lieu de partir dans une légende, et une quinzaine de
- * catégories reste lisible là où un camembert devient une roue de couleurs.
- *
- * Au-delà de `limit` lignes, la queue est repliée dans « Autres »: une liste de
- * quarante barres dont trente pèsent moins de 1 % n'apprend rien et noie les
- * dix qui comptent.
+ * Des barres et non un camembert : on compare des longueurs mieux que des
+ * angles, et les intitulés tiennent à côté. Au-delà de `limit`, la queue est
+ * repliée dans « Autres ».
  */
 export function CategoryBars({ shares, categories, currency, limit = 8, onSelect }: CategoryBarsProps) {
     if (shares.length === 0) {

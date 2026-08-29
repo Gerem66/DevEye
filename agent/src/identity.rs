@@ -129,7 +129,7 @@ pub fn generate_keypair() -> Keypair {
     }
 }
 
-/// Reconstruct the signing key from its stored base64 seed (for future use).
+/// Reconstruct the signing key from its stored base64 seed.
 #[allow(dead_code)]
 pub fn load_signing_key(secret_b64: &str) -> Result<SigningKey> {
     let bytes = base64::engine::general_purpose::STANDARD

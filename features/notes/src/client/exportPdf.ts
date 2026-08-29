@@ -4,19 +4,17 @@ import { inlineToHtml } from './markdown';
 import { NOTE_COLOR_OPTIONS } from './noteColors';
 
 /**
- * Export a note to PDF, client-side, with its inline markdown fully rendered.
- *
- * The note is laid out as a clean, typographic document (elegant serif, roomy
- * margins, harmonious spacing) into a hidden iframe, then sent to the browser's
- * print dialog, which offers "Save as PDF". No dependency, real selectable
- * text, and the decrypted content never leaves the page (zero-knowledge intact).
+ * Export a note to PDF, client-side: the document is laid out in a hidden iframe
+ * and handed to the browser's print dialog, which offers "Save as PDF". No
+ * dependency, real selectable text, and the decrypted content never leaves the
+ * page.
  */
 
 function escapeHtml(s: string): string {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-/** Render an inline string to HTML, keeping in-block line breaks. */
+/** Inline markdown to HTML, in-block line breaks kept. */
 function lineHtml(text: string): string {
     return inlineToHtml(text).replace(/\n/g, '<br/>');
 }
@@ -27,17 +25,15 @@ function markerStyle(color?: NoteColor): string {
 }
 
 /**
- * The ink of the printed page: white paper, so its own tokens rather than the
- * dark theme's. Declared next to the note palette in `style.module.css`
- * (`--note-print-<name>`), the single source of every colour this file uses.
+ * The ink of a printed page is white paper's, not the dark theme's. Declared as
+ * `--note-print-<name>` next to the note palette in `style.module.css`.
  */
 const PRINT_TOKENS = ['ink', 'muted', 'faint', 'meta', 'rule', 'rule-soft'] as const;
 
 /**
- * `:root` block re-declaring the note colour tokens and the print ink tokens
- * with their live computed values, so `var(--note-<name>)` resolves inside the
- * isolated print document (which inherits none of the app's stylesheets).
- * Keeps `style.module.css` the single source.
+ * The print document inherits none of the app's stylesheets, so the note and ink
+ * tokens are re-declared there with their live computed values; `style.module.css`
+ * stays the single source.
  */
 function noteColorVarsCss(): string {
     const root = getComputedStyle(document.documentElement);
@@ -51,7 +47,7 @@ function noteColorVarsCss(): string {
     return `:root{${vars}}`;
 }
 
-/** Turn the typed blocks into the document body, grouping consecutive lists. */
+/** The document body, consecutive list items grouped into one list. */
 function blocksToHtml(blocks: NoteBlock[]): string {
     let html = '';
     let i = 0;
@@ -109,15 +105,13 @@ function blocksToHtml(blocks: NoteBlock[]): string {
     return html;
 }
 
-/* A clean, modern sans-serif stack: system UI fonts, no web download needed. */
+/* System UI fonts, so nothing has to be downloaded. */
 const SANS =
     "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif";
 
 /**
- * The print-only stylesheet: a modern sans-serif, generous margins and a sober
- * vertical rhythm. A discreet page number sits bottom-centre, the most neutral,
- * widely accepted convention (supported via CSS page margin boxes in Chrome 131+
- * / Safari 18.2+). The document carries no URL/site chrome, only its own title.
+ * The bottom-centre page number relies on CSS page margin boxes (Chrome 131+,
+ * Safari 18.2+); the document carries no URL or site chrome, only its title.
  */
 const STYLE = `
     @page {

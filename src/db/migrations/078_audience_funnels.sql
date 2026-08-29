@@ -1,23 +1,13 @@
--- Les entonnoirs : ce qui rend lisible « où les gens décrochent ».
---
--- ## Un entonnoir ne collecte rien
---
--- C'est une **lecture** des événements déjà là, jamais une seconde collecte.
--- Le site pose des signaux nommés (`deveye.event('etape-email')`), et les
--- marches se composent ici, après coup. Conséquence directe et voulue : mesurer
--- un autre parcours ne demande aucun redéploiement du site suivi, et supprimer
--- un entonnoir ne perd aucune donnée — le recréer à l'identique rendrait
--- exactement les mêmes chiffres.
---
--- C'est aussi pourquoi ces deux tables sont minuscules et ne grandissent qu'à
--- la main : quelques dizaines de lignes par site, là où `audience_events` en
--- compte des millions.
+-- Les entonnoirs : une lecture des événements déjà là, jamais une seconde
+-- collecte. Le site pose des signaux nommés (`deveye.event('etape-email')`),
+-- les marches se composent ici, après coup : mesurer un autre parcours ne
+-- demande aucun redéploiement, et supprimer un entonnoir ne perd aucune donnée.
 
 CREATE TABLE IF NOT EXISTS audience_funnels (
     id         INT AUTO_INCREMENT PRIMARY KEY,
     site_id    INT      NOT NULL,
     -- 16 premiers caractères du sha256 du nom en minuscules : porte l'unicité
-    -- que `content` chiffré ne peut pas porter. Même motif que partout ailleurs.
+    -- que `content` chiffré ne peut pas porter.
     name_ref   CHAR(16) NOT NULL,
     sort_order INT      NOT NULL DEFAULT 0,
     -- { name } chiffré, étage ouvert.
@@ -29,19 +19,11 @@ CREATE TABLE IF NOT EXISTS audience_funnels (
 );
 
 -- Une marche : sa place dans l'ordre, ce qu'elle reconnaît, et son libellé.
---
--- `label_ref` est le **même condensé** que celui d'`audience_labels` : c'est ce
--- qui permet de retrouver l'identifiant du libellé sans jamais déchiffrer pour
--- comparer, et donc de compter en SQL sur des entiers.
---
--- Une marche peut parfaitement ne correspondre à **aucun** libellé : c'est le
--- cas d'un événement qu'on a prévu mais que le site n'a encore jamais posé. Elle
--- compte alors zéro, ce qui est la vérité — et non une erreur à signaler.
---
--- `site_id` est dupliqué depuis l'entonnoir, et c'est délibéré : la requête de
--- rétention joint les marches aux libellés du site, et remonter par
--- `audience_funnels` à chaque fois n'aurait servi qu'à écrire une jointure de
--- plus dans la seule requête du module qu'on veut garder lisible.
+-- `label_ref` est le même condensé que celui d'`audience_labels` : l'identifiant
+-- du libellé se retrouve sans déchiffrer. Une marche peut ne correspondre à
+-- aucun libellé (événement prévu, jamais posé) : elle compte alors zéro.
+-- `site_id` est dupliqué depuis l'entonnoir : la requête de rétention joint les
+-- marches aux libellés du site sans remonter par `audience_funnels`.
 CREATE TABLE IF NOT EXISTS audience_funnel_steps (
     id         INT AUTO_INCREMENT PRIMARY KEY,
     funnel_id  INT         NOT NULL,

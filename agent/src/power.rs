@@ -1,16 +1,13 @@
 //! System power actions: shutdown, reboot, suspend, hibernate and screen lock.
 //!
-//! Cross-platform and **best-effort**: each action shells out to the platform's
-//! native mechanism. Anything the host can't do (hibernate without swap, lock on a
-//! headless server, an action that needs privileges the agent lacks) surfaces as an
-//! `Err` the server relays to the UI — we never fail silently or pretend success.
+//! Cross-platform and best-effort: each action shells out to the platform's
+//! native mechanism. Anything the host can't do surfaces as an `Err` the server
+//! relays to the UI; never a silent failure or a fake success.
 //!
-//! Shutdown / reboot take the machine (and therefore this process) down moments
-//! after the command returns. L'ordre réel est donc : exécuter — il faut savoir
-//! si ça a échoué pour le dire —, puis envoyer `agent.powerResult` **et** une
-//! trame de fermeture, puis laisser un court instant au serveur pour les
-//! recevoir. Cela tient parce que `systemctl poweroff` rend la main dès que
-//! systemd a pris l'ordre en compte.
+//! Shutdown / reboot take the machine (and this process) down moments after the
+//! command returns. L'ordre réel est donc : exécuter (il faut savoir si ça a
+//! échoué), envoyer `agent.powerResult` et une trame de fermeture, puis laisser
+//! un court instant au serveur pour les recevoir.
 
 use std::process::Command;
 
@@ -48,11 +45,10 @@ fn run(program: &str, args: &[&str]) -> Result<()> {
 
 /// Try each candidate in order, returning on the first success and the last error
 /// if all fail. Lets us prefer logind (`systemctl`) and fall back to the classic
-/// tools without giving up on the first missing binary.
+/// tools.
 ///
-/// Linux seul : macOS choisit désormais sa commande sur le privilège plutôt que
-/// d'enchaîner les tentatives — un `osascript` qui rend 0 sans rien faire n'est
-/// pas un échec dont on peut se rattraper.
+/// Linux seul : sur macOS un `osascript` qui rend 0 sans rien faire n'est pas un
+/// échec dont on peut se rattraper, donc pas d'enchaînement.
 #[cfg(target_os = "linux")]
 fn run_first(candidates: &[(&str, &[&str])]) -> Result<()> {
     let mut last: Option<anyhow::Error> = None;
@@ -65,7 +61,6 @@ fn run_first(candidates: &[(&str, &[&str])]) -> Result<()> {
     Err(last.unwrap_or_else(|| anyhow::anyhow!("aucune commande disponible")))
 }
 
-// ───────────────────────────────── Linux ──────────────────────────────────
 #[cfg(target_os = "linux")]
 fn shutdown() -> Result<()> {
     run_first(&[("systemctl", &["poweroff"]), ("shutdown", &["-h", "now"])])
@@ -84,31 +79,20 @@ fn hibernate() -> Result<()> {
 }
 #[cfg(target_os = "linux")]
 fn lock() -> Result<()> {
-    // `lock-sessions` verrouille *toutes* les sessions et demande le privilège ;
-    // un agent utilisateur ne l'a pas, et échouait là où verrouiller sa propre
-    // session aurait suffi. `lock-session` sans argument vise celle de l'appelant.
+    // `lock-sessions` verrouille toutes les sessions et demande le privilège ;
+    // `lock-session` sans argument vise celle de l'appelant.
     run_first(&[
         ("loginctl", &["lock-sessions"]),
         ("loginctl", &["lock-session"]),
     ])
 }
 
-// ───────────────────────────────── macOS ──────────────────────────────────
-//
-// L'ordre des candidats compte, et il était inversé.
-//
-// `osascript ... to shut down` envoie un Apple Event à System Events. Hors
-// session graphique — un agent lancé en démon launchd — l'événement n'atteint
-// personne ; dans une session, il déclenche l'extinction *interactive*, qu'une
-// application refusant de quitter suffit à bloquer. Dans les deux cas la
-// commande rend **0**, donc `run_first` s'arrêtait sur ce premier « succès » et
-// n'essayait jamais `shutdown`. De l'extérieur : un bouton sans effet, et aucune
-// erreur — alors que « Verrouiller » et « Veille », qui passent par `pmset`,
-// fonctionnaient.
-//
-// `shutdown(8)` est la voie autoritaire, non interactive… et réservée à root.
-// On la prend donc en premier quand on en a le droit, et l'Apple Event ne reste
-// que le recours d'un agent non privilégié, seul cas où il a une chance d'agir.
+// `osascript ... to shut down` envoie un Apple Event à System Events : hors
+// session graphique (démon launchd) il n'atteint personne, et dans une session
+// il déclenche l'extinction interactive, qu'une application refusant de quitter
+// bloque. Dans les deux cas la commande rend 0. `shutdown(8)` est la voie
+// autoritaire mais réservée à root : on la prend quand on en a le droit, et
+// l'Apple Event reste le recours d'un agent non privilégié.
 #[cfg(target_os = "macos")]
 fn shutdown() -> Result<()> {
     if crate::report::is_privileged() {
@@ -139,13 +123,11 @@ fn hibernate() -> Result<()> {
 }
 #[cfg(target_os = "macos")]
 fn lock() -> Result<()> {
-    // The old `CGSession -suspend` helper was removed from recent macOS. Sleeping
-    // the display is the modern, daemon-friendly equivalent and locks the screen
-    // when "require password after sleep" is set (the default).
+    // `CGSession -suspend` no longer exists on recent macOS. Sleeping the display
+    // locks the screen when "require password after sleep" is set (the default).
     run("pmset", &["displaysleepnow"])
 }
 
-// ──────────────────────────────── Windows ─────────────────────────────────
 #[cfg(target_os = "windows")]
 fn shutdown() -> Result<()> {
     run("shutdown", &["/s", "/t", "0"])

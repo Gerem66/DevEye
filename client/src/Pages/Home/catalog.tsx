@@ -4,13 +4,8 @@ import type { HomeFeatureId } from '@deveye/types';
 import type { FeatureProps } from '@/Features/types';
 import { clientModules } from '@/sdk/registry';
 
-/**
- * Le rayon du marché où la fonctionnalité est rangée.
- *
- * Un seul rangement, porté par l'entrée elle-même : c'est ce qui fait que le
- * sélecteur d'ajout et la fiche « À propos » racontent la même chose sans table
- * de correspondance à tenir à jour à côté.
- */
+/** Le rayon du marché, porté par l'entrée elle-même : le marché et l'« À
+ *  propos » racontent la même chose sans table à côté. */
 export type FeatureCategory = 'supervision' | 'security' | 'dev' | 'work' | 'daily' | 'analysis';
 
 export const FEATURE_CATEGORY_LABEL: Record<FeatureCategory, string> = {
@@ -35,12 +30,8 @@ export const FEATURE_CATEGORY_ICON: Record<FeatureCategory, string> = {
 export const FEATURE_CATEGORIES: FeatureCategory[] = ['work', 'dev', 'supervision', 'security', 'analysis', 'daily'];
 
 /**
- * Ce qui relie une fonctionnalité à une autre.
- *
- * Une vraie liaison de données, pas un voisinage thématique : un projet pointe
- * ses dépôts, ses bases, ses cibles de déploiement ; un émetteur d'alertes
- * passe par un compte Mail. C'est ce que la fiche « À propos » donne à lire,
- * pour qu'on sache avant d'ajouter une carte ce qu'elle va pouvoir raccrocher.
+ * Une vraie liaison de données (un projet pointe ses dépôts, un émetteur passe
+ * par Mail), pas un voisinage thématique ; lue par la fiche « À propos ».
  */
 export interface FeatureLink {
     to: HomeFeatureId;
@@ -82,10 +73,8 @@ export interface FeatureCatalogEntry {
     compact?: boolean;
 }
 
-/**
- * L'adaptateur de vue d'un module : sa `Full` ne reçoit que `closeFeature`,
- * tout le reste passe par les hooks du SDK, comme chez les natives modernes.
- */
+/** L'adaptateur de vue d'un module : sa `Full` ne reçoit que `closeFeature`,
+ *  le reste passe par les hooks du SDK. */
 function moduleFull(Full: ComponentType<{ closeFeature(): void }>): ComponentType<FeatureProps> {
     return function ModuleFull(props: FeatureProps) {
         return <Full closeFeature={props.closeFeature} />;
@@ -93,17 +82,11 @@ function moduleFull(Full: ComponentType<{ closeFeature(): void }>): ComponentTyp
 }
 
 /**
- * Le catalogue complet : les modules installés, projetés depuis leur manifest
- * + leur entrée client. Plus aucune native depuis le rapatriement des
- * Appareils, la seizième : la grille, le marché d'ajout et l'« À propos »
- * lisent le même contrat pour toutes.
- *
- * PARESSEUX, et c'est vital : figé au premier APPEL (toujours au rendu, donc
- * après l'enregistrement des modules), jamais à l'évaluation du module. Une
- * constante de portée module s'était fait piéger : le graphe d'imports de la
- * glue générée atteignait ce fichier via TopNavbar → usePresence AVANT que
- * `registerClientModules` n'ait tourné, et le catalogue se figeait sans les
- * modules : Météo disparaissait du marché d'ajout sans un bruit.
+ * Le catalogue complet, projeté depuis le manifest et l'entrée client des
+ * modules installés. PARESSEUX : figé au premier appel (au rendu, après
+ * l'enregistrement des modules), jamais à l'évaluation du module ; le graphe
+ * d'imports atteint ce fichier avant `registerClientModules`, et une constante
+ * de portée module se figerait sans les modules.
  */
 let MERGED: FeatureCatalogEntry[] | null = null;
 
@@ -112,15 +95,13 @@ export function featureCatalog(): readonly FeatureCatalogEntry[] {
         MERGED = [
             ...clientModules().map(({ manifest, client }): FeatureCatalogEntry => ({
                 // Un module est externe par construction (vérifié à
-                // l'enregistrement), et un id externe est une tuile d'accueil
-                // valide depuis l'élargissement.
+                // l'enregistrement), et un id externe est une tuile d'accueil valide.
                 id: manifest.id as HomeFeatureId,
                 title: manifest.label,
                 icon: manifest.icon,
                 description: manifest.description,
                 category: manifest.category,
-                // Les liaisons déclarées par le manifest : la fiche « À propos »
-                // les lit dans les deux sens, comme celles des natives.
+                // Les liaisons du manifest, lues dans les deux sens par l'« À propos ».
                 links: manifest.links?.map((link) => ({ to: link.to as HomeFeatureId, what: link.what })),
                 WidgetContent: client.Widget,
                 FullComponent: moduleFull(client.Full),
@@ -139,12 +120,8 @@ export function featureCatalogEntry(id: HomeFeatureId): FeatureCatalogEntry | un
 }
 
 /**
- * Le contenu d'un dossier, dans l'ordre où il a été rangé.
- *
- * Un identifiant inconnu (disposition écrite par une version plus récente, ou
- * module retiré depuis) est ignoré plutôt que de faire tomber l'écran : un
- * dossier peut donc paraître vide alors qu'il ne l'est pas dans la
- * disposition, le même choix que pour la grille.
+ * Le contenu d'un dossier, dans l'ordre. Un id inconnu (disposition plus
+ * récente, module retiré) est ignoré plutôt que de faire tomber l'écran.
  */
 export function folderFeatures(items: readonly HomeFeatureId[]): FeatureCatalogEntry[] {
     return items
@@ -153,14 +130,9 @@ export function folderFeatures(items: readonly HomeFeatureId[]): FeatureCatalogE
 }
 
 /**
- * Les liaisons d'une fonctionnalité, **dans les deux sens**.
- *
- * Une liaison n'est déclarée qu'une fois, du côté qui la porte (un projet
- * pointe ses dépôts, pas l'inverse). La lire dans les deux sens est pourtant ce
- * qu'on attend d'une fiche : posté sur Git, on veut savoir que les projets s'y
- * raccrochent, sans avoir à parcourir toutes les autres entrées pour s'en
- * assurer. `outgoing` distingue les deux, parce que la phrase ne se lit pas
- * pareil selon le bout où l'on se trouve.
+ * Une liaison d'une fonctionnalité, dans un sens ou dans l'autre : elle n'est
+ * déclarée que du côté qui la porte, mais la fiche la lit des deux bouts.
+ * `outgoing` dit lequel, la phrase ne se lisant pas pareil.
  */
 export interface FeatureRelation {
     entry: FeatureCatalogEntry;

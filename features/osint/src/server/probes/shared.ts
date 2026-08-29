@@ -13,9 +13,7 @@ import {
     type OsintTone
 } from '../../contracts/domain';
 
-// Réexportés pour que chaque sonde n'ait qu'un seul import à écrire : elles
-// travaillent toutes avec ces types-là, et les faire venir de deux endroits
-// n'apporterait rien.
+// Réexportés pour que chaque sonde n'ait qu'un seul import à écrire.
 export type {
     OsintField,
     OsintLink,
@@ -30,19 +28,16 @@ export type {
 };
 
 /**
- * Socle des sondes OSINT.
- *
  * Une sonde est un {@link OsintProbeAdapter} : elle dit à quelles natures de
- * cible elle s'applique, et rend un {@link OsintProbeResult}. Elle ne connaît ni
- * la base, ni la socket, ni le client — d'où le fait qu'en ajouter une ne coûte
- * qu'un fichier.
+ * cible elle s'applique et rend un {@link OsintProbeResult}. Elle ne connaît ni
+ * la base, ni la socket, ni le client.
  */
 
 export interface OsintProbeContext {
     target: OsintTarget;
     /**
-     * La clé du fournisseur, déjà déchiffrée, ou `null` si elle n'est pas posée.
-     * Une sonde qui en exige une rend alors `skipped` — jamais une erreur.
+     * La clé du fournisseur, déjà déchiffrée, ou `null`. Une sonde qui en exige
+     * une rend alors `skipped`, jamais une erreur.
      */
     key: string | null;
 }
@@ -52,7 +47,7 @@ export interface OsintProbeAdapter {
     appliesTo: readonly OsintTargetKind[];
     /** Fournisseur dont la clé débloque (ou enrichit) cette sonde. */
     provider?: OsintProvider;
-    /** Sans clé, la sonde ne peut rien faire du tout — par opposition à un simple enrichissement. */
+    /** Sans clé, la sonde ne peut rien faire (par opposition à un simple enrichissement). */
     requiresKey?: true;
     /** Combien de temps un résultat reste servi depuis le cache. */
     ttlMs?: number;
@@ -122,21 +117,11 @@ export function describeError(e: unknown): string {
 /* --------------------------------- Cache ---------------------------------- */
 
 /**
- * Cache TTL en mémoire des résultats de sonde.
- *
- * Une reconnaissance est répétitive par nature : on relance la même cible après
- * avoir lu une carte, on rouvre l'écran, on revient sur une entrée d'historique.
- * Sans cache, chacun de ces gestes re-sollicite les fournisseurs — et c'est
- * comme ça qu'on se fait limiter par crt.sh ou par un serveur WHOIS.
- *
- * Les données mises en cache sont **publiques** (un enregistrement DNS, un
- * certificat) : rien d'utilisateur ne transite ici. La clé est donc la cible
- * seule, sans le moindre élément d'identité de l'appelant — deux membres du même
- * espace qui interrogent le même domaine partagent légitimement la réponse.
- *
- * La clé d'API est **délibérément exclue** de la clé de cache, pour la même
- * raison que côté météo : elle authentifie l'appel, elle ne change pas la
- * réponse, et elle n'a rien à faire dans un matériau de clé.
+ * Cache TTL en mémoire des résultats de sonde : sans lui, relancer la même cible
+ * re-sollicite les fournisseurs, et c'est comme ça qu'on se fait limiter par
+ * crt.sh ou un serveur WHOIS. Les données sont publiques, la clé est la cible
+ * seule ; la clé d'API en est exclue, elle authentifie l'appel sans changer la
+ * réponse.
  */
 const DEFAULT_TTL_MS = 15 * 60 * 1000;
 /** Plafond dur, pour qu'un processus de longue vie ne grandisse pas sans fin. */
@@ -182,7 +167,7 @@ export function writeCache(
     cache.set(cacheKey(probe, target), { result, expires: Date.now() + ttlMs });
 }
 
-/** Oublie tout ce qui est en cache pour cette cible — sert au « réessayer » forcé. */
+/** Oublie tout ce qui est en cache pour cette cible. */
 export function dropCache(target: OsintTarget): void {
     const suffix = `|${target.kind}|${target.value}`;
     for (const key of [...cache.keys()]) {
@@ -193,12 +178,9 @@ export function dropCache(target: OsintTarget): void {
 /* -------------------------------- Exécution ------------------------------- */
 
 /**
- * Exécute une sonde et normalise tout ce qui peut en sortir — y compris un jet.
- *
- * Une sonde qui échoue rend une carte en erreur, jamais une exception qui
- * remonterait au dispatcheur : sur un écran de reconnaissance, « ce fournisseur
- * n'a pas répondu » est un résultat comme un autre, et il ne doit pas emporter
- * les cinq autres cartes avec lui.
+ * Exécute une sonde et normalise tout ce qui en sort, y compris un jet : une
+ * sonde qui échoue rend une carte en erreur, jamais une exception qui
+ * emporterait les autres cartes.
  */
 export async function runProbe(adapter: OsintProbeAdapter, ctx: OsintProbeContext): Promise<OsintProbeResult> {
     const started = Date.now();

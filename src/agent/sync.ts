@@ -221,11 +221,9 @@ export function startAgentReconcile(distDir: string): void {
     const token = env.AGENT_DOWNLOAD_TOKEN || '';
     const repo = env.AGENT_REPO || '';
     if (!token || !repo) {
-        // No upstream configured (no token, or AGENT_REPO unset): serve disk only.
-        // Still *judge* that disk against this deploy's version instead of
-        // reporting `done` outright — a disabled sync freezes the served set
-        // forever, and announcing it green is how a server ended up handing out
-        // two-versions-old agents (and their dead protocol) without a warning.
+        // No upstream configured: serve disk only, but still judge that disk
+        // against this deploy's version instead of reporting `done` outright: a
+        // disabled sync freezes the served set forever.
         void settle(distDir, [], appVersion(), 'synchronisation désactivée').catch((e) => {
             logger.error({ err: (e as Error).message }, 'Agent settle (sync disabled) failed');
         });

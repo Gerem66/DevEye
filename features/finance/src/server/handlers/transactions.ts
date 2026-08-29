@@ -21,12 +21,8 @@ import {
 } from '../_shared';
 
 /**
- * Le journal: les opérations elles-mêmes.
- *
- * Trois natures, une seule table. Un **virement** y est une ligne unique qui
- * porte ses deux comptes, et non une paire de lignes: une paire devrait rester
- * cohérente à chaque modification, et une paire à moitié supprimée ferait
- * apparaître de l'argent.
+ * Le journal. Un virement est une ligne unique portant ses deux comptes : une
+ * paire à moitié supprimée ferait apparaître de l'argent.
  */
 
 /** Combien de lignes une page rend par défaut. */
@@ -58,10 +54,7 @@ export const financeTransactionListFeature = defineSdkFeature({
         const [rows, total, totals] = await Promise.all([
             ctx.repo.listTransactions(ctx.workspaceId, filter, input.limit ?? DEFAULT_LIMIT, input.offset ?? 0),
             ctx.repo.countTransactions(ctx.workspaceId, filter),
-            // Les sommes portent sur **tout** le filtre et non sur la page: un
-            // total qui ne compterait que les cent lignes affichées sur trois
-            // cents induirait en erreur précisément là où on vient chercher un
-            // chiffre juste.
+            // Les sommes portent sur tout le filtre, pas sur la page.
             ctx.repo.sumTransactions(ctx.workspaceId, filter)
         ]);
         return {
@@ -88,9 +81,7 @@ export const financeTransactionAddFeature = defineSdkFeature({
             accountId: draft.accountId,
             transferAccountId: draft.transferAccountId,
             categoryId: draft.categoryId,
-            // Une saisie à la main n'est jamais rattachée à une échéance: seul
-            // le rattrapage pose ce lien, et c'est lui qui rend l'index unique
-            // `(recurring_id, date)` utile sans gêner personne.
+            // Seul le rattrapage rattache une opération à une échéance.
             recurringId: null,
             kind: draft.kind,
             amount: draft.amount,
@@ -120,10 +111,8 @@ export const financeTransactionUpdateFeature = defineSdkFeature({
         const draft = input.transaction;
         await assertEntryConsistent(ctx, draft);
 
-        // Une opération née d'une échéance garde son rattachement, et l'index
-        // unique `(recurring_id, date)` interdit alors de la dater sur une autre
-        // occurrence de la même échéance. Le dire clairement vaut mieux qu'une
-        // erreur de contrainte remontée telle quelle.
+        // L'index unique `(recurring_id, date)` interdit de la dater sur une autre
+        // occurrence de la même échéance : le dire plutôt qu'une erreur de contrainte.
         if (existing.recurring_id !== null && existing.date !== draft.date) {
             const clash = await ctx.repo.findOccurrence(ctx.workspaceId, existing.recurring_id, draft.date);
             if (clash) {
@@ -191,11 +180,8 @@ export const financeTransactionSetClearedFeature = defineSdkFeature({
     mutates: true,
     access: WRITE,
     handler: async (ctx: Ctx, input) => {
-        // La requête filtre déjà sur l'espace: un identifiant étranger ne
-        // touche rien, et il n'y a donc rien à vérifier ligne par ligne. Pas
-        // d'audit non plus: pointer n'ajoute, ne retire ni ne modifie aucun
-        // montant, et le rapprochement d'un relevé en produit des dizaines à la
-        // minute, ce qui noierait le journal d'audit sans rien apprendre.
+        // La requête filtre déjà sur l'espace. Pas d'audit : pointer ne modifie
+        // aucun montant, et un rapprochement en produit des dizaines à la minute.
         await ctx.repo.setCleared(ctx.workspaceId, input.transactionIds, input.cleared);
         return { transactionIds: input.transactionIds, cleared: input.cleared };
     }

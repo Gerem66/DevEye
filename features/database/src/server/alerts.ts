@@ -12,19 +12,8 @@ import { isFiring, runConditions } from './rules';
 import { loadDatabase, toAlert, type Ctx, type StoredAlert } from './_shared';
 
 /**
- * Les alertes d'une base : des conditions SQL, un opérateur qui les relie, un
- * message.
- *
- * **Évaluées par le relevé périodique, et par lui seul.** Une alerte posée sur
- * une base dont la surveillance est éteinte est inerte : rien ne l'évalue, donc
- * rien ne la déclenchera. L'interface le dit plutôt que de laisser croire à une
- * surveillance qui n'existe pas.
- *
- * `database.alertTest` est l'exception : elle évalue tout de suite, à la
- * demande, **sans notifier personne**. C'est ce qui rend une condition
- * écrivable — on voit le nombre que rend la requête avant de choisir un seuil,
- * au lieu d'attendre une notification pour découvrir qu'on s'est trompé de
- * colonne.
+ * Les alertes d'une base. Évaluées par le relevé périodique seulement (inertes
+ * sur une base au repos) ; `database.alertTest` évalue à la demande, sans notifier.
  */
 
 export const databaseAlertFeatures = [
@@ -42,11 +31,8 @@ export const databaseAlertFeatures = [
         access: { level: 'write' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
-            // Domicile seulement, comme `database.update` : l'alerte serait
-            // rangée dans l'espace d'ICI et scellée sous sa clé, là où le relevé
-            // n'évalue que les alertes du domicile, lisibles sous la sienne. Une
-            // alerte posée d'une fenêtre serait donc inerte et invisible de la
-            // fiche ; le refus explicite vaut mieux.
+            // Domicile seulement : une alerte posée d'une fenêtre serait scellée
+            // sous la clé d'ici, que le relevé du domicile ne lit pas.
             const home = await loadDatabase(ctx, input.databaseId);
             if (home.workspace_id !== ctx.workspaceId) {
                 throw new FeatureError(
@@ -115,13 +101,7 @@ export const databaseAlertFeatures = [
             return { alertId: input.alertId };
         }
     }),
-    /**
-     * Évalue des conditions tout de suite, sans rien enregistrer ni notifier.
-     *
-     * Prend les conditions **en entrée** plutôt qu'un identifiant d'alerte : c'est
-     * ce qui permet d'essayer une condition en cours d'écriture, avant même de
-     * l'avoir enregistrée.
-     */
+    /** Prend les conditions en entrée : une condition s'essaie avant d'être enregistrée. */
     defineSdkFeature({
         ...databaseAlertTest,
         access: { level: 'write' },

@@ -18,11 +18,8 @@ export const agentSubscribeFeature: FeatureDefinition<
     ...agentSubscribe,
     access: { feature: 'devices', level: 'read' },
     handler: async (ctx, input) => {
-        // Le schéma autorise 50 identifiants, et cette commande part à chaque
-        // changement d'appareil et à chaque réouverture de socket : la séquence
-        // d'origine (une autorisation, puis un `latest` + un `nearest`, trois
-        // requêtes à lui seul, par appareil, l'un après l'autre) valait jusqu'à
-        // deux cents allers-retours pour un seul appel. Tout est parallèle.
+        // Jusqu'à 50 identifiants, à chaque changement d'appareil et réouverture
+        // de socket : tout est parallèle.
         const allowed: { id: string; row: DeviceRow }[] = await Promise.all(
             input.deviceIds.map(async (deviceId) => ({ id: deviceId, row: await authorizeDevice(ctx, deviceId) }))
         );
@@ -30,10 +27,8 @@ export const agentSubscribeFeature: FeatureDefinition<
         ctx.monitor?.subscribe(ids);
 
         // Push the latest stored instant + report straight away so the UI shows
-        // data immediately rather than waiting for the next live sample. The
-        // instant's process list is seeded too: it now travels with the metric
-        // stream, so without it the process table would stay empty for a whole
-        // collection cadence.
+        // data immediately. The process list is seeded too, else the process
+        // table would stay empty for a whole collection cadence.
         await Promise.all(
             allowed.map(async ({ id, row }) => {
                 const point = await ctx.db.metrics.latest(id);
@@ -46,10 +41,9 @@ export const agentSubscribeFeature: FeatureDefinition<
 });
 
 /**
- * Se désabonner ne demande aucun droit, à dessein : exiger `devices: read` pour
- * *cesser* de recevoir laisserait une souscription orpheline chez qui vient
- * justement de perdre l'accès. La diffusion, elle, est filtrée en continu par le
- * hub (voir `MonitorHub.rememberGrants`).
+ * Se désabonner ne demande aucun droit : exiger `devices: read` pour cesser de
+ * recevoir laisserait une souscription orpheline chez qui vient de perdre
+ * l'accès. La diffusion est filtrée en continu par le hub.
  */
 export const agentUnsubscribeFeature: FeatureDefinition<
     typeof agentUnsubscribe.command,

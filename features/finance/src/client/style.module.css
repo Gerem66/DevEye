@@ -1,21 +1,7 @@
-/* ------------------------------------------------------------------ *
- * Finances
- *
- * Une seule feuille pour toute la feature, comme ses voisines. Les blocs
- * suivent l'ordre de lecture des écrans : la carte de l'accueil, la coquille
- * et sa barre d'onglets, puis chaque onglet, puis ce qui est commun aux
- * formulaires.
- * Les panneaux de réglages (Général, Catégories) empruntent les rangées de la
- * coquille commune (`settingsStyles`) et ne reprennent d'ici que les pastilles
- * de couleur et la grille d'icônes.
- *
- * Aucune couleur en dur : tout passe par les jetons du thème, y compris la
- * palette `--finance-*` que portent comptes et catégories.
- * ------------------------------------------------------------------ */
-
-/* ------------------------------------------------------------------ *
- * Carte de la grille d'accueil
- * ------------------------------------------------------------------ */
+/*
+ * Finances. Une seule feuille pour toute la feature. Aucune couleur en dur :
+ * tout passe par les jetons du thème, y compris la palette `--finance-*`.
+ */
 
 .widget {
     display: flex;
@@ -57,10 +43,6 @@
 .widgetOut {
     color: var(--danger);
 }
-
-/* ------------------------------------------------------------------ *
- * Coquille et barre d'onglets
- * ------------------------------------------------------------------ */
 
 .feature {
     display: flex;
@@ -132,10 +114,6 @@
     padding-bottom: var(--space-md);
 }
 
-/* ------------------------------------------------------------------ *
- * États communs
- * ------------------------------------------------------------------ */
-
 .placeholder {
     margin: 0;
     padding: var(--space-md) 0;
@@ -181,10 +159,6 @@
     line-height: 1.5;
 }
 
-/* ------------------------------------------------------------------ *
- * Sélecteur segmenté (période, nature d'une opération, sens)
- * ------------------------------------------------------------------ */
-
 .segmented {
     display: inline-flex;
     padding: 2px;
@@ -217,10 +191,6 @@
     background: var(--accent-bg);
     color: var(--accent);
 }
-
-/* ------------------------------------------------------------------ *
- * Tableau de bord
- * ------------------------------------------------------------------ */
 
 .dashboard {
     display: flex;
@@ -378,10 +348,6 @@
     padding-top: var(--space-sm);
 }
 
-/* ------------------------------------------------------------------ *
- * Graphiques
- * ------------------------------------------------------------------ */
-
 .chart {
     margin: 0;
     display: flex;
@@ -472,10 +438,6 @@
     margin-left: auto;
     color: var(--text-muted);
 }
-
-/* ------------------------------------------------------------------ *
- * Répartition par catégorie, et jauges de budget
- * ------------------------------------------------------------------ */
 
 .shares {
     display: flex;
@@ -600,10 +562,6 @@
     background: var(--danger);
 }
 
-/* ------------------------------------------------------------------ *
- * Journal des opérations
- * ------------------------------------------------------------------ */
-
 .journal {
     display: flex;
     flex-direction: column;
@@ -707,9 +665,7 @@
     background: var(--surface-subtle);
 }
 
-/* La case de pointage est cliquable seule : c'est le geste qu'on répète des
-   dizaines de fois d'affilée au moment du rapprochement bancaire, et le faire
-   passer par l'ouverture de la fiche le rendrait impraticable. */
+/* Cliquable seule : le geste se répète des dizaines de fois au rapprochement bancaire. */
 .rowClear {
     display: flex;
     align-items: center;
@@ -776,9 +732,7 @@
     font-size: 0.9rem;
 }
 
-/* Le fanion « écrite par une échéance » : une opération qu'on n'a pas saisie
-   soi-même doit se reconnaître, sans pour autant se distinguer au point de
-   rompre la lecture de la liste. */
+/* Le fanion « écrite par une échéance » : reconnaissable sans rompre la lecture. */
 .rowBadge {
     width: 12px;
     color: var(--text-muted);
@@ -827,10 +781,6 @@
     color: var(--text-muted);
     font-size: 0.82rem;
 }
-
-/* ------------------------------------------------------------------ *
- * Comptes
- * ------------------------------------------------------------------ */
 
 .accounts,
 .budgets,
@@ -901,9 +851,7 @@
     border-top-color: var(--account-color, var(--accent));
 }
 
-/* framer-motion ne touche pas ces cartes, mais la règle vaut quand même :
-   atténuer par un filtre et non par `opacity` laisse la propriété libre pour
-   qui voudrait animer la carte plus tard. */
+/* Atténuer par un filtre et non par `opacity`, pour laisser la propriété à framer-motion. */
 .accountCard[data-archived='true'] {
     filter: opacity(0.55);
 }
@@ -1033,10 +981,6 @@
     font-size: 0.78rem;
 }
 
-/* ------------------------------------------------------------------ *
- * Budgets
- * ------------------------------------------------------------------ */
-
 .budgetList,
 .recurringList {
     display: flex;
@@ -1122,10 +1066,6 @@
     font-size: 0.75rem;
 }
 
-/* ------------------------------------------------------------------ *
- * Échéances
- * ------------------------------------------------------------------ */
-
 .recurringRow[data-inactive='true'] {
     filter: opacity(0.6);
 }
@@ -1197,10 +1137,6 @@
     background: var(--surface-subtle);
     color: var(--text-muted);
 }
-
-/* ------------------------------------------------------------------ *
- * Formulaires et dialogues
- * ------------------------------------------------------------------ */
 
 .form {
     display: flex;
@@ -1384,10 +1320,6 @@
     gap: var(--space-sm);
 }
 
-/* ------------------------------------------------------------------ *
- * Échéances à venir (bloc du tableau de bord)
- * ------------------------------------------------------------------ */
-
 .upcoming {
     display: flex;
     flex-direction: column;
@@ -1444,15 +1376,7 @@
     color: var(--success);
 }
 
-/* ------------------------------------------------------------------ *
- * Mouvement réduit
- *
- * Les transitions de cette feuille sont toutes décoratives (survol, largeur
- * d'une jauge, apparition d'une poignée) : les couper ne retire aucune
- * information. Les animations framer-motion des écrans respectent le même
- * réglage par leur propre mécanisme.
- * ------------------------------------------------------------------ */
-
+/* Toutes les transitions de cette feuille sont décoratives : les couper ne retire aucune information. */
 @media (prefers-reduced-motion: reduce) {
     .tab,
     .tabActive,

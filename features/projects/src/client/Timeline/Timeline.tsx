@@ -13,22 +13,16 @@ import styles from '../style.module.css';
 const ROW_H = 34;
 const BAR_H = 20;
 /**
- * La bande d'en-tête : les étiquettes de dates, puis les jalons dessous.
- *
- * Une seule constante pour les trois couches qui doivent démarrer sous elle (la
- * grille, les flèches de dépendance, les lignes) — c'est ce qui garantit que
- * jalons et barres ne se marchent pas dessus.
+ * Hauteur de la bande d'en-tête (dates puis jalons). Une seule constante pour
+ * les trois couches qui démarrent sous elle (grille, flèches, lignes) : c'est
+ * ce qui empêche jalons et barres de se chevaucher.
  */
 const HEAD_H = 44;
 
 /**
- * Étirement maximal, en px par jour.
- *
- * Sur un très grand écran, une fenêtre de quinze jours donnerait sinon des
- * journées de 200 px : les barres deviendraient des banderoles et la lecture n'y
- * gagnerait rien. Le plafond ne se fait sentir que là — la fenêtre fait au moins
- * dix-huit jours (deux semaines plus les marges), donc une popup ordinaire
- * s'occupe entièrement bien avant de l'atteindre.
+ * Étirement maximal, en px par jour : sans plafond, une fenêtre courte sur un
+ * grand écran donnerait des journées de 200 px et des barres illisibles. Une
+ * popup ordinaire remplit sa largeur bien avant de l'atteindre.
  */
 const MAX_STRETCH_DAY_WIDTH = 96;
 
@@ -37,20 +31,13 @@ const DEP_RADIUS = 8;
 const DEP_GAP = 14;
 
 /**
- * Le tracé d'une dépendance : de la fin du bloqueur au début du bloqué.
+ * Le tracé d'une dépendance, de la fin du bloqueur au début du bloqué : trois
+ * segments aux coudes arrondis, un angle droit se confondant avec la grille.
  *
- * Trois segments — on sort par la droite, on change de ligne, on entre par la
- * gauche — mais aux coudes arrondis : un angle droit sur un fond quadrillé se
- * confond avec la grille, la courbe se lit comme un chemin.
- *
- * `mid` est l'abscisse du coude et `x2` le bord d'arrivée : les deux sont
- * décidés par l'appelant, qui seul sait par quel côté il vaut mieux entrer.
- * Cette fonction ne fait que tracer — elle accepte aussi bien un coude à gauche
- * du point d'arrivée qu'à sa droite.
- *
- * Le rayon est rogné par la longueur des segments : sur deux lignes voisines,
- * une courbe de 8 px ne tiendrait pas dans les 17 px qui les séparent, et le
- * tracé se replierait sur lui-même.
+ * `mid` (l'abscisse du coude) et `x2` (le bord d'arrivée) viennent de
+ * l'appelant, seul à savoir par quel côté entrer ; le coude peut donc tomber
+ * des deux côtés. Le rayon est rogné par la longueur des segments, sans quoi
+ * une courbe de 8 px se replierait entre deux lignes distantes de 17.
  */
 function depPath(x1: number, y1: number, x2: number, y2: number, mid: number): string {
     if (Math.abs(y2 - y1) < 1) return `M ${x1} ${y1} H ${x2}`;
@@ -82,14 +69,10 @@ interface TimelineProps {
 }
 
 /**
- * La frise chronologique : les mêmes blocs que le kanban, posés sur le temps.
- *
- * N'y figurent que les cartes **datées** — c'est la demande, et c'est aussi la
- * seule chose qui ait un sens ici. Les autres sont listées dessous plutôt que
- * passées sous silence : une carte invisible est une carte oubliée.
- *
- * Une carte avec deux dates est une barre, une carte n'ayant qu'une échéance
- * est un point : afficher une durée qu'on n'a pas serait une invention.
+ * La frise chronologique : les blocs du kanban posés sur le temps. Seules les
+ * cartes datées y figurent, les autres étant listées dessous plutôt que passées
+ * sous silence. Deux dates font une barre, une échéance seule fait un point :
+ * afficher une durée qu'on n'a pas serait une invention.
  */
 export function Timeline({
     cards,
@@ -107,13 +90,9 @@ export function Timeline({
     const outlineFor = useLiveOutlines('l3');
 
     /**
-     * La largeur réellement offerte à la frise.
-     *
-     * Mesurée, contrairement à tout le reste de ce fichier : elle ne découle
-     * d'aucune donnée, c'est la popup qui la décide. Elle sert uniquement à
-     * *étirer* une frise plus courte que sa boîte — jamais à la calculer, ce qui
-     * fermerait la boucle (la frise s'élargit, la popup suit, la frise
-     * s'élargit…).
+     * La largeur offerte, mesurée : elle ne découle d'aucune donnée, c'est la
+     * popup qui la décide. Elle sert à étirer une frise plus courte que sa
+     * boîte, jamais à la calculer, ce qui bouclerait.
      */
     const scrollRef = useRef<HTMLDivElement>(null);
     const [avail, setAvail] = useState(0);
@@ -164,28 +143,19 @@ export function Timeline({
     /** Ce que le zoom choisi réclame, indépendamment de la place disponible. */
     const naturalWidth = days * zoomDayWidth;
 
-    // La frise réclame à la popup sa largeur **naturelle** : elle découle de la
-    // fenêtre de dates et du zoom, donc changer de zoom fait suivre la popup.
-    // Volontairement pas la largeur étirée ci-dessous, qui dépend de la popup —
-    // la demande se nourrirait de sa propre réponse.
+    // La largeur NATURELLE, tirée de la fenêtre et du zoom : changer de zoom
+    // fait suivre la popup. Jamais la largeur étirée, qui dépend de la popup et
+    // ferait boucler la demande sur sa réponse.
     useRequestPopupWidth(timelineNaturalWidth(naturalWidth));
 
     /**
-     * Le jour, en pixels, une fois la place disponible prise en compte.
+     * Le jour en pixels, place disponible comprise : une fenêtre plus courte que
+     * la boîte étire ses journées pour l'occuper, jusqu'au plafond ; une frise
+     * plus longue défile.
      *
-     * Trois tâches sur deux semaines au zoom « Mois » tiennent dans 500 px : la
-     * frise se tassait contre le bord gauche d'une popup deux fois plus large,
-     * et tout le reste de l'écran ne montrait rien. Quand la fenêtre de dates
-     * est plus courte que la boîte, les journées s'élargissent pour l'occuper —
-     * jusqu'au plafond, au-delà duquel s'étaler n'apporte plus rien.
-     *
-     * **Un entier**, et c'est ce qui supprime la barre de défilement fantôme :
-     * une largeur de jour fractionnaire donnait une frise large de quelques
-     * dixièmes de pixel de trop pour sa boîte, donc un ascenseur horizontal pour
-     * rien — et des lignes de grille floues, posées entre deux pixels.
-     *
-     * Dans l'autre sens, rien ne change : une frise plus longue que sa boîte
-     * défile, comme avant.
+     * Un entier, sans quoi la frise dépasse sa boîte de quelques dixièmes de
+     * pixel (ascenseur horizontal fantôme) et les lignes de grille tombent
+     * entre deux pixels.
      */
     const dayWidth = avail > naturalWidth ? Math.min(Math.floor(avail / days), MAX_STRETCH_DAY_WIDTH) : zoomDayWidth;
     const width = days * dayWidth;
@@ -198,12 +168,9 @@ export function Timeline({
     const { preview, onBarPointerDown, consumeClick } = useDateDrag({ dayWidth, onCommit: onCardDates });
 
     /**
-     * La carte telle qu'elle est **affichée** : ses dates, ou l'aperçu du geste
-     * en cours.
-     *
-     * L'aperçu ne remonte volontairement pas jusqu'à `dated` : l'ordre des
-     * lignes reste celui des dates enregistrées, sinon la barre qu'on tient
-     * changerait de ligne sous le pointeur dès qu'elle dépasse sa voisine.
+     * La carte telle qu'affichée : ses dates, ou l'aperçu du geste en cours.
+     * L'aperçu ne remonte pas jusqu'à `dated`, sinon la barre qu'on tient
+     * changerait de ligne dès qu'elle dépasse sa voisine.
      */
     const shown = (card: ProjectCard): ProjectCard =>
         preview?.cardId === card.id ? { ...card, startDate: preview.startDate, dueDate: preview.dueDate } : card;
@@ -220,17 +187,10 @@ export function Timeline({
     };
 
     /**
-     * L'abscisse du coude des flèches partant d'une tâche.
-     *
-     * À mi-chemin entre la fin du bloqueur et le début de la **plus proche** des
-     * tâches qu'il débloque, parmi celles qui commencent après lui. Une seule
-     * valeur pour tout le faisceau : les flèches d'un même bloqueur descendent
-     * donc ensemble, et le tronc tombe dans le blanc qui sépare la tâche de sa
-     * suite plutôt qu'à une distance arbitraire de son bord.
-     *
-     * Quand rien ne commence après — toutes les dépendances remontent le temps —
-     * il ne reste pas d'intervalle à couper en deux : un écart fixe garde alors
-     * le coude visible.
+     * L'abscisse du coude des flèches partant d'une tâche : à mi-chemin de la
+     * plus proche de celles qu'elle débloque. Une seule valeur pour tout le
+     * faisceau, si bien que le tronc tombe dans le blanc qui suit la tâche.
+     * Quand rien ne commence après elle, un écart fixe garde le coude visible.
      */
     const elbowOf = (blockerId: number, endX: number): number => {
         let nearest = Number.POSITIVE_INFINITY;
@@ -385,26 +345,14 @@ export function Timeline({
                             const y2 = toRow * ROW_H + ROW_H / 2;
 
                             /*
-                             * Par quel bord entrer chez le bloqué.
+                             * Par quel bord entrer chez le bloqué : par la
+                             * gauche s'il commence STRICTEMENT après la fin du
+                             * bloqueur, avec le coude commun au faisceau.
                              *
-                             * S'il commence **strictement** après la fin du
-                             * bloqueur, l'ordre des choses est respecté : on
-                             * entre par la gauche, sens de lecture, et le coude
-                             * est celui que partagent toutes les flèches du même
-                             * bloqueur.
-                             *
-                             * L'égalité compte pour un chevauchement, et ce n'est
-                             * pas un détail : deux tâches qui s'enchaînent au jour
-                             * près ont des barres jointives, sans un pixel entre
-                             * elles. Le coude n'avait alors nulle part où tomber
-                             * et se posait dans la barre visée.
-                             *
-                             * Dans ces cas-là — début avant, chevauchement ou
-                             * jointure — entrer par la gauche obligerait le trait
-                             * à revenir en arrière *par-dessus* la barre. On
-                             * contourne par la droite : le coude passe au-delà
-                             * des deux, et la pointe se pose sur le bord droit du
-                             * bloqué. Le trajet ne recouvre alors aucune barre.
+                             * Sinon (début avant, chevauchement, ou barres
+                             * jointives au jour près), entrer par la gauche
+                             * ferait revenir le trait par-dessus la barre : on
+                             * contourne par la droite, coude au-delà des deux.
                              */
                             const ordered = b.left > x1;
                             const x2 = ordered ? b.left : b.left + b.width;

@@ -54,11 +54,10 @@
     }
 }
 
-/* Reveal-on-hover wrapper, in the same key as the widget's "Déverrouiller" label:
-   it width-animates open (max-width 0 → content) while fading and scaling in from
-   the left edge, so it appears within the rounded pill rather than wiping in. The
-   margin-left carries the icon↔text gap, opening in step with the reveal — so a
-   lone spinner stays centered. An error/warning is never hidden: it forces it open. */
+/* Reveal-on-hover wrapper: width-animates open while fading and scaling in from
+   the left edge, so it appears within the rounded pill. The margin-left carries
+   the icon/text gap, opening in step with the reveal. An error/warning forces
+   it open. */
 .text {
     display: flex;
     max-width: 0;

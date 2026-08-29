@@ -6,20 +6,15 @@ import type { AudienceBreakdownRow } from './repo';
 import { loadSite, rangeWindow, readLabel, siteCipher, toMetrics, type Ctx } from './_shared';
 
 /**
- * Ce qu'on lit d'un site.
+ * Ce qu'on lit d'un site : quatre commandes en lecture seule, bornées par une
+ * fenêtre. Aucune ne déchiffre plus que ce qu'elle rend, les nombres venant
+ * d'un `GROUP BY` sur des entiers ; c'est l'objet de la table de dimensions.
  *
- * Quatre commandes, toutes en lecture seule, toutes bornées par une fenêtre.
- * Aucune ne déchiffre plus que ce qu'elle rend : les nombres viennent d'un
- * `GROUP BY` sur des entiers, et seuls les intitulés effectivement affichés —
- * quelques dizaines — passent par une clé. C'est tout l'objet de la table de
- * dimensions (migration `076`).
- *
- * **Rien ici ne dépend de l'état de l'ingestion.** Les statistiques sortent du
- * dépôt, jamais de la file en mémoire du service : deux lectures successives
- * doivent rendre la même chose, qu'une vidange soit en cours ou non.
+ * Rien ici ne dépend de l'état de l'ingestion : les statistiques sortent du
+ * dépôt, jamais de sa file en mémoire, pour que deux lectures successives
+ * rendent la même chose.
  */
 
-/** Combien de lignes un classement rend par défaut. Au-delà, on scrute. */
 const BREAKDOWN_DEFAULT = 8;
 
 /** La fenêtre du « en ce moment ». Cinq minutes, la convention du domaine. */
@@ -43,10 +38,8 @@ export const audienceOverviewFeature = defineSdkFeature({
         const window = rangeWindow(input.range, now);
         const span = window.to - window.from;
 
-        // En mode anonyme, le sel du visiteur tourne chaque jour : personne n'y
-        // est jamais « déjà venu », et la requête rendrait toujours zéro. On ne
-        // la pose donc pas, plutôt que de payer deux balayages pour un nombre
-        // dont on connaît d'avance la valeur.
+        // En mode anonyme, le sel du visiteur tourne chaque jour : personne n'y est
+        // jamais « déjà venu », la requête rendrait toujours zéro et on ne la pose pas.
         const tracksReturning = site.visitor_mode === 'persistent';
         const returning = tracksReturning
             ? await Promise.all([
@@ -55,10 +48,9 @@ export const audienceOverviewFeature = defineSdkFeature({
               ])
             : [0, 0];
 
-        // La fenêtre précédente est **de même longueur et immédiatement
-        // antérieure** : c'est ce qui rend la comparaison honnête. Comparer à
-        // « le mois dernier » calendaire ferait varier le diviseur avec le
-        // nombre de jours du mois, et un février paraîtrait toujours en baisse.
+        // La fenêtre précédente est de même longueur et immédiatement antérieure :
+        // comparer à « le mois dernier » calendaire ferait varier le diviseur avec le
+        // nombre de jours, et un février paraîtrait toujours en baisse.
         const [metrics, previous, points] = await Promise.all([
             ctx.repo.metrics(input.siteId, window.from, window.to),
             ctx.repo.metrics(input.siteId, window.from - span, window.from),

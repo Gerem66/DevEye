@@ -1,42 +1,14 @@
 import { z } from 'zod';
 
 /**
- * Les sauvegardes de l'espace: **où** ça atterrit, **quoi** part, et **ce qui
- * s'est passé** au dernier passage.
+ * Sauvegardes : une destination (où), un travail (quoi, où, quand, combien de
+ * copies) et une exécution (ce qu'un travail a produit une fois).
  *
- * Trois entités, et la séparation est la raison d'être du module:
- *
- *  - une **destination** est un endroit qui accepte des octets (un dossier du
- *    serveur, un dossier d'une machine enrôlée, un bucket S3). Elle ne sait rien
- *    de ce qu'on y range;
- *  - un **travail** dit quoi sauvegarder, vers quelle destination, à quelle
- *    cadence, et combien de copies garder;
- *  - une **exécution** est ce qu'un travail a produit une fois: une archive, sa
- *    taille, son empreinte, et son sort.
- *
- * Croiser les deux premiers est tout l'intérêt: la même base part vers le
- * Raspberry **et** vers un S3 distant en déclarant deux travaux, sans rien
- * dupliquer de la configuration d'accès.
- *
- * ## Toujours à l'étage ouvert
- *
- * Comme Uptime, Déploiement et Bases de données: l'ordonnanceur tourne sans
- * session ni mot de passe, donc tout ce qu'il doit lire — y compris la clé
- * secrète S3 — vit sous la clé de l'espace à l'étage ouvert. Un travail qui ne
- * pourrait s'exécuter qu'avec un humain devant l'écran ne serait pas une
- * sauvegarde.
- *
- * ## Ce qui est chiffré dans l'archive, et avec quelle clé
- *
- * Le contenu d'une archive est scellé avec le **même format que les blobs
- * CloudSync** (`DEVB` v2, AES-256-GCM par blocs de 1 Mio), sous une clé
- * **dérivée de la clé serveur** (`CRYPT_KEY_A`/`CRYPT_KEY_B`) et non stockée
- * nulle part. C'est la seule construction qui évite le serpent qui se mord la
- * queue: une clé rangée en base serait à l'intérieur de la sauvegarde de cette
- * base, donc illisible précisément le jour où on en a besoin.
- *
- * ⚠️ Corollaire à ne jamais perdre de vue: **`CRYPT_KEY_A` et `CRYPT_KEY_B` sont
- * la sauvegarde**. Une archive chiffrée sans elles n'est qu'un fichier de bruit.
+ * Tout vit à l'étage ouvert : l'ordonnanceur tourne sans session ni mot de
+ * passe, clé secrète S3 comprise. Les archives sont scellées au format DEVB
+ * v2 sous une clé dérivée de CRYPT_KEY_A/CRYPT_KEY_B, jamais stockée : une clé
+ * rangée en base serait à l'intérieur de la sauvegarde de cette base. Sans ces
+ * deux variables, une archive chiffrée est irrécupérable.
  */
 
 export const BACKUP_DESTINATION_NAME_MAX = 120;
@@ -48,16 +20,9 @@ export const BACKUP_ACCESS_KEY_MAX = 255;
 export const BACKUP_SECRET_MAX = 512;
 
 /**
- * Où une archive atterrit.
- *
- *  - `local`  — un dossier du serveur DevEye, sous `BACKUP_STORAGE_DIR`. Le plus
- *    simple, et le moins protecteur: la copie meurt avec la machine qu'elle
- *    sauvegarde. Utile comme premier palier, jamais comme seul palier.
- *  - `device` — un dossier d'une machine enrôlée, écrit **par son agent**. C'est
- *    ce qui fait d'un Raspberry Pi une cible de sauvegarde sans rien y installer
- *    d'autre que l'agent qui y tourne déjà.
- *  - `s3`     — un service compatible S3: Garage, MinIO, Scaleway, Backblaze,
- *    AWS. Le seul des trois qui sorte les octets du réseau local.
+ * `local` : un dossier du serveur sous `BACKUP_STORAGE_DIR`. `device` : un
+ * dossier d'une machine enrôlée, écrit par son agent. `s3` : un service
+ * compatible S3 (Garage, MinIO, Scaleway, Backblaze, AWS).
  */
 export const backupDestinationKindSchema = z.enum(['local', 'device', 's3']);
 export type BackupDestinationKind = z.infer<typeof backupDestinationKindSchema>;
@@ -67,30 +32,15 @@ export const backupDestinationStatusSchema = z.enum(['unknown', 'ok', 'error']);
 export type BackupDestinationStatus = z.infer<typeof backupDestinationStatusSchema>;
 
 /**
- * Ce qu'un travail sauvegarde.
- *
- *  - `database`  — une base supervisée de la feature Bases de données, par un
- *    vidage logique (`mysqldump` / `pg_dump`) à travers le même accès que la
- *    supervision, tunnel SSH compris.
- *  - `deveye`    — la base MySQL de DevEye elle-même. **Couvre le Monitoring,
- *    l'index CloudSync, les notes, les mots de passe, tout**: ces données vivent
- *    en base, donc les sauvegarder séparément reviendrait à les copier deux
- *    fois. C'est la sauvegarde à avoir si on n'en a qu'une.
- *  - `cloudsync` — les **blobs** d'un partage CloudSync, qui sont la seule
- *    partie de DevEye à ne pas vivre en base. Rendus en clair dans une archive
- *    `tar`, arborescence d'origine reconstituée depuis l'index: une archive doit
- *    se restaurer sans DevEye, sinon ce n'est pas une sauvegarde.
+ * `database` : vidage logique d'une base supervisée, par l'accès de la
+ * supervision (tunnel compris). `deveye` : la base MySQL de DevEye, qui couvre
+ * tout ce qui vit en base. `cloudsync` : les blobs d'un partage, en clair dans
+ * un `tar` reconstitué depuis l'index, restaurable sans DevEye.
  */
 export const backupSourceKindSchema = z.enum(['database', 'deveye', 'cloudsync']);
 export type BackupSourceKind = z.infer<typeof backupSourceKindSchema>;
 
-/**
- * Quand un travail part.
- *
- * Volontairement **pas** un cron: cinq champs lisibles couvrent tout ce qu'on
- * demande à une sauvegarde, et une expression cron mal écrite est un travail qui
- * ne part jamais sans que rien ne le dise.
- */
+/** Pas de cron, volontairement : une expression mal écrite est un travail qui ne part jamais sans rien dire. */
 export const backupScheduleKindSchema = z.enum(['manual', 'hourly', 'daily', 'weekly', 'monthly']);
 export type BackupScheduleKind = z.infer<typeof backupScheduleKindSchema>;
 
@@ -119,15 +69,8 @@ export const backupDestinationSchema = z.object({
     accessKeyId: z.string().max(BACKUP_ACCESS_KEY_MAX).nullable(),
     /** Le secret existe-t-il ? Sa valeur n'est jamais rendue. */
     hasSecret: z.boolean(),
-    /**
-     * Adressage par chemin (`https://hôte/bucket/clé`) plutôt que par
-     * sous-domaine. Vrai pour Garage et MinIO, faux pour AWS — et c'est la
-     * première chose qui casse quand on l'oublie.
-     */
+    /** Adressage par chemin (`https://hôte/bucket/clé`) : vrai pour Garage et MinIO, faux pour AWS. */
     pathStyle: z.boolean(),
-    // Le chiffrement des archives n'est plus un attribut de la destination :
-    // il se règle par TRAVAIL (`backupJobSchema.encryption`, migration 094).
-    // Une destination dit où écrire, le travail dit sous quelle forme.
     status: backupDestinationStatusSchema,
     /** Message du dernier contrôle raté; `null` quand tout va bien. */
     lastError: z.string().nullable(),
@@ -139,20 +82,10 @@ export const backupDestinationSchema = z.object({
 export type BackupDestination = z.infer<typeof backupDestinationSchema>;
 
 /**
- * Sous quelle forme les archives d'un travail sont écrites.
- *
- * - `none` : en clair. Lisible par qui tient la destination ; à réserver aux
- *   destinations déjà sous la même garde que le serveur.
- * - `server` : scellées (AES-256-GCM) sous une clé dérivée de
- *   CRYPT_KEY_A / CRYPT_KEY_B — jamais stockée, donc jamais dans l'archive
- *   qu'elle protège, et récupérable par `scripts/restore-backup.mjs` avec ces
- *   deux seules variables.
- *
- * Il n'y a **pas** de mode « mot de passe » et ce n'est pas un oubli :
- * l'ordonnanceur tourne la nuit sans session, or la clé dérivée du mot de
- * passe ne vit que dans une session déverrouillée, en mémoire, à fenêtre
- * glissante (voir Docs/SECURITY_MODEL.md). Un tel mode ne pourrait ni tourner
- * planifié, ni survivre à un dump de plusieurs heures.
+ * `none` : en clair. `server` : AES-256-GCM sous une clé dérivée de
+ * CRYPT_KEY_A/CRYPT_KEY_B, jamais stockée, rouverte par
+ * `scripts/restore-backup.mjs`. Pas de mode « mot de passe » : l'ordonnanceur
+ * tourne sans session, or cette clé ne vit qu'en session déverrouillée.
  */
 export const backupEncryptionSchema = z.enum(['none', 'server']);
 export type BackupEncryption = z.infer<typeof backupEncryptionSchema>;
@@ -189,14 +122,7 @@ export const backupJobSchema = z.object({
     /** Somme des tailles des archives encore présentes. */
     totalBytes: z.number().int().nonnegative(),
     runCount: z.number().int().nonnegative(),
-    /**
-     * Cet élément vient d'un **autre espace**, qui le projette ici.
-     *
-     * L'écran le signale d'une pastille : sans elle, rien ne distingue une
-     * ligne locale d'une fenêtre sur l'espace voisin — et les gestes réservés
-     * au domicile (supprimer, re-partager) sembleraient cassés au lieu de
-     * s'expliquer.
-     */
+    /** Vient d'un autre espace qui le projette ici ; l'écran le signale d'une pastille. */
     foreign: z.boolean(),
     created: z.number().int()
 });
@@ -215,7 +141,7 @@ export const backupRunSchema = z.object({
     checksum: z.string().nullable(),
     /** Chemin ou clé de l'objet écrit, tel qu'on le retrouve sur la destination. */
     artifact: z.string().nullable(),
-    /** L'archive a-t-elle été scellée ? Recopié de la destination au moment du run. */
+    /** L'archive a-t-elle été scellée ? Figé au moment de l'exécution. */
     encrypted: z.boolean(),
     /** `null` = déclenchée par l'ordonnanceur. */
     triggeredByUserId: z.number().int().positive().nullable(),
@@ -226,12 +152,8 @@ export const backupRunSchema = z.object({
 export type BackupRun = z.infer<typeof backupRunSchema>;
 
 /**
- * Une source proposée au choix, quand on crée un travail.
- *
- * Le client ne peut pas la construire seul: les bases vivent dans la feature
- * Bases de données, les partages dans CloudSync, et `deveye` n'existe nulle part
- * ailleurs qu'ici. Une commande dédiée évite trois appels croisés et trois
- * droits à vérifier côté écran.
+ * Une source proposée au choix d'un travail. Construite par le serveur : les
+ * bases et les partages vivent dans d'autres features, derrière leurs droits.
  */
 export const backupSourceCandidateSchema = z.object({
     kind: backupSourceKindSchema,
@@ -257,8 +179,6 @@ export const backupDestinationProbeSchema = z.object({
 });
 export type BackupDestinationProbe = z.infer<typeof backupDestinationProbeSchema>;
 
-// ------------------------------------------------------------- lignes SQL
-
 /** Ligne SQL (serveur uniquement). */
 export interface BackupDestinationRow {
     id: number;
@@ -272,14 +192,9 @@ export interface BackupDestinationRow {
     status: string;
     checked_at: number | null;
     /**
-     * { name, path, endpoint, region, bucket, accessKeyId, lastError } chiffré,
-     * étage ouvert.
-     *
-     * Le nom d'un bucket et l'adresse d'un service disent où sont les
-     * sauvegardes de quelqu'un: ce n'est pas une métadonnée de tri, ça n'a rien
-     * à faire en clair. Ne restent dehors que `kind`, `device_id` et les
-     * drapeaux — le strict nécessaire pour que l'ordonnanceur choisisse un
-     * chemin de code sans déchiffrer.
+     * { name, path, endpoint, region, bucket, accessKeyId, lastError } chiffré
+     * à l'étage ouvert : un bucket et une adresse disent où sont les
+     * sauvegardes de quelqu'un.
      */
     content: string;
     /** Clé secrète S3, chiffrée à l'étage ouvert. Vide pour `local`/`device`. */
@@ -309,15 +224,9 @@ export interface BackupJobRow {
     schedule_weekday: number;
     schedule_day: number;
     keep_last: number;
-    /** 'none' | 'server' : la forme des archives à venir. En clair, comme les
-     *  colonnes d'ordonnancement : l'exécuteur choisit un chemin de code sans
-     *  déchiffrer. */
+    /** 'none' | 'server'. En clair : l'exécuteur choisit un chemin sans déchiffrer. */
     encryption: string;
-    /**
-     * Quand l'ordonnanceur doit repasser. `NULL` = jamais (travail manuel ou
-     * désactivé), ce qui le sort de l'index des travaux dus **sans** condition
-     * supplémentaire dans la requête chaude.
-     */
+    /** `NULL` = jamais (manuel ou désactivé), ce qui le sort de l'index des travaux dus. */
     next_run_at: number | null;
     /** { name } chiffré, étage ouvert. */
     content: string;

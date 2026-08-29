@@ -1,11 +1,8 @@
 /**
- * L'entrée isomorphe du module : le manifest, et les contrats.
+ * L'entrée isomorphe du module : le manifest et les contrats.
  *
- * Les contrats des Notes vivent ICI, dans le module (src/contracts), comme
- * chez un module externe : @deveye/types ne garde que l'identité de la feature
- * (id, descripteur). Les notes sont une feature isolée : rien d'autre dans
- * l'app ne lit ses blocs, ses dossiers ni ses résumés, donc son vocabulaire
- * n'a rien à faire dans le package publié.
+ * Les contrats vivent dans le module, pas dans @deveye/types : rien d'autre
+ * dans l'app ne lit les blocs, dossiers ou résumés des notes.
  */
 export { manifest } from './manifest';
 export * from './contracts/domain';

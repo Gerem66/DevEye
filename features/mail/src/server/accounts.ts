@@ -40,11 +40,9 @@ import {
 /**
  * Les comptes : leur liste, leur cycle de vie, leur palier, et l'entrée OAuth.
  *
- * Chaque commande choisit son codec par le compte (`accountCipher` : son
- * palier chez lui, le codec ouvert de son domicile quand il est projeté ici)
- * et, pour un compte gardé, exige la session déverrouillée
- * (`assertMailUnlocked`) avant de lire quoi que ce soit : une liste vide
- * n'est pas une liste verrouillée.
+ * Chaque commande choisit son codec par le compte (`accountCipher`) et, pour un
+ * compte gardé, exige la session déverrouillée (`assertMailUnlocked`) avant de
+ * lire quoi que ce soit : une liste vide n'est pas une liste verrouillée.
  *
  * Le compte est l'élément que le partage projette (`Docs/SHARING.md`) : une
  * fenêtre le liste, le relève, y lit et en expédie ; supprimer, changer de
@@ -52,10 +50,10 @@ import {
  */
 
 /**
- * Les comptes visibles d'ici (les siens, plus les projetés), moins ceux
- * qu'une restriction de rôle masque : ils disparaissent de la liste plutôt
- * que d'y figurer grisés, une ligne qu'on voit sans pouvoir l'ouvrir apprend
- * déjà qu'elle existe. Le compte de la carte d'accueil lit les mêmes lignes.
+ * Les comptes visibles d'ici (les siens, plus les projetés), moins ceux qu'une
+ * restriction de rôle masque : ils disparaissent de la liste plutôt que d'y
+ * figurer grisés, une ligne qu'on voit sans pouvoir l'ouvrir apprenant déjà
+ * qu'elle existe.
  */
 async function listVisibleAccounts(ctx: Ctx): Promise<MailAccountRow[]> {
     const [rows, hidden] = await Promise.all([
@@ -91,9 +89,8 @@ export const mailAccountCountFeature = defineSdkFeature<
     typeof mailAccountCount.output
 >({
     ...mailAccountCount,
-    // Les mêmes lignes que la liste (projetées comprises, restrictions
-    // déduites) : une carte qui compte autre chose que la liste qu'elle ouvre
-    // se lit comme un bug.
+    // Les mêmes lignes que la liste : une carte qui compte autre chose que la
+    // liste qu'elle ouvre se lit comme un bug.
     handler: async (ctx) => ({ count: (await listVisibleAccounts(ctx)).length })
 });
 
@@ -214,10 +211,9 @@ export const mailAccountSetProfileFeature = defineSdkFeature<
     mutates: true,
     handler: async (ctx, input) => {
         const existing = await loadAccount(ctx, input.id, 'write');
-        // Depuis une fenêtre, le nom et la cadence se règlent (c'est le
-        // profil de la boîte qu'on voit ici) ; le palier et le proxy, non : le
-        // premier relie la boîte au mot de passe de son auteur, le second fait
-        // partie de ses identifiants.
+        // Depuis une fenêtre, le nom et la cadence se règlent ; le palier et le
+        // proxy, non : le premier relie la boîte au mot de passe de son auteur,
+        // le second fait partie de ses identifiants.
         if (input.securityTier !== existing.security_tier) assertAtHome(ctx, existing, 'changer son palier');
         if (input.proxy !== undefined) assertAtHome(ctx, existing, 'modifier son proxy');
         // Both ends of the move have to be reachable: reading what's there now,
@@ -232,9 +228,8 @@ export const mailAccountSetProfileFeature = defineSdkFeature<
         const to = isForeign(ctx, existing) ? from : cipherFor(ctx, input.securityTier);
 
         const credentials = await decryptCredentials(from, existing.credentials_enc);
-        // Absent means "leave the proxy alone" — the DTO never echoes proxy
-        // credentials back, so the client has nothing to resubmit (see the
-        // command's own doc); only an explicit null removes it.
+        // Absent means "leave the proxy alone": the DTO never echoes proxy
+        // credentials back, so only an explicit null removes it.
         if (input.proxy !== undefined) credentials.proxy = input.proxy;
         const emailAddress = (await from.tryDecrypt(existing.email_address_enc)) ?? '';
 
@@ -272,14 +267,13 @@ export const mailAccountDeleteFeature = defineSdkFeature<
     mutates: true,
     handler: async (ctx, input) => {
         const existing = await loadAccount(ctx, input.id, 'write');
-        // Supprimer depuis un espace qui ne fait que le **voir** détruirait la
-        // donnée d'un autre. Retirer la projection, oui (c'est `share.set`) ;
-        // détruire la boîte, non, et pas depuis ici.
+        // Supprimer depuis un espace qui ne fait que le voir détruirait la donnée
+        // d'un autre : retirer la projection est `share.set`, pas ceci.
         assertAtHome(ctx, existing, 'la supprimer');
         await ctx.repo.accounts.delete(input.id, ctx.workspaceId);
         // Le ménage d'un élément supprimé (restrictions par rôle, projections,
-        // route de notification), qu'aucune clé étrangère ne rattache à la
-        // table des comptes : l'ex `itemSharing.forgetItem` + `clearRoute`.
+        // route de notification), qu'aucune clé étrangère ne rattache à la table
+        // des comptes.
         await ctx.items.forget(input.id);
         ctx.audit({
             action: 'mail.accountDelete',
@@ -356,12 +350,10 @@ export const mailAccountTestConnectionFeature = defineSdkFeature<
 });
 
 /**
- * L'entrée du consentement OAuth. Le `state` est un ticket de session du SDK
- * (`ctx.secrecy.ticket`, dix minutes : le temps de choisir un compte chez le
- * fournisseur), qui porte le fournisseur et le palier ; la route de retour
- * (`routes.ts`) le rend contre les codecs de l'appelant et crée le compte sous
- * le bon. L'adresse de retour est celle de l'app (`ctx.origins.app`), la
- * même que celle enregistrée chez le fournisseur.
+ * L'entrée du consentement OAuth. Le `state` est un ticket de session de dix
+ * minutes (le temps de choisir un compte chez le fournisseur) qui porte le
+ * fournisseur et le palier ; la route de retour (`routes.ts`) le rend contre les
+ * codecs de l'appelant et crée le compte sous le bon.
  */
 export const mailOAuthStartFeature = defineSdkFeature<
     MailRepo,

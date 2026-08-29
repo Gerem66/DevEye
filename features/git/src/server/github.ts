@@ -1,20 +1,13 @@
 import { createHash } from 'crypto';
 
 /**
- * Adaptateur GitHub — lecture seule.
+ * Adaptateur GitHub, en lecture seule : `fetch` global, pas de client HTTP maison,
+ * et une surface étroite qui rend le fournisseur remplaçable.
  *
- * Même parti pris que `Services/shortcutTemplates/` : `fetch` global, pas de
- * client HTTP maison, et une surface étroite qui rend le fournisseur
- * remplaçable. Tout ce qui suit ne fait que **lire** ; rien dans DevEye n'écrit
- * dans un dépôt.
- *
- * Deux économies structurantes :
- *
- *  - **ETags.** Chaque endpoint renvoie un `ETag` ; le renvoyer en
- *    `If-None-Match` vaut un 304, qui ne coûte **rien** au quota. C'est ce qui
- *    permet de synchroniser souvent sans épuiser les 5 000 requêtes/heure.
- *  - **`since`.** Les commits sont demandés à partir du dernier connu, jamais
- *    depuis l'origine des temps.
+ * Deux économies structurantes. Les ETags : renvoyer celui d'un endpoint en
+ * `If-None-Match` vaut un 304, qui ne coûte rien au quota de 5 000 requêtes par
+ * heure. Et `since` : les commits sont demandés à partir du dernier connu, jamais
+ * depuis l'origine des temps.
  */
 
 const API = 'https://api.github.com';
@@ -113,24 +106,16 @@ export interface GitHubSyncState {
     /** Horodatage du commit le plus récent déjà connu, en secondes. */
     lastCommitAt?: number;
     /**
-     * L'historique ancien a-t-il été entièrement rapatrié ?
-     *
-     * Sans ce drapeau, un dépôt n'aurait jamais que ses commits récents : le
-     * premier tour en lisait mille, et tous les suivants repartaient de
-     * `since = le plus récent connu`, si bien que **rien d'antérieur ne pouvait
-     * plus jamais arriver**. C'est ce que cette bascule répare — on remonte le
-     * temps par tranches jusqu'à toucher le premier commit du dépôt.
+     * L'historique ancien a-t-il été entièrement rapatrié ? Sans ce drapeau, les
+     * tours suivants repartiraient tous de `since = le plus récent connu` et rien
+     * d'antérieur n'arriverait jamais ; on remonte le temps par tranches.
      */
     backfillDone?: boolean;
     /**
-     * Jusqu'où le backfill de la **branche par défaut** est descendu.
-     *
-     * Mémorisé ici plutôt que déduit d'un `MIN(committed_at)` sur le cache, et
-     * c'est une correction de fond : le cache contient aussi les commits des
-     * autres branches. Un seul commit ancien venu d'une branche latérale
-     * abaissait le minimum global, la tranche suivante repartait de bien plus
-     * bas, et **tout l'historique intermédiaire de la branche principale était
-     * sauté** — sans que rien ne le signale.
+     * Jusqu'où le backfill de la branche par défaut est descendu. Mémorisé ici et
+     * non déduit d'un `MIN(committed_at)` sur le cache, qui contient aussi les
+     * autres branches : un seul commit ancien venu d'une branche latérale
+     * abaisserait le minimum et ferait sauter tout l'historique intermédiaire.
      */
     backfillUntil?: number;
 }
@@ -142,10 +127,9 @@ interface FetchResult<T> {
 }
 
 /**
- * Identité stable d'un auteur, **sans conserver son adresse en clair**.
- *
- * Le condensé sert de clé d'unicité et de graine de couleur ; l'adresse
- * lisible, elle, vit dans le payload chiffré.
+ * Identité stable d'un auteur, sans conserver son adresse en clair : le condensé
+ * sert de clé d'unicité et de graine de couleur, l'adresse lisible vit dans le
+ * payload chiffré.
  */
 export function authorRef(email: string): string {
     return createHash('sha256').update(email.trim().toLowerCase()).digest('hex').slice(0, 16);
@@ -207,22 +191,13 @@ interface RawCommit {
 }
 
 /**
- * La date à retenir pour un commit : celle du **committer**, pas de l'auteur.
+ * La date à retenir pour un commit : celle du committer, pas de l'auteur. C'est le
+ * sens du champ (quand le travail a atterri dans le dépôt, qu'un rebase ou une PR
+ * fusionnée écartent de la date d'écriture), et surtout celle sur laquelle GitHub
+ * filtre `since` et `until` : borner le backfill sur la date d'auteur comparerait
+ * deux grandeurs distinctes, et sauterait des commits en silence.
  *
- * Deux raisons, et la seconde est un piège coûteux :
- *
- *  1. C'est le sens du champ. `committed_at` répond à « quand ce travail
- *     a-t-il atterri dans le dépôt ? » ; la date d'auteur répond à « quand a-t-il
- *     été écrit ? ». Un rebase, un cherry-pick ou une PR fusionnée des semaines
- *     plus tard écartent les deux.
- *  2. **C'est celle sur laquelle GitHub filtre** ses paramètres `since` et
- *     `until`. Mesuré sur un dépôt ordinaire : 66 commits sur 100 ont deux dates
- *     différentes. Borner le backfill sur la date d'auteur revenait donc à
- *     comparer deux grandeurs distinctes — la borne pouvait ne pas reculer, ou
- *     sauter des commits sans que rien ne le signale.
- *
- * L'auteur reste l'auteur : `authorName` / `authorEmail` continuent de venir de
- * `author`, et c'est bien lui qui colore le graphe.
+ * L'auteur reste l'auteur : `authorName` / `authorEmail` viennent de `author`.
  */
 function commitDate(raw: RawCommit): string | undefined {
     return raw.commit?.committer?.date ?? raw.commit?.author?.date;
@@ -312,11 +287,9 @@ interface RawPull {
 
 /**
  * Les pull requests, ouvertes comme fermées, les plus récemment actives d'abord.
- *
- * Une seule page : au-delà de cent, ce qui suit n'a plus été touché depuis
- * longtemps et n'apprend rien sur l'état courant du projet. Le fournisseur
- * confond « fusionnée » et « fermée » dans `state` ; on les sépare ici, sur la
- * seule preuve fiable — la présence de `merged_at`.
+ * Une seule page : au-delà de cent, ce qui suit n'a plus bougé depuis longtemps.
+ * Le fournisseur confond « fusionnée » et « fermée » dans `state` ; on les sépare
+ * sur la seule preuve fiable, la présence de `merged_at`.
  */
 export async function fetchPullRequests(
     owner: string,
@@ -357,12 +330,10 @@ export async function fetchPullRequests(
 }
 
 /**
- * De combien `head` est en avance et en retard sur `base`.
- *
- * Un appel par branche : c'est cher, et c'est la raison pour laquelle le
- * résultat est mémorisé avec le couple de sha qui l'a produit
- * (`project_branches.compared_sha`). Tant que ni la branche ni la base ne
- * bougent, la comparaison n'est pas refaite.
+ * De combien `head` est en avance et en retard sur `base`. Un appel par branche,
+ * c'est cher : le résultat est mémorisé avec le couple de sha qui l'a produit
+ * (`compared_sha`), et tant que ni la branche ni la base ne bougent, la
+ * comparaison n'est pas refaite.
  */
 export async function fetchComparison(
     owner: string,
@@ -379,12 +350,10 @@ export async function fetchComparison(
 }
 
 /**
- * Le détail d'un commit, diff compris.
- *
- * Lu à la demande et jamais conservé — voir `projectCommitDetailSchema`. GitHub
- * n'inclut les `patch` que jusqu'à 300 fichiers et les omet pour les binaires
- * comme pour les fichiers trop volumineux ; l'absence est donc une information,
- * pas un défaut de lecture, et elle remonte telle quelle.
+ * Le détail d'un commit, diff compris, lu à la demande et jamais conservé. GitHub
+ * n'inclut les `patch` que jusqu'à 300 fichiers et les omet pour les binaires comme
+ * pour les fichiers trop volumineux : l'absence est une information, pas un défaut
+ * de lecture, et elle remonte telle quelle.
  */
 export async function fetchCommitDetail(
     owner: string,
@@ -413,9 +382,8 @@ export async function fetchCommitDetail(
         sha: data.sha ?? sha,
         message: data.commit?.message ?? '',
         authorName: data.commit?.author?.name ?? '',
-        // Même date que dans la liste (voir `commitDate`) : sans ça, la popup
-        // d'un commit rebasé afficherait une heure différente de celle du point
-        // qu'on vient de cliquer dans le graphe.
+        // Même date que dans la liste (voir `commitDate`) : sinon un commit rebasé
+        // afficherait une heure différente de celle du point cliqué dans le graphe.
         committedAt: seconds(data.commit?.committer?.date ?? data.commit?.author?.date) ?? 0,
         url: data.html_url ?? '',
         additions: data.stats?.additions ?? 0,
@@ -436,32 +404,25 @@ export async function fetchCommitDetail(
 export interface CommitPage {
     commits: GitHubCommit[];
     /**
-     * `true` quand le distant n'avait plus rien à rendre dans cette direction —
-     * et non quand on a simplement épuisé son budget de pages. C'est cette
-     * distinction qui dit au backfill s'il a fini ou s'il doit reprendre au tour
-     * suivant.
+     * `true` quand le distant n'avait plus rien à rendre dans cette direction, et
+     * non quand le budget de pages est épuisé : c'est ce qui dit au backfill s'il a
+     * fini ou s'il doit reprendre au tour suivant.
      */
     exhausted: boolean;
 }
 
 /**
- * Lit des commits dans une fenêtre temporelle, avec un budget de pages.
+ * Lit des commits dans une fenêtre temporelle, avec un budget de pages. Trois
+ * usages, un seul code :
  *
- * Trois usages, un seul code :
- *
- *  - `{ since }` — la **tête** : ce qui est arrivé depuis le dernier commit
- *    connu. Court en régime établi, souvent vide.
- *  - `{ until }` — la **queue** : on remonte le temps depuis le plus ancien
- *    commit connu. C'est le backfill, qui converge en quelques tours.
- *  - `{ ref }` — une **branche** précise. ⚠️ Sans lui, GitHub ne rend que la
- *    branche **par défaut** : tout ce qui ne vit que sur une branche de travail
- *    reste invisible. C'est ce paramètre qui fait que « tous les commits » veut
- *    vraiment dire tous.
+ *  - `{ since }` : la tête, ce qui est arrivé depuis le dernier commit connu.
+ *  - `{ until }` : la queue, le backfill qui remonte le temps par tranches.
+ *  - `{ ref }` : une branche précise. Sans lui, GitHub ne rend que la branche par
+ *    défaut, et tout ce qui ne vit que sur une branche de travail reste invisible.
  *
  * `until` est inclusif chez GitHub : le commit de la borne revient à chaque
- * tranche. Sans conséquence — `INSERT IGNORE` le laisse tomber — mais c'est la
- * raison pour laquelle l'appelant surveille la **progression** de la borne et
- * non le simple nombre de lignes insérées.
+ * tranche, `INSERT IGNORE` le laisse tomber, mais c'est pourquoi l'appelant
+ * surveille la progression de la borne et non le nombre de lignes insérées.
  */
 export async function fetchCommits(
     owner: string,
@@ -472,17 +433,11 @@ export async function fetchCommits(
 ): Promise<CommitPage> {
     const commits: GitHubCommit[] = [];
     const iso = (t: number) => new Date(t * 1000).toISOString();
-    // ⚠️ La seconde de battement sur `until` n'est pas de la prudence gratuite.
-    //
-    // Nos horodatages sont **arrondis à la seconde** (`Math.floor`), alors que
-    // GitHub date ses commits à la milliseconde et compare strictement. Une
-    // borne posée à `12:00:07.000` exclut donc un commit réellement daté
-    // `12:00:07.400` — mesuré : la tranche suivante ne renvoie pas le commit de
-    // la borne. Sans ce +1, tout commit partageant la seconde de la borne serait
-    // sauté **définitivement**, puisque le backfill ne repasse jamais.
-    //
-    // Le prix est un chevauchement d'une seconde par tranche, que
-    // `INSERT IGNORE` absorbe sans bruit.
+    // La seconde de battement sur `until` est nécessaire : nos horodatages sont
+    // arrondis à la seconde alors que GitHub date à la milliseconde et compare
+    // strictement. Sans ce +1, tout commit partageant la seconde de la borne serait
+    // sauté définitivement, le backfill ne repassant jamais. Le prix est un
+    // chevauchement d'une seconde par tranche, qu'`INSERT IGNORE` absorbe.
     const bounds =
         (window.ref ? `&sha=${encodeURIComponent(window.ref)}` : '') +
         (window.since ? `&since=${iso(window.since)}` : '') +
@@ -535,14 +490,10 @@ interface RawOwnerRepo {
 }
 
 /**
- * Une requête GitHub **sans jeton obligatoire**.
- *
- * Le reste de l'adaptateur travaille toujours authentifié : on synchronise un
- * dépôt qu'on a explicitement relié, avec le jeton qu'on lui a donné. La
- * découverte, elle, doit fonctionner avant qu'aucun jeton n'existe — c'est
- * précisément le moment où l'on en cherche un. Sans jeton, GitHub ne rend que
- * le public et applique un quota horaire bien plus serré (60 par IP), ce que
- * l'appelant annonce à l'écran plutôt que de le subir en silence.
+ * Une requête GitHub sans jeton obligatoire : le reste de l'adaptateur travaille
+ * authentifié, mais la découverte doit fonctionner avant qu'aucun jeton n'existe.
+ * Sans jeton, GitHub ne rend que le public et applique un quota bien plus serré
+ * (60 par heure et par IP), ce que l'appelant annonce à l'écran.
  */
 async function callPublic<T>(path: string, token: string | null): Promise<T> {
     const headers: Record<string, string> = {
@@ -588,22 +539,17 @@ function toOwnerRepo(raw: RawOwnerRepo): GitHubOwnerRepo {
 }
 
 /**
- * Les dépôts d'un propriétaire ou d'une organisation.
+ * Les dépôts d'un propriétaire ou d'une organisation. Trois chemins, essayés dans
+ * cet ordre, parce que GitHub n'expose pas la même chose selon qui demande :
  *
- * Trois chemins, essayés dans cet ordre, parce que GitHub n'expose pas la même
- * chose selon qui demande :
+ *  1. `/user/repos` quand le jeton appartient au propriétaire demandé : le seul
+ *     endpoint qui rende ses dépôts privés. `/users/{login}/repos` ne rend que le
+ *     public, même avec le jeton de l'intéressé, d'où l'aller-retour sur `/user`.
+ *  2. `/orgs/{owner}/repos` : une organisation, dont un jeton membre voit aussi
+ *     les dépôts privés.
+ *  3. `/users/{owner}/repos` : le repli public, qui marche sans jeton.
  *
- *  1. **`/user/repos`** quand le jeton appartient au propriétaire demandé —
- *     c'est le **seul** endpoint qui rende ses dépôts privés. `/users/{login}/repos`
- *     ne rend que le public, même avec le jeton de l'intéressé : c'est le piège
- *     de cette API, et la raison de l'aller-retour sur `/user`.
- *  2. **`/orgs/{owner}/repos`** — une organisation, dont un jeton membre voit
- *     aussi les dépôts privés.
- *  3. **`/users/{owner}/repos`** — le repli public, qui marche sans jeton.
- *
- * Une seule page : cent dépôts suffisent à choisir dans une liste, et
- * paginer pour en proposer trois cents serait rendre le choix plus difficile,
- * pas plus complet.
+ * Une seule page : cent dépôts suffisent à choisir dans une liste.
  */
 export async function listOwnerRepos(owner: string, token: string | null): Promise<GitHubOwnerRepo[]> {
     const query = `sort=pushed&direction=desc&per_page=${PER_PAGE}`;

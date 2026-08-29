@@ -21,11 +21,11 @@ interface MessagePopupProps {
 }
 
 /**
- * Reading surface for a single message, as a popup rather than a permanent
- * third column — frees the message list to use the full width for browsing.
+ * Reading surface for a single message, as a popup rather than a permanent third
+ * column, which frees the message list to use the full width for browsing.
  *
  * Deliberately NOT `tall`: that mode pins the dialog to a fixed viewport-height
- * box, which left a short message floating above a large dead area. Sized to its
+ * box, leaving a short message floating above a large dead area. Sized to its
  * content instead, with `Dialog`'s own `max-height` + scroll taking over once a
  * message is long enough to need it.
  */

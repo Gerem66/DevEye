@@ -7,20 +7,15 @@ import { getActiveWorkspaceId } from './workspace';
 export { THEME_SLOT_COUNT };
 
 /**
- * Frontend theme personalization (accent color + dashboard background).
- * Persisted in localStorage for instant paint on load, and synced to the
- * server so settings follow the user across devices.
+ * Theme personalization (accent color + dashboard background). Persisted in
+ * localStorage for instant paint on load, and synced to the server.
  */
 const KEY_PREFIX = 'deveye:theme';
 
 /**
- * Le theme appartient a l'espace, pas au compte : chaque espace a sa propre
- * apparence, donc sa propre cle de stockage.
- *
- * `null` avant qu'un espace ne soit actif (ecran de connexion) : on ne lit ni
- * n'ecrit rien, et le theme par defaut s'applique. C'est ce qui empeche par
- * construction qu'un compte herite de l'apparence du precedent sur la meme
- * machine.
+ * Le theme appartient a l'espace, donc une cle par espace. `null` avant qu'un
+ * espace ne soit actif : on ne lit ni n'ecrit rien, ce qui empeche un compte
+ * d'heriter de l'apparence du precedent.
  */
 function storageKey(): string | null {
     const id = getActiveWorkspaceId();
@@ -69,16 +64,13 @@ function normalizeSlots(input: unknown): (string | null)[] {
 }
 
 /**
- * Make sure the active background occupies a gallery slot when there's room.
- * This seeds the gallery for themes saved before slots existed (single bgImage),
- * so the active image shows up as the first thumbnail. When every slot is taken,
- * the active image stays "overflow" (unsaved) — lost on the next change.
+ * Put the active background in a gallery slot when there is room; with every slot
+ * taken it stays "overflow", unsaved.
  */
 function ensureActiveSlotted(s: ThemeState): ThemeState {
     if (!s.bgImage || s.bgImages.includes(s.bgImage)) return s;
-    // Skip oversized legacy images (uncompressed data URLs from before the
-    // gallery): they'd exceed the slot cap and fail server validation on sync.
-    // They stay as the active "overflow" background instead.
+    // An oversized image would exceed the slot cap and fail server validation on
+    // sync: it stays as the active "overflow" background instead.
     if (s.bgImage.length > THEME_SLOT_IMAGE_MAX_LENGTH) return s;
     const free = s.bgImages.indexOf(null);
     if (free === -1) return s;
@@ -196,7 +188,6 @@ function applyTheme(s: ThemeState): void {
     root.setProperty('--wallpaper-blur', blur > 0 ? `${((blur / 100) * 20).toFixed(1)}px` : '0px');
 }
 
-// Apply persisted theme as soon as the module loads.
 applyTheme(state);
 
 function persist(): void {
@@ -216,10 +207,9 @@ function scheduleSyncToServer(): void {
     syncTimer = setTimeout(() => {
         syncTimer = null;
         if (ws.state !== 'open') return;
-        // `state` est lu au **déclenchement**, pas à la programmation : maintenant
-        // que l'apparence est partagée, celle d'un autre membre peut arriver
-        // pendant la seconde d'attente. Envoyer l'instantané capturé à l'appel
-        // réécrirait par-dessus un changement qu'on vient tout juste d'appliquer.
+        // `state` est lu au déclenchement, pas à la programmation : l'apparence d'un
+        // autre membre peut arriver pendant l'attente, et un instantané capturé à
+        // l'appel la réécrirait.
         void ws.send('user.setTheme', state).catch(() => {});
     }, 1000);
 }
@@ -237,11 +227,10 @@ export function setTheme(patch: Partial<ThemeState>): void {
 }
 
 /**
- * Apply `value` as the active background and remember it in the gallery, stored
- * in the first free slot. If it already occupies a slot, it's simply
- * re-activated (no duplicate). If every slot is taken it still becomes the active
- * background but isn't saved — it's lost on the next change. Returns whether it
- * landed in a slot so the UI can warn about the overflow case.
+ * Apply `value` as the active background and remember it in the first free
+ * gallery slot; one that already occupies a slot is merely re-activated. With
+ * every slot taken it still becomes active but is lost on the next change, which
+ * the returned flag lets the UI warn about.
  */
 export function saveBackground(value: string): { saved: boolean } {
     const bgImages = state.bgImages.slice();
@@ -263,14 +252,9 @@ export function clearBackgroundSlot(index: number): void {
     setTheme({ bgImages });
 }
 
-/**
- * Called by AuthProvider when a user bundle is received (login, refresh, /me).
- * The server state wins over localStorage so cross-device settings propagate.
- * Skips overwrite if the server has no saved theme (first login, or legacy user).
- */
+/** The server state wins over localStorage so cross-device settings propagate. */
 export function syncThemeFromServer(serverTheme: ThemeStateDTO | null): void {
-    // Aucun theme enregistre pour cet espace : repartir du defaut plutot que de
-    // laisser celui de l'espace precedent a l'ecran.
+    // Aucun theme enregistre pour cet espace : le defaut, pas celui de l'espace precedent.
     if (!serverTheme) {
         resetTheme();
         return;
@@ -289,9 +273,8 @@ export function syncThemeFromServer(serverTheme: ThemeStateDTO | null): void {
 }
 
 /**
- * Revient au theme par defaut sans rien ecrire : a la deconnexion, et quand un
- * espace n'a pas encore de theme. Ne purge pas les cles des autres espaces, qui
- * restent valables au prochain passage.
+ * Revient au theme par defaut sans rien ecrire. Ne purge pas les cles des autres
+ * espaces, qui restent valables au prochain passage.
  */
 export function resetTheme(): void {
     state = DEFAULT;

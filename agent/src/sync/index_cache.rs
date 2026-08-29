@@ -10,19 +10,15 @@ use tracing::debug;
 
 use crate::config::Config;
 
-/// Une entrée du cache, qui porte EXACTEMENT les champs d'un `SyncIndexEntry`.
+/// Une entrée du cache, avec exactement les champs d'un `SyncIndexEntry`.
 ///
-/// `kind` et `mode` ne servent pas au cache de hachage, ils servent à
-/// l'empreinte : sans eux, un `chmod` (qui déplace le ctime, pas le mtime) et un
-/// dossier vidé de son dernier fichier seraient invisibles à l'empreinte alors
-/// qu'un vrai scan les voit. L'empreinte cesserait alors de décrire ce que le
-/// scan produirait, ce qui est précisément la garantie à ne pas affaiblir.
+/// `kind` et `mode` ne servent pas au cache de hachage mais à l'empreinte : sans
+/// eux, un `chmod` (qui déplace le ctime, pas le mtime) ou un dossier vidé de
+/// son dernier fichier lui seraient invisibles alors qu'un scan les voit.
 ///
-/// Ces deux champs sont REQUIS, sans `serde(default)` : un cache écrit par une
-/// version antérieure cesse donc de se désérialiser, et `load` retombe sur un
-/// cache vide. C'est le chemin « cache corrompu » qui existe depuis toujours, il
-/// coûte un re-hachage unique par partage, et c'est très exactement ce qu'on
-/// veut — un cache muet sur `kind`/`mode` produirait une empreinte fausse.
+/// Ils sont requis, sans `serde(default)` : un cache qui ne les porte pas cesse
+/// de se désérialiser et `load` retombe sur un cache vide (un re-hachage par
+/// partage), plutôt que de produire une empreinte fausse.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CacheEntry {
     pub size: u64,
@@ -37,13 +33,10 @@ pub struct CacheEntry {
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct IndexCache {
-    /// Le dossier local du partage, tel qu'il était au dernier scan.
-    ///
-    /// Il ne sert pas au scan, qui reçoit sa racine du serveur : il sert au
-    /// **retrait**. `uninstall` tourne hors ligne, sans config de partage, et
-    /// c'est la seule trace locale de l'endroit où l'agent a posé ses
-    /// `.deveye-tmp` / `.deveye-trash` — sans quoi la désinstallation les
-    /// laisserait derrière elle sans même pouvoir les nommer.
+    /// Le dossier local du partage au dernier scan. Ne sert pas au scan (qui
+    /// reçoit sa racine du serveur) mais au retrait : `uninstall` tourne hors
+    /// ligne, et c'est la seule trace locale de l'endroit où l'agent a posé ses
+    /// `.deveye-tmp` / `.deveye-trash`.
     #[serde(default)]
     pub root: String,
     pub entries: HashMap<String, CacheEntry>,

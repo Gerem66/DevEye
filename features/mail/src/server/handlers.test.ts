@@ -30,24 +30,13 @@ import { createTestContext, type TestContext } from '@deveye/types/sdk/testing';
 import type { MailRepo } from './repo';
 
 /**
- * Les handlers du module, sur le harnais du SDK.
+ * Les handlers du module, sur le harnais du SDK. Ce qui se tient ici est ce qui
+ * ne lève nulle part quand ça se dérègle : le codec choisi par palier, le
+ * verrou, les secrets absents des DTO, la charge des deux tickets, et le partage
+ * inter-espaces (codec du domicile, gestes réservés au domicile).
  *
- * Ce qui mérite d'être tenu, c'est ce qui ne lève nulle part quand ça se
- * dérègle : les **deux paliers** (un compte ouvert s'écrit sous le codec
- * ouvert, un compte gardé sous le codec gardé, et un compte gardé n'existe pas
- * dans un espace partagé), le **verrou** (une lecture sur un compte gardé
- * répond `locked` à une session scellée, et la liste des comptes masque au
- * lieu de lever), les **secrets** (jamais dans un DTO), les deux **tickets**
- * (l'URL d'une pièce jointe et le `state` OAuth portent la charge que les
- * routes relisent, et le retour OAuth vise l'origine de l'app), les réglages
- * de l'espace, et le **partage inter-espaces** (un compte projeté se liste
- * avec `foreign: true` et se lit, dossiers et messages compris, sous le codec
- * de son domicile ; supprimer, changer de palier et retoucher les identifiants
- * restent chez lui ; un compte gardé ne se projette pas).
- *
- * `OAUTH_GOOGLE_*` est posé AVANT le chargement des handlers, parce que
- * `env.ts` lit l'environnement à l'import ; c'est la seule raison de l'import
- * dynamique ci-dessous.
+ * `OAUTH_GOOGLE_*` est posé AVANT le chargement des handlers, parce que `env.ts`
+ * lit l'environnement à l'import : c'est la raison de l'import dynamique.
  */
 
 process.env.OAUTH_GOOGLE_CLIENT_ID = 'google-client';
@@ -109,14 +98,10 @@ function row(over: Partial<MailAccountRow> & { id: number; workspace_id: number 
 
 /**
  * Un dépôt en mémoire, même contrat que le vrai : ce que ces tests traversent
- * (comptes, réglages, la chaîne message → dossier → compte) est implémenté,
- * le reste lève s'il est atteint.
- *
- * `projections` reproduit la table `item_shares` : `accountId → espaces où il
- * est projeté`. C'est ce qui donne à `listVisible` / `findVisible` leur
- * seconde branche (ouverts seulement, comme la requête), et ce que le harnais
- * (`shares`) doit dire en écho pour que `ctx.sharing.scope()` connaisse le
- * domicile.
+ * est implémenté, le reste lève s'il est atteint. `projections` reproduit
+ * `item_shares` (`accountId → espaces où il est projeté`), la seconde branche de
+ * `listVisible` / `findVisible`, dont le harnais (`shares`) doit dire l'écho
+ * pour que `ctx.sharing.scope()` connaisse le domicile.
  */
 function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
     let seq = 0;
@@ -128,8 +113,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         a.security_tier === 'open' && (projections[a.id] ?? []).includes(ws);
     const visible = (a: MailAccountRow, ws: number) => a.workspace_id === ws || projected(a, ws);
     // Des copies, comme une lecture SQL : la ligne qu'un handler tient est un
-    // instantané, et une écriture ne doit pas la faire bouger sous lui (c'est
-    // ce qui décide, dans `accountSetProfile`, si le palier a changé).
+    // instantané qu'une écriture ne doit pas faire bouger sous lui.
     const copy = (a: MailAccountRow | undefined): MailAccountRow | null => (a ? { ...a } : null);
     return {
         accountRows,
@@ -255,9 +239,8 @@ const DRAFT: MailAccountDraft = {
 };
 
 /**
- * Un codec qui étiquette son étage : le harnais chiffre à l'identité, ce qui
- * ne dit pas SOUS QUEL codec une ligne a été écrite. Posé sur `ctx.cipher`, il
- * rend visible le choix du palier, qui est toute la question ici.
+ * Un codec qui étiquette son étage : le harnais chiffre à l'identité, ce qui ne
+ * dirait pas sous quel codec une ligne a été écrite.
  */
 function taggedCipher(tag: string): SdkCipher {
     return {
@@ -459,10 +442,9 @@ function folderRow(id: number, accountId: number): MailFolderRow {
 
 describe('le partage inter-espaces', () => {
     it('liste un compte projeté avec sa pastille `foreign`, sous le codec de son domicile, et le compte', async () => {
-        // Le compte 7 vit dans l'espace 42 et se projette vers l'espace 1. La
-        // fenêtre chiffre avec un codec étiqueté : lire la ligne projetée avec
-        // lui rendrait « (compte verrouillé) », le codec du domicile (celui du
-        // harnais, l'identité) rend son nom.
+        // Le compte 7 vit dans l'espace 42 et se projette vers l'espace 1 : lire
+        // la ligne projetée avec le codec étiqueté de la fenêtre rendrait
+        // « (compte verrouillé) », celui du domicile rend son nom.
         const repo = fakeRepo({ 7: [1] });
         repo.accountRows.push(row({ id: 7, workspace_id: 42, display_name_enc: 'Ailleurs' }));
         const ctx = tagging(createTestContext({ repo, workspaceId: 1, shares: { 7: 42 } }));

@@ -27,19 +27,11 @@
     flex-direction: column;
     overflow: hidden;
     /*
-     * The 1240px cap above is the floor, not the ceiling: `stores/popupWidth`
-     * overrides `max-width` inline with the width the open view's content
-     * actually needs (a kanban of eight columns, a zoomed-out timeline), so the
-     * panel adapts to its content instead of jumping to full width.
-     *
-     * Widening is a CSS transition, not an animated style prop: the size settles
-     * *after* the render that changed it, so framer-motion (which owns this node
-     * through `layoutId`) measures no layout jump and never fights it.
-     *
-     * The store clamps its value to `innerWidth - margin`. That clamp is what
-     * keeps the growth even: the left/right insets already bound the real width,
-     * so animating `max-width` past them would saturate mid-flight — the box
-     * would stop growing while the transition kept running.
+     * The 1240px cap is the floor: `stores/popupWidth` overrides `max-width`
+     * inline with the width the open view needs, clamped to `innerWidth - margin`
+     * so the transition never saturates mid-flight. A CSS transition, not an
+     * animated style prop: framer-motion (which owns this node through
+     * `layoutId`) measures no layout jump.
      */
     transition: max-width var(--transition-slow);
 }
@@ -51,12 +43,10 @@
 }
 
 /*
- * Padded frame around the scroll area. It does NOT scroll itself, so its padding
- * — including the bottom — is always painted (a scroll container's own
- * `padding-bottom` is dropped by Chromium/WebKit once the content overflows, so
- * the bottom gap lives on this non-scrolling frame). The right padding is omitted
- * here and applied on `.scroll` instead, so the scrollbar hugs the popup edge
- * while the content keeps its inset.
+ * Padded frame around the scroll area. It does not scroll itself, so its bottom
+ * padding is always painted (Chromium/WebKit drop a scroll container's own
+ * `padding-bottom` once content overflows). The right padding sits on `.scroll`
+ * so the scrollbar hugs the popup edge.
  */
 .body {
     flex: 1;

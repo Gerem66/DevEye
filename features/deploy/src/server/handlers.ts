@@ -37,21 +37,13 @@ import {
 } from './_shared';
 
 /**
- * Déploiement — les cibles d'un espace, et ce qu'on y a poussé.
+ * Déploiement : les cibles d'un espace, et ce qu'on y a poussé. Une cible
+ * appartient à l'espace, un projet n'y pointe que par une liaison. Portée
+ * étroite : déclencher et suivre, rien n'est configuré ici.
  *
- * Feature de premier rang depuis la migration 080, et non plus un onglet des
- * Projets : une pile compose sert souvent deux projets (un client, un serveur),
- * certaines ne servent aucun projet, et un projet n'y **pointe** que par une
- * liaison (`features/project/deployLink.ts`, dans l'app). C'est la forme des
- * features Git, Bases de données et Audience, et pour les mêmes raisons.
- *
- * Portée volontairement **étroite** : déclencher et suivre. DevEye ne configure
- * rien — ni domaine, ni variable d'environnement, ni build. Tout cela vit chez
- * le fournisseur, dont ce n'est pas à nous de dupliquer l'interface.
- *
- * ⚠️ Préfixe unique `deploy.` avec des noms en camelCase : le contrôle de
- * démarrage de `_topics.ts` cherche un verbe **juste après le point** et n'en
- * verra donc aucun. `mutates` est à relire à la main sur chaque écriture.
+ * Préfixe unique `deploy.` avec des noms en camelCase : le contrôle de
+ * démarrage de `_topics.ts` cherche un verbe juste après le point et n'en verra
+ * aucun. `mutates` est à relire à la main sur chaque écriture.
  */
 
 /** Le type d'une cible, tel que l'adaptateur Dokploy le prend. */
@@ -103,9 +95,8 @@ export const deployHandlers = [
             const [target, rows, projectIds] = await Promise.all([
                 reloadTarget(ctx, input.targetId),
                 ctx.repo.listDeployments(input.targetId, home.workspace_id, input.limit ?? 20),
-                // Les liaisons de **cet** espace, par le contrat de Projets : la
-                // fiche d'une cible projetée montre les projets d'ici qui la
-                // déploient, pas ceux de là-bas.
+                // Les liaisons de CET espace : une cible projetée montre les
+                // projets d'ici qui la déploient, pas ceux de là-bas.
                 projectIdsOf(ctx, input.targetId)
             ]);
             return {
@@ -120,18 +111,16 @@ export const deployHandlers = [
         access: { level: 'write' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
-            // La clé existe-t-elle, et dans **cet** espace ? Sans cette garde on
-            // déclarerait une cible sur le jeton d'un autre espace, dont l'existence
-            // même n'a pas à fuiter.
+            // La clé existe-t-elle, et dans CET espace ? Sans cette garde on
+            // déclarerait une cible sur le jeton d'un autre espace.
             await loadDokployCredential(ctx, input.credentialId);
 
             const cipher = ctx.cipher();
             const body: StoredTarget = { name: input.name };
 
             // Idempotente : la même application sur la même instance est la même
-            // cible. On met son intitulé à jour plutôt que d'en créer une jumelle —
-            // c'est ce qui permet à un projet de « déclarer » une cible sans savoir
-            // si un autre l'a déjà fait.
+            // cible, dont l'intitulé se met à jour. Un projet peut ainsi déclarer
+            // une cible sans savoir si un autre l'a déjà fait.
             const existing = await ctx.repo.findTargetByExternal(ctx.workspaceId, input.credentialId, input.externalId);
             if (existing) {
                 await ctx.repo.updateTarget(existing.id, ctx.workspaceId, {
@@ -165,8 +154,7 @@ export const deployHandlers = [
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             // Domicile seulement : le jeton d'une cible se choisit parmi les clés
-            // de SON espace, que la fenêtre ne voit pas — lui en proposer d'ici
-            // relierait la cible à une clé d'un autre monde.
+            // de SON espace, que la fenêtre ne voit pas.
             await loadHomeTarget(ctx, input.targetId);
             if (input.credentialId !== null) await loadDokployCredential(ctx, input.credentialId);
 
@@ -184,23 +172,19 @@ export const deployHandlers = [
     defineSdkFeature({
         ...deployRemove,
         access: { level: 'write' },
-        // Un seul sujet, celui du module : l'onglet d'un projet qui montre une
-        // cible suit déjà `deploy.detail` / `deploy.list`. Ce que la
-        // suppression ne ravive plus, ce sont les compteurs d'onglets d'un
-        // projet (le sujet `projects`, qu'un module ne peut pas nommer) : ils
-        // se remettent à jour à leur prochaine lecture.
+        // Le sujet du module seulement : les compteurs d'onglets d'un projet
+        // (sujet `projects`, qu'un module ne nomme pas) se relisent à leur
+        // prochaine ouverture.
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             await loadHomeTarget(ctx, input.targetId);
-            // L'historique et les liaisons partent en CASCADE. L'application chez le
-            // fournisseur, elle, n'est évidemment jamais touchée : DevEye ne fait
-            // que la pointer.
+            // L'historique et les liaisons partent en CASCADE ; l'application chez
+            // le fournisseur n'est jamais touchée.
             const ok = await ctx.repo.deleteTarget(input.targetId, ctx.workspaceId);
             if (!ok) throw new FeatureError('not_found', 'Cible de déploiement introuvable');
             // Projections, restrictions et route de notification ne tiennent à
             // aucune clé étrangère : sans ce ménage, elles s'appliqueraient à la
-            // prochaine cible à hériter de l'identifiant. `ctx.items.forget` fait
-            // les trois (l'ex `itemSharing.forgetItem` + `notificationChannels.clearRoute`).
+            // prochaine cible à hériter de l'identifiant.
             await ctx.items.forget(input.targetId);
             ctx.audit({
                 action: 'deploy.remove',
@@ -225,8 +209,7 @@ export const deployHandlers = [
         handler: async (ctx: Ctx, input) => {
             const { baseUrl, apiKey } = await loadDokployCredential(ctx, input.credentialId);
             try {
-                // Applications **et** piles compose : sur une infra Dokploy, les
-                // secondes sont souvent majoritaires.
+                // Applications et piles compose.
                 const targets = await listTargets(baseUrl, apiKey);
                 return {
                     candidates: targets.map((t) => ({
@@ -244,14 +227,12 @@ export const deployHandlers = [
     defineSdkFeature({
         ...deployTrigger,
         access: { level: 'write' },
-        // Le sujet du module : l'onglet du projet suit `deploy.detail`, et voit
-        // l'événement arriver sans recharger. Sa frise (le sujet `projects`,
+        // L'onglet du projet suit `deploy.detail` ; sa frise (sujet `projects`,
         // qu'un module ne nomme pas) se relit à sa prochaine ouverture.
         mutates: true,
         handler: async (ctx: Ctx, input) => {
-            // Déclencher depuis une fenêtre est permis — c'est tout l'intérêt de
-            // projeter une cible vers l'espace d'une équipe — mais tout ce qui
-            // s'écrit appartient au domicile : la ligne, sa clé, son suivi.
+            // Déclencher depuis une fenêtre est permis, mais tout ce qui s'écrit
+            // appartient au domicile : la ligne, sa clé, son suivi.
             const target = await loadTarget(ctx, input.targetId, 'write');
             if (target.credential_id === null) {
                 throw new FeatureError('validation', 'L’accès Dokploy a été retiré : reliez une clé.');
@@ -262,9 +243,8 @@ export const deployHandlers = [
             const title = input.title || 'Déploiement depuis DevEye';
             const body: StoredDeployment = { title, description: input.description, url: baseUrl };
 
-            // La ligne est écrite **avant** l'appel : si le fournisseur accepte puis
-            // que la réponse se perd, il reste une trace de ce qui a été déclenché.
-            // Un déploiement fantôme est moins grave qu'un déploiement invisible.
+            // La ligne est écrite AVANT l'appel : si le fournisseur accepte puis que
+            // la réponse se perd, il reste une trace de ce qui a été déclenché.
             const row = await ctx.repo.createDeployment({
                 targetId: target.id,
                 workspaceId: target.workspace_id,
@@ -273,8 +253,7 @@ export const deployHandlers = [
                 content: await cipher.encrypt(JSON.stringify(body))
             });
 
-            // Audité en `warn` : c'est la seule action du module qui produise un
-            // effet hors de DevEye.
+            // Audité en `warn` : la seule action du module à effet hors de DevEye.
             ctx.audit({
                 level: 'warning',
                 action: 'deploy.trigger',
@@ -297,37 +276,29 @@ export const deployHandlers = [
                 throw new FeatureError('internal', message);
             }
 
-            // La frise du projet, quand le geste est parti de l'un d'eux. Facultatif
-            // par construction : déclenché depuis la feature, ce déploiement
-            // n'appartient à aucun projet en particulier, et l'inscrire dans l'un
-            // d'eux au hasard serait faux.
+            // La frise du projet, quand le geste est parti de l'un d'eux ; depuis
+            // la feature, ce déploiement n'appartient à aucun projet.
             if (input.projectId !== undefined) {
                 await recordProjectEvent(ctx, input.projectId, target.workspace_id, title);
             }
 
-            // Le suivi d'état est repris par l'ordonnanceur du module : c'est lui
-            // qui ira demander à Dokploy où en est ce déploiement. `wake()` et non
-            // `requestSync()` — il n'y a aucun dépôt git à synchroniser ici, juste
-            // un tour à déclencher plus tôt que la cadence.
+            // Le suivi d'état est repris par le rapprochement de fond, réveillé
+            // plutôt qu'attendu à sa cadence.
             wakeSync();
 
             return { deployment: await toDeployment(cipher, row) };
         }
     }),
     /**
-     * L'historique complet d'une cible, tel que Dokploy le rend.
-     *
-     * Distincte de `deployGet` : celle-ci interroge le fournisseur en direct à
-     * chaque appel plutôt que de relire le suivi local, donc coûte une requête
-     * externe et peut échouer si l'instance est injoignable — raison pour laquelle
-     * rien ne l'appelle en boucle ni depuis une liste de plusieurs cibles.
+     * L'historique complet, interrogé chez le fournisseur à chaque appel :
+     * rien ne l'appelle en boucle ni depuis une liste.
      */
     defineSdkFeature({
         ...deployHistory,
         handler: async (ctx: Ctx, input) => {
             const target = await loadTarget(ctx, input.targetId);
             // Le jeton a été retiré : rien à interroger, mais ce n'est pas une
-            // erreur — la fiche le dit déjà par ailleurs (« accès retiré »).
+            // erreur, la fiche le dit déjà (« accès retiré »).
             if (target.credential_id === null) return { entries: [] };
 
             const { baseUrl, apiKey } = await loadDokployCredential(ctx, target.credential_id, target);
@@ -340,12 +311,9 @@ export const deployHandlers = [
         }
     }),
     /**
-     * Le journal complet d'un déploiement, tel que Dokploy l'a produit.
-     *
-     * Reconstitue le chemin du journal en repassant par l'historique complet
-     * plutôt que de le faire porter au client : ce chemin est un détail
-     * d'implémentation du fournisseur (un emplacement sur son disque), pas
-     * quelque chose que DevEye a de raison d'exposer.
+     * Le journal complet d'un déploiement. Le chemin du journal est retrouvé en
+     * repassant par l'historique plutôt que porté par le client : c'est un
+     * emplacement sur le disque du fournisseur, rien à exposer.
      */
     defineSdkFeature({
         ...deployLog,
@@ -370,20 +338,8 @@ export const deployHandlers = [
         }
     }),
 
-    // ------------------------------------------------------------ clés Dokploy
-    //
-    // Les clés d'API **Dokploy** de l'espace.
-    //
-    // Elles vivaient dans la feature Git, où elles n'avaient jamais eu de raison
-    // d'être : un jeton git et une clé de mise en production ne se ressemblent
-    // que par leur forme. Elles y étaient parce que le déploiement n'était alors
-    // qu'un onglet de projet, sans écran à lui pour les accueillir — la feature
-    // ayant désormais le sien, poser la clé qui déploie relève de `deploy`, pas
-    // de `git`. Le rapatriement en module leur a donné leur table
-    // (`ft_deploy_credentials`, migration 099) et leurs quatre gestes ICI, là où
-    // `_credentials.ts` les partageait avec la porte de Git. L'adresse de
-    // l'instance est **obligatoire** — Dokploy est auto-hébergé, sans elle rien
-    // n'est adressable ; le contrat l'exige.
+    // Les clés d'API Dokploy de l'espace. L'adresse de l'instance est
+    // obligatoire : Dokploy est auto-hébergé, sans elle rien n'est adressable.
     defineSdkFeature({
         ...deployCredentialList,
         handler: async (ctx: Ctx) => {
@@ -410,7 +366,6 @@ export const deployHandlers = [
                 description: 'Accès Dokploy ajouté',
                 metadata: { credentialId: row.id }
             });
-            // Neuf, donc encore utilisé par rien.
             return { credential: toCredential(row, 0) };
         }
     }),
@@ -422,8 +377,7 @@ export const deployHandlers = [
             const row = await ctx.repo.updateCredential(input.credentialId, ctx.workspaceId, {
                 label: input.label,
                 baseUrl: input.baseUrl,
-                // Secret absent = inchangé. Le client ne l'a jamais reçu, il ne peut
-                // donc pas le renvoyer à l'identique.
+                // Secret absent = inchangé : le client ne l'a jamais reçu.
                 secretEnc: input.secret ? await ctx.cipher().encrypt(input.secret) : undefined
             });
             if (!row) throw new FeatureError('not_found', 'Accès Dokploy introuvable');
@@ -436,9 +390,8 @@ export const deployHandlers = [
         access: { level: 'write' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
-            // Ce qui s'en servait garde sa ligne mais perd son accès (le dépôt
-            // met les cibles à NULL avant de retirer la clé) : le déploiement
-            // s'arrête proprement et le dit, au lieu de disparaître avec le jeton.
+            // Les cibles de la clé gardent leur ligne mais perdent leur accès (le
+            // dépôt les met à NULL avant de retirer la clé).
             const ok = await ctx.repo.removeCredential(input.credentialId, ctx.workspaceId);
             if (!ok) throw new FeatureError('not_found', 'Accès Dokploy introuvable');
             ctx.audit({

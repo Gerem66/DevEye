@@ -14,15 +14,11 @@ import { createMailTransport } from './transport';
  * La relève de fond et le transport des alertes, sur le harnais de service du
  * SDK : sans horloge ni réseau, le client IMAP est la couture de test.
  *
- * Ce qui mérite d'être tenu : un tour relève les comptes **dus** et eux seuls
- * (ouverts, actifs, à échéance), met les dossiers et les enveloppes en cache
- * sous le codec ouvert, consigne la relève et ne prévient les écrans que
- * quand quelque chose a bougé ; une boîte qui ne répond pas est abandonnée à
- * l'échéance, consignée `unreachable`, annoncée, et rendue à la rotation ;
- * un compte gardé n'est jamais touché. Le transport ne liste que les comptes
- * ouverts et actifs visibles de l'espace (un compte projeté d'ailleurs en
- * fait partie, lu sous le codec de son domicile), envoie depuis l'adresse du
- * compte, et répond `false` plutôt que de lever.
+ * Ce qui mérite d'être tenu : un tour relève les comptes dus et eux seuls, ne
+ * prévient les écrans que quand quelque chose a bougé, abandonne à l'échéance
+ * une boîte qui ne répond pas et ne touche jamais un compte gardé ; le transport
+ * ne liste que les comptes ouverts et actifs visibles de l'espace, lus sous le
+ * codec de leur domicile, et répond `false` plutôt que de lever.
  */
 
 interface FakeRepo extends MailRepo {
@@ -345,10 +341,9 @@ describe('la relève de fond', () => {
         const repo = fakeRepo([account({ id: 1 })]);
         const deps = createTestServiceDeps({ repo });
         const client: SyncClient = {
-            // Répond bien après l'échéance : c'est le cas qu'`inFlight` seul ne
-            // rendait jamais. (Un minuteur tenu, et non une promesse jamais
-            // résolue : celui de l'échéance est `unref`, il ne retient pas le
-            // processus de test à lui seul.)
+            // Répond bien après l'échéance : le cas qu'`inFlight` seul ne rendait
+            // jamais. Le minuteur de l'échéance est `unref`, il ne retient pas le
+            // processus de test.
             listFolders: () => new Promise((resolve) => setTimeout(() => resolve([]), 200)),
             syncFolder: unused,
             fetchOlderMessages: unused

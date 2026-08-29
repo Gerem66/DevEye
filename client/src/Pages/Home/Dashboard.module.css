@@ -12,64 +12,27 @@
     padding-top: var(--navbar-height);
     transition: filter var(--transition-slow);
     /*
-     * Quand le verre des tuiles a le droit de revenir : après le flou, jamais
-     * pendant.
-     *
-     * Au repli, React retire `.recessed` d'un coup, donc `--glass-backdrop`
-     * reprend sa valeur immédiatement, alors que `filter` n'est pas parti : il
-     * *transitionne* vers zéro. Or **toute** valeur de `filter` autre que `none`
-     * fait encore de `main` un backdrop root. Sans ce délai, le verre revient
-     * pile pendant cette fenêtre et des tuiles s'effacent le temps du repli,
-     * pour reparaître à la fin. C'est l'exact symétrique du défaut d'ouverture,
-     * et il ne se voit qu'à la fermeture parce qu'à l'aller la classe arrive
-     * *avant* le flou, si bien que les deux ne se croisent jamais.
-     *
-     * Calculé sur la durée du flou plutôt que recopié : le délai doit rester
-     * supérieur à elle, et un nombre en dur ne tient cette règle que tant qu'on
-     * pense à relire le commentaire qui la rappelle. La marge de 60 ms, elle,
-     * est un choix — une image ou deux de battement coûtent moins cher qu'un
-     * scintillement — mais elle ne peut plus se désaccorder du flou.
+     * Le verre des tuiles ne revient qu'après le flou, jamais pendant : toute
+     * valeur de `filter` autre que `none` fait encore de `main` un backdrop
+     * root, et au repli `filter` transitionne vers zéro alors que
+     * `--glass-backdrop` est déjà revenu. Calculé sur la durée du flou pour ne
+     * pas s'en désaccorder, avec 60 ms de marge.
      */
     --glass-backdrop-delay: calc(var(--transition-slow-ms) + 60ms);
 }
 
 /*
- * L'accueil recule pendant qu'un dossier est déployé.
+ * L'accueil recule pendant qu'un dossier est déployé : flou et léger retrait.
+ * Le flou est porté par l'accueil, pas par la couche, dont un `backdrop-filter`
+ * flouterait les cartes qu'elle transporte. Le retrait est animé par
+ * framer-motion sur `main` (voir `index.tsx`) : un `scale()` CSS sur l'ancêtre
+ * des tuiles fausserait leurs mesures.
  *
- * Flou **et** léger retrait : le flou seul aplatit, le retrait seul ne dit pas
- * qu'on a changé de plan. Ensemble ils donnent la profondeur, et le liseré de
- * fond d'écran qui apparaît sur les bords suffit à faire lire la couche du
- * dessus comme posée par-dessus plutôt que comme un remplacement.
- *
- * Le flou est porté par l'accueil, pas par la couche : une couche floutante
- * (`backdrop-filter`) aurait flouté au passage les cartes qu'elle transporte.
- *
- * `pointer-events: none` par sûreté : le voile intercepte déjà les clics, mais
- * une tuile qui dépasserait resterait cliquable derrière une interface qui dit
- * le contraire. La molette, elle, traverse et défile la couche du dessus.
- *
- * Le retrait, lui, n'est **pas** ici : il est animé par framer-motion sur
- * `main` (voir `index.tsx`). Une mise à l'échelle posée en CSS sur l'ancêtre de
- * toutes les tuiles fausse leurs mesures — framer ne sait retrancher d'une
- * mesure que les transformations qu'il a écrites lui-même — et les tuiles
- * partaient alors se replacer à côté, voire hors de l'écran.
- */
-/*
- * Le verre des tuiles est coupé le temps du retrait.
- *
- * `filter` fait de `main` un **backdrop root** (Filter Effects 2). Les
- * `backdrop-filter` des cartes, à l'intérieur, se mettent alors à échantillonner
- * un fond vide, puisque `main` n'a pas de fond à lui. Un moteur conforme y rend
- * un no-op et la carte perd simplement son verre ; Firefox, lui, fait
- * carrément disparaître une partie des cartes, et pas les mêmes selon leur
- * taille et ce qu'il y a derrière, parce que le résultat dépend de la découpe
- * en couches du compositeur. D'où le symptôme déroutant : deux tuiles
- * s'évanouissaient, les dix autres non, alors que le flou est global.
- *
- * Couper le verre ici rend donc **exactement** ce qu'un moteur conforme rend
- * déjà, en le disant nous-mêmes au lieu de le laisser au navigateur. Ça passe
- * par un jeton parce que `.widget` vit dans un autre module CSS : la cascade
- * traverse ce qu'un sélecteur ne peut pas atteindre.
+ * Le verre des tuiles est coupé le temps du retrait : `filter` fait de `main`
+ * un backdrop root (Filter Effects 2), les `backdrop-filter` des cartes
+ * échantillonnent alors un fond vide, et Firefox fait carrément disparaître
+ * une partie des cartes. Par un jeton, parce que `.widget` vit dans un autre
+ * module CSS.
  */
 .recessed {
     --glass-backdrop: none;
@@ -104,17 +67,10 @@
 }
 
 /*
- * Tuile d'une feature que le rôle courant n'ouvre pas.
- *
- * Elle reste en place plutôt que de disparaître : la retirer déplacerait ses
- * voisines et donnerait à lire une disposition abîmée. En retrait et
- * désaturée, elle dit qu'il y a là quelque chose auquel on n'a pas droit — ce
- * qui est vrai, et se demande. Le clic reste actif : c'est lui qui l'explique.
- *
- * L'atténuation passe par `filter: opacity()`, pas par la propriété `opacity` :
- * le Widget est un motion.div (layoutId) et framer-motion écrit `opacity` en
- * style inline à la fin de ses animations, ce qui écraserait une règle de
- * feuille de style. `filter`, lui, n'est pas animé par framer, donc il tient.
+ * Tuile d'une feature que le rôle courant n'ouvre pas : en retrait plutôt que
+ * retirée (les voisines ne bougent pas), le clic restant actif pour l'expliquer.
+ * `filter: opacity()` et non `opacity` : le Widget est un motion.div et
+ * framer-motion écrit `opacity` en style inline, ce qui écraserait la feuille.
  */
 .lockedTile {
     filter: opacity(0.5);
@@ -139,10 +95,8 @@
     width: 100%;
 }
 
-/* Bascule d'espace quand l'accueil quitté n'a rien à laisser à l'écran : un
-   battement. Quand il a des sections, elles restent affichées et glissent vers
-   la disposition de la cible, ce bloc ne sert pas. Assez haut pour que la page
-   ne se recroqueville pas le temps du chargement. */
+/* Bascule d'espace quand l'accueil quitté n'a rien à laisser à l'écran. Assez
+   haut pour que la page ne se recroqueville pas le temps du chargement. */
 .switching {
     display: flex;
     align-items: center;
@@ -168,14 +122,9 @@
     }
 }
 
-/*
- * La boîte qui se déroule au dépliage d'une section.
- *
- * Elle n'apporte aucune mise en forme — la grille reste seule maîtresse de la
- * disposition — elle n'existe que pour porter la hauteur animée. `overflow` est
- * piloté en ligne : découpant pendant le mouvement, transparent une fois posé,
- * sinon le soulèvement d'une carte au survol se ferait rogner par le haut.
- */
+/* La boîte qui se déroule au dépliage : elle ne porte que la hauteur animée.
+   `overflow` est piloté en ligne, sinon le soulèvement d'une carte au survol
+   se ferait rogner. */
 .sectionBody {
     min-width: 0;
 }

@@ -11,15 +11,9 @@ import type { DatabaseRepo } from './repo';
 import { DatabaseMonitor } from './service';
 
 /**
- * Le relevé périodique du module, sur le harnais de service du SDK.
- *
- * Aucun réseau : l'ouverture de session est injectée, et le test décide de ce
- * que la base répond. Ce qui mérite d'être tenu, c'est ce qui ne lève nulle
- * part quand ça se dérègle : un relevé qui échoue **conserve** la version et
- * la taille connues, les alertes ne notifient qu'aux **transitions** (dans les
- * deux sens, sur la route de LA base, avec sa mise en page Discord),
- * `last_fired_at` n'est posé qu'à la montée, et une alerte cassée n'arrête
- * pas les autres.
+ * Le relevé périodique sur le harnais du SDK, session injectée : un échec
+ * conserve version et taille, les alertes notifient aux transitions seulement,
+ * `last_fired_at` n'est posé qu'à la montée, une alerte cassée n'arrête pas les autres.
  */
 
 interface FakeRepo extends DatabaseRepo {
@@ -75,7 +69,7 @@ function alert(over: Partial<DatabaseAlertRow> & { id: number }): DatabaseAlertR
     };
 }
 
-/** Un dépôt en mémoire ; le harnais chiffre à l'identité, donc les blobs sont le JSON en clair. */
+/** Un dépôt en mémoire ; le harnais chiffre à l'identité. */
 function fakeRepo(rows: DatabaseRow[], alerts: DatabaseAlertRow[] = []): FakeRepo {
     const alertChecks: FakeRepo['alertChecks'] = [];
     const unused = async () => {
@@ -87,8 +81,7 @@ function fakeRepo(rows: DatabaseRow[], alerts: DatabaseAlertRow[] = []): FakeRep
         alertChecks,
         list: unused,
         listVisible: unused,
-        // Une copie, comme une ligne lue en base : le service compare l'état
-        // d'AVANT le relevé à ce qu'il écrit.
+        // Une copie, comme une ligne lue en base.
         find: async (id, workspaceId) => {
             const r = rows.find((x) => x.id === id && x.workspace_id === workspaceId);
             return r ? { ...r } : null;
@@ -209,8 +202,7 @@ describe('la boucle', () => {
         );
         answer({});
         await deps.recorded.tickers[0].tick();
-        // Seule la base surveillée entre dans la boucle : « à la demande » est
-        // bien le comportement par défaut.
+        // Seule la base surveillée entre dans la boucle.
         assert.equal(repo.rows[0].status, 'up');
         assert.equal(repo.rows[1].status, 'unknown');
     });
@@ -279,8 +271,8 @@ describe('les alertes', () => {
         assert.equal(repo.alerts[0].last_fired_at, null);
         assert.equal(deps.recorded.notifications.length, 0);
 
-        // Franchi : une alerte, adressée à la route de LA base, mise en page
-        // Discord en plus du texte rendu, et `last_fired_at` posé.
+        // Franchi : une alerte sur la route de la base, embeds compris, et
+        // `last_fired_at` posé.
         answer({ query: () => number(12) });
         await monitor.checkNow(1, 1);
         assert.equal(repo.alerts[0].firing, 1);
@@ -300,8 +292,8 @@ describe('les alertes', () => {
         assert.equal(deps.recorded.notifications.length, 1);
         assert.equal(repo.alerts[0].last_fired_at, firedAt);
 
-        // Retour sous le seuil : le retour à la normale s'annonce, et la date
-        // de montée reste celle du problème (elle dit quand il a commencé).
+        // Retour sous le seuil : annoncé, et la date de montée reste celle du
+        // problème.
         answer({ query: () => number(1) });
         await monitor.checkNow(1, 1);
         assert.equal(repo.alerts[0].firing, 0);
@@ -342,9 +334,8 @@ describe('les alertes', () => {
         });
         await monitor.checkNow(1, 1);
 
-        // La cassée : mesurée à `null`, donc elle ne franchit plus (en `and`,
-        // une condition non mesurée empêche) ; son erreur est écrite, et le
-        // retour à la normale se signale comme toute transition.
+        // La cassée : mesurée à `null`, elle ne franchit plus ; son erreur est
+        // écrite, et le retour à la normale se signale.
         assert.equal(repo.alerts[0].firing, 0);
         assert.match(repo.alerts[0].last_error ?? '', /nope/);
         // La saine, évaluée malgré la cassée : elle franchit et notifie.

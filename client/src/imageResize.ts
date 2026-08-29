@@ -1,15 +1,12 @@
 /**
- * Réduire une image déposée à une vignette carrée transportable.
+ * Réduire une image déposée à une vignette carrée : recadrer au carré, mettre à
+ * l'échelle, et rester sous la borne que le contrat impose à la charge utile. Le
+ * faire dans le navigateur évite de transporter huit mégaoctets pour en garder
+ * cinquante kilos.
  *
- * Le même besoin revient partout où l'on peut déposer une image — l'avatar d'un
- * compte, l'icône d'un projet — et il a exactement la même forme : recadrer au
- * carré, mettre à l'échelle, et **rester sous une borne** que le contrat impose
- * à la charge utile. Le faire côté navigateur plutôt que sur le serveur évite de
- * transporter huit mégaoctets pour en garder cinquante kilos.
- *
- * La borne est respectée par **abaissement progressif de la qualité**, jamais en
- * refusant sèchement : une photo de téléphone dépasse toujours du premier coup,
- * et l'utilisateur n'a aucun moyen de savoir de combien.
+ * La borne est tenue par abaissement progressif de la qualité, jamais par un
+ * refus sec : une photo de téléphone la dépasse toujours du premier coup, et
+ * l'utilisateur n'a aucun moyen de savoir de combien.
  */
 
 export const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
@@ -38,11 +35,8 @@ function loadImage(file: File): Promise<HTMLImageElement> {
 }
 
 /**
- * Recadre au carré, met à l'échelle, et rend une URL de données JPEG tenant
- * sous `maxLength`.
- *
- * Lève une `Error` au message déjà lisible : c'est celui que l'utilisateur
- * verra, et « quota exceeded » ne lui apprend rien sur ce qu'il doit faire.
+ * Rend une URL de données JPEG tenant sous `maxLength`. Lève une `Error` au
+ * message déjà lisible : c'est celui que l'utilisateur verra.
  */
 export async function fileToSquareDataUrl(
     file: File,

@@ -42,22 +42,16 @@ function tuningOf(site: AudienceSite): Tuning {
 /**
  * Les réglages d'un site : la mesure, la reconnaissance des visiteurs et la
  * conservation des événements bruts. Le panneau Général de la coquille de
- * réglages, à l'échelle d'un SITE.
+ * réglages, à l'échelle d'un site, à côté de son partage et de ses permissions.
  *
- * Ces trois réglages vivaient dans le dialogue d'édition du site, à côté de
- * son nom et de ses origines (la dette de la coquille). Ils sont ici parce que
- * c'est là que se règle le reste du site (son partage, ce que chaque rôle en
- * voit), et que le dialogue redevient ce qu'il dit : l'identité du site.
- *
- * Autonome, comme tous les panneaux de la coquille : il charge le site
- * (`audience.get`), se sauvegarde par `audience.siteUpdate` (dont le contrat
- * prend le site ENTIER : le brouillon est recomposé à partir du site chargé,
- * l'identité conservée telle quelle) et ravive la fiche et la liste après.
- * Sans le droit d'écriture, les champs restent lisibles mais figés : un
+ * Autonome comme tous les panneaux de la coquille : il charge le site et se
+ * sauvegarde par `audience.siteUpdate`, dont le contrat prend le site entier,
+ * d'où un brouillon recomposé à partir du site chargé, identité conservée telle
+ * quelle. Sans le droit d'écriture, les champs restent lisibles mais figés : un
  * formulaire que le serveur refuserait est un écran qui ment.
  *
  * Un site projeté d'un autre espace se lit ici mais se règle chez lui : la
- * ligne se réécrit sous la clé de SON espace, et le serveur refuserait.
+ * ligne se réécrit sous la clé de son espace, et le serveur refuserait.
  */
 export default function SiteGeneralPanel({ scope, canWrite }: SettingsPanelProps) {
     const itemId = scope.kind === 'item' ? scope.itemId : null;
@@ -152,9 +146,8 @@ export default function SiteGeneralPanel({ scope, canWrite }: SettingsPanelProps
                     onChange={(v) => set('visitorMode', v)}
                     aria-label='Reconnaissance des visiteurs'
                 />
-                {/* Le mode persistant est le seul réglage de la feature qui
-                    crée une obligation pour le site suivi : il se lit dans le
-                    ton d'un avertissement, pas dans celui d'une aide. */}
+                {/* Le mode persistant crée une obligation pour le site suivi : il se
+                    lit dans le ton d'un avertissement, pas dans celui d'une aide. */}
                 <span className={draft.visitorMode === 'persistent' ? shell.warning : shell.fieldHint}>
                     {VISITOR_HINTS[draft.visitorMode]}
                 </span>

@@ -4,24 +4,11 @@ import { PULL_STATE_LABELS } from './PullRequestDialog';
 import styles from './style.module.css';
 
 /**
- * Les lignes des quatre listes d'un dépôt.
- *
- * Extraites parce qu'elles servent **deux fois** : dans le panneau, tronqué à
- * `PANEL_LIMIT`, et dans le dialogue « voir tout », complet. Les garder en
- * ligne dans le panneau aurait obligé à les réécrire dans le dialogue, avec la
- * certitude qu'une des deux copies dériverait.
+ * Les lignes des quatre listes d'un dépôt, extraites parce qu'elles servent deux
+ * fois : dans le panneau, tronqué, et dans le dialogue « voir tout », complet.
  */
 
-/**
- * Au-delà, un panneau renvoie vers son dialogue « voir tout ».
- *
- * Deux valeurs, parce que les quatre listes n'ont pas la même hauteur de ligne :
- * une branche ou une release tient sur une ligne courte, une pull request porte
- * son état et son numéro, un commit son sha, son message et son auteur. À
- * nombre égal, les deux panneaux du bas dépassaient nettement les deux du haut.
- * Les brider plus tôt rééquilibre la grille sans rien retirer — la liste
- * complète est à un clic.
- */
+/** Au-delà, un panneau renvoie vers son dialogue « voir tout ». */
 export const PANEL_LIMIT = 15;
 
 /** Pour les pull requests et les commits, dont les lignes sont plus hautes. */
@@ -33,7 +20,6 @@ export function firstLine(message: string): string {
     return line || '(sans message)';
 }
 
-/** Avance et retard d'une branche sur la principale, quand on les connaît. */
 function BranchDrift({ branch }: { branch: GitBranch }) {
     if (branch.isDefault) return null;
     if (branch.aheadCount === null && branch.behindCount === null) return null;
@@ -51,13 +37,8 @@ function BranchDrift({ branch }: { branch: GitBranch }) {
 }
 
 /**
- * Une branche.
- *
- * **Seul le sha est cliquable**, pas la ligne entière. Une branche n'est pas un
- * commit : la rendre cliquable en bloc promettait d'ouvrir « la branche » et
- * ouvrait son dernier commit — deux choses différentes. Le sha, lui, désigne
- * exactement ce qui s'ouvre, et se comporte alors comme tous les autres sha
- * affichés. Le reste de la ligne redevient du texte.
+ * Une branche. Seul le sha est cliquable, pas la ligne entière : celle-ci
+ * promettrait d'ouvrir la branche alors qu'elle ouvrirait son dernier commit.
  */
 export function BranchRow({ branch, onOpenCommit }: { branch: GitBranch; onOpenCommit?: (sha: string) => void }) {
     const head = branch.headSha;

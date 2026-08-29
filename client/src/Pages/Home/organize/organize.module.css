@@ -1,4 +1,3 @@
-/* ── Edit root + section blocks ─────────────────────────────────────────── */
 .editRoot {
     display: flex;
     flex-direction: column;
@@ -119,7 +118,7 @@
     color: var(--text-muted);
 }
 
-/* ── Tile grid (mirrors the real WidgetGrid so edit == final layout) ─────── */
+/* Mirrors the real WidgetGrid so edit == final layout. */
 .tileGrid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -133,7 +132,6 @@
     }
 }
 
-/* ── Sortable tile wrapper ──────────────────────────────────────────────── */
 .sortTile {
     position: relative;
     min-width: 0;
@@ -229,10 +227,8 @@
     min-height: 104px;
 }
 
-/* ── Boutons d'ajout, au bout des tuiles d'une section ───────────────────── */
-/* Les deux occupent ensemble l'emprise exacte d'une carte de fonctionnalité
-   (206 px), scindée en deux moitiés égales : au bout d'une rangée, le bloc se
-   pose comme une carte de plus au lieu de laisser un demi-vide sous lui. */
+/* Les deux boutons d'ajout occupent l'emprise d'une carte de fonctionnalité
+   (206 px) : au bout d'une rangée, le bloc se pose comme une carte de plus. */
 .addStack {
     display: grid;
     grid-template-rows: 1fr 1fr;
@@ -275,7 +271,6 @@
     font-weight: 600;
 }
 
-/* ── "Add a section" — full width, below every section block ─────────────── */
 .addSection {
     display: flex;
     flex-direction: row;
@@ -308,9 +303,7 @@
     color: var(--text-secondary);
 }
 
-/* ── Marché d'ajout ─────────────────────────────────────────────────────── */
-/* Un rail de rayons à gauche, l'étal à droite. Le même écran sert les appareils,
-   les fonctionnalités, les raccourcis et les dossiers : c'est le rayon qui
+/* Le marché : un rail de rayons à gauche, l'étal à droite ; c'est le rayon qui
    change, pas la popup. */
 .market {
     display: flex;
@@ -488,13 +481,8 @@
     border-style: dashed;
 }
 
-/* Ce qui s'éteint est **l'offre**, pas l'état : la vignette et le texte
-   reculent, la coche de confirmation garde son vert plein. Atténuer la carte
-   entière la faisait passer avec, et l'unique élément qui a quelque chose à dire
-   sur une carte grisée devenait le plus pâle de tous.
-
-   `filter` et non `opacity` — une carte de cet étal peut porter un `motion`
-   ailleurs, et c'est la règle du dépôt. */
+/* Ce qui s'éteint est l'offre, pas l'état : la coche garde son vert plein.
+   `filter` et non `opacity` : une carte de cet étal peut porter un `motion`. */
 .marketCardPlaced .marketCardArt,
 .marketCardPlaced .marketCardIcon,
 .marketCardPlaced .marketCardTitle,
@@ -583,7 +571,6 @@
     margin: 0 0 var(--space-sm) 0;
 }
 
-/* ── Étal : message quand il n'y a rien à montrer + pastille d'état ──────── */
 .addEmpty {
     font-size: 0.85rem;
     color: var(--text-muted);
@@ -606,7 +593,6 @@
     background: var(--text-muted);
 }
 
-/* ── Shortcut form ──────────────────────────────────────────────────────── */
 .form {
     display: flex;
     flex-direction: column;
@@ -704,8 +690,7 @@
     gap: 6px;
 }
 
-/* ── Template test gallery ──────────────────────────────────────────────── */
-/* Two columns so the tiles fill the width (no empty space to the right). */
+/* Template test gallery: two columns so the tiles fill the width. */
 .gallery {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -913,11 +898,9 @@
     margin-top: var(--space-xs);
 }
 
-/* ── Dossier : la cible « ranger dedans » et la rangée dépliée ───────────── */
-/* En retrait dans la carte, pour que ses bords restent des points d'insertion
-   ordinaires : viser le cœur range dedans, viser un bord pose à côté. Inerte au
-   clic — dnd-kit compare des coordonnées à un rectangle mesuré, il n'a pas
-   besoin de recevoir d'événement, et ouvrir le dossier reste un clic. */
+/* La cible « ranger dedans » d'un dossier, en retrait pour que les bords de la
+   carte restent des points d'insertion. Inerte au clic : dnd-kit compare des
+   coordonnées à un rectangle mesuré. */
 .folderDrop {
     position: absolute;
     inset: 14px;
@@ -943,9 +926,8 @@
     cursor: grabbing;
 }
 
-/* La rangée dépliée, sous les tuiles de la section qui porte le dossier. Un
-   contenant de glissé comme une section — d'où la même carrosserie en pointillé,
-   simplement teintée pour qu'on voie qu'on est « dedans ». */
+/* La rangée dépliée du dossier : un contenant de glissé comme une section, même
+   carrosserie en pointillé, teintée pour dire « dedans ». */
 .folderPanel {
     display: flex;
     flex-direction: column;

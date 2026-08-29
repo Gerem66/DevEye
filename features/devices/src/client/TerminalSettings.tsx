@@ -4,15 +4,9 @@ import { SelectInput, settingsStyles as shell, TextInput } from 'deveye-sdk-clie
 import { setTerminalPrefs, useTerminalPrefs } from './terminalPrefs';
 
 /**
- * Les réglages du terminal distant : le panneau Général de la coquille, à
- * l'échelle de la FEATURE. Le compte sous lequel ouvrir les sessions, et ce
- * qui se passe quand le shell se termine. Des préférences locales (par
- * navigateur, jamais synchronisées), persistées par le store
- * {@link useTerminalPrefs} ; le compte ne prend effet qu'à la session
- * suivante, que le terminal sait relancer.
- *
- * Ce panneau vivait dans le terminal lui-même, derrière un engrenage à part :
- * la dernière dette de la coquille de réglages.
+ * Les réglages du terminal distant : le panneau Général de la coquille à
+ * l'échelle de la feature. Préférences locales au navigateur
+ * ({@link useTerminalPrefs}) ; le compte ne prend effet qu'à la session suivante.
  */
 export function TerminalSettings({ canWrite }: { canWrite: boolean }) {
     const prefs = useTerminalPrefs();

@@ -1,12 +1,7 @@
--- Ordre d'affichage des dossiers cloud, défini par l'utilisateur (flèches
--- haut/bas dans la vue CloudSync), comme pour les services surveillés et les
--- notes. Jusqu'ici la liste suivait la date de création, que rien ne permettait
--- de changer.
+-- Ordre d'affichage des dossiers cloud, défini par l'utilisateur.
 --
--- Colonne ajoutée conditionnellement via INFORMATION_SCHEMA + SQL dynamique,
--- PAS via `ADD COLUMN IF NOT EXISTS` : cette clause a déjà fait tomber la
--- production au démarrage (non supportée par son serveur MySQL). Le motif
--- ci-dessous ne dépend d'aucun sucre syntaxique récent.
+-- Ajout conditionnel via INFORMATION_SCHEMA + SQL dynamique, jamais
+-- `ADD COLUMN IF NOT EXISTS` (extension MariaDB, cf. 038).
 SET @sort_order_exists = (
     SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sync_shares' AND COLUMN_NAME = 'sort_order'
@@ -20,13 +15,10 @@ PREPARE stmt FROM @add_sort_order;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
--- Rang initial = l'ordre de création, numéroté par espace de travail : c'est
--- exactement ce que la liste affichait jusqu'ici (`ORDER BY created ASC, id
--- ASC`), donc rien ne bouge visiblement à la migration. Restreint aux rangs
--- encore à zéro, pour qu'un rejeu ne réécrase pas une disposition déjà choisie.
---
--- `workspace_id` est NULLABLE et `PARTITION BY` regroupe les NULL ensemble, ce
--- qui est le comportement voulu : ces partages forment une seule liste.
+-- Rang initial = l'ordre de création par espace, ce que la liste affichait.
+-- Restreint aux rangs encore à zéro, pour qu'un rejeu ne réécrase pas une
+-- disposition déjà choisie. `workspace_id` est NULLABLE et `PARTITION BY`
+-- regroupe les NULL ensemble, ce qui est voulu.
 UPDATE sync_shares s
 JOIN (
     SELECT id,

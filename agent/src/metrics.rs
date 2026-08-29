@@ -15,10 +15,8 @@ use crate::report;
 use crate::sockets::SocketMap;
 
 /// Slow-moving signals (disk capacity, battery, logged-in users) refreshed at
-/// most every [`SLOW_TTL`]. They barely change between 10-s metric ticks yet are
-/// comparatively expensive to read — a full mount scan plus `pmset`/`who`
-/// subprocess spawns — so sampling them every cycle wasted CPU and wakeups on the
-/// monitored device (and, on laptops, battery). Cached here and reused in between.
+/// most every [`SLOW_TTL`]: they barely change between metric ticks yet cost a
+/// full mount scan plus `pmset`/`who` subprocess spawns.
 #[derive(Clone, Copy)]
 struct SlowSignals {
     disk_used: u64,
@@ -74,19 +72,15 @@ impl Collector {
         s
     }
 
-    /// Collect one **instant**: every graph signal plus the process list that
+    /// Collect one instant: every graph signal plus the process list that
     /// explains it, under a single timestamp.
     ///
-    /// There is deliberately no light/heavy split any more. The socket probe and
-    /// the process scan feed each other (per-process connections come from the
-    /// sockets; the socket owners' names come from the scan) and between them
-    /// they also yield `process_count`, aggregate disk I/O and the established
-    /// connection count — figures that used to cost a *second* full process
-    /// enumeration. The result measured cheaper than the old heavy cycle.
+    /// The socket probe and the process scan feed each other (per-process
+    /// connections from the sockets, socket owners' names from the scan) and
+    /// between them also yield `process_count`, disk I/O and the connection count.
     ///
-    /// The socket map is supplied by the caller (which probes it off the async
-    /// runtime) and handed back, so the periodic report can reuse it instead of
-    /// re-enumerating every socket.
+    /// The socket map is supplied by the caller (probed off the async runtime)
+    /// and handed back so the periodic report can reuse it.
     pub fn collect(
         &mut self,
         capture: &str,
@@ -100,7 +94,6 @@ impl Collector {
         let scan = report::collect_processes(capture, &sockets, &mut self.sys);
         sockets.resolve_names(&scan.pid_names);
 
-        // Disk/battery/user signals: cached for SLOW_TTL (cheap on most ticks).
         let slow = self.slow_signals();
 
         let cpu_percent = ((self.sys.global_cpu_usage() as f64) * 10.0).round() / 10.0;

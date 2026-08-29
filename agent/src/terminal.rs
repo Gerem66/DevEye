@@ -113,7 +113,6 @@ impl TermManager {
             });
         });
 
-        // Writer thread ← input channel.
         let (in_tx, in_rx) = std_mpsc::channel::<Vec<u8>>();
         std::thread::spawn(move || {
             while let Ok(data) = in_rx.recv() {

@@ -9,16 +9,10 @@ export interface WorkspacesRepo {
     findAccessibleByUser(userId: number): Promise<WorkspaceRow[]>;
     /**
      * Tous les espaces, appartenance ignorée. Réservé à l'administration de la
-     * flotte (`devices.workspaceList`), qui doit pouvoir proposer le partage d'un
-     * appareil vers un espace dont l'administrateur n'est pas membre. Aucune
-     * autre commande n'a de raison de franchir cette frontière.
+     * flotte, qui propose le partage vers un espace dont l'admin n'est pas membre.
      */
     listAll(): Promise<WorkspaceRow[]>;
-    /**
-     * Crée l'espace personnel d'un compte et y inscrit son propriétaire.
-     * Appelé une seule fois, à l'inscription : tout compte a exactement un espace
-     * personnel (contrainte `users.uniq_personal_workspace`).
-     */
+    /** Crée l'espace personnel d'un compte (un seul par compte) et y inscrit son propriétaire. */
     createPersonal(ownerUserId: number, name: string): Promise<WorkspaceRow>;
     create(input: { ownerUserId: number; name: string }): Promise<WorkspaceRow>;
     rename(id: number, name: string): Promise<void>;
@@ -70,14 +64,11 @@ export function workspacesRepo(pool: Q): WorkspacesRepo {
             await pool.query('UPDATE workspaces SET name = ? WHERE id = ?', [name, id]);
         },
         async delete(id) {
-            // Les FK ON DELETE CASCADE emportent les membres et tout le contenu,
-            // à deux exceptions près, retirées à la main AVANT : `deploy_targets`
-            // et `git_repos` portent un `credential_id ... ON DELETE SET NULL`
-            // vers une table que la même cascade détruit. InnoDB traite alors ce
-            // SET NULL comme une mise à jour de la ligne enfant, la revalide
-            // contre son espace en cours de suppression, et refuse (errno 1452
-            // sur `fk_deploy_target_workspace`) : la suppression d'un espace
-            // échouait dès qu'il avait une cible de déploiement ou un dépôt.
+            // Les FK ON DELETE CASCADE emportent membres et contenu, sauf
+            // `deploy_targets` et `git_repos`, retirés à la main avant : leur
+            // `credential_id ... ON DELETE SET NULL` vise une table que la même
+            // cascade détruit, et InnoDB revalide alors la ligne enfant contre
+            // son espace en cours de suppression et refuse (errno 1452).
             await pool.query('DELETE FROM deploy_targets WHERE workspace_id = ?', [id]);
             await pool.query('DELETE FROM git_repos WHERE workspace_id = ?', [id]);
             await pool.query('DELETE FROM workspaces WHERE id = ?', [id]);
@@ -95,11 +86,8 @@ export function workspacesRepo(pool: Q): WorkspacesRepo {
 }
 
 /**
- * Insère l'espace et y inscrit aussitôt son propriétaire comme membre.
- *
- * L'adhésion n'est pas optionnelle : l'invariant du modèle est que **tout** accès
- * passe par `workspace_members`, espace personnel compris. Sans elle, un
- * propriétaire ne verrait pas son propre espace dans `findAccessibleByUser`.
+ * Insère l'espace et y inscrit aussitôt son propriétaire comme membre : tout
+ * accès passe par `workspace_members`, espace personnel compris.
  */
 async function insertWorkspace(
     pool: Q,

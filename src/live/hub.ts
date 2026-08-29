@@ -24,18 +24,11 @@ import { logger } from '@/logger';
 import type { Database } from '@/db';
 
 /**
- * Le moteur de présence en direct : qui est connecté, où, et ce qui change.
- *
- * L'état est local au processus, exactement comme {@link MonitorHub}. Pour un
- * déploiement multi-instance il faudrait passer par un pub/sub partagé, mais
- * l'interface est volontairement étroite pour que ce remplacement reste isolé.
- *
- * Trois responsabilités, une seule structure parce qu'elles partagent le même
- * index (qui est dans quelle salle) :
- *
- *  1. le **roster** — les pairs d'un espace et leur lieu ;
- *  2. les **curseurs** — entre pairs situés au même lieu exactement ;
- *  3. les **changements** — « quelque chose a bougé, re-sollicitez ».
+ * Le moteur de présence en direct : le roster (les pairs d'un espace et leur
+ * lieu), les curseurs (entre pairs au même lieu) et les changements (« quelque
+ * chose a bougé, re-sollicitez »). État local au processus, comme
+ * {@link MonitorHub} ; l'interface reste étroite pour qu'un pub/sub partagé
+ * puisse le remplacer.
  */
 
 /** Période du balayage de vivacité. Deux tours sans `pong` ferment la socket. */
@@ -45,13 +38,9 @@ const HEARTBEAT_MS = 30_000;
 const FLUSH_MS = 50;
 
 /**
- * Plancher entre deux `live.changed` de même (espace, sujet).
- *
- * **Doit rester strictement inférieur à l'anti-rebond du client** (250 ms, voir
- * `stores/invalidation.ts`) : une écriture dont la trame est étouffée ici doit
- * malgré tout être visible par la re-sollicitation que la trame précédente a
- * déjà programmée. Remonter cette valeur au-dessus de 250 ms ouvrirait une
- * fenêtre où une écriture ne serait jamais vue.
+ * Plancher entre deux `live.changed` de même (espace, sujet). Doit rester
+ * strictement inférieur à l'anti-rebond du client (250 ms,
+ * `stores/invalidation.ts`), sinon une écriture étouffée ici ne serait jamais vue.
  */
 const TOPIC_FLOOR_MS = 200;
 
@@ -62,11 +51,8 @@ const CURSOR_FLOOR_MS = 25;
 const CURSOR_STRIKES_MAX = 200;
 
 /**
- * Durée de vie d'un « en train d'écrire » sans rafraîchissement.
- *
- * Le client réaffirme sa frappe périodiquement ; passé ce délai sans nouvelle,
- * le pair cesse d'être annoncé. C'est ce qui garantit qu'un onglet fermé
- * brutalement — ou un client fautif — ne laisse pas un fantôme à l'écran.
+ * Durée de vie d'un « en train d'écrire » sans rafraîchissement : un onglet
+ * fermé brutalement ne laisse pas un fantôme à l'écran.
  */
 const TYPING_TTL_MS = 6_000;
 
@@ -86,31 +72,21 @@ interface Grants {
 }
 
 export interface LiveConn {
-    /**
-     * Identité de la **socket**. `sessionId` (le `sid` du JWT) est partagé par
-     * les onglets d'une même session : deux onglets sont deux connexions, deux
-     * curseurs, un seul `sessionId`.
-     */
+    /** Identité de la socket : deux onglets sont deux connexions, un seul `sessionId`. */
     readonly connId: string;
     readonly socket: WebSocket;
     readonly userId: number;
     readonly sessionId: string;
     readonly joinedAt: number;
 
-    /**
-     * Salle courante. `null` tant qu'aucun `live.here` n'a abouti : la connexion
-     * est alors connue du hub — donc surveillée par le battement de cœur — mais
-     * n'appartient à aucune salle.
-     */
+    /** Salle courante ; `null` tant qu'aucun `live.here` n'a abouti. */
     workspaceId: number | null;
     path: LivePath;
     color: UserColor | null;
 
     /**
-     * Échéance du « en train d'écrire » de cette connexion, en millisecondes
-     * épochales. `0` = n'écrit pas. Une échéance plutôt qu'un booléen : la
-     * péremption devient un simple test au moment de diffuser, sans minuteur
-     * par connexion à annuler.
+     * Échéance du « en train d'écrire », en ms épochales ; `0` = n'écrit pas. Une
+     * échéance plutôt qu'un booléen : pas de minuteur par connexion à annuler.
      */
     typingUntil: number;
     typingAt: number;
@@ -124,9 +100,8 @@ export interface LiveConn {
     hasCursorPeers: boolean;
 
     /**
-     * Droits résolus par le dispatcheur, **par espace** — une même connexion en
-     * détient légitimement pour sa salle partagée et pour son espace personnel,
-     * à cause de `scope: 'account'`.
+     * Droits résolus par le dispatcheur, par espace : une même connexion en
+     * détient pour sa salle et pour son espace personnel (`scope: 'account'`).
      */
     grants: Map<number, Grants>;
 
@@ -149,11 +124,8 @@ export interface LiveTransport {
     typing(typing: boolean): void;
 
     // -- portée : le moteur entier, après une mutation d'accès -------------
-    //
-    // À appeler partout où `invalidateAccess()` l'est déjà. Cette dernière ne
-    // fait qu'incrémenter un compteur relu par la *commande suivante* : une
-    // connexion assise dans une salle n'en émet pas forcément, et continuerait
-    // sinon de recevoir curseurs et changements indéfiniment.
+    // À appeler partout où `invalidateAccess()` l'est : celle-ci n'est relue
+    // qu'à la commande suivante, qu'une connexion assise n'émet pas forcément.
 
     /** Un compte perd l'accès à un espace : il sort de sa salle. */
     evict(workspaceId: number, userId: number): void;
@@ -162,21 +134,12 @@ export interface LiveTransport {
     /** L'espace disparaît : tout le monde sort. */
     evictRoom(workspaceId: number): void;
     /**
-     * Prévenir UN compte, où que ses connexions soient assises.
-     *
-     * `changed` s'arrête aux connexions de la salle, et c'est son rôle. Mais
-     * gagner ou perdre un espace se décide depuis CET espace, pendant que
-     * l'intéressé est assis ailleurs : sans cette voie, sa liste d'espaces
-     * resterait figée jusqu'au rechargement. Réservé aux sujets sans droit de
-     * feature (`TOPIC_FEATURE` à `null`, comme `workspace`) : la projection par
-     * droits d'une salle n'a pas de sens pour qui n'y est pas.
+     * Prévenir un compte, où que ses connexions soient assises : gagner ou
+     * perdre un espace se décide pendant que l'intéressé est ailleurs. Réservé
+     * aux sujets sans droit de feature (comme `workspace`).
      */
     userChanged(userId: number, workspaceId: number, topics: readonly LiveTopic[], byUserId: number | null): void;
-    /**
-     * Un rôle a changé sans que personne ne perde l'espace : les droits sont
-     * re-résolus sur place. Sans ça les membres présents verraient tous leurs
-     * pairs « ailleurs » jusqu'à leur prochaine commande.
-     */
+    /** Un rôle a changé sans que personne ne perde l'espace : droits re-résolus sur place. */
     resync(db: Database, workspaceId: number): Promise<void>;
 }
 
@@ -195,13 +158,9 @@ export class LiveHub {
 
     /**
      * Les espaces reliés à un espace par des projections d'éléments, pour une
-     * feature — posé par `app.ts` (`db.itemSharing.linkedWorkspaces`).
-     *
-     * C'est ce qui fait TRAVERSER la projection à la diffusion : chaque
-     * `changed` sur un sujet de feature branchée au partage est rejoué dans les
-     * espaces reliés. Le point est d'être ICI et pas chez les appelants — le
-     * dispatcheur, cinq services de fond, le moteur de sauvegardes appellent
-     * tous `changed`, et aucun n'a à connaître la règle.
+     * feature (posé par `app.ts`). Ici et non chez les appelants : chaque
+     * `changed` sur un sujet branché au partage est rejoué dans les espaces
+     * reliés sans qu'aucun appelant n'ait à connaître la règle.
      */
     private shareLinks: ((workspaceId: number, feature: string) => Promise<number[]>) | null = null;
 
@@ -215,10 +174,8 @@ export class LiveHub {
     // ---------------------------------------------------------------- cycle de vie
 
     /**
-     * Inscrit une connexion `/ws`, **avant tout `live.here`**. C'est délibéré :
-     * sans ça le battement de cœur ne couvrirait que les utilisateurs ayant
-     * ouvert une vue instrumentée, et les sockets zombies des autres — un
-     * portable mis en veille — resteraient invisibles.
+     * Inscrit une connexion `/ws`, avant tout `live.here` : le battement de cœur
+     * doit couvrir toutes les sockets, pas seulement les vues instrumentées.
      */
     register(socket: WebSocket, userId: number, sessionId: string): LiveTransport {
         const conn: LiveConn = {
@@ -276,9 +233,8 @@ export class LiveHub {
     private sweep(): void {
         for (const conn of this.bySocket.values()) {
             if (!conn.alive) {
-                // Pas de `close()` : une socket dont la pile TCP est morte ne
-                // verra jamais la poignée de fermeture, et resterait un fantôme
-                // dans le roster jusqu'au délai système.
+                // Pas de `close()` : une pile TCP morte ne verra jamais la poignée
+                // de fermeture.
                 try {
                     conn.socket.terminate();
                 } catch {
@@ -299,13 +255,9 @@ export class LiveHub {
     // ---------------------------------------------------------------- salles
 
     /**
-     * Entrée en salle. **Déplacement, jamais ajout** : une connexion n'est dans
-     * qu'une salle à la fois.
-     *
-     * C'est ce qui rend la bascule d'espace sûre. `ws.send` estampille
-     * l'enveloppe au moment de l'envoi et non de l'appel, donc un `live.here`
-     * resté en file d'attente peut arriver avec le nouvel espace ; un hub qui
-     * ajouterait sans retirer laisserait un fantôme permanent dans l'ancienne.
+     * Entrée en salle. Déplacement, jamais ajout : une connexion n'est dans
+     * qu'une salle à la fois, sinon un `live.here` resté en file pendant une
+     * bascule d'espace laisserait un fantôme permanent dans l'ancienne.
      */
     here(socket: WebSocket, workspaceId: number, path: LivePath, color: UserColor): LivePeer[] {
         const conn = this.bySocket.get(socket);
@@ -351,12 +303,9 @@ export class LiveHub {
     }
 
     /**
-     * Sortie forcée d'un compte d'une salle, après retrait d'accès.
-     *
-     * Indispensable : `invalidateAccess()` n'incrémente qu'un compteur relu par
-     * la *commande suivante*, or une connexion déjà assise dans une salle n'en
-     * émet pas forcément — elle continuerait de recevoir curseurs et
-     * changements indéfiniment.
+     * Sortie forcée d'un compte d'une salle, après retrait d'accès :
+     * `invalidateAccess()` n'est relue qu'à la commande suivante, qu'une
+     * connexion assise n'émet pas forcément.
      */
     evict(workspaceId: number, userId: number): void {
         const room = this.byWorkspace.get(workspaceId);
@@ -391,12 +340,8 @@ export class LiveHub {
     }
 
     /**
-     * Prévenir un compte précis, quelle que soit sa salle (voir l'interface).
-     *
-     * Toutes ses connexions, salle ou pas : l'onglet ouvert sur un autre
-     * espace est précisément celui qui doit apprendre que sa liste vient de
-     * changer. Pas de plancher de débit ici, l'événement est rare par nature
-     * (on ne gagne pas un espace vingt fois par seconde).
+     * Prévenir un compte précis, toutes ses connexions, salle ou pas. Pas de
+     * plancher de débit : l'événement est rare par nature.
      */
     userChanged(userId: number, workspaceId: number, topics: readonly LiveTopic[], byUserId: number | null): void {
         if (topics.length === 0) return;
@@ -409,12 +354,9 @@ export class LiveHub {
     // ---------------------------------------------------------------- droits
 
     /**
-     * Instantané des droits, posé par le dispatcheur à chaque commande.
-     *
-     * Les droits sont retenus ici plutôt que ré-résolus au moment de diffuser :
-     * `forWorkspace()` rend une promesse qui peut *rejeter* (compte suspendu),
-     * et un rejet dans un minuteur est un rejet non traité. Ainsi la diffusion
-     * reste entièrement synchrone, et n'importe quelle commande répare l'état.
+     * Instantané des droits, posé par le dispatcheur à chaque commande. Retenus
+     * ici plutôt que ré-résolus à la diffusion, qui doit rester synchrone
+     * (`forWorkspace()` peut rejeter).
      */
     rememberGrants(
         socket: WebSocket,
@@ -428,12 +370,8 @@ export class LiveHub {
     }
 
     /**
-     * Re-résout les droits de toute une salle, après un changement de rôle.
-     *
-     * Un rôle rétréci n'est pas une exclusion : le membre reste dans la salle,
-     * mais ce qu'il a le droit d'y voir change. Sans ce rappel ses droits
-     * resteraient périmés — donc fermés — jusqu'à sa prochaine commande, et il
-     * verrait tous ses pairs « ailleurs » en attendant.
+     * Re-résout les droits de toute une salle après un changement de rôle : sans
+     * ça, ils resteraient périmés (donc fermés) jusqu'à la prochaine commande.
      */
     async resync(db: Database, workspaceId: number): Promise<void> {
         const room = this.byWorkspace.get(workspaceId);
@@ -477,16 +415,12 @@ export class LiveHub {
     changed(workspaceId: number, topics: readonly LiveTopic[], byUserId: number | null, exclude?: WebSocket): void {
         this.changedHere(workspaceId, topics, byUserId, exclude);
 
-        // Puis les espaces reliés par des projections, pour les sujets qui s'y
-        // prêtent : une sonde qui écrit chez elle doit rafraîchir ses fenêtres,
-        // une écriture faite depuis une fenêtre doit rafraîchir le domicile.
-        // Asynchrone et sans attente : la diffusion locale ne dépend jamais
-        // d'une requête de plus, et un échec ici ne casse rien — il retarde.
+        // Puis les espaces reliés par des projections, pour les sujets branchés
+        // au partage. Asynchrone et sans attente : la diffusion locale ne dépend
+        // jamais d'une requête de plus, et un échec ici ne fait que retarder.
         if (this.shareLinks === null) return;
         for (const topic of topics) {
             const feature = topicFeatureOf(topic);
-            // Natives par la liste publiée, modules par leur manifest : la
-            // même question que le serveur et la coquille de réglages.
             if (feature === null || !isShareWired(feature)) continue;
             void this.shareLinks(workspaceId, feature)
                 .then((linked) => {
@@ -495,13 +429,12 @@ export class LiveHub {
                     }
                 })
                 .catch(() => {
-                    // Un raté de résolution retarde un rafraîchissement, il ne
-                    // mérite pas de bruit : la prochaine écriture repassera.
+                    // La prochaine écriture repassera.
                 });
         }
     }
 
-    /** La diffusion dans UN espace — le corps historique de `changed`. */
+    /** La diffusion dans un seul espace. */
     private changedHere(
         workspaceId: number,
         topics: readonly LiveTopic[],
@@ -537,9 +470,7 @@ export class LiveHub {
 
     /**
      * Un compte vient de changer de couleur : toutes ses connexions la portent,
-     * dans toutes leurs salles. Le roster est la seule voie de propagation —
-     * la copie que la session a livrée au client est périmée jusqu'au prochain
-     * `/me`, celle du roster est vivante.
+     * dans toutes leurs salles. Le roster est la seule voie vivante.
      */
     colorChanged(socket: WebSocket, color: UserColor): void {
         const origin = this.bySocket.get(socket);
@@ -554,13 +485,10 @@ export class LiveHub {
     // ---------------------------------------------------------------- curseurs
 
     /**
-     * Voie rapide : une position, sans réponse, sans validation d'autorisation.
-     *
-     * **L'espace de l'enveloppe est délibérément ignoré.** Il est contrôlé par le
-     * client et n'est validé que dans `access.forWorkspace()`, que cette voie
-     * court-circuite : s'y fier laisserait n'importe qui injecter son curseur
-     * dans la salle d'autrui. Seul `conn.workspaceId` fait foi, et il n'a pu
-     * être posé que par un `live.here` passé, lui, par le dispatcheur.
+     * Voie rapide : une position, sans réponse ni validation d'autorisation.
+     * L'espace de l'enveloppe est ignoré (il n'est validé que par
+     * `access.forWorkspace()`, court-circuité ici) : seul `conn.workspaceId`,
+     * posé par un `live.here` passé par le dispatcheur, fait foi.
      */
     cursor(socket: WebSocket, cursor: LiveCursor | null): void {
         const conn = this.bySocket.get(socket);
@@ -588,16 +516,8 @@ export class LiveHub {
     }
 
     /**
-     * Voie rapide : « j'écris » / « j'ai fini », sans réponse.
-     *
-     * Mêmes précautions que {@link cursor}. **L'espace de l'enveloppe est ignoré**
-     * — il est contrôlé par le client et n'est validé que dans
-     * `access.forWorkspace()`, que cette voie court-circuite. Seul
-     * `conn.workspaceId` fait foi, et il n'a pu être posé que par un `live.here`
-     * passé, lui, par le dispatcheur.
-     *
-     * La trame ne dit pas *où* : le lieu vient du dernier `live.here`, donc un
-     * pair ne peut annoncer sa frappe que là où il se trouve réellement.
+     * Voie rapide : « j'écris » / « j'ai fini », sans réponse. Mêmes précautions
+     * que {@link cursor} : le lieu vient du dernier `live.here`, jamais de la trame.
      */
     typing(socket: WebSocket, typing: boolean): void {
         const conn = this.bySocket.get(socket);
@@ -605,8 +525,7 @@ export class LiveHub {
 
         const now = Date.now();
         // Étouffement simple plutôt que compteur de fautes : la frappe est une
-        // trame rare (début, fin, et un rappel toutes les quelques secondes),
-        // l'ignorer suffit à la borner.
+        // trame rare, l'ignorer suffit à la borner.
         if (now - conn.typingAt < TYPING_FLOOR_MS) return;
         conn.typingAt = now;
 
@@ -629,12 +548,9 @@ export class LiveHub {
     }
 
     /**
-     * Balayage de péremption, **vivant seulement pendant qu'on écrit**.
-     *
-     * Sans lui, un pair qui s'arrête net (onglet tué, réseau coupé) resterait
-     * annoncé jusqu'à la prochaine diffusion fortuite. Un seul minuteur pour
-     * tout le moteur, qui s'éteint dès que plus personne n'écrit — c'est ce qui
-     * évite de payer une cadence permanente pour un cas rare.
+     * Balayage de péremption, vivant seulement pendant qu'on écrit : un pair qui
+     * s'arrête net resterait sinon annoncé jusqu'à la prochaine diffusion. Un
+     * seul minuteur pour tout le moteur.
      */
     private ensureTypingSweep(): void {
         if (this.typingSweepTimer) return;
@@ -708,19 +624,16 @@ export class LiveHub {
     }
 
     /**
-     * Coût : pairs × destinataires, avec une troncature par destinataire. Une
-     * salle compte une poignée de membres, et rien n'est calculé tant que rien
-     * ne bouge. Si des salles à plusieurs dizaines de membres apparaissaient, ce
-     * serait l'endroit à mémoïser par signature de droits.
+     * Coût : pairs × destinataires. Une salle compte une poignée de membres ;
+     * pour des salles à plusieurs dizaines, mémoïser ici par signature de droits.
      */
     private projectRoster(room: Set<LiveConn>, recipient: LiveConn): LivePeer[] {
         const wsId = recipient.workspaceId;
         if (wsId === null) return [];
         const peers: LivePeer[] = [];
         for (const peer of room) {
-            // Une connexion n'entre en salle que par `here`, qui pose toujours
-            // la couleur : ce filtre ne retient rien en pratique, il évite juste
-            // d'inventer une couleur de repli qui masquerait un défaut.
+            // `here` pose toujours la couleur : ce filtre évite juste d'inventer
+            // une couleur de repli qui masquerait un défaut.
             if (peer.color === null) continue;
             peers.push({
                 connId: peer.connId,
@@ -736,14 +649,10 @@ export class LiveHub {
     }
 
     /**
-     * Le chemin d'un pair tel que ce destinataire a le droit de le voir.
-     *
-     * Seule la **racine** est examinée : un segment plus profond appartient par
-     * construction à la même feature que sa racine, donc qui peut voir la racine
-     * peut voir la suite. Les vues de compte et d'administration (Profil,
-     * Sécurité, Journaux, Utilisateurs, Gestion de l'espace) sont `private` et
-     * ne sont montrées à personne — « Gerem est dans Sécurité » n'a à fuiter
-     * vers personne, pas même vers un administrateur.
+     * Le chemin d'un pair tel que ce destinataire a le droit de le voir. Seule
+     * la racine est examinée : un segment plus profond appartient à la même
+     * feature. Les vues de compte et d'administration sont `private` et ne sont
+     * montrées à personne, pas même à un administrateur.
      */
     private visiblePath(recipient: LiveConn, workspaceId: number, path: LivePath): LivePath {
         if (path.length === 0) return [];
@@ -771,9 +680,8 @@ export class LiveHub {
                 const cursors = group
                     .filter((peer) => peer !== recipient && peer.cursor !== null)
                     .map((peer) => ({ connId: peer.connId, userId: peer.userId, cursor: peer.cursor! }));
-                // Une liste vide n'est envoyée qu'à qui en avait une : sans ça
-                // le dernier curseur d'un pair parti resterait à l'écran, mais
-                // l'envoyer à tout le monde à chaque mouvement serait du bruit.
+                // Une liste vide n'est envoyée qu'à qui en avait une : le dernier
+                // curseur d'un pair parti doit s'effacer, sans bruit pour les autres.
                 if (cursors.length === 0 && !recipient.hasCursorPeers) continue;
                 recipient.hasCursorPeers = cursors.length > 0;
                 this.send(recipient, LIVE_CURSORS_EVENT, { workspaceId, cursors });
@@ -804,9 +712,8 @@ export class LiveHub {
                 const typers = group
                     .filter((peer) => peer !== recipient && peer.typingUntil > now)
                     .map((peer) => ({ connId: peer.connId, userId: peer.userId }));
-                // Une liste vide n'est envoyée qu'à qui en avait une : sinon la
-                // mention du dernier partant resterait affichée, mais l'envoyer
-                // à tout le monde à chaque frappe serait du bruit.
+                // Même règle que les curseurs : une liste vide seulement à qui en
+                // avait une.
                 if (typers.length === 0 && !recipient.hasTypingPeers) continue;
                 recipient.hasTypingPeers = typers.length > 0;
                 this.send(recipient, LIVE_TYPERS_EVENT, { workspaceId, typers });
@@ -815,9 +722,8 @@ export class LiveHub {
     }
 
     /**
-     * Un envoi ne doit jamais lever : le dispatcheur diffuse depuis l'intérieur
-     * du `try` d'une commande déjà répondue, et une exception y transformerait
-     * un succès en second message d'erreur.
+     * Un envoi ne doit jamais lever : le dispatcheur diffuse depuis le `try`
+     * d'une commande déjà répondue.
      */
     private send(conn: LiveConn, command: string, data: unknown): void {
         try {

@@ -63,24 +63,16 @@ async function serveBinary(reply: FastifyReply, target: AgentTarget): Promise<Fa
 }
 
 /**
- * Les routes HTTP de l'infrastructure des agents :
- *  - POST /api/agent/enroll          (public)  → échange un code de liaison
- *    contre un jeton d'appareil ;
- *  - GET  /api/agent/targets, /api/agent/download/:target (admin) et
- *    /api/agent/self-update/:target (jeton d'appareil) → la distribution des
- *    binaires.
- *
- * L'émission des codes de liaison (`devices.linkCode*`) est une commande du
- * module `features/devices`, comme le reste de la flotte : seule leur
- * consommation, publique et sans session, reste ici.
+ * Les routes HTTP de l'infrastructure des agents : l'enrôlement (public, échange
+ * un code de liaison contre un jeton d'appareil) et la distribution des binaires
+ * (admin, ou jeton d'appareil pour l'auto-mise à jour). L'émission des codes de
+ * liaison est une commande du module `features/devices`.
  */
 export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }: AgentRouteDeps): Promise<void> {
     /**
-     * Resolve the caller as an admin for the fleet (Appareils) HTTP endpoints.
-     * Agent-binary distribution is reached only from the admin-only Appareils
-     * page, so it enforces the admin role server-side too — hiding the menu
-     * entry is not a boundary on its own. Returns `false` after already sending
-     * the 401/403.
+     * Resolve the caller as an admin: binary distribution enforces the role
+     * server-side, hiding the menu entry is not a boundary. Returns `false`
+     * after already sending the 401/403.
      */
     const requireAdmin = async (req: FastifyRequest, reply: FastifyReply): Promise<boolean> => {
         const accessToken = req.cookies[ACCESS_COOKIE];
@@ -180,11 +172,9 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }
         return serveBinary(reply, parsed.data);
     });
 
-    // Seule route publique et sans session de ce fichier, et elle consomme un
-    // secret de 8 caractères sur un alphabet de 31 — la deviner tient au nombre
-    // d'essais qu'on laisse faire. Le plafond global ne suffit pas : il se
-    // mesure sur toutes les routes confondues, alors qu'ici une adresse n'a
-    // aucune raison légitime de tenter plus de quelques enrôlements d'affilée.
+    // Route publique qui consomme un secret de 8 caractères : la deviner tient au
+    // nombre d'essais. Le plafond global, mesuré toutes routes confondues, ne
+    // suffit pas.
     app.post(
         '/api/agent/enroll',
         { config: { rateLimit: { max: 10, timeWindow: '10 minutes' } } },
@@ -225,16 +215,12 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }
             const deviceToken = await signDeviceToken(deviceId, ownerId);
             await db.devices.setTokenHash(deviceId, sha256hex(deviceToken));
 
-            // (Re)set the device to a clean enrolled state: pending by default (the
-            // owner approves it before its metrics are accepted — defence in depth),
-            // or active straight away if the code auto-approves. Doing this for the
-            // re-enrollment case too re-pairs a previously archived/revoked machine
-            // instead of leaving it stuck (and hidden) in its old state.
+            // (Re)set the device to a clean enrolled state: pending unless the code
+            // auto-approves. Done on re-enrollment too, so a previously
+            // archived/revoked machine is re-paired instead of staying hidden.
             await db.devices.markEnrolled(deviceId, consumed.autoApprove ? 'active' : 'pending');
-            // Un appareil vient d'entrer dans l'espace, et son code d'appairage de
-            // disparaître : c'est ce qui remplace le sondage du dialogue « Lier un
-            // appareil ». L'appairage passe par cette route HTTP, pas par une
-            // commande WS — sans ce signal, rien n'en avertirait personne.
+            // L'appairage passe par cette route HTTP, pas par une commande WS :
+            // sans ce signal, rien n'avertirait l'espace.
             live.changed(workspaceId, ['devices'], null);
             audit.record({
                 source: 'agent',

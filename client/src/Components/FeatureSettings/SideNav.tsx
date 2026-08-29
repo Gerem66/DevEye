@@ -18,19 +18,11 @@ export interface SideNavProps<T extends string> {
 }
 
 /**
- * La colonne de gauche de la coquille de réglages.
- *
- * Verticale et non horizontale, contrairement aux `Tabs` de l'écran Espace : les
- * sections d'un réglage sont des **catégories** (où partent les alertes, qui a
- * le droit, où la donnée est visible) et non des vues d'un même objet. Elles
- * s'énumèrent donc de haut en bas, où l'on peut lire des intitulés entiers
- * plutôt que de les tronquer.
- *
- * Comme les onglets, les entrées sont **construites par l'appelant en fonction
- * des droits** : une section affichée mène toujours à quelque chose
- * d'utilisable, plutôt qu'à un panneau vide ou grisé. Et quand il n'en reste
- * aucune, ce n'est pas cette barre qui disparaît — c'est le bouton qui ouvre la
- * coquille (voir `FeatureSettingsButton`).
+ * La colonne de gauche de la coquille de réglages. Verticale : les sections
+ * sont des catégories, non des vues d'un même objet, et les intitulés entiers
+ * se lisent de haut en bas. Les entrées sont construites par l'appelant en
+ * fonction des droits ; sans aucune, c'est le bouton qui ouvre la coquille qui
+ * disparaît (`FeatureSettingsButton`).
  */
 export default function SideNav<T extends string>({ items, active, onSelect, label }: SideNavProps<T>) {
     return (

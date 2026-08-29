@@ -54,20 +54,16 @@ function extractSubscribers(html: string): string | null {
 }
 
 /**
- * Channel video count — taken only from the structured header fields, and only
- * for the plural "videos", so a stray "1 video" elsewhere on the page can't win
- * (a loose match made it always report "1").
+ * Channel video count: structured header fields first, else the text right
+ * after the subscriber count, plural "videos" only so a stray "1 video"
+ * elsewhere on the page can't win.
  */
 function extractVideos(html: string): string | null {
-    // Structured count fields first (older layouts).
     const structured =
         html.match(/"videosCountText"\s*:\s*\{[^{}]*?"(?:simpleText|content)"\s*:\s*"([\d.,]+\s?[KMB]?)/i)?.[1] ??
         html.match(/"videosCountText"\s*:\s*\{[^{}]*?"runs"\s*:\s*\[\s*\{\s*"text"\s*:\s*"([\d.,]+\s?[KMB]?)/i)?.[1];
     if (structured) return structured.replace(/\s/g, '');
 
-    // Otherwise the channel's video count sits right next to the subscriber count
-    // in the header metadata — search just after it, plural "videos" only so a
-    // stray "1 video" elsewhere on the page can't win.
     const subIdx = html.search(/[\d.,]+\s?[KMB]?\s+subscribers/i);
     const slices = subIdx >= 0 ? [html.slice(subIdx, subIdx + 400)] : [];
     slices.push(html);

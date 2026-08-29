@@ -22,12 +22,12 @@ import {
 
 /**
  * Les dossiers d'un compte : leur liste, leur ordre, et les trois relèves à la
- * demande (incrémentale, vers le passé, à zéro), qui passent toutes par le
- * même `sync.ts` que le service de fond, avec le vrai client IMAP.
+ * demande (incrémentale, vers le passé, à zéro), qui passent toutes par le même
+ * `sync.ts` que le service de fond.
  *
- * Tout fonctionne sur un compte projeté d'un autre espace : le codec est
- * celui du domicile (`accountCipher`), et une relève faite depuis la fenêtre
- * écrit le cache du domicile, que la diffusion rafraîchit des deux côtés.
+ * Tout fonctionne sur un compte projeté d'un autre espace : le codec est celui
+ * du domicile (`accountCipher`), et une relève faite depuis la fenêtre écrit le
+ * cache du domicile.
  */
 
 export const mailFolderListFeature = defineSdkFeature<
@@ -42,11 +42,10 @@ export const mailFolderListFeature = defineSdkFeature<
         await assertMailUnlocked(ctx, account.security_tier);
         const cipher = await accountCipher(ctx, account);
 
-        // "Open" accounts are kept fresh by the background tick of `service.ts` —
-        // serving the cache instantly makes switching mailboxes feel instant
-        // instead of round-tripping to IMAP on every click. "Guarded" accounts
-        // have no background sync, so this on-demand call is their only chance
-        // to refresh (same discipline as mail.messageList).
+        // "Open" accounts are kept fresh by the background tick, so serving the
+        // cache makes switching mailboxes instant instead of round-tripping to
+        // IMAP on every click. "Guarded" accounts have no background sync, so
+        // this on-demand call is their only chance to refresh.
         let rows = account.security_tier === 'guarded' ? [] : await ctx.repo.folders.listByAccount(account.id);
         if (rows.length === 0) {
             try {
@@ -55,9 +54,8 @@ export const mailFolderListFeature = defineSdkFeature<
                 );
             } catch (e) {
                 if (account.security_tier === 'guarded') throw e;
-                // Open account, first-ever load, sync unreachable right now — fall
-                // back to whatever (possibly nothing) is cached rather than failing
-                // the whole switch; the background tick will fill it in shortly.
+                // Open account, first-ever load, sync unreachable: serve whatever
+                // is cached rather than failing the whole switch.
                 ctx.logger.warn(
                     { accountId: account.id, err: e instanceof Error ? e.message : String(e) },
                     'mail.folderList: initial sync failed'

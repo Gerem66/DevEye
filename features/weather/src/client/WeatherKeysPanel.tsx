@@ -8,16 +8,10 @@ import { manifest } from '../manifest';
 const api = featureApi(manifest);
 
 /**
- * Les clés d'API des fournisseurs météo — le panneau Sources de la Météo.
- *
- * Autonome, comme tous les panneaux de la coquille : il se charge tout seul.
- * La clé posée ici vaut pour tout l'espace ; un lieu peut porter la sienne
- * dans son propre dialogue, et sans elle il retombe sur celle-ci
- * (`resolveLocationKey` côté serveur). C'est le premier point d'entrée de
- * cette clé d'espace : `weather.setKey` existait sans aucun écran pour
- * l'appeler.
- *
- * La clé ne revient jamais du serveur, seulement le fait qu'elle existe.
+ * Le panneau Sources : les clés d'API des fournisseurs, à l'échelle de l'espace.
+ * Un lieu peut porter la sienne, et sans elle retombe sur celle-ci
+ * (`resolveLocationKey`). La clé ne revient jamais du serveur, seulement le fait
+ * qu'elle existe.
  */
 
 /** Ce que chaque fournisseur attend. Le registre est court et fermé. */
@@ -35,8 +29,7 @@ const PROVIDER_META: Record<WeatherProvider, { label: string; needsKey: boolean;
 };
 
 export default function WeatherKeysPanel() {
-    // Depuis le rapatriement, poser une clé exige la permission déclarée
-    // `manageKeys` (voir le manifest), pas seulement l'écriture.
+    // Poser une clé exige la permission déclarée `manageKeys`, pas seulement l'écriture.
     const canManage = useWorkspacePermissions().canExtra('weather', 'manageKeys');
     const [held, setHeld] = useState<Record<string, boolean>>({});
     const [drafts, setDrafts] = useState<Record<string, string>>({});

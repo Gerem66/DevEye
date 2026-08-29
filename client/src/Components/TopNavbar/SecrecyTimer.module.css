@@ -1,8 +1,6 @@
-/* Topbar mini-widget for password encryption — a compact pill in the spirit of
-   ConnectionStatus. Three skins (off / locked / unlocked) share the base shape.
-
-   NOTE (same rationale as ConnectionStatus): icon sizes are scoped under `.pill`
-   so the descendant selector (0,2,0) reliably beats the global `.icon` rule. */
+/* Topbar mini-widget for password encryption, a compact pill like
+   ConnectionStatus. Icon sizes are scoped under `.pill` so the descendant
+   selector (0,2,0) beats the global `.icon` rule. */
 .pill {
     display: inline-flex;
     align-items: center;
@@ -59,7 +57,7 @@
     transform: none;
 }
 
-/* ── State 3: feature off — sober, neutral. ─────────────────────────────── */
+/* State 3: feature off. */
 .off {
     color: var(--text-muted);
 }
@@ -69,9 +67,8 @@
     background: var(--glass-bg);
 }
 
-/* ── State 4: enabled but "validate on every action" — informational, routes to
-   config. Distinct from `off`: a present (not muted) closed padlock with a faint
-   accent edge, so it reads as "active, but nothing to unlock here". ─────────── */
+/* State 4: "validate on every action". A present closed padlock with a faint
+   accent edge, so it reads as "active, but nothing to unlock here". */
 .always {
     color: var(--text-secondary);
     border-style: dashed;
@@ -83,7 +80,7 @@
     background: var(--accent-bg);
 }
 
-/* ── State 1: locked — accent padlock inviting an unlock. ───────────────── */
+/* State 1: locked. */
 .locked {
     color: var(--accent);
     border-color: color-mix(in srgb, var(--accent) 40%, transparent);
@@ -93,7 +90,7 @@
     background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
-/* ── State 2: unlocked — a container with padlock + countdown bar. ──────── */
+/* State 2: unlocked, a container with padlock + countdown bar. */
 .unlocked {
     gap: 7px;
     color: var(--success);

@@ -72,23 +72,16 @@ export interface FeatureContext {
     /** Lève `forbidden` si l'appelant ne gère pas les canaux de cette feature. */
     assertChannels: (feature: FeatureId) => void;
     /**
-     * Les éléments d'une feature que le rôle de l'appelant voit autrement que
-     * les autres : `'none'` masqué, `'read'` en lecture seule.
-     *
-     * **Restrictif seulement** : la carte ne peut qu'abaisser ce que
-     * `canFeature` accorde, jamais l'élever. Les listages s'en servent pour
-     * filtrer ; les commandes visant un élément passent par `assertItem`.
-     *
-     * Vide pour le propriétaire et pour un membre sans rôle — le premier passe
-     * outre, le second n'a déjà rien.
+     * Les éléments d'une feature que le rôle de l'appelant voit autrement :
+     * `'none'` masqué, `'read'` en lecture seule. Restrictif seulement : la
+     * carte ne peut qu'abaisser ce que `canFeature` accorde. Les listages s'en
+     * servent pour filtrer ; les commandes visant un élément passent par `assertItem`.
      */
     itemRestrictions: (feature: FeatureId) => Promise<ReadonlyMap<number, ItemAccess>>;
     /**
-     * Lève `forbidden` si cet **élément précis** n'est pas accessible au niveau
-     * demandé, restriction de rôle comprise.
-     *
-     * Vérifie d'abord la feature : une restriction d'élément n'ouvre jamais ce
-     * qu'un droit de feature ferme.
+     * Lève `forbidden` si cet élément précis n'est pas accessible au niveau
+     * demandé, restriction de rôle comprise. Vérifie d'abord la feature : une
+     * restriction d'élément n'ouvre jamais ce qu'un droit de feature ferme.
      */
     assertItem: (feature: FeatureId, itemId: number, level?: FeatureAccess) => Promise<void>;
     /**
@@ -128,26 +121,16 @@ export interface FeatureContext {
 /**
  * Thrown by a feature handler to send a typed error back to the client.
  * The dispatcher converts it into a `protocolError` payload; anything else is
- * mapped to `internal`.
- *
- * La classe vit dans `@deveye/types/sdk/server` depuis le chantier des modules :
- * une seule définition pour les handlers natifs et les modules, sinon un
- * `instanceof` du dispatcheur raterait l'une des deux familles. Ré-exportée
- * ici pour que rien ne change chez les natifs.
+ * mapped to `internal`. One definition shared with the modules
+ * (`@deveye/types/sdk/server`), so the dispatcher's `instanceof` matches both.
  */
 export { FeatureError } from '@deveye/types/sdk/server';
 
 /**
  * Authorization a command requires, declared beside its schemas and enforced by
- * the WS dispatcher **before** the handler runs — exactly like the zod input
- * validation already is.
- *
- * Declaring it here rather than as the first line of each handler makes the whole
- * authorization surface greppable from the feature registry, and makes "I forgot
- * the guard" a visible omission instead of an invisible one.
- *
- * Commands whose check depends on the *row* being touched (owner-or-admin, e.g.
- * `devices.setConfig`) keep their guard in the handler and read `ctx.isAdmin`.
+ * the WS dispatcher before the handler runs: the whole authorization surface is
+ * greppable, and a forgotten guard is a visible omission. Commands whose check
+ * depends on the row being touched keep their guard in the handler.
  */
 export interface FeatureAccessSpec {
     /**
@@ -162,11 +145,9 @@ export interface FeatureAccessSpec {
     /** Global account admin: the device fleet and the system pages. */
     admin?: true;
     /**
-     * Commande de **compte** et non d'espace (secrecy, 2FA, avatar, mot de
-     * passe). Le dispatcheur force alors `ctx.workspace` sur l'espace personnel
-     * de l'appelant, quoi que dise l'enveloppe : `ctx.secure` reste son propre
-     * coffre, et une enveloppe pointant un espace partagé ne peut pas détourner
-     * une commande comme `secrecy.enable`.
+     * Commande de compte et non d'espace (secrecy, 2FA, avatar) : le
+     * dispatcheur force `ctx.workspace` sur l'espace personnel de l'appelant,
+     * quoi que dise l'enveloppe, pour que `ctx.secure` reste son propre coffre.
      */
     scope?: 'account';
 }
@@ -178,22 +159,12 @@ export interface FeatureDefinition<Cmd extends string, I extends z.ZodTypeAny, O
     /** Enforced by the dispatcher before `handler` is called. */
     access?: FeatureAccessSpec;
     /**
-     * Cette commande **écrit** : après un succès, le dispatcheur en avertit
-     * l'espace, et toute vue qui lit ce sujet se remet à jour d'elle-même.
-     *
-     * Déclaré ici pour la même raison qu'`access` : posé à côté des schémas, un
-     * oubli devient une omission visible plutôt qu'invisible. Et comme les
-     * sondages périodiques ont disparu du client, un oubli se voit — la donnée
-     * reste figée jusqu'au rechargement. Le contrôle de démarrage
-     * (`_topics.ts`) est là pour l'attraper avant.
-     *
-     * `true` déduit le sujet du préfixe de la commande via `COMMAND_PREFIX_TOPIC`
-     * (`notes.add` → `notes`, et `agent.*` comme `devices.*` → `devices`, la
-     * table corrigeant le préfixe quand il ne dit pas la feature). Une liste
-     * explicite sert aux commandes à double effet.
-     *
-     * Absent = lecture, ou action sans écriture (`agent.subscribe`,
-     * `secrecy.unlock`, un appel RPC vers un agent).
+     * Cette commande écrit : après un succès, le dispatcheur en avertit
+     * l'espace, et toute vue qui lit ce sujet se remet à jour. Un oubli fige la
+     * donnée jusqu'au rechargement ; le contrôle de démarrage (`_topics.ts`)
+     * l'attrape. `true` déduit le sujet du préfixe via `COMMAND_PREFIX_TOPIC` ;
+     * une liste explicite sert aux commandes à double effet. Absent = lecture,
+     * ou action sans écriture.
      */
     mutates?: true | readonly LiveTopic[];
     handler: (ctx: FeatureContext, input: z.infer<I>) => Promise<z.infer<O>>;

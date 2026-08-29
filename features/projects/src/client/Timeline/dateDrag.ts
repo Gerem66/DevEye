@@ -2,16 +2,12 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPoi
 import type { ProjectCard } from '../../contracts/domain';
 
 /**
- * Déplacer les dates d'une carte à la souris, sur la frise.
+ * Déplacer les dates d'une carte à la souris : le bord gauche déplace le début,
+ * le bord droit l'échéance, le milieu les deux.
  *
- * Trois gestes sur une même barre, distingués par l'endroit où on l'attrape :
- * le bord gauche déplace le début, le bord droit l'échéance, et le milieu les
- * deux ensemble, du même nombre de jours.
- *
- * Le geste ne persiste rien avant le relâchement : tant que le pointeur est
- * enfoncé, seul un aperçu local bouge. Une frise qui écrirait à chaque pixel
- * enverrait cinquante commandes pour un seul déplacement, et la carte
- * sauterait de ligne sous le pointeur au premier rechargement.
+ * Rien n'est persisté avant le relâchement, seul un aperçu local bouge : écrire
+ * à chaque pixel enverrait cinquante commandes par déplacement, et la carte
+ * sauterait de ligne sous le pointeur.
  */
 
 /** Ce qu'on tient : une extrémité, ou la barre entière. */
@@ -35,12 +31,9 @@ interface Options {
 const DRAG_THRESHOLD = 3;
 
 /**
- * Décale une date d'un nombre de jours **calendaires**, en heure locale.
- *
- * Et non de `n × 86 400 s` : les dates de ce module sont des minuits locaux
- * (voir `dateInputToSeconds`), et un changement d'heure d'été décalerait ce
- * minuit d'une heure à chaque passage — au bout de deux, une date posée sur le
- * 12 se relirait le 11 à 23 h.
+ * Décale une date d'un nombre de jours calendaires, en heure locale, et non de
+ * `n × 86 400 s` : les dates du module sont des minuits locaux, qu'un passage à
+ * l'heure d'été décalerait d'une heure à chaque fois.
  */
 function shiftDays(seconds: number, days: number): number {
     const d = new Date(seconds * 1000);
@@ -49,14 +42,9 @@ function shiftDays(seconds: number, days: number): number {
 }
 
 /**
- * Les dates de la carte après un déplacement de `days` jours.
- *
- * L'inversion est le point délicat : ramener le bord gauche au-delà du bord
- * droit ne bloque pas le geste, il échange les rôles. La date qu'on tient reste
- * celle qu'on tient ; c'est le `min`/`max` avec l'extrémité restée fixe qui
- * décide laquelle des deux est désormais le début. La poignée passe donc de
- * l'autre côté sans qu'on ait à la lâcher, et le geste se poursuit dans le même
- * mouvement.
+ * Les dates après un déplacement de `days` jours. Croiser les deux bords ne
+ * bloque pas le geste : le `min`/`max` avec l'extrémité fixe décide laquelle
+ * devient le début, et la poignée passe de l'autre côté sans qu'on la lâche.
  */
 function applyDrag(card: ProjectCard, mode: DragMode, days: number): DatePreview {
     const { startDate, dueDate } = card;
@@ -80,11 +68,9 @@ function applyDrag(card: ProjectCard, mode: DragMode, days: number): DatePreview
 }
 
 /**
- * Où l'on vient d'attraper la barre.
- *
- * Les zones de bord sont bornées au tiers de la largeur : sur une barre de deux
- * jours, deux poignées de 10 px ne laisseraient aucun milieu, et la barre ne
- * pourrait plus être déplacée d'un bloc.
+ * Où l'on vient d'attraper la barre. Les zones de bord sont bornées au tiers de
+ * la largeur : sur une barre de deux jours, deux poignées de 10 px ne
+ * laisseraient aucun milieu à saisir.
  */
 export function modeAt(rect: DOMRect, clientX: number, resizable: boolean): DragMode {
     if (!resizable) return 'move';

@@ -20,20 +20,14 @@ import SiteList from './SiteList';
 import styles from './style.module.css';
 
 /**
- * Audience — les sites suivis de l'espace actif.
+ * Les sites suivis de l'espace actif. Feature de premier rang et non un onglet
+ * des Projets : un site appartient à l'espace, plusieurs projets peuvent le
+ * suivre, certains n'en servent aucun, et un projet ne fait qu'y pointer.
  *
- * Feature de premier rang, et non un onglet des Projets : un site appartient à
- * l'espace, plusieurs projets peuvent le suivre, et certains ne servent aucun
- * projet. Un projet ne fait qu'y **pointer**. C'est la forme des features Git et
- * Bases de données, et pour les mêmes raisons.
- *
- * **Rien ici ne mesure quoi que ce soit.** Les visites entrent par une porte
- * publique que ce composant ne connaît pas (`/api/t/b`), et cet écran ne fait
- * que lire ce qu'elle a écrit. C'est aussi pourquoi il ne demande jamais de mot
- * de passe : tout vit à l'étage ouvert, sous la clé de l'espace.
- *
- * Depuis le rapatriement, l'espace vient de `useActiveWorkspace()` et non
- * d'une prop : la vue d'un module ne reçoit que `closeFeature`.
+ * Rien ici ne mesure quoi que ce soit : les visites entrent par une porte
+ * publique que ce composant ne connaît pas, et cet écran ne fait que lire ce
+ * qu'elle a écrit. D'où aussi l'absence de mot de passe, tout vivant à l'étage
+ * ouvert.
  */
 export function FeatureAudience(_props: FeatureViewProps) {
     const permissions = useWorkspacePermissions();
@@ -61,17 +55,13 @@ export function FeatureAudience(_props: FeatureViewProps) {
     const pendingReload = useRef(false);
 
     /**
-     * Présence : « qui regarde quel site ». Un seul déclarant par niveau : ce
-     * composant possède `l1`, et rien d'autre dans la feature n'y touche.
+     * Présence : « qui regarde quel site ». Un seul déclarant par niveau, ce
+     * composant possède `l1`.
      *
-     * Le même hook applique ce qu'une téléportation demande à ce niveau :
-     * rejoindre quelqu'un, ou venir de l'onglet d'un projet (« Ouvrir
-     * l'Audience »), ouvre la feature ET le site visé, au lieu de s'arrêter
-     * sur la liste. La cible est rendue tant qu'elle n'est pas atteinte, jamais
-     * consommée : on attend donc que la liste soit chargée (`ready`) pour
-     * vérifier que le site existe, et on l'ignore sans rien avoir à acquitter
-     * s'il a disparu. Le segment est l'identifiant nu du site, comme pour
-     * toute fiche d'élément.
+     * Le même hook applique ce qu'une téléportation demande à ce niveau : elle
+     * ouvre la feature et le site visé, au lieu de s'arrêter sur la liste. La
+     * cible est rendue tant qu'elle n'est pas atteinte et jamais consommée,
+     * d'où l'attente de la liste (`ready`) avant de vérifier que le site existe.
      */
     useLiveItemTarget('l1', openedId === null ? null : String(openedId), sites !== null, (value) => {
         if (value === null) {
@@ -95,8 +85,8 @@ export function FeatureAudience(_props: FeatureViewProps) {
     }, []);
 
     useEffect(() => {
-        // Une relecture réordonne la liste sous le pointeur : jamais pendant un
-        // glissé. Elle est retenue et rejouée au relâchement.
+        // Une relecture réordonne la liste sous le pointeur : jamais pendant un glissé,
+        // elle est retenue et rejouée au relâchement.
         if (dragging.current) {
             pendingReload.current = true;
             return;
@@ -136,8 +126,8 @@ export function FeatureAudience(_props: FeatureViewProps) {
 
     const reorder = useCallback(
         (siteIds: number[]) => {
-            // On range d'abord localement, pour que la carte reste là où on l'a
-            // lâchée sans aller-retour, puis on persiste.
+            // On range d'abord localement, pour que la carte reste là où on l'a lâchée
+            // sans aller-retour, puis on persiste.
             setSites((prev) => {
                 if (!prev) return prev;
                 const byId = new Map(prev.map((s) => [s.id, s]));
@@ -160,9 +150,8 @@ export function FeatureAudience(_props: FeatureViewProps) {
                             <h2 className={styles.title}>Sites suivis</h2>
                             <p className={styles.subtitle}>Ce que les visiteurs font de vos projets une fois livrés.</p>
                         </div>
-                        {/* Le bouton commun, monté sans condition comme partout :
-                            il se supprime lui-même tant qu'aucune section
-                            n'existe à cette échelle. */}
+                        {/* Le bouton commun, monté sans condition : il se supprime
+                            lui-même tant qu'aucune section n'existe à cette échelle. */}
                         <FeatureSettingsButton scope={{ kind: 'feature', feature: 'audience' }} />
                         {canWrite && (
                             <Button icon='add' onClick={() => setDialog({ site: null })}>
@@ -213,9 +202,9 @@ export function FeatureAudience(_props: FeatureViewProps) {
                 onClose={() => setDialog(null)}
                 onSaved={(site) => {
                     setDialog(null);
-                    // La fiche ouverte doit refléter le réglage tout de suite ;
-                    // la liste, elle, se relit par l'invalidation posée dans le
-                    // dialogue — à la source de la mutation, pas ici.
+                    // La fiche ouverte doit refléter le réglage tout de suite ; la liste
+                    // se relit par l'invalidation posée dans le dialogue, à la source de
+                    // la mutation.
                     setOpened((prev) => (prev && prev.site.id === site.id ? { ...prev, site } : prev));
                     void reload();
                 }}

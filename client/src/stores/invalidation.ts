@@ -4,28 +4,18 @@ import { useCallback, useSyncExternalStore } from 'react';
 import { ws } from '@/api/ws';
 
 /**
- * Bus d'invalidation : « cette donnée a changé, re-sollicitez ».
+ * Bus d'invalidation : « cette donnée a changé, re-sollicitez ». Deux sources, un
+ * seul mécanisme : localement, une feature qui vient d'écrire appelle
+ * `invalidate(key)` sans attendre l'aller-retour ; à distance, le serveur diffuse
+ * `live.changed` après toute commande déclarant `mutates` et après une écriture
+ * d'une tâche de fond.
  *
- * Deux sources, un seul mécanisme :
- *  - **locale** — une feature qui vient d'écrire appelle `invalidate(key)` pour
- *    rafraîchir ses propres vues sans attendre l'aller-retour du serveur ;
- *  - **distante** — le serveur diffuse `live.changed` après toute commande
- *    déclarant `mutates`, et après une écriture d'une tâche de fond. C'est ce
- *    qui fait qu'une note écrite par quelqu'un d'autre apparaît sans recharger.
- *
- * Les clés sont listées explicitement (comme les registres de features) pour que
- * l'ensemble des ressources invalidables reste visible et sans faute de frappe.
- * Par convention, une clé est la commande WS dont elle met en cache le résultat.
+ * Les clés sont listées explicitement pour que l'ensemble des ressources
+ * invalidables reste visible et sans faute de frappe. Par convention, une clé est
+ * la commande WS dont elle met en cache le résultat.
  */
 export type ResourceKey =
-    /**
-     * Les canaux d'alerte de l'espace.
-     *
-     * Une seule clé pour toutes les fonctionnalités : un canal appartient à
-     * l'espace, donc le corriger change ce que voit l'écran de réglages de
-     * chacune d'elles. Le routage suit dans `notify.routeGet`, relu par la
-     * coquille ouverte.
-     */
+    /** Les canaux d'alerte, une seule clé pour toutes les fonctionnalités. */
     | 'notify.channelList'
     | 'notify.routeGet'
     | 'notes.count'
@@ -35,12 +25,9 @@ export type ResourceKey =
     | 'cloudSync.listShares'
     | 'mail.accountCount'
     | 'mail.accountList'
-    /** Les réglages généraux de Mail (affichage, images approuvées) : lus par
-     *  l'écran ET par le panneau Général des réglages, qui doivent se suivre. */
     | 'mail.getSettings'
-    /** L'arborescence du compte ouvert — c'est elle qui porte les compteurs de non-lus. */
     | 'mail.folderList'
-    /** La tête de liste du dossier ouvert. Fusionnée, jamais rechargée en entier : voir `features/mail/src/client/Mail.tsx`. */
+    /** La tête de liste du dossier ouvert : fusionnée, jamais rechargée en entier. */
     | 'mail.messageList'
     | 'uptime.count'
     | 'uptime.list'
@@ -50,29 +37,12 @@ export type ResourceKey =
     | 'sentinel.findings'
     | 'sentinel.baseline'
     | 'weather.list'
-    /** L'historique des recherches OSINT — lu par l'écran et par la carte d'accueil. */
     | 'osint.history'
     | 'workspace.roleList'
-    /**
-     * L'état de l'espace actif tel que `workspace.activate` le rend : droits de
-     * l'appelant, apparence, disposition de l'accueil. Trois choses, une clé,
-     * parce qu'une seule commande les rend toutes les trois — les séparer ne
-     * ferait que multiplier les allers-retours pour un même rafraîchissement.
-     */
+    /** L'état de l'espace actif tel que `workspace.activate` le rend : droits, apparence, disposition. */
     | 'workspace.activate'
-    /**
-     * Ce qui ne vit que dans le bundle de session : nom et logo de l'espace,
-     * liste de ses membres. Rien ne les relit à la commande, d'où une clé à part
-     * — elle déclenche un `/me`, plus lourd, réservé à ce qui le vaut.
-     */
+    /** Ce qui ne vit que dans le bundle de session (nom, logo, membres) : déclenche un `/me`, plus lourd. */
     | 'workspace.session'
-    /**
-     * Projets : cinq clés déclarées par le manifest du module
-     * `features/projects`. Les quatre premières battent sur son sujet
-     * (`projects`), la cinquième et le portefeuille sur son sujet secondaire
-     * `projectsChat` (`manifest.topics`), pour qu'un message ne fasse pas
-     * re-solliciter le tableau, la frise et le portefeuille entiers.
-     */
     | 'projects.count'
     | 'projects.list'
     | 'projects.board'
@@ -83,17 +53,7 @@ export type ResourceKey =
     | 'git.repo'
     | 'deploy.count'
     | 'deploy.list'
-    /** La fiche d'une cible : son historique et les projets qui la déploient. */
     | 'deploy.detail'
-    /**
-     * Les finances. Six clés, parce qu'une écriture des finances remue plusieurs
-     * vues à la fois (une dépense change le journal, un solde, un budget, la
-     * frise du tableau de bord et la carte de l'accueil) et que chacune de ces
-     * vues n'a aucune raison de relire les cinq autres. Le module les invalide
-     * ensemble, une fois, à la source de la mutation
-     * (`features/finance/src/client/api.ts`) ; son manifest les déclare, et la
-     * glue générée les enregistre ici, comme pour Météo et OSINT.
-     */
     | 'finance.summary'
     | 'finance.accountList'
     | 'finance.transactionList'
@@ -106,126 +66,46 @@ export type ResourceKey =
     | 'backup.count'
     | 'backup.destinationList'
     | 'backup.jobList'
-    /** La fiche d'un travail : ses réglages et son historique d'exécutions. */
     | 'backup.detail'
-    /** Le journal transverse : les dernières exécutions, tous travaux confondus. */
     | 'backup.runs'
     | 'audience.count'
     | 'audience.list'
-    /** La fiche d'un site : ses réglages, sa clé, les projets qui le suivent. */
     | 'audience.detail'
-    /**
-     * Les chiffres eux-mêmes, séparés de la fiche exprès.
-     *
-     * Ils ne changent pas au même rythme : la fiche bouge quand un humain règle
-     * quelque chose, les chiffres à chaque minute d'ingestion. Les confondre
-     * aurait fait relire les réglages — et rouvrir la liste des projets liés —
-     * à chaque battement de l'audience.
-     */
+    /** Les chiffres, séparés de la fiche : ils bougent à chaque minute d'ingestion. */
     | 'audience.stats'
-    /**
-     * Les clés d'un module externe : `<id>.<nom>`, déclarées par son manifest
-     * (`resources`) et enregistrées au chargement par la glue générée. Le type
-     * reste nominal pour les natives et structurel pour les modules : la liste
-     * des modules dépend de l'installation, pas de ce fichier.
-     */
+    /** Les clés d'un module externe (`<id>.<nom>`), déclarées par son manifest. */
     | ExternalResourceKey;
 
 export type ExternalResourceKey = `x-${string}.${string}`;
 
 /**
- * Ce qu'un sujet du serveur invalide chez nous.
- *
- * La correspondance est explicite parce que les deux vocabulaires ne coïncident
- * pas : le serveur raisonne par feature (`workspace`), le client par commande
- * (`workspace.roleList`, `workspace.session`). Un sujet sans entrée ici
- * n'invalide rien — ce qui est le bon défaut, mais explique pourquoi une
- * nouvelle vue en cache doit penser à s'y inscrire.
+ * Ce qu'un sujet du serveur invalide chez nous, pour les sujets du socle. Le
+ * serveur raisonne par feature, le client par commande : un sujet sans entrée
+ * n'invalide rien, une nouvelle vue en cache doit s'y inscrire. Les sujets des
+ * modules passent par la glue générée (`registerFeatureResources`,
+ * `registerCrossTopicKeys`).
  */
 const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
     notify: ['notify.channelList', 'notify.routeGet'],
-    // (`mail` : ses cinq clés sont déclarées par le manifest du module
-    // `features/mail` et enregistrées par la glue générée. La relève de fond
-    // ne bouge pas que les cartes de comptes : elle fait entrer des messages,
-    // corrige des drapeaux et retire des lignes disparues. Sans les clés des
-    // dossiers et de la tête de liste, seule la date « il y a X min » se
-    // rafraîchissait, et une boîte laissée ouverte mentait jusqu'au prochain
-    // clic.)
-    // (`devices` : sa clé `devices.list` est déclarée par le manifest du
-    // module `features/devices` et enregistrée par la glue générée. Le sujet
-    // bat sur une écriture de flotte et sur chaque arête de présence d'un
-    // agent ; CloudSync le suit aussi, par `alsoInvalidatedBy`, parce que ses
-    // lignes de partage portent le nom de leurs appareils.)
-    // (`sentinel` : sujet distinct de `devices`, ses constats bougent à une
-    // tout autre cadence ; ses clés sont déclarées par le manifest du module
-    // `features/sentinel` et enregistrées par la glue générée.)
-    // (`projects` et `projectsChat` : deux sujets pour une seule feature, la
-    // structure d'un côté, les fils de discussion de l'autre, pour qu'un
-    // message ne fasse pas re-solliciter le portefeuille entier ; le second
-    // ravive aussi le portefeuille, qui affiche les comptes de non-lus. Les
-    // clés des deux sont déclarées par le manifest du module
-    // `features/projects` (`invalidatedByTopic` et `topics`) et enregistrées
-    // par la glue générée : `projectsChat` est le premier sujet secondaire
-    // d'un module.)
-    // (`git` : ses trois clés sont déclarées par le manifest du module
-    // `features/git` et enregistrées par la glue générée ; le sujet bat après
-    // une écriture d'un membre et à chaque tour de synchronisation qui a
-    // changé quelque chose, jamais sur un tour de 304.)
-    // (`deploy` : ses trois clés sont déclarées par le manifest du module
-    // `features/deploy` et enregistrées par la glue générée ; le sujet bat
-    // surtout au rythme du suivi de fond, qui fait avancer « En cours » vers
-    // « Réussi » sous les yeux, sans sondage côté navigateur.)
     /*
-     * Les cinq clés ensemble, parce qu'une seule exécution les remue toutes :
-     * elle change l'état du travail (liste), son historique (fiche), le journal
-     * transverse, et le compte d'échecs de la tuile d'accueil. Le contrôle d'une
-     * destination y touche aussi, en écrivant son verdict sur la ligne.
-     *
-     * Le sujet bat surtout au rythme de l'ordonnanceur, qui écrit sans qu'aucun
-     * navigateur n'ait rien demandé : c'est ce qui fait passer un travail de
-     * « en cours » à « réussi » sous les yeux, à 3 h du matin comme à midi.
-     */
-    // (`audience` : ses quatre clés sont déclarées par le manifest du module
-    // `features/audience` et enregistrées par la glue générée, ensemble parce
-    // que c'est le sujet ; le battement vient presque toujours de l'ingestion
-    // publique, coalescée à une fois par minute et par espace, et doit
-    // rafraîchir d'un coup tout ce qui montre de l'audience, où que ce soit.)
-    /*
-     * Un rôle modifié, un membre ajouté ou retiré, l'espace renommé : la liste
-     * des rôles bouge, mais **les droits de chacun aussi** — y compris ceux de
-     * qui ne regardait pas la page Espace. C'est ce second effet qui fait qu'une
-     * feature se grise (ou se dégrise) chez ses membres sans qu'ils rechargent,
-     * et qu'une vue dont on vient de perdre l'accès se referme d'elle-même.
-     *
-     * `workspace.session` et non `workspace.activate` : le `/me` qu'elle
-     * déclenche rapatrie le nom, le logo et les membres — que `workspace.activate`
-     * ne rend pas — *et* les droits, l'apparence et la disposition au passage.
-     * Demander les deux ferait deux allers-retours pour un seul changement.
-     *
-     * Le sujet `workspace` n'exige aucun droit de feature (`TOPIC_FEATURE`), donc
-     * la trame atteint bien celui à qui on vient de tout retirer.
+     * Un rôle modifié ou un membre retiré change les droits de chacun, y compris
+     * ceux de qui ne regardait pas la page Espace : d'où `workspace.session`, dont
+     * le `/me` rapatrie droits, apparence et disposition en plus des membres. Le
+     * sujet `workspace` n'exige aucun droit de feature, donc la trame atteint
+     * celui à qui on vient de tout retirer.
      */
     workspace: ['workspace.roleList', 'workspace.session'],
-    /*
-     * L'accueil de l'espace : quelqu'un a réorganisé les tuiles ou changé
-     * l'apparence, et c'est commun à tous ses membres. La voie légère —
-     * `workspace.activate` seule, sans recharger la session.
-     */
+    /* L'accueil ou l'apparence de l'espace : `workspace.activate` seule, sans recharger la session. */
     home: ['workspace.activate'],
-    /*
-     * Réglages de compte. Diffusés dans l'espace **personnel** de leur auteur,
-     * donc reçus par ses seuls autres onglets : rien de partagé à re-solliciter.
-     */
+    /* Réglages de compte, diffusés dans l'espace personnel de leur auteur : rien de partagé à re-solliciter. */
     account: []
 };
 
 /**
- * Anti-rebond de la réception.
- *
- * **Doit rester strictement supérieur au plancher du serveur** (200 ms, voir
- * `src/live/hub.ts`) : une écriture dont la trame a été étouffée là-bas doit
- * quand même être vue par la re-sollicitation que la trame précédente a déjà
- * programmée. Descendre en dessous ouvrirait une fenêtre d'écritures perdues.
+ * Anti-rebond de la réception. Doit rester strictement supérieur au plancher du
+ * serveur (200 ms, voir `src/live/hub.ts`) : une écriture dont la trame a été
+ * étouffée là-bas doit quand même être vue par la re-sollicitation déjà
+ * programmée, sans quoi elle serait perdue.
  */
 const REMOTE_DEBOUNCE_MS = 250;
 
@@ -240,11 +120,7 @@ export function invalidate(...keys: ResourceKey[]): void {
     }
 }
 
-/**
- * Version impérative de {@link useResourceVersion}, pour les stores singletons
- * qui ne vivent pas dans un composant. C'est ce qui a remplacé leurs sondages
- * périodiques : ils se rafraîchissent quand la donnée bouge, et jamais sinon.
- */
+/** Version impérative de {@link useResourceVersion}, pour les stores singletons hors composant. */
 export function onResourceChange(key: ResourceKey, fn: () => void): () => void {
     ensureWired();
     let set = listeners.get(key);
@@ -287,10 +163,9 @@ let flushTimer: ReturnType<typeof setTimeout> | null = null;
 const EXTERNAL_TOPIC_KEYS = new Map<string, ResourceKey[]>();
 
 /**
- * Les invalidations CROISÉES déclarées par les modules (`alsoInvalidatedBy`) :
- * le sujet d'une AUTRE feature ravive des clés du module. L'exemple fondateur :
- * les lignes de partage CloudSync portent le nom de leurs appareils, donc le
- * sujet `devices` doit raviver la liste des partages.
+ * Les invalidations croisées déclarées par les modules (`alsoInvalidatedBy`) : le
+ * sujet d'une autre feature ravive des clés du module, les partages CloudSync
+ * portant par exemple le nom de leurs appareils.
  */
 const CROSS_TOPIC_KEYS = new Map<string, ResourceKey[]>();
 
@@ -300,19 +175,15 @@ export function registerCrossTopicKeys(topic: string, keys: readonly ResourceKey
 }
 
 /**
- * Déclare les ressources d'un module : son sujet live (= son id), ou l'un de
- * ses sujets secondaires (`manifest.topics`), invalide les clés listées. L'équivalent, pour un module, d'une entrée dans `TOPIC_KEYS` ;
- * personne d'autre que la glue générée ne devrait l'appeler. Accepte aussi une
- * native rapatriée (Météo), dont l'entrée quitte alors la table.
+ * Déclare les ressources d'un module : son sujet live (= son id) ou l'un de ses
+ * sujets secondaires (`manifest.topics`) invalide les clés listées. L'équivalent
+ * d'une entrée dans `TOPIC_KEYS`, réservé à la glue générée.
  */
 export function registerFeatureResources(topic: string, invalidatedByTopic: readonly ResourceKey[]): void {
     EXTERNAL_TOPIC_KEYS.set(topic, [...invalidatedByTopic]);
 }
 
-/**
- * Branché à la première lecture, jamais au chargement du module : sans
- * abonné, il n'y a rien à invalider.
- */
+/** Branché à la première lecture : sans abonné, il n'y a rien à invalider. */
 export function ensureWired(): void {
     if (wired) return;
     wired = true;
@@ -332,8 +203,8 @@ export function ensureWired(): void {
         }
         if (pending.size === 0) return;
 
-        // Regroupé : une rafale d'écritures — un glisser-déposer qui réordonne
-        // dix éléments — ne doit produire qu'une seule re-sollicitation.
+        // Une rafale d'écritures, tel un réordonnancement, ne doit produire qu'une
+        // seule re-sollicitation.
         if (flushTimer) return;
         flushTimer = setTimeout(() => {
             flushTimer = null;

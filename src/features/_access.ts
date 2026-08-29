@@ -18,20 +18,16 @@ import { FeatureError } from './_define';
 import { moduleManifests } from './_sdk/register';
 
 /**
- * Résolution d'autorisation des commandes de feature.
- *
- * C'est le seul endroit qui répond à « que le droit l'appelant a-t-il ? ». Le
- * dispatcheur WS résout un {@link ResolvedScope} par commande et le passe au
- * handler via son contexte : aucun handler n'interroge jamais le rôle ni
+ * Résolution d'autorisation des commandes de feature : le seul endroit qui
+ * répond à « quel droit l'appelant a-t-il ? ». Le dispatcheur WS résout un
+ * {@link ResolvedScope} par commande ; aucun handler n'interroge le rôle ni
  * l'appartenance lui-même.
  */
 
 /**
- * Incrémenté dès que quelque chose qui accorde ou révoque un accès change (rôle
- * global, adhésion à un espace). Chaque entrée en cache retient l'époque sous
- * laquelle elle a été bâtie ; une divergence force sa reconstruction à la
- * commande suivante — la révocation prend donc effet immédiatement, sans
- * requête par commande ni minuteur.
+ * Incrémenté dès que quelque chose qui accorde ou révoque un accès change.
+ * Chaque entrée en cache retient l'époque de sa construction ; une divergence
+ * force sa reconstruction à la commande suivante.
  */
 let accessEpoch = 0;
 
@@ -41,21 +37,17 @@ export function invalidateAccess(): void {
 }
 
 /**
- * L'époque courante, pour estampiller un instantané de droits hors de ce module.
- *
- * Le hub de présence en retient un par connexion et par espace, pour pouvoir
- * filtrer ses diffusions **sans rien attendre** : une divergence d'époque y vaut
- * « aucun droit », jamais « les droits d'avant ».
+ * L'époque courante, pour estampiller un instantané de droits hors de ce module
+ * (les hubs filtrent leurs diffusions sans rien attendre : une divergence vaut
+ * « aucun droit »).
  */
 export function accessEpochNow(): number {
     return accessEpoch;
 }
 
 /**
- * Whether an account holds the global `admin` role — the single definition of
- * that question. The WS world reaches it through {@link createAccessResolver};
- * the fleet HTTP routes, which have no dispatcher to resolve access for them,
- * call it directly.
+ * Whether an account holds the global `admin` role: the single definition. The
+ * fleet HTTP routes, which have no dispatcher, call it directly.
  */
 export async function isAdminUser(db: Database, userId: number): Promise<boolean> {
     const user = await db.users.findById(userId);
@@ -84,25 +76,21 @@ export interface ResolvedScope {
     /** Droits par feature accordés par son rôle, absents = aucun accès. */
     features: ReadonlyMap<FeatureId, FeatureAccess>;
     /**
-     * Fonctionnalités dont le rôle gère les **canaux d'alerte** (le champ
-     * `channels` de ses grants, migration 093). Distinct de `features` : régler
-     * où Uptime écrit relève de `write`, gérer l'adresse de l'astreinte
-     * relève d'ici.
+     * Fonctionnalités dont le rôle gère les canaux d'alerte (champ `channels`
+     * des grants). Distinct de `features` : router relève de `write`, gérer
+     * l'adresse de l'astreinte relève d'ici.
      */
     channels: ReadonlySet<FeatureId>;
     /**
      * Les permissions déclarées par les features elles-mêmes (`extras` des
-     * grants, manifests des modules). Brutes ici : la résolution des défauts et
-     * du propriétaire se fait à la lecture, contre les specs du manifest.
+     * grants), brutes : défauts et propriétaire se résolvent à la lecture,
+     * contre les specs du manifest.
      */
     extras: ReadonlyMap<FeatureId, Record<string, boolean | string>>;
     /**
      * Les restrictions posées sur des éléments précis, pour le rôle de
-     * l'appelant. Chargées **paresseusement, par feature** : la plupart des
-     * commandes n'en ont pas besoin, et un espace qui n'en pose aucune n'a
-     * aucune ligne à lire.
-     *
-     * Vide pour le propriétaire, qui passe outre — comme partout ailleurs.
+     * l'appelant. Chargées paresseusement, par feature. Vide pour le
+     * propriétaire, qui passe outre.
      */
     itemRestrictions: (feature: FeatureId) => Promise<ReadonlyMap<number, ItemAccess>>;
     /** Coffre chiffré de cet espace, lié à cette session. */
@@ -111,19 +99,12 @@ export interface ResolvedScope {
 }
 
 /**
- * Droits effectifs d'un membre, dans cet ordre :
+ * Droits effectifs d'un membre : le propriétaire a tout (non révocable), un
+ * membre avec rôle exactement ce que son rôle accorde, un membre sans rôle rien
+ * (fail-closed).
  *
- *  1. **propriétaire** — tout. Non révocable : personne ne doit pouvoir
- *     s'enfermer dehors de chez soi, et l'espace personnel tombe toujours ici.
- *  2. **membre avec rôle** — exactement ce que son rôle accorde.
- *  3. **membre sans rôle** — rien. Fail-closed : un oubli d'attribution retire
- *     l'accès, il ne le donne jamais.
- *
- * Volontairement **sans** intersection avec `workspaces.features` : cette liste
- * dit quels widgets figurent sur l'accueil, pas qui a le droit d'ouvrir quoi.
- * L'intersecter reviendrait à supprimer l'accès à des données en décochant un
- * widget — et sur les espaces existants, dont la liste contient des identifiants
- * hérités, elle verrouillerait le propriétaire hors de ses propres données. Le
+ * Volontairement sans intersection avec `workspaces.features` : cette liste dit
+ * quels widgets figurent sur l'accueil, pas qui a le droit d'ouvrir quoi. Le
  * rôle est la seule frontière.
  */
 export function grantsFor(
@@ -136,16 +117,10 @@ export function grantsFor(
     extras: Map<FeatureId, Record<string, boolean | string>>;
 } {
     if (isOwner) {
-        // Les extras du propriétaire ne se matérialisent pas ici : leur
-        // résolution (`true` / `ownerValue`) se fait à la lecture, contre le
-        // manifest, parce qu'elle dépend de specs que ce module ne connaît pas.
-        //
-        // « Tout » = les natives ET les modules installés : la constante ne
-        // porte que l'enum natif, et un module à id externe (`x-…`) en est
-        // absent. Sans cette union, le propriétaire lui-même recevait
-        // `forbidden` sur chaque commande d'un module fraîchement installé —
-        // dans son propre espace personnel. Les ids natifs rapatriés (weather,
-        // osint, cloudsync) sont déjà dans l'enum, l'union est un no-op pour eux.
+        // Les extras du propriétaire se résolvent à la lecture, contre le
+        // manifest. « Tout » = les natives et les modules installés : la
+        // constante ne porte que l'enum natif, un module à id externe en est
+        // absent.
         const all: FeatureId[] = [...WORKSPACE_FEATURE_IDS, ...moduleManifests().map((m) => m.id)];
         return {
             capabilities: new Set(WORKSPACE_CAPABILITIES),
@@ -193,9 +168,8 @@ export interface AccessResolver {
      */
     forWorkspace(workspaceId: number | undefined): Promise<ResolvedScope>;
     /**
-     * L'espace personnel de l'appelant, quelle que soit l'enveloppe. Sert les
-     * commandes de compte (`secrecy`, `twofa`, avatar…) : elles doivent toujours
-     * viser le coffre de l'utilisateur, jamais celui d'un espace partagé.
+     * L'espace personnel de l'appelant, quelle que soit l'enveloppe : les
+     * commandes de compte doivent toujours viser le coffre de l'utilisateur.
      */
     forAccount(): Promise<ResolvedScope>;
 }
@@ -224,13 +198,9 @@ function parseFeatures(raw: unknown): string[] {
 }
 
 /**
- * Bâtit le résolveur d'accès d'une connexion.
- *
- * Chaque espace résolu est mémoïsé pour la durée de la connexion et réutilisé
- * jusqu'à ce que {@link invalidateAccess} incrémente l'époque. Résoudre à chaque
- * commande mettrait deux requêtes devant tous les chemins chauds (relevé de
- * métriques, listage de notes) pour répondre à des questions qui ne changent
- * quasiment jamais.
+ * Bâtit le résolveur d'accès d'une connexion. Chaque espace résolu est mémoïsé
+ * pour la durée de la connexion, jusqu'à ce que {@link invalidateAccess}
+ * incrémente l'époque.
  */
 export function createAccessResolver(
     db: Database,
@@ -245,10 +215,8 @@ export function createAccessResolver(
         if (!user) throw new FeatureError('auth_invalid', 'Compte introuvable');
 
         // La socket ne s'authentifie qu'à la poignée de main : sans ce contrôle,
-        // une suspension ne toucherait qu'un compte déconnecté, et celui qui est
-        // déjà en ligne garderait tout son accès jusqu'à ce qu'il recharge. Le
-        // `invalidateAccess()` posé par `admin.setUserStatus` fait retomber ce
-        // scope, donc la suspension mord dès la commande suivante.
+        // un compte suspendu déjà en ligne garderait son accès jusqu'au
+        // rechargement (`admin.setUserStatus` invalide l'époque).
         if (user.status === 'suspended') throw new FeatureError('forbidden', 'Ce compte est suspendu');
 
         const targetId = workspaceId ?? user.personal_workspace_id;
@@ -272,17 +240,9 @@ export function createAccessResolver(
         // propriétaire (l'appelant, seul membre) s'il est personnel.
         const { store, keys } = createSecureStore(db, crypt, row, sessionId);
 
-        /**
-         * Les restrictions d'éléments du rôle de l'appelant, par feature.
-         *
-         * Mémoïsées dans le scope, lui-même mémoïsé sous `accessEpoch` : une
-         * restriction modifiée doit donc bumper l'époque
-         * (`share.grantSet` appelle `invalidateAccess()`), sinon elle ne
-         * mordrait qu'à la reconnexion suivante.
-         *
-         * Le propriétaire n'en a jamais : il n'a pas de rôle, et les
-         * restrictions se posent sur des rôles.
-         */
+        // Mémoïsées dans le scope, lui-même mémoïsé sous `accessEpoch` : une
+        // restriction modifiée doit donc bumper l'époque (`share.grantSet`
+        // appelle `invalidateAccess()`).
         const restrictionCache = new Map<string, Promise<ReadonlyMap<number, ItemAccess>>>();
         const itemRestrictions = (feature: FeatureId): Promise<ReadonlyMap<number, ItemAccess>> => {
             if (isOwner || !role) return Promise.resolve(new Map());

@@ -1,30 +1,17 @@
 /* Case à cocher — uniquement des variables de thème, aucune couleur en dur. */
 
 /*
- * La ligne entière est cliquable, puisque c'est un `<label>`.
- *
- * Elle porte aussi la **typographie par défaut** du libellé. Les classes que
- * les appelants passent en `className` ne doivent donc rien redéclarer de ce
- * qui est ici : à spécificité égale, ce n'est pas l'ordre des classes dans
- * l'attribut qui tranche mais celui des fichiers dans le bundle — autant dire
- * un hasard. Elles ne portent que ce qui leur est propre : un rembourrage, un
- * fond au survol, une bordure.
- *
- * `flex-start` et non `center` : un libellé suivi d'une explication tient sur
- * trois lignes, et la case doit rester en face de la première.
+ * La ligne entière est cliquable (`<label>`) et porte la typographie par défaut
+ * du libellé : les `className` des appelants ne doivent rien redéclarer de ce
+ * qui est ici, à spécificité égale c'est l'ordre des fichiers dans le bundle
+ * qui tranche. `flex-start` : la case reste en face de la première ligne.
  */
 .row {
     /*
-     * ⚠️ Indispensable, et pas décoratif : c'est le bloc conteneur de la case
-     * native, qui est en `position: absolute` juste en dessous.
-     *
-     * Sans elle, l'input masqué se rattache au premier ancêtre positionné —
-     * l'accueil, `.dashboard`, qui est **hors de la zone défilante**. L'input
-     * cesse alors de défiler avec son libellé : dès qu'on a descendu la page, il
-     * se retrouve à des centaines de pixels de la case qu'on voit. Cliquer le
-     * libellé lui donne le focus, le navigateur le ramène à l'écran en faisant
-     * défiler tous ses ancêtres défilables — `overflow: hidden` en fait partie —
-     * et toute l'interface se décale sans barre pour revenir en arrière.
+     * Indispensable : bloc conteneur de la case native en `position: absolute`.
+     * Sans elle, l'input masqué se rattache à `.dashboard`, hors de la zone
+     * défilante, et lui donner le focus fait défiler toute l'interface (via
+     * `overflow: hidden`) sans barre pour revenir.
      */
     position: relative;
     display: flex;
@@ -45,12 +32,8 @@
 }
 
 /*
- * La case native reste dans le DOM, seulement masquée à l'œil.
- *
- * C'est elle qui porte l'état, le focus, le clavier et l'accessibilité ; la
- * boîte visible n'en est que le reflet, piloté par `:checked` et
- * `:focus-visible`. Un `<div role="checkbox">` aurait demandé de réécrire à la
- * main tout ce que le navigateur donne ici gratuitement.
+ * La case native reste dans le DOM, masquée : elle porte l'état, le focus, le
+ * clavier et l'accessibilité ; la boîte visible n'en est que le reflet.
  */
 .native {
     position: absolute;
@@ -65,17 +48,9 @@
 }
 
 /*
- * La case elle-même : un carré, et qui se voit.
- *
- * **Le rayon est en dur, à 4 px, et c'est délibéré.** L'échelle du thème
- * commence à `--radius-sm` (8 px), taillée pour des champs de 36 px et des
- * panneaux ; appliquée à une boîte de 18 px, elle arrondit presque un cercle et
- * la case cesse de ressembler à une case. 4 px adoucit l'angle sans effacer la
- * forme, qui est ici toute l'information.
- *
- * La bordure au repos est la **forte** (blanc à 16 %) et non celle des champs
- * de saisie (9 %) : un champ de saisie est une grande surface que son fond
- * suffit à délimiter, une case de 18 px n'a que son contour pour exister.
+ * Rayon en dur à 4 px, délibéré : `--radius-sm` (8 px) sur 18 px arrondit
+ * presque un cercle. Bordure forte au repos : une case de 18 px n'a que son
+ * contour pour exister.
  */
 .box {
     position: relative;
@@ -134,25 +109,16 @@
     border-color: var(--accent-hover);
 }
 
-/*
- * L'anneau de focus, posé à l'extérieur du carré.
- *
- * `box-shadow` et non `outline` : le carré n'ayant que 18 px, un contour posé
- * dessus mangerait sa forme, alors qu'une lueur écartée de deux pixels la
- * laisse intacte — c'est la même halo d'accent que les champs de saisie.
- */
+/* `box-shadow` et non `outline` : sur 18 px un contour mangerait la forme.
+   Même halo d'accent que les champs de saisie. */
 .native:focus-visible + .box {
     border-color: var(--accent);
     box-shadow: 0 0 0 2px var(--accent-glow);
 }
 
-/*
- * Le libellé : un titre, et le cas échéant une explication sous lui.
- *
- * N'impose ni taille ni couleur — elles viennent de `.row`, donc de l'appelant
- * s'il en décide autrement. Seule la hauteur de ligne est fixée : c'est elle
- * qui aligne la case sur la première ligne du texte.
- */
+/* Le libellé n'impose ni taille ni couleur (elles viennent de `.row`) ; seule
+   la hauteur de ligne est fixée, c'est elle qui aligne la case sur la
+   première ligne. */
 .text {
     display: flex;
     flex-direction: column;

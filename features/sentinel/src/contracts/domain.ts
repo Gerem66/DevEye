@@ -1,48 +1,21 @@
 import { z } from 'zod';
 
 /**
- * Sentinelle, surveillance de sécurité des hôtes.
- *
- * Monitoring collecte, Sentinelle interprète. Rien ici n'ouvre une nouvelle
- * sonde de son propre chef : le détecteur travaille sur l'instant que l'agent
- * envoie déjà (`metricSnapshotSchema.processes`), sur le rapport horaire
- * (`deviceReportSchema`) et sur les deux relevés que Sentinelle ajoute
- * (persistance, authentification).
- *
- * ## Ce que Sentinelle ne fait pas
- *
- * Aucun suivi de l'activité des utilisateurs. Les relevés d'authentification
- * portent des **issues** (une tentative a réussi ou échoué, depuis quelle
- * adresse) et jamais ce que quelqu'un fait de sa session ; les relevés de
- * persistance portent des **empreintes** et jamais le contenu d'un fichier.
- * Cette frontière est un choix de conception, pas une limitation technique :
- * l'agent a les droits de lire bien davantage, et ne le fait pas.
- *
- * ## Trois notions, à ne pas confondre
- *
- * - la **ligne de base** (`baselineEntrySchema`) : ce qui a été *observé*. Des
- *   faits, remis à jour à chaque instant, sans jugement ;
- * - le **constat** (`findingSchema`) : un écart *jugé* digne d'être montré ;
- * - l'**autorisation** (`allowEntrySchema`) : une décision *humaine*, « ceci est
- *   légitime ici ». Volontairement rangée à part de la ligne de base, pour
- *   qu'une reconstruction de celle-ci n'efface jamais une décision.
+ * Sentinelle interprète ce que Monitoring collecte : aucune sonde nouvelle,
+ * hors les relevés de persistance et d'authentification. Aucun suivi de
+ * l'activité des utilisateurs : des issues et des empreintes, jamais une
+ * session ni un contenu. Trois notions : la ligne de base (observé), le
+ * constat (jugé), l'autorisation (décidé par un humain, rangée à part pour
+ * survivre à une reconstruction de la ligne de base).
  */
 
-// ────────────────────────────── gravité & état ──────────────────────────────
-
-/**
- * Gravité d'un constat. Quatre paliers, et pas cinq : au-delà, personne ne sait
- * plus dire ce qui sépare deux voisins, et l'échelle cesse de trier.
- *
- * Le seuil de notification est `high` : voir `SENTINEL_NOTIFY_FROM`.
- */
+/** Quatre paliers, pas cinq : au-delà l'échelle cesse de trier. Seuil de notification : `SENTINEL_NOTIFY_FROM`. */
 export const findingSeveritySchema = z.enum(['info', 'low', 'high', 'critical']);
 export type FindingSeverity = z.infer<typeof findingSeveritySchema>;
 
 /**
- * Rang numérique d'une gravité. La colonne SQL porte ce rang (et non le nom)
- * pour qu'un `ORDER BY severity DESC` trie juste : `'critical' < 'low'` en ordre
- * lexical, ce qui remonterait exactement l'inverse de ce qu'on veut.
+ * La colonne SQL porte ce rang : `'critical' < 'low'` en ordre lexical, un
+ * `ORDER BY` sur le nom trierait à l'envers.
  */
 export const SEVERITY_RANK: Record<FindingSeverity, number> = {
     info: 1,
@@ -62,21 +35,12 @@ export const SEVERITY_BY_RANK: Record<number, FindingSeverity> = {
 export const SENTINEL_NOTIFY_FROM: FindingSeverity = 'high';
 
 /**
- * Cycle de vie d'un constat.
- *
- * - `open` : ouvert, personne ne l'a encore regardé ;
- * - `acknowledged` : un humain l'a jugé légitime. Une autorisation a été écrite,
- *   et la même situation ne rouvrira plus ;
- * - `resolved` : la situation a cessé d'elle-même (le programme a disparu, le
- *   port s'est refermé, la posture est redevenue correcte).
- *
- * Il n'y a pas d'état « ignoré sans décision » : masquer sans écrire pourquoi
- * est ce qui transforme une liste de constats en liste morte.
+ * `open` : personne ne l'a regardé. `acknowledged` : jugé légitime, une
+ * autorisation est écrite et la situation ne rouvrira plus. `resolved` : la
+ * situation a cessé. Pas d'état « ignoré sans décision ».
  */
 export const findingStateSchema = z.enum(['open', 'acknowledged', 'resolved']);
 export type FindingState = z.infer<typeof findingStateSchema>;
-
-// ────────────────────────────── catalogue de règles ─────────────────────────
 
 /**
  * Les règles, figées. Ajouter une règle est un geste délibéré : son identifiant
@@ -122,10 +86,8 @@ export const sentinelRuleIdSchema = z.enum([
 export type SentinelRuleId = z.infer<typeof sentinelRuleIdSchema>;
 
 /**
- * De quelle sonde une règle dépend. Sert à une seule chose, mais elle est
- * essentielle : quand une machine tourne encore sur un agent qui ne renvoie pas
- * la donnée, l'interface doit dire **« pas encore mesuré sur cet appareil »**
- * plutôt que d'afficher un vert rassurant qui ne repose sur rien.
+ * La sonde dont une règle dépend : sur un agent qui ne la renvoie pas,
+ * l'interface dit « pas encore mesuré » plutôt qu'un vert.
  */
 export const ruleProbeSchema = z.enum([
     /** Présent depuis toujours : instant métrique + liste de processus. */
@@ -146,15 +108,12 @@ export type RuleProbe = z.infer<typeof ruleProbeSchema>;
 export interface SentinelRuleMeta {
     /** Gravité par défaut. Le moteur peut la relever, jamais l'inventer. */
     severity: FindingSeverity;
-    /** Libellé court, tel qu'il s'affiche en tête de constat. */
     label: string;
-    /** Ce que la règle a vu, en une phrase. */
     description: string;
-    /** Ce qu'il y a à faire. Vide n'est pas une option : un constat sans conduite à tenir ne sert personne. */
+    /** Vide n'est pas une option : un constat sans conduite à tenir ne sert personne. */
     remediation: string;
-    /** La sonde dont elle dépend. */
     probe: RuleProbe;
-    /** Vrai si la règle a besoin d'une ligne de base constituée (donc muette pendant l'apprentissage). */
+    /** Muette pendant l'apprentissage. */
     needsBaseline: boolean;
 }
 
@@ -400,27 +359,14 @@ export const BASELINE_RULES: SentinelRuleId[] = (Object.keys(SENTINEL_RULES) as 
     (id) => SENTINEL_RULES[id].needsBaseline
 );
 
-// ────────────────────────────── ligne de base ───────────────────────────────
-
 /**
- * Nature d'une entrée de ligne de base.
- *
- * - `process`     : un couple (nom, chemin d'exécutable) ;
- * - `listener`    : un port en écoute, avec sa joignabilité ;
- * - `persistence` : un fichier d'une surface de persistance, avec son empreinte ;
- * - `account`     : un compte système vu se connecter.
+ * `process` : (nom, chemin). `listener` : port en écoute. `persistence` :
+ * fichier d'une surface, avec empreinte. `account` : compte vu se connecter.
  */
 export const baselineKindSchema = z.enum(['process', 'listener', 'persistence', 'account']);
 export type BaselineKind = z.infer<typeof baselineKindSchema>;
 
-/**
- * Ce qu'on a retenu d'un élément observé, au-delà de sa simple existence.
- *
- * Tous les champs sont facultatifs : une entrée `listener` n'a pas d'enveloppe
- * CPU, une entrée `persistence` n'a pas de comptes. Un seul schéma plutôt que
- * quatre parce que le stockage est une colonne JSON unique, et qu'un
- * discriminant y coûterait plus de code qu'il n'en éviterait.
- */
+/** Tous les champs facultatifs : un seul schéma pour quatre natures, le stockage est une colonne JSON unique. */
 export const baselineAttrsSchema = z.object({
     /** Comptes système sous lesquels l'élément a été vu (dédupliqués, bornés). */
     users: z.array(z.string().max(64)).max(16).default([]),
@@ -451,16 +397,9 @@ export const baselineEntrySchema = z.object({
 });
 export type BaselineEntry = z.infer<typeof baselineEntrySchema>;
 
-// ────────────────────────────────── constats ─────────────────────────────────
-
 /**
- * La preuve, déjà mise en forme par le serveur.
- *
- * Volontairement des paires libellé/valeur et non le JSON brut de la règle :
- * l'interface n'a alors aucun rendu ad hoc à écrire par règle, et une règle
- * nouvelle s'affiche correctement le jour où elle est écrite. La contrepartie
- * assumée est que la preuve n'est pas requêtable, c'est `subject` qui porte la
- * clé machine, et c'est lui qui sert au dédoublonnage et aux autorisations.
+ * Des paires libellé/valeur mises en forme par le serveur : aucun rendu par
+ * règle côté interface. Non requêtable ; `subject` porte la clé machine.
  */
 export const evidenceItemSchema = z.object({
     label: z.string().max(64),
@@ -509,15 +448,9 @@ export const allowEntrySchema = z.object({
 });
 export type AllowEntry = z.infer<typeof allowEntrySchema>;
 
-// ──────────────────────────────── posture ────────────────────────────────────
-
 /**
- * Un contrôle de posture tel qu'il s'affiche.
- *
- * `status` distingue trois issues, et la troisième est celle qui compte :
- * `unknown` veut dire « la sonde n'a rien pu dire », jamais « tout va bien ».
- * Afficher un vert sur une sonde absente est la façon la plus sûre de donner
- * une fausse assurance, c'est l'invariant 6 de Monitoring, appliqué ici.
+ * `unknown` veut dire « la sonde n'a rien pu dire », jamais « tout va bien » :
+ * un vert sur une sonde absente est une fausse assurance.
  */
 export const postureStatusSchema = z.enum(['ok', 'fail', 'unknown', 'not_applicable']);
 export type PostureStatus = z.infer<typeof postureStatusSchema>;
@@ -534,17 +467,11 @@ export type PostureCheck = z.infer<typeof postureCheckSchema>;
 export const devicePostureSchema = z.object({
     deviceId: z.string().max(36),
     deviceName: z.string().max(128),
-    /**
-     * Score sur 100, calculé sur les seuls contrôles **concluants**. Un contrôle
-     * `unknown` ne compte ni en bien ni en mal : le diluer dans une moyenne
-     * reviendrait à récompenser une machine qui ne mesure rien.
-     */
+    /** Sur 100, sur les seuls contrôles concluants : diluer `unknown` récompenserait une machine qui ne mesure rien. */
     score: z.number().int().min(0).max(100).nullable(),
     checks: z.array(postureCheckSchema).max(32)
 });
 export type DevicePosture = z.infer<typeof devicePostureSchema>;
-
-// ──────────────────────────────── réglages ───────────────────────────────────
 
 /** Bornes de la fenêtre d'apprentissage, en jours. */
 export const SENTINEL_LEARNING_DAYS_MIN = 1;
@@ -552,11 +479,9 @@ export const SENTINEL_LEARNING_DAYS_MAX = 90;
 export const DEFAULT_SENTINEL_LEARNING_DAYS = 7;
 
 /**
- * Bornes de la cadence du relevé de persistance, en minutes. Le défaut
- * (`DEFAULT_SENTINEL_INTEGRITY_MINUTES`, 360) vit dans `@deveye/types/sdk`, à
- * côté de `SENTINEL_AGENT_CONFIG_PROVIDER` : c'est l'app qui l'applique quand
- * elle compose la config d'un agent sans contribution du module, donc un
- * couplage déclaré, pas un détail du domaine.
+ * Bornes en minutes. Le défaut (`DEFAULT_SENTINEL_INTEGRITY_MINUTES`) vit dans
+ * `@deveye/types/sdk` : l'app l'applique en composant la config d'un agent
+ * sans contribution du module.
  */
 export const SENTINEL_INTEGRITY_MINUTES_MIN = 15;
 export const SENTINEL_INTEGRITY_MINUTES_MAX = 1440;
@@ -575,8 +500,6 @@ export const sentinelConfigSchema = z.object({
     authEvents: z.boolean()
 });
 export type SentinelConfig = z.infer<typeof sentinelConfigSchema>;
-
-// ──────────────────────────────── vue d'ensemble ─────────────────────────────
 
 /** Décompte des constats ouverts par gravité. */
 export const severityCountsSchema = z.object({
@@ -601,12 +524,7 @@ export const deviceSentinelStateSchema = z.object({
     probes: z.array(ruleProbeSchema).max(8),
     /** Dernier relevé de persistance reçu, unix ms. */
     lastIntegrityAt: z.number().int().positive().nullable(),
-    /**
-     * Les deux cadrans réglables, tels qu'ils sont enregistrés (les défauts
-     * sans ligne de config). Portés par l'état de flotte pour que le panneau
-     * de réglages parte de ce qui est réglé, et non de valeurs de départ qui
-     * feraient réécrire une cadence choisie à chaque enregistrement.
-     */
+    /** Tels qu'enregistrés (défauts sans ligne), pour que le panneau de réglages parte de ce qui est réglé. */
     integrityMinutes: z.number().int().min(SENTINEL_INTEGRITY_MINUTES_MIN).max(SENTINEL_INTEGRITY_MINUTES_MAX),
     authEvents: z.boolean()
 });

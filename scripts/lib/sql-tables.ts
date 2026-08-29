@@ -1,12 +1,7 @@
 /**
- * Balayage statique d'un fichier SQL : quelles tables sont visées, en DDL
- * comme en DML. Un module ne doit toucher que `ft_<slug>_*` (allowlist des
- * tables historiques d'une native rapatriée), et une écriture de données dans
- * une table du socle est une violation au même titre qu'un ALTER.
- *
- * Partagé par les deux sentinelles du cycle de vie d'un module : `gen-features`
- * (les migrations) et `uninstall-feature` (le `uninstall.sql`, sans allowlist :
- * les tables historiques sont des données de l'app, jamais à lui).
+ * Balayage statique d'un fichier SQL : quelles tables sont visées, en DDL comme
+ * en DML (une écriture dans une table du socle est une violation au même titre
+ * qu'un ALTER). Partagé par `gen-features` et `uninstall-feature`.
  */
 export function sqlTableTargets(sql: string): string[] {
     const targets: string[] = [];

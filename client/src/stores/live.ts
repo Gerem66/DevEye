@@ -12,44 +12,24 @@ import { ws } from '@/api/ws';
 import { getActiveWorkspaceId } from './workspace';
 
 /**
- * La présence en direct, côté client.
+ * La présence en direct : publier où je suis (`live.here`, anti-rebondi) et
+ * recevoir le roster de la salle avec les curseurs de mes voisins immédiats.
  *
- * Deux responsabilités qui partagent le même abonnement :
- *  - **publier** où je suis (`live.here`, anti-rebondi) ;
- *  - **recevoir** le roster de la salle et les curseurs de mes voisins immédiats.
- *
- * Le pseudo et l'avatar d'un pair ne viennent pas d'ici : le roster ne porte que
- * `userId` et la couleur, et le reste se résout contre les membres de l'espace
- * que la session a déjà livrés (`useActiveWorkspace().users`). Un avatar est une
- * URL de données pouvant atteindre 1,5 Mo — le roster repart à chaque changement
- * de chemin, il ne peut pas les transporter.
+ * Le roster ne porte que `userId` et la couleur ; pseudo et avatar se résolvent
+ * contre les membres que la session a déjà livrés (`useActiveWorkspace().users`).
+ * Un avatar est une URL de données pouvant atteindre 1,5 Mo, et le roster repart
+ * à chaque changement de chemin.
  */
 
 /**
- * L'ordre des niveaux, **déclaré** plutôt que déduit de l'ordre de montage.
+ * L'ordre des niveaux, déclaré plutôt que déduit de l'ordre de montage : les
+ * effets React se déclenchent de la feuille vers la racine, ce qui donnerait des
+ * chemins à l'envers.
  *
- * Les effets React se déclenchent de la feuille vers la racine : s'en remettre à
- * l'ordre de montage donnerait des chemins à l'envers. Un ordre global fixe dit
- * la même chose sans aucune fragilité.
- *
- * Les niveaux sont **positionnels et non sémantiques** — `l1`, `l2`, `l3` plutôt
- * que `account`, `folder`, `message`. C'est ce qui permet à n'importe quelle
- * feature d'entrer dans le moteur sans rien ajouter ici : `l1` est « la chose
- * sélectionnée dans cette feature », que ce soit une boîte mail, un service
- * surveillé, une ville ou un appareil. Des noms sémantiques auraient obligé à
- * étendre cette liste par feature, et surtout à décider où insérer `service`
- * par rapport à `folder` — une question qui n'a pas de réponse.
- *
- * Aucun risque de confusion entre features : les niveaux ne sont comparés
- * qu'après un préfixe commun, lequel commence toujours par `view:<feature>`.
- *
- * Cinq niveaux, parce que la feature la plus profonde en compte cinq : Projets
- * descend jusqu'à l'onglet d'une tâche (`view:projects l1:<id> l2:tab
- * l3:card l4:tab`). Le contrat du fil en autorise six (`livePathSchema`), il
- * reste donc de la marge — mais en ajouter un ici a un coût réel : chaque
- * niveau allonge le chemin diffusé à chaque déplacement, et affine le
- * regroupement des curseurs. On n'en ajoute que pour un lieu où deux personnes
- * peuvent réellement se croiser.
+ * Les niveaux sont positionnels et non sémantiques (`l1` = « la chose
+ * sélectionnée dans cette feature »), donc n'importe quelle feature entre dans le
+ * moteur sans rien ajouter ici. `livePathSchema` en autorise six, mais chaque
+ * niveau allonge le chemin diffusé à chaque déplacement.
  */
 export const LIVE_SEGMENT_ORDER = ['view', 'l1', 'l2', 'l3', 'l4'] as const;
 export type LiveSegmentKind = (typeof LIVE_SEGMENT_ORDER)[number];
@@ -93,31 +73,16 @@ export function getLiveState(): LiveState {
 }
 
 /**
- * L'état complet. **À réserver à ce qui lit vraiment les curseurs.**
- *
- * Les curseurs arrivent jusqu'à vingt fois par seconde, et chaque poussée
- * remplace l'objet d'état : tout lecteur de ce hook se réaffiche donc à cette
- * cadence, même s'il ne regarde que le roster. C'est ce qui faisait « sauter des
- * trames » sur les écrans de listes — le portefeuille des projets, les dépôts,
- * les bases, les appareils — dès qu'un pair bougeait sa souris quelque part
- * dans l'espace.
- *
- * Les vues étroites ci-dessous existent pour ça : `useSyncExternalStore` ne
- * redessine que si l'instantané change au sens de `Object.is`, donc une tranche
- * dont l'identité ne bouge pas isole ses lecteurs des poussées qui ne les
- * concernent pas.
+ * L'état complet, à réserver à ce qui lit vraiment les curseurs : ils arrivent
+ * jusqu'à vingt fois par seconde et chaque poussée remplace l'objet d'état, donc
+ * tout lecteur de ce hook se réaffiche à cette cadence. Les vues étroites
+ * ci-dessous isolent leurs lecteurs.
  */
 export function useLive(): LiveState {
     return useSyncExternalStore(subscribe, getLiveState, getLiveState);
 }
 
-/**
- * Le roster seul.
- *
- * `state.peers` garde son identité d'une poussée de curseurs à l'autre (l'état
- * est recopié en surface), donc aucun rendu n'est déclenché tant que la
- * composition de la salle ne change pas.
- */
+/** Le roster seul : `state.peers` garde son identité d'une poussée de curseurs à l'autre. */
 function getPeers(): LivePeer[] {
     return state.peers;
 }
@@ -126,7 +91,7 @@ export function usePeers(): LivePeer[] {
     return useSyncExternalStore(subscribe, getPeers, getPeers);
 }
 
-/** La cible d'une téléportation, seule — elle ne bouge qu'à la demande. */
+/** La cible d'une téléportation, seule : elle ne bouge qu'à la demande. */
 function getTeleportPath(): string[] | null {
     return state.teleportPath;
 }
@@ -136,11 +101,8 @@ export function useTeleportPath(): string[] | null {
 }
 
 /**
- * Le couple « qui est là » / « où je suis » : ce dont les contours ont besoin.
- *
- * Mémorisé parce qu'il faut rendre un objet : sans ce cache, chaque appel en
- * fabriquerait un nouveau et `useSyncExternalStore` conclurait à un changement
- * à chaque vérification — exactement le rendu permanent qu'on cherche à éviter.
+ * Le couple « qui est là » / « où je suis ». Mémorisé : un objet neuf à chaque
+ * appel ferait conclure `useSyncExternalStore` à un changement permanent.
  */
 let presenceView: { peers: LivePeer[]; path: string[] } = { peers: EMPTY.peers, path: EMPTY.path };
 
@@ -164,9 +126,8 @@ let publishTimer: ReturnType<typeof setTimeout> | null = null;
 let lastSentKey = '';
 
 /**
- * Le chemin courant : les niveaux déclarés, dans l'ordre, **jusqu'au premier
- * absent**. Un niveau sans valeur ferme le chemin — on ne peut pas être dans un
- * dossier sans être dans le compte qui le contient.
+ * Le chemin courant : les niveaux déclarés, dans l'ordre, jusqu'au premier absent
+ * (on ne peut pas être dans un dossier sans être dans le compte).
  */
 function buildPath(): string[] {
     const path: string[] = [];
@@ -178,7 +139,7 @@ function buildPath(): string[] {
     return path;
 }
 
-/** Déclare (ou retire) un niveau. Renvoie `true` si le chemin a bougé. */
+/** Déclare un niveau, ou le retire avec `null`. */
 export function setLiveSegment(kind: LiveSegmentKind, value: string | null): void {
     const before = segments.get(kind);
     if (value === null) {
@@ -201,11 +162,9 @@ function schedulePublish(): void {
 }
 
 /**
- * Envoie `live.here` et applique l'instantané qu'il renvoie.
- *
- * La réponse porte le roster : il n'y a donc aucun trou entre l'entrée en salle
- * et la première diffusion, et cet unique appel est aussi ce qui resynchronise
- * après une reconnexion.
+ * Envoie `live.here` et applique le roster qu'il renvoie : aucun trou entre
+ * l'entrée en salle et la première diffusion, et resynchronisation après une
+ * reconnexion.
  */
 async function publishNow(): Promise<void> {
     if (ws.state !== 'open') return;
@@ -223,9 +182,8 @@ async function publishNow(): Promise<void> {
         state = { ...state, peers: res.peers, path };
         emit();
     } catch {
-        // Socket fermée pendant l'envoi, ou droits refusés : on oublie la clé
-        // pour que la prochaine tentative reparte, plutôt que de rester
-        // silencieusement absent de la salle.
+        // Socket fermée pendant l'envoi, ou droits refusés : oublier la clé pour
+        // que la prochaine tentative reparte, plutôt que rester absent de la salle.
         lastSentKey = '';
     }
 }
@@ -239,16 +197,10 @@ export function refreshLive(): void {
 // ------------------------------------------------------------------ téléportation
 
 /**
- * Aller là où quelqu'un se trouve.
- *
- * L'intention vit **hors de l'arbre React**, dans ce singleton, et n'entre dans
- * l'état que pour être lue au rendu. C'est ce qui dispense de tout
- * ordonnancement : une feature pas encore montée n'a rien à rattraper, elle
- * trouvera l'intention en arrivant.
- *
- * Elle s'efface d'elle-même dès que le chemin publié rejoint la cible, et au
- * bout de dix secondes quoi qu'il arrive — sans quoi une cible disparue (un
- * compte mail supprimé entre-temps) laisserait la navigation coincée.
+ * Aller là où quelqu'un se trouve. L'intention vit hors de l'arbre React, donc une
+ * feature pas encore montée la trouvera en arrivant. Elle s'efface dès que le
+ * chemin publié rejoint la cible, et de toute façon au bout de ce délai : une
+ * cible disparue ne doit pas coincer la navigation.
  */
 const TELEPORT_TTL_MS = 10_000;
 
@@ -273,10 +225,8 @@ function clearTeleport(): void {
     emit();
 }
 
-/**
- * Appelé après chaque changement de niveau. Deux conditions d'arrêt : la cible
- * est atteinte, ou l'utilisateur est parti ailleurs de lui-même.
- */
+/** Appelé après chaque changement de niveau : la cible est atteinte, ou
+ *  l'utilisateur est parti ailleurs de lui-même. */
 function maybeCompleteTeleport(): void {
     const target = state.teleportPath;
     if (target === null) return;
@@ -285,15 +235,9 @@ function maybeCompleteTeleport(): void {
 }
 
 /**
- * Ce qu'une téléportation attend à un niveau donné.
- *
- * `null` = rien de demandé ici. `{ value: 'mail' }` = il faut y aller.
- * `{ value: null }` = ce niveau doit être **refermé** — c'est ainsi qu'on
- * exprime « rejoindre quelqu'un qui est à l'accueil », qu'un simple segment ne
- * saurait dire.
- *
- * Fonction **pure** : elle ne consomme rien. Une feature qui n'est pas prête à
- * l'appliquer la retrouvera au rendu suivant, sans avoir rien à acquitter.
+ * Ce qu'une téléportation attend à un niveau donné. `null` = rien de demandé,
+ * `{ value: 'mail' }` = il faut y aller, `{ value: null }` = ce niveau doit être
+ * refermé. Fonction pure : une feature pas prête la retrouvera au rendu suivant.
  */
 export interface LiveSegmentTarget {
     value: string | null;
@@ -311,10 +255,7 @@ export function segmentTarget(
     return value === current ? null : { value };
 }
 
-/**
- * Purge à la déconnexion. Sans ça la session suivante — un autre compte sur la
- * même machine — hériterait du roster et du chemin de la précédente.
- */
+/** Purge à la déconnexion : la session suivante ne doit pas hériter du roster et du chemin. */
 export function resetLive(): void {
     clearTeleport();
     segments.clear();
@@ -354,10 +295,8 @@ function ensureWired(): void {
         }
     });
 
-    // La socket se reconnaît seule (backoff, retour de focus) et le serveur ne
-    // garde rien d'une connexion morte : c'est ici que la présence se rétablit.
-    // L'`outbox` de `ws.send` ne peut pas s'en charger — elle est vidée à la
-    // fermeture, précisément pour que rien de périmé ne reparte.
+    // Le serveur ne garde rien d'une connexion morte, et l'`outbox` de `ws.send`
+    // est vidée à la fermeture : la présence se rétablit ici.
     ws.onStateChange((s) => {
         if (s === 'open') refreshLive();
         else {

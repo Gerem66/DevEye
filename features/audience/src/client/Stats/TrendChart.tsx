@@ -21,26 +21,23 @@ interface TrendChartProps {
 /**
  * La courbe des vues et des visiteurs sur la période.
  *
- * **`viewBox` fixe, sans `ResizeObserver`** : le SVG s'adapte à son conteneur
- * par simple mise à l'échelle, donc le dessin est indépendant de la résolution
- * et ne coûte aucun recalcul au redimensionnement. C'est le parti pris de
- * `features/uptime/src/client/UptimeChart.tsx`, et il vaut ici pour la même raison.
+ * `viewBox` fixe, sans `ResizeObserver` : le SVG s'adapte à son conteneur par
+ * mise à l'échelle, donc le dessin ne coûte aucun recalcul au redimensionnement.
  *
- * **L'axe est la fenêtre demandée, pas l'étendue des données.** Un site qui
- * n'a reçu ses premières visites qu'hier dessine donc sa courbe dans le dernier
- * dixième d'une vue « 30 jours », au lieu de l'étirer sur toute la largeur et
- * de laisser croire à un mois d'activité. Les trous se lisent comme des trous.
+ * L'axe est la fenêtre demandée et non l'étendue des données : un site qui n'a
+ * reçu ses premières visites qu'hier dessine sa courbe dans le dernier dixième
+ * d'une vue « 30 jours », au lieu de laisser croire à un mois d'activité.
  *
  * Deux séries superposées et non deux graphiques : « 400 vues pour 120
- * visiteurs » est une seule information — combien de pages une visite parcourt —
- * et elle disparaît si l'on doit comparer deux échelles côte à côte.
+ * visiteurs » est une seule information, qui disparaît si l'on doit comparer
+ * deux échelles côte à côte.
  */
 export function TrendChart({ points, resolution, from, to, bucket }: TrendChartProps) {
     const [hover, setHover] = useState<AudiencePoint | null>(null);
 
-    // Les seaux vides ne remontent pas de SQL : un GROUP BY ne rend que ce qui
-    // existe. On reconstitue la grille complète, sans quoi deux jours sans
-    // visite se toucheraient et la courbe mentirait sur le rythme.
+    // Les seaux vides ne remontent pas de SQL, un GROUP BY ne rendant que ce qui
+    // existe : sans cette grille complète, deux jours sans visite se toucheraient et la
+    // courbe mentirait sur le rythme.
     const slots: AudiencePoint[] = [];
     const byAt = new Map(points.map((p) => [p.at, p]));
     for (let at = from; at < to; at += bucket) {
@@ -58,8 +55,8 @@ export function TrendChart({ points, resolution, from, to, bucket }: TrendChartP
 
     const area = `${line((p) => p.views)} L ${x(slots.length - 1).toFixed(1)} ${plotH} L ${x(0).toFixed(1)} ${plotH} Z`;
 
-    // Une étiquette sur six au plus : au-delà, elles se chevauchent et aucune
-    // n'est lisible. La première et la dernière sont toujours du lot.
+    // Une étiquette sur six au plus : au-delà elles se chevauchent, et aucune n'est
+    // lisible. La première et la dernière sont toujours du lot.
     const labelEvery = Math.max(1, Math.ceil(slots.length / 6));
 
     return (
@@ -94,9 +91,8 @@ export function TrendChart({ points, resolution, from, to, bucket }: TrendChartP
                     />
                 )}
 
-                {/* Une bande transparente par seau : le survol vise une colonne
-                    entière, et non un point de deux pixels qu'il faudrait
-                    chercher à la souris. */}
+                {/* Une bande transparente par seau : le survol vise une colonne entière,
+                    et non un point de deux pixels à chercher à la souris. */}
                 {slots.map((slot, i) => (
                     <rect
                         key={`hit-${slot.at}`}
@@ -111,9 +107,9 @@ export function TrendChart({ points, resolution, from, to, bucket }: TrendChartP
                 ))}
             </svg>
 
-            {/* La légende porte la valeur survolée : un info-bulle flottant
-                demanderait de suivre le pointeur, et sauterait d'un bord à
-                l'autre sur les colonnes de rive. */}
+            {/* La légende porte la valeur survolée : une info-bulle flottante
+                demanderait de suivre le pointeur, et sauterait d'un bord à l'autre sur
+                les colonnes de rive. */}
             <figcaption className={styles.chartLegend}>
                 <span className={styles.legendItem}>
                     <span className={styles.legendSwatch} data-series='views' aria-hidden='true' />

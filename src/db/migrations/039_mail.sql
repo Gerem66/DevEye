@@ -1,18 +1,12 @@
--- Mail : boîtes IMAP/SMTP configurées par l'utilisateur, lues et envoyées
--- depuis DevEye.
+-- Mail : boîtes IMAP/SMTP configurées par l'utilisateur.
 --
--- Découpage clair / chiffré (voir Docs/SECURITY_MODEL.md) : contrairement à
--- Uptime/Password où l'étage de chiffrement est fixé une fois pour toutes par
--- la feature, ici c'est l'utilisateur qui choisit l'étage **par compte**
--- (`security_tier`, colonne claire — le serveur doit la lire avant de savoir
--- quel chiffreur utiliser). Un compte « open » peut être synchronisé et
--- utilisé en tâche de fond (ex. branché sur les alertes Uptime) ; un compte
--- « guarded » ne se déchiffre que pendant une session déverrouillée.
---
--- Les corps de message et pièces jointes ne sont **jamais** persistés — seule
--- l'enveloppe (sujet/expéditeur/destinataires/date/flags) est mise en cache
--- dans `mail_messages` pour un affichage de liste rapide ; le corps est
--- toujours récupéré en direct depuis IMAP à l'ouverture.
+-- L'étage de chiffrement est choisi par compte (`security_tier`, colonne
+-- claire : le serveur doit la lire avant de savoir quel chiffreur utiliser).
+-- Un compte « open » se synchronise en tâche de fond, un compte « guarded » ne
+-- se déchiffre que pendant une session déverrouillée.
+-- Les corps de message et pièces jointes ne sont jamais persistés : seule
+-- l'enveloppe est mise en cache dans `mail_messages`, le corps est relu depuis
+-- IMAP à l'ouverture.
 
 CREATE TABLE IF NOT EXISTS mail_accounts (
     id                    INT AUTO_INCREMENT PRIMARY KEY,
@@ -24,12 +18,8 @@ CREATE TABLE IF NOT EXISTS mail_accounts (
     security_tier         VARCHAR(8)   NOT NULL DEFAULT 'open',
     auth_method           VARCHAR(20)  NOT NULL DEFAULT 'password',
     enabled               TINYINT      NOT NULL DEFAULT 1,
-    -- Rythme de relève en tâche de fond, propre à cette boîte : une boîte pro
-    -- et une boîte d'archives n'ont aucune raison d'être relevées au même
-    -- rythme. Ne concerne que les comptes « open » — les « guarded » ne sont
-    -- jamais synchronisés en tâche de fond. La précision réelle reste bornée
-    -- par MAIL_SYNC_TICK_SECONDS, rythme auquel le serveur cherche les comptes
-    -- à relever.
+    -- Rythme de relève de fond, propre à cette boîte. Ne concerne que les
+    -- comptes « open ». La précision réelle est bornée par MAIL_SYNC_TICK_SECONDS.
     sync_interval_seconds INT          NOT NULL DEFAULT 600,
     last_sync_at          BIGINT       NULL,
     -- Chiffré selon `security_tier`, NULL après une synchro réussie.
@@ -90,10 +80,8 @@ CREATE TABLE IF NOT EXISTS mail_settings (
     user_id                        INT         PRIMARY KEY,
     -- Désactivé par défaut partout : opt-in, jamais poussé sur l'utilisateur.
     external_scan_enabled_default  TINYINT     NOT NULL DEFAULT 0,
-    -- Liste JSON (tableau de chaînes) des noms d'hôte dont les images
-    -- distantes se chargent automatiquement, sans repasser par le blocage par
-    -- défaut — alimentée depuis la popup « sources d'images ». Non chiffré :
-    -- ce ne sont que des noms d'hôte, pas des secrets.
+    -- Liste JSON des noms d'hôte dont les images distantes se chargent sans
+    -- blocage. Non chiffré : des noms d'hôte, pas des secrets.
     trusted_image_domains          TEXT        NULL,
     -- `embedded` (par défaut, rendu sanitizé inline dans le thème DevEye) ou
     -- `raw` (iframe sandboxée, fond blanc, CSS propre au message préservé).

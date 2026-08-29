@@ -5,7 +5,6 @@ import type { ProjectTabAddable } from './useProjectTabs';
 import styles from './style.module.css';
 
 interface ProjectTabsProps {
-    /** Les onglets à montrer, dans l'ordre. */
     tabs: ProjectTab[];
     active: ProjectTabId;
     onSelect: (id: ProjectTabId) => void;
@@ -16,12 +15,6 @@ interface ProjectTabsProps {
     outline: (value: string | null) => LiveOutlineProps;
 }
 
-/**
- * La barre d'onglets d'un projet, et le « + » qui tient les absents.
- *
- * Le bouton est en **bout de barre**, là où l'œil arrive après avoir lu ce qui
- * existe : ce qu'il ouvre est précisément ce qui n'existe pas encore.
- */
 export function ProjectTabs({ tabs, active, onSelect, addable, onAdd, outline }: ProjectTabsProps) {
     return (
         <nav className={styles.tabs}>
@@ -44,17 +37,9 @@ export function ProjectTabs({ tabs, active, onSelect, addable, onAdd, outline }:
 }
 
 /**
- * Le menu des gestes dont l'onglet n'est pas encore dans la barre.
- *
- * Chaque entrée nomme l'onglet **et** le geste qu'elle déclenche : le clic
- * n'ouvre pas un onglet vide, il ouvre le formulaire d'ajout correspondant — le
- * même que le bouton « Ajouter un… » de l'onglet. Celui-ci, lui, naît de ce
- * qu'on y met. Un onglet à plusieurs gestes (Déploiement, tant qu'il n'a ni
- * cible ni service surveillé) y occupe donc plusieurs lignes, une par geste.
- *
- * Se ferme au choix, au clic à l'extérieur, ou par Échap — cette dernière par
- * la pile de couches partagée, pour que le menu parte avant la popup qui le
- * porte, et non l'inverse.
+ * Le menu des gestes dont l'onglet n'est pas encore dans la barre : une entrée
+ * par geste, qui ouvre le formulaire d'ajout et non un onglet vide. Échap passe
+ * par la pile de couches partagée, pour que le menu parte avant sa popup.
  */
 function AddTabMenu({ addable, onAdd }: Pick<ProjectTabsProps, 'addable' | 'onAdd'>) {
     const [open, setOpen] = useState(false);

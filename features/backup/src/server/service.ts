@@ -18,43 +18,15 @@ import { cloudSyncSource, databaseSource, deveyeSource, type BackupArtifact } fr
 import type { StoredDestination, StoredJob, StoredRun } from './_shared';
 
 /**
- * L'ordonnanceur des sauvegardes, et le moteur qui les exécute.
+ * L'ordonnanceur des sauvegardes : un ticker du SDK qui cherche ce qui est dû
+ * et le fait, sans session ni mot de passe (codec ouvert de l'espace, clé de
+ * scellement dérivée de la clé serveur).
  *
- * Même forme que les autres services de fond : un ticker du SDK
- * (`deps.createTicker`, le patron des services natifs : setInterval + garde de
- * réentrance + unref), qui cherche ce qui est dû et le fait. Pas de file de
- * messages, pas de cron, pour la même raison que partout ailleurs ici : un seul
- * processus écrit, et une dépendance de plus au démarrage serait une panne de
- * plus au démarrage.
- *
- * ## Ce qui rend ce service différent des autres
- *
- * Une sauvegarde **dure**. Un relevé Uptime prend une seconde, un vidage de base
- * peut prendre une heure. Trois conséquences structurelles :
- *
- *  1. **un travail à la fois par espace** (`running`) : deux vidages simultanés
- *     de la même base doubleraient la charge sur un serveur de production pour
- *     produire deux archives identiques ;
- *  2. **l'échéance est repoussée AVANT l'exécution**, jamais après. Un travail
- *     qui plante ne doit pas repartir au tour suivant, en boucle, en écrivant
- *     des archives ratées jusqu'à saturer la destination ;
- *  3. **l'exécution est inscrite en base dès son début** (`running`), pour que
- *     l'écran montre ce qui se passe pendant que ça se passe, et pour que la
- *     mort du processus laisse une trace au lieu d'un silence
- *     (`failStaleRuns` au démarrage).
- *
- * ## Le chemin d'une archive
- *
- *     source → gzip → [scellement] → destination
- *
- * Rien n'est jamais posé sur disque entre les deux bouts. Voir `sources.ts`
- * pour les producteurs, `sinks.ts` pour les destinations, `crypto.ts` pour le
- * scellement.
- *
- * Tourne **sans session ni mot de passe** : tout ce qu'il lit de chiffré passe
- * par le codec ouvert de l'espace (`deps.cipherFor`, mémoïsé par le SDK), et
- * la clé de scellement est dérivée de la clé serveur (`deps.keys.derive`),
- * jamais stockée.
+ * Une sauvegarde dure, d'où : un travail à la fois (`running`), l'échéance
+ * repoussée AVANT l'exécution (un travail qui plante ne repart pas en boucle),
+ * l'exécution inscrite en base dès son début (`failStaleRuns` au démarrage).
+ * Chemin d'une archive : source → gzip → [scellement] → destination, sans
+ * passage par le disque.
  */
 
 /** Combien de travaux dus on ramasse par tour. Borne la rafale, pas le débit. */
@@ -70,9 +42,8 @@ export class BackupEngine {
     }
 
     start(): void {
-        // Solder ce qu'un arrêt brutal a laissé « en cours ». La borne est
-        // l'échéance d'exécution : au-delà, plus aucune exécution vivante ne
-        // peut légitimement porter ce statut.
+        // Solder ce qu'un arrêt brutal a laissé « en cours » : au-delà du budget
+        // d'exécution, aucune exécution vivante ne peut porter ce statut.
         void this.deps.repo
             .failStaleRuns(Math.floor(Date.now() / 1000) - env.BACKUP_RUN_TIMEOUT_SECONDS)
             .then((n) => {
@@ -95,9 +66,8 @@ export class BackupEngine {
         const now = Math.floor(Date.now() / 1000);
         const due = await this.deps.repo.listJobsDue(now, DUE_BATCH);
         for (const job of due) {
-            // Séquentiel, et c'est voulu : lancer cinq vidages en parallèle
-            // saturerait le lien montant et la machine sauvegardée. La
-            // sauvegarde est le travail de fond qui doit le moins déranger.
+            // Séquentiel : cinq vidages en parallèle satureraient le lien montant
+            // et la machine sauvegardée.
             await this.runJob(job, null).catch((e: unknown) =>
                 this.deps.logger.error({ jobId: job.id, err: e }, 'Backup: exécution échouée')
             );
@@ -118,8 +88,6 @@ export class BackupEngine {
         return at;
     }
 
-    // ------------------------------------------------------------ destinations
-
     /** Le contenu déchiffré d'une destination. */
     async readDestination(row: BackupDestinationRow): Promise<StoredDestination> {
         const raw = await this.cipherFor(row.workspace_id).tryDecrypt(row.content);
@@ -136,11 +104,8 @@ export class BackupEngine {
     }
 
     /**
-     * Construit l'écrivain d'une destination.
-     *
-     * Lève une phrase corrigeable plutôt qu'un `undefined` plus loin : une
-     * destination S3 sans bucket ou une destination d'appareil dont la machine a
-     * été supprimée sont des configurations incomplètes, pas des pannes.
+     * L'écrivain d'une destination. Lève une phrase corrigeable : une
+     * destination incomplète est une configuration, pas une panne.
      */
     async sinkFor(row: BackupDestinationRow): Promise<BackupSink> {
         const stored = await this.readDestination(row);
@@ -196,19 +161,14 @@ export class BackupEngine {
         return probe;
     }
 
-    // ---------------------------------------------------------------- exécution
-
     /** Un travail est-il déjà en cours ? Ce que l'écran demande avant d'insister. */
     isRunning(jobId: number): boolean {
         return this.running.has(jobId);
     }
 
     /**
-     * Ouvre une exécution et la lance en arrière-plan.
-     *
-     * Rend la ligne `running` tout de suite : une sauvegarde dure des minutes, et
-     * attendre la réponse d'une commande WebSocket pendant ce temps-là ne
-     * marcherait pas. L'écran suit par re-sollicitation, comme partout ailleurs.
+     * Ouvre une exécution et la lance en arrière-plan ; rend la ligne `running`
+     * tout de suite, une sauvegarde durant des minutes.
      */
     async trigger(job: BackupJobRow, userId: number): Promise<BackupRunRow> {
         // Réservation **synchrone**, avant le premier `await` : deux clics
@@ -290,13 +250,9 @@ export class BackupEngine {
         let checksum: string | null = null;
         let error: string | null = null;
         /**
-         * L'écriture réellement en cours, distincte de ce qu'on attend.
-         *
-         * `withTimeout` **abandonne l'attente, pas le travail** : une écriture
-         * qui dépasse le budget continue de pousser des octets en arrière-plan.
-         * Relâcher la réservation à ce moment-là laisserait le passage suivant
-         * démarrer par-dessus, et deux vidages de la même base se disputeraient
-         * la même destination. On ne la relâche donc qu'à l'issue *réelle*.
+         * `withTimeout` abandonne l'attente, pas le travail : la réservation ne
+         * se relâche qu'à l'issue réelle de l'écriture, sinon le passage suivant
+         * démarrerait par-dessus.
          */
         let writing: Promise<{ artifact: string; size: number }> | null = null;
 
@@ -304,10 +260,8 @@ export class BackupEngine {
             const source = await this.sourceFor(job, jobName);
             const sink = await this.sinkFor(destination);
 
-            // Le condensé est calculé **sur le clair**, avant scellement : c'est
-            // lui qui permettra de vérifier une restauration, et le condensé du
-            // chiffré ne dirait rien (deux scellements du même clair donnent deux
-            // fichiers différents).
+            // Condensé du clair, avant scellement : deux scellements du même
+            // clair donnent deux fichiers différents.
             const digest = crypto.createHash('sha256');
             const measured = async function* (input: AsyncIterable<Buffer>): AsyncGenerator<Buffer> {
                 for await (const chunk of input) {
@@ -316,8 +270,7 @@ export class BackupEngine {
                 }
             };
 
-            // La forme est celle du TRAVAIL (094) : la destination dit où
-            // écrire, le travail dit sous quelle forme.
+            // La forme est celle du travail : la destination dit seulement où écrire.
             const sealed = job.encryption === 'server';
             const name = sealed ? `${source.name}.enc` : source.name;
             const body = sealed
@@ -379,9 +332,8 @@ export class BackupEngine {
 
         if (job.source_kind === 'database') {
             if (!job.source_id) throw new Error('Ce travail ne désigne aucune base.');
-            // L'accès (tunnel compris) est ouvert par la feature Bases de
-            // données, seule à savoir déchiffrer une connexion ; sans son
-            // contrat, le run échoue proprement.
+            // L'accès (tunnel compris) est ouvert par Bases de données, seule à
+            // savoir déchiffrer une connexion.
             const databases = this.deps.providers.get<DatabaseBackupProvider>(DATABASE_BACKUP_PROVIDER);
             if (!databases) throw new Error('Source Bases de données indisponible.');
             const access = await databases.openAccess(job.source_id, job.workspace_id);
@@ -391,9 +343,7 @@ export class BackupEngine {
 
         if (job.source_kind === 'cloudsync') {
             if (!job.source_id) throw new Error('Ce travail ne désigne aucun partage.');
-            // CloudSync est un module : la lecture des partages passe par le
-            // contrat qu'il offre. Absent, le run échoue proprement et
-            // reprendra le jour où le module revient.
+            // Module absent : le run échoue proprement et reprendra quand il revient.
             const provider = this.deps.providers.get<CloudSyncBackupProvider>(CLOUDSYNC_BACKUP_PROVIDER);
             if (!provider) throw new Error('Source CloudSync indisponible : module non installé.');
             const share = await provider.findShare(job.source_id);
@@ -407,14 +357,9 @@ export class BackupEngine {
     }
 
     /**
-     * Applique la rétention : au-delà de `keep_last` archives réussies, la plus
-     * ancienne part.
-     *
-     * Une archive qu'on n'arrive pas à effacer (appareil hors ligne, droit
-     * manquant) **reste marquée présente** : la rétention repassera. La marquer
-     * effacée alors qu'elle ne l'est pas ferait grossir la destination sans que
-     * rien ne le dise, ce qui est la panne qu'on découvre quand le disque est
-     * plein.
+     * Rétention : au-delà de `keep_last` réussites, la plus ancienne part. Une
+     * archive qu'on n'arrive pas à effacer reste marquée présente : la
+     * rétention repassera.
      */
     private async prune(job: BackupJobRow, destination: BackupDestinationRow): Promise<void> {
         const stale = await this.deps.repo.listRunsToPrune(job.id, job.keep_last);
@@ -455,9 +400,8 @@ export class BackupEngine {
 
     private async notifyFailure(
         workspaceId: number,
-        // Le travail concerné : sa route l'emporte sur celle de la
-        // fonctionnalité, de sorte qu'une sauvegarde critique puisse réveiller
-        // quelqu'un d'autre que les copies de routine.
+        // Sa route l'emporte sur celle de la feature : une sauvegarde critique
+        // peut réveiller quelqu'un d'autre.
         jobId: number,
         jobName: string,
         error: string
@@ -468,9 +412,8 @@ export class BackupEngine {
                     subject: `DevEye : sauvegarde « ${jobName} » en échec`,
                     body: `La sauvegarde « ${jobName} » a échoué.\n\n${error}`,
                     payload: { feature: 'backup', job: jobName, error },
-                    // La même alerte, mise en page pour Discord. Seuls les
-                    // échecs sont annoncés : un canal rempli de succès
-                    // quotidiens finirait par noyer celui qui compte.
+                    // Seuls les échecs sont annoncés : un canal rempli de succès
+                    // noierait celui qui compte.
                     embeds: buildNotice({
                         job: jobName,
                         destination: null,
@@ -485,13 +428,7 @@ export class BackupEngine {
         }
     }
 
-    /**
-     * Borne une exécution.
-     *
-     * Sans elle, un agent qui cesse de répondre au milieu d'un dépôt laisserait
-     * le travail dans `running` pour toujours, et donc tous ses passages
-     * suivants sautés en silence.
-     */
+    /** Sans borne, un agent muet au milieu d'un dépôt laisserait le travail dans `running` pour toujours. */
     private async withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
         let timer: ReturnType<typeof setTimeout> | null = null;
         try {

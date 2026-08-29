@@ -23,32 +23,16 @@ import { api } from './api';
 type Editing = { credential: GitCredential | null } | null;
 
 /**
- * Les jetons GitHub de l'espace : le panneau de l'onglet « Sources » des
- * réglages de la feature Git.
+ * Les jetons GitHub de l'espace : le panneau de l'onglet « Sources » des réglages
+ * de la feature. Rangées, dialogue d'ajout empilé et confirmation reprennent la
+ * rangée canonique des réglages, d'où l'emprunt de sa feuille (`settingsStyles`).
  *
- * Il vivait dans la coquille (`sections/CredentialsPanel`, un `CredentialsKind`
- * par porte), né quand deux features (Git et Déploiement) se partageaient un
- * seul geste : lister, ajouter, modifier, retirer, sans jamais relire un
- * secret. Déploiement a emporté sa porte dans son module ; Git emporte la
- * sienne ici, sur ses propres commandes (`git.credential*`) et son propre
- * contrat (`GitCredential`, sans `provider` ni adresse : l'API GitHub est
- * publique, il n'y a pas d'instance à désigner). La coquille n'a plus aucun
- * panneau de sources natif.
+ * Un secret n'est jamais relu, le serveur ne le renvoie pas : le champ reste vide
+ * à la ré-ouverture, et le laisser vide veut dire « garder celui en place ».
  *
- * Rangées, dialogue d'ajout empilé et confirmation : les mêmes formes que la
- * liste des canaux de la section Notifications, exprès. C'est la rangée
- * canonique des réglages, d'où l'emprunt de sa feuille (`settingsStyles`), et
- * deux méthodes d'ajout dans une même popup étaient une de trop.
- *
- * Un secret n'est **jamais relu** : le serveur ne le renvoie pas. Le champ reste
- * donc vide à la ré-ouverture, et le laisser vide veut dire « garder celui en
- * place ».
- *
- * Autonome, comme tous les panneaux de la coquille : il se charge, s'invalide
- * et se rafraîchit tout seul. Il suit `git.list` et non une clé à lui : un
- * jeton retiré y rend des lignes orphelines, elle est déjà ce que le sujet
- * Live de la feature ravive, et les sélecteurs des dialogues d'élément
- * suivent par le même canal.
+ * Autonome comme tous les panneaux de la coquille, il suit `git.list` et non une
+ * clé à lui : un jeton retiré y rend des lignes orphelines, et les sélecteurs des
+ * dialogues d'élément suivent par le même canal.
  */
 export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
     const { data: credentials, error: loadError } = useResource(
@@ -65,9 +49,8 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
     /**
-     * Un jeton qui change touche la liste (un dépôt orphelin le dit) et la
-     * fiche ouverte (« jeton retiré, synchronisation arrêtée ») : les deux se
-     * relisent, sans attendre le sujet Live.
+     * Un jeton qui change touche la liste et la fiche ouverte, qui disent toutes
+     * deux ce qu'un retrait a coupé : les deux se relisent sans attendre le Live.
      */
     const changed = () => invalidate('git.list', 'git.repo');
 
@@ -124,8 +107,6 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                     setBusy(true);
                     try {
                         await api.send('git.credentialRemove', { credentialId: credential.id });
-                        // Un jeton retiré rend ses dépôts orphelins : la liste
-                        // de la feature doit le dire sans attendre.
                         changed();
                     } catch (e) {
                         setError(humanizeError(e, 'Le retrait a échoué.'));

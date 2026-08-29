@@ -58,19 +58,16 @@ export class DevEyeWs {
     private _hasConnected = false;
     private readonly unauthorizedListeners = new Set<() => void>();
     /**
-     * Commandes émises avant l'ouverture de la socket, en attente d'être postées.
-     *
-     * Un composant monté au premier rendu émet sa commande avant la fin de la
-     * poignée de main. Les rejeter aussitôt donnait un échec que l'appelant ne
-     * pouvait pas distinguer d'un refus métier : c'est ainsi qu'un lien
-     * d'invitation parfaitement valide s'affichait comme invalide.
+     * Commandes émises avant l'ouverture de la socket. Un composant monté au
+     * premier rendu émet la sienne avant la fin de la poignée de main, et la
+     * rejeter donnerait un échec que l'appelant ne peut pas distinguer d'un refus
+     * métier.
      */
     private outbox: (() => void)[] = [];
 
     constructor() {
-        // Auto-retry when the user comes back to the tab/window: a connection that
-        // dropped while the tab was hidden comes back on its own, so the user only
-        // sees the "Connexion perdue" banner + loader for a moment, no click needed.
+        // Auto-retry when the user comes back to the tab: a connection dropped
+        // while it was hidden comes back on its own, with no click needed.
         if (typeof window !== 'undefined') {
             window.addEventListener('focus', this.handleWake);
             document.addEventListener('visibilitychange', this.handleWake);
@@ -81,8 +78,8 @@ export class DevEyeWs {
         return this._state;
     }
 
-    /** True once the socket has opened at least once. Lets the UI tell a genuine
-     *  drop apart from the very first connect (where no banner should flash). */
+    /** True once the socket has opened at least once, so the UI can tell a genuine
+     *  drop apart from the first connect, where no banner should flash. */
     get hasConnected(): boolean {
         return this._hasConnected;
     }
@@ -170,11 +167,9 @@ export class DevEyeWs {
     }
 
     /**
-     * Force an immediate reconnection: cancels any pending backoff delay and
-     * resets the attempt counter so the socket comes back at once instead of
-     * waiting out the exponential backoff. Drives the topbar "Reconnecter" button
-     * and the focus/visibility auto-retry. Safe to call when already open
-     * (no-op via `connect`'s guard).
+     * Force an immediate reconnection: cancels any pending backoff delay and resets
+     * the attempt counter, so the socket comes back at once. Safe to call when
+     * already open, `connect`'s guard making it a no-op.
      */
     reconnect(): Promise<void> {
         this.reconnectAttempt = 0;
@@ -192,8 +187,8 @@ export class DevEyeWs {
     }
 
     /** Reconnect on tab focus / visibility regain, but only when the socket was
-     *  actually lost — never before the first login (idle) nor after an intentional
-     *  close (logout / unauthorized). */
+     *  actually lost: never before the first login (idle), nor after an intentional
+     *  close (logout, unauthorized). */
     private handleWake = (): void => {
         if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
         if (this.intentionallyClosed) return;
@@ -239,8 +234,8 @@ export class DevEyeWs {
             p.reject(err);
         }
         this.pending.clear();
-        // Ces requêtes viennent d'être rejetées : les garder en attente n'aurait
-        // servi qu'à poster, à la reconnexion, des messages sans destinataire.
+        // Ces requêtes viennent d'être rejetées : les garder ne servirait qu'à
+        // poster, à la reconnexion, des messages sans destinataire.
         this.outbox = [];
     }
 
@@ -249,13 +244,9 @@ export class DevEyeWs {
     }
 
     /**
-     * Poste une trame sans attendre de réponse.
-     *
-     * Aucune promesse en attente, aucun minuteur, et **aucune file d'attente** —
-     * délibérément, à l'inverse de {@link send}. Une trame émise avant
-     * l'ouverture de la socket décrit un état déjà périmé (une position de
-     * curseur, typiquement) : la poster à la réouverture n'apprendrait à
-     * personne où le pointeur se trouve *maintenant*. On la laisse tomber.
+     * Poste une trame sans attendre de réponse, et sans file d'attente à l'inverse
+     * de {@link send} : une trame émise avant l'ouverture décrit un état déjà
+     * périmé, typiquement une position de curseur, et se laisse tomber.
      *
      * Le garde de contre-pression n'est pas facultatif : les métriques
      * (`metrics.push`) partagent ce tampon d'envoi, et sous rafale une trame de
@@ -304,9 +295,8 @@ export class DevEyeWs {
             });
 
             const post = (): void => {
-                // Le délai a pu expirer, ou une fermeture avoir purgé les requêtes
-                // en vol, pendant que la socket s'ouvrait : ne pas poster un
-                // message dont plus personne n'attend la réponse.
+                // Le délai a pu expirer, ou une fermeture purger les requêtes en
+                // vol, pendant que la socket s'ouvrait.
                 if (!this.pending.has(requestId)) return;
                 if (!this.socket || this._state !== 'open') {
                     this.pending.delete(requestId);
@@ -316,9 +306,8 @@ export class DevEyeWs {
                 }
                 // L'espace actif voyage sur l'enveloppe, jamais dans le payload :
                 // aucun site d'appel n'a à le passer, et le serveur n'a qu'un point
-                // de résolution. Absent -> le serveur retombe sur l'espace
-                // personnel. Lu ici et non à l'appel : la session peut l'avoir
-                // fixé pendant que la socket s'ouvrait.
+                // de résolution ; absent, il retombe sur l'espace personnel. Lu ici
+                // et non à l'appel, la session pouvant l'avoir fixé entretemps.
                 const workspaceId = getActiveWorkspaceId();
                 const envelope: ClientMessage = {
                     requestId,

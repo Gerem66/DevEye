@@ -7,14 +7,10 @@ import { manifest } from '../manifest';
 const api = featureApi(manifest);
 
 /**
- * Shared weather store. Resolves the user's primary city and keeps its live
- * report fresh so the topbar status and the home widget stay in sync without
- * each re-fetching independently.
- *
- * Crucially, it reloads as soon as the WebSocket becomes `open` — so the widget
- * shows the temperature immediately on connect instead of being stuck on
- * "Aucune météo configurée" until the next 10-minute poll (the old behaviour,
- * which failed silently when the socket wasn't ready yet at mount time).
+ * Shared weather store: resolves the primary city and keeps its live report
+ * fresh so the topbar status and the home widget stay in sync from one fetch.
+ * Reloads as soon as the WebSocket becomes `open`, so the widget shows the
+ * temperature on connect instead of waiting for the next poll.
  */
 const REFRESH_MS = 10 * 60 * 1000;
 
@@ -71,11 +67,9 @@ export async function refreshWeather(): Promise<void> {
         const res = await api.send('weather.get', { id: primary.id });
         emit({ report: res.report, loading: false });
     } catch {
-        // If the socket isn't open yet, stay in the loading state — the state
-        // listener retries the moment it connects (avoids a misleading "no
-        // weather" flash). Only give up the spinner on a real, connected error;
-        // locations surfaced above survive, so a failed report never reads as
-        // "Aucune météo configurée".
+        // Socket not open yet: stay loading, the open listener retries. Only a
+        // real, connected error drops the spinner; the locations surfaced above
+        // survive, so a failed report never reads as "Aucune météo configurée".
         if (isSocketOpen()) emit({ loading: false });
     } finally {
         inFlight = false;

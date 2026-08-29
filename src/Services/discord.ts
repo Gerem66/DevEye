@@ -1,27 +1,11 @@
 import type { Logger } from 'pino';
 
 /**
- * Le transport Discord — **le seul canal qui sache modifier ce qu'il a déjà
- * envoyé**.
- *
- * Tout le reste de `Services/notifications.ts` est délibérément agnostique : une
- * seule URL, une charge utile à trois têtes (`content` pour Discord, `text` pour
- * Slack, les champs structurés pour un point d'entrée maison), et jamais la
- * question « quel service ? » posée à la configuration. Ce module est
- * l'exception assumée, parce que la capacité qu'il exploite n'existe que là :
- *
- *  - `POST /api/webhooks/{id}/{token}` **`?wait=true`** rend le message créé,
- *    donc son identifiant — sans ce paramètre, Discord répond `204` vide et la
- *    réponse ne sert à rien (c'est ce que fait la livraison ordinaire).
- *  - `PATCH /api/webhooks/{id}/{token}/messages/{id}` le modifie, **sans limite
- *    de durée**. C'est une différence de fond avec les jetons d'interaction,
- *    qui expirent au bout d'un quart d'heure : un déploiement d'une heure peut
- *    donc être suivi dans un seul message du début à la fin.
- *
- * Aucun bot, aucun jeton d'application : l'URL de webhook que l'utilisateur a
- * déjà collée suffit. C'est ce qui permet d'ajouter le suivi vivant **sans rien
- * demander de plus** à qui a réglé un webhook Discord, et sans rien retirer à
- * qui en a réglé un autre — les autres canaux gardent leur message unique.
+ * Le transport Discord : le seul canal qui sache modifier ce qu'il a déjà
+ * envoyé. `POST ...?wait=true` rend le message créé, donc son identifiant ;
+ * `PATCH .../messages/{id}` le modifie sans limite de durée (contrairement aux
+ * jetons d'interaction). Aucun bot ni jeton d'application : l'URL de webhook
+ * suffit.
  */
 
 /** Ce qu'un message porte : Discord accepte l'un, l'autre, ou les deux. */
@@ -31,13 +15,9 @@ export interface DiscordMessage {
 }
 
 /**
- * Cette URL est-elle un webhook Discord ?
- *
- * Analysée, jamais cherchée dans la chaîne : `includes('discord.com')` dirait
- * oui à `https://exemple.com/?ref=discord.com`, et l'on enverrait alors des
- * requêtes de modification à un point d'entrée qui n'en attend pas. Les deux
- * domaines sont acceptés — `discordapp.com` reste servi pour les URL anciennes,
- * que personne n'a de raison d'être allé recopier.
+ * Cette URL est-elle un webhook Discord ? Analysée, jamais cherchée dans la
+ * chaîne : `includes('discord.com')` dirait oui à `?ref=discord.com`.
+ * `discordapp.com` reste servi pour les URL anciennes.
  */
 export function isDiscordWebhook(url: string): boolean {
     try {
@@ -54,11 +34,8 @@ export function isDiscordWebhook(url: string): boolean {
 const TIMEOUT_MS = 10_000;
 
 /**
- * Publie un message et rend son identifiant, ou `null` si Discord l'a refusé.
- *
- * `null` n'est pas une erreur à faire remonter : l'appelant retombe alors sur le
- * message unique de fin, qui reste juste. Un suivi vivant qui n'a pas pu
- * commencer ne doit jamais empêcher l'avis d'arriver.
+ * Publie un message et rend son identifiant, ou `null` si Discord l'a refusé :
+ * l'appelant retombe alors sur le message unique de fin.
  */
 export async function postMessage(url: string, message: DiscordMessage, logger: Logger): Promise<string | null> {
     try {
@@ -81,12 +58,9 @@ export async function postMessage(url: string, message: DiscordMessage, logger: 
 }
 
 /**
- * Modifie un message déjà publié.
- *
- * `false` quand Discord refuse — le plus souvent parce que le message a été
- * supprimé à la main, ou le webhook révoqué. L'appelant s'arrête là plutôt que
- * de republier : quelqu'un qui efface le message de suivi ne demande pas qu'on
- * lui en pose un autre à sa place.
+ * Modifie un message déjà publié. `false` quand Discord refuse (message
+ * supprimé à la main, webhook révoqué) : l'appelant s'arrête là plutôt que de
+ * republier.
  */
 export async function editMessage(
     url: string,
@@ -111,11 +85,8 @@ export async function editMessage(
 }
 
 /**
- * `?wait=true`, en préservant les paramètres déjà présents.
- *
- * `thread_id` en particulier : une URL copiée depuis un fil de discussion le
- * porte, et l'écraser posterait le message dans le salon parent — au mauvais
- * endroit, sans que rien ne le signale.
+ * `?wait=true`, en préservant les paramètres déjà présents (`thread_id` en
+ * particulier : l'écraser posterait dans le salon parent).
  */
 function withWait(url: string): string {
     const parsed = new URL(url);
@@ -124,11 +95,8 @@ function withWait(url: string): string {
 }
 
 /**
- * L'adresse d'un message existant.
- *
- * Les paramètres de requête sont **conservés** et `wait` retiré : il n'a de sens
- * qu'à la création, alors que `thread_id` reste nécessaire pour retrouver un
- * message publié dans un fil.
+ * L'adresse d'un message existant. `wait` retiré (il n'a de sens qu'à la
+ * création), `thread_id` conservé.
  */
 function messageUrl(url: string, messageId: string): string {
     const parsed = new URL(url);

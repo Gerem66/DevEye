@@ -5,18 +5,14 @@ import { AUDIENCE_LABEL_MAX_LENGTH, type AudiencePlatform } from '../contracts/d
 /**
  * Ce qui transforme une saisie du monde extérieur en valeur rangeable.
  *
- * Tout ici est **pur** : aucune base, aucun réseau, aucune horloge. C'est ce qui
- * rend ces règles vérifiables seules avec `tsx`, et c'est nécessaire — ce sont
- * elles qui décident si deux visites comptent pour la même page, et une erreur
- * s'y traduirait par des statistiques fausses plutôt que par une panne.
+ * Tout ici est pur : aucune base, aucun réseau, aucune horloge. Ces règles
+ * décident si deux visites comptent pour la même page, et une erreur s'y
+ * traduirait par des statistiques fausses plutôt que par une panne.
  */
 
 /**
- * L'identité d'un libellé, ce que `content` chiffré ne peut pas porter.
- *
- * Même motif que `slug_ref` (git) et `name_ref` (bases) : 16 caractères du
- * sha256. La collision y est hors de portée pratique, et la colonne reste
- * courte, donc l'index tient en mémoire.
+ * L'identité d'un libellé, ce que `content` chiffré ne peut pas porter : 16
+ * caractères du sha256, collision hors de portée pratique et index court.
  */
 export function labelRef(value: string): string {
     return createHash('sha256').update(value).digest('hex').slice(0, 16);
@@ -25,29 +21,23 @@ export function labelRef(value: string): string {
 /**
  * Le chemin d'une page, ou le nom d'un écran.
  *
- * **La requête et l'ancre sont retirés**, et c'est la décision qui compte ici :
- * les garder ferait de chaque `?utm_source=…` une ligne de plus dans le
- * classement, et « /produits » finirait éparpillé sur trois cents entrées qui
- * ne disent rien. Ce qu'on perd — la provenance — est déjà porté par le
- * référent, à sa place et sans multiplier les pages.
- *
- * La barre finale est retirée aussi, sauf sur la racine : `/tarifs` et
- * `/tarifs/` sont la même page pour tout le monde sauf pour un `GROUP BY`.
+ * La requête et l'ancre sont retirées : les garder ferait de chaque
+ * `?utm_source=…` une ligne de plus dans le classement, et la provenance est
+ * déjà portée par le référent. La barre finale part aussi, sauf sur la racine :
+ * `/tarifs` et `/tarifs/` sont la même page, sauf pour un `GROUP BY`.
  */
 export function normalizePath(raw: string): string {
     let value = raw.trim();
     if (!value) return '/';
 
-    // Une URL complète est acceptée : un client natif peut n'avoir que ça, et
-    // exiger de lui qu'il la découpe reviendrait à dupliquer cette règle chez
-    // chaque appelant.
+    // Une URL complète est acceptée : un client natif peut n'avoir que ça, et exiger
+    // qu'il la découpe dupliquerait cette règle chez chaque appelant.
     if (/^https?:\/\//i.test(value)) {
         try {
             value = new URL(value).pathname;
         } catch {
-            // URL illisible : on garde la chaîne telle quelle, le nettoyage
-            // ci-dessous suffit. Refuser perdrait la visite pour une raison qui
-            // n'intéresse personne.
+            // URL illisible : on garde la chaîne telle quelle, le nettoyage ci-dessous
+            // suffit. Refuser perdrait la visite pour une raison qui n'intéresse personne.
         }
     }
 
@@ -61,13 +51,10 @@ export function normalizePath(raw: string): string {
 }
 
 /**
- * L'hôte d'une origine, quelle que soit la forme reçue.
- *
- * Accepte `https://exemple.fr`, `exemple.fr:443`, `EXEMPLE.FR/` — et rend
- * toujours `exemple.fr`. Une seule forme canonique des deux côtés de la
- * comparaison : celle que l'utilisateur a saisie dans les réglages, et celle
- * que le navigateur envoie dans l'en-tête `Origin`. Les comparer sans cela
- * aurait fait dépendre l'autorisation de la façon dont on a tapé le domaine.
+ * L'hôte d'une origine, quelle que soit la forme reçue : `https://exemple.fr`,
+ * `exemple.fr:443` et `EXEMPLE.FR/` rendent tous `exemple.fr`. Une seule forme
+ * canonique des deux côtés de la comparaison (le réglage saisi et l'en-tête
+ * `Origin`), sinon l'autorisation dépendrait de la façon de taper le domaine.
  */
 export function normalizeHost(raw: string): string {
     let value = raw.trim().toLowerCase();
@@ -75,24 +62,19 @@ export function normalizeHost(raw: string): string {
     value = value.replace(/^[a-z]+:\/\//, '');
     // Chemin, requête, ancre : rien de tout cela n'appartient à un hôte.
     value = value.split('/')[0].split('?')[0].split('#')[0];
-    // Le port ne fait pas partie de l'identité d'une origine ici : le même site
-    // en 3000 sur un poste de dev et en 443 en production reste le même site.
-    // IPv6 littérale exceptée, dont les deux-points sont l'écriture même.
+    // Le port ne fait pas partie de l'identité d'une origine : le même site en 3000
+    // sur un poste de dev et en 443 en production reste le même. IPv6 littérale
+    // exceptée, dont les deux-points sont l'écriture même.
     if (!value.startsWith('[')) value = value.split(':')[0];
     return value;
 }
 
 /**
- * D'où vient le visiteur — l'**hôte seul**, jamais l'URL complète.
+ * D'où vient le visiteur : l'hôte seul, jamais l'URL complète, qui serait un
+ * bon moyen d'accumuler des adresses personnelles sans l'avoir voulu.
  *
- * Deux raisons de ne garder que l'hôte : une URL de référent complète est un
- * bon moyen d'accumuler des adresses personnelles sans l'avoir voulu, et la
- * question qu'on se pose est « qui m'envoie du monde », pas « depuis quelle
- * page exactement ».
- *
- * Une navigation interne ne produit **aucun** référent : sans cette règle, le
- * premier du classement serait toujours le site lui-même, ce qui n'apprend
- * rien et masque les vrais.
+ * Une navigation interne ne produit aucun référent, sans quoi le premier du
+ * classement serait toujours le site lui-même.
  */
 export function normalizeReferrer(raw: string | undefined, ownHosts: readonly string[]): string | null {
     if (!raw) return null;
@@ -103,20 +85,15 @@ export function normalizeReferrer(raw: string | undefined, ownHosts: readonly st
 }
 
 /**
- * L'origine a-t-elle le droit d'écrire sur ce site ?
+ * L'origine a-t-elle le droit d'écrire sur ce site ? Trois règles, dans l'ordre :
  *
- * Trois règles, et l'ordre compte :
- *
- * 1. **aucune origine déclarée** → on accepte tout. C'est l'état d'un site
- *    qu'on vient de créer, le temps de brancher la balise ; l'écran le signale
- *    plutôt que de laisser croire à une protection qui n'existe pas.
- * 2. **plateforme `app`** → il n'y a rien à confronter, un binaire natif
- *    n'envoie pas d'`Origin`. Refuser son absence lui fermerait la porte pour
- *    de bon.
- * 3. **`web` ou `both`** → l'`Origin` présent doit figurer dans la liste. Son
- *    *absence* est refusée en `web` (une page en envoie toujours un, donc son
- *    absence dénonce un client qui n'en est pas une) et tolérée en `both`, qui
- *    dit précisément qu'on attend les deux mondes.
+ * 1. aucune origine déclarée : on accepte tout, l'état d'un site qu'on vient de
+ *    créer, le temps de brancher la balise (l'écran le signale).
+ * 2. plateforme `app` : rien à confronter, un binaire natif n'envoie pas
+ *    d'`Origin`, et refuser son absence lui fermerait la porte.
+ * 3. `web` ou `both` : l'`Origin` présent doit figurer dans la liste. Son
+ *    absence est refusée en `web` (une page en envoie toujours un) et tolérée
+ *    en `both`, qui dit qu'on attend les deux mondes.
  */
 export function originAllowed(
     origins: readonly string[],
@@ -132,17 +109,13 @@ export function originAllowed(
 }
 
 /**
- * Le condensé d'un visiteur.
- *
- * `sel + clé du site + IP + user-agent`, tronqué. **Ni l'IP ni le user-agent
- * ne sont conservés** : ils entrent ici et n'en ressortent pas. Le sel tournant
- * quotidiennement, le même visiteur n'est pas reconnaissable d'un jour à
- * l'autre — ce qui est une limite assumée (pas de « visiteurs récurrents ») et
- * le prix d'une mesure qui ne demande aucun consentement.
+ * Le condensé d'un visiteur : `sel + clé du site + IP + user-agent`, tronqué.
+ * Ni l'IP ni le user-agent ne sont conservés, ils entrent ici et n'en ressortent
+ * pas. Le sel tournant chaque jour, le même visiteur n'est pas reconnaissable
+ * d'un jour à l'autre : c'est le prix d'une mesure sans consentement.
  *
  * La clé du site entre dans le condensé pour qu'un même visiteur ne porte pas
- * le même identifiant sur deux sites : croiser les audiences de deux clients
- * n'est pas quelque chose que ce système doit rendre possible.
+ * le même identifiant sur deux sites, donc qu'on ne puisse pas les croiser.
  */
 export function visitorRef(salt: string, siteKey: string, ip: string, userAgent: string): string {
     return createHash('sha256')
@@ -158,17 +131,12 @@ export function visitorRef(salt: string, siteKey: string, ip: string, userAgent:
 }
 
 /**
- * Le condensé d'un visiteur **reconnu d'une visite à l'autre**.
+ * Le condensé d'un visiteur reconnu d'une visite à l'autre, en mode persistant :
+ * le client range un identifiant tiré au sort et le renvoie à chaque mesure.
+ * Aucun sel du jour ici, sinon la personne changerait d'identité chaque nuit.
  *
- * Employé seulement quand le site est en mode persistant : le client range un
- * identifiant tiré au sort dans son navigateur et le renvoie à chaque mesure.
- * Aucun sel du jour ici, sinon la personne changerait d'identité chaque nuit et
- * le mode n'apporterait rien.
- *
- * L'identifiant reçu n'est **jamais stocké tel quel**, et la clé du site entre
- * dans le condensé : un même identifiant posé sur deux sites y produit deux
- * empreintes sans rapport, donc aucun recoupement n'est possible même en
- * regardant la base.
+ * L'identifiant reçu n'est jamais stocké tel quel, et la clé du site entre dans
+ * le condensé : posé sur deux sites, il y produit deux empreintes sans rapport.
  */
 export function persistentVisitorRef(secret: string, siteKey: string, visitorId: string): string {
     return createHash('sha256')

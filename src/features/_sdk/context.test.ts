@@ -12,14 +12,9 @@ import type { SdkProviders } from '@deveye/types/sdk/server';
 const NO_PROVIDERS: SdkProviders = { get: () => undefined };
 
 /**
- * L'adaptateur du contexte natif en contexte SDK : la frontière exacte de ce
- * qu'un handler de module voit.
- *
- * Ce qui mérite d'être tenu : la projection (rien de plus que le contrat, ni
- * `ownerUserId` ni la base), la résolution des extras contre les specs du
- * manifest (toggle fermé par défaut, choix rabattu sur son défaut, le
- * propriétaire au-dessus des grants), et le transport du socket gardé deux
- * fois (capacité 'agents', puis présence du socket).
+ * L'adaptateur du contexte natif en contexte SDK : la projection (rien de plus
+ * que le contrat), la résolution des extras contre les specs du manifest, et
+ * le transport du socket gardé deux fois (capacité, puis présence du socket).
  */
 
 function manifest(opts: { id?: FeatureId; caps?: readonly NativeCapability[] } = {}): FeatureManifest {

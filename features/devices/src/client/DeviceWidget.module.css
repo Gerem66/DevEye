@@ -1,5 +1,4 @@
-/* Device tile body. Owns the whole card (no Widget header): name + status on
-   top, small metrics below, and a full-bleed activity tint behind it all. */
+/* Device tile body: owns the whole card (no Widget header). */
 .widget {
     position: relative;
     display: flex;
@@ -9,14 +8,11 @@
     gap: var(--space-sm);
 }
 
-/* Full-bleed activity background. Negative inset reaches past the Widget's own
-   padding to the card edges; the Widget's `overflow: hidden` clips it to the
-   rounded card. Tinted by `--activity-color`, set per level below.
-
-   The transition is on the tint itself, not on `background`: the gradient only
-   ever changes by `var()` substitution, which no engine interpolates. The
-   property is registered as a `<color>` in Styles/theme.css, which is what makes
-   this animate — the gradient then just recomputes each frame. */
+/* Full-bleed activity background: the negative inset reaches past the Widget's
+   padding, its `overflow: hidden` clips to the rounded card. The transition is
+   on the tint, not on `background`: no engine interpolates a `var()`
+   substitution, but `--activity-color` is registered as a `<color>` in
+   Styles/theme.css. */
 .bg {
     position: absolute;
     inset: calc(-1 * var(--space-md));

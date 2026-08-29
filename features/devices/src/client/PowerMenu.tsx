@@ -64,18 +64,17 @@ interface ResultState {
 }
 
 /**
- * System power-action menu for one device. Lists the available actions, requires
- * an explicit confirmation for the disruptive ones (no Enter-to-fire — accidental
- * key presses must never power off a machine), and surfaces the live outcome
- * pushed back by the agent (`device.powerResult`).
+ * System power-action menu for one device. Explicit confirmation for the
+ * disruptive ones (no Enter-to-fire: a key press must never power off a
+ * machine); the outcome is pushed back by the agent (`device.powerResult`).
  */
 export function PowerMenu({ deviceId }: { deviceId: string }) {
-    // Which action is awaiting confirmation, the one in flight, and the last outcome.
+    // The action awaiting confirmation, the one in flight, the last outcome.
     const [armed, setArmed] = useState<PowerActionDef | null>(null);
     const [sending, setSending] = useState<AgentPowerAction | null>(null);
     const [result, setResult] = useState<ResultState | null>(null);
 
-    // Ref-counted live subscription so the result push reaches us (released on unmount).
+    // Live subscription so the result push reaches us.
     useEffect(() => acquireMetrics(deviceId), [deviceId]);
 
     useEffect(

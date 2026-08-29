@@ -24,11 +24,8 @@ import {
 } from './_shared';
 
 /**
- * Les bases de l'espace : inventaire, réglages, suppression, ordre.
- *
- * **Rien ici ne joint un serveur.** `list` et `get` lisent le cache local ;
- * ouvrir la feature n'ouvre aucune connexion sortante. Ce sont les commandes de
- * `probe.ts` qui vont voir, et seulement quand on le leur demande.
+ * Les bases de l'espace : inventaire, réglages, suppression, ordre. Rien ici ne
+ * joint un serveur ; `probe.ts` s'en charge, sur demande.
  */
 
 /** Ce que le client envoie pour décrire un accès, sans son secret. */
@@ -52,8 +49,7 @@ export const databaseCrudFeatures = [
     defineSdkFeature({
         ...databaseCount,
         handler: async (ctx: Ctx) => {
-            // Les mêmes lignes que la liste — projetées comprises, restrictions
-            // déduites : la carte doit compter ce que la liste montre.
+            // Les mêmes lignes que la liste, restrictions déduites.
             const rows = await ctx.repo.listVisible(ctx.workspaceId);
             const hidden = await ctx.items.restrictions();
             return { count: rows.filter((r) => hidden.get(r.id) !== 'none').length };
@@ -63,9 +59,8 @@ export const databaseCrudFeatures = [
         ...databaseList,
         handler: async (ctx: Ctx) => {
             const rows = await ctx.repo.listVisible(ctx.workspaceId);
-            // Les bases qu'une restriction masque pour ce rôle disparaissent de la
-            // liste plutôt que d'y figurer grisées : une ligne qu'on voit sans
-            // pouvoir l'ouvrir apprend déjà qu'elle existe.
+            // Une base masquée pour ce rôle disparaît de la liste plutôt que d'y
+            // figurer grisée : la voir apprendrait déjà qu'elle existe.
             const hidden = await ctx.items.restrictions();
             const visible = rows.filter((r) => hidden.get(r.id) !== 'none');
             const [scope, counts] = await Promise.all([ctx.sharing.scope(), projectCountsOf(ctx)]);
@@ -86,16 +81,13 @@ export const databaseCrudFeatures = [
     defineSdkFeature({
         ...databaseGet,
         handler: async (ctx: Ctx, input) => {
-            // Visible, pas seulement locale : la fiche d'une base projetée doit
-            // s'ouvrir depuis la fenêtre — c'était le trou entre la liste (qui la
-            // montrait) et le détail (qui répondait « introuvable »).
+            // Visible, pas seulement locale : la fiche d'une base projetée s'ouvre
+            // depuis la fenêtre.
             const row = await ctx.repo.findVisibleWithStats(input.databaseId, ctx.workspaceId);
             if (!row) throw new FeatureError('not_found', 'Base de données introuvable');
             await ctx.items.assert(input.databaseId);
-            // Deux origines : la base est chiffrée chez ELLE, les projets liés
-            // listés ici sont ceux d'ICI (le contrat de Projets les rend avec
-            // leur titre, tous à l'étage ouvert, donc lisibles sans session :
-            // c'est ce qui rend l'interconnexion cliquable dans les deux sens).
+            // La base est chiffrée chez elle ; les projets liés sont ceux d'ici,
+            // via le contrat de Projets.
             const homeCipher = await databaseCipherFor(ctx, row);
             const [usage, counts, alertRows] = await Promise.all([
                 projectUsageOf(ctx, input.databaseId),
@@ -122,8 +114,7 @@ export const databaseCrudFeatures = [
             const cipher = ctx.cipher();
             const ref = nameRef(input.name);
 
-            // Le nom porte l'unicité : deux bases homonymes dans un même espace ne
-            // se distingueraient nulle part dans l'interface.
+            // Le nom porte l'unicité dans l'espace.
             if (await ctx.repo.findByName(ctx.workspaceId, ref)) {
                 throw new FeatureError('conflict', 'Une base porte déjà ce nom dans cet espace.');
             }
@@ -162,10 +153,8 @@ export const databaseCrudFeatures = [
         access: { level: 'write' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
-            // Domicile seulement : la ligne est réécrite sous la clé d'ICI, et le
-            // secret ressaisi y serait scellé — illisible chez elle. Le refus
-            // explicite vaut mieux que le « introuvable » qu'aurait rendu la
-            // requête scopée.
+            // Domicile seulement : la ligne serait réécrite sous la clé d'ici,
+            // illisible chez elle.
             const home = await loadDatabase(ctx, input.databaseId, 'write');
             if (home.workspace_id !== ctx.workspaceId) {
                 throw new FeatureError(
@@ -218,20 +207,15 @@ export const databaseCrudFeatures = [
     defineSdkFeature({
         ...databaseRemove,
         access: { level: 'write' },
-        // Un seul sujet, celui du module : les écrans de Projets qui montrent
-        // une base suivent déjà `database.detail` / `database.list`. Ce que la
-        // suppression ne ravive plus, c'est le tableau d'un projet et les
-        // compteurs de ses onglets (le sujet `projects`, qu'un module ne peut
-        // pas nommer) : ils se remettent à jour à leur prochaine lecture.
+        // Le sujet `projects` n'est pas nommable par un module : le tableau et
+        // les compteurs d'un projet se remettent à jour à leur prochaine lecture.
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const ok = await ctx.repo.remove(input.databaseId, ctx.workspaceId);
             if (!ok) throw new FeatureError('not_found', 'Base de données introuvable');
             // Projections, restrictions et route de notification ne tiennent à
             // aucune clé étrangère : sans ce ménage, elles s'appliqueraient à la
-            // prochaine base à hériter de l'identifiant. (Oubli du câblage
-            // d'origine, aligné sur Uptime.) `ctx.items.forget` fait les trois
-            // (l'ex `itemSharing.forgetItem` + `notificationChannels.clearRoute`).
+            // prochaine base à hériter de l'identifiant.
             await ctx.items.forget(input.databaseId);
             ctx.audit({
                 action: 'database.remove',
@@ -241,14 +225,6 @@ export const databaseCrudFeatures = [
             return { databaseId: input.databaseId };
         }
     }),
-    /**
-     * Range les bases de l'espace.
-     *
-     * ⚠️ Le filet de démarrage ne voit pas cette commande : `MUTATION_VERB` cherche
-     * un verbe juste après le point, et « reorder » y est précédé de rien du tout —
-     * `database.reorder` correspond en fait au motif. Elle est donc bien vue, et
-     * `mutates` ci-dessous est ce qu'il attend.
-     */
     defineSdkFeature({
         ...databaseReorder,
         access: { level: 'write' },

@@ -1,20 +1,12 @@
--- Uptime passe au scope espace.
+-- Uptime passe au scope espace : `uptime_services.workspace_id` (NULL = espace
+-- personnel) devient l'id reel et passe NOT NULL. `uptime_settings` passe d'un
+-- singleton par compte a un singleton par espace (bascule 1:1, chaque compte
+-- ayant exactement un espace personnel).
+-- Rien n'est re-chiffre : ces colonnes le sont par la DEK ouverte de
+-- l'utilisateur, que l'espace personnel resout (cf. 046).
 --
--- `uptime_services.workspace_id` existait deja mais etait nullable et n'entrait
--- dans aucune clause WHERE : les handlers listaient par `user_id` puis
--- filtraient en JS. NULL (« espace personnel ») devient l'id reel, et la colonne
--- passe NOT NULL.
---
--- `uptime_settings` etait un singleton par compte ; il devient un singleton par
--- espace. La bascule est 1:1 sans collision possible, puisque chaque `user_id`
--- correspond a exactement un espace personnel.
---
--- Rien n'est re-chiffre : les colonnes chiffrees de ces tables le sont par la
--- DEK ouverte de l'utilisateur, et l'espace personnel resout precisement cette
--- cle (cf. 046). Voir aussi `SecureStore.createOpenCipher`.
---
--- Ajouts de colonnes toujours via INFORMATION_SCHEMA + SQL dynamique, jamais
--- `ADD COLUMN IF NOT EXISTS` (cf. 038 : cette clause a fait tomber la prod).
+-- Ajouts de colonnes via INFORMATION_SCHEMA + SQL dynamique, jamais
+-- `ADD COLUMN IF NOT EXISTS` (extension MariaDB, cf. 038).
 
 -- 1. uptime_services : backfill du NULL vers l'espace personnel du proprietaire.
 UPDATE uptime_services s
@@ -24,10 +16,9 @@ WHERE s.workspace_id IS NULL;
 
 ALTER TABLE uptime_services MODIFY COLUMN workspace_id INT NOT NULL;
 
--- Les rangs etaient numerotes par (utilisateur, espace) ; ils doivent l'etre par
--- espace seul, sinon deux membres d'un meme espace partage produiraient des
--- rangs qui se telescopent. Motif idempotent : renumerotation depuis l'ordre
--- courant, donc rejouer ne change rien.
+-- Les rangs se numerotent par espace seul, sinon deux membres d'un meme espace
+-- partage produiraient des rangs qui se telescopent. Renumerotation depuis
+-- l'ordre courant : rejouer ne change rien.
 UPDATE uptime_services s
 JOIN (
     SELECT id, ROW_NUMBER() OVER (PARTITION BY workspace_id ORDER BY sort_order ASC, id ASC) - 1 AS rn

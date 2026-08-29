@@ -1,13 +1,11 @@
 /**
  * Bridge between the DOM selection and the block model.
  *
- * The whole block list is a *single* contentEditable host (see BlockEditor), so
- * the browser hands us selections that may span several blocks, which is what
- * makes free navigation, multi-block selection and copy work natively. Every row
- * carries `data-block="<index>"` and, when it holds text, a `[data-text]`
- * surface whose rendered content equals the block's source character-for-
- * character (see {@link inlineToEditorHtml}). A DOM boundary therefore maps to a
- * plain-text offset inside a block, and back.
+ * The whole block list is a *single* contentEditable host (see BlockEditor), so a
+ * selection may span several blocks. Every row carries `data-block="<index>"` and,
+ * when it holds text, a `[data-text]` surface whose rendered content equals the
+ * block's source character-for-character (see {@link inlineToEditorHtml}): a DOM
+ * boundary therefore maps to a plain-text offset inside a block, and back.
  */
 
 /** A caret position in the model: a block index + a plain-text offset. */
@@ -24,15 +22,13 @@ export interface BlockRange {
 
 export const caretRange = (point: BlockPoint): BlockRange => ({ start: point, end: point });
 
-/** Whether the selection reaches across two blocks (the case the browser cannot
- *  be trusted with: it would merge the block elements themselves). */
+/** The case the browser can't be trusted with: it would merge the rows themselves. */
 export const spansBlocks = (range: BlockRange): boolean => range.start.index !== range.end.index;
 
 export const isCollapsed = (range: BlockRange): boolean =>
     range.start.index === range.end.index && range.start.offset === range.end.offset;
 
-/** Which end of a selection a DOM boundary is: it decides where a boundary that
- *  falls between blocks (or beside a row's chrome) sticks. */
+/** Decides where a boundary falling between blocks, or beside a row's chrome, sticks. */
 type Edge = 'start' | 'end';
 
 function asElement(node: Node | null): Element | null {
@@ -40,7 +36,6 @@ function asElement(node: Node | null): Element | null {
     return node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
 }
 
-/** The row element that owns `node`, if any. */
 function rowOf(node: Node | null): HTMLElement | null {
     return asElement(node)?.closest<HTMLElement>('[data-block]') ?? null;
 }
@@ -59,7 +54,7 @@ export function blockTextElement(root: HTMLElement, index: number): HTMLElement 
     return blockRow(root, index)?.querySelector<HTMLElement>('[data-text]') ?? null;
 }
 
-/** Plain-text length of the caret position `node`/`nodeOffset` within `root`. */
+/** Plain-text offset of the position `node`/`nodeOffset` within `root`. */
 function offsetWithin(root: HTMLElement, node: Node, nodeOffset: number): number {
     const range = document.createRange();
     range.selectNodeContents(root);
@@ -83,8 +78,7 @@ function locate(root: HTMLElement, target: number): { node: Node; offset: number
     return { node: last, offset: last.textContent?.length ?? 0 };
 }
 
-/** The whole of a row, from the model's point of view: a start boundary clings
- *  to the row's beginning, an end boundary to its end. */
+/** A boundary that owns the whole row: `start` clings to its beginning, `end` to its end. */
 function edgePoint(row: HTMLElement, edge: Edge): BlockPoint {
     const text = row.querySelector<HTMLElement>('[data-text]');
     return {
@@ -98,8 +92,7 @@ function pointFrom(root: HTMLElement, node: Node, nodeOffset: number, edge: Edge
     let row = rowOf(node);
     if (!row) {
         // A boundary at container level (select-all, or a drag past the list):
-        // walk from the child it points at, in the edge's direction, to the
-        // first real row.
+        // walk from the child it points at, towards the first real row.
         const children = Array.from(root.childNodes);
         const step = edge === 'start' ? 1 : -1;
         for (let i = edge === 'start' ? nodeOffset : nodeOffset - 1; i >= 0 && i < children.length; i += step) {
@@ -125,8 +118,7 @@ export function readSelection(root: HTMLElement): BlockRange | null {
     return start && end ? { start, end } : null;
 }
 
-/** Whether the whole DOM selection sits in blocks' text, the only place the
- *  browser may be left to edit on its own (see {@link snapCaret}). */
+/** Blocks' text is the only place the browser may be left to edit on its own. */
 export function selectionInText(root: HTMLElement): boolean {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return false;
@@ -138,8 +130,7 @@ export function selectionInText(root: HTMLElement): boolean {
     );
 }
 
-/** The caret position at the start (walking forward) or the end (backward) of
- *  the first row from `index` that holds text, dividers hold none. */
+/** First row from `index` that holds text: its start walking forward, its end backward. */
 function nearestCaret(root: HTMLElement, index: number, dir: 1 | -1): BlockPoint | null {
     for (let i = index; i >= 0 && blockRow(root, i); i += dir) {
         const text = blockTextElement(root, i);
@@ -149,13 +140,10 @@ function nearestCaret(root: HTMLElement, index: number, dir: 1 | -1): BlockPoint
 }
 
 /**
- * Move the caret out of the positions the browser offers *beside* a row's
- * chrome. They belong to no block: typing there writes outside the model, and
- * a backspace eats the grip or the marker itself. Pressing Left at the start of
- * a block walks straight into one, so the caret is nudged on the way it was
- * heading, before a row's text it belongs at the end of the block above, after
- * it at the start of the one below. Returns where it was moved, or null when
- * there was nothing to correct.
+ * Move the caret out of the positions the browser offers *beside* a row's chrome:
+ * they belong to no block, so typing there writes outside the model and a
+ * backspace eats the grip or the marker. The caret is nudged the way it was
+ * heading, and null means there was nothing to correct.
  */
 export function snapCaret(root: HTMLElement): BlockRange | null {
     const selection = window.getSelection();
@@ -187,7 +175,6 @@ function domPoint(root: HTMLElement, point: BlockPoint): { node: Node; offset: n
     return text ? locate(text, Math.max(0, point.offset)) : { node: row, offset: 0 };
 }
 
-/** Put the DOM selection where `range` says, and scroll it into view. */
 export function applySelection(root: HTMLElement, range: BlockRange): void {
     const a = domPoint(root, range.start);
     const b = isCollapsed(range) ? a : domPoint(root, range.end);

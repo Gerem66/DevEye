@@ -15,47 +15,32 @@ import type { SdkQueryable } from '@deveye/types/sdk/server';
 type Q = SdkQueryable;
 
 /**
- * Persistance de Sentinelle : la ligne de base (ce qu'on a observé), les
- * constats (ce qu'on en a jugé), les autorisations (ce qu'un humain a décidé)
- * et, depuis le rapatriement, la config par appareil (ce qu'on surveille).
+ * Persistance de Sentinelle : la ligne de base (ce qu'on a observé), les constats
+ * (ce qu'on en a jugé), les autorisations (ce qu'un humain a décidé) et la config
+ * par appareil (ce qu'on surveille). Rien n'est chiffré, ce sont des faits sur
+ * des machines : c'est ce qui laisse le moteur tourner sans session ni mot de
+ * passe.
  *
- * Quatre dépôts dans un fichier parce qu'ils se lisent ensemble et ne se
- * comprennent qu'ensemble, le moteur les fait travailler dans le même tour.
- *
- * Aucune donnée n'est chiffrée ici : ce sont des faits sur des machines, du même
- * palier que `devices.report_json`. C'est ce qui laisse le moteur tourner sans
- * session ni mot de passe.
- *
- * **Aucune jointure vers `devices`.** Les lignes rendent `device_id`, et ce sont
- * les handlers qui résolvent les noms par la façade des appareils : un module
- * ne lit pas les tables des autres features. Les clés étrangères des tables
- * historiques vers `devices`, elles, restent : ce sont des contraintes, pas des
- * lectures.
+ * Aucune jointure vers `devices` : les lignes rendent `device_id`, les handlers
+ * résolvent les noms par la façade des appareils. Les clés étrangères vers
+ * `devices` restent, ce sont des contraintes, pas des lectures.
  */
 
 /**
- * L'empreinte qui porte l'unicité, partout où une clé peut être un chemin.
- *
- * Un chemin de 512 caractères en utf8mb4 pèse 2048 octets : l'index composé
- * dépasserait la limite InnoDB de 3072. L'empreinte fixe le coût à 32 octets
- * quelle que soit la longueur, et la colonne lisible reste là pour l'affichage.
+ * L'empreinte qui porte l'unicité, partout où une clé peut être un chemin : un
+ * chemin de 512 caractères en utf8mb4 pèse 2048 octets, et l'index composé
+ * dépasserait la limite InnoDB de 3072. La colonne lisible reste pour l'affichage.
  */
 function hashKey(key: string): Buffer {
     return createHash('sha256').update(key, 'utf8').digest();
 }
 
 /**
- * Séparateur des clés composées (règle + sujet).
- *
- * Écrit en échappement et non en caractère littéral : c'est un octet invisible,
- * et le laisser tel quel dans la source en ferait un piège, impossible à voir
- * en relecture, perdu au premier copier-coller, et le perdre changerait **toutes**
- * les empreintes de dédoublonnage d'un coup (les constats en cours se
- * rouvriraient en double et les autorisations cesseraient de correspondre).
- *
- * Un NUL plutôt qu'un espace parce qu'un sujet est souvent un chemin, et qu'un
- * chemin peut contenir des espaces : seul un octet interdit dans les deux
- * composants rend la concaténation non ambiguë.
+ * Séparateur des clés composées (règle + sujet), écrit en échappement et non en
+ * caractère littéral : invisible dans la source, il se perdrait au premier
+ * copier-coller, et le perdre changerait toutes les empreintes de dédoublonnage
+ * d'un coup. Un NUL plutôt qu'un espace parce qu'un sujet est souvent un chemin :
+ * seul un octet interdit dans les deux composants lève l'ambiguïté.
  */
 const KEY_SEP = '\u0000';
 
@@ -63,8 +48,6 @@ const KEY_SEP = '\u0000';
 export function findingDedup(rule: SentinelRuleId, subject: string): Buffer {
     return createHash('sha256').update(`${rule}${KEY_SEP}${subject}`, 'utf8').digest();
 }
-
-// ────────────────────────────── ligne de base ───────────────────────────────
 
 export interface BaselineRow {
     id: number;
@@ -86,27 +69,15 @@ export interface BaselineObservation {
 
 export interface BaselineRepo {
     /**
-     * Enregistre les éléments vus à cet instant.
-     *
-     * Un seul `INSERT … ON DUPLICATE KEY UPDATE` multi-lignes plutôt qu'une
-     * requête par élément : une machine à trois cents programmes ferait sinon
-     * trois cents allers-retours par tour, ce qui coûterait plus cher que toute
-     * la détection réunie.
-     *
-     * `first_seen` n'est **jamais** réécrit : c'est la date qui dit depuis quand
-     * on connaît l'élément, et l'écraser reviendrait à rajeunir tout ce qui
-     * tourne à chaque tour.
+     * Enregistre les éléments vus à cet instant. Un seul `INSERT … ON DUPLICATE
+     * KEY UPDATE` multi-lignes : une machine à trois cents programmes ferait
+     * sinon trois cents allers-retours par tour. `first_seen` n'est jamais
+     * réécrit, l'écraser rajeunirait tout ce qui tourne à chaque tour.
      */
     observe(deviceId: string, at: number, items: BaselineObservation[]): Promise<void>;
-    /** Les éléments connus d'un appareil, pour une nature donnée. */
     known(deviceId: string, kind: BaselineKind): Promise<Map<string, BaselineRow>>;
-    /** Page de lecture pour l'interface. */
     list(deviceId: string, kind: BaselineKind | null, limit: number): Promise<{ rows: BaselineRow[]; total: number }>;
-    /**
-     * Éléments d'une nature absents depuis `since`. Sert à `process.vanished` et
-     * au diff de persistance, dans les deux cas, la question est « qu'est-ce qui
-     * était là et ne l'est plus ».
-     */
+    /** Éléments d'une nature absents depuis `since` : ce qui était là et ne l'est plus. */
     staleSince(deviceId: string, kind: BaselineKind, since: number): Promise<BaselineRow[]>;
     /** Oublie les éléments d'une nature (diff de persistance : on réécrit tout). */
     forget(deviceId: string, kind: BaselineKind, keys: string[]): Promise<number>;
@@ -119,8 +90,8 @@ function parseAttrs(raw: string | BaselineAttrs): BaselineAttrs {
     try {
         return JSON.parse(raw) as BaselineAttrs;
     } catch {
-        // Un blob illisible est un défaut de stockage, pas une entrée absente :
-        // on rend une enveloppe vide plutôt que de faire tomber tout le tour.
+        // Un blob illisible est un défaut de stockage, pas une entrée absente : une
+        // enveloppe vide plutôt que tout le tour qui tombe.
         return {
             users: [],
             listenPorts: [],
@@ -226,8 +197,6 @@ export function baselineRepo(q: Q): BaselineRepo {
     };
 }
 
-// ────────────────────────────────── constats ─────────────────────────────────
-
 export interface FindingRow {
     id: number;
     device_id: string;
@@ -274,32 +243,23 @@ export interface FindingsFilter {
 
 export interface FindingsRepo {
     /**
-     * Ouvre le constat, ou fait monter son compteur.
-     *
-     * `isNew` distingue les deux, et c'est lui seul qui autorise une
-     * notification : sans cette distinction, une situation qui dure notifierait à
-     * chaque tour, et le canal serait ignoré avant la fin de la nuit.
-     *
-     * Un constat `acknowledged` **ne rouvre pas** : la décision humaine tient, et
-     * seule la levée de l'autorisation le fait revenir. Un constat `resolved`,
-     * lui, rouvre, la situation est bel et bien revenue.
+     * Ouvre le constat, ou fait monter son compteur. `isNew` distingue les deux et
+     * autorise seul une notification : sans lui, une situation qui dure notifierait
+     * à chaque tour. Un constat `acknowledged` ne rouvre pas, seule la levée de
+     * l'autorisation le fait revenir ; un `resolved` rouvre, la situation est
+     * revenue.
      */
     upsert(deviceId: string, draft: FindingDraft, at: number): Promise<FindingUpsert>;
     /** Marque résolus les constats ouverts d'un appareil absents de `keep`. */
     resolveMissing(deviceId: string, rules: SentinelRuleId[], keep: Buffer[], at: number): Promise<number>;
-    /** Un constat par son identifiant. */
     find(findingId: number): Promise<FindingRow | null>;
     list(filter: FindingsFilter): Promise<{ rows: FindingRow[]; total: number }>;
-    /** Décompte par gravité des constats ouverts d'un ensemble d'appareils. */
     openCounts(deviceIds: string[]): Promise<Record<FindingSeverity, number>>;
     acknowledge(findingId: number, userId: number, at: number): Promise<void>;
     /**
-     * Ferme un constat parce que la situation a cessé, sans le juger normal.
-     *
-     * Volontairement le même état que la résolution automatique : la seule
-     * différence est *qui* l'a constatée. Un état de plus n'aurait rien dit de
-     * neuf, et aurait fallu le traiter partout où `resolved` l'est déjà :
-     * filtres, rétention, réouverture par `upsert`.
+     * Ferme un constat parce que la situation a cessé, sans le juger normal. Même
+     * état que la résolution automatique, seul diffère qui l'a constatée : un état
+     * de plus serait à traiter partout où `resolved` l'est déjà.
      */
     resolve(findingId: number, at: number): Promise<void>;
     reopen(findingId: number, at: number): Promise<void>;
@@ -348,9 +308,9 @@ export function findingsRepo(q: Q): FindingsRepo {
             const dedup = findingDedup(draft.rule, draft.subject);
             const rank = SEVERITY_RANK[draft.severity];
 
-            // On lit avant d'écrire parce que la décision « faut-il notifier »
-            // dépend de l'état *précédent*, qu'un INSERT … ON DUPLICATE ne rend
-            // pas. La lecture porte sur la clé unique, donc elle est indexée.
+            // On lit avant d'écrire parce que « faut-il notifier » dépend de l'état
+            // précédent, qu'un INSERT … ON DUPLICATE ne rend pas. La lecture porte
+            // sur la clé unique, donc elle est indexée.
             const existing = await q.query<{ id: number; state: FindingState }>(
                 'SELECT id, state FROM device_findings WHERE device_id = ? AND dedup_hash = ?',
                 [deviceId, dedup]
@@ -378,8 +338,8 @@ export function findingsRepo(q: Q): FindingsRepo {
                 return { id: ins.insertId, isNew: true, severity: draft.severity };
             }
 
-            // Un constat acquitté reste acquitté : la décision humaine tient tant
-            // que son autorisation n'est pas levée. On ne fait que dater.
+            // Un constat acquitté reste acquitté tant que son autorisation n'est pas
+            // levée : on ne fait que dater.
             if (row.state === 'acknowledged') {
                 await q.execute(
                     'UPDATE device_findings SET last_seen = ?, occurrences = occurrences + 1 WHERE id = ?',
@@ -480,8 +440,8 @@ export function findingsRepo(q: Q): FindingsRepo {
 
         async resolve(findingId, at) {
             // `state = 'open'` en garde : sans elle, un double clic rouvrirait la
-            // fenêtre de rétention d'un constat déjà résolu, et « réglé » écraserait
-            // un acquittement, deux décisions qui ne se remplacent pas l'une l'autre.
+            // fenêtre de rétention d'un constat résolu, et « réglé » écraserait un
+            // acquittement.
             await q.execute(
                 `UPDATE device_findings SET state = 'resolved', last_seen = ? WHERE id = ? AND state = 'open'`,
                 [at, findingId]
@@ -503,9 +463,8 @@ export function findingsRepo(q: Q): FindingsRepo {
         },
 
         async pruneResolved(days) {
-            // Un constat est une **preuve** : il ne suit pas `retention_days`,
-            // qui régit les métriques. Seuls les résolus s'effacent, et seulement
-            // une fois vraiment vieux ; les ouverts ne s'effacent jamais.
+            // Un constat est une preuve : il ne suit pas la rétention des métriques,
+            // seuls les résolus s'effacent, jamais les ouverts.
             const del = await q.execute(
                 `DELETE FROM device_findings
                  WHERE state = 'resolved' AND last_seen < (UNIX_TIMESTAMP() * 1000) - ? * 86400000`,
@@ -515,8 +474,6 @@ export function findingsRepo(q: Q): FindingsRepo {
         }
     };
 }
-
-// ─────────────────────────────── autorisations ───────────────────────────────
 
 export interface AllowRow {
     id: number;
@@ -532,8 +489,7 @@ export interface AllowRow {
 export interface AllowRepo {
     /**
      * Les autorisations qui s'appliquent à un appareil : les siennes, plus celles
-     * de portée flotte. Une seule requête, chargée une fois par tour de moteur et
-     * consultée en mémoire, la liste est courte par nature.
+     * de portée flotte. Chargées une fois par tour de moteur, la liste est courte.
      */
     forDevice(workspaceId: number, deviceId: string): Promise<Set<string>>;
     list(workspaceId: number, deviceId: string | null): Promise<AllowRow[]>;
@@ -547,7 +503,6 @@ export interface AllowRepo {
         at: number;
     }): Promise<AllowRow>;
     find(allowId: number, workspaceId: number): Promise<AllowRow | null>;
-    /** Retire une autorisation, et rend le constat qu'elle couvrait (pour le rouvrir). */
     remove(allowId: number, workspaceId: number): Promise<boolean>;
     /** Retire l'autorisation couvrant exactement ce constat, quelle que soit sa portée. */
     removeFor(workspaceId: number, deviceId: string, rule: SentinelRuleId, subject: string): Promise<number>;
@@ -559,11 +514,9 @@ export function allowKey(rule: SentinelRuleId, subject: string): string {
 }
 
 /**
- * Le sujet d'une clé d'autorisation, sans sa règle.
- *
- * Existe pour que personne n'ait à réécrire le séparateur ailleurs : c'est un
- * octet invisible, et le retaper à la main dans un autre fichier est exactement
- * le genre d'erreur qui ne se voit pas en relecture.
+ * Le sujet d'une clé d'autorisation, sans sa règle. Existe pour que le séparateur
+ * ne soit retapé nulle part ailleurs : un octet invisible mal recopié est une
+ * erreur qui ne se voit pas en relecture.
  */
 export function allowSubject(key: string): string {
     const i = key.indexOf(KEY_SEP);
@@ -600,9 +553,9 @@ export function allowRepo(q: Q): AllowRepo {
             return rows.map(hydrateAllow);
         },
         async add(entry) {
-            // `INSERT … ON DUPLICATE KEY UPDATE` plutôt qu'un test préalable :
-            // deux personnes qui acquittent le même constat en même temps ne
-            // doivent pas voir l'une des deux échouer sur une contrainte.
+            // `INSERT … ON DUPLICATE KEY UPDATE` plutôt qu'un test préalable : deux
+            // personnes qui acquittent le même constat en même temps ne doivent pas
+            // voir l'une des deux échouer sur une contrainte.
             await q.execute(
                 `INSERT INTO sentinel_allowlist
                      (workspace_id, device_id, rule, subject, subject_hash, reason, created_by, created)
@@ -655,20 +608,14 @@ export function allowRepo(q: Q): AllowRepo {
     };
 }
 
-// ─────────────────────────── config par appareil ─────────────────────────────
-
 /**
- * Les réglages Sentinelle d'un appareil, tels que `ft_sentinel_device_config`
- * les porte (migration 098 du socle). Une ligne par appareil surveillé ou
- * l'ayant été ; l'absence de ligne vaut « sondes éteintes, défauts ».
+ * Les réglages Sentinelle d'un appareil : une ligne par appareil surveillé ou
+ * l'ayant été, l'absence de ligne valant « sondes éteintes, défauts ».
  *
- * Séparés de la config de collecte (`devices.metric_interval_seconds`, ...)
- * parce que ce sont deux cadrans distincts : l'un règle ce que l'agent mesure
- * en continu, l'autre décide si on le surveille, et une feature n'a pas à
- * pouvoir modifier les réglages de l'autre en passant. Depuis le
- * rapatriement, ils ont chacun leur table, et l'app recompose la config
- * poussée à l'agent en demandant au module sa part (le provider
- * `SENTINEL_AGENT_CONFIG_PROVIDER`).
+ * Table séparée de la config de collecte (`devices.metric_interval_seconds`) :
+ * l'une règle ce que l'agent mesure en continu, l'autre décide si on le
+ * surveille, et une feature n'a pas à modifier les réglages de l'autre en
+ * passant.
  */
 export interface DeviceConfigRow {
     device_id: string;
@@ -706,21 +653,17 @@ export interface DeviceConfigRepo {
     /** Les lignes d'un lot d'appareils, par identifiant : la vue de flotte en une requête. */
     forDevices(deviceIds: string[]): Promise<Map<string, DeviceConfigRow>>;
     /**
-     * Écrit les champs donnés, en créant la ligne si l'appareil n'en avait pas
-     * (`INSERT … ON DUPLICATE KEY UPDATE`) : le premier réglage d'une machine
-     * ne se distingue pas du suivant, et deux écritures concurrentes ne se
-     * disputent pas la création.
+     * Écrit les champs donnés, en créant la ligne au passage : le premier réglage
+     * d'une machine ne se distingue pas du suivant, et deux écritures concurrentes
+     * ne se disputent pas la création.
      */
     set(deviceId: string, patch: DeviceConfigPatch): Promise<void>;
     /** Date le dernier manifeste de persistance reçu (unix ms). */
     touchIntegrity(deviceId: string, at: number): Promise<void>;
     /**
-     * Les appareils sur lesquels Sentinelle tourne, tous espaces confondus.
-     *
-     * Le moteur n'a ni session ni espace courant : il balaye la flotte entière,
-     * exactement comme l'ordonnanceur d'Uptime. Le statut de l'appareil
-     * (archivé, révoqué) ne se lit pas ici : c'est la façade des appareils qui
-     * le dit, et le moteur écarte ce qui n'est plus actif.
+     * Les appareils sur lesquels Sentinelle tourne, tous espaces confondus : le
+     * moteur n'a ni session ni espace courant. Le statut (archivé, révoqué) ne se
+     * lit pas ici, c'est la façade des appareils qui le dit.
      */
     listEnabled(): Promise<string[]>;
 }
@@ -781,10 +724,9 @@ export function deviceConfigRepo(q: Q): DeviceConfigRepo {
                 const value = patch[key];
                 if (value === undefined) continue;
                 sets.push(columns[key]);
-                // Les deux drapeaux sont des TINYINT : les passer en booléens
-                // JS marcherait, mais mysql2 les sérialiserait en 0/1 sans le
-                // dire, et une relecture rendrait un type différent de celui
-                // qu'on croit écrire.
+                // Les deux drapeaux sont des TINYINT : passer des booléens JS
+                // marcherait, mais une relecture rendrait alors un autre type que
+                // celui qu'on croit écrire.
                 params.push(typeof value === 'boolean' ? (value ? 1 : 0) : value);
             }
             if (sets.length === 0) return;
@@ -802,11 +744,6 @@ export function deviceConfigRepo(q: Q): DeviceConfigRepo {
     };
 }
 
-/**
- * Le dépôt du module : les trois anciens dépôts de l'app (`baseline`,
- * `findings`, `sentinelAllow`), composés plutôt qu'aplatis, plus la config par
- * appareil qui vivait dans `devices`. Chaque méthode garde le nom qu'elle avait.
- */
 export interface SentinelRepo {
     baseline: BaselineRepo;
     findings: FindingsRepo;
@@ -814,7 +751,6 @@ export interface SentinelRepo {
     deviceConfig: DeviceConfigRepo;
 }
 
-/** Même dépôt qu'avant le rapatriement, porté sur le `SdkQueryable` du module. */
 export function createRepo(q: Q): SentinelRepo {
     return {
         baseline: baselineRepo(q),

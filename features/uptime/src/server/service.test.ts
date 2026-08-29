@@ -10,15 +10,10 @@ import type { UptimeRepo } from './repo';
 import { UptimeMonitor, type ProbeOutcome } from './service';
 
 /**
- * L'ordonnanceur du module, sur le harnais de service du SDK.
- *
- * Aucun réseau : la sonde est injectée, et le test décide de ce qu'elle rend.
- * Ce qui mérite d'être tenu, c'est ce qui ne lève nulle part quand ça se
- * dérègle : le **seuil** (un échec isolé n'ouvre pas d'incident), la
- * **diffusion sur transition seulement** (`live.changed` à la bascule, jamais
- * à chaque tour), l'**exactly-once** des alertes (une par incident, adressée
- * à la route du SERVICE, avec sa mise en page Discord), et le rétablissement
- * qui ne s'annonce que si la panne l'avait été.
+ * Aucun réseau : la sonde est injectée. Ce qui se vérifie ne lève nulle part
+ * quand ça se dérègle : le seuil, la diffusion sur transition seulement,
+ * l'exactly-once des alertes (une par incident, sur la route du service) et le
+ * rétablissement qui ne s'annonce que si la panne l'avait été.
  */
 
 interface FakeRepo extends UptimeRepo {

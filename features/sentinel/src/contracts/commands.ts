@@ -33,23 +33,13 @@ export const sentinelOverview = {
     output: z.object({
         /** Constats ouverts de tout l'espace, par gravité. */
         open: severityCountsSchema,
-        /**
-         * Score de posture de la flotte : moyenne des scores concluants. `null`
-         * quand aucune machine n'a encore de posture mesurable, et non `0`, qui
-         * se lirait comme une flotte en ruine.
-         */
+        /** Moyenne des scores concluants. `null` sans posture mesurable, et non `0`, qui se lirait comme une flotte en ruine. */
         fleetScore: z.number().int().min(0).max(100).nullable(),
         devices: z.array(deviceSentinelStateSchema).max(500)
     })
 };
 
-/**
- * Le décompte seul, pour la carte de grille et la pastille de Monitoring.
- *
- * Séparé d'`overview` parce qu'il se rafraîchit à chaque changement et qu'il
- * n'a besoin d'aucune jointure : deux `COUNT` indexés contre un balayage de
- * toute la flotte.
- */
+/** Séparé d'`overview` : il se rafraîchit à chaque changement et n'a besoin d'aucune jointure. */
 export const sentinelCount = {
     command: 'sentinel.count' as const,
     input: z.object({}),
@@ -101,12 +91,9 @@ export const sentinelPosture = {
 };
 
 /**
- * « Ceci est légitime. »
- *
- * Écrit une autorisation **et** résout le constat, dans cet ordre : si l'écriture
- * échoue, le constat reste ouvert plutôt que de disparaître sans qu'aucune règle
- * ne l'en empêche de revenir. En portée `fleet`, l'autorisation vaut pour tout
- * l'espace, y compris les machines qui le rejoindront ensuite.
+ * Écrit une autorisation puis résout le constat, dans cet ordre : si
+ * l'écriture échoue, le constat reste ouvert. En portée `fleet`, vaut pour
+ * tout l'espace.
  */
 export const sentinelAcknowledge = {
     command: 'sentinel.acknowledge' as const,
@@ -122,18 +109,9 @@ export const sentinelAcknowledge = {
 };
 
 /**
- * « C'est réglé. »
- *
- * Ferme le constat **sans** écrire d'autorisation : la situation a cessé, elle
- * n'a pas été jugée normale. La distinction n'est pas cosmétique, un constat
- * acquitté ne rouvrira plus jamais, un constat réglé rouvre au premier relevé
- * qui le revoit, et c'est précisément ce qu'on veut d'une correction.
- *
- * Le moteur résout tout seul ce qu'il sait rejouer (les règles d'instant). Restent
- * les constats d'**événement**, une authentification, une entrée de persistance :
- * ils décrivent quelque chose qui a eu lieu, donc rien ne cessera de les
- * déclencher, et sans cette commande la seule sortie était de les déclarer
- * légitimes. C'est-à-dire de mentir pour faire le ménage.
+ * Ferme sans écrire d'autorisation : un constat réglé rouvre au premier relevé
+ * qui le revoit, un acquitté jamais. Nécessaire pour les constats d'événement
+ * (authentification, persistance), que rien ne cessera de déclencher.
  */
 export const sentinelResolve = {
     command: 'sentinel.resolve' as const,
@@ -163,11 +141,8 @@ export const sentinelRemoveAllow = {
 };
 
 /**
- * Active Sentinelle sur une machine et règle ses cadences.
- *
- * Activer (re)part une fenêtre d'apprentissage de `learningDays` : sans elle, le
- * premier jour produirait des centaines de constats « nouveau programme » et la
- * liste deviendrait illisible avant d'avoir servi.
+ * Activer (re)part une fenêtre d'apprentissage : sans elle, le premier jour
+ * produirait des centaines de « nouveau programme ».
  */
 export const sentinelSetConfig = {
     command: 'sentinel.setConfig' as const,
@@ -202,13 +177,9 @@ export const sentinelScanNow = {
 };
 
 /**
- * Efface la ligne de base d'une machine et relance l'apprentissage.
- *
- * Le geste à faire après une montée de version d'agent qui change ce qui est
- * observé, typiquement l'arrivée des chemins d'exécutables, qui redéfinit la
- * clé d'un programme. **Les autorisations survivent** : ce sont des décisions,
- * pas des observations, et les réclamer une seconde fois serait une punition
- * pour avoir mis l'agent à jour.
+ * Efface la ligne de base et relance l'apprentissage (après une montée de
+ * version d'agent qui change ce qui est observé). Les autorisations
+ * survivent : ce sont des décisions.
  */
 export const sentinelResetBaseline = {
     command: 'sentinel.resetBaseline' as const,

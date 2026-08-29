@@ -27,20 +27,9 @@ import {
 import styles from './style.module.css';
 
 /**
- * Sauvegardes : ce qui part, où, et si c'est bien parti.
- *
- * Feature d'espace de premier rang, comme Git, Bases de données et Déploiement.
- * Deux moitiés qui ne se recouvrent pas : les **destinations** (rarement
- * touchées ; ce sont les sources de la feature, gérées dans Réglages → Sources)
- * et les **travaux**, qui sont ce qu'on vient regarder.
- *
- * L'écran est construit autour d'une seule question : « est-ce que mes
- * sauvegardes tournent ? ». Le dernier état de chaque travail est donc en
- * évidence sur la liste, et non caché derrière un clic : un travail cassé qui
- * ne se voit qu'en ouvrant sa fiche est un travail cassé qu'on ne voit pas.
- *
- * Ne demande jamais de mot de passe : tout vit à l'étage ouvert, condition pour
- * que l'ordonnanceur puisse écrire la nuit.
+ * Sauvegardes : les travaux et l'état de leur dernier passage, en évidence sur
+ * la liste. Les destinations se gèrent dans Réglages → Sources. Aucun mot de
+ * passe demandé : tout vit à l'étage ouvert.
  */
 export default function Backup(_props: FeatureViewProps) {
     const permissions = useWorkspacePermissions();
@@ -51,9 +40,8 @@ export default function Backup(_props: FeatureViewProps) {
         () => api.send('backup.jobList', {}).then((res) => res.jobs),
         'Impossible de charger les travaux de sauvegarde.'
     );
-    // La liste des destinations n'est qu'un appoint de l'écran : son absence
-    // ne doit pas masquer les travaux, qui sont l'essentiel. Son erreur n'est
-    // donc jamais montrée ici.
+    // L'erreur des destinations n'est pas montrée : leur liste n'est qu'un
+    // appoint, les travaux sont l'essentiel.
     const { data: destinations } = useResource(
         'backup.destinationList',
         () => api.send('backup.destinationList', {}).then((res) => res.destinations),
@@ -78,9 +66,8 @@ export default function Backup(_props: FeatureViewProps) {
 
     const opened = jobs?.find((j) => j.id === openedId) ?? null;
 
-    // La fiche ouverte est un lieu : déclarée à la présence par son identifiant
-    // nu, donc rejoignable, et atteignable par la téléportation de « Régler
-    // dans <espace> » d'un élément projeté.
+    // La fiche ouverte est déclarée à la présence par son identifiant :
+    // rejoignable, et cible de « Régler dans <espace> » d'un élément projeté.
     const liveTarget = useLiveSegment('l1', openedId === null ? null : String(openedId));
     useEffect(() => {
         if (!liveTarget || !jobs) return;
@@ -110,9 +97,6 @@ export default function Backup(_props: FeatureViewProps) {
                             </p>
                         </div>
                         <div className={styles.toolbarActions}>
-                            {/* Les destinations vivaient derrière leur propre
-                                bouton : elles sont dans Réglages → Sources,
-                                comme les sources de toute feature. */}
                             <FeatureSettingsButton scope={{ kind: 'feature', feature: 'backup' }} />
                             {canWrite && (
                                 <Button icon='plus' onClick={() => setJobDialog({ job: null })}>

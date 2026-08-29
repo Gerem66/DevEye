@@ -1,19 +1,11 @@
-// Privilège de native rapatriée : le garde SSRF est partagé par toute l'app, pas propre au module.
+// Le garde SSRF est celui de l'app, partagé, pas propre au module.
 import { fetchJson } from '@/Services/netFetch';
 import { field, tag, type OsintProbeAdapter } from './shared';
 
 /**
- * Sous-domaines par transparence des certificats (crt.sh).
- *
- * La source libre la plus rentable de toute la feature. Depuis 2018, toute
- * autorité de certification publique doit journaliser publiquement chaque
- * certificat émis. Ces journaux sont donc un **index quasi exhaustif des
- * sous-domaines** de n'importe quel domaine — sans envoyer le moindre paquet à
- * la cible, et sans deviner des noms.
- *
- * crt.sh est lent (la requête frappe une grosse base Postgres publique) : d'où
- * un délai large, une mise en cache longue, et le classement de cette sonde
- * parmi les lentes côté client.
+ * Sous-domaines par transparence des certificats : les journaux CT sont un
+ * index quasi exhaustif des sous-domaines, sans envoyer un paquet à la cible.
+ * crt.sh est lent, d'où un délai large et un cache long.
  */
 
 const CRTSH_TIMEOUT_MS = 20_000;

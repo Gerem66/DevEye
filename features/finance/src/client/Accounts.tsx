@@ -14,22 +14,10 @@ interface AccountsProps {
 }
 
 /**
- * Les comptes, et leurs soldes.
- *
- * ## Trois soldes par carte, et pourquoi les trois
- *
- * `balance` est le solde, sans autre qualificatif: ce qu'il y a aujourd'hui.
- * `projected` le complète des opérations déjà saisies pour plus tard (un loyer
- * prélevé le 5, noté le 2), et n'est montré que s'il diffère. `cleared` ne compte
- * que ce qui a été **pointé**: c'est le seul qu'on puisse comparer à un relevé
- * bancaire, et les confondre est la source d'erreur la plus courante d'un livre
- * de comptes.
- *
- * ## Les archivés restent dans le total
- *
- * Archiver range un compte, cela ne fait pas disparaître ce qu'il contient. Le
- * total en tête couvre donc tout ce qui est affiché ici, archivés compris, et
- * c'est aussi ce qu'annonce le tableau de bord.
+ * Les comptes et leurs soldes. `projected` n'est montré que s'il diffère de
+ * `balance` ; `cleared` est le seul comparable à un relevé. Les archivés
+ * restent dans le total : archiver range un compte sans faire disparaître ce
+ * qu'il contient.
  */
 export function Accounts({ base }: AccountsProps) {
     const [dialog, setDialog] = useState<{ account: FinanceAccount | null } | null>(null);

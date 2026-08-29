@@ -10,13 +10,8 @@ import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 import { decryptAll, encryptJson, financeCipher, toCategory, WRITE, type Ctx, type StoredCategory } from '../_shared';
 
 /**
- * Les catégories: la grille de lecture des dépenses et des recettes.
- *
- * Une catégorie ne sert **qu'un** sens (`flow`). « Salaire » ne classe pas une
- * dépense, et proposer les deux dans un seul sélecteur transformerait le choix
- * en fouille. C'est aussi ce qui rend une répartition lisible: additionner des
- * entrées et des sorties sous un même intitulé ne produit aucun nombre qui
- * veuille dire quelque chose.
+ * Les catégories. Une catégorie ne sert qu'un sens : additionner entrées et
+ * sorties sous un même intitulé ne veut rien dire.
  */
 
 export const financeCategoryListFeature = defineSdkFeature({
@@ -53,11 +48,7 @@ export const financeCategoryUpdateFeature = defineSdkFeature({
         const existing = await ctx.repo.findCategory(input.categoryId, ctx.workspaceId);
         if (!existing) throw new FeatureError('not_found', 'Catégorie introuvable');
 
-        // Changer le sens d'une catégorie rendrait fausses toutes les opérations
-        // déjà classées dessous: une dépense se retrouverait rangée sous une
-        // catégorie de recettes, et la répartition compterait une sortie comme
-        // une entrée. Le refus est franc, plutôt qu'une reclassification
-        // silencieuse de l'historique.
+        // Changer le sens rendrait fausses toutes les opérations déjà classées dessous.
         if (existing.flow !== input.category.flow) {
             throw new FeatureError(
                 'validation',
@@ -86,10 +77,8 @@ export const financeCategoryRemoveFeature = defineSdkFeature({
     handler: async (ctx: Ctx, input) => {
         const existing = await ctx.repo.findCategory(input.categoryId, ctx.workspaceId);
         if (!existing) throw new FeatureError('not_found', 'Catégorie introuvable');
-        // Les opérations qu'elle classait retombent dans « Sans catégorie »
-        // (`ON DELETE SET NULL`) et le budget posé dessus part avec elle
-        // (`ON DELETE CASCADE`): une enveloppe sans catégorie ne veut plus rien
-        // dire, une dépense sans catégorie reste une dépense.
+        // Les opérations retombent dans « Sans catégorie » (`ON DELETE SET NULL`),
+        // le budget part avec elle (`ON DELETE CASCADE`).
         await ctx.repo.deleteCategory(input.categoryId, ctx.workspaceId);
         ctx.audit({
             action: 'finance.categoryRemove',

@@ -1,27 +1,14 @@
--- « Gérer les canaux d'alerte » passe de l'espace à la fonctionnalité.
+-- « Gérer les canaux d'alerte » passe de l'espace à la fonctionnalité : la
+-- capacité `workspace.notifications` devient un champ `channels` sur chaque
+-- grant (`features[*].channels`), et disparaît.
 --
--- La capacité `workspace.notifications` accordait la gestion de TOUS les
--- canaux d'un coup. Depuis que chaque émetteur possède les siens (091), ce
--- bloc unique confiait l'astreinte d'Uptime avec le salon des sauvegardes. Le
--- droit devient un champ `channels` porté par chaque grant de fonctionnalité
--- du rôle (`features[*].channels`), et la capacité disparaît.
+-- Reprise : un rôle qui portait la capacité reçoit `channels: true` sur chacun
+-- de ses grants, les autres `channels: false`. Les droits d'hier sont ceux de
+-- demain.
 --
--- ## Ce que la reprise préserve
---
--- Un rôle qui portait la capacité gérait les canaux de toutes les
--- fonctionnalités qu'il voyait (les commandes exigeaient aussi la lecture de
--- la fonctionnalité propriétaire) : il reçoit `channels: true` sur chacun de
--- ses grants. Un rôle sans la capacité reçoit `channels: false` partout. Les
--- droits effectifs d'hier sont donc exactement ceux de demain.
---
--- ## Rejouabilité
---
--- Même armature que la 091 : phase A gardée sur l'absence de la colonne de
--- travail `notif_cap`, phase B gardée sur sa présence et composée
--- d'instructions idempotentes, la colonne tombant en dernier. La colonne fige
--- « le rôle portait la capacité » AVANT qu'on la retire du JSON : sans elle,
--- un rejeu relirait des capacités déjà nettoyées et écraserait `channels` à
--- false.
+-- Rejouable : même armature que la 091. La colonne de travail `notif_cap` fige
+-- « le rôle portait la capacité » AVANT qu'on la retire du JSON : sans elle, un
+-- rejeu relirait des capacités déjà nettoyées et écraserait `channels` à false.
 
 -- ── Phase A : la colonne de travail ─────────────────────────────────────────
 

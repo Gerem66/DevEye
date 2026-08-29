@@ -2,17 +2,12 @@ import type { LiveCursorKind } from '@deveye/types';
 import type { ReactNode } from 'react';
 
 /**
- * Le dessin de chaque état de curseur.
+ * Le dessin de chaque état de curseur. Sept formes tenues à la main plutôt
+ * qu'empruntées aux icônes du thème : un curseur doit se lire à seize pixels et
+ * garder la silhouette que tout le monde reconnaît d'un système à l'autre.
  *
- * Sept formes, tenues à la main plutôt qu'empruntées aux icônes du thème : un
- * curseur doit se lire à seize pixels **et** garder la silhouette que tout le
- * monde reconnaît d'un système à l'autre. Les icônes de l'interface, dessinées
- * pour des boutons, n'ont ni cette silhouette ni ce poids de trait.
- *
- * `hotspot` est le point du dessin qui doit tomber sur la position reçue — la
- * pointe pour une flèche, le doigt pour une main, le centre pour une barre de
- * texte. Sans lui, un curseur de texte serait décalé d'une demi-hauteur et
- * désignerait la mauvaise ligne.
+ * `hotspot` est le point du dessin qui doit tomber sur la position reçue : la
+ * pointe pour une flèche, le centre pour une barre de texte.
  */
 interface GlyphSpec {
     width: number;
@@ -61,10 +56,8 @@ export const CURSOR_GLYPHS: Record<LiveCursorKind, CursorGlyph> = withOffsets({
         shape: <path d='M1 1 L1 16.5 L5.2 12.6 L7.8 18.6 L10.6 17.4 L8 11.5 L13 11.2 Z' {...OUTLINE} />
     },
 
-    // Main de clic : index tendu, trois doigts repliés en bosses, pouce en coin.
-    // La silhouette est celle que tous les systèmes dessinent — c'est elle qu'on
-    // reconnaît, pas le détail — et elle tient en un seul tracé pour que le
-    // contour sombre en épouse le pourtour sans coutures internes.
+    // Main de clic, en un seul tracé pour que le contour sombre en épouse le
+    // pourtour sans coutures internes.
     pointer: {
         width: 16,
         height: 17.5,
@@ -108,7 +101,7 @@ export const CURSOR_GLYPHS: Record<LiveCursorKind, CursorGlyph> = withOffsets({
         )
     },
 
-    // Poing fermé : mêmes proportions, doigts repliés — la différence se lit.
+    // Poing fermé : mêmes proportions que `grab`, doigts repliés.
     grabbing: {
         width: 19,
         height: 18,

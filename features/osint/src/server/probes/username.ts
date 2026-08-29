@@ -1,22 +1,11 @@
-// Privilège de native rapatriée : le garde SSRF est partagé par toute l'app, pas propre au module.
+// Le garde SSRF est celui de l'app, partagé, pas propre au module.
 import { BROWSER_UA } from '@/Services/netFetch';
 import { field, mapLimit, tag, type OsintProbeAdapter, type OsintLink } from './shared';
 
 /**
- * Existence d'un pseudo sur une liste de sites curatés.
- *
- * ## Pourquoi une liste courte, et écrite à la main
- *
- * L'approche « Sherlock » (des centaines de sites) rend surtout du bruit : la
- * moitié des entrées sont périmées, beaucoup répondent `200` sur une page
- * d'erreur, et l'ensemble prend une minute. Une trentaine de sites vérifiés,
- * avec pour chacun la façon dont il signale l'absence, donne un résultat qu'on
- * peut croire — ce qui est tout l'intérêt.
- *
- * ## Ce que « trouvé » veut dire, et ne veut pas dire
- *
- * Que l'identifiant est **pris** sur ce site. Pas que c'est la même personne :
- * un pseudo courant est pris partout par des gens différents. La carte le dit.
+ * Existence d'un pseudo sur une liste courte de sites vérifiés : l'approche
+ * « Sherlock » (des centaines de sites) rend surtout du bruit. « Trouvé » veut
+ * dire que l'identifiant est pris, pas que c'est la même personne.
  */
 
 const SITE_TIMEOUT_MS = 5000;

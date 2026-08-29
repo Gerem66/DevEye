@@ -5,33 +5,18 @@ import { computeAgentUpdate, deviceRowToDevice } from './mappers';
 import { agentDistDir, readServedManifestCached } from './sync';
 
 /**
- * Ce qu'il faut pour répondre à « cet appareil m'est-il visible ? » : la base,
- * l'espace visé et le statut d'administrateur global. Un `FeatureContext` le
- * porte ; la façade du SDK (`features/_sdk/facade.ts`) aussi, sans session ni
- * socket, et c'est pour elle que la garde ne demande rien de plus.
+ * Ce qu'il faut pour décider si un appareil est visible : un `FeatureContext` le
+ * porte, la façade du SDK aussi, sans session ni socket.
  */
 export type DeviceScope = Pick<FeatureContext, 'db' | 'isAdmin' | 'workspaceId'>;
 
 /**
  * Charge un appareil que l'appelant a le droit d'atteindre, sinon lève.
  *
- * La frontière est **le partage** : un appareil se gère depuis n'importe quel
- * espace avec lequel il est partagé (`device_workspaces`), pas seulement depuis
- * celui où il a été appairé. C'est la seule définition de « cet appareil m'est
- * accessible » ; le transport (`agent.*`), la feature (`devices.*`) et la
- * façade du SDK passent tous par elle.
- *
- * Deux dérogations, et pas une de plus :
- * - l'administrateur global, parce que la page Appareils gère la flotte entière,
- *   y compris des machines d'espaces dont il n'est pas membre ;
- * - son espace **personnel**, où tous les appareils sont disponibles en
- *   permanence sans partage explicite : l'accueil d'un admin est sa vue de
- *   flotte.
- *
- * Le *niveau* de droit exigé (`devices: read` ou `write`, `admin`) n'est pas
- * décidé ici : chaque commande le déclare dans son `access`, appliqué par le
- * dispatcheur avant que le handler ne tourne. Cette fonction ne répond qu'à la
- * question « de quel appareil parle-t-on, et m'est-il visible ? ».
+ * La frontière est le partage (`device_workspaces`), pas l'espace d'appairage ;
+ * seule dérogation, l'administrateur global, qui gère la flotte entière. Le
+ * niveau de droit exigé n'est pas décidé ici : chaque commande le déclare dans
+ * son `access`.
  */
 export async function authorizeDevice(scope: DeviceScope, deviceId: string): Promise<DeviceRow> {
     const row = await scope.db.devices.findById(deviceId);

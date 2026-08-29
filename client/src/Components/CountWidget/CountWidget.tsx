@@ -6,41 +6,30 @@ import styles from './CountWidget.module.css';
 import { useActiveWorkspace } from '@/stores/workspace';
 
 /** Commands that return a plain `{ count }` for a workspace. Each doubles as
- *  its own invalidation key (see `invalidate`), so the card refreshes when the
- *  matching data changes. Only the `.count`-shaped resources qualify.
- *
- *  `uptime.count` porte le même suffixe mais rend `{ total, up, down }`, et a
- *  son propre magasin partagé (`features/uptime/src/client/store.ts`, chez le
- *  module) : l'exclure ici est ce qui garde
- *  ce composant sur une seule forme de réponse. `sentinel.count` est dans le
- *  même cas (magasin dans `features/sentinel/src/client/store.ts`) : il rend un
- *  décompte **par gravité**, parce que « trois constats » ne veut rien dire
- *  tant qu'on ne sait pas si l'un d'eux est critique. */
+ *  its own invalidation key (see `invalidate`). `uptime.count` et
+ *  `sentinel.count` rendent une autre forme (`{ total, up, down }`, un décompte
+ *  par gravité) et ont leur propre magasin : exclus. */
 type CountCommand =
     | Exclude<Extract<ResourceKey, `${string}.count`>, 'uptime.count' | 'sentinel.count'>
     // Un module externe déclare sa propre clé `.count` dans son manifest ; le
     // registre des commandes la connaît au chargement, pas ce type.
     | `x-${string}.count`
-    // Une commande de comptage au nom historique (`mail.accountCount`) : la
-    // même forme de réponse, `{ count }`, sous un autre nom.
+    // Une commande de comptage au nom historique (`mail.accountCount`), même
+    // forme de réponse.
     | `${string}.${string}Count`;
 
 export type CountState = { kind: 'loading' } | { kind: 'ready'; count: number };
 
 /**
  * Fetch a workspace item count over the WS, (re)fetching whenever the socket
- * opens. These commands are NOT gated by the password-encryption unlock, so the
- * result is a normal number even when the session is locked — no `locked` state,
- * no prompt. A transient send failure (socket not open yet, a drop) keeps the
- * last good value instead of collapsing into a misleading "0". It also
- * re-fetches when its resource is invalidated (e.g. a note/password created or
- * deleted), so the card stays in sync without a reload.
+ * opens or the resource is invalidated. Not gated by the password-encryption
+ * unlock, so the result is a normal number even when locked. A transient send
+ * failure keeps the last good value instead of collapsing into a misleading 0.
  */
 export function useWorkspaceCount(command: CountCommand): CountState {
     const workspace = useActiveWorkspace();
-    // Une commande de comptage au nom historique n'est pas une clé de ressource
-    // pour le type, mais elle en est une pour le bus : les natives rapatriées
-    // gardent leurs clés dans l'union, et un module externe déclare les siennes.
+    // Une commande au nom historique n'est pas une clé de ressource pour le
+    // type, mais elle en est une pour le bus.
     const version = useResourceVersion(command as ResourceKey);
     const [state, setState] = useState<CountState>({ kind: 'loading' });
 
@@ -78,25 +67,17 @@ interface CountWidgetProps {
     state: CountState;
     /** Singular noun, pluralized with a trailing "s" (e.g. "note" → "notes"). */
     noun: string;
-    /**
-     * Pluriel explicite, pour les mots que le « s » final ne suffit pas à
-     * accorder — « travail » → « travaux ». Le défaut couvre la quasi-totalité
-     * des cartes ; sans cette échappatoire, la seule issue serait de choisir un
-     * autre mot que le mot juste.
-     */
+    /** Pluriel explicite pour les mots que le « s » final n'accorde pas
+     *  (« travail » → « travaux »). */
     plural?: string;
     /** Secondary line shown under the count when there is at least one item. */
     hint: string;
     /** Secondary line shown when the count is zero. */
     empty: string;
     /**
-     * Teinte du nombre. `neutral` (défaut) = la couleur d'accent du thème, celle
-     * de **toutes** les cartes de comptage ; `danger` la passe en rouge.
-     *
-     * Optionnelle et rare à dessein : une carte qui alerte n'est justifiée que
-     * si l'ignorer coûte quelque chose. Le cas qui l'a introduite est celui des
-     * sauvegardes — un compteur affichant « 4 travaux » pendant que trois
-     * échouent depuis une semaine donnerait la sensation d'être couvert.
+     * Teinte du nombre : `neutral` (défaut) est l'accent du thème, `danger` le
+     * passe en rouge. Rare à dessein : une carte qui alerte n'est justifiée que
+     * si l'ignorer coûte quelque chose (des sauvegardes qui échouent).
      */
     tone?: 'neutral' | 'danger';
 }

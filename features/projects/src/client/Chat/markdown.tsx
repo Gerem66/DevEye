@@ -1,43 +1,19 @@
 import type { ReactNode } from 'react';
 
 /**
- * Le peu de markdown qu'un message de discussion mérite.
- *
- * Quatre marques en ligne et trois sortes de blocs, pas davantage : on écrit ici
- * des phrases et des listes de points, pas des documents. `features/notes` a son
- * propre moteur, plus riche (couleurs, barré) — il n'est pas réutilisé pour deux
- * raisons : il rend des **chaînes HTML**, et il lit `_` en paire double.
- *
- * Le rendu produit des **nœuds React**, jamais du HTML injecté. Ce n'est pas un
- * détail de style : le texte vient d'un autre membre de l'espace, et le faire
- * passer par `dangerouslySetInnerHTML` donnerait à quiconque écrit un message le
- * pouvoir d'exécuter du balisage chez ses lecteurs. Le seul balisage possible
- * ici est celui que ce fichier construit lui-même.
- *
- * Marques reconnues :
- *
- * | Écrit          | Rendu        |
- * |----------------|--------------|
- * | `**gras**`     | gras         |
- * | `*italique*`   | italique     |
- * | `_souligné_`   | souligné     |
- * | `# titre`      | titre (1 à 3 niveaux) |
- * | `- point`      | liste à puces |
- * | `1. point`     | liste numérotée |
+ * Le peu de markdown qu'un message de discussion mérite : `**gras**`,
+ * `*italique*`, `_souligné_`, titres `#` à `###`, listes à puces et numérotées.
+ * Le rendu produit des nœuds React et jamais du HTML injecté : le texte vient
+ * d'un autre membre de l'espace, `dangerouslySetInnerHTML` lui donnerait le
+ * pouvoir d'exécuter du balisage chez ses lecteurs. Le moteur de `features/notes`
+ * n'est pas réutilisable ici, il rend des chaînes HTML.
  */
 
 /**
- * Les trois marques en ligne, en une passe.
- *
- * L'ordre des alternatives compte : `**` doit être tenté avant `*`, sinon un
- * gras se lirait comme un italique vide suivi de texte. Les quantificateurs sont
- * paresseux pour que deux marques voisines ne fusionnent pas en une seule.
- *
- * Le `_` n'ouvre une marque **qu'aux limites d'un mot**, comme dans le markdown
- * de référence. Sans cette réserve, `assignee_user_id` — le genre de mot qui
- * circule tous les jours dans ces discussions — se lirait « assignee<u>user</u>id ».
- * L'astérisque n'a pas besoin de la même précaution : il n'apparaît pas au
- * milieu des identifiants.
+ * L'ordre des alternatives compte : `**` avant `*`, sinon un gras se lirait comme
+ * un italique vide suivi de texte. Les quantificateurs sont paresseux pour que
+ * deux marques voisines ne fusionnent pas. Le `_` n'ouvre une marque qu'aux
+ * limites d'un mot, sans quoi `assignee_user_id` se lirait « assignee<u>user</u>id ».
  */
 const INLINE_RE = /\*\*([\s\S]+?)\*\*|\*([\s\S]+?)\*|(?<![A-Za-z0-9])_([\s\S]+?)_(?![A-Za-z0-9])/;
 
@@ -78,13 +54,10 @@ const BULLET_RE = /^\s*[-*]\s+(.+)$/;
 const NUMBER_RE = /^\s*\d{1,3}[.)]\s+(.+)$/;
 
 /**
- * Découpe le message en blocs.
- *
- * Les tirets et les nombres sont reconnus **en début de ligne seulement**, ce
- * qui laisse `*italique*` et « 3. ok » au milieu d'une phrase tranquilles. Les
- * lignes d'un même paragraphe restent séparées par leur saut : c'est le
- * `white-space: pre-wrap` du conteneur qui les rend, et un message reste donc
- * fidèle à la façon dont il a été tapé.
+ * Découpe le message en blocs. Tirets et nombres ne sont reconnus qu'en début de
+ * ligne, ce qui laisse « 3. ok » tranquille au milieu d'une phrase. Les lignes
+ * d'un même paragraphe gardent leur saut : c'est le `white-space: pre-wrap` du
+ * conteneur qui les rend.
  */
 function parse(text: string): Block[] {
     const blocks: Block[] = [];
@@ -133,11 +106,8 @@ function parse(text: string): Block[] {
 }
 
 /**
- * Rend un message.
- *
- * `trailing` — la mention « (modifié) » — se colle à la fin du dernier
- * paragraphe plutôt que de vivre à part : posée après le dernier bloc, elle
- * tomberait à la ligne toute seule sous un message d'un mot.
+ * `trailing`, la mention « (modifié) », se colle à la fin du dernier paragraphe :
+ * posée après le dernier bloc, elle tomberait seule à la ligne.
  */
 export function renderMessage(text: string, trailing?: ReactNode): ReactNode[] {
     const blocks = parse(text);

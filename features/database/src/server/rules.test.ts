@@ -6,13 +6,8 @@ import type { DatabaseCondition, DatabaseRows } from '../contracts/domain';
 import { compare, isFiring, renderMessage, runConditions, type ConditionOutcome } from './rules';
 
 /**
- * L'évaluation d'une alerte, en fonctions pures.
- *
- * Ce qui mérite d'être tenu, c'est ce qui ne lève nulle part quand ça se
- * dérègle : une condition **qui n'a pas pu être mesurée ne franchit pas**
- * (en `and` elle empêche, en `or` elle n'entraîne pas), une condition en échec
- * n'interrompt pas les autres, et le message substitue les mesures par leur
- * nom court sans toucher à ce qu'il ne connaît pas.
+ * L'évaluation d'une alerte : une condition non mesurée ne franchit pas, une
+ * condition en échec n'interrompt pas les autres, le message substitue les mesures.
  */
 
 function condition(over: Partial<DatabaseCondition> = {}): DatabaseCondition {

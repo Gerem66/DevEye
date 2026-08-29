@@ -16,12 +16,8 @@ import {
 /**
  * Shared building blocks for the shortcut-preview adapters (one per file in this
  * folder). An adapter turns a URL into a normalized {@link ShortcutPreview}.
- *
- * Les primitives réseau elles-mêmes (garde SSRF, fetch bornés, extraction de
- * balises) vivent dans `Services/netFetch` : les sondes OSINT s'en servent
- * aussi, et un garde SSRF écrit deux fois est un garde qu'on corrigera une
- * fois. Elles sont réexportées ici pour que les adaptateurs de ce dossier
- * gardent un import unique.
+ * The network primitives live in `Services/netFetch` (shared with other
+ * callers) and are re-exported here so adapters keep a single import.
  */
 export {
     decodeEntities,

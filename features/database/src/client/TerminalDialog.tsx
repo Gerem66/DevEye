@@ -7,7 +7,7 @@ import { ResultDialog, ResultTable } from './ResultTable';
 import { formatCount } from './format';
 import styles from './style.module.css';
 
-/** Lignes montrées dans l'aperçu d'un résultat, au fil de l'historique. */
+/** Lignes montrées dans l'aperçu d'un résultat. */
 const PREVIEW_ROWS = 3;
 
 interface TerminalDialogProps {
@@ -15,56 +15,32 @@ interface TerminalDialogProps {
     databaseId: number;
     databaseName: string;
     onClose: () => void;
-    /** Une écriture a eu lieu : la page affichée n'est peut-être plus juste. */
+    /** Une écriture a eu lieu : la page affichée est peut-être périmée. */
     onWrote: () => void;
 }
 
-/** Une instruction passée, et ce qu'elle a donné. */
 interface Entry {
     sql: string;
     result: DatabaseExecution | null;
     error: string | null;
 }
 
-/** Reconnaît une lecture pour prévenir *avant* d'exécuter le reste. */
+/** Une lecture ne demande pas de confirmation. */
 function isRead(sql: string): boolean {
     return /^\s*(select|with|show|explain|describe|desc)\b/i.test(sql);
 }
 
 /**
- * Un terminal SQL sur la base.
- *
- * Ce que la grille de recherche ne sait pas exprimer — une jointure, un
- * `GROUP BY`, une correction ponctuelle — se tape ici. **Les écritures sont
- * acceptées** : refuser un `UPDATE` dans un terminal alors que l'explorateur en
- * propose par formulaire n'aurait aucun sens.
- *
- * Deux garde-fous, et seulement deux :
- *
- *  - **une instruction à la fois** — un copier-coller de trois instructions dont
- *    on ne visait que la première s'exécuterait en entier, sans qu'aucun écran
- *    n'ait montré les deux autres ;
- *  - une **confirmation** avant toute instruction qui n'est pas une lecture. Le
- *    reste appartient au compte de la base : c'est lui, en dernier ressort, qui
- *    accorde ou refuse.
- *
- * L'historique reste dans la popup, sans jamais quitter le navigateur : ce qu'on
- * tape sur une base de production n'a pas à être conservé par DevEye.
- *
- * ## L'historique ne montre que des aperçus
- *
- * Une requête qui rend quatre cents lignes les déroulait entières dans le fil,
- * poussant l'invite hors de l'écran et rendant illisible tout ce qui précédait.
- * Or ce qu'on attend d'un résultat *passé* tient en une ligne — combien, et à
- * quoi il ressemblait. Le fil en garde donc trois lignes, et le résultat complet
- * s'ouvre d'un clic dans un écran fait pour lui, avec tri et copie.
+ * Un terminal SQL sur la base, écritures comprises. Deux garde-fous : une
+ * instruction à la fois, et une confirmation avant toute instruction qui n'est
+ * pas une lecture. L'historique ne quitte jamais le navigateur et ne montre
+ * que des aperçus ; le résultat complet s'ouvre dans `ResultDialog`.
  */
 export function TerminalDialog({ open, databaseId, databaseName, onClose, onWrote }: TerminalDialogProps) {
     const [sql, setSql] = useState('');
     const [history, setHistory] = useState<Entry[]>([]);
     const [busy, setBusy] = useState(false);
     const [confirm, setConfirm] = useState<string | null>(null);
-    /** Le résultat ouvert en grand, s'il y en a un. */
     const [opened, setOpened] = useState<Entry | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -74,7 +50,7 @@ export function TerminalDialog({ open, databaseId, databaseName, onClose, onWrot
         setOpened(null);
     }, [open]);
 
-    // Le dernier résultat est celui qu'on attend : on l'amène sous les yeux.
+    // Le dernier résultat est amené sous les yeux.
     useEffect(() => {
         const box = scrollRef.current;
         if (box) box.scrollTop = box.scrollHeight;
@@ -101,8 +77,8 @@ export function TerminalDialog({ open, databaseId, databaseName, onClose, onWrot
     const submit = () => {
         const statement = sql.trim();
         if (statement === '' || busy) return;
-        // Une écriture se confirme. Pas une politesse : c'est le seul écran de
-        // DevEye d'où l'on peut vider une table d'un serveur de production.
+        // Une écriture se confirme : c'est le seul écran d'où l'on peut vider
+        // une table de production.
         if (isRead(statement)) void run(statement);
         else setConfirm(statement);
     };
@@ -159,9 +135,6 @@ export function TerminalDialog({ open, databaseId, databaseName, onClose, onWrot
                                             {formatCount(entry.result.rows.rows.length)} ligne
                                             {entry.result.rows.rows.length > 1 ? 's' : ''} · {entry.result.elapsedMs} ms
                                         </p>
-                                        {/* Un aperçu, cliquable en entier — et non un
-                                            tableau suivi d'un lien : la cible du geste
-                                            est ce qu'on regarde déjà. */}
                                         <div
                                             role='button'
                                             tabIndex={0}
@@ -198,8 +171,7 @@ export function TerminalDialog({ open, databaseId, databaseName, onClose, onWrot
                             placeholder='SELECT * FROM clients WHERE ville = &#39;Lyon&#39;'
                             onChange={(e) => setSql(e.target.value)}
                             onKeyDown={(e) => {
-                                // Entrée insère une ligne — une requête tient
-                                // rarement sur une seule. Ctrl/⌘+Entrée exécute.
+                                // Entrée insère une ligne ; Ctrl/⌘+Entrée exécute.
                                 if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                                     e.preventDefault();
                                     submit();

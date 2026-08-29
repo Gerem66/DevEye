@@ -28,26 +28,12 @@ import {
 } from '../_notifications';
 
 /**
- * Les canaux d'alerte, et les routes qui pointent dessus.
- *
- * ## Deux étages d'autorisation, et ils ne se confondent pas
- *
- * **Les canaux** appartiennent à leur fonctionnalité (091) : les gérer relève
- * du champ `channels` du grant de rôle sur CETTE fonctionnalité
- * (`ctx.assertChannels`, migration 093). L'adresse de l'astreinte d'Uptime ne
- * s'ouvre ni parce qu'on a confié le réglage d'Uptime, ni parce qu'on gère les
- * canaux des sauvegardes.
- *
- * **Les routes** relèvent de la fonctionnalité visée — `{ feature, level:
- * 'write' }`, résolu par commande depuis l'argument. Décider où Uptime écrit
- * fait partie du réglage d'Uptime.
- *
- * Aucun de ces contrôles ne peut être déclaré dans `access` : la fonctionnalité
- * visée est une **donnée d'entrée** (l'argument `feature`, ou celle du canal
- * visé par son id), pas une constante de la commande. Le dispatcheur ne peut
- * donc pas la vérifier avant le handler ; chaque handler la vérifie en première
- * ligne, pour la même raison que `devices.setConfig` : le contrôle dépend de ce
- * qu'on touche.
+ * Les canaux d'alerte, et les routes qui pointent dessus. Deux étages
+ * d'autorisation : les canaux appartiennent à leur fonctionnalité (champ
+ * `channels` du grant, `ctx.assertChannels`) ; les routes relèvent du droit
+ * d'écriture de la fonctionnalité visée. Aucun ne peut être déclaré dans
+ * `access` : la fonctionnalité visée est une donnée d'entrée, chaque handler
+ * la vérifie en première ligne.
  */
 
 /** La fonctionnalité propriétaire d'un canal, ou `not_found`. */
@@ -58,37 +44,19 @@ async function channelFeatureOf(ctx: FeatureContext, id: number): Promise<Notifi
 }
 
 /**
- * Le droit de régler où une fonctionnalité écrit.
- *
- * **Lecture** : le droit de lire la fonctionnalité suffit. Savoir vers quels
- * canaux elle pointe fait partie de la comprendre — et les canaux eux-mêmes ne
- * livrent pas leur adresse sans la gestion des canaux de la fonctionnalité.
- *
- * **Écriture** : le droit d'écriture de la fonctionnalité. Régler où Uptime
- * prévient est un réglage d'Uptime, ni plus ni moins — l'étage de « droits
- * fins » qui distinguait le routage de l'écriture a été essayé puis retiré.
- *
- * Vérifié ici et non déclaré dans `access` : la fonctionnalité visée est une
- * **donnée d'entrée**, que le dispatcheur ne connaît pas avant le handler.
+ * Le droit de régler où une fonctionnalité écrit : lire la fonctionnalité
+ * suffit pour lire sa route (les canaux ne livrent pas leur adresse pour
+ * autant), l'écrire pour la régler.
  */
 function assertRouteAccess(ctx: FeatureContext, feature: NotificationFeature, level: 'read' | 'write'): void {
     ctx.assertFeature(feature, level === 'write' ? 'write' : 'read');
 }
 
 /**
- * L'intitulé d'un élément, relu au moment de l'affichage.
- *
- * Sert à une seule chose : que la confirmation de suppression d'un canal nomme
- * ce qui va cesser de prévenir. Un module nomme ses éléments lui-même (entrée
- * `items` de son serveur, le nom déchiffré par le codec ouvert de l'espace
- * appelant) ; plus aucun émetteur natif n'a d'éléments depuis le rapatriement
- * des dernières features à éléments, et le `switch` qui lisait leurs blobs a
- * disparu avec elles.
- *
- * `null` n'est pas une erreur : un élément supprimé dont la route a survécu est
- * exactement ce que l'écran doit montrer comme « une cible disparue », et un
- * module externe dont les éléments ne sont pas lisibles d'ici garde une
- * confirmation générique.
+ * L'intitulé d'un élément, pour que la confirmation de suppression d'un canal
+ * nomme ce qui va cesser de prévenir. Un module nomme ses éléments lui-même
+ * (entrée `items`). `null` n'est pas une erreur : un élément supprimé dont la
+ * route a survécu est « une cible disparue ».
  */
 async function itemLabelOf(ctx: FeatureContext, feature: NotificationFeature, itemId: number): Promise<string | null> {
     const items = moduleItems(feature, ctx.db);
@@ -97,11 +65,8 @@ async function itemLabelOf(ctx: FeatureContext, feature: NotificationFeature, it
 }
 
 /**
- * L'espace où vit un élément — le sien, ou celui qui le projette ici.
- *
- * `ctx.workspaceId` par défaut : un élément inconnu de la table de projections
- * est chez lui, et les commandes qui le visent échoueront de toute façon plus
- * loin sur son absence.
+ * L'espace où vit un élément : le sien, ou celui qui le projette ici. Un
+ * élément inconnu de la table de projections est chez lui.
  */
 async function homeWorkspaceOf(ctx: FeatureContext, feature: NotificationFeature, itemId: number): Promise<number> {
     const share = await ctx.db.itemSharing.findShare(ctx.workspaceId, feature, itemId);
@@ -128,19 +93,13 @@ function testAlert(label: string) {
 }
 
 /**
- * La liste s'ouvre avec la lecture de la fonctionnalité, rien de plus.
- *
- * On ne peut pas router une fonctionnalité vers des destinations qu'on ne voit
- * pas. Ce que la gestion des canaux garde, c'est leur **contenu** :
- * `listChannels` vide `target` pour qui ne l'a pas, si bien qu'un membre voit
- * « Astreinte · e-mail », peut y router, et ne peut ni lire l'adresse ni la
- * modifier.
+ * La liste s'ouvre avec la lecture de la fonctionnalité : on ne route pas vers
+ * des destinations qu'on ne voit pas. La gestion des canaux garde leur contenu
+ * (`listChannels` vide `target` pour qui ne l'a pas).
  */
 const channelList = defineFeature({
     ...notifyChannelList,
     handler: async (ctx, input) => {
-        // Les canaux d'une feature se lisent avec elle (091) : voir ceux
-        // d'Uptime fait partie de lire Uptime, comme sa route.
         assertRouteAccess(ctx, input.feature, 'read');
         return { channels: await listChannels(ctx, input.feature) };
     }
@@ -196,9 +155,8 @@ const channelDelete = defineFeature({
     mutates: true,
     handler: async (ctx, input) => {
         ctx.assertChannels(await channelFeatureOf(ctx, input.id));
-        // Les liaisons partent en cascade. Une route laissée vide reste, et
-        // c'est sans conséquence depuis la 092 : vide ou absente, la cible est
-        // silencieuse ; la prochaine sélection écrite la réutilise ou l'efface.
+        // Les liaisons partent en cascade ; une route laissée vide est sans
+        // conséquence (vide ou absente, la cible est silencieuse).
         if (!(await ctx.db.notificationChannels.remove(input.id, ctx.workspaceId))) {
             throw new FeatureError('not_found', 'Canal introuvable');
         }
@@ -237,16 +195,11 @@ const routeGet = defineFeature({
     ...notifyRouteGet,
     handler: async (ctx, input) => {
         assertRouteAccess(ctx, input.feature, 'read');
-        // La route d'un élément **projeté** vit dans son espace d'origine : la
-        // lire ici rendrait une liste vide, et l'écran ferait croire qu'aucune
-        // alerte ne part alors qu'elles partent — vers des destinations qu'on
-        // n'a simplement pas à connaître.
+        // La route d'un élément projeté vit dans son espace d'origine : la lire
+        // ici ferait croire qu'aucune alerte ne part. Ses destinations sont
+        // rendues masquées (le genre, jamais l'adresse).
         const home = input.itemId ? await homeWorkspaceOf(ctx, input.feature, input.itemId) : ctx.workspaceId;
         const route = await getRoute(ctx, input.feature, input.itemId, home);
-        // Les destinations d'un élément projeté vivent dans son espace
-        // d'origine : sans elles, l'écran afficherait « aucun canal » sur un
-        // élément qui prévient bel et bien. Rendues masquées — le genre, jamais
-        // l'adresse.
         const managedHere = home === ctx.workspaceId;
         const foreign = managedHere ? [] : await foreignChannels(ctx, home, input.feature, route.channelIds);
         return { route, foreign, managedHere, homeWorkspaceId: home };
@@ -258,10 +211,9 @@ const routeSet = defineFeature({
     mutates: true,
     handler: async (ctx, input) => {
         assertRouteAccess(ctx, input.feature, 'write');
-        // Router un élément **projeté** vers des canaux d'ici est refusé : ces
-        // canaux appartiennent à cet espace, et l'ordonnanceur qui sonde
-        // l'élément tourne dans le sien — il ne les résoudrait pas. Un écran qui
-        // laisserait cocher produirait un réglage muet.
+        // Router un élément projeté vers des canaux d'ici est refusé :
+        // l'ordonnanceur qui sonde l'élément tourne dans son espace d'origine et
+        // ne les résoudrait pas.
         if (input.itemId) {
             const home = await homeWorkspaceOf(ctx, input.feature, input.itemId);
             if (home !== ctx.workspaceId) {
@@ -271,9 +223,8 @@ const routeSet = defineFeature({
                 );
             }
         }
-        // La sélection vit sur l'élément (092) : une route de fonctionnalité ne
-        // subsiste que pour les émetteurs sans éléments (Sentinelle). Sur les
-        // autres, elle ne viserait rien de nommable.
+        // La sélection vit sur l'élément : une route de fonctionnalité ne
+        // subsiste que pour les émetteurs sans éléments.
         if (input.itemId === undefined && featureDescriptor(input.feature).hasItems) {
             throw new FeatureError(
                 'validation',

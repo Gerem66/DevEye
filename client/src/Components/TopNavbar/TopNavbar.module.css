@@ -149,10 +149,9 @@
     white-space: nowrap;
 }
 
-/* Home-organization banner — text + "Terminer" as a single block, absolutely
-   centered in the navbar so it tracks the viewport centre regardless of the
-   left/right cluster widths. The container is click-through (so the profile /
-   status behind it stay reachable on overlap); only the button opts back in. */
+/* Home-organization banner, absolutely centered so it tracks the viewport
+   centre regardless of the side clusters. Click-through, only the button opts
+   back in. */
 .organizeBanner {
     position: absolute;
     left: 50%;
@@ -293,9 +292,7 @@
    dans ce que lit un lecteur d'écran. */
 .workspaceLabel {
     /* Un nom peut aller jusqu'à 64 caractères : sans plafond il repousse les
-       widgets de la barre. `min-width: 0` seul ne suffit pas — tant que la barre
-       a de la place, rien ne force le rétrécissement. L'attribut `title` porte le
-       nom entier. */
+       widgets, `min-width: 0` seul ne suffit pas. `title` porte le nom entier. */
     max-width: 18ch;
     min-width: 0;
     overflow: hidden;

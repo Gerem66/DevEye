@@ -24,30 +24,12 @@ type Editing = { credential: DeployCredential | null } | null;
 
 /**
  * Les accès Dokploy de l'espace : le panneau de l'onglet « Sources » des
- * réglages de la feature Déploiement.
+ * réglages de la feature. Mêmes formes que la liste des canaux de la section
+ * Notifications (rangées, dialogue empilé, confirmation), d'où `settingsStyles`.
  *
- * Il vivait dans la coquille (`sections/CredentialsPanel`, un `CredentialsKind`
- * par porte), partagé avec les jetons GitHub de Git : deux droits distincts
- * (lire des dépôts n'autorise pas à poser la clé qui met en production), mais
- * un seul geste. Le rapatriement du module a ramené sa porte chez lui, sur ses
- * propres commandes (`deploy.credential*`) et son propre contrat
- * (`DeployCredential`, sans `provider`) ; la coquille ne garde que Git.
- *
- * Rangées, dialogue d'ajout empilé et confirmation : les mêmes formes que la
- * liste des canaux de la section Notifications, exprès. C'est la rangée
- * canonique des réglages, d'où l'emprunt de sa feuille (`settingsStyles`), et
- * deux méthodes d'ajout dans une même popup étaient une de trop.
- *
- * Un secret n'est **jamais relu** : le serveur ne le renvoie pas. Le champ reste
- * donc vide à la ré-ouverture, et le laisser vide veut dire « garder celui en
- * place ». Une instance Dokploy est auto-hébergée : son adresse fait partie de
- * l'accès, et elle est obligatoire.
- *
- * Autonome, comme tous les panneaux de la coquille : il se charge, s'invalide
- * et se rafraîchit tout seul. Il suit `deploy.list` et non une clé à lui : un
- * accès retiré y rend des lignes orphelines, elle est déjà ce que le sujet
- * Live de la feature ravive, et les sélecteurs des dialogues d'élément
- * suivent par le même canal.
+ * Un secret n'est jamais relu : le champ reste vide à la ré-ouverture, et vide
+ * veut dire « garder celui en place ». L'adresse de l'instance est obligatoire.
+ * Autonome : il suit `deploy.list`, qu'un accès retiré rend orpheline.
  */
 export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
     const { data: credentials, error: loadError } = useResource(
@@ -64,11 +46,7 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
     const [error, setError] = useState<string | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
-    /**
-     * Un accès qui change touche la liste (une cible orpheline le dit) et la
-     * fiche ouverte (« accès retiré, déclenchement impossible ») : les deux se
-     * relisent, sans attendre le sujet Live.
-     */
+    /** Un accès qui change touche la liste (cible orpheline) et la fiche ouverte (« accès retiré »). */
     const changed = () => invalidate('deploy.list', 'deploy.detail');
 
     const openForm = (credential: DeployCredential | null) => {
@@ -135,8 +113,6 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                     setBusy(true);
                     try {
                         await api.send('deploy.credentialRemove', { credentialId: credential.id });
-                        // Un accès retiré rend ses cibles orphelines : la
-                        // liste de la feature doit le dire sans attendre.
                         changed();
                     } catch (e) {
                         setError(humanizeError(e, 'Le retrait a échoué.'));
@@ -257,8 +233,7 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                         <span className={shell.fieldLabel}>
                             {editing?.credential ? 'Nouvelle clé d’API (facultatif)' : 'Clé d’API'}
                         </span>
-                        {/* `enableShowHideButton` : un secret se relit une fois à
-                            la saisie, jamais après. */}
+                        {/* Un secret se relit une fois à la saisie, jamais après. */}
                         <TextInput
                             type='password'
                             enableShowHideButton

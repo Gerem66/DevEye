@@ -11,60 +11,28 @@ import {
 } from '@deveye/types/sdk/server';
 
 /**
- * Chiffrement des archives de sauvegarde.
+ * Scellement des archives au format `DEVB` v2 de CloudSync
+ * (`@deveye/types/sdk/server`, `devb.ts`) : un seul outil de restauration.
  *
- * ## Le format est celui de CloudSync, délibérément
- *
- * `DEVB` v2 : en-tête (magic + version + nonce de base), puis des blocs de
- * 1 Mio scellés en AES-256-GCM, nonce dérivé du compteur, AAD portant le rang et
- * le marqueur de fin. Réécrire un second format aurait produit un second
- * outil de restauration à tenir à jour, et c'est exactement le genre de dette
- * qu'on découvre le jour où on doit s'en servir. Le format vit dans le SDK
- * (`@deveye/types/sdk/server`, `devb.ts`), seul endroit que deux modules
- * partagent ; voir sa description complète et la raison de chacun de ses
- * champs là-bas.
- *
- * ## La clé, en revanche, n'est PAS celle de CloudSync
- *
- * La BMK de CloudSync est tirée au premier démarrage puis rangée, *wrappée*,
- * dans la table `sync_meta`. Ce serait un piège mortel ici : la sauvegarde de la
- * base contient `sync_meta`, donc la clé qui déchiffre l'archive dormirait à
- * l'intérieur de l'archive. Le jour où on la restaure — c'est-à-dire le jour où
- * la base a disparu — on n'aurait aucun moyen de l'ouvrir.
- *
- * La clé de sauvegarde est donc **dérivée**, jamais stockée :
- *
- *     BAK = HKDF-SHA256(serverKey, salt = 'deveye-backup', info = 'v1', 32)
- *
- * `serverKey` est lui-même un condensé de `CRYPT_KEY_A`/`CRYPT_KEY_B`, qui
- * vivent dans l'environnement. Deux conséquences, l'une heureuse et l'autre à
- * garder en tête :
- *
- *  - restaurer ne demande que les deux variables d'environnement et
- *    `scripts/restore-backup.mjs`. Aucune base, aucun DevEye vivant ;
- *  - **`CRYPT_KEY_A`/`CRYPT_KEY_B` sont la sauvegarde.** Les perdre transforme
- *    toutes les archives scellées en bruit. Elles se rangent là où on range une
- *    clé, pas à côté des archives.
+ * La clé n'est PAS la BMK de CloudSync, rangée dans `sync_meta` donc à
+ * l'intérieur de la sauvegarde de la base. Elle est dérivée, jamais stockée :
+ * BAK = HKDF-SHA256(serverKey, salt 'deveye-backup', info 'v1'). Restaurer ne
+ * demande que CRYPT_KEY_A/CRYPT_KEY_B et `scripts/restore-backup.mjs` ; les
+ * perdre transforme toutes les archives scellées en bruit.
  */
 
 const BACKUP_KEY_SALT = 'deveye-backup';
 const BACKUP_KEY_INFO = 'v1';
 
-/**
- * La clé de scellement des archives. Purement dérivée : rien à stocker. La
- * dérivation est celle du SDK (`keys.derive`, HKDF-SHA256 sur la clé serveur),
- * et `scripts/restore-backup.mjs` la refait à l'identique sans DevEye.
- */
+/** Dérivée par le SDK (`keys.derive`) ; `scripts/restore-backup.mjs` la refait à l'identique. */
 export function backupKey(keys: SdkServerKeys): Buffer {
     return Buffer.from(keys.derive(BACKUP_KEY_SALT, BACKUP_KEY_INFO, 32));
 }
 
 /**
- * Scelle un flux de clair en flux `DEVB` v2.
- *
- * Le découpage d'entrée n'a aucune importance : on ré-agrège nous-mêmes en blocs
- * de {@link BLOB_CHUNK_BYTES}, parce qu'un bloc de taille variable rendrait la
- * relecture impossible — l'ouvreur compte les blocs pour retrouver leur rang.
+ * Scelle un clair en `DEVB` v2. Ré-agrège en blocs de {@link BLOB_CHUNK_BYTES}
+ * quel que soit le découpage d'entrée : l'ouvreur compte les blocs pour
+ * retrouver leur rang.
  */
 export async function* sealStream(key: Buffer, source: AsyncIterable<Buffer>): AsyncGenerator<Buffer> {
     const header = createBlobHeader();
@@ -93,13 +61,7 @@ export async function* sealStream(key: Buffer, source: AsyncIterable<Buffer>): A
     yield sealChunk(key, nonce, index, Buffer.concat(pending, pendingLen), true);
 }
 
-/**
- * Ouvre un flux `DEVB` v2 et rend le clair.
- *
- * Lève dès qu'un bloc ne s'authentifie pas — contenu modifié, blocs
- * réordonnés, ou archive coupée avant sa fin. Une sauvegarde qu'on ne peut pas
- * prouver intacte n'en est pas une, donc jamais de lecture tolérante ici.
- */
+/** Ouvre un flux `DEVB` v2. Lève dès qu'un bloc ne s'authentifie pas : jamais de lecture tolérante. */
 export async function* openSealedStream(key: Buffer, source: AsyncIterable<Buffer>): AsyncGenerator<Buffer> {
     let buffer: Buffer = Buffer.alloc(0);
     let nonce: Buffer | null = null;
@@ -125,9 +87,8 @@ export async function* openSealedStream(key: Buffer, source: AsyncIterable<Buffe
             nonce = parsed.nonce;
         }
 
-        // On garde toujours de quoi former un dernier bloc : tant qu'il reste
-        // exactement `BLOB_CHUNK_SEALED` octets, on ne peut pas savoir s'ils
-        // sont un bloc intermédiaire ou le bloc final — et l'AAD diffère.
+        // Garder de quoi former un dernier bloc : à exactement `BLOB_CHUNK_SEALED`
+        // octets, on ne sait pas s'il est intermédiaire ou final, et l'AAD diffère.
         while (buffer.length > BLOB_CHUNK_SEALED) {
             const sealed = take(BLOB_CHUNK_SEALED);
             if (sealed === null) break;

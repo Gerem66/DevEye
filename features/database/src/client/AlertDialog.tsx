@@ -11,7 +11,7 @@ interface AlertDialogProps {
     databaseId: number;
     /** L'alerte modifiée ; `null` = on en crée une. */
     alert: DatabaseAlert | null;
-    /** La surveillance est-elle active sur cette base ? Sinon l'alerte est inerte. */
+    /** Sans surveillance active, l'alerte est inerte. */
     monitorEnabled: boolean;
     onClose: () => void;
     onSaved: () => void;
@@ -25,13 +25,11 @@ const EMPTY_CONDITION: DatabaseCondition = {
     label: 'mesure'
 };
 
-/** Les deux façons de relier les conditions, en segments : deux choix fixes. */
 const COMBINATORS: { value: DatabaseCombinator; label: string; title: string }[] = [
     { value: 'and', label: 'Toutes (ET)', title: 'Toutes les conditions sont remplies' },
     { value: 'or', label: 'Au moins une (OU)', title: 'Au moins une condition est remplie' }
 ];
 
-/** Le résultat d'un essai, condition par condition. */
 interface TestResult {
     firing: boolean;
     values: (number | null)[];
@@ -40,18 +38,8 @@ interface TestResult {
 }
 
 /**
- * Écrire une alerte : des conditions, un opérateur, un message.
- *
- * Le bouton **« Essayer »** est le cœur de cet écran, pas un extra. Une
- * condition est une requête SQL dont on ne connaît pas le résultat avant de
- * l'avoir lancée : sans essai à blanc, on choisirait un seuil à l'aveugle et
- * l'on découvrirait son erreur par une notification, la nuit. L'essai n'écrit
- * rien et ne notifie personne.
- *
- * Ouvert depuis l'onglet Alertes des réglages de la base
- * (`DatabaseAlertsPanel`), et de là seulement : la fiche montre l'état des
- * alertes, la coquille de réglages les écrit. La suppression vit dans la zone
- * danger de ce dialogue, comme pour la base elle-même.
+ * Écrire une alerte : conditions, opérateur, message. L'essai à blanc n'écrit
+ * rien et ne notifie personne : c'est ce qui permet de choisir un seuil.
  */
 export function AlertDialog({ open, databaseId, alert, monitorEnabled, onClose, onSaved, onRemove }: AlertDialogProps) {
     const [name, setName] = useState('');
@@ -188,8 +176,7 @@ export function AlertDialog({ open, databaseId, alert, monitorEnabled, onClose, 
                                 </label>
                                 <label className={styles.fieldNarrow}>
                                     <span className={styles.label}>Comparaison</span>
-                                    {/* Six comparateurs : un de trop pour une rangée de
-                                        segments, le déroulant reste le bon outil. */}
+                                    {/* Six comparateurs : un de trop pour des segments. */}
                                     <SelectInput
                                         value={condition.comparator}
                                         onChange={(e) => patch(i, { comparator: e.target.value as DatabaseComparator })}

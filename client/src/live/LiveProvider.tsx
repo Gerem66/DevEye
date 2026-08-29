@@ -8,26 +8,18 @@ import { useHideLiveCursors } from './hideCursors';
 import { useWorkspaceState } from '@/stores/workspace';
 
 /**
- * Le cycle de vie de la présence, et la **surface** des curseurs.
+ * Le cycle de vie de la présence, et la surface à laquelle les coordonnées d'un
+ * curseur se rapportent.
  *
- * ## La surface
+ * Cette surface ne peut pas être un nœud appartenant à une feature :
+ * `FeatureKeepAlive` déplace son conteneur entre le corps de la popup et un
+ * support caché, et `WidgetPopup` recrée son élément de défilement à chaque
+ * ouverture. C'est donc le corps de la popup, ou la zone de contenu de l'accueil
+ * quand rien n'est ouvert ; deux pairs n'échangeant de curseurs qu'au même
+ * chemin, ils ont forcément la même.
  *
- * Les coordonnées d'un curseur n'ont de sens que rapportées à un cadre commun.
- * Ce cadre ne peut pas être un nœud appartenant à une feature :
- * `FeatureKeepAlive` déplace physiquement le conteneur d'une feature entre le
- * corps de la popup et un support caché, et `WidgetPopup` recrée son élément de
- * défilement à chaque ouverture — aucune identité ne survit.
- *
- * La surface est donc **le corps de la popup**, que l'accueil détient déjà dans
- * son état, ou **la zone de contenu de l'accueil** quand rien n'est ouvert. Comme
- * deux pairs n'échangent de curseurs que s'ils sont au **même chemin**, ils ont
- * forcément la même surface logique : le cas « feature garée dans un support
- * `display: none` » ne peut pas se produire.
- *
- * ## Les unités
- *
- * `x` relatif à la largeur, `y` en pixels absolus du contenu — voir
- * `liveCursorSchema` dans @deveye/types pour le pourquoi de ce mélange.
+ * `x` est relatif à la largeur, `y` en pixels absolus du contenu : voir
+ * `liveCursorSchema` dans @deveye/types.
  */
 
 const SurfaceContext = createContext<HTMLElement | null>(null);
@@ -45,28 +37,24 @@ export function LiveProvider({ surface, children }: { surface: HTMLElement | nul
     const hidden = useHideLiveCursors();
 
     useEffect(() => {
-        // La reconnexion est prise en charge par le store lui-même ; ce qu'il ne
-        // peut pas voir sans dépendre de React, c'est la bascule d'espace — d'où
-        // cette époque, la même qui sert déjà de clé de remontage aux features.
+        // Le store prend en charge la reconnexion ; ce qu'il ne peut pas voir sans
+        // dépendre de React, c'est la bascule d'espace, d'où cette époque.
         refreshLive();
     }, [epoch]);
 
     const lastSentAt = useRef(0);
     const frame = useRef<number | null>(null);
     /**
-     * Le dernier point vu, **brut**. Rien n'est calculé ici : `pointermove` peut
-     * dépasser la centaine d'événements par seconde, alors qu'on n'en émet que
-     * vingt. La conversion et surtout la lecture du curseur effectif — qui
-     * interroge la mise en page — attendent la vidange.
+     * Le dernier point vu, brut : `pointermove` dépasse la centaine d'événements
+     * par seconde là où on n'en émet que vingt, donc la conversion et la lecture du
+     * curseur effectif, qui interroge la mise en page, attendent la vidange.
      */
     const lastPoint = useRef<{ x: number; y: number; buttons: number } | null>(null);
     const hadCursor = useRef(false);
 
-    // La coupure est **réciproque** : qui masque les curseurs des autres cesse
-    // aussi d'émettre le sien. C'est la sortie de cet effet qui la rend
-    // immédiate — au moment où le drapeau passe à vrai, React démonte l'exécution
-    // précédente, dont le nettoyage envoie déjà `cursor: null`. Les pairs nous
-    // perdent donc dans le même tic, sans une ligne de plus.
+    // La coupure est réciproque : qui masque les curseurs des autres cesse d'émettre
+    // le sien. Le nettoyage de cet effet, joué dès que le drapeau passe à vrai,
+    // envoie déjà `cursor: null` : les pairs nous perdent dans le même tic.
     useEffect(() => {
         if (!surface || hidden) return;
 
@@ -79,9 +67,9 @@ export function LiveProvider({ surface, children }: { surface: HTMLElement | nul
             if (point) {
                 const rect = surface.getBoundingClientRect();
                 if (rect.width > 0 && rect.height > 0) {
-                    // Les coordonnées peuvent sortir de la surface — marges de la
-                    // popup, bords de l'écran — et c'est voulu : on est toujours
-                    // sur la même page, le curseur doit continuer d'exister.
+                    // Les coordonnées peuvent sortir de la surface (marges de la
+                    // popup, bords de l'écran) et c'est voulu : on est toujours sur
+                    // la même page, le curseur doit continuer d'exister.
                     cursor = {
                         x: (point.x - rect.left) / rect.width,
                         y: point.y - rect.top + surface.scrollTop,
@@ -100,9 +88,8 @@ export function LiveProvider({ surface, children }: { surface: HTMLElement | nul
         };
 
         const onMove = (e: PointerEvent): void => {
-            // Souris seulement : un doigt n'a pas de position au repos, et un
-            // curseur qui se fige là où quelqu'un a tapé se lit comme une
-            // présence qui n'existe plus.
+            // Souris seulement : un doigt n'a pas de position au repos, et un curseur
+            // figé là où quelqu'un a tapé se lit comme une présence qui n'existe plus.
             if (e.pointerType !== 'mouse') return;
             lastPoint.current = { x: e.clientX, y: e.clientY, buttons: e.buttons };
             schedule();
@@ -115,10 +102,8 @@ export function LiveProvider({ surface, children }: { surface: HTMLElement | nul
         };
 
         window.addEventListener('pointermove', onMove, { passive: true });
-        // Effacé quand le pointeur quitte la **fenêtre**, jamais la surface : le
-        // faire sur la surface était ce qui donnait l'impression que le curseur
-        // d'un pair « disparaissait sur les côtés » alors qu'il était encore là,
-        // simplement dans la marge de la popup.
+        // Effacé quand le pointeur quitte la fenêtre, jamais la surface : sur la
+        // surface, un pair dans la marge de la popup semblerait avoir disparu.
         document.documentElement.addEventListener('pointerleave', clear);
         // Un onglet caché ne doit pas laisser un curseur immobile chez les autres.
         document.addEventListener('visibilitychange', clear);

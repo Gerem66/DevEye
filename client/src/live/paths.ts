@@ -1,11 +1,6 @@
 /**
- * La règle de comparaison de deux lieux, isolée du rendu.
- *
- * Elle tient en une question : **où nos chemins se séparent-ils ?** Tout le
- * comportement visible en découle — quel nœud s'entoure, et lequel ne s'entoure
- * pas. La sortir du hook la rend lisible d'un coup d'œil et vérifiable
- * directement, ce qui compte pour une règle dont chaque cas a une conséquence à
- * l'écran.
+ * La règle de comparaison de deux lieux, isolée du rendu : où nos chemins se
+ * séparent-ils ? Quel nœud s'entoure en découle entièrement.
  */
 
 /**
@@ -15,15 +10,12 @@
  * |---|---|
  * | il prolonge mon chemin | le segment juste sous moi |
  * | il est dans un nœud voisin du mien | ce nœud-là |
- * | nos chemins sont identiques | `null` — on se voit par les curseurs |
- * | il est en amont de moi | `null` — il est derrière moi, rien à désigner |
+ * | nos chemins sont identiques | `null`, on se voit par les curseurs |
+ * | il est en amont de moi | `null`, rien à désigner |
  *
- * Le cas « nœud voisin » n'est pas un raffinement : sans lui, un dossier de mail
- * ne se surlignait jamais. Ouvrir une boîte sélectionne d'office la boîte de
- * réception, donc on est toujours déjà **dans** un dossier — jamais au niveau
- * au-dessus, seule position où la règle « son chemin commence par le mien »
- * aurait pu s'appliquer. Même chose pour Monitoring, qui sélectionne d'office le
- * premier appareil.
+ * Le cas « nœud voisin » est indispensable : une feature qui sélectionne d'office
+ * son premier élément place toujours ses visiteurs dedans, jamais au niveau
+ * au-dessus, seule position où « son chemin commence par le mien » s'appliquerait.
  */
 export function divergingSegment(mine: readonly string[], peer: readonly string[]): string | null {
     let depth = 0;

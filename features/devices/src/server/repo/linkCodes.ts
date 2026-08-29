@@ -9,10 +9,9 @@ export interface LinkCode {
 }
 
 /**
- * La table `device_link_codes`, côté émission : ce qu'un administrateur crée,
- * relit, retouche et révoque depuis la page Appareils. La consommation d'un
- * code (l'enrôlement, `POST /api/agent/enroll`) reste au socle : c'est une
- * route publique, sans session, et elle écrit `devices` dans la foulée.
+ * La table `device_link_codes`, côté émission. La consommation d'un code
+ * (l'enrôlement, `POST /api/agent/enroll`) reste au socle : route publique,
+ * sans session.
  */
 export interface LinkCodeRepo {
     create(input: {
@@ -47,13 +46,10 @@ function toLinkCode(row: LinkCodeRow): LinkCode {
 }
 
 function randomCode(): string {
-    // Human-typable: 8 unambiguous base32-ish chars, grouped (XXXX-XXXX).
-    //
-    // Tiré cryptographiquement, comme tout secret ici : ce code est la seule
-    // pièce d'identité qui enrôle une machine dans un espace, et `Math.random`
-    // n'est pas imprévisible. `randomInt` fait lui-même le rejet d'échantillon,
-    // donc l'alphabet de 31 symboles reste uniforme malgré sa taille non
-    // puissance de deux.
+    // Human-typable: 8 unambiguous chars, grouped (XXXX-XXXX). Tiré
+    // cryptographiquement : ce code enrôle une machine dans un espace.
+    // `randomInt` fait le rejet d'échantillon, l'alphabet de 31 symboles reste
+    // uniforme.
     const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
     let raw = '';
     for (let i = 0; i < 8; i++) raw += alphabet[randomInt(alphabet.length)];

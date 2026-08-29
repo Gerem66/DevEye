@@ -21,20 +21,12 @@ interface UptimeLinksProps {
 }
 
 /**
- * Les services surveillés que ce projet rattache.
+ * Les services surveillés que ce projet rattache, dans l'onglet Déploiement :
+ * c'est là qu'on se demande si ce qui vient d'être livré tient debout.
  *
- * Ils vivent dans l'onglet Déploiement, et nulle part ailleurs : c'est
- * l'endroit où l'on se demande si ce qui vient d'être livré tient debout, donc
- * l'endroit où « est-ce en ligne ? » est la question suivante. Un panneau
- * générique posé sur tous les onglets, comme l'ancien « Liens DevEye »,
- * répondait à cette question partout, c'est-à-dire nulle part.
- *
- * **Chaque feature garde ses droits.** Le serveur ne rend que des identifiants ;
- * les noms et les états viennent de la liste du module Uptime, lue par son
- * contrat client (`listServices`, au nom de l'utilisateur). Un membre sans
- * accès à Uptime voit donc qu'il y a des services rattachés, sans pouvoir les
- * nommer, plutôt que de les voir disparaître. Module absent : même lecture,
- * des identifiants nus, et une phrase qui le dit.
+ * Le serveur ne rend que des identifiants ; les noms et les états viennent de
+ * la liste du module Uptime, lue au nom de l'utilisateur. Sans accès à Uptime,
+ * ou sans le module, les services se listent en identifiants nus.
  */
 export function UptimeLinks({ projectId, canWrite, foreign = false }: UptimeLinksProps) {
     const permissions = useWorkspacePermissions();

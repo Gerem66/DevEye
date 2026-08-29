@@ -3,14 +3,7 @@ import { SENTINEL_RULES, type Finding, type FindingSeverity } from '../contracts
 import { formatDuration } from './format';
 import styles from './style.module.css';
 
-/**
- * Les constats, groupés par gravité, le pire en tête.
- *
- * Le tri vient du serveur (`severity DESC, last_seen DESC`) ; on ne fait que le
- * découper en sections. Regrouper côté client sur une liste déjà triée évite de
- * refaire le tri et garantit que l'ordre affiché est celui que la commande a
- * produit, deux tris qui se croiseraient finiraient par diverger.
- */
+/** Groupés par gravité, le pire en tête. Le tri vient du serveur ; on ne fait que découper en sections. */
 
 const SEVERITY_ORDER: FindingSeverity[] = ['critical', 'high', 'low', 'info'];
 
@@ -35,16 +28,8 @@ export function severityClass(severity: FindingSeverity): string {
 }
 
 /**
- * Depuis combien de temps la situation dure, ou `null` si ça n'a pas de sens.
- *
- * Remplace le décompte d'occurrences qui s'affichait ici. Le nombre était juste
- * mais informait mal : pour une condition vraie en permanence, il n'est que la
- * durée divisée par la cadence de relevé. Un constat de posture revu chaque heure
- * annonçait « constaté 300 fois », ce qui se lisait comme trois cents problèmes
- * plutôt que comme un problème vieux de quelques jours.
- *
- * `null` en deçà de la minute : un constat qui vient d'apparaître n'a pas de
- * durée à montrer, et `first_seen == last_seen` au premier relevé.
+ * Depuis combien de temps la situation dure. Un décompte d'occurrences se
+ * lisait comme autant de problèmes. `null` sous la minute.
  */
 export function persistedFor(finding: Pick<Finding, 'firstSeen' | 'lastSeen'>): string | null {
     const span = finding.lastSeen - finding.firstSeen;
@@ -128,9 +113,7 @@ export default function FindingsList({ findings, selectedId, onSelect, showDevic
                                                 {persisted !== null && (
                                                     <span
                                                         className={styles.chip}
-                                                        // Une durée se lit tout de suite, là où « ×300 » se
-                                                        // lisait comme trois cents problèmes distincts. Le
-                                                        // décompte brut reste dans l'infobulle.
+                                                        // Le décompte brut reste dans l'infobulle.
                                                         title={`Situation vue sans interruption depuis ${persisted} (${finding.occurrences} relevés)`}
                                                         aria-label={`Présent depuis ${persisted}`}
                                                     >

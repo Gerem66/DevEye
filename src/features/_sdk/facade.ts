@@ -21,10 +21,9 @@ import { pushAgentConfig, sdkHub } from './host';
 import { agentDistDir, readServedManifestCached } from '@/agent/sync';
 
 /**
- * La façade des natives : le SEUL chemin d'un module vers les données des
+ * La façade des natives : le seul chemin d'un module vers les données des
  * autres features. Chaque méthode vérifie d'abord que le manifest déclare la
- * capacité correspondante : la déclaration n'est pas une politesse, c'est ce
- * qu'un administrateur lit avant d'installer le module.
+ * capacité correspondante, ce qu'un administrateur lit avant d'installer.
  */
 export interface FacadeDeps {
     db: Database;
@@ -63,9 +62,8 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
             async send(alert, opts) {
                 gate('notify');
                 const routed = await resolveRoute(deps.db, cipher, deps.workspaceId, feature, opts?.itemId);
-                // Un canal dont le message vivant a conclu a déjà tout dit :
-                // lui renvoyer l'avis en texte afficherait deux fois la même
-                // chose (le suivi d'un déploiement).
+                // Un canal dont le message vivant a conclu a déjà tout dit : lui
+                // renvoyer l'avis en texte afficherait deux fois la même chose.
                 const except = new Set(opts?.except ?? []);
                 const channels = routed.filter((c) => !except.has(c.id));
                 if (!hasChannel(channels)) return false;
@@ -75,9 +73,8 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
                         subject: alert.subject,
                         body: alert.body,
                         payload: alert.payload ?? { feature: deps.manifest.id },
-                        // La mise en page Discord du module, quand il en a une :
-                        // `deliver` ne s'en sert que sur un canal Discord, le
-                        // texte reste ce que reçoivent les autres.
+                        // `deliver` ne s'en sert que sur un canal Discord ; le texte
+                        // reste ce que reçoivent les autres.
                         embeds: alert.embeds ? [...alert.embeds] : undefined
                     },
                     deps.logger
@@ -86,16 +83,14 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
             async liveChannels(opts) {
                 gate('notify');
                 const routed = await resolveRoute(deps.db, cipher, deps.workspaceId, feature, opts?.itemId);
-                // Discord seul sait modifier ce qu'il a déjà envoyé (voir
-                // `Services/discord.ts`) : ce sont les canaux d'un message qui
-                // se met à jour du début à la fin.
+                // Discord seul sait modifier ce qu'il a déjà envoyé
+                // (`Services/discord.ts`).
                 return discordChannels(routed).map((c) => ({ id: c.id }));
             },
             async postLive(channelId, message, messageId) {
                 gate('notify');
-                // Un canal de LA feature du module, dans SON espace : la
-                // résolution par identifiant ignore la feature, la ligne est
-                // relue pour la vérifier avant de publier quoi que ce soit.
+                // Un canal de la feature du module, dans son espace : la
+                // résolution par identifiant ignore la feature, d'où la relecture.
                 const row = await deps.db.notificationChannels.findById(channelId, deps.workspaceId);
                 if (!row || row.feature !== feature) return null;
                 const [channel] = discordChannels(
@@ -112,11 +107,8 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
         mail: {
             async listAccounts() {
                 gate('mail.accounts');
-                // Le contrat du module Mail (`MAIL_TRANSPORT_PROVIDER`), le même
-                // que lit `Services/notifications.ts` : les expéditeurs prêts,
-                // c'est-à-dire les comptes de l'étage ouvert (un compte gardé
-                // n'est pas lisible sans session, et un module n'a pas à
-                // savoir qu'il existe) et actifs. Sans module Mail, aucun.
+                // Le contrat du module Mail : les expéditeurs prêts, comptes de
+                // l'étage ouvert et actifs. Sans module Mail, aucun.
                 const transport = deps.providers.get<MailTransportProvider>(MAIL_TRANSPORT_PROVIDER);
                 if (!transport) return [];
                 return transport.listSenders(deps.workspaceId);
@@ -125,9 +117,8 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
         workspaces: {
             async list() {
                 gate('workspaces.read');
-                // La capacité dit ce que le module PEUT demander ; l'appelant
-                // doit encore être l'administrateur global : la liste de tous
-                // les espaces n'appartient à aucun membre.
+                // La capacité dit ce que le module peut demander ; l'appelant doit
+                // encore être l'administrateur global.
                 if (!deps.isAdmin) throw new FeatureError('forbidden', 'Réservé à l’administrateur');
                 const rows = await deps.db.workspaces.listAll();
                 return rows.map((w) => ({ id: w.id, name: w.name, kind: w.kind, ownerUserId: w.owner_user_id }));
@@ -143,29 +134,21 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
                     userId: u.id,
                     name: u.username,
                     isOwner: u.id === deps.ownerUserId,
-                    // La couleur du compte, celle de sa présence en direct :
-                    // un module qui montre une personne la montre de la même
-                    // couleur que partout ailleurs. Vide sur un compte jamais
-                    // colorié : `null`, et l'appelant retombe sur
-                    // `defaultUserColor`, comme l'app.
+                    // Vide sur un compte jamais colorié : `null`, et l'appelant
+                    // retombe sur `defaultUserColor`, comme l'app.
                     color: u.color || null
                 }));
             }
         },
         devices: {
             // La garde unique des appareils (`agent/authorize.ts`), celle du
-            // transport et de la feature : la ligne doit exister ET appartenir
-            // à CET espace, l'admin global passant outre l'appartenance. Elle
-            // ne demande que la base, l'espace et le statut, ce que la façade
-            // porte sans session ni socket.
+            // transport et de la feature.
             async authorize(deviceId) {
                 gate('devices.read');
                 return toSdkDevice(await authorizeDevice(deps, deviceId));
             },
             // Même règle que `devices.list` : l'administrateur dans son espace
-            // PERSONNEL voit la flotte entière (c'est là qu'il surveille ses
-            // machines, et l'obliger à se partager chaque appareil à lui-même
-            // n'aurait rien protégé) ; partout ailleurs, le partage explicite.
+            // personnel voit la flotte entière ; partout ailleurs, le partage explicite.
             async list() {
                 gate('devices.read');
                 const rows =
@@ -199,10 +182,9 @@ export function toSdkDevice(row: DeviceRow): SdkDevice {
 }
 
 /**
- * La télémétrie des appareils, lue à l'instant : la liste de processus la plus
- * proche et la ligne de métriques qui l'accompagne, exactement ce que le moteur
- * Sentinelle lisait en dur. Et l'épinglage d'un instant, pour que la rétention
- * n'efface jamais la preuve d'un constat.
+ * La télémétrie des appareils, lue à l'instant (la liste de processus la plus
+ * proche et sa ligne de métriques), et l'épinglage d'un instant pour que la
+ * rétention n'efface jamais la preuve d'un constat.
  */
 export function createTelemetry(db: Database, gate: () => void): SdkTelemetry {
     return {
@@ -221,8 +203,7 @@ export function createTelemetry(db: Database, gate: () => void): SdkTelemetry {
         async pinInstant(deviceId, ts) {
             gate();
             // Les deux tables en une seule instruction : une preuve à moitié
-            // épinglée est une preuve dont la liste de processus disparaît à
-            // la purge suivante.
+            // épinglée perd sa liste de processus à la purge suivante.
             await db.metrics.setInstantsPinned(deviceId, ts, ts, true);
         }
     };
@@ -230,9 +211,7 @@ export function createTelemetry(db: Database, gate: () => void): SdkTelemetry {
 
 /**
  * La façade agents : chaque appel vérifie la capacité puis délègue au hub,
- * résolu à l'invocation (le hub se dépose au boot, après le chargement des
- * modules). Noms et sémantique du hub, à l'identique : c'est ce qui a permis
- * au moteur rapatrié de troquer sa poignée sans changer une ligne de logique.
+ * résolu à l'invocation (il se dépose au boot, après le chargement des modules).
  */
 export function agentsFacade(gate: () => void): AgentsFacade {
     return {
@@ -242,9 +221,7 @@ export function agentsFacade(gate: () => void): AgentsFacade {
         requestDestroy: (deviceId) => (gate(), sdkHub().requestDestroy(deviceId)),
         disconnectAgent: (deviceId) => (gate(), sdkHub().disconnectAgent(deviceId)),
         resetAgentSession: (deviceId) => (gate(), sdkHub().resetAgentSession(deviceId)),
-        // Le manifest des binaires servis (version, cibles signées) : ce que la
-        // flotte lit pour signaler un agent à mettre à jour. La distribution
-        // elle-même (`/api/agent/download/*`, `self-update`) reste à l'app.
+        // Le manifest des binaires servis ; la distribution elle-même reste à l'app.
         servedManifest: () => (gate(), readServedManifestCached(agentDistDir())),
         requestSyncConfig: (deviceId, payload) => (gate(), sdkHub().requestSyncConfig(deviceId, payload)),
         requestSyncScan: (deviceId, payload) => (gate(), sdkHub().requestSyncScan(deviceId, payload)),
@@ -257,9 +234,8 @@ export function agentsFacade(gate: () => void): AgentsFacade {
         requestSyncDelete: (deviceId, payload) => (gate(), sdkHub().requestSyncDelete(deviceId, payload)),
         publishSyncProgress: (payload) => (gate(), sdkHub().publishSyncProgress(payload)),
         publishSyncState: (payload) => (gate(), sdkHub().publishSyncState(payload)),
-        // Les ordres de fichiers de l'explorateur, offerts tels quels : c'est
-        // ce qui fait d'une machine enrôlée une destination de sauvegarde
-        // sans rien changer à l'agent.
+        // Les ordres de fichiers de l'explorateur : ce qui fait d'une machine
+        // enrôlée une destination de sauvegarde.
         requestFilesMutate: (deviceId, payload) => (gate(), sdkHub().requestFilesMutate(deviceId, payload)),
         requestFilesUpload: (deviceId, payload) => (gate(), sdkHub().requestFilesUpload(deviceId, payload)),
         awaitFilesOp: (opId, timeoutMs) => (gate(), sdkHub().awaitFilesOp(opId, timeoutMs)),

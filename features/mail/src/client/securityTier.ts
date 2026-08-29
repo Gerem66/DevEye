@@ -1,10 +1,8 @@
 import type { MailSecurityTier } from '../contracts/domain';
 
 /**
- * Le palier d'une boîte, dit au même endroit pour les deux surfaces qui le
- * proposent : le formulaire de création (le palier sous lequel la boîte naît)
- * et l'onglet Chiffrement de ses réglages (son changement). Une seule
- * définition, pour que les deux disent la même chose du même choix.
+ * Le palier d'une boîte, défini une fois pour les deux surfaces qui le
+ * proposent : le formulaire de création et l'onglet Chiffrement des réglages.
  */
 export const SECURITY_TIER_LABEL: Record<MailSecurityTier, string> = {
     open: 'Ouvert',

@@ -3,11 +3,8 @@ import { wmoIcon } from './wmoIcon';
 import styles from './Weather.module.css';
 
 /**
- * Le mini-widget de topbar : la température de la ville principale.
- *
- * Aucune prop, c'est le contrat : tout ce qu'il montre vient du magasin du
- * module, donc des commandes weather.*, autorisées côté serveur contre les
- * droits de l'appelant. L'hôte fournit le cadre et le titre.
+ * Aucune prop, c'est le contrat : tout vient du magasin du module, donc des
+ * commandes weather.* autorisées côté serveur. L'hôte fournit le cadre et le titre.
  */
 export default function WeatherTopbarWidget() {
     const { report } = useWeather();

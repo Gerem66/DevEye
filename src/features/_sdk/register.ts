@@ -54,9 +54,8 @@ function sdkQueryable(q: Queryable): SdkQueryable {
 }
 
 /**
- * Enregistre les modules installés. Appelée une fois, au chargement du
- * registre : toute violation lève et empêche le démarrage, comme les
- * sentinelles historiques (`buildTopicIndex`, `assertAccessDeclared`).
+ * Enregistre les modules installés, une fois, au chargement du registre :
+ * toute violation lève et empêche le démarrage.
  */
 export function registerModules(installed: readonly InstalledFeatureModule[]): void {
     for (const mod of installed) {
@@ -68,14 +67,13 @@ export function registerModules(installed: readonly InstalledFeatureModule[]): v
         if ((manifest.nativeCapabilities ?? []).includes('notify') && !manifest.notifies) {
             throw new Error(`Module « ${manifest.id} » : la capacité 'notify' exige notifies: true`);
         }
-        // Projeter suppose que l'app sache où vit un élément : sans l'entrée
-        // `items`, l'onglet Partage cocherait et `share.set` répondrait
-        // « introuvable ». Refusé au boot plutôt que découvert à l'écran.
+        // Projeter suppose que l'app sache où vit un élément (`items`) :
+        // refusé au boot plutôt que découvert à l'écran.
         if (manifest.shareTier !== 'never' && !mod.server.items) {
             throw new Error(`Module « ${manifest.id} » : shareTier '${manifest.shareTier}' exige server.items`);
         }
-        // Une native rapatriée (Météo) garde son descripteur dans le registre
-        // publié : seuls les ids externes s'enregistrent ici.
+        // Une native migrée a déjà son descripteur dans le registre publié :
+        // seuls les ids externes s'enregistrent ici.
         if (isExternalFeatureId(manifest.id)) registerExternalFeature(externalDescriptorOf(manifest));
         let repo: { value: unknown } | null = null;
         const registered: RegisteredModule = {
@@ -103,11 +101,8 @@ export function moduleManifest(featureId: string): FeatureManifest | undefined {
 
 /**
  * Les définitions natives issues des modules, prêtes pour `featureHandlers`.
- *
- * Chaque commande est gardée par le droit de SA feature (niveau déclaré,
- * `read` par défaut), puis par ses extras : le dispatcheur applique la
- * première, l'enveloppe applique les seconds, le handler ne voit que le
- * contexte SDK.
+ * Chaque commande est gardée par le droit de sa feature (`read` par défaut),
+ * appliqué par le dispatcheur, puis par ses extras, appliqués ici.
  */
 export function moduleFeatureHandlers(): FeatureDefinition<string, never, never>[] {
     return MODULES.flatMap((mod) =>
@@ -117,10 +112,8 @@ export function moduleFeatureHandlers(): FeatureDefinition<string, never, never>
                 input: def.input as never,
                 output: def.output as never,
                 access: { feature: mod.manifest.id, level: def.access?.level ?? 'read' },
-                // Un booléen bat le sujet du module ; une liste nomme les
-                // sujets (les siens, un secondaire du manifest, celui d'une
-                // autre feature dont les écrans reflètent cette donnée) :
-                // `buildTopicIndex` refuse au boot un sujet inconnu.
+                // Un booléen bat le sujet du module ; une liste nomme les sujets,
+                // que `buildTopicIndex` valide au boot.
                 mutates: def.mutates === true ? true : def.mutates ? (def.mutates as readonly LiveTopic[]) : undefined,
                 handler: async (ctx, input) => {
                     // L'administrateur global, en plus du droit de feature :
@@ -146,9 +139,8 @@ export function moduleMigrationDirs(): { id: string; dir: string }[] {
 
 /**
  * Ce que l'app sait des éléments d'un module (domicile, intitulé), lié à son
- * repo : les commandes transversales de partage et de routage de notification
- * y passent avant leur `switch` natif. `undefined` pour une native non migrée
- * ou un module sans éléments.
+ * repo, pour le partage et le routage de notification. `undefined` pour une
+ * feature sans `items`.
  */
 export function moduleItems(
     featureId: string,
@@ -183,10 +175,8 @@ export function isModuleShareWired(featureId: string): boolean {
 }
 
 /**
- * Les services créés, gardés pour les regards transverses : les hooks agent
- * (`moduleAgentHooks`) et les contrats offerts (`moduleProvider`) se lisent
- * dessus à la demande, jamais à la construction, pour que l'ordre de boot ne
- * compte pas.
+ * Les services créés : hooks agent et contrats offerts se lisent dessus à la
+ * demande, jamais à la construction, pour que l'ordre de boot ne compte pas.
  */
 const SERVICES: { manifest: FeatureManifest; service: FeatureService; logger: ModuleServiceHost['logger'] }[] = [];
 
@@ -220,11 +210,9 @@ export function createModuleServices(host: ModuleServiceHost): FeatureService[] 
 }
 
 /**
- * L'agrégat des hooks agent des modules qui déclarent la capacité 'agents' :
- * la couche socket agent appelle ceci sans savoir quels modules existent.
- * Chaque hook est isolé : un module qui trébuche sur une trame ne prive pas
- * les autres, ni la couche socket ; la trame est perdue pour lui, et ça se
- * lit dans le journal.
+ * L'agrégat des hooks agent des modules qui déclarent la capacité 'agents'.
+ * Chaque hook est isolé : un module qui trébuche sur une trame ne prive ni
+ * les autres ni la couche socket.
  */
 export function moduleAgentHooks(): Required<FeatureAgentHooks> {
     const each = (hook: keyof FeatureAgentHooks, run: (hooks: FeatureAgentHooks) => void | Promise<void>): void => {
@@ -257,11 +245,8 @@ export function moduleAgentHooks(): Required<FeatureAgentHooks> {
 
 /**
  * Le contrat nommé qu'un module offre, à l'app comme aux autres modules (voir
- * @deveye/types/sdk/providers) : recherche à l'appel, `undefined` quand
- * personne n'offre la clé, et c'est à l'appelant de dégrader proprement. Une
- * clé n'a qu'un offreur possible (sentinelle de `createModuleServices`).
- * Depuis le rapatriement de Projets, l'app n'offre plus aucun contrat
- * elle-même : tout provider vient du service d'un module.
+ * @deveye/types/sdk/providers) : `undefined` quand personne n'offre la clé,
+ * à l'appelant de dégrader proprement. Une clé n'a qu'un offreur possible.
  */
 export function moduleProvider<T>(key: string): T | undefined {
     for (const s of SERVICES) {
@@ -272,16 +257,10 @@ export function moduleProvider<T>(key: string): T | undefined {
 }
 
 /**
- * Valide les `extras` d'une liste de grants contre les manifests installés.
- *
- * Trois cas, trois traitements :
- *  - feature au manifest connu : chaque clé doit exister dans ses
- *    `extraPermissions`, avec une valeur du bon type (et, pour un choix, une
- *    des options) ;
- *  - feature sans manifest (native pas encore migrée) : aucun extra admis ;
- *  - feature externe INCONNUE (module retiré) : le grant passe tel quel, il
- *    est inerte tant que rien ne porte cet id, et le rejeter casserait
- *    l'édition d'un rôle qui n'y touche pas.
+ * Valide les `extras` d'une liste de grants contre les manifests installés :
+ * chaque clé doit exister dans les `extraPermissions` du manifest, avec une
+ * valeur du bon type. Une feature externe inconnue (module retiré) passe telle
+ * quelle : rejeter casserait l'édition d'un rôle qui n'y touche pas.
  */
 export function validateGrantExtras(
     grants: readonly { feature: string; extras: Record<string, boolean | string> }[]
@@ -311,11 +290,7 @@ export function validateGrantExtras(
     }
 }
 
-/**
- * Les chemins publics que les modules ont déclarés, pour le délégateur CORS
- * de l'app : ces routes-là sont faites pour être atteintes d'ailleurs, et
- * c'est la seule chose que l'app a besoin d'en savoir.
- */
+/** Les chemins publics déclarés par les modules, pour le délégateur CORS de l'app. */
 const PUBLIC_PATHS = new Set<string>();
 
 export function isModulePublicPath(url: string): boolean {
@@ -325,13 +300,9 @@ export function isModulePublicPath(url: string): boolean {
 
 /**
  * Monte les routes publiques des modules (capacité `'routes.public'`) sur un
- * écouteur : l'app elle-même, et la surface publique quand elle existe. Le
- * module déclare les mêmes routes à chaque appel ; c'est l'écouteur qui
- * change. Un module qui offre `publicRoutes` sans déclarer la capacité est
- * refusé ici, comme une façade non déclarée le serait à l'appel : ouvrir une
- * porte ne se fait pas en douce. Pas de session, journal silencieux (ce sont
- * des balises, à la cadence des visites), plafond de débit par route quand
- * le module en demande un.
+ * écouteur : l'app elle-même, et la surface publique quand elle existe. Sans
+ * la capacité déclarée, refus : ouvrir une porte ne se fait pas en douce. Pas
+ * de session, journal silencieux, plafond de débit par route à la demande.
  */
 export function modulePublicRoutes(app: FastifyInstance, listener: 'app' | 'public'): void {
     for (const s of SERVICES) {
@@ -346,17 +317,15 @@ export function modulePublicRoutes(app: FastifyInstance, listener: 'app' | 'publ
             opts: SdkPublicRouteOptions,
             handler: SdkPublicHandler
         ) => {
-            // Une route qui n'a de sens que depuis l'origine de l'app (un
-            // téléchargement à ticket, un retour OAuth) ne s'ouvre pas sur la
-            // surface publique : ce port n'expose que ce qui doit l'être.
+            // Une route qui n'a de sens que depuis l'origine de l'app (ticket,
+            // retour OAuth) ne s'ouvre pas sur la surface publique.
             if ((opts.exposure ?? 'everywhere') === 'app' && listener === 'public') return;
             PUBLIC_PATHS.add(path);
             const route: RouteShorthandOptions = { logLevel: 'silent' };
             if (opts.rateLimit) route.config = { rateLimit: opts.rateLimit };
             // Deux branches plutôt qu'un `app[method]` : l'union des deux
-            // signatures ne se résout pas contre le gestionnaire (la surcharge
-            // WebSocket de `get` prend le dessus). La requête et la réponse de
-            // Fastify satisfont structurellement la surface promise au SDK.
+            // signatures ne se résout pas (la surcharge WebSocket de `get`
+            // prend le dessus).
             if (method === 'get') app.get(path, route, (req, reply) => handler(req, reply));
             else app.post(path, route, (req, reply) => handler(req, reply));
         };
@@ -370,8 +339,7 @@ export function modulePublicRoutes(app: FastifyInstance, listener: 'app' | 'publ
 
 /**
  * Les sujets live que les modules installés peuvent battre : leur id et leurs
- * sujets secondaires (`manifest.topics`). Lu par le filet de démarrage des
- * sujets (`_topics.ts`) pour valider une liste `mutates` ; lu à l'appel, jamais
+ * sujets secondaires (`manifest.topics`). Lu à l'appel par `_topics.ts`, jamais
  * au chargement, pour que l'ordre des imports ne compte pas.
  */
 export function moduleTopics(): readonly string[] {

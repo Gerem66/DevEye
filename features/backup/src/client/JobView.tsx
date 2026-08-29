@@ -24,14 +24,7 @@ interface JobViewProps {
     running: boolean;
 }
 
-/**
- * La fiche d'un travail : ses réglages en tête, son historique en dessous.
- *
- * L'historique est **la** raison d'ouvrir cette fiche. Une sauvegarde ne se juge
- * pas sur sa configuration mais sur ce qu'elle a réellement produit : une
- * cadence quotidienne dont la dernière archive date de trois semaines est un
- * travail cassé, quoi que dise son formulaire.
- */
+/** La fiche d'un travail : ses réglages en tête, son historique en dessous. */
 export default function JobView({ job, canWrite, onBack, onEdit, onRun, running }: JobViewProps) {
     const { data: runs, error } = useResource(
         'backup.detail',
@@ -42,17 +35,12 @@ export default function JobView({ job, canWrite, onBack, onEdit, onRun, running 
 
     return (
         <div className={styles.detail}>
-            {/* Retour, titre, actions : une seule rangée, la même que dans les
-                fiches des autres features. La suppression vit dans le dialogue
-                de modification, comme pour une cible ou un dépôt. */}
             <div className={styles.detailHead}>
                 <Button variant='ghost' icon='arrow-left' onClick={onBack}>
                     Travaux
                 </Button>
                 <h2 className={styles.detailTitle}>
                     {job.name}
-                    {/* Sans cette pastille, rien ne distingue un travail local
-                        d'une fenêtre sur l'espace voisin. */}
                     {job.foreign && (
                         <span title='Ce travail appartient à un autre espace qui le partage ici'>
                             {' '}
@@ -71,19 +59,13 @@ export default function JobView({ job, canWrite, onBack, onEdit, onRun, running 
                             {running ? 'En cours…' : 'Sauvegarder'}
                         </Button>
                     )}
-                    {/* `!job.foreign` : la destination et la source d'un travail
-                        se choisissent parmi les objets de SON espace ; le
-                        serveur le refuse, l'écran ne le propose donc pas.
-                        Sauvegarder, lui, reste permis : c'est tout l'objet de
-                        la projection. */}
+                    {/* Un travail projeté se modifie chez lui (le serveur le
+                        refuse d'ici) ; le sauvegarder reste permis. */}
                     {canWrite && !job.foreign && (
                         <Button variant='secondary' icon='edit' onClick={onEdit}>
                             Modifier
                         </Button>
                     )}
-                    {/* Les réglages **de ce travail** : la forme de ses archives,
-                        ses propres canaux ou ceux des Sauvegardes tant qu'il les
-                        suit, son partage. */}
                     <FeatureSettingsButton
                         scope={{ kind: 'item', feature: 'backup', itemId: job.id, itemLabel: job.name }}
                     />
@@ -134,10 +116,8 @@ export default function JobView({ job, canWrite, onBack, onEdit, onRun, running 
                                 </p>
                                 {run.artifact && !run.pruned && <p className={styles.runPath}>{run.artifact}</p>}
                                 {run.error && <p className={styles.rowError}>{run.error}</p>}
-                                {/* Le condensé est du **clair**, avant scellement :
-                                    c'est lui qui permet de vérifier une
-                                    restauration sans faire confiance à la
-                                    destination. */}
+                                {/* Condensé du clair, avant scellement : vérifie une
+                                    restauration sans faire confiance à la destination. */}
                                 {run.checksum && <p className={styles.runHash}>sha256 : {run.checksum}</p>}
                             </div>
                             <span className={styles.runAgo}>{formatAgo(run.startedAt)}</span>

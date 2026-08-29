@@ -38,17 +38,9 @@ import {
 
 /**
  * Sauvegardes : les destinations de l'espace et les travaux qui y écrivent.
- *
- * Feature d'espace de premier rang, comme Git, Bases de données, Déploiement et
- * Audience. Une destination appartient à l'espace, pas à ce qu'elle sauvegarde :
- * le même Raspberry Pi reçoit le vidage d'une base **et** l'archive d'un partage
- * CloudSync sans qu'on ait à déclarer son chemin deux fois.
- *
- * Aucune de ces commandes ne demande de session déverrouillée : tout est à
- * l'étage ouvert, faute de quoi rien ne pourrait partir la nuit.
+ * Tout est à l'étage ouvert : aucune commande ne demande de session
+ * déverrouillée.
  */
-
-// ---------------------------------------------------------- destinations
 
 const destinationListFeature = defineSdkFeature({
     ...backupDestinationList,
@@ -60,12 +52,8 @@ const destinationListFeature = defineSdkFeature({
 });
 
 /**
- * Valide la cohérence d'une destination **avant** de l'écrire.
- *
- * Le contrat zod ne peut pas l'exprimer : les champs obligatoires dépendent du
- * genre, et une union discriminée aurait imposé trois formulaires à l'écran là
- * où il n'y en a qu'un dont les champs apparaissent. La règle vit donc ici,
- * énoncée une fois, et rend une phrase que l'utilisateur peut corriger.
+ * Les champs obligatoires dépendent du genre, ce que le contrat zod n'exprime
+ * pas sans imposer trois formulaires à l'écran.
  */
 function assertDestinationShape(input: {
     kind: string;
@@ -89,9 +77,8 @@ function assertDestinationShape(input: {
     }
 
     if (input.kind === 'local') {
-        // Validé à l'enregistrement et pas seulement à l'écriture : découvrir un
-        // chemin refusé au premier passage nocturne, c'est une nuit sans
-        // sauvegarde pour une faute de frappe.
+        // Validé à l'enregistrement : découvrir un chemin refusé au premier
+        // passage nocturne, c'est une nuit sans sauvegarde.
         try {
             safeRelPath(input.path);
         } catch (e) {
@@ -123,9 +110,8 @@ const destinationAddFeature = defineSdkFeature({
             throw new FeatureError('validation', 'Une destination S3 exige sa clé secrète.');
         }
         if (input.kind === 'device') {
-            // L'appartenance de l'appareil à l'espace est vérifiée ici et pas
-            // ailleurs : sans ce contrôle, on pourrait écrire des archives sur
-            // la machine d'un autre espace en devinant un identifiant.
+            // Sans ce contrôle, on écrirait des archives sur la machine d'un
+            // autre espace en devinant un identifiant.
             const devices = await ctx.deveye.devices.list();
             if (!devices.some((d) => d.id === input.deviceId)) {
                 throw new FeatureError('not_found', "Cet appareil n'appartient pas à cet espace.");
@@ -211,10 +197,8 @@ const destinationRemoveFeature = defineSdkFeature({
     mutates: true,
     handler: async (ctx: Ctx, input) => {
         await loadDestination(ctx, input.destinationId);
-        // La clé étrangère des travaux cascade (elle cascadait par l'espace de
-        // toute façon) : c'est ICI que le refus se décide, en disant *combien*
-        // de travaux bloquent, plutôt que d'effacer en silence la configuration
-        // de quelqu'un ou de laisser remonter une erreur SQL.
+        // Le refus se décide ici, en disant combien de travaux bloquent, plutôt
+        // que de laisser la clé étrangère cascader en silence.
         const uses = await ctx.repo.countJobsUsing(input.destinationId);
         if (uses > 0) {
             throw new FeatureError(
@@ -231,9 +215,7 @@ const destinationRemoveFeature = defineSdkFeature({
             description: 'Destination de sauvegarde retirée',
             metadata: { destinationId: input.destinationId }
         });
-        // Les archives déjà écrites ne sont pas touchées : DevEye a produit des
-        // fichiers chez quelqu'un d'autre, et ranger sa configuration ne doit
-        // jamais les détruire.
+        // Les archives déjà écrites ne sont pas touchées : ranger sa configuration ne détruit rien.
         return { destinationId: input.destinationId };
     }
 });
@@ -248,15 +230,12 @@ const destinationTestFeature = defineSdkFeature({
         requireEngine().probeDestination(await loadDestination(ctx, input.destinationId))
 });
 
-// ---------------------------------------------------------------- travaux
-
 const jobListFeature = defineSdkFeature({
     ...backupJobList,
     access: { level: 'read' },
     handler: async (ctx: Ctx) => {
         const rows = await ctx.repo.listVisibleJobs(ctx.workspaceId);
-        // Les travaux qu'une restriction masque pour ce rôle disparaissent de
-        // la liste plutôt que d'y figurer grisés.
+        // Un travail masqué pour ce rôle disparaît de la liste plutôt que d'y figurer grisé.
         const hidden = await ctx.items.restrictions();
         const visible = rows.filter((r) => hidden.get(r.id) !== 'none');
         const shares = await ctx.sharing.scope();
@@ -268,10 +247,8 @@ const countFeature = defineSdkFeature({
     ...backupCount,
     access: { level: 'read' },
     handler: async (ctx: Ctx) => {
-        // Les mêmes lignes que la liste, projetées comprises, restrictions
-        // déduites : la carte doit compter ce que la liste montre, et un échec
-        // survenu chez le voisin sur un travail qu'on regarde d'ici mérite
-        // autant le rouge qu'un échec local.
+        // Les mêmes lignes que la liste, projetées comprises : la carte compte ce
+        // que la liste montre.
         const rows = await ctx.repo.listVisibleJobs(ctx.workspaceId);
         const hidden = await ctx.items.restrictions();
         const visible = rows.filter((r) => hidden.get(r.id) !== 'none' && r.enabled === 1);
@@ -386,9 +363,8 @@ const jobUpdateFeature = defineSdkFeature({
             scheduleDay: input.scheduleDay,
             keepLast: input.keepLast,
             encryption: input.encryption,
-            // Recalculée à chaque modification : changer l'heure sans déplacer
-            // l'échéance laisserait le travail partir à l'ancienne jusqu'au
-            // lendemain, ce que personne n'attend.
+            // Recalculée : changer l'heure sans déplacer l'échéance ferait partir
+            // le travail à l'ancienne jusqu'au lendemain.
             nextRunAt: nextRunAt(
                 input.schedule,
                 input.enabled,
@@ -445,9 +421,8 @@ const jobRunFeature = defineSdkFeature({
     mutates: true,
     access: { level: 'write' },
     handler: async (ctx: Ctx, input) => {
-        // Déclencher depuis une fenêtre est permis : le moteur lit tout (clé,
-        // destination, historique) depuis l'espace du travail
-        // (`job.workspace_id`), jamais depuis l'espace de l'appelant.
+        // Permis depuis une fenêtre : le moteur lit tout depuis l'espace du
+        // travail, jamais depuis celui de l'appelant.
         const engine = requireEngine();
         const job = await loadJob(ctx, input.jobId, 'write');
         const cipher = await (await ctx.sharing.scope()).cipherFor(job.id);
@@ -482,9 +457,7 @@ const sourcesFeature = defineSdkFeature({
             }
         ];
 
-        // Les bases viennent de leur feature par son contrat : elle seule sait
-        // les nommer (le nom vit chiffré sous son codec). Sans le contrat, la
-        // source disparaît simplement du sélecteur.
+        // Sans le contrat de Bases de données, la source disparaît du sélecteur.
         const databases = databaseProvider(ctx);
         for (const row of databases ? await databases.listDatabases(ctx.workspaceId) : []) {
             candidates.push({
@@ -497,9 +470,8 @@ const sourcesFeature = defineSdkFeature({
             });
         }
 
-        // CloudSync est un module : sans lui, la source disparaît de la liste
-        // (les travaux persistés qui la visent échoueront avec un message clair
-        // au run).
+        // Sans le module CloudSync, la source disparaît ; les travaux persistés
+        // qui la visent échoueront au run avec un message clair.
         const cloudSync = cloudSyncProvider(ctx);
         const shares = cloudSync ? await cloudSync.listShares(ctx.workspaceId) : [];
         for (const share of shares) {

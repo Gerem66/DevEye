@@ -7,18 +7,10 @@ import type { BaselineRow, FindingDraft } from './repo';
 import { authRules, evaluateReport, evaluateSnapshot, persistenceRules, processKey, type EvalContext } from './rules';
 
 /**
- * Vérification du catalogue de règles de Sentinelle.
- *
- * On fabrique des instants, on regarde ce que les règles rendent. Aucune base,
- * aucun agent, aucun réseau : c'est tout l'intérêt d'avoir gardé les règles
- * **pures**. Ces trente et une vérifications sont celles de l'ancien
- * `scripts/check-rules.ts` de l'app (lancé par `npm run ci:rules`), devenues un
- * test du module au rapatriement : mêmes cas, mêmes libellés, mêmes attendus.
- *
- * Ce que ça protège, concrètement : une règle de détection qui cesse de se
- * déclencher ne casse rien, ne lève rien, et ne se voit nulle part, la feature
- * a simplement l'air calme. C'est le pire mode de panne possible pour un
- * détecteur, et le seul filet contre lui est ici.
+ * Des instants fabriqués, ce que les règles en rendent : ni base, ni agent, ni
+ * réseau, les règles sont pures. Une règle qui cesse de se déclencher ne casse
+ * rien et ne se voit nulle part, la feature a simplement l'air calme : le seul
+ * filet contre ce mode de panne est ici.
  */
 
 function expectRules(drafts: FindingDraft[], expected: string[]): void {
@@ -361,10 +353,8 @@ describe('Règles de posture', () => {
 
 describe('Séparation des cadences', () => {
     // Le rapport arrive une fois par heure, l'instant toutes les soixante secondes.
-    // Tant que la posture vivait dans `evaluateSnapshot`, chaque lot de métriques la
-    // re-constatait sur un rapport inchangé : « constaté 1206 fois » comptait des
-    // tours de moteur, et « dernière fois il y a 5 min » datait un fait relevé
-    // jusqu'à une heure plus tôt. Ces deux assertions tiennent la frontière.
+    // Constater la posture à chaque lot de métriques compterait des tours de moteur
+    // dans « constaté n fois » : ces deux assertions tiennent la frontière.
     const posture = report({
         security: {
             firewall: false,

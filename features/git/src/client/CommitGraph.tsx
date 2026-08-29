@@ -17,21 +17,16 @@ const PICK_R = 14;
 const HOUR_TICKS = [0, 6, 12, 18, 24];
 
 /**
- * Largeur d'un seau de l'index spatial, en px.
- *
- * Égale au rayon de capture : une recherche n'examine alors que trois seaux
- * (celui du curseur et ses deux voisins), ce qui suffit à couvrir le disque de
- * capture quelle que soit la densité.
+ * Largeur d'un seau de l'index spatial, en px. Égale au rayon de capture : une
+ * recherche n'examine alors que trois seaux, celui du curseur et ses deux voisins,
+ * ce qui couvre le disque de capture quelle que soit la densité.
  */
 const BUCKET_W = PICK_R;
 
 /**
- * Une entrée de la légende : soit un auteur git, soit un **membre** qui en
- * réunit plusieurs.
- *
- * `refs` porte les auteurs git rassemblés — au moins un. C'est ce qui permet à
- * une personne qui commite sous trois adresses de n'occuper qu'un jeton dans la
- * légende, et à ses points de s'allumer ensemble quand on la survole.
+ * Une entrée de la légende : un auteur git, ou un membre qui en réunit plusieurs.
+ * `refs` porte les auteurs rassemblés, au moins un ; c'est ce qui allume leurs
+ * points ensemble au survol.
  */
 interface DisplayAuthor {
     /** Identité de l'entrée : `u:<id>` pour un membre, l'empreinte sinon. */
@@ -52,62 +47,30 @@ interface CommitGraphProps {
     total: number;
     /** Les membres de l'espace, pour nommer les auteurs rattachés. */
     members: readonly MinimalUser[];
-    /**
-     * Réunir les auteurs rattachés sous leur membre (voir {@link DisplayAuthor}).
-     *
-     * Réglable depuis le dialogue de rattachement, activé par défaut : une fois
-     * la configuration faite, on ne veut plus voir que de vraies personnes.
-     */
+    /** Réunir les auteurs rattachés sous leur membre (voir {@link DisplayAuthor}). */
     groupByMember: boolean;
     /** Ouvre le détail d'un commit ; absent = graphe non cliquable. */
     onOpenCommit?: (sha: string) => void;
-    /**
-     * Ouvre le rattachement des auteurs aux membres ; absent = pastille masquée.
-     *
-     * Elle est ici, en queue de légende, et non dans un repli posé sous le
-     * graphe : la légende est l'endroit où l'on *lit* les auteurs, donc celui où
-     * l'on remarque qu'il en manque un — et un dernier jeton après les leurs se
-     * trouve sans être cherché.
-     */
+    /** Ouvre le rattachement des auteurs aux membres ; absent = pastille masquée. */
     onConfigure?: () => void;
 }
 
 /**
- * Tous les commits dans le temps : un point par commit, coloré par auteur.
+ * Tous les commits dans le temps : un point par commit, coloré par auteur. Les
+ * deux axes portent une grandeur réelle, la date en abscisse et l'heure de la
+ * journée en ordonnée ; la dispersion veut donc dire quelque chose.
  *
- * **Les deux axes portent une grandeur réelle.** L'abscisse est la date,
- * l'ordonnée **l'heure de la journée** — on lit d'un coup d'œil les nuits
- * blanches, les journées ouvrées, les week-ends. La dispersion est celle d'un
- * brouillage, mais elle veut dire quelque chose.
+ * Les points sont peints sur un canvas : un `<circle>` chacun donnait autant de
+ * nœuds à mettre en page et à peindre, et toute l'interface en pâtissait dès
+ * quelques milliers de commits. Les axes restent en SVG, une vingtaine d'éléments
+ * porteurs de texte, que le canvas ne saurait ni mettre à l'échelle ni thémer.
  *
- * ## Pourquoi un canvas
+ * Le survol cherche le point le plus proche du curseur ; les points sont rangés
+ * en seaux de `BUCKET_W` pixels, un balayage complet à chaque `mousemove` coûtant
+ * plus cher que le dessin lui-même.
  *
- * Les points étaient un `<circle>` SVG chacun. À quelques milliers de commits le
- * navigateur portait autant de nœuds à mettre en page, à peindre et à conserver
- * en mémoire — et tout le reste de l'interface en pâtissait, jusqu'au défilement
- * de la page. Le canvas ramène le graphe à **un seul élément** et à un dessin
- * qu'on ne refait que lorsque les données, la largeur ou l'auteur mis en avant
- * changent.
- *
- * Les axes, eux, restent en SVG : ils sont une vingtaine d'éléments, ils portent
- * du texte, et le texte d'un canvas ne se sélectionne pas, ne se met pas à
- * l'échelle et ne suit pas le thème.
- *
- * ## Pourquoi un index spatial
- *
- * Le survol cherche le point le plus proche du curseur. Un balayage complet à
- * chaque `mousemove` — soixante fois par seconde, sur vingt mille points —
- * coûtait plus cher que le dessin lui-même. Les points sont donc rangés en
- * seaux par colonne de `BUCKET_W` pixels : une recherche n'en examine que trois.
- *
- * ## Pourquoi la légende n'est pas la liste des auteurs
- *
- * Une même personne commite sous plusieurs adresses selon la machine. Quand
- * `groupByMember` est actif — le réglage par défaut, décochable depuis le
- * dialogue de rattachement — les auteurs rattachés à un membre sont réunis sous
- * lui : voir {@link DisplayAuthor} et la table `display.slotOf`, qui traduit
- * l'indice d'auteur du serveur en entrée de légende. Le regroupement est donc
- * purement local ; le serveur rend toujours les auteurs bruts.
+ * Le regroupement des auteurs sous leur membre est purement local (voir
+ * {@link DisplayAuthor}) : le serveur rend toujours les auteurs bruts.
  */
 export function CommitGraph({
     points,
@@ -137,12 +100,9 @@ export function CommitGraph({
     }, [firstCommitAt, lastCommitAt]);
 
     /**
-     * Les coordonnées en pixels, dans deux tableaux plats.
-     *
-     * `Float32Array` et non un tableau d'objets : à vingt mille points, c'est la
-     * différence entre deux blocs de mémoire contigus et vingt mille objets à
-     * allouer puis à ramasser. Le dessin et la recherche les parcourent tels
-     * quels.
+     * Les coordonnées en pixels, dans deux tableaux plats. `Float32Array` et non un
+     * tableau d'objets : à vingt mille points, c'est la différence entre deux blocs
+     * contigus et vingt mille objets à allouer puis à ramasser.
      */
     const placed = useMemo(() => {
         const n = points.count;
@@ -176,15 +136,12 @@ export function CommitGraph({
     }, [placed, points.count]);
 
     /**
-     * La légende telle qu'elle s'affiche, et la table qui y mène.
+     * La légende telle qu'elle s'affiche, et la table qui y mène : `slotOf[i]` donne
+     * l'entrée de légende de l'indice d'auteur `i` du serveur. Un `Int32Array`
+     * plutôt qu'une `Map`, consulté une fois par point à chaque image.
      *
-     * `slotOf[i]` donne, pour l'indice d'auteur `i` du serveur, l'entrée de
-     * légende correspondante. Un `Int32Array` plutôt qu'une `Map` : le dessin et
-     * la recherche le consultent une fois par point, à chaque image.
-     *
-     * Le regroupement se fait **ici et non côté serveur** : c'est une préférence
-     * d'affichage propre au navigateur, et la réponse du graphe reste la même
-     * pour tout le monde — la basculer ne coûte donc pas un aller-retour.
+     * Le regroupement se fait ici et non côté serveur : c'est une préférence
+     * d'affichage du navigateur, la basculer ne coûte pas un aller-retour.
      */
     const display = useMemo(() => {
         const usernames = new Map(members.map((m) => [m.id, m.username]));
@@ -225,11 +182,9 @@ export function CommitGraph({
     const authorColors = useMemo(() => display.authors.map((a) => userColorVar(a.color)), [display]);
 
     /**
-     * Le dessin, refait seulement quand quelque chose de visible a changé.
-     *
-     * Les variables CSS (`--color-…`) ne veulent rien dire pour un canvas : on
-     * les résout une fois contre l'élément, sinon chaque point serait peint en
-     * noir.
+     * Le dessin, refait seulement quand quelque chose de visible a changé. Les
+     * variables CSS ne veulent rien dire pour un canvas : on les résout une fois
+     * contre l'élément, sinon chaque point serait peint en noir.
      */
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -254,10 +209,8 @@ export function CommitGraph({
             return name ? styleOf.getPropertyValue(name).trim() || neutral : c;
         });
 
-        // Groupés par entrée de légende : changer `fillStyle` est l'opération
-        // chère d'un canvas, on la fait une fois par couleur au lieu d'une fois
-        // par point. Un membre qui réunit trois auteurs git n'en coûte donc
-        // qu'une seule, et ses points se dessinent d'un trait.
+        // Groupés par entrée de légende : changer `fillStyle` est l'opération chère
+        // d'un canvas, on la fait une fois par couleur au lieu d'une fois par point.
         for (let slot = 0; slot < resolved.length; slot++) {
             const dim = highlight !== null && display.authors[slot]?.key !== highlight;
             ctx.fillStyle = resolved[slot];
@@ -292,11 +245,7 @@ export function CommitGraph({
     /** Le sha d'un point, découpé à la demande dans la chaîne concaténée. */
     const shaAt = (i: number) => points.shas.slice(i * GIT_GRAPH_SHA_LEN, (i + 1) * GIT_GRAPH_SHA_LEN);
 
-    /**
-     * Le point le plus proche du curseur.
-     *
-     * Trois seaux seulement, jamais tout le nuage : voir l'en-tête du fichier.
-     */
+    /** Le point le plus proche du curseur : trois seaux, jamais tout le nuage. */
     const pick = (e: MouseEvent<HTMLDivElement>) => {
         const rect = e.currentTarget.getBoundingClientRect();
         const px = e.clientX - rect.left;
@@ -374,8 +323,6 @@ export function CommitGraph({
                     aria-label={`Graphe de ${total} commits, par date et heure de la journée`}
                 />
 
-                {/* Axes et graduations : une vingtaine d'éléments, du texte, et
-                    rien qui grandisse avec le nombre de commits. */}
                 {width > 0 && (
                     <svg className={styles.graphAxes} width={width} height={HEIGHT} aria-hidden='true'>
                         {HOUR_TICKS.map((hour) => (
@@ -401,13 +348,10 @@ export function CommitGraph({
 
                         {ticks.map((tick) => {
                             const tx = x(tick.t);
-                            // Les étiquettes des bords sont ramenées dans le
-                            // cadre — celle de droite se ferait couper par le
-                            // bord du SVG. Un décalage de quelques pixels, et
-                            // seulement quand il le faut : l'échelle les a
-                            // espacées en les supposant centrées sur leur trait,
-                            // et les recaler du côté intérieur les ferait se
-                            // chevaucher pour de bon.
+                            // Les étiquettes des bords sont ramenées dans le cadre,
+                            // celle de droite se ferait couper. Le décalage reste
+                            // minimal : l'échelle les a espacées en les supposant
+                            // centrées sur leur trait.
                             const half = labelWidth(tick.label) / 2;
                             const lx = Math.min(Math.max(tx, half), width - half);
                             return (
@@ -469,9 +413,8 @@ export function CommitGraph({
                             <button
                                 type='button'
                                 className={highlight === author.key ? styles.legendOn : styles.legendItem}
-                                // Un membre réunissant plusieurs auteurs git le
-                                // dit au survol : la légende reste lisible, et
-                                // l'information n'est pas perdue pour autant.
+                                // Un membre réunissant plusieurs auteurs git le dit
+                                // au survol, sans allonger la légende.
                                 title={author.refs.length > 1 ? `${author.refs.length} auteurs git réunis` : undefined}
                                 onMouseEnter={() => setHighlight(author.key)}
                                 onMouseLeave={() => setHighlight(null)}

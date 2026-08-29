@@ -152,10 +152,9 @@
         background var(--transition-fast);
 }
 
-/* Drag-to-reorder handle, mirroring a note's block grip: hidden until the row is
-   hovered, à la native editors. `touch-action: none` is what makes reordering
-   possible under a finger (it stops the scroller from claiming the gesture), and
-   it is scoped to these 18px so the rest of the card still scrolls the list. */
+/* Hidden until the row is hovered. `touch-action: none` is what makes reordering
+   possible under a finger, scoped to these 18px so the rest of the card still
+   scrolls the list. */
 .grip {
     flex-shrink: 0;
     align-self: center;
@@ -211,14 +210,8 @@
     min-width: 0;
 }
 
-/*
- * La bande d'état, au milieu de la ligne.
- *
- * `flex: 2 1 180px` : elle prend la place restante en priorité (c'est elle qui
- * gagne à être large, un nom et une URL non), mais elle cède avant de rendre le
- * reste illisible. En dessous de sa base, elle passe au fil des points de rupture
- * plutôt que d'écraser tout le monde.
- */
+/* La bande d'état prend la place restante en priorité (`flex: 2`), mais cède
+   avant de rendre le reste illisible. */
 .cardGraph {
     flex: 2 1 180px;
     min-width: 0;
@@ -822,14 +815,8 @@
 }
 
 /* ------------------------------------------------------------------ *
- * Phones (the client's usual breakpoint, see WidgetPopup, WidgetGrid)
- *
- * The service row is the one that genuinely breaks rather than merely
- * tightens: its ratios and actions refuse to shrink (~386px of them), so
- * on a ~358px viewport `.cardMain` was laid out at zero width, and since
- * all three of its lines ellipsize, the card rendered with no name, no URL
- * and no last check at all. Everything below is about giving those lines a
- * full row of their own.
+ * Phones. The service row's ratios and actions refuse to shrink, which
+ * collapsed `.cardMain` to zero width: its lines get a full row of their own.
  * ------------------------------------------------------------------ */
 
 @media (max-width: 640px) {

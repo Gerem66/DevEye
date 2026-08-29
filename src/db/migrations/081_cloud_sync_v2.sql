@@ -1,39 +1,18 @@
 -- CloudSync : finitions de production.
 --
--- Trois apports, tous nécessaires à l'objectif « le dossier est identique sur
--- macOS, Linux et Windows EN TOUT TEMPS » :
+-- 1. `kind` : seuls les dossiers vides sont indexés (`kind = 'dir'`), un
+--    dossier peuplé est implicite. Sans ça un dossier vide n'existait sur aucun
+--    autre appareil.
+-- 2. `mode` : permissions Unix. NULL = aucun agent Unix ne l'a encore vu, et le
+--    serveur CONSERVE alors la valeur en base au lieu de l'effacer.
+-- 3. `sync_snapshots` / `sync_snapshot_files` : point de restauration du dossier
+--    complet, photo de l'index sans copier un octet (blobs partagés par hash).
+--    `isHashReferenced` (src/db/repos/syncFiles.ts) doit AUSSI regarder
+--    `sync_snapshot_files`, sinon le GC détruirait des blobs qu'un snapshot est
+--    seul à référencer.
 --
--- 1. `kind` — l'index ne connaissait que des fichiers. Un dossier VIDE n'existait
---    donc sur aucun autre appareil, et un dossier vidé restait en coquille chez
---    les pairs. Seuls les dossiers vides sont indexés (`kind = 'dir'`) : un
---    dossier peuplé est implicite, ses fichiers le recréent partout.
---
--- 2. `mode` — les permissions Unix n'étaient pas transportées : un script
---    perdait son bit exécutable en faisant Linux → Windows → Linux. NULL veut
---    dire « aucun agent Unix ne l'a encore vu » ; un agent Windows renvoie NULL
---    et le serveur CONSERVE alors la valeur en base au lieu de l'effacer.
---
--- 3. `sync_snapshots` / `sync_snapshot_files` — point de restauration du dossier
---    complet. `sync_versions` est une corbeille PAR FICHIER : elle ne permet pas
---    de revenir à « l'état du partage tel qu'il était mardi à 14 h ». Un snapshot
---    ne copie AUCUN octet : c'est une photo de l'index, les blobs étant déjà
---    dédupliqués et partagés par hash.
---
---    Conséquence critique, implémentée dans src/db/repos/syncFiles.ts :
---    `isHashReferenced` (la porte du GC de blobs) doit AUSSI regarder
---    `sync_snapshot_files`, sinon la purge des versions détruirait des blobs
---    qu'un snapshot est seul à référencer, et la restauration deviendrait
---    impossible.
---
--- Les valeurs par défaut sont exactes pour l'existant (tout est `file`, mode
--- inconnu) : aucune remise à zéro des données n'est nécessaire.
-
--- Les DDL de MySQL committent implicitement : une migration qui casse au
--- milieu reste à moitié appliquée SANS être enregistrée dans `_migrations`, et
--- la relance butterait sur les colonnes déjà là. Chaque ajout est donc gardé,
--- comme dans 071.
-
--- ─── 1 & 2 : nature et permissions des entrées d'index ──────────────────────
+-- Chaque ajout est gardé (INFORMATION_SCHEMA) : une migration qui casse au
+-- milieu reste à moitié appliquée et se rejoue.
 
 SET @c = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sync_files' AND COLUMN_NAME = 'kind');
@@ -58,8 +37,6 @@ SET @c = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sync_device_files' AND COLUMN_NAME = 'mode');
 SET @s = IF(@c = 0, 'ALTER TABLE sync_device_files ADD COLUMN mode SMALLINT NULL AFTER mtime', 'SELECT 1');
 PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-
--- ─── 3 : sauvegardes point-in-time ──────────────────────────────────────────
 
 SET @c = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sync_shares' AND COLUMN_NAME = 'snapshot_enabled');

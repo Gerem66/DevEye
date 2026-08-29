@@ -18,19 +18,12 @@ interface AuthorMapDialogProps {
 }
 
 /**
- * Rattacher les auteurs git aux membres de l'espace.
+ * Rattacher les auteurs git aux membres de l'espace, ouvert depuis une pastille
+ * de la légende du graphe : c'est là qu'on lit les auteurs, donc là qu'on
+ * remarque qu'il en manque un.
  *
- * Dans un dialogue, ouvert depuis une pastille de la légende du graphe — et non
- * dans un `<details>` posé sous le graphe, où il flottait entre deux blocs sans
- * appartenir à aucun. La légende est le bon endroit pour l'appeler : c'est là
- * qu'on lit les auteurs, donc là qu'on remarque qu'il en manque un.
- *
- * Le rattachement donne au graphe la couleur de présence de la personne, la même
- * que partout ailleurs dans l'application.
- *
- * **La liste ci-dessous reste toujours complète**, y compris quand le graphe
- * regroupe : c'est ici qu'on fait le rattachement, il faut donc voir chaque
- * auteur git séparément. Le regroupement ne concerne que la lecture du graphe.
+ * La liste reste toujours complète, même quand le graphe regroupe : c'est ici
+ * qu'on rattache, il faut donc voir chaque auteur git séparément.
  */
 export function AuthorMapDialog({
     open,
@@ -53,11 +46,7 @@ export function AuthorMapDialog({
             width={560}
         >
             <div className={styles.form}>
-                {/*
-                 * Le réglage d'abord : il décide de ce que le graphe montrera
-                 * une fois le travail ci-dessous terminé, et c'est justement en
-                 * finissant de rattacher qu'on veut l'atteindre.
-                 */}
+                {/* Le réglage d'abord : c'est en finissant de rattacher qu'on veut l'atteindre. */}
                 <Checkbox checked={groupByMember} onChange={onGroupByMemberChange}>
                     <>
                         <span className={styles.label}>N’afficher que les membres rattachés</span>

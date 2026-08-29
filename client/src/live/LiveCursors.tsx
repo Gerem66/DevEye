@@ -12,35 +12,26 @@ import { useLiveSurface } from './LiveProvider';
 import styles from './LiveCursors.module.css';
 
 /**
- * Les curseurs des pairs qui sont exactement là où nous sommes.
+ * Les curseurs des pairs qui sont exactement là où nous sommes. Le serveur a déjà
+ * fait le tri ; il ne reste qu'à replacer les coordonnées dans notre surface et à
+ * en tirer un pseudo, une couleur et une forme.
  *
- * Le serveur a déjà fait le tri : il n'envoie de curseurs qu'entre connexions au
- * chemin identique. Il ne reste ici qu'à replacer les coordonnées dans **notre**
- * surface, et à en tirer un pseudo, une couleur et une forme.
- *
- * La surface sert de **repère**, pas de cadre : le curseur d'un pair reste
- * affiché dans les marges de la popup et jusqu'aux bords de l'écran — on est sur
- * la même page, il n'y a aucune raison qu'il s'évanouisse en chemin. Seule la
- * fenêtre borne l'affichage, et au-delà le curseur est **masqué** plutôt
- * qu'épinglé au bord : un curseur collé au bord se lit comme quelqu'un qui serait
- * là et qui n'y est pas.
+ * La surface sert de repère, pas de cadre : un curseur reste affiché dans les
+ * marges de la popup et jusqu'aux bords de l'écran. Seule la fenêtre borne
+ * l'affichage, et au-delà le curseur est masqué plutôt qu'épinglé au bord, où il
+ * se lirait comme quelqu'un qui serait là sans y être.
  */
 
 /**
- * La géométrie de la surface, **lue au rendu et jamais mémorisée**.
+ * La géométrie de la surface, lue au rendu et jamais mémorisée. La mettre en
+ * cache sur `ResizeObserver` serait faux : la popup s'ouvre par un morphe
+ * framer-motion qui anime un `transform`, lequel ne change pas la boîte de
+ * bordure et ne déclenche donc aucun observateur ; la mesure resterait figée sur
+ * la taille de la carte d'origine et les curseurs atterriraient hors cadre.
  *
- * La tentation est de la mettre en cache et de la rafraîchir sur
- * `ResizeObserver`. C'est faux ici : la popup s'ouvre par un morphe
- * framer-motion (`layoutId`), qui anime un `transform` — lequel ne change pas la
- * boîte de bordure et **ne déclenche donc aucun `ResizeObserver`**. Une mesure
- * prise à l'ouverture reste figée sur la taille de la carte d'origine, et tous
- * les curseurs atterrissent hors cadre, donc invisibles.
- *
- * Lire au rendu est ici à la fois juste et bon marché : ce composant ne rend que
- * lorsqu'un curseur bouge, c'est-à-dire au plus une fois par tic de 50 ms, et
- * c'est précisément l'instant où l'on a besoin d'une mesure fraîche. Les
- * abonnements ci-dessous ne servent qu'à provoquer un rendu quand rien ne bouge
- * côté pairs mais que le cadre, lui, a changé (défilement, redimensionnement).
+ * Lire au rendu est bon marché : ce composant ne rend que lorsqu'un curseur
+ * bouge, au plus une fois par tic de 50 ms. Les abonnements ci-dessous ne servent
+ * qu'à provoquer un rendu quand le cadre change sans que les pairs bougent.
  */
 function useSurfaceGeometry(surface: HTMLElement | null): { rect: DOMRect; scrollTop: number } | null {
     const [, bump] = useReducer((n: number) => n + 1, 0);
@@ -50,8 +41,8 @@ function useSurfaceGeometry(surface: HTMLElement | null): { rect: DOMRect; scrol
         const observer = new ResizeObserver(bump);
         observer.observe(surface);
         // En capture, sur le document : le repère de l'accueil ne défile pas
-        // lui-même — c'est son parent qui bouge — et un écouteur posé sur le
-        // repère raterait donc tout défilement de la page.
+        // lui-même, c'est son parent qui bouge, et un écouteur posé dessus raterait
+        // tout défilement de la page.
         document.addEventListener('scroll', bump, { passive: true, capture: true });
         window.addEventListener('resize', bump);
         return () => {
@@ -73,9 +64,8 @@ export function LiveCursors() {
     const geometry = useSurfaceGeometry(surface);
     const hidden = useHideLiveCursors();
 
-    // Un espace personnel est une salle d'une personne : rien à afficher. Le
-    // réglage de compte s'ajoute ici, après les hooks — sortir plus haut les
-    // rendrait conditionnels, ce que React n'admet pas.
+    // Un espace personnel est une salle d'une personne : rien à afficher. La sortie
+    // est ici, après les hooks, que React n'admet pas conditionnels.
     if (!geometry || !workspace || workspace.kind === 'personal' || hidden || cursors.length === 0) return null;
 
     const members = new Map((workspace.users ?? []).map((u) => [u.id, u]));
@@ -109,12 +99,12 @@ export function LiveCursors() {
                 <motion.div
                     key={c.connId}
                     className={styles.cursor}
-                    // Interpolé : les trames arrivent par paquets de 50 ms, un
-                    // saut par trame se lirait comme une saccade plutôt qu'un
-                    // mouvement. Un ressort ferme, pour ne pas traîner derrière.
+                    // Interpolé : les trames arrivent par paquets de 50 ms, et un saut
+                    // par trame se lirait comme une saccade. Ressort ferme, pour ne
+                    // pas traîner derrière.
                     initial={false}
-                    // Le point chaud du dessin — pointe de flèche, bout du doigt,
-                    // milieu de la barre — doit tomber sur la position reçue.
+                    // Le point chaud du dessin (pointe de flèche, bout du doigt)
+                    // doit tomber sur la position reçue.
                     animate={{ x: c.left - c.glyph.offsetX, y: c.top - c.glyph.offsetY }}
                     transition={{ type: 'spring', stiffness: 700, damping: 45, mass: 0.6 }}
                     style={{ '--peer': userColorVar(c.color) } as CSSProperties}

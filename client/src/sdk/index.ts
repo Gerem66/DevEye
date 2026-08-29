@@ -1,11 +1,8 @@
 /**
- * `deveye-sdk-client` : LA surface d'import du code client d'un module.
- *
- * Le package d'un module n'importe rien d'autre de l'app : ce barrel est le
- * contrat, et ce qui n'y figure pas est interne (donc libre de bouger). Résolu
- * par alias (vite + tsconfig) quand le module est compilé dans l'app ; pour le
- * typecheck autonome du repo d'un module, le template porte une déclaration du
- * même module basée sur `@deveye/types/sdk/client`.
+ * `deveye-sdk-client` : la seule surface d'import du code client d'un module. Ce
+ * qui n'y figure pas est interne, donc libre de bouger. Résolu par alias (vite +
+ * tsconfig) dans l'app ; pour le typecheck autonome du repo d'un module, le
+ * template en porte une déclaration basée sur `@deveye/types/sdk/client`.
  */
 import { useEffect, useRef, type ChangeEvent } from 'react';
 
@@ -22,11 +19,9 @@ import type { FeatureManifest, ManifestCommand } from '@deveye/types/sdk';
 import type { z, ZodType } from 'zod';
 
 // ── Le kit d'interface ─────────────────────────────────────────────────────
-// Imports DIRECTS, jamais le baril `@/Components` : le baril tire TopNavbar,
-// qui tire la présence, qui tire le catalogue ; le catalogue s'évaluerait
-// alors PENDANT le chargement de la glue des modules, avant leur
-// enregistrement. C'est arrivé (Météo absente du marché) ; la paresse du
-// catalogue protège désormais aussi, mais un graphe court reste la règle.
+// Imports directs, jamais le baril `@/Components` : il tire TopNavbar, puis la
+// présence, puis le catalogue, qui s'évaluerait alors pendant le chargement de
+// la glue des modules, avant leur enregistrement.
 export { default as Button } from '@/Components/Button';
 export { default as Checkbox } from '@/Components/Checkbox';
 export { ConfirmDialog } from '@/Components/ConfirmDialog';
@@ -37,39 +32,34 @@ export { StatusBadge } from '@/Components/StatusBadge';
 export { default as Switch } from '@/Components/Switch';
 export { default as TextInput } from '@/Components/TextInput';
 export { Dialog, DialogCancelButton, useDialogClose, useDialogSubmit, useDismissLayer } from '@/Components/Dialog';
-// La couche impérative au-dessus de Dialog (OpenPopup → promesse résolue par
-// ClosePopup), et l'explicatif « i » commun : les features à formulaires
-// (Coffre, Notes) s'en servent, les modules qui en viennent aussi.
+// La couche impérative au-dessus de Dialog (OpenPopup, promesse résolue par
+// ClosePopup), et l'explicatif « i » commun.
 export { default as Popup, ClosePopup, OpenPopup } from '@/Components/Popup';
 export { openInfo } from '@/Components/InfoPopup';
 export { FeatureSettingsButton } from '@/Components/FeatureSettings';
 export { DeviceFolderPicker } from '@/Components/DeviceFolderPicker';
 /**
- * Les appareils de l'espace actif, tels que le module Appareils les offre à
- * l'app (`DEVICES_CLIENT_PROVIDER`) : CloudSync et Sauvegardes les listent
- * pour choisir une machine. Vide, chargée et sans erreur quand le module
- * n'est pas installé.
+ * Les appareils de l'espace actif, tels que le module Appareils les offre à l'app
+ * (`DEVICES_CLIENT_PROVIDER`). Vide, chargée et sans erreur quand le module n'est
+ * pas installé.
  */
 export { useDevices } from '@/devicesProvider';
-// Le comptage des abonnements aux métriques vivantes (le hub abonne par
-// socket, le client n'en a qu'une : deux consommateurs du même appareil ne
-// doivent pas se désabonner l'un l'autre) et les chemins d'un appareil, tels
-// que `DeviceFolderPicker` les manipule : le module Appareils en a besoin
-// autant que lui.
+// Le comptage des abonnements aux métriques vivantes (le hub abonne par socket,
+// le client n'en a qu'une : deux consommateurs du même appareil ne doivent pas se
+// désabonner l'un l'autre) et les chemins d'un appareil.
 export { acquireMetrics } from '@/stores/metricsSubscription';
 export { isWinPath, joinPath } from '@/devicePath';
 /**
- * La version de DevEye dont cette interface est bâtie (celle du package.json
- * racine, injectée au build) : ce à quoi un module compare la version qu'un
- * agent rapporte, pour offrir une mise à jour.
+ * La version de DevEye dont cette interface est bâtie (package.json racine,
+ * injectée au build) : ce à quoi un module compare la version qu'un agent
+ * rapporte, pour offrir une mise à jour.
  */
 export const APP_VERSION: string = __APP_VERSION__;
 /**
- * Les deux gestes HTTP qu'un module peut avoir à faire, parce que la socket
- * ne porte pas de binaire : un GET validé sur une route de l'app (le cookie
- * de session voyage, un jeton périmé est renouvelé et l'appel rejoué une
- * fois), et le renouvellement explicite du cookie d'accès avant un `fetch`
- * brut qui échappe au client (le téléchargement d'un agent).
+ * Les deux gestes HTTP qu'un module peut avoir à faire, la socket ne portant pas
+ * de binaire : un GET validé sur une route de l'app (le cookie de session voyage,
+ * un jeton périmé est renouvelé et l'appel rejoué une fois), et le renouvellement
+ * explicite du cookie d'accès avant un `fetch` brut qui échappe au client.
  */
 export { ensureFreshAccess, get as httpGet } from '@/api/http';
 /** Les classes de rangées canoniques des écrans de réglages (channelRow, etc.). */
@@ -98,8 +88,7 @@ export { useActiveWorkspace, useWorkspacePermissions } from '@/stores/workspace'
 export { useFeatureLifecycle } from '@/Features/useFeatureLifecycle';
 /**
  * Demander un cadre plus large à la popup de feature tant que le composant
- * appelant est monté (`null` = rien demander) : la vue qui déborde du cadre
- * par défaut, comme un explorateur de tables en mode agrandi.
+ * appelant est monté (`null` = rien demander).
  */
 export { useRequestPopupWidth } from '@/stores/popupWidth';
 /** La pastille d'identité d'un membre, commune à toute feature qui nomme quelqu'un. */
@@ -109,9 +98,9 @@ export { userColorVar } from '@/Features/Profile/userColors';
 /** Deux bandeaux collants l'un sous l'autre : la mesure du haut, décalage du bas. */
 export { useStickyOffset, type StickyOffset } from '@/stickyOffset';
 /**
- * Le contrat client qu'un AUTRE module offre (`FeatureClient.providers`) :
- * la composition inter-modules, l'inverse de `providers` du manifest.
- * `undefined` quand ce module n'est pas installé : dégrader, jamais supposer.
+ * Le contrat client qu'un autre module offre (`FeatureClient.providers`), soit
+ * l'inverse de `providers` du manifest. `undefined` quand ce module n'est pas
+ * installé : dégrader, jamais supposer.
  */
 export { moduleClientProvider } from '@/sdk/registry';
 /** L'utilisateur connecté, `null` tant que la session n'a pas répondu. */
@@ -122,9 +111,8 @@ export { ACCEPTED_TYPES, MAX_INPUT_BYTES, fileToSquareDataUrl } from '@/imageRes
 const NO_MEMBERS: readonly MinimalUser[] = [];
 
 /**
- * Les membres de l'espace actif, tels que la session les liste : de quoi
- * mettre un visage sur « qui a déclenché quoi ». Vide tant que la session
- * n'a rien fourni, jamais `null` (une liste se filtre sans garde).
+ * Les membres de l'espace actif, tels que la session les liste. Vide tant qu'elle
+ * n'a rien fourni, jamais `null`.
  */
 export function useWorkspaceMembers(): readonly MinimalUser[] {
     return useActiveWorkspace()?.users ?? NO_MEMBERS;
@@ -132,11 +120,8 @@ export function useWorkspaceMembers(): readonly MinimalUser[] {
 
 /**
  * Ouvrir une autre feature de l'espace actif, sur l'un de ses éléments quand
- * `itemId` est donné : la téléportation de l'hôte, la même mécanique que
- * « rejoindre quelqu'un ». Le segment de présence d'un élément est son
- * identifiant nu (`l1:<id>`), pour toutes les features ; le chemin n'est donc
- * jamais écrit par un module. La garde d'accès reste celle de l'hôte, et une
- * cible disparue s'ignore d'elle-même après dix secondes.
+ * `itemId` est donné, par la téléportation de l'hôte. La garde d'accès reste
+ * celle de l'hôte, et une cible disparue s'ignore après dix secondes.
  */
 export function openFeature(feature: string, itemId?: number): void {
     const workspaceId = getActiveWorkspaceId();
@@ -145,10 +130,9 @@ export function openFeature(feature: string, itemId?: number): void {
 }
 
 // ── Le chiffrement par mot de passe ────────────────────────────────────────
-// L'état de verrou de la session, l'invite globale, et le patron « réessaie
-// une fois après déverrouillage ». C'est la surface qu'exige toute feature
-// dont une commande peut répondre `locked` (contrats en `'private'` côté
-// serveur) ; OSINT est la première migrée à s'en servir.
+// L'état de verrou de la session, l'invite globale, et le patron « réessaie une
+// fois après déverrouillage » : ce qu'exige toute feature dont une commande peut
+// répondre `locked` (contrats en `'private'` côté serveur).
 export {
     ensureUnlocked as ensureSecrecyUnlocked,
     touchSecrecy,
@@ -159,19 +143,16 @@ export {
 export type { SecrecyState } from '@/stores/secrecy';
 
 /**
- * L'envoi typé des commandes de VOTRE module.
- *
- * `ws.send` natif est typé par le registre fermé de @deveye/types, que les
- * modules n'étendent pas ; cet enrobage retrouve les types depuis les
- * `commands` du manifest. La validation d'exécution reste celle du serveur,
- * dans les deux sens. `timeoutMs` allonge l'attente d'une commande qui
- * interroge un tiers lent (une sonde OSINT, un relevé distant) ; le délai
- * par défaut reste celui du socket.
+ * L'envoi typé des commandes de votre module. `ws.send` natif est typé par le
+ * registre fermé de @deveye/types, que les modules n'étendent pas ; cet enrobage
+ * retrouve les types depuis les `commands` du manifest, la validation d'exécution
+ * restant celle du serveur. `timeoutMs` allonge l'attente d'une commande qui
+ * interroge un tiers lent ; par défaut c'est le délai du socket.
  */
 export function featureApi<const M extends FeatureManifest>(manifest: M) {
     // Le corps de `commandsApi`, répété plutôt que délégué : passer par
-    // `manifest.commands` élargirait le type au contrat générique et
-    // perdrait le nom de chaque commande.
+    // `manifest.commands` élargirait le type au contrat générique et perdrait le
+    // nom de chaque commande.
     type Commands = M['commands'][number];
     void manifest;
     return {
@@ -186,11 +167,10 @@ export function featureApi<const M extends FeatureManifest>(manifest: M) {
 }
 
 /**
- * L'envoi typé d'une liste de contrats, quelle qu'elle soit : les commandes
- * d'un manifest (`featureApi`), ou celles du transport des agents
- * (`commandsApi(agentCommands)`, que chaque consommateur construit avec son
- * propre import de `@deveye/types` : le barrel ne peut pas l'exporter tout
- * fait, l'identité du type diffère selon qui résout le package).
+ * L'envoi typé d'une liste de contrats quelconque : les commandes d'un manifest
+ * (`featureApi`) ou celles du transport des agents. Chaque consommateur la
+ * construit avec son propre import de `@deveye/types` ; le barrel ne peut pas
+ * l'exporter tout fait, l'identité du type dépendant de qui résout le package.
  */
 export function commandsApi<const C extends readonly ManifestCommand[]>(commands: C) {
     type Commands = C[number];
@@ -207,13 +187,11 @@ export function commandsApi<const C extends readonly ManifestCommand[]>(commands
 }
 
 /**
- * Déclare la position `kind` de la vue ET consomme la téléportation qui la
- * vise : le patron canonique des features à éléments, packagé.
+ * Déclare la position `kind` de la vue et consomme la téléportation qui la vise.
  *
- * `ready` doit rester faux tant que la liste n'est pas chargée : la cible
- * n'est jamais consommée à sa lecture, elle reste posée jusqu'à ce qu'un rendu
- * prêt puisse l'appliquer. `onTarget(null)` signifie « referme l'élément »
- * (l'émetteur est remonté d'un niveau).
+ * `ready` doit rester faux tant que la liste n'est pas chargée : la cible n'est
+ * jamais consommée à sa lecture, elle reste posée jusqu'à ce qu'un rendu prêt
+ * puisse l'appliquer. `onTarget(null)` signifie « referme l'élément ».
  */
 export function useLiveItemTarget(
     kind: LiveSegmentKind,

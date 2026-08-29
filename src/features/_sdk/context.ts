@@ -12,19 +12,15 @@ import { createFacade } from './facade';
 import { createFeatureStore } from './store';
 
 /**
- * Adapte le contexte natif en contexte SDK, par requête.
- *
- * C'est ici que la frontière se tient : rien de ce qui n'est pas listé dans
- * `SdkFeatureContext` ne traverse. Le repo du module est construit une fois
- * par processus (voir `register.ts`) et injecté ; le store et la façade se
+ * Adapte le contexte natif en contexte SDK, par requête : rien de ce qui n'est
+ * pas listé dans `SdkFeatureContext` ne traverse. Le repo du module est
+ * construit une fois par processus (`register.ts`) ; le store et la façade se
  * construisent par requête, liés à l'espace de l'enveloppe.
  */
 /**
- * Où vit DevEye, sans barre finale : l'origine des membres (`PUBLIC_ORIGIN`)
- * et celle joignable sans le VPN quand un écouteur public existe
- * (`AUDIENCE_ORIGIN`, sinon la même). Le serveur est le seul à la connaître :
- * une balise qui déduirait l'adresse du navigateur serait juste en
- * développement et fausse en production.
+ * Où vit DevEye, sans barre finale : l'origine des membres et celle joignable
+ * sans le VPN (`AUDIENCE_ORIGIN`, sinon la même). Le serveur seul la connaît :
+ * la déduire du navigateur serait faux en production.
  */
 export const ORIGINS = {
     app: env.PUBLIC_ORIGIN.replace(/\/+$/, ''),
@@ -63,14 +59,10 @@ export function createSdkContext(
             providers
         }),
         transport: socketTransport(ctx, manifest),
-        // Le verrou de la session, tel que le magasin gardé le voit : la
-        // question « puis-je lire l'étage gardé maintenant ? », posée AVANT
-        // de lire quand la réponse change la forme de la réponse.
         secrecy: {
             isUnlocked: () => ctx.secure.isUnlocked(),
-            // Signé par l'hôte, lié à la session de l'appelant et à CE module
-            // (l'audience) : le module tend le ticket au navigateur, son
-            // service le rend contre les codecs de l'appelant.
+            // Signé par l'hôte, lié à la session de l'appelant et à ce module
+            // (l'audience) ; son service le rend contre les codecs de l'appelant.
             ticket: (payload, opts) =>
                 signModuleTicket(
                     manifest.id,
@@ -80,14 +72,12 @@ export function createSdkContext(
         },
         keys: serverKeysOf(ctx.crypt),
         items: {
-            // Les restrictions et la garde par élément sont celles du
-            // dispatcheur, liées à LA feature du module : un module ne peut
-            // pas interroger les restrictions d'une autre.
+            // Liées à la feature du module : un module ne peut pas interroger
+            // les restrictions d'une autre.
             restrictions: () => ctx.itemRestrictions(manifest.id),
             assert: (itemId, level) => ctx.assertItem(manifest.id, itemId, level),
             // Le ménage d'un élément supprimé : projections, restrictions et
-            // route de notification, qu'aucune clé étrangère ne rattache à sa
-            // table (l'élément vit dans une table différente selon la feature).
+            // route de notification, qu'aucune clé étrangère ne rattache à sa table.
             forget: async (itemId) => {
                 await ctx.db.itemSharing.forgetItem(manifest.id, itemId, ctx.workspaceId);
                 await ctx.db.notificationChannels.clearRoute(
@@ -99,9 +89,8 @@ export function createSdkContext(
         },
         sharing: {
             scope: async () => {
-                // `shareTier: 'never'` dit qu'aucune ligne ne voyage : un
-                // module qui le déclare et interroge quand même les
-                // projections se trompe de contrat, et doit l'apprendre.
+                // `shareTier: 'never'` dit qu'aucune ligne ne voyage : interroger
+                // quand même les projections est une erreur de contrat.
                 if (manifest.shareTier === 'never') {
                     throw new FeatureError('forbidden', "Declare a shareTier other than 'never' to read projections");
                 }

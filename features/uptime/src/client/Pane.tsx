@@ -9,14 +9,8 @@ interface PaneProps {
 }
 
 /**
- * A block that reloads **in place**.
- *
- * The uptime panels re-query on every probe, and swapping their content for a
- * "Chargement…" placeholder made the whole view jump: charts collapsed, the page
- * resized, then everything snapped back. Instead the last known content stays
- * mounted at its exact size, dimmed, with a spinner centred over it, so a
- * refresh reads as a subtle pulse rather than a glitch, and each block does it
- * on its own schedule.
+ * A block that reloads in place: the last content stays mounted at its exact
+ * size, dimmed, with a spinner over it, so a refresh never shifts the layout.
  */
 export function Pane({ busy, children }: PaneProps) {
     return (

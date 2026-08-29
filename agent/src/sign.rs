@@ -1,17 +1,16 @@
-//! DevEye update-signing helper (build-time / CI only, behind `--features signer`).
+//! DevEye update-signing helper (CI only, behind `--features signer`).
 //!
-//! The agent self-update channel is signed: each released binary's sha256 is
-//! signed with a dedicated ed25519 key whose **private** half lives only in a CI
-//! secret and whose **public** half is embedded in the agent (`update-signing.pub`
-//! → `DEVEYE_UPDATE_PUBKEY`). The agent refuses any binary whose signature doesn't
-//! verify. This tool produces those artifacts:
+//! Each released binary's sha256 is signed with an ed25519 key whose private
+//! half lives only in a CI secret and whose public half is embedded in the agent
+//! (`update-signing.pub` → `DEVEYE_UPDATE_PUBKEY`). The agent refuses any binary
+//! whose signature doesn't verify.
 //!
 //!   deveye-sign keygen                              # print a fresh private+public pair
 //!   deveye-sign sign <priv_b64> <hex_sha256>        # print the base64 signature
 //!   deveye-sign verify <pub_b64> <hex_sha256> <sig> # exit 0 iff it verifies
 //!
-//! `verify` uses the exact same `verify_strict` the agent uses, so it doubles as a
-//! CI/dev self-check that a signed manifest will actually be accepted on-device.
+//! `verify` uses the same `verify_strict` as the agent, so it doubles as a check
+//! that a signed manifest will be accepted on-device.
 //!
 //! Build/run with: `cargo run --features signer --bin deveye-sign -- …`
 
@@ -78,7 +77,6 @@ fn main() {
                 .unwrap_or_else(|_| die("signature is not valid base64"))
                 .try_into()
                 .unwrap_or_else(|_| die("signature must decode to 64 bytes"));
-            // verify_strict mirrors exactly what the agent's update.rs runs.
             match vk.verify_strict(&hex_decode(hex), &Signature::from_bytes(&sig_bytes)) {
                 Ok(()) => println!("OK"),
                 Err(_) => die("FAIL: signature does not verify"),

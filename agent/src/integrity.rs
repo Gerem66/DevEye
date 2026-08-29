@@ -1,24 +1,13 @@
 //! Empreintes des surfaces de persistance : les endroits où un programme
-//! s'installe pour survivre au redémarrage.
+//! s'installe pour survivre au redémarrage (cron, unités systemd, agents de
+//! lancement, clés SSH autorisées, comptes, sudoers, préchargement du linker).
 //!
-//! C'est là que vivent réellement mineurs et portes dérobées. Un processus se
-//! tue, un fichier de service se relance — donc surveiller les processus sans
-//! surveiller ce qui les rallume ne détecte qu'une moitié du problème.
+//! Jamais le contenu d'un fichier : seulement une empreinte et des métadonnées
+//! (chemin, sha256, taille, date, propriétaire, droits), ce qui suffit au diff
+//! serveur sans rien révéler.
 //!
-//! # Jamais le contenu d'un fichier
-//!
-//! On ne remonte qu'une **empreinte** et des métadonnées : chemin, sha256,
-//! taille, date, propriétaire, droits. C'est ce qui rend la sonde acceptable sur
-//! une machine partagée — elle prouve qu'un fichier a changé sans jamais révéler
-//! ce qu'il contient, et un sha256 suffit entièrement au diff que le serveur en
-//! fait. L'agent a les droits de lire davantage ; il ne le fait pas.
-//!
-//! # Une liste fermée
-//!
-//! Les surfaces sont énumérées en dur, pas découvertes. Un balayage large
-//! coûterait cher, remonterait des milliers d'entrées sans intérêt, et noierait
-//! le signal. Ce qui compte tient en une page : cron, unités systemd, agents de
-//! lancement, clés SSH autorisées, comptes, sudoers, préchargement du linker.
+//! Les surfaces sont énumérées en dur, pas découvertes : un balayage large
+//! coûterait cher et noierait le signal.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -32,12 +21,9 @@ use sha2::{Digest, Sha256};
 /// cessé de regarder.
 const MAX_ENTRIES: usize = 2000;
 
-/// Taille au-delà de laquelle on n'empreinte pas.
-///
-/// Une unité systemd fait quelques centaines d'octets ; un `authorized_keys`
-/// quelques kilo-octets. Un fichier de 8 Mio dans `/etc/cron.d` n'est pas une
-/// tâche planifiée, et le lire entièrement à chaque cycle coûterait plus que
-/// tout le reste de la sonde.
+/// Taille au-delà de laquelle on n'empreinte pas : un fichier de 8 Mio dans
+/// `/etc/cron.d` n'est pas une tâche planifiée, et le lire à chaque cycle
+/// coûterait plus que tout le reste de la sonde.
 const MAX_FILE_BYTES: u64 = 1024 * 1024;
 
 /// Profondeur maximale de descente dans un répertoire de surface.
@@ -81,11 +67,8 @@ struct Surface {
     suffixes: &'static [&'static str],
 }
 
-// Les deux fabriques ne servent qu'aux tables de surfaces, qui sont propres à
-// chaque plateforme : `s` sur Linux et macOS, `s_ext` sur Linux seul (les
-// suffixes ne filtrent que les unités systemd). Ailleurs — Windows, où la table
-// est vide et les surfaces viennent du registre — elles seraient du code mort,
-// et la CI compile l'agent sur les trois.
+// Les deux fabriques ne servent qu'aux tables de surfaces, propres à chaque
+// plateforme ; sans `cfg`, elles seraient du code mort sur Windows.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 const fn s(name: &'static str, path: &'static str) -> Surface {
     Surface {
@@ -151,12 +134,8 @@ const SURFACES: &[Surface] = &[
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 const SURFACES: &[Surface] = &[];
 
-/// L'état d'un relevé en cours.
-///
-/// Regroupé plutôt que passé en trois paramètres : `owners` est lu une fois pour
-/// tout le relevé, et le trimballer séparément invitait à le reconstruire par
-/// entrée — ce qui, sur une surface de cinq cents fichiers, relirait
-/// `/etc/passwd` cinq cents fois.
+/// L'état d'un relevé en cours. `owners` est lu une fois pour tout le relevé,
+/// jamais par entrée (ce serait relire `/etc/passwd` par fichier).
 struct Scan {
     entries: Vec<PersistenceEntry>,
     seen: HashSet<String>,
@@ -361,9 +340,6 @@ fn collect_home_surfaces(scan: &mut Scan) -> bool {
 
     for home in home_dirs() {
         let candidates: [(&'static str, PathBuf); 2] = [
-            // La porte dérobée la plus discrète qui soit : une ligne ajoutée
-            // dans un fichier que personne ne relit, et l'accès survit à tous
-            // les changements de mot de passe.
             ("authorized_keys", home.join(".ssh/authorized_keys")),
             (USER_UNITS.0, home.join(USER_UNITS.1)),
         ];
@@ -422,12 +398,9 @@ fn home_dirs() -> Vec<PathBuf> {
         .unwrap_or_default()
 }
 
-/// Clés `Run`/`RunOnce` et tâches planifiées.
-///
-/// Windows n'a pas de fichiers à empreinter pour ces surfaces : ce sont des
-/// valeurs de registre et des définitions de tâches. On empreinte donc leur
-/// **texte rendu**, ce qui répond à la même question — « est-ce que ça a
-/// changé ? » — avec le même mécanisme de diff côté serveur.
+/// Clés `Run`/`RunOnce` et tâches planifiées. Windows n'a pas de fichiers à
+/// empreinter pour ces surfaces : on empreinte leur texte rendu, ce qui répond
+/// à la même question avec le même diff côté serveur.
 #[cfg(target_os = "windows")]
 fn collect_windows(scan: &mut Scan) -> bool {
     const KEYS: [&str; 4] = [
@@ -481,8 +454,7 @@ fn now_millis() -> i64 {
 mod tests {
     use super::*;
 
-    /// L'empreinte doit être celle du contenu, et changer avec lui — c'est tout
-    /// ce sur quoi repose la détection de modification côté serveur.
+    /// L'empreinte doit être celle du contenu, et changer avec lui.
     #[test]
     fn fingerprint_tracks_content() {
         let dir = std::env::temp_dir().join(format!("deveye-int-{}", std::process::id()));
@@ -503,8 +475,7 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// Un fichier trop gros n'est pas empreinté : ce n'est pas une tâche
-    /// planifiée, et le lire à chaque cycle coûterait plus que la sonde entière.
+    /// Un fichier trop gros n'est pas empreinté.
     #[test]
     fn fingerprint_skips_oversized_files() {
         let dir = std::env::temp_dir().join(format!("deveye-int-big-{}", std::process::id()));
@@ -542,12 +513,9 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// Le relevé complet sur la machine qui exécute les tests.
-    ///
-    /// N'affirme rien sur *ce que* la machine contient — cela varie — mais tout
-    /// sur la **forme** de ce qui sort. C'est ce qui attrape une empreinte
-    /// tronquée, un chemin relatif ou un doublon, trois défauts que le diff
-    /// serveur transformerait en constats fantômes rejouant à chaque cycle.
+    /// Le relevé complet sur la machine qui exécute les tests : rien sur ce
+    /// qu'elle contient, tout sur la forme (empreinte tronquée, chemin relatif
+    /// ou doublon deviendraient des constats fantômes rejouant à chaque cycle).
     #[test]
     fn collect_yields_a_well_formed_manifest() {
         let report = collect();

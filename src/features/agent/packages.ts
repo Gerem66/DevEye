@@ -37,9 +37,8 @@ export const agentUpgradePackagesFeature: FeatureDefinition<
         const row = await authorizeOnlineDevice(ctx, input.deviceId);
         const monitor = ctx.monitor;
         if (!monitor) throw new FeatureError('conflict', 'Agent hors ligne');
-        // Le verrou d'abord : c'est la seule barrière qui tienne quels que soient
-        // l'écran, l'onglet ou la personne à l'origine du second clic. Il est
-        // relâché par `pkg.done`, ou d'autorité si l'agent s'en va.
+        // Le verrou d'abord : la seule barrière qui tienne quel que soit l'écran
+        // du second clic. Relâché par `pkg.done`, ou d'autorité si l'agent s'en va.
         if (!monitor.beginUpgrade(row.id, input.manager)) {
             throw new FeatureError('conflict', `Une mise à jour « ${input.manager} » est déjà en cours`);
         }

@@ -7,17 +7,9 @@ import { api } from './api';
 import styles from './style.module.css';
 
 /**
- * Les décisions prises : « ceci est légitime ici », ou partout.
- *
- * Sans cet écran, acquitter était un aller sans retour. On créait des
- * autorisations en jugeant des constats, et plus rien ne permettait ensuite de
- * savoir lesquelles existaient, qui les avait posées, ni de revenir dessus,
- * une décision d'un jour devenait un angle mort permanent.
- *
- * Retirer une autorisation ne rouvre pas le constat sur-le-champ : c'est le
- * moteur qui le refera au tour suivant, **si la situation existe encore**. Une
- * autorisation retirée pour un programme depuis désinstallé ne ressuscite rien,
- * ce qui est le comportement voulu.
+ * Les décisions prises. Retirer une autorisation ne rouvre pas le constat
+ * sur-le-champ : le moteur le refera au tour suivant, si la situation existe
+ * encore.
  */
 
 interface Props {

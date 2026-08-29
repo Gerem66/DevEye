@@ -23,24 +23,13 @@ interface AudienceProps {
 }
 
 /**
- * L'onglet « Audience » d'un projet : les sites qu'il suit.
+ * L'onglet « Audience » d'un projet : les sites qu'il suit. Le site n'appartient
+ * pas au projet, qui n'en tient qu'un pointeur ; tout l'affichage vient du bloc
+ * du module (`AUDIENCE_CLIENT_PROVIDER`), rendu ici plutôt que derrière un
+ * renvoi, sans que cet écran importe le module.
  *
- * Enveloppe mince, exactement comme les onglets Git et Bases de données. **Le
- * site n'appartient pas au projet** : il vit dans sa feature, avec ses réglages
- * et sa clé, et plusieurs projets peuvent suivre le même. Cet onglet ne possède
- * qu'un pointeur (`projects.audienceList` / `audienceLink` / `audienceUnlink`) et
- * délègue tout l'affichage au module Audience, par son contrat client
- * (`AUDIENCE_CLIENT_PROVIDER`) : cet écran n'importe pas le module.
- *
- * Le contenu est rendu **ici**, et non derrière un renvoi vers la feature : les
- * chiffres d'un projet se consultent depuis le projet, sinon la liaison ne sert
- * qu'à ranger. C'est le bloc du module (`LinkedSite`), qui charge son site
- * lui-même, suit les invalidations de la feature et porte sa barre collante.
- *
- * Corollaire à connaître : lire une audience relève du droit `audience`, pas de
- * `projects`. Un membre qui a l'un sans l'autre voit qu'il y a des sites
- * rattachés sans pouvoir les ouvrir, et l'écran le dit. Module absent : même
- * lecture, des identifiants nus, et une phrase qui le dit.
+ * Lire une audience relève du droit `audience`, pas de `projects` : sans lui,
+ * ou sans le module, les sites se listent en identifiants nus.
  */
 export function Audience({ project, canWrite }: AudienceProps) {
     const permissions = useWorkspacePermissions();

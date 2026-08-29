@@ -9,14 +9,10 @@ import { createModuleServices, registerModules } from './register';
 import type { ModuleServiceHost } from './service';
 
 /**
- * La sentinelle des providers : deux modules qui offrent le même contrat se
- * refusent à la création des services (`moduleProvider` n'aurait aucun
- * critère pour en choisir un).
- *
- * Dans son propre fichier, donc son propre processus : `createModuleServices`
- * avorte à mi-course en laissant les services déjà créés dans le registre
- * (état de module sans remise à zéro), ce qui fausserait tout test voisin qui
- * compterait des hooks ou des services. Rien d'autre n'est enregistré ici.
+ * Deux modules qui offrent le même contrat se refusent à la création des
+ * services. Dans son propre fichier, donc son propre processus :
+ * `createModuleServices` avorte à mi-course en laissant les services déjà
+ * créés dans le registre, ce qui fausserait tout test voisin.
  */
 
 function manifest(id: ExternalFeatureId): FeatureManifest {

@@ -34,24 +34,17 @@ import {
 } from './_shared';
 
 /**
- * Le tableau d'un projet : colonnes et cartes.
- *
- * Toutes les lignes d'un projet sont chiffrées **sous l'étage du projet** : pas
- * de tier par carte. C'est ce qui rend la bascule de confidentialité atomique
- * (voir `reencryptProjectTree`) et évite d'avoir à raisonner carte par carte.
- * Et sous la clé de **son** espace : un projet projeté ici (`Docs/SHARING.md`)
- * se lit et s'écrit chez lui, `projectCipher` et `project.workspace_id`, avec
- * les droits d'ici. Le tableau entier est un geste de fenêtre.
- *
- * ⚠️ Rappel : le contrôle de démarrage de `_topics.ts` ne repère pas les noms en
- * camelCase sous un préfixe unique. Chaque écriture ci-dessous déclare `mutates`
- * à la main, et un oubli ne produirait aucun avertissement.
+ * Le tableau d'un projet : colonnes et cartes. Toutes les lignes d'un projet sont
+ * chiffrées sous l'étage du projet, jamais un palier par carte, ce qui rend la
+ * bascule de confidentialité atomique (`reencryptProjectTree`). Et sous la clé de
+ * son espace : un projet projeté ici se lit et s'écrit chez lui, avec les droits
+ * d'ici.
  */
 
 /**
- * Charge la colonne **et** son projet, visible d'ici au niveau demandé. La
- * colonne se lit par son seul identifiant : c'est le projet qui est l'élément
- * gardé, et la colonne porte son espace par construction.
+ * Charge la colonne et son projet, visible d'ici au niveau demandé. La colonne se lit
+ * par son seul identifiant : c'est le projet qui est l'élément gardé, et la colonne
+ * porte son espace par construction.
  */
 async function loadColumn(
     ctx: Ctx,
@@ -64,7 +57,7 @@ async function loadColumn(
     return { column, project };
 }
 
-/** Charge la carte **et** son projet, visible d'ici au niveau demandé (même règle que la colonne). */
+/** Charge la carte et son projet, même règle que la colonne. */
 export async function loadCard(
     ctx: Ctx,
     cardId: number,
@@ -77,12 +70,10 @@ export async function loadCard(
 }
 
 /**
- * Un membre à qui attribuer une carte doit appartenir à l'espace **actif**,
- * même sur un projet projeté : on assigne parmi les gens qu'on voit.
- *
- * Sans cette garde, un identifiant quelconque passerait (la colonne est en
- * clair et n'a pas de contrainte d'appartenance) et la carte s'afficherait
- * attribuée à un inconnu que l'interface ne saurait pas nommer.
+ * Un membre à qui attribuer une carte doit appartenir à l'espace actif, même sur un
+ * projet projeté : on assigne parmi les gens qu'on voit. Sans cette garde, la colonne
+ * étant en clair et sans contrainte d'appartenance, un identifiant quelconque
+ * passerait et la carte s'afficherait attribuée à un inconnu.
  */
 async function assertAssignee(ctx: Ctx, userId: number | null): Promise<void> {
     if (userId === null) return;
@@ -102,9 +93,8 @@ export const projectBoardFeature = defineSdkFeature({
         const cipher = await projectCipher(ctx, project);
         const wantArchived = input.archived === true;
 
-        // Sur un projet gardé, les titres sont sous l'étage gardé : mieux vaut
-        // lever `locked` tout de suite (le client ouvre l'invite) que de rendre
-        // un tableau entier de cartes sans titre.
+        // Les titres d'un projet gardé sont sous l'étage gardé : mieux vaut lever
+        // `locked` que rendre un tableau entier de cartes sans titre.
         await assertProjectUnlocked(ctx, project);
 
         // Les non-lus sont ceux de l'appelant, chez lui comme par une fenêtre.
@@ -122,8 +112,8 @@ export const projectBoardFeature = defineSdkFeature({
             cardRows.map(async (row) => toCard(row, await decryptCard(cipher, row.content), unread.get(row.id) ?? 0))
         );
 
-        // L'archive ne montre pas de colonnes : celles-ci décrivent un flux de
-        // travail vivant, et une carte archivée n'y circule plus.
+        // L'archive ne montre pas de colonnes : elles décrivent un flux de travail
+        // vivant, où une carte archivée ne circule plus.
         return { columns: wantArchived ? [] : columns, cards };
     }
 });
@@ -180,9 +170,8 @@ export const projectColumnRemoveFeature = defineSdkFeature({
         const { project } = await loadColumn(ctx, input.columnId, 'write');
         await assertProjectUnlocked(ctx, project);
 
-        // La contrainte SQL est en CASCADE : sans cette garde, retirer une
-        // colonne détruirait des cartes, alors que rien d'autre dans ce module
-        // ne permet d'en supprimer une.
+        // La contrainte SQL est en CASCADE : sans cette garde, retirer une colonne
+        // détruirait des cartes, que rien d'autre ici ne permet de supprimer.
         const held = await ctx.repo.board.countCardsInColumn(input.columnId, project.workspace_id);
         if (held > 0) {
             throw new FeatureError(
@@ -270,9 +259,9 @@ export const projectCardMoveFeature = defineSdkFeature({
     handler: async (ctx: Ctx, input) => {
         const { column, project } = await loadColumn(ctx, input.columnId, 'write');
 
-        // Chaque carte listée doit déjà appartenir au même projet que la colonne
-        // d'arrivée : sinon un glisser-déposer pourrait transplanter une carte
-        // d'un projet à l'autre, ce que l'interface ne propose jamais.
+        // Chaque carte listée doit déjà appartenir au projet de la colonne
+        // d'arrivée : sinon un glisser-déposer transplanterait une carte d'un projet
+        // à l'autre, ce que l'interface ne propose jamais.
         for (const cardId of input.cardIds) {
             const row = await ctx.repo.board.findCard(cardId);
             if (!row) throw new FeatureError('not_found', 'Carte introuvable');
@@ -282,7 +271,7 @@ export const projectCardMoveFeature = defineSdkFeature({
         }
 
         // Aucun corps chiffré n'est touché : un projet confidentiel se réordonne
-        // sans déverrouillage.
+        // sans déverrouiller.
         await ctx.repo.board.moveCards(project.workspace_id, input.columnId, input.cardIds);
         return { columnId: input.columnId, cardIds: input.cardIds };
     }
@@ -298,8 +287,8 @@ export const projectCardArchiveFeature = defineSdkFeature({
         const ok = await ctx.repo.board.archiveCard(input.cardId, project.workspace_id, Math.floor(Date.now() / 1000));
         if (!ok) throw new FeatureError('not_found', 'Carte introuvable');
 
-        // Le libellé porte le titre de la carte au moment de l'archivage : la
-        // frise doit rester lisible même si la carte est renommée ensuite.
+        // Le libellé fige le titre du moment : la frise reste lisible même si la
+        // carte est renommée ensuite.
         const title = (await decryptCard(await projectCipher(ctx, project), card.content)).title;
         await recordEvent(ctx, project, {
             kind: 'card.archived',

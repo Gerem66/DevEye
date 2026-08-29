@@ -24,18 +24,9 @@ import type { DatabaseRepo, DatabaseWithStatsRow } from './repo';
 import { nameRef } from './_shared';
 
 /**
- * Les handlers du module, sur le harnais du SDK.
- *
- * Ce qui mérite d'être tenu, c'est ce qui ne lève nulle part quand ça se
- * dérègle : les **restrictions par élément** (une base masquée pour ce rôle
- * disparaît de la liste et du compte), le **partage inter-espaces** (une
- * projection se liste avec `foreign: true` sous le codec de son espace
- * d'origine, ses alertes sont celles du domicile, et elle ne se modifie
- * jamais depuis la fenêtre), le **contrat de Projets** (le compte et la liste
- * des projets viennent du provider, et son absence vaut zéro plutôt qu'une
- * erreur), la discipline des **secrets** (absent = conservé, vide = effacé,
- * jamais rendus), le **ménage** à la suppression (`ctx.items.forget`), et les
- * dernières mesures d'une alerte conservées à sa réécriture.
+ * Les handlers du module sur le harnais du SDK : restrictions par élément,
+ * partage inter-espaces, contrat de Projets, discipline des secrets, ménage à
+ * la suppression, dernières mesures conservées à la réécriture d'une alerte.
  */
 
 /** Le handler d'un contrat, typé par ce contrat (le registre est hétérogène). */
@@ -58,7 +49,7 @@ interface FakeRepo extends DatabaseRepo {
     alerts: DatabaseAlertRow[];
 }
 
-/** Une base en base, telle que le vrai dépôt la rendrait (contenu en clair : le harnais chiffre à l'identité). */
+/** Une ligne telle que le vrai dépôt la rendrait ; le harnais chiffre à l'identité. */
 function row(over: Partial<DatabaseRow> & { id: number; workspace_id: number }): DatabaseRow {
     const name = `Base ${over.id}`;
     return {
@@ -104,13 +95,7 @@ function alert(
     };
 }
 
-/**
- * Un dépôt en mémoire, même contrat que le vrai. `projections` reproduit la
- * table `item_shares` : `databaseId → espaces où elle est projetée`, ce qui
- * donne à `listVisible` / `findVisible` leur seconde branche, et ce que le
- * harnais (`shares`) doit dire en écho pour que `ctx.sharing.scope()`
- * connaisse le domicile.
- */
+/** Un dépôt en mémoire ; `projections` reproduit `item_shares` (base → espaces où elle est projetée). */
 function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
     let seq = 100;
     const rows: DatabaseRow[] = [];
@@ -229,7 +214,7 @@ function seed(repo: FakeRepo, ...seeded: DatabaseRow[]): FakeRepo {
     return repo;
 }
 
-/** Le contrat de Projets, tel que l'app (ou son module) l'offre : l'espace 1 relie la base 1 à deux projets. */
+/** Le contrat de Projets : l'espace 1 relie la base 1 à deux projets. */
 const projects: ProjectsUsageProvider = {
     usageOf: async (feature, itemId, workspaceId) =>
         feature === 'database' && itemId === 1 && workspaceId === 1
@@ -240,9 +225,7 @@ const projects: ProjectsUsageProvider = {
             : [],
     countByItem: async (feature, workspaceId) =>
         feature === 'database' && workspaceId === 1 ? new Map([[1, 2]]) : new Map(),
-    // La frise d'un projet : ce que Déploiement lui dit, jamais Bases de données.
     recordEvent: async () => undefined,
-    // Une version ne se reporte que depuis un dépôt git : rien à faire ici.
     applyVersion: async () => undefined
 };
 
@@ -300,8 +283,7 @@ describe('le partage inter-espaces', () => {
         const repo = seed(fakeRepo({ 7: [1] }), row({ id: 7, workspace_id: 42 }));
         const ctx = createTestContext({ repo, workspaceId: 1, shares: { 7: 42 } });
 
-        // Le codec est demandé pour la ligne : le harnais rend l'identité,
-        // l'appel est ce qui se vérifie.
+        // Le harnais rend l'identité : c'est l'appel qui se vérifie.
         const asked: number[] = [];
         const scope = ctx.sharing.scope;
         ctx.sharing = {

@@ -1,39 +1,18 @@
 /**
- * Le contrôle de démarrage sur l'autorisation.
- *
- * Même esprit que `buildTopicIndex` pour les `mutates` : attraper l'omission au
- * boot plutôt qu'en production. La différence est que celle-ci ne se voit pas —
- * un `mutates` oublié fige un écran, un `access` oublié **ouvre une commande**,
- * en silence, et l'interface qui masque la donnée donne au passage l'impression
- * que la garde existe.
- *
- * Ce n'est pas une hypothèse : au moment d'écrire ce fichier, `uptime`, `mail`,
- * `weather` et `cloudSync` — soit 76 commandes — n'en déclaraient **aucun**,
- * alors que les quatre sont accordables dans l'écran des rôles. Un membre dont
- * le rôle ne les accordait pas voyait l'interface masquée et pouvait appeler
- * chacune d'elles.
+ * Le contrôle de démarrage sur l'autorisation : attraper l'omission au boot
+ * plutôt qu'en production. Un `access` oublié ouvre une commande en silence,
+ * et l'interface qui masque la donnée fait croire que la garde existe.
  */
 
 /**
- * Les commandes qui n'ont **délibérément** pas d'`access` déclaratif.
- *
- * Trois familles, et chacune a sa raison :
- *
- *  - **le cycle de vie de l'espace** — s'en aller, en créer un, lire l'état de
- *    sa clé. Ces commandes ne visent pas le contenu d'un espace mais l'espace
- *    lui-même, et leur garde dépend de la ligne touchée (`isOwner`), ce qu'une
- *    déclaration statique ne sait pas dire ;
- *  - **ce que tout membre doit pouvoir lire** — la liste des rôles (chacun doit
- *    connaître ses propres droits), la liste des canaux (on ne route pas vers
- *    ce qu'on ne voit pas), sa propre présence ;
- *  - **ce dont la cible est un argument** — tout `notify.*` : la
- *    fonctionnalité visée arrive dans l'entrée (routes comme canaux, la
- *    gestion des canaux étant par fonctionnalité depuis la 093). Le
- *    dispatcheur ne peut pas vérifier avant le handler ce qu'il ne connaît pas
- *    encore ; le contrôle est en première ligne du handler.
- *
- * Toute autre commande doit déclarer son `access`. Ajouter une entrée ici est un
- * geste délibéré, qui se voit en revue — c'est tout l'objet de la liste.
+ * Les commandes qui n'ont délibérément pas d'`access` déclaratif :
+ *  - le cycle de vie de l'espace, dont la garde dépend de la ligne touchée
+ *    (`isOwner`) ;
+ *  - ce que tout membre doit pouvoir lire (ses rôles, les canaux, sa présence) ;
+ *  - ce dont la cible est un argument (`notify.*`, `share.*`) : la
+ *    fonctionnalité visée arrive dans l'entrée, le contrôle est en première
+ *    ligne du handler.
+ * Toute autre commande doit déclarer son `access`.
  */
 const ACCESS_EXEMPT = new Set([
     'workspace.activate',
@@ -47,19 +26,15 @@ const ACCESS_EXEMPT = new Set([
     'notify.routeGet',
     'notify.routeSet',
     'notify.routeTest',
-    // Même raison encore, depuis que la gestion des canaux est PAR
-    // fonctionnalité (grant `channels`, 093) : la fonctionnalité visée arrive
-    // dans l'entrée (`feature` pour l'ajout, l'id du canal pour le reste), et
-    // chaque handler ouvre sur `ctx.assertChannels(...)`.
+    // Chaque handler ouvre sur `ctx.assertChannels(...)`.
     'notify.channelAdd',
     'notify.channelUpdate',
     'notify.channelUsage',
     'notify.channelDelete',
     'notify.channelReorder',
     'notify.channelTest',
-    // Même raison : la fonctionnalité visée arrive dans l'entrée. Le partage
-    // vérifie en tête de handler l'accès à cette feature, l'appartenance à
-    // l'espace cible et — pour les restrictions — `workspace.roles`.
+    // Le partage vérifie en tête de handler l'accès à la feature, l'appartenance
+    // à l'espace cible et, pour les restrictions, `workspace.roles`.
     'share.get',
     'share.set',
     'share.grantList',
@@ -67,12 +42,9 @@ const ACCESS_EXEMPT = new Set([
 ]);
 
 /**
- * Refuse le démarrage si une commande n'est gardée par rien.
- *
- * Lever plutôt qu'avertir : un avertissement de boot se lit une fois puis se
- * range dans le bruit des journaux, et la commande reste ouverte pendant ce
- * temps. Le coût d'une entrée oubliée est une seconde de correction ; celui
- * d'une garde oubliée est une donnée servie à qui n'y a pas droit.
+ * Refuse le démarrage si une commande n'est gardée par rien. Lever plutôt
+ * qu'avertir : un avertissement se range dans le bruit des journaux, et la
+ * commande reste ouverte pendant ce temps.
  */
 export function assertAccessDeclared(defs: readonly { command: string; access?: unknown }[]): void {
     const naked = defs.filter((d) => !d.access && !ACCESS_EXEMPT.has(d.command)).map((d) => d.command);

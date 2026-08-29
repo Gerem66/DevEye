@@ -1,13 +1,12 @@
 /*
- * Audience — l'apparence.
+ * L'apparence de la feature Audience.
  *
  * Aucune couleur en dur : tout passe par les variables du thème, donc l'écran
  * suit l'apparence de l'espace sans une ligne de plus.
  *
- * ⚠️ Une classe ne doit être définie **qu'une fois** seule dans son sélecteur —
- * `client/scripts/check-css-modules.mjs` échoue sinon. Ce filet existe parce
- * qu'une redéfinition silencieuse a rendu la page d'accueil des Projets
- * inutilisable sans que rien (TypeScript, ESLint, le build) ne le signale.
+ * Une classe ne doit être définie qu'une fois seule dans son sélecteur, sans
+ * quoi `client/scripts/check-css-modules.mjs` échoue : une redéfinition
+ * silencieuse ne se voit ni de TypeScript, ni d'ESLint, ni du build.
  */
 
 .feature {
@@ -269,9 +268,8 @@
     gap: var(--space-md);
 }
 
-/* Collant sur le corps défilant de la popup — même mécanique que le voile de
-   synchronisation de la feature Git. Le fond doit être **opaque** : sans lui,
-   le contenu défilerait visiblement dessous. */
+/* Collant sur le corps défilant de la popup. Le fond doit être opaque : sans
+   lui, le contenu défilerait visiblement dessous. */
 .detailHead {
     position: sticky;
     top: 0;
@@ -342,11 +340,10 @@
     gap: var(--space-md);
 }
 
-/* Le voile couvre les chiffres sans les démonter : ils restent lisibles
-   dessous, atténués, et sont remplacés en place. `pointer-events: none` pour
-   qu'on puisse continuer à changer de fenêtre pendant qu'il tourne, et un fond
-   très clair plutôt qu'un masque opaque — on voile une relecture, on ne cache
-   pas un écran. */
+/* Le voile couvre les chiffres sans les démonter : ils restent lisibles dessous
+   et sont remplacés en place. `pointer-events: none` pour qu'on puisse changer
+   de fenêtre pendant qu'il tourne, et un fond clair plutôt qu'un masque opaque :
+   on voile une relecture, on ne cache pas un écran. */
 .viewVeil {
     position: absolute;
     inset: 0;
@@ -386,13 +383,9 @@
 /*
  * Juste sous le bandeau collant qui la précède, quel qu'il soit.
  *
- * `--sticky-head` est publiée par `useStickyOffset`, qui **mesure** ce bandeau
- * plutôt que de supposer sa hauteur : l'en-tête d'une fiche de site dans la
- * feature Audience, l'en-tête et les onglets d'un projet dans son onglet
- * Audience. Le repli `0px` couvre le cas où il n'y en a aucun.
- *
- * Une constante écrite en dur marchait dans un seul des deux cas, et se
- * décalait dès qu'un titre passait à la ligne.
+ * `--sticky-head` est publiée par `useStickyOffset`, qui mesure ce bandeau
+ * plutôt que d'en supposer la hauteur : une constante en dur se décale dès
+ * qu'un titre passe à la ligne. Le repli `0px` couvre le cas sans bandeau.
  */
 .viewHead {
     position: sticky;
@@ -620,17 +613,12 @@
 
 .panel {
     /*
-     * Le fond que doit porter le bandeau collant de ce bloc, **opaque**.
+     * Le fond opaque que doit porter le bandeau collant de ce bloc : la teinte
+     * du bloc ne l'est pas, et laisserait défiler le contenu au travers.
      *
-     * La teinte du bloc ne l'est pas : `--surface-subtle` vaut 4 % de blanc et
-     * `--surface-widget` 62 %. Posée telle quelle sur un en-tête collant, elle
-     * laissait défiler le contenu au travers, ce qui est le contraire de ce
-     * qu'on lui demande.
-     *
-     * On empile donc la teinte du bloc **sur** le jumeau opaque du fond de
-     * popup (`linear-gradient` d'une seule couleur sert de calque). Le résultat
-     * a exactement la couleur apparente du bloc, sans rien laisser passer. La
-     * peindre en dur aurait figé une valeur que le thème peut changer.
+     * On empile donc cette teinte sur le jumeau opaque du fond de popup (un
+     * `linear-gradient` d'une seule couleur sert de calque) : même couleur
+     * apparente, sans rien laisser passer, et sans figer une valeur du thème.
      */
     --block-bg: linear-gradient(var(--surface-widget), var(--surface-widget)), var(--surface-popup-solid);
     display: flex;
@@ -660,13 +648,9 @@
 /* ------------------------------------------------- un site dans un projet */
 
 /*
- * Le bloc d'un site relié, rendu par le module dans l'onglet d'un projet
- * (`LinkedSite`).
- *
- * La même boîte que les panneaux de la fiche, cadre et fond opaque de la barre
- * collante compris : l'onglet l'empruntait déjà telle quelle quand il
- * importait cette feuille, et un site ne se présente pas autrement selon la
- * porte par laquelle on entre.
+ * Le bloc d'un site relié, rendu dans l'onglet d'un projet : la même boîte que
+ * les panneaux de la fiche, cadre et fond opaque de la barre collante compris,
+ * un site ne se présentant pas autrement selon la porte par laquelle on entre.
  */
 .linkedBlock {
     composes: panel;
@@ -1003,10 +987,9 @@
     transition: width var(--transition-normal);
 }
 
-/* L'abandon est un **lien entre deux marches**, pas une propriété de l'une
-   d'elles : il est donc rendu au-dessus de la marche dans laquelle il conduit.
-   Le poser en dessous collait la première marche à la deuxième et désalignait
-   toute la colonne — la première n'a pas d'abandon, rien ne la précède. */
+/* L'abandon est un lien entre deux marches et non une propriété de l'une
+   d'elles : il est rendu au-dessus de la marche dans laquelle il conduit, et la
+   première n'en a pas, puisque rien ne la précède. */
 .funnelLink {
     display: flex;
     align-items: center;
@@ -1060,23 +1043,18 @@
 }
 
 /* `SelectInput` pose `width: 100%` : sans largeur imposée il réclamerait toute
-   la ligne et écraserait le champ de valeur — le motif est connu du dépôt. */
+   la ligne et écraserait le champ de valeur. */
 .stepKind {
     flex-shrink: 0;
 }
 
-/* La gouttière, et pourquoi c'est elle qu'il fallait corriger.
-   `SelectInput` pose `padding-right: 48px` — une réserve pour une flèche
-   personnalisée qui **n'existe pas** : le composant ne rend qu'un `<select>` nu,
-   sans `appearance: none`, sans image de fond ni pseudo-élément. Le navigateur
-   dessine donc sa flèche native au bord, et le texte est coupé 48 px avant elle.
-   Élargir le champ ne faisait qu'agrandir ce vide au lieu de le supprimer.
-   28 px laissent la place de la flèche native et rien de plus ; sur 140 px il
-   reste alors ~98 px de texte, quand « Événement » en réclame ~85.
-   ⚠️ **Double sélecteur pour battre les règles de `SelectInput`** : à
-   spécificité égale (0,1,0) c'est l'ordre d'injection des feuilles qui tranche.
-   Deux classes locales montent à (0,2,0) et gagnent quel que soit cet ordre —
-   même motif que `.stepBtn .stepIcon` juste au-dessus. */
+/* `SelectInput` pose `padding-right: 48px`, une réserve pour une flèche
+   personnalisée qui n'existe pas : le composant rend un `<select>` nu, le
+   navigateur dessine sa flèche native au bord, et le texte est coupé 48 px
+   avant elle. Élargir le champ ne fait qu'agrandir ce vide.
+   Double sélecteur pour battre les règles de `SelectInput` : à spécificité
+   égale (0,1,0) c'est l'ordre d'injection qui tranche, deux classes locales
+   montent à (0,2,0) et gagnent quel que soit cet ordre. */
 .stepRow .stepKind {
     width: 140px;
     padding-right: 8px;
@@ -1127,21 +1105,17 @@
 
 /* 18 px est la taille par défaut d'une icône : dans un bouton de 26 px elle
    remplit tout et ne se lit plus comme un chevron.
-   ⚠️ **Double sélecteur pour battre le `.icon { width: 18px }` global**
-   d'icons.css : à spécificité égale (0,1,0) c'est l'ordre d'injection des
-   feuilles qui tranche, et icons.css passe après. Deux classes locales — le
-   bouton puis l'icône — montent à (0,2,0) et gagnent quel que soit cet ordre.
-   Même motif que `.card2Chip .chipIcon` dans le module Projets.
+   Double sélecteur pour battre le `.icon { width: 18px }` global d'icons.css :
+   à spécificité égale (0,1,0) l'ordre d'injection tranche, et icons.css passe
+   après ; deux classes locales montent à (0,2,0) et gagnent.
    Ni `.stepBtn .icon` ni `:global` : dans un module, un `.icon` nu serait
-   renommé et ne matcherait plus rien — c'est ce qui avait déjà fait échouer,
-   en silence, la rotation du chevron « bas ». */
+   renommé et ne matcherait plus rien. */
 .stepBtn .stepIcon {
     width: 13px;
 }
 
-/* `chevron.svg` pointe **à droite**. Les rotations sont portées par l'icône
-   elle-même, jamais par un sélecteur descendant depuis une classe composée :
-   c'est ce détour qui avait laissé les deux flèches pointer du même côté. */
+/* `chevron.svg` pointe à droite. Les rotations sont portées par l'icône
+   elle-même, jamais par un sélecteur descendant depuis une classe composée. */
 .chevronUp {
     composes: stepIcon;
     transform: rotate(-90deg);
@@ -1328,12 +1302,9 @@
 }
 
 /*
- * Le groupe de dépliants, **sans gouttière**.
- *
- * `.install` espace ses enfants d'un `gap`, qui venait s'ajouter au-dessus de
- * chaque filet : un titre se retrouvait plus loin de sa propre ligne que du
- * bloc précédent, et l'ensemble paraissait décalé vers le bas. Le seul
- * espacement est désormais celui, égal de part et d'autre, du bouton de titre.
+ * Le groupe de dépliants, sans gouttière : le `gap` de `.install` s'ajouterait
+ * au-dessus de chaque filet, mettant un titre plus loin de sa propre ligne que
+ * du bloc précédent. Le seul espacement est celui du bouton de titre.
  */
 .disclosures {
     display: flex;
@@ -1374,17 +1345,16 @@
     transform: rotate(90deg);
 }
 
-/* ⚠️ Double sélecteur, pour la quatrième fois dans ce fichier : une classe de
-   module seule ne bat pas le `.icon { width: 18px }` global d'icons.css, les
-   deux étant à (0,1,0) et l'ordre d'injection tranchant en faveur du second.
-   12 px est la taille des chevrons du reste de l'application. */
+/* Double sélecteur : une classe de module seule ne bat pas le
+   `.icon { width: 18px }` global d'icons.css, les deux étant à (0,1,0) et
+   l'ordre d'injection tranchant pour le second. 12 px est la taille des
+   chevrons du reste de l'application. */
 .disclosureHead .disclosureShut {
     width: 12px;
 }
 
-/* Le corps d'un dépliant porte lui-même son espacement : à l'intérieur d'un
-   `<details>`, les enfants échappaient au `gap` de `.install`, et le bouton de
-   copie se retrouvait collé au bloc de code qu'il copie. */
+/* Le corps d'un dépliant porte lui-même son espacement : ses enfants échappent
+   au `gap` de `.install`. */
 .disclosureBody {
     display: flex;
     flex-direction: column;

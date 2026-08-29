@@ -10,16 +10,11 @@ import { dueSince, SentinelEngine } from './engine';
 import type { BaselineRow, DeviceConfigRow, FindingRow, SentinelRepo } from './repo';
 
 /**
- * Le moteur du module, sur le harnais de service du SDK.
- *
- * Ce qui mérite d'être tenu, c'est ce qui ne lève nulle part quand ça se
- * dérègle : le **plancher d'évaluation** (une reconnexion en boucle ne rejoue
- * pas les relevés horaires), et un **tour complet** sur un instant suspect :
- * le constat s'ouvre, la preuve s'épingle, la vue est prévenue, l'alerte part
- * une fois avec sa mise en page Discord, et jamais deux fois pour la même
- * situation. Et la garde à l'ingestion, depuis que l'app ne la tient plus :
- * un appareil non surveillé n'évalue rien, une fenêtre d'authentification
- * reçue sonde éteinte est jetée.
+ * Ce qui ne lève nulle part quand ça se dérègle : le plancher d'évaluation (une
+ * reconnexion en boucle ne rejoue pas les relevés), un tour complet sur un
+ * instant suspect (constat ouvert, preuve épinglée, vue prévenue, alerte une
+ * seule fois), et la garde à l'ingestion (appareil non surveillé ou sonde
+ * éteinte : rien n'est évalué).
  */
 
 interface FakeRepo extends SentinelRepo {

@@ -67,10 +67,8 @@ export default function FeatureProfile({ user, workspace }: FeatureProps) {
         }
     };
 
-    // Même conduite que la couleur, et pour la même raison : l'effet du clic est
-    // immédiat à l'écran (les curseurs des pairs disparaissent, le nôtre cesse
-    // d'être émis), donc l'état local part devant et ne revient en arrière que si
-    // le serveur refuse.
+    // Comme la couleur : l'état local part devant, l'effet du clic étant
+    // immédiat à l'écran, et ne revient en arrière que si le serveur refuse.
     const onToggleCursors = async (visible: boolean) => {
         if (savingCursors) return;
         const previous = user.settings;

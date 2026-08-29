@@ -2,35 +2,15 @@ import { z } from 'zod';
 import { projectCardSchema } from './board';
 
 /**
- * Ce qui relie un projet au reste de DevEye, et ce qui relie une personne à ses
- * tâches à travers tous les projets.
- *
- * Deux notions transverses réunies ici parce qu'elles répondent à la même
- * question posée dans les deux sens : « qu'est-ce qui touche ce projet ? » et
- * « qu'est-ce qui me touche, moi, dans tous les projets ? ».
+ * Ce qui relie un projet au reste de DevEye, et une personne à ses tâches à travers
+ * tous les projets. Une liaison ne stocke qu'un identifiant : l'objet visé garde
+ * ses propres droits, c'est la feature qui le détient qui tranche.
  */
 
 /**
- * Ce qui relie un projet à un service surveillé.
- *
- * On ne stocke que l'identifiant : la cible garde ses propres droits, et rien
- * d'identifiant n'a besoin d'être chiffré. Un membre sans accès à Uptime voit
- * qu'il y a des services rattachés sans pouvoir les nommer — c'est la feature
- * visée qui tranche, pas celle-ci.
- *
- * La liaison est **non exclusive dans les deux sens** : un projet suit plusieurs
- * services, et un même service peut être suivi par plusieurs projets. Même forme
- * que la liaison au dépôt git, et pour la même raison — ce sont deux objets
- * d'espace, pas des propriétés d'un projet.
- */
-
-/**
- * Une tâche qui m'est attribuée, vue depuis l'extérieur de son projet.
- *
- * `masked` marque une carte d'un projet confidentiel verrouillé : elle est
- * comptée et située, mais son titre reste illisible. La faire disparaître
- * donnerait une liste de tâches fausse, ce qui est pire que de dire « il y a
- * quelque chose ici que tu ne peux pas lire maintenant ».
+ * Une tâche qui m'est attribuée, vue depuis l'extérieur de son projet. `masked`
+ * marque une carte d'un projet confidentiel verrouillé : comptée et située, titre
+ * illisible. La faire disparaître donnerait une liste de tâches fausse.
  */
 export const myTaskSchema = z.object({
     card: projectCardSchema,
@@ -41,17 +21,11 @@ export const myTaskSchema = z.object({
 export type MyTask = z.infer<typeof myTaskSchema>;
 
 /**
- * L'intitulé d'un objet d'espace relié, tel que la feature visée le rend par
- * son contrat d'éléments (`labelOf`, sous le codec ouvert du DOMICILE du
- * projet). Une entrée par identifiant lié, toujours, chez soi comme depuis une
- * fenêtre : `label` vaut `null` quand le module est absent ou que l'élément a
- * disparu, et l'écran montre alors « un élément disparu », jamais un numéro.
- *
- * C'est ce qui rend une liaison lisible depuis une fenêtre sur un projet
- * projeté (`Docs/SHARING.md`) : le dépôt, la base, le site, la cible ou le
- * service vivent dans l'espace d'origine, que la fenêtre ne voit pas et ne
- * saurait nommer par ses propres listes. Le nom seul voyage ; ouvrir l'objet
- * reste un droit de l'espace d'origine, vérifié par sa feature.
+ * L'intitulé d'un objet d'espace relié, tel que la feature visée le rend par son
+ * contrat d'éléments (`labelOf`). Une entrée par identifiant lié, toujours ; `label`
+ * vaut `null` quand le module est absent ou que l'élément a disparu, et l'écran
+ * montre « un élément disparu », jamais un numéro. Seul le nom voyage jusqu'à une
+ * fenêtre sur le projet : ouvrir l'objet reste un droit de l'espace d'origine.
  */
 export const projectLinkLabelSchema = z.object({
     id: z.number().int().positive(),
@@ -60,44 +34,25 @@ export const projectLinkLabelSchema = z.object({
 export type ProjectLinkLabel = z.infer<typeof projectLinkLabelSchema>;
 
 /**
- * Combien d'éléments chaque intégration d'un projet a à montrer.
- *
- * Des **compteurs seulement** : ils décident si l'écran a quelque chose à
- * ouvrir, pas ce qu'il montrera. Un projet neuf n'a ni dépôt, ni base, ni site,
- * ni déploiement — lui présenter quatre onglets vides revient à lui demander de
- * fouiller pour trouver le vide. Zéro fait donc disparaître l'onglet, et le
- * geste d'ajout se replie dans un menu unique.
- *
- * Les clés portent le nom de la **feature d'espace** pointée (`git`,
- * `database`, `audience`), pas celui de l'onglet qui les affiche : ce sont les
- * mêmes identifiants que les droits (`workspaceFeatureIdSchema`), et c'est ce
- * qui permet à l'appelant de demander « ai-je le droit d'y ajouter ? » sans
- * table de correspondance.
- *
- * Un compte ne dit rien de ce que l'appelant a le droit de **lire** : les
- * liaisons relèvent de `projects`, leur contenu de la feature visée. Un membre
- * sans accès à Git voit donc l'onglet Git et, dedans, la phrase qui explique ce
- * qui lui manque — plutôt qu'un onglet escamoté qui lui cacherait l'existence
- * même du lien.
+ * Combien d'éléments chaque intégration d'un projet a à montrer : zéro fait
+ * disparaître l'onglet. Les clés portent le nom de la feature d'espace pointée et
+ * non celui de l'onglet, ce sont les mêmes identifiants que les droits
+ * (`workspaceFeatureIdSchema`). Un compte ne dit rien du droit de lire le contenu :
+ * les liaisons relèvent de Projets, ce qu'elles pointent de la feature visée.
  */
 export const projectLinkCountsSchema = z.object({
-    /** Dépôts reliés. */
     git: z.number().int().nonnegative(),
-    /** Bases de données reliées. */
     database: z.number().int().nonnegative(),
-    /** Sites suivis reliés. */
     audience: z.number().int().nonnegative(),
-    /**
-     * La cible de déploiement (0 ou 1) **plus** les services surveillés
-     * rattachés. Les deux vivent dans le même onglet : compter la seule cible
-     * ferait disparaître un onglet qui a encore de quoi répondre à « est-ce en
-     * ligne ? ».
-     */
+    /** La cible de déploiement (0 ou 1) plus les services surveillés rattachés. */
     deploy: z.number().int().nonnegative()
 });
 export type ProjectLinkCounts = z.infer<typeof projectLinkCountsSchema>;
 
-/** Ligne SQL (serveur uniquement). */
+/**
+ * Ligne SQL (serveur uniquement) : la liaison projet → service surveillé, non
+ * exclusive dans les deux sens, comme toutes les liaisons vers un objet d'espace.
+ */
 export interface ProjectUptimeLinkRow {
     project_id: number;
     service_id: number;
@@ -106,13 +61,9 @@ export interface ProjectUptimeLinkRow {
 }
 
 /**
- * Ligne SQL (serveur uniquement) : la liaison projet → base.
- *
- * Même forme que la liaison à un service surveillé, et pour la même raison :
- * la base est un objet d'espace que le projet ne fait que pointer. La table
- * (`project_database_links`, migration 068) appartient à Projets, pas au
- * module Bases de données, qui ne connaît ses projets que par le contrat
- * `PROJECTS_USAGE_PROVIDER`.
+ * Ligne SQL (serveur uniquement) : la liaison projet → base. La table appartient à
+ * Projets, pas au module Bases de données, qui ne connaît ses projets que par le
+ * contrat `PROJECTS_USAGE_PROVIDER`.
  */
 export interface ProjectDatabaseLinkRow {
     project_id: number;

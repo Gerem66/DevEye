@@ -16,7 +16,6 @@ export interface PasswordRepo {
     delete(id: number, workspaceId: number): Promise<boolean>;
 }
 
-/** Même dépôt qu'avant le rapatriement, porté sur le `SdkQueryable` du module. */
 export function createRepo(q: SdkQueryable): PasswordRepo {
     return {
         async listByWorkspace(workspaceId) {

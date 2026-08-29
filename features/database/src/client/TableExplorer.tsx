@@ -21,30 +21,21 @@ import { compareTables, FILTER_OPERATOR_LABELS, formatBytes, formatCount, OPERAT
 import { rowKey, rowKeyCells } from './rowKey';
 import styles from './style.module.css';
 
-/** Lignes par page. Aligné sur le défaut du serveur. */
+/** Lignes par page, aligné sur le défaut du serveur. */
 const PAGE = 50;
 /** Durée du halo d'une ligne qu'on vient de rejoindre. */
 const HIGHLIGHT_MS = 3500;
 
-/**
- * Le ressort de l'agrandissement.
- *
- * Assez ferme pour que le geste paraisse immédiat, assez amorti pour qu'il ne
- * rebondisse pas : un panneau qui dépasse sa taille puis revient donne
- * l'impression d'un accident, pas d'un choix.
- */
+/** Le ressort de l'agrandissement : ferme, et amorti pour ne pas rebondir. */
 const EXPAND_SPRING = { type: 'spring', stiffness: 260, damping: 32, mass: 0.9 } as const;
 
 /**
- * Le temps que la disposition met à se poser après un agrandissement.
- *
- * Calé sur `--transition-slow` (400 ms), qui referme la colonne des tables, plus
- * une marge : c'est le délai après lequel une mesure de largeur porte sur la
- * disposition finale et non sur une image intermédiaire.
+ * Le temps que la disposition met à se poser après un agrandissement : calé sur
+ * `--transition-slow` (400 ms), qui referme la colonne des tables, plus une marge.
  */
 const SETTLE_MS = 450;
 
-/** Deux références désignent-elles la même table ? Par son nom, pas son identité. */
+/** Même table, par son nom. */
 function sameTable(a: DatabaseTable | null, b: DatabaseTable | null): boolean {
     return a !== null && b !== null && a.schema === b.schema && a.name === b.name;
 }
@@ -54,12 +45,12 @@ interface TableExplorerProps {
     databaseName: string;
     /** Charger l'inventaire des tables dès l'affichage (réglage de la base). */
     autoLoad: boolean;
-    /** La table ouverte occupe toute la popup. Piloté par l'appelant. */
+    /** La table ouverte occupe toute la popup ; piloté par l'appelant. */
     expanded: boolean;
     onExpandedChange: (expanded: boolean) => void;
 }
 
-/** Quelle popup est ouverte. Une seule à la fois, elles se recouvriraient. */
+/** Une seule popup à la fois. */
 type Dialogue =
     | { kind: 'row'; row: { columns: string[]; values: (string | null)[] } | null }
     | { kind: 'structure' }
@@ -69,39 +60,18 @@ type Dialogue =
     | { kind: 'delete' };
 
 /**
- * L'exploration et l'administration des tables.
- *
- * **Rien ne part tant qu'on n'a pas cliqué** — sauf si la base est réglée pour
- * charger ses tables à l'ouverture, ce qui est éteint par défaut. C'est le
- * principe de toute la feature, et c'est ici qu'il compte le plus : personne ne
- * veut qu'un onglet laissé ouvert interroge la production en boucle.
- *
- * ## Ce qui tient l'écran
- *
- * Une liste de tables à gauche, la table ouverte à droite, et une barre d'outils
- * qui rassemble tout ce qu'on peut lui faire. Les gestes destructeurs y sont
- * séparés du reste, et deux d'entre eux — modifier, supprimer — n'existent pas
- * du tout sur une table sans clé primaire : sans clé, aucune condition ne
- * désigne *une* ligne, et le serveur refuserait de toute façon.
- *
- * ## Les valeurs restent des chaînes
- *
- * Elles arrivent déjà ainsi (voir `databaseRowsSchema`) : un `BIGINT` dépasse le
- * nombre sûr de JavaScript et une date n'a pas la même forme chez les deux
- * moteurs. On les affiche telles quelles, et on les renvoie telles quelles.
+ * L'exploration et l'administration des tables. Rien ne part sans clic, sauf
+ * `autoLoad`. Modifier et supprimer n'existent pas sur une table sans clé
+ * primaire. Les valeurs restent des chaînes (voir `databaseRowsSchema`).
  */
 export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, onExpandedChange }: TableExplorerProps) {
     const [tables, setTables] = useState<DatabaseTable[] | null>(null);
-    /** La table **choisie** — celle que la liste de gauche met en avant. */
+    /** La table choisie dans la liste de gauche. */
     const [table, setTable] = useState<DatabaseTable | null>(null);
     /**
-     * La table que `rows` et `structure` décrivent **réellement**.
-     *
-     * Distincte de la précédente le temps d'un chargement : le clic déplace la
-     * sélection tout de suite, le contenu ne change qu'à l'arrivée des lignes.
-     * Tout ce qui décrit le contenu affiché — son nom, sa fenêtre, sa clé
-     * primaire — se lit donc ici, sans quoi l'écran annoncerait pendant une
-     * demi-seconde une table dont il montre les lignes d'une autre.
+     * La table que `rows` et `structure` décrivent réellement : distincte de
+     * `table` le temps d'un chargement, pour ne jamais annoncer une table en
+     * montrant les lignes d'une autre.
      */
     const [shown, setShown] = useState<DatabaseTable | null>(null);
     /** Le même, lisible depuis une closure asynchrone. */
@@ -112,7 +82,7 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
     const [filters, setFilters] = useState<DatabaseFilter[]>([]);
     const [combinator, setCombinator] = useState<DatabaseCombinator>('and');
     const [sort, setSort] = useState<DatabaseSort | null>(null);
-    /** Les lignes cochées, par clé primaire — un indice ne survit pas au tri. */
+    /** Les lignes cochées, par clé primaire (un indice ne survit pas au tri). */
     const [selected, setSelected] = useState<Set<string>>(new Set());
     /** La ligne rejointe par une clé étrangère, auréolée quelques secondes. */
     const [highlight, setHighlight] = useState<string | null>(null);
@@ -121,37 +91,22 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
     const [error, setError] = useState<string | null>(null);
     const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
-    /** Le plein écran était-il déjà installé au rendu précédent ? */
+    /** Le plein écran était déjà installé au rendu précédent. */
     const wasExpanded = useRef(false);
 
     /**
-     * La largeur que la popup doit prendre pour montrer la table en entier.
-     *
-     * Seulement en plein écran : c'est le mode où l'on vient regarder *une*
-     * table, et la seule chose qui doive alors décider de la largeur de l'écran,
-     * c'est elle. Hors de ce mode, la popup garde sa largeur de lecture.
-     *
-     * `null` = aucune demande, donc la popup revient à sa largeur commune. Le
-     * store ne descend jamais sous 1240 px et écrête à la fenêtre : demander
-     * large ne peut ni rétrécir la popup ni la faire déborder.
+     * La largeur que la popup doit prendre pour montrer la table en entier, en
+     * plein écran seulement ; `null` = largeur commune. Le store ne descend
+     * jamais sous 1240 px et écrête à la fenêtre.
      */
     const [wantedWidth, setWantedWidth] = useState<number | null>(null);
     useRequestPopupWidth(expanded ? wantedWidth : null);
 
     /**
-     * Mesurer ce qui manque, et le demander en une fois.
-     *
-     * La cible est **absolue** — largeur du tableau plus l'habillage — et non un
-     * ajustement relatif : la popup s'élargit par une transition CSS, donc une
-     * mesure prise en plein vol verrait une largeur intermédiaire et l'on
-     * ajouterait deux fois le même manque.
-     *
-     * L'habillage se mesure contre le cadre de la popup, et c'est là qu'il faut
-     * **attendre** : à l'entrée en plein écran, la colonne des tables est encore
-     * ouverte pendant sa transition, et ses 240 px compteraient comme de
-     * l'habillage. On demanderait alors une popup trop large, puis on la
-     * rétrécirait — deux mouvements pour un geste. Une fois installé, en
-     * revanche, plus rien ne bouge : changer de table mesure tout de suite.
+     * Une cible absolue (tableau plus habillage), pas un ajustement relatif :
+     * la popup s'élargit par une transition CSS, une mesure en plein vol
+     * ajouterait deux fois le même manque. À l'entrée en plein écran, on attend
+     * que la colonne des tables se soit refermée pour mesurer l'habillage.
      */
     useLayoutEffect(() => {
         if (!expanded) {
@@ -162,8 +117,7 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
         const measure = () => {
             const box = scrollRef.current;
             const grid = box?.querySelector('table');
-            // Rendu hors d'une popup de feature (un test, un autre hôte) : on ne
-            // demande rien plutôt que de deviner un habillage.
+            // Hors d'une popup de feature, on ne demande rien.
             const frame = box?.closest<HTMLElement>('[data-popup-frame]');
             if (!box || !grid || !frame) return;
             const chrome = frame.clientWidth - box.clientWidth;
@@ -179,9 +133,7 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
         return () => clearTimeout(timer);
     }, [expanded, rows, table]);
 
-    // Changer de base referme tout : garder les tables d'une autre à l'écran
-    // serait au mieux déroutant, au pire trompeur. Le plein écran retombe avec
-    // le reste — il n'a plus de table à montrer.
+    // Changer de base referme tout, plein écran compris.
     useEffect(() => {
         setTables(null);
         setTable(null);
@@ -204,9 +156,8 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
         setError(null);
         try {
             const res = await api.send('database.tableList', { databaseId });
-            // Rangées une fois pour toutes, ici : la liste de gauche, le
-            // sélecteur de l'export et le suivi d'une clé étrangère lisent tous
-            // celle-ci, et aucun n'a de raison de les voir dans un autre ordre.
+            // Rangées une fois pour toutes : la liste, l'export et le suivi
+            // d'une clé étrangère lisent celle-ci.
             setTables([...res.tables].sort(compareTables));
         } catch (e) {
             setError(humanizeError(e, 'Impossible de lire les tables.'));
@@ -215,19 +166,12 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
         }
     }, [databaseId]);
 
-    // Le seul endroit de la feature où une connexion part sans clic — et
-    // seulement si la base le demande explicitement.
+    // Le seul endroit où une connexion part sans clic, si la base le demande.
     useEffect(() => {
         if (autoLoad) void loadTables();
     }, [autoLoad, loadTables]);
 
-    /**
-     * Charge une page.
-     *
-     * `withStructure` ne sert qu'à la première lecture d'une table : structure et
-     * première page arrivent alors dans la **même session**, ce qui compte quand
-     * chaque connexion rouvre un tunnel SSH.
-     */
+    /** `withStructure` à la première lecture : structure et page dans la même session. */
     const loadRows = useCallback(
         async (
             target: DatabaseTable,
@@ -256,9 +200,8 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
                     ...(nextSort ? { sort: nextSort } : {}),
                     ...(options.withStructure ? { withStructure: true } : {})
                 });
-                // Les trois d'un bloc : c'est ce qui fait qu'à aucun instant
-                // l'écran ne montre les lignes d'une table sous le nom d'une
-                // autre. Le remplacement est le seul moment où le contenu change.
+                // D'un bloc : l'écran ne montre jamais les lignes d'une table
+                // sous le nom d'une autre.
                 setRows(res.rows);
                 setOffset(at);
                 shownRef.current = target;
@@ -266,10 +209,9 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
                 if (res.structure) setStructure(res.structure);
             } catch (e) {
                 setError(humanizeError(e, 'Impossible de lire cette table.'));
-                // Un échec **en changeant de table** ne doit pas laisser le
-                // contenu de la précédente derrière le voile qui se lève : il
-                // passerait pour celui de la nouvelle. Un échec de pagination,
-                // lui, garde la page affichée — elle est toujours juste.
+                // Un échec en changeant de table ne doit pas laisser le contenu
+                // de la précédente passer pour celui de la nouvelle ; un échec
+                // de pagination garde la page affichée, toujours juste.
                 if (!sameTable(shownRef.current, target)) {
                     setRows(null);
                     setStructure(null);
@@ -284,14 +226,8 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
     );
 
     /**
-     * Ouvre une table : ses critères repartent de zéro, son contenu **reste**.
-     *
-     * Vider `rows` et `structure` ici démontait tout le bloc de droite le temps
-     * de l'aller-retour : le panneau retombait à la hauteur d'un panneau vide,
-     * puis se redéployait — un sursaut de la moitié de l'écran pour un clic dans
-     * une liste. Les lignes précédentes tiennent donc la place jusqu'à ce que les
-     * nouvelles arrivent, et le voile de chargement dit qu'elles ne sont plus
-     * celles qu'on regarde.
+     * Ouvre une table : ses critères repartent de zéro, son contenu reste sous
+     * le voile jusqu'à l'arrivée des lignes, pour que le panneau ne sursaute pas.
      */
     const open = useCallback(
         (target: DatabaseTable, nextFilters: DatabaseFilter[] = []) => {
@@ -306,14 +242,9 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
     );
 
     /**
-     * Suivre une clé étrangère.
-     *
-     * La table visée s'ouvre **filtrée sur la valeur pointée**, et la ligne
-     * trouvée s'auréole quelques secondes. Filtrer plutôt que calculer la page
-     * où se trouve la ligne : ce calcul supposerait un ordre stable et une clé
-     * d'une seule colonne, deux hypothèses que rien ne garantit. Le critère
-     * reste visible et se retire d'un clic — on voit donc *pourquoi* on ne voit
-     * qu'une ligne.
+     * Suivre une clé étrangère : la table visée s'ouvre filtrée sur la valeur
+     * pointée (calculer la page supposerait un ordre stable et une clé d'une
+     * colonne), et la ligne s'auréole quelques secondes.
      */
     const followForeignKey = (refSchema: string, refTable: string, refColumn: string, value: string) => {
         const target = tables?.find((t) => t.name === refTable && (refSchema === '' || t.schema === refSchema));
@@ -331,14 +262,8 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
     const foreignKeyOf = (column: string) => structure?.foreignKeys.find((fk) => fk.columns.includes(column)) ?? null;
 
     const total = rows?.total ?? null;
-    /**
-     * Combien de pages, en tout.
-     *
-     * `total` peut manquer — un moteur ne sait pas toujours compter sans coût.
-     * On retombe alors sur ce qu'on a sous les yeux : une page pleine en suppose
-     * une suivante, une page entamée est la dernière. C'est faux d'une page au
-     * pire, et c'est ce qui permet de garder « Suivant » utilisable partout.
-     */
+    // Sans `total`, une page pleine en suppose une suivante, une page entamée
+    // est la dernière.
     const pageCount =
         total === null
             ? Math.floor(offset / PAGE) + ((rows?.rows.length ?? 0) < PAGE ? 1 : 2)
@@ -385,7 +310,7 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
         }
     };
 
-    /** La ligne unique cochée, quand il n'y en a qu'une — sinon `null`. */
+    /** La ligne cochée, quand il n'y en a qu'une. */
     const singleSelectedRow = () => {
         if (!rows || selected.size !== 1) return null;
         const found = rows.rows.find((row) => {
@@ -396,28 +321,15 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
     };
 
     return (
-        /*
-         * `layout` : l'agrandissement n'est pas un changement de classe qu'on
-         * subit, c'est un mouvement qu'on suit. framer-motion mesure la boîte
-         * avant et après, et anime l'écart — d'où un panneau qui *monte* vers sa
-         * pleine taille au lieu d'apparaître dedans.
-         */
+        /* `layout` : framer-motion mesure la boîte avant et après, et anime l'écart. */
         <motion.section
             layout
             transition={EXPAND_SPRING}
             className={expanded ? styles.panelExpanded : styles.panelGrow}
         >
-            {/* En plein écran, tout ce qui parle de la base disparaît — y compris
-                cet en-tête : on est venu regarder *une* table. */}
             {!expanded && (
-                /*
-                 * `layout` ici aussi, et pour la raison écrite plus bas : une
-                 * animation de disposition redimensionne par une échelle, et une
-                 * échelle déforme ce qu'elle contient. Cet en-tête ne le portait
-                 * pas, il encaissait donc l'étirement vertical en entier —
-                 * titre et boutons compris, ce qui est précisément ce qui se
-                 * voyait. Le porter lui donne l'échelle inverse.
-                 */
+                /* `layout` sur chaque enfant animé : il reçoit l'échelle inverse
+                   et n'est pas déformé pendant le mouvement. */
                 <motion.header layout transition={EXPAND_SPRING} className={styles.panelHead}>
                     <h3 className={styles.panelTitle}>Tables</h3>
                     <div className={styles.actions}>
@@ -456,26 +368,13 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
             {tables?.length === 0 && <p className={styles.hint}>Cette base ne contient aucune table.</p>}
 
             {tables && tables.length > 0 && (
-                /*
-                 * `layout` aussi ici, et sur le cadre de la table : une animation
-                 * de disposition redimensionne par une échelle, et une échelle
-                 * déforme tout ce qui est dedans. Un enfant qui porte `layout` à
-                 * son tour reçoit l'échelle inverse — c'est ce qui garde le texte
-                 * et les bordures nets pendant tout le mouvement, au lieu d'un
-                 * demi-seconde de contenu étiré.
-                 */
                 <motion.div
                     layout
                     transition={EXPAND_SPRING}
                     className={expanded ? styles.explorerExpanded : styles.explorer}
                 >
-                    {/*
-                     * La liste tient dans une boîte qui, elle, s'étire à la
-                     * hauteur de la ligne : c'est la seule façon d'obtenir une
-                     * colonne aussi haute que sa voisine sans lui imposer une
-                     * hauteur en dur — trop courte, elle laissait un vide sous
-                     * elle ; sans plafond, elle repoussait la carte entière.
-                     */}
+                    {/* La boîte s'étire à la hauteur de la ligne : une colonne
+                        aussi haute que sa voisine sans hauteur en dur. */}
                     <div className={styles.tableListPane}>
                         <ul className={styles.tableList}>
                             {tables.map((item) => (
@@ -502,9 +401,7 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
                     <div className={styles.rowsPane}>
                         {!table && <p className={styles.hint}>Choisissez une table pour en voir le contenu.</p>}
 
-                        {/* La toute première lecture, la seule qui n'ait rien à
-                            garder à l'écran : elle a droit à une attente en
-                            clair, faute de contenu à voiler. */}
+                        {/* La toute première lecture n'a rien à voiler. */}
                         {table && !shown && busy && (
                             <p className={styles.loadingLine}>
                                 <span className={`icon icon-spinner ${styles.spinning}`} aria-hidden='true' />
@@ -512,23 +409,10 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
                             </p>
                         )}
 
-                        {/*
-                         * Un cadre autour de la table ouverte, et c'est tout son
-                         * objet : sans lui, « Ajouter / Modifier / Supprimer »
-                         * flottaient entre la liste des tables et le contenu, et
-                         * rien ne disait qu'ils portaient sur la table
-                         * sélectionnée plutôt que sur la base.
-                         */}
                         {table && shown && rows && (
                             <motion.div layout transition={EXPAND_SPRING} className={styles.tablePanel}>
-                                {/*
-                                 * Le voile d'un chargement : il **couvre** le
-                                 * contenu précédent au lieu de le remplacer. Rien
-                                 * ne se démonte, donc rien ne se replie — la
-                                 * hauteur du panneau ne bouge pas d'un pixel entre
-                                 * deux tables, et le contenu suivant s'installe
-                                 * d'un coup, sans passer par un écran vide.
-                                 */}
+                                {/* Le voile couvre le contenu précédent au lieu de le
+                                    remplacer : la hauteur du panneau ne bouge pas. */}
                                 {busy && (
                                     <div className={styles.tableVeil} aria-hidden='true'>
                                         <span className={`icon icon-spinner ${styles.spinning}`} />
@@ -596,8 +480,6 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
                                     >
                                         Structure
                                     </Button>
-                                    {/* Le seul bouton qui survit au plein écran :
-                                        c'est lui qui en sort. */}
                                     <Button
                                         variant='secondary'
                                         icon={expanded ? 'collapse' : 'expand'}
@@ -643,11 +525,6 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
                                     </div>
                                 )}
 
-                                {/* Le tableau défile dans sa propre boîte : une
-                                    table à quarante colonnes ne doit pas faire
-                                    défiler la page entière. En plein écran, cette
-                                    boîte prend toute la hauteur restante — c'est
-                                    tout l'intérêt d'y être passé. */}
                                 <div
                                     ref={scrollRef}
                                     className={expanded ? styles.rowsScrollFill : styles.rowsScrollPane}

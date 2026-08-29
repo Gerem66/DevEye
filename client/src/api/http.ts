@@ -45,21 +45,16 @@ const isExpiredCode = (code: string): boolean => code === 'auth_expired' || code
 let refreshing: Promise<void> | null = null;
 
 /**
- * Renouvelle le cookie d'accès, au plus une fois à la fois.
- *
- * Le cookie `dv_at` ne vit que `JWT_ACCESS_TTL_SECONDS` (quinze minutes par
- * défaut) alors que la WebSocket, elle, reste ouverte des heures. Un onglet posé
- * sur une socket saine ne repassait donc jamais par l'authentification HTTP :
- * passé le quart d'heure, toute requête REST tombait en 401 pendant que le reste
- * de l'application continuait de fonctionner. Le symptôme était incompréhensible
- * — « Télécharger l'agent » indisponible sur un site manifestement connecté.
+ * Renouvelle le cookie d'accès, au plus une fois à la fois. Le cookie `dv_at` ne
+ * vit que `JWT_ACCESS_TTL_SECONDS` alors que la WebSocket reste ouverte des
+ * heures : sans ce rappel, un onglet posé sur une socket saine ne repasse jamais
+ * par l'authentification HTTP et toute requête REST finit en 401.
  */
 export function ensureFreshAccess(): Promise<void> {
     refreshing ??= (async () => {
         try {
-            // Même query d'espace que `refresh()` : sans elle le serveur
-            // recalcule l'espace actif de son côté et peut renvoyer les droits
-            // d'un autre espace que celui affiché.
+            // Même query d'espace que `refresh()` : sans elle le serveur recalcule
+            // l'espace actif et peut renvoyer les droits d'un autre.
             await request(`/api/auth/refresh${workspaceQuery()}`, { method: 'POST' }, refreshResponseSchema);
         } finally {
             refreshing = null;
@@ -93,10 +88,9 @@ async function request<TOut>(
     }
     if (!envelope.data.ok) {
         const { code, message, details } = envelope.data.error;
-        // Un jeton d'accès périmé se répare tout seul tant que le jeton de
-        // rafraîchissement tient : on renouvelle et on rejoue UNE fois. Un échec
-        // du renouvellement laisse remonter l'erreur d'origine, que
-        // `AuthProvider` traduira en déconnexion sur le prochain incident.
+        // Un jeton d'accès périmé se répare tant que le jeton de rafraîchissement
+        // tient : renouveler et rejouer une fois. Un échec laisse remonter l'erreur
+        // d'origine, que `AuthProvider` traduira en déconnexion.
         if (isExpiredCode(code) && !retried && !AUTH_PATHS.includes(path.split('?')[0])) {
             try {
                 await ensureFreshAccess();
@@ -116,12 +110,9 @@ export function login(payload: LoginRequest): Promise<LoginResponse> {
 }
 
 /**
- * Espace actif transmis en query.
- *
- * Sans lui, le serveur recalcule l'espace actif de son côté (le favori, sinon le
- * personnel) et renvoie le thème, la disposition **et les droits** d'un autre
- * espace que celui affiché. Il reste juge de l'accès : un id inaccessible est
- * ignoré et il retombe sur un espace valide.
+ * Espace actif transmis en query : sans lui le serveur le recalcule de son côté
+ * et renvoie le thème, la disposition et les droits d'un autre espace que celui
+ * affiché. Il reste juge de l'accès et ignore un id inaccessible.
  */
 function workspaceQuery(): string {
     const id = getActiveWorkspaceId();

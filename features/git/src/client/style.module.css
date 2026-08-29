@@ -1,12 +1,6 @@
-/* Git — dépôts de l'espace, graphe des commits, diffs.
-   Uniquement des variables de thème : aucune couleur en dur.
-
-   Module séparé de `features/projects/src/client/style.module.css`, et pas seulement
-   parce que la feature l'est : un module CSS de 2000 lignes pour une douzaine
-   d'écrans rend une collision de noms structurellement probable — c'est
-   exactement comme ça que `.grid` a été défini deux fois et que la page
-   d'accueil des Projets s'est retrouvée illisible. `check-css-modules.mjs`
-   attrape désormais le cas, mais la vraie réponse est de découper. */
+/* Git : dépôts de l'espace, graphe des commits, diffs. Uniquement des
+   variables de thème, aucune couleur en dur. Une feuille par module, pour
+   éviter les collisions de noms de classe. */
 
 /* ------------------------------------------------------- primitives partagées */
 
@@ -97,10 +91,8 @@
 
 /* -------------------------------------------------------------------- git */
 
-/* L'en-tête d'un dépôt reste en vue tant qu'on parcourt son bloc : un projet
-   peut en relier plusieurs, et sans lui on ne sait plus lequel on regarde. Il
-   se pose sous l'en-tête du projet, dont `useStickyOffset` publie la hauteur
-   dans `--sticky-head` ; le repli à 0 vaut pour la feature Git elle-même. */
+/* L'en-tête d'un dépôt reste en vue tant qu'on parcourt son bloc, sous
+   l'en-tête du projet (`--sticky-head`) ; le repli à 0 vaut dans la feature. */
 .repoHead {
     position: sticky;
     top: var(--sticky-head, 0px);
@@ -120,17 +112,16 @@
     flex: 1;
 }
 
-/* Boîte du contenu synchronisable : c'est elle que le voile recouvre, et elle
-   seule — l'en-tête reste net et cliquable pendant la synchronisation. */
+/* Boîte du contenu synchronisable, la seule que le voile recouvre : l'en-tête
+   reste net et cliquable. */
 .gitContent {
     position: relative;
     display: flex;
     flex-direction: column;
 }
 
-/* La pile de contenu, sous le voile. Une classe explicite et non un
-   `.gitContent > div` : ce sélecteur aurait aussi frappé le voile lui-même —
-   plus spécifique que `.syncOverlay`, il aurait écrasé son centrage. */
+/* Une classe explicite et non `.gitContent > div`, qui frapperait aussi le
+   voile. */
 .gitStack {
     display: flex;
     flex-direction: column;
@@ -145,8 +136,7 @@
     transition: filter var(--transition-normal);
 }
 
-/* Le voile couvre toute la boîte remplacée — y compris ce qui dépasse sous le
-   pli. Il ne centre donc rien lui-même : c'est `.syncPanel` qui s'en charge. */
+/* Le voile couvre toute la boîte, pli compris ; `.syncPanel` centre. */
 .syncOverlay {
     position: absolute;
     inset: 0;
@@ -154,19 +144,9 @@
     pointer-events: none;
 }
 
-/*
- * Le contenu du voile, collé à la zone visible.
- *
- * `.gitContent` est plus haut que la fenêtre dès qu'un dépôt a quelques
- * branches : un simple `inset: 0` centrait le texte et la barre au milieu du
- * *contenu*, c'est-à-dire hors écran, et le voile débordait sous la barre de
- * défilement. `position: sticky` se cale sur l'ancêtre défilant — le corps de
- * la popup — et fonctionne parfaitement à l'intérieur d'une boîte absolue.
- *
- * La hauteur est celle de ce corps, déduite de la géométrie de la popup
- * (`top: navbar + md`, `bottom: lg`, moins son propre padding vertical) plutôt
- * que d'un `100vh` qui déborderait sous la barre de navigation.
- */
+/* Collé à la zone visible : `.gitContent` dépasse la fenêtre, un `inset: 0`
+   centrerait hors écran ; `position: sticky` se cale sur le corps défilant de
+   la popup. Hauteur déduite de la géométrie de la popup, pas d'un `100vh`. */
 .syncPanel {
     position: sticky;
     top: 0;
@@ -253,12 +233,8 @@
     overflow: hidden;
 }
 
-/*
- * Le nuage de points, en canvas. Deux couches superposées : le canvas dessous
- * porte les disques (un seul élément, quel que soit le nombre de commits), le
- * SVG dessus porte les axes et leurs libellés (une vingtaine d'éléments, du
- * texte qui suit le thème et se met à l'échelle).
- */
+/* Deux couches : le canvas porte les disques (un seul élément), le SVG dessus
+   les axes et leurs libellés (du texte qui suit le thème). */
 .graphCanvas {
     display: block;
 }
@@ -365,10 +341,8 @@
     list-style: none;
 }
 
-/* Une grille, et non `justify-content: space-between` : c'est ce qui aligne
-   tous les sélecteurs sur une même colonne. En flex, chaque ligne se répartit
-   pour son compte, et un sélecteur suivait la longueur du nom qui le précède —
-   ils mordaient alors sur les adresses e-mail et ne s'alignaient jamais. */
+/* Une grille et non `space-between` : elle aligne tous les sélecteurs sur une
+   même colonne. */
 .authorList li {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 200px;
@@ -399,17 +373,9 @@
     }
 }
 
-/*
- * Trois colonnes explicites, et non `auto-fit`.
- *
- * `auto-fit` déduit le nombre de colonnes de la largeur : à 1200 px avec un
- * plancher de 300 px il en fabrique quatre, les trois panneaux occupent les
- * trois premières et chacun vaut un quart de la largeur au lieu d'un tiers. Une
- * grille de trois dit ce qu'on veut vraiment.
- *
- * `align-items` reste à sa valeur par défaut (`stretch`) : les trois panneaux
- * d'une même ligne prennent la hauteur du plus grand.
- */
+/* Trois colonnes explicites : `auto-fit` en fabriquerait quatre à 1200 px, et
+   chaque panneau vaudrait un quart. `align-items: stretch` : même hauteur sur
+   une ligne. */
 .gitCols {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -422,13 +388,7 @@
     }
 }
 
-/*
- * Carte autour d'une liste.
- *
- * Les quatre listes s'étalaient auparavant sur toute la largeur sans rien qui
- * les sépare : un contour discret leur rend une limite, sans alourdir. Même
- * traitement que `.column` du kanban, pour que les deux onglets se ressemblent.
- */
+/* Carte autour d'une liste, même traitement que `.column` du kanban. */
 .panel {
     display: flex;
     flex-direction: column;
@@ -453,16 +413,8 @@
     gap: var(--space-sm);
 }
 
-/*
- * Deux sorties, et elles ne mènent pas au même endroit.
- *
- * Le **titre** ouvre la liste complète dans DevEye : c'est le geste courant,
- * il prend toute la place disponible. La petite **icône GitHub** part chez le
- * fournisseur : c'est le geste rare, elle se contente du coin.
- *
- * Auparavant le titre faisait la seconde chose, ce qui obligeait à quitter
- * l'application pour lire la seizième branche.
- */
+/* Le titre ouvre la liste complète dans DevEye (geste courant, grande cible) ;
+   l'icône GitHub part chez le fournisseur (geste rare, le coin). */
 .panelTitle {
     flex: 1;
     min-width: 0;
@@ -523,27 +475,9 @@
     font-family: var(--font-mono);
 }
 
-/* Le pied d'un panneau tronqué. Discret : c'est la même action que le titre,
-   posée là où le regard arrive quand la liste s'arrête. */
-/*
- * Le pied d'un panneau tronqué, **collé au bas de la carte**.
- *
- * `margin-top: auto` est tout le sujet. Les trois panneaux d'une même ligne
- * prennent la hauteur du plus grand (`align-items: stretch`), mais leurs enfants
- * s'empilent depuis le haut : sans cette marge, l'espace libre tombait *sous* le
- * « Voir tout », qui flottait alors au milieu de sa carte pendant que le voisin
- * touchait le fond.
- *
- * On avait d'abord cherché à corriger ça en ajustant le **nombre d'éléments** de
- * chaque liste. C'était voué à l'échec : une ligne de pull request n'a pas la
- * même hauteur qu'une ligne de release, donc aucun couple de nombres ne rend
- * deux colonnes égales — réduire l'une déplaçait simplement le décalage sur
- * l'autre. La marge automatique, elle, aligne les pieds quelles que soient les
- * listes, leurs longueurs et leurs hauteurs de ligne.
- *
- * Le filet supérieur fait lire l'espace restant comme un pied de carte plutôt
- * que comme un trou.
- */
+/* Le pied d'un panneau tronqué, collé au bas de la carte : `margin-top: auto`
+   aligne les pieds des panneaux d'une ligne quelles que soient les listes, et
+   le filet supérieur fait lire l'espace restant comme un pied, pas un trou. */
 .seeAll {
     margin-top: auto;
     padding: var(--space-xs);
@@ -743,7 +677,7 @@
 }
 
 /* La description telle qu'elle a été écrite : retours à la ligne et
-   indentation préservés (voir PullRequestView pour le parti pris). */
+   indentation préservés. */
 .pullBody {
     margin: 0;
     padding: var(--space-md);
@@ -757,10 +691,8 @@
     overflow-wrap: anywhere;
 }
 
-/* Dans le pied d'un dialogue, à côté de « Fermer ».
-   Surtout pas d'`align-self: flex-start` : le pied est une ligne flex, et cette
-   règle collait le lien en haut au lieu de l'aligner sur les boutons. Le pied
-   centre déjà ses enfants — il suffit de le laisser faire. */
+/* Dans le pied d'un dialogue, à côté de « Fermer ». Pas d'`align-self:
+   flex-start` : le pied centre déjà ses enfants. */
 .externalLink {
     display: inline-flex;
     align-items: center;
@@ -856,23 +788,14 @@
     transition: transform var(--transition-normal);
 }
 
-/* Fermé : pointe à droite. Ouvert : vers le bas. C'est le sens de lecture d'un
-   dépliage, et la rotation se voit puisqu'elle est animée. */
+/* Fermé : pointe à droite. Ouvert : vers le bas. */
 .diffChevronOpen {
     transform: rotate(90deg);
 }
 
-/*
- * Dépliage animé, sans mesurer le DOM.
- *
- * `grid-template-rows: 0fr → 1fr` interpole la hauteur **réelle** du contenu :
- * c'est la seule façon d'animer vers `auto` en CSS pur. Une `max-height`
- * arbitraire aurait soit tronqué un gros diff, soit produit une fin
- * d'animation dans le vide sur un petit.
- *
- * Sur un moteur qui ne sait pas interpoler `fr`, la bascule reste correcte —
- * elle est simplement instantanée.
- */
+/* `grid-template-rows: 0fr → 1fr` interpole la hauteur réelle : la seule façon
+   d'animer vers `auto` en CSS pur. Un moteur qui ne sait pas interpoler `fr`
+   bascule sans animer. */
 .diffReveal {
     display: grid;
     grid-template-rows: 0fr;
@@ -981,8 +904,7 @@
     color: var(--text-muted);
 }
 
-/* Zone rouge du dialogue de dépôt : une action destructrice se sépare
-   visuellement de ce qui l'entoure. */
+/* Zone rouge du dialogue de dépôt. */
 .dangerZone {
     display: flex;
     align-items: center;
@@ -995,14 +917,8 @@
     background: var(--danger-bg);
 }
 
-/*
- * Le texte de la zone, et lui seul.
- *
- * C'était `.dangerZone > div`, ce qui frappait aussi le groupe de boutons de
- * confirmation — enfant direct lui aussi. « Annuler / Confirmer » héritaient
- * donc de `flex-direction: column` et s'empilaient, étirés, au lieu de rester
- * côte à côte. Une classe nommée ne peut pas se tromper de cible.
- */
+/* Une classe nommée et non `.dangerZone > div`, qui frapperait aussi le groupe
+   de boutons de confirmation. */
 .dangerText {
     display: flex;
     flex-direction: column;
@@ -1013,13 +929,8 @@
 
 /* ------------------------------------------------- feature Git : les dépôts */
 
-/*
- * Une ligne par dépôt, comme le portefeuille des Projets.
- *
- * Une grille de cartes irait mal ici : ce qui distingue deux dépôts, c'est un
- * chemin `owner/repo` — du texte long, horizontal, qui se tronque mal dans une
- * colonne de 300 px.
- */
+/* Une ligne par dépôt : `owner/repo` est du texte long, qui se tronque mal
+   dans une colonne. */
 .repoGrid {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -1032,15 +943,9 @@
     position: relative;
 }
 
-/*
- * Où atterrirait la carte glissée. Traverse la liste et se tient dans
- * l'interstice lui-même : aucune ligne n'est déplacée ni restylée pour montrer
- * la cible, donc ce qu'on voit est exactement la position obtenue. Pilotée par
- * le DOM (voir RepoList), jamais par un état React.
- *
- * `position: absolute` la sort du flux : c'est un `<li>` — le seul enfant
- * valide d'une `<ul>` — mais il n'occupe aucune cellule de la grille.
- */
+/* Où atterrirait la carte glissée : dans l'interstice, aucune ligne déplacée,
+   pilotée par le DOM (voir RepoList). `position: absolute` sort ce `<li>` du
+   flux. */
 .dropBar {
     position: absolute;
     left: 0;
@@ -1072,20 +977,16 @@
     transform: translateY(-1px);
 }
 
-/* La carte en cours de déplacement : estompée plutôt que masquée, pour que sa
-   place dans la liste reste un repère pendant que la barre montre la cible.
-   `filter: opacity()` et non `opacity` — la propriété est déjà revendiquée par
-   les surfaces animées de l'application (voir la note sur framer-motion). */
+/* Estompée plutôt que masquée : sa place reste un repère. `filter: opacity()`
+   et non `opacity`, propriété que framer-motion revendique. */
 .repoCardDragging {
     filter: opacity(0.4);
     cursor: grabbing;
 }
 
-/* Poignée de réorganisation, sur le modèle d'une ligne de bloc dans une note :
-   cachée jusqu'au survol, à la manière des éditeurs natifs. `touch-action: none`
-   est ce qui rend le geste possible au doigt — il empêche le défileur de
-   revendiquer le mouvement — et reste cantonné à ces 18 px, de sorte qu'une
-   pression ailleurs sur la carte fait toujours défiler la page. */
+/* Poignée de réorganisation, cachée jusqu'au survol. `touch-action: none` rend
+   le geste possible au doigt, cantonné à ces 18 px pour qu'une pression
+   ailleurs sur la carte fasse défiler. */
 .repoGrip {
     flex-shrink: 0;
     align-self: center;
@@ -1118,9 +1019,8 @@
     }
 }
 
-/* Deux colonnes : le texte, puis la flèche — alignées en haut, de sorte que la
-   flèche marque le coin de la carte plutôt que de se ranger au bas avec les
-   indicateurs d'état, où elle se lisait comme l'un d'eux. */
+/* Deux colonnes alignées en haut : la flèche marque le coin de la carte, pas
+   la ligne d'état. */
 .repoCardBody {
     flex: 1;
     min-width: 0;
@@ -1179,7 +1079,7 @@
     color: var(--accent);
 }
 
-/* Les projets qui utilisent un dépôt — l'autre sens de l'interconnexion. */
+/* Les projets qui utilisent un dépôt. */
 .usage {
     display: flex;
     flex-direction: column;
@@ -1248,17 +1148,9 @@
 
 /* ------------------------------------------------------ « voir tout » */
 
-/* La liste complète défile dans le dialogue, pas la page derrière. */
-/*
- * La liste complète défile dans le dialogue, pas la page derrière.
- *
- * Le padding horizontal n'est pas décoratif : `.gitRowButton` déborde de sa
- * boîte par une marge négative (`0 calc(-1 * var(--space-xs))`) pour que son
- * fond de survol dépasse le texte. Dans un conteneur défilant, ces quelques
- * pixels suffisaient à faire apparaître une barre horizontale parasite. Le
- * padding leur rend exactement la place qu'ils prennent ; `overflow-x: hidden`
- * ferme la porte pour tout ce qui déborderait autrement.
- */
+/* La liste complète défile dans le dialogue. Le padding horizontal rend à
+   `.gitRowButton` la place de sa marge négative : sans lui, une barre
+   horizontale parasite apparaissait. */
 .listDialogBody {
     display: flex;
     flex-direction: column;
@@ -1377,12 +1269,8 @@
     color: var(--warning);
 }
 
-/*
- * Une action notable mais non destructrice, au pied d'un dialogue.
- *
- * Même géométrie que `.dangerZone` — elle partage `.dangerText` — mais un ton
- * neutre : tout resynchroniser coûte du temps et du quota, ça ne perd rien.
- */
+/* Même géométrie que `.dangerZone`, ton neutre : resynchroniser coûte du temps,
+   pas des données. */
 .actionZone {
     display: flex;
     align-items: center;
@@ -1397,14 +1285,8 @@
 
 /* ------------------------------------------- avancement dans la liste */
 
-/*
- * Bande fine en tête de carte, pendant qu'un dépôt se synchronise.
- *
- * Même parti pris que la carte d'un compte mail : elle se superpose au lieu de
- * s'insérer, donc rien ne bouge dans la carte quand elle apparaît ou disparaît.
- * `.repoCard` est déjà `position: relative` ; le `overflow: hidden` ci-dessous
- * est ce qui lui fait épouser les coins arrondis.
- */
+/* Bande de progression en tête de carte, superposée au lieu d'insérée : rien
+   ne bouge dans la carte. */
 .syncStrip {
     position: absolute;
     top: 0;
@@ -1439,14 +1321,7 @@
 
 /* ------------------------------------------------- un objet dans un projet */
 
-/*
- * Un dépôt / une base à l'intérieur de l'onglet d'un projet.
- *
- * Sans cadre tant qu'il n'y en a qu'un : une boîte dans une boîte n'apporterait
- * rien. À partir de deux, un contour sobre — pas une carte pleine — dit
- * simplement où l'un finit et où l'autre commence, entre deux graphes et huit
- * panneaux qui se ressembleraient sinon.
- */
+/* Un dépôt dans l'onglet d'un projet : un contour sobre, pas une carte pleine. */
 .repoBlock {
     display: flex;
     flex-direction: column;
@@ -1455,19 +1330,9 @@
 }
 
 .repoBlockFramed {
-    /*
-     * Le fond que doit porter le bandeau collant de ce bloc, **opaque**.
-     *
-     * La teinte du bloc ne l'est pas : `--surface-subtle` vaut 4 % de blanc et
-     * `--surface-widget` 62 %. Posée telle quelle sur un en-tête collant, elle
-     * laissait défiler le contenu au travers, ce qui est le contraire de ce
-     * qu'on lui demande.
-     *
-     * On empile donc la teinte du bloc **sur** le jumeau opaque du fond de
-     * popup (`linear-gradient` d'une seule couleur sert de calque). Le résultat
-     * a exactement la couleur apparente du bloc, sans rien laisser passer. La
-     * peindre en dur aurait figé une valeur que le thème peut changer.
-     */
+    /* Le fond du bandeau collant doit être opaque, et la teinte du bloc ne
+       l'est pas : on l'empile (`linear-gradient` d'une seule couleur) sur le
+       jumeau opaque du fond de popup, pour suivre le thème. */
     --block-bg: linear-gradient(var(--surface-subtle), var(--surface-subtle)), var(--surface-popup-solid);
     composes: repoBlock;
     padding: var(--space-md);

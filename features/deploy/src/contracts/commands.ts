@@ -15,16 +15,9 @@ import {
 } from './domain';
 
 /**
- * Commandes du déploiement.
- *
- * Feature d'espace de premier rang, sur le modèle de Git : une cible appartient
- * à l'espace, un projet n'y **pointe** (voir `projects.deployLink`). Tout est à
- * l'étage ouvert, donc aucune de ces commandes ne demande de session
- * déverrouillée.
- *
- * Les clés d'API Dokploy vivent ici et non plus dans la feature Git, où elles
- * n'avaient atterri que faute de module pour les accueillir : poser la clé qui
- * déploie relève de `deploy`, pas de `git`.
+ * Commandes du déploiement. Une cible appartient à l'espace, un projet n'y
+ * pointe (voir `projects.deployLink`). Tout est à l'étage ouvert : aucune de ces
+ * commandes ne demande de session déverrouillée.
  */
 
 const targetId = z.number().int().positive();
@@ -37,10 +30,7 @@ export const deployList = {
     output: z.object({ targets: z.array(deployTargetSchema) })
 };
 
-/**
- * Compte les cibles. Métadonnée en clair pure : la tuile d'accueil affiche
- * toujours un nombre, même session verrouillée.
- */
+/** Compte les cibles : métadonnée en clair, la tuile d'accueil l'affiche même session verrouillée. */
 export const deployCount = {
     command: 'deploy.count' as const,
     input: z.object({}),
@@ -89,10 +79,8 @@ export const deployUpdate = {
 };
 
 /**
- * Supprime une cible, **et son historique avec elle**.
- *
- * L'application chez le fournisseur n'est pas touchée : DevEye ne fait que la
- * pointer. Les projets qui la déployaient perdent leur liaison, rien d'autre.
+ * Supprime une cible et son historique. L'application chez le fournisseur n'est
+ * pas touchée ; les projets qui la déployaient perdent leur liaison.
  */
 export const deployRemove = {
     command: 'deploy.remove' as const,
@@ -108,11 +96,8 @@ export const deployReorder = {
 };
 
 /**
- * Les applications proposées par l'instance, pour en choisir une.
- *
- * Seule commande du module qui appelle un service externe en direct : elle sert
- * à remplir un sélecteur, et attendre le prochain tour d'un ordonnanceur pour
- * voir apparaître la liste n'aurait aucun sens.
+ * Les applications proposées par l'instance. Seule commande du module qui
+ * appelle le fournisseur en direct : elle remplit un sélecteur.
  */
 export const deployCandidates = {
     command: 'deploy.candidates' as const,
@@ -121,15 +106,9 @@ export const deployCandidates = {
 };
 
 /**
- * Déclenche un déploiement.
- *
- * Toujours audité en `warn` : c'est la seule action du module qui produise un
- * effet **hors** de DevEye, et savoir qui a poussé quoi en production compte
- * plus que le reste.
- *
- * `projectId` est facultatif et ne sert qu'à la frise du projet : déclenché
- * depuis l'onglet d'un projet, l'événement y est inscrit ; déclenché depuis la
- * feature, il n'appartient à aucun projet en particulier.
+ * Déclenche un déploiement. Audité en `warn` : la seule action du module à
+ * effet hors de DevEye. `projectId` ne sert qu'à la frise du projet d'où part le
+ * geste ; depuis la feature, le déploiement n'appartient à aucun projet.
  */
 export const deployTrigger = {
     command: 'deploy.trigger' as const,
@@ -143,15 +122,9 @@ export const deployTrigger = {
 };
 
 /**
- * L'historique complet d'une cible, **tel que Dokploy le rend** — pas
- * seulement ce que DevEye a déclenché : un déploiement lancé depuis
- * l'interface de Dokploy ou une CI y apparaît aussi.
- *
- * Distincte de `deployGet`, qui reste le suivi local (léger, toujours
- * disponible sans réseau vers le fournisseur) : celle-ci interroge Dokploy en
- * direct à chaque appel, coûte une requête externe, et n'a donc de sens que
- * là où on la demande explicitement — la fiche d'une cible dans la feature,
- * pas l'onglet d'un projet qui en reliste plusieurs.
+ * L'historique complet d'une cible tel que Dokploy le rend, y compris ce qui
+ * n'est pas parti de DevEye. Interroge l'instance à chaque appel : réservé à la
+ * fiche d'une cible, jamais à une liste. `deployGet` reste le suivi local.
  */
 export const deployHistory = {
     command: 'deploy.history' as const,
@@ -160,14 +133,9 @@ export const deployHistory = {
 };
 
 /**
- * Le journal complet d'un déploiement, tel que Dokploy l'a produit.
- *
- * `externalId` vient d'une ligne de `deployHistory` : c'est la seule façon dont
- * le client connaît un déploiement dont DevEye n'a pas forcément la ligne
- * locale. Repose sur un point d'entrée de Dokploy sans procédure tRPC dédiée
- * (voir l'adaptateur `dokploy.ts`) : peut échouer sur une instance qui
- * l'authentifie autrement, ou pas du tout — l'appelant le traite alors comme
- * n'importe quelle autre panne réseau.
+ * Le journal complet d'un déploiement. `externalId` vient d'une ligne de
+ * `deployHistory`. Repose sur un point d'entrée Dokploy sans procédure tRPC
+ * (voir `dokploy.ts`) : peut échouer sur une instance qui l'authentifie autrement.
  */
 export const deployLog = {
     command: 'deploy.log' as const,
@@ -175,15 +143,7 @@ export const deployLog = {
     output: z.object({ log: z.string() })
 };
 
-// ------------------------------------------------------------------ jetons
-
-/**
- * Les clés d'API Dokploy de l'espace.
- *
- * Quatre commandes jumelles de `git.credential*` : même table, même forme, mais
- * chaque feature n'expose que les jetons de ses fournisseurs et les garde
- * derrière son propre droit. Le secret n'est jamais rendu.
- */
+/** Les clés d'API Dokploy de l'espace. Le secret n'est jamais rendu. */
 export const deployCredentialList = {
     command: 'deploy.credentialList' as const,
     input: z.object({}),
@@ -214,9 +174,8 @@ export const deployCredentialUpdate = {
 };
 
 /**
- * Retire un jeton. Les cibles qui s'en servaient **restent**, sans jeton
- * (`ON DELETE SET NULL`) : elles cessent d'être déployables et le disent, plutôt
- * que de disparaître avec leur clé.
+ * Retire un jeton. Les cibles qui s'en servaient restent, sans jeton : elles
+ * cessent d'être déployables et le disent.
  */
 export const deployCredentialRemove = {
     command: 'deploy.credentialRemove' as const,

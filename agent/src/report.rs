@@ -76,12 +76,9 @@ fn hardware() -> DeviceHardware {
     }
 }
 
-/// Network interfaces with their MAC and an inferred class. On macOS the class is
-/// resolved from `networksetup -listallhardwareports` (reliable: `en0` may be
-/// Wi-Fi or Ethernet); elsewhere it's inferred from the interface name.
-/// Hard cap on reported network interfaces (mirrors the ports/connections caps): a
-/// container host can expose dozens of virtual `veth*`/`br-*` devices, and an
-/// over-long list would be rejected wholesale by the report schema's `.max(64)`.
+/// Hard cap on reported network interfaces: a container host can expose dozens
+/// of virtual `veth*`/`br-*` devices, and an over-long list would be rejected
+/// wholesale by the report schema's `.max(64)`.
 const NET_INTERFACES_LIMIT: usize = 64;
 
 /// Sort key so truncation drops noise (container veths, loopback) before real NICs.
@@ -97,6 +94,9 @@ fn iface_rank(kind: &str) -> u8 {
     }
 }
 
+/// Network interfaces with their MAC and an inferred class. On macOS the class is
+/// resolved from `networksetup -listallhardwareports` (`en0` may be Wi-Fi or
+/// Ethernet); elsewhere it's inferred from the interface name.
 fn read_network_interfaces() -> Vec<NetInterface> {
     #[cfg(target_os = "macos")]
     let ports = macos_hardware_ports();
@@ -131,9 +131,7 @@ fn read_network_interfaces() -> Vec<NetInterface> {
             }
         })
         .collect();
-    // Meaningful interfaces first (physical before virtual/loopback) then
-    // alphabetical, and cap the count so a container host's many veths can't push
-    // the list past the report schema's limit and get the whole report rejected.
+    // Physical before virtual/loopback, then alphabetical, so the cap drops noise.
     out.sort_by(|a, b| {
         iface_rank(a.kind)
             .cmp(&iface_rank(b.kind))
@@ -366,29 +364,18 @@ fn agent_info() -> AgentInfo {
     }
 }
 
-/// Ce que **cette version** de l'agent sait relever.
-///
-/// Une liste en dur, et c'est voulu : elle décrit le binaire, pas la machine. Le
-/// serveur s'en sert pour distinguer « la sonde a échoué ici » d'« un agent trop
-/// ancien pour l'avoir » — les deux rendent `null`, mais l'une envoie inspecter
-/// la machine et l'autre la mettre à jour.
-///
-/// Ajouter une sonde, c'est ajouter son nom ici. L'oublier ferait taire côté
-/// serveur des règles pourtant alimentées.
+/// Ce que cette version de l'agent sait relever : décrit le binaire, pas la
+/// machine. Le serveur distingue ainsi « la sonde a échoué ici » d'« un agent
+/// trop ancien pour l'avoir ». Ajouter une sonde, c'est ajouter son nom ici.
 const PROBES: [&str; 4] = ["execPath", "posture", "integrity", "auth"];
 
 /// Effective uid 0 ⇒ root.
 ///
 /// Sur Linux la réponse vient du noyau (`/proc/self/status`), pas d'un binaire
-/// externe : `id` doit être trouvé dans le `PATH`, et sur une racine minimale —
-/// image de conteneur, système embarqué sans coreutils — il ne l'est pas. Le
-/// `run(...).unwrap_or(false)` d'origine ne distinguait pas « je ne suis pas
-/// root » de « je n'ai pas pu le savoir » : un agent lancé sous `sudo` se
-/// déclarait alors non privilégié, et l'interface le croyait.
-///
-/// La ligne `Uid:` donne quatre entiers — réel, effectif, sauvegardé, système de
-/// fichiers ; c'est l'**effectif**, le deuxième, qui décide de ce qu'on a le
-/// droit de lire. `id -u` reste le repli des autres Unix.
+/// externe : `id` n'est pas toujours dans le `PATH` (conteneur, embarqué sans
+/// coreutils), et « je n'ai pas pu le savoir » ne doit pas se lire « pas root ».
+/// La ligne `Uid:` donne réel, effectif, sauvegardé, fs : c'est l'effectif qui
+/// décide. `id -u` reste le repli des autres Unix.
 #[cfg(unix)]
 pub fn is_privileged() -> bool {
     #[cfg(target_os = "linux")]
@@ -486,7 +473,7 @@ struct RawProcess {
 /// Aggregate figures the same scan yields for free, so the metric snapshot needs
 /// no second process enumeration.
 pub struct ProcTotals {
-    /// Number of running processes (was a separate `sysinfo` full refresh).
+    /// Number of running processes.
     pub count: Option<u32>,
     /// Cumulative bytes read/written across all processes; `None` when the
     /// platform or our privileges don't expose per-process I/O.
@@ -503,27 +490,20 @@ pub struct ProcessScan {
     pub pid_names: HashMap<u32, String>,
 }
 
-/// Scan processes once per collection tick, **aggregated by program name**:
+/// Scan processes once per collection tick, aggregated by program:
 /// - `off`  → no process list (totals are still reported);
-/// - `top`  → the 20 heaviest programs, scored on **CPU% + memory%**;
+/// - `top`  → the 20 heaviest programs, scored on CPU% + memory%;
 /// - `all`  → every program (capped at `ALL_PROCESS_LIMIT`).
 ///
-/// We aggregate same-named processes (summing CPU% and memory) because modern
-/// apps are multi-process — e.g. a browser splits work across many helper
-/// processes, so a single PID looks idle while the app is busy. Grouping by name
-/// gives the realistic "this app is using X%"; `instances` keeps the multiplicity
-/// visible.
+/// Same-named processes are summed because modern apps are multi-process (a
+/// browser splits work across helpers, so a single PID looks idle while the app
+/// is busy); `instances` keeps the multiplicity visible.
 ///
-/// On Unix we shell out to `ps` rather than use `sysinfo`: its per-process CPU
-/// reads 0 on macOS (a known limitation), whereas `ps` reports a real value on
-/// both Unixes. `%cpu` is the kernel's recent (decaying-average) utilisation and
-/// can exceed 100% across cores; `%mem` is RSS as a fraction of physical memory.
-/// Widening the `ps` format string costs nothing measurable, so pid, thread
-/// count, owner and start time come along for free. Windows has no `ps`, so
-/// there we use `sysinfo` (whose per-process CPU *is* accurate on Windows).
+/// `%cpu` is the kernel's recent (decaying-average) utilisation and can exceed
+/// 100% across cores; `%mem` is RSS as a fraction of physical memory.
 ///
-/// `sockets` supplies the per-process connection counts and listening ports —
-/// the same probe that produced the report's port list, never a second one.
+/// `sockets` supplies the per-process connection counts and listening ports,
+/// from the same probe that produced the report's port list.
 pub fn collect_processes(capture: &str, sockets: &SocketMap, sys: &mut System) -> ProcessScan {
     let raw = scan_processes(sys);
     let count = if raw.is_empty() {
@@ -546,11 +526,9 @@ pub fn collect_processes(capture: &str, sockets: &SocketMap, sys: &mut System) -
         };
     }
 
-    // La clé est **(nom, chemin)** et non le nom seul : deux binaires homonymes
-    // rangés à des endroits différents sont deux programmes différents, et les
-    // fusionner est exactement ce derrière quoi un imposteur se cache. Un
-    // `nginx` légitime dans /usr/sbin et un `nginx` déposé dans /tmp forment
-    // donc deux entrées — ce qui est l'information utile.
+    // La clé est (nom, chemin) et non le nom seul : un `nginx` légitime dans
+    // /usr/sbin et un `nginx` déposé dans /tmp sont deux programmes, et les
+    // fusionner est ce derrière quoi un imposteur se cache.
     let mut agg: HashMap<(String, Option<String>), Aggregate> = HashMap::new();
     for p in raw {
         let owned_sockets = sockets.by_pid.get(&p.pid);
@@ -611,9 +589,8 @@ impl Aggregate {
         if self.instances == 0 {
             self.exec_path = p.exec_path.clone();
         }
-        // Un seul processus au binaire effacé suffit à marquer le groupe : c'est
-        // l'anomalie qu'on cherche, et la noyer dans une majorité saine
-        // reviendrait à la taire.
+        // Un seul processus au binaire effacé suffit à marquer le groupe :
+        // c'est l'anomalie qu'on cherche.
         if p.deleted == Some(true) {
             self.deleted = Some(true);
         } else if self.deleted.is_none() {
@@ -750,11 +727,9 @@ fn per_process_io(raw: &[RawProcess]) -> Option<ProcessIo> {
 /// (hence the `System`, unused here but needed by the Windows arm).
 #[cfg(not(target_os = "windows"))]
 fn scan_processes(sys: &mut System) -> Vec<RawProcess> {
-    // Linux lit `/proc` directement : pas de binaire externe, donc rien à
-    // trouver dans le `PATH` et aucune dépendance au `ps` du système. Le `ps`
-    // d'origine partait du principe que celui de procps-ng était installé — un
-    // BusyBox, une racine minimale ou un `PATH` réduit rendaient une liste vide,
-    // en silence, et la machine paraissait n'exécuter aucun processus.
+    // Linux lit `/proc` directement : aucune dépendance au `ps` du système (un
+    // BusyBox, une racine minimale ou un `PATH` réduit rendent une liste vide,
+    // en silence).
     #[cfg(target_os = "linux")]
     {
         let procs = scan_processes_proc();
@@ -764,31 +739,23 @@ fn scan_processes(sys: &mut System) -> Vec<RawProcess> {
         tracing::warn!("/proc yielded no process — falling back to ps");
     }
 
-    // macOS uses `ucomm` (short accounting name) and `etime` (formatted); Linux
-    // uses `comm`, `etimes` (plain seconds) and exposes a thread count (`nlwp`).
+    // macOS uses `%cpu`/`%mem`, `etime` (formatted) and `comm`; Linux uses
+    // `pcpu`/`pmem`, `etimes` (plain seconds) and exposes a thread count (`nlwp`).
     //
-    // Deux détails propres à BSD, et les deux vidaient la liste :
-    //
-    // - `%cpu`/`%mem` et non leurs alias `pcpu`/`pmem`. Le `ps` de Darwin refuse
-    //   un en-tête personnalisé sur un alias : il écrit « illegal keyword
-    //   specification », **sort en non-zéro**, et interrompt là le parcours du
-    //   format. procps n'a pas cette restriction, d'où un format qui ne
-    //   fonctionnait que du côté Linux.
-    // - `-ww` : sans lui, BSD tronque chaque ligne à la largeur du terminal —
-    //   79 colonnes quand aucun tty n'est attaché, c'est-à-dire sous launchd. La
-    //   colonne du nom se vidait, et `parse_ps_line` rejette une ligne sans nom.
-    // `comm` (chemin complet) et non `ucomm` (nom court) : le nom s'en déduit —
-    // c'est son dernier segment — tandis que l'inverse est impossible. Deux
-    // colonnes libres en fin de ligne seraient de toute façon indécoupables,
-    // les deux pouvant contenir des espaces (« Google Chrome Helper »).
+    // Deux détails propres à BSD, et les deux vident la liste :
+    // - `%cpu`/`%mem` et non leurs alias `pcpu`/`pmem` : le `ps` de Darwin refuse
+    //   un en-tête personnalisé sur un alias et sort en non-zéro ;
+    // - `-ww` : sans lui, BSD tronque chaque ligne à 79 colonnes quand aucun tty
+    //   n'est attaché (sous launchd), et la colonne du nom se vide.
+    // `comm` (chemin complet) et non `ucomm` (nom court) : le nom s'en déduit,
+    // l'inverse est impossible.
     #[cfg(target_os = "macos")]
     let args: [&str; 2] = ["-Awwo", "pid=,%cpu=,%mem=,rss=,etime=,user=,comm="];
     #[cfg(not(target_os = "macos"))]
     let args: [&str; 2] = ["-eo", "pid=,pcpu=,pmem=,rss=,etimes=,nlwp=,user=,comm="];
 
     // Lecture même sur statut non nul : un `ps` qui se plaint d'une colonne peut
-    // répondre utilement sur les autres, et jeter sa sortie transformait un
-    // succès partiel en perte totale.
+    // répondre utilement sur les autres.
     let procs = match run_unchecked("ps", &args) {
         Some(out) => {
             let procs: Vec<RawProcess> = out.lines().filter_map(parse_ps_line).collect();
@@ -801,8 +768,7 @@ fn scan_processes(sys: &mut System) -> Vec<RawProcess> {
             procs
         }
         None => {
-            // Ne pas rendre un vide muet : c'est indiscernable d'une machine au
-            // repos, et c'est ce qui rendait le diagnostic impossible.
+            // Ne pas rendre un vide muet : indiscernable d'une machine au repos.
             tracing::warn!("`ps` unavailable or failed — no process list this tick");
             Vec::new()
         }
@@ -811,10 +777,8 @@ fn scan_processes(sys: &mut System) -> Vec<RawProcess> {
         return procs;
     }
 
-    // Dernier recours : `sysinfo`, déjà en dépendance et déjà la source de la
-    // branche Windows. Il n'a besoin d'aucun binaire externe, donc quelle que
-    // soit la version de `ps` de l'hôte, la liste ne peut plus être vide en
-    // silence — c'est exactement ce qui a laissé macOS muet.
+    // Dernier recours : `sysinfo`, sans aucun binaire externe, pour que la liste
+    // ne puisse jamais être vide en silence quelle que soit la version de `ps`.
     tracing::warn!("falling back to sysinfo for the process list");
     scan_processes_sysinfo(sys)
 }
@@ -899,32 +863,18 @@ fn scan_processes_proc() -> Vec<RawProcess> {
 
 /// Chemin de l'exécutable d'un processus, et « son binaire a-t-il été effacé ? ».
 ///
-/// Une seule syscall par PID (`readlink`), soit ~2 ms pour 700 processus : le
-/// coût est négligeable devant le reste du tick, et il débloque les règles les
-/// plus franches du détecteur (exécution depuis /tmp, implant résident).
+/// Une seule syscall par PID (`readlink`), négligeable devant le reste du tick.
 ///
-/// Le noyau suffixe le lien de « (deleted) » quand l'inode a été délié — mais il
-/// le fait pour **deux situations opposées**, et les confondre rend la sonde
-/// inutilisable :
+/// Le noyau suffixe le lien de « (deleted) » quand l'inode a été délié, dans
+/// deux situations opposées : l'exécutable a disparu (forme d'un implant
+/// résident en mémoire, ce qu'on cherche), ou il a été REMPLACÉ, ce que fait
+/// tout gestionnaire de paquets (`rename()` par-dessus). Le discriminant est le
+/// chemin : s'il pointe encore sur un fichier, le binaire a été remplacé. Un
+/// leurre déposé à l'emplacement échapperait à cette règle ; les autres (chemin
+/// suspect, persistance) couvrent ce cas.
 ///
-/// - l'exécutable a disparu et rien ne l'a remplacé. C'est la forme d'un implant
-///   résident en mémoire, et c'est ce qu'on cherche ;
-/// - l'exécutable a été **remplacé**, ce que fait tout gestionnaire de paquets
-///   (un `rename()` par-dessus délie l'ancien inode). Après un `dnf update`, la
-///   moitié des processus au long cours d'un serveur portent ce suffixe.
-///
-/// Le discriminant est le chemin lui-même : s'il pointe encore sur un fichier,
-/// le binaire a été remplacé, pas effacé. On ne rend donc `true` que lorsque le
-/// chemin est réellement vide.
-///
-/// Un attaquant pourrait déposer un leurre à l'emplacement pour se cacher — mais
-/// alerter sur chaque mise à jour de paquet aurait noyé la règle bien avant
-/// qu'elle serve, et les autres règles (chemin suspect, persistance) couvrent ce
-/// cas-là.
-///
-/// `None` sur échec : un processus qui s'éteint entre l'énumération et la
-/// lecture, ou un `/proc/<pid>/exe` d'un autre compte sans les droits. Ce n'est
-/// pas une anomalie, c'est le fonctionnement normal sans privilèges.
+/// `None` sur échec : processus disparu, ou `/proc/<pid>/exe` d'un autre compte
+/// sans les droits. C'est le fonctionnement normal sans privilèges.
 #[cfg(target_os = "linux")]
 fn proc_exe(pid: u32) -> (Option<String>, Option<bool>) {
     const DELETED: &str = " (deleted)";
@@ -1056,8 +1006,7 @@ fn proc_uid(pid: u32) -> Option<u32> {
 }
 
 /// uid → nom, lu une fois par balayage. `/etc/passwd` ne couvre pas les comptes
-/// d'un annuaire distant ; un uid non résolu reste simplement sans nom, comme le
-/// faisait déjà `ps` sur une colonne trop étroite.
+/// d'un annuaire distant ; un uid non résolu reste simplement sans nom.
 #[cfg(target_os = "linux")]
 fn passwd_names() -> HashMap<u32, String> {
     let mut map = HashMap::new();
@@ -1077,26 +1026,21 @@ fn passwd_names() -> HashMap<u32, String> {
 }
 
 /// Windows scan via `sysinfo`. The `System` lives across ticks, so the CPU delta
-/// is measured against the previous collection — which is exactly what a
-/// periodic collector wants, and removes the 300 ms blocking double-refresh the
-/// old one-shot scan needed.
+/// is measured against the previous collection.
 #[cfg(target_os = "windows")]
 fn scan_processes(sys: &mut System) -> Vec<RawProcess> {
     scan_processes_sysinfo(sys)
 }
 
 /// Disposition des colonnes demandées à `ps`, qui diffère d'un Unix à l'autre.
-///
-/// Portée par une valeur et non par un `cfg` à l'intérieur du parseur : celui-ci
-/// est pur, et la variante BSD n'était couverte par aucun test — elle ne pouvait
-/// pas l'être, la compilation choisissant l'autre branche. C'est précisément la
-/// disposition qui s'était cassée.
+/// Portée par une valeur et non par un `cfg` dans le parseur, pour que les deux
+/// variantes soient testables sur toute plateforme.
 #[cfg(not(target_os = "windows"))]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum PsLayout {
-    /// `pid pcpu pmem rss etimes nlwp user comm` — `etimes` en secondes brutes.
+    /// `pid pcpu pmem rss etimes nlwp user comm` : `etimes` en secondes brutes.
     Linux,
-    /// `pid %cpu %mem rss etime user ucomm` — `etime` formaté, pas de fils.
+    /// `pid %cpu %mem rss etime user comm` : `etime` formaté, pas de fils.
     Bsd,
 }
 
@@ -1129,12 +1073,11 @@ fn parse_ps_line_with(line: &str, layout: PsLayout) -> Option<RawProcess> {
         ),
     };
     let user = parts.next()?.to_string();
-    // Tout ce qui suit l'utilisateur appartient à la dernière colonne — les noms
+    // Tout ce qui suit l'utilisateur appartient à la dernière colonne : les noms
     // macOS contiennent couramment des espaces.
     let tail = parts.collect::<Vec<_>>().join(" ");
-    // Sous BSD la colonne est `comm`, le chemin complet : le nom en est le
-    // dernier segment. Sous Linux c'est `comm`, déjà le nom seul, et le chemin
-    // vient de `/proc/<pid>/exe` (voir `proc_exe`).
+    // Sous BSD `comm` est le chemin complet, dont le nom est le dernier segment.
+    // Sous Linux c'est déjà le nom seul, et le chemin vient de `proc_exe`.
     let (name, exec_path) = match layout {
         PsLayout::Bsd => {
             // Un chemin commence par `/`. Sans cela c'est un nom nu (noyau, ou
@@ -1153,7 +1096,7 @@ fn parse_ps_line_with(line: &str, layout: PsLayout) -> Option<RawProcess> {
         name,
         exec_path,
         // macOS n'expose pas l'équivalent du suffixe « (deleted) » de Linux :
-        // inconnu, et non « pas supprimé » — la règle reste muette.
+        // inconnu, et non « pas supprimé ».
         deleted: None,
         cpu_percent,
         mem_percent,
@@ -1183,11 +1126,8 @@ fn parse_etime(s: &str) -> Option<u64> {
 }
 
 fn security() -> Security {
-    // Les mises à jour ne sont relevées **qu'une fois** : sur Debian, `apt-get -s
-    // upgrade` relit les listes d'apt et attend le verrou dpkg, ce qui se compte
-    // en dizaines de secondes. Appeler une seconde sonde pour n'en extraire que
-    // les correctifs de sécurité doublerait ce coût pour une information que la
-    // première a déjà sous la main.
+    // Les mises à jour ne sont relevées qu'une fois : `apt-get -s upgrade` se
+    // compte en dizaines de secondes, et la même sortie porte déjà la part de sécurité.
     let updates = updates();
     Security {
         firewall: firewall_enabled(),
@@ -1209,17 +1149,14 @@ fn security() -> Security {
 pub(crate) struct UpdateCounts {
     total: u32,
     /// `None` quand le gestionnaire ne sait pas distinguer les correctifs de
-    /// sécurité — inconnu, et non « aucun », ce qui se lirait comme une bonne
-    /// nouvelle.
+    /// sécurité : inconnu, et non « aucun », qui se lirait comme une bonne nouvelle.
     security: Option<u32>,
 }
 
-/// Traduit la valeur d'une directive booléenne de sshd.
-///
-/// `prohibit-password` / `without-password` / `forced-commands-only` interdisent
-/// le mot de passe : pour la question posée (« root peut-il se connecter comme
-/// n'importe qui ? »), ce sont des non. Toute autre forme rend `None` — on ne
-/// devine pas.
+/// Traduit la valeur d'une directive booléenne de sshd. `prohibit-password` /
+/// `without-password` / `forced-commands-only` interdisent le mot de passe :
+/// pour la question posée (« root peut-il se connecter comme n'importe qui ? »),
+/// ce sont des non. Toute autre forme rend `None`.
 #[cfg(not(target_os = "windows"))]
 fn ssh_bool(v: &str) -> Option<bool> {
     match v.trim_matches('"').to_lowercase().as_str() {
@@ -1230,12 +1167,11 @@ fn ssh_bool(v: &str) -> Option<bool> {
 }
 
 /// Le disque, vu par l'analyseur de configuration : lire un fichier, lister un
-/// dossier. Injecté pour que l'analyse soit vérifiable sans rien poser sur le
-/// disque — c'est la même raison qui garde les règles du serveur pures.
+/// dossier. Injecté pour que l'analyse soit vérifiable sans rien poser sur le disque.
 #[cfg(not(target_os = "windows"))]
 trait ConfigFs {
     fn read(&self, path: &str) -> Option<String>;
-    /// Chemins complets des fichiers d'un dossier, triés — OpenSSH déroule un
+    /// Chemins complets des fichiers d'un dossier, triés : OpenSSH déroule un
     /// glob dans l'ordre lexicographique, et l'ordre décide du vainqueur.
     fn list(&self, dir: &str) -> Vec<String>;
 }
@@ -1267,8 +1203,8 @@ impl ConfigFs for DiskFs {
 enum Scan {
     /// La directive a été rencontrée. `None` à l'intérieur = valeur non comprise.
     Value(Option<bool>),
-    /// Un bloc `Match` s'ouvre : la section globale est finie, ici **et** chez
-    /// l'appelant — l'état du parseur d'OpenSSH traverse les `Include`.
+    /// Un bloc `Match` s'ouvre : la section globale est finie, ici et chez
+    /// l'appelant (l'état du parseur d'OpenSSH traverse les `Include`).
     Stop,
     /// Fichier épuisé sans rien trouver ; l'appelant poursuit sa lecture.
     End,
@@ -1276,12 +1212,12 @@ enum Scan {
     Unknown,
 }
 
-/// `*` et `?` seulement — c'est tout ce qu'on rencontre dans un `Include`.
+/// `*` et `?` seulement : tout ce qu'on rencontre dans un `Include`.
 #[cfg(not(target_os = "windows"))]
 fn glob_match(pattern: &str, name: &str) -> bool {
     let (p, n): (Vec<char>, Vec<char>) = (pattern.chars().collect(), name.chars().collect());
     // Parcours avec point de reprise sur la dernière `*` : linéaire en pratique,
-    // et sans récursion — un `Include` est lu à chaque rapport.
+    // sans récursion.
     let (mut pi, mut ni) = (0usize, 0usize);
     let (mut star, mut resume) = (None, 0usize);
     while ni < n.len() {
@@ -1347,21 +1283,16 @@ fn ssh_directive(line: &str) -> Option<(String, &str)> {
     Some((line[..end].to_lowercase(), rest))
 }
 
-/// Première valeur obtenue pour `key` dans la **section globale**, en partant de
-/// `path`.
+/// Première valeur obtenue pour `key` dans la section globale, en partant de
+/// `path`. Reproduit trois règles d'OpenSSH qu'un `grep` du fichier principal
+/// ignore :
 ///
-/// Reproduit trois règles d'OpenSSH qu'un simple `grep` du fichier principal
-/// ignore, et dont chacune produit un constat faux quand on l'oublie :
-///
-/// - **le premier obtenu gagne**, pas le dernier écrit ;
-/// - **`Include` est déroulé à sa place.** Fedora et Debian récents le posent en
-///   *tête* de `sshd_config` : un `PermitRootLogin yes` resté plus bas dans le
-///   fichier principal est donc battu par le `no` d'un `sshd_config.d/`. Lire le
-///   seul fichier principal faisait dire « SSH autorise root » à une machine
-///   dûment verrouillée ;
-/// - **`Match` clôt la section globale.** Un `PermitRootLogin yes` sous
-///   `Match Address 10.0.0.0/8` ne décrit pas le cas général, et `sshd -T` sans
-///   `-C` ne le rend pas non plus.
+/// - le premier obtenu gagne, pas le dernier écrit ;
+/// - `Include` est déroulé à sa place : Fedora et Debian le posent en tête de
+///   `sshd_config`, donc un `PermitRootLogin yes` resté plus bas est battu par
+///   le `no` d'un `sshd_config.d/` ;
+/// - `Match` clôt la section globale : un `PermitRootLogin yes` sous
+///   `Match Address 10.0.0.0/8` ne décrit pas le cas général.
 #[cfg(not(target_os = "windows"))]
 fn ssh_config_scan(fs: &dyn ConfigFs, path: &str, key: &str, depth: u8) -> Scan {
     // Garde-fou : `Include` peut boucler. OpenSSH s'arrête aussi, on ne conclut
@@ -1383,9 +1314,8 @@ fn ssh_config_scan(fs: &dyn ConfigFs, path: &str, key: &str, depth: u8) -> Scan 
             for pattern in rest.split_whitespace() {
                 for target in include_targets(fs, pattern) {
                     match ssh_config_scan(fs, &target, key, depth + 1) {
-                        // Un fichier du glob qui ne s'ouvre pas : on renonce.
-                        // Prétendre que la directive est absente reviendrait à
-                        // conclure sur ce qu'on n'a pas lu.
+                        // Un fichier du glob qui ne s'ouvre pas : on renonce
+                        // plutôt que de conclure sur ce qu'on n'a pas lu.
                         Scan::End => continue,
                         other => return other,
                     }
@@ -1400,11 +1330,8 @@ fn ssh_config_scan(fs: &dyn ConfigFs, path: &str, key: &str, depth: u8) -> Scan 
     Scan::End
 }
 
-/// Chemins où chercher `sshd`, avant de s'en remettre au `PATH`.
-///
-/// Le binaire vit dans un `sbin`, et le `PATH` d'un service n'en contient pas
-/// toujours un. Le manquer fait basculer sur l'analyse du fichier — correcte
-/// depuis, mais moins sûre que la parole de `sshd` lui-même.
+/// Chemins où chercher `sshd`, avant de s'en remettre au `PATH` : le binaire vit
+/// dans un `sbin`, et le `PATH` d'un service n'en contient pas toujours un.
 #[cfg(not(target_os = "windows"))]
 const SSHD_PATHS: [&str; 4] = [
     "/usr/sbin/sshd",
@@ -1415,19 +1342,15 @@ const SSHD_PATHS: [&str; 4] = [
 
 /// Réglage effectif du serveur SSH, ou `None` si on ne peut pas l'affirmer.
 ///
-/// Deux chemins, et une abstention assumée :
-///
-/// - **privilégié** : `sshd -T` rend la configuration *effective*, `Include`
-///   résolus et blocs `Match` appliqués. C'est la seule source qui fasse foi ;
-/// - **non privilégié** : on déroule `/etc/ssh/sshd_config` nous-mêmes, avec ses
-///   `Include` et en s'arrêtant au premier `Match` (voir `ssh_config_scan`), et
-///   on ne répond que si la directive s'y trouve. Son absence ne veut rien dire
-///   de sûr, et conclure sur la valeur par défaut d'OpenSSH produirait des
-///   constats faux sur toute machine dont la configuration est éclatée — ce qui
-///   est la disposition par défaut des distributions récentes.
+/// - privilégié : `sshd -T` rend la configuration effective, `Include` résolus
+///   et blocs `Match` appliqués. La seule source qui fasse foi ;
+/// - non privilégié : on déroule `/etc/ssh/sshd_config` nous-mêmes (voir
+///   `ssh_config_scan`) et on ne répond que si la directive s'y trouve. Conclure
+///   sur la valeur par défaut d'OpenSSH produirait des constats faux sur toute
+///   configuration éclatée.
 ///
 /// `None` est donc une réponse fréquente et voulue : mieux vaut « pas mesuré »
-/// qu'un « SSH accepte root » qui enverrait chercher un problème inexistant.
+/// qu'un « SSH accepte root » inventé.
 #[cfg(not(target_os = "windows"))]
 fn ssh_setting(key: &str) -> Option<bool> {
     if is_privileged() {
@@ -1441,8 +1364,7 @@ fn ssh_setting(key: &str) -> Option<bool> {
                     return it.next().and_then(ssh_bool);
                 }
             }
-            // `sshd -T` a répondu sans la clé : la configuration ne la contient
-            // pas et OpenSSH ne l'a pas normalisée — on ne tranche pas.
+            // `sshd -T` a répondu sans la clé : on ne tranche pas.
             return None;
         }
     }
@@ -1460,15 +1382,10 @@ fn ssh_setting(_key: &str) -> Option<bool> {
 
 /// Délai au-delà duquel une sonde est abandonnée et son processus tué.
 ///
-/// Aucune sonde d'un agent de supervision ne doit pouvoir attendre sans fin.
-/// `Command::output()` le permettait pourtant : il attend la fin du fils, quoi
-/// qu'il arrive. Une seule commande lente — `apt-get -s upgrade` bloqué sur le
-/// verrou dpkg, sur une carte SD — suffisait à figer la session entière avant
-/// même qu'elle n'entre dans sa boucle : ni métriques, ni commandes traitées, et
-/// une machine qui restait affichée « en ligne » sans jamais rien envoyer.
-///
-/// Cinq secondes couvrent très largement toute sonde saine ; celles qu'on sait
-/// lentes demandent explicitement plus (voir `run_timeout`).
+/// Aucune sonde ne doit pouvoir attendre sans fin : une seule commande bloquée
+/// (`apt-get -s upgrade` sur le verrou dpkg) figerait la session entière. Cinq
+/// secondes couvrent toute sonde saine ; celles qu'on sait lentes demandent
+/// explicitement plus (voir `run_timeout`).
 const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Échéance de la sonde de mises à jour, la seule qu'on sache légitimement lente.
@@ -1484,9 +1401,8 @@ pub(crate) struct ProbeOutput {
 /// Lance une commande sous échéance et rend sa sortie.
 ///
 /// La sortie est drainée par un fil dédié plutôt que lue après coup : un tuyau
-/// plein bloque le fils, et l'attendre en le sondant se serait mordu la queue.
-/// Passé l'échéance, le fils est tué — sans quoi l'abandonner le laisserait
-/// vivre et tenir ses verrous.
+/// plein bloque le fils. Passé l'échéance, le fils est tué, sans quoi il
+/// vivrait et tiendrait ses verrous.
 pub(crate) fn run_timeout(cmd: &str, args: &[&str], timeout: Duration) -> Option<ProbeOutput> {
     use std::io::Read;
     use std::process::Stdio;
@@ -1541,19 +1457,12 @@ pub fn run(cmd: &str, args: &[&str]) -> Option<String> {
 
 /// Like `run`, but returns stdout even on a non-zero exit. Some tools print the
 /// answer we want yet exit non-zero (`systemctl is-active` exits 3 when a unit is
-/// inactive but still prints "inactive"). `None` only when the binary is absent.
-///
-/// Également le bon choix quand un outil se plaint d'une partie de sa demande
-/// tout en répondant utilement au reste — le `ps` de BSD sur un alias de mot-clé.
-///
-/// Hors Windows : là-bas le balayage passe par `sysinfo` et plus aucune sonde ne
-/// l'appelle.
+/// inactive but still prints "inactive"; BSD `ps` on a keyword alias). `None`
+/// only when the binary is absent. Hors Windows, où aucune sonde ne l'appelle.
 #[cfg(not(target_os = "windows"))]
 fn run_unchecked(cmd: &str, args: &[&str]) -> Option<String> {
     run_timeout(cmd, args, PROBE_TIMEOUT).map(|o| o.stdout)
 }
-
-// ── macOS collectors ────────────────────────────────────────────────────────
 
 #[cfg(target_os = "macos")]
 fn firewall_enabled() -> Option<bool> {
@@ -1604,9 +1513,8 @@ fn updates() -> Option<UpdateCounts> {
     None
 }
 
-/// macOS n'expose pas de contrôle d'accès obligatoire comparable : c'est SIP et
-/// le bac à sable applicatif qui tiennent ce rôle, et ils ont leur propre
-/// contrôle. Sans objet plutôt qu'inconnu — l'interface le dit ainsi.
+/// macOS n'expose pas de contrôle d'accès obligatoire comparable : SIP et le
+/// bac à sable applicatif tiennent ce rôle, et ont leur propre contrôle.
 #[cfg(target_os = "macos")]
 fn mandatory_access_control() -> Option<&'static str> {
     None
@@ -1617,14 +1525,10 @@ fn reboot_required() -> Option<bool> {
     None
 }
 
-// ── Linux collectors ────────────────────────────────────────────────────────
-
 #[cfg(target_os = "linux")]
 fn firewall_enabled() -> Option<bool> {
-    // `ufw status` and reading the nft ruleset both need root; when the agent runs
-    // unprivileged they return None and we fall through to the systemd probe below,
-    // which any user can read. So firewall state is now detectable without root as
-    // long as the firewall is a managed systemd unit.
+    // `ufw status` and the nft ruleset both need root; unprivileged they return
+    // None and we fall through to the systemd probe, readable by any user.
     if let Some(out) = run("ufw", &["status"]) {
         let lower = out.to_lowercase();
         if lower.contains("status: active") {
@@ -1638,8 +1542,8 @@ fn firewall_enabled() -> Option<bool> {
         return Some(out.trim() == "running");
     }
     // Non-root fallback: a running firewall service. Only a positive "active" is
-    // conclusive here (an absent unit also reports inactive), so we don't infer
-    // "disabled" from this — we keep looking and ultimately return None (unknown).
+    // conclusive (an absent unit also reports inactive), so "disabled" is never
+    // inferred from this.
     for svc in ["firewalld", "ufw", "nftables"] {
         if let Some(out) = run_unchecked("systemctl", &["is-active", svc]) {
             if out.trim() == "active" {
@@ -1673,13 +1577,9 @@ fn sip_enabled() -> Option<bool> {
 
 #[cfg(target_os = "linux")]
 fn updates() -> Option<UpdateCounts> {
-    // Debian/Ubuntu: simulate an upgrade and count "Inst" lines.
-    //
-    // La sonde la plus lente de toutes : elle relit les listes d'apt et attend
-    // le verrou dpkg dès qu'`apt-daily` tourne. Sur une carte SD cela se compte
-    // en minutes. D'où une échéance propre, plus large que le défaut mais bien
-    // finie — « inconnu » est une réponse que l'interface sait afficher, une
-    // attente sans fin ne l'est pas.
+    // Debian/Ubuntu: simulate an upgrade and count "Inst" lines. La sonde la
+    // plus lente de toutes (verrou dpkg dès qu'`apt-daily` tourne), d'où une
+    // échéance propre : « inconnu » s'affiche, une attente sans fin non.
     if let Some(out) = run_timeout("apt-get", &["-s", "upgrade"], APT_TIMEOUT) {
         if !out.success {
             return None;
@@ -1690,8 +1590,7 @@ fn updates() -> Option<UpdateCounts> {
             .filter(|l| l.starts_with("Inst "))
             .collect();
         // La même sortie porte le dépôt d'origine entre parenthèses : un
-        // correctif de sécurité vient d'une suite `*-security`. C'est ce qui
-        // évite une seconde simulation, qui coûterait aussi cher que la première.
+        // correctif de sécurité vient d'une suite `*-security`.
         let security = inst
             .iter()
             .filter(|l| {
@@ -1721,17 +1620,12 @@ fn updates() -> Option<UpdateCounts> {
 }
 
 /// SELinux ou AppArmor, celui qui est actif.
-///
-/// Ce qui borne les dégâts d'un service compromis : sans lui, une faille dans
-/// nginx donne les droits de nginx sur toute la machine.
 #[cfg(target_os = "linux")]
 fn mandatory_access_control() -> Option<&'static str> {
     if let Some(out) = run("getenforce", &[]) {
         return match out.trim().to_lowercase().as_str() {
             "enforcing" => Some("selinux-enforcing"),
-            // Permissif journalise sans bloquer : ce n'est pas « aucun », mais ce
-            // n'est pas une protection non plus. Le serveur le compte comme
-            // conforme, l'interface affiche lequel.
+            // Permissif journalise sans bloquer : ni « aucun », ni une protection.
             "permissive" => Some("selinux-permissive"),
             "disabled" => Some("none"),
             _ => None,
@@ -1741,18 +1635,16 @@ fn mandatory_access_control() -> Option<&'static str> {
     if let Some(out) = run_timeout("aa-status", &["--enabled"], PROBE_TIMEOUT) {
         return Some(if out.success { "apparmor" } else { "none" });
     }
-    // Sans aucun des deux outils, on ne peut pas conclure : une machine peut
-    // très bien avoir SELinux compilé sans `getenforce` installé.
+    // Sans aucun des deux outils, on ne conclut pas : SELinux peut être compilé
+    // sans `getenforce` installé.
     if std::path::Path::new("/sys/kernel/security/apparmor").exists() {
         return Some("apparmor");
     }
     None
 }
 
-/// Des correctifs déjà installés attendent-ils un redémarrage ?
-///
-/// Un noyau corrigé mais non redémarré n'est pas un noyau corrigé — c'est
-/// exactement la fenêtre pendant laquelle une machine paraît à jour sans l'être.
+/// Des correctifs déjà installés attendent-ils un redémarrage ? Un noyau corrigé
+/// mais non redémarré n'est pas un noyau corrigé.
 #[cfg(target_os = "linux")]
 fn reboot_required() -> Option<bool> {
     // Debian/Ubuntu : le fichier est posé par les paquets eux-mêmes. Sa présence
@@ -1771,10 +1663,8 @@ fn reboot_required() -> Option<bool> {
     None
 }
 
-// ── plateformes non couvertes ───────────────────────────────────────────────
-//
-// Ni Linux, ni macOS, ni Windows : aucune sonde n'est écrite, et tout rend
-// `None`. C'est « pas mesuré », que l'interface distingue d'un « tout va bien ».
+// Ni Linux, ni macOS, ni Windows : tout rend `None`, « pas mesuré », que
+// l'interface distingue d'un « tout va bien ».
 
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 fn updates() -> Option<UpdateCounts> {
@@ -1790,8 +1680,6 @@ fn mandatory_access_control() -> Option<&'static str> {
 fn reboot_required() -> Option<bool> {
     None
 }
-
-// ── Windows collectors ──────────────────────────────────────────────────────
 
 #[cfg(target_os = "windows")]
 fn firewall_enabled() -> Option<bool> {
@@ -1847,12 +1735,8 @@ fn mandatory_access_control() -> Option<&'static str> {
     None
 }
 
-/// Windows pose une clé de registre quand un redémarrage est en attente.
-///
-/// Trois emplacements, parce que trois sous-systèmes différents y écrivent
-/// (Component Based Servicing, Windows Update, un renommage de fichier
-/// programmé) et qu'un seul d'entre eux suffit à rendre la machine « à
-/// redémarrer ».
+/// Windows pose une clé de registre quand un redémarrage est en attente ; un
+/// seul des sous-systèmes (Component Based Servicing, Windows Update) suffit.
 #[cfg(target_os = "windows")]
 fn reboot_required() -> Option<bool> {
     const KEYS: [&str; 2] = [
@@ -1860,8 +1744,7 @@ fn reboot_required() -> Option<bool> {
         r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired",
     ];
     for key in KEYS {
-        // `?` porte le cas « `reg` introuvable » : on ne peut alors rien
-        // affirmer, ni la présence ni l'absence de redémarrage en attente.
+        // `?` porte le cas « `reg` introuvable » : on ne peut alors rien affirmer.
         let out = run_timeout("reg", &["query", key], PROBE_TIMEOUT)?;
         if out.success {
             return Some(true);
@@ -1874,10 +1757,8 @@ fn reboot_required() -> Option<bool> {
 mod tests {
     use super::*;
 
-    /// Analyse des lignes de `ps`, donc **hors Windows** : ni `ps` ni son
-    /// parseur n'y existent, et des tests non gardés les y référençaient — ce
-    /// que seule la CI Windows voyait. La `cfg` du module est désormais la même
-    /// que celle du code testé, si bien que les deux ne peuvent plus diverger.
+    /// Analyse des lignes de `ps`, donc hors Windows, sous la même `cfg` que
+    /// le code testé.
     #[cfg(not(target_os = "windows"))]
     mod ps {
         use super::*;
@@ -1946,8 +1827,8 @@ mod tests {
             assert_eq!(p.name, "Finder");
         }
 
-        /// Les noms macOS contiennent couramment des espaces, et `ucomm` est en
-        /// dernier — tout ce qui suit l'utilisateur lui appartient.
+        /// Les noms macOS contiennent couramment des espaces, et `comm` est en
+        /// dernier : tout ce qui suit l'utilisateur lui appartient.
         #[test]
         fn parse_ps_line_bsd_keeps_names_containing_spaces() {
             let p = parse_ps_line_with(
@@ -1960,9 +1841,8 @@ mod tests {
             assert_eq!(p.user.as_deref(), Some("_windowserver"));
         }
 
-        /// Le cas réel sous macOS : `comm` rend le chemin complet, dont le nom
-        /// est le dernier segment. C'est ce qui donne le chemin d'exécutable
-        /// sans seconde sonde, et sans changer le nom affiché.
+        /// Sous macOS `comm` rend le chemin complet, dont le nom est le dernier
+        /// segment.
         #[test]
         fn parse_ps_line_bsd_splits_name_from_exec_path() {
             let p = parse_ps_line_with(
@@ -1990,9 +1870,8 @@ mod tests {
             assert_eq!(p.exec_path, None);
         }
 
-        /// La troncature BSD à 79 colonnes (aucun tty attaché, cas launchd) vide la
-        /// colonne du nom. La ligne doit être rejetée, pas produire un processus
-        /// anonyme — c'est `-ww` qui empêche le cas de se produire.
+        /// La troncature BSD à 79 colonnes (aucun tty attaché) vide la colonne du
+        /// nom : la ligne doit être rejetée, pas produire un processus anonyme.
         #[test]
         fn parse_ps_line_bsd_rejects_a_truncated_row() {
             assert!(
@@ -2002,13 +1881,9 @@ mod tests {
         }
     }
 
-    /// Met en situation les deux indicateurs les plus francs du détecteur :
-    /// l'exécution depuis un répertoire temporaire, et le binaire effacé du
-    /// disque alors que le processus tourne toujours.
-    ///
-    /// Se vérifie pour de vrai plutôt que sur une chaîne fabriquée : c'est le
-    /// noyau qui pose le suffixe « (deleted) », et une supposition sur son
-    /// format ne prouverait rien.
+    /// Exécution depuis un répertoire temporaire, puis binaire effacé alors que
+    /// le processus tourne. Vérifié pour de vrai : c'est le noyau qui pose le
+    /// suffixe « (deleted) », une chaîne fabriquée ne prouverait rien.
     #[cfg(target_os = "linux")]
     #[test]
     fn proc_exe_reports_path_then_deletion() {
@@ -2019,8 +1894,7 @@ mod tests {
         let bin = dir.join("kdevtmpfsi");
 
         // Un shell script ne convient pas : `/proc/<pid>/exe` pointerait vers
-        // l'interpréteur, pas vers le fichier. Il faut un vrai exécutable, donc
-        // une copie d'un binaire du système.
+        // l'interpréteur. Il faut un vrai exécutable.
         let Ok(src) = std::fs::read("/bin/sleep") else {
             eprintln!("/bin/sleep absent — vérification sautée");
             return;
@@ -2072,12 +1946,8 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// Le pendant du test précédent, et celui qui compte le plus en pratique :
-    /// un binaire **remplacé** — ce que fait tout gestionnaire de paquets — ne
-    /// doit pas être signalé comme supprimé.
-    ///
-    /// Sans cette distinction, chaque `dnf update` faisait sonner la moitié des
-    /// processus au long cours d'un serveur, en `critical`.
+    /// Un binaire remplacé (ce que fait tout gestionnaire de paquets) ne doit
+    /// pas être signalé comme supprimé.
     #[cfg(target_os = "linux")]
     #[test]
     fn proc_exe_does_not_flag_a_replaced_binary() {
@@ -2195,12 +2065,8 @@ mod tests {
         assert_eq!(info.listen_ports, vec![80, 443], "sorted and deduped");
     }
 
-    /// L'analyse de `sshd_config` quand `sshd -T` n'est pas joignable.
-    ///
-    /// Ce qui se jouait ici : un `PermitRootLogin yes` resté dans le fichier
-    /// principal, battu par un `no` d'un `sshd_config.d/`, faisait signaler
-    /// « SSH autorise root » en boucle sur une machine correctement verrouillée.
-    /// La sonde ne doit plus jamais conclure sur ce qu'elle n'a pas déroulé.
+    /// L'analyse de `sshd_config` quand `sshd -T` n'est pas joignable : la sonde
+    /// ne doit jamais conclure sur ce qu'elle n'a pas déroulé.
     #[cfg(not(target_os = "windows"))]
     mod sshd_config {
         use super::*;
@@ -2276,9 +2142,8 @@ mod tests {
             );
         }
 
-        /// Le cas qui a produit le faux constat : l'`Include` est en tête, donc
-        /// le drop-in est *obtenu en premier* et l'emporte sur le `yes` resté
-        /// plus bas dans le fichier principal.
+        /// L'`Include` est en tête, donc le drop-in est obtenu en premier et
+        /// l'emporte sur le `yes` resté plus bas dans le fichier principal.
         #[test]
         fn le_drop_in_inclus_en_tete_bat_le_fichier_principal() {
             assert_eq!(
@@ -2353,8 +2218,7 @@ mod tests {
         }
 
         /// Un `Match` clôt la section globale : ce qui suit est conditionnel et
-        /// ne décrit pas le cas général — `sshd -T` sans `-C` ne le rend pas non
-        /// plus.
+        /// ne décrit pas le cas général.
         #[test]
         fn ce_qui_suit_un_match_ne_compte_pas() {
             assert_eq!(
@@ -2434,8 +2298,7 @@ mod proc_scan_tests {
         let mine = scan_processes_proc();
         assert!(!mine.is_empty(), "/proc n'a rendu aucun processus");
 
-        // `ps` n'est pas garanti présent — c'est précisément la raison d'être de
-        // ce lecteur. Sans lui, il n'y a rien à comparer : on s'arrête là.
+        // `ps` n'est pas garanti présent : sans lui, rien à comparer.
         let Some(ps) = run(
             "ps",
             &["-eo", "pid=,pcpu=,pmem=,rss=,etimes=,nlwp=,user=,comm="],
@@ -2464,16 +2327,9 @@ mod proc_scan_tests {
             assert_eq!(a.user, b.user, "utilisateur divergent");
         }
 
-        // Le RSS se compare sur **un autre processus que soi**, et de préférence
-        // sur pid 1.
-        //
-        // Le processus de test est le pire candidat qui soit : les autres tests
-        // de la suite tournent en parallèle dans le même processus, allouent et
-        // libèrent, si bien que sa mémoire bouge entre la lecture de `/proc` et
-        // celle de `ps` — qui n'ont pas lieu au même instant. Encadrer ne suffit
-        // pas non plus, la valeur pouvant sortir des deux bornes. Pid 1, lui, ne
-        // fait rien pendant ces quelques millisecondes, et c'est bien la lecture
-        // de `/proc` qu'on veut éprouver, pas la stabilité de notre propre tas.
+        // Le RSS se compare sur pid 1, pas sur soi : les autres tests tournent
+        // en parallèle dans ce processus et font bouger sa mémoire entre la
+        // lecture de `/proc` et celle de `ps`.
         let stable = mine
             .iter()
             .find(|p| p.pid == 1)

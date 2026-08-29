@@ -8,11 +8,9 @@ import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { resetWorkspace, upsertWorkspace, useActiveWorkspace } from '@/stores/workspace';
 
 /**
- * Toute la logique de la page « Espace », séparée de son rendu.
- *
- * Même partage que la flotte du module Appareils : le composant décrit l'écran, ce hook
- * porte l'état, les appels et les erreurs. Une seule chaîne d'erreur partagée,
- * affichée une fois en tête de page plutôt qu'une par action.
+ * Toute la logique de la page « Espace », séparée de son rendu : le composant
+ * décrit l'écran, ce hook porte l'état, les appels et les erreurs. Une seule
+ * chaîne d'erreur, affichée en tête de page plutôt qu'une par action.
  */
 export function useWorkspaceAdmin() {
     const { user } = useAuth();
@@ -28,18 +26,11 @@ export function useWorkspaceAdmin() {
     const fail = (e: unknown, fallback: string): void => setError(e instanceof WsError ? e.message : fallback);
 
     /**
-     * Les droits de quelqu'un viennent de changer — **le nôtre y compris**.
-     *
-     * Le serveur diffuse bien le changement, mais il en exclut son auteur : il a
-     * déjà la réponse de sa propre commande. Sauf que cette réponse ne dit rien
-     * de *ses* droits à lui, alors qu'il vient peut-être de se retirer une
-     * capacité en modifiant son propre rôle. Sans ce rappel, l'onglet Rôles
-     * restait ouvert sous les pieds de qui venait de s'en retirer l'accès —
-     * alors que la même révocation venue d'ailleurs le faisait disparaître aussitôt.
-     *
-     * On repasse donc par la **même** clé que la voie distante plutôt que
-     * d'appliquer les droits à la main : un seul chemin à garder juste, et
-     * l'auteur voit exactement ce que voient les autres.
+     * Les droits de quelqu'un viennent de changer, les nôtres y compris. Le
+     * serveur diffuse le changement mais en exclut son auteur, dont la réponse ne
+     * dit rien de ses propres droits : il vient peut-être de se retirer une
+     * capacité en modifiant son propre rôle. On repasse par la même clé que la
+     * voie distante, pour qu'il voie exactement ce que voient les autres.
      *
      * Miroir de l'`invalidateAccess()` du serveur : ces deux commandes-là, et
      * elles seules, peuvent redéfinir les droits d'un membre déjà en place.
@@ -58,10 +49,9 @@ export function useWorkspaceAdmin() {
     }, []);
 
     /**
-     * Les rôles se relisent aussi quand **quelqu'un d'autre** y touche : deux
-     * personnes ouvrent volontiers cette page en même temps, et celle qui
-     * regarde ne doit pas rester sur une liste périmée. La clé est déjà
-     * invalidée par le sujet `workspace` ; il ne manquait que l'abonnement.
+     * Les rôles se relisent aussi quand quelqu'un d'autre y touche : deux personnes
+     * ouvrent volontiers cette page en même temps, et celle qui regarde ne doit pas
+     * rester sur une liste périmée.
      */
     const rolesVersion = useResourceVersion('workspace.roleList');
     useEffect(() => {
@@ -69,11 +59,9 @@ export function useWorkspaceAdmin() {
     }, [loadRoles, rolesVersion]);
 
     /**
-     * Exécute une action, en portant l'erreur et l'état occupé.
-     *
-     * Renvoie si elle a abouti : un appelant qui doit enchaîner — fermer un
-     * dialogue, vider un champ — le décide sur ce booléen plutôt qu'en relisant
-     * `error`, dont le rendu suivant n'a pas encore eu lieu.
+     * Exécute une action, en portant l'erreur et l'état occupé. Renvoie si elle a
+     * abouti : un appelant qui doit enchaîner le décide sur ce booléen plutôt qu'en
+     * relisant `error`, dont le rendu suivant n'a pas encore eu lieu.
      */
     const run = async (fn: () => Promise<void>, fallback: string): Promise<boolean> => {
         setError(null);
@@ -101,16 +89,13 @@ export function useWorkspaceAdmin() {
 
         /**
          * Deux rôles de départ pour un onglet encore vide : « Admin » (tout) et
-         * « Membre » (toutes les fonctionnalités, aucune administration), ce
-         * dernier attribué d'office aux arrivants pour que la première
-         * invitation fonctionne sans réglage. Composer un premier rôle à la
-         * main est l'obstacle ; l'ajuster ensuite est facile.
+         * « Membre » (toutes les fonctionnalités, aucune administration), ce dernier
+         * attribué d'office pour que la première invitation marche sans réglage.
          */
         createPresetRoles: () =>
             run(async () => {
-                // Les canaux d'alerte (adresses d'astreinte, salons) suivent la
-                // ligne du preset : l'Admin les gère, le Membre s'en sert sans
-                // pouvoir les modifier.
+                // Les canaux d'alerte suivent la ligne du preset : l'Admin les gère,
+                // le Membre s'en sert sans pouvoir les modifier.
                 const grants = (channels: boolean) =>
                     FEATURE_REGISTRY.map<WorkspaceFeatureGrant>((f) => ({
                         feature: f.id,
@@ -186,10 +171,9 @@ export function useWorkspaceAdmin() {
             }, 'Renommage impossible.'),
 
         /**
-         * Ajoute un membre par son adresse. Le serveur renvoie l'espace complet
-         * plutôt que le seul nouvel arrivant : la liste des membres se recompose
-         * ainsi d'une source unique, sans reconstruire un `MinimalUser` de
-         * fortune côté client.
+         * Le serveur renvoie l'espace complet plutôt que le seul arrivant : la liste
+         * des membres se recompose d'une source unique, sans reconstruire un
+         * `MinimalUser` de fortune côté client.
          */
         addMember: (email: string) =>
             run(async () => {
@@ -207,10 +191,9 @@ export function useWorkspaceAdmin() {
             }, 'Exclusion impossible.'),
 
         /**
-         * Quitter ou supprimer fait perdre l'espace courant. `resetWorkspace`
-         * efface l'id local, puis `onDone` recharge la session : le serveur
-         * replace alors le client sur un espace valide (le favori, sinon le
-         * personnel) au lieu de le laisser sur un id devenu interdit.
+         * Quitter fait perdre l'espace courant. `resetWorkspace` efface l'id local,
+         * puis `onDone` recharge la session : le serveur replace alors le client sur
+         * un espace valide au lieu d'un id devenu interdit.
          */
         leave: (onDone: () => void) =>
             run(async () => {

@@ -6,41 +6,28 @@ import type { ProjectsRepo, ProjectUsageRow } from './repo';
 import { encryptProject, tryDecryptProject, type StoredEvent } from './_shared';
 
 /**
- * Ce que les autres modules demandent à Projets (`PROJECTS_USAGE_PROVIDER`),
- * publié par le service de ce module : pour un élément d'une autre feature
- * (une base de données, une cible de déploiement, un dépôt git, un site
- * suivi), les projets de l'espace qui le relient, avec leur titre, et combien
- * en relient chacun. C'est ce qui rend l'interconnexion cliquable dans les
- * deux sens sans qu'un module lise une table de Projets. Et, dans l'autre
- * sens, les deux seules choses qu'un module ait à DIRE à un projet : une ligne
- * de frise (un déploiement déclenché depuis l'onglet d'un projet), et la
- * version que porte un élément (la dernière release d'un dépôt, pour les
- * projets qui ont demandé à la suivre).
+ * Ce que les autres modules demandent à Projets (`PROJECTS_USAGE_PROVIDER`) : pour
+ * un élément d'une autre feature, les projets de l'espace qui le relient, avec leur
+ * titre, et combien en relient chacun, ce qui rend l'interconnexion cliquable dans
+ * les deux sens sans qu'un module lise une table de Projets. Et dans l'autre sens,
+ * les deux seules choses qu'un module ait à dire à un projet : une ligne de frise et
+ * la version que porte un élément.
  *
- * Les modules le lisent par `providers.get` sans savoir qui l'offre : l'app
- * l'offrait tant que Projets était native, le service publie la même clé, et
- * rien n'a changé de leur côté.
+ * Tout ici travaille sans session, à l'étage ouvert (`deps.cipherFor`) : un projet
+ * gardé ne se relie pas, il n'a donc rien à rendre ni à recevoir par ce contrat.
  *
- * Tout ici travaille **sans session**, à l'étage ouvert (`deps.cipherFor`,
- * mémoïsé par l'hôte) : un projet gardé ne se relie pas, donc n'a rien à
- * rendre ni à recevoir par ce contrat.
- *
- * Rien à savoir des projections (`Docs/SHARING.md`) : une liaison ne se pose
- * qu'au domicile du projet, vers un élément du même espace, et c'est cet
- * espace que les modules passent ici (`workspaceId`). Le domicile du projet
- * et celui de l'élément relié sont donc toujours le même, et `findById`
- * (le domicile seul, jamais une fenêtre) suffit.
+ * Rien à savoir des projections : une liaison ne se pose qu'au domicile du projet,
+ * vers un élément du même espace, et c'est cet espace que les modules passent ici.
+ * `findById`, le domicile seul et jamais une fenêtre, suffit donc.
  */
 
 /** Ce que le contrat lit du dépôt et de l'hôte : pas le service entier. */
 type Deps = Pick<FeatureServiceDeps<ProjectsRepo>, 'repo' | 'cipherFor' | 'live'>;
 
 /**
- * Une table de liaison par feature reliée, explicite plutôt que dynamique :
- * chaque feature range ses liaisons dans sa propre table de Projets, et une
- * résolution par nom construirait une requête à partir d'une entrée. Une
- * feature absente d'ici ne relie rien : vide, jamais une erreur. Uptime s'y
- * ajoutera le jour où ses liaisons passeront par ce contrat.
+ * Une table de liaison par feature reliée, explicite plutôt que dynamique : une
+ * résolution par nom construirait une requête à partir d'une entrée. Une feature
+ * absente d'ici ne relie rien, ce qui rend du vide et jamais une erreur.
  */
 const LINKS: Record<
     string,
@@ -68,11 +55,9 @@ const LINKS: Record<
 };
 
 /**
- * La source de version qu'un projet doit avoir choisie pour suivre les
- * versions d'une feature reliée. La règle est celle de Projets, pas celle du
- * module : `github_release` est la seule source suivie aujourd'hui, et elle
- * vaut pour la feature `git` (la dernière release d'un dépôt lié). Une feature
- * absente d'ici n'a pas de version à reporter : rien n'est écrit.
+ * La source de version qu'un projet doit avoir choisie pour suivre les versions
+ * d'une feature reliée. La règle est celle de Projets, pas celle du module ; une
+ * feature absente d'ici n'a pas de version à reporter, rien n'est écrit.
  */
 const VERSION_SOURCE_OF: Record<string, ProjectVersionSource> = {
     git: 'github_release'
@@ -85,9 +70,8 @@ export function createProjectsUsageProvider(deps: Deps): ProjectsUsageProvider {
             if (!link) return [];
             const rows = await link.usage(deps.repo, itemId, workspaceId);
             const cipher = deps.cipherFor(workspaceId);
-            // Tous à l'étage ouvert (la requête le garantit), donc lisibles
-            // sans session ; un corps illisible garde le projet dans la liste,
-            // sous un titre de secours.
+            // Tous à l'étage ouvert, la requête le garantit, donc lisibles sans
+            // session ; un corps illisible garde le projet, sous un titre de secours.
             return Promise.all(
                 rows.map(async (row): Promise<ProjectUsage> => ({
                     projectId: row.project_id,
@@ -103,10 +87,8 @@ export function createProjectsUsageProvider(deps: Deps): ProjectsUsageProvider {
         },
         async recordEvent(projectId, workspaceId, event) {
             const project = await deps.repo.projects.findById(projectId, workspaceId);
-            // Un projet gardé n'a pas de déploiement (sa liaison est refusée) :
-            // s'il s'en présente un, c'est qu'on regarde le mauvais projet. Et
-            // l'étage ouvert est le seul que ce contrat sache écrire sans
-            // session : la frise d'un projet gardé vit sous sa clé.
+            // L'étage ouvert est le seul que ce contrat sache écrire sans session,
+            // et un projet gardé n'a de toute façon aucune liaison.
             if (!project || project.security_tier !== 'open') return;
             const payload: StoredEvent = { label: event.label, from: null, to: null };
             await deps.repo.history.record({
@@ -118,20 +100,15 @@ export function createProjectsUsageProvider(deps: Deps): ProjectsUsageProvider {
                 refId: null,
                 content: await deps.cipherFor(workspaceId).encrypt(JSON.stringify(payload))
             });
-            // La frise ouverte de ce projet doit suivre : le module qui écrit
-            // (`deploy.trigger`) ne bat que son sujet, celui-ci est le nôtre.
+            // Le module qui écrit ne bat que son sujet : la frise du projet ne
+            // suivrait pas sans cela.
             deps.live.changed(workspaceId);
         },
         /**
-         * Reporte une version sur les projets qui ont demandé à la suivre. Le
-         * champ devient alors piloté par l'élément, et l'interface le passe en
-         * lecture seule. L'ex `applyReleaseVersion` du service git natif, côté
-         * Projets : le module dit la version, Projets décide qui la suit.
-         *
-         * **Tous** les projets liés de l'espace, et non un seul : un dépôt sert
-         * plusieurs projets, et n'en servir qu'un serait arbitraire. La liste
-         * est courte, et déjà filtrée sur l'étage ouvert (la liaison d'un
-         * projet gardé est refusée), donc lisible et réécrite sans session.
+         * Reporte une version sur les projets qui ont demandé à la suivre : le module
+         * dit la version, Projets décide qui la suit. Tous les projets liés de
+         * l'espace, un dépôt en servant plusieurs ; la liste est courte et déjà
+         * filtrée sur l'étage ouvert, donc lisible et réécrite sans session.
          */
         async applyVersion(feature, itemId, workspaceId, version) {
             const link = LINKS[feature];
@@ -157,10 +134,9 @@ export function createProjectsUsageProvider(deps: Deps): ProjectsUsageProvider {
                 });
                 changed = true;
             }
-            // Le sujet `projects`, que le service git natif battait après un
-            // tour qui avait changé une version : le module Git ne nomme que
-            // le sien, c'est donc Projets qui ravive son portefeuille. Jamais
-            // sans changement, une release déjà reportée ne réveille personne.
+            // Le module Git ne bat que son propre sujet : c'est à Projets de raviver
+            // son portefeuille. Jamais sans changement, une release déjà reportée ne
+            // réveille personne.
             if (changed) deps.live.changed(workspaceId);
         }
     };

@@ -7,27 +7,9 @@ import type {
     FinanceTransactionKind
 } from '../contracts/domain';
 
-/**
- * Mise en forme et vocabulaire des finances.
- *
- * Tout ce qui traduit un état en français, et tout ce qui transforme des
- * centimes en quelque chose de lisible, vit ici. Regroupé plutôt que dispersé
- * dans les écrans parce qu'un même montant doit s'écrire exactement pareil sur
- * la carte de l'accueil, dans le journal et dans une info-bulle de graphique.
- */
+/** Mise en forme et vocabulaire : un même montant doit s'écrire pareil partout. */
 
-/* ------------------------------------------------------------------ *
- * Montants
- * ------------------------------------------------------------------ */
-
-/**
- * Un montant en centimes, écrit dans la devise de l'espace.
- *
- * `Intl` fait tout le travail, y compris la position du symbole et l'espace
- * insécable devant lui, qui changent d'une devise à l'autre. La division par
- * cent est la **dernière** étape et la seule: les centimes restent entiers
- * partout ailleurs.
- */
+/** `Intl` place le symbole et l'espace insécable ; la division par cent est la dernière étape. */
 export function formatMoney(cents: number, currency: string, options?: { compact?: boolean }): string {
     return new Intl.NumberFormat('fr-FR', {
         style: 'currency',
@@ -51,13 +33,9 @@ export function formatSigned(cents: number, currency: string): string {
 }
 
 /**
- * Lit un montant tapé à la main et le rend en centimes, ou `null`.
- *
- * Accepte les deux séparateurs décimaux et les espaces de milliers, parce que
- * c'est ce qu'un clavier produit réellement: « 1 234,56 », « 1234.56 » et
- * « 1234 » désignent tous la même chose et refuser l'un des trois ne protège de
- * rien. Arrondi à l'entier le plus proche pour que « 12,999 » ne devienne pas
- * 12,99 par troncature.
+ * Un montant tapé à la main, en centimes, ou `null`. Accepte les deux
+ * séparateurs décimaux et les espaces de milliers ; arrondi à l'entier le plus
+ * proche pour que « 12,999 » ne devienne pas 12,99.
  */
 export function parseAmount(value: string): number | null {
     // `\s` couvre déjà l'espace insécable et l'espace fine insécable, que
@@ -75,11 +53,8 @@ export function amountToInput(cents: number): string {
 }
 
 /**
- * Les taux de TVA proposés en raccourci dans les formulaires.
- *
- * Les quatre taux français, plus l'exonération. Le taux n'est jamais stocké:
- * ces boutons ne servent qu'à **calculer** la part de TVA d'un montant TTC, et
- * c'est cette part-là qui est enregistrée (voir `financeTransactionSchema`).
+ * Les quatre taux français plus l'exonération. Le taux n'est jamais stocké :
+ * ces boutons calculent la part de TVA d'un montant TTC.
  */
 export const VAT_RATES = [0, 2.1, 5.5, 10, 20] as const;
 
@@ -98,10 +73,6 @@ export function rateOfVat(grossCents: number, vatCents: number): number | null {
     return VAT_RATES.find((candidate) => Math.abs(candidate - rate) < 0.15) ?? null;
 }
 
-/* ------------------------------------------------------------------ *
- * Dates
- * ------------------------------------------------------------------ */
-
 /** Le jour courant, au format `AAAA-MM-JJ` attendu par le serveur. */
 export function todayIso(): string {
     const now = new Date();
@@ -110,11 +81,8 @@ export function todayIso(): string {
 }
 
 /**
- * Un jour civil, mis en forme sans jamais passer par un fuseau.
- *
- * `new Date('2026-08-18')` est interprété en UTC puis réaffiché en heure locale,
- * ce qui recule la date d'un jour partout à l'ouest de Greenwich. On construit
- * donc la date en composantes locales explicites.
+ * `new Date('2026-08-18')` est interprété en UTC puis réaffiché en local, ce
+ * qui recule d'un jour à l'ouest de Greenwich : composantes locales explicites.
  */
 function localDate(iso: string): Date {
     return new Date(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10)));
@@ -175,10 +143,6 @@ export function formatRelativeDay(iso: string): string {
     if (days > 0) return `dans ${days} jours`;
     return `il y a ${-days} jours`;
 }
-
-/* ------------------------------------------------------------------ *
- * Vocabulaire
- * ------------------------------------------------------------------ */
 
 export const ACCOUNT_KINDS: { id: FinanceAccountKind; label: string; icon: string }[] = [
     { id: 'checking', label: 'Compte courant', icon: 'finance' },
@@ -246,14 +210,7 @@ export const RANGES: { id: FinanceRange; label: string }[] = [
     { id: 'year', label: 'Cette année' }
 ];
 
-/**
- * Les icônes proposées pour une catégorie.
- *
- * Choisies dans `icons.css`, donc sans en ajouter aucune: une catégorie de
- * dépenses n'a pas besoin d'un pictogramme littéral (une fourchette pour les
- * courses), elle a besoin d'être **reconnaissable d'un coup d'œil** au milieu
- * de quinze autres, ce que la couleur fait déjà pour l'essentiel.
- */
+/** Choisies dans `icons.css`, sans en ajouter : une catégorie doit être reconnaissable, la couleur fait l'essentiel. */
 export const CATEGORY_ICONS = [
     'other',
     'home',
@@ -274,15 +231,7 @@ export const CATEGORY_ICONS = [
     'refresh'
 ];
 
-/**
- * Le jeu de catégories proposé à qui n'en a aucune.
- *
- * Un livre de comptes vide n'est pas utilisable: chaque opération demanderait de
- * créer sa catégorie avant de pouvoir être saisie, et personne ne s'y met.
- * Ces entrées ne sont **pas** créées d'office pour autant (un espace peut très
- * bien vouloir sa propre grille): l'écran des catégories les propose en un
- * bouton, et elles restent ensuite modifiables comme n'importe quelle autre.
- */
+/** Proposé en un bouton à qui n'a aucune catégorie, jamais créé d'office. */
 export const DEFAULT_CATEGORIES: {
     name: string;
     flow: 'expense' | 'income';

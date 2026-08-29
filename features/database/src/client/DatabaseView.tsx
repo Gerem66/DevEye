@@ -11,54 +11,21 @@ interface DatabaseViewProps {
     database: Database;
     alerts: DatabaseAlert[];
     canWrite: boolean;
-    /** Un essai de connexion est en cours (« Tester », pas « Relever »). */
+    /** Un essai de connexion est en cours. */
     testing: boolean;
     /** Le dernier essai de connexion, s'il y en a eu un dans cette vue. */
     probe: DatabaseProbe | null;
-    /**
-     * L'explorateur passe (ou sort) du plein écran.
-     *
-     * Remonté parce que l'appelant possède ce que ce mode doit effacer — son
-     * en-tête — et la racine dont le panneau agrandi tire sa hauteur.
-     */
+    /** L'explorateur passe ou sort du plein écran ; l'appelant possède l'en-tête à effacer. */
     onExpandChange?: (expanded: boolean) => void;
     /** Rendu après l'explorateur (les projets liés, par exemple). */
     children?: ReactNode;
 }
 
 /**
- * Le contenu d'une base : son état, ses alertes, ses tables.
- *
- * **Partagé** entre la feature Bases de données (`DatabaseDetail`) et l'onglet
- * « Bases de données » d'un projet, exactement comme `RepoView` l'est entre la
- * feature Git et l'onglet Git. C'est la raison d'être du composant : les deux
- * montrent la même base, et une seconde implémentation aurait divergé au premier
- * ajustement.
- *
- * L'en-tête — nom, adresse, boutons — appartient à l'appelant : la feature y met
- * un retour à la liste, l'onglet d'un projet y met un « Délier ».
- *
- * L'ordre des blocs suit ce qu'on vient y chercher : **est-elle joignable**,
- * **qu'est-ce qui la surveille**, **qu'y a-t-il dedans**. L'exploration vient en
- * dernier et non en premier parce qu'elle est la seule qui ouvre une connexion —
- * on ne la déclenche pas par accident en affichant l'écran.
- *
- * ## Les alertes : un état, pas un formulaire
- *
- * Le bloc « Alertes » montre ce que les règles ont mesuré (franchie ou non,
- * dernières valeurs, erreur), et rien ne s'y écrit. Leur écriture (créer,
- * modifier, supprimer) est un réglage de la base, et vit donc dans l'onglet
- * Alertes de sa coquille de réglages, derrière le bouton commun posé dans
- * l'en-tête du bloc. C'était la dette de la coquille de cette feature : un
- * dialogue artisanal derrière son propre « Nouvelle alerte », dans le corps de
- * la fiche.
- *
- * ## Le mode agrandi
- *
- * L'explorateur peut prendre toute la place : tout ce qui décrit la **base** —
- * son état, ses alertes, ses projets — s'efface alors, pour ne plus laisser à
- * l'écran que la table qu'on regarde. C'est l'état qui remonte à l'appelant, lui
- * seul pouvant effacer l'en-tête et donner sa hauteur à la racine.
+ * Le contenu d'une base (état, alertes, tables), partagé entre la feature et
+ * l'onglet d'un projet ; l'en-tête appartient à l'appelant. Le bloc Alertes
+ * montre un état, leur écriture vit dans les réglages de la base. En mode
+ * agrandi, seul l'explorateur reste.
  */
 export function DatabaseView({
     database,
@@ -72,8 +39,7 @@ export function DatabaseView({
     const [expanded, setExpanded] = useState(false);
     const status = STATUS_META[database.status];
 
-    // Stable : l'explorateur s'en sert dans un effet de remise à zéro, qui
-    // rejouerait à chaque rendu si la fonction changeait d'identité.
+    // Stable : l'explorateur s'en sert dans un effet de remise à zéro.
     const expand = useCallback(
         (next: boolean) => {
             setExpanded(next);
@@ -86,9 +52,6 @@ export function DatabaseView({
         <>
             {!expanded && (
                 <>
-                    {/* Le résultat d'un essai à la demande, à part de l'état
-                        enregistré : l'un dit « en ce moment », l'autre « au
-                        dernier relevé ». */}
                     <ProbeLine testing={testing} probe={probe} />
 
                     <section className={styles.statRow}>
@@ -102,20 +65,12 @@ export function DatabaseView({
                             }
                         />
                         <Stat label='Dernier relevé' value={formatAgo(database.lastCheckAt)} />
-                        {/* Le temps qu'a mis le dernier relevé à aboutir. C'est
-                            le premier signe d'une base qui se dégrade, bien avant
-                            qu'elle devienne injoignable — et il n'apparaissait
-                            jusqu'ici que dans un essai, donc jamais deux fois de
-                            suite au même endroit. */}
                         <Stat label='Temps de réponse' value={formatMs(database.lastElapsedMs)} />
                         <Stat label='Taille' value={formatBytes(database.sizeBytes)} />
                         <Stat label='Tables' value={formatCount(database.tableCount)} />
                         <Stat label='Version' value={database.serverVersion ?? '—'} />
                     </section>
 
-                    {/* Dire d'où viennent ces chiffres, sans quoi on les croit lus
-                        à l'instant — alors qu'ils datent du dernier relevé, lequel
-                        peut n'avoir jamais eu lieu. */}
                     {database.lastCheckAt === null && (
                         <p className={styles.hint}>
                             Ces chiffres sont vides : cette base n’a jamais été relevée. « Relever l’état » va les
@@ -136,11 +91,8 @@ export function DatabaseView({
                                 </span>
                             )}
                         </h3>
-                        {/* Le bouton commun, ouvert sur l'onglet Alertes : c'est
-                            là que les règles se créent et se corrigent. Hors du
-                            `canWrite` : un lecteur y voit les règles à défaut de
-                            les changer, et le bouton se supprime seul quand
-                            aucune section n'est lisible. */}
+                        {/* Hors du `canWrite` : un lecteur y voit les règles, et le
+                            bouton se supprime seul sans section lisible. */}
                         <FeatureSettingsButton
                             scope={{
                                 kind: 'item',

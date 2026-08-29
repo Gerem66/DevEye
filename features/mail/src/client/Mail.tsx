@@ -59,13 +59,10 @@ function cursorOf(message: MailMessageSummary | undefined): MailMessageCursor | 
 }
 
 /**
- * Fusionne une première page fraîchement relue dans la liste déjà affichée.
- *
- * La page 0 **est** la tête de liste : elle remplace donc ce qui était là
- * (drapeaux réconciliés, lignes disparues, messages arrivés), et tout ce qui est
- * plus ancien que sa dernière ligne est conservé intact — c'est ce qui préserve
- * les pages déjà déroulées et, avec elles, la position de défilement. Les lignes
- * gardent leur `id`, donc seule celles qui ont réellement changé se repeignent.
+ * Fusionne une première page fraîchement relue dans la liste déjà affichée. La
+ * page 0 est la tête de liste : elle remplace ce qui était là, et tout ce qui est
+ * plus ancien que sa dernière ligne est conservé intact, ce qui préserve les
+ * pages déjà déroulées et la position de défilement.
  */
 function mergeHead(previous: MailMessageSummary[], head: MailMessageSummary[]): MailMessageSummary[] {
     const boundary = cursorOf(head[head.length - 1]);
@@ -92,9 +89,9 @@ export default function Mail(_props: FeatureViewProps) {
     const [showAccountList, setShowAccountList] = useState(true);
     /**
      * Which of the two columns is on screen once there is only room for one.
-     * Inert on desktop — nothing reads it there — because the switch itself is
-     * pure CSS (see `.feature[data-mobile-view]` in the stylesheet), which keeps
-     * the wide layout free of any width detection.
+     * Inert on desktop, where the switch itself is pure CSS
+     * (`.feature[data-mobile-view]`), keeping the wide layout free of any width
+     * detection.
      */
     const [mobileView, setMobileView] = useState<'panel' | 'messages'>('panel');
 
@@ -104,13 +101,10 @@ export default function Mail(_props: FeatureViewProps) {
     const selectedFolderIdRef = useRef<number | null>(null);
     selectedFolderIdRef.current = selectedFolderId;
     /**
-     * Jeton du dossier ouvert, incrémenté à chaque changement de sélection.
-     *
-     * Ouvrir un dossier lance une suite d'allers-retours (la page en cache, puis la
-     * relève IMAP, puis la fusion de tête) qui dure bien plus qu'un clic. Chaque
-     * étape se compare à ce jeton : celle qui appartient au dossier précédent
-     * s'arrête là où elle en est, sans lancer la suivante et sans rien écrire —
-     * c'est ce qui empêche les messages d'un dossier d'atterrir dans un autre.
+     * Jeton du dossier ouvert, incrémenté à chaque changement de sélection. Ouvrir
+     * un dossier lance une suite d'allers-retours qui dure bien plus qu'un clic :
+     * chaque étape se compare à ce jeton et s'arrête si elle appartient au dossier
+     * précédent, ce qui empêche les messages d'atterrir dans un autre.
      */
     const folderRunRef = useRef(0);
     /** Jeton de la relève en vol, s'il y en a une (`null` sinon). */
@@ -162,18 +156,17 @@ export default function Mail(_props: FeatureViewProps) {
     }, []);
 
     /**
-     * Reload the list *and* tell the dashboard widget its count moved. Every
-     * path that adds or removes a mailbox goes through here — the widget
-     * subscribes to `mail.accountCount` but nothing was ever bumping it, so its
-     * number stayed at whatever it was until the socket next reconnected.
+     * Reload the list *and* tell the dashboard widget its count moved: every path
+     * that adds or removes a mailbox goes through here, the widget subscribing to
+     * `mail.accountCount`.
      */
     const reloadAfterAccountChange = useCallback(async () => {
         invalidate('mail.accountCount');
         await reloadAccounts();
     }, [reloadAccounts]);
 
-    // Le sondage au repos a disparu : c'est `live.changed` qui prévient d'un
-    // nouveau message, qu'il vienne d'un autre membre ou de la synchro de fond.
+    // C'est `live.changed` qui prévient d'un nouveau message, qu'il vienne d'un
+    // autre membre ou de la synchro de fond.
     useEffect(() => {
         return onResourceChange('mail.accountList', () => {
             // Une relecture réordonne la liste sous le pointeur ; jamais en plein
@@ -182,10 +175,8 @@ export default function Mail(_props: FeatureViewProps) {
         });
     }, [reloadAccounts]);
 
-    // Seul minuteur conservé, et ce n'est pas un sondage de données : la barre
-    // de progression d'une synchro en cours (voir AccountCard/AccountPanel) lit
-    // un compteur qui ne vit qu'en mémoire du serveur, le temps de la synchro.
-    // Il ne tourne donc que pendant celle-ci, et s'arrête avec elle.
+    // Pas un sondage de données : la barre de progression d'une synchro en cours
+    // lit un compteur qui ne vit qu'en mémoire du serveur, le temps de celle-ci.
     const anySyncing = accounts.some((a) => a.syncing);
     useEffect(() => {
         if (!anySyncing) return;
@@ -196,22 +187,17 @@ export default function Mail(_props: FeatureViewProps) {
     }, [anySyncing, reloadAccounts]);
 
     useEffect(() => {
-        // Driven only by the id actually changing — not by every render — so
-        // the manual back-arrow toggle (same id, `showAccountList` flipped
-        // locally) is never overridden. A selection turning null (e.g. the
-        // selected account got deleted) must still fall back to the list,
-        // though, or slide 2 would be stuck empty with no way back to it.
+        // Driven only by the id actually changing, not by every render, so the
+        // manual back-arrow toggle (same id, `showAccountList` flipped locally) is
+        // never overridden. A selection turning null must still fall back to the
+        // list, or slide 2 would be stuck empty with no way back to it.
         setShowAccountList(selectedAccountId === null);
     }, [selectedAccountId]);
 
-    // Les deux niveaux profonds de Mail, déclarés au moteur de présence. Le
-    // composant ne sait rien de l'arbre : il annonce ses deux niveaux (compte,
-    // puis dossier), et la racine `view:mail` vient de l'accueil.
-    //
-    // Rejoindre quelqu'un, ou arriver par `openFeature('mail', id)` : le compte
-    // visé est son identifiant nu, appliqué dès que la liste est chargée (la
-    // cible reste posée jusque-là). Un compte absent de la liste s'ignore,
-    // comme chez les autres features à éléments.
+    // Les deux niveaux profonds de Mail, déclarés au moteur de présence : le
+    // composant annonce ses deux niveaux (compte, puis dossier), la racine
+    // `view:mail` venant de l'accueil. Le compte visé est son identifiant nu,
+    // appliqué dès que la liste est chargée ; un compte absent s'ignore.
     useLiveItemTarget(
         'l1',
         selectedAccountId === null ? null : String(selectedAccountId),
@@ -229,10 +215,9 @@ export default function Mail(_props: FeatureViewProps) {
     );
     const folderTarget = useLiveSegment('l2', selectedFolderId === null ? null : String(selectedFolderId));
 
-    // Le dossier visé attend l'arborescence de son compte. La cible est
-    // **redonnée à chaque rendu** tant qu'elle n'est pas atteinte : cette garde
-    // attend simplement que les données arrivent, sans rien avoir à acquitter
-    // ni à mémoriser.
+    // Le dossier visé attend l'arborescence de son compte. La cible est redonnée
+    // à chaque rendu tant qu'elle n'est pas atteinte : cette garde attend que les
+    // données arrivent, sans rien à acquitter ni à mémoriser.
     useEffect(() => {
         if (!folderTarget) return;
         if (folderTarget.value === null) return;
@@ -291,14 +276,11 @@ export default function Mail(_props: FeatureViewProps) {
     }, [selectedAccountId, loadFolders]);
 
     /**
-     * Relit l'arborescence sans toucher à la sélection — c'est ce qui remet les
-     * compteurs de non-lus d'aplomb après une relève de fond.
-     *
-     * Pas `loadFolders`, qui retombe d'office sur la boîte de réception et
-     * déplacerait l'utilisateur à chaque tick ; pas de `foldersLoading` non plus,
-     * un rafraîchissement de fond n'ayant pas à remplacer la liste par
-     * « Chargement… ». Et pas de `withSecrecy` : un rafraîchissement que personne
-     * n'a demandé ne doit jamais faire surgir l'invite de déverrouillage.
+     * Relit l'arborescence sans toucher à la sélection, ce qui remet les compteurs
+     * de non-lus d'aplomb après une relève de fond. Pas `loadFolders`, qui
+     * retomberait d'office sur la boîte de réception ; pas de `foldersLoading` ni
+     * de `withSecrecy` : un rafraîchissement que personne n'a demandé ne doit pas
+     * faire surgir l'invite de déverrouillage.
      */
     const refreshFolders = useCallback(async () => {
         const accountId = selectedAccountIdRef.current;
@@ -313,17 +295,16 @@ export default function Mail(_props: FeatureViewProps) {
     }, []);
 
     /**
-     * One page of the local cache. When the cache runs dry (`nextCursor` comes
-     * back null) that isn't necessarily the end of the mailbox — only the end of
-     * what has been pulled so far — so this reaches past it once, backfilling an
-     * older batch from IMAP and re-reading the page. `reachedStart` is the real
-     * end of the folder, and the only thing that stops the scroll for good.
+     * One page of the local cache. A null `nextCursor` isn't necessarily the end
+     * of the mailbox, only the end of what has been pulled so far, so this reaches
+     * past it once, backfilling an older batch from IMAP and re-reading the page.
+     * `reachedStart` is the real end of the folder, and the only thing that stops
+     * the scroll for good.
      */
     const loadMessages = useCallback(async (folderId: number, cursor: MailMessageCursor | null) => {
         // La lecture appartient au dossier ouvert au moment où elle part ; passé
-        // ce point, plus rien ne s'écrit si la sélection a bougé (voir
-        // `folderRunRef`). L'indicateur de chargement, lui, appartient déjà à la
-        // nouvelle lecture : c'est elle qui l'éteindra.
+        // ce point, plus rien ne s'écrit si la sélection a bougé. L'indicateur de
+        // chargement appartient déjà à la nouvelle lecture, qui l'éteindra.
         const run = folderRunRef.current;
         const stale = () => folderRunRef.current !== run;
         setMessagesLoading(true);
@@ -373,11 +354,9 @@ export default function Mail(_props: FeatureViewProps) {
 
     /**
      * Rafraîchissement du dossier ouvert : une seule page 0, fusionnée en tête.
-     *
-     * `nextCursor` et `reachedFolderStart` ne bougent pas — ils décrivent la
-     * queue de la liste, que cette relecture ne touche pas. C'est le pendant
-     * client de la réconciliation serveur : ce qu'elle vient de corriger tient
-     * précisément dans cette page.
+     * `nextCursor` et `reachedFolderStart` ne bougent pas, ils décrivent la queue
+     * de la liste. C'est le pendant client de la réconciliation serveur, qui porte
+     * précisément sur cette page.
      */
     const refreshMessageHead = useCallback(async () => {
         const folderId = selectedFolderIdRef.current;
@@ -407,19 +386,16 @@ export default function Mail(_props: FeatureViewProps) {
         }
     }, [loadMessages]);
 
-    // Le signal `live.changed`, mais pour ce qu'on est en train de lire. Sans ces
-    // deux abonnements, la relève de fond ne rafraîchissait que les cartes de
-    // comptes : la liste ouverte gardait ses messages, ses drapeaux et ses
-    // compteurs jusqu'à ce qu'on change de dossier.
+    // Le signal `live.changed`, mais pour ce qu'on est en train de lire : sans ces
+    // deux abonnements, la liste ouverte garderait ses messages, ses drapeaux et
+    // ses compteurs jusqu'au changement de dossier.
     useEffect(() => onResourceChange('mail.folderList', () => void refreshFolders()), [refreshFolders]);
     useEffect(() => onResourceChange('mail.messageList', () => void refreshMessageHead()), [refreshMessageHead]);
 
     // Les `live.changed` émis pendant une coupure de socket ne sont annoncés à
-    // personne, et la reconnexion ne fait que rétablir le lien. Une relecture au
-    // retour, donc — sans quoi une veille de la machine laisse la vue figée sur
-    // l'état d'avant. `onSocketOpen` appelle aussi tout de suite quand la
-    // socket est déjà ouverte : c'est le chargement initial des comptes (les
-    // deux autres relectures n'ont alors rien à relire).
+    // personne : une relecture au retour, donc, sans quoi une veille de la machine
+    // laisse la vue figée sur l'état d'avant. `onSocketOpen` appelle aussi tout de
+    // suite quand la socket est déjà ouverte : c'est le chargement initial.
     useEffect(
         () =>
             onSocketOpen(() => {
@@ -433,12 +409,11 @@ export default function Mail(_props: FeatureViewProps) {
     /**
      * Debounced search over the whole folder cache. It has to be a server round
      * trip rather than a filter over `messages`: that array only holds the pages
-     * scrolled so far, and the envelopes are encrypted at rest, so only the
-     * server can look inside them (see `mail.messageSearch`).
+     * scrolled so far, and the envelopes are encrypted at rest.
      *
-     * `cancelled` covers the second half of the race the debounce doesn't: a
-     * request already in flight when the query changes would otherwise land
-     * after the newer one and overwrite fresher results with staler ones.
+     * `cancelled` covers the half of the race the debounce doesn't: a request
+     * already in flight when the query changes would otherwise land after the
+     * newer one and overwrite fresher results with staler ones.
      */
     useEffect(() => {
         const query = search.trim();
@@ -483,17 +458,12 @@ export default function Mail(_props: FeatureViewProps) {
     }, [search, selectedFolderId]);
 
     /**
-     * Relève douce du dossier ouvert, à la demande : côté serveur, la même passe
-     * que la synchro de fond — les arrivées, plus la réconciliation des drapeaux
-     * et des disparus sur la fenêtre récente — puis la tête de liste est fusionnée
-     * ici. Rien n'est jeté : la position de défilement et les pages déjà déroulées
-     * survivent, et l'aller-retour IMAP se compte en un fetch plutôt qu'en deux
-     * cents enveloppes.
+     * Relève douce du dossier ouvert, à la demande : côté serveur la même passe
+     * que la synchro de fond, puis la tête de liste est fusionnée ici. Rien n'est
+     * jeté : la position de défilement et les pages déjà déroulées survivent.
      *
-     * Une relève déjà en vol **pour le même dossier** n'est pas relancée — c'est la
-     * garde du double-clic. Changer de dossier, en revanche, la périme : la
-     * nouvelle prend la main sur l'indicateur, et l'ancienne, en revenant, ne
-     * touche plus à rien.
+     * Une relève déjà en vol pour le même dossier n'est pas relancée, c'est la
+     * garde du double-clic ; changer de dossier, en revanche, la périme.
      */
     const syncFolder = useCallback(async () => {
         const folderId = selectedFolderIdRef.current;
@@ -518,15 +488,11 @@ export default function Mail(_props: FeatureViewProps) {
     }, [refreshMessageHead, refreshFolders]);
 
     /**
-     * Ouvrir un dossier : la page la plus récente d'abord — c'est le cache local,
-     * donc c'est immédiat — puis une relève IMAP dont seule la tête de liste est
-     * refusionnée. Avant, la sélection s'arrêtait au cache : ce qui était arrivé
-     * depuis le dernier tour de relève de fond n'apparaissait qu'au tour suivant,
-     * ou après un clic sur « Actualiser ».
-     *
-     * La relève est sautée pour les comptes « guarded » : n'ayant pas de relève de
-     * fond, `mail.messageList` vient déjà de synchroniser le dossier côté serveur,
-     * et en redemander une ouvrirait une seconde connexion IMAP pour rien.
+     * Ouvrir un dossier : la page la plus récente d'abord, depuis le cache local,
+     * donc immédiate, puis une relève IMAP dont seule la tête de liste est
+     * refusionnée. La relève est sautée pour les comptes « guarded » :
+     * `mail.messageList` vient déjà de synchroniser le dossier côté serveur, et en
+     * redemander une ouvrirait une seconde connexion IMAP pour rien.
      */
     const openFolder = useCallback(
         async (folderId: number) => {
@@ -551,11 +517,11 @@ export default function Mail(_props: FeatureViewProps) {
     }, [selectedFolderId, openFolder]);
 
     /*
-     * The paginated list and the search results are two views of the same rows,
-     * so every local row mutation has to hit both — otherwise marking a message
-     * read from a search result leaves it bold the moment you clear the query.
-     * `searchResults` stays `null` when not searching, so the second update is
-     * a no-op then.
+     * The paginated list and the search results are two views of the same rows, so
+     * every local row mutation has to hit both: otherwise marking a message read
+     * from a search result leaves it bold the moment you clear the query.
+     * `searchResults` stays `null` when not searching, so the second update is a
+     * no-op then.
      */
     const patchMessage = useCallback((id: number, patch: Partial<MailMessageSummary['flags']>) => {
         const apply = (list: MailMessageSummary[]) =>
@@ -575,9 +541,8 @@ export default function Mail(_props: FeatureViewProps) {
             setMessagePopupOpen(true);
             setMessageLoading(true);
             // Keep showing the current content only while re-fetching the SAME
-            // message (e.g. to unblock its images) — opening a different one (or
-            // reopening after close) must never flash the previous message's
-            // content, so clear it up front in that case.
+            // message (to unblock its images): opening a different one must never
+            // flash the previous message's content, so clear it up front.
             setSelectedMessage((prev) => (prev && prev.id === message.id ? prev : null));
             try {
                 const res = await withSecrecy(() =>
@@ -602,9 +567,8 @@ export default function Mail(_props: FeatureViewProps) {
     selectedAccountTierRef.current = selectedAccount?.securityTier ?? null;
     const selectedFolder = folders.find((f) => f.id === selectedFolderId) ?? null;
 
-    // Reads the selection through the ref, like `deleteAccount` below, so the
-    // callback stays stable for the whole session instead of being rebuilt
-    // every time a different mailbox is picked.
+    // Reads the selection through the ref so the callback stays stable for the
+    // whole session instead of being rebuilt on every mailbox pick.
     const openAccountForm = useCallback(
         async (account: MailAccount | null) => {
             const result: AccountPopupResult = await OpenPopup(ACCOUNT_POPUP, account);
@@ -683,10 +647,9 @@ export default function Mail(_props: FeatureViewProps) {
     );
 
     /*
-     * Everything handed down to `MessageList` below is a stable callback. The
-     * list and its rows are memoized (see MessageList.tsx), so a fresh closure
-     * here would defeat that outright and repaint every row on each sync poll
-     * — which is what made opening a message read as several redraws.
+     * Everything handed down to `MessageList` below is a stable callback: the list
+     * and its rows are memoized, so a fresh closure here would defeat that and
+     * repaint every row on each refresh.
      */
 
     /** Applies a flag change to a message, keeping the list row and (if open) the popup in sync. */
@@ -721,11 +684,9 @@ export default function Mail(_props: FeatureViewProps) {
 
     const openMessageId = selectedMessage?.id ?? null;
 
-    // Read through refs, never through the closure. Depending on the open
-    // message or the page cursor would re-create these on every selection and
-    // every page — and a changed callback prop invalidates *every* memoized row
-    // at once, which is exactly the repaint storm the memoization exists to
-    // avoid. Only `messages` and `selectedId` may move a row now.
+    // Read through refs, never through the closure: depending on the open message
+    // or the page cursor would re-create these on every selection and every page,
+    // and a changed callback prop invalidates *every* memoized row at once.
     const openMessageIdRef = useRef<number | null>(null);
     openMessageIdRef.current = openMessageId;
     const nextCursorRef = useRef<MailMessageCursor | null>(null);
@@ -798,11 +759,9 @@ export default function Mail(_props: FeatureViewProps) {
     const searchMode = search.trim() !== '';
 
     /**
-     * One line under the search box while searching. It says how many matched
-     * *and* that the search covered the local cache rather than the whole
-     * remote mailbox — without that, "3 messages trouvés" in a folder holding
-     * thousands of server-side messages reads as a complete answer when it is
-     * only a complete answer about what has been synced.
+     * One line under the search box while searching: how many matched, and whether
+     * the search covered only the local cache. Without that, "3 messages trouvés"
+     * in a folder holding thousands reads as a complete answer.
      */
     const searchStatus = ((): string | null => {
         if (!searchMode) return null;

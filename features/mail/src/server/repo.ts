@@ -13,12 +13,10 @@ import type {
 import type { SdkQueryable } from '@deveye/types/sdk/server';
 
 /**
- * Le dépôt du module : les quatre dépôts natifs (`db.mailAccounts`,
- * `db.mailFolders`, `db.mailMessages`, `db.mailSettings`) réunis en un seul
- * contrat sur `SdkQueryable`, sections gardées parce que leurs verbes se
- * répètent d'une table à l'autre (`findById`, `reorder`, `delete`). Les quatre
- * tables `mail_*` datent du socle (039 et suivantes), jamais déplacées :
- * l'allowlist de `deveye-feature.json` les dispense du préfixe `ft_mail_`.
+ * Le dépôt du module sur `SdkQueryable`, en sections parce que les mêmes verbes
+ * se répètent d'une table à l'autre (`findById`, `reorder`, `delete`).
+ * L'allowlist de `deveye-feature.json` dispense les tables `mail_*` du préfixe
+ * `ft_mail_`.
  */
 export interface MailRepo {
     accounts: MailAccountsRepo;
@@ -45,19 +43,12 @@ export interface MailAccountConfig {
 export interface MailAccountsRepo {
     listByWorkspace(workspaceId: number): Promise<MailAccountRow[]>;
     /**
-     * Les comptes **visibles** depuis cet espace : les siens, plus ceux qu'un
-     * autre espace y projette (`item_shares`), les locaux d'abord.
-     *
-     * La branche projetée ne retient que les comptes **ouverts**, en garde de
-     * cohérence : un compte gardé est chiffré par le mot de passe de son
-     * auteur, illisible dans tout autre espace. `share.set` refuse de le
-     * projeter (`items.shareable`), et un compte projeté qui passe au palier
-     * gardé perd ses projections (`rekeyTier`, par `ctx.items.forget`).
-     *
-     * Séparé de `listByWorkspace` plutôt que de le remplacer : la relève de
-     * fond tourne au domicile, sur les comptes d'un espace, pas sur ce qu'on
-     * y voit (relever deux fois la même boîte parce qu'elle est projetée
-     * ailleurs doublerait les requêtes IMAP).
+     * Les comptes visibles depuis cet espace : les siens, plus ceux qu'un autre
+     * espace y projette (`item_shares`), les locaux d'abord. Ne retient des
+     * projetés que les comptes ouverts : un compte gardé est chiffré par le mot
+     * de passe de son auteur, illisible ailleurs. La relève de fond passe par
+     * `listByWorkspace` : la relancer une fois par espace qui voit la boîte
+     * doublerait les requêtes IMAP.
      */
     listVisible(workspaceId: number): Promise<MailAccountRow[]>;
     findById(id: number, workspaceId: number): Promise<MailAccountRow | null>;
@@ -69,12 +60,8 @@ export interface MailAccountsRepo {
     update(id: number, workspaceId: number, input: MailAccountConfig): Promise<MailAccountRow | null>;
     setEnabled(id: number, workspaceId: number, enabled: boolean): Promise<MailAccountRow | null>;
     delete(id: number, workspaceId: number): Promise<boolean>;
-    /** Lay out the user's accounts in the given order — same convention as `uptime.reorder`. */
     reorder(workspaceId: number, ids: number[]): Promise<void>;
-    /**
-     * Write back a sync outcome (background loop or on-demand), horodatage de
-     * relève compris — c'est ce qui remet le compte dans la rotation.
-     */
+    /** Write back a sync outcome, `last_sync_at` compris : c'est ce qui remet le compte dans la rotation. */
     recordSync(
         id: number,
         lastSyncAt: number,
@@ -82,10 +69,9 @@ export interface MailAccountsRepo {
         status: MailAccountStatus
     ): Promise<void>;
     /**
-     * Même écriture d'état, mais **sans** toucher `last_sync_at` : l'issue d'une
-     * commande de l'utilisateur dit ce que vaut l'accès à la boîte, pas quand
-     * elle a été relevée. Les confondre ferait passer un simple clic pour une
-     * relève et repousserait d'autant le prochain passage de fond.
+     * Même écriture d'état, mais sans toucher `last_sync_at` : l'issue d'une
+     * commande dit ce que vaut l'accès à la boîte, pas quand elle a été relevée,
+     * et les confondre repousserait d'autant le prochain passage de fond.
      */
     recordStatus(id: number, at: number, lastSyncErrorEnc: string | null, status: MailAccountStatus): Promise<void>;
     /** Persist a refreshed OAuth token blob without touching anything else. */
@@ -142,7 +128,7 @@ export interface MailMessageEnvelopeInput {
     hasAttachments: boolean;
 }
 
-/** Les drapeaux tels qu'ils sont en cache — assez pour décider quoi réécrire, sans toucher à l'enveloppe chiffrée. */
+/** Les drapeaux tels qu'ils sont en cache : de quoi décider quoi réécrire sans toucher à l'enveloppe. */
 export interface MailMessageFlagsRow {
     id: number;
     uid: number;
@@ -154,26 +140,22 @@ export interface MailMessageFlagsRow {
 export interface MailMessagesRepo {
     /** Counts from the cache, used to keep `mail_folders.unread_count/total_count` in step after a sync. */
     countByFolder(folderId: number): Promise<{ total: number; unseen: number }>;
-    /** Lowest cached UID, or null if empty — backstops `mail_folders.first_seen_uid` for rows predating it. */
+    /** Lowest cached UID, or null if empty; backstops `mail_folders.first_seen_uid`. */
     minUidByFolder(folderId: number): Promise<number | null>;
     /**
-     * Newest **by date** first, paged on `(date, id)`.
-     *
-     * Not by row id: ids are insertion order, and the cache is not filled in
-     * date order. Backfill (and remote search) write older messages into it
-     * after newer ones, so `ORDER BY id DESC` surfaced freshly-fetched *old*
-     * mail at the top of the mailbox. `id` only breaks ties between equal
-     * dates, which keeps the page boundary exact — no repeated or skipped row.
+     * Newest **by date** first, paged on `(date, id)`. Not by row id: ids are
+     * insertion order and the cache is not filled in date order, backfill and
+     * remote search writing older messages in after newer ones. `id` only breaks
+     * ties between equal dates, which keeps the page boundary exact.
      */
     listByFolder(folderId: number, cursor: MailMessageCursor | null, limit: number): Promise<MailMessageRow[]>;
     findById(id: number): Promise<MailMessageRow | null>;
     /** Every cached row of a folder, unpaged — only for a tier switch's re-key pass. */
     listAllByFolder(folderId: number): Promise<MailMessageRow[]>;
     /**
-     * Newest-first scan surface for `mail.messageSearch`, capped by `limit`.
-     * Unlike {@link listByFolder} this is not a page of results but the set of
-     * rows the handler will decrypt to look inside — the envelopes are
-     * encrypted, so the filtering cannot happen in SQL.
+     * Newest-first scan surface for `mail.messageSearch`, capped by `limit`. Not
+     * a page of results but the rows the handler will decrypt to look inside:
+     * the envelopes are encrypted, so the filtering cannot happen in SQL.
      */
     listForSearch(folderId: number, limit: number): Promise<MailMessageRow[]>;
     /** Cached rows for specific UIDs — how a remote search finds which of its hits it already holds. */
@@ -181,9 +163,8 @@ export interface MailMessagesRepo {
     /**
      * Les `limit` UID les plus hauts du cache d'un dossier, avec leurs drapeaux :
      * la fenêtre que la synchro va redemander au serveur pour la réconcilier.
-     *
      * Trié par UID et non par date, parce que c'est en UID que se formule la
-     * plage IMAP à relire — et rendu sans l'enveloppe, qui pèse et n'apprend rien.
+     * plage IMAP à relire.
      */
     listFlagsWindow(folderId: number, limit: number): Promise<MailMessageFlagsRow[]>;
     /** Re-key one cached envelope, for a tier switch. */
@@ -195,11 +176,9 @@ export interface MailMessagesRepo {
         flags: Partial<{ seen: boolean; flagged: boolean; answered: boolean }>
     ): Promise<MailMessageRow | null>;
     /**
-     * Écrit les trois drapeaux d'un coup, sans relire la ligne — contrairement à
-     * {@link setFlags}, qui rend la ligne parce que son appelant la renvoie au
-     * client. La réconciliation, elle, connaît déjà l'état qu'elle pose et tourne
-     * à chaque tick sur chaque dossier : la relecture y serait une requête sur
-     * deux, pour rapatrier une enveloppe chiffrée dont elle ne fait rien.
+     * Écrit les trois drapeaux d'un coup, sans relire la ligne, contrairement à
+     * {@link setFlags} : la réconciliation connaît déjà l'état qu'elle pose et
+     * tourne sur chaque dossier à chaque tick.
      */
     updateFlags(id: number, flags: { seen: boolean; flagged: boolean; answered: boolean }): Promise<void>;
     moveFolder(id: number, toFolderId: number, newUid: number): Promise<void>;
@@ -252,8 +231,7 @@ function accountsRepo(q: SdkQueryable): MailAccountsRepo {
         },
         async listVisible(workspaceId) {
             // `sort_order` appartient à l'espace d'origine : un compte projeté
-            // se range après les locaux, par identifiant. Lui donner un ordre
-            // propre à chaque espace demanderait une colonne par projection.
+            // se range après les locaux, par identifiant.
             return q.query<MailAccountRow>(
                 `SELECT v.* FROM (
                      SELECT a.* FROM mail_accounts a WHERE a.workspace_id = ?

@@ -1,25 +1,11 @@
 import { z } from 'zod';
 
 /**
- * OSINT — reconnaissance à partir d'une saisie unique.
- *
- * ## Le contrat tient en deux idées
- *
- * 1. **Une cible se devine, elle ne se choisit pas.** `detectTarget()` est une
- *    fonction pure, définie ici et nulle part ailleurs : le client l'appelle à la
- *    frappe pour afficher la nature de ce qui est saisi sans aller-retour, et le
- *    serveur la ré-applique sur ce qu'il reçoit. Une seule définition, donc pas
- *    de dérive possible entre ce que l'interface annonce et ce que le serveur
- *    sonde.
- *
- * 2. **Toutes les sondes rendent la même forme.** DNS, WHOIS, certificat TLS,
- *    géolocalisation d'IP, analyse de numéro, registre du commerce : tout sort
- *    en {@link osintProbeResultSchema}. Le client n'a donc qu'un seul composant
- *    de rendu, et ajouter une sonde ne lui coûte pas une ligne.
- *
- * Rien ici n'est un secret d'utilisateur : ce sont des descriptions de données
- * publiques. Ce qui est sensible, c'est **la question posée** — d'où l'historique
- * chiffré (voir `OsintLookupRow`).
+ * Deux idées : `detectTarget()` est une fonction pure définie ici et nulle part
+ * ailleurs (le client l'appelle à la frappe, le serveur la ré-applique), et
+ * toutes les sondes rendent la même forme, {@link osintProbeResultSchema}.
+ * Rien ici n'est un secret ; ce qui est sensible, c'est la question posée, d'où
+ * l'historique chiffré.
  */
 
 /* ------------------------------- La cible -------------------------------- */
@@ -99,10 +85,7 @@ export const OSINT_PROBE_LABELS: Record<OsintProbeId, string> = {
     dorks: 'Pivots'
 };
 
-/**
- * Sondes lentes par nature — le client les place en fin de grille pour que les
- * réponses immédiates (DNS, pivots) occupent le haut de l'écran.
- */
+/** Sondes lentes par nature : le client les place en fin de grille. */
 export const OSINT_SLOW_PROBES: readonly OsintProbeId[] = ['crtsh', 'username', 'whois'];
 
 /* ------------------------------ Le résultat ------------------------------ */
@@ -132,12 +115,8 @@ export const osintLinkSchema = z.object({
 export type OsintLink = z.infer<typeof osintLinkSchema>;
 
 /**
- * Un jugement chiffré **et son barème**.
- *
- * C'est ce qui répond à « déduire la fiabilité d'un numéro » sans rendre un
- * nombre magique : la carte affiche les signaux qui ont produit la note, avec
- * leur contribution. Un score sans son barème ne s'audite pas, donc ne sert à
- * rien — les deux voyagent ensemble ou pas du tout.
+ * Un jugement chiffré et son barème : la carte affiche les signaux qui ont
+ * produit la note. Un score sans son barème ne s'audite pas.
  */
 export const osintScoreSchema = z.object({
     value: z.number().int().min(0).max(100),
@@ -188,12 +167,9 @@ export type OsintHistoryEntry = z.infer<typeof osintHistoryEntrySchema>;
 export const OSINT_HISTORY_PAGE_MAX = 100;
 
 /**
- * Ligne SQL (serveur uniquement).
- *
- * `query_enc` passe par `ctx.secure` : la question posée — un nom, un numéro —
- * est la donnée la plus sensible de la feature, bien plus que n'importe lequel
- * des résultats, qui sont publics par construction. `kind` reste en clair : il
- * ne dit rien de la cible et sert à grouper la liste sans déchiffrer.
+ * Ligne SQL. `query_enc` est chiffré à l'étage gardé : la question posée est la
+ * donnée la plus sensible de la feature. `kind` reste en clair pour grouper la
+ * liste sans déchiffrer.
  */
 export interface OsintLookupRow {
     id: string;
@@ -207,9 +183,8 @@ export interface OsintLookupRow {
 /* ---------------------------- Clés optionnelles --------------------------- */
 
 /**
- * Fournisseurs qu'une clé débloque. **Aucun n'est requis** : la feature entière
- * fonctionne sans, et une sonde dont la clé manque rend `skipped` avec le lien
- * pour en obtenir une — jamais une erreur.
+ * Fournisseurs qu'une clé débloque. Aucun n'est requis : une sonde dont la clé
+ * manque rend `skipped` avec le lien pour en obtenir une, jamais une erreur.
  */
 export const osintProviderSchema = z.enum(['pappers', 'numverify', 'hibp', 'shodan', 'virustotal']);
 export type OsintProvider = z.infer<typeof osintProviderSchema>;
@@ -319,9 +294,8 @@ export function detectTarget(raw: string): OsintTarget {
     if (isIpv4(bare)) return mk('ip', bare);
     if (isIpv6(bare)) return mk('ip', bare.toLowerCase());
 
-    // Hôte extrait à la main plutôt qu'avec `URL` : ce module est partagé et
-    // compilé sans lib DOM ni types Node, donc `URL` n'y existe pas — et une
-    // fonction pure ne doit de toute façon rien devoir à son environnement.
+    // Hôte extrait à la main : ce module est compilé sans lib DOM ni types
+    // Node, `URL` n'y existe pas.
     const scheme = query.match(/^https?:\/\/([^/?#]+)/i);
     if (scheme) {
         const authority = scheme[1];

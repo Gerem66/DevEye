@@ -20,13 +20,11 @@ import type { DevicesRepo } from './repo';
 import { ADMIN, computeAgentUpdate, loadDevice, rowToDevice, toDevice, WRITE } from './_shared';
 
 /**
- * La flotte : la liste, le cycle de vie d'un appareil (approbation,
- * révocation, réactivation, suppression), son nom, sa configuration de
- * collecte, son rang dans l'espace et son partage entre espaces. Les gestes
+ * La flotte : la liste, le cycle de vie d'un appareil, son nom, sa
+ * configuration de collecte, son rang et son partage entre espaces. Les gestes
  * de flotte sont réservés à l'administrateur global (`ADMIN`) ; ranger et
- * régler la collecte relèvent du droit `devices: write` de l'espace. Les
- * ordres au hub (couper une session, la remettre à zéro, demander
- * l'auto-destruction, pousser la config) passent par la façade `agents`.
+ * régler la collecte relèvent du droit `devices: write`. Les ordres au hub
+ * passent par la façade `agents`.
  */
 
 export const devicesListFeature = defineSdkFeature<
@@ -37,21 +35,12 @@ export const devicesListFeature = defineSdkFeature<
 >({
     ...devicesList,
     handler: async (ctx, input) => {
-        // Deux ensembles distincts : le plan de données (les appareils que
-        // l'espace actif voit, ce qu'affichent l'accueil, la topbar et
-        // Monitoring) et la flotte entière, qui n'a de sens que pour la page
-        // d'administration. La portée est explicite plutôt que déduite du rôle :
-        // un administrateur travaille lui aussi dans un espace partagé, et son
-        // accueil n'y doit pas afficher les machines de tous les autres.
-        //
-        // La portée d'espace vient de la façade, qui porte la règle et sa seule
-        // exception : l'espace **personnel** d'un administrateur, où toute la
-        // flotte est disponible en permanence sans partage explicite. C'est là
-        // qu'il surveille ses machines, et l'y obliger à se partager à
-        // lui-même chaque appareil n'aurait rien protégé. Les lignes entières
-        // (rapport, cible de build, configuration) se relisent ensuite par le
-        // dépôt du module, dans l'ordre que la façade a rendu : le rang de
-        // l'espace, la date ne faisant que départager.
+        // Deux ensembles : les appareils que l'espace actif voit, et la flotte
+        // entière pour l'administration. La portée est explicite plutôt que
+        // déduite du rôle : un administrateur travaille aussi dans un espace
+        // partagé. La portée d'espace vient de la façade, qui porte la règle et
+        // son exception (l'espace personnel d'un administrateur voit toute la
+        // flotte) ; les lignes entières se relisent ici, dans l'ordre rendu.
         let rows: DeviceRow[];
         if (input.scope === 'fleet') {
             if (!ctx.isAdmin) throw new FeatureError('forbidden', 'Réservé aux administrateurs');
@@ -61,8 +50,7 @@ export const devicesListFeature = defineSdkFeature<
             rows = await ctx.repo.devices.findByIds(visible.map((d) => d.id));
         }
         const ids = rows.map((r) => r.id);
-        // Chargement groupé : une requête par carte serait un N+1 sur la page
-        // Appareils, qui affiche la flotte entière.
+        // Chargement groupé : une requête par carte serait un N+1 sur la flotte.
         const [manifest, shares] = await Promise.all([
             ctx.deveye.agents.servedManifest(),
             ctx.repo.devices.workspaceIdsFor(ids)
@@ -94,8 +82,8 @@ export const devicesConfirmFeature = defineSdkFeature<
         if (row.status === 'revoked') throw new FeatureError('conflict', 'Device is revoked');
         await ctx.repo.devices.setStatus(row.id, 'active');
         // Le statut vit aussi dans la session agent, figée à la connexion : sans
-        // cette remise à zéro, un agent déjà connecté au moment de l'approbation
-        // verrait sa télémétrie accusée puis jetée, indéfiniment et en silence.
+        // cette remise à zéro, un agent déjà connecté verrait sa télémétrie
+        // jetée en silence.
         ctx.deveye.agents.resetAgentSession(row.id);
         const updated = (await ctx.repo.devices.findById(row.id)) ?? { ...row, status: 'active' as const };
         ctx.audit({
@@ -120,10 +108,8 @@ export const devicesRevokeFeature = defineSdkFeature<
     handler: async (ctx, input) => {
         const row = await loadDevice(ctx, input.deviceId);
         await ctx.repo.devices.setStatus(row.id, 'revoked');
-        // La session agent porte un instantané du statut pris à la connexion, et
-        // le filtre d'ingestion le relit tel quel : sans cette coupure, l'agent
-        // révoqué continuerait d'écrire jusqu'à sa prochaine reconnexion, qui
-        // peut ne jamais venir. Sa reconnexion, elle, sera refusée.
+        // La session agent porte un instantané du statut : sans cette coupure,
+        // l'agent révoqué continuerait d'écrire jusqu'à sa prochaine reconnexion.
         ctx.deveye.agents.disconnectAgent(row.id);
         const updated = (await ctx.repo.devices.findById(row.id)) ?? { ...row, status: 'revoked' as const };
         ctx.audit({
@@ -185,13 +171,9 @@ export const devicesRenameFeature = defineSdkFeature<
 });
 
 /**
- * Range les appareils de l'espace.
- *
- * Sous `devices: write` et non `admin: true` comme le reste de la flotte :
+ * Range les appareils de l'espace. Sous `devices: write` et non `admin: true` :
  * arranger la liste que son propre espace affiche n'est pas de la gestion de
- * flotte, et un membre qui peut piloter ses machines doit pouvoir les ranger.
- * Aucun état d'agent n'est touché ; un appareil que l'espace ne voit pas est
- * ignoré par la requête elle-même.
+ * flotte. Un appareil que l'espace ne voit pas est ignoré par la requête.
  */
 export const devicesReorderFeature = defineSdkFeature<
     DevicesRepo,
@@ -209,11 +191,8 @@ export const devicesReorderFeature = defineSdkFeature<
 });
 
 /**
- * Change la cadence de collecte et la conservation d'un appareil.
- *
- * Sous `devices: write` : régler la collecte d'une machine, c'est décider ce que
- * le serveur enregistre d'elle et combien de temps il le garde ; un membre qui
- * ne peut pas piloter les appareils de son espace n'a pas à en décider.
+ * Change la cadence de collecte et la conservation d'un appareil. Sous
+ * `devices: write` : c'est décider ce que le serveur enregistre et garde.
  */
 export const devicesSetConfigFeature = defineSdkFeature<
     DevicesRepo,
@@ -234,9 +213,8 @@ export const devicesSetConfigFeature = defineSdkFeature<
             description: `Configuration modifiée : « ${row.name} »`,
             metadata: { deviceId: row.id, ...patch }
         });
-        // If a cadence or the capture mode changed, push it to a live agent :
-        // l'app recompose la config entière (part des modules comprise) depuis
-        // la ligne qui vient d'être écrite, et l'agent la reçoit en bloc.
+        // Une cadence ou un mode de capture changé se pousse à un agent en
+        // ligne ; l'app recompose la config entière depuis la ligne écrite.
         if (input.metricIntervalSeconds !== undefined || input.processCapture !== undefined) {
             await ctx.deveye.agents.pushConfig(row.id);
         }
@@ -258,9 +236,8 @@ export const devicesRequestDeleteFeature = defineSdkFeature<
         if (row.status === 'archived' || row.status === 'pending_deletion') {
             throw new FeatureError('conflict', 'Device is already being deleted');
         }
-        // Remember the current status so the deletion can be cancelled, then ask
-        // a connected agent to self-destruct now; an offline agent receives the
-        // destroy signal on its next connection (see the app's agent/ws.ts).
+        // Remember the current status so the deletion can be cancelled; an
+        // offline agent receives the destroy signal on its next connection.
         await ctx.repo.devices.requestDeletion(row.id, row.status);
         const isOnline = ctx.deveye.agents.requestDestroy(row.id);
         ctx.audit({
@@ -310,12 +287,8 @@ export const devicesForceDeleteFeature = defineSdkFeature<
         if (row.status === 'archived') {
             throw new FeatureError('conflict', 'Device is already archived');
         }
-        // Archive immediately without telling the agent to self-destruct: this is
-        // for agents that no longer exist (or that we don't care about cleaning).
-        // A still-running agent is simply refused on its next connection.
         await ctx.repo.devices.archive(row.id);
-        // Même raison que pour la révocation : le statut est instantané côté
-        // session agent, seule la fermeture arrête vraiment le flux.
+        // Comme pour la révocation : seule la fermeture arrête vraiment le flux.
         ctx.deveye.agents.disconnectAgent(row.id);
         const updated = (await ctx.repo.devices.findById(row.id)) ?? row;
         ctx.audit({
@@ -329,13 +302,9 @@ export const devicesForceDeleteFeature = defineSdkFeature<
 });
 
 /**
- * Purge dure : la ligne appareil et, par cascade, tout son historique.
- *
- * Sous `admin: true` comme le reste de la gestion de flotte. Ce n'est pas une
- * action d'espace : elle détruit une machine et sa supervision pour **tous** les
- * espaces avec lesquels elle est partagée, définitivement. Elle ne demande pas
- * à l'agent de s'auto-détruire : c'est `devices.requestDelete`, depuis la page
- * Appareils.
+ * Purge dure : la ligne appareil et, par cascade, tout son historique, pour
+ * tous les espaces. Ne demande pas à l'agent de s'auto-détruire
+ * (`devices.requestDelete` le fait).
  */
 export const devicesDeleteFeature = defineSdkFeature<
     DevicesRepo,
@@ -361,14 +330,9 @@ export const devicesDeleteFeature = defineSdkFeature<
 
 /**
  * Les espaces avec lesquels un appareil peut être partagé, et lesquels le sont.
- *
- * Seuls les espaces **partagés** sont proposés : ranger la machine d'autrui dans
- * l'espace personnel d'un tiers n'aurait pas de sens, et l'accueil personnel
- * d'un administrateur voit déjà toute la flotte sans partage (`devices.list`).
- *
- * C'est la seule commande qui énumère des espaces dont l'appelant n'est pas
- * membre, d'où `admin: true` (que la façade `workspaces.list` exige elle
- * aussi), et rien de plus que l'identité et le nom.
+ * Seuls les espaces partagés sont proposés : l'accueil personnel d'un
+ * administrateur voit déjà toute la flotte. La seule commande qui énumère des
+ * espaces dont l'appelant n'est pas membre, d'où `admin: true`.
  */
 export const devicesWorkspaceListFeature = defineSdkFeature<
     DevicesRepo,
@@ -400,12 +364,9 @@ export const devicesWorkspaceListFeature = defineSdkFeature<
 });
 
 /**
- * Ouvre (ou ferme) l'accès à un appareil, espace par espace.
- *
- * Journalisé en avertissement : donner accès à une machine, c'est donner à ses
- * membres de quoi ouvrir un terminal dessus. L'espace d'appairage est réintégré
- * d'office : le retirer laisserait un appareil dont plus personne ne répond de
- * l'origine, alors qu'il porte encore l'unicité de son empreinte.
+ * Ouvre (ou ferme) l'accès à un appareil, espace par espace. Journalisé en
+ * avertissement : c'est donner de quoi ouvrir un terminal dessus. L'espace
+ * d'appairage est réintégré d'office : il porte l'unicité de l'empreinte.
  */
 export const devicesSetWorkspacesFeature = defineSdkFeature<
     DevicesRepo,

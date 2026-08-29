@@ -1,19 +1,17 @@
 import sanitizeHtml from 'sanitize-html';
 
 /**
- * Server-side HTML sanitization for mail bodies — the client never receives
- * raw remote HTML. Strict allowlist by default: no `<script>`, no inline
- * event handlers, no `style`/`<style>` (the simplest reliable defense against
- * CSS-based tracking beacons and layout tricks). Remote images are rewritten
- * to an inert `data-blocked-src` placeholder unless the caller explicitly
- * allowed them (globally for this response, or because their hostname is on
- * the user's trusted-domains list) — see `mail_settings.trusted_image_domains`.
+ * Server-side HTML sanitization for mail bodies: the client never receives raw
+ * remote HTML. Strict allowlist by default, no `<script>`, no inline event
+ * handlers, no `style`/`<style>` (the simplest reliable defense against
+ * CSS-based tracking beacons and layout tricks). Remote images are rewritten to
+ * an inert `data-blocked-src` placeholder unless the caller allowed them,
+ * globally or by trusted hostname.
  *
  * `preserveStyling` (the "raw" body render mode) relaxes the allowlist to keep
- * `<style>`/inline `style=""` so the message renders with its own look, on
- * the understanding the client only ever shows that HTML inside a sandboxed,
- * script-disabled iframe. Scripts/handlers stay stripped either way — that
- * part of the allowlist never changes.
+ * `<style>`/inline `style=""`, on the understanding the client only ever shows
+ * that HTML inside a sandboxed, script-disabled iframe. Scripts and handlers
+ * stay stripped either way.
  */
 
 const ALLOWED_TAGS = [
@@ -107,28 +105,22 @@ export function sanitizeMailHtml(rawHtml: string, opts: SanitizeOptions): Saniti
         allowedTags,
         allowedAttributes,
         // `preserveStyling` puts `<style>` on the allowlist, which sanitize-html
-        // warns about on every call — rightly, in general. It's accounted for
-        // here: that mode exists only to feed the `raw` renderer, which puts the
-        // result in a `sandbox=""` iframe (no scripts, opaque origin, no reach
-        // into the app), remote `url(...)` references are stripped below, and
-        // scripts and event handlers are removed in both modes regardless. The
-        // flag silences a warning we've already answered; it relaxes nothing.
+        // warns about. Answered here: that mode only feeds the `raw` renderer,
+        // whose result goes in a `sandbox=""` iframe, remote `url(...)` refs are
+        // stripped below, and scripts and handlers go in both modes. The flag
+        // silences a warning already answered; it relaxes nothing.
         allowVulnerableTags: opts.preserveStyling,
         // No 'data' scheme: kills CSS/style smuggling and most phishing tricks
-        // that rely on lookalike-content URIs; inline (cid:/base64) images are a
-        // V2 nicety, not a security requirement.
+        // that rely on lookalike-content URIs.
         allowedSchemes: ['http', 'https', 'mailto'],
         allowedSchemesAppliedToAttributes: ['href', 'src'],
         disallowedTagsMode: 'discard',
         transformTags: {
-            // In `embedded` mode the body is rendered inline in the SPA, so a
-            // plain link would navigate the whole app away from DevEye on a
-            // single click — losing whatever the user was doing, for a
-            // destination that came out of an untrusted email. Every link opens
-            // in a new tab instead, with `noopener` so the target can never
-            // reach back through `window.opener`. (`raw` mode gets the same
-            // effect from its `<base target="_blank">`, but the iframe there is
-            // opaque-origin anyway.)
+            // In `embedded` mode the body is rendered inline in the SPA, where a
+            // plain link would navigate the whole app away on a single click, to
+            // a destination that came out of an untrusted email. Every link opens
+            // in a new tab instead, with `noopener` so the target can never reach
+            // back through `window.opener`.
             a: (_tagName, attribs) => ({
                 tagName: 'a',
                 attribs: { ...attribs, target: '_blank', rel: 'noopener noreferrer nofollow' }
@@ -149,9 +141,8 @@ export function sanitizeMailHtml(rawHtml: string, opts: SanitizeOptions): Saniti
     });
 
     // `<style>`/`style=""` content isn't parsed as CSS above, so a
-    // `background-image: url(...)` could otherwise still act as a tracking
-    // pixel in `raw` mode. Best-effort text-level strip of remote `url(...)`
-    // references, same trust/allow rules as the `<img>` pass.
+    // `background-image: url(...)` could still act as a tracking pixel in `raw`
+    // mode. Best-effort text-level strip, same trust rules as the `<img>` pass.
     if (opts.preserveStyling && !opts.allowRemoteImages) {
         html = html.replace(/url\(\s*(['"]?)(https?:\/\/[^'")]+)\1\s*\)/gi, (match, _quote: string, url: string) => {
             const host = hostnameOf(url);

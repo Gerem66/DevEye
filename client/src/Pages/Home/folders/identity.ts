@@ -1,9 +1,7 @@
 /**
- * L'identité d'un dossier, à part de sa carte et de son écran.
- *
- * Dans son propre module parce que les deux bouts en ont besoin : les visuels
- * de tuiles (`tiles/tileVisual`) et l'écran déployé, qui dépend déjà d'eux. Les
- * laisser chez l'un des deux aurait fermé un cycle d'imports.
+ * L'identité d'un dossier, dans son propre module : les visuels de tuiles et
+ * l'écran déployé en ont besoin, et la garder chez l'un des deux fermerait un
+ * cycle d'imports.
  */
 
 /** Un dossier n'est pas une vue : sa clé ne sert qu'au morphe et à la présence. */

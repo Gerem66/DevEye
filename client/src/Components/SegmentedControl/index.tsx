@@ -17,13 +17,9 @@ export interface SegmentedControlProps<T extends string> {
 }
 
 /**
- * Un choix unique parmi deux à quatre options, toutes visibles.
- *
- * Remplace un menu déroulant quand la liste est courte et connue d'avance : le
- * déroulant cache les choix derrière un clic et pèse lourd pour trois entrées,
- * ici l'état et les alternatives se lisent d'un coup d'œil et se changent d'un
- * clic. Au-delà de quatre options, ou pour une liste qui vient des données,
- * `SelectInput` reste le bon outil.
+ * Un choix unique parmi deux à quatre options, toutes visibles. Au-delà de
+ * quatre, ou pour une liste qui vient des données, `SelectInput` reste le bon
+ * outil.
  */
 export default function SegmentedControl<T extends string>({
     options,

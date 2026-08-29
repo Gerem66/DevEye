@@ -2,14 +2,9 @@ import type { DeployCredentialRow, DeploymentRow, DeployTargetRow, DeployTargetS
 import type { SdkQueryable } from '@deveye/types/sdk/server';
 
 /**
- * La même, augmentée de ce qu'une liste montre sans ouvrir la fiche : l'adresse
- * de l'instance et l'état du dernier déploiement. Calculé par jointure plutôt
- * que recopié dans des colonnes, qui dériveraient.
- *
- * Le nombre de projets qui s'en servent n'en fait plus partie : la table de
- * liaison (`project_deploy_links`) appartient à Projets, et le module ne lit
- * aucune table de Projets. Le compte vient de son contrat
- * (`PROJECTS_USAGE_PROVIDER`), et `toTarget` le reçoit en paramètre.
+ * Une cible augmentée de ce qu'une liste montre sans ouvrir la fiche : l'adresse
+ * de l'instance et l'état du dernier déploiement, par jointure. Le nombre de
+ * projets vient du contrat de Projets, `toTarget` le reçoit en paramètre.
  */
 export interface DeployTargetWithUsageRow extends DeployTargetRow {
     base_url: string | null;
@@ -18,31 +13,14 @@ export interface DeployTargetWithUsageRow extends DeployTargetRow {
 }
 
 /**
- * Les cibles de déploiement de l'espace, et l'historique de ce qu'on y a poussé.
- *
- * **Portées par l'espace, jamais par un projet** (migration 080) : une pile
- * compose sert souvent deux projets, et un projet n'en garde qu'une liaison. Le
- * corollaire est que rien ici ne suit le `security_tier` d'un projet — tout est
- * à l'étage ouvert, et la garde atomique qu'exigeait l'ancienne écriture de
- * `updateDeployment` a disparu avec sa cause.
- *
- * L'historique n'est plus seulement **ce que DevEye a déclenché** (migration
- * 085). `listTargetsDue` et `createRemoteDeployment` servent le rapprochement de
- * fond, qui recopie en base ce que le fournisseur connaît — y compris les
- * déploiements partis de son interface, d'une CI ou d'un push git. C'est ce qui
- * fait qu'une liste ouverte sans réseau vers Dokploy dit malgré tout la vérité
- * du dernier état connu.
- *
- * Depuis le rapatriement en module, deux choses ont changé de dépôt. Les
- * liaisons vers les projets (`project_deploy_links`) ont rejoint
- * `db/repos/projectLinks.ts` : c'est une table de Projets, que le module ne lit
- * pas. Les clés Dokploy sont entrées ici à la place (`ft_deploy_credentials`,
- * migration 099 du socle) : un module possède ses accès, et une clé qui
- * déploie n'a jamais eu de raison de partager la table d'un jeton qui lit des
- * dépôts.
+ * Les cibles de déploiement de l'espace et l'historique de ce qu'on y a poussé,
+ * portées par l'espace, jamais par un projet ; tout est à l'étage ouvert.
+ * L'historique n'est pas seulement ce que DevEye a déclenché : le rapprochement
+ * de fond (`listTargetsDue`, `createRemoteDeployment`) recopie ce que le
+ * fournisseur connaît, d'où une liste juste même sans réseau vers Dokploy.
+ * `project_deploy_links` est une table de Projets : le module ne la lit pas.
  */
 export interface DeployRepo {
-    // -- cibles -------------------------------------------------------------
     listTargets(workspaceId: number): Promise<DeployTargetWithUsageRow[]>;
     /** Comme `listTargets`, plus les cibles projetées vers cet espace. */
     listVisibleTargets(workspaceId: number): Promise<DeployTargetWithUsageRow[]>;
@@ -75,12 +53,10 @@ export interface DeployRepo {
     /** Range les cibles : `ids` est la liste complète, rang = indice. */
     reorderTargets(workspaceId: number, ids: number[]): Promise<void>;
 
-    // -- clés Dokploy -------------------------------------------------------
     /**
-     * Les accès Dokploy de l'espace : l'adresse d'une instance et sa clé d'API,
-     * chiffrée à l'étage ouvert (le suivi de fond tourne sans session). Le
-     * secret n'est rendu qu'à travers la ligne brute, que seule la couche
-     * feature manipule ; le DTO n'en porte qu'un booléen.
+     * Les accès Dokploy de l'espace, clé chiffrée à l'étage ouvert (le suivi de
+     * fond tourne sans session). Le secret n'est rendu qu'à travers la ligne
+     * brute ; le DTO n'en porte qu'un booléen.
      */
     listCredentials(workspaceId: number): Promise<DeployCredentialRow[]>;
     findCredential(id: number, workspaceId: number): Promise<DeployCredentialRow | null>;
@@ -96,38 +72,21 @@ export interface DeployRepo {
         /** `secretEnc` absent = on garde le secret en place. */
         input: { label: string; baseUrl: string | null; secretEnc?: string }
     ): Promise<DeployCredentialRow | null>;
-    /**
-     * Retire une clé. Les cibles qui s'en servaient **restent**, sans clé :
-     * elles cessent d'être déployables et le disent, plutôt que de disparaître
-     * avec leur accès.
-     */
+    /** Retire une clé. Les cibles qui s'en servaient restent, sans clé : indéployables, et le disent. */
     removeCredential(id: number, workspaceId: number): Promise<boolean>;
-    /**
-     * Combien de cibles s'appuient sur chaque clé de l'espace : c'est ce
-     * chiffre qui dit à l'écran ce qu'une suppression va couper, **avant** de
-     * cliquer.
-     */
+    /** Combien de cibles s'appuient sur chaque clé : ce qu'une suppression va couper, avant de cliquer. */
     countCredentialUses(workspaceId: number): Promise<Map<number, number>>;
 
-    // -- rapprochement de fond ----------------------------------------------
     /**
-     * Les cibles qu'il est temps de réinterroger, la plus urgente d'abord.
-     *
-     * Deux régimes dans une seule requête : une cible qui a un déploiement en
-     * vol passe **à chaque tour**, les autres attendent `staleBefore`. C'est ce
-     * qui permet de suivre un déploiement à la minute sans sonder toute la liste
-     * aussi souvent — et de rester borné : `limit` plafonne la rafale sortante,
-     * quel que soit le nombre de cibles déclarées.
-     *
-     * Les cibles sans jeton ou sans adresse d'instance sont écartées ici plutôt
-     * que dans l'appelant : il n'y a rien à leur demander, et les faire remonter
-     * ne servirait qu'à consommer le budget d'un tour.
+     * Les cibles à réinterroger, la plus urgente d'abord. Une cible qui a un
+     * déploiement en vol passe à chaque tour, les autres attendent
+     * `staleBefore` ; `limit` plafonne la rafale sortante. Les cibles sans jeton
+     * ou sans adresse sont écartées ici : rien à leur demander.
      */
     listTargetsDue(limit: number, staleBefore: number): Promise<DeployTargetSyncRow[]>;
     /** Horodate un rapprochement réussi ; c'est lui qui sort du premier import. */
     markTargetSynced(id: number, at: number): Promise<void>;
 
-    // -- déploiements -------------------------------------------------------
     createDeployment(input: {
         targetId: number;
         workspaceId: number;
@@ -136,15 +95,9 @@ export interface DeployRepo {
         content: string;
     }): Promise<DeploymentRow>;
     /**
-     * Enregistre un déploiement **découvert chez le fournisseur**, avec son état
-     * et sa date à lui.
-     *
-     * Distincte de `createDeployment`, qui écrit un déclenchement parti d'ici :
-     * celle-ci n'a pas d'auteur (`triggered_by_user_id` reste NULL — l'ordre
-     * vient de l'interface de Dokploy, d'une CI ou d'un push), commence rarement
-     * à `queued`, et porte `notified` explicitement : le premier import d'une
-     * cible entre en base **déjà notifié**, sans quoi il enverrait un avis par
-     * ligne d'historique.
+     * Enregistre un déploiement découvert chez le fournisseur, sans auteur, avec
+     * son état et sa date. `notified` explicite : le premier import d'une cible
+     * entre en base déjà notifié, sans quoi il enverrait un avis par ligne.
      */
     createRemoteDeployment(input: {
         targetId: number;
@@ -165,26 +118,17 @@ export interface DeployRepo {
      *  mais qu'un état perdu ne fasse pas non plus disparaître le déploiement. */
     markDeploymentNotified(id: number): Promise<void>;
     /**
-     * Réécrit le seul blob, sans toucher à l'état.
-     *
-     * Sert à retenir l'identifiant du message de suivi dès qu'il est ouvert.
-     * Distincte de `updateDeployment` exprès : celle-ci réécrit aussi le statut
-     * et la date de fin, et s'en servir ici obligerait à les repasser — donc à
-     * risquer de les écraser avec ce qu'on croyait savoir.
+     * Réécrit le seul blob, sans toucher à l'état : retient l'identifiant du
+     * message de suivi sans risquer d'écraser statut et date de fin.
      */
     setDeploymentContent(id: number, content: string): Promise<void>;
     listDeployments(targetId: number, workspaceId: number, limit: number): Promise<DeploymentRow[]>;
 }
 
 /**
- * Ce qu'une liste montre sans ouvrir la fiche : l'adresse de l'instance et
- * l'état du dernier déploiement.
- *
- * Par jointure et non par colonnes recopiées : un état dénormalisé se serait mis
- * à mentir dès le premier déploiement écrit par le service de fond, qui n'a
- * aucune raison de connaître la ligne de la cible. L'adresse vient de la table
- * des clés du module (`ft_deploy_credentials`) ; le nombre de projets, qui
- * était la troisième colonne, vient désormais du contrat de Projets.
+ * Ce qu'une liste montre sans ouvrir la fiche, par jointure et non par colonnes
+ * recopiées : un état dénormalisé mentirait dès le premier déploiement écrit
+ * par le service de fond.
  */
 const TARGET_WITH_USAGE = `
     SELECT t.*, c.base_url,
@@ -222,8 +166,7 @@ export function createRepo(q: SdkQueryable): DeployRepo {
         },
         async listVisibleTargets(workspaceId) {
             // `sort_order` appartient à l'espace d'origine : une cible projetée
-            // se range après les locales, par identifiant — même arbitrage que
-            // les services Uptime.
+            // se range après les locales, par identifiant.
             return q.query<DeployTargetWithUsageRow>(
                 `${TARGET_WITH_USAGE} WHERE t.workspace_id = ?
                  UNION
@@ -361,14 +304,11 @@ export function createRepo(q: SdkQueryable): DeployRepo {
             return findCredential(id, workspaceId);
         },
         async removeCredential(id, workspaceId) {
-            // Le ménage explicite qui remplace la clé étrangère
-            // `fk_deploy_target_credential` (080, `ON DELETE SET NULL`), retirée
-            // par la 099 et non recréée vers la table du module : InnoDB
+            // Pas de clé étrangère `ON DELETE SET NULL` vers cette table : InnoDB
             // revalidait la ligne mise à NULL contre un parent que la même
-            // cascade supprimait, et la suppression d'un espace échouait
-            // dessus. Les cibles de la clé passent donc à NULL ICI, dans
-            // l'espace de la clé, avant que la ligne ne parte : ce que la
-            // contrainte faisait sans le dire.
+            // cascade supprimait, et la suppression d'un espace échouait dessus.
+            // Les cibles de la clé passent donc à NULL ici, avant que la ligne
+            // ne parte.
             await q.execute(
                 'UPDATE deploy_targets SET credential_id = NULL WHERE credential_id = ? AND workspace_id = ?',
                 [id, workspaceId]
@@ -448,9 +388,6 @@ export function createRepo(q: SdkQueryable): DeployRepo {
             await q.execute('UPDATE deployments SET content = ? WHERE id = ?', [content, id]);
         },
         async updateDeployment(id, { externalId, status, finishedAt, content }) {
-            // Écriture simple : plus de garde atomique sur `security_tier`. Une
-            // cible est d'espace, elle ne bascule jamais d'étage, donc la course
-            // que cette garde protégeait n'existe plus (migration 080).
             await q.execute(
                 'UPDATE deployments SET external_id = ?, status = ?, finished_at = ?, content = ? WHERE id = ?',
                 [externalId, status, finishedAt, content, id]

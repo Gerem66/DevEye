@@ -42,17 +42,10 @@
     overflow: hidden;
 }
 
-/*
- * "Fill" mode: same flex column, but the height stays `auto` — no inline height
- * is animated onto the node, so the panel is exactly as tall as its content
- * until `max-height` stops it.
- *
- * That single difference from `.dialogTall` is what a dialog holding a growing
- * region (a conversation) needs: short thread → short dialog; long thread → the
- * dialog reaches the edge of the screen and the *thread* starts scrolling, not
- * the dialog around it. `overflow: hidden` is what forbids the second
- * scrollbar; the content claims the leftover with `flex: 1`.
- */
+/* "Fill" mode: same flex column, but the height stays `auto`, so the panel is
+   exactly as tall as its content until `max-height` stops it; then the content
+   scrolls, not the dialog (`overflow: hidden` forbids the second scrollbar, the
+   content claims the leftover with `flex: 1`). */
 .dialogFill {
     display: flex;
     flex-direction: column;

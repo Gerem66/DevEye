@@ -7,12 +7,9 @@ import { LinkUptimeDialog } from './Deploy/LinkUptimeDialog';
 import type { ProjectFeatureTabId, ProjectTabAddKey } from './tabs';
 
 /**
- * Rien de relié, par construction.
- *
  * Le menu « + » ne propose que des features à zéro élément : la liste des
- * éléments déjà liés, dont les dialogues se servent pour retirer des choix
- * possibles, est donc forcément vide. Constante partagée pour garder une
- * identité stable d'un rendu à l'autre.
+ * éléments déjà liés dont se servent les dialogues est forcément vide.
+ * Constante partagée pour garder une identité stable d'un rendu à l'autre.
  */
 const NOTHING_LINKED: number[] = [];
 
@@ -21,27 +18,14 @@ interface AddFeatureDialogProps {
     /** Le geste dont l'ajout est en cours, ou `null` si le menu n'a rien lancé. */
     pending: ProjectTabAddKey | null;
     onClose: () => void;
-    /** L'ajout a abouti : l'onglet a désormais de quoi s'ouvrir. */
     onAdded: (id: ProjectFeatureTabId) => void;
 }
 
 /**
- * Les formulaires d'ajout du menu « + », montés au niveau du projet.
- *
- * **Les mêmes dialogues que ceux des onglets**, et non des copies : ajouter un
- * dépôt depuis la barre ou depuis l'onglet Git doit être exactement le même
- * geste, avec le même formulaire — une seconde implémentation divergerait au
- * premier réglage ajouté. Ils sont montés ici parce que l'onglet, lui, n'existe
- * pas encore : c'est précisément ce que l'ajout va faire naître.
- *
- * Les deux points d'entrée ne se marchent jamais dessus : le menu ne propose que
- * ce qui est absent de la barre, et le bouton d'un onglet n'existe que s'il y
- * est. Ils restent tous montés fermés pour que la fermeture s'anime, comme
- * partout ailleurs ; leurs requêtes, elles, ne partent qu'à l'ouverture.
- *
- * Le déploiement en porte deux (`deploy`, `uptime`) puisque son onglet montre
- * deux choses ; les deux gestes révèlent le même onglet, `onAdded('deploy')`
- * dans les deux cas.
+ * Les formulaires d'ajout du menu « + » : les mêmes dialogues que ceux des
+ * onglets, montés ici parce que l'onglet n'existe pas encore. Tous restent
+ * montés fermés pour que la fermeture s'anime, leurs requêtes ne partant qu'à
+ * l'ouverture.
  */
 export function AddFeatureDialog({ projectId, pending, onClose, onAdded }: AddFeatureDialogProps) {
     return (

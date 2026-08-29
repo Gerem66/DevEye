@@ -1,14 +1,6 @@
-/*
- * Sélecteur de dossier d'un appareil — l'apparence.
- *
- * Ces règles vivaient dans la feuille de CloudSync, seule feature à s'en servir
- * à l'époque. Elles suivent le composant : une carte de sauvegarde n'a pas à
- * importer la feuille de CloudSync pour dessiner un explorateur qui n'est
- * propre ni à l'une ni à l'autre.
- *
- * ⚠️ Une classe ne doit être définie **qu'une fois** seule dans son sélecteur —
- * `client/scripts/check-css-modules.mjs` échoue sinon.
- */
+/* Sélecteur de dossier d'un appareil. Une classe ne doit être définie qu'une
+   fois seule dans son sélecteur : `client/scripts/check-css-modules.mjs` échoue
+   sinon. */
 
 /* Barre du sélecteur : chemin courant à gauche, actions d'icône à droite. */
 .pickerBar {

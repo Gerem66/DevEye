@@ -1,13 +1,10 @@
 /**
- * In-memory, process-local tracker for background sync progress — never
- * persisted, purely for the live "syncing…" progress bar in the account
- * list/back button (see `AccountCard`/`AccountPanel` client-side).
+ * In-memory, process-local tracker for background sync progress, never
+ * persisted: it feeds the live "syncing…" progress bar.
  *
- * Combines two levels: which folder of the account we're on
- * (`foldersDone`/`foldersTotal`), and how far into *that* folder's own
- * message fetch we are (`currentFolderProgress`, fed by `syncFolder`'s
- * `onProgress` — see `client.ts`). The result reads as one smooth
- * 0-1 progress across the whole account instead of jumping once per folder.
+ * Combines two levels, which folder of the account we're on and how far into
+ * that folder's own message fetch we are, so the whole account reads as one
+ * smooth 0-1 progress instead of jumping once per folder.
  */
 
 interface SyncEntry {

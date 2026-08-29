@@ -11,18 +11,12 @@ import type { AudienceRepo, NewSessionInput, PendingEventRow } from './repo';
 import { AudienceIngest, type IngestRequest } from './service';
 
 /**
- * L'ingestion du module, sur le harnais de service du SDK.
- *
- * Aucune horloge ni réseau à simuler : le dépôt en mémoire retient ce qu'on
- * lui écrit, et les deux tickers se battent à la main. Ce qui mérite d'être
- * tenu, c'est ce qui ne lève nulle part quand ça se dérègle : un événement
- * accepté **entre en base à la vidange** (session ouverte, fait écrit, site
- * touché), un refus (origine, clé, robot) **n'écrit rien** et ne dit rien, le
- * direct est **coalescé** à un battement par minute et par espace,
- * `invalidate` fait relire un site que le cache tenait pour actif, le ménage
- * agrège hier et aujourd'hui puis élague à la rétention, et le sel des
- * visiteurs est **dérivé** de la clé serveur par le SDK, stable d'une
- * instance à l'autre.
+ * L'ingestion du module, sur le harnais de service du SDK. Aucune horloge ni
+ * réseau à simuler : le dépôt en mémoire retient ce qu'on lui écrit et les deux
+ * tickers se battent à la main. On tient l'événement accepté qui entre en base
+ * à la vidange, le refus qui n'écrit rien, le direct coalescé, `invalidate` qui
+ * fait relire un site, le ménage qui agrège puis élague, et le sel des
+ * visiteurs stable d'une instance à l'autre.
  */
 
 interface FakeRepo extends AudienceRepo {

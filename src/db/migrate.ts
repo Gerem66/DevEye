@@ -31,15 +31,10 @@ async function applyDir(q: Queryable, applied: Set<string>, dir: string, prefix:
 }
 
 /**
- * Rejoue le socle puis les modules.
- *
- * Le socle garde sa numérotation globale `0NN_*.sql`, enregistrée au nom de
- * fichier nu, comme depuis toujours. Chaque module apporte sa propre séquence
- * locale `001_*.sql`, enregistrée sous `<id>/<fichier>` : le slash rend toute
- * collision avec un nom du socle impossible, et l'ordre local du module reste
- * le sien. Tous les fichiers du socle passent avant tous les modules (le socle
- * fonde ce que les modules référencent), les modules dans l'ordre de la config,
- * qui est celui du tableau généré.
+ * Rejoue le socle puis les modules. Le socle s'enregistre au nom de fichier nu
+ * (`0NN_*.sql`), chaque module sous `<id>/<fichier>` : le slash rend toute
+ * collision impossible. Tout le socle avant tous les modules (il fonde ce
+ * qu'ils référencent), les modules dans l'ordre de la config.
  */
 export async function runMigrations(pool: DbPool, modules: readonly ModuleMigrations[] = []): Promise<void> {
     const q = getQueryable(pool);

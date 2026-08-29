@@ -1,13 +1,9 @@
 import { CountWidget, useWorkspaceCount } from 'deveye-sdk-client';
 
 /**
- * Carte compacte de l'accueil : le nombre de cibles de déploiement de l'espace.
- *
- * Adossée à `deploy.count`, qui ne compte que des lignes. Elle **ne montre pas**
- * l'état du dernier déploiement, et c'est délibéré : ce serait la seule tuile de
- * l'accueil à changer sans qu'on ait rien fait, pour une information dont on ne
- * fait rien à cet endroit. L'état se lit dans la feature, où l'on est venu le
- * chercher.
+ * Carte compacte de l'accueil : le nombre de cibles de l'espace. Pas l'état du
+ * dernier déploiement : ce serait la seule tuile à changer sans qu'on ait rien
+ * fait.
  */
 export function DeployWidget() {
     const state = useWorkspaceCount('deploy.count');

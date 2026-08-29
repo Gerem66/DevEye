@@ -1,16 +1,9 @@
 /**
- * Les deux configs de modules et ce qu'on en tire, au même endroit pour les
- * trois scripts qui les lisent (gen-features, smoke-all, uninstall-feature) :
- *
- *  - `features.config.json` (committée) : les modules publics, résolus dans
- *    node_modules ;
- *  - `features.local.json` (gitignorée, optionnelle) : les modules privés de
- *    cette installation, résolus par `path` (dossier relatif à la racine).
- *
- * Une entrée = `{ package, path? }`. D'une entrée on tire le dossier du module
- * (son deveye-feature.json, ses migrations, son uninstall.sql), son manifest
- * (l'entrée racine du paquet, ou le `src/index.ts` d'un module privé, que tsx
- * transpile) et, de l'id du manifest, le préfixe de ses tables.
+ * Les deux configs de modules, partagées par les scripts qui les lisent :
+ * `features.config.json` (committée, modules publics dans node_modules) et
+ * `features.local.json` (gitignorée, modules privés résolus par `path`). Une
+ * entrée = `{ package, path? }` ; on en tire le dossier du module, son manifest
+ * et le préfixe de ses tables.
  */
 import fs from 'node:fs';
 import path from 'node:path';

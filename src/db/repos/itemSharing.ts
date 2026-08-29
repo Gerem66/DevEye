@@ -5,22 +5,14 @@ import type { Queryable } from '../pool';
 type Q = Queryable;
 
 /**
- * Les projections d'éléments entre espaces, et les restrictions par rôle.
- *
- * Deux tables, une seule raison d'être : rendre un élément **visible** ailleurs
- * sans le déplacer. Il garde un domicile — `home_workspace_id` — dont la clé
- * seule le déchiffre.
+ * Les projections d'éléments entre espaces, et les restrictions par rôle : un
+ * élément devient visible ailleurs sans être déplacé, et garde un domicile
+ * (`home_workspace_id`) dont la clé seule le déchiffre.
  */
 export interface ItemSharingRepo {
     /** Les espaces où cet élément est projeté, l'origine exclue. */
     sharesOf(feature: string, itemId: number, homeWorkspaceId: number): Promise<ItemShareRow[]>;
-    /**
-     * Les éléments d'une feature projetés **vers** cet espace.
-     *
-     * Lu une fois par listage : la question « d'où vient cette ligne ? » se pose
-     * pour chacune, et une requête par ligne mettrait un aller-retour devant
-     * chaque affichage.
-     */
+    /** Les éléments d'une feature projetés vers cet espace (lu une fois par listage). */
     sharedInto(workspaceId: number, feature: string): Promise<ItemShareRow[]>;
     /** Cet élément précis est-il projeté vers cet espace ? */
     findShare(workspaceId: number, feature: string, itemId: number): Promise<ItemShareRow | null>;
@@ -30,23 +22,13 @@ export interface ItemSharingRepo {
     forgetItem(feature: string, itemId: number, homeWorkspaceId: number): Promise<void>;
     /**
      * Les espaces reliés à celui-ci par au moins une projection de cette
-     * feature, dans les deux sens : ceux qui regardent ses éléments, et ceux
-     * dont il regarde les éléments.
-     *
-     * C'est l'éventail de la diffusion live : une écriture ici doit rafraîchir
-     * les fenêtres, et une écriture faite depuis une fenêtre doit rafraîchir le
-     * domicile et les autres fenêtres.
+     * feature, dans les deux sens : l'éventail de la diffusion live.
      */
     linkedWorkspaces(workspaceId: number, feature: string): Promise<number[]>;
 
     /** Les restrictions posées depuis cet espace sur cet élément. */
     grantsOf(workspaceId: number, feature: string, itemId: number): Promise<ItemRoleGrantRow[]>;
-    /**
-     * Les restrictions qui touchent **un rôle**, pour toute une feature.
-     *
-     * C'est la forme dont la résolution d'accès a besoin : elle veut savoir, en
-     * une requête, quels éléments sont abaissés pour l'appelant.
-     */
+    /** Les restrictions qui touchent un rôle, pour toute une feature (résolution d'accès). */
     grantsForRole(workspaceId: number, feature: string, roleId: number): Promise<ItemRoleGrantRow[]>;
     setGrant(
         workspaceId: number,
@@ -142,9 +124,8 @@ export function itemSharingRepo(pool: Q): ItemSharingRepo {
 
         async setGrant(workspaceId, feature, itemId, roleId, access) {
             if (access === null) {
-                // L'absence de ligne **est** « rien de particulier ». Écrire une
-                // valeur neutre ferait grossir la table d'exceptions qui n'en
-                // sont pas, et brouillerait la lecture de l'écran.
+                // L'absence de ligne est « rien de particulier » : pas de valeur
+                // neutre écrite.
                 await pool.query(
                     `DELETE FROM item_role_grants
                       WHERE workspace_id = ? AND feature = ? AND item_id = ? AND role_id = ?`,

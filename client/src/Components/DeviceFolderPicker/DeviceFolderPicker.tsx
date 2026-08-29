@@ -22,25 +22,16 @@ interface DeviceFolderPickerProps {
     onClose: () => void;
     /** Appelé avec le chemin absolu du dossier choisi sur l'appareil. */
     onPick: (path: string) => void;
-    /**
-     * À quoi le dossier va servir, dit par l'appelant.
-     *
-     * Le composant ne le sait pas : il sert la synchronisation d'un partage
-     * comme la destination d'une sauvegarde, et une phrase codée en dur pour
-     * l'un des deux mentirait à l'autre.
-     */
+    /** À quoi le dossier va servir, dit par l'appelant : le composant sert la
+     *  synchronisation d'un partage comme la destination d'une sauvegarde. */
     description?: string;
 }
 
 /**
- * Mini-explorateur de dossiers d'un appareil, sur les commandes de
- * l'explorateur de fichiers du Monitoring (`agent.filesList` + push corrélé
- * par opId) — dossiers uniquement, avec « Choisir ce dossier », « Actualiser »
- * et « Nouveau dossier ».
- *
- * Partagé plutôt que rangé dans une feature : choisir un dossier sur une machine
- * distante n'appartient ni à CloudSync ni aux Sauvegardes, et la troisième
- * recopie aurait été celle de trop.
+ * Mini-explorateur de dossiers d'un appareil, sur les commandes de l'explorateur
+ * de fichiers (`agent.filesList` + push corrélé par opId). Partagé : choisir un
+ * dossier sur une machine distante n'appartient ni à CloudSync ni aux
+ * Sauvegardes.
  */
 export function DeviceFolderPicker({
     open,
@@ -60,11 +51,9 @@ export function DeviceFolderPicker({
     /** Chemin du dossier qu'un mkdir en cours vient de créer, ouvert au succès. */
     const mkdirTarget = useRef<string | null>(null);
     /**
-     * Le dossier affiché, en référence. Les gestionnaires de push vivent dans un
-     * abonnement monté UNE fois : y lire l'état `listing` capturerait sa valeur
-     * du premier rendu (donc `null`) pour toute la vie du dialogue. Le remettre
-     * dans les dépendances de l'effet serait pire — chaque navigation
-     * réabonnerait et relancerait une navigation vers la racine.
+     * Le dossier affiché, en référence : les gestionnaires de push vivent dans
+     * un abonnement monté une fois, lire l'état `listing` y capturerait `null`,
+     * et l'ajouter aux dépendances réabonnerait à chaque navigation.
      */
     const pathRef = useRef('/');
 
@@ -83,12 +72,9 @@ export function DeviceFolderPicker({
     );
 
     // Les réponses de l'agent (`files.listing`) ne sont diffusées qu'aux
-    // ABONNÉS de l'appareil (`hub.publishToSubscribers`). Sans abonnement, la
-    // commande partait bien, l'agent répondait bien, et le serveur jetait sa
-    // réponse faute de destinataire : « Chargement… » à l'infini. Chaque
-    // panneau du Monitoring qui consomme un push d'appareil prend le même
-    // abonnement ; celui-ci manquait ici. Le compte de références empêche de
-    // couper l'abonnement d'un autre écran ouvert sur la même machine.
+    // abonnés de l'appareil (`hub.publishToSubscribers`) : sans abonnement, le
+    // serveur jette la réponse. Le compte de références n'interrompt pas
+    // l'abonnement d'un autre écran ouvert sur la même machine.
     useEffect(() => {
         if (!open) return;
         return acquireMetrics(deviceId);
@@ -115,17 +101,15 @@ export function DeviceFolderPicker({
                 if (d.deviceId !== deviceId || d.opId !== mutateOp.current) return;
                 const created = mkdirTarget.current;
                 mkdirTarget.current = null;
-                // Un dossier créé s'ouvre directement : c'est presque toujours
-                // celui qu'on venait chercher, et ça vaut re-listage de toute
-                // façon puisque le contenu du dossier courant a changé.
+                // Un dossier créé s'ouvre directement ; le dossier courant a
+                // changé de toute façon.
                 if (d.ok) navigate(created ?? pathRef.current);
                 else setError(d.error ?? 'Création impossible');
             }
         });
-        // Navigation lancée APRÈS l'écoute, sinon une réponse rapide arriverait
-        // avant l'abonnement local et se perdrait à son tour. On repart de la
-        // racine et on vide l'ancienne arborescence : rouvrir le dialogue sur
-        // une autre machine ne doit pas montrer les dossiers de la précédente.
+        // Navigation lancée après l'écoute, sinon une réponse rapide se perdrait.
+        // On repart de la racine : rouvrir sur une autre machine ne doit pas
+        // montrer les dossiers de la précédente.
         setListing(null);
         pathRef.current = '/';
         navigate('/');

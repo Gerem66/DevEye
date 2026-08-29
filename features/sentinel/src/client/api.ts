@@ -6,12 +6,8 @@ import { manifest } from '../manifest';
 export const api = featureApi(manifest);
 
 /**
- * Ravive tout ce que l'écran montre après une écriture faite ICI.
- *
- * Le dispatcheur diffuse le sujet `sentinel` aux autres membres après une
- * commande mutante, mais l'émetteur en est exclu (il tient déjà sa réponse) :
- * le panneau de réglages, qui n'est pas la vue, doit donc prévenir lui-même
- * la vue et la carte d'accueil restées derrière lui.
+ * Après une écriture faite ici : l'émetteur est exclu de la diffusion du sujet
+ * `sentinel`, le panneau de réglages doit prévenir lui-même la vue et la carte.
  */
 export function refreshSentinelViews(): void {
     invalidate('sentinel.count', 'sentinel.overview', 'sentinel.findings');

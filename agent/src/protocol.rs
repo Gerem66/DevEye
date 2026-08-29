@@ -73,15 +73,12 @@ pub struct DeviceReport {
     /// How the agent itself runs (privilege level + account). Lets the UI explain
     /// why some best-effort probes are limited (e.g. not running as root).
     pub agent: AgentInfo,
-    /// Listening sockets (TCP, plus UDP on Linux). Empty = none found; a legacy
-    /// report that predates this field deserialises to `null` server-side.
+    /// Listening sockets (TCP, plus UDP on Linux).
     #[serde(rename = "openPorts")]
     pub open_ports: Vec<OpenPort>,
-    /// Established TCP connections (the detail behind the `activeConnections`
-    /// metric). Empty = none; a legacy report deserialises to `null` server-side.
+    /// Established TCP connections (the detail behind the `activeConnections` metric).
     pub connections: Vec<TcpConnection>,
-    /// Static hardware inventory (CPU, RAM, GPU, network, bluetooth). Slow-moving;
-    /// a legacy report that predates this field deserialises to `null` server-side.
+    /// Static hardware inventory (CPU, RAM, GPU, network, bluetooth).
     pub hardware: DeviceHardware,
 }
 
@@ -153,13 +150,10 @@ pub struct AgentInfo {
     pub service_scope: &'static str,
     /// `true` when launched under a service manager (so a self-update just exits).
     pub managed: bool,
-    /// Ce que cet agent sait relever, déclaré par lui-même.
-    ///
-    /// Sans cette liste, rien ne distingue « la sonde a échoué » d'« un agent
-    /// trop ancien pour l'avoir » : les deux rendent `null`, et l'interface
-    /// afficherait le même vide pour deux situations qui n'appellent pas la
-    /// même réaction. La version ne peut pas servir — elle est injectée à la
-    /// compilation et vaut `0.0.0` sur une construction locale.
+    /// Ce que cet agent sait relever, déclaré par lui-même : distingue « la
+    /// sonde a échoué » d'« un agent trop ancien pour l'avoir », deux `null`
+    /// que l'interface ne doit pas afficher pareil. La version ne peut pas
+    /// servir : `0.0.0` sur une construction locale.
     pub probes: Vec<&'static str>,
 }
 
@@ -332,15 +326,13 @@ pub struct Security {
     pub sip: Option<bool>,
     #[serde(rename = "pendingUpdates")]
     pub pending_updates: Option<u32>,
-    /// Correctifs de **sécurité** en attente, distingués du total.
-    ///
-    /// C'est la distinction qui porte le signal : quarante mises à jour dont
-    /// aucune de sécurité n'est qu'un retard d'entretien, tandis qu'une seule
-    /// faille non corrigée est une porte.
+    /// Correctifs de sécurité en attente, distingués du total : quarante mises
+    /// à jour sans sécurité ne sont qu'un retard d'entretien, une seule faille
+    /// non corrigée est une porte.
     #[serde(rename = "pendingSecurityUpdates")]
     pub pending_security_updates: Option<u32>,
-    /// Unix ms du dernier contrôle des mises à jour — c'est son **ancienneté**
-    /// qui fait le constat, pas le nombre.
+    /// Unix ms du dernier contrôle des mises à jour : c'est son ancienneté qui
+    /// fait le constat, pas le nombre.
     #[serde(rename = "updatesCheckedAt")]
     pub updates_checked_at: Option<i64>,
     /// `PermitRootLogin` du serveur SSH.
@@ -363,19 +355,14 @@ pub struct Security {
 #[derive(Debug, Clone, Serialize)]
 pub struct ProcessInfo {
     pub name: String,
-    /// Chemin de l'exécutable, et **seconde moitié de la clé d'agrégation**.
-    ///
-    /// Agréger sur le seul nom fusionnait deux binaires homonymes rangés à des
-    /// endroits différents — exactement ce derrière quoi un imposteur se cache.
-    /// `None` quand la plateforme ou les droits ne l'exposent pas : la règle
-    /// serveur qui en dépend reste alors muette plutôt que de conclure à vide.
+    /// Chemin de l'exécutable, et seconde moitié de la clé d'agrégation :
+    /// deux binaires homonymes rangés à des endroits différents sont deux
+    /// programmes (c'est derrière quoi un imposteur se cache). `None` quand la
+    /// plateforme ou les droits ne l'exposent pas ; la règle serveur reste alors muette.
     #[serde(rename = "execPath")]
     pub exec_path: Option<String>,
-    /// L'exécutable a été effacé du disque mais le processus tourne toujours.
-    ///
-    /// Un des indicateurs les plus francs d'un implant résident en mémoire, et
-    /// il ne coûte rien : le lien `/proc/<pid>/exe` est déjà lu pour `exec_path`.
-    /// `None` là où la plateforme ne l'expose pas.
+    /// L'exécutable a été effacé du disque mais le processus tourne toujours
+    /// (implant résident en mémoire). `None` là où la plateforme ne l'expose pas.
     pub deleted: Option<bool>,
     /// Number of PIDs aggregated under this name.
     pub instances: u32,
@@ -484,8 +471,7 @@ pub enum ClientMessage {
     Integrity {
         #[serde(rename = "deviceId")]
         device_id: String,
-        // Boxé comme `Report` : c'est l'une des plus grosses variantes, et la
-        // laisser en ligne gonflerait l'enum entier (clippy::large_enum_variant).
+        // Boxé comme `Report` : une des plus grosses variantes (clippy::large_enum_variant).
         integrity: Box<crate::integrity::IntegrityReport>,
     },
     /// Fenêtre d'issues d'authentification (Sentinelle).
@@ -499,8 +485,8 @@ pub enum ClientMessage {
     Report {
         #[serde(rename = "deviceId")]
         device_id: String,
-        // Boxed: the report is by far the largest variant; boxing keeps the enum
-        // small (clippy::large_enum_variant) without changing the wire shape.
+        // Boxed: by far the largest variant (clippy::large_enum_variant); the
+        // wire shape is unchanged.
         report: Box<DeviceReport>,
     },
     /// Outcome of an `agent.destroy`: whether the agent wiped itself successfully.
@@ -760,11 +746,9 @@ pub enum ServerMessage {
     /// Push a fresh sample + report immediately (user clicked "refresh").
     #[serde(rename = "agent.collect")]
     Collect {},
-    /// Relevé Sentinelle immédiat (persistance + authentification).
-    ///
-    /// Distinct de `Collect` exprès : celui-là coûte quelques millisecondes,
-    /// celui-ci empreinte des centaines de fichiers. Les confondre ferait payer
-    /// ce prix à chaque « rafraîchir » de la page Monitoring.
+    /// Relevé Sentinelle immédiat (persistance + authentification). Distinct de
+    /// `Collect` : celui-là coûte quelques millisecondes, celui-ci empreinte des
+    /// centaines de fichiers.
     #[serde(rename = "agent.scan")]
     Scan {},
     /// Self-destruct: wipe local config + binary and exit (device being deleted).
@@ -897,11 +881,8 @@ pub enum ServerMessage {
         #[serde(rename = "shareId")]
         share_id: i64,
         /// `auto` autorise la réponse rapide, `full` impose le parcours complet.
-        ///
-        /// `Option` plutôt qu'un défaut serde : champ ABSENT veut dire vieux
-        /// serveur, et un vieux serveur doit obtenir le comportement d'avant,
-        /// c'est-à-dire un scan complet. La dissymétrie de version dégrade donc
-        /// vers « on parcourt », jamais vers « on saute ».
+        /// Champ absent = scan complet : la dissymétrie de version dégrade vers
+        /// « on parcourt », jamais vers « on saute ».
         #[serde(default)]
         mode: Option<String>,
     },
@@ -936,18 +917,16 @@ pub enum ServerMessage {
         mtime: i64,
         #[serde(default)]
         mode: Option<u32>,
-        /// Offset de clair décidé par le SERVEUR pour cette reprise. L'agent
-        /// tronque son temporaire à cette valeur : il ne doit jamais présumer
-        /// de son propre point de reprise, sous peine de diverger.
+        /// Offset de clair décidé par le SERVEUR pour cette reprise : l'agent
+        /// tronque son temporaire à cette valeur, jamais à la sienne.
         #[serde(rename = "resumeFrom", default)]
         resume_from: u64,
     },
     /// CloudSync: prepare a download. The agent replies `sync.opResult` with
     /// `op: "applyReady"` and the number of plaintext bytes it already holds for
     /// this exact hash, so the server only resends what is missing.
-    // `rel_path`/`size`/`mtime`/`mode` sont portés par le protocole (le serveur
-    // les répète sur chaque frame) mais l'amorce n'a besoin que du hash : c'est
-    // lui seul qui identifie le partiel réutilisable.
+    // `rel_path`/`size`/`mtime`/`mode` sont portés par le protocole, mais
+    // l'amorce n'a besoin que du hash, qui seul identifie le partiel réutilisable.
     #[allow(dead_code)]
     #[serde(rename = "sync.applyStart")]
     SyncApplyStart {
@@ -1048,14 +1027,9 @@ pub enum ServerMessage {
         metric_interval_ms: u64,
         #[serde(rename = "processCapture")]
         process_capture: String,
-        /// Sentinelle est-elle active sur cet appareil ?
-        ///
-        /// Éteinte, l'agent ne relève ni persistance ni authentification. Ces
-        /// deux sondes ne coûtent rien à qui ne les demande pas, et une machine
-        /// non surveillée ne doit pas voir ses journaux lus « au cas où ».
-        ///
-        /// `Option` avec défaut : un serveur antérieur à Sentinelle n'envoie pas
-        /// le champ, et l'agent se comporte alors comme avant.
+        /// Sentinelle est-elle active sur cet appareil ? Éteinte, l'agent ne
+        /// relève ni persistance ni authentification : une machine non
+        /// surveillée ne doit pas voir ses journaux lus « au cas où ».
         #[serde(rename = "sentinelEnabled", default)]
         sentinel_enabled: Option<bool>,
         #[serde(rename = "integrityIntervalMs", default)]

@@ -109,58 +109,25 @@ import { logger } from '@/logger';
 
 /**
  * Période du balayage de vivacité des agents. Deux tours sans `pong` ferment la
- * socket, donc la détection tombe dans `[P, 2P]` : 60 à 120 s ici.
+ * socket, donc la détection tombe dans `[P, 2P]`.
  *
- * ## Pourquoi un battement, puisqu'on est sur une WebSocket
+ * Nécessaire malgré la WebSocket : une machine éteinte n'envoie rien, TCP est
+ * silencieux au repos, et la socket resterait `ESTABLISHED` des heures, la
+ * machine affichée en ligne et avalant les commandes.
  *
- * L'événement de fermeture ne couvre que les arrêts PROPRES, et ceux-là sont
- * déjà gratuits : sur `SIGTERM`, l'agent envoie une trame de fermeture et on le
- * voit partir tout de suite. Le battement existe pour tout le reste — coupure de
- * courant, câble arraché, VM tuée, machine mise en veille — où personne n'émet
- * rien. TCP étant silencieux au repos, la socket reste `ESTABLISHED` et AUCUN
- * événement ne se déclenche : la machine s'afficherait en ligne et avalerait les
- * commandes qu'on lui envoie. Le noyau ne l'apprendrait qu'en tentant d'émettre
- * (retransmissions, ~15 min) ou par son keepalive TCP, deux heures par défaut.
- *
- * ## Pourquoi cette cadence
- *
- * C'est le SEUL battement du lien : l'agent n'émet plus le sien, il se contente
- * de constater un silence (`SERVER_SILENCE_LIMIT`). Ce ping et le pong qu'il
- * appelle sont donc, à eux deux, TOUT le trafic permanent d'un agent au repos —
- * deux trames par minute. Une minute est le meilleur compromis trouvé : quatre
- * fois plus discret que le code d'origine, tout en gardant une marge confortable
- * sous le délai d'inactivité d'un proxy inverse (180 s par défaut chez Traefik),
- * au-delà duquel la connexion serait coupée et la reconnexion coûterait bien
- * plus cher que le ping économisé.
- *
- * Le balayage est volontairement INCONDITIONNEL. Ne pas pinguer un agent qui
- * vient de parler paraît malin, mais ça n'économise des trames que lorsqu'il y a
- * déjà du trafic — donc jamais quand ça se verrait — et ça couple les deux
- * côtés : un ping sauté ici raccourcit le silence perçu là-bas, au risque de
- * faire reconnecter un agent parfaitement sain.
- *
- * DÉLIBÉRÉMENT plus rapide que celui de `LiveHub` (30 s), et il ne faut pas
- * « corriger » la divergence. Les coûts d'une panne ne sont pas comparables :
- * une socket d'agent morte fait passer une machine éteinte pour en ligne et
- * avale en silence les commandes qu'on lui envoie, alors qu'une socket de
- * navigateur morte ne laisse qu'un fantôme dans une liste de présence.
- *
- * `SERVER_SILENCE_LIMIT` (150 s) doit rester au-dessus de `2 × P`, sinon un
- * balayage en retard sous charge ferait reconnecter des agents sains.
+ * Seul battement du lien (l'agent ne fait que constater un silence,
+ * `SERVER_SILENCE_LIMIT`, qui doit rester au-dessus de `2 × P`) ; une minute
+ * reste sous le délai d'inactivité d'un proxy inverse (180 s chez Traefik).
+ * Inconditionnel : sauter un ping raccourcirait le silence perçu par l'agent.
+ * Plus rapide que `LiveHub` (30 s), à dessein : une socket agent morte coûte
+ * plus qu'un fantôme dans une liste de présence.
  */
 const AGENT_HEARTBEAT_MS = 60_000;
 
 /**
- * Fenêtre et seuil du signalement de reconnexions en rafale.
- *
- * Un agent sain se connecte une fois et reste. Au-delà de ce seuil sur cette
- * fenêtre, la machine va mal : lien instable, résolution DNS qui bascule entre
- * deux chemins, ou instance dupliquée qui se fait évincer en boucle.
- *
- * Ça mérite un signalement explicite, parce que les gardes qui bornent le
- * travail de connexion (rapport, relevé Sentinelle) rendent désormais ce
- * symptôme invisible. Les borner sans le dire aurait remplacé un bug voyant par
- * un bug silencieux.
+ * Fenêtre et seuil du signalement de reconnexions en rafale : lien instable, DNS
+ * qui bascule, ou instance dupliquée évincée en boucle. Les gardes qui bornent
+ * le travail de connexion rendraient sinon ce symptôme invisible.
  */
 const RECONNECT_WINDOW_MS = 60 * 60 * 1000;
 const RECONNECT_WARN_THRESHOLD = 12;
@@ -178,23 +145,14 @@ export class MonitorHub {
     /** deviceId -> connected agent socket. */
     private readonly agents = new Map<string, WebSocket>();
     /**
-     * Attentes de verdict d'une opération de fichier lancée **hors socket web**.
-     *
-     * Les commandes `device.files*` viennent d'un navigateur abonné, qui lit le
-     * résultat dans la diffusion. Les sauvegardes, elles, tournent à 3 h du
-     * matin sans personne d'abonné : il leur faut une promesse par `opId`, pas
-     * un événement poussé à un auditoire vide. Même mécanique que la table `ops`
-     * du moteur CloudSync, réduite à ce dont un dépôt de fichier a besoin.
+     * Attentes de verdict d'une opération de fichier lancée hors socket web
+     * (une sauvegarde nocturne, sans abonné) : une promesse par `opId`.
      */
     private readonly fileOpWaiters = new Map<string, (result: { ok: boolean; error?: string }) => void>();
     /**
-     * Vivacité par socket agent, remise à `true` par l'événement `pong`.
-     *
-     * Sans elle, `online` valait « il y a une socket dans la Map », et rien ne
-     * l'en retirait qu'un `close`. Or une machine qu'on éteint n'en envoie
-     * jamais : la socket restait à moitié ouverte jusqu'au keepalive TCP du
-     * noyau — plus de deux heures — pendant lesquelles l'appareil s'affichait
-     * en ligne, acceptait des commandes et les perdait en silence.
+     * Vivacité par socket agent, remise à `true` par `pong` : une machine
+     * éteinte n'envoie jamais de `close`, la socket resterait ouverte jusqu'au
+     * keepalive TCP du noyau.
      */
     private readonly agentAlive = new Map<WebSocket, boolean>();
     private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -203,20 +161,10 @@ export class MonitorHub {
     /** subscriber socket -> set of deviceIds it watches (for cleanup). */
     private readonly socketDevices = new Map<WebSocket, Set<string>>();
     /**
-     * Mises à jour de paquets en cours, par appareil — le verrou de la
-     * fonctionnalité.
-     *
-     * Il vit ici, et non dans l'écran qui l'a lancée, parce que « une commande
-     * tourne déjà » est un fait de la machine, pas de l'onglet : refermer la
-     * fenêtre, rouvrir la fonctionnalité ou être quelqu'un d'autre ne le change
-     * pas. Sans lui, la même mise à jour partait autant de fois qu'on cliquait,
-     * et les téléchargements se doublaient jusqu'à ce que les verrous des outils
-     * eux-mêmes fassent le tri.
-     *
-     * En mémoire du processus, comme la présence : un redémarrage du serveur
-     * relâche tout, ce qui est le bon défaut (mieux vaut un verrou perdu qu'un
-     * verrou éternel) et reste sans danger — les outils refusent les exécutions
-     * concurrentes.
+     * Mises à jour de paquets en cours, par appareil : le verrou. Ici et non
+     * dans l'écran, « une commande tourne déjà » est un fait de la machine, pas
+     * de l'onglet. En mémoire du processus : un redémarrage relâche tout, et les
+     * outils refusent les exécutions concurrentes.
      */
     private readonly upgrades = new Map<string, Set<PackageManagerId>>();
     /** shareId (CloudSync) -> set of subscriber (user) sockets. */
@@ -225,18 +173,9 @@ export class MonitorHub {
     private readonly socketShares = new Map<WebSocket, Set<number>>();
     /**
      * Droit de voir les appareils, par socket abonnée, estampillé de l'époque
-     * d'accès sous laquelle il a été résolu.
-     *
-     * Sans ça, un abonnement était acquis une fois pour toutes : la diffusion
-     * arrosait l'ensemble des sockets inscrites, et un utilisateur retiré d'un
-     * espace — ou dont le rôle venait de perdre `devices` — continuait de
-     * recevoir métriques, rapports, **sortie de terminal** et morceaux de
-     * fichiers jusqu'à sa déconnexion.
-     *
-     * Retenu ici plutôt que ré-résolu à la diffusion, exactement comme le fait
-     * `LiveHub` : `forWorkspace()` rend une promesse qui peut rejeter, et la
-     * diffusion doit rester entièrement synchrone. Une époque divergente vaut
-     * « aucun droit », jamais « les droits d'avant » — et n'importe quelle
+     * d'accès : un utilisateur retiré d'un espace ne doit plus rien recevoir.
+     * Retenu ici plutôt que ré-résolu à la diffusion, qui doit rester synchrone
+     * (comme `LiveHub`) ; une époque divergente vaut « aucun droit », et toute
      * commande de l'utilisateur répare l'instantané.
      */
     private readonly grants = new Map<WebSocket, { allowed: boolean; epoch: number }>();
@@ -244,11 +183,9 @@ export class MonitorHub {
     private readonly reconnects = new Map<string, { since: number; count: number }>();
 
     agentOnline(deviceId: string, socket: WebSocket): void {
-        // One live session per device. Without this, a superseded socket (fast
-        // reconnect, or a *duplicate agent instance* sharing the enrollment)
-        // kept streaming its own snapshots alongside the new one — doubled
-        // telemetry with no error anywhere. 1012 = "service restart": the old
-        // agent treats it as a clean close and backs off before redialing.
+        // One live session per device: a superseded socket (fast reconnect, or a
+        // duplicate agent instance) would keep streaming alongside the new one.
+        // 1012 = "service restart": the old agent backs off before redialing.
         const prev = this.agents.get(deviceId);
         if (prev && prev !== socket) prev.close(1012, 'Session replaced by a newer agent connection');
         this.agents.set(deviceId, socket);
@@ -260,12 +197,8 @@ export class MonitorHub {
 
     /**
      * Compte les connexions d'un appareil sur une fenêtre glissante et signale
-     * les rafales. Aucune table : c'est un symptôme à voir passer dans les logs,
-     * pas un historique à conserver.
-     *
-     * Signalé une seule fois par fenêtre et par appareil (le compteur repart à
-     * zéro), sinon un agent en boucle inonderait les logs du message qui dénonce
-     * justement une inondation.
+     * les rafales, une seule fois par fenêtre : un agent en boucle inonderait
+     * sinon les logs.
      */
     private noteReconnect(deviceId: string): void {
         const now = Date.now();
@@ -284,10 +217,6 @@ export class MonitorHub {
         this.reconnects.set(deviceId, { since: now, count: 0 });
     }
 
-    /**
-     * Démarre le balayage de vivacité. Appelé une fois au démarrage, à côté de
-     * celui de `LiveHub`.
-     */
     startHeartbeat(): void {
         if (this.heartbeatTimer) return;
         this.heartbeatTimer = setInterval(() => this.sweepAgents(), AGENT_HEARTBEAT_MS);
@@ -303,10 +232,8 @@ export class MonitorHub {
         for (const [deviceId, socket] of this.agents) {
             if (this.agentAlive.get(socket) === false) {
                 // `terminate()` et non `close()` : une pile TCP morte ne verra
-                // jamais la poignée de fermeture, et la socket resterait un
-                // fantôme. `terminate()` émet malgré tout `close`, donc toute la
-                // comptabilité de présence existante s'applique sans être
-                // dupliquée ici.
+                // jamais la poignée de fermeture. `terminate()` émet malgré tout
+                // `close`, donc la comptabilité de présence s'applique.
                 try {
                     socket.terminate();
                 } catch {
@@ -327,10 +254,9 @@ export class MonitorHub {
     }
 
     agentOffline(deviceId: string, socket: WebSocket): void {
-        // Only forget the agent if the socket closing is the one we still hold. A
-        // fast reconnect — or a self-update relaunch — may have already replaced it,
-        // and a late close from the *old* socket must not evict the new one (which
-        // would leave a live agent wrongly marked offline until its next reconnect).
+        // Only forget the agent if the socket closing is the one we still hold: a
+        // fast reconnect may have replaced it, and a late close from the old
+        // socket must not evict the new one.
         if (this.agents.get(deviceId) !== socket) return;
         this.agents.delete(deviceId);
         this.agentAlive.delete(socket);
@@ -343,8 +269,7 @@ export class MonitorHub {
 
     /**
      * Send one command frame to a device's connected agent. Returns false (a no-op)
-     * when the agent is offline — every `requestX`/`pushConfig` below is a thin,
-     * self-documenting wrapper over this so they all share the offline semantics.
+     * when the agent is offline; every `requestX`/`pushConfig` below wraps this.
      */
     private sendToAgent(deviceId: string, command: string, payload: unknown = {}): boolean {
         const socket = this.agents.get(deviceId);
@@ -360,10 +285,7 @@ export class MonitorHub {
 
     /**
      * Demande un relevé Sentinelle immédiat (persistance + authentification).
-     *
-     * Distinct de `requestCollect` exprès : celui-là coûte quelques
-     * millisecondes, celui-ci empreinte des centaines de fichiers. Les confondre
-     * ferait payer ce prix à chaque « rafraîchir » de la page Monitoring.
+     * Distinct de `requestCollect` : celui-ci empreinte des centaines de fichiers.
      */
     requestScan(deviceId: string): boolean {
         return this.sendToAgent(deviceId, AGENT_SCAN);
@@ -380,17 +302,10 @@ export class MonitorHub {
     }
 
     /**
-     * Coupe la session d'un agent, sur-le-champ.
-     *
-     * La session agent capture le statut de l'appareil **à la connexion**, et le
-     * filtre d'ingestion relit cet instantané : révoquer un appareil sans fermer
-     * sa socket le laissait écrire métriques et listes de processus jusqu'à sa
-     * prochaine reconnexion, c'est-à-dire potentiellement indéfiniment. La
-     * révocation doit donc mordre sur la socket, pas seulement sur la ligne.
-     *
-     * 1008 (« policy violation ») et non 1012 : ce n'est pas un redémarrage, et
-     * l'agent ne doit pas se ruer sur une reconnexion — la suivante sera de
-     * toute façon refusée à l'authentification.
+     * Coupe la session d'un agent sur-le-champ : la session capture le statut à
+     * la connexion, révoquer sans fermer la socket laisserait l'agent écrire
+     * jusqu'à sa reconnexion. 1008 (« policy violation ») et non 1012 : l'agent
+     * ne doit pas se ruer sur une reconnexion.
      */
     disconnectAgent(deviceId: string): boolean {
         const socket = this.agents.get(deviceId);
@@ -400,12 +315,8 @@ export class MonitorHub {
     }
 
     /**
-     * Coupe la session pour qu'elle se rétablisse avec un statut à jour.
-     *
-     * Le symétrique du problème ci-dessus : approuver un appareil dont l'agent
-     * est **déjà** connecté laissait sa session sur l'instantané « pending », et
-     * sa télémétrie continuait d'être accusée puis jetée — un appareil approuvé
-     * qui n'enregistre rien, sans le moindre message d'erreur. 1012 (« service
+     * Coupe la session pour qu'elle se rétablisse avec un statut à jour (un
+     * appareil approuvé alors que son agent est déjà connecté). 1012 (« service
      * restart »), pour que l'agent revienne au lieu de renoncer.
      */
     resetAgentSession(deviceId: string): boolean {
@@ -436,14 +347,9 @@ export class MonitorHub {
     }
 
     /**
-     * Re-demande l'inventaire des paquets après une mise à jour aboutie, pour
-     * que les compteurs cessent d'annoncer des mises à jour déjà appliquées.
-     *
-     * Ici, et une seule fois : si chaque écran ouvert le demandait de son côté,
-     * une machine regardée par trois personnes subirait trois détections — soit,
-     * sur certains gestionnaires, plusieurs minutes de sondes redondantes. Le
-     * résultat part de toute façon à tous les abonnés. Rien n'est demandé quand
-     * personne ne regarde.
+     * Re-demande l'inventaire des paquets après une mise à jour aboutie. Ici et
+     * une seule fois : chaque écran le demandant de son côté multiplierait les
+     * détections. Rien n'est demandé quand personne ne regarde.
      */
     refreshPackagesIfWatched(deviceId: string): void {
         if ((this.subscribers.get(deviceId)?.size ?? 0) === 0) return;
@@ -455,11 +361,7 @@ export class MonitorHub {
         return [...(this.upgrades.get(deviceId) ?? [])];
     }
 
-    /**
-     * Prend le verrou pour ce gestionnaire. `false` — et rien n'est modifié —
-     * quand une mise à jour y tourne déjà : c'est la réponse qu'attend
-     * l'appelant pour refuser la commande plutôt que d'en lancer une seconde.
-     */
+    /** Prend le verrou pour ce gestionnaire ; `false` si une mise à jour y tourne déjà. */
     beginUpgrade(deviceId: string, manager: PackageManagerId): boolean {
         const set = this.upgrades.get(deviceId) ?? new Set<PackageManagerId>();
         if (set.has(manager)) return false;
@@ -477,13 +379,9 @@ export class MonitorHub {
     }
 
     /**
-     * Clôt d'autorité les mises à jour d'un appareil devenu injoignable.
-     *
-     * L'agent parti, aucun `pkg.done` n'arrivera plus : sans ça le verrou
-     * resterait pour la durée du processus, et le bouton grisé pour toujours. On
-     * diffuse un échec explicite, parce qu'un bouton qui se réactive sans un mot
-     * laisserait croire que la mise à jour a abouti — elle continue peut-être
-     * sur la machine, mais plus personne ne la suit.
+     * Clôt d'autorité les mises à jour d'un appareil devenu injoignable : aucun
+     * `pkg.done` n'arrivera plus. Échec explicite diffusé, sinon un bouton
+     * réactivé sans un mot laisserait croire à un succès.
      */
     failRunningUpgrades(deviceId: string, error: string): void {
         for (const manager of this.runningUpgrades(deviceId)) {
@@ -599,9 +497,8 @@ export class MonitorHub {
 
     /** Fan out a filesystem mutation outcome to a device's subscribers. */
     publishFilesOp(payload: DeviceFilesOpPush): void {
-        // Le verdict part aux abonnés **et** à qui l'attendait par promesse. Les
-        // deux, jamais l'un ou l'autre : une sauvegarde déclenchée à la main
-        // depuis un écran ouvert doit à la fois débloquer le moteur et se voir.
+        // Le verdict part aux abonnés et à qui l'attendait par promesse : une
+        // sauvegarde lancée depuis un écran doit débloquer le moteur et se voir.
         const waiter = this.fileOpWaiters.get(payload.opId);
         if (waiter) {
             this.fileOpWaiters.delete(payload.opId);
@@ -612,10 +509,8 @@ export class MonitorHub {
 
     /**
      * Attend le verdict d'une opération de fichier, pour un appelant sans socket.
-     *
-     * L'échéance n'est pas une commodité : un agent qui se déconnecte au milieu
-     * d'un dépôt n'enverra jamais de verdict, et sans elle le moteur de
-     * sauvegarde resterait suspendu pour toujours en tenant le travail.
+     * L'échéance est nécessaire : un agent déconnecté en plein dépôt n'enverra
+     * jamais de verdict.
      */
     awaitFilesOp(opId: string, timeoutMs: number): Promise<{ ok: boolean; error?: string }> {
         return new Promise((resolve) => {
@@ -637,11 +532,8 @@ export class MonitorHub {
     }
 
     /**
-     * Octets encore en attente d'envoi vers un agent.
-     *
-     * Sans cette lecture, pousser une archive de plusieurs gigaoctets remplirait
-     * le tampon d'envoi aussi vite que le disque produit les octets : la mémoire
-     * du serveur suivrait la taille de l'archive, pas celle d'un chunk.
+     * Octets encore en attente d'envoi vers un agent, pour la contre-pression :
+     * sans elle, la mémoire du serveur suivrait la taille de l'archive poussée.
      */
     agentBuffered(deviceId: string): number {
         return this.agents.get(deviceId)?.bufferedAmount ?? 0;

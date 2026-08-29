@@ -4,36 +4,22 @@ import type { DatabaseRows } from '../contracts/domain';
 import { formatCount } from './format';
 import styles from './style.module.css';
 
-/** Combien de temps la confirmation « copié » reste affichée. */
 const COPIED_MS = 1600;
 
 interface ResultTableProps {
     rows: DatabaseRows;
-    /** N'afficher que les premières lignes — un aperçu. */
+    /** N'afficher que les premières lignes (un aperçu). */
     limit?: number;
-    /**
-     * Trier sur une colonne au clic de son en-tête.
-     *
-     * Absent, les en-têtes restent du texte : un aperçu ne se trie pas, il se
-     * regarde.
-     */
+    /** Absent, les en-têtes restent du texte : un aperçu ne se trie pas. */
     sort?: { column: string; direction: 'asc' | 'desc' } | null;
     onSort?: (column: string) => void;
-    /** Occuper toute la hauteur disponible plutôt que le gabarit par défaut. */
+    /** Occuper toute la hauteur disponible. */
     fill?: boolean;
 }
 
 /**
- * Un jeu de résultats, tel quel.
- *
- * Le **seul** rendu de tableau de la feature qui ne soit pas celui de
- * l'explorateur : le terminal l'utilisait autrefois par recopie, les deux ont
- * divergé, et l'un des deux a fini par ne plus savoir dire `NULL`. Il est ici
- * une fois, et sert l'aperçu comme la vue complète — ce qui garantit qu'une
- * ligne vue en petit est la même que celle vue en grand.
- *
- * `NULL` reste distinct de la chaîne vide, comme partout ailleurs : les
- * confondre à l'affichage ferait douter de ce qu'il y a réellement en base.
+ * Un jeu de résultats, tel quel, pour l'aperçu comme pour la vue complète.
+ * `NULL` reste distinct de la chaîne vide.
  */
 export function ResultTable({ rows, limit, sort, onSort, fill }: ResultTableProps) {
     const shown = limit === undefined ? rows.rows : rows.rows.slice(0, limit);
@@ -82,25 +68,16 @@ export function ResultTable({ rows, limit, sort, onSort, fill }: ResultTableProp
 
 interface ResultDialogProps {
     open: boolean;
-    /** Ce qui a produit ces lignes — l'instruction, telle qu'elle a été tapée. */
+    /** L'instruction, telle qu'elle a été tapée. */
     sql: string;
     rows: DatabaseRows | null;
     onClose: () => void;
 }
 
 /**
- * Un jeu de résultats en grand, et de quoi s'en servir.
- *
- * L'historique du terminal n'en montre qu'un aperçu : une requête qui rend
- * quatre cents lignes rendait la conversation illisible et repoussait l'invite
- * hors de l'écran, alors que ce qu'on veut d'un résultat passé tient en une
- * ligne — « combien, et à quoi ça ressemblait ». Le reste se regarde ici, dans un
- * écran fait pour ça : toute la hauteur, un tri par colonne, et une copie.
- *
- * Le **tri est local**. Rejouer l'instruction avec un `ORDER BY` serait faux : le
- * texte n'est pas forcément triable (un `SHOW`, un `EXPLAIN`), et rejouer une
- * requête pour la regarder autrement la ferait s'exécuter deux fois sur un
- * serveur de production. On trie donc ce qu'on a déjà.
+ * Un jeu de résultats en grand : toute la hauteur, un tri par colonne, une
+ * copie. Le tri est local : rejouer l'instruction avec un `ORDER BY` serait faux
+ * (un `SHOW` ne se trie pas) et l'exécuterait deux fois.
  */
 export function ResultDialog({ open, sql, rows, onClose }: ResultDialogProps) {
     const [sort, setSort] = useState<{ column: string; direction: 'asc' | 'desc' } | null>(null);
@@ -116,14 +93,8 @@ export function ResultDialog({ open, sql, rows, onClose }: ResultDialogProps) {
         return () => clearTimeout(timer);
     }, [copied]);
 
-    /**
-     * Les lignes rangées.
-     *
-     * Comparaison numérique quand les deux valeurs sont des nombres, textuelle
-     * sinon : trier des identifiants en chaînes mettrait 10 avant 9, ce qui est
-     * exactement le cas où l'on trie. `NULL` va toujours en fin, dans les deux
-     * sens — c'est une absence, pas une valeur extrême.
-     */
+    // Comparaison numérique quand les deux valeurs sont des nombres (sinon 10
+    // passerait avant 9), textuelle sinon ; `NULL` toujours en fin.
     const sorted = useMemo(() => {
         if (!rows || !sort) return rows;
         const at = rows.columns.indexOf(sort.column);
@@ -145,8 +116,7 @@ export function ResultDialog({ open, sql, rows, onClose }: ResultDialogProps) {
 
     const copy = async () => {
         if (!sorted) return;
-        // Séparé par des tabulations : c'est ce qu'un tableur attend d'un
-        // collage, et ce qui se relit le mieux dans un message.
+        // Tabulations : ce qu'un tableur attend d'un collage.
         const text = [
             sorted.columns.join('\t'),
             ...sorted.rows.map((row) => row.map((cell) => cell ?? 'NULL').join('\t'))

@@ -9,14 +9,12 @@ import { noteColorSchema, type NoteColor } from '../contracts/domain';
  *  - `*italic*`        → italic
  *  - `__underline__`   → underline
  *  - `~~strike~~`      → strikethrough
- *  - `{c:red}…{/c}`    → coloured text (name ∈ noteColorSchema); rendered with
- *    the `--note-<name>` palette token. Unlike the emphasis marks it carries a
- *    parameter (the colour) and nests properly (recolouring a sub-range works),
- *    so it is matched with an explicit open/close + depth count.
+ *  - `{c:red}…{/c}`    → coloured text (name ∈ noteColorSchema), matched with an
+ *    explicit open/close and a depth count since it carries a parameter.
  *
- * Marks nest (e.g. `**bold _und_**`); overlapping ranges aren't supported (no
- * standard markdown is). Two-char delimiters are matched before the single `*`,
- * and `_` only forms underline as a pair so it never clashes with snake_case.
+ * Marks nest (`**bold _und_**`), overlapping ranges don't. Two-char delimiters
+ * are matched before the single `*`, and `_` only forms underline as a pair so it
+ * never clashes with snake_case.
  */
 
 export type InlineMark = 'bold' | 'italic' | 'underline' | 'strike';
@@ -33,7 +31,7 @@ const DELIMITERS: { delim: string; mark: InlineMark }[] = [
     { delim: '*', mark: 'italic' }
 ];
 
-/** The markdown markers, longest first, used to wrap a selection from the toolbar. */
+/** The markers the toolbar wraps a selection with. */
 export const MARK_DELIMITERS: Record<InlineMark, string> = {
     bold: '**',
     underline: '__',
@@ -41,14 +39,13 @@ export const MARK_DELIMITERS: Record<InlineMark, string> = {
     italic: '*'
 };
 
-/** Colour marker builders (kept next to the parser so both stay in sync). */
 export const COLOR_CLOSE = '{/c}';
 export const colorOpen = (color: NoteColor): string => `{c:${color}}`;
 
 const VALID_COLORS = new Set<string>(noteColorSchema.options);
 const COLOR_OPEN_RE = /^\{c:([a-z]+)\}/;
 
-/** Remove every `{c:name}`/`{/c}` marker from a string (used to clear colour). */
+/** Remove every `{c:name}`/`{/c}` pair; an unknown colour name is left alone. */
 export function stripColorMarkers(input: string): string {
     return input
         .replace(/\{c:([a-z]+)\}/g, (m, name: string) => (VALID_COLORS.has(name) ? '' : m))
@@ -56,10 +53,9 @@ export function stripColorMarkers(input: string): string {
 }
 
 /**
- * Strip the (innermost) colour pair whose content encloses caret `pos`, if any,
- * returning the new text and the caret shifted for the removed opening marker.
- * Null when the caret isn't inside a coloured run, lets "Défaut" clear the
- * colour of the run under a collapsed caret without touching anything else.
+ * Strip the innermost colour pair enclosing caret `pos`, returning the new text
+ * and the caret shifted for the removed opening marker. Null when the caret isn't
+ * inside a coloured run.
  */
 export function removeEnclosingColor(input: string, pos: number): { text: string; caret: number } | null {
     let best: { openStart: number; openLen: number; closeStart: number } | null = null;
@@ -69,8 +65,8 @@ export function removeEnclosingColor(input: string, pos: number): { text: string
         if (open && VALID_COLORS.has(open[1])) {
             const innerStart = i + open[0].length;
             const closeStart = findColorClose(input, innerStart);
-            // Enclosing when the caret sits within the inner range; keep the
-            // innermost (largest opening index).
+            // Enclosing when the caret sits within the inner range; the last one
+            // kept is the innermost.
             if (closeStart !== -1 && innerStart <= pos && pos <= closeStart) {
                 best = { openStart: i, openLen: open[0].length, closeStart };
             }
@@ -87,9 +83,9 @@ export function removeEnclosingColor(input: string, pos: number): { text: string
 }
 
 /**
- * Index of the `{/c}` that closes a colour opened just before `from`, honouring
- * nested colour pairs (depth count); -1 if unbalanced. Only valid `{c:name}`
- * count as nested opens, so stray text with braces doesn't skew the balance.
+ * Index of the `{/c}` closing a colour opened just before `from`, nested pairs
+ * honoured; -1 if unbalanced. Only a valid `{c:name}` counts as a nested open, so
+ * stray braces don't skew the balance.
  */
 function findColorClose(input: string, from: number): number {
     let depth = 1;
@@ -112,7 +108,6 @@ function findColorClose(input: string, from: number): number {
     return -1;
 }
 
-/** Parse a single line/segment of inline markdown into a node tree. */
 function parseInline(input: string): InlineNode[] {
     const out: InlineNode[] = [];
     let i = 0;
@@ -124,7 +119,6 @@ function parseInline(input: string): InlineNode[] {
     while (i < input.length) {
         let matched = false;
 
-        // Colour: `{c:name}…{/c}` with a valid palette name and a balanced close.
         const open = COLOR_OPEN_RE.exec(input.slice(i));
         if (open && VALID_COLORS.has(open[1])) {
             const innerStart = i + open[0].length;
@@ -163,7 +157,7 @@ function escapeHtml(s: string): string {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-/** Class names the editor renderer wraps marked text / dimmed markers with. */
+/** Class names the editor renderer wraps marked text and dimmed markers with. */
 export interface MarkClasses {
     marker: string;
     bold: string;
@@ -195,9 +189,9 @@ function nodesToEditorHtml(nodes: InlineNode[], cls: MarkClasses): string {
 }
 
 /**
- * Render markdown to HTML that keeps the markers visible (dimmed) and styles the
- * marked text. Crucially, the rendered element's textContent equals `input`
- * character-for-character, so the editor can map the caret by plain offset.
+ * Renders the markers as visible (dimmed) spans around the styled text, so that
+ * the element's textContent equals `input` character-for-character and the editor
+ * can map the caret by plain offset.
  */
 export function inlineToEditorHtml(input: string, cls: MarkClasses): string {
     return nodesToEditorHtml(parseInline(input), cls);
@@ -216,7 +210,7 @@ function nodesToHtml(nodes: InlineNode[]): string {
         .join('');
 }
 
-/** Render markdown to clean semantic HTML (markers removed), used by the PDF. */
+/** Clean semantic HTML, markers removed, for the PDF. */
 export function inlineToHtml(input: string): string {
     return nodesToHtml(parseInline(input));
 }
@@ -225,7 +219,7 @@ function nodesToPlain(nodes: InlineNode[]): string {
     return nodes.map((n) => (n.type === 'text' ? n.text : nodesToPlain(n.children))).join('');
 }
 
-/** Strip all inline markers, leaving plain text, used by previews. */
+/** Plain text, for the previews. */
 export function stripInline(input: string): string {
     return nodesToPlain(parseInline(input));
 }

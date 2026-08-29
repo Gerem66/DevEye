@@ -1,5 +1,5 @@
-// En tout premier : l'enregistrement des modules installés (descripteurs +
-// invalidation). Avant App, donc avant le catalogue, qui se fige en s'évaluant.
+// En tout premier : l'enregistrement des modules installés, avant App donc avant
+// le catalogue, qui se fige en s'évaluant.
 import '@/sdk/modules';
 
 import { createRoot } from 'react-dom/client';
@@ -9,13 +9,13 @@ import { suppressNativeDrags } from './nativeDrag';
 import { preloadIcons } from './Styles/preloadIcons';
 
 // Before anything renders: a stray drag on a link, an image or a text selection
-// can freeze the whole page, and no drag must be able to start unnoticed.
+// can freeze the whole page.
 suppressNativeDrags();
 
 const container = document.getElementById('root');
 const root = createRoot(container ?? document.body);
 root.render(<App />);
 
-// Warm the icon cache up front so no icon (notably the WS-reconnect overlay's)
-// ever has to be fetched at the moment it's first shown.
+// Warm the icon cache up front so no icon has to be fetched the moment it is
+// first shown.
 preloadIcons();

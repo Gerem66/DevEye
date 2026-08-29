@@ -2,17 +2,10 @@ import { useUptimeCount } from './store';
 import styles from './style.module.css';
 
 /**
- * Le mini-widget de topbar : services confirmés en ligne sur services
- * surveillés.
- *
- * Aucune prop, c'est le contrat : tout ce qu'il montre vient du magasin du
- * module (`uptime.count`, autorisée côté serveur contre les droits de
- * l'appelant), le même que la carte de l'accueil, d'une seule requête.
- * L'hôte fournit le cadre (`statusItem`) et le titre ; le module ne rend que
- * l'icône et le chiffre.
- *
- * The icon carries both the identity (which widget is this?) and the state,
- * so the two count widgets can't be mistaken for one another at a glance.
+ * Aucune prop, c'est le contrat : tout vient du magasin du module
+ * (`uptime.count`), le même que la carte de l'accueil, d'une seule requête.
+ * L'icône porte l'identité et l'état, pour que les deux compteurs de la barre
+ * ne se confondent pas.
  */
 export default function UptimeTopbarWidget() {
     const { total, up, down, loading } = useUptimeCount();

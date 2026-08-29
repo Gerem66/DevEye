@@ -22,23 +22,9 @@ import TargetView, { TargetActions } from './TargetView';
 import styles from './style.module.css';
 
 /**
- * Déploiement — les cibles de l'espace actif.
- *
- * Feature de premier rang, et non un onglet des Projets : une pile compose sert
- * souvent deux projets (un client, un serveur), certaines ne servent aucun
- * projet, et un projet n'y **pointe** que par une liaison. C'est la forme des
- * features Git, Bases de données et Audience, et pour les mêmes raisons — c'est
- * même le dernier module à l'avoir prise (migration 080).
- *
- * Portée volontairement étroite : **déclencher et suivre**. Rien ici ne
- * configure un déploiement ; tout cela vit chez Dokploy, qui le fait mieux.
- *
- * Ne demande jamais de mot de passe : tout vit à l'étage ouvert, sous la clé de
- * l'espace — condition pour que le suivi d'état tourne sans session.
- *
- * Depuis le rapatriement, l'espace vient de `useActiveWorkspace()` et ses
- * membres de `useWorkspaceMembers()`, non d'une prop : la vue d'un module ne
- * reçoit que `closeFeature`.
+ * Déploiement : les cibles de l'espace actif. Feature de premier rang : une
+ * pile compose sert souvent deux projets, et un projet n'y pointe que par une
+ * liaison. Ne demande jamais de mot de passe : tout vit à l'étage ouvert.
  */
 export function FeatureDeploy(_props: FeatureViewProps) {
     const permissions = useWorkspacePermissions();
@@ -54,10 +40,9 @@ export function FeatureDeploy(_props: FeatureViewProps) {
     const [opened, setOpened] = useState<{ target: DeployTarget; deployments: Deployment[] } | null>(null);
 
     /**
-     * L'historique complet, tel que Dokploy le rend — chargé à part de
-     * `opened` : une instance injoignable ne doit pas priver la fiche de son
-     * nom ni de son bouton « Déployer », seul l'historique doit le dire.
-     * `null` = en cours de chargement.
+     * L'historique complet tel que Dokploy le rend, chargé à part de `opened` :
+     * une instance injoignable ne doit pas priver la fiche de son nom ni de son
+     * bouton « Déployer ». `null` = en cours de chargement.
      */
     const [history, setHistory] = useState<DeployHistoryEntry[] | null>(null);
     const [historyError, setHistoryError] = useState<string | null>(null);
@@ -74,18 +59,10 @@ export function FeatureDeploy(_props: FeatureViewProps) {
     const pendingReload = useRef(false);
 
     /**
-     * Présence : « qui regarde quelle cible ». Un seul déclarant par niveau —
-     * ce composant possède `l1`, et rien d'autre dans la feature n'y touche.
-     *
-     * Le même hook applique ce qu'une téléportation demande à ce niveau :
-     * rejoindre quelqu'un, ou venir de l'onglet d'un projet (« Ouvrir le
-     * Déploiement »), ouvre la feature ET la cible visée, au lieu de s'arrêter
-     * sur la liste. La cible est rendue tant qu'elle n'est pas atteinte, jamais
-     * consommée : on attend donc que la liste soit chargée (`ready`) pour
-     * vérifier que la cible existe, et on l'ignore sans rien avoir à acquitter
-     * si elle a disparu. Le segment est l'identifiant nu de la cible, comme
-     * pour toute fiche d'élément (il portait un préfixe `target:` du temps où
-     * la feature écrivait ses chemins elle-même).
+     * Présence : « qui regarde quelle cible ». Ce composant seul possède `l1`.
+     * Une téléportation ouvre la feature ET la cible visée ; on attend que la
+     * liste soit chargée (`ready`) pour vérifier qu'elle existe, et on l'ignore
+     * si elle a disparu.
      */
     useLiveItemTarget('l1', openedId === null ? null : String(openedId), targets !== null, (value) => {
         if (value === null) {
@@ -144,9 +121,8 @@ export function FeatureDeploy(_props: FeatureViewProps) {
             const res = await api.send('deploy.history', { targetId }, { timeoutMs: DOKPLOY_TIMEOUT_MS });
             setHistory(res.entries);
         } catch (e) {
-            // Le message de Dokploy lui-même, pas un intitulé générique : c'est
-            // souvent la seule piste pour distinguer une instance injoignable
-            // d'un refus d'authentification (voir `dokployError`).
+            // Le message de Dokploy lui-même (voir `dokployError`) : la seule
+            // piste pour distinguer injoignable de refus d'authentification.
             setHistoryError(dokployError(e, 'Impossible de charger l’historique complet.'));
         }
     }, []);
@@ -198,12 +174,8 @@ export function FeatureDeploy(_props: FeatureViewProps) {
                             <p className={styles.subtitle}>Ce que vous mettez en production, et ce que ça a donné.</p>
                         </div>
                         <div className={styles.actions}>
-                            {/* Un seul bouton d'espace : les accès Dokploy (les
-                                sources de la feature) vivent dans Réglages →
-                                Sources, à côté des canaux d'alerte. Ils avaient
-                                leur propre bouton « Accès Dokploy », troisième
-                                endroit à connaître pour régler une même
-                                feature. */}
+                            {/* Les accès Dokploy vivent dans Réglages → Sources,
+                                à côté des canaux d'alerte. */}
                             <FeatureSettingsButton scope={{ kind: 'feature', feature: 'deploy' }} />
                             {canWrite && (
                                 <Button icon='add' onClick={() => setDialog({ target: null })}>
@@ -239,10 +211,8 @@ export function FeatureDeploy(_props: FeatureViewProps) {
                 <p className={styles.empty}>{error ?? 'Chargement…'}</p>
             ) : (
                 <>
-                    {/* Retour à gauche, actions à droite : la même rangée
-                        d'en-tête que la liste, et que les fiches des autres
-                        features. Les actions vivaient dans le bloc d'identité,
-                        plus bas, en décalage avec la page parente. */}
+                    {/* La même rangée d'en-tête que la liste et que les fiches
+                        des autres features : retour à gauche, actions à droite. */}
                     <header className={styles.head}>
                         <Button variant='ghost' icon='arrow-left' onClick={() => setOpenedId(null)}>
                             Déploiements
@@ -275,9 +245,8 @@ export function FeatureDeploy(_props: FeatureViewProps) {
                 onClose={() => setDialog(null)}
                 onSaved={(target) => {
                     setDialog(null);
-                    // La fiche ouverte doit refléter le réglage tout de suite ;
-                    // la liste se relit par l'invalidation posée dans le
-                    // dialogue, à la source de la mutation.
+                    // La fiche ouverte reflète le réglage tout de suite ; la liste
+                    // se relit par l'invalidation posée dans le dialogue.
                     setOpened((prev) => (prev && prev.target.id === target.id ? { ...prev, target } : prev));
                     void reload();
                 }}

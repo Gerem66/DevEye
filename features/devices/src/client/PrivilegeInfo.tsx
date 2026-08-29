@@ -1,9 +1,8 @@
 import type { AgentInfo, DevicePlatform } from '@deveye/types';
 
 /**
- * Explainer shown from the "Privilèges agent" chip (via openInfo). Tells the user
- * how the agent runs, which signals its privilege level limits, what running with
- * privileges would add, and how to relaunch elevated — honestly per platform.
+ * Explainer shown from the "Privilèges agent" chip: how the agent runs, what its
+ * privilege level limits, and how to relaunch elevated, per platform.
  */
 export function PrivilegeInfo({ agent, platform }: { agent: AgentInfo | null; platform: DevicePlatform }) {
     if (!agent) {

@@ -34,15 +34,7 @@ interface ProjectDialogProps {
     error: string | null;
     onClose: () => void;
     onSubmit: (result: ProjectDialogResult) => void;
-    /**
-     * Archiver le projet. Absent à la création, sur un projet déjà archivé, ou
-     * en lecture seule.
-     *
-     * L'action vit ici et non sur la carte du portefeuille : on archive un
-     * projet une fois dans sa vie, ce n'est pas un geste qui mérite d'être le
-     * plus accessible de l'écran — ni de côtoyer l'ouverture, qu'on fait vingt
-     * fois par jour.
-     */
+    /** Archiver. Absent à la création, sur un projet déjà archivé, ou en lecture seule. */
     onArchive?: () => void;
 }
 
@@ -57,11 +49,9 @@ const EMPTY: ProjectDraft = {
 };
 
 /**
- * Formulaire de profil d'un projet — titre, description, étiquettes, statut,
- * fenêtre de dates, et à la création seulement le niveau de confidentialité.
- *
- * `holdSecrecy` : le formulaire *écrit* de la donnée chiffrée, une saisie longue
- * ne doit donc pas tomber sur la re-validation en cours de route.
+ * Le profil d'un projet ; le niveau de confidentialité ne s'y règle qu'à la
+ * création. `holdSecrecy` parce que le formulaire écrit de la donnée chiffrée :
+ * une saisie longue ne doit pas tomber sur la re-validation.
  */
 export function ProjectDialog({
     open,
@@ -79,7 +69,6 @@ export function ProjectDialog({
     const [tagLabel, setTagLabel] = useState('');
     /** L'archivage sort le projet de l'espace de travail : il se confirme. */
     const [confirmArchive, setConfirmArchive] = useState(false);
-    /** Ce qui a empêché la dernière image d'être acceptée, s'il y a lieu. */
     const [iconError, setIconError] = useState<string | null>(null);
     const fileRef = useRef<HTMLInputElement>(null);
 
@@ -115,10 +104,8 @@ export function ProjectDialog({
     };
 
     /**
-     * Réduit l'image déposée et la pose dans le brouillon.
-     *
-     * Un échec n'efface pas l'icône en place et ne bloque rien : il s'affiche
-     * sous le titre, et le reste du formulaire continue de fonctionner.
+     * Réduit l'image déposée et la pose dans le brouillon. Un échec n'efface pas
+     * l'icône en place et ne bloque rien : il s'affiche sous le titre.
      */
     const pickIcon = async (file: File | null) => {
         if (!file) return;
@@ -162,12 +149,8 @@ export function ProjectDialog({
             }
         >
             <div className={styles.form}>
-                {/* La vignette à côté du titre, pas dans une section à part :
-                    les deux nomment le projet, et on les choisit d'un même
-                    geste. L'image est réduite **dans le navigateur** avant
-                    d'être envoyée — le contrat borne la charge utile, et
-                    transporter huit mégaoctets pour en garder cinquante kilos
-                    n'aurait aucun sens. */}
+                {/* L'image est réduite dans le navigateur avant d'être envoyée :
+                    le contrat borne la charge utile. */}
                 <div className={styles.iconRow}>
                     <button
                         type='button'

@@ -3,19 +3,10 @@ import { SENTINEL_RULES, type DevicePosture, type PostureStatus, type RuleProbe 
 import styles from './style.module.css';
 
 /**
- * La posture d'une machine, contrôle par contrôle.
- *
- * Quatre états et non deux, parce que la nuance porte tout le sens :
- *
- * - **conforme** / **à corriger** : la sonde a répondu ;
- * - **non mesuré** : elle n'a rien pu dire. Ce n'est pas un succès, et l'afficher
- *   en vert donnerait une assurance que rien ne soutient ;
- * - **sans objet** : le contrôle ne s'applique pas à cette plateforme (SIP hors
- *   macOS). Le confondre avec « non mesuré » ferait chercher une sonde
- *   défaillante qui n'a jamais eu lieu d'exister.
- *
- * Les contrôles à corriger remontent en tête : c'est la seule question qu'on
- * pose à cet écran.
+ * La posture, contrôle par contrôle. Quatre états : conforme, à corriger, non
+ * mesuré (la sonde n'a rien pu dire, pas un succès), sans objet (le contrôle
+ * ne s'applique pas à cette plateforme). Les contrôles à corriger remontent
+ * en tête.
  */
 
 const STATUS_LABEL: Record<PostureStatus, string> = {

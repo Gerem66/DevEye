@@ -153,11 +153,9 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
         void fetchSecrecy();
     }, [fetchStatus, fetchSecrecy]);
 
-    // Keep the global user.security in sync so the profile's "Sécurité x / 3"
-    // counter updates live, without a full page reload. Only patches once both
-    // statuses are known to avoid flicker from partial state. The re-auth window
-    // counts when strict (≤ 5 min, 0 being the strongest) — but only while
-    // password encryption is ON, since the window is meaningless without it.
+    // Keeps the profile's "Sécurité x / 3" counter live. Waits for both statuses
+    // to avoid flicker, and counts the re-auth window only when it is strict AND
+    // encryption is on (see STRICT_RE_AUTH_MINUTES below).
     useEffect(() => {
         if (status === null || secrecy === null) return;
         const reAuth = secrecy.reAuthInterval ?? 60;
@@ -259,9 +257,8 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
     const encryptionEnabled = secrecy?.enabled ?? false;
     // Current persisted window in minutes (null = server default of 1 min).
     const currentReAuthMinutes = Math.round((secrecy?.reAuthInterval ?? 60) / 60);
-    // Whether the window is strict enough to count as a protection (≤ 5 min,
-    // including 0 = "always re-prompt", the strongest setting). Same threshold as
-    // the profile security counter — and only when encryption is enabled.
+    // Strict enough to count as a protection: 5 min or less, 0 ("always
+    // re-prompt") being the strongest.
     const reAuthStrict = encryptionEnabled && currentReAuthMinutes <= 5;
     const reAuthTitle = !encryptionEnabled
         ? 'Validation du mot de passe'
@@ -297,9 +294,8 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
         }
     }, [reAuthValid, parsedReAuth]);
 
-    // Debounced autosave: wait 500 ms after the last edit before persisting. Any
-    // change resets the timer, so we only save once the user pauses. Only fires
-    // when the value is valid and actually differs from what's stored.
+    // Debounced autosave: 500 ms after the last edit, and only when the value is
+    // valid and actually differs from what is stored.
     useEffect(() => {
         if (!reAuthDirty) return;
         window.clearTimeout(reAuthDebounce.current);
@@ -307,7 +303,6 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
         return () => window.clearTimeout(reAuthDebounce.current);
     }, [reAuthDirty, reAuthInput, saveReAuth]);
 
-    // Clean up any pending timers on unmount.
     useEffect(
         () => () => {
             window.clearTimeout(reAuthDebounce.current);

@@ -1,18 +1,10 @@
 /*
- * Feature « Sentinelle ».
- *
- * Module à part, comme Git et Bases de données : une feature, une feuille.
- *
- * Aucune couleur en dur, les quatre gravités réutilisent `--danger` et
- * `--warning` plutôt que d'introduire une échelle chromatique de plus. Un rouge
- * qui ne serait pas le rouge du reste de l'application se lirait comme un état
- * différent, alors que c'est le même : « ça ne va pas ».
- *
+ * Sentinelle. Aucune couleur en dur : les quatre gravités réutilisent `--danger`
+ * et `--warning` plutôt qu'une échelle chromatique de plus, un rouge qui ne
+ * serait pas celui du reste de l'application se lirait comme un autre état.
  * `filter: opacity()` et jamais `opacity` pour atténuer : la propriété est
- * revendiquée par les surfaces animées de l'application.
+ * revendiquée par les surfaces animées.
  */
-
-/* ── carte de grille ─────────────────────────────────────────────────────── */
 
 .widget {
     display: flex;
@@ -52,8 +44,6 @@
     font-size: 0.8rem;
     color: var(--text-muted);
 }
-
-/* ── mise en page ────────────────────────────────────────────────────────── */
 
 .root {
     display: flex;
@@ -96,15 +86,11 @@
 }
 
 /*
- * Le détail suit le défilement : la liste peut être longue, et devoir remonter
- * pour lire ce qu'on vient de sélectionner annulerait tout l'intérêt d'avoir
- * deux colonnes.
- *
- * Ni largeur ni marge ici : framer-motion les anime à l'ouverture et à la
- * fermeture (voir `index.tsx`). Les déclarer aussi en CSS ferait deux sources
- * pour une même valeur, et l'animation se battrait contre la feuille de style.
- * `overflow: hidden` est ce qui rend la largeur animable sans que le contenu
- * déborde pendant la transition.
+ * Le détail suit le défilement : remonter pour lire ce qu'on vient de
+ * sélectionner annulerait l'intérêt des deux colonnes. Ni largeur ni marge ici,
+ * framer-motion les anime depuis `index.tsx` et les déclarer aussi en CSS
+ * ferait deux sources pour une même valeur ; `overflow: hidden` rend la largeur
+ * animable sans que le contenu déborde pendant la transition.
  */
 .detailPane {
     position: sticky;
@@ -114,18 +100,16 @@
 }
 
 /*
- * Le contenu, à largeur figée pendant que le panneau anime la sienne. Sa valeur
- * vient de `index.tsx`, en même temps que celle de l'animation : c'est la même
- * largeur, et elle n'a qu'une seule source. Ici on ne pose que ce qui rend le
- * rognage propre, pas de rétrécissement, pas de saut de ligne.
+ * Le contenu, à largeur figée pendant que le panneau anime la sienne : la valeur
+ * vient de `index.tsx`, avec celle de l'animation, une seule source pour les
+ * deux. Ici, seulement de quoi rendre le rognage propre.
  */
 .detailInner {
     flex-shrink: 0;
 }
 
-/* Sous 1000 px la colonne de détail passe sous la liste : deux colonnes ne
-   tiennent pas, et rétrécir la liste rendrait les sujets, souvent des
-   chemins, illisibles. */
+/* Sous 1000 px le détail passe sous la liste : rétrécir la liste rendrait les
+   sujets, souvent des chemins, illisibles. */
 @media (max-width: 1000px) {
     .split {
         flex-direction: column;
@@ -157,13 +141,8 @@
     }
 }
 
-/* ── bouton de tête : l'état de la flotte, et le retour à son accueil ─────── */
-
-/*
- * Volontairement gros, et porteur du seul chiffre qui résume tout. C'est à la
- * fois l'information principale et le chemin de retour : une simple ligne de
- * menu ne disait ni l'un ni l'autre.
- */
+/* Volontairement gros : à la fois le chiffre qui résume tout et le chemin de
+   retour, qu'une simple ligne de menu n'annoncerait ni l'un ni l'autre. */
 .overviewButton {
     display: flex;
     flex-direction: column;
@@ -226,8 +205,6 @@
 .overviewLabel {
     font-size: 0.82rem;
 }
-
-/* ── barre latérale ──────────────────────────────────────────────────────── */
 
 .sidebarLabel {
     margin: var(--space-md) 0 4px var(--space-sm);
@@ -327,8 +304,6 @@
     color: var(--accent);
 }
 
-/* ── en-têtes ────────────────────────────────────────────────────────────── */
-
 .header {
     display: flex;
     flex-direction: column;
@@ -401,7 +376,6 @@
     color: var(--text-muted);
 }
 
-/* Décomptes par gravité, la lecture d'un coup d'œil de « à quel point ». */
 .tallies {
     display: flex;
     gap: var(--space-lg);
@@ -421,8 +395,6 @@
     font-weight: 600;
     color: currentColor;
 }
-
-/* ── filtres ─────────────────────────────────────────────────────────────── */
 
 .filters {
     display: flex;
@@ -460,8 +432,6 @@
 .filterCheck {
     font-size: 0.76rem;
 }
-
-/* ── sections ────────────────────────────────────────────────────────────── */
 
 .section {
     display: flex;
@@ -512,11 +482,9 @@
     transition: transform var(--transition-fast);
 }
 
-/* Les icônes du projet sont des **masques CSS** dimensionnés par
-   `.icon { width: 18px }` : `font-size` n'a aucune prise dessus. Double
-   sélecteur pour battre ce global quel que soit l'ordre d'injection des
-   feuilles (spécificité 0,2,0), comme dans Projects et CloudSync.
-   14 px : le chevron indique un pli, il ne l'annonce pas. */
+/* Les icônes du projet sont des masques CSS dimensionnés par
+   `.icon { width: 18px }` : `font-size` n'a aucune prise dessus. Double sélecteur
+   pour battre ce global quel que soit l'ordre d'injection des feuilles. */
 .sectionToggle .sectionChevron {
     width: 14px;
 }
@@ -524,8 +492,6 @@
 .sectionChevronOpen {
     transform: rotate(90deg);
 }
-
-/* ── constats ────────────────────────────────────────────────────────────── */
 
 .findings {
     display: flex;
@@ -565,8 +531,6 @@
     list-style: none;
 }
 
-/* La carte d'un constat : même grammaire que les cartes de Bases de données,
-   surface de widget, bordure de verre, léger soulèvement au survol. */
 .findingRow {
     position: relative;
     display: flex;
@@ -579,9 +543,8 @@
     overflow: hidden;
     border: 1px solid var(--glass-border);
     /*
-     * Rayon volontairement court : le liseré de gravité court sur toute la
-     * hauteur du bord gauche, et un grand rayon lui rogne les deux extrémités,
-     * on ne voyait plus qu'un trait central, qui avait l'air inachevé.
+     * Rayon volontairement court : le liseré de gravité file sur toute la hauteur
+     * du bord gauche, et un grand rayon lui rogne ses deux extrémités.
      */
     border-radius: var(--radius-sm);
     background: var(--surface-widget);
@@ -612,8 +575,8 @@
     filter: opacity(0.55);
 }
 
-/* Le liseré de gravité : lisible sans lire, et sans ajouter une pastille de
-   plus dans une ligne déjà dense. */
+/* Le liseré de gravité : lisible sans lire, sans une pastille de plus dans une
+   ligne déjà dense. */
 .findingBar {
     position: absolute;
     top: 0;
@@ -670,8 +633,6 @@
     white-space: nowrap;
 }
 
-/* ── gravités ────────────────────────────────────────────────────────────── */
-
 .sevDot {
     width: 7px;
     height: 7px;
@@ -695,8 +656,6 @@
 .sevInfo {
     color: var(--text-muted);
 }
-
-/* ── détail d'un constat ─────────────────────────────────────────────────── */
 
 .detail {
     position: relative;
@@ -799,8 +758,7 @@
     color: var(--text-muted);
 }
 
-/* La conduite à tenir : le seul bloc teinté de l'écran, parce que c'est la
-   seule ligne qui demande une action. */
+/* Le seul bloc teinté de l'écran : c'est la seule ligne qui demande une action. */
 .remediation {
     display: flex;
     gap: var(--space-sm);
@@ -841,10 +799,10 @@
 }
 
 /*
- * « C'est réglé » et « Légitime » répondent à deux questions différentes, et se
- * confondraient posés côte à côte dans la même rangée de boutons. Le trait les
- * sépare : au-dessus, ranger un constat corrigé ; en dessous, décider qu'une
- * situation est normale, la seule des deux qui écrive une autorisation.
+ * « C'est réglé » et « Légitime » se confondraient côte à côte dans la même
+ * rangée. Le trait les sépare : au-dessus, ranger un constat corrigé, en dessous,
+ * décider qu'une situation est normale, la seule des deux qui écrive une
+ * autorisation.
  */
 .settled {
     display: flex;
@@ -861,8 +819,6 @@
     line-height: 1.5;
     color: var(--text-muted);
 }
-
-/* ── appel à l'action (machine non surveillée) ───────────────────────────── */
 
 .callout {
     display: flex;
@@ -897,8 +853,6 @@
     color: var(--text-muted);
 }
 
-/* ── posture ─────────────────────────────────────────────────────────────── */
-
 .posture {
     display: flex;
     flex-direction: column;
@@ -926,8 +880,8 @@
     font-size: 0.8rem;
 }
 
-/* Seuls les contrôles à corriger portent une bordure : le reste est du contexte,
-   et tout encadrer reviendrait à ne rien souligner. */
+/* Seuls les contrôles à corriger portent une bordure : tout encadrer reviendrait
+   à ne rien souligner. */
 .postureRowFail {
     border-color: var(--glass-border-strong);
 }
@@ -980,8 +934,6 @@
     color: var(--text-muted);
     filter: opacity(0.55);
 }
-
-/* ── ligne de base ───────────────────────────────────────────────────────── */
 
 .baseline {
     display: flex;
@@ -1036,8 +988,6 @@
     color: var(--text-muted);
 }
 
-/* ── décisions (autorisations) ───────────────────────────────────────────── */
-
 .allowRows {
     display: flex;
     flex-direction: column;
@@ -1089,8 +1039,6 @@
     color: var(--text-muted);
 }
 
-/* ── détail : le champ « raison » ────────────────────────────────────────── */
-
 .field {
     display: flex;
     flex-direction: column;
@@ -1103,12 +1051,10 @@
     color: var(--text-primary);
 }
 
-/* ── panneau des appareils (coquille de réglages, onglet Appareils) ──────── */
-
 /*
- * Un bloc par appareil, séparé du précédent par un trait : la coquille fournit
- * les rangées de champs (`settingsStyles`), le module ne pose que ce qui est à
- * lui, l'en-tête d'une machine et sa zone de réapprentissage.
+ * Un bloc par appareil : la coquille fournit les rangées de champs
+ * (`settingsStyles`), le module ne pose que l'en-tête d'une machine et sa zone
+ * de réapprentissage.
  */
 .panelDevice {
     display: flex;
@@ -1146,8 +1092,8 @@
 
 .dangerZone {
     display: flex;
-    /* Le bouton se centre en face de son explication plutôt que de coller en
-       haut : sur trois lignes de texte, l'alignement haut le laissait orphelin. */
+    /* Le bouton se centre en face de son explication : sur trois lignes de texte,
+       l'alignement haut le laissait orphelin. */
     align-items: center;
     justify-content: space-between;
     gap: var(--space-md);
@@ -1162,8 +1108,6 @@
     gap: 4px;
     min-width: 0;
 }
-
-/* ── états ───────────────────────────────────────────────────────────────── */
 
 .empty {
     margin: 0;

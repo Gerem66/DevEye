@@ -37,31 +37,17 @@ import {
 } from './_shared';
 
 /**
- * Le portefeuille : les projets de l'espace actif, plus ceux qu'un autre
- * espace y projette.
- *
- * L'espace vient de l'enveloppe WS et l'appartenance est déjà vérifiée par le
- * dispatcheur. Un projet projeté (`Docs/SHARING.md`) se lit et son arbre
- * s'écrit **chez lui**, sous le codec ouvert de son domicile
- * (`ctx.sharing.scope()`, projet par projet) ; les droits restent ceux de
- * l'espace actif, restriction par élément comprise (`ctx.items.assert`).
- * Depuis la fenêtre, tout se fait sauf ce qui référence d'autres objets de
- * l'espace d'origine : son palier, le suivi des releases, ses liaisons, son
- * rang dans le portefeuille (`assertAtHome`).
- *
- * ⚠️ Le contrôle de démarrage de `_topics.ts` qui attrape un `mutates` oublié
- * cherche un verbe **juste après le point** (`notes.add`). Les commandes d'ici
- * sont en camelCase sous un préfixe unique (`projects.setStatus`) : il n'en
- * verra aucune. `mutates` est donc à relire à la main sur toute écriture
- * ajoutée ici.
+ * Le portefeuille : les projets de l'espace actif, plus ceux qu'un autre espace y
+ * projette. Un projet projeté (`Docs/SHARING.md`) se lit et son arbre s'écrit chez
+ * lui, sous le codec ouvert de son domicile, mais les droits restent ceux de
+ * l'espace actif, restriction par élément comprise. Depuis la fenêtre, tout se fait
+ * sauf ce qui référence d'autres objets de l'espace d'origine (`assertAtHome`).
  */
 
 /**
- * Colonnes posées d'office à la création.
- *
- * Un tableau sans colonne est une impasse : on ne peut y créer aucune carte, et
- * rien n'indique par où commencer. La dernière porte `countsAsDone`, ce qui rend
- * l'avancement du projet calculable dès la première carte.
+ * Colonnes posées d'office : un tableau sans colonne est une impasse, aucune carte
+ * ne peut y naître. La dernière porte `countsAsDone`, ce qui rend l'avancement du
+ * projet calculable dès la première carte.
  */
 const DEFAULT_COLUMNS: { name: string; countsAsDone: boolean }[] = [
     { name: 'À faire', countsAsDone: false },
@@ -69,7 +55,6 @@ const DEFAULT_COLUMNS: { name: string; countsAsDone: boolean }[] = [
     { name: 'Terminé', countsAsDone: true }
 ];
 
-/** Le corps chiffré, à partir d'un brouillon et de la version à conserver. */
 function toPayload(draft: ProjectDraft, version: string): StoredProject {
     return {
         title: draft.title,
@@ -80,7 +65,7 @@ function toPayload(draft: ProjectDraft, version: string): StoredProject {
     };
 }
 
-/** Relit et déchiffre une ligne fraîchement écrite, sous son codec, pour la renvoyer entière. */
+/** Relit une ligne fraîchement écrite, sous son codec, pour la renvoyer entière. */
 async function readProject(ctx: Ctx, row: ProjectRow) {
     const payload = await decryptProject(await projectCipher(ctx, row), row.content);
     if (!payload) throw new FeatureError('internal', 'Le corps du projet est illisible');
@@ -96,14 +81,12 @@ export const projectListFeature = defineSdkFeature({
             ctx.items.restrictions(),
             ctx.sharing.scope()
         ]);
-        // Les projets qu'une restriction masque pour ce rôle disparaissent de
-        // la liste plutôt que d'y figurer grisés : une ligne qu'on voit sans
-        // pouvoir l'ouvrir apprend déjà qu'elle existe.
+        // Les projets qu'une restriction masque disparaissent de la liste plutôt
+        // que d'y figurer grisés : une ligne qu'on voit apprend déjà qu'elle existe.
         const rows = visible.filter((r) => hidden.get(r.id) !== 'none');
 
-        // Compteurs d'abord : ils ne dépendent d'aucune clé, et doivent donc
-        // s'afficher même sur un projet gardé qu'on ne sait pas déchiffrer.
-        // Par projet visible, où qu'il vive : les non-lus sont ceux de
+        // Les compteurs ne dépendent d'aucune clé : ils s'affichent même sur un
+        // projet gardé qu'on ne sait pas déchiffrer. Les non-lus sont ceux de
         // l'appelant, chez lui comme par une fenêtre.
         const stats = new Map(
             (
@@ -115,10 +98,9 @@ export const projectListFeature = defineSdkFeature({
             ).map((s) => [s.project_id, s])
         );
 
-        // Jamais bloquée : la liste s'affiche toujours. Un projet gardé n'est
-        // révélé que si la DEK est déjà vivante, et on ne le demande (ce qui
-        // fait glisser la fenêtre de grâce) que s'il y a vraiment un projet
-        // gardé à révéler.
+        // Un projet gardé n'est révélé que si la DEK est déjà vivante, et la
+        // question n'est posée (elle fait glisser la fenêtre de grâce) que s'il y a
+        // vraiment un projet gardé à révéler.
         const canReadGuarded = rows.some((r) => r.security_tier === 'guarded') ? await ctx.secrecy.isUnlocked() : false;
 
         let skipped = 0;
@@ -127,12 +109,12 @@ export const projectListFeature = defineSdkFeature({
                 rows.map(async (row): Promise<ProjectSummary | null> => {
                     const guarded = row.security_tier === 'guarded';
                     if (guarded && !canReadGuarded) return toMaskedSummary(row, stats.get(row.id));
-                    // Le codec est choisi projet par projet : un projet projeté
-                    // reste chiffré sous la clé de son espace d'origine.
+                    // Un projet projeté reste chiffré sous la clé de son espace
+                    // d'origine, d'où un codec choisi projet par projet.
                     const payload = await tryDecryptProject(await projectCipher(ctx, row, scope), row.content);
                     if (!payload) {
-                        // Ligne corrompue (ou clé qui ne correspond plus) : on la
-                        // laisse de côté plutôt que de faire échouer toute la liste.
+                        // Ligne corrompue, ou clé qui ne correspond plus : mise de
+                        // côté plutôt que de faire échouer toute la liste.
                         skipped += 1;
                         return null;
                     }
@@ -151,10 +133,9 @@ export const projectListFeature = defineSdkFeature({
 export const projectCountFeature = defineSdkFeature({
     ...projectCount,
     handler: async (ctx: Ctx) => {
-        // Les mêmes lignes que la liste (projetées comprises, restrictions
-        // déduites), comptées sur les métadonnées claires : aucune DEK, aucun
-        // verrou. Une carte qui compte autre chose que la liste qu'elle ouvre
-        // se lit comme un bug.
+        // Les mêmes lignes que la liste, comptées sur les métadonnées claires :
+        // aucune DEK, aucun verrou. Une tuile qui compte autre chose que la liste
+        // qu'elle ouvre se lit comme un bug.
         const [visible, hidden] = await Promise.all([
             ctx.repo.projects.listVisible(ctx.workspaceId, false),
             ctx.items.restrictions()
@@ -167,8 +148,8 @@ export const projectGetFeature = defineSdkFeature({
     ...projectGet,
     handler: async (ctx: Ctx, input) => {
         const row = await loadProject(ctx, input.projectId);
-        // `decrypt` (et non `tryDecrypt`) : ici l'échec doit remonter en `locked`
-        // pour que le client ouvre l'invite, au lieu de rendre un projet vide.
+        // `decrypt` et non `tryDecrypt` : l'échec doit remonter en `locked` pour
+        // que le client ouvre l'invite, au lieu de rendre un projet vide.
         return { project: await readProject(ctx, row) };
     }
 });
@@ -190,8 +171,7 @@ export const projectAddFeature = defineSdkFeature({
             dueDate: input.project.dueDate,
             content: await encryptProject(cipher, payload)
         });
-        // Le tableau naît utilisable. Les colonnes suivent l'étage du projet,
-        // comme tout le reste de son arbre.
+        // Les colonnes suivent l'étage du projet, comme tout le reste de son arbre.
         for (const column of DEFAULT_COLUMNS) {
             await ctx.repo.board.createColumn({
                 projectId: row.id,
@@ -219,8 +199,8 @@ export const projectUpdateFeature = defineSdkFeature({
         const existing = await loadProject(ctx, input.projectId, 'write');
         await assertProjectUnlocked(ctx, existing);
 
-        // Le profil se réécrit d'où l'on est, chez lui : sous le codec de son
-        // domicile, dans la ligne de son domicile.
+        // Le profil se réécrit d'où l'on est, mais chez lui : codec et ligne du
+        // domicile.
         const cipher = await projectCipher(ctx, existing);
         // La version n'est pas dans le brouillon : on relit celle en place pour
         // qu'une édition du profil n'écrase jamais une valeur synchronisée.
@@ -237,8 +217,7 @@ export const projectUpdateFeature = defineSdkFeature({
         if (!row) throw new FeatureError('not_found', 'Projet introuvable');
 
         // Seuls les changements qu'on cherche des mois plus tard entrent dans la
-        // frise : un renommage ou un changement de statut, pas une retouche de
-        // description.
+        // frise : un renommage ou un statut, pas une retouche de description.
         if (previous.title !== payload.title) {
             await recordEvent(ctx, row, {
                 kind: 'projects.renamed',
@@ -289,13 +268,11 @@ export const projectSetVersionFeature = defineSdkFeature({
         await assertProjectUnlocked(ctx, existing);
 
         if (input.source === 'github_release') {
-            // Suivre les releases référence un dépôt de l'espace d'origine, que
-            // la fenêtre ne voit pas : un geste du domicile. Une version
-            // manuelle, elle, se pose d'où l'on est.
+            // Suivre les releases référence un dépôt de l'espace d'origine, que la
+            // fenêtre ne voit pas ; une version manuelle se pose d'où l'on est.
             assertAtHome(ctx, existing, 'le suivi des releases');
-            // Un projet gardé ne se synchronise pas : le service de fond du
-            // module Git lit sans session, il n'atteindra jamais l'étage gardé.
-            // Refus explicite plutôt qu'un réglage qui ne ferait rien.
+            // Le service de fond du module Git lit sans session : il n'atteindra
+            // jamais l'étage gardé. Refus explicite plutôt qu'un réglage sans effet.
             if (existing.security_tier === 'guarded') {
                 throw new FeatureError(
                     'validation',
@@ -308,9 +285,8 @@ export const projectSetVersionFeature = defineSdkFeature({
         const previous = await decryptProject(cipher, existing.content);
         if (!previous) throw new FeatureError('internal', 'Le corps du projet est illisible');
 
-        // En mode `github_release` le numéro appartient au module Git (par le
-        // contrat d'usage, `applyVersion`) : on garde celui en place et on
-        // ignore ce que demande le client.
+        // En `github_release` le numéro appartient au module Git (`applyVersion`) :
+        // on garde celui en place et on ignore ce que demande le client.
         const version = input.source === 'github_release' ? previous.version : input.version;
         const payload: StoredProject = { ...previous, version };
 
@@ -360,17 +336,13 @@ export const projectSetSecurityTierFeature = defineSdkFeature({
             );
         }
 
-        // Passer en confidentiel retire les liaisons aux objets d'espace. Elles
-        // sont en clair par construction (le dépôt, la base, le site, la cible
-        // appartiennent à l'espace, pas au projet) : rattacher un projet
-        // confidentiel à un dépôt nommé montrerait précisément ce que le palier
-        // est censé cacher, et les services de fond de ces modules lisent sans
-        // session. Les objets, leur cache et les autres projets qui s'en
-        // servent ne sont pas touchés : seules les liaisons tombent.
+        // Passer en confidentiel retire les liaisons aux objets d'espace, en clair
+        // par construction : rattacher un projet confidentiel à un dépôt nommé
+        // montrerait ce que le palier est censé cacher. Seules les liaisons tombent,
+        // pas les objets ni les autres projets qui s'en servent.
         //
-        // Fait **avant** la conversion, pour que les événements de frise soient
-        // enregistrés sous l'ancien tier, celui sous lequel le reste de
-        // l'historique du projet a été écrit.
+        // Avant la conversion, pour que les événements de frise soient écrits sous
+        // l'ancien palier, celui du reste de l'historique du projet.
         if (input.securityTier === 'guarded') {
             const repos = await ctx.repo.links.unlinkAllRepos(input.projectId, home);
             if (repos > 0) {
@@ -421,15 +393,11 @@ export const projectSetSecurityTierFeature = defineSdkFeature({
                 : row;
         if (!settled) throw new FeatureError('not_found', 'Projet introuvable');
 
-        // Un projet gardé ne se lit que chez son auteur : ses projections vers
-        // d'autres espaces n'ont plus d'objet, et `ctx.items.forget` les
-        // retire avec les restrictions par élément, ce qui est juste ici
-        // puisqu'un projet gardé n'existe que dans un espace personnel
-        // (`assertGuardedAllowed`), où aucune restriction de rôle n'a de sens.
-        // Ce qui garde l'invariant des deux côtés : `share.set` refuse
-        // d'entrée un projet gardé (`items.shareable`), et la bascule oublie
-        // ce qui existait. Sans ce ménage, une ligne `item_shares` dormante
-        // remontrerait le projet le jour où il rouvre.
+        // Un projet gardé ne se lit que chez son auteur : ses projections n'ont plus
+        // d'objet, et `ctx.items.forget` les retire avec les restrictions par
+        // élément, sans perte puisqu'un projet gardé vit dans un espace personnel.
+        // Sans ce ménage, une ligne `item_shares` dormante remontrerait le projet le
+        // jour où il rouvre.
         if (input.securityTier === 'guarded') await ctx.items.forget(input.projectId);
 
         await recordEvent(ctx, settled, {
@@ -454,8 +422,8 @@ export const projectArchiveFeature = defineSdkFeature({
     handler: async (ctx: Ctx, input) => {
         const existing = await loadProject(ctx, input.projectId, 'write');
         await assertProjectUnlocked(ctx, existing);
-        // Chez lui, même depuis une fenêtre : archiver ne détruit rien, et le
-        // projet quitte toutes ses fenêtres à la fois.
+        // Chez lui, même depuis une fenêtre : le projet quitte toutes ses fenêtres
+        // à la fois.
         const ok = await ctx.repo.projects.archive(
             input.projectId,
             existing.workspace_id,
@@ -479,7 +447,6 @@ export const projectRestoreFeature = defineSdkFeature({
     handler: async (ctx: Ctx, input) => {
         const existing = await loadProject(ctx, input.projectId, 'write');
         await assertProjectUnlocked(ctx, existing);
-        // En fin de son portefeuille, chez lui.
         const ok = await ctx.repo.projects.restore(input.projectId, existing.workspace_id);
         if (!ok) throw new FeatureError('not_found', 'Projet introuvable');
         await recordEvent(ctx, existing, { kind: 'projects.restored', label: 'Projet restauré' });
@@ -492,10 +459,9 @@ export const projectReorderFeature = defineSdkFeature({
     mutates: true,
     access: WRITE,
     handler: async (ctx: Ctx, input) => {
-        // Un projet projeté n'a pas de rang ici : son classement est celui de
-        // son domicile. Refus franc plutôt qu'abandon silencieux : le client ne
-        // le propose pas au glisser, un appel qui l'inclut est une erreur qu'il
-        // vaut mieux voir.
+        // Un projet projeté se classe chez lui. Refus franc plutôt qu'abandon
+        // silencieux : le client ne le propose pas au glisser, un appel qui l'inclut
+        // est une erreur qu'il vaut mieux voir.
         const [scope, hidden] = await Promise.all([ctx.sharing.scope(), ctx.items.restrictions()]);
         if (input.projectIds.some((id) => scope.foreignIds.has(id))) {
             throw new FeatureError(
@@ -503,12 +469,10 @@ export const projectReorderFeature = defineSdkFeature({
                 'Un projet partagé depuis un autre espace se classe chez lui, pas ici.'
             );
         }
-        // Un projet que ce rôle ne peut pas écrire est laissé de côté, en
-        // silence, comme un id étranger : c'est le portefeuille d'ici qu'on
-        // range, avec ce qu'on y voit.
+        // Un projet que ce rôle ne peut pas écrire est laissé de côté en silence :
+        // c'est le portefeuille d'ici qu'on range, avec ce qu'on y voit.
         const projectIds = input.projectIds.filter((id) => !hidden.has(id));
-        // Ne touche jamais au corps chiffré : fonctionne donc aussi sur des
-        // projets masqués, session verrouillée.
+        // Ne touche jamais au corps chiffré : fonctionne sur des projets masqués.
         await ctx.repo.projects.reorder(ctx.workspaceId, projectIds);
         return { projectIds };
     }

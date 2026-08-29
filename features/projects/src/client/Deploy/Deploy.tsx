@@ -24,24 +24,14 @@ interface DeployProps {
 }
 
 /**
- * L'onglet Déploiement d'un projet : les cibles qu'il met en production.
+ * L'onglet Déploiement d'un projet : les cibles qu'il met en production. La
+ * cible n'appartient pas au projet, qui n'en tient qu'un pointeur, et deux
+ * projets déployant la même pile compose sont le cas normal ; tout l'affichage
+ * vient du bloc du module (`DEPLOY_CLIENT_PROVIDER`), sans que cet écran
+ * importe le module.
  *
- * Enveloppe mince, exactement comme les onglets Git, Bases et Audience — et
- * c'est nouveau : le déploiement fut le dernier module à vivre **dans** le
- * projet. **La cible n'appartient pas au projet** : elle vit dans sa feature,
- * avec sa clé, son historique et son suivi d'état, et plusieurs projets peuvent
- * déployer la même — le cas normal quand un client et un serveur partent dans la
- * même pile compose. Cet onglet ne possède qu'un pointeur (`projects.deployList`
- * / `deployLink` / `deployUnlink`) et délègue tout l'affichage au module
- * Déploiement, par son contrat client (`DEPLOY_CLIENT_PROVIDER`) : cet écran
- * n'importe pas le module. C'est le bloc du module (`LinkedTarget`) qui charge
- * sa cible lui-même, suit les invalidations de la feature et porte son
- * dialogue de réglage.
- *
- * Corollaire à connaître : déclencher relève du droit `deploy`, pas de
- * `projects`. Un membre qui a l'un sans l'autre voit qu'il y a des cibles
- * rattachées sans pouvoir les ouvrir, et l'écran le dit. Module absent : même
- * lecture, des identifiants nus, et une phrase qui le dit.
+ * Déclencher relève du droit `deploy`, pas de `projects` : sans lui, ou sans le
+ * module, les cibles se listent en identifiants nus.
  */
 export function Deploy({ project, canWrite }: DeployProps) {
     const permissions = useWorkspacePermissions();

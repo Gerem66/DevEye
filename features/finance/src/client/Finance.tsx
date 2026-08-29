@@ -22,29 +22,10 @@ import styles from './style.module.css';
 import type { FinanceBase } from './shared';
 
 /**
- * Les finances de l'espace: le grand livre, pour un particulier comme pour
- * une PME.
- *
- * Feature de premier rang et non un onglet des Projets, pour la même raison que
- * Git, les bases de données et l'audience: les comptes appartiennent à
- * l'**espace**, pas à un projet. Un espace personnel tient les finances d'un
- * foyer, un espace partagé celles d'une structure, et c'est le même objet des
- * deux côtés: seul le mode entreprise (la TVA) s'ajoute par-dessus.
- *
- * **Aucun mot de passe n'est jamais demandé ici.** Tout vit à l'étage ouvert du
- * chiffrement, sous la clé de l'espace, parce que tout membre d'un espace
- * partagé doit pouvoir lire les comptes de la structure sans dépendre de la
- * session de son propriétaire.
- *
- * ## Cinq onglets, et ce qui décide de la répartition
- *
- * Ce qu'on **regarde** (Tableau de bord), ce qu'on **saisit** (Opérations), et
- * les trois choses qu'on **règle** puis qu'on oublie: les comptes, les
- * enveloppes, les échéances. Les catégories et les réglages ne sont pas des
- * onglets mais deux panneaux de la coquille de réglages commune (Général,
- * Catégories), derrière le bouton de l'en-tête: on y va deux fois par an, et
- * leur donner une place permanente dans la barre pousserait vers le bas ce
- * qu'on ouvre tous les jours.
+ * Les finances de l'espace : le grand livre. Aucun mot de passe demandé : tout
+ * vit à l'étage ouvert, pour que tout membre d'un espace partagé lise les
+ * comptes sans dépendre de la session du propriétaire. Cinq onglets ; les
+ * catégories et les réglages sont des panneaux de la coquille de réglages.
  */
 
 type TabId = 'dashboard' | 'transactions' | 'accounts' | 'budgets' | 'recurring';
@@ -63,14 +44,12 @@ export type TransactionDraft = { transaction: FinanceTransaction | null; account
 export default function Finance() {
     const permissions = useWorkspacePermissions();
     const canWrite = permissions.canFeature('finance', 'write');
-    // L'espace vient du SDK, plus des props: c'est lui qui borne le socle.
     const workspaceId = useActiveWorkspace()?.id ?? null;
 
     const [tab, setTab] = useState<TabId>('dashboard');
     const [dialog, setDialog] = useState<TransactionDraft | null>(null);
 
-    // Le niveau profond des finances : l'onglet ouvert. La racine `view:finance`
-    // vient de l'accueil ; cette feature n'annonce que le sien.
+    // L'onglet ouvert est le niveau profond ; la racine `view:finance` vient de l'accueil.
     const liveTarget = useLiveSegment('l1', tab);
     useEffect(() => {
         if (!liveTarget || liveTarget.value === null) return;
@@ -79,11 +58,8 @@ export default function Finance() {
     }, [liveTarget]);
 
     /**
-     * Le socle, en une seule requête groupée.
-     *
-     * Les trois lectures partent ensemble et arrivent ensemble: séparées, un
-     * rendu intermédiaire montrerait un journal dont les comptes ne sont pas
-     * encore chargés, c'est-à-dire des lignes sans nom de compte.
+     * Le socle en une seule requête groupée : séparées, un rendu intermédiaire
+     * montrerait des lignes sans nom de compte.
      */
     const load = useCallback(async () => {
         const [config, accounts, categories] = await Promise.all([
@@ -122,10 +98,6 @@ export default function Finance() {
 
     return (
         <div className={styles.feature}>
-            {/* L'en-tête commun à toutes les features : les onglets à gauche,
-                les actions à droite, le bouton de réglages commun en dernier.
-                Ses deux panneaux (Général, Catégories) ont remplacé l'engrenage
-                maison et ses deux dialogues. */}
             <header className={styles.toolbar}>
                 <nav className={styles.tabs} role='tablist'>
                     {TABS.map((entry) => (
@@ -155,12 +127,7 @@ export default function Finance() {
 
             {error && <p className={styles.error}>{error}</p>}
 
-            {/*
-                Un fondu court d'un onglet à l'autre, et rien de plus. Un
-                glissement horizontal supposerait un ordre entre les onglets
-                qui n'existe pas, et une durée plus longue se ferait sentir dès
-                le troisième aller-retour de la journée.
-            */}
+            {/* Un fondu court : un glissement supposerait un ordre entre les onglets. */}
             <AnimatePresence mode='wait' initial={false}>
                 <motion.div
                     key={tab}

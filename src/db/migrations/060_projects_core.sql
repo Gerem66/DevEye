@@ -1,29 +1,15 @@
 -- Projets : suivi du travail, des premières phases au déploiement.
 --
--- Découpage clair / chiffré (voir Docs/SECURITY_MODEL.md). Reste en clair
--- **uniquement** ce dont le serveur a besoin pour lister, trier, compter et
--- router sans rien déchiffrer : `workspace_id`, `status`, `security_tier`,
--- `sort_order`, les dates, `archived_at`, `assignee_user_id`, `message_count`.
--- Passe par `content` chiffré tout ce qui identifie : titres, descriptions,
--- étiquettes, versions, corps des messages, libellés d'événements.
+-- Découpage clair / chiffré (voir Docs/SECURITY_MODEL.md) : reste en clair ce
+-- dont le serveur a besoin pour lister, trier, compter et router sans
+-- déchiffrer, tout ce qui identifie passe par `content` chiffré.
+-- L'étage est choisi par projet (`security_tier`) : `open` autorise la
+-- synchronisation de fond, `guarded` n'ouvre le projet que sur session
+-- déverrouillée. Tout l'arbre d'un projet suit le tier de son projet.
 --
--- L'étage de chiffrement n'est **pas** fixé par la feature mais choisi par
--- projet (`projects.security_tier`), comme les comptes mail : `open` autorise
--- la synchronisation de fond (git, déploiement), `guarded` la rend impossible
--- mais n'ouvre le projet que sur une session déverrouillée. Tout l'arbre d'un
--- projet suit le tier de son projet — c'est ce qui rend la bascule atomique.
---
--- Deux partis pris structurants :
---
---   1. **Rien ne se supprime.** `archived_at` sort une ligne de l'espace de
---      travail ; aucune commande de suppression n'existe dans ce module. La
---      frise d'historique (`project_events`) s'appuie dessus.
---   2. **Les comptes se suppriment, pas le travail.** Les références vers
---      `users` sont `ON DELETE SET NULL` et non `CASCADE` (contrairement aux
---      notes, qui sont personnelles) : `src/db/repos/users.ts` supprime bien la
---      ligne, et le départ d'une personne ne doit pas emporter les projets, les
---      cartes et les messages d'un espace partagé. Le client affiche « compte
---      supprimé » pour un auteur nul.
+-- Rien ne se supprime (`archived_at`), et les références vers `users` sont
+-- `ON DELETE SET NULL` : le départ d'une personne ne doit pas emporter les
+-- projets d'un espace partagé (le client affiche « compte supprimé »).
 
 CREATE TABLE IF NOT EXISTS projects (
     id             INT AUTO_INCREMENT PRIMARY KEY,
@@ -124,8 +110,7 @@ CREATE TABLE IF NOT EXISTS project_cards (
 );
 
 -- Dépendances entre cartes : `card_id` est bloquée par `blocked_by_card_id`.
--- La paire est unique, et l'absence de garde d'acyclicité est assumée côté SQL —
--- c'est le handler qui refuse un cycle, là où le graphe est connu.
+-- Pas de garde d'acyclicité côté SQL : c'est le handler qui refuse un cycle.
 CREATE TABLE IF NOT EXISTS project_card_deps (
     card_id            INT NOT NULL,
     blocked_by_card_id INT NOT NULL,

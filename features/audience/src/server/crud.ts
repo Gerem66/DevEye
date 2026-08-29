@@ -27,29 +27,21 @@ import {
 } from './_shared';
 
 /**
- * Les sites suivis de l'espace : inventaire, réglages, clé, ordre.
+ * Les sites suivis de l'espace : inventaire, réglages, clé, ordre. Rien ici ne
+ * mesure quoi que ce soit ; les chiffres viennent de `stats.ts` et les
+ * événements entrent par les routes publiques du module.
  *
- * **Rien ici ne mesure quoi que ce soit.** Ces commandes déclarent des sites et
- * lisent ce qu'ils sont ; les chiffres viennent de `stats.ts`, et les
- * événements entrent par une porte qui n'est pas une commande du tout
- * (`routes.ts`, les routes publiques du module).
- *
- * ⚠️ Toute écriture qui touche à l'identité, à l'état ou aux origines d'un site
- * doit appeler `ingestOf()?.invalidate()`. L'ingestion tient un cache
- * `clé publique → site` pour ne pas interroger la base à chaque visite : sans
- * cet appel, un site éteint continuerait d'accepter des mesures pendant toute
- * la vie du processus, et c'est le genre de panne qu'on ne voit qu'en relisant
- * des chiffres qu'on croyait arrêtés.
+ * Toute écriture qui touche à l'identité, à l'état ou aux origines d'un site
+ * doit appeler `ingestOf()?.invalidate()` : l'ingestion tient un cache
+ * `clé publique → site`, et sans cet appel un site éteint continuerait
+ * d'accepter des mesures pendant toute la vie du processus.
  */
 
 /**
- * Recharge un site **du domicile** avec ses chiffres, pour le rendre au client.
- *
- * Une requête de plus après chaque écriture, assumée : sans elle, `projectCount`
- * et les compteurs de la journée seraient absents ou devinés, et la liste
- * afficherait « 0 projet » sur un site qui en sert trois (un chiffre faux est
- * pire qu'un aller-retour). Domicile seulement : les gestes qui l'appellent
- * sont réservés au domicile, et le codec est donc celui d'ici.
+ * Recharge un site du domicile avec ses chiffres. Une requête de plus après
+ * chaque écriture, assumée : sans elle, `projectCount` et les compteurs du jour
+ * seraient devinés, et la liste afficherait « 0 projet » sur un site qui en
+ * sert trois.
  */
 async function reloadHomeSite(ctx: Ctx, siteId: number): Promise<AudienceSite> {
     const row = await ctx.repo.findWithStats(siteId, ctx.workspaceId);
@@ -61,8 +53,8 @@ async function reloadHomeSite(ctx: Ctx, siteId: number): Promise<AudienceSite> {
 export const audienceCountFeature = defineSdkFeature({
     ...audienceCount,
     handler: async (ctx: Ctx) => {
-        // Les mêmes lignes que la liste — projetées comprises, restrictions
-        // déduites : la carte doit compter ce que la liste montre.
+        // Les mêmes lignes que la liste, projetées comprises et restrictions déduites :
+        // la carte doit compter ce que la liste montre.
         const rows = await ctx.repo.listVisible(ctx.workspaceId);
         const hidden = await ctx.items.restrictions();
         return { count: rows.filter((r) => hidden.get(r.id) !== 'none').length };
@@ -100,11 +92,9 @@ export const audienceGetFeature = defineSdkFeature({
         const row = await ctx.repo.findWithStats(input.siteId, home.workspace_id);
         if (!row) throw new FeatureError('not_found', 'Site introuvable');
 
-        // Le site est chiffré chez LUI ; les projets liés listés ici sont ceux
-        // d'ICI, et ils viennent du contrat de Projets, avec leur titre : c'est
-        // ce qui rend l'interconnexion cliquable dans les deux sens. Ils sont
-        // tous à l'étage ouvert (un projet confidentiel ne peut pas lier), donc
-        // lisibles sans session.
+        // Le site est chiffré chez lui, mais les projets liés listés ici sont ceux de
+        // l'espace appelant, avec leur titre, pour rendre l'interconnexion cliquable
+        // dans les deux sens.
         const [usage, counts] = await Promise.all([projectUsageOf(ctx, input.siteId), projectCountsOf(ctx)]);
 
         return {
@@ -115,17 +105,11 @@ export const audienceGetFeature = defineSdkFeature({
                 counts.get(row.id) ?? 0
             ),
             usage: [...usage],
-            // L'adresse par laquelle un site suivi atteint l'ingestion :
-            // `AUDIENCE_ORIGIN` quand elle est réglée, `PUBLIC_ORIGIN` sinon,
-            // sans barre finale (la balise la recolle, et deux barres dans une
-            // URL servie à des tiers se remarquent). Le contexte la porte
-            // (`ctx.origins.public`, l'ex `ingestOrigin()` de la native) parce
-            // que **le serveur est le seul à la connaître** : l'application vit
-            // derrière le VPN et l'ingestion doit être joignable sans lui, donc
-            // les deux adresses diffèrent par construction. La déduire de
-            // l'origine du navigateur (ce que faisait la première version)
-            // donnait une balise juste en développement et fausse en
-            // production, c'est-à-dire fausse là où elle compte.
+            // L'adresse par laquelle un site suivi atteint l'ingestion, sans barre
+            // finale (la balise la recolle). Le serveur est le seul à la connaître :
+            // l'application vit derrière le VPN et l'ingestion doit être joignable sans
+            // lui, donc les deux adresses diffèrent par construction et la déduire de
+            // l'origine du navigateur donnerait une balise fausse en production.
             ingestOrigin: ctx.origins.public
         };
     }
@@ -166,8 +150,8 @@ export const audienceSiteUpdateFeature = defineSdkFeature({
     mutates: true,
     access: { level: 'write' },
     handler: async (ctx: Ctx, input) => {
-        // Domicile seulement : les réglages d'un site — origines, rétention,
-        // mode visiteur — appartiennent à son espace.
+        // Domicile seulement : les réglages d'un site (origines, rétention, mode
+        // visiteur) appartiennent à son espace.
         await loadHomeSite(ctx, input.siteId);
         const ref = nameRef(input.name);
         const clash = await ctx.repo.findByName(ctx.workspaceId, ref);
@@ -200,9 +184,8 @@ export const audienceSiteRotateKeyFeature = defineSdkFeature({
     handler: async (ctx: Ctx, input) => {
         await loadHomeSite(ctx, input.siteId);
         await ctx.repo.setPublicKey(input.siteId, ctx.workspaceId, generatePublicKey());
-        // Sans cette invalidation, l'ancienne clé resterait acceptée jusqu'au
-        // prochain redémarrage — c'est-à-dire que la rotation ne servirait à
-        // rien, précisément dans le cas où on la demande.
+        // Sans cette invalidation, l'ancienne clé resterait acceptée jusqu'au prochain
+        // redémarrage : la rotation ne servirait à rien là où on la demande.
         ingestOf()?.invalidate();
         ctx.audit({
             level: 'warning',
@@ -217,21 +200,17 @@ export const audienceSiteRotateKeyFeature = defineSdkFeature({
 
 export const audienceSiteRemoveFeature = defineSdkFeature({
     ...audienceSiteRemove,
-    // La native diffusait aussi le sujet `projects` (les projets qui suivaient
-    // ce site ne perdent qu'un pointeur, et leur onglet doit se relire) ; le
-    // SDK ne connaît que le sujet du module. Les compteurs d'onglets d'un
-    // projet se remettent à jour à leur prochaine lecture.
     mutates: true,
     access: { level: 'write' },
     handler: async (ctx: Ctx, input) => {
         await loadHomeSite(ctx, input.siteId);
-        // Libellés, sessions, événements, agrégat et liaisons partent en
-        // CASCADE. Les projets qui suivaient ce site ne perdent qu'un pointeur.
+        // Libellés, sessions, événements, agrégat et liaisons partent en CASCADE ; les
+        // projets qui suivaient ce site ne perdent qu'un pointeur.
         const removed = await ctx.repo.remove(input.siteId, ctx.workspaceId);
         if (!removed) throw new FeatureError('not_found', 'Site introuvable');
-        // Projections, restrictions et route de notification ne tiennent à
-        // aucune clé étrangère : sans ce ménage, elles s'appliqueraient au
-        // prochain site à hériter de l'identifiant.
+        // Projections, restrictions et route de notification ne tiennent à aucune clé
+        // étrangère : sans ce ménage, elles s'appliqueraient au prochain site à hériter
+        // de l'identifiant.
         await ctx.items.forget(input.siteId);
         ingestOf()?.invalidate();
         ctx.audit({
@@ -249,9 +228,8 @@ export const audienceReorderFeature = defineSdkFeature({
     mutates: true,
     access: { level: 'write' },
     handler: async (ctx: Ctx, input) => {
-        // Aucune invalidation ici : l'ordre d'affichage n'entre dans aucune
-        // décision de l'ingestion, et vider son cache pour un glisser-déposer
-        // lui ferait relire la base sans raison.
+        // Aucune invalidation ici : l'ordre d'affichage n'entre dans aucune décision de
+        // l'ingestion, et vider son cache lui ferait relire la base sans raison.
         await ctx.repo.reorder(ctx.workspaceId, input.siteIds);
         return { ok: true as const };
     }

@@ -17,24 +17,17 @@ import type { MailAccount, MailSecurityTier } from '../contracts/domain';
 
 /**
  * Le palier de chiffrement d'une boîte : l'onglet Chiffrement de ses réglages.
- *
- * Le choix vivait dans le formulaire d'ajout/édition du compte, au milieu des
- * champs IMAP : il en sort, parce que ce n'est pas de la configuration de
- * connexion mais un réglage de l'élément, comme pour les autres features. Le
- * formulaire d'ajout garde le choix à la création (il détermine sous quelle
+ * Le formulaire d'ajout garde le choix à la création (il détermine sous quelle
  * clé la boîte naît) ; ensuite, c'est ici.
  *
- * Changer de palier re-chiffre toute la boîte côté serveur (comptes, dossiers,
- * enveloppes) : le bouton l'annonce, et le passage par `withSecrecy` couvre le
- * déverrouillage qu'exige une boîte protégée.
+ * Changer de palier re-chiffre toute la boîte côté serveur (compte, dossiers,
+ * enveloppes) : le bouton l'annonce, et `withSecrecy` couvre le déverrouillage
+ * qu'exige une boîte protégée.
  *
- * La boîte est l'élément de la portée (`scope.itemId`) ; l'onglet n'existe
- * qu'à cette échelle, le manifest le dit.
- *
- * Une boîte projetée d'un autre espace n'a pas de palier à régler ici : il
- * relie la boîte au mot de passe de son auteur, et le serveur refuse le
- * changement depuis une fenêtre. L'onglet le dit plutôt que d'ouvrir sur un
- * refus.
+ * La boîte est l'élément de la portée (`scope.itemId`) ; l'onglet n'existe qu'à
+ * cette échelle. Une boîte projetée d'un autre espace n'a pas de palier à régler
+ * ici : il relie la boîte au mot de passe de son auteur, et le serveur refuse le
+ * changement depuis une fenêtre. L'onglet le dit plutôt que d'ouvrir sur un refus.
  */
 export default function MailEncryptionPanel({ scope, canWrite }: SettingsPanelProps) {
     const accountId = scope.kind === 'item' ? scope.itemId : null;

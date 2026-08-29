@@ -6,11 +6,9 @@ interface SyncProgressBarProps {
 }
 
 /**
- * Thin strip pinned to the top of its (positioned, `overflow: hidden`)
- * container — used on both the account card (list) and the selected-account
- * header (folder view), so the same sync is visible from either slide of
- * Panel A. Folder-count granularity is the finest available without
- * instrumenting the IMAP fetch itself (see `MailSyncService`/`_syncStatus`).
+ * Thin strip pinned to the top of its (positioned, `overflow: hidden`) container,
+ * used on both the account card and the selected-account header, so the same
+ * sync is visible from either slide of Panel A.
  */
 export function SyncProgressBar({ progress }: SyncProgressBarProps) {
     return (

@@ -3,13 +3,7 @@ import { defineSdkFeature } from '@deveye/types/sdk/server';
 
 import { postDueRecurring, readConfig, startOfMonth, today, WRITE, type Ctx } from '../_shared';
 
-/**
- * Réglages de l'espace et carte de l'accueil.
- *
- * Deux commandes de lecture minuscules et une écriture, réunies parce qu'elles
- * répondent à la même question: « dans quel cadre lit-on ce livre, et où en
- * est-il ». Tout le reste de la feature suppose ces réponses connues.
- */
+/** Réglages de l'espace et carte de l'accueil. */
 
 export const financeConfigFeature = defineSdkFeature({
     ...financeConfig,
@@ -31,13 +25,7 @@ export const financeConfigUpdateFeature = defineSdkFeature({
     }
 });
 
-/**
- * Ce que lit la carte de l'accueil: le solde, et le mois en cours.
- *
- * Le solde plutôt qu'un décompte de comptes, parce que « 3 comptes » ne dit rien
- * qu'on veuille savoir d'un coup d'œil depuis l'accueil, là où « 4 210 € » dit
- * exactement ce pour quoi on ouvre la feature.
- */
+/** La carte de l'accueil : le solde plutôt qu'un décompte de comptes. */
 export const financeSummaryFeature = defineSdkFeature({
     ...financeSummary,
     handler: async (ctx: Ctx) => {

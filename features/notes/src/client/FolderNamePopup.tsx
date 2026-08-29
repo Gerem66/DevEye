@@ -8,15 +8,10 @@ import { NOTE_FOLDER_MAX_LENGTH } from '../contracts/domain';
 
 export const FOLDER_NAME_POPUP = 'popup-folder-name';
 
-/** Input: an existing name to rename, or '' to create a new folder. */
 export type FolderNameInput = { name: string; mode: 'add' | 'rename' } | null;
-/** Result: the trimmed name to save, or null on cancel. */
+/** The trimmed name to save, or null on cancel. */
 export type FolderNameResult = string | null;
 
-/**
- * A minimal name prompt shared by "Nouveau dossier" and folder rename. Kept
- * separate from the note editor so folder management stays out of the note form.
- */
 export default function FolderNamePopup() {
     const [mode, setMode] = useState<'add' | 'rename'>('add');
     const [name, setName] = useState('');

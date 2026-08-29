@@ -1,12 +1,8 @@
 /**
- * One-shot "the dashboard has its essential first data" signal.
- *
- * The login splash holds its fade-out until this fires, so the progress-bar
- * animation always finishes onto a populated home rather than a half-empty grid.
- * HomePage marks it ready once the device list (its above-the-fold content) has
- * resolved; the splash also caps the wait so a stalled load can't trap the user.
- *
- * Reset on logout / session loss so the next sign-in waits afresh.
+ * One-shot "the dashboard has its essential first data" signal. The login splash
+ * holds its fade-out until this fires, so its progress bar always finishes onto a
+ * populated home; the splash caps the wait so a stalled load can't trap the user.
+ * Reset on logout so the next sign-in waits afresh.
  */
 let ready = false;
 const listeners = new Set<() => void>();

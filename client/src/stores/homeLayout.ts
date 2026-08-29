@@ -21,17 +21,10 @@ import { ws } from '@/api/ws';
 import { getActiveWorkspaceId } from './workspace';
 
 /**
- * Home grid layout: ordered **sections**, each holding ordered tiles. Sections
- * are fully modular — none by default, added/removed/reordered by the user —
- * and, since the unification, **untyped**: appareils, fonctionnalités,
- * raccourcis et dossiers cohabitent dans la même. Une section est donc
- * identifiée par son `id`, et une tuile par ce qu'elle est.
- * Persisted in localStorage for an instant paint, and synced to the server
- * (debounced) so the arrangement follows the user across devices. Mirrors
- * {@link ./theme}.
- *
- * Holds only non-sensitive personalization metadata (feature ids, device ids,
- * pinned link objects) — never zero-knowledge payload.
+ * Home grid layout: ordered sections, each holding ordered tiles of any kind. A
+ * section is identified by its `id`, a tile by what it is. Persisted in
+ * localStorage for an instant paint and synced to the server (debounced). Holds
+ * only non-sensitive personalization metadata, never zero-knowledge payload.
  */
 const KEY_PREFIX = 'deveye:homeLayout';
 
@@ -41,7 +34,6 @@ function storageKey(): string | null {
     return id === null ? null : `${KEY_PREFIX}:${id}`;
 }
 
-/** A fresh home: no grid section, no navbar mini-widget. */
 const EMPTY_LAYOUT: HomeLayout = { topbar: [], sections: [] };
 
 function uid(): string {
@@ -74,8 +66,7 @@ function persist(): void {
     }
 }
 
-// Debounced server sync: coalesce rapid edits (a drag, several adds, typing a
-// section title) into one WS call.
+// Debounced server sync: coalesce rapid edits into one WS call.
 let syncTimer: ReturnType<typeof setTimeout> | null = null;
 function scheduleSyncToServer(): void {
     if (syncTimer) clearTimeout(syncTimer);
@@ -93,7 +84,6 @@ function commit(next: HomeLayout): void {
     for (const fn of listeners) fn();
 }
 
-/** Replace one section's tiles (matched by id), keeping the others/order intact. */
 function replaceItems(sectionId: string, items: HomeTile[]): void {
     commit({
         ...state,
@@ -109,16 +99,11 @@ export function findSection(layout: HomeLayout, sectionId: string): HomeSection 
     return layout.sections.find((s) => s.id === sectionId);
 }
 
-/** Toutes les tuiles posées sur l'accueil, sections confondues. */
 function allTiles(layout: HomeLayout): HomeTile[] {
     return layout.sections.flatMap((s) => s.items);
 }
 
-/**
- * Every device id on the grid, whichever section holds it. Used by the readers
- * that don't care where a tile sits: the device popup views, the prune pass, and
- * "already placed" filtering in the picker (a device belongs to one section).
- */
+/** Every device id on the grid; a device belongs to exactly one section. */
 export function placedDeviceIds(layout: HomeLayout): string[] {
     return allTiles(layout)
         .filter((tile) => homeTileKind(tile) === 'device')
@@ -126,14 +111,8 @@ export function placedDeviceIds(layout: HomeLayout): string[] {
 }
 
 /**
- * Same, for feature tiles (a feature also belongs to a single section).
- *
- * **Le contenu des dossiers en fait partie.** Une fonctionnalité rangée dans un
- * dossier est posée sur l'accueil comme une autre : simplement, sa carte attend
- * derrière une tuile au lieu d'occuper une place. Tout ce qui se demande « où
- * est-elle ? » lit cette liste, donc la règle « pas deux fois la même » et la
- * survie d'une vue ouverte à une bascule d'espace n'ont pas à connaître les
- * dossiers.
+ * Same, for feature tiles, folder contents included: a feature filed in a folder
+ * counts as placed, so the "not twice" rule needs no knowledge of folders.
  */
 export function placedFeatureIds(layout: HomeLayout): HomeFeatureId[] {
     return allTiles(layout).flatMap((tile) => {
@@ -142,24 +121,13 @@ export function placedFeatureIds(layout: HomeLayout): HomeFeatureId[] {
     });
 }
 
-/**
- * Les fonctionnalités **rangées dans un dossier**, où qu'il soit.
- *
- * Le complément de `placedFeatureIds` : ce qui est posé sur l'accueil sans être
- * là-dedans se trouve sur la grille, et peut donc être déplacé dans un dossier.
- */
+/** Les fonctionnalités rangées dans un dossier, où qu'il soit. */
 export function foldedFeatureIds(layout: HomeLayout): HomeFeatureId[] {
     return allTiles(layout).flatMap((tile) => (isHomeFolder(tile) ? tile.items : []));
 }
 
-/**
- * Retrouve un dossier dans la disposition, et la section qui le porte.
- *
- * Par son seul id : un dossier est unique dans tout l'accueil, et ses appelants
- * (l'écran qui le déploie, la fiche qui l'édite) n'ont aucune raison de tenir la
- * section à jour de leur côté. Relire par id à chaque rendu est aussi ce qui
- * fait que l'écran suit une modification venue d'un autre membre de l'espace.
- */
+/** Retrouve un dossier et la section qui le porte : son id est unique dans tout
+ *  l'accueil. */
 export function findFolder(layout: HomeLayout, folderId: string): { section: HomeSection; folder: HomeFolder } | null {
     for (const section of layout.sections) {
         for (const tile of section.items) {
@@ -170,13 +138,7 @@ export function findFolder(layout: HomeLayout, folderId: string): { section: Hom
 }
 
 // ── Sections ───────────────────────────────────────────────────────────────
-/**
- * Append an empty section and return its id (so the UI can focus it).
- *
- * Plus rien à choisir avant : une section ne se distingue plus par ce qu'elle
- * tient, donc le bouton l'ajoute sur-le-champ au lieu d'ouvrir une popup pour
- * une question qui n'existe plus.
- */
+/** Append an empty section and return its id, so the UI can focus it. */
 export function addSection(): string {
     const id = uid();
     commit({ ...state, sections: [...state.sections, { id, items: [] }] });
@@ -201,12 +163,8 @@ export function renameSection(sectionId: string, title: string): void {
 }
 
 /**
- * Rend une section repliable, ou cesse de l'être.
- *
- * Retirer le repli **retire aussi** l'état initial replié : une section qu'on ne
- * peut pas déplier mais qui démarre repliée serait simplement invisible, et
- * c'est le genre d'incohérence qu'il vaut mieux rendre impossible que d'avoir à
- * expliquer.
+ * Retirer le repli retire aussi l'état initial replié : une section qu'on ne peut
+ * pas déplier mais qui démarre repliée serait invisible.
  */
 export function setSectionCollapsible(sectionId: string, collapsible: boolean): void {
     commit({
@@ -239,23 +197,14 @@ export function setSectionOrder(ids: string[]): void {
     commit({ ...state, sections: reordered });
 }
 
-/**
- * L'identité des tuiles d'une section, dans l'ordre.
- *
- * C'est le vocabulaire du déplacement : l'organiseur s'en sert pour ses
- * identifiants de glissé, le store pour retrouver une tuile. La forme de
- * l'union, elle, n'est lue que par `homeTileId` (voir `@deveye/types`).
- */
 export function sectionTileIds(section: HomeSection): string[] {
     return section.items.map((tile) => homeTileId(tile));
 }
 
 /**
- * Où insérer, sachant devant quelle tuile on lâche.
- *
- * `null` = à la fin (on a lâché sur la section elle-même, pas sur une tuile).
- * Une tuile inconnue vaut la fin aussi : mieux vaut un rang inattendu qu'un
- * indice négatif qui déplacerait la mauvaise chose.
+ * Où insérer, sachant devant quelle tuile on lâche. `null` = à la fin, et une
+ * tuile inconnue aussi : mieux vaut un rang inattendu qu'un indice négatif qui
+ * déplacerait la mauvaise chose.
  */
 function insertIndex(section: HomeSection, beforeId: string | null): number {
     if (beforeId === null) return section.items.length;
@@ -264,22 +213,10 @@ function insertIndex(section: HomeSection, beforeId: string | null): number {
 }
 
 /**
- * Déplace une tuile dans sa section.
- *
- * ## Une tuile se désigne par son identité, jamais par son rang
- *
- * Ces deux fonctions étaient appelées avec des indices lus dans l'instantané de
- * rendu de l'organiseur. Or un glissé émet des dizaines d'événements par seconde
- * quand React n'a rendu qu'une fois : l'indice décrivait alors une liste qui
- * n'existait plus, et l'on découpait **une autre tuile** — ou rien du tout, ce
- * qui insérait un `undefined` dans `items`. Une disposition portant un trou ne
- * passe plus le schéma : elle est rejetée par le serveur, et relue vide au
- * démarrage suivant. C'est-à-dire un accueil effacé, sans rien pour le dire.
- *
- * Une identité, elle, ne périme pas. Les deux bouts du déplacement — la tuile et
- * le point d'insertion — sont donc résolus **ici**, sur l'état courant, au moment
- * où l'écriture a lieu. Un appelant en retard ne peut plus au pire que demander
- * un déplacement sans objet, qui ne fait rien.
+ * Déplace une tuile dans sa section. Elle se désigne par son identité, jamais par
+ * son rang : un glissé émet des dizaines d'événements par seconde là où React n'a
+ * rendu qu'une fois, et un indice lu dans l'instantané de rendu décrirait une
+ * liste qui n'existe plus. Les deux bouts sont résolus ici, sur l'état courant.
  */
 export function moveSectionItem(sectionId: string, tileId: string, beforeId: string | null): void {
     const section = findSection(state, sectionId);
@@ -289,10 +226,8 @@ export function moveSectionItem(sectionId: string, tileId: string, beforeId: str
     const to = insertIndex(section, beforeId);
     if (from === to) return;
 
-    // `to` est un rang de la liste **d'avant le retrait** : c'est la convention
-    // d'`arrayMove`, celle que dnd-kit anime à l'écran. Le corriger du décalage
-    // du retrait décalerait le résultat d'un cran par rapport à ce que le glissé
-    // vient de montrer.
+    // `to` est un rang de la liste d'avant le retrait (convention d'`arrayMove`,
+    // celle que dnd-kit anime à l'écran).
     const items = section.items.slice();
     const [moved] = items.splice(from, 1);
     items.splice(to, 0, moved);
@@ -300,12 +235,9 @@ export function moveSectionItem(sectionId: string, tileId: string, beforeId: str
 }
 
 /**
- * Déplace une tuile vers une autre section (un glissé entre deux).
- *
- * Plus aucune condition de genre : les sections tiennent toutes n'importe quelle
- * tuile depuis l'unification, donc tout va partout. La tuile est retirée avant
- * d'être posée, donc le déplacement ne peut pas la dupliquer. Mêmes garanties
- * d'identité que {@link moveSectionItem}.
+ * Déplace une tuile vers une autre section. Elle est retirée avant d'être posée,
+ * donc le déplacement ne peut pas la dupliquer. Mêmes garanties d'identité que
+ * {@link moveSectionItem}.
  */
 export function transferSectionItem(fromId: string, toId: string, tileId: string, beforeId: string | null): void {
     const source = findSection(state, fromId);
@@ -333,12 +265,9 @@ export function transferSectionItem(fromId: string, toId: string, tileId: string
 
 // ── Tiles ──────────────────────────────────────────────────────────────────
 /**
- * Pose une tuile en fin de section.
- *
- * Le passage unique de tous les ajouts : le plafond du schéma est tenu **avant**
- * l'écriture (une section trop longue ne se valide plus, donc le serveur la
- * refuse et le prochain démarrage relit une disposition vide — un accueil effacé
- * en silence), et l'appelant n'a qu'à décrire ce qu'il pose.
+ * Pose une tuile en fin de section. Le plafond du schéma est tenu avant
+ * l'écriture : une section trop longue ne se valide plus, le serveur la refuse et
+ * le prochain démarrage relit une disposition vide.
  */
 function appendTile(sectionId: string, tile: HomeTile): boolean {
     const section = findSection(state, sectionId);
@@ -347,13 +276,7 @@ function appendTile(sectionId: string, tile: HomeTile): boolean {
     return true;
 }
 
-/**
- * Retire une tuile de sa section, quel que soit son genre.
- *
- * Une seule fonction pour les quatre : la tuile se désigne par son identité, et
- * la retirer ne demande rien de plus. C'est l'appelant qui décide s'il faut
- * demander confirmation avant (voir l'organiseur, pour un dossier plein).
- */
+/** Retire une tuile de sa section, sans confirmation : c'est l'appelant qui décide. */
 export function removeTile(sectionId: string, tileId: string): void {
     const section = findSection(state, sectionId);
     if (!section) return;
@@ -361,14 +284,7 @@ export function removeTile(sectionId: string, tileId: string): void {
     if (items.length !== section.items.length) replaceItems(sectionId, items);
 }
 
-/**
- * Pose une fonctionnalité sur la grille.
- *
- * Refusée si elle est **déjà quelque part** sur l'accueil, dossiers compris : la
- * garde est celle de la disposition entière, pas celle de la section. Le
- * sélecteur filtre déjà sur la même liste ; l'avoir aussi ici est ce qui rend la
- * règle vraie quel que soit le chemin.
- */
+/** Refusée si la fonctionnalité est déjà quelque part sur l'accueil, dossiers compris. */
 export function addFeature(sectionId: string, featureId: HomeFeatureId): void {
     if (placedFeatureIds(state).includes(featureId)) return;
     appendTile(sectionId, featureId);
@@ -381,15 +297,7 @@ export function addDevice(sectionId: string, deviceId: string): void {
 }
 
 // ── Dossiers ───────────────────────────────────────────────────────────────
-/**
- * Réécrit un dossier en place, où qu'il soit, en laissant tout le reste de la
- * disposition intact. Passage unique des mutations ci-dessous : la forme de
- * l'union (chaîne ou objet) n'est lue qu'ici.
- *
- * Par le seul id du dossier : il est unique dans tout l'accueil, et ses
- * appelants — l'organiseur, qui le déploie sous la section — n'ont aucune raison
- * de tenir la section à jour de leur côté.
- */
+/** Réécrit un dossier en place, où qu'il soit : son id est unique. */
 function updateFolder(folderId: string, fn: (folder: HomeFolder) => HomeFolder): void {
     let touched = false;
     const sections = state.sections.map((section) => ({
@@ -403,10 +311,7 @@ function updateFolder(folderId: string, fn: (folder: HomeFolder) => HomeFolder):
     if (touched) commit({ ...state, sections });
 }
 
-/**
- * Ajoute un dossier vide en fin de section et rend son id, pour que
- * l'organiseur le déploie dans la foulée.
- */
+/** Ajoute un dossier vide en fin de section et rend son id (`null` si la section est pleine). */
 export function addFolder(sectionId: string): string | null {
     const id = uid();
     return appendTile(sectionId, { kind: 'folder', id, title: '', items: [] }) ? id : null;
@@ -417,7 +322,6 @@ export function renameFolder(folderId: string, title: string): void {
     updateFolder(folderId, (folder) => ({ ...folder, title: title.slice(0, 40) }));
 }
 
-/** Où insérer dans un dossier, sachant devant quelle fonctionnalité on lâche. */
 function folderInsertIndex(folder: HomeFolder, beforeId: string | null): number {
     if (beforeId === null) return folder.items.length;
     const at = folder.items.indexOf(beforeId as HomeFeatureId);
@@ -425,20 +329,13 @@ function folderInsertIndex(folder: HomeFolder, beforeId: string | null): number 
 }
 
 /**
- * Range une fonctionnalité dans un dossier, d'où qu'elle vienne.
- *
- * Posée sur la grille, elle **quitte sa tuile dans la même écriture** : deux
- * mutations l'auraient laissée à deux endroits le temps d'un rendu, et surtout
- * la disposition partie au serveur entre les deux aurait porté le doublon.
- * Venant d'un autre dossier, même chose : elle en sort et entre ici d'un seul
- * coup.
+ * Range une fonctionnalité dans un dossier, d'où qu'elle vienne. Elle quitte sa
+ * tuile de grille ou son autre dossier dans la même écriture, deux mutations
+ * ayant envoyé au serveur une disposition portant le doublon.
  */
 export function fileInFolder(folderId: string, featureId: HomeFeatureId, beforeId: string | null): void {
-    // Le plafond du schéma, tenu **avant** l'écriture. Un dossier trop plein ne
-    // se valide plus : le serveur refuse la disposition entière et le prochain
-    // démarrage la relit vide, c'est-à-dire un accueil effacé sans un mot. Une
-    // fonctionnalité déjà rangée ici ne compte pas — elle ne fait que changer
-    // de rang.
+    // Le plafond du schéma, tenu avant l'écriture. Une fonctionnalité déjà rangée
+    // ici ne fait que changer de rang.
     const target = findFolder(state, folderId)?.folder;
     if (!target) return;
     if (!target.items.includes(featureId) && target.items.length >= HOME_FOLDER_MAX_ITEMS) return;
@@ -461,11 +358,11 @@ export function fileInFolder(folderId: string, featureId: HomeFeatureId, beforeI
         return { ...section, items };
     });
     // Sans dossier cible, rien : retirer la tuile de la grille pour la ranger
-    // nulle part serait une disparition pure et simple.
+    // nulle part serait une disparition.
     if (filed) commit({ ...state, sections });
 }
 
-/** Réordonne une fonctionnalité **dans** son dossier. */
+/** Réordonne une fonctionnalité dans son dossier, sans l'en sortir. */
 export function moveFolderItem(folderId: string, featureId: HomeFeatureId, beforeId: string | null): void {
     updateFolder(folderId, (folder) => {
         const from = folder.items.indexOf(featureId);
@@ -474,20 +371,15 @@ export function moveFolderItem(folderId: string, featureId: HomeFeatureId, befor
         if (from === to) return folder;
         const items = folder.items.slice();
         const [moved] = items.splice(from, 1);
-        // `to` est un rang d'avant le retrait, convention d'`arrayMove` : c'est
-        // ce que le glissé vient de montrer à l'écran.
+        // `to` est un rang d'avant le retrait, convention d'`arrayMove`.
         items.splice(to, 0, moved);
         return { ...folder, items };
     });
 }
 
 /**
- * Sort une fonctionnalité de son dossier et la **repose sur la grille**.
- *
- * Le geste du téléphone : on ouvre le dossier, on tire une carte sur le côté,
- * elle reprend sa place parmi les autres. En une seule écriture, pour la même
- * raison que {@link fileInFolder} — le temps d'un rendu à deux endroits serait
- * un doublon parti au serveur.
+ * Sort une fonctionnalité de son dossier et la repose sur la grille, en une seule
+ * écriture pour la même raison que {@link fileInFolder}.
  */
 export function unfileFromFolder(
     folderId: string,
@@ -515,12 +407,8 @@ export function unfileFromFolder(
     if (freed) commit({ ...state, sections });
 }
 
-/**
- * Retire une fonctionnalité d'un dossier **et de l'accueil**.
- *
- * Le × de la fiche du dossier, à distinguer du glissé vers la grille : ici elle
- * s'en va pour de bon et redevient proposable au marché.
- */
+/** Retire une fonctionnalité du dossier et de l'accueil : elle redevient
+ *  proposable au marché. */
 export function removeFolderItem(folderId: string, featureId: HomeFeatureId): void {
     updateFolder(folderId, (folder) => ({
         ...folder,
@@ -555,10 +443,9 @@ export function addShortcut(sectionId: string, draft: ShortcutDraft): void {
 export function updateShortcut(sectionId: string, id: string, draft: ShortcutDraft): void {
     const section = findSection(state, sectionId);
     if (!section) return;
-    // La garde de genre n'est pas décorative : les identifiants de toutes les
-    // tuiles vivent désormais dans le même espace de noms, et écrire sans elle
-    // remplacerait une carte d'appareil par un raccourci si l'appelant se
-    // trompait de cible.
+    // Les identifiants de toutes les tuiles vivent dans le même espace de noms :
+    // sans la garde de genre, un appelant trompé de cible remplacerait une carte
+    // d'appareil par un raccourci.
     replaceItems(
         sectionId,
         section.items.map((tile) => (isShortcutTile(tile) && tile.id === id ? shortcutFrom(id, draft) : tile))
@@ -578,9 +465,9 @@ export function removeTopbarWidget(id: HomeTopbarWidgetId): void {
 }
 
 /**
- * Drop device tiles whose device no longer exists (deleted), across every
- * section. No-op when nothing is stale. Only call once devices have actually
- * loaded, so a transient empty list can't wipe the layout.
+ * Drop device tiles whose device no longer exists, across every section. Only
+ * call once devices have actually loaded, so a transient empty list can't wipe
+ * the layout.
  */
 export function pruneMissingDevices(validDeviceIds: Set<string>): void {
     let changed = false;
@@ -594,13 +481,11 @@ export function pruneMissingDevices(validDeviceIds: Set<string>): void {
 }
 
 /**
- * Called by AuthProvider when a user bundle arrives. The server copy wins over
- * localStorage so the layout propagates across devices; skipped when the server
- * has none (fresh user) so the last local edit stands.
+ * The server copy wins over localStorage so the layout propagates across devices;
+ * skipped when the server has none, so the last local edit stands.
  */
 export function syncHomeLayoutFromServer(serverLayout: HomeLayout | null): void {
-    // Espace sans disposition enregistree : accueil vide, et surtout pas celui
-    // de l'espace precedent.
+    // Espace sans disposition enregistree : accueil vide, pas celui de l'espace precedent.
     if (!serverLayout) {
         resetHomeLayout();
         return;

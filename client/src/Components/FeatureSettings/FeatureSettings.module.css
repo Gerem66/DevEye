@@ -6,14 +6,10 @@
     grid-template-columns: 190px 1fr;
     gap: var(--space-lg);
     min-height: 0;
-    /* Hauteur FIXE, pas minimale : chaque section a la sienne, et un dialogue
-       qui se redimensionne à chaque clic de la barre latérale fait danser tout
-       l'écran. Le panneau défile à l'intérieur (`overflow-y` sur `.panel`).
-
-       ⚠️ Surtout pas de `flex: 1` ici : dans la colonne flex du corps du
-       dialogue, sa base à 0 ÉCRASE la hauteur explicite, et le dialogue
-       reprenait la taille du contenu — précisément ce que cette règle
-       interdit. C'est le bug qui a fait poser ce commentaire. */
+    /* Hauteur FIXE, pas minimale : un dialogue qui se redimensionne à chaque
+       clic de la barre latérale fait danser l'écran ; le panneau défile à
+       l'intérieur. Surtout pas de `flex: 1` : dans la colonne flex du corps du
+       dialogue, sa base à 0 écrase la hauteur explicite. */
     height: min(540px, 70vh);
 }
 
@@ -83,8 +79,6 @@
     min-width: 0;
     overflow-y: auto;
 }
-
-/* ------------------------------------------------------------- une section */
 
 .section {
     display: flex;
@@ -169,8 +163,6 @@
     font-size: 0.78rem;
     line-height: 1.45;
 }
-
-/* --------------------------------------------------------- liste de canaux */
 
 .channelList {
     display: flex;
@@ -308,9 +300,8 @@
 }
 
 .rowAction:disabled {
-    /* framer-motion n'intervient pas ici, mais on garde le même levier que
-       partout ailleurs : `filter` plutôt qu'`opacity`, pour ne pas entrer en
-       conflit avec une animation ajoutée plus tard. */
+    /* `filter` plutôt qu'`opacity`, comme partout : pas de conflit avec une
+       animation. */
     filter: opacity(0.4);
     cursor: default;
 }
@@ -330,8 +321,6 @@
     font-size: 0.85rem;
     line-height: 1.6;
 }
-
-/* ------------------------------------------------- formulaires des sections */
 
 .field {
     display: flex;
@@ -392,7 +381,6 @@
     height: 8px;
     border-radius: 50%;
 }
-
 
 /* Une destination d'un autre espace : présente, inerte, sans identité. */
 .channelRowForeign {

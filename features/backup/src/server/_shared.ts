@@ -25,13 +25,9 @@ import type { BackupEngine } from './service';
 import type { BackupRepo } from './repo';
 
 /**
- * Ce que les handlers de sauvegarde partagent : les gardes d'accès, la lecture
- * du chiffré, et la projection des lignes SQL vers les DTO.
- *
- * **Aucun verrou de session nulle part**, et c'est la propriété qui fonde le
- * module : tout vit à l'étage ouvert, parce qu'une sauvegarde doit partir à
- * 3 h du matin. Une commande qui exigerait une session déverrouillée serait un
- * travail qui ne s'exécute que quand quelqu'un regarde.
+ * Ce que les handlers partagent : gardes d'accès, lecture du chiffré,
+ * projection des lignes vers les DTO. Aucun verrou de session : tout vit à
+ * l'étage ouvert.
  */
 
 export type Ctx = SdkFeatureContext<BackupRepo>;
@@ -58,12 +54,7 @@ export interface StoredRun {
     error: string | null;
 }
 
-/**
- * Le moteur du module, posé par `createService` au démarrage : le remplaçant
- * du `ctx.backups` natif. Un singleton d'étendue module, assumé : le moteur
- * est unique par processus, exactement comme avant le rapatriement (patron
- * `setEngine` de CloudSync).
- */
+/** Le moteur, posé par `createService` au démarrage : unique par processus. */
 let engineRef: BackupEngine | null = null;
 
 export function setEngine(engine: BackupEngine | null): void {
@@ -92,12 +83,7 @@ export async function readJsonWith<T>(cipher: SdkCipher, blob: string): Promise<
     }
 }
 
-/**
- * Les deux contrats que ce module consomme, relus à l'appel : CloudSync (un
- * module, absent tant qu'il n'est pas installé) et Bases de données (offert
- * par l'app tant que la feature est native, par son module ensuite ; d'ici,
- * aucune différence).
- */
+/** Les deux contrats consommés, relus à l'appel : chacun peut être absent. */
 export function cloudSyncProvider(ctx: Pick<Ctx, 'providers'>): CloudSyncBackupProvider | undefined {
     return ctx.providers.get<CloudSyncBackupProvider>(CLOUDSYNC_BACKUP_PROVIDER);
 }
@@ -124,13 +110,7 @@ export async function loadJob(ctx: Ctx, jobId: number, level: 'read' | 'write' =
     return row;
 }
 
-/**
- * Comme {@link loadJob}, mais exige que le travail soit **chez l'appelant**.
- *
- * Pour les gestes réservés au domicile : le modifier (sa destination et sa
- * source se choisissent parmi les objets de SON espace, que la fenêtre ne voit
- * pas) et le supprimer. Une fenêtre lit, déclenche et suit.
- */
+/** Comme {@link loadJob}, mais exige le domicile : modifier et supprimer se font chez lui. */
 export async function loadHomeJob(ctx: Ctx, jobId: number) {
     const row = await loadJob(ctx, jobId, 'write');
     if (row.workspace_id !== ctx.workspaceId) {
@@ -155,8 +135,7 @@ export async function toDestination(ctx: Ctx, row: BackupDestinationWithUsageRow
         region: stored.region ?? null,
         bucket: stored.bucket ?? null,
         accessKeyId: stored.accessKeyId ?? null,
-        // Le secret ne sort jamais : un secret qu'on ne renvoie pas ne peut
-        // fuiter ni par une capture d'écran ni par un journal.
+        // Le secret ne sort jamais.
         hasSecret: row.secret_enc.length > 0,
         pathStyle: row.path_style === 1,
         status: row.status as BackupDestinationStatus,
@@ -206,13 +185,8 @@ export async function toJob(ctx: Ctx, row: BackupJobWithStateRow, shares?: SdkSh
 }
 
 /**
- * L'intitulé de la source d'un travail, relu au moment de l'affichage.
- *
- * Recopié nulle part exprès : un partage renommé doit apparaître sous son
- * nouveau nom, et une base supprimée doit se voir comme telle plutôt que de
- * laisser croire que le travail tourne toujours. Les deux viennent de leur
- * feature par son contrat, la base sous le nom que Bases de données lui donne
- * (c'est elle qui tient le codec de son espace, pas ce module).
+ * L'intitulé de la source, relu à l'affichage et recopié nulle part : un
+ * partage renommé ou une base supprimée doivent se voir.
  */
 export async function sourceNameOf(
     ctx: Ctx,
@@ -246,9 +220,7 @@ export async function toRun(ctx: Ctx, row: BackupRunRow, cipher?: SdkCipher): Pr
         artifact: stored.artifact ?? null,
         encrypted: row.encrypted === 1,
         triggeredByUserId: row.triggered_by_user_id,
-        // Une exécution soldée au démarrage n'a pas de message : le processus
-        // est mort avant d'en écrire un. On le dit plutôt que de laisser un
-        // « échec » sans cause.
+        // Soldée au démarrage, l'exécution n'a pas de message : le processus est mort avant.
         error:
             row.status === 'failed'
                 ? (stored.error ?? 'Interrompue : le serveur a redémarré pendant la sauvegarde.')

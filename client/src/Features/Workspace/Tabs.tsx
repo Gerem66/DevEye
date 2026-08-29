@@ -15,12 +15,8 @@ export interface TabsProps<T extends string> {
 }
 
 /**
- * Barre d'onglets de la page Espace.
- *
- * Un seul rôle : découper une page qui listait tout à la suite. Les onglets sont
- * construits par l'appelant en fonction des droits, si bien qu'un onglet affiché
- * mène toujours à quelque chose d'utilisable — plutôt qu'à une section vide ou
- * grisée.
+ * Barre d'onglets de la page Espace. L'appelant les construit selon les droits :
+ * un onglet affiché mène toujours à quelque chose d'utilisable.
  */
 export default function Tabs<T extends string>({ tabs, active, onSelect }: TabsProps<T>) {
     return (

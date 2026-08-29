@@ -1,12 +1,7 @@
 /**
- * Domaines de messagerie jetable.
- *
- * Liste **embarquée** plutôt que téléchargée : elle bouge lentement, et la
- * dépendre d'un service tiers ferait dépendre une réponse locale et instantanée
- * de la disponibilité d'un dépôt GitHub. Volontairement courte et centrée sur
- * les fournisseurs réellement rencontrés — une liste de 100 000 entrées coûterait
- * de la mémoire pour un gain marginal, et le drapeau n'est de toute façon qu'un
- * signal parmi d'autres dans le score.
+ * Domaines de messagerie jetable, liste embarquée plutôt que téléchargée : elle
+ * bouge lentement, et une réponse locale ne doit pas dépendre d'un dépôt tiers.
+ * Courte à dessein : le drapeau n'est qu'un signal parmi d'autres dans le score.
  */
 export const DISPOSABLE_DOMAINS: ReadonlySet<string> = new Set([
     '0-mail.com',

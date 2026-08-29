@@ -46,7 +46,6 @@ pub enum LogEvent {
     },
 }
 
-// ───────────────────────────── level helpers ──────────────────────────────
 fn level_rank(level: &str) -> u8 {
     LEVELS.iter().position(|l| *l == level).unwrap_or(1) as u8
 }
@@ -120,12 +119,10 @@ fn truncate_msg(s: String) -> String {
     t
 }
 
-// ───────────────────────────── command helpers ────────────────────────────
-/// Deadline for reading a source. None of these tools is naturally bounded — a
-/// container holding several GB of logs, a journal that has never been vacuumed —
-/// and their output only becomes visible once the process exits. Without a
-/// deadline, one fat source leaves the panel spinning with nothing to show and no
-/// reason given; with it, the query comes back as an error one can act on.
+/// Deadline for reading a source. None of these tools is naturally bounded (a
+/// container holding several GB of logs, a journal never vacuumed) and their
+/// output only becomes visible once the process exits: without a deadline, one
+/// fat source leaves the panel spinning with no reason given.
 const READ_TIMEOUT: Duration = Duration::from_secs(45);
 /// Same, for the inventory: detection has to feel immediate, and a wedged engine
 /// daemon must cost a listing, not the whole panel.
@@ -137,13 +134,10 @@ const POLL_INTERVAL: Duration = Duration::from_millis(50);
 /// if it overruns. `label` is what the error blames (`docker logs`, `journalctl`…).
 ///
 /// Both streams come back because both can be log content: a container engine
-/// forwards the container's stderr to ours, and dropping it would lose half of
-/// what a service writes. On failure stderr is the diagnostic instead.
+/// forwards the container's stderr to ours. On failure stderr is the diagnostic.
 ///
 /// Each pipe is drained by its own thread rather than after the wait: a child
-/// filling a pipe nobody reads blocks on it, and the deadline would then be
-/// watching a process that can no longer make progress — the very hang this is
-/// meant to break.
+/// filling a pipe nobody reads blocks on it, the very hang this is meant to break.
 fn run_bounded<S: AsRef<std::ffi::OsStr>>(
     label: &str,
     program: &str,
@@ -228,7 +222,6 @@ fn file_label(path: &str) -> String {
         .unwrap_or_else(|| path.to_string())
 }
 
-// ───────────────────────────── source detection ───────────────────────────
 /// Container engines whose logs we can list and read. Both expose the same `ps`
 /// and `logs` surface, so one reader serves them; the source id carries which one
 /// (`docker:<id>` / `podman:<id>`) because a host can perfectly well run both.
@@ -268,9 +261,8 @@ pub fn detect_sources() -> Vec<LogSource> {
         }
     }
 
-    // Conteneurs — quel que soit l'OS, pour chaque moteur qui répond. Un `ps` qui
-    // échoue (binaire absent, démon arrêté, socket interdite à l'utilisateur du
-    // service) ne donne simplement aucune source : l'interface le dit à sa façon.
+    // Conteneurs, quel que soit l'OS. Un `ps` qui échoue (binaire absent, démon
+    // arrêté, socket interdite) ne donne simplement aucune source.
     for bin in CONTAINER_RUNTIMES {
         let Some(list) = run_capture(
             bin,
@@ -326,7 +318,6 @@ pub fn detect_sources() -> Vec<LogSource> {
     out
 }
 
-// ───────────────────────────────── querying ───────────────────────────────
 /// Run one log query: read raw lines from the source, then apply the uniform
 /// post-filter (text/regex, severity floor, time window) and tail to `limit`.
 pub fn run_query(source_id: &str, filter: &LogFilter, limit: usize) -> Result<Vec<LogLine>> {
@@ -339,10 +330,8 @@ pub fn run_query(source_id: &str, filter: &LogFilter, limit: usize) -> Result<Ve
         .filter(|(bin, _)| CONTAINER_RUNTIMES.contains(bin));
 
     // Le plafond de balayage dépend de la source : une ligne de conteneur coûte
-    // bien plus cher qu'une ligne de journal — c'est la sortie applicative brute,
-    // jusqu'à `MAX_MSG` chacune, et le moteur la rend d'un bloc avant que quoi que
-    // ce soit ne s'affiche. Chercher y remonte donc moins loin dans le passé, ce
-    // qui est le prix d'une recherche qui revient.
+    // bien plus cher qu'une ligne de journal (sortie applicative brute, rendue
+    // d'un bloc), donc chercher y remonte moins loin dans le passé.
     let max_raw = if container.is_some() {
         MAX_RAW_CONTAINER
     } else {
@@ -406,7 +395,6 @@ fn post_filter(mut lines: Vec<LogLine>, filter: &LogFilter, limit: usize) -> Res
     let matcher = build_matcher(filter)?;
 
     lines.retain(|l| {
-        // Severity floor: a level is required and must meet the floor.
         if let Some(min) = min_rank {
             match l.level {
                 Some(lv) if level_rank(lv) >= min => {}
@@ -439,7 +427,6 @@ fn post_filter(mut lines: Vec<LogLine>, filter: &LogFilter, limit: usize) -> Res
     Ok(lines)
 }
 
-// ───────────────────────────────── readers ────────────────────────────────
 fn read_journald(filter: &LogFilter, raw_cap: usize) -> Result<Vec<LogLine>> {
     let mut args: Vec<String> = vec![
         "-o".into(),
@@ -659,7 +646,6 @@ fn read_eventlog(channel: &str, raw_cap: usize) -> Result<Vec<LogLine>> {
     Ok(lines)
 }
 
-// ───────────────────────────── timestamp parsing ──────────────────────────
 /// Days from 1970-01-01 to the given civil date (Howard Hinnant's algorithm).
 fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     let y = if m <= 2 { y - 1 } else { y };
@@ -701,7 +687,6 @@ fn parse_rfc3339_ms(s: &str) -> Option<i64> {
     Some(ms)
 }
 
-// ───────────────────────────────── tasks ──────────────────────────────────
 /// Enumerate sources off the runtime and stream the result.
 pub async fn detect_task(tx: Sender<LogEvent>) {
     let sources = tokio::task::spawn_blocking(detect_sources)

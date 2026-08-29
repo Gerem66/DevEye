@@ -31,12 +31,8 @@ const DAY = 86400;
 
 /**
  * Un service visible depuis cet espace : le sien, ou un que l'on y projette.
- * Lève `not_found` sinon.
- *
- * `level` décide de la garde : `ctx.items.assert` (l'ex `assertItem`) refuse
- * en plus les services qu'une restriction de rôle masque ou passe en lecture
- * seule. La feature seule ne suffit plus à répondre « ce service-là m'est-il
- * ouvert ? ».
+ * Lève `not_found` sinon ; `ctx.items.assert` refuse en plus ceux qu'une
+ * restriction de rôle masque ou passe en lecture seule.
  */
 async function loadService(ctx: Ctx, id: number, level: 'read' | 'write' = 'read'): Promise<UptimeServiceRow> {
     const row = await ctx.repo.services.findVisible(id, ctx.workspaceId);
@@ -88,8 +84,7 @@ async function loadStats(ctx: Ctx, now: number): Promise<Map<number, ServiceStat
  * **Le codec est choisi ligne par ligne** : un service projeté depuis un autre
  * espace reste chiffré sous la clé de cet espace-là, et le déchiffrer avec celle
  * d'ici rendrait un nom vide plutôt qu'une erreur (un service sans nom, qu'on
- * croirait mal enregistré). `ctx.sharing.scope()` est l'ex `shareScope(ctx,
- * 'uptime')` : mêmes `foreignIds`, `homeOf` et `cipherFor`.
+ * croirait mal enregistré).
  */
 async function toServices(ctx: Ctx, rows: UptimeServiceRow[]): Promise<UptimeService[]> {
     const now = Math.floor(Date.now() / 1000);
@@ -273,13 +268,9 @@ export const uptimeHandlers = [
             }
             // History, rollup and incidents go with it (ON DELETE CASCADE).
             await ctx.repo.services.delete(input.id, ctx.workspaceId);
-            // Projections, restrictions et route de notification ne sont rattachées
-            // par aucune clé étrangère : l'élément vit dans une table différente
-            // selon la feature. Sans ce ménage, une ligne orpheline s'appliquerait
-            // au prochain service à hériter de l'identifiant ; pour la route, avec
-            // en prime un « réglé à la main » qui l'empêcherait d'hériter d'Uptime.
-            // `ctx.items.forget` fait les deux (l'ex `itemSharing.forgetItem` +
-            // `notificationChannels.clearRoute`).
+            // Projections, restrictions et route de notification ne sont
+            // rattachées par aucune clé étrangère : sans ce ménage, une ligne
+            // orpheline s'appliquerait au prochain service à hériter de l'id.
             await ctx.items.forget(input.id);
             ctx.audit({
                 action: 'uptime.remove',

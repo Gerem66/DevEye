@@ -3,24 +3,11 @@ import { z } from 'zod';
 /**
  * Les cibles de déploiement d'un espace, et l'historique de ce qu'on y a poussé.
  *
- * **Une cible appartient à l'espace, pas à un projet.** C'est le renversement
- * qui fonde cette feature, le même que celui des dépôts git : une pile compose
- * sert souvent deux projets (un client, un serveur), et la modéliser comme une
- * propriété de l'un d'eux interdisait à l'autre de la voir. Un projet n'en garde
- * donc qu'une **liaison** (`project_deploy_links`), et délier n'efface jamais la
- * cible.
- *
- * Portée volontairement **étroite** : déclencher et suivre. DevEye ne configure
- * pas le déploiement, ne gère ni domaines ni variables d'environnement — tout
- * cela vit chez le fournisseur, qui le fait mieux. Ce module répond à deux
- * questions : « est-ce que je peux lancer ça d'ici ? » et « où en est le
- * dernier ? ».
- *
- * **Toujours à l'étage ouvert**, quel que soit le tier des projets qui s'y
- * rattachent : le suivi d'état tourne sans session, et une cible d'espace ne
- * peut pas suivre le palier de confidentialité de l'un de ses projets.
- * Corollaire assumé, identique à celui des dépôts : un projet confidentiel n'a
- * pas de déploiement.
+ * Une cible appartient à l'espace, pas à un projet : un projet n'en garde qu'une
+ * liaison (`project_deploy_links`), et délier n'efface jamais la cible. Portée
+ * étroite : déclencher et suivre, rien n'est configuré ici. Toujours à l'étage
+ * ouvert, quel que soit le tier des projets rattachés : le suivi d'état tourne
+ * sans session, et un projet confidentiel n'a donc pas de déploiement.
  */
 
 export const DEPLOY_TITLE_MAX_LENGTH = 120;
@@ -28,36 +15,21 @@ export const DEPLOY_DESCRIPTION_MAX_LENGTH = 500;
 export const DEPLOY_TARGET_NAME_MAX_LENGTH = 120;
 export const DEPLOY_EXTERNAL_ID_MAX_LENGTH = 128;
 
-/**
- * Les fournisseurs que le module sait déclencher.
- *
- * Un seul pour l'instant, et l'énumération est là pour que le second n'ait pas à
- * réécrire le contrat. Distinct de `credentialProviderSchema`, qui couvre aussi
- * GitHub : un jeton GitHub ne déploie rien.
- */
+/** Les fournisseurs que le module sait déclencher (une énumération, pour le second). */
 export const deployProviderSchema = z.enum(['dokploy']);
 export type DeployProvider = z.infer<typeof deployProviderSchema>;
 
 /**
- * L'état d'un déploiement, ramené à quatre valeurs.
- *
- * Les fournisseurs ont chacun leur vocabulaire (`done`, `success`, `idle`,
- * `error`, `failed`…). L'adaptateur les projette là-dessus, pour que
- * l'interface n'ait qu'un seul jeu d'états à connaître.
+ * L'état d'un déploiement, ramené à quatre valeurs : l'adaptateur y projette le
+ * vocabulaire de chaque fournisseur.
  */
 export const deployStatusSchema = z.enum(['queued', 'running', 'success', 'failed']);
 export type DeployStatus = z.infer<typeof deployStatusSchema>;
 
 /**
- * Ce qu'on déploie chez Dokploy : une **application** ou une pile **compose**.
- *
- * La distinction n'est pas cosmétique — chaque type a sa propre procédure de
- * déclenchement (`application.deploy` / `compose.deploy`) et sa propre
- * procédure d'historique (`deployment.all` / `deployment.allByCompose`). Une
- * cible sans son type serait indéployable.
- *
- * En pratique, une infra Dokploy est souvent majoritairement composée de piles
- * compose : les ignorer reviendrait à ne rien pouvoir déployer.
+ * Application ou pile compose : chacune a sa procédure de déclenchement
+ * (`application.deploy` / `compose.deploy`) et d'historique (`deployment.all` /
+ * `deployment.allByCompose`). Une cible sans son type serait indéployable.
  */
 export const deployTargetKindSchema = z.enum(['application', 'compose']);
 export type DeployTargetKind = z.infer<typeof deployTargetKindSchema>;
@@ -73,24 +45,14 @@ export const deployTargetSchema = z.object({
     /** `null` = le jeton a été retiré ; la cible reste, indéployable, et le dit. */
     credentialId: z.number().int().positive().nullable(),
     /**
-     * L'adresse de l'instance qui l'héberge, recopiée du jeton.
-     *
-     * Deux instances Dokploy peuvent servir la même pile sous le même nom ; sans
-     * elle, deux lignes de la liste seraient indiscernables. Elle vient du jeton
-     * et n'est jamais saisie ici.
+     * L'adresse de l'instance, recopiée du jeton : deux instances peuvent servir
+     * la même pile sous le même nom.
      */
     baseUrl: z.string().nullable(),
     /** L'état du dernier déploiement, ou `null` si rien n'est jamais parti d'ici. */
     lastStatus: deployStatusSchema.nullable(),
     lastDeployAt: z.number().int().nullable(),
-    /**
-     * Cet élément vient d'un **autre espace**, qui le projette ici.
-     *
-     * L'écran le signale d'une pastille : sans elle, rien ne distingue une
-     * ligne locale d'une fenêtre sur l'espace voisin — et les gestes réservés
-     * au domicile (supprimer, re-partager) sembleraient cassés au lieu de
-     * s'expliquer.
-     */
+    /** Vient d'un autre espace qui le projette ici : l'écran le signale d'une pastille. */
     foreign: z.boolean(),
     /** Combien de projets la déploient. */
     projectCount: z.number().int().nonnegative(),
@@ -158,13 +120,9 @@ export interface DeployTargetRow {
     sort_order: number;
     content: string;
     /**
-     * Dernier rapprochement réussi avec le fournisseur ; `null` = jamais.
-     *
-     * Porte deux rôles à la fois, et c'est voulu : il ordonne les cibles à
-     * réinterroger (la plus ancienne d'abord), **et** il distingue le premier
-     * rapprochement des suivants. Cette seconde lecture est ce qui empêche
-     * l'import initial de notifier : la première fois, tout l'historique de la
-     * cible est « nouveau » sans que rien ne vienne de se produire.
+     * Dernier rapprochement réussi ; `null` = jamais. Ordonne les cibles à
+     * réinterroger, et distingue le premier rapprochement des suivants : c'est
+     * ce qui empêche l'import initial de notifier tout l'historique.
      */
     synced_at: number | null;
     created: number;
@@ -181,29 +139,18 @@ export interface DeploymentRow {
     started_at: number;
     finished_at: number | null;
     /**
-     * Un avis est-il déjà parti pour ce déploiement ?
-     *
-     * Même rôle que `uptime_incidents.notified`, et pour la même raison : un avis
-     * appartient au **déploiement**, pas au tour de sondage qui l'a vu. Sans
-     * cette colonne, chaque tour renotifierait le même échec — et l'import
-     * initial d'une cible en enverrait un par ligne d'historique.
+     * Un avis est-il déjà parti ? Il appartient au déploiement, pas au tour de
+     * sondage : sans cette colonne, chaque tour renotifierait le même échec.
      */
     notified: number;
     content: string;
 }
 
 /**
- * Une cible à réinterroger, avec l'adresse de son instance et de quoi choisir
- * son tour.
- *
- * `base_url` vient du jeton par jointure : la boucle de fond n'a pas de session
- * pour repasser par la feature, et faire un second aller-retour par cible pour
- * lire son jeton coûterait une requête de plus pour une donnée déjà jointe.
- *
- * `in_flight` compte les déploiements non terminés que DevEye connaît. Il ne
- * sert qu'à trier : une cible qui a quelque chose en vol passe à chaque tour,
- * les autres attendent leur cadence. C'est ce qui permet de suivre un
- * déploiement à la minute sans sonder toutes les cibles aussi souvent.
+ * Une cible à réinterroger. `base_url` vient du jeton par jointure (la boucle
+ * de fond n'a pas de session). `in_flight` compte les déploiements non
+ * terminés connus : une cible qui en a passe à chaque tour, les autres
+ * attendent leur cadence.
  */
 export interface DeployTargetSyncRow extends DeployTargetRow {
     base_url: string | null;
@@ -212,16 +159,8 @@ export interface DeployTargetSyncRow extends DeployTargetRow {
 
 /**
  * Les accès Dokploy de l'espace : l'adresse d'une instance et sa clé d'API.
- *
- * Ils vivaient dans `workspace_credentials`, une table à deux propriétaires
- * (jetons GitHub de Git, clés Dokploy de Déploiement, distingués par un
- * `provider`). Le rapatriement du module les a ramenés chez lui, dans
- * `ft_deploy_credentials` (migration 099 du socle) : un module possède ses
- * tables, et une clé qui déploie n'a jamais eu de raison de partager la sienne
- * avec un jeton qui lit des dépôts. Le contrat perd donc son `provider`.
- *
- * Le secret ne sort **jamais** : seule sa présence est annoncée (`hasSecret`).
- * Toujours chiffré à l'étage ouvert : le suivi de fond tourne sans session.
+ * Le secret ne sort jamais (`hasSecret` seulement). Chiffré à l'étage ouvert :
+ * le suivi de fond tourne sans session.
  */
 export const DEPLOY_CREDENTIAL_LABEL_MAX_LENGTH = 64;
 export const DEPLOY_CREDENTIAL_SECRET_MAX_LENGTH = 512;

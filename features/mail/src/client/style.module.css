@@ -1,8 +1,8 @@
-/* ------------------------------------------------------------------ *
+/*
  * Feature panel — a slim top toolbar, then two columns: accounts/folders
  * and the message list. The reading pane is a popup (see MessagePopup),
  * so the message list gets the rest of the width to itself.
- * ------------------------------------------------------------------ */
+ */
 
 .root {
     display: flex;
@@ -213,12 +213,12 @@
     max-width: 60ch;
 }
 
-/* ------------------------------------------------------------------ *
+/*
  * Panel A — a two-slide horizontal track (see AccountPanel.tsx): the
  * account list, and the selected account + its folders. `.panelA` clips
  * the off-screen half; `.panelATrack` is 200% wide (each slide is 50% of
  * it, i.e. 100% of the real panel) and its `transform` is set inline.
- * ------------------------------------------------------------------ */
+ */
 
 .panelA {
     flex: 1 1 auto;
@@ -370,9 +370,7 @@
     background: var(--danger-bg);
 }
 
-/* ------------------------------------------------------------------ *
- * Account list (drag & drop, same technique as features/uptime/src/client/ServiceList)
- * ------------------------------------------------------------------ */
+/* Account list (drag & drop, same technique as features/uptime/src/client/ServiceList) */
 
 /* A grid, not a flex column, for one reason: `grid-auto-rows: 1fr` makes every
    row exactly as tall as the tallest card, whatever any individual card happens
@@ -635,9 +633,7 @@
     cursor: default;
 }
 
-/* ------------------------------------------------------------------ *
- * Folder tree
- * ------------------------------------------------------------------ */
+/* Folder tree */
 
 .folderTree {
     display: flex;
@@ -689,9 +685,7 @@
     padding: 1px 6px;
 }
 
-/* ------------------------------------------------------------------ *
- * Message list
- * ------------------------------------------------------------------ */
+/* Message list */
 
 /* No `gap`: it belongs to neither neighbour, so it stayed unlit on hover.
    `.messageRow`'s border separates the rows instead. */
@@ -851,9 +845,7 @@
     white-space: nowrap;
 }
 
-/* ------------------------------------------------------------------ *
- * Reading pane
- * ------------------------------------------------------------------ */
+/* Reading pane */
 
 .messagePopupBody {
     display: flex;
@@ -881,11 +873,11 @@
     line-height: 1.5;
 }
 
-/* ------------------------------------------------------------------ *
+/*
  * Alert banner — one thin, single-line strip covering every warning a
  * message can carry (blocked remote images, suspicious links). Click to
  * expand the full detail instead of stacking a separate box per warning.
- * ------------------------------------------------------------------ */
+ */
 
 .alertBanner {
     border-radius: var(--radius-sm);
@@ -1053,7 +1045,7 @@
     font-size: 0.9rem;
     line-height: 1.6;
     color: var(--text-primary);
-    /* The server already stripped everything unsafe (see src/mail/sanitize.ts) — this
+    /* The server already stripped everything unsafe (see server/sanitize.ts) — this
        just keeps a runaway table/image from stretching the reading column. */
     overflow-x: auto;
     word-break: break-word;
@@ -1085,11 +1077,11 @@
     word-break: break-word;
 }
 
-/* ------------------------------------------------------------------ *
+/*
  * Technical info popup (MessageInfoPopup) — a label/value list, then every
  * header line verbatim. Values are selectable and wrap rather than
  * ellipsize: the whole point is reading and copying them in full.
- * ------------------------------------------------------------------ */
+ */
 
 .infoBody {
     display: flex;
@@ -1168,9 +1160,7 @@
     white-space: pre-wrap;
 }
 
-/* ------------------------------------------------------------------ *
- * Forms (account popup, compose)
- * ------------------------------------------------------------------ */
+/* Forms (account popup, compose) */
 
 .form {
     display: flex;
@@ -1419,15 +1409,14 @@
     flex-wrap: wrap;
 }
 
-/* ------------------------------------------------------------------ *
+/*
  * Touch input
- *
  * The row actions live on hover, which a finger never produces — they
  * were simply unreachable. Here they come back into the flow beside the
  * date, permanently visible, which costs the sender and subject a little
  * width (both already ellipsize) and nothing else: the absolute
  * positioning and the fade exist purely to serve the hover reveal.
- * ------------------------------------------------------------------ */
+ */
 
 @media (hover: none) {
     .messageMeta {
@@ -1444,16 +1433,15 @@
     }
 }
 
-/* ------------------------------------------------------------------ *
+/*
  * Phones (the client's usual breakpoint — see WidgetPopup, WidgetGrid)
- *
  * The sidebar alone is wider than the whole viewport, so the two columns
  * become two steps of one journey instead: accounts → folders (panel A's
  * own slide track, unchanged) → messages. Only one column is mounted at a
  * time; `data-mobile-view` says which, and the toolbar's back arrow steps
  * out of the messages — the same ← already used on the account card, so
  * the gesture reads the same at every depth.
- * ------------------------------------------------------------------ */
+ */
 
 @media (max-width: 640px) {
     .feature {

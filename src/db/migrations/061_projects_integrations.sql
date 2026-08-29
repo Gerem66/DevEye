@@ -1,32 +1,17 @@
--- Projets : intégrations externes — dépôt git et déploiement.
+-- Projets : intégrations externes (dépôt git et déploiement).
 --
--- Découpage clair / chiffré, comme le reste du module. Reste en clair ce sur
--- quoi le serveur doit trier, dédupliquer et agréger sans clé : `sha`,
--- `committed_at`, `author_ref`, les statuts, les horodatages. Passe par
--- `content` chiffré tout ce qui identifie : nom du dépôt, nom de branche,
--- message de commit, nom et adresse de l'auteur, corps d'une release.
+-- Reste en clair ce sur quoi le serveur trie, déduplique et agrège sans clé
+-- (`sha`, `committed_at`, `author_ref`, statuts, horodatages), le reste passe
+-- par `content` chiffré. Le chiffrement étant non déterministe, ce qui doit être
+-- unique (nom de branche, tag) est porté par un condensé stable `*_ref`.
+-- `author_ref` (16 caractères du sha256 de l'e-mail) donne une identité stable
+-- sans stocker l'adresse en clair.
 --
--- Deux partis pris qui expliquent la forme de ces tables :
---
---   1. **Le graphe des commits est une agrégation SQL.** `committed_at` et
---      `author_ref` sont en clair précisément pour ça : dessiner vingt mille
---      points ne doit pas coûter vingt mille déchiffrements. `author_ref` est
---      un condensé de l'adresse e-mail (16 caractères de son sha256), donc une
---      identité stable **sans stocker l'adresse en clair**.
---   2. **Ce qui doit être unique ne peut pas être chiffré.** Le chiffrement est
---      non déterministe : deux chiffrés du même nom de branche diffèrent, et
---      aucune contrainte d'unicité ne tiendrait dessus. D'où les colonnes
---      `*_ref` — condensés stables qui portent l'unicité pendant que la valeur
---      lisible vit dans `content`.
---
--- ⚠️ `project_credentials.secret_enc` est **toujours** sous l'étage ouvert,
--- quel que soit le tier du projet : le service de fond doit pouvoir le lire
--- sans session. Il ne figure donc PAS dans la conversion de tier d'un projet
--- (`src/db/repos/projectRekey.ts`).
+-- `project_credentials.secret_enc` est toujours sous l'étage ouvert, quel que
+-- soit le tier du projet : le service de fond doit le lire sans session.
 
 -- Identifiants d'accès aux services externes, partagés par tout l'espace : un
--- jeton GitHub sert en général à plusieurs projets, et le ressaisir par projet
--- serait à la fois pénible et plus risqué.
+-- jeton GitHub sert en général à plusieurs projets.
 CREATE TABLE IF NOT EXISTS project_credentials (
     id           INT AUTO_INCREMENT PRIMARY KEY,
     workspace_id INT         NOT NULL,
@@ -79,10 +64,8 @@ CREATE TABLE IF NOT EXISTS project_repos (
 -- rattachement se fait une fois et vaut pour tous les commits de la personne,
 -- passés comme à venir.
 CREATE TABLE IF NOT EXISTS project_commit_authors (
-    -- Clé de substitution, et non la paire (project_id, author_ref) : la
-    -- conversion de tier (`projectRekey`) cible une ligne par **une seule**
-    -- colonne identifiante. Avec une clé composite, elle mettrait à jour
-    -- l'auteur de même empreinte dans tous les projets à la fois.
+    -- Clé de substitution, et non la paire (project_id, author_ref) : une ligne
+    -- se cible par une seule colonne identifiante.
     id           INT AUTO_INCREMENT PRIMARY KEY,
     project_id   INT         NOT NULL,
     -- 16 premiers caractères du sha256 de l'adresse e-mail : identité stable,

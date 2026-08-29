@@ -1,16 +1,7 @@
--- CloudSync passe au scope espace.
---
--- `sync_shares.workspace_id` existait deja (avec sa FK) mais n'a jamais ete
--- renseigne ni lu : `syncShares.create` ne l'acceptait meme pas en parametre.
--- On le backfill vers l'espace personnel du proprietaire, puis NOT NULL.
---
--- Aucune autre table `sync_*` n'a besoin de colonne : fichiers, versions,
--- sessions, evenements, exclusions et appareils rattaches passent tous par
--- `share_id`, donc cloisonner le partage cloisonne l'arbre entier.
---
--- Les blobs ne sont pas touches : CloudSync chiffre avec une BMK unique wrappee
--- par la cle serveur (cf. SECURITY_MODEL.md), independante des DEK utilisateur —
--- ce changement de rattachement ne l'affecte donc pas du tout.
+-- CloudSync passe au scope espace : `sync_shares.workspace_id` existait (avec sa
+-- FK) sans jamais etre renseigne. Backfill vers l'espace personnel, puis NOT NULL.
+-- Les autres tables `sync_*` passent par `share_id`. Les blobs ne sont pas
+-- touches : la BMK est independante des DEK utilisateur (cf. SECURITY_MODEL.md).
 
 UPDATE sync_shares s
 JOIN users u ON u.id = s.user_id

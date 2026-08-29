@@ -145,11 +145,8 @@ const buildStaticViews = (): ViewConfig[] => [
 ];
 
 /**
- * La feature dont une vue dépend, ou `null` si elle n'en dépend d'aucune.
- *
- * Les vues de compte et d'administration (profil, sécurité, logs, utilisateurs,
- * gestion de l'espace) n'en dépendent pas : elles ont leurs propres gardes, et
- * un rôle d'espace n'a pas à décider si l'on peut voir son propre profil.
+ * La feature dont une vue dépend, ou `null` : les vues de compte et
+ * d'administration ont leurs propres gardes, un rôle d'espace n'en décide pas.
  */
 function featureBehind(viewId: string): WorkspaceFeatureId | null {
     if (WORKSPACE_FEATURE_IDS.includes(viewId as WorkspaceFeatureId)) return viewId as WorkspaceFeatureId;
@@ -159,17 +156,10 @@ function featureBehind(viewId: string): WorkspaceFeatureId | null {
 }
 
 /**
- * Cette vue a-t-elle encore un sens dans l'espace où l'on arrive ?
- *
- * Trois conditions, et la troisième est la règle demandée : le rôle doit ouvrir
- * la feature, et la tuile doit **figurer sur l'accueil de la cible**. Une feature
- * qu'on n'y a pas posée n'a pas à s'ouvrir toute seule parce qu'on venait
- * d'ailleurs.
- *
- * Les vues **sans tuile** — profil, sécurité, journaux, utilisateurs, gestion de
- * l'espace — échappent à la règle : elles ne sont pas composées dans l'accueil,
- * donc l'y chercher n'aurait aucun sens, et leur contenu ne dépend pas de
- * l'espace (ou le suit, pour la gestion de l'espace). Les refermer serait gratuit.
+ * Cette vue a-t-elle encore un sens dans l'espace où l'on arrive ? Le rôle doit
+ * ouvrir la feature et la tuile doit figurer sur l'accueil de la cible. Les vues
+ * sans tuile (profil, sécurité, journaux, utilisateurs, espace) échappent à la
+ * règle : elles ne sont pas composées dans l'accueil.
  */
 function survivesWorkspaceSwitch(
     viewId: string,
@@ -184,8 +174,8 @@ function survivesWorkspaceSwitch(
     if (config && !config.hasCard) return true;
 
     if (viewId.startsWith(DEVICE_VIEW_PREFIX)) {
-        // Un appareil appartient à un espace : le même identifiant n'existe pas
-        // ailleurs, cette vue ne survit donc jamais — et c'est bien ainsi.
+        // Un appareil appartient à un espace : son id n'existe pas ailleurs, la
+        // vue ne survit donc jamais.
         return placedDeviceIds(layout).includes(viewId.slice(DEVICE_VIEW_PREFIX.length));
     }
     return placedFeatureIds(layout).includes(viewId as HomeFeatureId);
@@ -199,36 +189,15 @@ function getGreeting(): string {
 }
 
 /**
- * En-tête de l'accueil.
- *
- * L'espace personnel salue son propriétaire — il est à lui seul, son nom serait
- * une redite. Un espace partagé garde son nom en titre : une fois qu'on jongle
- * entre plusieurs, savoir d'un coup d'œil où l'on se trouve prime sur tout le
- * reste. La salutation ne disparaît pas pour autant, elle passe en sous-titre :
- * l'accueil appartient au lieu, mais on continue d'y être reçu.
- */
-/**
- * La courbe du repli d'une section.
- *
- * Départ franc, arrivée longue : c'est ce qui donne l'impression que la section
- * *se pose* au lieu de s'arrêter net. Un ressort aurait dépassé sa hauteur puis
- * serait revenu, ce qui sur une boîte qui se referme se lit comme un rebond
- * accidentel plutôt que comme une intention.
+ * Courbe du repli d'une section : départ franc, arrivée longue, la section se
+ * pose au lieu de s'arrêter net. Un ressort se lirait comme un rebond.
  */
 const FOLD_EASE = [0.32, 0.72, 0, 1] as const;
 
 /**
- * Une section de l'accueil, repliable ou non.
- *
- * Le repli est **local et éphémère** : l'état enregistré (`section.collapsed`)
- * dit seulement comment la section *s'ouvre*, pas comment on l'a laissée. C'est
- * délibéré — replier une section pour dégager la vue une minute ne devrait pas
- * modifier la disposition partagée de l'espace, ni partir en écriture sur le
- * réseau. Recharger la page revient donc à l'état choisi dans l'organiseur.
- *
- * Sans `collapsible`, il n'y a **rien à cliquer** : un chevron sur une section
- * que personne ne veut replier est une chose de plus à ignorer. Le titre reste
- * alors un simple intitulé.
+ * Section de l'accueil. Le repli est local et éphémère : `section.collapsed`
+ * dit comment la section s'ouvre, pas comment on l'a laissée ; replier pour
+ * dégager la vue ne doit ni modifier la disposition partagée ni écrire réseau.
  */
 function CollapsibleSection({ section, children }: { section: HomeSection; children: ReactNode }) {
     const foldable = section.collapsible === true;
@@ -256,10 +225,8 @@ function CollapsibleSection({ section, children }: { section: HomeSection; child
 
     return (
         <div className={styles.sectionGroup}>
-            {/* Le bouton **est** l'intitulé : une cible séparée du titre serait
-                minuscule, et le titre resterait un texte mort à côté. Une
-                section repliable sans titre reste cliquable — elle affiche
-                simplement le chevron seul. */}
+            {/* Le bouton est l'intitulé : une cible séparée serait minuscule.
+                Sans titre, le chevron seul reste cliquable. */}
             <button type='button' className={styles.sectionToggle} aria-expanded={!folded} onClick={toggle}>
                 <span
                     className={`icon icon-chevron-down ${folded ? styles.chevronFolded : styles.chevron}`}
@@ -268,19 +235,10 @@ function CollapsibleSection({ section, children }: { section: HomeSection; child
                 <span className={styles.sectionHeading}>{section.title ?? 'Section'}</span>
             </button>
 
-            {/*
-             * Le repli se **déroule**, il ne clignote pas.
-             *
-             * `height: auto` est une valeur que framer sait mesurer et animer ;
-             * c'est ce qui permet de garder la grille telle quelle, sans lui
-             * imposer une hauteur en dur qu'il faudrait tenir à jour. L'opacité
-             * va plus vite que la hauteur : le contenu s'efface pendant que la
-             * boîte se referme, plutôt que de rester net jusqu'au dernier pixel.
-             *
-             * `overflow: hidden` **seulement pendant le mouvement** : c'est lui
-             * qui découpe les tuiles au fil du repli, mais le garder ensuite
-             * rognerait le petit soulèvement des cartes au survol.
-             */}
+            {/* `height: auto` est mesuré et animé par framer, la grille garde sa
+                hauteur naturelle. `overflow: hidden` seulement pendant le
+                mouvement : gardé ensuite, il rognerait le soulèvement des cartes
+                au survol. */}
             <AnimatePresence initial={false}>
                 {!folded && (
                     <motion.div
@@ -306,6 +264,8 @@ function CollapsibleSection({ section, children }: { section: HomeSection; child
     );
 }
 
+/** Espace personnel : la salutation en titre ; espace partagé : son nom, pour
+ *  savoir d'un coup d'œil où l'on est, la salutation passe en sous-titre. */
 function homeHeading(workspace: Workspace, username: string): { title: string; subtitle: string } {
     if (workspace.kind === 'personal') {
         return { title: `${getGreeting()}, ${username}`, subtitle: upperFirst(formatDate()) };
@@ -324,13 +284,9 @@ function formatDate(): string {
 }
 
 /**
- * Majuscule initiale, et elle seule : `toLocaleDateString` rend « mercredi », or
- * le sous-titre ouvre une phrase.
- *
- * Remplace un `text-transform: capitalize` qui capitalisait chaque mot — correct
- * tant que le sous-titre n'était qu'une date, faux dès qu'il en dit plus (« 1
- * Membre », « Bonsoir Gerem »), et fautif même sur la date : en français les
- * noms de mois ne prennent pas de majuscule.
+ * Majuscule initiale seule : `toLocaleDateString` rend « mercredi » et le
+ * sous-titre ouvre une phrase. Pas de `text-transform: capitalize`, qui
+ * capitaliserait chaque mot (« 1 Membre », « 12 Juin »).
  */
 function upperFirst(text: string): string {
     return text.charAt(0).toUpperCase() + text.slice(1);
@@ -345,11 +301,8 @@ export default function HomePage() {
     const currentWorkspace = useActiveWorkspace();
     const layout = useHomeLayout();
     const { devices, loading: devicesLoading, error: devicesError } = useDevices();
-    // Ce que le module Appareils offre à l'accueil : la liste vivante, le
-    // panneau et la tuile d'un appareil. Lu au rendu, jamais à l'import (le
-    // registre est rempli par l'initialiseur, avant le premier rendu, et n'en
-    // bouge plus : la valeur est stable). `undefined` sans le module, et
-    // l'accueil ne connaît alors aucun appareil.
+    // Lu au rendu, jamais à l'import : le registre est rempli par
+    // l'initialiseur avant le premier rendu. `undefined` sans le module.
     const devicesModule = devicesProvider();
     const { canFeature, can } = useWorkspacePermissions();
     // Deux réglages de l'espace, deux capacités. Lues en booléens (et non via
@@ -362,34 +315,17 @@ export default function HomePage() {
     const [editing, setEditing] = useState(false);
     const [autoAddSection, setAutoAddSection] = useState(false);
     /**
-     * Une bascule d'espace est en cours : la disposition affichée est encore
-     * celle de l'espace quitté, et les droits sont déjà remis à zéro.
-     *
-     * Pendant cette fenêtre, la grille **reste montée et garde son visage** :
-     * marquer toutes les tuiles « Accès restreint » contre des droits vides
-     * était un instantané faux des deux espaces à la fois, donc le grisage est
-     * suspendu (et le clic avec, voir `handleExpand`).
-     *
-     * Rester à l'écran n'est pas qu'une politesse, c'est la condition de la
-     * glissade d'arrivée. L'identité de morphe d'une tuile est
-     * `époque:feature`, et l'époque vient de changer : les tuiles encore
-     * affichées se réinscrivent donc sous leur nouvelle identité, et celles que
-     * la cible partage viennent se poser dessus quand sa disposition remplace
-     * l'ancienne. Démonter la grille pendant l'aller-retour (un écran de
-     * chargement) laissait les tuiles sortantes inscrites sous l'ancienne
-     * époque : plus de paire, plus de mouvement.
+     * Bascule d'espace en cours : la disposition affichée est encore celle de
+     * l'espace quitté, les droits sont déjà vides. La grille reste montée sans
+     * grisage (des droits vides ne sont ceux de personne), et c'est ce qui permet
+     * aux tuiles communes de glisser vers leur nouvelle identité `époque:feature`.
      */
     const [switching, setSwitching] = useState(false);
     /**
-     * Le dossier déployé : son id, et la tuile d'où il sort.
-     *
-     * L'id, et non le dossier lui-même : son contenu est relu dans la
-     * disposition à chaque rendu, donc une modification faite par un autre
-     * membre de l'espace se voit tout de suite, et un dossier supprimé referme
-     * l'écran de lui-même. La mesure de la tuile, elle, est prise au clic : le
-     * fond recule aussitôt après, et le mesurer ensuite rendrait un cadre déjà
-     * rétréci. `offset` est la hauteur de l'en-tête de l'accueil, pour que les
-     * cartes déployées se posent là où commence la grille, et pas plus haut.
+     * Le dossier déployé : son id (relu dans la disposition à chaque rendu, donc
+     * vivant) et la tuile d'où il sort, mesurée au clic avant que le fond ne
+     * recule. `offset` est la hauteur de l'en-tête, pour poser les cartes au
+     * niveau de la grille.
      */
     const [openFolder, setOpenFolder] = useState<{ id: string; source: DOMRect; offset: number } | null>(null);
     /** L'en-tête (« Bonjour… »), mesuré à l'ouverture d'un dossier. */
@@ -402,17 +338,9 @@ export default function HomePage() {
     // The open popup's body element — feature content is portaled into it.
     const [popupBodyEl, setPopupBodyEl] = useState<HTMLDivElement | null>(null);
     // Repère des curseurs : le corps de la popup quand une feature est ouverte,
-    // la colonne de contenu de l'accueil sinon. Jamais un nœud appartenant à une
-    // feature — `FeatureKeepAlive` les déplace.
-    //
-    // C'est bien `content` — bornée à 1280 px et centrée — et non `main`, qui
-    // occupe toute la largeur : le repère doit être la boîte que le contenu
-    // remplit vraiment, sinon deux écrans de tailles différentes ne placent pas
-    // le curseur au même endroit de la même tuile. La popup, elle, est déjà
-    // bornée à 1240 px, donc son propre corps fait un repère juste.
-    //
-    // Rien n'y est pour autant rogné : le repère sert à convertir, le cadre de
-    // la fenêtre seul décide de ce qui s'affiche (voir `LiveCursors`).
+    // la colonne `content` sinon (bornée et centrée, et non `main` pleine
+    // largeur : deux écrans doivent placer le curseur au même point de la même
+    // tuile). Jamais un nœud d'une feature : `FeatureKeepAlive` les déplace.
     const [contentEl, setContentEl] = useState<HTMLDivElement | null>(null);
     // Timers for TTL-based auto-unmount, keyed by view id.
     const ttlTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -424,19 +352,10 @@ export default function HomePage() {
     // Expand requested while another popup is still open / animating out.
     const pendingExpandRef = useRef<{ widgetId: string; forceReset: boolean } | null>(null);
     /**
-     * L'époque d'espace **au moment où la popup s'est ouverte**, qui identifie sa
-     * paire de morphe avec la tuile d'origine.
-     *
-     * Sans elle, garder une vue ouverte en changeant d'espace la faisait
-     * disparaître : la disposition remplacée démonte puis remonte toutes les
-     * tuiles, la nouvelle tuile reparaît avec le même `layoutId` que la popup
-     * ouverte, et framer-motion — qui n'admet qu'un élément par identité —
-     * projette alors la popup **dans** cette tuile. Mesuré : la popup passait de
-     * 1143×743 à 290×206, la taille d'une carte, sans jamais se refermer côté
-     * React (d'où le fond assombri qui restait).
-     *
-     * Figer l'époque suffit : la tuile d'après-bascule porte une autre identité,
-     * la paire ne peut plus se former, et la popup reste où elle est.
+     * L'époque d'espace à l'ouverture de la popup, qui identifie sa paire de
+     * morphe. Sans elle, une bascule remonte les tuiles avec le même `layoutId`
+     * que la popup ouverte, et framer-motion (un seul élément par identité)
+     * projette la popup dans la tuile, à la taille d'une carte.
      */
     const morphEpochRef = useRef(0);
 
@@ -452,9 +371,8 @@ export default function HomePage() {
     }, []);
 
     /**
-     * Remonte une vue à neuf sans toucher à son ouverture : le contenu repart de
-     * zéro, la popup ne bouge pas. C'est ce qui permet à une feature de traverser
-     * une bascule d'espace en restant à l'écran.
+     * Remonte une vue à neuf sans la refermer : c'est ce qui permet à une feature
+     * de traverser une bascule d'espace en restant à l'écran.
      */
     const remountFeature = useCallback((featureId: string) => {
         clearTimeout(ttlTimers.current.get(featureId));
@@ -487,14 +405,7 @@ export default function HomePage() {
         setExpandedWidget(widgetId);
     }, []);
 
-    /**
-     * Le rôle courant ouvre-t-il cette vue ? La lecture suffit à l'ouvrir.
-     *
-     * La règle est celle des droits de feature du rôle, et cette fonction est
-     * le passage unique de `handleExpand`, donc du clic sur une tuile, du menu
-     * de la topbar et de la navigation inter-features : la poser ici les
-     * couvre toutes.
-     */
+    /** Le rôle courant ouvre-t-il cette vue ? La lecture suffit. */
     const allowedToOpen = useCallback(
         (viewId: string): boolean => {
             const feature = featureBehind(viewId);
@@ -512,13 +423,11 @@ export default function HomePage() {
 
     const handleExpand = useCallback(
         (widgetId: string, forceReset = false) => {
-            // Pendant une bascule d'espace, les droits affichés sont vides :
-            // ouvrir est impossible, et refuser serait mentir. Le clic ne fait
-            // rien, la fenêtre se compte en dixièmes de seconde.
+            // Pendant une bascule, les droits affichés sont vides : ni ouvrir ni
+            // refuser, le clic ne fait rien.
             if (switching) return;
-            // Une seule garde, ici : la tuile de l'accueil, la navigation entre
-            // features et le menu de la topbar y aboutissent tous. La poser dans
-            // le rendu des tuiles n'aurait fermé qu'une porte sur trois.
+            // Garde unique : tuile, navigation inter-features et menu de la
+            // topbar aboutissent tous ici.
             if (!allowedToOpen(widgetId)) {
                 void openInfo({
                     title: 'Accès refusé',
@@ -552,11 +461,7 @@ export default function HomePage() {
     const expandedWidgetRef = useRef(expandedWidget);
     expandedWidgetRef.current = expandedWidget;
 
-    /**
-     * La vue ouverte a-t-elle encore lieu d'être avec ces droits-là ? Sinon on
-     * la referme. Appelé après chaque relecture de l'état de l'espace, quelle
-     * qu'en soit la voie.
-     */
+    /** Referme la vue ouverte si les droits relus ne la couvrent plus. */
     const reconcileOpenView = useCallback(
         (permissions: WorkspacePermissions) => {
             const open = expandedWidgetRef.current;
@@ -568,23 +473,11 @@ export default function HomePage() {
     );
 
     /**
-     * L'accueil de l'espace a bougé sous nos pieds : on le relit.
-     *
-     * Quelqu'un a réorganisé les tuiles ou changé l'apparence, et le serveur l'a
-     * diffusé (sujet `home`). `workspace.activate` rend l'état complet de
-     * l'espace d'un seul appel — thème, disposition **et** droits — donc une
-     * relecture suffit à remettre l'écran d'aplomb : le fond change, les tuiles
-     * se recomposent, les features se grisent ou se dégrisent. Une vue
-     * **ouverte** sur une feature devenue interdite, elle, resterait affichée :
-     * `reconcile` la referme.
-     *
-     * L'auteur du changement est exclu de sa propre diffusion : ce chemin ne
-     * repasse donc jamais par-dessus l'édition qu'il est en train de faire.
-     *
-     * Le serveur, lui, n'attend pas cette relecture pour refuser : toute commande
-     * re-résout les droits dès que l'époque d'accès a changé (`invalidateAccess`).
-     * Ce qui se joue ici est l'écran, pas la sûreté — une écriture partie juste
-     * avant la révocation est rejetée quoi qu'il arrive.
+     * L'accueil de l'espace a changé ailleurs (sujet `home`) : `workspace.activate`
+     * rend thème, disposition et droits d'un coup, et `reconcile` referme une vue
+     * ouverte sur une feature devenue interdite. L'auteur est exclu de sa propre
+     * diffusion. La sûreté ne dépend pas de cette relecture : le serveur
+     * re-résout les droits à chaque commande (`invalidateAccess`).
      */
     const stateVersion = useResourceVersion('workspace.activate');
     useEffect(() => {
@@ -607,17 +500,10 @@ export default function HomePage() {
     }, [stateVersion, handleClose, refresh, reconcileOpenView]);
 
     /**
-     * Ce que seule la session porte : le nom de l'espace, son logo, ses membres.
-     *
-     * Aucune commande ne les relit — ils n'existent que dans le bundle de `/me` —
-     * donc un renommage ou une arrivée de membre resterait invisible chez les
-     * autres jusqu'au rechargement. Ce chemin est le plus lourd des deux (il
-     * rapatrie les avatars de tous les membres), d'où son sujet dédié : il ne
-     * part que sur un changement d'espace, pas sur un glisser-déposer de tuile.
-     *
-     * Il rapporte au passage droits, thème et disposition — `applyBundle` les
-     * pose tous les trois — ce qui rend la voie légère inutile en plus de
-     * celle-ci.
+     * Nom, logo et membres de l'espace n'existent que dans le bundle de `/me` :
+     * seule une relecture de session les rafraîchit. Chemin lourd (avatars de
+     * tous les membres), d'où un sujet dédié qui ne part que sur un changement
+     * d'espace, pas sur un glisser-déposer de tuile.
      */
     const sessionVersion = useResourceVersion('workspace.session');
     useEffect(() => {
@@ -628,17 +514,9 @@ export default function HomePage() {
         })();
     }, [sessionVersion, refresh, reconcileOpenView]);
 
-    /**
-     * Même règle pour les deux réglages d'espace : le droit tombe, ce qu'il
-     * ouvrait se referme.
-     *
-     * Les entrées du menu disparaissent d'elles-mêmes — elles lisent le store —
-     * mais l'organiseur ou le panneau d'apparence déjà ouverts resteraient sous
-     * les yeux, à proposer des gestes que le serveur refuse désormais. Aucune
-     * dépendance sur `editing`/`settingsOpen` : les fermer *parce qu'ils sont
-     * ouverts* relancerait l'effet à chaque ouverture, alors que ce qu'on
-     * surveille est la perte du droit.
-     */
+    // Le droit tombe, ce qu'il ouvrait se referme. Sans dépendance sur
+    // `editing`/`settingsOpen` : c'est la perte du droit qu'on surveille, pas
+    // l'ouverture.
     useEffect(() => {
         if (!canLayout) setEditing(false);
     }, [canLayout]);
@@ -664,11 +542,9 @@ export default function HomePage() {
     }, [liveViewTarget, handleExpand, handleClose]);
 
     /**
-     * Close the popup on a feature's own request. Guarded so only the feature
-     * currently shown can dismiss it, and marks the view for a fresh remount on
-     * reopen (so e.g. a cancelled unlock prompt re-appears instead of leaving the
-     * cached, empty view behind). Stable identity: features read current state
-     * via refs, so this never re-triggers their load effects.
+     * Close the popup on the shown feature's own request, and mark the view for a
+     * fresh remount (a cancelled unlock prompt must re-appear, not the cached
+     * empty view). Stable identity: features read current state via refs.
      */
     const requestCloseFeature = useCallback((featureId: string) => {
         if (expandedWidgetRef.current !== featureId) return;
@@ -677,9 +553,8 @@ export default function HomePage() {
         setExpandedWidget(null);
     }, []);
 
-    // Device views: one per device tile whose device still exists. Built here
-    // because they depend on the live device list; the panel is the module's
-    // (without the module the list is empty, so there is none).
+    // Device views: one per device tile whose device still exists. The panel is
+    // the module's; without the module there is none.
     const deviceViews = useMemo<ViewConfig[]>(() => {
         const out: ViewConfig[] = [];
         const DevicePanel = devicesModule?.DevicePanel;
@@ -707,13 +582,9 @@ export default function HomePage() {
     viewsRef.current = views;
 
     /**
-     * Le dossier déployé, relu dans la disposition courante à chaque rendu.
-     *
-     * C'est ce qui le rend vivant : renommé, rempli ou vidé par un autre membre
-     * de l'espace, l'écran suit sans rien de particulier à brancher. Un dossier
-     * qui n'a plus rien à montrer (supprimé, vidé, ou resté dans l'espace qu'on
-     * vient de quitter) referme l'écran plutôt que de laisser une couche voilée
-     * sur du vide.
+     * Le dossier déployé, relu dans la disposition à chaque rendu : les
+     * modifications d'un autre membre se voient, et un dossier vidé ou supprimé
+     * referme l'écran.
      */
     const folderView = useMemo(
         () => (openFolder ? (findFolder(layout, openFolder.id)?.folder ?? null) : null),
@@ -751,20 +622,10 @@ export default function HomePage() {
     }, [unmountFeature, doExpand]);
 
     /**
-     * Drop device tiles whose device no longer exists (deleted). Only once devices
-     * have actually loaded, so a transient empty list can't wipe the layout.
-     *
-     * `error` compte autant que `loading` : une liste qui a **échoué** est vide
-     * elle aussi, et l'élaguer contre elle effacerait toutes les tuiles
-     * d'appareils — de la disposition partagée, pour tout l'espace. Une coupure
-     * réseau y suffisait ; un membre dont le rôle n'ouvre pas `devices` le ferait
-     * à chaque chargement.
-     *
-     * Et l'élagage n'est de toute façon pas le sien : sans `workspace.layout` il
-     * n'a pas à toucher à la composition de l'accueil, fût-ce pour la nettoyer.
-     *
-     * Sans le module Appareils, la liste est vide par construction, pas parce
-     * que les appareils ont disparu : rien à élaguer non plus.
+     * Drop device tiles whose device no longer exists. Seulement une fois la
+     * liste chargée ET sans erreur : une liste vide par échec effacerait toutes
+     * les tuiles d'appareils de la disposition partagée. Sans `workspace.layout`,
+     * pas d'élagage ; sans le module, la liste est vide par construction.
      */
     useEffect(() => {
         if (!devicesModule || devicesLoading || devicesError !== null || !canLayout) return;
@@ -772,19 +633,16 @@ export default function HomePage() {
     }, [devices, devicesLoading, devicesError, canLayout, devicesModule]);
 
     /**
-     * La liste d'appareils est le contenu principal au-dessus de la ligne de
-     * flottaison : une fois qu'elle a répondu (chargée ou en erreur), l'accueil
-     * est assez « prêt » pour que l'écran de connexion se fonde sur une vue
-     * peuplée. Sans le module, il n'y a rien à attendre. Sans effet après le
-     * premier signal, et remis à zéro à la déconnexion.
+     * La liste d'appareils est le contenu principal : une fois répondu (chargée
+     * ou en erreur), l'accueil est prêt pour le fondu de l'écran de connexion.
+     * Sans le module, rien à attendre.
      */
     useEffect(() => {
         if (!devicesModule || !devicesLoading || devicesError !== null) markHomeReady();
     }, [devicesLoading, devicesError, devicesModule]);
 
-    // Eagerly warm preload feature views that are on the grid, at idle, once the
-    // home is ready — so the first open is instant without stealing the opening
-    // moment. (See the original rationale; unchanged beyond gating on the layout.)
+    // Warm preload feature views that are on the grid, at idle, once the home is
+    // ready: the first open is instant without stealing the opening moment.
     const preloadedRef = useRef(false);
     useEffect(() => {
         const mountPreloads = () => {
@@ -854,41 +712,27 @@ export default function HomePage() {
     const heading = homeHeading(currentWorkspace, user.username);
 
     /**
-     * Bascule d'espace : on publie le nouvel id (les commandes suivantes le
-     * portent aussitôt), puis on recharge la session — ce qui rapatrie le thème
-     * et la disposition de la cible et corrige l'id si l'accès n'existe plus.
-     * L'incrément d'époque du store remonte au passage toutes les features.
-     *
-     * **La vue ouverte survit à la bascule quand la cible la propose aussi.**
-     * Changer d'espace en gardant Mail sous les yeux, pour y retrouver les mêmes
-     * boîtes ailleurs, est le geste courant ; refermer à chaque fois obligeait à
-     * rouvrir. Son contenu, lui, repart de zéro — l'époque du store d'espaces
-     * entre dans la clé de remontage, donc rien de l'espace précédent ne traîne.
-     *
-     * La composition de l'accueil d'un autre espace n'est **pas** connue d'avance
-     * (la session n'embarque que celle de l'espace actif) : la décision ne peut
-     * donc tomber qu'après `workspace.activate`. D'ici là le contenu est démonté
-     * plutôt que laissé vivant — il interrogerait le nouvel espace avec les
-     * droits de l'ancien, et l'on verrait passer une erreur avant même de savoir
-     * si la vue reste.
+     * Bascule d'espace : publier l'id (les commandes suivantes le portent), puis
+     * recharger l'état de la cible. La vue ouverte survit si la cible la propose
+     * aussi, mais son contenu repart de zéro (l'époque entre dans la clé de
+     * remontage). La composition de la cible n'est connue qu'après
+     * `workspace.activate` : d'ici là le contenu est démonté, sinon il
+     * interrogerait le nouvel espace avec les droits de l'ancien.
      */
     const handleSelectWorkspace = (workspaceId: number) => {
-        // Re-choisir l'espace courant n'est pas une bascule : rien à recharger,
-        // et l'écran de transition n'a pas à clignoter pour rien.
+        // Re-choisir l'espace courant n'est pas une bascule.
         if (workspaceId === getWorkspaceState().activeId) return;
         const openView = expandedWidget;
         if (openView) unmountFeature(openView);
-        // Ce qui appartient à l'espace quitté sort de scène avec lui : un
-        // dossier déployé montrerait ses anciennes cartes par-dessus le
-        // chargement, et l'organiseur écrirait la vieille grille dans le nouvel
-        // espace, puisque les commandes portent déjà son id.
+        // Ce qui appartient à l'espace quitté sort avec lui : un dossier déployé
+        // montrerait ses anciennes cartes, et l'organiseur écrirait la vieille
+        // grille dans le nouvel espace.
         setOpenFolder(null);
         setEditing(false);
         setSwitching(true);
         // Vider la liste d'appareils AVANT de basculer : sinon l'effet d'élagage
-        // ci-dessus tourne encore contre ceux de l'espace précédent alors que la
-        // nouvelle disposition est déjà en place, et supprime définitivement ses
-        // tuiles d'appareils.
+        // tourne contre ceux de l'espace précédent une fois la nouvelle
+        // disposition en place, et supprime définitivement ses tuiles.
         devicesModule?.resetDevices();
         // L'id est publié d'abord : `workspace.activate` part alors avec la
         // bonne enveloppe, et le dispatcheur en vérifie l'appartenance.
@@ -899,21 +743,17 @@ export default function HomePage() {
                 setPermissions(res.permissions);
                 syncThemeFromServer(res.theme);
                 syncHomeLayoutFromServer(res.homeLayout);
-                // Relancer tout de suite : `resetDevices` a vidé la liste, et
-                // plus rien ne la re-sollicite tant que rien ne change — les
-                // tuiles d'appareils resteraient vides indéfiniment.
+                // `resetDevices` a vidé la liste et rien ne la re-sollicite tant
+                // que rien ne change : les tuiles resteraient vides.
                 devicesModule?.refreshDevices();
 
                 if (!openView) return;
-                // `doExpand` avec remontage forcé : la vue reparaît vierge, sur
-                // les données de l'espace d'arrivée.
                 if (survivesWorkspaceSwitch(openView, getHomeLayout(), res.permissions, viewsRef.current)) {
                     remountFeature(openView);
                 } else handleClose();
             } catch {
                 // Accès perdu entre-temps : recharger la session remet le client
-                // sur un espace valide. Attendu, pour que l'écran de bascule ne
-                // se lève pas sur la disposition de l'espace qu'on vient de rater.
+                // sur un espace valide, avant de lever l'écran de bascule.
                 if (openView) handleClose();
                 await refresh().catch(() => {});
             } finally {
@@ -922,10 +762,8 @@ export default function HomePage() {
         })();
     };
 
-    // Bascule d'espace demandée depuis ailleurs — aujourd'hui la téléportation,
-    // qui peut avoir à changer d'espace avant d'ouvrir une vue. Enregistré ici
-    // plutôt qu'appelé directement : c'est la seule façon d'emprunter la séquence
-    // complète ci-dessus, dont la réécrire une moitié serait le vrai risque.
+    // Bascule demandée depuis ailleurs (téléportation), enregistrée ici pour
+    // emprunter la séquence complète ci-dessus.
     useEffect(() => onSelectWorkspaceRequest(handleSelectWorkspace));
 
     const handleCreateWorkspace = () => {
@@ -950,13 +788,9 @@ export default function HomePage() {
     };
 
     /**
-     * Le rendu d'une section, hors mode organisation.
-     *
-     * Une seule boucle pour tous les genres de tuiles : la section n'a plus de
-     * genre, et c'est `homeTileVisual` qui sait ce que chacune porte. Rend `null`
-     * pour une section vide, donc elle ne laisse jamais un trou. Une section sans
-     * titre se lit comme un groupe légèrement espacé ; avec un titre, ce dernier
-     * devient un intitulé discret au-dessus de la grille.
+     * Rendu d'une section hors organisation. Une seule boucle pour tous les
+     * genres de tuiles ; `null` pour une section vide, qui ne laisse donc pas de
+     * trou.
      */
     const renderSection = (section: HomeSection): ReactNode => {
         const tiles: ReactNode[] = [];
@@ -964,12 +798,9 @@ export default function HomePage() {
             if (isHomeFolder(tile)) {
                 const v = featureTileVisual(tile);
                 if (!v) continue;
-                // Un dossier **rempli** dont plus rien n'est connu (modules
-                // retirés) s'efface : promettre un écran qui n'a rien à montrer
-                // serait pire que de ne rien montrer. Un dossier vraiment vide,
-                // lui, reste : on vient de le créer, et le voir disparaître de
-                // l'accueil se lirait comme une perte. Il est simplement
-                // inerte, et son corps dit où le remplir.
+                // Un dossier rempli dont plus rien n'est connu (modules retirés)
+                // s'efface ; un dossier vraiment vide reste, inerte : on vient
+                // de le créer.
                 const visible = folderFeatures(tile.items);
                 if (visible.length === 0 && tile.items.length > 0) continue;
                 const folderId = tile.id;
@@ -981,8 +812,7 @@ export default function HomePage() {
                         icon={v.icon}
                         interactive={visible.length > 0}
                         // La tuile reste visible pendant le déploiement : elle
-                        // part avec le fond qui recule, et c'est ce qui dit
-                        // d'où viennent les cartes.
+                        // part avec le fond qui recule et dit d'où viennent les cartes.
                         onExpand={(e) => {
                             setOpenFolder({
                                 id: folderId,
@@ -1011,12 +841,8 @@ export default function HomePage() {
                 const v = featureTileVisual(tile);
                 if (!v) continue;
                 // La tuile reste posée, en retrait : la retirer déplacerait les
-                // voisines et laisserait croire à une disposition abîmée. Elle dit
-                // qu'il y a là quelque chose auquel on n'a pas droit, ce qui est
-                // vrai et se demande. Pendant une bascule d'espace, en revanche,
-                // les droits vides ne sont ceux de personne : le retrait est
-                // suspendu et la tuile garde son visage jusqu'à la disposition
-                // de la cible.
+                // voisines. Pendant une bascule, les droits vides ne sont ceux
+                // de personne : pas de grisage.
                 const locked = !switching && !allowedToOpen(v.widgetId);
                 tiles.push(
                     <Widget
@@ -1040,7 +866,7 @@ export default function HomePage() {
             }
 
             // Un appareil. Escamoté quand il n'existe plus (l'effet d'élagage
-            // s'en charge de son côté), plutôt que de poser une carte creuse.
+            // s'en charge), plutôt que de poser une carte creuse.
             const device = devices.find((d) => d.id === tile);
             if (!device) continue;
             const v = deviceTileVisual(device);
@@ -1077,18 +903,15 @@ export default function HomePage() {
 
                 <TopNavbar
                     aboutBody={<AboutContent />}
-                    // Un dossier déployé prend la barre comme une vue : elle
-                    // porte son intitulé et le retour, exactement comme pour un
-                    // écran de fonctionnalité. Une vue ouverte par-dessus passe
-                    // devant, et son retour ramène au dossier.
+                    // Un dossier déployé prend la barre comme une vue ; une vue
+                    // ouverte par-dessus passe devant, et son retour ramène au
+                    // dossier.
                     viewTitle={expandedConfig?.title ?? (folderView ? folderTitle(folderView.title) : undefined)}
                     onBack={expandedWidget ? handleClose : folderView ? closeFolder : undefined}
                     onOpenProfile={(e) => handleExpand('profile', isForceReload(e))}
                     onOpenSecurity={(e) => handleExpand('security', isForceReload(e))}
-                    // L'entrée « Appareils » de l'administrateur ouvre le module,
-                    // dont le segment « Flotte » n'existe que dans son espace
-                    // personnel : ailleurs, l'entrée n'a rien de plus à offrir
-                    // que la tuile.
+                    // Le segment « Flotte » du module n'existe que dans l'espace
+                    // personnel : ailleurs, l'entrée n'offre rien de plus que la tuile.
                     onOpenDevices={
                         user.role === 'admin' && devicesModule && currentWorkspace.kind === 'personal'
                             ? (e) => handleExpand('devices', isForceReload(e))
@@ -1106,33 +929,21 @@ export default function HomePage() {
                 />
 
                 {/* The grid stays mounted under the popup so the shared-element morph
-                back into a card is smooth and never dips behind sibling cards.
-                Un dossier déployé le fait reculer : flou et léger retrait, pour
-                que les cartes qui en sortent aient de la profondeur derrière
-                elles (voir `.recessed`). */}
+                back into a card is smooth. Un dossier déployé le fait reculer
+                (voir `.recessed`). */}
                 <motion.main
                     className={`${styles.main} ${folderView ? styles.recessed : ''}`}
                     /*
-                     * C'est **ici** que l'accueil défile, et framer doit le savoir.
-                     *
-                     * Les tuiles se mesurent en coordonnées de page ; sans
-                     * `layoutScroll`, le défilement du conteneur n'est jamais
-                     * retranché de ces mesures, et la moindre remesure prise après
-                     * un déroulement lisait un déplacement qui n'a pas eu lieu. Les
-                     * tuiles partaient alors se « replacer » à des centaines de
-                     * pixels de là : les sections du bas — les raccourcis, souvent —
-                     * semblaient disparaître dès qu'un dossier s'ouvrait, alors
-                     * qu'elles n'ont rien à voir avec lui. Ce qui déclenchait la
-                     * remesure était simplement le rendu provoqué par l'ouverture.
+                     * C'est ici que l'accueil défile : sans `layoutScroll`, framer
+                     * ne retranche pas le défilement des mesures de tuiles, et
+                     * toute remesure après un déroulement les envoie se
+                     * « replacer » à des centaines de pixels.
                      */
                     layoutScroll
                     /*
-                     * Le retrait, animé par framer plutôt qu'en CSS : c'est la même
-                     * histoire. Framer ne retranche d'une mesure que les
-                     * transformations qu'il a lui-même écrites, donc un
-                     * `transform: scale()` posé en CSS sur l'ancêtre de toutes les
-                     * tuiles décalait chacune d'elles. Passé par ce chemin, il est
-                     * connu et compensé.
+                     * Retrait animé par framer, pas en CSS : framer ne compense que
+                     * les transformations qu'il a écrites, un `scale()` CSS sur
+                     * l'ancêtre décalerait chaque tuile.
                      */
                     animate={{ scale: folderView && !reducedMotion ? 0.965 : 1 }}
                     transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
@@ -1146,24 +957,18 @@ export default function HomePage() {
                         {editing ? (
                             <EditableHome autoOpenAdd={autoAddSection} />
                         ) : layout.sections.length > 0 ? (
-                            // En tête des branches : pendant une bascule d'espace,
-                            // ce sont encore les sections de l'espace quitté, et
-                            // c'est voulu : elles restent en place, telles quelles,
-                            // et les tuiles communes glissent vers leur nouvelle
-                            // position à l'arrivée de la disposition de la cible
-                            // (voir `switching`).
+                            // Pendant une bascule, ce sont encore les sections de
+                            // l'espace quitté, à dessein : les tuiles communes
+                            // glissent vers leur nouvelle position (voir `switching`).
                             <div className={styles.sections}>{layout.sections.map(renderSection)}</div>
                         ) : switching ? (
-                            // Bascule en cours et rien à garder à l'écran : un
-                            // battement, plutôt que l'invite « accueil vide » de
-                            // l'espace quitté sous le nom du nouveau.
+                            // Bascule en cours et rien à garder : un battement, plutôt
+                            // que l'invite « accueil vide » sous le nom du nouveau.
                             <div className={styles.switching} role='status' aria-label='Chargement de l’espace'>
                                 <span className={`icon icon-spinner ${styles.switchingSpinner}`} aria-hidden='true' />
                             </div>
-                        ) : // A fresh home has no section at all: point the way in
-                        // rather than showing a bare greeting. Sans le droit de
-                        // composer, le même bloc dit seulement pourquoi c'est
-                        // vide — inviter à un geste refusé serait pire que rien.
+                        ) : // A fresh home has no section: point the way in. Sans le
+                        // droit de composer, dire seulement pourquoi c'est vide.
                         canLayout ? (
                             <button type='button' className={styles.emptyHome} onClick={() => startOrganizing(true)}>
                                 <span className={`icon icon-plus ${styles.emptyHomeIcon}`} />
@@ -1184,10 +989,9 @@ export default function HomePage() {
                     </div>
                 </motion.main>
 
-                {/* Le dossier déployé. Posé **avant** la popup : à palier de
-                    z-index égal, c'est l'ordre de l'arbre qui décide, donc une
-                    fonctionnalité ouverte depuis une carte voile bien le dossier
-                    au lieu de passer dessous. */}
+                {/* Posé avant la popup : à z-index égal, l'ordre de l'arbre décide,
+                    et une fonctionnalité ouverte depuis une carte doit voiler le
+                    dossier. */}
                 <FolderOverlay
                     folder={folderView}
                     entries={folderEntries}
@@ -1204,11 +1008,9 @@ export default function HomePage() {
                 {popupConfig && (
                     <WidgetPopup
                         key={popupConfig.hasCard ? popupConfig.id : 'page'}
-                        // Le morphe n'a de partenaire que tant qu'on est dans
-                        // l'espace où la vue a été ouverte. Après une bascule, la
-                        // tuile porte une autre identité : la popup renonce au
-                        // morphe et se referme par un simple fondu, ce qui est de
-                        // toute façon plus juste — sa carte d'origine n'est plus là.
+                        // Le morphe n'a de partenaire que dans l'espace où la vue a
+                        // été ouverte ; après une bascule, la popup se referme par
+                        // un simple fondu.
                         layoutId={
                             popupConfig.hasCard && morphEpochRef.current === workspaceEpoch
                                 ? `${morphEpochRef.current}:${popupConfig.id}`

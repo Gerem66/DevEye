@@ -8,7 +8,6 @@ import { formatMoment, formatMs } from './format';
 import Pane from './Pane';
 import styles from './style.module.css';
 
-/** Measures loaded per page. */
 const PAGE = 100;
 
 const DAY = 86400;
@@ -37,13 +36,9 @@ interface MeasuresBrowserProps {
 }
 
 /**
- * The full ping journal, on its own floor below the service detail.
- *
- * It lives here rather than in the detail view because a year of probes is tens
- * of thousands of rows: inline, it would bury the charts and turn the panel into
- * one endless scroll. The detail keeps a short preview and sends you here when
- * you actually want the record: filtered, counted, and scrolling in its own box
- * so the surrounding page never grows.
+ * The full ping journal, on its own floor below the service detail: a year of
+ * probes is tens of thousands of rows, so it is filtered, counted and scrolls
+ * in its own box rather than burying the charts.
  */
 export function MeasuresBrowser({ service, onBack }: MeasuresBrowserProps) {
     const [periodSeconds, setPeriodSeconds] = useState<number | null>(null);

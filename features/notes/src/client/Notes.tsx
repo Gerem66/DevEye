@@ -28,21 +28,17 @@ import NoteGrid from './NoteGrid';
 import styles from './style.module.css';
 
 /**
- * The user's manual order; the id only breaks ties. Les notes projetées
- * depuis un autre espace viennent après les locales : leur rang est celui de
- * leur domicile, et les mêler au classement d'ici les ferait paraître
- * déplaçables.
+ * Les notes projetées depuis un autre espace passent après les locales : leur
+ * rang est celui de leur domicile, et les mêler au classement d'ici les ferait
+ * paraître déplaçables.
  */
 function byOrder(a: NoteSummary, b: NoteSummary): number {
     return Number(a.foreign) - Number(b.foreign) || a.sortOrder - b.sortOrder || a.id - b.id;
 }
 
 /**
- * La vue complète. Aucune prop de l'hôte (`FeatureViewProps` n'en offre
- * qu'une, `closeFeature`, dont les notes n'ont pas l'usage : la liste
- * n'est jamais verrouillée, il y a toujours quelque chose à montrer).
- * L'espace vient du SDK, plus des props : c'est lui qui borne les notes,
- * et son changement recharge la liste.
+ * L'espace vient du SDK, pas des props : c'est lui qui borne les notes, et son
+ * changement recharge la liste.
  */
 function Notes() {
     const workspaceId = useActiveWorkspace()?.id ?? null;
@@ -56,8 +52,6 @@ function Notes() {
     useLiveSegment('l1', openNoteId === null ? null : String(openNoteId));
     const reloadRef = useRef<Promise<void> | null>(null);
     const draggingRef = useRef<NoteSummary | null>(null);
-    // Session lock state, from the store the topbar widget and the unlock prompt
-    // both drive: the single source of truth for "can private notes be read".
     const { unlocked } = useSecrecy();
     const wasUnlocked = useRef(unlocked);
 
@@ -95,12 +89,9 @@ function Notes() {
     }, [reload]);
 
     /**
-     * Re-list whenever the session flips lock state, wherever that came from
-     * (the topbar padlock, another feature's prompt, or the grace window running
-     * out). Unlocking swaps the padlock placeholders for real titles; re-locking
-     * masks them again. Only the *transition* triggers a fetch, and `reload`
-     * de-duplicates, so the explicit refresh in {@link revealPrivate} costs
-     * nothing extra.
+     * Re-list whenever the session flips lock state, wherever that came from:
+     * unlocking swaps the padlock placeholders for real titles, re-locking masks
+     * them again. Only the transition triggers a fetch, and `reload` de-duplicates.
      */
     useEffect(() => {
         if (unlocked === wasUnlocked.current) return;
@@ -109,11 +100,8 @@ function Notes() {
     }, [unlocked, reload]);
 
     /**
-     * Une note écrite par quelqu'un d'autre apparaît sans recharger.
-     *
-     * Le serveur diffusait déjà le sujet `notes` après chaque écriture, et la
-     * clé était bien invalidée ; personne ne l'écoutait. Sans danger pour le
-     * verrou : `notes.list` ne lit que la clé ouverte (les notes privées y
+     * Une note écrite par quelqu'un d'autre apparaît sans recharger. Sans danger
+     * pour le verrou : `notes.list` ne lit que la clé ouverte (les notes privées y
      * reviennent masquées), donc cette relecture ne peut pas faire surgir une
      * demande de mot de passe.
      */
@@ -149,7 +137,6 @@ function Notes() {
         [workspaceId, upsert]
     );
 
-    /** Open the editor to create a note (optionally pre-filed) or edit one. */
     const openEditor = useCallback(
         async (summary: NoteSummary | null, targetFolderId: number | null = null) => {
             setActionError(null);
@@ -166,16 +153,15 @@ function Notes() {
             }
 
             const input: NoteEditorInput = { note: existing, folderId: existing ? existing.folderId : targetFolderId };
-            // Déclaré le temps de l'édition : deux membres sur la même note se
-            // voient, sur deux notes différentes chacun voit l'autre entouré.
+            // Déclaré le temps de l'édition, pour que deux membres sur la même
+            // note se voient.
             setOpenNoteId(existing?.id ?? null);
             const result = await OpenPopup<NoteEditorResult>(NOTE_EDITOR_POPUP, input);
             setOpenNoteId(null);
             if (result === null) return;
 
-            // Deletion is already confirmed inside the editor (popup over it), so
-            // 'delete' here means "go ahead", and it archives rather than
-            // destroys; the archive popup owns the irreversible step.
+            // 'delete' arrives already confirmed by the editor, and archives rather
+            // than destroys: the irreversible step belongs to the archive popup.
             if (result === 'delete' && existing) {
                 try {
                     await withSecrecy(() => api.send('notes.archive', { noteId: existing!.id }));
@@ -193,14 +179,10 @@ function Notes() {
     );
 
     /**
-     * Enter the master password, then re-list so every private note swaps its
-     * padlock placeholder for its real title and preview. Backs both the header
-     * button and a click on a masked card.
-     *
-     * The refresh stays explicit rather than leaning on the lock-state effect
-     * above: in "validate on every action" mode the session is never held
-     * unlocked, so there is no transition to react to; the DEK only lives long
-     * enough to serve the request this reload issues.
+     * Enter the master password, then re-list so private notes swap their padlock
+     * placeholders for real titles and previews. The refresh stays explicit: in
+     * "validate on every action" mode the session is never held unlocked, so the
+     * lock-state effect above sees no transition to react to.
      */
     const revealPrivate = useCallback(async (): Promise<void> => {
         setActionError(null);
@@ -213,9 +195,8 @@ function Notes() {
     }, [reload]);
 
     /**
-     * Click on a note card. A masked card only *reveals*: chaining straight into
-     * the editor would open a note blind, since its title is precisely what isn't
-     * known yet. The user gets the decrypted list back, then picks.
+     * A masked card only *reveals*: chaining straight into the editor would open a
+     * note blind, since its title is precisely what isn't known yet.
      */
     const openCard = useCallback(
         async (summary: NoteSummary) => {
@@ -228,7 +209,6 @@ function Notes() {
         [revealPrivate, openEditor]
     );
 
-    /** Open the archive; re-list only if something was restored or destroyed. */
     const openArchives = useCallback(async () => {
         setActionError(null);
         const changed = await OpenPopup<boolean>(NOTE_ARCHIVE_POPUP);
@@ -239,18 +219,13 @@ function Notes() {
     }, [workspaceId, reload]);
 
     /**
-     * Drop `dragged` into `folderId` at `index`: the single primitive behind
-     * both drag & drop and the card's "Déplacer vers" menu (which appends).
-     * Positions are entirely manual, so this is the only thing that reorders.
+     * The single primitive behind both drag & drop and the card's "Déplacer vers"
+     * menu (which appends). The server takes the destination folder's full new
+     * order; the previous folder simply keeps its own, one gap shorter.
+     * Optimistic, with a rollback to the previous list on failure.
      *
-     * The server takes the destination folder's full new order; the note simply
-     * leaves a gap behind in its previous folder, whose relative order is
-     * untouched. Optimistic, with a rollback to the previous list on failure.
-     *
-     * Les notes projetées n'en font pas partie : ni comme source (leur carte
-     * ne se glisse pas) ni dans l'ordre envoyé (elles se classent chez elles,
-     * et le serveur refuse un ordre qui les inclut). Rangées en fin de racine,
-     * elles n'occupent aucun des rangs qu'un dépôt peut viser.
+     * Les notes projetées en sont exclues : elles se classent chez elles, et le
+     * serveur refuse un ordre qui les inclut.
      */
     const dropInto = useCallback(
         async (dragged: NoteSummary, folderId: number | null, index: number) => {
@@ -343,11 +318,10 @@ function Notes() {
     );
 
     /**
-     * Notes filtered by search and bucketed by folder id. Masked notes stay in
-     * their own folder (the clear `folderId` column), never pulled into a special
-     * section. Search skips them since their title/preview aren't available
-     * client-side while locked. Les notes projetées arrivent sans dossier
-     * (`folderId: null`) : elles se rangent à la racine, après les locales.
+     * A masked note keeps its own folder (the `folderId` column is in the clear),
+     * but search skips it: its title and preview aren't known client-side while
+     * the session is locked. Une note projetée arrive sans dossier, donc à la
+     * racine.
      */
     const { byFolder, unfiled, total } = useMemo(() => {
         const lower = search.trim().toLowerCase();
@@ -379,13 +353,12 @@ function Notes() {
 
     const maskedCount = useMemo(() => notes.filter((n) => n.masked).length, [notes]);
 
-    // Folders in their manual order (sortOrder); the user moves them up/down.
     const sortedFolders = useMemo(
         () => [...folders].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id),
         [folders]
     );
 
-    /** Move a folder one slot up (dir -1) or down (dir +1); persists the new order. */
+    /** `dir` is -1 to move the folder up, +1 to move it down. */
     const reorderFolder = useCallback(
         async (folder: NoteFolder, dir: -1 | 1) => {
             setActionError(null);
@@ -394,7 +367,6 @@ function Notes() {
             const j = i + dir;
             if (i === -1 || j < 0 || j >= ordered.length) return;
             [ordered[i], ordered[j]] = [ordered[j], ordered[i]];
-            // Optimistic: renumber locally, roll back to the previous list on failure.
             const previous = folders;
             const renumbered = ordered.map((f, idx) => ({ ...f, sortOrder: idx }));
             setFolders(renumbered);
@@ -409,7 +381,6 @@ function Notes() {
         [folders, workspaceId]
     );
 
-    /** A card was released over a gap: the grid tells us which, we know what. */
     const dropAt = useCallback(
         (folderId: number | null, index: number) => {
             const dragged = draggingRef.current;
@@ -421,7 +392,6 @@ function Notes() {
 
     const searching = search.trim() !== '';
 
-    /** One folder's grid: its cards, the trailing add card and the drop logic. */
     const renderGrid = (items: NoteSummary[], folderId: number | null) => (
         <NoteGrid
             notes={items}
@@ -490,9 +460,8 @@ function Notes() {
             {loaded &&
                 sortedFolders.map((folder, idx) => {
                     const items = byFolder.get(folder.id) ?? [];
-                    // While searching, hide folders with no matching notes to cut noise.
                     if (searching && items.length === 0) return null;
-                    // Reordering is meaningless while searching (the list is filtered).
+                    // A filtered list isn't the real order, so nothing is reorderable.
                     const canReorder = !searching;
                     return (
                         <section key={folder.id} className={styles.folderSection}>
@@ -577,15 +546,11 @@ function Notes() {
     );
 }
 
-/**
- * Display name of a folder. Names created before the folder tree moved to the
- * open key can't be recovered, so they come back empty until renamed.
- */
 function folderLabel(folder: NoteFolder): string {
     return folder.name || 'Dossier sans nom';
 }
 
-/** Build an optimistic summary from a full note after add/edit. */
+/** Optimistic summary after an add/edit, until the next re-list. */
 function toSummary(note: Note): NoteSummary {
     const checks = note.blocks.filter((b) => b.type === 'check');
     const previewBlock = note.blocks.find((b) => 'text' in b && b.text.trim() !== '');

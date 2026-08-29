@@ -18,13 +18,9 @@ import { passwordHandlers } from './handlers';
 import type { PasswordRepo } from './repo';
 
 /**
- * Les handlers du module, sur le harnais du SDK.
- *
- * Ce qui mérite d'être tenu, c'est le **masque** et le **verrou** : la liste
- * ne rend jamais un mot de passe, seule `password.get` le rend et seulement
- * sur une session déverrouillée, et le compte de la carte d'accueil répond
- * même verrouillé. Rien de tout cela ne lève ailleurs : un masque qui fuit ne
- * casse aucun autre test, il montre juste un secret de trop.
+ * Ce qui se vérifie ici ne lève nulle part ailleurs : la liste ne rend jamais un
+ * mot de passe, seule `password.get` le rend et seulement déverrouillée, et le
+ * compte de la carte d'accueil répond même verrouillé.
  */
 
 /** Le handler d'un contrat, typé par ce contrat (le registre est hétérogène). */

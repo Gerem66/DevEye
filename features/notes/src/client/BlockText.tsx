@@ -20,16 +20,11 @@ const MARK_CLASSES: MarkClasses = {
 };
 
 /**
- * One block's text surface, rendering inline markdown live: the markers stay
- * visible but dimmed while the marked text is styled. Because the rendered
- * content's text equals the source character-for-character, the caret maps to a
- * plain offset (see {@link readSelection}).
- *
- * It is *not* an editing host of its own, the whole block list is (see
- * BlockEditor), which is what lets the caret and a selection move freely from
- * one block to the next. It only owns its own HTML: React never renders children
- * here, so a keystroke landing in this element cannot desynchronise React's
- * tree, and re-rendering the formatting under the caret never makes it jump.
+ * Renders inline markdown live, markers kept visible but dimmed. The rendered
+ * text equals the source character-for-character, so the caret maps to a plain
+ * offset (see {@link readSelection}). The editing host is the whole block list
+ * (BlockEditor), which lets the caret cross blocks; React never renders children
+ * here, so a keystroke landing in this element cannot desynchronise its tree.
  */
 export default function BlockText({ value, className, placeholder }: BlockTextProps) {
     const elRef = useRef<HTMLDivElement>(null);

@@ -10,16 +10,9 @@ interface AvatarProps {
 }
 
 /**
- * Pastille d'identité d'un membre : son avatar s'il en a un, sinon son initiale
- * sur sa **couleur de compte** — la même que celle de la présence en direct, de
- * sorte qu'une personne garde une seule couleur dans toute l'application.
- *
- * `user` peut être absent : un compte supprimé laisse `assigneeUserId` à null et
- * un auteur inconnu ne doit pas casser le rendu d'une carte.
- *
- * Composant commun depuis le 29 août 2026 : il vivait dans Projets, où
- * Déploiement venait le chercher. Une pastille d'identité sert à toute feature
- * qui nomme quelqu'un, et un module ne peut l'atteindre que par le barrel.
+ * Pastille d'identité d'un membre : son avatar, sinon son initiale sur sa
+ * couleur de compte (la même que la présence en direct). `user` peut être
+ * absent : un compte supprimé ne doit pas casser le rendu.
  */
 export function Avatar({ user, size = 22, title }: AvatarProps) {
     const label = title ?? user?.username ?? 'Compte supprimé';

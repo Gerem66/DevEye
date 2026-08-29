@@ -1,16 +1,7 @@
--- Les appareils sont rattaches a un espace.
---
--- `owner_id` est CONSERVE : il dit qui a appaire la machine, information reelle
--- qui sert a l'attribution et aux messages d'audit. Il cesse simplement d'etre
--- la frontiere d'acces, qui devient `workspace_id`.
---
--- Les tables filles (`device_metrics`, `device_presence`,
--- `device_process_samples`) ne changent pas : elles passent par `device_id`,
--- donc cloisonner l'appareil cloisonne tout son historique.
---
--- Rien n'est chiffre par une DEK cote appareils (les rapports d'agent sont en
--- clair, cf. SECURITY_MODEL.md) : ce changement de rattachement n'a donc aucun
--- effet cryptographique.
+-- Les appareils sont rattaches a un espace. `owner_id` est CONSERVE (qui a
+-- appaire la machine, pour l'attribution et l'audit) mais cesse d'etre la
+-- frontiere d'acces. Les tables filles passent par `device_id`. Rien n'est
+-- chiffre par une DEK cote appareils : aucun effet cryptographique.
 
 -- 1. devices.
 SET @c = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
@@ -38,10 +29,9 @@ SET @s = IF(@c = 0,
     'SELECT 1');
 PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
--- L'unicite « une machine appairee une fois » se mesure desormais par espace et
--- non par compte : le re-appairage (`findByWorkspaceFingerprint`) doit retrouver
--- la ligne existante dans l'espace vise, pas celle d'un autre espace.
--- Consequence assumee : une meme machine peut etre appairee une fois par espace.
+-- L'unicite « une machine appairee une fois » se mesure par espace : le
+-- re-appairage (`findByWorkspaceFingerprint`) doit retrouver la ligne de
+-- l'espace vise. Une meme machine peut donc etre appairee une fois par espace.
 SET @c = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'devices' AND INDEX_NAME = 'uniq_workspace_fingerprint');
 SET @s = IF(@c = 0,

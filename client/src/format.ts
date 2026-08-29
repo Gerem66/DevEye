@@ -1,8 +1,4 @@
-/**
- * Formats partagés entre features. Né dans Monitoring, promu ici quand
- * CloudSync et Backup s'en sont servis aussi : un format d'affichage n'a pas
- * de feature propriétaire.
- */
+/** Formats d'affichage partagés entre features. */
 
 /** Taille en octets, unités françaises (o / Ko / Mo / Go). */
 export function formatBytesFr(bytes: number): string {

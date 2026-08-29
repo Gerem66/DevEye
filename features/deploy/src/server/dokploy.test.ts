@@ -6,18 +6,9 @@ import { WebSocketServer } from 'ws';
 import { fetchDeploymentLog } from './dokploy';
 
 /**
- * Le rapatriement d'un journal de déploiement.
- *
- * Ce test existe pour un défaut précis, coûteux et invisible : `/listen-deployment`
- * **ne referme jamais** la connexion. C'est un `tail -f`, pas un téléchargement.
- * Le code d'origine attendait la fermeture, plafonnée à trente secondes — le
- * journal était donc complet en deux dixièmes de seconde et la popup restait à
- * « Chargement… » une demi-minute, sans que rien n'échoue ni ne s'affiche dans
- * un journal d'erreurs.
- *
- * Rien ne l'aurait signalé : le résultat était juste, seul le délai était absurde.
- * D'où un serveur réel — un faux client mentirait précisément sur le point qui
- * compte, à savoir que personne ne ferme.
+ * Le rapatriement d'un journal de déploiement. `/listen-deployment` ne referme
+ * jamais la connexion (un `tail -f`, pas un téléchargement) : d'où un serveur
+ * réel, un faux client mentirait précisément sur ce point.
  */
 
 let server: Server;
@@ -74,7 +65,7 @@ describe('fetchDeploymentLog — conclure sans fermeture', () => {
 
     it('respecte encore une fermeture, quand elle vient', async () => {
         // Une autre version de Dokploy pourrait fermer : ce chemin doit rester
-        // le plus rapide des deux, pas être remplacé par l'attente du repos.
+        // le plus rapide des deux.
         behaviour = { chunks: ['fini'], gapMs: 0, close: true };
         const { log, elapsed } = await fetchLog(20_000);
         assert.equal(log, 'fini');
@@ -83,8 +74,7 @@ describe('fetchDeploymentLog — conclure sans fermeture', () => {
 
     it('rend ce qui est arrivé quand le plafond tombe sur un flux bavard', async () => {
         // Un déploiement EN COURS émet sans discontinuer : le silence n'arrive
-        // jamais, et c'est le plafond qui tranche. Le suivi vivant en dépend —
-        // il prend la température du journal sans y passer plus de trois secondes.
+        // jamais, et c'est le plafond qui tranche.
         behaviour = { chunks: Array.from({ length: 40 }, (_, i) => `l${i} `), gapMs: 120, close: false };
         const { log, elapsed } = await fetchLog(1_200);
         assert.ok(log.startsWith('l0 '), 'le début du flux doit être rendu');

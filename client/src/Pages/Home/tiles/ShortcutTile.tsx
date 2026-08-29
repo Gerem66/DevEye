@@ -88,8 +88,7 @@ export function ShortcutTile({ item, hideBadge }: ShortcutTileProps) {
 
     return (
         <div className={`${styles.shortcut} ${refreshing ? styles.refreshing : ''}`} onClick={onClick}>
-            {/* Status dot + small service logo in the corner. Hidden in edit mode,
-                where the action buttons occupy that corner. */}
+            {/* Status dot + small service logo in the corner. */}
             {status && (
                 <span
                     className={`${styles.statusDot} ${status === 'online' ? styles.statusOnline : styles.statusOffline}`}

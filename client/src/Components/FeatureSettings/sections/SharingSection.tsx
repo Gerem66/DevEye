@@ -14,22 +14,10 @@ import { goToItemSettings } from '../goToHome';
 import ItemGrantsPanel from './ItemGrantsPanel';
 
 /**
- * Où cet élément est visible — **ses espaces, et seulement les siens**.
- *
- * ## Ce que la case fait, et ce qu'elle ne fait pas
- *
- * Elle **projette**, elle ne déplace pas. L'élément garde un domicile ; cocher
- * un espace y ouvre une fenêtre. Il s'y lit et s'y modifie comme chez lui, mais
- * son contenu reste chiffré sous la clé de son origine — c'est ce qui permet à
- * ce chantier de ne rien re-chiffrer.
- *
- * ## Pourquoi seulement ses propres espaces
- *
- * La liste est celle des espaces dont on est membre, l'espace personnel
- * compris. Proposer ceux des autres reviendrait à y déposer une donnée dont on
- * ne pourrait plus répondre, et à contourner l'appartenance — la frontière
- * absolue du modèle. Le serveur le refuse aussi : l'écran ne fait que ne pas le
- * proposer.
+ * Où cet élément est visible : ses espaces, et seulement les siens. La case
+ * projette, elle ne déplace pas : l'élément garde un domicile et reste chiffré
+ * sous la clé de son origine. Proposer les espaces d'autrui contournerait
+ * l'appartenance ; le serveur le refuse aussi.
  */
 
 const BLOCKER_TEXT: Record<ShareBlocker, string> = {
@@ -71,18 +59,9 @@ export default function SharingSection({ scope }: Props) {
             .send('share.set', { feature, itemId, workspaceId, shared })
             .then((res) => {
                 setState(res);
-                // La liste de la fonctionnalité change des deux côtés : ici on
-                // vient d'ouvrir ou de fermer une fenêtre, là-bas la ligne
-                // apparaît ou disparaît. Ce qu'on ravive : les ressources que
-                // le manifest du module déclare, toutes, c'est le même geste
-                // que son sujet live. Il y avait ici une table par feature
-                // native branchée au partage, qui suivait
-                // `SHARE_WIRED_FEATURES` (la clé avait d'abord été codée en
-                // dur sur `uptime.list` : partager un dépôt rafraîchissait…
-                // la liste des services). Les natives partageables ont toutes
-                // été rapatriées, Audience la dernière, et la table est partie
-                // avec elles : une feature qui se partage est un module, et un
-                // module n'a rien à inscrire.
+                // La liste de la fonctionnalité change des deux côtés : on ravive
+                // toutes les ressources que le manifest du module déclare, le
+                // même geste que son sujet live.
                 for (const key of moduleManifest(feature)?.resources ?? []) invalidate(key as ResourceKey);
             })
             .catch(() => setError('Modification impossible.'))
@@ -93,15 +72,12 @@ export default function SharingSection({ scope }: Props) {
 
     const noun = featureDescriptor(scope.feature).itemNoun ?? 'élément';
 
-    // Sans le droit de régler le partage, la table d'interrupteurs inertes
-    // n'apprenait rien : elle promettait un geste refusé. On dit simplement où
-    // l'élément est visible, parmi les espaces auxquels l'appelant a accès, et
-    // pourquoi ça ne se règle pas d'ici.
+    // Sans le droit de régler le partage, on dit seulement où l'élément est
+    // visible et pourquoi ça ne se règle pas d'ici.
     if (state.blocker === 'forbidden' || state.blocker === 'foreign') {
         const visible = state.workspaces.filter((w) => w.shared).map((w) => w.workspaceName);
         // Le domicile, s'il est parmi les espaces de l'appelant : c'est là que
-        // le partage se règle, et on peut alors proposer d'y aller plutôt que
-        // d'en rester à l'explication du refus.
+        // le partage se règle, on propose d'y aller.
         const home = state.workspaces.find((w) => w.isHome) ?? null;
         return (
             <div className={styles.section}>
@@ -149,8 +125,7 @@ export default function SharingSection({ scope }: Props) {
                                     : `Rendre visible dans ${w.workspaceName}`
                             }
                             // L'origine n'est pas décochable : l'élément y est
-                            // chez lui, pas projeté. Un interrupteur qui ne
-                            // pourrait qu'échouer n'a pas à être actionnable.
+                            // chez lui, pas projeté.
                             disabled={w.isHome || busy || state.blocker !== null}
                             onChange={(on) => toggle(w.workspaceId, on)}
                         />
@@ -165,11 +140,10 @@ export default function SharingSection({ scope }: Props) {
                                 </span>
                             )}
                         </span>
-                        {/* Régler ce que chaque rôle de CET espace voit de
-                            l'élément, sans avoir à y basculer : le même panneau
-                            que son onglet Permissions, ni plus ni moins. Le
-                            serveur dit qui peut (`grantsManageable`) — membre de
-                            l'espace, et ses rôles en main. */}
+                        {/* Régler ce que chaque rôle de cet espace voit de
+                            l'élément, sans y basculer : le même panneau que son
+                            onglet Permissions. Le serveur dit qui peut
+                            (`grantsManageable`). */}
                         {w.grantsManageable && (
                             <Button
                                 variant='ghost'

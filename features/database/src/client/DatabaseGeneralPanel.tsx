@@ -6,11 +6,7 @@ import type { Database } from '../contracts/domain';
 import { api } from './api';
 import { formatInterval } from './format';
 
-/**
- * Cadences offertes, en secondes, dans les bornes du contrat (une minute à un
- * jour) : la même échelle qu'Uptime, sans le « presque en direct » qu'une base
- * de production n'a aucune raison de subir.
- */
+/** Cadences offertes, dans les bornes du contrat (une minute à un jour). */
 const INTERVALS: { value: number; label: string }[] = [
     { value: 60, label: '1 minute' },
     { value: 300, label: '5 minutes' },
@@ -20,7 +16,6 @@ const INTERVALS: { value: number; label: string }[] = [
     { value: 86400, label: '1 jour' }
 ];
 
-/** Les trois réglages du panneau, découpés de la base chargée. */
 interface Tuning {
     monitorEnabled: boolean;
     intervalSeconds: number;
@@ -36,26 +31,10 @@ function tuningOf(database: Database): Tuning {
 }
 
 /**
- * Les réglages d'une base : le relevé périodique, sa cadence, et le chargement
- * des tables à l'ouverture de sa fiche. Le panneau Général de la coquille de
- * réglages, à l'échelle d'une BASE.
- *
- * Ces trois réglages vivaient dans l'onglet « Options » du dialogue d'édition
- * de la base, à côté de son adresse et de son tunnel (la dette de la coquille).
- * Ils sont ici parce que c'est là que se règle le reste de la base (ses
- * alertes, ses canaux, son partage, ce que chaque rôle en voit), et que le
- * dialogue redevient ce qu'il dit : l'identité de la base.
- *
- * Autonome, comme tous les panneaux de la coquille : il charge la base
- * (`database.get`), se sauvegarde par `database.update` (dont le contrat prend
- * la base ENTIÈRE : le brouillon est recomposé à partir de la base chargée,
- * l'identité conservée telle quelle, et les secrets, jamais rendus au client,
- * restent en place parce qu'ils ne sont pas envoyés) et ravive la fiche et la
- * liste après. Sans le droit d'écriture, les champs restent lisibles mais
- * figés : un formulaire que le serveur refuserait est un écran qui ment.
- *
- * Une base projetée d'un autre espace se lit ici mais se règle chez elle : la
- * ligne se réécrit sous la clé de SON espace, et le serveur refuserait.
+ * Le panneau Général d'une base : relevé périodique, cadence, chargement des
+ * tables. Autonome : il charge la base et se sauvegarde par `database.update`,
+ * dont le contrat prend la base entière (identité recomposée, secrets non
+ * envoyés donc conservés). Une base projetée se lit ici mais se règle chez elle.
  */
 export default function DatabaseGeneralPanel({ scope, canWrite }: SettingsPanelProps) {
     const itemId = scope.kind === 'item' ? scope.itemId : null;
@@ -92,8 +71,7 @@ export default function DatabaseGeneralPanel({ scope, canWrite }: SettingsPanelP
                 database: database.database,
                 username: database.username,
                 // Ni `password` ni `access.secret` : absents, le serveur garde
-                // ceux en place. Le client ne les reçoit jamais, il ne pourrait
-                // pas les renvoyer inchangés.
+                // ceux en place.
                 access: {
                     kind: database.access.kind,
                     host: database.access.host,
@@ -128,9 +106,8 @@ export default function DatabaseGeneralPanel({ scope, canWrite }: SettingsPanelP
     const set = <K extends keyof Tuning>(key: K, value: Tuning[K]) => setDraft((d) => (d ? { ...d, [key]: value } : d));
     const editable = canWrite && !busy;
 
-    // Une cadence saisie avant que la liste existe (n'importe quel nombre de
-    // minutes, jadis) reste affichée telle quelle : un déroulant qui n'a pas
-    // la valeur courante montrerait la première, et c'est un mensonge.
+    // Une cadence hors liste reste affichée telle quelle : un déroulant sans
+    // la valeur courante montrerait la première.
     const intervals = INTERVALS.some((i) => i.value === draft.intervalSeconds)
         ? INTERVALS
         : [

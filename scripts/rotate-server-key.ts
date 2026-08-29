@@ -1,17 +1,14 @@
 /**
- * Change la clé serveur (`CRYPT_KEY_A` / `CRYPT_KEY_B`) sans rien perdre.
- *
- * La clé serveur n'emballe que des clés et scelle le secret TOTP (voir
- * `Docs/KEY_ROTATION.md`, qui est la procédure) : chaque ligne concernée est
- * rouverte sous l'ancienne clé, rescellée sous la nouvelle, relue, et le tout
- * part dans une seule transaction. Rien d'autre en base ne dépend d'elle.
+ * Change la clé serveur (`CRYPT_KEY_A` / `CRYPT_KEY_B`) sans rien perdre : elle
+ * n'emballe que des clés et scelle le secret TOTP (procédure dans
+ * `Docs/KEY_ROTATION.md`). Chaque ligne est rouverte, rescellée, relue, en une
+ * seule transaction.
  *
  * Usage : NEW_CRYPT_KEY_A=… NEW_CRYPT_KEY_B=… npm run rotate:server-key [-- --yes]
- *   anciennes clés : l'environnement courant (`CRYPT_KEY_A/B`) ;
- *   dry-run par défaut : compte, vérifie que tout s'ouvre, n'écrit rien.
+ *   anciennes clés : l'environnement courant ; dry-run par défaut.
  *
- * Serveur ARRÊTÉ : un serveur vivant écrirait encore sous l'ancienne clé.
- * Les archives de sauvegarde déjà écrites restent sous l'ancienne clé dérivée.
+ * Serveur arrêté : un serveur vivant écrirait encore sous l'ancienne clé. Les
+ * archives de sauvegarde déjà écrites restent sous l'ancienne clé dérivée.
  */
 import { createDbPool, testConnection, withTransaction, type Queryable } from '@/db/pool';
 import Encryption from '@/Services/Encryption';

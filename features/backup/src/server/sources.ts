@@ -7,28 +7,10 @@ import { env } from './env';
 import { tarEnd, tarHeader, tarPadding } from './tar';
 
 /**
- * Ce qu'un travail de sauvegarde produit : un nom d'archive et un flux d'octets.
- *
- * Le flux n'est **jamais** matérialisé quelque part avant d'être écrit : il part
- * du producteur (un `mysqldump`, un parcours de blobs) vers la destination en
- * traversant la compression puis, éventuellement, le scellement. Une base de
- * 40 Gio ne coûte donc ni 40 Gio de disque temporaire ni 40 Gio de mémoire.
- *
- * ## Pourquoi `mysqldump` et `pg_dump` plutôt qu'un vidage maison
- *
- * DevEye sait déjà lire une base par les adaptateurs du module Bases de
- * données (`features/database/src/server/engine.ts`), et
- * il aurait été tentant d'en tirer le vidage. Ce serait une erreur : un vidage
- * juste doit reproduire les vues, les procédures, les déclencheurs, les
- * séquences, les contraintes différées, les types utilisateur, l'ordre
- * d'insertion imposé par les clés étrangères, et l'échappement exact de chaque
- * dialecte. Ces outils font exactement ça, ils sont testés par des millions
- * d'installations, et surtout **leur sortie se restaure avec `mysql <` ou
- * `psql <`** — sans DevEye. Une sauvegarde qui exige son producteur pour être
- * relue n'est pas une sauvegarde.
- *
- * ⚠️ Ils doivent donc être présents dans l'image (voir `Dockerfile`). Leur
- * absence est signalée par une phrase explicite, jamais par un `ENOENT` nu.
+ * Ce qu'un travail produit : un nom d'archive et un flux, jamais matérialisé
+ * avant d'être écrit. `mysqldump` et `pg_dump` plutôt qu'un vidage maison :
+ * leur sortie se restaure avec `mysql <` ou `psql <`, sans DevEye. Ils doivent
+ * être présents dans l'image (voir `Dockerfile`).
  */
 
 export interface BackupArtifact {
@@ -117,11 +99,9 @@ export async function* gzipStream(source: AsyncIterable<Buffer>): AsyncGenerator
 }
 
 /**
- * Lance un outil externe et rend sa sortie standard en flux.
- *
- * La sortie d'erreur est **retenue** (bornée) plutôt que journalisée au fil de
- * l'eau : `mysqldump` y écrit ses avertissements bénins autant que la raison
- * d'un échec, et seule la fin de course dit laquelle des deux on vient de lire.
+ * Lance un outil externe, sortie standard en flux. La sortie d'erreur est
+ * retenue (bornée) : seule la fin de course dit si c'était un avertissement
+ * bénin ou la cause d'un échec.
  */
 async function* spawnStream(
     command: string,
@@ -169,14 +149,7 @@ async function* spawnStream(
     }
 }
 
-/**
- * `mysqldump` de MariaDB ne connaît pas `--set-gtid-purged`.
- *
- * Le détecter coûte un `--version` (quelques millisecondes, une fois par
- * sauvegarde) et évite le seul mode d'échec qu'on ne peut pas rattraper une fois
- * l'écriture commencée : découvrir l'option inconnue quand le premier octet est
- * déjà parti sur la destination.
- */
+/** `mysqldump` de MariaDB ne connaît pas `--set-gtid-purged` : le détecter avant que le premier octet parte. */
 async function isMariaDump(): Promise<boolean> {
     return new Promise((resolve) => {
         const child = spawn('mysqldump', ['--version'], { stdio: ['ignore', 'pipe', 'ignore'] });
@@ -204,7 +177,7 @@ function mysqlDumpArgs(host: string, port: number, user: string, database: strin
         '--triggers',
         '--events',
         // Sans droit `PROCESS`, l'absence de ce drapeau fait échouer le vidage
-        // sur un compte applicatif ordinaire — le cas courant.
+        // sur un compte applicatif ordinaire.
         '--no-tablespaces',
         ...(maria ? [] : ['--set-gtid-purged=OFF']),
         database
@@ -224,15 +197,9 @@ export async function deveyeSource(): Promise<BackupArtifact> {
 }
 
 /**
- * Une base supervisée de l'espace, à travers le **même accès** que la
- * supervision, tunnel SSH ou proxy SOCKS compris : l'accès est OUVERT par la
- * feature Bases de données (`DATABASE_BACKUP_PROVIDER`), seule à savoir
- * déchiffrer une connexion, et ce module ne voit qu'un hôte et un port
- * joignables d'ici.
- *
- * L'accès est refermé quand le flux s'achève, quelle qu'en soit la raison : un
- * tunnel oublié laisse une session SSH et un écouteur ouverts, et quelques
- * sauvegardes ratées suffiraient à épuiser les descripteurs du processus.
+ * Une base supervisée, par le même accès que la supervision (tunnel compris),
+ * ouvert par Bases de données. Refermé quand le flux s'achève, quelle qu'en
+ * soit la raison : un tunnel oublié épuise les descripteurs du processus.
  */
 export async function databaseSource(access: DatabaseBackupAccess, label: string): Promise<BackupArtifact> {
     const maria = access.engine === 'mysql' ? await isMariaDump() : false;
@@ -276,16 +243,8 @@ export async function databaseSource(access: DatabaseBackupAccess, label: string
 }
 
 /**
- * Les blobs d'un partage CloudSync, rendus **en clair** dans une archive `tar`.
- *
- * L'index (qui est à quel chemin) vit en base, donc dans la sauvegarde `deveye` ;
- * les blobs, eux, sont la seule partie de DevEye à vivre sur le disque. Les deux
- * ensemble font la restauration complète.
- *
- * L'arborescence est reconstituée telle que l'utilisateur la connaît, et non
- * copiée sous forme de blobs adressés par condensé : une archive doit pouvoir
- * s'extraire avec `tar -xzf` sur une machine où DevEye n'a jamais tourné. C'est
- * la différence entre une sauvegarde et une copie de répertoire technique.
+ * Les blobs d'un partage, en clair dans un `tar` reconstitué depuis l'index :
+ * l'archive doit s'extraire avec `tar -xzf` sans DevEye.
  */
 export async function cloudSyncSource(
     provider: CloudSyncBackupProvider,
@@ -293,8 +252,6 @@ export async function cloudSyncSource(
     logger: SdkLogger
 ): Promise<BackupArtifact> {
     async function* stream(): AsyncGenerator<Buffer> {
-        // Le module fournit l'index et les blobs déchiffrés ; le flux tar
-        // reste ici, côté public, comme pour les autres sources.
         const files = [...(await provider.listPresentFiles(share.id))];
         // Chemin croissant : l'archive se relit dans l'ordre de l'arborescence,
         // et un `tar -t` reste lisible.

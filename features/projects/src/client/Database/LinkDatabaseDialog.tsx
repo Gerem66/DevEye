@@ -16,17 +16,10 @@ interface LinkDatabaseDialogProps {
 
 /**
  * Ajouter une base au projet : en choisir une de l'espace, ou en créer une.
- *
- * **La création passe par le vrai dialogue de la feature** (`DatabaseDialog`,
- * lu par le contrat client du module Bases de données), pas par une copie
- * réduite. Une base a une adresse, un compte, un tunnel et une surveillance ;
- * en réécrire un formulaire ici garantirait qu'il diverge au premier réglage
- * ajouté. Ce dialogue-ci ne fait que l'ouvrir, puis relier ce qu'il a créé,
- * c'est aussi ce que fait l'onglet Git avec `RepoPicker`. Module absent, le
- * dialogue le dit et ne propose rien.
- *
- * Rien n'est exclusif : une base déjà utilisée par un autre projet peut être
- * choisie ici sans lui être retirée.
+ * La création ouvre le dialogue de la feature (`DatabaseDialog`, par le
+ * contrat client du module) plutôt qu'une copie réduite, qui divergerait au
+ * premier réglage ajouté ; module absent, rien n'est proposé. Rien n'est
+ * exclusif : une base utilisée ailleurs peut être choisie ici.
  */
 export function LinkDatabaseDialog({ open, projectId, linkedIds, onClose, onSaved }: LinkDatabaseDialogProps) {
     const provider = moduleClientProvider<DatabaseClientProvider>(DATABASE_CLIENT_PROVIDER);

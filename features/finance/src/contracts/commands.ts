@@ -24,31 +24,16 @@ import {
     financeTransactionSchema
 } from './domain';
 /**
- * Commandes des finances de l'espace.
- *
- * L'espace visé n'apparaît dans aucune entrée: il voyage sur l'enveloppe WS
- * (voir `protocol/envelope`) et le dispatcheur le résout avant le handler.
- *
- * ⚠️ Préfixe unique `finance.` et verbes en camelCase, comme `git`, `database`
- * et `audience`: le filet `MUTATION_VERB` de `_topics.ts` ne voit **aucune** de
- * ces commandes, donc les `mutates` du serveur se relisent à la main. Les huit
- * lectures sont `config`, `summary`, `accountList`, `categoryList`,
- * `transactionList`, `budgetList`, `recurringList` et `overview`; tout le reste
- * écrit.
+ * Commandes des finances. Préfixe `finance.` et verbes en camelCase : le filet
+ * `MUTATION_VERB` de `_topics.ts` ne voit aucune de ces commandes, donc les
+ * `mutates` du serveur se relisent à la main.
  */
 const accountId = z.number().int().positive();
 const categoryId = z.number().int().positive();
 const transactionId = z.number().int().positive();
 const budgetId = z.number().int().positive();
 const recurringId = z.number().int().positive();
-/* ------------------------------------------------------------------ *
- * Réglages
- * ------------------------------------------------------------------ */
-/**
- * Les réglages de l'espace. Jamais gardés derrière un droit d'écriture: toute
- * lecture en a besoin (ne serait-ce que pour formater un montant), et la
- * première ouverture de la feature crée la ligne par défaut si elle manque.
- */
+/** Jamais derrière un droit d'écriture : toute lecture en a besoin, ne serait-ce que pour formater un montant. */
 export const financeConfig = {
     command: 'finance.config' as const,
     input: z.object({}),
@@ -65,9 +50,6 @@ export const financeSummary = {
     input: z.object({}),
     output: z.object({ summary: financeSummarySchema })
 };
-/* ------------------------------------------------------------------ *
- * Comptes
- * ------------------------------------------------------------------ */
 const accountDraftSchema = z.object({
     name: z.string().min(1).max(FINANCE_NAME_MAX_LENGTH),
     kind: financeAccountKindSchema,
@@ -76,11 +58,7 @@ const accountDraftSchema = z.object({
     note: z.string().max(FINANCE_NOTE_MAX_LENGTH),
     archived: z.boolean()
 });
-/**
- * Les comptes de l'espace, soldes compris. `archived` inclut ceux qu'on a mis
- * de côté; sans lui la liste ne rend que les comptes vivants, ce dont ont besoin
- * tous les sélecteurs.
- */
+/** `archived` inclut les comptes mis de côté ; sans lui, seuls les vivants, ce que veulent les sélecteurs. */
 export const financeAccountList = {
     command: 'finance.accountList' as const,
     input: z.object({ archived: z.boolean().optional() }),
@@ -96,11 +74,7 @@ export const financeAccountUpdate = {
     input: z.object({ accountId, account: accountDraftSchema }),
     output: z.object({ account: financeAccountSchema })
 };
-/**
- * Supprime un compte. Refusé (`conflict`) tant qu'il porte des opérations: les
- * effacer avec lui ferait disparaître de l'argent d'un livre de comptes sans
- * autre trace, et le seul geste réversible existe déjà (l'archivage).
- */
+/** Refusé (`conflict`) tant qu'il porte des opérations : le geste réversible est l'archivage. */
 export const financeAccountRemove = {
     command: 'finance.accountRemove' as const,
     input: z.object({ accountId }),
@@ -111,9 +85,6 @@ export const financeAccountReorder = {
     input: z.object({ accountIds: z.array(accountId).min(1) }),
     output: z.object({ accountIds: z.array(accountId) })
 };
-/* ------------------------------------------------------------------ *
- * Catégories
- * ------------------------------------------------------------------ */
 const categoryDraftSchema = z.object({
     name: z.string().min(1).max(FINANCE_NAME_MAX_LENGTH),
     flow: financeFlowSchema,
@@ -136,10 +107,8 @@ export const financeCategoryUpdate = {
     output: z.object({ category: financeCategorySchema })
 };
 /**
- * Supprime une catégorie. Les opérations qu'elle classait ne sont pas touchées:
- * elles retombent simplement dans « Sans catégorie » (`ON DELETE SET NULL`).
- * Les budgets posés dessus, eux, disparaissent avec elle: une enveloppe sans
- * catégorie ne veut plus rien dire.
+ * Les opérations retombent dans « Sans catégorie » (`ON DELETE SET NULL`) ;
+ * les budgets posés dessus disparaissent avec elle.
  */
 export const financeCategoryRemove = {
     command: 'finance.categoryRemove' as const,
@@ -151,9 +120,6 @@ export const financeCategoryReorder = {
     input: z.object({ categoryIds: z.array(categoryId).min(1) }),
     output: z.object({ categoryIds: z.array(categoryId) })
 };
-/* ------------------------------------------------------------------ *
- * Opérations
- * ------------------------------------------------------------------ */
 const transactionDraftSchema = z.object({
     accountId,
     kind: financeTransactionKindSchema,
@@ -168,15 +134,9 @@ const transactionDraftSchema = z.object({
     cleared: z.boolean()
 });
 /**
- * Le journal, filtré et paginé.
- *
- * Toute la sélection est faite en SQL sur des colonnes en clair. La **recherche
- * textuelle** n'y figure pas et ne peut pas y figurer: l'intitulé et le tiers
- * sont chiffrés, donc aucun `LIKE` ne les atteint. Le client filtre ce qu'il a
- * chargé, ce qui est honnête tant que la fenêtre est bornée par une période.
- *
- * `totals` porte les sommes de l'**ensemble** du filtre, pas de la page: sans
- * ça, un total qui ne compte que 50 lignes sur 300 induit en erreur.
+ * Le journal, filtré en SQL sur les colonnes en clair. Pas de recherche
+ * textuelle : intitulé et tiers sont chiffrés, le client filtre ce qu'il a
+ * chargé. `totals` porte les sommes de tout le filtre, pas de la page.
  */
 export const financeTransactionList = {
     command: 'finance.transactionList' as const,
@@ -220,13 +180,8 @@ export const financeTransactionRemove = {
     output: z.object({ transactionId })
 };
 /**
- * Pointe ou dépointe une opération, sans toucher au reste.
- *
- * Commande à part plutôt qu'un passage par `transactionUpdate`: pointer est un
- * clic sur une ligne, répété des dizaines de fois d'affilée au moment du
- * rapprochement bancaire. Le faire passer par la modification complète
- * imposerait de déchiffrer puis rechiffrer le contenu à chaque clic, pour un
- * booléen qui est en clair.
+ * Commande à part : pointer se répète des dizaines de fois au rapprochement,
+ * et passer par `transactionUpdate` rechiffrerait le contenu à chaque clic.
  */
 export const financeTransactionSetCleared = {
     command: 'finance.transactionSetCleared' as const,
@@ -236,19 +191,12 @@ export const financeTransactionSetCleared = {
     }),
     output: z.object({ transactionIds: z.array(transactionId), cleared: z.boolean() })
 };
-/* ------------------------------------------------------------------ *
- * Budgets
- * ------------------------------------------------------------------ */
 export const financeBudgetList = {
     command: 'finance.budgetList' as const,
     input: z.object({}),
     output: z.object({ budgets: z.array(financeBudgetSchema) })
 };
-/**
- * Pose ou remplace l'enveloppe d'une catégorie. Une seule par catégorie, d'où
- * un `budgetSet` plutôt qu'un couple ajout / modification: deux enveloppes sur
- * la même catégorie n'auraient aucun sens et il faudrait ensuite les départager.
- */
+/** Une seule enveloppe par catégorie, d'où un `set` plutôt qu'un couple ajout / modification. */
 export const financeBudgetSet = {
     command: 'finance.budgetSet' as const,
     input: z.object({ categoryId, amount: financeAmountSchema, period: financeBudgetPeriodSchema }),
@@ -259,9 +207,6 @@ export const financeBudgetRemove = {
     input: z.object({ budgetId }),
     output: z.object({ budgetId })
 };
-/* ------------------------------------------------------------------ *
- * Échéances
- * ------------------------------------------------------------------ */
 const recurringDraftSchema = z.object({
     accountId,
     kind: financeTransactionKindSchema,
@@ -303,12 +248,7 @@ export const financeRecurringRemove = {
     input: z.object({ recurringId }),
     output: z.object({ recurringId })
 };
-/**
- * Écrit maintenant l'occurrence attendue, et avance la date de la suivante.
- * C'est le clic que réclame une échéance non automatique. `amount` permet de
- * corriger au passage le montant d'une facture qui varie, sans toucher au
- * modèle lui-même.
- */
+/** Écrit l'occurrence attendue et avance la date. `amount` corrige au passage une facture qui varie. */
 export const financeRecurringPost = {
     command: 'finance.recurringPost' as const,
     input: z.object({ recurringId, amount: financeAmountSchema.optional() }),
@@ -320,9 +260,6 @@ export const financeRecurringSkip = {
     input: z.object({ recurringId }),
     output: z.object({ recurring: financeRecurringSchema })
 };
-/* ------------------------------------------------------------------ *
- * Tableau de bord
- * ------------------------------------------------------------------ */
 export const financeOverview = {
     command: 'finance.overview' as const,
     input: z.object({ range: financeRangeSchema }),

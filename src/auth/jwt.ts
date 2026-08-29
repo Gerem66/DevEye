@@ -128,14 +128,10 @@ export async function verifyTwoFactorChallenge(
 }
 
 /**
- * Le ticket de session d'un module (`ctx.secrecy.ticket` du SDK) : ce qu'un
- * module tend au navigateur pour une route publique de son service (une URL de
- * téléchargement, un `state` OAuth), et que `deps.secrecy.redeem` lui rend
- * contre les codecs de l'appelant. Signé par l'hôte avec le secret des jetons
- * d'accès ; l'audience porte l'identifiant du module, de sorte qu'un ticket
- * n'est rendu qu'au module qui l'a émis. La charge utile est celle du module,
- * relue telle quelle ; l'identité (session, espace, compte) est celle de
- * l'hôte, que le module n'a jamais vue.
+ * Le ticket de session d'un module : ce qu'un module tend au navigateur pour une
+ * route publique de son service (URL de téléchargement, `state` OAuth). L'audience
+ * porte l'identifiant du module, donc un ticket n'est rendu qu'à son émetteur ;
+ * la charge utile est celle du module, l'identité celle de l'hôte.
  */
 export interface ModuleTicketClaims {
     userId: number;

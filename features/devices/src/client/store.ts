@@ -5,25 +5,11 @@ import type { Device } from '@deveye/types';
 import { api } from './api';
 
 /**
- * Listes d'appareils partagées, interrogées tant qu'un consommateur est monté :
- * la tuile, Monitoring, la topbar et l'accueil (par le provider du module)
- * restent ainsi synchronisés sans se re-fetcher chacun de leur côté.
- *
- * Pas de sondage : la liste se relit quand le sujet `devices` bouge, c'est-à-
- * dire sur une commande de flotte, ou quand un agent se connecte ou se
- * déconnecte (l'ingestion le signale au moteur de présence). C'est plus
- * réactif que les six secondes d'un sondage, et strictement muet quand rien ne
- * change.
- *
- * Deux portées, deux listes indépendantes :
- *  - **espace** : les appareils de l'espace actif. C'est le plan de données :
- *    accueil, topbar, Monitoring. Le contenu change à chaque bascule d'espace.
- *  - **flotte** : tous les appareils, tous espaces confondus, réservé aux
- *    administrateurs. C'est ce que gère le segment « Flotte ».
- *
- * Une seule mécanique, instanciée deux fois : sans ça, la flotte et l'accueil
- * se marcheraient dessus en partageant un état qui ne décrit pas le même
- * ensemble.
+ * Listes d'appareils partagées, vivantes tant qu'un consommateur est monté. Pas
+ * de sondage : la liste se relit quand le sujet `devices` bouge (une commande
+ * de flotte, un agent qui se connecte ou se déconnecte). Deux portées, deux
+ * listes indépendantes : l'espace actif (accueil, topbar, Monitoring) et la
+ * flotte entière (administrateurs), qui ne décrivent pas le même ensemble.
  */
 interface DevicesState {
     devices: Device[];
@@ -54,10 +40,8 @@ function createDeviceList(scope: Scope): DeviceListStore {
     }
 
     async function refresh(): Promise<void> {
-        // La socket peut encore se connecter (chargement de la page) ou se
-        // reconnecter : un envoi rejette aussitôt et ferait clignoter un faux
-        // « Connexion indisponible ». On reste en chargement, la réouverture
-        // relance la lecture.
+        // Socket pas encore ouverte : un envoi rejetterait aussitôt et ferait
+        // clignoter un faux « Connexion indisponible ». La réouverture relance.
         if (!isSocketOpen()) return;
         try {
             const res = await api.send('devices.list', scope === 'fleet' ? { scope } : {});
@@ -76,8 +60,7 @@ function createDeviceList(scope: Scope): DeviceListStore {
         refCount += 1;
         if (refCount !== 1) return;
         offInvalidate = onResourceChange('devices.list', () => void refresh());
-        // Tout de suite si la socket est ouverte, puis à chaque réouverture :
-        // la liste paraît sans attendre, et sans erreur pendant la connexion.
+        // Tout de suite si la socket est ouverte, puis à chaque réouverture.
         offOpen = onSocketOpen(() => void refresh());
     }
 
@@ -125,14 +108,10 @@ export const onDevicesChange = workspaceList.onChange;
 export const useFleetDevices = fleetList.use;
 
 /**
- * Vide les deux listes et repasse en chargement, à la déconnexion **et à chaque
- * bascule d'espace** (l'app l'appelle par le provider).
- *
- * Indispensable : sans ça, la nouvelle session (ou le nouvel espace) démarre
- * avec les appareils du précédent et `loading: false`. L'accueil lance alors son
- * élagage des tuiles contre une liste étrangère et **supprime définitivement**
- * de la disposition les tuiles dont les appareils n'appartenaient pas à
- * l'ensemble d'avant.
+ * Vide les deux listes et repasse en chargement, à la déconnexion et à chaque
+ * bascule d'espace. Sans ça, le nouvel espace démarre avec les appareils du
+ * précédent et `loading: false` : l'accueil élague ses tuiles contre une liste
+ * étrangère et les supprime définitivement.
  */
 export function resetDevices(): void {
     workspaceList.reset();

@@ -30,10 +30,8 @@
     color: var(--text-secondary);
 }
 
-/* Two columns rather than one: the card's height only affords two rows, and a
-   single column left half the width unused while pushing the fourth line out of
-   the card. `minmax(0, 1fr)` is what lets a cell shrink below its content so the
-   names below can actually ellipsize. Pinned to the bottom of the card. */
+/* Two columns: the card's height only affords two rows. `minmax(0, 1fr)` lets
+   a cell shrink below its content so the names can ellipsize. */
 .deviceList {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -45,8 +43,7 @@
     display: flex;
     align-items: center;
     gap: var(--space-sm);
-    /* Grid items default to `min-width: auto` — without this a long hostname
-       widens its track and spills past the card edge. */
+    /* Grid items default to `min-width: auto`: a long hostname would widen its track. */
     min-width: 0;
     font-size: 0.8rem;
     color: var(--text-secondary);
@@ -74,8 +71,7 @@
     white-space: nowrap;
 }
 
-/* Occupies the last slot of the grid when the fleet outgrows it, so it reads as
-   one more entry in the block rather than as a caption above it. */
+/* Occupies the last slot of the grid when the fleet outgrows it. */
 .moreDevices {
     display: flex;
     align-items: center;
@@ -84,7 +80,6 @@
     font-style: italic;
 }
 
-/* Full view */
 /* ------------------------------------------------------------------ *
  * La vue complète : le segment (Monitoring | Flotte) au-dessus du contenu
  * ------------------------------------------------------------------ */
@@ -103,9 +98,7 @@
     flex: none;
 }
 
-/* Le contenu du segment prend le reste de la hauteur et défile sous la barre
-   (Monitoring fait déjà défiler ses deux colonnes séparément ; la flotte, une
-   grille de cartes, défile ici). */
+/* Le contenu du segment prend le reste de la hauteur et défile sous la barre. */
 .viewBody {
     flex: 1;
     min-height: 0;
@@ -116,10 +109,9 @@
  * Mini-widget de topbar
  * ------------------------------------------------------------------ */
 
-/* L'icône porte l'identité (quel widget ?) et l'état. L'hôte la teinte en
-   accent par défaut (`.statusItem .icon`, deux classes) : la teinte « en
-   ligne » pèse trois classes pour l'emporter quel que soit l'ordre des
-   feuilles, avec le même jeton que les statuts natifs (`--success`). */
+/* L'hôte teinte l'icône en accent par défaut (`.statusItem .icon`, deux
+   classes) : la teinte « en ligne » pèse trois classes pour l'emporter quel que
+   soit l'ordre des feuilles. */
 :global(.icon).statusIcon.statusOk {
     color: var(--success);
 }
@@ -143,7 +135,6 @@
     margin: 0 0 var(--space-lg) 0;
 }
 
-/* Feature header: title block + general "how it works" info button. */
 .titleRow {
     display: flex;
     align-items: flex-start;
@@ -151,13 +142,12 @@
     gap: var(--space-sm);
 }
 
-/* Title on the left; actions (update-all + info) on the right, hugging the panel. */
 .titleHead {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    /* Le bouton Réglages s'ajoute aux icônes : dans la colonne de 260 px, la
-       rangée d'actions passe à la ligne plutôt que de déborder. */
+    /* Dans la colonne de 260 px, la rangée d'actions passe à la ligne plutôt
+       que de déborder. */
     flex-wrap: wrap;
     gap: var(--space-sm);
 }
@@ -168,7 +158,7 @@
     gap: var(--space-xs);
 }
 
-/* Sidebar variant: compact, sits atop the device list (frees the full-width band). */
+/* Sidebar variant: compact, atop the device list. */
 .titleSidebar .title {
     font-size: 1.25rem;
 }
@@ -255,14 +245,9 @@
     }
 }
 
-/*
- * Les cartes, dans leur propre boîte à l'intérieur du volet défilant.
- *
- * C'est elle qui ancre la barre d'insertion : `.deviceListFull` défile, donc un
- * enfant absolu s'y positionnerait par rapport au *contenu* et non à ce qu'on
- * voit. Ici, la boîte se déplace avec le défilement, et la barre suit sans
- * qu'aucun code n'ait à corriger un `scrollTop`.
- */
+/* Les cartes, dans leur propre boîte à l'intérieur du volet défilant : c'est
+   elle qui ancre la barre d'insertion, et elle se déplace avec le défilement
+   sans qu'aucun code n'ait à corriger un `scrollTop`. */
 .deviceCards {
     position: relative;
     display: flex;
@@ -270,11 +255,8 @@
     gap: var(--space-sm);
 }
 
-/*
- * Où atterrirait la carte glissée. Traverse la liste et se tient dans
- * l'interstice lui-même : aucune ligne n'est déplacée ni restylée pour montrer
- * la cible. Pilotée par le DOM (voir `src/dragReorder.ts`), jamais par un état.
- */
+/* Où atterrirait la carte glissée, dans l'interstice lui-même. Pilotée par le
+   DOM (voir `useDragReorder`), jamais par un état. */
 .dropBar {
     position: absolute;
     left: 0;
@@ -288,11 +270,9 @@
     pointer-events: none;
 }
 
-/* Poignée de réorganisation, comme dans Uptime, Git et les bases de données :
-   cachée jusqu'au survol, à la manière des éditeurs natifs. `touch-action: none`
-   est ce qui rend le geste possible au doigt — il empêche le défileur de
-   revendiquer le mouvement — et reste cantonné à ces 16 px, de sorte qu'une
-   pression ailleurs sur la carte fait toujours défiler la liste. */
+/* Poignée de réorganisation, cachée jusqu'au survol. `touch-action: none` rend
+   le geste possible au doigt (le défileur ne revendique pas le mouvement) et
+   reste cantonné à ces 16 px : ailleurs, la carte fait défiler la liste. */
 .grip {
     flex-shrink: 0;
     width: 16px;
@@ -316,15 +296,14 @@
     cursor: grabbing;
 }
 
-/* Aucun survol pour la révéler : elle doit être là d'emblée. */
+/* Pas de survol au doigt : la poignée doit être là d'emblée. */
 @media (pointer: coarse) {
     .grip {
         opacity: 1;
     }
 }
 
-/* La carte en cours de déplacement : estompée plutôt que masquée, pour que sa
-   place reste un repère pendant que la barre montre la cible. */
+/* La carte en cours de déplacement : estompée, sa place reste un repère. */
 .deviceCardDragging {
     filter: opacity(0.4);
     cursor: grabbing;
@@ -392,7 +371,7 @@
     white-space: nowrap;
 }
 
-/* Per-device update affordance in the sidebar card (accent, right-aligned). */
+/* Per-device update button in the sidebar card. */
 .cardUpdateBtn {
     margin-left: auto;
     display: inline-flex;
@@ -512,22 +491,17 @@
     font-variant-numeric: tabular-nums;
 }
 
-/* Per-device collection config dialog (opened from the Monitoring panel). */
+/* Per-device collection config panel. */
 .configGrid {
     display: flex;
     flex-direction: column;
     gap: var(--space-md);
 }
 
-/*
- * Grille et non rangée flex : le libellé prend la place restante, le champ
- * exactement la sienne, et la précision occupe une seconde ligne sur toute la
- * largeur. En flex, elle se rangeait à côté du champ et sortait de la popup.
- *
- * `minmax(0, …)` des deux côtés : sans lui, `min-width: auto` empêche une
- * colonne de descendre sous son contenu le plus large, et le débordement
- * reprend dès que la fenêtre se resserre.
- */
+/* Grille et non rangée flex : la précision occupe une seconde ligne sur toute
+   la largeur au lieu de se ranger à côté du champ. `minmax(0, …)` des deux
+   côtés : sans lui, `min-width: auto` empêche une colonne de descendre sous
+   son contenu. */
 .configRow {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, auto);
@@ -541,11 +515,8 @@
     min-width: 0;
 }
 
-/*
- * Compressible, et à la ligne au besoin : figé (`flex-shrink: 0`), ce bloc ne
- * cédait jamais un pixel — tout ce qui dépassait la largeur utile de la popup
- * en sortait et se faisait rogner par son `overflow-x: hidden`.
- */
+/* Compressible, et à la ligne au besoin : figé, ce bloc sortirait de la popup
+   et se ferait rogner par son `overflow-x: hidden`. */
 .configField {
     display: flex;
     flex-wrap: wrap;
@@ -569,8 +540,8 @@
     width: 72px;
 }
 
-/* Précision sous un champ (coût de stockage projeté…), alignée à droite sur
-   toute la largeur de la ligne pour ne pas élargir la colonne du champ. */
+/* Précision sous un champ, sur toute la largeur pour ne pas élargir la colonne
+   du champ. */
 .configHint {
     grid-column: 1 / -1;
     justify-self: end;
@@ -639,7 +610,7 @@
     font-weight: 600;
 }
 
-/* Discreet label: total time span the graphs cover (live / zone / snapshot). */
+/* Total time span the graphs cover. */
 .graphsSpan {
     display: flex;
     align-items: center;
@@ -812,9 +783,8 @@
     border: 1px solid var(--border);
     background: linear-gradient(120deg, color-mix(in srgb, var(--activity-color) 14%, transparent), transparent 70%);
     --activity-color: var(--text-muted);
-    /* Transitioning the tint (registered as a `<color>` in Styles/theme.css)
-       rather than any one property that uses it: it inherits, so the label, the
-       icon and the dot's halo below all cross-fade from this single line. */
+    /* The tint is registered as a `<color>` in Styles/theme.css and inherits:
+       label, icon and halo all cross-fade from this single line. */
     transition: --activity-color var(--transition-slow);
 }
 .activityHero.muted {
@@ -957,7 +927,7 @@
 
 /* ─── Loading skeletons (device switch / first load) ──────────────────────── */
 
-/* A shimmering placeholder block; sized by the modifier classes below. */
+/* A shimmering placeholder block, sized by the modifier classes below. */
 .skelLine {
     position: relative;
     overflow: hidden;
@@ -1370,8 +1340,7 @@
 /* ─── Top processes table ─────────────────────────────────────────────────── */
 
 /* Disposition automatique : chaque colonne de données se dimensionne sur son
-   contenu (cf. .procNum) et le nom absorbe ce qui reste (cf. .procName). Une
-   disposition fixe donnait l'inverse — un nom démesuré, des chiffres repliés. */
+   contenu (.procNum) et le nom absorbe ce qui reste (.procName). */
 .procTable {
     width: 100%;
     border-collapse: collapse;
@@ -1393,9 +1362,8 @@
     border-top: 1px solid var(--glass-border);
 }
 
-/* Numeric columns: right-aligned, tabular figures. `width: 1%` les réduit à
-   leur contenu, `nowrap` garantit qu'une valeur composée comme
-   « 923.5 MB / 22.5 MB » tienne sur une seule ligne. */
+/* Numeric columns. `width: 1%` les réduit à leur contenu, `nowrap` garde une
+   valeur composée sur une seule ligne. */
 .procNum {
     text-align: right;
     width: 1%;
@@ -1403,9 +1371,8 @@
     font-variant-numeric: tabular-nums;
 }
 
-/* Seule cellule au contenu non borné : une liste de ports peut être longue. On
-   la plafonne pour qu'elle n'élargisse pas le tableau au-delà du panneau, la
-   liste complète restant lisible au survol. */
+/* Une liste de ports peut être longue : plafonnée pour ne pas élargir le
+   tableau, la liste complète reste lisible au survol. */
 .procPorts {
     max-width: 28ch;
     overflow: hidden;
@@ -1511,7 +1478,7 @@
     position: relative;
 }
 
-/* The trigger reuses the header-button look but carries a label + chevron. */
+/* The header-button look, with a label + chevron. */
 .actionsMenuBtn {
     width: auto;
     gap: 6px;
@@ -1584,7 +1551,7 @@
     color: var(--accent);
 }
 
-/* Update-available button: accent by default so it stands out among the header icons. */
+/* Update-available button: accent, to stand out among the header icons. */
 .iconHeaderUpdate {
     border-color: var(--accent);
     color: var(--accent);
@@ -1729,16 +1696,14 @@
     pointer-events: none;
 }
 
-/* An instant that also carries a process list. Marks are metric instants, so
-   with `processCapture: 'off'` every tick is navigable but none is inspectable —
-   this keeps the difference readable instead of implicit. Declared before
-   .snapshotMarkPinned so pinning still wins the colour. */
+/* An instant that also carries a process list (with `processCapture: 'off'`
+   none does). Declared before .snapshotMarkPinned so pinning wins the colour. */
 .snapshotMarkProc {
     opacity: 0.75;
 }
 
-/* Continuous "data available" run, drawn instead of individual ticks once the
-   window holds more marks than are legible (see MAX_INDIVIDUAL_MARKS). */
+/* Continuous "data available" run, instead of individual ticks past
+   MAX_INDIVIDUAL_MARKS. */
 .snapshotBand {
     position: absolute;
     bottom: 0;
@@ -1989,9 +1954,8 @@
     width: 35%;
     animation: pkgIndet 1.1s ease-in-out infinite;
 }
-/* Une commande terminée : barre pleine, couleur de son issue. Sans ça une
-   progression sans pourcentage (le cas d'apt) laissait, une fois finie, une
-   barre affichée mais vide — un travail visiblement inachevé. */
+/* Une commande terminée : barre pleine, couleur de son issue, sinon une
+   progression sans pourcentage (apt) finit sur une barre vide. */
 .pkgBarOk {
     background: var(--success, var(--accent));
 }
@@ -2307,8 +2271,7 @@
     align-items: center;
     gap: var(--space-sm);
 }
-/* Relancer la session, et le bouton commun des réglages (les préférences du
-   terminal vivent dans la coquille, à l'échelle de la feature). */
+/* Relancer la session, et le bouton commun des réglages. */
 .terminalBar {
     display: flex;
     justify-content: flex-end;
@@ -2451,12 +2414,11 @@
     background: var(--accent);
     opacity: 0.8;
     transition: width 0.25s ease;
-    /* Same radius as the track: below 100% the fill's right edge used to be a
-       raw vertical cut (the track's overflow only rounds it at full width). */
+    /* Same radius as the track: its overflow only rounds the fill at full width. */
     border-radius: inherit;
 }
-/* Indeterminate sweep shown while the recursive usage is still being computed —
-   kept very subtle so it reads as "loading", not as a real bar. */
+/* Indeterminate sweep while the recursive usage is computed: subtle, so it
+   reads as "loading", not as a real bar. */
 .filesBarIndet {
     display: block;
     height: 100%;

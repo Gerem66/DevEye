@@ -13,39 +13,15 @@ import type {
 import { openTunnel, type TunnelConfig } from './tunnel';
 
 /**
- * Joindre une base, quel que soit son dialecte.
- *
- * Deux adaptateurs derrière une seule interface : tout ce qui est au-dessus —
- * les commandes, le relevé périodique, l'évaluation des alertes — ignore lequel
- * répond. Ajouter un troisième moteur revient à écrire un `EngineAdapter` de
- * plus, sans toucher au reste.
- *
- * ## Une connexion par opération, jamais de pool
- *
- * Une base d'inventaire n'est pas la base de l'application : on l'interroge
- * quelques fois par heure au plus, et souvent jamais. Un pool tiendrait des
- * sockets ouvertes vers des serveurs tiers pour rien, et à travers un tunnel
- * SSH il tiendrait aussi la session SSH. On ouvre, on lit, on ferme.
- *
- * ## Lecture seule, et deux gardes distinctes
- *
- * Les requêtes d'une condition d'alerte, comme celles de l'explorateur, sont du
- * texte écrit par l'utilisateur. Deux protections, qui ne visent pas la même
- * chose :
- *
- *  - {@link assertReadOnly} refuse tout ce qui n'est pas un `SELECT`/`WITH`
- *    unique. C'est une garde d'intention : DevEye n'est pas un client SQL, et
- *    une feature de surveillance n'a pas à écrire ;
- *  - le **compte** utilisé reste celui que l'utilisateur a saisi. C'est lui, et
- *    lui seul, qui décide de ce qui est réellement possible. L'interface le dit
- *    : le bon réflexe est un compte en lecture seule.
+ * Joindre une base, quel que soit son dialecte : deux adaptateurs derrière une
+ * seule interface. Une connexion par opération, jamais de pool : une base
+ * d'inventaire s'interroge rarement, et un pool tiendrait aussi la session SSH.
+ * `assertReadOnly` garde l'intention ; le compte saisi décide en dernier ressort.
  */
 
-/** Au-delà, on abandonne : une requête d'inventaire n'a pas à durer. */
 const QUERY_TIMEOUT_MS = 15_000;
 const CONNECT_TIMEOUT_MS = 12_000;
 
-/** Lignes rendues par défaut à l'exploration. */
 export const ROWS_PAGE_DEFAULT = 50;
 
 export interface EngineTarget {
@@ -65,27 +41,21 @@ export interface Inventory {
     tableCount: number;
 }
 
-/**
- * Des plages de valeurs sur une colonne, bornes comprises.
- *
- * La colonne est validée par l'appelant, comme partout ailleurs ici ; les bornes
- * sont des nombres, liés en paramètres.
- */
+/** Des plages sur une colonne, bornes comprises ; colonne validée par l'appelant. */
 export interface IdRanges {
     column: string;
     ranges: DatabaseIdRange[];
 }
 
-/** Comment lire une page de table : filtres, ordre, fenêtre. */
 export interface PageRequest {
     offset: number;
     limit: number;
     /** Critères de recherche ; colonnes validées par l'appelant. */
     filters?: DatabaseFilter[];
-    /** Comment les filtres se combinent. `and` par défaut. */
+    /** `and` par défaut. */
     combinator?: 'and' | 'or';
     sort?: DatabaseSort;
-    /** Bornes sur une colonne, ajoutées **par un ET** aux critères. */
+    /** Bornes sur une colonne, ajoutées par un ET aux critères. */
     ranges?: IdRanges;
 }
 
@@ -97,24 +67,18 @@ export interface ExecutionResult {
 }
 
 /**
- * Une session ouverte sur une base, le temps d'une suite d'opérations.
- *
- * **Aucun nom n'est validé ici.** Table et colonnes arrivent déjà confrontées au
- * catalogue réel par l'appelant (`explore.ts`), qui
- * est le seul endroit où cette vérification a du sens : c'est lui qui reçoit ce
- * que le client a envoyé. La session, elle, ne fait que citer.
+ * Une session ouverte sur une base. Aucun nom n'est validé ici : table et
+ * colonnes arrivent confrontées au catalogue par `explore.ts`, la session cite.
  */
 export interface Session {
     serverVersion(): Promise<string>;
     inventory(): Promise<Inventory>;
     tables(): Promise<DatabaseTable[]>;
-    /** Colonnes, clé primaire, clés étrangères et index d'une table. */
     structure(schema: string, table: string): Promise<DatabaseStructure>;
-    /** Le contenu d'une table, page par page, filtres et ordre compris. */
     tableRows(schema: string, table: string, page: PageRequest): Promise<DatabaseRows>;
-    /** Une requête de lecture, telle que l'utilisateur l'a écrite. */
+    /** Lecture seule (`assertReadOnly`). */
     query(sql: string): Promise<DatabaseRows>;
-    /** Une instruction libre, écriture comprise — le terminal. */
+    /** Une instruction libre, écriture comprise (le terminal). */
     execute(sql: string): Promise<ExecutionResult>;
     insertRow(schema: string, table: string, values: DatabaseCell[]): Promise<number>;
     updateRow(schema: string, table: string, key: DatabaseCell[], values: DatabaseCell[]): Promise<number>;
@@ -122,14 +86,7 @@ export interface Session {
     close(): Promise<void>;
 }
 
-/**
- * Ce que devient une valeur au transport.
- *
- * Tout en chaîne : un `BIGINT` dépasse le nombre sûr de JavaScript, une date n'a
- * pas la même forme chez les deux moteurs, et un binaire n'a pas de
- * représentation JSON. Le formatage appartient à l'affichage ; ici, on veut
- * seulement ne rien perdre.
- */
+/** Tout en chaîne au transport, pour ne rien perdre (`BIGINT`, dates, binaires). */
 function toText(value: unknown): string | null {
     if (value === null || value === undefined) return null;
     if (value instanceof Date) return value.toISOString();
@@ -138,15 +95,9 @@ function toText(value: unknown): string | null {
     return String(value);
 }
 
-// --------------------------------------------------------------- dialectes
-
 /**
- * Ce qui distingue les deux moteurs dans la fabrication d'une requête.
- *
- * Deux points, et deux seulement : la façon de citer un identifiant, et la façon
- * de désigner un paramètre. Tout le reste — clauses `WHERE`, `ORDER BY`,
- * `INSERT`, `UPDATE`, `DELETE` — s'écrit une fois pour les deux, ce qui évite
- * que la recherche marche d'un côté et pas de l'autre.
+ * Ce qui distingue les deux moteurs dans une requête : citer un identifiant et
+ * désigner un paramètre. Tout le reste s'écrit une fois pour les deux.
  */
 interface Dialect {
     quote(identifier: string): string;
@@ -165,11 +116,8 @@ const POSTGRES: Dialect = {
 };
 
 /**
- * Les valeurs liées d'une requête en construction.
- *
- * Un compteur partagé, parce que PostgreSQL numérote ses marqueurs : la clause
- * `WHERE`, l'ordre et la fenêtre doivent puiser dans la même suite, sinon `$3`
- * désigne la mauvaise valeur.
+ * Les valeurs liées d'une requête. Un compteur partagé, parce que PostgreSQL
+ * numérote ses marqueurs : `WHERE`, ordre et fenêtre puisent dans la même suite.
  */
 class Params {
     readonly values: unknown[] = [];
@@ -181,23 +129,10 @@ class Params {
 }
 
 /**
- * La clause `WHERE` d'une recherche.
- *
- * L'opérateur vient d'une énumération fermée et la valeur est **toujours liée** :
- * aucun fragment écrit par l'utilisateur n'entre dans le texte de la requête. Le
- * nom de colonne, lui, a été confronté au catalogue par l'appelant — c'est le
- * seul endroit où cette vérification peut se faire.
- *
- * ## Les jokers d'un `LIKE` sont **rendus tels quels**
- *
- * `%` et `_` gardent leur rôle de motif, et `\%` désigne un pourcentage
- * littéral. C'est un choix, et l'inverse du précédent (qui échappait tout) : la
- * recherche est une grille sur du vrai SQL, pas une boîte à texte, et pouvoir
- * écrire `2026-%-01` vaut mieux que de n'avoir aucun moyen d'exprimer un motif.
- * Rien n'en devient dangereux pour autant — la valeur reste **liée**, elle n'est
- * jamais recollée dans le texte de la requête ; seul son *sens* pour l'opérateur
- * `LIKE` change. Les deux moteurs prennent `\` comme caractère d'échappement par
- * défaut, la convention est donc la même des deux côtés.
+ * La clause `WHERE` d'une recherche : opérateur d'une énumération fermée,
+ * valeur toujours liée, colonne confrontée au catalogue par l'appelant.
+ * Les jokers d'un `LIKE` (`%`, `_`, `\%`) gardent leur sens, à dessein : la
+ * valeur reste liée, seul son sens pour `LIKE` change.
  */
 function buildWhere(
     d: Dialect,
@@ -234,27 +169,18 @@ function buildWhere(
             case 'eq':
                 return `${col} = ${p.add(f.value)}`;
             default:
-                // Inatteignable : `DatabaseFilterOperator` est fermé et tous ses
-                // membres sont traités. Le garde-fou vaut pour le jour où l'un
-                // s'y ajoute sans passer par ici.
+                // Inatteignable tant que tous les membres de l'énumération sont
+                // traités ci-dessus.
                 throw new Error('Opérateur de recherche inconnu.');
         }
     });
-    // Les plages s'ajoutent **par un ET**, quelle que soit la combinaison des
-    // critères : elles bornent la sélection, elles ne s'y ajoutent pas comme un
-    // critère de plus. Un `OU` entre critères reste donc parenthésé à part.
+    // Les plages bornent la sélection par un ET, quelle que soit la
+    // combinaison des critères : un `OU` reste parenthésé à part.
     const clause = parts.join(combinator === 'or' ? ' OR ' : ' AND ');
     return grouped === '' ? ` WHERE ${clause}` : ` WHERE (${clause}) AND ${grouped}`;
 }
 
-/**
- * La condition qui borne une lecture à des plages d'identifiants.
- *
- * Un groupe de `BETWEEN` reliés par `OU`, bornes comprises et **liées** : « 1-50,
- * 80 » ne traverse jamais le contrat sous forme de texte, seules des paires de
- * nombres arrivent ici. Sert à l'export ; la colonne visée est la clé primaire,
- * résolue par l'appelant sur le catalogue réel.
- */
+/** Des `BETWEEN` reliés par `OU`, bornes liées ; colonne résolue par l'appelant. */
 function buildRanges(d: Dialect, p: Params, ranges?: IdRanges): string {
     if (!ranges || ranges.ranges.length === 0) return '';
     const col = d.quote(ranges.column);
@@ -268,13 +194,7 @@ function buildOrder(d: Dialect, sort?: DatabaseSort): string {
     return ` ORDER BY ${d.quote(sort.column)} ${sort.direction === 'desc' ? 'DESC' : 'ASC'}`;
 }
 
-/**
- * La condition qui désigne **une** ligne, par sa clé primaire.
- *
- * `IS NULL` pour une valeur nulle, et non `= NULL` qui ne vaut jamais vrai : une
- * clé primaire ne devrait pas porter de nul, mais une clé qu'on ne retrouve pas
- * silencieusement vaudrait un `UPDATE` sans effet plutôt qu'une erreur.
- */
+/** La condition qui désigne une ligne par sa clé ; `IS NULL` et non `= NULL`, qui ne vaut jamais vrai. */
 function keyCondition(d: Dialect, p: Params, key: DatabaseCell[]): string {
     return key
         .map((cell) =>
@@ -283,7 +203,6 @@ function keyCondition(d: Dialect, p: Params, key: DatabaseCell[]): string {
         .join(' AND ');
 }
 
-/** Les lignes plates que rendent les deux catalogues, avant regroupement. */
 interface StructureRows {
     schema: string;
     table: string;
@@ -295,13 +214,7 @@ interface StructureRows {
     indexRows: { name: string; column: string; unique: boolean }[];
 }
 
-/**
- * Regroupe les lignes plates du catalogue en contraintes et en index.
- *
- * Les deux moteurs rendent une ligne **par colonne** d'une contrainte : une clé
- * composite y occupe deux lignes, appariées par leur position. Le regroupement
- * est donc le même des deux côtés, et vaut d'être écrit une seule fois.
- */
+/** Regroupe les lignes du catalogue (une par colonne de contrainte) en contraintes et index. */
 function buildStructure(input: StructureRows): DatabaseStructure {
     const foreignKeys = new Map<string, DatabaseStructure['foreignKeys'][number]>();
     for (const row of input.foreignRows) {
@@ -338,12 +251,8 @@ function buildStructure(input: StructureRows): DatabaseStructure {
 }
 
 /**
- * Refuse tout ce qui n'est pas une lecture unique.
- *
- * Volontairement stricte plutôt que fine : on cherche à empêcher une écriture,
- * pas à analyser du SQL. Le point-virgule interne est refusé parce qu'il ouvre
- * la porte à une seconde instruction — le seul cas où une chaîne « qui commence
- * par SELECT » peut malgré tout écrire.
+ * Refuse tout ce qui n'est pas une lecture unique. Le point-virgule interne est
+ * refusé : c'est le seul cas où une chaîne qui commence par SELECT peut écrire.
  */
 export function assertReadOnly(sql: string): void {
     const trimmed = sql.trim().replace(/;\s*$/, '');
@@ -359,13 +268,8 @@ export function assertReadOnly(sql: string): void {
 }
 
 /**
- * Refuse ce qui n'est pas **une seule** instruction — écriture comprise.
- *
- * Le terminal administre : refuser les écritures n'aurait pas de sens, puisque
- * l'explorateur en propose déjà par ses formulaires. Ce qui reste interdit,
- * c'est la salve : un copier-coller de trois instructions dont on ne visait que
- * la première s'exécuterait en entier, sans qu'aucun écran n'ait montré les
- * deux autres.
+ * Refuse ce qui n'est pas une seule instruction, écriture comprise : un
+ * copier-coller de trois instructions ne doit pas s'exécuter en entier.
  */
 export function assertSingleStatement(sql: string): void {
     const trimmed = sql.trim().replace(/;\s*$/, '');
@@ -377,13 +281,7 @@ export function assertSingleStatement(sql: string): void {
     }
 }
 
-/**
- * La valeur numérique d'une condition d'alerte.
- *
- * Une condition doit rendre **un seul nombre** : c'est ce qui permet de la
- * comparer à un seuil, de la raconter dans un message et de la relire dans
- * l'historique. Un message clair vaut mieux qu'un `NaN` silencieux.
- */
+/** La valeur numérique d'une condition d'alerte : un seul nombre, ou une erreur claire plutôt qu'un `NaN`. */
 export function singleNumber(rows: DatabaseRows): number {
     if (rows.rows.length === 0) throw new Error('La requête n’a rendu aucune ligne.');
     if (rows.rows.length > 1)
@@ -403,7 +301,7 @@ export async function openSession(target: EngineTarget): Promise<Session> {
     try {
         return target.engine === 'postgres' ? await openPostgres(target, tunnel) : await openMysql(target, tunnel);
     } catch (e) {
-        // Le tunnel a été ouvert, la session non : sans ce rattrapage il
+        // Le tunnel est ouvert, la session non : sans ce rattrapage il
         // resterait un écouteur et une session SSH derrière chaque échec.
         await tunnel.close();
         throw e;
@@ -418,8 +316,8 @@ async function openMysql(target: EngineTarget, tunnel: { host: string; port: num
         password: target.password ?? undefined,
         database: target.database,
         connectTimeout: CONNECT_TIMEOUT_MS,
-        // Les entiers hors du domaine sûr reviennent en chaîne plutôt qu'arrondis
-        // en silence — un identifiant faux est pire qu'un identifiant textuel.
+        // Les entiers hors du domaine sûr reviennent en chaîne plutôt
+        // qu'arrondis en silence.
         supportBigNumbers: true,
         bigNumberStrings: true,
         dateStrings: false,
@@ -439,7 +337,6 @@ async function openMysql(target: EngineTarget, tunnel: { host: string; port: num
         };
     };
 
-    /** Une écriture : ce qui compte n'est pas ce qu'elle rend, mais combien. */
     const exec = async (sql: string, params: unknown[] = []): Promise<number> => {
         const [result] = await connection.query({ sql, values: params, timeout: QUERY_TIMEOUT_MS });
         return Number((result as unknown as { affectedRows?: number }).affectedRows ?? 0);
@@ -488,9 +385,7 @@ async function openMysql(target: EngineTarget, tunnel: { host: string; port: num
                   ORDER BY ORDINAL_POSITION ASC`,
                 [schema, table]
             );
-            // La clé primaire dans **l'ordre de la clé**, et non celui des
-            // colonnes : sur une clé composite, les deux diffèrent, et c'est
-            // l'ordre de la clé qui compte pour désigner une ligne.
+            // La clé primaire dans l'ordre de la clé, pas celui des colonnes.
             const primary = await run(
                 `SELECT COLUMN_NAME FROM information_schema.STATISTICS
                   WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND INDEX_NAME = 'PRIMARY'
@@ -521,8 +416,8 @@ async function openMysql(target: EngineTarget, tunnel: { host: string; port: num
                     nullable: r[2] === 'YES',
                     default: r[3],
                     primaryKey: r[4] === 'PRI',
-                    // `auto_increment`, mais aussi les colonnes calculées : dans
-                    // les deux cas le moteur refuse qu'on les renseigne.
+                    // `auto_increment` et colonnes calculées : le moteur refuse
+                    // qu'on les renseigne.
                     generated: /auto_increment|GENERATED/i.test(r[5] ?? ''),
                     comment: r[6] ?? ''
                 })),
@@ -542,16 +437,12 @@ async function openMysql(target: EngineTarget, tunnel: { host: string; port: num
             });
         },
         async tableRows(schema, table, page) {
-            // Le nom a déjà été confronté à la liste réelle par l'appelant ; il
-            // ne reste qu'à le citer, un identifiant ne pouvant pas être un
-            // paramètre lié.
             const quoted = `${MYSQL.quote(schema)}.${MYSQL.quote(table)}`;
             const countParams = new Params(MYSQL);
             const where = buildWhere(MYSQL, countParams, page.filters, page.combinator, page.ranges);
             const count = await run(`SELECT COUNT(*) AS n FROM ${quoted}${where}`, countParams.values);
 
-            // Une seconde suite de paramètres : la clause est identique, mais
-            // les valeurs sont consommées par une autre requête.
+            // Une seconde suite de paramètres pour la seconde requête.
             const pageParams = new Params(MYSQL);
             const sql =
                 `SELECT * FROM ${quoted}` +
@@ -570,8 +461,7 @@ async function openMysql(target: EngineTarget, tunnel: { host: string; port: num
             const started = Date.now();
             const [result, fields] = await connection.query({ sql, timeout: QUERY_TIMEOUT_MS });
             // Un jeu de résultats arrive en tableau ; une écriture rend un
-            // en-tête portant son décompte. C'est la seule chose qui les
-            // distingue à ce niveau.
+            // en-tête portant son décompte.
             if (Array.isArray(result)) {
                 const columns = (fields ?? []).map((f) => f.name);
                 const list = result as Record<string, unknown>[];
@@ -646,7 +536,6 @@ async function openPostgres(target: EngineTarget, tunnel: { host: string; port: 
         };
     };
 
-    /** Une écriture : ce qui compte n'est pas ce qu'elle rend, mais combien. */
     const exec = async (sql: string, params: unknown[] = []): Promise<number> => {
         const res = await client.query({ text: sql, values: params });
         return Number(res.rowCount ?? 0);
@@ -672,11 +561,8 @@ async function openPostgres(target: EngineTarget, tunnel: { host: string; port: 
             };
         },
         async tables() {
-            // `reltuples` est l'estimation que tient le planificateur : un
-            // `COUNT(*)` exact sur chaque table d'un serveur de production
-            // coûterait bien plus que ce que cette colonne apporte. `-1` y
-            // signifie « jamais analysée », qu'on rend en `null` plutôt qu'en
-            // nombre négatif.
+            // `reltuples` est l'estimation du planificateur ; `-1` signifie
+            // « jamais analysée », rendu en `null`.
             const res = await run(
                 `SELECT n.nspname, c.relname,
                         CASE WHEN c.reltuples < 0 THEN NULL ELSE c.reltuples::bigint END AS row_count,
@@ -695,9 +581,8 @@ async function openPostgres(target: EngineTarget, tunnel: { host: string; port: 
             }));
         },
         async structure(schema, table) {
-            // `format('%I.%I', …)::regclass` cite les deux identifiants du côté
-            // du serveur : la table est ainsi désignée par un paramètre lié, et
-            // non par un nom recollé dans le texte de la requête.
+            // `format('%I.%I', …)::regclass` cite les identifiants côté serveur :
+            // la table est désignée par un paramètre lié.
             const relation = `format('%I.%I', $1::text, $2::text)::regclass`;
             const columns = await run(
                 `SELECT a.attname,
@@ -718,8 +603,7 @@ async function openPostgres(target: EngineTarget, tunnel: { host: string; port: 
                   ORDER BY a.attnum ASC`,
                 [schema, table]
             );
-            // La clé primaire dans l'ordre de la clé : `indkey` le porte, et
-            // c'est lui qui compte pour désigner une ligne.
+            // La clé primaire dans l'ordre de la clé, que porte `indkey`.
             const primary = await run(
                 `SELECT att.attname
                    FROM pg_index i
@@ -729,10 +613,9 @@ async function openPostgres(target: EngineTarget, tunnel: { host: string; port: 
                   ORDER BY k.ord ASC`,
                 [schema, table]
             );
-            // `unnest(conkey, confkey)` apparie les deux côtés **position par
-            // position** : une contrainte composite reste donc juste, là où une
-            // jointure sur `constraint_column_usage` produirait un produit
-            // croisé et de faux appariements.
+            // `unnest(conkey, confkey)` apparie les deux côtés position par
+            // position ; une jointure sur `constraint_column_usage` produirait
+            // un produit croisé.
             const foreign = await run(
                 `SELECT con.conname, att.attname, nsp2.nspname, cls2.relname, att2.attname
                    FROM pg_constraint con
@@ -806,8 +689,8 @@ async function openPostgres(target: EngineTarget, tunnel: { host: string; port: 
             assertSingleStatement(sql);
             const started = Date.now();
             const res = await client.query({ text: sql, rowMode: 'array' });
-            // Ici c'est la présence de colonnes qui distingue une lecture d'une
-            // écriture : `rowCount` est renseigné dans les deux cas.
+            // La présence de colonnes distingue une lecture d'une écriture :
+            // `rowCount` est renseigné dans les deux cas.
             if (res.fields.length > 0) {
                 const columns = res.fields.map((f) => f.name);
                 const rows = (res.rows as unknown[][]) ?? [];
@@ -858,13 +741,7 @@ async function openPostgres(target: EngineTarget, tunnel: { host: string; port: 
     return session;
 }
 
-/**
- * Traduit l'échec d'un pilote en une phrase que l'utilisateur peut corriger.
- *
- * Les codes bruts (`ECONNREFUSED`, `ER_ACCESS_DENIED_ERROR`, `28P01`) ne disent
- * rien à qui n'écrit pas de SQL toute la journée, et c'est pourtant la seule
- * chose qu'il verra à l'écran. Le message d'origine reste dans les journaux.
- */
+/** Traduit l'échec d'un pilote en une phrase corrigeable ; le message brut reste aux journaux. */
 export function explainError(e: unknown): string {
     const code = typeof e === 'object' && e !== null && 'code' in e ? String((e as { code: unknown }).code) : '';
     const message = e instanceof Error ? e.message : String(e);

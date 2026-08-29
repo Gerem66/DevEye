@@ -9,23 +9,9 @@ import { formatAgo } from './format';
 import styles from './style.module.css';
 
 /**
- * Les alertes d'une base : l'onglet Alertes de sa coquille de réglages.
- *
- * C'était un dialogue à part, derrière son propre « Nouvelle alerte » dans le
- * corps de la fiche (la dette de la coquille) : une règle d'alerte est un
- * réglage de la base, au même titre que sa cadence de relevé ou ses canaux, et
- * tout réglage passe par la coquille. La fiche garde l'ÉTAT des alertes
- * (franchie, dernières mesures, erreur) ; ce panneau les ÉCRIT, par le
- * dialogue de la feature (`AlertDialog`, dont la zone danger supprime).
- *
- * Rangées : les mêmes formes que la liste des canaux de la section
- * Notifications, exprès (`settingsStyles`) ; seules les pastilles restent
- * celles de la feature, qui les partage avec sa fiche.
- *
- * Autonome, comme tous les panneaux de la coquille : il se charge
- * (`database.get`, qui rend la base ET ses alertes en une lecture : la base
- * dit si la surveillance tourne, sans quoi les règles sont inertes, et si
- * elle vient d'un autre espace), s'invalide et se rafraîchit tout seul.
+ * L'onglet Alertes d'une base : la fiche montre l'état des alertes, ce panneau
+ * les écrit par `AlertDialog`. Rangées aux formes de la liste des canaux
+ * (`settingsStyles`). Autonome : `database.get` rend la base et ses alertes.
  */
 export default function DatabaseAlertsPanel({ scope, canWrite }: SettingsPanelProps) {
     const itemId = scope.kind === 'item' ? scope.itemId : null;
@@ -41,11 +27,10 @@ export default function DatabaseAlertsPanel({ scope, canWrite }: SettingsPanelPr
     if (!data) return <p className={loadError ? shell.notice : shell.empty}>{loadError ?? 'Chargement…'}</p>;
 
     const { database, alerts } = data;
-    // `!database.foreign` : la ligne se réécrit sous la clé de SON espace, le
-    // serveur le refuse, l'écran ne le propose donc pas.
+    // Une base projetée se règle chez elle : le serveur le refuse ici.
     const editable = canWrite && !database.foreign;
 
-    /** Une alerte qui change touche la fiche (ses règles) et la liste (le compte franchi). */
+    /** Touche la fiche (ses règles) et la liste (le compte franchi). */
     const changed = () => invalidate('database.detail', 'database.list');
 
     const remove = async (alertId: number) => {

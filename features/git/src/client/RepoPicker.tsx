@@ -23,42 +23,29 @@ interface RepoPickerProps {
     value: RepoTarget;
     onChange: (value: RepoTarget) => void;
     /**
-     * Les réglages de la feature s'ouvrent ou se ferment depuis le « + » du
-     * sélecteur : l'appelant relit ses jetons et adopte celui qui vient d'être
-     * créé (voir `RepoDialog`).
+     * Le « + » du sélecteur ouvre et referme les réglages ; l'appelant en profite
+     * pour relire ses jetons et adopter celui qui vient d'être créé.
      */
     onSettingsOpenChange: (open: boolean) => void;
     autoFocus?: boolean;
 }
 
 /**
- * Attente avant d'interroger GitHub sur un propriétaire en cours de frappe.
- *
- * Assez long pour ne pas lancer un appel par lettre (« g », « ge », « ger »…),
- * assez court pour que la liste paraisse arriver seule.
+ * Attente avant d'interroger GitHub sur un propriétaire en cours de frappe : assez
+ * long pour ne pas lancer un appel par lettre, assez court pour qu'on ne l'attende pas.
  */
 const LOOKUP_DEBOUNCE_MS = 500;
 
 /**
  * Désigner un dépôt chez le fournisseur : jeton, propriétaire, puis dépôt.
  *
- * **L'ordre des trois champs est le sujet.** Le jeton vient en premier parce
- * qu'il *change le résultat* des deux autres : sans lui GitHub ne rend que le
- * public, avec lui il rend aussi les dépôts privés du compte ou de
- * l'organisation. Le placer sous la liste, comme c'était le cas, revenait à
- * demander de choisir dans une liste avant d'avoir dit ce qu'elle devait
- * contenir.
+ * L'ordre des trois champs compte : le jeton vient en premier parce qu'il change
+ * le résultat des deux autres, sans lui GitHub ne rend que le public. La liste se
+ * recharge donc à chaque changement de jeton ou de propriétaire, et de rien d'autre.
  *
- * La liste se recharge donc à **chaque changement de jeton ou de propriétaire**,
- * et ces deux-là seulement — c'est exactement ce dont elle dépend.
- *
- * La saisie manuelle reste possible et n'est pas un détail : la découverte
- * dépend d'une API tierce qui peut refuser (quota anonyme épuisé, propriétaire
- * introuvable, jeton à portée réduite). Sans repli, un échec de liste
- * empêcherait d'ajouter un dépôt dont on connaît parfaitement le nom.
- *
- * Les jetons se gèrent dans Réglages → Sources, jamais ici : le « + » du
- * sélecteur est le bouton commun de la coquille, ouvert sur cet onglet.
+ * La saisie manuelle reste possible : la découverte dépend d'une API tierce qui
+ * peut refuser (quota épuisé, propriétaire introuvable, jeton à portée réduite),
+ * et un échec de liste ne doit pas empêcher d'ajouter un dépôt qu'on sait nommer.
  */
 export function RepoPicker({ credentials, value, onChange, onSettingsOpenChange, autoFocus }: RepoPickerProps) {
     const [candidates, setCandidates] = useState<GitRepoCandidate[] | null>(null);
@@ -70,11 +57,8 @@ export function RepoPicker({ credentials, value, onChange, onSettingsOpenChange,
     const credentialId = value.credentialId;
 
     /**
-     * Le jeton d'une réponse en vol.
-     *
-     * Sans lui, une recherche lente sur « ger » écraserait le résultat de
-     * « gerem66 » en arrivant après — la réponse la plus lente gagnerait la
-     * course.
+     * Le jeton d'une réponse en vol : sans lui, une recherche lente sur « ger »
+     * écraserait le résultat de « gerem66 » en arrivant après.
      */
     const runId = useRef(0);
 
@@ -115,8 +99,6 @@ export function RepoPicker({ credentials, value, onChange, onSettingsOpenChange,
 
     return (
         <>
-            {/* En premier : il décide de ce que les deux champs suivants peuvent
-                voir. */}
             <label className={styles.field}>
                 <span className={styles.label}>Jeton d’accès</span>
                 <div className={styles.fieldWithAction}>
@@ -133,9 +115,8 @@ export function RepoPicker({ credentials, value, onChange, onSettingsOpenChange,
                             </option>
                         ))}
                     </SelectInput>
-                    {/* Le « + » : le bouton commun, ouvert sur l'onglet Sources,
-                        la seule porte vers les jetons, ici comme dans l'en-tête
-                        de la feature. */}
+                    {/* Le bouton commun, ouvert sur l'onglet Sources : la seule
+                        porte vers les jetons, ici comme ailleurs. */}
                     <FeatureSettingsButton
                         scope={{ kind: 'feature', feature: 'git' }}
                         initialSection='sources'
@@ -207,10 +188,8 @@ export function RepoPicker({ credentials, value, onChange, onSettingsOpenChange,
                     </span>
                 )}
 
-                {/* Toujours offert : la liste dépend d'une API tierce, et un nom
-                    qu'on connaît doit rester saisissable même quand elle échoue.
-                    Le retour à la liste n'est proposé que si elle a quelque
-                    chose à montrer — sinon le bouton mènerait à un cul-de-sac. */}
+                {/* Le retour à la liste n'est proposé que si elle a quelque chose
+                    à montrer, sinon le bouton mènerait à un cul-de-sac. */}
                 {(!useManual || manual) && (
                     <button type='button' className={styles.linkButton} onClick={() => setManual((v) => !v)}>
                         {manual && candidates !== null && candidates.length > 0

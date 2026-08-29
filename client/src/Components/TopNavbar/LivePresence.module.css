@@ -2,14 +2,9 @@
    Même idiome de pastille que SecrecyTimer : bordure de verre, coins pilule,
    libellé révélé au survol par une animation de largeur. */
 
-/* Hauteur **fixe** et rembourrage **horizontal seulement** : c'est ce qui rend le
-   calage vertical indépendant de la police. Avec un rembourrage vertical, la
-   hauteur découlait de la boîte de ligne du texte, qui varie d'un navigateur à
-   l'autre — le contenu paraissait alors monté ou descendu selon le poste, et la
-   pastille ne s'alignait plus sur ses voisines.
-
-   Ici tout est centré par le flex, dans les deux axes, et la hauteur est celle
-   que partagent toutes les pastilles de la barre. */
+/* Hauteur fixe et rembourrage horizontal seulement : avec un rembourrage
+   vertical, la hauteur découlait de la boîte de ligne du texte, qui varie d'un
+   navigateur à l'autre, et la pastille ne s'alignait plus sur ses voisines. */
 .pill {
     display: inline-flex;
     align-items: center;

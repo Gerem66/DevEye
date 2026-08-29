@@ -20,9 +20,8 @@ function resolver(): Resolver {
 }
 
 /**
- * Gravatar indexe par empreinte MD5 de l'adresse en minuscules. Un `404` sur
- * l'avatar dit « aucun profil », un `200` dit « cette adresse est utilisée
- * quelque part » — et le profil JSON donne parfois nom et comptes liés.
+ * Gravatar indexe par MD5 de l'adresse en minuscules : un `404` sur l'avatar dit
+ * « aucun profil », un `200` dit « adresse utilisée quelque part ».
  */
 function gravatarHash(email: string): string {
     return createHash('md5').update(email.trim().toLowerCase()).digest('hex');

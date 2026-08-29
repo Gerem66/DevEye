@@ -3,12 +3,9 @@ import { invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 
 /**
- * Supprime un espace partagé, avec tout ce qu'il contient (les FK ON DELETE
- * CASCADE emportent membres, notes, mots de passe…).
- *
- * Réservé au **propriétaire** : être membre ne suffit pas à détruire le travail
- * des autres. Un espace personnel n'est jamais supprimable — il disparaît avec
- * son compte, pas avant.
+ * Supprime un espace partagé avec tout ce qu'il contient (FK ON DELETE
+ * CASCADE). Réservé au propriétaire ; un espace personnel disparaît avec son
+ * compte, pas avant.
  */
 export const workspaceDeleteFeature: FeatureDefinition<
     typeof workspaceDelete.command,

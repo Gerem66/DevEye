@@ -20,13 +20,8 @@ import {
 } from '../_shared';
 
 /**
- * Les comptes de l'espace.
- *
- * Un compte est le seul objet de la feature qui porte un **solde de départ**:
- * c'est le point où le livre commence, et il vaut à toutes les dates. Tout le
- * reste des soldes se déduit des opérations, jamais d'un compteur entretenu à la
- * main, pour qu'une correction d'une opération d'il y a six mois se répercute
- * d'elle-même sur le solde d'aujourd'hui.
+ * Les comptes. Le solde de départ est le seul compteur : tout le reste se
+ * déduit des opérations, pour qu'une correction passée se répercute.
  */
 
 export const financeAccountListFeature = defineSdkFeature({
@@ -93,11 +88,8 @@ export const financeAccountRemoveFeature = defineSdkFeature({
         const row = await ctx.repo.findAccount(input.accountId, ctx.workspaceId, today());
         if (!row) throw new FeatureError('not_found', 'Compte introuvable');
 
-        // Le garde-fou du livre. Les deux clés étrangères sont en CASCADE, donc
-        // supprimer le compte emporterait sans un mot ses opérations **et** les
-        // échéances réglées dessus: de l'argent disparaîtrait d'un livre de
-        // comptes, ce qui est exactement ce qu'un livre de comptes ne doit
-        // jamais faire. Le geste réversible existe déjà, c'est l'archivage.
+        // Les deux clés étrangères sont en CASCADE : supprimer emporterait
+        // opérations et échéances sans un mot. Le geste réversible est l'archivage.
         const [used, scheduled] = await Promise.all([
             ctx.repo.countAccountUsage(input.accountId, ctx.workspaceId),
             ctx.repo.countAccountRecurring(input.accountId, ctx.workspaceId)

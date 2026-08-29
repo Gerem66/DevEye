@@ -1,31 +1,11 @@
 import crypto from 'crypto';
 
 /**
- * Un client S3 minimal, écrit ici plutôt qu'importé.
- *
- * ## Pourquoi pas le SDK d'AWS
- *
- * `@aws-sdk/client-s3` tire une centaine de paquets et une machinerie de
- * middlewares pour six requêtes HTTP dont la forme est figée depuis 2012. Ce
- * dépôt écrit déjà lui-même son pool MySQL, ses migrations, son tunnel SSH et
- * son format de blob chiffré ; ajouter un arbre de dépendances de cette taille
- * pour signer quatre en-têtes serait le seul endroit du serveur à ne pas suivre
- * cette ligne. Le protocole tient en une signature SigV4 et un `PUT`.
- *
- * ## Ce qu'il sait faire, et rien de plus
- *
- * Déposer un objet (en une fois ou en parties), le relire, le lister, l'effacer.
- * Aucune gestion de versions, d'ACL, de chiffrement côté serveur ni de classes
- * de stockage : DevEye scelle lui-même ce qu'il envoie (voir `crypto.ts`), et
- * tout le reste relève de la configuration du bucket, pas de l'appelant.
- *
- * ## Compatible Garage, MinIO, Scaleway, Backblaze et AWS
- *
- * La seule différence qui compte en pratique est l'adressage : `pathStyle`
- * (`https://hôte/bucket/clé`) pour un service auto-hébergé, virtuel
- * (`https://bucket.hôte/clé`) pour AWS. C'est la première chose qui casse quand
- * on se trompe, d'où un drapeau explicite plutôt qu'une devinette sur le nom
- * d'hôte.
+ * Client S3 minimal (déposer, relire, lister, effacer), écrit ici plutôt que
+ * d'importer `@aws-sdk/client-s3` et sa centaine de paquets pour six requêtes
+ * figées : le protocole tient en une signature SigV4. Compatible Garage,
+ * MinIO, Scaleway, Backblaze et AWS ; la seule différence qui compte est
+ * `pathStyle`.
  */
 
 export interface S3Config {
@@ -46,10 +26,8 @@ export interface S3Object {
 }
 
 /**
- * Taille d'une partie en envoi multiple. 16 Mio : au-dessus du minimum imposé
- * par S3 (5 Mio), assez grand pour que 10 000 parties couvrent 160 Gio — la
- * limite de parties étant la vraie borne d'une archive — et assez petit pour ne
- * jamais tenir plus de 16 Mio de clair en mémoire.
+ * 16 Mio par partie : au-dessus du minimum S3 (5 Mio), 10 000 parties couvrent
+ * 160 Gio, et jamais plus de 16 Mio de clair en mémoire.
  */
 export const S3_PART_BYTES = 16 * 1024 * 1024;
 
@@ -66,10 +44,8 @@ const hmac = (key: crypto.BinaryLike, data: string): Buffer =>
     crypto.createHmac('sha256', key).update(data, 'utf8').digest();
 
 /**
- * Encodage d'un segment d'URI selon la règle S3 : `encodeURIComponent` **plus**
- * les cinq caractères qu'il laisse passer et que la signature exige encodés.
- * Les oublier fait échouer la signature sur les seules clés qui en contiennent,
- * donc de façon parfaitement intermittente.
+ * `encodeURIComponent` plus les cinq caractères qu'il laisse passer et que la
+ * signature exige encodés : les oublier casse la signature par intermittence.
  */
 function uriEncode(value: string): string {
     return encodeURIComponent(value).replace(
@@ -248,18 +224,10 @@ export class S3Client {
     }
 
     /**
-     * Écrit un flux vers une clé, en choisissant seul entre `PUT` et envoi
-     * multiple.
-     *
-     * L'appelant ne connaît pas la taille à l'avance — une archive est produite
-     * au fil de l'eau — donc on accumule jusqu'au seuil : en dessous, un seul
-     * `PUT` (ce que fait la plupart des sauvegardes de configuration) ; au-delà,
-     * on bascule sans avoir rien perdu de ce qui est déjà en mémoire.
-     *
-     * En cas d'échec après le basculement, l'envoi multiple est **abandonné
-     * explicitement** : S3 facture les parties d'un envoi jamais terminé, et
-     * elles restent invisibles au listage — une fuite qu'on ne découvre que sur
-     * la facture.
+     * Écrit un flux vers une clé : un seul `PUT` sous le seuil, envoi multiple
+     * au-delà (la taille n'est pas connue à l'avance). En cas d'échec, l'envoi
+     * multiple est abandonné explicitement : S3 facture les parties d'un envoi
+     * jamais terminé, invisibles au listage.
      */
     async putStream(key: string, source: AsyncIterable<Buffer>, contentType?: string): Promise<number> {
         const pending: Buffer[] = [];
@@ -352,9 +320,8 @@ export class S3Client {
             body,
             headers: { 'content-type': 'application/xml', 'content-length': String(body.length) }
         });
-        // S3 répond 200 puis échoue **dans le corps** : c'est le piège classique
-        // de cette opération, et le seul endroit du protocole où un code 200 ne
-        // veut pas dire que ça a marché.
+        // S3 répond 200 puis échoue dans le corps : seul endroit du protocole où
+        // 200 ne veut pas dire réussi.
         const xml = await res.text();
         if (/<Error>/.test(xml)) {
             throw new S3Error(explainS3(200, xml), 200, xml);
@@ -384,13 +351,7 @@ function escapeXml(value: string): string {
         .replace(/'/g, '&#39;');
 }
 
-/**
- * Une phrase que l'utilisateur peut corriger, plutôt qu'un code HTTP.
- *
- * Les quatre erreurs qui suivent couvrent l'écrasante majorité des premières
- * configurations, et chacune se corrige à un endroit différent de l'écran : les
- * confondre sous « échec S3 » ferait chercher au mauvais endroit.
- */
+/** Une phrase corrigeable plutôt qu'un code HTTP : chaque erreur se corrige à un endroit différent de l'écran. */
 function explainS3(status: number, body: string): string {
     const code = /<Code>([\s\S]*?)<\/Code>/.exec(body)?.[1] ?? '';
     if (code === 'SignatureDoesNotMatch' || status === 403) {

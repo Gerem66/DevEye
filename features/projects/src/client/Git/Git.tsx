@@ -23,28 +23,14 @@ interface GitProps {
 }
 
 /**
- * L'onglet Git d'un projet : les dépôts qu'il pointe.
+ * L'onglet Git d'un projet : les dépôts qu'il pointe. Le dépôt n'appartient pas
+ * au projet, qui n'en tient qu'un pointeur ; tout l'affichage vient du bloc du
+ * module (`GIT_CLIENT_PROVIDER`), le même contenu que la feature Git, sans que
+ * cet écran importe le module. Un projet en pointe plusieurs (client, serveur,
+ * contrats), chacun dans un cadre qui le sépare du suivant.
  *
- * Enveloppe mince, et c'est tout l'intérêt. **Le dépôt n'appartient pas au
- * projet** : il vit dans la feature Git, avec son cache, sa synchronisation et
- * ses jetons, et plusieurs projets peuvent viser le même. Cet onglet ne possède
- * donc qu'un pointeur (`projects.repoList` / `repoLink` / `repoUnlink`) et délègue
- * tout l'affichage au module Git, par son contrat client (`GIT_CLIENT_PROVIDER`) :
- * cet écran n'importe pas le module. C'est le bloc du module (`LinkedRepo`),
- * exactement le même contenu que la feature Git (un dépôt n'a pas à se
- * présenter autrement selon la porte par laquelle on entre), qui charge son
- * dépôt lui-même, suit les invalidations de la feature et porte son dialogue
- * de réglage.
- *
- * **Plusieurs dépôts**, depuis la migration 069 : un projet réel se compose
- * souvent d'un client, d'un serveur et de contrats partagés. Chaque dépôt
- * reçoit un cadre discret, sans lequel deux graphes et huit panneaux
- * s'enchaîneraient sans qu'on sache où l'un finit et où l'autre commence.
- *
- * Corollaire à connaître : lire ces dépôts relève du droit `git`, pas de
- * `projects`. Un membre qui a l'un sans l'autre voit le projet mais pas ses
- * dépôts, et l'écran le dit. Module absent : même lecture, des identifiants
- * nus, et une phrase qui le dit.
+ * Lire ces dépôts relève du droit `git`, pas de `projects` : sans lui, ou sans
+ * le module, les dépôts se listent en identifiants nus.
  */
 export function Git({ project, canWrite }: GitProps) {
     const permissions = useWorkspacePermissions();

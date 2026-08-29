@@ -13,25 +13,20 @@ import { useDeviceActions } from './useDeviceActions';
 import styles from './style.module.css';
 
 /**
- * The fleet segment: fleet management (admin). Orchestrates the device grid
- * ({@link DeviceCard}), link-code generation ({@link useLinkCodes}) and the
- * device actions ({@link useDeviceActions}); the heavy logic lives in those
- * modules so this stays a thin shell.
+ * The fleet segment (admin): the device grid ({@link DeviceCard}), link codes
+ * ({@link useLinkCodes}) and the device actions ({@link useDeviceActions}).
  */
 export default function Fleet() {
-    // La flotte entière, tous espaces confondus, contrairement à l'accueil et
-    // à Monitoring, qui ne voient que l'espace actif.
+    // La flotte entière, tous espaces confondus.
     const { devices, loading, error, refresh } = useFleetDevices();
     const [showDownloadModal, setShowDownloadModal] = useState(false);
     const links = useLinkCodes(refresh);
     const actions = useDeviceActions(refresh);
 
-    // Archived devices are gone from management; they live (read-only) in
-    // Monitoring for browsing their frozen history.
+    // Archived devices are gone from management; Monitoring keeps their history.
     const visibleDevices = devices.filter((d) => d.status !== 'archived');
 
-    // Devices that can take a self-update right now (same condition as each card's
-    // update button). The bulk "Tout mettre à jour" only appears when 2+ qualify.
+    // Same condition as each card's update button; the bulk button needs 2+.
     const updatableDevices = visibleDevices.filter(
         (d) => d.status !== 'pending_deletion' && d.online && agentUpdatable(d)
     );
@@ -94,9 +89,8 @@ export default function Fleet() {
                 </div>
             ) : (
                 <div className={styles.deviceGrid}>
-                    {/* No entrance/layout animation here: the cards are plain children of
-                        the popup so they morph in and out *with* it (the shared-element
-                        transition). Only deletions animate, via exit. */}
+                    {/* No entrance/layout animation: the cards morph in and out with
+                        the popup (shared-element transition). Only deletions animate. */}
                     <AnimatePresence initial={false}>
                         {visibleDevices.map((device) => (
                             <motion.div

@@ -1,12 +1,10 @@
-//! Runtime state the *running* agent records about itself, so out-of-process
-//! commands (`status`) report **its** facts — the account it runs as, its pid —
-//! instead of re-deriving them from the process that asks (which may be a
-//! different user, e.g. you in a terminal vs. a root system service).
+//! Runtime state the running agent records about itself, so out-of-process
+//! commands (`status`) report its facts (account, pid) instead of re-deriving
+//! them from the asking process, which may run as a different user.
 //!
-//! Written next to the config when the monitoring loop starts and removed on a
-//! clean exit. `read` self-validates against the recorded process's *identity*,
-//! so a file left behind by a crash or a power cut is treated as "not running"
-//! (and swept).
+//! Written next to the config when the monitoring loop starts, removed on a
+//! clean exit. `read` validates against the recorded process's identity, so a
+//! file left behind by a crash is treated as "not running" and swept.
 
 use serde::{Deserialize, Serialize};
 use sysinfo::{Pid, ProcessesToUpdate, System};
@@ -22,16 +20,14 @@ pub struct RuntimeState {
     pub user: String,
     /// Whether that account is privileged (root / elevated token).
     pub privileged: bool,
-    /// Date de démarrage du processus, en secondes epoch — ce qui distingue *ce*
+    /// Date de démarrage du processus, en secondes epoch : ce qui distingue ce
     /// processus d'un futur homonyme ayant hérité de son numéro (voir
     /// [`is_this_agent`]).
     pub started_at: u64,
 }
 
-/// Date de démarrage d'un processus vivant, telle que `sysinfo` la calcule.
-///
-/// Même source pour l'écriture et la relecture : la comparaison porte donc sur
-/// deux mesures identiques, et non sur deux façons de dater un même instant.
+/// Date de démarrage d'un processus vivant, telle que `sysinfo` la calcule :
+/// même source à l'écriture et à la relecture, pour comparer deux mesures identiques.
 fn start_time(pid: u32) -> Option<u64> {
     let pid = Pid::from_u32(pid);
     let mut sys = System::new();
@@ -58,35 +54,24 @@ pub fn clear() {
     let _ = std::fs::remove_file(Config::state_path());
 }
 
-/// Le processus enregistré est-il **toujours cet agent** ?
+/// Le processus enregistré est-il toujours cet agent ?
 ///
-/// Un numéro de processus ne veut rien dire hors de son démarrage : le système
-/// les recycle, et il repart de zéro à chaque amorçage. Se contenter de « un
-/// processus porte ce numéro » faisait qu'un fichier d'état laissé par une
-/// extinction brutale bloquait le démarrage suivant dès qu'un démon quelconque
-/// avait hérité du numéro — ce qui est la règle, non l'exception, pour un agent
-/// lancé tôt au démarrage et donc numéroté bas. L'agent refusait alors de
-/// démarrer, le gestionnaire de service le relançait, il refusait de nouveau :
-/// « lancement au démarrage » ne fonctionnait plus, sans que rien ne le dise.
-///
-/// La date de démarrage tranche : elle est propre à une instance, un numéro
-/// recyclé ne la reproduit pas, et un redémarrage de la machine la rend
-/// inatteignable.
+/// Un numéro de processus est recyclé par le système et repart de zéro à chaque
+/// amorçage : un fichier d'état laissé par une extinction brutale désignerait
+/// vite un autre démon et bloquerait le démarrage suivant. La date de démarrage
+/// est propre à une instance, un numéro recyclé ne la reproduit pas.
 fn is_this_agent(state: &RuntimeState) -> bool {
     let Some(started) = start_time(state.pid) else {
         return false;
     };
-    // `started_at == 0` : la date n'a pas pu être lue à l'écriture. On ne peut
-    // alors rien affirmer, et refuser de démarrer sur un doute est le pire des
-    // deux risques.
+    // `started_at == 0` : la date n'a pas pu être lue à l'écriture ; refuser de
+    // démarrer sur un doute serait le pire des deux risques.
     state.started_at != 0 && started == state.started_at
 }
 
-/// The recorded state of a *currently live* agent, or `None` when nothing is
-/// running. A stale file (the process is gone, or its pid now belongs to
-/// something else) is swept and reported as `None` — comme un fichier écrit par
-/// une version antérieure, qu'aucune conversion ne rattrape : il ne décrit plus
-/// rien de vérifiable, et le prochain démarrage le réécrit.
+/// The recorded state of a currently live agent, or `None` when nothing is
+/// running. A stale file (process gone, pid reused, or unreadable) is swept and
+/// reported as `None`.
 pub fn read_running() -> Option<RuntimeState> {
     let raw = std::fs::read_to_string(Config::state_path()).ok()?;
     let state: RuntimeState = serde_json::from_str(&raw).ok()?;
@@ -100,9 +85,8 @@ pub fn read_running() -> Option<RuntimeState> {
 
 /// Whether a PID is a live process, regardless of which user owns it.
 ///
-/// Sert au fichier de pid (`stop`, `status`), qui ne porte qu'un numéro : la
-/// question y est bien « ce numéro est-il vivant ? ». La garde d'instance
-/// unique, elle, exige une identité (voir [`is_this_agent`]).
+/// Sert au fichier de pid (`stop`, `status`), qui ne porte qu'un numéro. La
+/// garde d'instance unique, elle, exige une identité (voir [`is_this_agent`]).
 pub fn process_alive(pid: u32) -> bool {
     let pid = Pid::from_u32(pid);
     let mut sys = System::new();

@@ -4,12 +4,11 @@ import { CountWidget, onSocketOpen, useResourceVersion, type CountState } from '
 import { api } from './api';
 
 /**
- * Le compte des boîtes, à la main plutôt que par `useWorkspaceCount` : ce
- * hook n'admet que les commandes nommées `<feature>.count`, et celle-ci
- * s'appelle `mail.accountCount`. Même discipline que lui : relu à chaque
- * ouverture de la socket et à chaque invalidation de sa clé, et une lecture
- * qui échoue garde le dernier nombre plutôt que de retomber sur un « 0 » qui
- * mentirait.
+ * Le compte des boîtes, à la main plutôt que par `useWorkspaceCount` : ce hook
+ * n'admet que les commandes nommées `<feature>.count`, et celle-ci s'appelle
+ * `mail.accountCount`. Même discipline : relu à chaque ouverture de la socket et
+ * à chaque invalidation de sa clé, et une lecture qui échoue garde le dernier
+ * nombre plutôt que de retomber sur un « 0 » qui mentirait.
  */
 function useAccountCount(): CountState {
     const version = useResourceVersion('mail.accountCount');
@@ -35,8 +34,8 @@ function useAccountCount(): CountState {
 
 /**
  * Compact dashboard card: number of configured mail accounts. Backed by
- * `mail.accountCount`, clear metadata with no unlock gate — same "always
- * renders a number" discipline as `password.count`/`notes.count`.
+ * `mail.accountCount`, clear metadata with no unlock gate, so it always renders
+ * a number.
  */
 export function MailWidget() {
     const state = useAccountCount();

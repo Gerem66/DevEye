@@ -1,14 +1,9 @@
 import type { UserColor } from '@deveye/types';
 
 /**
- * La palette d'identité des comptes, côté interface. L'ensemble des noms est
- * détenu par `userColorSchema` dans @deveye/types ; on y attache ici une
- * étiquette française et l'ordre du sélecteur. La valeur vient toujours du jeton
- * `--user-<nom>` (voir Styles/theme.css) — jamais un hexadécimal ici, pour que
- * la palette reste une source de vérité unique.
- *
- * Même contrat que `features/notes/src/client/noteColors.ts`, dont ceci est le
- * pendant (la palette des notes, elle, vit avec son module).
+ * La palette d'identité des comptes : les noms viennent de `userColorSchema`,
+ * ceci n'ajoute que l'étiquette et l'ordre du sélecteur. La valeur passe
+ * toujours par le jeton `--user-<nom>`, jamais un hexadécimal ici.
  */
 export interface UserColorOption {
     value: UserColor;

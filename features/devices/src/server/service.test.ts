@@ -7,13 +7,10 @@ import type { DevicesRepo } from './repo';
 
 /**
  * Le balayage de rétention, sur le harnais de service du SDK : un tick purge
- * les trois tables par le dépôt du module, sous la durée que l'environnement
- * fixe, et rien n'est diffusé ni audité (une frise qui perd ses points les
- * plus anciens se relit d'elle-même).
+ * les trois tables sous la durée de l'environnement, sans diffusion ni audit.
  *
  * `MONITORING_RETENTION_DAYS` est posée AVANT le chargement du module, parce
- * que `env.ts` lit l'environnement à l'import ; c'est la seule raison de
- * l'import dynamique ci-dessous.
+ * que `env.ts` lit l'environnement à l'import : d'où l'import dynamique.
  */
 
 process.env.MONITORING_RETENTION_DAYS = '7';

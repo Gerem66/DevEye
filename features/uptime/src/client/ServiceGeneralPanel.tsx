@@ -53,23 +53,11 @@ function tuningOf(service: UptimeService): Tuning {
 }
 
 /**
- * Les réglages d'un service : cadence de relève, délai, seuil de défaillance
- * et rétention du détail. Le panneau Général de la coquille de réglages, à
- * l'échelle d'un SERVICE.
- *
- * Ces quatre réglages vivaient dans le dialogue d'édition du service, à côté
- * de son nom et de son URL (la dette de la coquille). Ils sont ici parce que
- * c'est là que se règle le reste du service (ses canaux, son partage, ce que
- * chaque rôle en voit), et que le dialogue redevient ce qu'il dit : l'identité
- * du service.
- *
- * Autonome, comme tous les panneaux de la coquille : il charge le service
- * (`uptime.list`, retrouvé par son identifiant), se sauvegarde par
- * `uptime.update` (dont le contrat prend le service ENTIER : le brouillon est
- * recomposé à partir du service chargé, l'identité conservée telle quelle) et
- * ravive `uptime.list` après. Sans le droit d'écriture, les champs restent
- * lisibles mais figés : un formulaire que le serveur refuserait est un écran
- * qui ment.
+ * Le panneau Général d'un service : cadence de relève, délai, seuil de
+ * défaillance et rétention. Autonome : il charge le service par `uptime.list`,
+ * enregistre par `uptime.update` (qui prend le service entier, identité
+ * conservée) et ravive `uptime.list`. Sans droit d'écriture, les champs restent
+ * lisibles mais figés.
  */
 export default function ServiceGeneralPanel({ scope, canWrite }: SettingsPanelProps) {
     const itemId = scope.kind === 'item' ? scope.itemId : null;

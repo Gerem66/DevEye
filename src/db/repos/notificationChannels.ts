@@ -10,24 +10,16 @@ import type { Queryable } from '../pool';
 type Q = Queryable;
 
 /**
- * Les canaux d'alerte d'un espace, et les routes qui pointent dessus.
- *
- * Remplace `notificationSettings`, qui portait deux canaux binaires par couple
- * `(espace, feature)`. Trois tables plutôt qu'une : la liaison est un ensemble
- * (plusieurs canaux par route, un canal dans plusieurs routes). Une route est
- * la **sélection** de sa cible — un élément, ou la fonctionnalité elle-même
- * pour un émetteur sans éléments — et il n'y a pas d'héritage (092) : sans
- * route, une cible est silencieuse.
- *
- * Tout ce qui est lisible — libellé, adresse, URL — est **chiffré par
- * l'appelant** avant d'arriver ici : le dépôt ne voit que des cryptogrammes, et
- * ne décide jamais de l'étage.
+ * Les canaux d'alerte d'un espace, et les routes qui pointent dessus. Une route
+ * est la sélection de sa cible (un élément, ou la fonctionnalité elle-même) ;
+ * pas d'héritage : sans route, une cible est silencieuse. Libellé, adresse et
+ * URL sont chiffrés par l'appelant : le dépôt ne voit que des cryptogrammes.
  */
 
 /** Ce qu'écrit une création ou une modification de canal. */
 export interface NotificationChannelWrite {
     kind: NotificationChannelKind;
-    /** Libellé chiffré ; `null` = jamais nommé (la reprise de la 087 les laisse ainsi). */
+    /** Libellé chiffré ; `null` = jamais nommé. */
     labelEnc: string | null;
     /** Adresse ou URL chiffrée ; `null` sur un `email` = l'adresse du compte expéditeur. */
     targetEnc: string | null;
@@ -36,7 +28,7 @@ export interface NotificationChannelWrite {
 }
 
 export interface NotificationChannelsRepo {
-    /** Les canaux d'une fonctionnalité de l'espace, dans l'ordre d'affichage (091 : chaque émetteur a les siens). */
+    /** Les canaux d'une fonctionnalité de l'espace, dans l'ordre d'affichage. */
     list(workspaceId: number, feature: NotificationFeature): Promise<NotificationChannelRow[]>;
     findById(id: number, workspaceId: number): Promise<NotificationChannelRow | null>;
     /** `feature` est la propriétaire du canal, immuable ensuite (l'update ne la touche pas). */
@@ -46,16 +38,11 @@ export interface NotificationChannelsRepo {
         input: NotificationChannelWrite
     ): Promise<NotificationChannelRow>;
     update(id: number, workspaceId: number, input: NotificationChannelWrite): Promise<NotificationChannelRow | null>;
-    /** Les liaisons partent en cascade ; une route laissée vide reste inerte (vide = silence, 092). */
+    /** Les liaisons partent en cascade ; une route laissée vide reste inerte (vide = silence). */
     remove(id: number, workspaceId: number): Promise<boolean>;
     reorder(workspaceId: number, ids: number[]): Promise<void>;
 
-    /**
-     * Combien de routes désignent chaque canal — ce que l'écran affiche en
-     * « utilisé par N ». Rendu en une requête pour toute la liste : le demander
-     * canal par canal mettrait une requête par ligne devant l'ouverture de
-     * l'écran.
-     */
+    /** Combien de routes désignent chaque canal, en une requête pour toute la liste. */
     usageCounts(workspaceId: number): Promise<Map<number, number>>;
 
     /** Les cibles que ce canal sert, pour que la confirmation de suppression les nomme. */
@@ -67,8 +54,7 @@ export interface NotificationChannelsRepo {
     routeChannelIds(routeId: number): Promise<number[]>;
     /**
      * Pose la route et ses liaisons. Les canaux inconnus de l'espace sont
-     * ignorés silencieusement — la vérification d'appartenance est faite par le
-     * handler, et une course entre deux onglets ne doit pas lever.
+     * ignorés : une course entre deux onglets ne doit pas lever.
      */
     setRoute(
         workspaceId: number,
@@ -114,8 +100,7 @@ export function notificationChannelsRepo(pool: Q): NotificationChannelsRepo {
         },
 
         async create(workspaceId, feature, input) {
-            // La place suit la dernière : un canal ajouté apparaît en bas, là où
-            // on vient de le créer, et non en tête d'une liste qu'on relit.
+            // Un canal ajouté apparaît en bas de la liste.
             const res = await pool.query(
                 `INSERT INTO notification_channels
                      (workspace_id, feature, kind, label_enc, target_enc, mail_account_id, enabled, position)
@@ -166,10 +151,8 @@ export function notificationChannelsRepo(pool: Q): NotificationChannelsRepo {
         },
 
         async reorder(workspaceId, ids) {
-            // Une requête par ligne, comme les autres réordonnancements du dépôt :
-            // les listes sont courtes et le gain d'un CASE massif ne vaut pas sa
-            // lisibilité. Le `workspace_id` reste dans le WHERE — un identifiant
-            // d'un autre espace glissé dans la liste ne déplace rien.
+            // Une requête par ligne : les listes sont courtes. `workspace_id` reste
+            // dans le WHERE : un identifiant d'un autre espace ne déplace rien.
             for (const [index, id] of ids.entries()) {
                 await pool.query('UPDATE notification_channels SET position = ? WHERE id = ? AND workspace_id = ?', [
                     index,
@@ -225,12 +208,8 @@ export function notificationChannelsRepo(pool: Q): NotificationChannelsRepo {
             if (!route) throw new Error('Route écrite mais introuvable');
 
             // Effacer puis réécrire : l'ensemble des canaux d'une route est une
-            // valeur, pas une collection à réconcilier. Un différentiel coûterait
-            // deux lectures et deux écritures pour le même résultat.
-            //
-            // `c.feature = ?` : une route ne peut désigner que des canaux de SA
-            // fonctionnalité (091) — un identifiant d'un autre émetteur glissé
-            // dans la liste est ignoré comme le serait celui d'un autre espace.
+            // valeur. `c.feature = ?` : une route ne désigne que des canaux de sa
+            // fonctionnalité, tout autre identifiant est ignoré.
             await pool.query('DELETE FROM notification_route_channels WHERE route_id = ?', [route.id]);
             for (const channelId of channelIds) {
                 await pool.query(

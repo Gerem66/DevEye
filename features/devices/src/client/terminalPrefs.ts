@@ -1,10 +1,8 @@
 import { useSyncExternalStore } from 'react';
 
 /**
- * Local preferences for the remote terminal (per browser, not synced). Kept tiny
- * and self-contained: a default account to open sessions under, and what to do
- * when the shell exits. Edited in the feature's General settings panel
- * (`TerminalSettings`), read by `TerminalPanel` when a session opens.
+ * Local preferences for the remote terminal (per browser, not synced), edited
+ * in `TerminalSettings` and read by `TerminalPanel` when a session opens.
  */
 const KEY = 'deveye:terminal';
 

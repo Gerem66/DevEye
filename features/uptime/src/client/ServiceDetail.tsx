@@ -17,11 +17,7 @@ import StatusBars from './StatusBars';
 import UptimeChart from './UptimeChart';
 import styles from './style.module.css';
 
-/**
- * Measures previewed inline. Deliberately short: the full record lives on its own
- * floor ({@link MeasuresBrowser}), so the detail stays a page you read rather
- * than a list you scroll past.
- */
+/** Measures previewed inline; the full record lives in {@link MeasuresBrowser}. */
 const CHECKS_PREVIEW = 8;
 /** Outages listed under the chart. */
 const INCIDENTS_MAX = 20;
@@ -131,8 +127,6 @@ export function ServiceDetail({ service, onBack, onEdit, onCheckNow }: ServiceDe
     const minMs = timed.length > 0 ? Math.min(...timed.map((p) => p.minMs ?? Infinity)) : null;
     const maxMs = timed.length > 0 ? Math.max(...timed.map((p) => p.maxMs ?? 0)) : null;
 
-    // The full journal is a floor below this one, exactly like this view is a
-    // floor below the service list.
     if (journalOpen) {
         return <MeasuresBrowser service={service} onBack={() => setJournalOpen(false)} />;
     }
@@ -156,10 +150,6 @@ export function ServiceDetail({ service, onBack, onEdit, onCheckNow }: ServiceDe
                     <Button variant='secondary' icon='edit' onClick={onEdit}>
                         Modifier
                     </Button>
-                    {/* Les réglages **de ce service** : sa cadence, son délai,
-                        son seuil et sa rétention (Général), ses propres canaux
-                        d'alerte ou ceux d'Uptime tant qu'il les suit
-                        (Notifications), et où il est visible (Partage). */}
                     <FeatureSettingsButton
                         scope={{
                             kind: 'item',

@@ -1,15 +1,9 @@
--- Roles d'espace : qui a le droit de quoi, a l'interieur d'un espace partage.
+-- Roles d'espace : un role porte les droits, un membre porte un role.
 --
--- Jusqu'ici tout se resumait au proprietaire (tout) contre les membres (lire et
--- ecrire partout, mais rien administrer). Les roles rendent ca parametrable
--- sans multiplier les drapeaux par utilisateur : un role porte les droits, un
--- membre porte un role.
---
--- La FK est volontairement `ON DELETE SET NULL` et surtout PAS `RESTRICT` : un
--- RESTRICT entre `workspace_members` et `workspace_roles` peut bloquer un
--- `DELETE FROM workspaces` selon l'ordre — non garanti par MySQL — dans lequel
--- il parcourt la cascade. Le refus de supprimer un role encore porte est
--- applique par le handler, la ou le message peut etre utile.
+-- La FK est `ON DELETE SET NULL` et surtout PAS `RESTRICT` : un RESTRICT entre
+-- `workspace_members` et `workspace_roles` peut bloquer un `DELETE FROM
+-- workspaces` selon l'ordre, non garanti par MySQL, de la cascade. Le refus de
+-- supprimer un role encore porte est applique par le handler.
 
 CREATE TABLE IF NOT EXISTS workspace_roles (
     id           INT AUTO_INCREMENT PRIMARY KEY,
@@ -39,10 +33,8 @@ SET @s = IF(@c = 0,
     'SELECT 1');
 PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
--- Un role « Membre » par espace partage existant, reproduisant EXACTEMENT le
--- comportement d'avant : acces en ecriture a toutes les features, aucune
--- capacite d'administration. Sans ce seed, les membres actuels se
--- retrouveraient sans aucun droit du jour au lendemain.
+-- Un role « Membre » par espace partage existant, reproduisant le comportement
+-- d'avant : ecriture sur toutes les features, aucune administration.
 INSERT INTO workspace_roles (workspace_id, name, color, position, capabilities, features, is_default)
 SELECT w.id, 'Membre', '#22d3ee', 0, CAST('[]' AS JSON),
        CAST('[{"feature":"devices","access":"read"},

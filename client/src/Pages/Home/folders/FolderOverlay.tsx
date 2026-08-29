@@ -19,12 +19,9 @@ import { folderKey, folderTitle } from './identity';
 import styles from './folders.module.css';
 
 /**
- * Le décalage de départ, puis d'arrivée, de chaque carte.
- *
- * « En parallèle avec un léger délai » : les cartes partent ensemble mais pas au
- * même instant, ce qui donne à lire un éventail plutôt qu'un bloc. Le repli est
- * plus serré et en ordre inverse, pour que la dernière sortie soit la première
- * rentrée : c'est ce qui fait que la pile se reconstitue au lieu de s'écrouler.
+ * Les cartes partent ensemble mais décalées (un éventail, pas un bloc). Le repli
+ * est plus serré et en ordre inverse : la dernière sortie rentre la première,
+ * la pile se reconstitue.
  */
 const STAGGER_IN = 0.045;
 const STAGGER_OUT = 0.03;
@@ -32,30 +29,16 @@ const SPRING = { type: 'spring', stiffness: 240, damping: 28, mass: 0.9 } as con
 const FOLD_BACK = { duration: 0.32, ease: [0.4, 0, 0.2, 1] } as const;
 
 /**
- * Où en est l'éventail quand le couvercle commence, puis finit, de s'effacer.
- *
- * Le couvercle **suit** le déploiement au lieu d'attendre un délai calculé à
- * côté. L'ancienne version s'effaçait après `entries.length * STAGGER_IN`, une
- * durée qui n'a rien à voir avec celle d'un ressort : selon le nombre de cartes,
- * il partait tantôt bien après que tout se soit posé, tantôt au beau milieu du
- * mouvement. Deux dossiers ne s'ouvraient pas de la même manière, et aucune des
- * deux lectures — « il reste » ou « il s'efface pendant que ça sort » — n'était
- * tenue jusqu'au bout.
- *
- * Accroché à l'avancement réel, le parti pris est le second et il est le même
- * partout : le couvercle disparaît **pendant** que l'éventail s'étale, une fois
- * la pile dégagée de dessous lui, et il a fini avant qu'aucune carte ne se soit
- * posée.
+ * Avancement de l'éventail (0 = pile, 1 = posé) entre lequel le couvercle
+ * s'efface. Accroché à l'avancement réel du ressort et non à une durée
+ * calculée : le couvercle disparaît pendant que l'éventail s'étale, de la même
+ * façon quel que soit le nombre de cartes.
  */
 const LID_FADE_FROM = 0.22;
 const LID_FADE_TO = 0.6;
 
-/**
- * Le retour du couvercle, au repli.
- *
- * Plus court que `FOLD_BACK` : il doit être redevenu opaque avant que la
- * première carte ne revienne se ranger dessous.
- */
+/** Le retour du couvercle, plus court que `FOLD_BACK` : il doit être opaque
+ *  avant que la première carte ne revienne se ranger dessous. */
 const LID_RESTACK = { duration: 0.16, ease: 'easeOut' } as const;
 
 /** Où poser une carte pour qu'elle se confonde avec la tuile du dossier. */
@@ -80,19 +63,11 @@ interface FanCardProps {
 }
 
 /**
- * Une carte du déploiement.
- *
- * Elle est posée par la grille, à sa place d'arrivée, et c'est le transform qui
- * la ramène sur la tuile : la mise en page reste celle de l'accueil (mêmes
- * colonnes, mêmes gouttières), et l'animation ne fait que la traverser. Calculer
- * les positions à la main aurait dupliqué la grille CSS, qui aurait fini par
- * diverger d'elle.
- *
- * Les valeurs sont des `MotionValue` écrites en `useLayoutEffect`, pas des props
- * `initial`/`animate` : elles atteignent le DOM **avant la peinture**, donc la
- * carte est déjà empilée sur la tuile au premier affichage. Avec `initial`, il
- * aurait fallu mesurer d'abord, donc rendre une fois, donc laisser voir les
- * cartes à leur place d'arrivée le temps d'une image.
+ * Une carte du déploiement, posée par la grille à sa place d'arrivée ; le
+ * transform la ramène sur la tuile, la mise en page reste celle de l'accueil.
+ * Les valeurs sont des `MotionValue` écrites en `useLayoutEffect`, pas des
+ * props `initial`/`animate` : elles atteignent le DOM avant la peinture, la
+ * carte est déjà empilée sur la tuile au premier affichage.
  */
 function FanCard({ index, count, source, hidden, children }: FanCardProps) {
     const reduced = useReducedMotion() === true;
@@ -145,16 +120,9 @@ function FanCard({ index, count, source, hidden, children }: FanCardProps) {
         ];
         void Promise.all(running.map((a) => a.finished))
             .then(() => {
-                // Posée, la carte se cache elle-même. Le couvercle, redevenu
-                // opaque, la recouvre déjà : la cacher ne change rien à l'image.
-                // Mais la couche, elle, ne se démonte qu'une fois la DERNIÈRE
-                // carte rentrée, plus le temps que React et le compositeur s'en
-                // aperçoivent : pendant ce battement, une carte posée restait
-                // peinte et pouvait ressortir quelques images, figée, alors que
-                // la fermeture semblait finie. Une carte cachée n'a plus rien à
-                // laisser traîner, quel que soit ce retard. (Rouvrir pendant le
-                // repli n'existe pas : la couche intercepte tous les clics tant
-                // qu'elle est là, l'état caché ne survit donc jamais.)
+                // Posée, la carte se cache elle-même : la couche ne se démonte
+                // qu'une fois la dernière carte rentrée, et pendant ce battement
+                // une carte posée pouvait ressortir quelques images, figée.
                 el.style.visibility = 'hidden';
                 safeToRemove();
             })
@@ -177,23 +145,11 @@ function FanCard({ index, count, source, hidden, children }: FanCardProps) {
 }
 
 /**
- * Le couvercle : une copie de la tuile du dossier, posée sur la couche, au même
- * endroit et par-dessus les cartes.
- *
- * C'est ce qui donne le « dessous ». Les cartes vivent sur une couche fixe,
- * au-dessus de l'accueil : rien ne peut les faire passer derrière la vraie
- * tuile, qui est en dessous. Une copie sur la couche, elle, se met devant, et
- * les cartes glissent sous elle au départ comme au retour. Elle s'efface une
- * fois la pile dégagée, sinon elle masquerait la carte qui vient prendre sa
- * place, et revient juste avant que les cartes ne rentrent.
- *
- * `spread` est la clé : c'est le mouvement de la **dernière** carte, rejoué sur
- * une valeur de 0 (pile) à 1 (place d'arrivée). Même ressort, même délai de
- * départ, donc même course — un ressort avance de la même façon quelle que soit
- * la distance qu'il couvre. Le couvercle lit là un avancement réel, et non une
- * durée supposée, ce qui rend son effacement identique d'un dossier à l'autre.
- *
- * Décoratif de bout en bout : c'est `.lid` qui laisse passer les clics.
+ * Le couvercle : une copie de la tuile du dossier sur la couche, par-dessus les
+ * cartes, qui glissent sous elle au départ comme au retour (la vraie tuile est
+ * sous la couche). `spread` rejoue le mouvement de la dernière carte de 0 à 1 :
+ * le couvercle lit un avancement réel, pas une durée supposée. Décoratif :
+ * `.lid` laisse passer les clics.
  */
 function FolderLid({ count, source, children }: { count: number; source: DOMRect; children: ReactNode }) {
     const [isPresent, safeToRemove] = usePresence();
@@ -203,12 +159,11 @@ function FolderLid({ count, source, children }: { count: number; source: DOMRect
     useLayoutEffect(() => {
         const running = animate(spread, 1, { ...SPRING, delay: Math.max(count - 1, 0) * STAGGER_IN });
         return () => running.stop();
-        // Monté une fois, comme les cartes qu'il double : le nombre d'entrées
-        // peut changer en direct, l'éventail déjà parti, lui, ne change plus.
+        // Monté une fois, comme les cartes : l'éventail déjà parti ne change plus.
     }, []);
 
-    // Le repli : le couvercle se referme, puis la couche attend que les cartes
-    // soient rentrées pour disparaître — il reste donc opaque jusqu'au bout.
+    // Le repli : le couvercle redevient opaque, puis la couche attend que les
+    // cartes soient rentrées pour disparaître.
     useEffect(() => {
         if (isPresent) return;
         const running = animate(spread, 0, LID_RESTACK);
@@ -234,12 +189,9 @@ export interface FolderOverlayProps {
     /** La tuile d'origine, mesurée au clic : le point de départ et de retour. */
     source: DOMRect | null;
     /**
-     * La hauteur de l'en-tête de l'accueil, en pixels.
-     *
-     * Les cartes se posent en dessous, donc exactement là où commence la grille
-     * quand l'accueil est en haut de sa course : ce qui se déploie prend les
-     * places des tuiles, pas des places décalées vers le haut. Mesurée plutôt
-     * que devinée, l'en-tête changeant de hauteur avec la largeur de la fenêtre.
+     * Hauteur de l'en-tête de l'accueil, en pixels, pour que les cartes se posent
+     * sur les places des tuiles. Mesurée : elle change avec la largeur de la
+     * fenêtre.
      */
     topOffset: number;
     /** La vue actuellement ouverte par-dessus, s'il y en a une. */
@@ -251,21 +203,11 @@ export interface FolderOverlayProps {
 }
 
 /**
- * Le dossier déployé par-dessus l'accueil.
- *
- * Ce n'est **pas** une vue : rien n'est monté dans la popup, aucun identifiant
- * ne part dans la présence en direct, et la barre du haut garde la main (elle
- * porte l'intitulé et le retour, comme pour un écran de fonctionnalité). Un
- * dossier n'est qu'un rangement de l'accueil, et se comporter comme tel est ce
- * qui le rend compatible avec le reste sans ligne particulière ailleurs : une
- * carte déployée s'ouvre, se partage et se rejoint exactement comme sa jumelle
- * posée sur la grille.
- *
- * La couche se cale sur la géométrie de l'accueil (même colonne centrale, mêmes
- * marges, même grille), donc les cartes arrivent précisément sur les places des
- * tuiles ordinaires. Le fond, lui, recule : c'est l'accueil qui porte le flou et
- * le léger retrait (voir `Dashboard.module.css`), pas cette couche, sinon les
- * cartes se flouteraient avec lui.
+ * Le dossier déployé par-dessus l'accueil. Ce n'est pas une vue : rien dans la
+ * popup, rien dans la présence en direct ; une carte déployée s'ouvre et se
+ * rejoint comme sa jumelle sur la grille. La couche se cale sur la géométrie de
+ * l'accueil ; le flou et le retrait sont portés par l'accueil, pas par la
+ * couche, sinon les cartes se flouteraient avec lui.
  */
 export function FolderOverlay({
     folder,
@@ -286,9 +228,7 @@ export function FolderOverlay({
     return (
         <AnimatePresence>
             {open && (
-                // Tout ce qui n'est pas une carte referme : les gouttières de la
-                // grille et le bas de page en font partie, et viser le voile à
-                // côté d'une carte est le geste naturel pour revenir.
+                // Tout ce qui n'est pas une carte referme, gouttières comprises.
                 <div key='folder' className={styles.layer} onClick={onClose}>
                     <motion.div
                         className={styles.scrim}
@@ -331,10 +271,8 @@ export function FolderOverlay({
                         </WidgetGrid>
                     </div>
 
-                    {/* Le couvercle, en dernier : à z-index égal c'est l'ordre de
-                        l'arbre qui décide, donc il couvre les cartes sans avoir à
-                        empiler qui que ce soit. Sans mouvement, il n'a rien à
-                        cacher : les cartes ne traversent alors pas la tuile. */}
+                    {/* Le couvercle en dernier : à z-index égal, l'ordre de l'arbre
+                        décide. Sans mouvement, il n'a rien à cacher. */}
                     {!reduced && (
                         <FolderLid count={entries.length} source={source}>
                             <Widget

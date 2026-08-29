@@ -18,22 +18,9 @@ import { BACKUP_PROBE_TIMEOUT_MS, DESTINATION_ICONS, DESTINATION_LABELS, destina
 import styles from './style.module.css';
 
 /**
- * Les destinations de l'espace : le panneau de l'onglet « Sources » des
- * réglages de la feature Sauvegardes.
- *
- * C'était un dialogue à part, derrière son propre bouton « Destinations » en
- * tête de la feature : un endroit de plus à connaître, à côté des réglages. Les
- * sources d'une fonctionnalité vivent toutes au même endroit, Réglages →
- * Sources, et le bouton du dialogue de travail mène ici.
- *
- * Rangées, dialogue d'ajout empilé et confirmation : les mêmes formes que la
- * liste des canaux de la section Notifications, exprès. C'est la rangée
- * canonique des réglages, d'où l'emprunt de sa feuille (`settingsStyles`) ;
- * seule la pastille d'état reste celle de la feature, qui la partage avec ses
- * cartes.
- *
- * Autonome, comme tous les panneaux de la coquille : il se charge
- * (`backup.destinationList`), s'invalide et se rafraîchit tout seul.
+ * Les destinations de l'espace : panneau « Sources » des réglages de la
+ * feature. Mêmes formes que la liste des canaux des Notifications, d'où
+ * l'emprunt de `settingsStyles`.
  */
 export default function DestinationsPanel({ canWrite }: SettingsPanelProps) {
     const { data: destinations, error: loadError } = useResource(
@@ -47,21 +34,13 @@ export default function DestinationsPanel({ canWrite }: SettingsPanelProps) {
     const [error, setError] = useState<string | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
     /**
-     * Ce que le dernier contrôle a mesuré, par destination.
-     *
-     * En mémoire de l'écran seulement, pas en base : l'occupation d'un bucket
-     * change à chaque sauvegarde, et la ranger en base voudrait dire l'y écrire
-     * à chaque passage, donc afficher, le reste du temps, un chiffre faux avec
-     * l'autorité d'une donnée enregistrée. Elle n'a de sens qu'au moment où on
-     * vient de la mesurer.
+     * Mesures du dernier contrôle, en mémoire de l'écran seulement :
+     * l'occupation change à chaque sauvegarde, une valeur en base serait fausse
+     * le reste du temps.
      */
     const [probes, setProbes] = useState<Record<number, BackupDestinationProbe>>({});
 
-    /**
-     * Une destination qui change touche aussi les travaux (nom affiché sur
-     * chaque carte, verdict de contrôle) et la tuile de l'accueil : les mêmes
-     * clés que la feature invalidait quand ce panneau était son dialogue.
-     */
+    // Une destination touche aussi les cartes des travaux et la tuile de l'accueil.
     const changed = () => invalidate('backup.destinationList', 'backup.jobList', 'backup.count');
 
     const test = async (destination: BackupDestination) => {
@@ -83,10 +62,6 @@ export default function DestinationsPanel({ canWrite }: SettingsPanelProps) {
         }
     };
 
-    /**
-     * La confirmation ne s'ouvre que quand le retrait est possible : une
-     * destination encore désignée a son bouton désactivé, avec la raison.
-     */
     const askRemove = (destination: BackupDestination) => {
         setConfirm({
             title: `Retirer « ${destination.name} » ?`,

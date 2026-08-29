@@ -5,14 +5,7 @@ import type { Database } from '../contracts/domain';
 import { ENGINE_LABELS, STATUS_META } from './format';
 import styles from './style.module.css';
 
-/**
- * Ce que « Relever » fait vraiment.
- *
- * La question s'est posée telle quelle : est-ce que ça copie la base ? est-ce
- * que ça la teste ? est-ce que ça évalue les alertes ? Le mot seul ne pouvait
- * pas y répondre, et deux boutons voisins qui joignent tous deux le serveur sans
- * dire en quoi ils diffèrent laissaient la question ouverte.
- */
+/** Ce que « Tester » et « Relever » font, et ce que « Relever » conserve. */
 function explainInspect() {
     void openInfo({
         title: 'Tester, relever : quelle différence ?',
@@ -63,34 +56,17 @@ interface DatabaseHeaderProps {
     onTest: () => void;
     onInspect: () => void;
     onEdit: () => void;
-    /**
-     * Ouvrir cette base dans la feature « Bases de données ».
-     *
-     * Absent quand on y est déjà : dans sa propre feature, le nom n'a nulle part
-     * où mener. Présent dans l'onglet d'un projet, où la base est montrée en
-     * entier alors que tout ce qui la concerne vraiment (ses réglages, ses
-     * projets, ses voisines) vit ailleurs.
-     *
-     * Rendu comme un **bouton de la barre d'actions**, et non plus en rendant le
-     * titre cliquable. Un titre qui navigue ne s'annonce pas : rien ne le
-     * distingue d'un intitulé, et il fallait le survoler pour le découvrir. Les
-     * trois onglets d'un projet portent désormais la même barre, dans le même
-     * ordre : actions de la feature, « Ouvrir… », puis « Délier ».
-     */
+    /** Ouvrir cette base dans sa feature ; absent quand on y est déjà. */
     onOpenInFeature?: () => void;
-    /** Posé avant l'identité — un retour à la liste, par exemple. */
+    /** Posé avant l'identité (un retour à la liste, par exemple). */
     before?: ReactNode;
-    /** Posé après les boutons — un « Délier », par exemple. */
+    /** Posé après les boutons (un « Délier », par exemple). */
     after?: ReactNode;
 }
 
 /**
- * L'en-tête d'une base : ce qu'elle est, et ce qu'on peut lui faire.
- *
- * Partagé entre la feature et l'onglet d'un projet, comme le contenu qu'il
- * surmonte. Ce qui diffère d'un contexte à l'autre entre par `before` et
- * `after` : la feature met un retour à la liste, l'onglet d'un projet un
- * « Délier » — le reste est identique, et doit le rester.
+ * L'en-tête d'une base, partagé entre la feature et l'onglet d'un projet ; ce
+ * qui diffère entre par `before` et `after`.
  */
 export function DatabaseHeader({
     database,
@@ -133,9 +109,7 @@ export function DatabaseHeader({
                     {database.lastError && <p className={styles.error}>{database.lastError}</p>}
                 </div>
             </div>
-            {/* La barre est rendue sans condition : outre « Ouvrir… », elle
-                porte le bouton de réglages commun, auquel un lecteur a droit
-                (il voit où la base prévient, à défaut de le changer). */}
+            {/* Rendue sans condition : le bouton de réglages est ouvert au lecteur. */}
             <div className={styles.actions}>
                 {canWrite && (
                     <>
@@ -145,8 +119,6 @@ export function DatabaseHeader({
                         <Button variant='secondary' icon='search' onClick={onInspect} disabled={busy}>
                             Relever l’état
                         </Button>
-                        {/* Deux boutons voisins joignent le serveur ; celui-ci dit
-                        en quoi ils diffèrent, et ce que « relever » garde. */}
                         <button
                             type='button'
                             className={styles.infoButton}
@@ -156,9 +128,8 @@ export function DatabaseHeader({
                         >
                             <span className='icon icon-info' />
                         </button>
-                        {/* `!database.foreign` : la ligne se réécrit sous la
-                                clé de SON espace — le serveur le refuse, l'écran
-                                ne le propose donc pas. */}
+                        {/* `!database.foreign` : une base projetée se modifie chez
+                            elle, le serveur le refuse ici. */}
                         {!database.foreign && (
                             <Button variant='secondary' icon='edit' onClick={onEdit} disabled={busy}>
                                 Modifier
@@ -166,10 +137,6 @@ export function DatabaseHeader({
                         )}
                     </>
                 )}
-                {/* Les réglages **de cette base**, hors du bloc d'écriture :
-                        un lecteur voit où elle prévient, comme le dit déjà le
-                        bouton de la fonctionnalité. Le bouton se supprime seul
-                        quand aucune section n'est lisible. */}
                 <FeatureSettingsButton
                     scope={{
                         kind: 'item',
@@ -178,9 +145,8 @@ export function DatabaseHeader({
                         itemLabel: database.name
                     }}
                 />
-                {/* Toujours l'avant-dernier : les trois onglets d'un projet
-                        rangent leur barre dans le même ordre, actions de la
-                        feature puis « Ouvrir… » puis « Délier ». */}
+                {/* Avant-dernier, avant `after` : le même ordre dans les trois
+                    onglets d'un projet. */}
                 {onOpenInFeature && (
                     <Button variant='secondary' icon='chevrons-right' onClick={onOpenInFeature}>
                         Ouvrir la Base de données

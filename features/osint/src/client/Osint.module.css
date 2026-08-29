@@ -1,5 +1,4 @@
-/* OSINT — un champ, une grille de cartes, un historique.
-   Aucune couleur en dur : tout passe par les variables du thème. */
+/* Aucune couleur en dur : tout passe par les variables du thème. */
 
 /* `relative` + `overflow: hidden` : c'est ce bloc qui borne le tiroir
    d'historique. Sans lui, le panneau se positionnerait sur le premier ancêtre
@@ -666,9 +665,6 @@
 .historyRemove:hover {
     color: var(--danger);
 }
-
-/* Les clés des fournisseurs (panneau Sources) n'ont plus de styles à elles :
-   le panneau est passé aux rangées canoniques des réglages (settingsStyles). */
 
 /* ---------------------------------- Widget --------------------------------- */
 

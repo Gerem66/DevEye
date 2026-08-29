@@ -12,12 +12,8 @@ export interface WorkspaceSwitcherProps {
 }
 
 /**
- * Section « Espaces » du menu de la topbar, en tête.
- *
- * Volontairement plate : la liste complète est visible d'un coup, sans sous-menu
- * ni repli, parce qu'un utilisateur en a une poignée et que le but est de
- * basculer en un clic. L'espace personnel arrive toujours en tête — le serveur
- * le trie ainsi.
+ * Section « Espaces » du menu de la topbar : liste plate, visible d'un coup,
+ * pour basculer en un clic. L'espace personnel arrive en tête (tri serveur).
  */
 export function WorkspaceSwitcher({ onSelect, onCreate, onManage }: WorkspaceSwitcherProps) {
     const { workspaces, activeId } = useWorkspaceState();
@@ -30,9 +26,7 @@ export function WorkspaceSwitcher({ onSelect, onCreate, onManage }: WorkspaceSwi
     return (
         <>
             {/* La création vit sur l'intitulé de la section, pas dans la liste :
-                c'est une action sur l'ensemble, pas un espace de plus à choisir.
-                Une ligne « Nouvel espace » se lisait comme une entrée parmi les
-                autres et allongeait une liste qu'on parcourt pour basculer. */}
+                c'est une action sur l'ensemble, pas un espace de plus à choisir. */}
             <div className={styles.menuLabel}>
                 <span>Espaces</span>
                 <button

@@ -33,18 +33,13 @@ import type { GitRepo } from './repo';
 import { GitSync } from './service';
 
 /**
- * La synchronisation de fond du module, sur le harnais de service du SDK.
- *
- * Aucun réseau : l'adaptateur GitHub est injecté, et le test décide de ce que
- * le dépôt distant répond. Ce qui mérite d'être tenu, c'est ce qui ne lève
- * nulle part quand ça se dérègle : les **branches** suivent le distant
- * (ajoutées, mises à jour, retirées), la **tête** est sautée au premier tour
- * (aucun « depuis » sans commit connu), le **backfill** enchaîne ses tranches
- * jusqu'au premier commit et l'avancement **survit** entre deux, la dernière
- * **release** stable est dite à Projets par son contrat (`applyVersion`,
- * jamais une pré-version), un tour de **304** ne ravive personne, un **quota
- * épuisé** inscrit un horodatage futur sans toucher à l'état, et
- * `syncStatus` / `runningIn` disent la vérité pendant et après.
+ * La synchronisation de fond, sans réseau : l'adaptateur GitHub est injecté et
+ * le test décide des réponses. Ce qui se vérifie ici ne lève nulle part
+ * ailleurs : les branches suivent le distant, la tête est sautée au premier
+ * tour, le rattrapage enchaîne ses tranches et son avancement survit entre
+ * deux, seule la dernière release stable est dite à Projets, un 304 ne ravive
+ * personne, un quota épuisé recule la prochaine tentative sans toucher à
+ * l'état, et `syncStatus` / `runningIn` disent la vérité pendant et après.
  */
 
 interface FakeRepo extends GitRepo {

@@ -27,10 +27,7 @@ interface JobDialogProps {
     destinations: BackupDestination[];
     onClose: () => void;
     onSaved: () => void;
-    /**
-     * Le travail vient d'être supprimé ; la suppression vit dans la zone danger
-     * de ce dialogue, comme pour une cible ou un dépôt. Absent = pas proposée.
-     */
+    /** Absent = suppression non proposée. */
     onRemoved?: () => void;
 }
 
@@ -38,15 +35,8 @@ interface JobDialogProps {
 const keyOf = (kind: BackupSourceKind, id: number | null): string => `${kind}:${id ?? ''}`;
 
 /**
- * Créer ou modifier un travail : quoi, où, quand, combien de copies.
- *
- * Les sources viennent du serveur (`backup.sources`) plutôt que d'un croisement
- * côté écran : elles vivent dans trois features différentes, chacune derrière
- * son propre droit, et les recomposer ici aurait demandé trois appels et trois
- * gardes à tenir en phase avec le serveur.
- *
- * La cadence reste un déroulant : cinq choix, un de plus que ce qu'une rangée
- * de segments sait montrer sans s'étirer.
+ * Les sources viennent du serveur (`backup.sources`) : elles vivent dans trois
+ * features, chacune derrière son droit.
  */
 export default function JobDialog({ open, job, destinations, onClose, onSaved, onRemoved }: JobDialogProps) {
     const [candidates, setCandidates] = useState<BackupSourceCandidate[]>([]);
@@ -64,17 +54,14 @@ export default function JobDialog({ open, job, destinations, onClose, onSaved, o
     /** La suppression emporte l'historique : elle se confirme sur place. */
     const [confirmRemove, setConfirmRemove] = useState(false);
     /**
-     * Les destinations connues au moment d'ouvrir les réglages : celle qui
-     * apparaît ensuite vient d'y être créée, et c'est pour ce travail-ci qu'on
-     * l'a créée ; elle se sélectionne donc toute seule au retour.
+     * Les destinations connues à l'ouverture des réglages : celle qui apparaît
+     * ensuite vient d'y être créée pour ce travail.
      */
     const knownIds = useRef<Set<number> | null>(null);
 
-    // À l'ouverture seule, surtout pas quand `destinations` bouge : la liste
-    // se recharge au rythme du sujet Live (chaque exécution nocturne la fait
-    // battre), et remettre le formulaire à zéro sous les doigts effacerait la
-    // saisie en cours. Le choix de la destination par défaut vit dans les deux
-    // effets qui suivent.
+    // À l'ouverture seule, pas quand `destinations` bouge : la liste se
+    // recharge au rythme du sujet Live et remettrait le formulaire à zéro sous
+    // les doigts.
     useEffect(() => {
         if (!open) return;
         setError(null);
@@ -108,17 +95,14 @@ export default function JobDialog({ open, job, destinations, onClose, onSaved, o
         setKeepLast(7);
     }, [open, job]);
 
-    // Sans destination choisie, la première de la liste : couvre l'ouverture
-    // (l'ancien défaut) comme l'arrivée de la toute première destination.
+    // Sans destination choisie, la première de la liste.
     useEffect(() => {
         if (!open) return;
         setDestinationId((prev) => (prev !== 0 ? prev : (destinations[0]?.id ?? 0)));
     }, [open, destinations]);
 
-    // L'adoption : une destination apparue pendant que les réglages étaient
-    // ouverts vient d'y être créée, et c'est pour ce travail-ci ; elle se
-    // sélectionne toute seule, comme les dialogues de liaison des Projets
-    // relient ce qu'ils viennent de créer.
+    // Une destination apparue pendant que les réglages étaient ouverts se
+    // sélectionne toute seule.
     useEffect(() => {
         if (knownIds.current === null) return;
         const fresh = destinations.find((d) => !knownIds.current?.has(d.id));
@@ -155,9 +139,7 @@ export default function JobDialog({ open, job, destinations, onClose, onSaved, o
                 scheduleWeekday: weekday,
                 scheduleDay: day,
                 keepLast,
-                // La forme des archives se règle dans l'onglet Chiffrement des
-                // réglages du travail : le formulaire préserve l'existante, et
-                // un travail naît scellé (le défaut sûr).
+                // La forme se règle dans l'onglet Chiffrement ; un travail naît scellé.
                 encryption: job?.encryption ?? ('server' as const)
             };
             if (job) await api.send('backup.jobUpdate', { jobId: job.id, ...body });
@@ -242,11 +224,9 @@ export default function JobDialog({ open, job, destinations, onClose, onSaved, o
                                 </option>
                             ))}
                         </SelectInput>
-                        {/* La fiche choisit, les réglages gèrent : les
-                            destinations se déclarent dans Réglages → Sources,
-                            jamais ici. Le bouton commun y mène, par-dessus, et
-                            la destination créée pendant ce temps est adoptée
-                            (`onOpenChange` fige la liste connue à l'ouverture). */}
+                        {/* Les destinations se déclarent dans Réglages → Sources ;
+                            celle créée pendant ce temps est adoptée
+                            (`onOpenChange` fige la liste connue). */}
                         <FeatureSettingsButton
                             scope={{ kind: 'feature', feature: 'backup' }}
                             initialSection='sources'
@@ -309,10 +289,7 @@ export default function JobDialog({ open, job, destinations, onClose, onSaved, o
                         <label className={styles.field}>
                             <span className={styles.fieldLabel}>Quantième</span>
                             <SelectInput value={day} onChange={(e) => setDay(Number(e.target.value))}>
-                                {/* Borné à 28 : un travail au 31 ne partirait pas
-                                    en février, et un travail qui saute un mois
-                                    sans rien dire est précisément la panne qu'on
-                                    ne veut pas rendre possible. */}
+                                {/* Borné à 28 : un travail au 31 ne partirait pas en février. */}
                                 {Array.from({ length: 28 }, (_, i) => (
                                     <option key={i + 1} value={i + 1}>
                                         {i + 1}

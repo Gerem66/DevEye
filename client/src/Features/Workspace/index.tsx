@@ -27,12 +27,9 @@ function lastSeen(epoch: number): string {
 }
 
 /**
- * Page « Espace de travail », découpée en onglets : Général, Membres, Rôles.
- *
- * Les onglets sont construits d'après les droits de l'appelant, si bien qu'un
- * onglet affiché mène toujours à quelque chose d'utilisable — plutôt qu'à une
- * section vide ou grisée. Un espace personnel n'en garde donc qu'un : il n'a ni
- * membres, ni rôles, et ne se quitte pas.
+ * Page « Espace de travail » : Général, Membres, Rôles. Les onglets suivent les
+ * droits de l'appelant, si bien qu'un onglet affiché mène toujours à quelque
+ * chose d'utilisable ; un espace personnel n'en garde qu'un.
  */
 export default function FeatureWorkspace() {
     const admin = useWorkspaceAdmin();
@@ -52,12 +49,7 @@ export default function FeatureWorkspace() {
     const canManageRoles = can('workspace.roles');
     const canRename = can('workspace.manage');
 
-    /**
-     * Onglets réellement disponibles, construits d'après les droits : un onglet
-     * affiché mène toujours à quelque chose d'utilisable, plutôt qu'à une section
-     * vide ou grisée. L'espace personnel n'en garde qu'un — il n'a ni membres, ni
-     * rôles.
-     */
+    /** Les onglets que les droits de l'appelant rendent utilisables. */
     const tabs: TabDef<TabId>[] = (
         [
             { id: 'general', label: 'Général', icon: 'settings', when: true },

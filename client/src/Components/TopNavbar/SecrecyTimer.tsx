@@ -11,16 +11,12 @@ function formatRemaining(ms: number): string {
 }
 
 /**
- * Topbar mini-widget for password-based encryption, styled like the reconnect
- * pill. Three states:
- *  1. enabled + locked   → a lone padlock; hover reveals "Déverrouiller", click
- *     opens the unlock prompt (so the session can be unlocked ahead of any action).
- *  2. enabled + unlocked → a padlock + a live countdown bar. The remaining time
- *     shows only on hover (no reserved space). Clicking the bar postpones the
- *     flush; clicking the padlock re-locks immediately (flushes the cached DEK).
- *  3. disabled           → a sober open-padlock; click opens the security page.
- *  4. enabled, "always prompt" (interval 0) → caching is pointless, so instead of
- *     a no-op unlock the widget reads as informational and routes to the config.
+ * Topbar mini-widget for password-based encryption. Four states:
+ *  1. enabled + locked: a padlock, click opens the unlock prompt.
+ *  2. enabled + unlocked: padlock (re-locks, flushes the cached DEK) + countdown
+ *     bar (click postpones the flush); remaining time shown on hover only.
+ *  3. disabled: an open padlock, click opens the security page.
+ *  4. enabled, "always prompt": caching is pointless, routes to the config.
  */
 export function SecrecyTimer({ onOpenSecurity }: { onOpenSecurity?: (e: ReactMouseEvent) => void }) {
     const { enabled, unlocked, unlockedUntil, alwaysPrompt } = useSecrecy();

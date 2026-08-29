@@ -10,16 +10,11 @@ import type { ProjectsRepo, ProjectUsageRow } from './repo';
 
 /**
  * Le contrat que le service publie (`PROJECTS_USAGE_PROVIDER`), sur le harnais
- * sessionless du SDK : ce que les modules Bases de données, Déploiement, Git
- * et Audience lisent de Projets sans ouvrir une de ses tables.
- *
- * Ce qui mérite d'être tenu : une feature inconnue vaut vide (jamais une
- * erreur), les titres se lisent à l'étage ouvert avec un repli quand le corps
- * résiste, la frise d'un projet gardé ne s'écrit pas d'ici (un module ne
- * regarde jamais un projet gardé, sa liaison est refusée), et la version
- * d'une release ne se reporte que sur les projets ouverts qui ont demandé à
- * la suivre, en ravivant le portefeuille seulement quand quelque chose a
- * changé.
+ * sessionless du SDK. Ce qui mérite d'être tenu : une feature inconnue vaut du vide
+ * et jamais une erreur, les titres se lisent à l'étage ouvert avec un repli quand le
+ * corps résiste, la frise d'un projet gardé ne s'écrit pas d'ici, et la version
+ * d'une release ne se reporte que sur les projets ouverts qui l'ont demandée, en
+ * ravivant le portefeuille seulement quand quelque chose a changé.
  */
 
 function body(title: string, version = ''): string {
@@ -56,8 +51,8 @@ interface FakeRepo extends ProjectsRepo {
 }
 
 /**
- * Un dépôt réduit à ce que le contrat lit : les projets, la frise, et les
- * lectures d'usage des dépôts git. Le reste lève s'il est atteint.
+ * Un dépôt réduit à ce que le contrat lit : les projets, la frise et les lectures
+ * d'usage des dépôts git. Le reste lève s'il est atteint.
  */
 function fakeRepo(): FakeRepo {
     const projectRows: ProjectRow[] = [];

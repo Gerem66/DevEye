@@ -9,11 +9,8 @@ export const clientEntry: FeatureClient = {
     Widget: FinanceWidget,
     Full: Finance,
     settingsPanels: { general: FinanceGeneralPanel, categories: FinanceCategoriesPanel },
-    // Démonté dès la fermeture, comme le journal des bases : le journal des
-    // opérations tient une page bornée par une période et des filtres qui
-    // n'ont aucune raison de survivre à la fermeture de l'écran, et les
-    // soldes d'une instance en cache auraient vieilli en silence. Pas de
-    // `holdSecrecy` : rien n'y est chiffré à l'étage gardé, donc rien ne
-    // peut déclencher l'invite de mot de passe.
+    // Démonté dès la fermeture : les filtres du journal n'ont pas à survivre,
+    // et les soldes en cache vieilliraient. Pas de `holdSecrecy` : rien n'est
+    // chiffré à l'étage gardé.
     cacheDurationMinutes: 0
 };

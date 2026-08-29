@@ -8,11 +8,9 @@ type BadgeTone = NonNullable<ComponentProps<typeof StatusBadge>['tone']>;
 
 /**
  * Comment se dit l'état d'une boîte, au même endroit pour les deux surfaces qui
- * l'affichent : la pastille d'une carte et le bandeau de la boîte ouverte.
- *
- * Les libellés parlent de ce qu'il y a à faire, pas de ce qui a techniquement
- * échoué — le message brut du serveur reste disponible juste à côté, et il est
- * le seul à pouvoir être précis.
+ * l'affichent : la pastille d'une carte et le bandeau de la boîte ouverte. Les
+ * libellés parlent de ce qu'il y a à faire, pas de ce qui a techniquement
+ * échoué, le message brut du serveur restant juste à côté.
  */
 export interface AccountStatusView {
     tone: BadgeTone;
@@ -23,9 +21,8 @@ export interface AccountStatusView {
 }
 
 /**
- * `null` quand il n'y a rien à signaler — l'appelant n'affiche alors rien du
- * tout, plutôt qu'une pastille verte permanente : une boîte qui marche est le
- * cas normal, et le dire en continu ne ferait que diluer les cas qui comptent.
+ * `null` quand il n'y a rien à signaler : l'appelant n'affiche alors rien plutôt
+ * qu'une pastille verte permanente, une boîte qui marche étant le cas normal.
  *
  * `needsReauth` passe devant l'état de la dernière opération : il décrit une
  * impasse déjà certaine (plus de jeton de rafraîchissement), là où `auth` peut

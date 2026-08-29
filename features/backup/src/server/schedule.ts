@@ -1,20 +1,10 @@
 import type { BackupScheduleKind } from '../contracts/domain';
 
 /**
- * La prochaine échéance d'un travail, à partir de `from`.
- *
- * Rend `null` pour un travail manuel ou désactivé : c'est ce `NULL` qui le
- * sort de l'index des travaux dus, plutôt qu'une condition de plus dans la
- * requête chaude.
- *
- * Les heures sont **locales au serveur** : « sauvegarde à 3 h » veut dire
- * 3 h là où la machine est administrée, pas 3 h UTC. Le passage à l'heure
- * d'été décale donc une sauvegarde d'une heure une fois par an, ce qui est
- * exactement ce qu'on veut ici et le contraire de ce qu'on voudrait pour une
- * mesure.
- *
- * Fonction pure, sans dépôt ni moteur : les handlers la calculent à
- * l'enregistrement d'un travail, l'ordonnanceur avant chaque exécution.
+ * La prochaine échéance d'un travail à partir de `from` ; `null` pour un
+ * travail manuel ou désactivé (ce qui le sort de l'index des travaux dus).
+ * Heures locales au serveur : « 3 h » veut dire 3 h là où la machine est
+ * administrée, heure d'été comprise.
  */
 export function nextRunAt(
     schedule: BackupScheduleKind,

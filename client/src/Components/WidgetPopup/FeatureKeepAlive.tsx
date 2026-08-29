@@ -12,18 +12,11 @@ export interface FeatureKeepAliveProps {
 }
 
 /**
- * Keeps a feature mounted across open/close without ever remounting it.
- *
- * The trick: the children are portaled into a *single persistent container*
- * whose identity never changes, so React never tears the subtree down (a portal
- * remounts its children if you change its container — which would reload the
- * feature). Instead we physically move that container's DOM node between the
- * open popup body and a hidden holder with `appendChild`. React doesn't care
- * where the container lives in the document, so feature state (fetched data,
- * scroll, form input…) is fully preserved.
- *
- * The component only truly unmounts — firing its `useFeatureLifecycle`
- * onUnmount — when the dashboard stops rendering it (TTL expiry, forced reset).
+ * Keeps a feature mounted across open/close: the children are portaled into a
+ * single persistent container (a portal remounts its children if its container
+ * changes), and that container's DOM node is moved with `appendChild` between
+ * the open popup body and a hidden holder. State is fully preserved; the
+ * component only unmounts when the dashboard stops rendering it.
  */
 export default function FeatureKeepAlive({ target, children }: FeatureKeepAliveProps) {
     // Persistent portal container. `display: contents` keeps it layout-neutral

@@ -8,15 +8,12 @@ import { TRACKER_SCRIPT, TRACKER_SCRIPT_ETAG } from './script';
 import type { AudienceIngest, IngestRequest } from './service';
 
 /**
- * Les routes publiques du module, sur une surface `SdkPublicApp` factice qui
- * retient ce qu'on lui déclare.
- *
- * Ce qui se tient ici est ce que l'hôte ne vérifie pas pour nous : le script
- * est servi avec son type, son cache et son ETag, et un ETag connu rend `304` ;
- * un lot valide atteint l'ingestion avec l'origine, le user-agent et l'adresse
- * de la requête ; un corps invalide rend le même `204` **sans** l'atteindre ;
- * les deux POST demandent leur plafond de débit, et les trois réponses sont
- * chargeables depuis une autre origine (CORP).
+ * Les routes publiques du module, sur une surface `SdkPublicApp` factice. On
+ * tient ce que l'hôte ne vérifie pas pour nous : le script servi avec son type,
+ * son cache et son ETag (un ETag connu rend `304`), un lot valide qui atteint
+ * l'ingestion avec l'origine, le user-agent et l'adresse, un corps invalide qui
+ * rend le même `204` sans l'atteindre, le plafond de débit des deux POST, et
+ * les trois réponses chargeables depuis une autre origine (CORP).
  */
 
 const KEY = 'pk_000000000000000000000001';

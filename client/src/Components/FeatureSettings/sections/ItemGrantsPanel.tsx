@@ -8,29 +8,12 @@ import { useResourceVersion } from '@/stores/invalidation';
 import styles from '../FeatureSettings.module.css';
 
 /**
- * Ce que chaque rôle d'un espace voit **de cet élément** — le panneau, seul.
- *
- * Réutilisé tel quel à deux endroits : l'onglet Permissions des réglages d'un
- * élément (l'espace actif), et l'onglet Partage du domicile, où chaque espace
- * coché porte un bouton Permissions (`workspaceId` visé). Un seul composant,
- * pour que régler une fenêtre depuis chez soi et la régler depuis là-bas soient
- * le même écran — deux écrans finiraient par ne plus dire la même chose.
- *
- * ## L'hérité est toujours affiché
- *
- * Chaque ligne dit ce que le rôle voit **effectivement** : l'exception posée,
- * ou, à défaut, ce que la fonctionnalité lui donne. Une vue qui ne montrerait
- * que les exceptions obligerait à deviner le reste — l'inverse d'une vue
- * d'ensemble.
- *
- * ## Restreindre, jamais accorder
- *
- * Les trois choix sont « comme la fonctionnalité », « lecture seule » et
- * « masqué ». Il n'y a pas de quatrième qui ouvrirait : le droit du rôle sur la
- * fonctionnalité reste le plafond — l'écran des rôles doit rester la seule
- * réponse à « qui a accès à quoi ». Un rôle sans accès à la fonctionnalité n'a
- * donc rien à régler ici, et sa ligne le dit au lieu de proposer des choix
- * sans effet.
+ * Ce que chaque rôle d'un espace voit de cet élément. Réutilisé par l'onglet
+ * Permissions d'un élément (espace actif) et par l'onglet Partage du domicile
+ * (`workspaceId` visé). Chaque ligne dit ce que le rôle voit effectivement,
+ * exception ou héritage. On restreint, jamais on n'accorde : le droit du rôle
+ * sur la fonctionnalité reste le plafond, l'écran des rôles reste la seule
+ * réponse à « qui a accès à quoi ».
  */
 
 const FEATURE_ACCESS_LABEL: Record<'none' | 'read' | 'write', string> = {
@@ -116,9 +99,8 @@ export default function ItemGrantsPanel({ feature, itemId, workspaceId }: Props)
                             <span className={styles.channelMeta}>{effectiveOf(role)}</span>
                         </span>
                         {/* Trois choix fixes : des boutons collés plutôt qu'un
-                            menu déroulant qui les cachait derrière un clic. Ce
-                            que « Hérité » vaut pour CE rôle est dans l'infobulle
-                            et dans la phrase sous son nom. */}
+                            déroulant. Ce que « Hérité » vaut pour ce rôle est dans
+                            l'infobulle et la phrase sous son nom. */}
                         <SegmentedControl
                             value={role.access ?? 'inherit'}
                             disabled={busy || role.featureAccess === 'none'}

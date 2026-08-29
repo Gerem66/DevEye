@@ -3,15 +3,9 @@ import { connect } from 'net';
 import { field, tag, type OsintProbeAdapter, type OsintTag } from './shared';
 
 /**
- * WHOIS brut, en TCP sur le port 43.
- *
- * Aucune dépendance : le protocole tient en une phrase — on ouvre la connexion,
- * on envoie la requête suivie de CRLF, on lit jusqu'à la fermeture. Une
- * bibliothèque n'apporterait ici qu'une table de serveurs à maintenir.
- *
- * Servie **en plus** de RDAP, pas à sa place : le texte libre du registre porte
- * régulièrement ce que son RDAP omet — c'est vrai de l'AFNIC (`.fr`), qui y
- * publie le statut du titulaire et les dates de façon plus complète.
+ * WHOIS brut, en TCP sur le port 43, sans dépendance : une bibliothèque
+ * n'apporterait qu'une table de serveurs à maintenir. Servi en plus de RDAP :
+ * le texte libre du registre porte souvent ce que son RDAP omet (l'AFNIC).
  */
 
 const WHOIS_PORT = 43;

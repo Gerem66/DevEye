@@ -24,39 +24,16 @@ import { looksLikeBot, parseUserAgent } from './userAgent';
 /**
  * L'ingestion de l'audience : le seul chemin de DevEye ouvert sur Internet.
  *
- * ## Ce qui coûte, et ce qui n'est donc pas fait dans la requête
- *
  * Une requête d'ingestion arrive à la cadence des visites de tous les sites de
- * tous les espaces. Elle ne fait donc, dans le cas courant, **aucune requête
- * SQL** : le site est résolu depuis un cache mémoire, le visiteur est condensé,
- * et l'événement part dans une file. Tout le travail de base a lieu dans la
- * vidange, une fois par seconde, en lots.
+ * tous les espaces. Elle ne fait donc, dans le cas courant, aucune requête SQL :
+ * le site vient d'un cache mémoire, le visiteur est condensé, l'événement part
+ * dans une file, et tout le travail de base a lieu à la vidange, en lots. Le
+ * prix : une seconde d'événements est perdue si le processus tombe entre deux
+ * vidanges.
  *
- * Le prix, à dire franchement : **une seconde d'événements est perdue** si le
- * processus tombe entre deux vidanges. C'est de l'analytique, pas de la
- * comptabilité — et la garantie inverse aurait coûté un aller-retour SQL
- * synchrone à chaque page vue de chaque site.
- *
- * ## Le direct, coalescé
- *
- * Diffuser un `live.changed` par événement ferait re-solliciter l'écran de tous
- * les membres de l'espace à chaque visite. La diffusion est donc regroupée à
- * **une par minute et par espace** — la cadence demandée, et bien assez pour
- * une donnée qui se lit en tendance.
- *
- * Deux garde-fous sont déjà là et n'ont pas à être refaits : `LiveHub.changed`
- * ne fait rien quand personne n'est dans la salle, et son plancher de 200 ms
- * (qui doit rester sous l'anti-rebond client de 250 ms) protège le reste du
- * système. La coalescence à la minute vit **ici**, jamais dans le hub.
- *
- * ## Depuis le rapatriement en module
- *
- * Le service tourne sur `FeatureServiceDeps` : les deux boucles sont des
- * tickers du SDK, le codec ouvert d'un espace vient de `deps.cipherFor`
- * (mémoïsé par l'hôte, la `Map` locale a disparu), la diffusion passe par
- * `deps.live.changed`, et le sel des visiteurs est **dérivé** de la clé
- * serveur (`deps.keys.derive`) au lieu d'être la clé elle-même, qu'un module
- * ne lit pas. Voir {@link AudienceIngest.visitorSalt}.
+ * Le direct est coalescé à une diffusion par minute et par espace ; en émettre
+ * une par événement ferait re-solliciter l'écran de tous les membres à chaque
+ * visite. Cette coalescence vit ici, jamais dans le hub.
  */
 
 /** Une requête d'ingestion, une fois l'enveloppe HTTP ôtée. */
@@ -64,8 +41,8 @@ export interface IngestRequest {
     key: string;
     /**
      * L'identifiant que le client garde d'une visite à l'autre, s'il en pose un.
-     * **Ignoré** quand le site n'est pas en mode persistant : les deux côtés
-     * doivent être d'accord, et c'est le réglage du site qui tranche.
+     * Ignoré quand le site n'est pas en mode persistant : c'est le réglage du
+     * site qui tranche.
      */
     visitorId?: string | null;
     /** En-tête `Origin`, ou `null` : un client natif n'en envoie pas. */
@@ -75,7 +52,6 @@ export interface IngestRequest {
     events: AudienceEventInput[];
 }
 
-/** Le site tel que le cache le tient — que ce dont l'ingestion a besoin. */
 interface CachedSite {
     id: number;
     workspaceId: number;
@@ -86,7 +62,6 @@ interface CachedSite {
     active: boolean;
 }
 
-/** Un événement accepté, en attente d'écriture. */
 interface QueuedEvent {
     siteId: number;
     workspaceId: number;
@@ -106,35 +81,27 @@ interface QueuedEvent {
     screenWidth: number | null;
 }
 
-/** Une session ouverte, telle que le cache la tient entre deux vidanges. */
 interface CachedSession {
     id: number;
     lastAt: number;
     identityId: number | null;
 }
 
-/** Cadence de vidange de la file. */
 const FLUSH_MS = 1000;
 
-/** Cadence du ménage : agrégat journalier, rétention, libellés orphelins. */
 const MAINTENANCE_MS = 60 * 60 * 1000;
 
 /**
- * Une diffusion `live` par espace au plus, sur cette période.
- *
- * ⚠️ **N'a rien à voir avec `TOPIC_FLOOR_MS` du hub** (200 ms), qui doit rester
- * sous l'anti-rebond du client. Celui-ci est un choix de produit — une audience
- * se lit en tendance, la rafraîchir plus souvent ne montrerait rien de plus et
- * ferait re-solliciter tous les écrans de l'espace.
+ * Une diffusion `live` par espace au plus, sur cette période. Sans rapport avec
+ * le plancher du hub : c'est un choix de produit, une audience se lit en
+ * tendance et la rafraîchir plus souvent ne montrerait rien de plus.
  */
 const BROADCAST_FLOOR_MS = 60_000;
 
 /**
- * Plafond de la file. Au-delà, on jette et on le dit.
- *
- * Sans lui, une base indisponible transformerait la mémoire du processus en
- * file d'attente sans fond — et le serveur tomberait pour une feature qui n'est
- * pas critique. Jeter des visites est le bon compromis ; s'arrêter ne l'est pas.
+ * Plafond de la file : au-delà, on jette et on le dit. Sans lui, une base
+ * indisponible transformerait la mémoire du processus en file sans fond, et le
+ * serveur tomberait pour une feature qui n'est pas critique.
  */
 const QUEUE_MAX = 20_000;
 
@@ -144,46 +111,30 @@ const SESSION_CACHE_MAX = 20_000;
 const UNKNOWN_KEY_CACHE_MAX = 1_000;
 
 /**
- * Les deux paramètres de la dérivation du sel des visiteurs : fixes, parce
- * que le sel doit être le même d'un redémarrage à l'autre (voir
- * {@link AudienceIngest.visitorSalt}).
+ * Les deux paramètres de la dérivation du sel des visiteurs, fixes : le sel
+ * doit être le même d'un redémarrage à l'autre.
  */
 const VISITOR_SALT = 'audience';
 const VISITOR_SALT_INFO = 'visitor-salt';
 
 export class AudienceIngest {
-    /** La vidange de la file : un ticker du SDK, une fois par seconde. */
     private readonly flushTicker: FeatureService;
-    /** Le ménage horaire : un ticker du SDK. */
     private readonly maintenanceTicker: FeatureService;
     private flushing = false;
 
     /**
-     * Le secret d'où sortent les condensés de visiteurs.
-     *
-     * Le service natif salait avec `CRYPT_KEY_A` brute, qu'un module ne lit
-     * pas : le module dérive une fois au démarrage une clé de 32 octets de la
-     * clé serveur (`deps.keys.derive`, HKDF, jamais stockée) et s'en sert à
-     * la place, dans le condensé persistant comme dans le sel du jour. Même
-     * propriété qu'avant : stable d'un redémarrage à l'autre tant que la clé
-     * serveur ne change pas, et jamais en base.
-     *
-     * Conséquence assumée, et une seule fois : les condensés de visiteurs ont
-     * changé à la migration. Un visiteur persistant a été compté « nouveau »
-     * une fois (sa session suivante ne s'est pas rattachée à l'ancienne
-     * empreinte) ; les condensés anonymes tournaient déjà chaque jour, rien
-     * n'a bougé pour eux. C'est le prix de ne plus manipuler la clé serveur.
+     * Le secret d'où sortent les condensés de visiteurs : 32 octets dérivés de
+     * la clé serveur (HKDF), jamais stockés ni écrits en base, et stables d'un
+     * redémarrage à l'autre tant que la clé serveur ne change pas.
      */
     private readonly visitorSalt: string;
 
     /** `public_key` → site. Vidé à toute mutation d'un site (voir `invalidate`). */
     private readonly sites = new Map<string, CachedSite>();
     /**
-     * Les clés qu'aucun site ne porte.
-     *
-     * Sans cette mémoire, un client mal configuré — ou hostile — ferait une
-     * requête SQL par événement pour toujours. Bornée, parce qu'elle est
-     * alimentée par une entrée publique : c'est une file d'oubli, pas un cache.
+     * Les clés qu'aucun site ne porte : sans cette mémoire, un client mal
+     * configuré ou hostile ferait une requête SQL par événement pour toujours.
+     * Bornée, parce qu'elle est alimentée par une entrée publique.
      */
     private readonly unknownKeys = new Set<string>();
 
@@ -205,9 +156,8 @@ export class AudienceIngest {
     start(): void {
         this.flushTicker.start();
         this.maintenanceTicker.start();
-        // Un premier ménage au démarrage : c'est le seul moment où l'on est sûr
-        // de passer, même sur une instance qui ne tourne qu'une heure par jour.
-        // Un `setTimeout` et non un ticker : ce n'est pas une boucle.
+        // Un premier ménage au démarrage : le seul moment où l'on est sûr de passer,
+        // même sur une instance qui ne tourne qu'une heure par jour.
         setTimeout(() => void this.maintain(), 30_000).unref();
         this.deps.logger.info({ flushMs: FLUSH_MS }, 'Audience ingest started');
     }
@@ -215,20 +165,15 @@ export class AudienceIngest {
     async stop(): Promise<void> {
         this.flushTicker.stop();
         this.maintenanceTicker.stop();
-        // Une dernière vidange : un arrêt propre n'a pas de raison de perdre ce
-        // qui est déjà accepté. Attendue, parce que l'hôte attend l'arrêt d'un
-        // module avant de fermer le pool : lancée en `void`, elle serait coupée
-        // par la fermeture qui suit.
+        // Une dernière vidange, attendue : l'hôte attend l'arrêt du module avant de
+        // fermer le pool, donc lancée en `void` elle serait coupée par la fermeture.
         await this.flush();
     }
 
     /**
-     * Oublie tout ce qu'on savait des sites.
-     *
-     * Appelé après **toute** mutation d'un site — création, réglages, rotation
-     * de clé, suppression. Vider en entier plutôt que cibler : la carte compte
-     * quelques dizaines d'entrées, et une invalidation partielle est exactement
-     * le genre de finesse qui laisse une entrée périmée derrière elle.
+     * Oublie tout ce qu'on savait des sites ; appelé après toute mutation d'un
+     * site. Vider en entier plutôt que cibler : la carte compte quelques
+     * dizaines d'entrées, et une invalidation partielle laisse des périmés.
      */
     invalidate(): void {
         this.sites.clear();
@@ -236,11 +181,9 @@ export class AudienceIngest {
     }
 
     /**
-     * Accepte (ou ignore en silence) une requête d'ingestion.
-     *
-     * **Ne lève jamais et ne dit jamais non.** L'appelant répond `204` quoi
-     * qu'il arrive : distinguer les refus ferait de cet endpoint un oracle, qui
-     * dirait à n'importe qui quelles clés existent.
+     * Accepte, ou ignore en silence, une requête d'ingestion. Ne lève jamais et
+     * ne dit jamais non : l'appelant répond `204` quoi qu'il arrive, sans quoi
+     * cet endpoint dirait à n'importe qui quelles clés existent.
      */
     async accept(req: IngestRequest): Promise<void> {
         const site = await this.resolveSite(req.key);
@@ -250,13 +193,10 @@ export class AudienceIngest {
 
         const ua = parseUserAgent(req.userAgent);
 
-        // Deux façons de reconnaître quelqu'un, et le réglage du site tranche.
-        //
-        // En persistant, on se fie à l'identifiant que le client garde : c'est
-        // ce qui rend la même personne reconnaissable d'un jour à l'autre, donc
-        // les visiteurs connus mesurables. Un client qui n'en envoie pas malgré
-        // le réglage retombe sur l'anonyme — il compte, simplement il ne sera
-        // jamais « déjà venu ».
+        // Deux façons de reconnaître quelqu'un, et le réglage du site tranche. En
+        // persistant, l'identifiant que le client garde rend la même personne
+        // reconnaissable d'un jour à l'autre ; un client qui n'en envoie pas retombe
+        // sur l'anonyme et ne sera jamais « déjà venu ».
         const persistent = site.visitorMode === 'persistent' && !!req.visitorId;
         const visitor = persistent
             ? persistentVisitorRef(this.visitorSalt, site.publicKey, req.visitorId as string)
@@ -269,8 +209,7 @@ export class AudienceIngest {
                 return;
             }
             const name = event.type === 'event' ? event.name?.trim() || null : null;
-            // Un événement nommé sans nom n'est rien : le laisser entrer
-            // produirait une ligne que rien ne pourrait jamais désigner.
+            // Un événement nommé sans nom produirait une ligne que rien ne désigne.
             if (event.type === 'event' && !name) continue;
 
             this.queue.push({
@@ -282,8 +221,8 @@ export class AudienceIngest {
                 path: normalizePath(event.path),
                 name,
                 referrer: normalizeReferrer(event.referrer, site.origins),
-                // Ce que le client déclare l'emporte sur ce qu'on devine : un
-                // client natif *sait*, là où le user-agent est une supposition.
+                // Ce que le client déclare l'emporte sur ce qu'on devine : un client natif
+                // sait, là où le user-agent est une supposition.
                 browser: event.browser?.trim() || ua.browser,
                 os: event.os?.trim() || ua.os,
                 device: event.device?.trim() || ua.device,
@@ -297,24 +236,20 @@ export class AudienceIngest {
     }
 
     /**
-     * Le sel du jour : dérivé d'un secret du serveur et de la date UTC.
-     *
-     * Dérivé, et non tiré au sort au démarrage : un redémarrage compterait
-     * sinon deux fois chaque visiteur de la journée. Tournant, et non fixe :
-     * c'est ce qui garantit qu'aucun identifiant ne suit quelqu'un d'un jour à
-     * l'autre.
+     * Le sel du jour, dérivé d'un secret du serveur et de la date UTC. Dérivé
+     * et non tiré au sort au démarrage, sinon un redémarrage compterait deux
+     * fois chaque visiteur du jour ; tournant, pour qu'aucun identifiant ne
+     * suive quelqu'un d'un jour à l'autre.
      */
     private dailySalt(): string {
         return `${this.visitorSalt}:${dayKey(Math.floor(Date.now() / 1000))}`;
     }
 
     /**
-     * L'horodatage retenu.
-     *
-     * Un client peut en proposer un — c'est ce qui permettra à un module natif
-     * de livrer ce qu'il a mis de côté hors ligne. Il est **borné** aux
-     * dernières 24 heures : une horloge fausse ne doit pas pouvoir dater une
-     * visite de 2038 et écraser l'échelle de tous les graphes de l'espace.
+     * L'horodatage retenu. Un client peut en proposer un (pour livrer ce qu'il
+     * a mis de côté hors ligne), borné aux dernières 24 heures : une horloge
+     * fausse ne doit pas dater une visite de 2038 et écraser l'échelle des
+     * graphes.
      */
     private clampTimestamp(proposed: number | undefined, now: number): number {
         if (proposed === undefined) return now;
@@ -354,11 +289,8 @@ export class AudienceIngest {
     }
 
     /**
-     * L'identifiant d'un libellé, du cache ou de la base.
-     *
-     * Le cache est ce qui rend la feature tenable : un site qui a trente pages
-     * résout trente libellés une fois, puis plus jamais. Sans lui, chaque
-     * visite ferait un aller-retour SQL **et** un chiffrement par dimension.
+     * L'identifiant d'un libellé, du cache ou de la base. Sans le cache, chaque
+     * visite ferait un aller-retour SQL et un chiffrement par dimension.
      */
     private async resolveLabel(siteId: number, kind: string, value: string, cipher: SdkCipher): Promise<number> {
         const ref = labelRef(value);
@@ -418,9 +350,9 @@ export class AudienceIngest {
                     nameId
                 });
 
-                // Une identité qui apparaît en cours de route rattache la
-                // session déjà ouverte : on arrive anonyme, on se connecte, et
-                // sans ceci toute visite resterait anonyme jusqu'à la suivante.
+                // Une identité qui apparaît en cours de route rattache la session déjà
+                // ouverte : on arrive anonyme, on se connecte, et sans ceci toute visite
+                // resterait anonyme jusqu'à la suivante.
                 if (item.identity && session.identityId === null) {
                     const identityId = await this.resolveLabel(item.siteId, 'identity', item.identity, cipher);
                     await this.deps.repo.setSessionIdentity(session.id, identityId);
@@ -446,16 +378,14 @@ export class AudienceIngest {
             }
             for (const workspaceId of workspaces) this.maybeBroadcast(workspaceId);
         } catch (e) {
-            // La file a déjà été vidée : ce lot est perdu, et c'est voulu. Le
-            // remettre en tête ferait boucler indéfiniment sur une écriture qui
-            // échoue, en accumulant tout ce qui arrive derrière.
+            // La file a déjà été vidée : ce lot est perdu, et c'est voulu. Le remettre en
+            // tête ferait boucler sur une écriture qui échoue, en accumulant la suite.
             this.deps.logger.error({ err: e, events: batch.length }, 'Audience ingest: flush failed');
         } finally {
             this.flushing = false;
         }
     }
 
-    /** La session ouverte de ce visiteur, ou une nouvelle. */
     private async resolveSession(item: QueuedEvent, cipher: SdkCipher): Promise<CachedSession> {
         const cacheKey = `${item.siteId}:${item.visitorRef}`;
         const cached = this.sessions.get(cacheKey);
@@ -469,9 +399,9 @@ export class AudienceIngest {
             return session;
         }
 
-        // Les dimensions d'une session sont posées **à son ouverture** et n'en
-        // bougent plus : elles décrivent une visite, pas un instant. L'identité
-        // fait exception, parce qu'elle arrive après coup par construction.
+        // Les dimensions d'une session sont posées à son ouverture et n'en bougent plus :
+        // elles décrivent une visite, pas un instant. L'identité fait exception, parce
+        // qu'elle arrive après coup par construction.
         const id = await this.deps.repo.createSession({
             siteId: item.siteId,
             visitorRef: item.visitorRef,
@@ -501,18 +431,15 @@ export class AudienceIngest {
         const now = Date.now();
         if (now - (this.lastBroadcast.get(workspaceId) ?? 0) < BROADCAST_FLOOR_MS) return;
         this.lastBroadcast.set(workspaceId, now);
-        // Le sujet du module (`audience`), diffusé par le hub, projections
-        // comprises : l'ex `live.changed(workspaceId, ['audience'], null)`.
+        // Le sujet du module, diffusé par le hub, projections comprises.
         this.deps.live.changed(workspaceId);
     }
 
     /**
-     * Le ménage horaire : agrégat, rétention, libellés orphelins.
-     *
-     * L'agrégat est refait pour **hier et aujourd'hui**. Aujourd'hui parce que
-     * la journée bouge encore ; hier parce que rien ne garantit qu'une instance
-     * tournait à minuit — et un jour manquant dans l'agrégat est un trou
-     * définitif dès que les événements bruts ont expiré.
+     * Le ménage horaire : agrégat, rétention, libellés orphelins. L'agrégat est
+     * refait pour hier et aujourd'hui : aujourd'hui bouge encore, et rien ne
+     * garantit qu'une instance tournait à minuit, alors qu'un jour manquant est
+     * un trou définitif dès que les événements bruts ont expiré.
      */
     private async maintain(): Promise<void> {
         try {
@@ -529,14 +456,12 @@ export class AudienceIngest {
                 const events = await this.deps.repo.pruneEvents(site.id, before);
                 const sessions = await this.deps.repo.pruneSessions(site.id, before);
                 if (events + sessions > 0) {
-                    // Les libellés ne sont balayés que si quelque chose a
-                    // réellement disparu : la requête parcourt deux tables de
-                    // faits, il n'y a aucune raison de la jouer à vide.
+                    // Les libellés ne sont balayés que si quelque chose a réellement
+                    // disparu : la requête parcourt deux tables de faits.
                     const labels = await this.deps.repo.pruneOrphanLabels(site.id);
                     this.deps.logger.info({ siteId: site.id, events, sessions, labels }, 'Audience retention sweep');
-                    // Des identifiants viennent de disparaître : le cache les
-                    // rendrait encore, et l'insertion suivante buterait sur une
-                    // clé étrangère morte.
+                    // Des identifiants viennent de disparaître : le cache les rendrait
+                    // encore, et l'insertion suivante buterait sur une clé étrangère morte.
                     this.labels.clear();
                     this.sessions.clear();
                 }

@@ -1,9 +1,7 @@
 /**
- * Les variables d'environnement propres à la feature se lisent ici, pas dans
- * `Utils/Env` de l'app : le module est le seul à savoir ce qu'elles veulent
- * dire. Même paire hôte/conteneur que CloudSync pour le stockage :
- * `BACKUP_STORAGE_ROOT` est le dossier de l'hôte (lu par docker compose seul,
- * source du montage), `BACKUP_STORAGE_DIR` ce même dossier vu par le serveur.
+ * Même paire hôte/conteneur que CloudSync : `BACKUP_STORAGE_ROOT` est le
+ * dossier de l'hôte (docker compose), `BACKUP_STORAGE_DIR` ce dossier vu par
+ * le serveur.
  */
 export const env = {
     /** La racine des destinations `local`, cloisonnée par espace en dessous. */
@@ -15,11 +13,7 @@ export const env = {
      * milieu d'un dépôt laisserait le travail « en cours » pour toujours.
      */
     BACKUP_RUN_TIMEOUT_SECONDS: Number(process.env.BACKUP_RUN_TIMEOUT_SECONDS) || 6 * 60 * 60,
-    /**
-     * La base de DevEye elle-même, pour la source `deveye` : les mêmes
-     * variables que celles avec lesquelles ce processus s'est connecté. Lues
-     * telles quelles ; l'app a déjà refusé de démarrer si elles manquaient.
-     */
+    /** La base de DevEye elle-même, pour la source `deveye`. */
     DB_HOSTNAME: process.env.DB_HOSTNAME ?? '',
     DB_PORT: Number(process.env.DB_PORT) || 3306,
     DB_DATABASE: process.env.DB_DATABASE ?? '',

@@ -1,8 +1,6 @@
 /**
- * Les formats propres à Sentinelle. `formatDuration` est la copie de celle du
- * Monitoring de l'app (`Features/Monitoring/utils.ts`), que la feature
- * importait avant son rapatriement : un module n'importe rien de l'app hors du
- * barrel, et douze lignes ne valent pas une entrée de SDK.
+ * `formatDuration` est une copie de celle du Monitoring de l'app : un module
+ * n'importe rien de l'app hors du barrel.
  */
 
 /** Compact span label (e.g. "24 h", "3 h 30", "12 min") for the graph window. */

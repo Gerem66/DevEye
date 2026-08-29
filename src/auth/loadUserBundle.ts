@@ -5,32 +5,23 @@ import { permissionsFor } from '@/features/_access';
 
 /**
  * Charge tout ce qu'une session a besoin de connaître : le compte, ses espaces,
- * et **le seul espace actif** avec son thème et sa disposition d'accueil.
- *
- * Le thème des autres espaces n'est délibérément pas embarqué (`bgImages` peut
- * contenir plusieurs data URLs de fond d'écran) : basculer d'espace va chercher
- * les siens.
+ * et le seul espace actif avec son thème et sa disposition d'accueil. Le thème
+ * des autres espaces n'est pas embarqué (`bgImages` peut peser lourd).
  */
 export async function loadUserBundle(
     db: Database,
     userId: number,
     /**
-     * Espace où le client se trouve déjà, s'il en a un. Sans lui, le serveur
-     * recalculerait l'espace actif (favori, sinon personnel) et renverrait le
-     * thème, la disposition **et les droits** d'un autre espace que celui
-     * affiché — trois incohérences d'un coup, dont une de sécurité apparente
-     * (des droits qui ne correspondent pas à l'espace ouvert).
-     *
-     * Ignoré s'il n'est pas accessible : un espace supprimé ou dont l'accès a été
-     * révoqué doit ramener sur un espace valide, pas bloquer la session.
+     * Espace où le client se trouve déjà : sans lui, le serveur renverrait thème,
+     * disposition et droits d'un autre espace que celui affiché. Ignoré s'il
+     * n'est plus accessible.
      */
     preferredWorkspaceId?: number
 ): Promise<SessionBundle | null> {
     const row = await db.users.findById(userId);
     if (!row) return null;
-    // Un compte suspendu n'a pas de session : `/me` et `/refresh` passent tous
-    // deux par ici, et le jeton d'accès déjà émis reste valide jusqu'à son
-    // expiration — sans ce garde-fou il servirait encore un bundle complet.
+    // Un compte suspendu n'a pas de session : `/me` et `/refresh` passent ici,
+    // et le jeton d'accès déjà émis reste valide jusqu'à son expiration.
     if (row.status === 'suspended') return null;
 
     // Security posture surfaced as "Sécurité → x / 3" in the profile. The
@@ -75,16 +66,13 @@ export async function loadUserBundle(
         };
     });
 
-    // Par ordre de préséance : l'espace où le client se trouve déjà, sinon son
-    // favori, sinon le personnel. Chacun n'est retenu que s'il est encore
-    // accessible — un espace supprimé ou révoqué ramène sur le suivant plutôt
-    // que de bloquer la session.
+    // Par préséance : l'espace où le client se trouve déjà, sinon son favori,
+    // sinon le personnel ; chacun seulement s'il est encore accessible.
     const accessible = new Set(workspaces.map((w) => w.id));
     const activeWorkspaceId =
         [preferredWorkspaceId, row.default_workspace_id].find((id): id is number => id != null && accessible.has(id)) ??
-        // L'espace personnel est censé être toujours accessible (son propriétaire
-        // en est membre par construction). On y retombe sans le vérifier : si cet
-        // invariant cassait, échouer ici serait pire qu'ouvrir un espace vide.
+        // L'espace personnel est accessible par construction ; si cet invariant
+        // cassait, échouer ici serait pire qu'ouvrir un espace vide.
         row.personal_workspace_id;
 
     const activeRow = await db.workspaces.findById(activeWorkspaceId);
@@ -135,11 +123,9 @@ function parseHomeLayout(raw: string | null | undefined): HomeLayout | null {
 }
 
 /**
- * Une colonne `JSON` tenant un tableau de chaînes, lue sans supposer ce que le
- * driver en a fait : selon la configuration du pool, mysql2 rend soit la valeur
- * déjà désérialisée, soit la chaîne brute. Les deux sont acceptées, et tout le
- * reste vaut « rien » — une colonne illisible ne doit pas faire échouer une
- * session ni une écriture de drapeau.
+ * Une colonne `JSON` tenant un tableau de chaînes : selon la configuration du
+ * pool, mysql2 rend la valeur désérialisée ou la chaîne brute. Tout le reste
+ * vaut « rien », une colonne illisible ne doit pas faire échouer une session.
  */
 export function parseStringArray(raw: unknown): string[] {
     if (Array.isArray(raw)) return raw.map(String);

@@ -94,9 +94,8 @@ export const uptimeRemove = {
 
 /**
  * Lay out the workspace's services: `ids` is the **complete** list in its final
- * order (lower index first). Nothing else positions a service (new ones are
- * appended), so the order is entirely the user's, as it is for notes. Touches no
- * probe state, so reordering never disturbs monitoring.
+ * order. Nothing else positions a service (new ones are appended). Touches no
+ * probe state.
  */
 export const uptimeReorder = {
     command: 'uptime.reorder' as const,

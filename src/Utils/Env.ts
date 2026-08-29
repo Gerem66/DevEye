@@ -6,51 +6,24 @@ export const env = {
     LISTEN_PORT: getEnvVar('LISTEN_PORT', 'number'),
     PUBLIC_ORIGIN: getEnvVar('PUBLIC_ORIGIN', 'string'),
 
-    // Origine de l'écouteur **public** : celle par laquelle le monde extérieur
-    // atteint les routes publiques des modules, donc celle qui figure dans ce
-    // qu'un module donne à copier (la balise d'audience). Elle nourrit
-    // `ctx.origins.public` de TOUS les modules (`_sdk/context.ts`) ; aucun ne
-    // la lit directement, et l'app non plus.
-    //
-    // **Distincte de `PUBLIC_ORIGIN` par nature** : l'application est derrière
-    // le VPN, l'ingestion doit être joignable sans lui. C'est en général un
-    // sous-domaine dédié rangé sur le même conteneur (`https://t.exemple.fr`),
-    // exempté du filtre côté proxy, exempter un hôte entier se relisant d'un
-    // coup d'œil, là où un `PathPrefix` mal écrit exposerait toute l'application.
-    //
-    // Vide, on retombe sur `PUBLIC_ORIGIN` : c'est ce qui fait marcher le
-    // développement local sans rien configurer. Le nom garde son histoire
-    // (Audience a été la première, et reste la seule, à ouvrir une porte).
+    // Origine par laquelle le monde extérieur atteint les routes publiques des
+    // modules ; nourrit `ctx.origins.public` (`_sdk/context.ts`), seul lecteur.
+    // Distincte de `PUBLIC_ORIGIN` : l'application est derrière le VPN, ces
+    // routes doivent être joignables sans lui (sous-domaine dédié exempté côté
+    // proxy). Vide, on retombe sur `PUBLIC_ORIGIN` (développement local).
     AUDIENCE_ORIGIN: getEnvVar('AUDIENCE_ORIGIN', 'string', false),
 
-    /**
-     * Port du **second écouteur**, celui qu'on expose sur Internet.
-     *
-     * Vide, il n'y en a pas : le serveur se comporte exactement comme avant, et
-     * les routes publiques restent joignables sur le port principal. C'est le
-     * cas du développement, où un seul port sert tout.
-     *
-     * Réglé, un second serveur démarre, qui **n'enregistre que** les routes
-     * publiques des modules (capacité `routes.public` : l'ingestion d'audience
-     * et son script, voir `publicApp.ts`). On lui dédie alors un domaine côté
-     * proxy, et il n'existe aucun chemin de code de ce port vers
-     * l'authentification, la socket ou le client web.
-     */
+    // Port du second écouteur, celui qu'on expose sur Internet (`publicApp.ts`) :
+    // il n'enregistre que les routes publiques des modules. Vide, pas de second
+    // serveur, et ces routes restent joignables sur le port principal.
     PUBLIC_LISTEN_PORT: getEnvVar('PUBLIC_LISTEN_PORT', 'number', false),
 
     LOG_LEVEL: getEnvVar('LOG_LEVEL', 'enum', ['fatal', 'error', 'warn', 'info', 'debug', 'trace']),
     LOG_PATH: getEnvVar('LOG_PATH', 'string', false) || './logs',
 
-    /**
-     * Racine du stockage CloudSync **vue par le serveur**, c'est-à-dire dans le
-     * conteneur. Le compose y monte un volume dont la source, sur l'hôte, est
-     * `CLOUDSYNC_STORAGE_ROOT` — deux variables distinctes parce que ce sont
-     * deux chemins différents, et les confondre menait à écrire à l'intérieur
-     * du conteneur (donc à perdre les données au redéploiement).
-     *
-     * On n'y touche que pour un déploiement hors conteneur, où les deux côtés
-     * se confondent effectivement. Voir `Docs/CLOUDSYNC.md`.
-     */
+    // Racine du stockage CloudSync vue par le serveur (dans le conteneur) ;
+    // `CLOUDSYNC_STORAGE_ROOT` est le chemin côté hôte que le compose y monte.
+    // Ne change que hors conteneur. Voir `Docs/CLOUDSYNC.md`.
     CLOUDSYNC_STORAGE_DIR: getEnvVar('CLOUDSYNC_STORAGE_DIR', 'string', false) || '/data/cloudsync',
 
     SSL_PRIVATE_KEY_PATH: getEnvVar('SSL_PRIVATE_KEY_PATH', 'string', false),
@@ -97,10 +70,8 @@ export const env = {
     TWOFA_ISSUER: getEnvVar('TWOFA_ISSUER', 'string', false) || 'DevEye',
     TWOFA_CHALLENGE_TTL_SECONDS: getEnvVar('TWOFA_CHALLENGE_TTL_SECONDS', 'number', false) || 60 * 5,
 
-    // (Les SENTINEL_* sont lues par le module Sentinelle lui-même, features/sentinel ;
-    // les MAIL_SYNC_* et OAUTH_* par le module Mail, features/mail ;
-    // MONITORING_RETENTION_DAYS et LINK_CODE_TTL_SECONDS par le module
-    // Appareils, features/devices.)
+    // Les variables propres à un module (SENTINEL_*, MAIL_SYNC_*, OAUTH_*,
+    // MONITORING_RETENTION_DAYS, LINK_CODE_TTL_SECONDS) sont lues par le module.
 
     COOKIE_DOMAIN: getEnvVar('COOKIE_DOMAIN', 'string', false),
 
@@ -110,9 +81,8 @@ export const env = {
 
 export const isDev = env.ENVIRONMENT === 'dev';
 
-// Les deux écouteurs sur le même port, c'est un `EADDRINUSE` brut au démarrage,
-// et **après** que le serveur principal soit debout : le message ne dirait rien
-// de la cause. On refuse tout de suite, en la nommant.
+// Deux écouteurs sur le même port : un `EADDRINUSE` brut après le démarrage du
+// serveur principal ne dirait rien de la cause. On refuse tout de suite.
 if (env.PUBLIC_LISTEN_PORT && env.PUBLIC_LISTEN_PORT === env.LISTEN_PORT) {
     throw new Error(
         `PUBLIC_LISTEN_PORT (${env.PUBLIC_LISTEN_PORT}) doit différer de LISTEN_PORT : ce sont deux serveurs distincts, ` +

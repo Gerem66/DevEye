@@ -6,16 +6,10 @@ import { defineSdkFeature, type SdkCipher } from '@deveye/types/sdk/server';
 import { assertProjectUnlocked, loadProject, projectCipher, type Ctx, type StoredEvent } from './_shared';
 
 /**
- * La frise verticale d'un projet.
- *
- * Lecture seule : rien ne s'écrit ici depuis le client. Les événements sont
- * posés par les mutations elles-mêmes (`recordEvent`), au moment où le fait se
- * produit, et par les autres modules à travers le contrat d'usage
- * (`PROJECTS_USAGE_PROVIDER.recordEvent`, un déploiement parti de l'onglet
- * d'un projet) : c'est ce qui garantit qu'aucune histoire ne peut être
- * réécrite après coup. Elle se lit chez le projet, sous son codec, depuis une
- * fenêtre comme chez lui ; ses acteurs sont des identifiants, que le client
- * nomme parmi les membres de l'espace actif et masque sinon.
+ * La frise verticale d'un projet, en lecture seule : les événements sont posés par
+ * les mutations elles-mêmes (`recordEvent`) et par les autres modules à travers
+ * `PROJECTS_USAGE_PROVIDER.recordEvent`, au moment où le fait se produit, ce qui
+ * interdit de réécrire une histoire après coup.
  */
 
 /** Ne lève jamais : un événement illisible reste sur la frise, sans son libellé. */

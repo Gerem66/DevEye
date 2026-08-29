@@ -18,43 +18,31 @@ import { oauthProviderEndpoints } from './oauth';
 import type { MailRepo } from './repo';
 import { getAccountSyncStatus } from './syncStatus';
 
-/** Le contexte d'une commande de Mail : le contexte du SDK, sur le dépôt du module. */
 export type Ctx = SdkFeatureContext<MailRepo>;
 
-/**
- * Depuis le rapatriement, la lecture est implicite (le défaut du SDK) : seules
- * les écritures déclarent leur niveau.
- */
+/** La lecture est implicite (le défaut du SDK) : seules les écritures déclarent leur niveau. */
 export const WRITE = { level: 'write' } as const;
 
 /**
  * Pick the cipher an account's data is encrypted with, per its own tier.
  *
- * `ctx.cipher()` est l'ex `ctx.secure.open` (l'étage ouvert, celui que le
- * service de fond sait relire seul), `ctx.cipher('private')` l'ex `ctx.secure`
- * (l'étage gardé, qui n'existe que dans une session déverrouillée). Le palier
- * est une colonne en clair précisément pour que ce choix se fasse avant de
- * lire quoi que ce soit.
+ * Le palier est une colonne en clair précisément pour que ce choix se fasse
+ * avant de lire quoi que ce soit.
  */
 export function cipherFor(ctx: Ctx, tier: MailSecurityTier): SdkCipher {
     return ctx.cipher(tier === 'open' ? 'server' : 'private');
 }
 
-/** Ce compte est vu d'ici par une fenêtre : il vit dans un autre espace, qui le projette. */
+/** Ce compte vit dans un autre espace, qui le projette ici. */
 export function isForeign(ctx: Ctx, account: MailAccountRow): boolean {
     return account.workspace_id !== ctx.workspaceId;
 }
 
 /**
- * Le codec sous lequel les données d'un compte **existant** sont écrites, où
- * qu'il vive.
- *
- * Chez lui, c'est {@link cipherFor} par son palier. Projeté d'ailleurs, c'est
- * le codec ouvert de son espace d'origine, que seul `ctx.sharing.scope()` sait
- * rendre (`Docs/SHARING.md` §3) : le déchiffrer avec celui d'ici rendrait un
- * nom vide plutôt qu'une erreur, une boîte qu'on croirait mal enregistrée. Un
- * compte projeté est toujours ouvert (`findVisible` ne rend pas d'autre
- * projection), donc l'étage ouvert du domicile est indispensable et suffisant.
+ * Le codec sous lequel les données d'un compte existant sont écrites : chez lui
+ * {@link cipherFor} par son palier, projeté d'ailleurs le codec ouvert de son
+ * espace d'origine, que seul `ctx.sharing.scope()` sait rendre (`Docs/SHARING.md`
+ * §3). Le déchiffrer avec celui d'ici rendrait un nom vide plutôt qu'une erreur.
  */
 export async function accountCipher(ctx: Ctx, account: MailAccountRow): Promise<SdkCipher> {
     if (!isForeign(ctx, account)) return cipherFor(ctx, account.security_tier);
@@ -62,13 +50,10 @@ export async function accountCipher(ctx: Ctx, account: MailAccountRow): Promise<
 }
 
 /**
- * Refuse un geste réservé au domicile sur un compte projeté.
- *
- * Une fenêtre lit et agit, le domicile configure : supprimer le compte,
- * changer son palier ou retoucher ses identifiants touchent la donnée d'un
- * autre espace, et le palier en particulier relie la boîte au mot de passe de
- * son auteur, que la fenêtre ne voit pas. Le serveur refuse, et l'écran ne
- * propose pas.
+ * Refuse un geste réservé au domicile sur un compte projeté : supprimer le
+ * compte, changer son palier ou retoucher ses identifiants touchent la donnée
+ * d'un autre espace, et le palier relie la boîte au mot de passe de son auteur,
+ * que la fenêtre ne voit pas.
  */
 export function assertAtHome(ctx: Ctx, account: MailAccountRow, gesture: string): void {
     if (!isForeign(ctx, account)) return;
@@ -79,14 +64,11 @@ export function assertAtHome(ctx: Ctx, account: MailAccountRow, gesture: string)
 }
 
 /**
- * Range un échec dans l'une des trois familles d'{@link MailAccountStatus}.
- *
- * Sur le message, faute de mieux : IMAP n'a pas de code d'erreur exploitable —
- * imapflow lève `Error('Command failed')` et laisse la vraie raison dans
- * `responseText`, que `describeError` a déjà repliée dans le message. La
- * classification n'a donc pas à être exhaustive : elle sert à choisir ce que
- * l'interface propose (reconnecter, patienter, lire), et `error` est un défaut
- * honnête pour tout ce qu'on ne reconnaît pas.
+ * Range un échec dans l'une des trois familles d'{@link MailAccountStatus}, sur
+ * le message faute de mieux : IMAP n'a pas de code exploitable, imapflow lève
+ * `Error('Command failed')` et laisse la raison dans le message. La
+ * classification n'a pas à être exhaustive : elle choisit ce que l'interface
+ * propose, et `error` couvre tout ce qu'on ne reconnaît pas.
  */
 export function classifyMailError(message: string): Exclude<MailAccountStatus, 'ok'> {
     const m = message.toLowerCase();
@@ -111,25 +93,17 @@ export function classifyMailError(message: string): Exclude<MailAccountStatus, '
 }
 
 /**
- * Exécute une opération IMAP au nom d'un compte et **en retient l'issue**.
- *
- * Tout ce qui touche au serveur de mail passe par ici, relève de fond comprise
- * (voir `service.ts`), parce qu'un état qui ne s'écrirait que sur un
- * chemin ne vaudrait rien : une boîte dont l'accès a changé doit s'annoncer
- * qu'on l'ouvre, qu'on la relève à la main ou qu'on la laisse tourner seule.
- *
- * L'écriture est faite pour être bon marché sur le cas courant : une réussite
- * qui suit une réussite ne touche pas la base. Seules les transitions écrivent,
- * et ce sont elles que le caller diffuse.
- *
- * L'erreur est toujours relancée : c'est un observateur, pas un filet.
+ * Exécute une opération IMAP au nom d'un compte et en retient l'issue. Tout ce
+ * qui touche au serveur de mail passe par ici, relève de fond comprise : un
+ * état qui ne s'écrirait que sur un chemin ne vaudrait rien. Seules les
+ * transitions écrivent, et ce sont elles que l'appelant diffuse. L'erreur est
+ * toujours relancée : c'est un observateur, pas un filet.
  */
 export async function runWithAccountStatus<T>(
     repo: MailRepo,
     cipher: SdkCipher,
     account: MailAccountRow,
     work: () => Promise<T>,
-    /** Appelé quand l'état visible du compte a changé, pour prévenir les clients. */
     onStatusChanged?: () => void
 ): Promise<T> {
     const now = Math.floor(Date.now() / 1000);
@@ -153,13 +127,8 @@ export async function runWithAccountStatus<T>(
 }
 
 /**
- * Ensure a "guarded" account's data is reachable this session. No-op for
- * "open" accounts — they never gate. Mirrors `assertUnlocked` in
- * `features/password/src/server/_shared.ts`, but per-account rather than
- * per-feature.
- *
- * `ctx.secrecy.isUnlocked()` est l'ex `ctx.secure.isUnlocked()` : la même
- * question, posée au verrou du SDK.
+ * Ensure a "guarded" account's data is reachable this session. No-op for "open"
+ * accounts, which never gate.
  */
 export async function assertMailUnlocked(ctx: Ctx, tier: MailSecurityTier): Promise<void> {
     if (tier === 'open') return;
@@ -177,7 +146,6 @@ export async function assertMailUnlocked(ctx: Ctx, tier: MailSecurityTier): Prom
  * Le palier « guarded » n'a de sens que dans un espace personnel : dans un
  * espace partagé, les deux étages utilisent la clé de l'espace, lisible par
  * tout membre, et le palier annoncerait une protection qu'il ne donne pas.
- * Même règle que les notes privées et les projets confidentiels.
  */
 export function assertTierAllowed(ctx: Ctx, tier: MailSecurityTier): void {
     if (tier === 'open' || ctx.workspace.kind === 'personal') return;
@@ -208,15 +176,10 @@ export async function tryDecryptCredentials(cipher: SdkCipher, blob: string): Pr
 }
 
 /**
- * The `onTokenRefreshed` hook every `client.ts` call takes: writes a
- * freshly minted OAuth access token back onto the account, re-encrypted with
- * the cipher the account is already stored under. `undefined` for a password
- * account, which has no token to refresh — which is also what makes this safe
- * to pass unconditionally at every call site.
- *
- * Single definition on purpose: the same three lines lived in the feature
- * handlers, in the background sync loop and in the attachment route, and a
- * refresh that isn't persisted is invisible until the token expires for good.
+ * The `onTokenRefreshed` hook every `client.ts` call takes: writes a freshly
+ * minted OAuth access token back onto the account, re-encrypted with the cipher
+ * the account is already stored under. `undefined` for a password account,
+ * which has no token to refresh, so it is safe to pass at every call site.
  */
 export function persistRefreshedToken(
     repo: MailRepo,
@@ -232,15 +195,11 @@ export function persistRefreshedToken(
 }
 
 /**
- * Move an account's cached tree from one tier's cipher to the other.
- *
- * `security_tier` sits in a clear column precisely so the server can pick a
- * cipher before reading anything — but that also means switching it strands
- * every blob already written under the old one. The account row is the obvious
- * part; the folder names and message envelopes underneath it are the part
- * that's easy to forget, and they'd otherwise silently degrade to their
- * "(verrouillé)" fallbacks. Anything that won't decrypt is left untouched
- * rather than overwritten with a re-encrypted placeholder.
+ * Move an account's cached tree from one tier's cipher to the other: switching
+ * `security_tier` otherwise strands the folder names and envelopes written
+ * under the old one, which would silently degrade to their "(verrouillé)"
+ * fallbacks. Anything that won't decrypt is left untouched rather than
+ * overwritten with a re-encrypted placeholder.
  */
 export async function reencryptAccountTree(
     repo: MailRepo,
@@ -259,7 +218,7 @@ export async function reencryptAccountTree(
 }
 
 /**
- * Le DTO d'un compte, sous le codec de SON domicile (voir {@link accountCipher}) ;
+ * Le DTO d'un compte, sous le codec de son domicile ({@link accountCipher}) ;
  * `foreign` dit à l'écran qu'il regarde une fenêtre sur un autre espace.
  */
 export async function toAccountDTO(cipher: SdkCipher, row: MailAccountRow, foreign: boolean): Promise<MailAccount> {
@@ -281,8 +240,7 @@ export async function toAccountDTO(cipher: SdkCipher, row: MailAccountRow, forei
         smtpHost = credentials.smtp.host;
         smtpPort = credentials.smtp.port;
         // Loose on purpose, here and below: a blob written before `proxy`
-        // existed has no key at all, and `!== null` would report that absence
-        // as a configured proxy.
+        // existed has no key at all, and `!== null` would read as configured.
         proxyConfigured = credentials.proxy != null;
     } else if (credentials?.kind === 'oauth') {
         const endpoints = oauthProviderEndpoints(credentials.provider);
@@ -291,8 +249,7 @@ export async function toAccountDTO(cipher: SdkCipher, row: MailAccountRow, forei
         smtpHost = endpoints.smtpHost;
         smtpPort = endpoints.smtpPort;
         proxyConfigured = credentials.proxy != null;
-        // No refresh token and the access token is already stale: the only way
-        // out is the user reconnecting through the OAuth flow again.
+        // No refresh token and a stale access token: only a new OAuth flow recovers.
         needsReauth = !credentials.refreshToken && Date.now() >= credentials.expiresAt;
     }
 
@@ -369,9 +326,8 @@ export function toSettingsDTO(row: MailSettingsRow | null): MailSettings {
 }
 
 /**
- * Case- and accent-insensitive form used on both sides of a search comparison.
- * Folding accents matters here rather than being a nicety: French subjects are
- * full of them, and nobody types `Réunion` into a search box.
+ * Case- and accent-insensitive form used on both sides of a search comparison:
+ * French subjects are full of accents, and nobody types `Réunion` into a box.
  */
 function foldForSearch(value: string): string {
     return value
@@ -387,9 +343,8 @@ export function searchTerms(query: string): string[] {
 
 /**
  * Does this envelope match every term? The haystack is everything the cached
- * envelope knows — subject, sender name and address, every recipient, and the
- * snippet — concatenated, so a single box searches all of them at once without
- * the user choosing a field first.
+ * envelope knows (subject, sender, recipients, snippet) concatenated, so one
+ * box searches all of them without the user choosing a field first.
  */
 export function messageMatchesTerms(message: MailMessageSummary, terms: string[]): boolean {
     const haystack = foldForSearch(
@@ -439,13 +394,9 @@ export type ItemLevel = 'read' | 'write';
 
 /**
  * Un compte visible depuis cet espace : le sien, ou un qu'un autre espace y
- * projette. Lève `not_found` sinon.
- *
- * `level` décide de la garde : `ctx.items.assert` refuse en plus les comptes
- * qu'une restriction de rôle masque ou passe en lecture seule. La feature
- * seule ne suffit pas à répondre « cette boîte-là m'est-elle ouverte ? ».
- * Ses dossiers et ses messages en cache suivent son domicile : la chaîne
- * message → dossier → compte remonte toujours jusqu'ici.
+ * projette ; `not_found` sinon. `level` passe par `ctx.items.assert`, qui
+ * refuse en plus les comptes qu'une restriction de rôle masque ou passe en
+ * lecture seule : la permission de feature seule n'y répond pas.
  */
 export async function loadAccount(ctx: Ctx, id: number, level: ItemLevel = 'read'): Promise<MailAccountRow> {
     const row = await ctx.repo.accounts.findVisible(id, ctx.workspaceId);
@@ -510,15 +461,10 @@ export async function credentialsFor(ctx: Ctx, account: MailAccountRow): Promise
 
 /**
  * Toute opération de commande qui parle à IMAP, avec l'état du compte tenu à
- * jour au passage — le pendant, côté session, de ce que le service de fond
- * (`service.ts`) fait pour la relève de fond.
- *
- * Passer par ici plutôt que par `credentialsFor` seul est ce qui rend l'état
- * fiable : un accès qui tombe se voit dès l'ouverture de la boîte, sans
- * attendre qu'un tour de relève le constate, et un accès qui revient efface la
- * mention d'erreur sans que personne ait à y penser. Le déchiffrement des
- * identifiants est dedans à dessein — une DEK qui ne se déballe pas est, du
- * point de vue de l'utilisateur, une boîte inaccessible comme une autre.
+ * jour au passage : un accès qui tombe se voit dès l'ouverture de la boîte,
+ * sans attendre un tour de relève, et un accès qui revient efface la mention
+ * d'erreur. Le déchiffrement des identifiants est dedans à dessein : une DEK
+ * qui ne se déballe pas est une boîte inaccessible comme une autre.
  */
 export async function imapFor<T>(
     ctx: Ctx,
@@ -526,17 +472,15 @@ export async function imapFor<T>(
     work: (credentials: MailCredentials) => Promise<T>
 ): Promise<T> {
     const cipher = await accountCipher(ctx, account);
-    // Rien à diffuser d'ici : les commandes qui écrivent le font déjà par
-    // `mutates`, et celles qui lisent rendent l'échec à leur propre appelant,
-    // qui relit la liste des comptes dans la foulée (voir le client du module).
+    // Rien à diffuser d'ici : les commandes qui écrivent le font par `mutates`,
+    // et celles qui lisent rendent l'échec à leur appelant, qui relit la liste.
     return runWithAccountStatus(ctx.repo, cipher, account, async () => work(await credentialsFor(ctx, account)));
 }
 
 /**
  * Finish a tier switch: the caller has already rewritten the account row under
  * `to`, this carries over everything hanging off it (cached folder names and
- * envelopes, plus the last sync error) so nothing is left readable only by the
- * cipher the account no longer uses.
+ * envelopes, plus the last sync error).
  */
 export async function rekeyTier(
     ctx: Ctx,
@@ -550,12 +494,9 @@ export async function rekeyTier(
         await ctx.repo.accounts.updateSyncError(previous.id, error === null ? null : await to.encrypt(error));
     }
     await reencryptAccountTree(ctx.repo, from, to, previous.id);
-    // Une boîte gardée ne se lit que chez son auteur : ses projections vers
-    // d'autres espaces n'ont plus d'objet, et `ctx.items.forget` les retire
-    // avec les restrictions par élément, ce qui est juste ici puisqu'une
-    // boîte gardée n'existe que dans un espace personnel (`assertTierAllowed`),
-    // où aucune restriction de rôle n'a de sens. Sans ce ménage, une ligne
-    // `item_shares` dormante remontrerait la boîte le jour où elle rouvre.
+    // Une boîte gardée ne se lit que chez son auteur : ses projections n'ont
+    // plus d'objet, et sans ce ménage une ligne `item_shares` dormante
+    // remontrerait la boîte le jour où elle rouvre.
     if (nextTier === 'guarded') await ctx.items.forget(previous.id);
     ctx.logger.info(
         { accountId: previous.id, from: previous.security_tier, to: nextTier },

@@ -30,9 +30,8 @@ export const mailAccountList = {
 };
 
 /**
- * Clear metadata only (row count across the user's accounts), so — like
- * `password.count`/`uptime.count` — it never requires any account's session to
- * be unlocked and a summary widget always renders a number.
+ * Clear metadata only (row count across the user's accounts), so it never
+ * requires an unlocked session and a summary widget always renders a number.
  */
 export const mailAccountCount = {
     command: 'mail.accountCount' as const,
@@ -59,15 +58,13 @@ export const mailAccountUpdate = {
 
 /**
  * The part of an account that exists whatever its auth method: label, storage
- * tier, optional proxy. Separate from `mailAccountUpdate` because that one is
- * inseparable from a full set of server credentials — which an OAuth mailbox
- * simply doesn't have to give, its servers and secrets being the provider's.
- * This is therefore the only edit path for an OAuth account, and a perfectly
- * good one for a password account whose servers aren't changing.
+ * tier, optional proxy. Separate from `mailAccountUpdate`, which is inseparable
+ * from a full set of server credentials an OAuth mailbox doesn't have to give,
+ * so this is the only edit path for an OAuth account.
  *
- * `proxy` omitted means "leave it as it is" — the account DTO deliberately
- * never echoes proxy credentials back, so the client has nothing to resubmit
- * and an absent field must not be read as "remove it". `null` removes it.
+ * `proxy` omitted means "leave it as it is": the account DTO never echoes proxy
+ * credentials back, so an absent field must not be read as "remove it". `null`
+ * removes it.
  */
 export const mailAccountSetProfile = {
     command: 'mail.accountSetProfile' as const,
@@ -87,7 +84,7 @@ export const mailAccountDelete = {
     output: z.object({ id: accountId })
 };
 
-/** `ids` is the complete, final order — identical convention to `uptime.reorder`/`notes.reorder`. */
+/** `ids` is the complete, final order. */
 export const mailAccountReorder = {
     command: 'mail.accountReorder' as const,
     input: z.object({ ids: z.array(accountId).min(1) }),
@@ -117,11 +114,11 @@ export const mailAccountTestConnection = {
 };
 
 /**
- * Authorization URL to send the browser to for a Google/Microsoft OAuth
- * mailbox. The account row is created server-side once the provider redirects
- * back to the callback HTTP route (never over this WS command) — the callback
- * page closes itself via `window.opener.postMessage`, which the client uses to
- * detect completion and refresh `mail.accountList`. No WS push event needed.
+ * Authorization URL to send the browser to for a Google/Microsoft OAuth mailbox.
+ * The account row is created server-side once the provider redirects back to the
+ * callback HTTP route, never over this WS command; the callback page closes
+ * itself via `window.opener.postMessage`, which the client uses to detect
+ * completion and refresh `mail.accountList`.
  */
 export const mailOAuthStart = {
     command: 'mail.oauthStart' as const,
@@ -144,7 +141,7 @@ export const mailFolderReorder = {
 /**
  * Force a refresh now instead of waiting for the next background tick (or for
  * guarded accounts, which are never background-synced). Incrémentale : elle
- * rapatrie les arrivées et réconcilie la fenêtre récente, sans rien jeter —
+ * rapatrie les arrivées et réconcilie la fenêtre récente, sans rien jeter,
  * contrairement à `mail.folderReset`, qui reconstruit tout.
  */
 export const mailFolderSync = {
@@ -162,10 +159,9 @@ export const mailFolderSync = {
 
 /**
  * Fetches one older batch (`limit`, newest-first among the older ones) for a
- * folder — the "force refetch" path, since the regular sync only ever moves
- * forward from `last_seen_uid` and can never backfill history that fell
- * outside a folder's initial sync window. Call repeatedly (client-driven, not
- * a server-side loop) until `reachedStart`.
+ * folder: the regular sync only ever moves forward from `last_seen_uid` and can
+ * never backfill history that fell outside a folder's initial sync window. Call
+ * repeatedly (client-driven, not a server-side loop) until `reachedStart`.
  */
 export const mailFolderBackfill = {
     command: 'mail.folderBackfill' as const,
@@ -174,13 +170,11 @@ export const mailFolderBackfill = {
 };
 
 /**
- * Drops a folder's whole cache and re-syncs it from scratch — the "really
- * refresh" path, next to `mail.folderSync` (which only pulls what arrived
- * since) and `mail.folderBackfill` (which only extends downwards). Destructive
- * only in appearance: `mail_messages` is a metadata cache, rebuilt from IMAP,
- * and nothing on the mail server is touched. Use it when the cache and the
- * mailbox have drifted apart — a partial first sync, a folder rebuilt server
- * side, anything where reconciling is less trustworthy than starting over.
+ * Drops a folder's whole cache and re-syncs it from scratch. Destructive only in
+ * appearance: `mail_messages` is a metadata cache, rebuilt from IMAP, and
+ * nothing on the mail server is touched. For when the cache and the mailbox have
+ * drifted apart badly enough that reconciling is less trustworthy than starting
+ * over.
  */
 export const mailFolderReset = {
     command: 'mail.folderReset' as const,
@@ -205,25 +199,21 @@ export const mailMessageList = {
 /**
  * Search one folder, on two legs that complement each other:
  *
- *  1. **Local** — decrypts the folder's cached envelopes and filters them on
- *     subject, sender and recipients. Necessarily server-side even though the
- *     data is already ours: `envelope_enc` is encrypted at rest, so no SQL
- *     predicate can see inside it. Capped, with `scanned` reporting how far it
- *     reached.
- *  2. **Remote** — an IMAP `UID SEARCH` against the real mailbox, covering
- *     message **bodies** and every message that was never synced. Envelopes for
- *     hits missing from the cache are fetched and cached, so a result is a
- *     normal row: openable, flaggable, deletable like any other.
+ *  1. Local: decrypts the folder's cached envelopes and filters them on subject,
+ *     sender and recipients. Necessarily server-side even though the data is
+ *     ours, `envelope_enc` being encrypted at rest. Capped, with `scanned`
+ *     reporting how far it reached.
+ *  2. Remote: an IMAP `UID SEARCH` against the real mailbox, covering message
+ *     bodies and every message that was never synced. Envelopes for hits missing
+ *     from the cache are fetched and cached, so a result is a normal row.
  *
- * The remote leg is best-effort. If the mailbox is unreachable, the account is
- * paused, or the server rejects the search, the local results still come back
- * with `remote: false` and `remoteError` set — a search never fails outright
- * just because IMAP was.
+ * The remote leg is best-effort: an unreachable mailbox or a refused search
+ * still returns the local results, with `remote: false` and `remoteError` set.
  *
  * Whitespace splits the query into terms that must *all* match, in any order.
  * The local leg ignores case and accents (`reunion` finds « Réunion »); the
- * remote leg is at the mercy of the server's own matching, which by RFC 3501
- * is case-insensitive but says nothing about accents.
+ * remote leg is at the mercy of the server's own matching, case-insensitive by
+ * RFC 3501 but silent about accents.
  */
 export const mailMessageSearch = {
     command: 'mail.messageSearch' as const,
@@ -246,10 +236,10 @@ export const mailMessageSearch = {
 };
 
 /**
- * Fetches the body live from IMAP — never served from cache — and runs the
+ * Fetches the body live from IMAP, never from cache, and runs the
  * sanitize/remote-image-block/suspicious-link pipeline server-side.
- * `allowRemoteImages` unblocks images for this single response only; nothing
- * is persisted about the choice.
+ * `allowRemoteImages` unblocks images for this single response only; nothing is
+ * persisted about the choice.
  */
 export const mailMessageGet = {
     command: 'mail.messageGet' as const,
@@ -282,7 +272,7 @@ export const mailMessageDelete = {
     output: z.object({ id: messageId })
 };
 
-/** Returns a short-lived, cookie-authed download URL — mirrors the agent file-serve pattern rather than chunking over WS. */
+/** Returns a short-lived ticketed download URL, rather than chunking bytes over WS. */
 export const mailAttachmentDownload = {
     command: 'mail.attachmentDownload' as const,
     input: z.object({ messageId, attachmentId: z.string() }),
@@ -327,10 +317,8 @@ export const mailGetSettings = {
 };
 
 /**
- * Input is `mailSettingsSchema` itself (not a hand-duplicated field list) —
- * a settings save always resends the whole object (see `withSettingsDefaults`
- * client-side), and duplicating the shape here is exactly what let this drift
- * out of sync with the domain schema once already.
+ * Input is `mailSettingsSchema` itself, not a hand-duplicated field list: a
+ * settings save always resends the whole object, and a copied shape drifts.
  */
 export const mailSetSettings = {
     command: 'mail.setSettings' as const,

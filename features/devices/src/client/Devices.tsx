@@ -15,18 +15,10 @@ const SEGMENTS: readonly { value: Segment; label: string; title: string }[] = [
 ];
 
 /**
- * La vue complète de la feature : Monitoring, et pour l'administrateur dans
- * son espace personnel un second segment, la flotte (l'ancienne page
- * « Appareils » de la barre du haut).
- *
- * Deux segments fixes, donc `SegmentedControl` : la flotte n'est pas une
- * autre feature, c'est l'envers de la même (les machines qu'on supervise sont
- * celles qu'on a enrôlées), et elle ne s'adresse qu'à l'administrateur global,
- * depuis le seul espace où la flotte entière a un sens. Ailleurs, la vue est
- * Monitoring tout court, sans barre.
- *
- * La vue d'un module ne reçoit que `closeFeature` ; l'espace et le rôle
- * viennent des hooks du barrel.
+ * La vue complète : Monitoring, et pour l'administrateur dans son espace
+ * personnel un second segment, la flotte. Deux segments fixes, donc
+ * `SegmentedControl` : la flotte est l'envers de la même feature, et ne
+ * s'adresse qu'à l'administrateur global depuis le seul espace où elle a un sens.
  */
 export default function Devices(_props: FeatureViewProps) {
     const user = useCurrentUser();
@@ -34,16 +26,15 @@ export default function Devices(_props: FeatureViewProps) {
     const fleetOffered = user?.role === 'admin' && workspace?.kind === 'personal';
     const [segment, setSegment] = useState<Segment>('monitoring');
 
-    // L'intention « ouvrir la flotte » posée par un panneau d'appareil (« Gérer
-    // les appareils »), consommée ici au montage comme à chaque nouvelle
-    // demande pendant que la vue vit, visible ou parquée.
+    // L'intention « ouvrir la flotte » posée par un panneau d'appareil,
+    // consommée au montage comme à chaque nouvelle demande, vue visible ou parquée.
     const intent = useFleetIntent();
     useEffect(() => {
         if (takeFleetIntent()) setSegment('fleet');
     }, [intent]);
 
-    // L'espace ou le rôle change sous la vue : la flotte n'est plus offerte,
-    // on revient à Monitoring plutôt que de laisser un segment orphelin.
+    // La flotte n'est plus offerte : on revient à Monitoring plutôt que de
+    // laisser un segment orphelin.
     useEffect(() => {
         if (!fleetOffered) setSegment('monitoring');
     }, [fleetOffered]);

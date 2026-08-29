@@ -5,22 +5,14 @@ import { Dialog } from '@/Components/Dialog';
 import type { ReactNode } from 'react';
 
 /**
- * Imperative dialog layer over the shared <Dialog/> UI.
+ * Imperative dialog layer over the shared <Dialog/> UI: a feature mounts a
+ * <Popup id=… /> once, other code drives it with `OpenPopup(id, input)` /
+ * `ClosePopup(id, result)`; `OpenPopup` resolves with what `ClosePopup` passes.
  *
- * A feature mounts a <Popup id=… /> wrapping its form once; other code then
- * drives it with `OpenPopup(id, input)` / `ClosePopup(id, result)`. `OpenPopup`
- * returns a promise that resolves with whatever `ClosePopup` passes, which keeps
- * request/response flows (unlock, add/edit password…) linear and readable.
- *
- * ## Une pile par identifiant, pas une case
- *
- * Deux montages d'un même `id` coexistent réellement : la feature Mail reste
- * vivante en arrière-plan (`FeatureKeepAlive`) avec son `AccountPopup`, pendant
- * que la section Notifications en monte un second à la demande pour le « + »
- * du compte expéditeur. Avec une case unique, le second montage écrasait
- * l'inscription du premier et son démontage la **supprimait** : le dialogue de
- * Mail ne s'ouvrait plus jusqu'au remontage de la feature. Le dernier monté
- * répond donc, et son démontage rend la main au précédent.
+ * Une pile par identifiant, pas une case : deux montages d'un même `id`
+ * coexistent (une feature gardée vivante par `FeatureKeepAlive`, et un second
+ * montage à la demande). Le dernier monté répond, et son démontage rend la
+ * main au précédent.
  */
 interface PopupEntry {
     setInputData: (data: unknown) => void;

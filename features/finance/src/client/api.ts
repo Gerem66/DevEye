@@ -8,16 +8,9 @@ import { manifest } from '../manifest';
 export const api = featureApi(manifest);
 
 /**
- * Le raccordement des finances au reste de l'application.
- *
- * Une écriture des finances touche **plusieurs** vues à la fois: enregistrer une
- * dépense change le journal, le solde du compte, le tableau de bord, un budget,
- * et la carte de l'accueil. Plutôt que de laisser chaque appelant se souvenir de
- * cette liste, `refreshFinance()` la porte une fois pour toutes, et s'appelle
- * juste après l'appel WS qui a réussi.
+ * Toutes les clés que remue une écriture : une dépense change le journal, un
+ * solde, un budget, le tableau de bord et la carte de l'accueil.
  */
-
-/** Toutes les clés que remue une écriture des finances. */
 export function refreshFinance(): void {
     invalidate(
         'finance.summary',
@@ -30,13 +23,9 @@ export function refreshFinance(): void {
 }
 
 /**
- * Le résumé lu par la carte de l'accueil.
- *
- * Même forme que `useWorkspaceCount`, dont il ne peut pas se servir: celui-là
- * n'accepte que les commandes rendant `{ count }`, et une carte de finances qui
- * annoncerait « 3 comptes » ne dirait rien de ce qu'on vient y chercher. Il
- * relit à l'ouverture de la socket et à chaque invalidation de `finance.summary`,
- * exactement comme lui.
+ * Le résumé de la carte de l'accueil. Pas `useWorkspaceCount` : il n'accepte
+ * que les commandes rendant `{ count }`. Relit à l'ouverture de la socket et à
+ * chaque invalidation de `finance.summary`.
  */
 export function useFinanceSummary(): { summary: FinanceSummary | null; loading: boolean } {
     const workspace = useActiveWorkspace();
@@ -58,10 +47,8 @@ export function useFinanceSummary(): { summary: FinanceSummary | null; loading: 
                     setLoading(false);
                 })
                 .catch(() => {
-                    // Une coupure passagère ne touche à rien: la dernière valeur
-                    // connue reste affichée, et la reconnexion relira. Retomber à
-                    // zéro afficherait un solde faux, ce qui est bien pire que
-                    // d'afficher un solde d'il y a une minute.
+                    // Une coupure passagère ne touche à rien : la dernière valeur
+                    // reste, la reconnexion relira. Un zéro serait un solde faux.
                 });
         });
         return () => {

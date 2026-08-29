@@ -7,22 +7,10 @@ import { ago, persistedFor, severityClass } from './FindingsList';
 import styles from './style.module.css';
 
 /**
- * Le détail d'un constat : ce qui a été vu, ce que ça veut dire, et quoi faire.
- *
- * Les trois blocs sont délibérément dans cet ordre, et la conduite à tenir n'est
- * pas facultative, un constat qui n'y répond pas ne sert personne.
- *
- * L'acquittement propose deux portées parce que les deux situations existent :
- * « ce port ouvert est normal **sur cette machine** » et « notre agent de
- * sauvegarde est légitime **partout** ». N'offrir que la première ferait rejuger
- * huit fois la même décision.
- *
- * « C'est réglé » n'est pas une troisième portée mais l'autre réponse possible :
- * on a corrigé, ce n'est pas devenu normal. Elle existe parce que le moteur ne
- * résout de lui-même que ce qu'il peut rejouer, une authentification suspecte ou
- * une entrée de persistance décrivent un fait passé, que plus aucun relevé ne
- * viendra contredire. Sans elle, la seule façon de ranger un constat corrigé
- * était de le déclarer légitime.
+ * Le détail d'un constat : ce qui a été vu, ce que ça veut dire, quoi faire.
+ * Deux portées d'acquittement (cette machine, partout). « C'est réglé » est
+ * l'autre réponse : corrigé, pas devenu normal ; nécessaire pour les constats
+ * d'événement que le moteur ne peut pas rejouer.
  */
 
 interface Props {

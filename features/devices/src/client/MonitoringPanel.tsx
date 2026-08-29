@@ -37,10 +37,8 @@ import { PowerMenu } from './PowerMenu';
 import { LogsPanel } from './LogsPanel';
 import { useAgentUpdate } from './useAgentUpdate';
 
-// xterm.js is heavy and rarely opened — load the terminal panel on demand so it
-// doesn't weigh on the initial bundle.
+// xterm.js and the file explorer are heavy and rarely opened: loaded on demand.
 const TerminalPanel = lazy(() => import('./TerminalPanel').then((m) => ({ default: m.TerminalPanel })));
-// The file explorer is a sizeable, on-demand panel — lazy-load it too.
 const FilesPanel = lazy(() => import('./FilesPanel').then((m) => ({ default: m.FilesPanel })));
 import { agentUpdatable } from './agentVersion';
 import { agent, api } from './api';
@@ -103,10 +101,9 @@ function spanResolution(spanMs: number): MetricsResolution {
 }
 
 /**
- * Keep last-known values for the genuinely optional probes — the ones that are
- * null because the machine has no such sensor or the agent lacks privileges, not
- * because of the collection cycle. Since every tick now carries the full picture,
- * `processCount` / `activeConnections` / disk I/O are no longer sparse.
+ * Keep last-known values for the genuinely optional probes: null because the
+ * machine has no such sensor or the agent lacks privileges, not because of the
+ * collection cycle.
  */
 const SPARSE_FIELDS: (keyof MetricSeriesPoint)[] = [
     'gpuPercent',
@@ -226,11 +223,9 @@ export interface MonitoringPanelProps {
 }
 
 /**
- * Per-device monitoring panel: live activity, timeline, graphs, KPIs, security,
- * ports and processes for a single machine. Reused by the full Monitoring view
- * (alongside its device sidebar) and by the home device tile's popup (standalone,
- * no sidebar). Owns the device's live state (presence/report/metric pushes) and
- * its metric subscription, scoped to `deviceId`.
+ * Per-device monitoring panel, reused by the full Monitoring view and by the
+ * home device tile's popup. Owns the device's live state (presence, report,
+ * metric pushes) and its metric subscription.
  */
 export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const user = useCurrentUser();
@@ -243,12 +238,9 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const [terminalOpen, setTerminalOpen] = useState(false);
     const [filesOpen, setFilesOpen] = useState(false);
     const updater = useAgentUpdate();
-    // Storage footprint of the device's stored snapshots.
     const [storage, setStorage] = useState<{ snapshots: number; processes: number; bytes: number } | null>(null);
-    // Snapshot-deletion confirmation (targets the current snapshot/zone focus).
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [deleting, setDeleting] = useState(false);
-    // Pin (permanent keep) in flight for the current snapshot/zone focus.
     const [pinning, setPinning] = useState(false);
 
     // Timeline window: dayStart null = live (rolling last 24h); otherwise a day.
@@ -267,15 +259,12 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     });
     const [snapshotTimes, setSnapshotTimes] = useState<number[]>([]);
     const [pinnedTimes, setPinnedTimes] = useState<number[]>([]);
-    // Subset of `snapshotTimes` whose process list was actually recorded. Marks
-    // are metric instants now, so with `processCapture: 'off'` the timeline still
-    // navigates while this stays empty — and the process-only actions know it.
+    // Subset of `snapshotTimes` whose process list was recorded: empty with
+    // `processCapture: 'off'`, and the process-only actions know it.
     const [procTimes, setProcTimes] = useState<number[]>([]);
     const [points, setPoints] = useState<MetricSeriesPoint[]>([]);
-    // Two sources, never merged: `liveProc` is the latest pushed instant,
-    // `histProc` the one fetched for a focused past instant/range. Keeping them
-    // apart is what lets "Direct" show live processes again immediately instead
-    // of the previously inspected instant lingering until the next tick.
+    // Two sources, never merged: the latest pushed instant and the one fetched
+    // for a focused past instant. "Direct" shows live processes again at once.
     const [liveProc, setLiveProc] = useState<ProcessSample | null>(null);
     const [histProc, setHistProc] = useState<ProcessSample | null>(null);
     const [showAllProcs, setShowAllProcs] = useState(false);
@@ -284,25 +273,19 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const [refreshing, setRefreshing] = useState(false);
     const [dataDays, setDataDays] = useState<string[]>([]);
     const [graphsExpanded, setGraphsExpanded] = useState(false);
-    // False from the moment the device changes until its first metrics query
-    // resolves. The graphs and activity hero come *only* from that historical
-    // query, so we show loaders for them until it lands — everything else (KPIs,
-    // security, online state) is seeded instantly by the subscribe push.
+    // False until the first metrics query resolves: the graphs and activity
+    // hero come only from that query, everything else is seeded by the push.
     const [metricsReady, setMetricsReady] = useState(false);
     /**
-     * Une lecture de supervision a échoué.
-     *
-     * Sans état, les neuf `.catch(() => {})` de ce panneau rendaient un échec
-     * réseau indiscernable d'une machine sans données : les cartes affichaient
-     * « — » et l'utilisateur concluait à une perte d'historique. On ne retient
-     * qu'un drapeau — la panne est la même pour toutes les lectures, c'est la
-     * socket — et il se lève dès que l'une d'elles repasse.
+     * Une lecture de supervision a échoué. Un seul drapeau : la panne est la
+     * même pour toutes les lectures (la socket), et il se lève dès que l'une
+     * d'elles repasse. Sans lui, un échec réseau ressemble à une machine sans
+     * données.
      */
     const [readError, setReadError] = useState(false);
     /**
      * La fenêtre contenait plus d'instants que le serveur n'en rend : seuls les
-     * plus récents sont là. Dit plutôt que tu, sinon la frise s'arrête au milieu
-     * de la journée et la navigation par ‹ › bute sans raison apparente.
+     * plus récents sont là, sinon la frise s'arrête au milieu sans raison apparente.
      */
     const [timelineTruncated, setTimelineTruncated] = useState(false);
 
@@ -323,14 +306,12 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         return windowRange;
     }, [focus, windowRange, intervalMs]);
     const resolution = spanResolution(graphWindow.end - graphWindow.start);
-    // Which instant the process list describes. In live focus the pushed snapshot
-    // already carries its own processes, so no historical fetch is needed at all.
+    // Which instant the process list describes; in live focus the pushed
+    // snapshot carries its own processes.
     const processAt = focus.kind === 'snapshot' ? focus.at : focus.kind === 'range' ? focus.end : null;
 
-    // Changing device: drop the previous machine's transient data so its graphs,
-    // activity and KPIs never bleed into the new selection. The per-device effects
-    // below refill everything; until the first metrics query resolves we show
-    // loaders instead of stale or empty cards.
+    // Changing device: drop the previous machine's transient data so it never
+    // bleeds into the new selection.
     useEffect(() => {
         setMetricsReady(false);
         setReadError(false);
@@ -357,7 +338,6 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             .catch(() => setReadError(true));
     }, [deviceId]);
 
-    // Storage footprint of the device's stored snapshots (count + DB bytes).
     useEffect(() => {
         const id = deviceId;
         api.send('devices.storage', { deviceId: id })
@@ -368,19 +348,16 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             .catch(() => setReadError(true));
     }, [deviceId]);
 
-    // Subscribe live to this device through the shared ref-counted store, so it
-    // coexists with any other live consumer on the single socket and survives a
-    // reconnect. Released on unmount (true unmount — kept-alive parking keeps it).
+    // Live subscription through the shared ref-counted store, so it coexists
+    // with other consumers and survives a reconnect. Released on true unmount.
     useEffect(() => acquireMetrics(deviceId), [deviceId]);
 
-    // (Re)compute the window + presence + snapshot marks + reset focus when the
-    // device or the chosen day changes.
+    // Window, presence, snapshot marks and focus follow the device and the day.
     useEffect(() => {
         const id = deviceId;
         let cancelled = false;
         const now = Date.now();
-        // Window ends at "now" (live) or the chosen day's end, and spans `spanMs`
-        // (zoom). For a past day, don't run before that day's 00:00.
+        // The window ends at "now" or the chosen day's end, and spans `spanMs`.
         const end = dayStart === null ? now : Math.min(dayStart + DAY_MS, now);
         const floor = dayStart === null ? -Infinity : dayStart;
         const start = Math.max(floor, end - spanMs);
@@ -388,8 +365,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         setFocus({ kind: 'live' });
         setReport(baseDevices.find((d) => d.id === id)?.report ?? null);
         // Même garde que pour la série : deux changements de zoom rapprochés
-        // pouvaient laisser les marques d'une fenêtre sur une autre, et la frise
-        // cessait alors de correspondre aux graphes.
+        // laisseraient les marques d'une fenêtre sur une autre.
         api.send('devices.presence', { deviceId: id, from: start, to: end })
             .then((res) => {
                 if (!cancelled && idRef.current === id)
@@ -414,20 +390,14 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         };
     }, [deviceId, dayStart, spanMs]);
 
-    // Fetch the series + processes for the current graph window / focus.
-    //
-    // Chaque changement de fenêtre lance une requête sans annuler la précédente,
-    // et rien ne garantissait leur ordre d'arrivée : une réponse plus ancienne
-    // écrasait la plus récente, et les graphes affichaient une autre plage que
-    // celle visée — voire, quand ses points tombaient tous hors champ, des
-    // cartes vides. Intermittent par nature, donc, selon la latence du moment.
-    // Le jeton d'annulation fait qu'une réponse périmée n'écrit plus rien.
+    // Fetch the series + processes for the current graph window / focus. Le
+    // jeton d'annulation fait qu'une réponse périmée n'écrit rien : rien ne
+    // garantit l'ordre d'arrivée, et une réponse ancienne écraserait la récente.
     useEffect(() => {
         const id = deviceId;
         let cancelled = false;
-        // Les graphes couvrent désormais *cette* fenêtre-ci : tant que sa
-        // réponse n'est pas là, on montre le squelette plutôt que les points de
-        // la précédente, qui ne veulent plus rien dire sur ce cadre.
+        // Le squelette plutôt que les points de la fenêtre précédente, qui ne
+        // veulent plus rien dire sur ce cadre.
         setMetricsReady(false);
         api.send('devices.metrics', { deviceId: id, from: graphWindow.start, to: graphWindow.end, resolution })
             .then((res) => {
@@ -438,13 +408,13 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             .catch(() => {
                 if (!cancelled) setReadError(true);
             })
-            // Reveal the graphs once the attempt lands (success or failure), so a
-            // transient error shows "no data" rather than an endless loader.
+            // Success or failure: a transient error shows "no data" rather than
+            // an endless loader.
             .finally(() => {
                 if (!cancelled && idRef.current === id) setMetricsReady(true);
             });
-        // Historical focus only: in live focus the process list rides along with
-        // each pushed snapshot, so there is nothing to fetch.
+        // Historical focus only: in live focus the process list rides along
+        // with each push.
         if (processAt !== null) {
             api.send('devices.processesAt', { deviceId: id, at: processAt })
                 .then((res) => {
@@ -461,14 +431,12 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
 
     const liveTail = focus.kind === 'live' && dayStart === null;
 
-    // Live push handling: three typed subscriptions, one per event.
     useEffect(() => {
         const offMetrics = onServerEvent(METRICS_PUSH_EVENT, metricsPushSchema, (push) => {
             if (push.deviceId !== deviceId) return;
-            // Split the instant: the graph series keeps only the numbers (a
-            // window holds hundreds of points, and carrying every process list
-            // along would cost megabytes of state), the process table takes the
-            // list. Both come from the same tick, under one timestamp.
+            // Split the instant: the graph series keeps only the numbers (every
+            // process list along would cost megabytes of state), the process
+            // table takes the list.
             const { processes, processKind, ...point } = push.snapshot;
             setLiveSnapshot((prev) => mergeSnapshot(prev, point));
             if (processes !== null) {
@@ -476,9 +444,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             }
             if (liveTail) {
                 // La frise apprend le nouvel instant en même temps que les
-                // graphes. Sans ça elle se figeait à l'ouverture du panneau :
-                // les marques n'avançaient plus, et reculer d'un cran depuis
-                // le direct sautait tout ce qui était arrivé entre-temps.
+                // graphes, sinon ses marques se figent à l'ouverture du panneau.
                 const floor = point.timestamp - spanMs;
                 const appendTs = (prev: number[]) =>
                     prev.length && point.timestamp <= prev[prev.length - 1]
@@ -488,10 +454,8 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 if (processes !== null) setProcTimes(appendTs);
                 setPoints((prev) => {
                     if (prev.length && point.timestamp <= prev[prev.length - 1].timestamp) return prev;
-                    // Rogné à la fenêtre affichée : sans ça, un panneau laissé
-                    // ouvert en direct accumulait indéfiniment des points hors
-                    // champ — ~17 000 par jour à la cadence la plus rapide,
-                    // recalculés à chaque poussée et jamais dessinés.
+                    // Rogné à la fenêtre affichée : un panneau laissé ouvert en
+                    // direct accumulerait des points hors champ indéfiniment.
                     const floor = point.timestamp - spanMs;
                     const next = [...prev, point];
                     const from = next.findIndex((p) => p.timestamp >= floor);
@@ -510,12 +474,10 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             const seen = pres.lastSeen;
             if (seen) {
                 setPresence((pr) => {
-                    // Seules les vraies **transitions** entrent : la frise
-                    // dessine ses lignes en alternant les segments, et un
-                    // doublon s'y lit comme un rayage arbitraire. Le serveur
-                    // horodate à la publication, y compris sur le front
-                    // « hors ligne » — d'où le repli sur l'instant courant
-                    // plutôt qu'un `lastSeen` qui dirait « vu à l'instant ».
+                    // Seules les vraies transitions entrent : la frise alterne
+                    // ses segments, un doublon s'y lit comme un rayage. Le
+                    // serveur horodate à la publication, d'où le plafond à
+                    // l'instant courant.
                     const last = pr.events[pr.events.length - 1];
                     if (last && last.online === pres.online) return pr;
                     const ts = Math.min(seen * 1000, Date.now());
@@ -528,15 +490,13 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             offReport();
             offPresence();
         };
-        // `spanMs` en dépendance : la fermeture rogne points et marques à la fenêtre
-        // visible, et un zoom élargi avec l'ancienne valeur en mémoire aurait retaillé
-        // à chaque poussée ce que la requête venait justement d'aller chercher.
+        // `spanMs` en dépendance : la fermeture rogne à la fenêtre visible, et un
+        // zoom élargi avec l'ancienne valeur retaillerait ce qu'on vient de lire.
     }, [deviceId, liveTail, spanMs]);
 
-    // What a delete action would remove, per the current focus. Counted on the
-    // *process* instants only: `devices.deleteSnapshots` removes process lists and
-    // deliberately leaves the metric rows (the graphs) alone, so an instant with no
-    // recorded process list has nothing to delete and must not offer the action.
+    // What a delete action would remove. Counted on the process instants only:
+    // `devices.deleteSnapshots` leaves the metric rows alone, so an instant with
+    // no process list has nothing to delete.
     const procSet = useMemo(() => new Set(procTimes), [procTimes]);
     const deleteTarget = useMemo(() => {
         if (focus.kind === 'snapshot') {
@@ -552,9 +512,8 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
 
     const pinnedSet = useMemo(() => new Set(pinnedTimes), [pinnedTimes]);
 
-    // What a pin/unpin action targets, per the current focus: the bounds, how many
-    // snapshots fall inside, and how many of those are already pinned (so the UI
-    // can flip between "Conserver" and "Ne plus conserver").
+    // What a pin/unpin action targets: the bounds, how many snapshots fall
+    // inside, how many are already pinned.
     const pinTarget = useMemo(() => {
         if (focus.kind === 'snapshot') {
             return { from: focus.at, to: focus.at, count: 1, pinnedCount: pinnedSet.has(focus.at) ? 1 : 0 };
@@ -566,10 +525,9 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         }
         return null;
     }, [focus, snapshotTimes, pinnedSet]);
-    // Fully pinned already → the action unpins; otherwise it pins the whole target.
+    // Fully pinned already: the action unpins.
     const allPinned = !!pinTarget && pinTarget.count > 0 && pinTarget.pinnedCount === pinTarget.count;
 
-    // Re-fetch the timeline's snapshot marks (incl. pin state) for the window.
     const refreshSnapshotMarks = useCallback(() => {
         const id = idRef.current;
         api.send('devices.snapshots', { deviceId: id, from: windowRange.start, to: windowRange.end })
@@ -584,7 +542,6 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             .catch(() => setReadError(true));
     }, [windowRange]);
 
-    // Re-fetch the stored-snapshot footprint (count + DB bytes).
     const refreshStorage = useCallback(() => {
         const id = idRef.current;
         api.send('devices.storage', { deviceId: id })
@@ -595,7 +552,6 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             .catch(() => setReadError(true));
     }, []);
 
-    // Delete the targeted snapshot(s), then drop back to live and refresh marks.
     const deleteSnapshots = useCallback(async () => {
         const id = idRef.current;
         if (!deleteTarget) return;
@@ -607,14 +563,13 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             refreshSnapshotMarks();
             refreshStorage();
         } catch {
-            // Keep the dialog open; the failure is rare (network) and retryable.
+            // Keep the dialog open: retryable.
         } finally {
             setDeleting(false);
         }
     }, [deleteTarget, refreshSnapshotMarks, refreshStorage]);
 
-    // Pin (keep past retention) or unpin the targeted snapshot(s). Unpinning may
-    // delete instants already past their deadline — drop to live if so.
+    // Unpinning may delete instants already past their deadline: drop to live.
     const setPinned = useCallback(
         async (pinned: boolean) => {
             const id = idRef.current;
@@ -631,7 +586,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 refreshSnapshotMarks();
                 refreshStorage();
             } catch {
-                // Rare (network) and retryable; leave the UI as-is.
+                // Retryable; leave the UI as-is.
             } finally {
                 setPinning(false);
             }
@@ -639,7 +594,6 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         [pinTarget, pinning, refreshSnapshotMarks, refreshStorage]
     );
 
-    // Refresh: ask the agent to push fresh data now.
     const refreshNow = useCallback(() => {
         const id = idRef.current;
         if (refreshing) return;
@@ -650,12 +604,8 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             .finally(() => setTimeout(() => setRefreshing(false), 1200));
     }, [refreshing]);
 
-    // ── Derived series for the graphs ──
-    //
-    // Toutes mémoïsées ensemble, sur la seule dépendance qui les gouverne. Nues,
-    // elles se recalculaient à *chaque* rendu — soit au moins une fois par
-    // relevé poussé, sur toute la fenêtre — alors que leurs voisines (`display`,
-    // `procCols`, `portGroups`) l'étaient déjà.
+    // Derived series for the graphs, mémoïsées ensemble : nues, elles se
+    // recalculeraient à chaque rendu, soit à chaque relevé poussé.
     const { cpuS, ramS, diskS, netRx, netTx, diskRead, diskWrite, tempS, gpuS, batteryS } = useMemo(() => {
         const netRx: { t: number; v: number }[] = [];
         const netTx: { t: number; v: number }[] = [];
@@ -666,7 +616,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             netRx.push({ t, v: Math.max(0, (points[i].netRxBytes - points[i - 1].netRxBytes) / dt) });
             netTx.push({ t, v: Math.max(0, (points[i].netTxBytes - points[i - 1].netTxBytes) / dt) });
         }
-        // Disk I/O rates (counters present only on snapshot rows; skip the null gaps).
+        // Disk I/O rates; skip the null gaps.
         const diskRead: { t: number; v: number }[] = [];
         const diskWrite: { t: number; v: number }[] = [];
         let prevIO: { t: number; r: number | null; w: number | null } | null = null;
@@ -701,13 +651,9 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         };
     }, [points]);
 
-    // Value to show in the KPI cards, per focus.
-    //
-    // En direct, **uniquement** le dernier instant reçu. Le repli sur le dernier
-    // point de la série disait « en direct » en montrant un agrégat : au-delà
-    // d'une heure de fenêtre les points sont des moyennes horaires, si bien que
-    // l'écran affichait une valeur moyennée vieille d'une heure pendant que
-    // vingt relevés étaient arrivés depuis. Un instant n'est pas un seau.
+    // Value to show in the KPI cards, per focus. En direct, uniquement le dernier
+    // instant reçu : au-delà d'une heure de fenêtre les points sont des moyennes
+    // horaires, et un instant n'est pas un seau.
     const display = useMemo<MetricSeriesPoint | null>(() => {
         if (focus.kind === 'range') return averageSnapshot(points);
         if (focus.kind === 'snapshot') return nearestBy(points, focus.at, (p) => p.timestamp);
@@ -715,9 +661,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     }, [focus, points, liveSnapshot]);
     const averaged = focus.kind === 'range';
 
-    // Bannière « hors ligne » seulement : la date du dernier instant reçu, dont
-    // l'ancienneté est justement l'information. Rien d'autre ne s'en sert — un
-    // seau de la série ne serait pas un instant (voir `display`).
+    // Bannière « hors ligne » seulement : la date du dernier instant reçu.
     const lastKnown = liveSnapshot;
     const online = selected?.online ?? false;
     const archived = selected?.status === 'archived';
@@ -727,18 +671,16 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     // The focus is the single driver here too (see Docs/MONITORING.md §10).
     const procSample = focus.kind === 'live' ? liveProc : histProc;
 
-    // Processus KPI — always rendered for stability; `procStale` marks a value that
-    // isn't the current live one (agent offline or silent), so the UI prefixes "~"
-    // and the hint gives its age. The card never disappears silently.
+    // Processus KPI, always rendered; `procStale` marks a value that isn't the
+    // current live one, so the UI prefixes "~" and the hint gives its age.
     const procView = {
         count: display?.processCount ?? null,
         at: focus.kind === 'snapshot' ? focus.at : focus.kind === 'live' ? (procSample?.ts ?? null) : null,
         averaged: focus.kind === 'range'
     };
 
-    // Show a per-process column only when at least one row has the data: these
-    // probes are privilege- and platform-gated, and a full column of "—" says
-    // nothing. Same rule as elsewhere — unknown is hidden, never faked as 0.
+    // A per-process column only when at least one row has the data: these
+    // probes are privilege- and platform-gated. Unknown is hidden, never 0.
     const procCols = useMemo(() => {
         const rows = procSample?.processes ?? [];
         return {
@@ -748,15 +690,13 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         };
     }, [procSample]);
 
-    // Grouped once here so the header count and the rendered sections can never
-    // disagree: one dual-stack service is one bubble, not two sockets.
+    // Grouped once so the header count and the sections can never disagree.
     const portGroups = useMemo(
         () => (report?.openPorts ? groupPorts(report.openPorts, report.hardware?.network ?? []) : null),
         [report]
     );
 
-    // Every tick carries its process list, so "stale" now only means the agent
-    // stopped reporting — not that we're between two heavy snapshots.
+    // Every tick carries its process list: "stale" means the agent stopped reporting.
     const procStale =
         focus.kind === 'live' &&
         procView.count != null &&
@@ -775,7 +715,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 ? 'En direct'
                 : 'Dernières valeurs connues';
 
-    // ── Graph definitions: a compact stat by default, full stats on click ──
+    // Graph definitions: a compact stat by default, full stats on click.
     const fmtPct1 = (v: number) => `${v.toFixed(0)}%`;
     const fmtTemp = (v: number) => `${v.toFixed(0)}°C`;
     const compact = (text: string) => <span className={styles.graphStat}>{text}</span>;
@@ -822,7 +762,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const ramTotal = display?.memTotalBytes ?? 0;
     const diskUsed = display?.diskUsedBytes ?? 0;
     const diskTotal = display?.diskTotalBytes ?? 0;
-    // Disk detail: aggregate stats + a per-disk breakdown (from the latest report).
+    // Aggregate stats + a per-disk breakdown from the latest report.
     const diskDetailRows: DetailRow[] = [
         ...pctRows(stats(diskS), diskUsed, diskTotal),
         ...(report?.disks ?? []).map((d) => ({
@@ -995,7 +935,6 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     }
     const shownGraphs = graphsExpanded ? allGraphs : allGraphs.slice(0, COLLAPSED_GRAPHS);
 
-    // Activity level from the focused snapshot (idle / normal / intensive).
     const activity = activityLevel(display, cores);
     const activityMeta = ACTIVITY_META[activity];
 
@@ -1026,17 +965,13 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         );
     }
 
-    // Device features gathered in one labelled dropdown (icon + text) instead of
-    // a row of bare icon buttons. Online-only features simply don't appear when
-    // the agent is offline; only refresh/update stay as direct header buttons,
-    // and the collection config is the device's General settings panel, behind
-    // the common settings button.
+    // Online-only features don't appear when the agent is offline; the
+    // collection config is the device's General settings panel.
     const deviceActions: DeviceAction[] = [
         { icon: 'icon-cpu', label: 'Matériel & agent', onClick: showHardwareInfo },
-        // Les mises à jour système sont la seule entrée réservée à
-        // l'administrateur (`agent.listPackages`/`upgradePackages`) : sans cette
-        // garde, tout titulaire du droit « appareils » l'ouvrait pour se heurter
-        // à un refus du serveur.
+        // Les mises à jour système sont réservées à l'administrateur
+        // (`agent.listPackages` / `upgradePackages`) : sans cette garde, on
+        // l'ouvrirait pour se heurter à un refus du serveur.
         ...(online && !archived && user?.role === 'admin'
             ? [{ icon: 'icon-database', label: 'Mises à jour système', onClick: () => setPackagesOpen(true) }]
             : []),
@@ -1048,9 +983,8 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                   { icon: 'icon-power', label: 'Commandes système', onClick: () => setPowerOpen(true) }
               ]
             : []),
-        // Jump to the fleet segment (revoke, agent stop/restart, autostart…)
-        // without hunting for it: the module's own navigation. Offered where
-        // the segment exists, to the administrator in their personal workspace.
+        // Jump to the fleet segment, offered where it exists: the administrator
+        // in their personal workspace.
         ...(user?.role === 'admin' && workspace?.kind === 'personal'
             ? [{ icon: 'icon-server', label: 'Gérer les appareils', onClick: openFleet }]
             : [])
@@ -1095,8 +1029,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                             {online ? 'En ligne' : 'Hors ligne'}
                         </span>
                     )}
-                    {/* En dernier dans l'en-tête de la fiche, comme partout : la
-                        coquille de réglages de CET appareil (sa collecte). */}
+                    {/* En dernier, comme partout : les réglages de CET appareil. */}
                     <FeatureSettingsButton
                         scope={{ kind: 'item', feature: 'devices', itemId: selected.id, itemLabel: selected.name }}
                     />
@@ -1170,8 +1103,8 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 onSpanChange={setSpanMs}
             />
 
-            {/* Snapshot footprint + keep/delete — right under the timeline: these
-                actions target the whole focused snapshot/zone, not just processes. */}
+            {/* Snapshot footprint + keep/delete: these actions target the whole
+                focused snapshot/zone. */}
             <div className={styles.snapshotBar}>
                 <span className={styles.snapshotUsage} title='Espace occupé en base par les snapshots de cet appareil'>
                     <span className='icon icon-server' />
@@ -1227,9 +1160,8 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 <span className='icon icon-clock' />
                 <span>{formatDuration(graphWindow.end - graphWindow.start)}</span>
             </div>
-            {/* Une plage sans le moindre relevé donnait une grille de cartes
-                grises et muettes — un tracé vide se dessine comme une absence de
-                données, sans dire laquelle. On l'énonce. */}
+            {/* Une plage sans relevé : on l'énonce, plutôt qu'une grille de
+                cartes grises et muettes. */}
             {metricsReady && points.length === 0 ? (
                 <p className={styles.waitingMsg}>
                     Aucun relevé sur cette période

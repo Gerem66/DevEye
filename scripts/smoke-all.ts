@@ -1,26 +1,17 @@
 /**
- * `npm run ci:smoke` — le smoke E2E de CHAQUE module installé, automatisé.
+ * `npm run ci:smoke` : le smoke E2E (`smoke-feature.ts`) de chaque module
+ * installé, autonome : construit le client dans un dossier à lui, démarre un
+ * serveur à lui, sonde chaque module, et éteint tout.
  *
- * Le smoke d'un module (`smoke-feature.ts`) garde la seule classe de bugs
- * qu'aucun autre contrôle ne voit (registre des commandes, catalogue, page
- * blanche) ; un garde qu'on lance « quand on y pense » n'en est pas un. Ce
- * script le rend autonome : il construit le client dans un dossier à lui,
- * démarre un serveur à lui, sonde chaque module, et éteint tout.
+ * Il lui faut une base MySQL joignable (variables DB_*) et un Chromium
+ * (`SMOKE_BROWSER`, défaut chromium-browser).
  *
- * Ce qu'il lui faut : une base MySQL joignable (variables DB_*, comme le
- * serveur — en local, le .env et le tunnel ; en CI, un service MySQL neuf,
- * que le boot migre de zéro) et un Chromium (`SMOKE_BROWSER`, défaut
- * chromium-browser).
+ * Isolé du dev qui tourne à côté : port SMOKE_PORT (défaut 3999), client
+ * construit dans .smoke/client à la racine (jamais client/build, que le ci du
+ * client reconstruit en parallèle), rate limit relevé pour que les connexions
+ * enchaînées ne se bloquent pas entre elles.
  *
- * Isolé du dev qui tourne à côté : port SMOKE_PORT (défaut 3999, jamais 3000),
- * client construit dans .smoke/client à la racine (jamais client/build, que le
- * ci du client reconstruit en parallèle sous ./ci.sh — ni sous client/, dont
- * le lint ratisse tout), rate limit relevé pour que les connexions enchaînées
- * des smokes ne se bloquent pas entre elles.
- *
- * Les modules : ceux de features.config.json ET de features.local.json —
- * en local, les modules privés sont sondés aussi ; en CI, l'overlay local
- * n'existe pas.
+ * Les modules : ceux de features.config.json et de features.local.json.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
@@ -32,8 +23,8 @@ import { importManifest, readFeatureConfig, type FeatureConfigEntry } from './li
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.SMOKE_PORT ?? 3999);
 const BASE_URL = `http://localhost:${PORT}`;
-// Hors de client/ : un dossier de plus sous client/ tomberait sous son `eslint .`
-// (des bundles minifiés à linter — le ci du client pendait indéfiniment).
+// Hors de client/ : un dossier de plus sous client/ tomberait sous son
+// `eslint .` (des bundles minifiés à linter).
 const SMOKE_DIR = path.join(ROOT, '.smoke');
 const CLIENT_DIR = path.join(SMOKE_DIR, 'client');
 const TSX = path.join(ROOT, 'node_modules', '.bin', 'tsx');

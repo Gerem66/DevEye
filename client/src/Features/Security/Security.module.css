@@ -1,4 +1,3 @@
-/* Widget compact */
 .widgetLoading {
     display: flex;
     align-items: center;
@@ -55,7 +54,6 @@
     color: var(--text-secondary);
 }
 
-/* Full view */
 .container {
     display: flex;
     flex-direction: column;
@@ -87,7 +85,7 @@
     gap: var(--space-lg);
 }
 
-/* Password-based encryption dialog (moved from Profile). */
+/* Password-based encryption dialog. */
 .form {
     display: flex;
     flex-direction: column;
@@ -231,7 +229,7 @@
     width: 18px;
 }
 
-/* Inline re-auth window editor (3rd security card). */
+/* Inline re-auth window editor. */
 .reAuthEditor {
     display: flex;
     align-items: center;
@@ -275,17 +273,9 @@
     color: var(--text-secondary);
 }
 
-/*
- * Le délai, quand le chiffrement par mot de passe est coupé.
- *
- * Remplace le champ grisé : un nombre qu'on ne peut pas changer laisse croire
- * qu'il gouverne encore quelque chose, alors qu'il ne veut plus rien dire tant
- * qu'il n'y a pas de mot de passe à revalider. Un mot suffit à dire l'état.
- *
- * Mêmes métriques que `Button` — les deux cartes s'alignent sur leur bord droit
- * quel que soit l'état affiché. Pas de `cursor`, pas de `:hover` : rien ici
- * n'invite au clic.
- */
+/* Le délai quand le chiffrement par mot de passe est coupé : un mot plutôt
+   qu'un champ grisé, qui laisserait croire qu'il gouverne encore quelque chose.
+   Mêmes métriques que `Button` pour aligner les cartes, sans `:hover`. */
 .reAuthOff {
     display: inline-flex;
     align-items: center;
@@ -379,7 +369,7 @@
     margin-top: var(--space-md);
 }
 
-/* 2FA setup steps (rendered inside the setup Dialog). */
+/* 2FA setup steps, inside the setup dialog. */
 .steps {
     display: flex;
     flex-direction: column;

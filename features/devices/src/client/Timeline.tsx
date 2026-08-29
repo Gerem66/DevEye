@@ -16,11 +16,7 @@ interface TimelineProps {
     snapshotTimes: number[];
     /** Subset of `snapshotTimes` that are pinned (kept past retention). */
     pinnedTimes: number[];
-    /**
-     * Subset of `snapshotTimes` whose process list was recorded. Empty when the
-     * device captures no processes — the marks and the stepping stay usable, only
-     * the process detail is absent.
-     */
+    /** Subset of `snapshotTimes` whose process list was recorded (empty with capture off). */
     processTimes: number[];
     /** Current zone selection, or null when not in range mode. */
     selection: { start: number; end: number } | null;
@@ -51,22 +47,17 @@ interface Segment {
 const CLICK_SLOP_PX = 5;
 
 /**
- * Hard cap on the number of snapshots a selection may span — enforced *here*,
- * at the only place a selection is created (the drag), so every downstream
- * consumer (queries, averages, delete/pin counts) can assume a bounded range
- * and nothing else has to handle oversized selections. The moving edge simply
- * stops growing at the cap-th snapshot from the anchor.
- *
- * Sized for the unified cadence: every collection tick is a snapshot now (~1440
- * a day at 60 s), so the old 200 would have capped a drag at roughly three hours.
+ * Hard cap on the number of snapshots a selection may span, enforced at the
+ * only place a selection is created (the drag): every downstream consumer can
+ * assume a bounded range. Every collection tick is a snapshot (~1440 a day at
+ * 60 s).
  */
 const MAX_SELECTION_SNAPSHOTS = 2000;
 
 /**
- * Above this many marks in the visible window, individual ticks stop being
- * legible (they merge into a solid bar) and cost a DOM node each. Past it the
- * timeline draws continuous "data available" bands instead — the click target is
- * unchanged, since a click snaps to the nearest mark either way.
+ * Above this many marks in the window, individual ticks merge into a solid bar
+ * and cost a DOM node each: the timeline draws continuous bands instead. A
+ * click snaps to the nearest mark either way.
  */
 const MAX_INDIVIDUAL_MARKS = 200;
 
@@ -100,8 +91,7 @@ function countInRange(sorted: number[], from: number, to: number): number {
 
 /**
  * Clamp the moving edge `candidate` so the selection `[anchor, candidate]` holds
- * at most `max` of `sortedSnaps` — the edge sticks at the max-th snapshot from
- * `anchor`. O(log n): runs on every pointer move.
+ * at most `max` of `sortedSnaps`. O(log n): runs on every pointer move.
  */
 function clampToMaxSnapshots(anchor: number, candidate: number, sortedSnaps: number[], max: number): number {
     if (sortedSnaps.length === 0 || max <= 0) return candidate;
@@ -167,14 +157,12 @@ export function Timeline({
     onSpanChange
 }: TimelineProps) {
     const trackRef = useRef<HTMLDivElement>(null);
-    // Racine de la frise : sert à savoir si ce panneau est bien celui qu'on voit
-    // (voir la garde du raccourci clavier plus bas).
+    // Sert à savoir si ce panneau est bien celui qu'on voit (garde du clavier).
     const rootRef = useRef<HTMLDivElement>(null);
     const [drag, setDrag] = useState<{ a: number; b: number; downX: number } | null>(null);
     const [calOpen, setCalOpen] = useState(false);
 
-    // The server sends the marks ascending; re-sorting once per fetch keeps the
-    // binary-search helpers (clamp, stepping, counts) safe against any caller.
+    // Re-sorted once per fetch: the binary-search helpers must not trust callers.
     const sortedSnaps = useMemo(() => [...snapshotTimes].sort((a, b) => a - b), [snapshotTimes]);
 
     const span = Math.max(1, windowEnd - windowStart);
@@ -205,9 +193,8 @@ export function Timeline({
         if (!el) return windowStart;
         const rect = el.getBoundingClientRect();
         const frac = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-        // Round to an integer ms: the focus drives `devices.metrics`/`processesAt`,
-        // whose schemas require integer `from`/`to`/`at`. A fractional value would
-        // fail client-side validation and the graphs would never reflect the zone.
+        // Integer ms: `devices.metrics` / `processesAt` require integer bounds,
+        // and a fractional value would fail client-side validation.
         return Math.round(windowStart + frac * span);
     };
 
@@ -228,7 +215,7 @@ export function Timeline({
         const end = Math.max(drag.a, drag.b);
         setDrag(null);
         if (movedPx < CLICK_SLOP_PX) {
-            // A click: snap to the nearest snapshot mark when there is one.
+            // A click snaps to the nearest snapshot mark.
             const t = timeAt(e.clientX);
             onPickSnapshot(nearestValue(snapshotTimes, t) ?? t);
         } else if (end - start > 60_000) {
@@ -243,8 +230,8 @@ export function Timeline({
 
     const pinnedSet = useMemo(() => new Set(pinnedTimes), [pinnedTimes]);
     const procSet = useMemo(() => new Set(processTimes), [processTimes]);
-    // Dense windows collapse to bands; a run breaks when a gap exceeds twice the
-    // median spacing, so a real agent outage still reads as a hole.
+    // A band breaks when a gap exceeds twice the median spacing, so a real
+    // agent outage still reads as a hole.
     const dense = sortedSnaps.length > MAX_INDIVIDUAL_MARKS;
     const bands = useMemo(() => {
         if (!dense) return [];
@@ -254,32 +241,24 @@ export function Timeline({
         const median = gaps[Math.floor(gaps.length / 2)] || 60_000;
         return toBands(sortedSnaps, median * 2);
     }, [dense, sortedSnaps]);
-    // Adjacent snapshots around the focused instant, to step through with the
-    // ‹ › buttons or the keyboard arrows (binary search on the sorted marks).
-    //
-    // En direct, la vue montre déjà le dernier relevé : on la traite donc comme
-    // un point posé sur la marque la plus récente, et ← recule d'un cran à
-    // partir de là. Sans quoi les flèches ne faisaient rien tant qu'on n'avait
-    // pas d'abord cliqué un instant, alors que l'écran en affichait un.
+    // Adjacent snapshots around the focused instant, for ‹ › and the arrow keys.
+    // En direct, la vue montre déjà le dernier relevé : ← recule d'un cran à
+    // partir de la marque la plus récente.
     const stepFrom = pointAt ?? sortedSnaps[sortedSnaps.length - 1] ?? null;
     const prevSnap = stepFrom === null ? null : (sortedSnaps[lowerBound(sortedSnaps, stepFrom) - 1] ?? null);
     const nextSnap = pointAt === null ? null : (sortedSnaps[lowerBound(sortedSnaps, pointAt + 1)] ?? null);
     /** Sur la marque la plus récente, → ramène au direct : le pas suivant, c'est lui. */
     const nextIsLive = pointAt !== null && nextSnap === null && dayStart === null;
 
-    // Keyboard stepping (← previous / → next) while an instant is focused. A
-    // window listener (not a focus-bound onKeyDown) because the timeline is never
-    // focused in normal use; scoped to the arrow keys and skipped when the user is
-    // typing in a field, so it can't hijack inputs or other shortcuts.
+    // Keyboard stepping. A window listener because the timeline is never
+    // focused in normal use; skipped when the user is typing in a field.
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
             if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
             if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
-            // Un panneau **garé** garde son DOM monté (`FeatureKeepAlive` le
-            // range dans un conteneur `display: none`) : sans ce contrôle, la
-            // popup d'appareil de l'accueil et la vue Monitoring pilotaient
-            // toutes deux leur frise sur la même flèche. `offsetParent` est nul
-            // exactement dans ce cas.
+            // Un panneau garé garde son DOM monté (`display: none`) : sans ce
+            // contrôle, deux frises répondraient à la même flèche.
+            // `offsetParent` est nul exactement dans ce cas.
             if (rootRef.current?.offsetParent === null) return;
             const el = e.target as HTMLElement | null;
             if (
@@ -399,8 +378,7 @@ export function Timeline({
                               title={procSet.has(t) ? undefined : 'Instant sans liste de processus'}
                           />
                       ))}
-                {/* Pinned instants stay individually visible whatever the density:
-                    they are rare and deliberately kept, so they must be findable. */}
+                {/* Pinned instants stay individually visible whatever the density. */}
                 {dense &&
                     pinnedTimes.map((t) => (
                         <div
@@ -459,8 +437,7 @@ export function Timeline({
                 ) : sortedSnaps.length === 0 ? (
                     <span className={styles.dragHint}>Aucun instant enregistré sur cette fenêtre</span>
                 ) : (
-                    // En direct, ‹ recule à partir du dernier relevé — celui que
-                    // la vue montre déjà. Le bouton dit ce que la flèche fait.
+                    // En direct, ‹ recule à partir du dernier relevé.
                     <span className={styles.instantNav}>
                         <button
                             className={styles.instantArrow}

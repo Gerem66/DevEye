@@ -1,19 +1,10 @@
 /**
  * L'échelle de temps du graphe des commits : ses étiquettes de dates.
  *
- * Une COPIE de `features/projects/src/client/Timeline/scale.ts`, l'échelle de
- * la frise d'un projet, réduite à ce que `CommitGraph` consomme : `DAY_MS`,
- * `startOfDay`, `labelWidth`, `timelineTicks` et le type `Tick`. Les niveaux
- * de zoom de la frise n'ont pas suivi : le graphe n'a pas de zoom.
- *
- * Copiée et non importée, pour deux raisons. Un module n'importe pas un autre
- * module : le SDK est la frontière, et l'échelle d'un axe n'est pas une
- * surface que Projets a vocation à publier. Et une frise de commits peut diverger d'une
- * frise de projet : le graphe tasse tout l'historique d'un dépôt dans la
- * largeur d'une carte et descend bien plus bas en pixels par jour qu'une
- * frise, d'où une échelle qui va du jour au siècle ; si l'une des deux
- * évolue pour son propre besoin, l'autre n'a pas à la suivre. Les
- * commentaires d'origine sont gardés tels quels, ils portent les décisions.
+ * Une copie de l'échelle de la frise de Projets, réduite à ce que `CommitGraph`
+ * consomme, et copiée plutôt qu'importée : un module n'importe pas un autre
+ * module, et les deux peuvent diverger. Le graphe tasse tout l'historique d'un
+ * dépôt dans la largeur d'une carte, d'où une échelle qui va du jour au siècle.
  */
 
 export const DAY_MS = 86_400_000;
@@ -38,11 +29,9 @@ interface Step {
 }
 
 /**
- * L'échelle des pas, du plus fin au plus grossier.
- *
- * Les multiples d'années suivent la progression 1–2–5, reprise à chaque
- * décennie : ce sont les seuls intervalles qu'on compte de tête sur un axe. On
- * s'arrête au siècle — ni un projet ni un dépôt git n'ira jusque-là.
+ * L'échelle des pas, du plus fin au plus grossier. Les multiples d'années suivent
+ * la progression 1–2–5, reprise à chaque décennie : les seuls intervalles qu'on
+ * compte de tête sur un axe. On s'arrête au siècle.
  */
 const STEPS: Step[] = [
     { unit: 'day', every: 1, minDays: 1 },
@@ -53,14 +42,10 @@ const STEPS: Step[] = [
 ];
 
 /**
- * Largeur d'un caractère d'étiquette, en px.
- *
- * Les deux appelants écrivent en corps ~10 : à chasse fixe pour le graphe
- * (`.graphLabel`), proportionnelle pour la frise (`.gridLabel`), un peu plus
- * étroite en moyenne. La valeur retenue est celle de la chasse fixe, donc
- * majorante dans les deux cas — et une estimation suffit : on décide d'un pas,
- * pas d'un placement au pixel. Mesurer le texte dans le document coûterait un
- * calcul de mise en page à chaque redimensionnement.
+ * Largeur d'un caractère d'étiquette, en px : celle de la chasse fixe du graphe,
+ * donc majorante. Une estimation suffit puisqu'on décide d'un pas, pas d'un
+ * placement au pixel ; mesurer le texte coûterait une mise en page par
+ * redimensionnement.
  */
 const CHAR_W = 6.1;
 
@@ -135,17 +120,12 @@ function opensYear(d: Date, unit: TickUnit): boolean {
 }
 
 /**
- * Ce qu'écrit une graduation.
+ * Ce qu'écrit une graduation : la plus grosse période qu'elle ouvre, et elle
+ * seule. Celle de janvier n'écrit que l'année, qui tiendrait sinon deux fois plus
+ * de place au moment où l'axe en manque.
  *
- * **La plus grosse période qu'elle ouvre, et elle seule.** Une graduation de
- * janvier n'écrit que l'année : « janv. » n'apprendrait rien qu'on ne lise déjà
- * dans sa position, et l'année tiendrait deux fois plus de place au moment
- * précis où l'axe en manque. Les autres portent leur mois — leur jour aussi
- * quand le pas descend sous la semaine.
- *
- * `withYear` couvre le cas de la fenêtre qui s'ouvre en cours d'année sans
- * jamais en franchir une : sans lui, une frise entièrement contenue dans 2024
- * n'écrirait l'année nulle part.
+ * `withYear` couvre la fenêtre qui s'ouvre en cours d'année sans jamais en
+ * franchir une : sans lui, une frise contenue dans 2024 n'écrirait l'année nulle part.
  */
 function tickLabel(d: Date, step: Step, withYear: boolean): string {
     const opens = opensYear(d, step.unit);
@@ -176,10 +156,9 @@ function buildTicks(min: number, max: number, step: Step): Tick[] {
         advance(d, step);
     }
 
-    // La première graduation ne porte l'année que si aucune autre ne l'ouvre.
-    // C'est elle qui décidait du pas : « oct. 2021 » tient deux fois plus de
-    // place que « oct. », et refusait à lui seul le trimestre sur cinq ans de
-    // commits — pour redire une année écrite en clair trois crans plus loin.
+    // La première graduation ne porte l'année que si aucune autre ne l'ouvre :
+    // « oct. 2021 » tient deux fois plus de place que « oct. », et refuserait à
+    // lui seul un pas qui tiendrait.
     const orphan = !dates.some((x) => opensYear(x, step.unit));
     return dates.map((x, i) => ({
         t: x.getTime(),
@@ -189,17 +168,12 @@ function buildTicks(min: number, max: number, step: Step): Tick[] {
 }
 
 /**
- * Les étiquettes tiennent-elles côte à côte ?
+ * Les étiquettes tiennent-elles côte à côte ? Comparaison paire par paire et non
+ * contre un écart moyen : les pas du calendrier sont inégaux, et c'est toujours
+ * l'intervalle le plus court qui décide de la lisibilité.
  *
- * Comparaison paire par paire, et non contre un écart moyen : les pas du
- * calendrier sont inégaux — février contre juillet, une année bissextile — et
- * c'est toujours l'intervalle le plus court qui décide de la lisibilité.
- *
- * Chaque voisine n'avance dans l'intervalle que de sa demi-largeur : c'est la
- * géométrie du graphe, dont les étiquettes sont centrées sur leur trait. La
- * frise les pose à droite du trait, donc en occupe le double ; `LABEL_GAP` et
- * une chasse majorante lui rendent la marge, et ses quatre niveaux de zoom
- * donnent de toute façon des étiquettes largement séparées.
+ * Chaque voisine n'avance dans l'intervalle que de sa demi-largeur : les
+ * étiquettes du graphe sont centrées sur leur trait.
  */
 function fits(ticks: Tick[], dayWidth: number): boolean {
     for (let i = 1; i < ticks.length; i++) {
@@ -213,16 +187,9 @@ function fits(ticks: Tick[], dayWidth: number): boolean {
 const MIN_STEP_PX = 3 * CHAR_W + LABEL_GAP;
 
 /**
- * Les étiquettes de la fenêtre : **le pas le plus fin dont elles tiennent**.
- *
- * L'échelle est essayée du jour au siècle et la première qui passe est rendue.
- * L'ancienne règle s'arrêtait au mois : sur une frise de projet, dont le zoom
- * garantit au moins 6 px par jour, cela suffisait ; sur cinq ans de commits
- * ramenés à la largeur d'une carte, cela donnait soixante dates en bouillie.
- *
- * Le choix se fait sur les étiquettes elles-mêmes, une fois écrites, et non sur
- * une largeur supposée : « 2024 » et « 12 janv. 2024 » n'occupent pas la même
- * place, et c'est justement le format qui décide si un pas passe ou non.
+ * Les étiquettes de la fenêtre : le pas le plus fin dont elles tiennent, essayé du
+ * jour au siècle. Le choix se fait sur les étiquettes une fois écrites et non sur
+ * une largeur supposée, « 2024 » et « 12 janv. 2024 » n'occupant pas la même place.
  */
 export function timelineTicks(min: number, max: number, dayWidth: number): Tick[] {
     if (max <= min) return [];
@@ -235,8 +202,7 @@ export function timelineTicks(min: number, max: number, dayWidth: number): Tick[
         last = buildTicks(min, max, step);
         if (fits(last, dayWidth)) return last;
     }
-    // Fenêtre plus étroite qu'une seule étiquette, ou plus longue qu'un siècle :
-    // le dernier pas essayé reste le moins mauvais. Vide si aucun n'a été
-    // engendré — mieux vaut pas d'axe qu'un axe illisible.
+    // Fenêtre plus étroite qu'une étiquette, ou plus longue qu'un siècle : le
+    // dernier pas essayé reste le moins mauvais, et vide si aucun n'a été engendré.
     return last;
 }

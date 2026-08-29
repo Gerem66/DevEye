@@ -6,11 +6,9 @@
 .group {
     display: inline-flex;
     align-items: stretch;
-    /* Jamais plus large que ses boutons. Sans ça, posé dans une colonne flex
-       (un panneau de réglages), l'étirement par défaut lui impose la pleine
-       largeur : les segments gardent leur taille et le cadre traîne du vide.
-       `width` plutôt qu'`align-self`, qui casserait le centrage vertical du
-       composant posé dans une rangée. */
+    /* Jamais plus large que ses boutons : dans une colonne flex, l'étirement par
+       défaut lui imposerait la pleine largeur. `width` plutôt qu'`align-self`,
+       qui casserait le centrage vertical dans une rangée. */
     width: fit-content;
     background: var(--input-bg);
     border: 1px solid var(--input-border);

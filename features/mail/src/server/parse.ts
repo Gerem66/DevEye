@@ -54,13 +54,12 @@ export async function parseAndSanitize(raw: Buffer, sanitizeOpts: SanitizeOption
     }
 
     const attachments: MailAttachment[] = parsed.attachments
-        // Index over the *unparsed* list, so an id is a stable handle into the
-        // message as parsed — `findAttachmentBytes` re-derives ids the same way.
-        // Filtering first would renumber everything after an inline image and
-        // hand back the wrong file (see `attachmentId`).
+        // Index over the *unparsed* list, the way `findAttachmentBytes` re-derives
+        // ids: filtering first would renumber everything after an inline image and
+        // hand back the wrong file.
         .map((a, i) => ({ attachment: a, id: attachmentId(a, i) }))
-        // Inline images already referenced by the (now-blocked) HTML body aren't
-        // useful as a separate "attachments" list in V1.
+        // Inline images already referenced by the HTML body aren't useful as a
+        // separate "attachments" list.
         .filter(({ attachment }) => !attachment.related)
         .map(({ attachment, id }) => ({
             id,

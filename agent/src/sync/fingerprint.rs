@@ -1,42 +1,27 @@
 //! Empreinte d'un index de partage : `{nombre}.{octets}.{sha256hex}`.
 //!
-//! Elle répond à UNE question, et le serveur est seul à la poser : « ce que
-//! l'agent détient est-il exactement ce que je crois qu'il détient ? ». Elle ne
-//! porte donc aucune conclusion, seulement un fait sur soi — l'architecture
-//! reste « le serveur orchestre, l'agent exécute ».
+//! Elle répond à une seule question, posée par le serveur : « ce que l'agent
+//! détient est-il exactement ce que je crois qu'il détient ? ». L'agent ne
+//! conclut rien, il rapporte un fait sur lui-même.
 //!
-//! ⚠️ Le `mtime` est VOLONTAIREMENT absent de la ligne, et ce n'est pas un
-//! oubli. La baseline du serveur n'est réécrite que lorsque le HASH change
-//! (`refreshBaseline` dans `planner.ts`) : un simple `touch`, qui déplace le
-//! mtime sans toucher au contenu, laisserait donc la baseline désaccordée pour
-//! toujours, et l'empreinte ne correspondrait plus jamais — le chemin rapide ne
-//! s'engagerait plus, en silence, ce qui est exactement le mode de panne à
-//! éviter. Ce n'est pas non plus une perte de rigueur : l'empreinte certifie que
-//! l'appareil détient le même JEU DE CONTENUS que la baseline, et le mtime ne
-//! fait pas partie du contenu. Quand toutes les empreintes concordent, aucun
-//! hash ne diffère, donc le planificateur ne peut produire ni montée, ni
-//! conflit, ni rafraîchissement de baseline — les seuls endroits où le mtime
-//! aurait pesé.
+//! Le `mtime` est VOLONTAIREMENT absent : la baseline du serveur n'est réécrite
+//! que lorsque le hash change (`refreshBaseline` dans `planner.ts`), donc un
+//! simple `touch` laisserait la baseline désaccordée pour toujours et le chemin
+//! rapide ne s'engagerait plus jamais, en silence. L'empreinte certifie un jeu
+//! de contenus, dont le mtime ne fait pas partie.
 //!
-//! Le pli est un XOR des hachages par ligne, donc INDÉPENDANT DE L'ORDRE. Un
-//! tri obligerait Rust (`String: Ord`, ordre octet UTF-8) et TypeScript
-//! (`Array#sort`, ordre unité UTF-16) à s'accorder sur les caractères hors BMP,
-//! ce qu'ils ne font pas : un seul emoji dans un nom de fichier aurait alors
-//! désactivé le chemin rapide pour toujours, en silence. Le XOR supprime la
-//! question. L'annulation par doublon, elle, est impossible : les clés sont
-//! uniques des deux côtés (`HashMap` ici, `uniq_sync_device_file` en base).
+//! Le pli est un XOR des hachages par ligne, donc indépendant de l'ordre : un
+//! tri obligerait Rust (ordre octet UTF-8) et TypeScript (ordre unité UTF-16) à
+//! s'accorder hors BMP, ce qu'ils ne font pas. L'annulation par doublon est
+//! impossible, les clés étant uniques des deux côtés.
 //!
-//! ⚠️ L'empreinte ne doit JAMAIS intégrer un digest de la config (exclusions,
-//! chemin local). Les deux copies changeraient au même instant alors que les
-//! JEUX D'ENTRÉES, eux, diffèrent encore — le cache de l'agent ayant été produit
-//! sous les anciennes exclusions. Ce serait une fausse égalité, c'est-à-dire une
-//! non-convergence silencieuse. L'invalidation appartient au compteur du
-//! watcher (`SyncManager`), pas au hachage.
+//! L'empreinte ne doit JAMAIS intégrer un digest de la config (exclusions,
+//! chemin local) : les deux copies changeraient au même instant alors que les
+//! jeux d'entrées diffèrent encore, une fausse égalité. L'invalidation
+//! appartient au compteur du watcher (`SyncManager`).
 //!
 //! Le format est mot pour mot celui de `src/cloudSync/fingerprint.ts`, et le
-//! vecteur de test ci-dessous est le même des deux côtés. C'est ce seul test qui
-//! sépare « le chemin rapide fonctionne » de « le chemin rapide ne s'engage
-//! jamais, sans que personne ne le remarque ».
+//! vecteur de test est le même des deux côtés.
 
 use sha2::{Digest, Sha256};
 
@@ -75,9 +60,8 @@ impl Fingerprint {
             *slot ^= byte;
         }
         self.count += 1;
-        // Saturant : deux exaoctets dans un partage n'arriveront pas, mais un
-        // débordement en `--release` serait silencieux et rendrait l'empreinte
-        // fausse plutôt que bruyante.
+        // Saturant : un débordement en `--release` serait silencieux et rendrait
+        // l'empreinte fausse plutôt que bruyante.
         self.sum_size = self.sum_size.saturating_add(e.size);
     }
 
@@ -146,13 +130,10 @@ mod tests {
         );
     }
 
-    /// Le test qui justifie l'absence du mtime : un `touch` ne doit RIEN changer,
-    /// sans quoi la baseline du serveur (réécrite au seul changement de hash) se
-    /// désaccorderait définitivement et le chemin rapide mourrait en silence.
+    /// Un `touch` ne doit RIEN changer : la baseline du serveur n'est réécrite
+    /// qu'au changement de hash.
     #[test]
     fn a_touch_does_not_move_the_fingerprint() {
-        // Aucun champ d'empreinte ne porte le mtime : deux relevés du même
-        // contenu à des dates différentes produisent la même chaîne.
         assert_eq!(compute(&fixture()), compute(&fixture()));
     }
 

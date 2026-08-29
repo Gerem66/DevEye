@@ -4,13 +4,8 @@ import { describe, it } from 'node:test';
 import { addDays, addMonths, anchorDayOf, daysInMonth, nextOccurrence, periodBounds, rangeBounds } from './_shared';
 
 /**
- * Le calendrier des finances.
- *
- * C'est le seul endroit purement calculatoire de la feature, et c'est aussi
- * celui dont une erreur ne se verrait pas: une échéance qui dérive du 31 au 28,
- * un budget dont la période commence un jour trop tôt, une fenêtre « mois
- * précédent » qui déborde d'un jour. Rien de tout cela ne lève, rien ne
- * s'affiche en rouge, et le chiffre reste plausible. D'où ces vérifications.
+ * Le seul endroit purement calculatoire, et celui dont une erreur ne se verrait
+ * pas : le chiffre reste plausible.
  */
 
 describe('addDays', () => {

@@ -1,24 +1,16 @@
 import WebSocket from 'ws';
 
 /**
- * Adaptateur Dokploy.
+ * Adaptateur Dokploy, calé sur une instance réelle plutôt que sur la doc :
+ *  - pas de couche REST, tout passe par tRPC sous `/api/trpc/<procédure>` ;
+ *  - charges utiles enveloppées par superjson (`{ result: { data: { json } } }`
+ *    en réponse, `{ json: … }` en entrée) ;
+ *  - pas de `application.all` : les cibles se découvrent par `project.all`,
+ *    imbriquées dans les environnements de chaque projet ;
+ *  - les piles compose sont des cibles au même titre que les applications.
  *
- * **Calé sur une instance réelle**, et le résultat diffère nettement de ce que
- * décrit la documentation publique :
- *
- *  - La couche REST (`/api/application.list`, `/api/application.deploy`) n'y
- *    existe pas. Tout passe par **tRPC**, sous `/api/trpc/<procédure>`.
- *  - Les charges utiles sont enveloppées par **superjson** : une réponse est
- *    `{ result: { data: { json: … } } }`, une entrée `{ "json": { … } }`.
- *  - Il n'y a **pas** de `application.all`. Les cibles se découvrent par
- *    `project.all`, où elles sont imbriquées dans les environnements de chaque
- *    projet.
- *  - Une infra Dokploy est souvent majoritairement faite de piles **compose**,
- *    pas d'applications. Les ignorer reviendrait à ne rien pouvoir déployer.
- *
- * Le décodage reste **défensif** : les champs sont cherchés sous plusieurs noms
- * plausibles et retombent sur une valeur neutre s'ils manquent. Une instance
- * d'une autre version dégrade l'affichage, elle ne fait rien planter.
+ * Décodage défensif : champs cherchés sous plusieurs noms, valeur neutre s'ils
+ * manquent. Une instance d'une autre version dégrade l'affichage sans planter.
  */
 
 export class DokployError extends Error {
@@ -41,12 +33,9 @@ export interface DokployTarget {
     /** « Projet / environnement », tel que Dokploy l'organise. */
     path: string | null;
     /**
-     * Les trois niveaux séparés, en plus du chemin déjà assemblé.
-     *
-     * `path` sert à un sélecteur, où une seule ligne de texte suffit ; un avis
-     * Discord, lui, les montre en colonnes distinctes comme Dokploy le fait dans
-     * les siens. Les recomposer en découpant `path` sur un séparateur serait
-     * faux dès qu'un projet contient une barre oblique dans son nom.
+     * Les trois niveaux séparés, en plus du chemin assemblé : un avis Discord
+     * les montre en colonnes, et redécouper `path` serait faux dès qu'un nom
+     * contient une barre oblique.
      */
     projectName: string | null;
     environmentName: string | null;
@@ -251,17 +240,9 @@ export function readDeployments(payload: unknown): DokployDeployment[] {
 }
 
 /**
- * L'adresse de la fiche d'une cible dans le tableau de bord Dokploy.
- *
- * **Relevée sur l'instance, pas devinée** : cette forme répond `307` (la
- * redirection d'authentification, donc la route existe), là où
- * `/dashboard/project/{id}/services/compose/{id}` et `/dashboard/project/{id}`
- * répondent `404`. Un lien faux dans un avis serait pire que pas de lien — on
- * enverrait le lecteur sur une page d'erreur au moment précis où il cherche à
- * comprendre un échec.
- *
- * `null` dès qu'un identifiant manque : une instance d'une autre version, dont
- * le décodage n'aurait pas trouvé les siens, perd le lien et rien d'autre.
+ * L'adresse de la fiche d'une cible dans le tableau de bord Dokploy. Relevée
+ * sur l'instance (cette forme répond 307, les autres 404) : un lien faux serait
+ * pire que pas de lien. `null` dès qu'un identifiant manque.
  */
 export function dashboardUrl(baseUrl: string, target: DokployTarget): string | null {
     if (!target.projectId || !target.environmentId) return null;
@@ -318,48 +299,21 @@ const LOG_TIMEOUT_MS = 30_000;
 
 /**
  * Silence après le dernier octet au bout duquel le journal est réputé complet.
- *
- * **C'est ce qui décide du temps d'ouverture de la popup**, et non le plafond
- * ci-dessus. Mesuré sur l'instance de référence : les 22 ko d'un journal
- * arrivent en **un seul message, 185 ms** après l'ouverture — puis plus rien,
- * jamais. Une seconde de calme est donc un écart considérable à l'échelle d'un
- * rejeu de fichier, tout en restant imperceptible à l'usage.
+ * C'est ce qui décide du temps d'ouverture de la popup : un journal complet
+ * arrive en un seul message, ~200 ms après l'ouverture, puis plus rien.
  */
 const LOG_IDLE_MS = 1_000;
 
 /**
- * Rejoue le journal d'un déploiement, tel que Dokploy le stream.
- *
- * **Hors du protocole `call()`** : aucune procédure tRPC ne le rend. Dokploy
- * le sert par un WebSocket dédié, repéré en observant le trafic de sa propre
- * interface — non documenté, donc collecté avec un filet plutôt qu'en confiance
- * aveugle :
- *
- *  - L'en-tête `x-api-key` est posé comme pour le reste de l'adaptateur, mais
- *    rien ne garantit que cette route l'exige, ni même la reconnaisse — le
- *    navigateur qui a servi de référence pour ce point d'entrée ne peut de
- *    toute façon poser aucun en-tête sur un WebSocket, donc son propre trafic
- *    ne dit rien de ce que cette route attend vraiment. Une instance qui la
- *    refuse remonte une erreur normale, pas un crash.
- *  - **Le serveur ne referme jamais rien.** C'était l'hypothèse inverse qui
- *    était écrite ici — « un déploiement déjà terminé clôt son flux de lui-même
- *    une fois le fichier rejoué » — et elle est fausse : mesuré sur l'instance
- *    de référence, les 22 ko d'un journal arrivent en un seul message 185 ms
- *    après l'ouverture, puis la socket reste ouverte indéfiniment (toujours
- *    vivante après 40 s). `/listen-deployment` est un `tail -f`, pas un
- *    téléchargement.
- *
- *    La conséquence se payait à chaque ouverture de la popup : le journal était
- *    là en deux dixièmes de seconde, et l'on attendait les trente secondes du
- *    plafond avant de le rendre. D'où {@link LOG_IDLE_MS} — c'est le **silence
- *    après le dernier octet** qui conclut, plus l'attente d'une fermeture qui
- *    ne vient pas.
- *
- * `timeoutMs` reste le plafond, et garde son sens pour un déploiement **en
- * cours** : celui-là émet en continu, donc le silence n'arrive jamais et c'est
- * le plafond qui tranche. Le suivi vivant s'en sert pour prendre la température
- * du journal sans y passer plus de trois secondes ; la lecture à la demande
- * garde trente secondes, puisqu'elle sert à rapatrier un journal complet.
+ * Rejoue le journal d'un déploiement tel que Dokploy le stream, par un
+ * WebSocket dédié hors de `call()` (aucune procédure tRPC ne le rend, route
+ * non documentée). Deux garde-fous :
+ *  - `x-api-key` est posé, mais rien ne garantit que cette route l'exige ;
+ *    une instance qui la refuse remonte une erreur normale ;
+ *  - le serveur ne referme jamais la socket (`/listen-deployment` est un
+ *    `tail -f`) : c'est le silence après le dernier octet ({@link LOG_IDLE_MS})
+ *    qui conclut, et `timeoutMs` reste le plafond pour un déploiement en cours,
+ *    qui émet sans discontinuer.
  */
 export function fetchDeploymentLog(
     baseUrl: string,
@@ -373,8 +327,7 @@ export function fetchDeploymentLog(
         let settled = false;
         let idle: ReturnType<typeof setTimeout> | null = null;
 
-        // Deux minuteurs, deux rôles. Le plafond borne le pire cas — un flux qui
-        // parle sans discontinuer, ou qui ne dit jamais rien. Le repos conclut
+        // Le plafond borne le pire cas (flux continu ou muet), le repos conclut
         // le cas courant, dès que le fichier a fini d'être rejoué.
         const cap = setTimeout(() => finish(), options.timeoutMs ?? LOG_TIMEOUT_MS);
 

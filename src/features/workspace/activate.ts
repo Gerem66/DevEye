@@ -5,13 +5,8 @@ import { defineFeature, FeatureError, type FeatureDefinition } from '../_define'
 
 /**
  * Bascule vers un espace : renvoie son apparence et sa disposition d'accueil.
- *
- * L'espace visé est celui de l'enveloppe, et le dispatcheur a déjà vérifié
- * l'appartenance — le handler n'a donc plus qu'à servir les deux blobs.
- *
  * Une commande dédiée plutôt qu'un `/api/auth/me` : cette route recalcule
- * l'espace actif à partir du favori du compte et renverrait l'apparence de
- * l'espace qu'*elle* choisit, écrasant au passage la bascule demandée.
+ * l'espace actif à partir du favori et écraserait la bascule demandée.
  */
 export const workspaceActivateFeature: FeatureDefinition<
     typeof workspaceActivate.command,

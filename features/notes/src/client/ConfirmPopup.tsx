@@ -12,7 +12,6 @@ export interface ConfirmInput {
     confirmLabel: string;
 }
 
-/** Lightweight confirm used for destructive folder actions (delete). */
 export default function ConfirmPopup() {
     const [data, setData] = useState<ConfirmInput>({ title: '', message: '', confirmLabel: 'Confirmer' });
 

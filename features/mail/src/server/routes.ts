@@ -18,32 +18,22 @@ import { decryptCredentials, encryptCredentials, persistRefreshedToken } from '.
 
 /**
  * Les deux portes HTTP de Mail, sur la surface publique du SDK (capacité
- * `routes.public`, `exposure: 'app'` : l'origine de l'app seulement, jamais le
- * second écouteur). Toutes deux sont des GET nus, sans session : le
- * navigateur télécharge nativement, la fenêtre de consentement revient de
- * chez Google ou Microsoft. Ce qui les autorise est un **ticket de session**
- * signé par l'hôte (`ctx.secrecy.ticket` côté commande, `deps.secrecy.redeem`
- * ici) : il lie l'appelant, son espace et ce module, et se rend contre ses
- * codecs, l'étage gardé compris tant que sa session est déverrouillée. Le
- * module ne voit ni session ni clé ; c'était l'ex `signMailAttachmentToken` /
- * `signMailOAuthState` de `auth/jwt.ts`, et `cipherForTier` qui reconstruisait
- * le magasin gardé à partir de l'identifiant de session.
+ * `routes.public`, `exposure: 'app'` : l'origine de l'app seulement). Toutes
+ * deux sont des GET nus, sans session : le navigateur télécharge nativement, la
+ * fenêtre de consentement revient de chez Google ou Microsoft. Ce qui les
+ * autorise est un ticket de session signé par l'hôte (`deps.secrecy.redeem`) :
+ * il lie l'appelant, son espace et ce module, et se rend contre ses codecs,
+ * l'étage gardé compris tant que sa session est déverrouillée.
  */
 
-/**
- * Ce que les routes lisent de l'hôte : le dépôt, le rendu des tickets, le
- * codec ouvert d'un espace (celui du domicile d'un compte projeté), l'origine,
- * le journal.
- */
 export type MailRouteDeps = Pick<
     FeatureServiceDeps<MailRepo>,
     'repo' | 'secrecy' | 'cipherFor' | 'origins' | 'logger' | 'audit'
 >;
 
 /**
- * La couture de test des routes : le client IMAP (les octets d'un message) et
- * l'échange OAuth (le code contre les jetons), sans réseau. Le reste, tickets
- * compris, tourne tel quel sur le harnais.
+ * La couture de test des routes : le client IMAP et l'échange OAuth, sans
+ * réseau. Le reste, tickets compris, tourne tel quel.
  */
 export interface MailRouteSeam {
     client?: Pick<typeof mailClient, 'fetchMessageRaw'>;
@@ -70,13 +60,11 @@ const oauthQuerySchema = z.object({
 });
 
 /**
- * Le codec d'un compte visible depuis l'espace du ticket : l'étage ouvert de
- * son **domicile** pour un compte ouvert (le sien quand il est chez lui, celui
- * de l'espace qui le projette sinon : jamais celui du ticket, qui ne lirait
- * pas une boîte projetée), l'étage gardé du ticket pour un compte gardé
- * (toujours chez lui : une boîte gardée ne se projette pas), `null` quand la
- * session s'est verrouillée entre l'émission du ticket et son usage (le
- * ticket vit deux minutes, le verrou peut tomber entre-temps).
+ * Le codec d'un compte visible depuis l'espace du ticket : l'étage ouvert de son
+ * domicile pour un compte ouvert (jamais celui du ticket, qui ne lirait pas une
+ * boîte projetée), l'étage gardé du ticket pour un compte gardé, qui ne se
+ * projette pas. `null` quand la session s'est verrouillée entre l'émission du
+ * ticket et son usage.
  */
 function ticketAccountCipher(
     deps: MailRouteDeps,
@@ -92,11 +80,10 @@ function ticketCipher(ticket: SdkRedeemedTicket, tier: MailSecurityTier): SdkCip
 }
 
 /**
- * `Content-Disposition` for a filename that came out of an untrusted email.
- * The plain `filename=` form is reduced to safe ASCII — anything else (a
- * newline especially, which Node rejects outright and would turn a download
- * into a 500) is dropped — and the real name is carried by the RFC 5987
- * `filename*` form, which browsers prefer when both are present.
+ * `Content-Disposition` for a filename that came out of an untrusted email. The
+ * plain `filename=` form is reduced to safe ASCII (a newline especially, which
+ * Node rejects outright, turning a download into a 500); the real name rides in
+ * the RFC 5987 `filename*` form, which browsers prefer when both are present.
  */
 export function contentDisposition(filename: string): string {
     const ascii = filename.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '');
@@ -114,21 +101,19 @@ function escapeHtml(value: string): string {
 }
 
 /**
- * The single OAuth redirect target for Gmail/Microsoft 365 mailboxes
- * (`mail.oauthStart` builds the authorization URL pointing here). Opened in a
- * popup by the client; this always responds with a small self-closing HTML
- * page rather than a redirect, since there's no natural place in the SPA to
- * land on mid-flow — `window.opener.postMessage` is how the popup reports
- * back, matching a standard OAuth-popup pattern.
+ * The single OAuth redirect target for Gmail/Microsoft 365 mailboxes. Opened in
+ * a popup by the client; it always answers with a small self-closing HTML page
+ * rather than a redirect, `window.opener.postMessage` being how the popup
+ * reports back.
  *
- * `message` is never trustworthy: on the error path it is `?error=` straight
- * off the query string, so this page is reachable with arbitrary content on
- * DevEye's own origin. It goes into markup escaped, and into the script block
- * as JSON with `<` neutralised — `JSON.stringify` alone leaves `</script>`
- * intact, which is enough to break out of the block.
+ * `message` is never trustworthy: on the error path it is `?error=` straight off
+ * the query string, so this page is reachable with arbitrary content on DevEye's
+ * own origin. It goes into markup escaped, and into the script block as JSON
+ * with `<` neutralised: `JSON.stringify` alone leaves `</script>` intact, which
+ * is enough to break out of the block.
  *
- * La cible du `postMessage` est l'origine de l'app (`deps.origins.app`, l'ex
- * `PUBLIC_ORIGIN`) : la fenêtre qui a ouvert le consentement, et aucune autre.
+ * La cible du `postMessage` est l'origine de l'app : la fenêtre qui a ouvert le
+ * consentement, et aucune autre.
  */
 export function popupResponse(appOrigin: string, ok: boolean, message?: string): string {
     const payload = JSON.stringify({ source: 'deveye-mail-oauth', ok, error: message ?? null }).replace(
@@ -156,9 +141,8 @@ export function mailRoutes(app: SdkPublicApp, deps: MailRouteDeps, seam: MailRou
     /**
      * Streams one attachment's bytes, re-derived live from IMAP (never cached
      * server-side, matching the rest of Mail's storage policy). Reached via the
-     * short-lived ticketed URL `mail.attachmentDownload` hands back — a plain GET
-     * so the browser's native download flow (Content-Disposition) just works,
-     * rather than piping bytes back over the WebSocket.
+     * short-lived ticketed URL `mail.attachmentDownload` hands back, a plain GET
+     * so the browser's native download flow just works.
      */
     app.get('/api/mail/attachment', { exposure: 'app' }, async (req, reply) => {
         const query = attachmentQuerySchema.safeParse(req.query);
@@ -211,9 +195,9 @@ export function mailRoutes(app: SdkPublicApp, deps: MailRouteDeps, seam: MailRou
         const claims = ticket ? oauthStateSchema.safeParse(ticket.payload) : null;
         if (!ticket || !claims?.success) return page(false, 'Lien de connexion expiré ou invalide');
 
-        // Le palier a été vérifié à l'émission du ticket (`assertTierAllowed`,
-        // dans `mail.oauthStart`) ; ici il ne reste qu'à tenir le codec, et un
-        // compte gardé exige que la session le soit encore.
+        // Le palier a été vérifié à l'émission du ticket (`mail.oauthStart`) ;
+        // ici il reste à tenir le codec, un compte gardé exigeant que la session
+        // le soit encore.
         const cipher = ticketCipher(ticket, claims.data.securityTier);
         if (!cipher) return page(false, 'Session verrouillée entre-temps : déverrouillez puis recommencez');
 

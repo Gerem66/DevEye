@@ -1,11 +1,7 @@
--- Mail passe au scope espace.
---
--- Seule `mail_accounts` gagne la colonne : les dossiers et les messages sont
--- rattaches a leur compte mail (`mail_folders.account_id`,
--- `mail_messages.folder_id`), donc cloisonner la racine cloisonne tout l'arbre.
---
--- `mail_settings` suit le meme changement de cle primaire qu'`uptime_settings`.
--- Rien n'est re-chiffre (cf. 049).
+-- Mail passe au scope espace. Seule `mail_accounts` gagne la colonne : dossiers
+-- et messages sont rattaches a leur compte, donc cloisonner la racine cloisonne
+-- tout l'arbre. `mail_settings` suit le meme changement de cle primaire
+-- qu'`uptime_settings`. Rien n'est re-chiffre (cf. 049).
 
 -- 1. mail_accounts.
 SET @c = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS

@@ -27,13 +27,8 @@ interface Draft {
 }
 
 /**
- * Le réglage d'un compte.
- *
- * Le champ le plus important est le **solde de départ**, et c'est aussi le moins
- * évident: ce n'est pas « combien j'avais à l'ouverture du compte » mais
- * « combien il y a au moment où je commence à tenir ce livre ». L'aide sous le
- * champ le dit, parce que se tromper là décale tous les soldes suivants du même
- * montant sans qu'aucune opération ne l'explique.
+ * Le solde de départ est « combien il y a au moment où je commence ce livre »,
+ * pas le solde d'ouverture du compte : se tromper décale tous les soldes suivants.
  */
 export function AccountDialog({ base, open, account, onClose, onSaved }: AccountDialogProps) {
     const initial = useMemo<Draft>(
@@ -101,9 +96,7 @@ export function AccountDialog({ base, open, account, onClose, onSaved }: Account
             await api.send('finance.accountRemove', { accountId: account.id });
             onSaved();
         } catch (e) {
-            // Le serveur refuse tant que le compte porte des opérations, et sa
-            // phrase dit combien: elle est plus utile que « suppression
-            // impossible », donc on la montre telle quelle.
+            // La phrase du serveur dit combien d'opérations bloquent : plus utile que le repli.
             setError(humanizeError(e, 'Suppression impossible.'));
         } finally {
             setBusy(false);

@@ -1,48 +1,27 @@
--- Les finances de l'espace: comptes, opérations, budgets, échéances.
+-- Les finances de l'espace: comptes, opérations, budgets, échéances. Le livre
+-- de comptes appartient à l'espace et vit à l'étage ouvert: la feature s'ouvre
+-- sans mot de passe et tout membre lit les comptes.
 --
--- Même forme que les dépôts git (064), les bases (068) et l'audience (076): le
--- livre de comptes appartient à l'**espace**, pas à un projet, et vit donc à
--- l'étage **ouvert** du chiffrement. Corollaire pratique voulu: la feature
--- s'ouvre sans jamais demander de mot de passe, et tout membre d'un espace
--- partagé lit les comptes de la structure sans dépendre de la session de son
--- propriétaire, ce qui est la condition pour qu'une PME s'en serve à plusieurs.
+-- Un solde est un `SUM(...) GROUP BY`: les nombres, les dates et les
+-- rattachements restent en clair, seul le texte libre part dans `content`.
 --
--- ## Pourquoi si peu de colonnes sont chiffrées
+-- Les montants sont des entiers de centimes (`BIGINT`, jamais `DECIMAL` ni
+-- `FLOAT`): l'addition est exacte par construction.
 --
--- Un solde, un budget et une répartition par catégorie sont des `SUM(...)
--- GROUP BY`. Le chiffrement étant non déterministe, rien de ce sur quoi on
--- agrège ne peut le traverser: les **nombres, les dates et les rattachements**
--- restent donc en clair, et seul le **texte libre** part dans `content`
--- (intitulé, tiers, note, nom de compte, nom de catégorie). C'est exactement
--- l'arbitrage de `audience_labels`, et l'alternative serait de télécharger
--- l'intégralité du journal dans le navigateur pour afficher un solde.
+-- Les dates sont des `DATE`, pas des epoch: une opération appartient à un jour
+-- civil, un epoch changerait de mois comptable selon le fuseau. Le dépôt
+-- projette ces colonnes par `DATE_FORMAT(..., '%Y-%m-%d')`, sinon le pilote
+-- rendrait un `Date` recalé sur le fuseau du serveur Node.
 --
--- ## Les montants sont des entiers de centimes
---
--- `BIGINT`, jamais `DECIMAL` ni `FLOAT`. Les centimes en entier rendent
--- l'addition exacte par construction, et `BIGINT` couvre 92 millions de
--- milliards de centimes, ce qui laisse de la marge.
---
--- ## Les dates sont des jours, pas des instants
---
--- `DATE` et non `BIGINT` epoch, contrairement au reste du schéma, et c'est
--- délibéré: une opération appartient à un jour civil. Un epoch se décale d'un
--- fuseau à l'autre et ferait basculer une dépense du 31 janvier au 1er février
--- selon qui la regarde, donc changerait de mois comptable. Le dépôt projette
--- toujours ces colonnes par `DATE_FORMAT(..., '%Y-%m-%d')`, parce que le pilote
--- rendrait sinon un objet `Date` recalé sur le fuseau du serveur Node.
---
--- ⚠️ Les noms de contraintes sont uniques **par schéma** et non par table, d'où
--- le préfixe `fk_fin_` sur toutes celles d'ici.
+-- Les noms de contraintes sont uniques par schéma, d'où le préfixe `fk_fin_`.
 
 -- Réglages de la feature, une ligne par espace. Créée à la demande par le
 -- serveur (`ensureConfig`) plutôt qu'ici: une insertion pour chaque espace
 -- existant poserait une ligne à des espaces qui n'ouvriront jamais la feature.
 CREATE TABLE IF NOT EXISTS finance_config (
     workspace_id INT         NOT NULL PRIMARY KEY,
-    -- Code ISO 4217. Une seule devise par espace: le multidevise n'est pas un
-    -- champ de plus mais un taux de change daté par opération, sans quoi tout
-    -- total additionnerait des euros et des dollars.
+    -- Code ISO 4217. Une seule devise par espace: le multidevise demanderait un
+    -- taux de change daté par opération.
     currency     CHAR(3)     NOT NULL DEFAULT 'EUR',
     -- Mode entreprise: fait apparaître la TVA sur les opérations et son
     -- récapitulatif sur le tableau de bord. Le seul commutateur entre l'usage
@@ -112,8 +91,7 @@ CREATE TABLE IF NOT EXISTS finance_recurring (
     -- 'weekly' | 'monthly' | 'quarterly' | 'yearly'
     frequency           VARCHAR(16)  NOT NULL DEFAULT 'monthly',
     -- « Tous les N » de la cadence. `interval` est un mot réservé de MySQL,
-    -- d'où le suffixe: le contourner à coups de guillemets obliques dans
-    -- chaque requête reviendrait à confier la correction à la vigilance.
+    -- d'où le suffixe.
     interval_count      INT          NOT NULL DEFAULT 1,
     next_date           DATE         NOT NULL,
     -- Jour du mois de la série (1 à 31), NULL pour une cadence hebdomadaire.
@@ -148,11 +126,9 @@ CREATE TABLE IF NOT EXISTS finance_transactions (
     id                  INT AUTO_INCREMENT PRIMARY KEY,
     workspace_id        INT          NOT NULL,
     account_id          INT          NOT NULL,
-    -- Un virement est **une** ligne et non deux: elle porte son compte de
-    -- départ (`account_id`) et son compte d'arrivée, et les deux soldes en
-    -- tiennent compte. Une paire de lignes devrait rester cohérente à chaque
-    -- modification, et une paire à moitié supprimée ferait apparaître de
-    -- l'argent.
+    -- Un virement est une ligne et non deux: elle porte son compte de départ
+    -- (`account_id`) et son compte d'arrivée. Une paire à moitié supprimée
+    -- ferait apparaître de l'argent.
     transfer_account_id INT          NULL,
     category_id         INT          NULL,
     -- L'échéance qui l'a engendrée. NULL pour une saisie à la main.
@@ -200,8 +176,7 @@ CREATE TABLE IF NOT EXISTS finance_budgets (
     -- 'monthly' | 'quarterly' | 'yearly'
     period       VARCHAR(16)  NOT NULL DEFAULT 'monthly',
     created      BIGINT       NOT NULL DEFAULT (UNIX_TIMESTAMP()),
-    -- Une seule enveloppe par catégorie: deux n'auraient aucun sens et il
-    -- faudrait ensuite les départager. C'est ce qui rend `budgetSet` possible
+    -- Une seule enveloppe par catégorie: c'est ce qui rend `budgetSet` possible
     -- (pose ou remplace) plutôt qu'un couple ajout / modification.
     UNIQUE KEY uniq_finance_budget_category (category_id),
     KEY idx_finance_budgets_ws (workspace_id),

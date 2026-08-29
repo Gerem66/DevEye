@@ -4,38 +4,18 @@ import { SENTINEL_RULES, type EvidenceItem, type FindingSeverity, type SentinelR
 import type { BaselineRow, FindingDraft } from './repo';
 
 /**
- * Le catalogue de règles de Sentinelle.
+ * Le catalogue de règles. Tout ici est pur : aucune règle ne lit la base,
+ * n'écrit, ni ne regarde l'horloge autrement qu'à travers le `now` qu'on lui
+ * passe, ce qui les rend vérifiables sans base ni agent. Une règle rend un
+ * `FindingDraft`, jamais un effet : c'est le moteur qui décide d'ouvrir,
+ * d'incrémenter ou de notifier.
  *
- * **Tout ici est une fonction pure.** Aucune règle ne lit la base, n'écrit nulle
- * part, ni ne regarde l'horloge autrement qu'à travers le `now` qu'on lui passe.
- * C'est cette pureté qui rend les règles vérifiables sans base ni agent : on
- * leur fabrique un instant, on regarde ce qu'elles rendent (voir
- * `rules.test.ts`, les trente et une vérifications de l'ancien
- * `scripts/check-rules.ts`, désormais un test du module).
- *
- * ## Ce que ce module expose
- *
- * `evaluateSnapshot` pour l'instant, `persistenceRules` et `authRules` pour les
- * deux relevés qui ont leur propre cadence, plus les clés d'éléments. Les règles
- * qu'`evaluateSnapshot` compose ne sortent pas : ce sont des détails de
- * composition, et les exposer aurait invité à les appeler dans le désordre, or
- * l'ordre et le regroupement font partie de ce que le moteur attend.
- *
- * ## Ce qu'une règle rend
- *
- * Un `FindingDraft`, jamais un effet. C'est le moteur qui décide s'il faut
- * ouvrir, incrémenter ou notifier, une règle qui saurait cela devrait connaître
- * l'état précédent, et deviendrait intestable.
- *
- * ## La discipline du silence
- *
- * Une règle dont la sonde n'a rien dit **ne rend rien**. Elle ne rend surtout
- * pas un constat rassurant : `null` veut dire « je n'ai pas pu regarder », et le
- * confondre avec « tout va bien » est la façon la plus sûre de donner une
- * fausse assurance (invariant 6 de Monitoring).
+ * Une règle dont la sonde n'a rien dit ne rend rien, surtout pas un constat
+ * rassurant : `null` veut dire « je n'ai pas pu regarder », et le confondre avec
+ * « tout va bien » donne une assurance que rien ne soutient.
  */
 
-/** Ce qu'une règle produit (voir `FindingDraft` du dépôt). Le moteur y ajoute l'appareil et la date. */
+/** Ce qu'une règle produit ; le moteur y ajoute l'appareil et la date. */
 export type { FindingDraft };
 
 /** L'instant sur lequel les règles d'instant travaillent. */
@@ -83,40 +63,29 @@ function ev(label: string, value: string | number | null | undefined): EvidenceI
     return { label, value: value === null || value === undefined ? ',' : String(value).slice(0, 512) };
 }
 
-// ─────────────────────────────── clés d'éléments ─────────────────────────────
-
 /**
- * La clé d'un programme : `nom|chemin`.
- *
- * Le chemin fait partie de la clé, et c'est le point. Agréger sur le seul nom
- * fusionnait deux binaires homonymes rangés à des endroits différents, exactement
- * ce derrière quoi un imposteur se cache. Un agent trop ancien ne renvoie pas de
- * chemin : la clé retombe alors sur le nom seul, et les règles qui dépendent du
- * chemin (`exec.*`) restent muettes plutôt que de conclure sur du vide.
+ * La clé d'un programme : `nom|chemin`. Agréger sur le seul nom fusionnerait deux
+ * binaires homonymes rangés à des endroits différents, exactement ce derrière
+ * quoi un imposteur se cache. Sans chemin (agent trop ancien), la clé retombe sur
+ * le nom seul et les règles `exec.*` restent muettes.
  */
 export function processKey(p: ReportProcess): string {
     return p.execPath ? `${p.name}|${p.execPath}` : p.name;
 }
 
 /**
- * La clé d'une écoute : `proto/adresse:port`.
- *
- * L'adresse de bind fait partie de la clé parce qu'elle porte l'exposition :
- * `127.0.0.1:8080` et `0.0.0.0:8080` sont deux faits différents, et passer de
- * l'un à l'autre est précisément l'événement qu'on veut voir.
+ * La clé d'une écoute : `proto/adresse:port`. L'adresse de bind en fait partie
+ * parce qu'elle porte l'exposition : passer de `127.0.0.1:8080` à `0.0.0.0:8080`
+ * est précisément l'événement qu'on veut voir.
  */
 export function listenerKey(proto: string, address: string, port: number): string {
     return `${proto}/${address}:${port}`;
 }
 
-// ──────────────────────────────── heuristiques ───────────────────────────────
-
 /**
- * Répertoires où rien ne devrait jamais s'exécuter.
- *
- * Ce sont les points de chute d'un dropper : accessibles en écriture à tous,
- * souvent montés sans `noexec`, et vidés au redémarrage, ce qui en fait aussi
- * un endroit commode pour ne pas laisser de trace.
+ * Répertoires où rien ne devrait jamais s'exécuter : les points de chute d'un
+ * dropper, accessibles en écriture à tous, souvent sans `noexec`, et vidés au
+ * redémarrage donc sans trace.
  */
 const SUSPICIOUS_EXEC_PREFIXES = [
     '/tmp/',
@@ -132,22 +101,17 @@ const SUSPICIOUS_EXEC_PREFIXES = [
 const SUSPICIOUS_EXEC_FRAGMENTS = ['/.cache/', '/.local/share/Trash/', '/Downloads/'];
 
 /**
- * Ports de pools de minage.
- *
- * Liste courte et assumée : ce sont les ports par défaut des pools les plus
- * répandus. Un mineur peut évidemment en choisir un autre, cette règle attrape
- * le cas paresseux, qui est de très loin le plus fréquent, et `process.new`
- * plus `process.resource_anomaly` couvrent le reste.
+ * Ports de pools de minage. Liste courte et assumée : les ports par défaut des
+ * pools répandus attrapent le cas paresseux, de loin le plus fréquent, et
+ * `process.new` plus `process.resource_anomaly` couvrent le reste.
  */
 const MINING_POOL_PORTS = new Set([3333, 4444, 5555, 7777, 8888, 9000, 14444, 45700]);
 
 /**
- * Interpréteurs et outils réseau qui n'ont normalement rien à faire avec une
- * connexion sortante établie.
- *
- * Un `bash` qui maintient une socket vers l'extérieur est la forme même d'un
- * shell inversé. Les scripts d'administration légitimes existent, d'où
- * l'acquittement, mais le défaut est de le signaler.
+ * Interpréteurs et outils réseau qui n'ont rien à faire avec une connexion
+ * sortante établie : un `bash` qui maintient une socket vers l'extérieur est la
+ * forme même d'un shell inversé. Les scripts d'administration légitimes existent,
+ * d'où l'acquittement, mais le défaut est de le signaler.
  */
 const SHELL_NAMES = new Set([
     'sh',
@@ -194,8 +158,6 @@ function isSuspiciousPath(path: string): boolean {
 export function isWorldBound(address: string): boolean {
     return address === '0.0.0.0' || address === '::' || address === '*';
 }
-
-// ────────────────────────────── règles d'instant ─────────────────────────────
 
 /**
  * Ce qu'un processus révèle de lui-même, indépendamment de son passé.
@@ -293,16 +255,10 @@ function netRules(ctx: EvalContext): FindingDraft[] {
 }
 
 /**
- * Les connexions établies, telles que le rapport les porte.
- *
- * Elles vivent dans le rapport et pas dans l'instant : c'est lui qui porte le
- * détail derrière le simple compteur `activeConnections`. La règle est donc
- * rangée avec les autres règles de rapport, à la cadence du rapport, la
- * rejouer à chaque instant la re-constatait toutes les soixante secondes sur
- * une liste de connexions inchangée.
- *
- * L'instant reste utile quand il y en a un : il date le constat, et c'est lui
- * qu'épingle `setInstantsPinned` pour une règle de cette gravité.
+ * Les connexions établies vivent dans le rapport, pas dans l'instant : la règle
+ * est donc rangée avec les règles de rapport et suit sa cadence, la rejouer à
+ * chaque instant la re-constaterait sur une liste inchangée. L'instant, quand il
+ * y en a un, sert seulement à dater le constat.
  */
 function connectionRules(ctx: EvalContext): FindingDraft[] {
     const ts = ctx.snapshot?.ts ?? null;
@@ -325,11 +281,9 @@ function connectionRules(ctx: EvalContext): FindingDraft[] {
 }
 
 /**
- * Les ports en écoute, confrontés à ce qu'on connaît.
- *
- * `port.unattributed` est la seule des deux à ne pas dépendre de la ligne de
- * base : une écoute sans propriétaire est anormale en soi. Encore faut-il que
- * l'agent ait eu les droits de chercher, sans privilèges, l'absence de `pid`
+ * Les ports en écoute, confrontés à ce qu'on connaît. `port.unattributed` ne
+ * dépend pas de la ligne de base, une écoute sans propriétaire étant anormale en
+ * soi, mais elle exige un agent privilégié : sans privilèges, l'absence de `pid`
  * est la normale et n'apprend rien.
  */
 function listenerRules(ctx: EvalContext): FindingDraft[] {
@@ -380,10 +334,8 @@ function listenerRules(ctx: EvalContext): FindingDraft[] {
 
 /**
  * La dérive des programmes : ce qui est nouveau, ce qui a changé de compte, ce
- * qui s'est mis à écouter, ce qui consomme hors de son habitude.
- *
- * Entièrement muette pendant l'apprentissage, c'est là toute la différence
- * entre un détecteur utilisable et une liste de trois cents lignes le jour 1.
+ * qui s'est mis à écouter, ce qui consomme hors de son habitude. Muette pendant
+ * l'apprentissage, sans quoi le jour 1 rendrait trois cents lignes.
  */
 function processRules(ctx: EvalContext): FindingDraft[] {
     if (ctx.learning || !ctx.snapshot) return [];
@@ -454,9 +406,8 @@ function processRules(ctx: EvalContext): FindingDraft[] {
             );
         }
 
-        // Le seuil demande une enveloppe **et** un historique : une p95 tirée de
-        // trois instants ne veut rien dire, et se déclencherait sur le premier
-        // pic normal.
+        // Le seuil demande une enveloppe et un historique : une p95 tirée de trois
+        // instants se déclencherait sur le premier pic normal.
         if (attrs.cpuP95 !== null && known.samples >= 60 && p.cpuPercent > attrs.cpuP95 * 3 && p.cpuPercent > 20) {
             out.push(
                 draft(
@@ -475,9 +426,9 @@ function processRules(ctx: EvalContext): FindingDraft[] {
     }
 
     if (ctx.snapshot.activeConnections !== null) {
-        // Pas d'enveloppe par appareil pour les connexions : le seuil est
-        // volontairement grossier et absolu, parce que la p99 d'une machine au
-        // repos est si basse qu'un multiplicateur la ferait sonner pour rien.
+        // Pas d'enveloppe par appareil pour les connexions : la p99 d'une machine au
+        // repos est si basse qu'un multiplicateur la ferait sonner pour rien, le
+        // seuil est donc absolu.
         const spike = ctx.snapshot.activeConnections;
         if (spike > 500) {
             out.push(
@@ -494,15 +445,10 @@ function processRules(ctx: EvalContext): FindingDraft[] {
     return out;
 }
 
-// ─────────────────────────────── règles de posture ───────────────────────────
-
 /**
- * La posture, transformée en constats.
- *
- * Un contrôle dont la sonde rend `null` **ne produit rien** : ni constat, ni
- * assurance. C'est ce qui distingue « le pare-feu est éteint » de « je n'ai pas
- * pu savoir si le pare-feu est allumé », deux phrases qu'un tableau de bord ne
- * doit jamais confondre.
+ * La posture, transformée en constats. Un contrôle dont la sonde rend `null` ne
+ * produit rien, ni constat ni assurance : « le pare-feu est éteint » et « je n'ai
+ * pas pu savoir » sont deux phrases qu'un tableau de bord ne confond jamais.
  */
 function postureRules(ctx: EvalContext): FindingDraft[] {
     const security = ctx.report?.security;
@@ -574,9 +520,8 @@ function postureRules(ctx: EvalContext): FindingDraft[] {
         );
     }
 
-    // Les correctifs de sécurité : c'est leur **ancienneté** qui fait le signal,
-    // pas leur nombre. Douze correctifs appliqués dans la journée ne disent rien ;
-    // un seul qui attend depuis trois semaines dit tout.
+    // Pour les correctifs de sécurité, c'est l'ancienneté qui fait le signal, pas
+    // le nombre : un seul qui attend depuis trois semaines dit tout.
     const pending = security.pendingSecurityUpdates;
     if (pending !== null && pending > 0) {
         const checkedAt = security.updatesCheckedAt;
@@ -598,15 +543,11 @@ function postureRules(ctx: EvalContext): FindingDraft[] {
     return out;
 }
 
-// ───────────────────────── règles de persistance & auth ──────────────────────
-
 /**
- * Le diff du manifeste de persistance contre ce qu'on connaît.
- *
- * `truncated` coupe les suppressions, et c'est important : un manifeste tronqué
- * ne prouve pas qu'une entrée a disparu, seulement qu'on a cessé de regarder.
- * Émettre `persistence.removed` dans ce cas produirait des centaines de faux
- * constats le jour où une machine dépasse le plafond.
+ * Le diff du manifeste de persistance contre ce qu'on connaît. `truncated` coupe
+ * les suppressions : un manifeste tronqué ne prouve pas qu'une entrée a disparu,
+ * seulement qu'on a cessé de regarder, et `persistence.removed` produirait alors
+ * des centaines de faux constats.
  */
 export function persistenceRules(ctx: EvalContext, entries: PersistenceEntry[], truncated: boolean): FindingDraft[] {
     if (ctx.learning) return [];
@@ -679,22 +620,20 @@ export function persistenceRules(ctx: EvalContext, entries: PersistenceEntry[], 
 const BRUTEFORCE_THRESHOLD = 10;
 
 /**
- * Combien d'échecs, depuis une adresse, rendent une réussite ultérieure
- * suspecte. Volontairement plus bas que le seuil de tentatives répétées : ce
- * n'est pas le volume qui compte ici, c'est l'enchaînement.
+ * Combien d'échecs, depuis une adresse, rendent une réussite ultérieure suspecte.
+ * Plus bas que le seuil de tentatives répétées : ici, c'est l'enchaînement qui
+ * compte, pas le volume.
  */
 const SUCCESS_AFTER_FAILURES_THRESHOLD = 5;
 
 /**
- * Les issues d'authentification.
- *
- * Actives sans ligne de base : une création de compte ou une réussite après
- * échecs n'a pas besoin d'habitude pour être anormale. `unavailable` coupe tout ,
- * une machine dont on n'a pas pu lire le journal n'est pas une machine tranquille.
+ * Les issues d'authentification, actives sans ligne de base : une création de
+ * compte ou une réussite après échecs n'a pas besoin d'habitude pour être
+ * anormale. `unavailable` coupe tout, une machine dont on n'a pas pu lire le
+ * journal n'étant pas une machine tranquille.
  */
 // `_ctx` : cette règle n'a besoin ni de la ligne de base ni du rapport, mais
-// garde la signature commune du catalogue, toute règle s'appelle de la même
-// façon, et celle-ci pourra s'en servir sans changer ses appelants.
+// garde la signature commune du catalogue.
 export function authRules(_ctx: EvalContext, auth: AuthWindow): FindingDraft[] {
     if (auth.unavailable) return [];
     const out: FindingDraft[] = [];
@@ -767,30 +706,18 @@ export function authRules(_ctx: EvalContext, auth: AuthWindow): FindingDraft[] {
 }
 
 /**
- * Les règles d'un instant, dans l'ordre où on veut les lire.
- *
- * Persistance et authentification n'y sont pas : elles arrivent sur leurs
- * propres relevés, à leur propre cadence, et les rejouer à chaque instant
- * ferait remonter des constats sur des données inchangées.
- *
- * **Posture et ports non plus, pour exactement la même raison.** Ils ne lisent
- * que `ctx.report`, qui n'arrive qu'au rapport horaire ; les rejouer à chaque
- * lot de métriques réécrivait `last_seen` et incrémentait `occurrences` toutes
- * les soixante secondes sans qu'aucune mesure n'ait eu lieu. L'interface
- * annonçait « constaté il y a 5 min » pour un fait relevé jusqu'à une heure
- * plus tôt, et « constaté 1206 fois » comptait des tours de moteur. Voir
- * `evaluateReport`.
+ * Les règles d'un instant, dans l'ordre où on veut les lire. Persistance,
+ * authentification, posture et ports n'y sont pas : ils arrivent sur leurs
+ * propres relevés, et les rejouer à chaque lot de métriques réécrirait `last_seen`
+ * et incrémenterait `occurrences` sans qu'aucune mesure n'ait eu lieu.
  */
 export function evaluateSnapshot(ctx: EvalContext): FindingDraft[] {
     return [...execRules(ctx), ...netRules(ctx), ...processRules(ctx)];
 }
 
 /**
- * Les règles nourries par le rapport, à rejouer seulement quand il en arrive un.
- *
- * `connectionRules` lit `ctx.report.connections`, `listenerRules`
- * `ctx.report.openPorts` et `postureRules` `ctx.report.security` : aucune ne
- * regarde l'instant autrement que pour dater son constat.
+ * Les règles nourries par le rapport, à rejouer seulement quand il en arrive un :
+ * aucune ne regarde l'instant autrement que pour dater son constat.
  */
 export function evaluateReport(ctx: EvalContext): FindingDraft[] {
     return [...connectionRules(ctx), ...listenerRules(ctx), ...postureRules(ctx)];

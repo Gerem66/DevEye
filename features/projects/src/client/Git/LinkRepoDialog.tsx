@@ -15,23 +15,13 @@ interface LinkRepoDialogProps {
 }
 
 /**
- * Ajouter un dépôt au projet : en choisir un de l'espace, ou en créer un.
+ * Ajouter un dépôt au projet : en choisir un de l'espace, ou en créer un. La
+ * création ouvre le dialogue de la feature (`RepoDialog`, par le contrat client
+ * de Git) plutôt qu'une copie réduite, qui divergerait au premier réglage
+ * ajouté ; module absent, rien n'est proposé.
  *
- * **La création passe par le vrai dialogue de la feature** (`RepoDialog`, lu
- * par le contrat client du module Git), pas par une copie réduite : même parti
- * pris que `LinkDatabaseDialog` et `LinkTargetDialog`. Un dépôt se désigne par
- * un jeton, un propriétaire et un nom qu'il faut aller lire chez le
- * fournisseur ; en réécrire un formulaire ici garantirait qu'il diverge au
- * premier réglage ajouté. Ce dialogue-ci ne fait que l'ouvrir, puis relier ce
- * qu'il a créé. Module absent, le dialogue le dit et ne propose rien.
- *
- * `git.repoAdd` étant idempotente sur `owner/repo`, saisir par mégarde un dépôt
- * déjà présent le retrouve au lieu de le dupliquer. Un dépôt né dans un projet
- * n'est pas un dépôt de seconde classe : il rejoint la feature Git comme
- * n'importe quel autre.
- *
- * Rien n'est exclusif : un dépôt déjà utilisé par un autre projet peut être
- * choisi ici sans lui être retiré.
+ * `git.repoAdd` étant idempotente sur `owner/repo`, ressaisir un dépôt présent
+ * le retrouve au lieu de le dupliquer. Rien n'est exclusif.
  */
 export function LinkRepoDialog({ open, projectId, linkedRepoIds, onClose, onSaved }: LinkRepoDialogProps) {
     const provider = moduleClientProvider<GitClientProvider>(GIT_CLIENT_PROVIDER);

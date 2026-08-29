@@ -2,7 +2,6 @@ import type { Queryable } from '../pool';
 
 type Q = Queryable;
 
-/** Ligne de `feature_kv` (voir la migration 095). */
 export interface FeatureKvRow {
     workspace_id: number;
     feature: string;

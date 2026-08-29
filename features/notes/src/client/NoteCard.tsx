@@ -6,10 +6,6 @@ import { stripInline } from './markdown';
 import type { NoteFolder, NoteSummary } from '../contracts/domain';
 import { StatusBadge, useLiveOutline } from 'deveye-sdk-client';
 
-/**
- * Compact "last modified" label for a card corner: a short numeric date, or the
- * full date+time when `full` is set (used for the hover title).
- */
 function formatCardDate(time: number, full = false): string {
     return new Date(time * 1000).toLocaleDateString(
         'fr-FR',
@@ -31,24 +27,17 @@ interface NoteCardProps {
 }
 
 /**
- * A single note preview. A `masked` note (private, session still locked) shows
- * only a large padlock (no title or body ever reached the client); clicking it
- * opens the master-password prompt.
- *
- * Cards are drag sources only: the surrounding {@link NoteGrid} owns the drop
- * side, so a card is never restyled or displaced while a drag is in flight.
- * Masked cards drag too: positioning never touches the body. The discreet folder
- * menu stays for long-distance moves (it appends to the target folder); at rest
- * its button is collapsed so the badges sit flush against the right edge.
- *
- * Une note **projetée** depuis un autre espace n'a ni le menu ni le glisser :
- * son dossier et son rang sont ceux de son domicile, et le serveur refuse de
- * la classer d'ici. Elle porte la pastille « partagée » à la place.
+ * A `masked` note (private, session still locked) shows only a padlock: no title
+ * or body ever reached the client. Cards are drag sources only, the surrounding
+ * {@link NoteGrid} owns the drop side; masked ones drag too, since positioning
+ * never touches the body. Une note projetée depuis un autre espace n'a ni le menu
+ * ni le glisser : son rang est celui de son domicile, et le serveur refuse de la
+ * classer d'ici.
  */
 export default function NoteCard({ note, folders, draggable, onOpen, onMove, onDragStart, onDragEnd }: NoteCardProps) {
     const [menuOpen, setMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement | null>(null);
-    // Quelqu'un édite cette note : sa couleur sur la carte.
+    // La couleur de qui édite la note en ce moment.
     const outline = useLiveOutline('l1', String(note.id));
 
     useEffect(() => {
@@ -62,8 +51,6 @@ export default function NoteCard({ note, folders, draggable, onOpen, onMove, onD
 
     // Shared by both renderings so a masked card drags exactly like a readable
     // one; `data-note-card` is how the grid locates the cards to measure.
-    // La bordure de présence y est aussi : les deux rendus la portent alors sans
-    // avoir à la répéter.
     const dnd = {
         draggable,
         'data-note-card': '',
@@ -116,10 +103,6 @@ export default function NoteCard({ note, folders, draggable, onOpen, onMove, onD
             <div className={styles.cardHead}>
                 <h4 className={styles.cardTitle}>{note.title || 'Sans titre'}</h4>
                 <span className={styles.cardBadges}>
-                    {/* Projetée depuis un autre espace : elle se lit et se modifie
-                        comme les autres, mais ne se classe ni ne se détruit d'ici.
-                        Sans cette pastille, rien ne distingue une ligne locale
-                        d'une fenêtre sur l'espace voisin. */}
                     {note.foreign && (
                         <span title='Cette note appartient à un autre espace qui la partage ici'>
                             <StatusBadge tone='accent'>partagée</StatusBadge>

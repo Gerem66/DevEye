@@ -26,15 +26,9 @@ import {
 } from '../_shared';
 
 /**
- * Les échéances: les opérations qui reviennent.
- *
- * Elles n'ont **aucune tâche de fond** derrière elles. Ce qui les fait exister
- * est `postDueRecurring`, appelé en tête de chaque lecture de la feature: la
- * première lecture qui suit la date écrit ce qui manque. Les raisons de ce choix
- * sont dans `_shared.ts`, à côté du code qui l'applique.
- *
- * Ce fichier ne porte donc que les gestes explicites: régler une échéance,
- * l'écrire tout de suite, ou passer une occurrence.
+ * Les échéances. Aucune tâche de fond : `postDueRecurring` (voir `_shared.ts`)
+ * écrit ce qui manque en tête de chaque lecture. Ici, seulement les gestes
+ * explicites.
  */
 
 /** Charge une échéance de l'espace, ou lève `not_found`. */
@@ -119,9 +113,7 @@ export const financeRecurringUpdateFeature = defineSdkFeature({
             frequency: draft.frequency,
             interval: draft.interval,
             nextDate: draft.nextDate,
-            // Recalculé depuis la date affichée: si l'on déplace une échéance au
-            // 15, c'est le 15 qui devient l'ancre, sans quoi elle repartirait au
-            // jour d'origine à la période suivante.
+            // Recalculé depuis la date affichée : déplacer une échéance au 15 fait du 15 l'ancre.
             anchorDay: anchorDayOf(draft.frequency, draft.nextDate),
             endDate: draft.endDate,
             automatic: draft.automatic,
@@ -152,12 +144,8 @@ export const financeRecurringRemoveFeature = defineSdkFeature({
 });
 
 /**
- * Écrit l'occurrence attendue maintenant, puis avance la date.
- *
- * C'est le clic que réclame une échéance non automatique. `amount` permet de
- * corriger au passage le montant d'une facture qui varie: c'est précisément ce
- * pour quoi une échéance est déclarée manuelle, et l'obliger à passer par la
- * modification du modèle changerait aussi toutes les occurrences suivantes.
+ * Le clic d'une échéance manuelle. `amount` corrige au passage une facture qui
+ * varie sans toucher au modèle.
  */
 export const financeRecurringPostFeature = defineSdkFeature({
     ...financeRecurringPost,

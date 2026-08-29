@@ -7,10 +7,9 @@ import type { SdkQueryable } from '@deveye/types/sdk/server';
 const gunzipAsync = promisify(gunzip);
 
 /**
- * Don't return a process sample further than this from the requested instant.
- * Metric rows and process samples share the exact same `ts` (both come from
- * one agent tick), so this only absorbs the case where the requested instant
- * falls between two stored ones: a couple of cadences is plenty.
+ * Don't return a process sample further than this from the requested instant:
+ * metric rows and process samples share the same `ts`, so this only absorbs an
+ * instant falling between two stored ones.
  */
 const NEAREST_TOLERANCE_MS = 5 * 60 * 1000;
 
@@ -34,10 +33,8 @@ export interface SnapshotStorage {
 }
 
 /**
- * La table `device_process_samples`, en lecture et en entretien : la liste de
- * processus la plus proche d'un instant, les instants qui en portent une,
- * l'empreinte de stockage, les suppressions et les purges. L'insertion (le
- * blob gzip, mesuré à l'écriture) est le fait de l'ingestion, hors session.
+ * La table `device_process_samples`, en lecture et en entretien. L'insertion
+ * (le blob gzip, mesuré à l'écriture) est le fait de l'ingestion, hors session.
  */
 export interface ProcessSampleRepo {
     /** The process list captured nearest `at` (within tolerance), else null. */
@@ -91,8 +88,8 @@ export function processSampleRepo(q: SdkQueryable): ProcessSampleRepo {
             );
             const row = rows[0];
             if (!row) return null;
-            // A blob that fails to inflate or parse is corrupt storage, not a
-            // client error: report "no sample" rather than breaking the panel.
+            // A blob that fails to inflate or parse is corrupt storage: report
+            // "no sample" rather than breaking the panel.
             let processes: ReportProcess[];
             try {
                 const json = (await gunzipAsync(row.payload)).toString('utf8');
@@ -103,9 +100,8 @@ export function processSampleRepo(q: SdkQueryable): ProcessSampleRepo {
             return { ts, kind: row.kind, processes };
         },
         async snapshotTimes(deviceId, from, to) {
-            // Même plafond et même sens que `metrics.instantTimes`, pour que les
-            // deux sources fusionnent sans qu'un côté ait à gérer une autre
-            // borne : les plus récents d'abord, remis dans l'ordre ensuite.
+            // Même plafond et même sens que `metrics.instantTimes` : les plus
+            // récents d'abord, remis dans l'ordre ensuite.
             const rows = await q.query<{ ts: number; pinned: number }>(
                 `SELECT ts, pinned FROM device_process_samples
                  WHERE device_id = ? AND ts BETWEEN ? AND ?
@@ -157,9 +153,7 @@ export function processSampleRepo(q: SdkQueryable): ProcessSampleRepo {
         },
         async pruneByRetention(defaultDays) {
             // Même échéance que les métriques et la présence : un relevé est un
-            // instant, et les faire expirer séparément ne produisait que des
-            // instants à moitié lisibles. Les lignes épinglées survivent quel
-            // que soit leur âge.
+            // instant. Les lignes épinglées survivent quel que soit leur âge.
             const r = await q.execute(
                 `DELETE s FROM device_process_samples s
                  JOIN devices d ON d.id = s.device_id

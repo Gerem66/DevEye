@@ -57,23 +57,9 @@ interface Draft {
 }
 
 /**
- * La saisie d'une opération.
- *
- * ## Le montant est toujours positif
- *
- * Le sens vient du sélecteur en tête (dépense, recette, virement) et jamais du
- * signe: un montant signé laisserait exister « une dépense de -30 € », qui est
- * une recette écrite de travers, et chaque écran devrait ensuite se demander ce
- * qu'il regarde. Changer de nature reconfigure donc le formulaire, et pas
- * seulement une étiquette.
- *
- * ## La TVA se saisit par son taux, mais se stocke en montant
- *
- * Les boutons de taux ne font que **calculer** la part de TVA d'un montant TTC.
- * C'est cette part qui part au serveur, jamais le taux: garder les deux
- * ouvrirait la porte à un couple incohérent que rien ne pourrait ensuite
- * départager, et un taux exotique (un import, un DOM) resterait saisissable en
- * modifiant le montant à la main.
+ * La saisie d'une opération. Le montant est toujours positif : le sens vient
+ * du sélecteur, pas du signe. La TVA se saisit par son taux mais se stocke en
+ * montant : garder les deux ouvrirait un couple incohérent.
  */
 export function TransactionDialog({
     base,
@@ -313,9 +299,7 @@ export function TransactionDialog({
                             </SelectInput>
                             {categories.length === 0 && (
                                 <>
-                                    {/* La fiche choisit, les réglages gèrent : sans
-                                        catégorie à choisir, le bouton commun mène au
-                                        panneau Catégories (patron des sources). */}
+                                    {/* Sans catégorie à choisir, le bouton mène au panneau Catégories. */}
                                     <span className={styles.fieldHint}>
                                         Aucune catégorie de {draft.kind === 'income' ? 'recettes' : 'dépenses'}: elles
                                         se créent dans les réglages.

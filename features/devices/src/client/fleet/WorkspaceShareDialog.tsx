@@ -15,14 +15,10 @@ interface WorkspaceShareDialogProps {
 }
 
 /**
- * Quels espaces ont accès à un appareil.
- *
- * Un interrupteur par espace partagé. L'espace d'**appairage** y figure activé
- * et verrouillé : c'est lui qui porte l'unicité de l'empreinte de la machine et
- * son ré-enrôlement, le retirer laisserait un appareil dont plus personne ne
- * répond de l'origine. Les espaces personnels des autres comptes ne sont pas
- * proposés — y ranger la machine d'un tiers n'aurait pas de sens, et l'accueil
- * personnel d'un administrateur voit déjà toute la flotte sans partage.
+ * Quels espaces ont accès à un appareil : un interrupteur par espace partagé.
+ * L'espace d'appairage y figure activé et verrouillé : il porte l'unicité de
+ * l'empreinte et le ré-enrôlement. Les espaces personnels ne sont pas proposés :
+ * l'accueil personnel d'un administrateur voit déjà toute la flotte.
  */
 export function WorkspaceShareDialog({ open, target, onClose, onSaved }: WorkspaceShareDialogProps) {
     const [rows, setRows] = useState<DeviceShareTarget[]>([]);

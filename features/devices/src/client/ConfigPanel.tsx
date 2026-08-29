@@ -18,9 +18,9 @@ const METRIC_PRESETS = [10, 30, 60, 300]; // seconds
 const RET_PRESETS = [7, 30, 90, 365]; // days
 
 /**
- * Rough daily storage per device at a given cadence, so the cost of a fast
- * cadence is visible *before* saving. Based on the measured size of a gzipped
- * process list (~4.8 KB for ~580 programs); `top` carries ~20 entries instead.
+ * Rough daily storage per device at a given cadence, visible before saving.
+ * Based on the measured size of a gzipped process list (~4.8 KB for ~580
+ * programs); `top` carries ~20 entries.
  */
 function estimateDailyBytes(intervalSec: number, capture: ProcessCapture): number {
     if (capture === 'off') return 0;
@@ -40,18 +40,9 @@ function clamp(v: number, lo: number, hi: number): number {
 
 /**
  * La configuration de collecte d'un appareil : le panneau Général de la
- * coquille de réglages, à l'échelle d'un APPAREIL. Cadence de collecte,
- * capture des processus, conservation de l'historique, et l'estimation de ce
- * que ça coûte en base. Chaque champ numérique est un déroulant de préréglages
- * avec une entrée « Personnalisé… » qui révèle un champ libre.
- *
- * Ce formulaire était un dialogue maison (`ConfigDialog`), enfoui dans le menu
- * « Fonctions » du panneau : la dernière dette de la coquille. Autonome comme
- * tous ses panneaux : il lit l'appareil dans la liste de l'espace (déjà
- * chargée par le panneau qui l'ouvre), se sauvegarde par `devices.setConfig`
- * et relit la liste après, pour que le panneau voie la nouvelle cadence
- * aussitôt. Un appareil archivé ne collecte plus : ses réglages se lisent,
- * ne s'écrivent pas.
+ * coquille de réglages à l'échelle d'un appareil. Autonome : il lit l'appareil
+ * dans la liste de l'espace, se sauvegarde par `devices.setConfig` et relit la
+ * liste après. Un appareil archivé ne collecte plus : lecture seule.
  */
 export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite: boolean }) {
     const { devices, loading } = useDevices();
@@ -68,9 +59,8 @@ export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
 
-    // (Re)initialise from the device once it is known, and again only when the
-    // *selected device* changes: not on every list refresh (which replaces the
-    // object reference and would wipe an in-progress "Personnalisé…" entry).
+    // (Re)initialise only when the selected device changes: a list refresh
+    // replaces the object reference and would wipe an in-progress entry.
     const known = device !== null;
     useEffect(() => {
         if (!device) return;
@@ -95,7 +85,7 @@ export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite
         return Number.isFinite(raw) && raw > 0 ? raw : null;
     };
 
-    // Cadence et conservation retenues, pour l'estimation vivante ci-dessous.
+    // Pour l'estimation vivante.
     const estimateSec = resolve(metricSel, metricCustom) ?? DEFAULT_METRIC_INTERVAL_SECONDS;
     const estimateDays = resolve(retSel, retCustom) ?? DEFAULT_RETENTION_DAYS;
     const dailyBytes = estimateDailyBytes(estimateSec, capture);
@@ -201,12 +191,10 @@ export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite
 }
 
 /**
- * Une ligne du formulaire : libellé à gauche, champ à droite, et une précision
- * facultative sur toute la largeur en dessous.
- *
- * Le complément est un **frère** du champ et non son enfant : posé dedans, il
- * devenait un élément de la rangée flex et se rangeait *à côté* du select au
- * lieu d'en dessous, poussant la ligne hors du cadre.
+ * Une ligne du formulaire : libellé, champ, et une précision facultative sur
+ * toute la largeur en dessous. La précision est un frère du champ, non son
+ * enfant : dedans, elle se rangerait à côté du select et pousserait la ligne
+ * hors du cadre.
  */
 function ConfigRow({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
     return (

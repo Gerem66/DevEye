@@ -9,53 +9,29 @@ import {
 } from '@/stores/live';
 
 /**
- * Déclare le niveau de l'arborescence où se trouve ce composant, **et** reçoit
- * celui qu'une téléportation attend ici.
+ * Déclare le niveau de l'arborescence où se trouve ce composant, et reçoit celui
+ * qu'une téléportation attend ici. Une feature annonce son propre niveau sans
+ * jamais connaître l'arbre entier, et le chemin complet s'assemble tout seul.
  *
- * C'est tout ce qu'une feature a à faire pour entrer dans le moteur de présence :
- * elle annonce son propre niveau, sans jamais connaître l'arbre entier.
- * L'accueil déclare `view`, Mail déclare `account` puis `folder`, et le chemin
- * complet — `view:mail account:12 folder:34` — s'assemble tout seul.
+ * La cible est rendue tant qu'elle n'est pas atteinte, jamais consommée à la
+ * lecture : une feature dont les données n'ont pas chargé la retrouvera au rendu
+ * suivant. `null` en `value` retire le niveau et referme tout ce qui est en
+ * dessous.
  *
- * ```tsx
- * const target = useLiveSegment('l1', selectedId ? String(selectedId) : null);
- * useEffect(() => {
- *     if (!target) return;                       // rien de demandé
- *     const id = target.value === null ? null : Number(target.value);
- *     if (id !== null && !accounts.some((a) => a.id === id)) return;  // pas encore chargé
- *     setSelectedId(id);
- * }, [target, accounts]);
- * ```
- *
- * La cible est rendue **tant qu'elle n'est pas atteinte**, jamais consommée à la
- * lecture : une feature dont les données n'ont pas encore chargé la retrouvera au
- * rendu suivant, sans rien avoir à acquitter.
- *
- * `null` en `value` retire le niveau, et referme du même coup tout ce qui est en
- * dessous : on ne peut pas être dans un dossier sans être dans le compte qui le
- * contient.
- *
- * ## Un seul déclarant par niveau
- *
- * Ce hook doit être appelé **une fois** par `kind`, dans le composant qui détient
- * la sélection — jamais depuis chaque ligne d'une liste. Le registre est une map
- * par `kind` : plusieurs déclarants s'écraseraient, et surtout celui qui se
- * démonte remettrait le niveau à `null` en effaçant ce qu'un autre vient de
- * poser. C'est pourquoi `CloudSync` fait remonter l'ouverture d'un dialogue
- * depuis ses cartes au lieu de laisser chacune déclarer son propre niveau.
- *
- * Pour entourer des lignes, c'est `useLiveOutlines` qu'il faut : il n'écrit rien
- * et se consulte autant de fois qu'on veut.
+ * À appeler une seule fois par `kind`, dans le composant qui détient la
+ * sélection : le registre est une map par `kind`, donc plusieurs déclarants
+ * s'écraseraient, et celui qui se démonte effacerait ce qu'un autre vient de
+ * poser. Pour entourer des lignes, c'est `useLiveOutlines` qu'il faut, qui
+ * n'écrit rien et se consulte autant de fois qu'on veut.
  */
 export function useLiveSegment(kind: LiveSegmentKind, value: string | null): LiveSegmentTarget | null {
-    // Seule la téléportation intéresse ce hook : le lire sur l'état complet
-    // ferait re-rendre toute feature montée à chaque trame de curseur.
+    // Seule la téléportation intéresse ce hook : le lire sur l'état complet ferait
+    // re-rendre toute feature montée à chaque trame de curseur.
     const teleportPath = useTeleportPath();
 
     useEffect(() => {
         setLiveSegment(kind, value);
-        // Au démontage le niveau disparaît : une feature fermée n'est plus un
-        // lieu. Le rétablissement éventuel viendra du composant qui reprend.
+        // Au démontage le niveau disparaît : une feature fermée n'est plus un lieu.
         return () => setLiveSegment(kind, null);
     }, [kind, value]);
 

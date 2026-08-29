@@ -1,12 +1,7 @@
--- Meteo passe au scope espace.
---
--- Deux tables : les lieux, et les cles d'API par fournisseur (singleton compose,
--- dont la cle primaire suit le meme changement que les autres reglages).
---
--- Attention particuliere a `is_primary` : « le lieu principal » etait unique par
--- compte, il devient unique par espace. Sans re-derivation, deux membres d'un
--- meme espace partage y auraient chacun le leur, et l'affichage en choisirait un
--- au hasard.
+-- Meteo passe au scope espace : les lieux, et les cles d'API par fournisseur
+-- (dont la cle primaire suit le meme changement que les autres reglages).
+-- `is_primary` etait unique par compte, il devient unique par espace : sans
+-- re-derivation, deux membres d'un meme espace y auraient chacun le leur.
 
 -- 1. weather_locations.
 SET @c = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS

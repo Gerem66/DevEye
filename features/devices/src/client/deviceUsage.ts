@@ -5,25 +5,13 @@ import { acquireMetrics, isSocketOpen, onServerEvent, onSocketOpen } from 'devey
 import { api } from './api';
 
 /**
- * Dernière mesure connue de chaque tuile d'appareil de l'accueil.
- *
- * **Abonnement, plus sondage.** Ce store interrogeait le serveur toutes les dix
- * secondes, pour une raison qui a cessé d'être vraie : le hub indexe les
- * abonnements par *socket*, donc deux consommateurs du même appareil se
- * désabonnaient l'un l'autre. `acquireMetrics` (le barrel) a été écrit
- * exactement pour ça : il compte les références et n'émet qu'un abonnement par
- * appareil. Les tuiles peuvent donc partager le flux temps réel de Monitoring
- * au lieu de le doubler d'un sondage.
- *
- * Une seule lecture ponctuelle subsiste, à l'acquisition : un appareil silencieux
- * ne pousserait rien avant sa prochaine télémétrie, et la tuile resterait sur
- * « Mesure en cours » alors que des mesures existent.
+ * Dernière mesure connue de chaque tuile d'appareil de l'accueil, par
+ * abonnement partagé (`acquireMetrics` compte les références : un seul
+ * abonnement par appareil). Une seule lecture ponctuelle à l'acquisition : un
+ * appareil silencieux ne pousserait rien avant sa prochaine télémétrie.
  */
 
-/**
- * Fenêtre demandée à l'amorçage ; on n'en garde que le dernier point. Assez
- * large pour qu'une cadence lente (jusqu'à ~10 min) rende quand même un point.
- */
+/** Fenêtre demandée à l'amorçage (on garde le dernier point) : couvre une cadence lente. */
 const WINDOW_MS = 15 * 60 * 1000;
 
 const latest = new Map<string, MetricSeriesPoint | null>();
@@ -49,15 +37,11 @@ async function seed(deviceId: string): Promise<void> {
             resolution: 'raw'
         });
         // Une fenêtre vide ne doit PAS effacer la dernière valeur connue : la
-        // tuile repasserait sur « Mesure en cours » au moindre trou, alors que
-        // de vraies mesures existent. Seul un point plus récent remplace.
+        // tuile repasserait sur « Mesure en cours » au moindre trou.
         if (res.points.length === 0) return;
         const last = res.points[res.points.length - 1];
-        // Comparé sur l'horodatage et non sur l'identité de l'objet : `last`
-        // sort d'une désérialisation, il n'est jamais celui qu'on a rangé, donc
-        // le test précédent était toujours vrai et rendait un rendu à chaque
-        // amorçage. Ne remplace que par un point strictement plus récent : une
-        // relecture ne doit pas faire reculer une poussée arrivée entre-temps.
+        // Ne remplace que par un point strictement plus récent : une relecture
+        // ne doit pas faire reculer une poussée arrivée entre-temps.
         const known = latest.get(deviceId);
         if (!known || last.timestamp > known.timestamp) {
             latest.set(deviceId, last);
@@ -75,10 +59,9 @@ function ensureWired(): void {
         latest.set(push.deviceId, push.snapshot);
         emit();
     });
-    // À la réouverture, `acquireMetrics` réémet les abonnements ; on ré-amorce
-    // ici pour ne pas attendre la première télémétrie d'après-coupure. Branché
-    // AVANT la première référence : le rappel part aussi tout de suite quand
-    // la socket est déjà ouverte, sur une carte alors vide.
+    // À la réouverture, on ré-amorce pour ne pas attendre la première télémétrie
+    // d'après-coupure. Branché AVANT la première référence : le rappel part
+    // aussi tout de suite quand la socket est déjà ouverte.
     offOpen = onSocketOpen(() => {
         for (const id of refCounts.keys()) void seed(id);
     });

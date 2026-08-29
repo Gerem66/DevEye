@@ -17,7 +17,6 @@ interface DatabaseDialogProps {
     onRemove?: () => void;
 }
 
-/** L'état du formulaire, à plat : un champ, une valeur, aucune structure imbriquée. */
 interface Form {
     engine: DatabaseEngine;
     name: string;
@@ -26,7 +25,7 @@ interface Form {
     database: string;
     username: string;
     password: string;
-    /** Le mot de passe a-t-il été touché ? Sinon on ne l'envoie pas du tout. */
+    /** Non touché, le mot de passe n'est pas envoyé du tout. */
     passwordTouched: boolean;
     accessKind: DatabaseAccessKind;
     accessHost: string;
@@ -55,23 +54,13 @@ const EMPTY: Form = {
     accessSecretTouched: false
 };
 
-/**
- * Les réglages de surveillance d'une base qui naît : rien ne se connecte tout
- * seul (le principe de la feature), une cadence de cinq minutes pour le jour
- * où on l'allume, aucune table chargée à l'ouverture. Ils se règlent ensuite
- * dans le panneau Général de la base, jamais ici.
- */
+/** La surveillance d'une base qui naît ; elle se règle ensuite dans le panneau Général. */
 const MONITORING_DEFAULTS = { monitorEnabled: false, intervalSeconds: 300, autoLoadTables: false } as const;
 
-/** Les deux moteurs, en segments : deux choix fixes, tous deux visibles. */
 const ENGINES: { value: DatabaseEngine; label: string }[] = (Object.keys(ENGINE_LABELS) as DatabaseEngine[]).map(
     (id) => ({ value: id, label: ENGINE_LABELS[id] })
 );
 
-/**
- * Par où passe la connexion, en segments. Le libellé tient en deux mots, la
- * phrase qui l'explique se lit sous le choix et dans l'infobulle.
- */
 const ACCESS_KINDS: { value: DatabaseAccessKind; label: string; title: string }[] = [
     { value: 'direct', label: 'Direct', title: 'Le serveur joint l’hôte lui-même' },
     { value: 'ssh', label: 'Tunnel SSH', title: 'Rebond par une machine du réseau' },
@@ -83,39 +72,13 @@ const SSH_AUTHS: { value: DatabaseSshAuth; label: string }[] = [
     { value: 'key', label: 'Clé privée' }
 ];
 
-/** Les deux moitiés du formulaire. */
 type Tab = 'connection' | 'access';
 
 /**
- * Ajouter une base, ou changer son identité et son accès.
- *
- * ## Deux onglets, et où passe la coupure
- *
- * **Connexion** : ce qu'il faut pour joindre la base (moteur, nom, adresse,
- * compte). **Accès** : par où l'on passe (direct, tunnel SSH, proxy SOCKS) et,
- * tout en bas, sa suppression.
- *
- * La coupure n'est pas décorative : le premier onglet est obligatoire et se
- * remplit en une fois, le second a un défaut valable (l'accès direct). Une
- * base s'ajoute donc sans jamais quitter le premier, ce qui n'était pas le cas
- * quand les blocs s'empilaient sur la hauteur de l'écran, l'essentiel se
- * retrouvant noyé au milieu de réglages qu'on ne touche presque jamais.
- *
- * ## Ce que le dialogue ne porte plus
- *
- * La surveillance (le relevé périodique, sa cadence, le chargement des tables
- * à l'ouverture) vivait dans un onglet « Options » de ce dialogue : la dette
- * de la coquille de réglages. Ce sont des réglages, et ils vivent désormais
- * dans le panneau Général de la coquille de la base (`DatabaseGeneralPanel`),
- * à côté de ses canaux et de son partage ; le dialogue redevient ce qu'il dit,
- * l'identité de la base. À la création il envoie leurs défauts (rien ne se
- * connecte tout seul), à la modification il renvoie ceux de la base chargée,
- * inchangés.
- *
- * Les secrets ne se relisent jamais : un champ laissé intact garde celui en
- * place, et le formulaire le dit. C'est la même convention que les jetons
- * d'accès git : le client ne reçoit pas le secret, il ne peut donc pas le
- * renvoyer inchangé.
+ * Ajouter une base, ou changer son identité et son accès. Deux onglets :
+ * Connexion (obligatoire) et Accès (défaut valable). La surveillance se règle
+ * dans `DatabaseGeneralPanel` ; le dialogue en renvoie les défauts ou ceux de
+ * la base, inchangés. Un secret laissé intact garde celui en place.
  */
 export function DatabaseDialog({ open, database, onClose, onSaved, onRemove }: DatabaseDialogProps) {
     const [form, setForm] = useState<Form>(EMPTY);
@@ -123,7 +86,7 @@ export function DatabaseDialog({ open, database, onClose, onSaved, onRemove }: D
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [confirmRemove, setConfirmRemove] = useState(false);
-    /** L'essai en cours, et son résultat — distinct de l'enregistrement. */
+    /** L'essai en cours, et son résultat ; distinct de l'enregistrement. */
     const [testing, setTesting] = useState(false);
     const [probe, setProbe] = useState<DatabaseProbe | null>(null);
 
@@ -132,8 +95,7 @@ export function DatabaseDialog({ open, database, onClose, onSaved, onRemove }: D
         setConfirmRemove(false);
         setError(null);
         setProbe(null);
-        // Toute ouverture repart de la connexion : c'est là que se trouve ce
-        // qu'on vient changer neuf fois sur dix.
+        // Toute ouverture repart de la connexion.
         setTab('connection');
         setForm(
             database
@@ -160,7 +122,7 @@ export function DatabaseDialog({ open, database, onClose, onSaved, onRemove }: D
 
     const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((f) => ({ ...f, [key]: value }));
 
-    /** Changer de moteur propose son port — sauf si l'on en a déjà saisi un autre. */
+    /** Changer de moteur propose son port, sauf si un autre est déjà saisi. */
     const setEngine = (engine: DatabaseEngine) =>
         setForm((f) => ({
             ...f,
@@ -171,13 +133,7 @@ export function DatabaseDialog({ open, database, onClose, onSaved, onRemove }: D
     const canSubmit =
         form.name.trim() !== '' && form.host.trim() !== '' && form.database.trim() !== '' && form.port.trim() !== '';
 
-    /**
-     * Les réglages tels qu'ils sont saisis, dans la forme du contrat.
-     *
-     * Une seule source pour l'essai et pour l'enregistrement : les deux doivent
-     * viser exactement la même chose, sans quoi « Tester » validerait une
-     * connexion qui n'est pas celle qu'on s'apprête à écrire.
-     */
+    /** Une seule source pour l'essai et l'enregistrement : « Tester » doit viser ce qu'on écrit. */
     const draft = () => ({
         name: form.name.trim(),
         host: form.host.trim(),
@@ -190,8 +146,7 @@ export function DatabaseDialog({ open, database, onClose, onSaved, onRemove }: D
             port: form.accessPort.trim() === '' ? null : Number(form.accessPort),
             username: form.accessUser.trim(),
             auth: form.accessAuth,
-            // Non touché = on garde celui en place ; c'est ce que `undefined`
-            // veut dire au contrat.
+            // Non touché = `undefined` = on garde celui en place.
             ...(form.accessSecretTouched ? { secret: form.accessSecret } : {})
         }
     });
@@ -201,8 +156,8 @@ export function DatabaseDialog({ open, database, onClose, onSaved, onRemove }: D
         setBusy(true);
         setError(null);
         try {
-            // La surveillance ne se règle pas ici : une base qui naît prend les
-            // défauts, une base modifiée garde les siens tels quels.
+            // La surveillance ne se règle pas ici : défauts à la création, tels
+            // quels ensuite.
             const monitoring = database
                 ? {
                       monitorEnabled: database.monitorEnabled,
@@ -227,13 +182,6 @@ export function DatabaseDialog({ open, database, onClose, onSaved, onRemove }: D
         }
     };
 
-    /**
-     * Essayer la connexion **avant** d'enregistrer.
-     *
-     * L'ordre naturel : on saisit une adresse, on vérifie qu'elle répond, puis
-     * on garde. Sans cela il fallait créer la base pour découvrir qu'un port
-     * était faux, la corriger, et recommencer.
-     */
     const test = async () => {
         if (busy || !canSubmit) return;
         setTesting(true);
@@ -241,8 +189,8 @@ export function DatabaseDialog({ open, database, onClose, onSaved, onRemove }: D
         setError(null);
         try {
             const res = await api.send('database.testDraft', {
-                // Sur une base existante, le serveur reprend les secrets qu'on
-                // n'a pas ressaisis — ils ne redescendent jamais jusqu'ici.
+                // Sur une base existante, le serveur reprend les secrets non
+                // ressaisis : ils ne redescendent jamais ici.
                 ...(database ? { databaseId: database.id } : {}),
                 engine: form.engine,
                 ...draft(),
@@ -267,16 +215,11 @@ export function DatabaseDialog({ open, database, onClose, onSaved, onRemove }: D
             width={620}
             onSubmit={submit}
             footer={
-                /* Le résultat de l'essai se lit **juste au-dessus du bouton qui
-                   le déclenche**, et non au bas du formulaire : c'est là que
-                   l'œil est déjà, et un onglet plus loin la phrase serait sortie
-                   de l'écran. D'où ce pied en deux étages. */
+                /* Le résultat de l'essai se lit juste au-dessus du bouton qui le
+                   déclenche : un onglet plus loin, il serait hors écran. */
                 <div className={styles.footerStack}>
                     <ProbeLine testing={testing} probe={probe} />
                     <div className={styles.footerRow}>
-                        {/* À gauche du couple Annuler / Enregistrer : ce n'est pas
-                            une issue de la popup, c'est une vérification qu'on fait
-                            avant de choisir. */}
                         <Button
                             variant='secondary'
                             className={styles.footerLead}
@@ -317,7 +260,6 @@ export function DatabaseDialog({ open, database, onClose, onSaved, onRemove }: D
                     </button>
                 </div>
 
-                {/* ---- où elle est ---- */}
                 {tab === 'connection' && (
                     <div className={styles.section}>
                         <div className={styles.field}>
@@ -326,9 +268,8 @@ export function DatabaseDialog({ open, database, onClose, onSaved, onRemove }: D
                                 aria-label='Moteur'
                                 options={ENGINES}
                                 value={form.engine}
-                                // Le moteur ne se change pas après coup : les deux
-                                // dialectes n'exposent pas les mêmes notions, et le
-                                // relevé conservé serait celui de l'autre.
+                                // Le moteur ne se change pas après coup : le relevé
+                                // conservé serait celui de l'autre dialecte.
                                 disabled={database !== null}
                                 onChange={setEngine}
                             />
@@ -396,7 +337,6 @@ export function DatabaseDialog({ open, database, onClose, onSaved, onRemove }: D
 
                 {tab === 'access' && (
                     <>
-                        {/* ---- par où on y va ---- */}
                         <div className={styles.section}>
                             <span className={styles.sectionTitle}>Accès</span>
                             <div className={styles.field}>

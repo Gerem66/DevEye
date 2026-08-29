@@ -2,11 +2,8 @@ import { isIP } from 'net';
 
 /**
  * Primitives d'accès au réseau public, partagées par tout ce qui va chercher
- * quelque chose dehors (aperçus de raccourcis, sondes OSINT).
- *
- * Elles vivent ici plutôt que dans l'un des deux dossiers de services parce
- * qu'aucun des deux n'en est propriétaire : un garde SSRF écrit deux fois est un
- * garde qu'on corrigera une fois.
+ * quelque chose dehors : un garde SSRF écrit deux fois est un garde qu'on
+ * corrigera une fois.
  */
 
 export const FETCH_TIMEOUT_MS = 4500;
@@ -48,13 +45,9 @@ export function isValidHttpUrl(s: string): boolean {
 }
 
 /**
- * Cette adresse IP est-elle routable publiquement ?
- *
- * Sert deux appelants : le garde d'URL ci-dessous, et les sondes OSINT qui
- * reçoivent une IP *directement* (sans URL autour). Couvre les plages que
- * l'espionnage d'un réseau interne viserait — boucle locale, RFC 1918,
- * lien-local, CGNAT — en v4 comme en v6, y compris la forme IPv4-mappée
- * (`::ffff:10.0.0.1`) par laquelle un filtre naïf se contourne.
+ * Cette adresse IP est-elle routable publiquement ? Couvre boucle locale,
+ * RFC 1918, lien-local, CGNAT, en v4 comme en v6, y compris la forme
+ * IPv4-mappée (`::ffff:10.0.0.1`) par laquelle un filtre naïf se contourne.
  */
 export function isPublicIp(raw: string): boolean {
     const ip = raw.replace(/^\[|\]$/g, '').toLowerCase();
@@ -88,12 +81,9 @@ function isPublicIpv4(ip: string): boolean {
 }
 
 /**
- * SSRF guard: only fetch public http(s) hosts. Blocks loopback / private / link-
- * local addresses so a pasted URL can't probe the server's internal network.
- *
- * Un nom d'hôte qui n'est pas une IP littérale passe : la résolution DNS n'est
- * pas faite ici (elle ouvrirait la porte à un TOCTOU de toute façon). Ce garde
- * arrête la cible *écrite* en clair, ce qui est son rôle.
+ * SSRF guard: only fetch public http(s) hosts, so a pasted URL can't probe the
+ * server's internal network. Un nom d'hôte qui n'est pas une IP littérale
+ * passe : la résolution DNS n'est pas faite ici (TOCTOU de toute façon).
  */
 export function isSafePublicUrl(u: URL): boolean {
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;

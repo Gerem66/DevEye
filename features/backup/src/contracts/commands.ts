@@ -19,22 +19,13 @@ import {
 } from './domain';
 
 /**
- * Commandes des sauvegardes.
- *
- * Deux moitiés qui ne se recouvrent pas: les **destinations** (où) et les
- * **travaux** (quoi, quand, combien de copies). Tout est à l'étage ouvert, donc
- * aucune de ces commandes ne demande de session déverrouillée — c'est la
- * condition pour qu'une sauvegarde parte à 3 h du matin.
- *
- * `backup.deveyeDump` n'existe pas comme commande: la base de DevEye se
- * sauvegarde par un travail de source `deveye` comme les autres, et il n'y a
- * aucune raison de lui inventer un chemin à part.
+ * Commandes des sauvegardes : les destinations (où) et les travaux (quoi,
+ * quand, combien de copies). Tout est à l'étage ouvert : aucune ne demande de
+ * session déverrouillée.
  */
 
 const destinationId = z.number().int().positive();
 const jobId = z.number().int().positive();
-
-// ---------------------------------------------------------- destinations
 
 /** Les destinations de l'espace, dans l'ordre où elles ont été déclarées. */
 export const backupDestinationList = {
@@ -43,14 +34,7 @@ export const backupDestinationList = {
     output: z.object({ destinations: z.array(backupDestinationSchema) })
 };
 
-/**
- * Déclare une destination.
- *
- * Un seul schéma pour les trois genres, avec les champs des deux autres à
- * `null`: la forme alternative (trois commandes, ou une union discriminée)
- * obligerait l'écran à trois formulaires là où il n'en a qu'un, dont les champs
- * apparaissent selon le genre choisi.
- */
+/** Un seul schéma pour les trois genres, champs des autres à `null` : l'écran n'a qu'un formulaire. */
 export const backupDestinationAdd = {
     command: 'backup.destinationAdd' as const,
     input: z.object({
@@ -86,33 +70,19 @@ export const backupDestinationUpdate = {
     output: z.object({ destination: backupDestinationSchema })
 };
 
-/**
- * Retire une destination. **Refusée** tant qu'un travail la vise.
- *
- * Contrairement aux jetons de déploiement, qui laissent la cible orpheline mais
- * vivante: un travail sans destination n'a aucun comportement raisonnable — il
- * ne peut ni s'exécuter ni le dire à l'avance. Mieux vaut obliger à trancher.
- */
+/** Refusée tant qu'un travail la vise : un travail sans destination n'a aucun comportement raisonnable. */
 export const backupDestinationRemove = {
     command: 'backup.destinationRemove' as const,
     input: z.object({ destinationId }),
     output: z.object({ destinationId })
 };
 
-/**
- * Contrôle qu'une destination est joignable et inscriptible, **maintenant**.
- *
- * Écrit puis relit puis efface un petit objet témoin: lister un bucket ne prouve
- * pas qu'on peut y écrire, et découvrir le contraire à 3 h du matin est
- * exactement ce que cette commande existe pour éviter.
- */
+/** Écrit, relit puis efface un objet témoin : lister un bucket ne prouve pas qu'on peut y écrire. */
 export const backupDestinationTest = {
     command: 'backup.destinationTest' as const,
     input: z.object({ destinationId }),
     output: backupDestinationProbeSchema
 };
-
-// ---------------------------------------------------------------- travaux
 
 /** Les travaux de l'espace, avec l'état de leur dernier passage. */
 export const backupJobList = {
@@ -127,7 +97,7 @@ export const backupCount = {
     input: z.object({}),
     output: z.object({
         count: z.number().int().nonnegative(),
-        /** Combien ont échoué à leur dernier passage — ce que la tuile signale. */
+        /** Combien ont échoué à leur dernier passage. */
         failing: z.number().int().nonnegative()
     })
 };
@@ -165,13 +135,7 @@ export const backupJobUpdate = {
     output: z.object({ job: backupJobSchema })
 };
 
-/**
- * Supprime un travail et son historique.
- *
- * Les archives déjà écrites ne sont **pas** touchées: DevEye a produit des
- * fichiers chez quelqu'un d'autre, et les effacer parce qu'on range sa
- * configuration serait le contraire d'une sauvegarde. L'écran le dit.
- */
+/** Supprime un travail et son historique. Les archives déjà écrites ne sont pas touchées. */
 export const backupJobRemove = {
     command: 'backup.jobRemove' as const,
     input: z.object({ jobId }),
@@ -179,13 +143,8 @@ export const backupJobRemove = {
 };
 
 /**
- * Lance un travail tout de suite.
- *
- * Ne rend pas l'archive: une sauvegarde dure des minutes, et attendre la réponse
- * d'une commande WS pendant ce temps-là ne marcherait pas. Elle inscrit
- * l'exécution en `running` et rend sa ligne; l'avancement se lit en
- * re-sollicitant, comme partout ailleurs (le sujet `backup` est diffusé à
- * chaque transition).
+ * Lance un travail tout de suite et rend l'exécution en `running` : une
+ * sauvegarde dure des minutes, l'avancement se suit par le sujet `backup`.
  */
 export const backupJobRun = {
     command: 'backup.jobRun' as const,
@@ -200,12 +159,7 @@ export const backupSources = {
     output: z.object({ candidates: z.array(backupSourceCandidateSchema) })
 };
 
-/**
- * Les dernières exécutions de l'espace, tous travaux confondus.
- *
- * Ce que la vue d'ensemble montre: on veut savoir « est-ce que mes sauvegardes
- * tournent », pas ouvrir sept fiches pour le découvrir.
- */
+/** Les dernières exécutions de l'espace, tous travaux confondus. */
 export const backupRuns = {
     command: 'backup.runs' as const,
     input: z.object({ limit: z.number().int().positive().max(200).optional() }),

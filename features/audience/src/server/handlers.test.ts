@@ -26,19 +26,11 @@ import type { AudienceIngest } from './service';
 import { setIngest } from './_shared';
 
 /**
- * Les handlers du module, sur le harnais du SDK.
- *
- * Ce qui mérite d'être tenu, c'est ce qui ne lève nulle part quand ça se
- * dérègle : les **restrictions par élément** (un site masqué pour ce rôle
- * disparaît de la liste et du compte), le **partage inter-espaces** (une
- * projection se liste avec `foreign: true` sous le codec de son espace
- * d'origine, et ne se règle jamais depuis la fenêtre), le **contrat de
- * Projets** (le compte et la liste des projets viennent du provider, et son
- * absence vaut zéro plutôt qu'une erreur), l'**adresse de la balise** (celle du
- * serveur, `ctx.origins.public`, jamais celle du navigateur), le **cache de
- * l'ingestion** (toute mutation d'un site le vide, un réordonnancement non),
- * le **ménage** à la suppression (`ctx.items.forget`), et un entonnoir dont les
- * marches sont normalisées comme à l'ingestion.
+ * Les handlers du module, sur le harnais du SDK. On tient ce qui ne lève nulle
+ * part quand ça se dérègle : restrictions par élément, partage inter-espaces,
+ * contrat de Projets absent qui vaut zéro, adresse de la balise venue du
+ * serveur, cache de l'ingestion vidé par les mutations, ménage à la
+ * suppression, et marches d'entonnoir normalisées comme à l'ingestion.
  */
 
 /** Le handler d'un contrat, typé par ce contrat (le registre est hétérogène). */
@@ -82,13 +74,12 @@ function site(over: Partial<AudienceSiteRow> & { id: number; workspace_id: numbe
 }
 
 /**
- * Un dépôt en mémoire, même contrat que le vrai. `projections` reproduit la
- * table `item_shares` : `siteId → espaces où il est projeté`, ce qui donne à
- * `listVisible` / `findVisible` leur seconde branche, et ce que le harnais
- * (`shares`) doit dire en écho pour que `ctx.sharing.scope()` connaisse le
- * domicile. La rétention d'un entonnoir est simulée : dix visites à la
- * première marche, quatre à la seconde, zéro dès qu'une marche n'a pas de
- * libellé.
+ * Un dépôt en mémoire, même contrat que le vrai. `projections` reproduit
+ * `item_shares` (`siteId → espaces où il est projeté`), ce qui donne à
+ * `listVisible` / `findVisible` leur seconde branche ; le harnais doit le dire
+ * en écho pour que `ctx.sharing.scope()` connaisse le domicile. La rétention
+ * est simulée : dix visites à la première marche, quatre à la seconde, zéro
+ * dès qu'une marche n'a pas de libellé.
  */
 function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
     let seq = 100;
@@ -263,10 +254,7 @@ function projectsProvider(): ProjectsUsageProvider {
     };
 }
 
-/**
- * L'ingestion factice posée en singleton : ce qu'un handler lui demande, c'est
- * d'oublier son cache, et c'est ce qu'on compte.
- */
+/** L'ingestion factice : un handler lui demande d'oublier son cache, on compte. */
 function mountIngest(): { invalidated: number } {
     const fake = {
         invalidated: 0,

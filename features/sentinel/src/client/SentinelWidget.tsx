@@ -2,25 +2,16 @@ import { totalOpen, useSentinelCount, worstSeverity } from './store';
 import styles from './style.module.css';
 
 /**
- * Carte de grille de Sentinelle.
- *
- * Elle répond à une seule question : **à quel point**, et non « combien ». Un
- * grand nombre de constats mineurs est moins urgent qu'un seul constat critique,
- * donc c'est la pire gravité qui teinte la carte et qui décide du sous-titre.
- *
- * Un espace où Sentinelle n'est activée nulle part le dit explicitement, plutôt
- * que d'afficher un « 0 constat » rassurant qui ne reposerait sur rien : c'est
- * la même règle que partout dans cette feature, ne pas mesurer n'est pas aller
- * bien.
+ * La carte de grille répond à « à quel point », pas « combien » : la pire
+ * gravité teinte. Sans appareil surveillé, on le dit plutôt qu'un « 0 constat ».
  */
 export function SentinelWidget() {
     const { open, watched, loading } = useSentinelCount();
     const total = totalOpen(open);
     const worst = worstSeverity(open);
 
-    // Rien d'ouvert ne se teinte pas : la couleur de l'accent, celle de toutes
-    // les autres vignettes au repos, *est* l'état calme, seul un constat net
-    // (élevé ou critique) la fait basculer vers une nuance active.
+    // Rien d'ouvert ne se teinte pas : l'accent est l'état calme, seul un
+    // constat net bascule la couleur.
     const tone = worst === 'critical' || worst === 'high' ? styles.widgetAlert : worst ? styles.widgetWarn : '';
 
     return (

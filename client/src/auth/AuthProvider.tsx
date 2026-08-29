@@ -30,10 +30,9 @@ interface AuthContextValue extends AuthState {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 /**
- * Applique un bundle de session.
- *
- * L'ordre compte : l'espace actif est publie AVANT le theme et la disposition,
- * car ces deux stores resolvent leur cle de stockage a partir de lui.
+ * Applique un bundle de session. L'ordre compte : l'espace actif est publie avant
+ * le theme et la disposition, ces deux stores resolvant leur cle de stockage a
+ * partir de lui.
  */
 function applyBundle(bundle: SessionBundle): AuthState {
     syncWorkspacesFromServer(bundle.workspaces, bundle.activeWorkspaceId, bundle.permissions);
@@ -44,8 +43,8 @@ function applyBundle(bundle: SessionBundle): AuthState {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [state, setState] = useState<AuthState>({ status: 'unknown', user: null });
-    // Le magasin `currentUser` suit l'état : c'est par lui que le barrel des
-    // modules connaît l'utilisateur sans importer ce fournisseur.
+    // Le magasin `currentUser` suit l'état : c'est par lui que le barrel des modules
+    // connaît l'utilisateur sans importer ce fournisseur.
     useEffect(() => {
         setCurrentUser(state.user);
     }, [state.user]);
@@ -54,18 +53,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const setAnonymous = useCallback(() => {
         setUnlocked(false);
-        // Next sign-in must wait for the home's first data again before its splash
-        // fades, instead of inheriting this session's "ready" flag.
+        // The next sign-in must wait for the home's first data again rather than
+        // inherit this session's "ready" flag.
         resetHomeReady();
-        // Sans ces trois remises a zero, se reconnecter avec un autre compte sur
-        // la meme machine heriterait de l'espace, du theme et de l'accueil du
-        // precedent — et estampillerait ses commandes avec un espace interdit.
+        // Sans ces trois remises a zero, se reconnecter avec un autre compte sur la
+        // meme machine heriterait de l'espace, du theme et de l'accueil du precedent,
+        // et estampillerait ses commandes avec un espace interdit.
         resetWorkspace();
         resetTheme();
         resetHomeLayout();
         // La liste d'appareils est celle du module Appareils, quand il est là.
         devicesProvider()?.resetDevices();
-        // Idem pour la presence : sans ca la session suivante repartirait avec le
+        // Idem pour la presence, sans quoi la session suivante repartirait avec le
         // roster et le lieu declare de la precedente.
         resetLive();
         setState({ status: 'anonymous', user: null });
@@ -78,9 +77,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const bundle = await apiMe();
                 setState(applyBundle(bundle));
                 await ws.connect().catch(() => {});
-                // Fire-and-forget: the secrecy state updates its store reactively
-                // and nothing on the reveal path waits on it, so awaiting here only
-                // serialised an extra round-trip onto the critical load.
+                // Fire-and-forget: the secrecy state updates its store reactively and
+                // nothing on the reveal path waits on it, so awaiting here would only
+                // serialise an extra round-trip onto the critical load.
                 void refreshSecrecyStatus();
             } catch (e) {
                 if (e instanceof ApiError && (e.code === 'auth_required' || e.code === 'auth_expired')) {
@@ -131,13 +130,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setState((prev) => (prev.user ? { ...prev, user: { ...prev.user, ...patch } } : prev));
     }, []);
 
-    // A WS `4401` only means the *access* token expired — typically while the tab
-    // sat in the background. The refresh cookie is usually still valid, so instead
-    // of dropping the user to the login screen we silently refresh the session and
-    // reconnect the socket, keeping them on the populated dashboard. Only a failed
-    // refresh (refresh token also gone) falls back to anonymous. The lock throttles
-    // the pathological case where a freshly-refreshed socket is rejected again, so
-    // we can't spin in a refresh/reconnect loop.
+    // A WS `4401` only means the access token expired, typically while the tab sat
+    // in the background, and the refresh cookie is usually still valid: refresh the
+    // session silently rather than drop the user to the login screen. Only a failed
+    // refresh falls back to anonymous. The lock keeps a socket that is rejected again
+    // right after a refresh from spinning in a refresh/reconnect loop.
     const reauthenticate = useCallback(async () => {
         if (reauthLock.current) return;
         reauthLock.current = true;

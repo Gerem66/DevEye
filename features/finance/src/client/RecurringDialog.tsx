@@ -59,12 +59,8 @@ interface Draft {
 }
 
 /**
- * Le réglage d'une échéance.
- *
- * La **prochaine date** est le champ qui décide de tout: c'est elle qui fixe le
- * jour d'ancrage de la série. Une échéance posée au 31 revient au 31 tous les
- * mois, y compris après un février, ce que le serveur garantit en gardant ce
- * jour à part plutôt qu'en repartant de la dernière date écrite.
+ * La prochaine date fixe le jour d'ancrage de la série : une échéance au 31
+ * revient au 31, y compris après un février.
  */
 export function RecurringDialog({ base, open, recurring, onClose, onSaved }: RecurringDialogProps) {
     const initial = useMemo<Draft>(

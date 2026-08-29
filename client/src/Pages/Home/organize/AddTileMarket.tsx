@@ -16,21 +16,12 @@ import { FeatureArt, type ArtId } from '../art';
 import { ShortcutForm } from './ShortcutForm';
 import styles from './organize.module.css';
 
-/**
- * Les rayons du marché.
- *
- * `all` d'abord (avec la recherche, c'est le rayon par défaut), puis les
- * appareils, puis les rayons de fonctionnalités portés par le catalogue, puis
- * les deux rayons de **création** — un raccourci se saisit, un dossier se pose
- * vide. Les six du milieu ne sont pas répétés ici : les tenir à deux endroits
- * serait la garantie qu'un futur rayon n'arrive que dans l'un des deux.
- */
+/** Les rayons du marché : `all` (le rayon par défaut), les appareils, les
+ *  rayons du catalogue, puis la création d'un raccourci. */
 type Rayon = 'all' | 'devices' | FeatureCategory | 'shortcut';
 
-// « Par appareil » et non « Appareils » : ce rayon range une tuile PAR machine,
-// et « Appareils » est le nom de la feature (le module, sa propre carte dans
-// le rayon Supervision). Deux boutons du même nom dans un même marché, c'est
-// un clic sur l'un pour l'autre.
+// « Par appareil » et non « Appareils », qui est le nom de la feature : deux
+// boutons du même nom dans un même marché se confondent.
 const RAYON_LABEL: Record<'all' | 'devices' | 'shortcut', string> = {
     all: 'Tout',
     devices: 'Par appareil',
@@ -43,15 +34,8 @@ const RAYON_ICON: Record<'all' | 'devices' | 'shortcut', string> = {
     shortcut: 'move-to-right'
 };
 
-/**
- * Le rail, en trois groupes séparés d'un filet.
- *
- * L'étal complet ; puis ce qui vient de **vous** — vos machines, vos liens ; puis
- * les fonctionnalités de DevEye, rangées par usage. Sans ces deux filets, dix
- * entrées de même poids se lisaient comme une liste plate où « Appareils » et
- * « Sécurité » semblaient de même nature, alors que l'un désigne votre matériel
- * et l'autre un rayon du catalogue.
- */
+/** Le rail en trois groupes séparés d'un filet : l'étal complet, ce qui vient
+ *  de vous (machines, liens), les fonctionnalités par usage. */
 const RAIL_GROUPS: Rayon[][] = [['all'], ['devices', 'shortcut'], [...FEATURE_CATEGORIES]];
 
 function rayonLabel(rayon: Rayon): string {
@@ -79,31 +63,15 @@ interface MarketItem {
     keywords?: string;
     /** Élément posé à droite du titre (la pastille d'état d'un appareil). */
     badge?: ReactNode;
-    /**
-     * Déjà sur l'accueil.
-     *
-     * La carte **reste à l'étal**, éteinte, au lieu d'en disparaître : un
-     * catalogue dont les articles s'effacent au fur et à mesure ne dit plus ce
-     * qui existe, et ne laisse pas voir qu'on possède déjà ce qu'on cherchait.
-     * Elle n'est simplement plus cliquable, et une seule tuile par
-     * fonctionnalité ou par appareil reste la règle.
-     */
+    /** Déjà sur l'accueil : la carte reste à l'étal, éteinte, plutôt que d'en
+     *  disparaître ; une seule tuile par fonctionnalité ou par appareil. */
     placed?: boolean;
     onPick: () => void;
 }
 
 /**
- * Le repère du coin d'une carte : ce qu'on peut y faire, ou ce qui est déjà fait.
- *
- * Dessiné ici plutôt que pris dans `Styles/icons.css` : `icon-plus` y pointe sur
- * un glyphe très gras (une croix tracée dans un carré de 309 unités, ramenée à
- * treize pixels), qui à cette taille rend un pâté plutôt qu'un signe. Deux
- * traits arrondis et une coche, dans le même langage que les vignettes juste
- * au-dessus, tiennent en quelques lignes et se règlent au pixel près.
- *
- * La pastille porte la couleur, pas le glyphe : un signe gris perdu dans un coin
- * ne dit pas qu'il y a un geste à faire, un jeton teinté si. Le plein se remplit
- * au survol de la carte, et l'état « déjà posée » passe au vert de succès.
+ * Le repère du coin d'une carte, dessiné ici : `icon-plus` de `Styles/icons.css`
+ * rend un pâté à cette taille. La pastille porte la couleur, pas le glyphe.
  */
 function MarketMark({ placed }: { placed: boolean }) {
     return (
@@ -131,23 +99,10 @@ export interface AddTileMarketProps {
 }
 
 /**
- * Le marché : **une seule popup pour tout ce qui se pose sur l'accueil**.
- *
- * Il y avait auparavant trois sélecteurs, atteints par trois boutons différents,
- * parce qu'une section ne tenait qu'un genre de tuile. Les sections étant
- * unifiées, la question « quel genre ? » n'a plus lieu d'être posée à l'avance :
- * on ouvre l'étal, on cherche, on prend. Les rayons ne sont plus qu'un rangement.
- *
- * Un rayon ne présente pas un catalogue mais un **geste de création** : un
- * raccourci se saisit, formulaire complet et aperçu en direct. Il vit au même
- * endroit que le reste parce que, vu de l'accueil, c'en est une carte comme une
- * autre. Les dossiers, eux, ne passent pas par ici : un dossier ne se remplit
- * qu'en y tirant des cartes déjà posées, donc son bouton est au bout de la
- * section, là où se trouvent justement ces cartes.
- *
- * Chaque ajout referme, comme partout ailleurs dans l'application. Seul le
- * formulaire de raccourci fait exception à la règle de fermeture immédiate quand
- * il sert à **éditer** : il se ferme aussi, mais après enregistrement.
+ * Le marché : une seule popup pour tout ce qui se pose sur l'accueil. Le rayon
+ * des raccourcis est un formulaire, pas un catalogue. Les dossiers ne passent
+ * pas par ici : un dossier ne se remplit qu'en y tirant des cartes déjà posées,
+ * son bouton est au bout de la section. Chaque ajout referme.
  */
 export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketProps) {
     const layout = useHomeLayout();
@@ -158,23 +113,15 @@ export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketP
     const open = section !== null;
     const sectionId = section?.id ?? null;
 
-    // Une réouverture repart de l'étal complet : garder le rayon et la recherche
-    // du passage précédent ferait s'ouvrir une popup déjà filtrée sans que rien
-    // ne l'ait demandé.
+    // Une réouverture repart de l'étal complet, pas d'une popup déjà filtrée.
     useEffect(() => {
         if (!open) return;
         setRayon('all');
         setQuery('');
     }, [open]);
 
-    /**
-     * L'étal, reconstruit à chaque rendu.
-     *
-     * Volontairement non mémorisé : il dépend de la disposition, de la liste
-     * d'appareils, du contexte **et** des rappels du parent, donc une mémo
-     * aurait porté une liste de dépendances plus longue que le calcul qu'elle
-     * évite — pour une quarantaine d'articles.
-     */
+    /** L'étal, volontairement non mémorisé : la liste de dépendances serait plus
+     *  longue que le calcul, pour une quarantaine d'articles. */
     const items: MarketItem[] = [];
     if (sectionId !== null) {
         // Un appareil déjà posé n'est pas reproposé : il n'a qu'une carte.
@@ -219,9 +166,8 @@ export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketP
             });
         }
 
-        // Le rayon des raccourcis n'a pas d'article : c'est un formulaire. Il est
-        // pourtant annoncé dans l'étal, sans quoi rien n'y mènerait depuis
-        // « Tout » — et c'est là qu'on arrive.
+        // Le rayon des raccourcis est un formulaire, pas un article ; annoncé
+        // dans l'étal pour qu'on y arrive depuis « Tout ».
         items.push({
             key: 'shortcut',
             rayon: 'shortcut',
@@ -231,8 +177,7 @@ export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketP
             description: 'Un lien épinglé, avec son aperçu récupéré automatiquement.',
             keywords: 'lien url site favori raccourci',
             // La recherche est vidée avec : elle prend le pas sur le rayon dans
-            // l'affichage, donc la laisser garderait la liste de résultats à
-            // l'écran et le clic n'aurait rien fait de visible.
+            // l'affichage.
             onPick: () => {
                 setQuery('');
                 setRayon('shortcut');
@@ -243,12 +188,9 @@ export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketP
     const search = query.trim().toLowerCase();
 
     /**
-     * Ce que l'étal montre.
-     *
-     * Une recherche **traverse les rayons** : chercher « git » depuis le rayon
-     * des appareils doit trouver la fonctionnalité, sinon la recherche ne serait
-     * qu'un filtre de plus au lieu d'un raccourci. Le rayon ne reprend la main
-     * que le champ vide.
+     * Une recherche traverse les rayons : chercher « git » depuis les appareils
+     * doit trouver la fonctionnalité. Le rayon ne reprend la main que le champ
+     * vide.
      */
     const shown = search
         ? items.filter((item) =>
@@ -350,9 +292,7 @@ export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketP
                                                         {item.badge}
                                                         <MarketMark placed={item.placed === true} />
                                                     </span>
-                                                    {/* Le rayon n'est rappelé que quand l'étal les mélange :
-                                                    dans un rayon donné, le répéter à chaque carte serait
-                                                    une colonne de texte identique. */}
+                                                    {/* Le rayon n'est rappelé que quand l'étal les mélange. */}
                                                     {item.placed ? (
                                                         <span className={styles.marketCardRayon}>
                                                             Déjà sur l’accueil

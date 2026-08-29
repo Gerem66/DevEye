@@ -22,16 +22,10 @@ import { allowSubject } from './repo';
 import { deviceNames, engine, nameOf, posturize, stateOf, toAllow, toFinding, type Ctx } from './_shared';
 
 /**
- * Sentinelle : constats, ligne de base, posture, autorisations.
- *
- * Toutes les lectures passent par les dépôts, jamais par le moteur : une
- * réponse ne doit pas dépendre de l'état d'un tour de boucle en cours. Le moteur
- * n'est sollicité que pour oublier son cache après une remise à zéro.
- *
- * L'accès est déclaré commande par commande (`level: read|write`, la feature
- * est implicite) et appliqué par le dispatcheur avant le handler ;
- * l'appartenance de l'appareil est vérifiée par `ctx.deveye.devices.authorize`,
- * la même règle que la feature Appareils.
+ * Constats, ligne de base, posture, autorisations. Les lectures passent par les
+ * dépôts, jamais par le moteur : une réponse ne doit pas dépendre d'un tour de
+ * boucle en cours. L'appartenance d'un appareil est vérifiée par
+ * `ctx.deveye.devices.authorize`, la même règle que la feature Appareils.
  */
 
 export const sentinelHandlers = [
@@ -41,11 +35,9 @@ export const sentinelHandlers = [
             const devices = await ctx.deveye.devices.list();
             const ids = devices.map((d) => d.id);
 
-            // Un seul décompte groupé pour la flotte, une seule lecture des
-            // réglages, puis un décompte par appareil. Les appareils sont peu
-            // nombreux par nature (ce sont des machines, pas des lignes de
-            // données) ; c'est le décompte *global* qui devait éviter le N+1,
-            // et il l'évite.
+            // Un décompte groupé pour la flotte, une lecture des réglages, puis un
+            // décompte par appareil : les machines sont peu nombreuses par nature,
+            // c'est le décompte global qui devait éviter le N+1.
             const [open, configs, perDevice] = await Promise.all([
                 ctx.repo.findings.openCounts(ids),
                 ctx.repo.deviceConfig.forDevices(ids),
@@ -88,9 +80,8 @@ export const sentinelHandlers = [
     defineSdkFeature({
         ...sentinelFindings,
         handler: async (ctx: Ctx, input) => {
-            // Le filtre par appareil passe par `authorize` ; sans appareil
-            // précis, le périmètre borne déjà la requête. Dans les deux cas, aucun
-            // constat d'une machine qu'on ne voit pas ne peut sortir.
+            // Le filtre par appareil passe par `authorize` ; sans appareil précis,
+            // le périmètre borne déjà la requête.
             if (input.deviceId) await ctx.deveye.devices.authorize(input.deviceId);
             const devices = await ctx.deveye.devices.list();
             const names = deviceNames(devices);
@@ -126,11 +117,9 @@ export const sentinelHandlers = [
                     typeof row.attrs === 'string'
                         ? { users: [], listenPorts: [], cpuP95: null, memP95: null, sha256: null, surface: null }
                         : row.attrs,
-                // Une entrée « autorisée » l'est pour une règle donnée ; on affiche
-                // le drapeau dès qu'une règle la couvre, ce qui est la question que
-                // l'utilisateur se pose devant l'inventaire. Le sujet se lit via
-                // `allowSubject` : le séparateur de clé est un octet invisible, et
-                // le retaper ici serait une erreur qu'aucune relecture n'attraperait.
+                // Une entrée est autorisée pour une règle donnée : le drapeau se lève
+                // dès qu'une règle la couvre. Le sujet se lit par `allowSubject`, le
+                // séparateur de clé étant un octet invisible qu'on ne retape pas.
                 allowed: [...allowed].some((key) => allowSubject(key) === row.item_key)
             }));
             return { deviceId: device.id, entries, total };
@@ -155,9 +144,8 @@ export const sentinelHandlers = [
                 throw new FeatureError('conflict', "Cet appareil n'appartient plus à aucun espace");
             }
 
-            // L'autorisation **d'abord**, la résolution ensuite. Dans l'autre ordre,
-            // un échec d'écriture laisserait un constat clos que rien n'empêcherait
-            // de rouvrir au tour suivant, l'utilisateur croirait avoir décidé.
+            // L'autorisation d'abord, l'acquittement ensuite : dans l'autre ordre, un
+            // échec d'écriture laisserait un constat clos que le tour suivant rouvrirait.
             const allow = await ctx.repo.allow.add({
                 workspaceId: device.workspaceId,
                 deviceId: input.scope === 'fleet' ? null : device.id,
@@ -219,8 +207,7 @@ export const sentinelHandlers = [
             const device = await ctx.deveye.devices.authorize(row.device_id);
 
             // Rouvrir sans retirer l'autorisation ne servirait à rien : le moteur
-            // filtrerait de nouveau le constat au tour suivant, et l'utilisateur
-            // verrait sa réouverture s'annuler toute seule.
+            // refiltrerait le constat au tour suivant.
             if (device.workspaceId !== null) {
                 await ctx.repo.allow.removeFor(device.workspaceId, device.id, row.rule, row.subject);
             }
@@ -277,9 +264,9 @@ export const sentinelHandlers = [
             const current = await ctx.repo.deviceConfig.get(device.id);
             const wasEnabled = current?.enabled === 1;
 
-            // Activer (re)part une fenêtre d'apprentissage. Réactiver une machine
-            // déjà surveillée ne la relance pas : ce serait faire taire la dérive
-            // sept jours de plus à chaque passage dans les réglages.
+            // Activer (re)part une fenêtre d'apprentissage. Réactiver une machine déjà
+            // surveillée ne la relance pas : ce serait faire taire la dérive quelques
+            // jours de plus à chaque passage dans les réglages.
             const learningUntil =
                 input.enabled && !wasEnabled
                     ? Date.now() + (input.learningDays ?? LEARNING_DAYS) * 86400000
@@ -297,10 +284,8 @@ export const sentinelHandlers = [
             const updated = await ctx.repo.deviceConfig.get(device.id);
             if (!updated) throw new FeatureError('internal', 'Réglages écrits mais introuvables');
 
-            // La config est poussée tout de suite **et** rejouée à la reconnexion
-            // (`agent/ws.ts`) : un agent hors ligne au moment du changement applique
-            // quand même les bons réglages dès son retour (invariant 1 de Monitoring).
-            // C'est l'app qui la recompose, en demandant au module sa part.
+            // Poussée tout de suite et rejouée à la reconnexion : un agent hors ligne
+            // au moment du changement applique quand même les bons réglages au retour.
             await ctx.deveye.agents.pushConfig(device.id);
 
             ctx.audit({
@@ -338,20 +323,18 @@ export const sentinelHandlers = [
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const device = await ctx.deveye.devices.authorize(input.deviceId);
-            // Le moteur d'abord : sans lui la remise à zéro n'aurait d'effet qu'au
-            // prochain redémarrage, autant le dire avant d'avoir effacé quoi que
-            // ce soit.
+            // Le moteur d'abord : sans lui, autant échouer avant d'avoir effacé quoi
+            // que ce soit.
             const running = engine();
             const cleared = await ctx.repo.baseline.reset(device.id);
 
             // Le moteur tient la ligne de base en mémoire : sans cet oubli, il
-            // continuerait de comparer à ce qu'on vient d'effacer, et la remise à
-            // zéro n'aurait d'effet qu'au prochain redémarrage du serveur.
+            // comparerait encore à ce qui vient d'être effacé.
             running.invalidate(device.id);
 
-            // Repartir d'une ligne de base vide sans réapprentissage ferait sonner
-            // toute la machine au tour suivant. Les autorisations, elles, survivent :
-            // ce sont des décisions, pas des observations.
+            // Repartir d'une ligne de base vide sans réapprentissage ferait sonner toute
+            // la machine au tour suivant. Les autorisations survivent : ce sont des
+            // décisions, pas des observations.
             await ctx.repo.deviceConfig.set(device.id, {
                 learningUntil: Date.now() + LEARNING_DAYS * 86400000
             });

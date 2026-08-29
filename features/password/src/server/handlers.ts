@@ -20,18 +20,8 @@ import {
 } from './_shared';
 
 /**
- * Coffre de mots de passe, scopé à l'espace actif.
- *
- * L'espace vient de l'enveloppe WS et l'appartenance est déjà vérifiée par le
- * dispatcheur : les handlers filtrent simplement sur `ctx.workspaceId`, sans
- * garde ni traduction d'id.
- *
- * Six commandes sous le préfixe `password.`, un verbe simple derrière le
- * point : le filet `MUTATION_VERB` de `_topics.ts` voit `add`, `edit` et
- * `delete`, qui déclarent bien `mutates`. Les trois lectures (`list`, `count`,
- * `get`) n'écrivent rien. L'ancienne `password.unlock` n'existe plus : son
- * registre en mémoire n'avait aucun lecteur, la vraie protection est le
- * chiffrement, et le déverrouillage de session passe par `secrecy.unlock`.
+ * Coffre de mots de passe, scopé à l'espace actif : l'appartenance est déjà
+ * vérifiée par le dispatcheur, les handlers filtrent sur `ctx.workspaceId`.
  */
 export const passwordHandlers = [
     defineSdkFeature({

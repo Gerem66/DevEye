@@ -5,12 +5,10 @@ import type { Queryable } from '../pool';
 type Q = Queryable;
 
 /**
- * Le dépôt du SOCLE : ce que l'infrastructure écrit hors session (l'enrôlement,
- * ce que l'agent rapporte, la présence) et ce que la façade du SDK lit pour
- * les autres modules. La flotte et l'historique (statut, nom, configuration,
- * espaces, codes de liaison, fenêtres, épinglage, purges) sont les requêtes du
- * module `features/devices`, dans son propre dépôt sur ces mêmes tables :
- * deux lecteurs, un schéma, assumé.
+ * Le dépôt du socle : ce que l'infrastructure écrit hors session (enrôlement,
+ * rapports d'agent, présence) et ce que la façade du SDK lit. La flotte et
+ * l'historique sont les requêtes du module `features/devices`, sur ces mêmes
+ * tables.
  */
 
 export interface CreateDeviceInput {
@@ -37,9 +35,8 @@ export interface DevicesRepo {
     setAgentTarget(id: string, target: string): Promise<void>;
     setReport(id: string, reportJson: string): Promise<void>;
     /**
-     * Reset a device to a freshly-enrolled state: set its status (`pending` or
-     * `active`) and clear any deletion bookkeeping. Used on (re)enrollment so a
-     * previously archived/revoked machine re-pairs into a clean, visible state.
+     * Reset a device to a freshly-enrolled state (status + cleared deletion
+     * bookkeeping), so a previously archived/revoked machine re-pairs cleanly.
      */
     markEnrolled(id: string, status: DeviceStatus): Promise<void>;
     /** Finalise a deletion: archive the device (its history is kept, frozen). */
@@ -47,9 +44,7 @@ export interface DevicesRepo {
     /** Abort a deletion after a self-destruct failure: restore status + record why. */
     failDeletion(id: string, message: string): Promise<void>;
 
-    // ─────────────────────────── partage entre espaces ───────────────────────
-    // Les deux lectures de la garde et de la façade ; le partage lui-même
-    // (`devices.setWorkspaces`, le rangement) s'écrit dans le module.
+    // Le partage lui-même (`devices.setWorkspaces`) s'écrit dans le module.
     /** Les espaces ayant accès à cet appareil. */
     workspaceIdsOf(deviceId: string): Promise<number[]>;
     /** Cet espace a-t-il accès à cet appareil ? La frontière, en une question. */
@@ -71,8 +66,7 @@ export function devicesRepo(pool: Q): DevicesRepo {
         },
         async listByWorkspace(workspaceId) {
             // La jonction est la frontière : un appareil apparaît dans chaque
-            // espace avec lequel il est partagé, rangé selon *ce* rang-là.
-            // L'ordre de l'utilisateur ; la date ne fait que départager.
+            // espace avec lequel il est partagé, rangé selon ce rang-là.
             const r = await pool.query<DeviceRow>(
                 `SELECT d.* FROM devices d
                  JOIN device_workspaces dw ON dw.device_id = d.id
@@ -93,9 +87,8 @@ export function devicesRepo(pool: Q): DevicesRepo {
                  VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
                 [id, ownerId, workspaceId, name, fingerprint, platform, publicKey, tokenHash]
             );
-            // L'espace d'appairage est le premier à y avoir accès. Un nouvel
-            // appareil atterrit à la fin de sa liste, jamais au milieu :
-            // l'ordre appartient à l'utilisateur.
+            // L'espace d'appairage est le premier à y avoir accès ; un nouvel
+            // appareil atterrit à la fin de sa liste, l'ordre appartient à l'utilisateur.
             await pool.query(
                 `INSERT INTO device_workspaces (device_id, workspace_id, sort_order)
                  SELECT ?, ?, COALESCE(MAX(sort_order) + 1, 0) FROM device_workspaces WHERE workspace_id = ?`,
@@ -162,10 +155,9 @@ export function devicesRepo(pool: Q): DevicesRepo {
 }
 
 /**
- * Les codes de liaison, côté consommation : l'enrôlement (`POST
- * /api/agent/enroll`, route publique sans session) échange un code contre un
- * appareil. L'émission, la relecture, l'auto-approbation et la révocation sont
- * les commandes `devices.linkCode*` du module, sur son propre dépôt.
+ * Les codes de liaison, côté consommation (l'enrôlement échange un code contre
+ * un appareil). L'émission et la révocation sont les commandes
+ * `devices.linkCode*` du module.
  */
 export interface LinkCodesRepo {
     consume(code: string): Promise<{ userId: number; workspaceId: number; autoApprove: boolean } | null>;

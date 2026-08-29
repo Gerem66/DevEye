@@ -1,5 +1,4 @@
--- Le démontage du module : sa seule table au préfixe. Les trois tables
--- historiques (device_baseline, device_findings, sentinel_allowlist, migration
--- 074 du socle) sont des données de l'application et restent en place ; la
--- sentinelle du SQL de démontage refuserait de toute façon d'y toucher.
+-- Seule la table au préfixe du module part. Les tables device_baseline,
+-- device_findings et sentinel_allowlist sont des données de l'application et
+-- restent en place (la sentinelle du SQL de démontage refuserait d'y toucher).
 DROP TABLE IF EXISTS ft_sentinel_device_config;

@@ -6,8 +6,7 @@ export interface ProjectPlanRepo {
     listMilestones(projectId: number, workspaceId: number): Promise<ProjectMilestoneRow[]>;
     /**
      * Par identifiant seul : l'espace du jalon est celui de son projet, que
-     * l'appelant vérifie (`loadProject`) avant d'agir. Les écritures, elles,
-     * prennent le domicile du projet.
+     * l'appelant vérifie avant d'agir. Les écritures prennent le domicile du projet.
      */
     findMilestone(milestoneId: number): Promise<ProjectMilestoneRow | null>;
     createMilestone(input: {
@@ -27,7 +26,6 @@ export interface ProjectPlanRepo {
         reachedAt: number | null
     ): Promise<ProjectMilestoneRow | null>;
     deleteMilestone(milestoneId: number, workspaceId: number): Promise<boolean>;
-    /** Rattache une carte à un jalon (ou l'en détache avec `null`). */
     setCardMilestone(cardId: number, workspaceId: number, milestoneId: number | null): Promise<boolean>;
 
     /** Toutes les arêtes du projet : c'est ce qui rend la détection de cycle locale. */
@@ -103,7 +101,7 @@ export function projectPlanRepo(q: SdkQueryable): ProjectPlanRepo {
         },
         async addDep(cardId, blockedByCardId, projectId) {
             // `IGNORE` : la paire est la clé primaire, la reposer n'est pas une
-            // erreur, c'est le même fait, déclaré deux fois.
+            // erreur mais le même fait déclaré deux fois.
             await q.execute(
                 'INSERT IGNORE INTO project_card_deps (card_id, blocked_by_card_id, project_id) VALUES (?, ?, ?)',
                 [cardId, blockedByCardId, projectId]

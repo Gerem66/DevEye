@@ -17,90 +17,66 @@ export interface ProjectUsageRow {
 }
 
 /**
- * Les objets d'espace rattachés à un projet : les services surveillés
- * (`project_uptime_links`), les bases de données (`project_database_links`),
- * les cibles de déploiement (`project_deploy_links`), les dépôts git
- * (`project_repo_links`) et les sites suivis (`project_audience_links`).
+ * Les objets d'espace rattachés à un projet : services surveillés, bases de données,
+ * cibles de déploiement, dépôts git et sites suivis. Seul l'identifiant de la cible
+ * est stocké, rien d'identifiant donc rien à chiffrer, et la cible garde ses propres
+ * droits : c'est la feature visée qui tranche. Non exclusif dans les deux sens, ce
+ * sont des objets d'espace et non des propriétés d'un projet.
  *
- * On ne stocke que l'identifiant de la cible. Aucune donnée identifiante ici,
- * donc rien à chiffrer, et la cible garde ses propres droits : un membre sans
- * accès à Uptime verra qu'il y a des liaisons sans pouvoir les nommer, c'est la
- * feature visée qui tranche.
+ * Les cinq tables sont celles de Projets, pas des modules visés : ceux-ci n'en
+ * lisent aucune, Projets ne lit les leurs que pour l'ordre d'affichage, et ce qu'ils
+ * ont besoin de savoir des projets leur est offert par `PROJECTS_USAGE_PROVIDER`.
  *
- * Non exclusif dans les deux sens : un projet suit plusieurs services, un
- * service peut être suivi par plusieurs projets. Même forme que
- * `project_repo_links`, la première de la famille, et pour la même raison : ce
- * sont des objets d'espace, pas des propriétés d'un projet.
- *
- * Les cinq tables sont celles de Projets, pas des modules visés : Uptime,
- * Bases de données, Déploiement, Git et Audience ne lisent aucune table de
- * Projets, et Projets ne lit les leurs que pour l'ordre d'affichage (une
- * jointure admise, la même que la native faisait). Ce que ces modules ont
- * besoin de savoir des projets (combien relient chaque élément, lesquels, sous
- * quel titre) leur est offert par le contrat `PROJECTS_USAGE_PROVIDER`, que le
- * service de ce module publie à partir des lectures d'ici.
+ * Une même forme pour les cinq familles : `list*Ids` rend les identifiants dans
+ * l'ordre d'affichage de la feature visée, `list*Usage` les projets qui relient un
+ * élément (titre encore chiffré), `count*Links` une entrée par élément relié de
+ * l'espace, un élément absent valant zéro, et `unlinkAll*` sert la conversion d'un
+ * projet en confidentiel.
  */
 export interface ProjectLinksRepo {
-    /** Les identifiants rattachés, dans l'ordre d'affichage d'Uptime. */
     listServiceIds(projectId: number, workspaceId: number): Promise<number[]>;
     link(projectId: number, workspaceId: number, serviceId: number): Promise<void>;
     unlink(projectId: number, workspaceId: number, serviceId: number): Promise<boolean>;
-    /** Les lignes brutes d'un projet, pour les rares besoins qui les veulent. */
+    /** Les lignes brutes, pour les rares appelants qui les veulent. */
     listByProject(projectId: number, workspaceId: number): Promise<ProjectUptimeLinkRow[]>;
 
     // -- liaison projet → base --------------------------------------------
-    /** Les identifiants rattachés, dans l'ordre d'affichage de Bases de données. */
     listDatabaseIds(projectId: number, workspaceId: number): Promise<number[]>;
     linkDatabase(projectId: number, workspaceId: number, databaseId: number): Promise<void>;
     unlinkDatabase(projectId: number, workspaceId: number, databaseId: number): Promise<boolean>;
     unlinkAllDatabases(projectId: number, workspaceId: number): Promise<void>;
-    /** Les projets qui utilisent cette base ; le titre reste à déchiffrer. */
     listDatabaseUsage(databaseId: number, workspaceId: number): Promise<ProjectUsageRow[]>;
-    /** Combien de projets de l'espace relient chaque base (absente = zéro). */
     countDatabaseLinks(workspaceId: number): Promise<Map<number, number>>;
 
     // -- liaison projet → cible de déploiement ----------------------------
-    /** Les identifiants rattachés, dans l'ordre d'affichage de Déploiement. */
     listDeployTargetIds(projectId: number, workspaceId: number): Promise<number[]>;
     linkDeployTarget(projectId: number, workspaceId: number, targetId: number): Promise<void>;
     unlinkDeployTarget(projectId: number, workspaceId: number, targetId: number): Promise<boolean>;
-    /** Retire toutes les liaisons d'un projet : sa conversion en confidentiel. Rend le nombre retiré. */
     unlinkAllDeployTargets(projectId: number, workspaceId: number): Promise<number>;
-    /** Les projets qui déploient cette cible ; le titre reste à déchiffrer. */
     listDeployUsage(targetId: number, workspaceId: number): Promise<ProjectUsageRow[]>;
-    /** Combien de projets de l'espace relient chaque cible (absente = zéro). */
     countDeployLinks(workspaceId: number): Promise<Map<number, number>>;
 
     // -- liaison projet → dépôt git ---------------------------------------
-    /** Les dépôts liés à un projet, dans l'ordre de la liste de la feature Git. */
     listRepoIds(projectId: number, workspaceId: number): Promise<number[]>;
     linkRepo(projectId: number, workspaceId: number, repoId: number): Promise<void>;
     unlinkRepo(projectId: number, workspaceId: number, repoId: number): Promise<boolean>;
-    /** Retire toutes les liaisons d'un projet (passage en confidentiel). Rend le nombre retiré. */
     unlinkAllRepos(projectId: number, workspaceId: number): Promise<number>;
-    /** Les projets qui utilisent ce dépôt ; le titre reste à déchiffrer. */
     listRepoUsage(repoId: number, workspaceId: number): Promise<ProjectUsageRow[]>;
-    /** Combien de projets de l'espace relient chaque dépôt (absent = zéro). */
     countRepoLinks(workspaceId: number): Promise<Map<number, number>>;
 
     // -- liaison projet → site suivi --------------------------------------
-    /** Les sites liés à un projet, dans l'ordre de la liste de la feature Audience. */
     listSiteIds(projectId: number, workspaceId: number): Promise<number[]>;
     linkSite(projectId: number, workspaceId: number, siteId: number): Promise<void>;
     unlinkSite(projectId: number, workspaceId: number, siteId: number): Promise<boolean>;
-    /** Retire toutes les liaisons d'un projet (passage en confidentiel). */
     unlinkAllSites(projectId: number, workspaceId: number): Promise<void>;
-    /** Les projets qui suivent ce site ; le titre reste à déchiffrer. */
     listSiteUsage(siteId: number, workspaceId: number): Promise<ProjectUsageRow[]>;
-    /** Combien de projets de l'espace relient chaque site (absent = zéro). */
     countSiteLinks(workspaceId: number): Promise<Map<number, number>>;
 }
 
 export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
     return {
         async listServiceIds(projectId, workspaceId) {
-            // Trié comme la liste d'Uptime elle-même : les deux écrans montrent
-            // les mêmes services, ils n'ont pas à les montrer dans deux ordres.
+            // Trié comme la liste d'Uptime : deux écrans, un seul ordre.
             const rows = await q.query<{ service_id: number }>(
                 `SELECT l.service_id
                    FROM project_uptime_links l
@@ -118,8 +94,8 @@ export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
             );
         },
         async link(projectId, workspaceId, serviceId) {
-            // La paire (projet, service) est la clé primaire : reposer la même
-            // liaison n'est pas une erreur, c'est le même fait déclaré deux fois.
+            // La paire est la clé primaire : reposer la même liaison n'est pas une
+            // erreur mais le même fait déclaré deux fois.
             await q.execute(
                 'INSERT IGNORE INTO project_uptime_links (project_id, service_id, workspace_id) VALUES (?, ?, ?)',
                 [projectId, serviceId, workspaceId]
@@ -134,8 +110,7 @@ export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
         },
 
         async listDatabaseIds(projectId, workspaceId) {
-            // Trié comme la liste de Bases de données elle-même, pour la même
-            // raison que les services : deux écrans, un seul ordre.
+            // Trié comme la liste de Bases de données : deux écrans, un seul ordre.
             const rows = await q.query<{ database_id: number }>(
                 `SELECT l.database_id
                    FROM project_database_links l
@@ -166,9 +141,8 @@ export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
             ]);
         },
         async listDatabaseUsage(databaseId, workspaceId) {
-            // Les projets confidentiels ne peuvent pas être liés : filtrer sur
-            // l'étage ouvert garantit que tous les titres rendus ici sont
-            // lisibles sans session, plutôt que d'en masquer certains.
+            // L'étage ouvert seul : un projet confidentiel ne se reliant pas, tous
+            // les titres rendus ici sont lisibles sans session.
             return q.query<ProjectUsageRow>(
                 `SELECT p.id AS project_id, p.status, p.content
                    FROM project_database_links l
@@ -179,9 +153,8 @@ export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
             );
         },
         async countDatabaseLinks(workspaceId) {
-            // « Combien de projets utilisent cette base » se lit sur l'index de
-            // la table de liaison seul (migration 068) : une requête pour tout
-            // l'espace, ce que la liste des bases demande en une fois.
+            // L'index de la table de liaison suffit : une requête pour tout l'espace,
+            // ce que la liste des bases demande en une fois.
             const rows = await q.query<Pick<ProjectDatabaseLinkRow, 'database_id'> & { n: number }>(
                 `SELECT l.database_id, COUNT(*) AS n
                    FROM project_database_links l
@@ -193,8 +166,7 @@ export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
         },
 
         async listDeployTargetIds(projectId, workspaceId) {
-            // Trié comme la liste de la feature : les deux écrans montrent les
-            // mêmes cibles, ils n'ont pas à les montrer dans deux ordres.
+            // Trié comme la liste de Déploiement : deux écrans, un seul ordre.
             const rows = await q.query<{ target_id: number }>(
                 `SELECT l.target_id
                    FROM project_deploy_links l
@@ -228,8 +200,7 @@ export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
             return res.affectedRows;
         },
         async listDeployUsage(targetId, workspaceId) {
-            // Même règle que les bases : l'étage ouvert seul, donc des titres
-            // lisibles sans session (un projet confidentiel ne se relie pas).
+            // L'étage ouvert seul, comme pour les bases.
             return q.query<ProjectUsageRow>(
                 `SELECT p.id AS project_id, p.status, p.content
                    FROM project_deploy_links l
@@ -240,9 +211,7 @@ export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
             );
         },
         async countDeployLinks(workspaceId) {
-            // « Combien de projets déploient cette cible » se lit sur l'index de
-            // la table de liaison seul (migration 080) : une requête pour tout
-            // l'espace, ce que la liste des cibles demande en une fois.
+            // L'index de la table de liaison suffit, une requête pour tout l'espace.
             const rows = await q.query<Pick<ProjectDeployLinkRow, 'target_id'> & { n: number }>(
                 `SELECT l.target_id, COUNT(*) AS n
                    FROM project_deploy_links l
@@ -254,9 +223,8 @@ export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
         },
 
         async listRepoIds(projectId, workspaceId) {
-            // Trié comme la liste de la feature Git elle-même : les deux écrans
-            // montrent les mêmes dépôts, ils n'ont pas à les montrer dans deux
-            // ordres. La jointure sur `git_repos` est admise, pour l'ordre seul.
+            // Trié comme la liste de la feature Git : deux écrans, un seul ordre. La
+            // jointure sur `git_repos` est admise, pour l'ordre seul.
             const rows = await q.query<{ repo_id: number }>(
                 `SELECT l.repo_id
                    FROM project_repo_links l
@@ -268,9 +236,8 @@ export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
             return rows.map((row) => Number(row.repo_id));
         },
         async linkRepo(projectId, workspaceId, repoId) {
-            // Le couple (projet, dépôt) est la clé primaire depuis la migration
-            // 069 : relier deux fois le même dépôt n'est pas une erreur, c'est
-            // le même fait déclaré deux fois.
+            // Le couple est la clé primaire : relier deux fois le même dépôt n'est
+            // pas une erreur mais le même fait déclaré deux fois.
             await q.execute(
                 'INSERT IGNORE INTO project_repo_links (project_id, workspace_id, repo_id) VALUES (?, ?, ?)',
                 [projectId, workspaceId, repoId]
@@ -291,9 +258,7 @@ export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
             return res.affectedRows;
         },
         async listRepoUsage(repoId, workspaceId) {
-            // Les projets confidentiels ne peuvent pas être liés : filtrer sur
-            // l'étage ouvert garantit que tous les titres rendus ici sont
-            // lisibles sans session, plutôt que d'en masquer certains.
+            // L'étage ouvert seul, comme pour les bases.
             return q.query<ProjectUsageRow>(
                 `SELECT p.id AS project_id, p.status, p.content
                    FROM project_repo_links l
@@ -304,10 +269,7 @@ export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
             );
         },
         async countRepoLinks(workspaceId) {
-            // « Combien de projets utilisent ce dépôt » se lit sur l'index de la
-            // table de liaison seul (`idx_project_repo_links_repo`, migration
-            // 064) : une requête pour tout l'espace, ce que la liste des dépôts
-            // demande en une fois.
+            // L'index de la table de liaison suffit, une requête pour tout l'espace.
             const rows = await q.query<Pick<ProjectRepoLinkRow, 'repo_id'> & { n: number }>(
                 `SELECT l.repo_id, COUNT(*) AS n
                    FROM project_repo_links l
@@ -319,10 +281,8 @@ export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
         },
 
         async listSiteIds(projectId, workspaceId) {
-            // Trié comme la liste de la feature Audience elle-même : les deux
-            // écrans montrent les mêmes sites, ils n'ont pas à les montrer dans
-            // deux ordres. La jointure sur `audience_sites` est admise, pour
-            // l'ordre seul.
+            // Trié comme la liste de la feature Audience : deux écrans, un seul
+            // ordre. La jointure sur `audience_sites` est admise, pour l'ordre seul.
             const rows = await q.query<{ site_id: number }>(
                 `SELECT l.site_id
                    FROM project_audience_links l
@@ -356,10 +316,8 @@ export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
             ]);
         },
         async listSiteUsage(siteId, workspaceId) {
-            // Même règle que les bases : l'étage ouvert seul, donc des titres
-            // lisibles sans session (un projet confidentiel ne se relie pas).
-            // Et les archivés à part : un projet rangé ne suit plus rien à
-            // l'écran.
+            // L'étage ouvert seul, comme pour les bases, et les archivés à part : un
+            // projet rangé ne suit plus rien à l'écran.
             return q.query<ProjectUsageRow>(
                 `SELECT p.id AS project_id, p.status, p.content
                    FROM project_audience_links l
@@ -371,9 +329,7 @@ export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
             );
         },
         async countSiteLinks(workspaceId) {
-            // « Combien de projets suivent ce site » se lit sur l'index de la
-            // table de liaison seul (migration 077) : une requête pour tout
-            // l'espace, ce que la liste des sites demande en une fois.
+            // L'index de la table de liaison suffit, une requête pour tout l'espace.
             const rows = await q.query<Pick<ProjectAudienceLinkRow, 'site_id'> & { n: number }>(
                 `SELECT l.site_id, COUNT(*) AS n
                    FROM project_audience_links l

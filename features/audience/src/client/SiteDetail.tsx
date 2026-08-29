@@ -26,35 +26,26 @@ interface SiteDetailProps {
 
 /**
  * La fiche d'un site : son en-tête, ses statistiques, et les projets qui le
- * suivent.
- *
- * Le corps est `SiteView`, exactement celui de l'onglet d'un projet. Ce
- * composant-ci n'ajoute que ce qui n'a de sens **que** dans la feature : le
- * retour à la liste, les réglages, l'installation, et l'interconnexion vers les
- * projets — qui n'aurait aucun sens dans l'onglet d'un projet, puisqu'on y est
- * déjà.
+ * suivent. Le corps est `SiteView`, exactement celui de l'onglet d'un projet ;
+ * ce composant n'ajoute que ce qui n'a de sens que dans la feature (retour à la
+ * liste, réglages, installation, interconnexion vers les projets).
  */
 export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onEdit, onSiteChanged }: SiteDetailProps) {
     const [installOpen, setInstallOpen] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
 
-    // La barre de période de `SiteView` colle juste sous cet en-tête. Sa
-    // hauteur est mesurée et non écrite en dur : elle change dès que le nom du
-    // site passe à la ligne ou que les boutons se replient.
+    // La barre de période de `SiteView` colle juste sous cet en-tête. Sa hauteur est
+    // mesurée et non écrite en dur : elle change dès que le nom du site passe à la ligne
+    // ou que les boutons se replient.
     const sticky = useStickyOffset<HTMLElement>();
 
     /**
-     * Relire maintenant.
+     * Les chiffres se rafraîchissent seuls, mais au plus une fois par minute et
+     * par espace : ce bouton sert au moment où l'on vient de faire quelque chose
+     * sur le site et où l'on veut voir l'effet tout de suite.
      *
-     * Les chiffres se rafraîchissent seuls, mais au plus **une fois par minute
-     * et par espace** : c'est la coalescence de l'ingestion, et c'est le bon
-     * réglage pour une donnée qui se lit en tendance. Reste le moment où l'on
-     * vient justement de faire quelque chose sur le site et où l'on veut voir
-     * l'effet tout de suite — d'où ce bouton, qui ne fait qu'invalider les deux
-     * clés concernées.
-     *
-     * Le tour de l'icône ne mesure rien : il acquitte le clic. La relecture est
-     * quasi instantanée, et prétendre la chronométrer serait inventer un délai.
+     * Le tour de l'icône ne mesure rien, il acquitte le clic : la relecture est
+     * quasi instantanée, et la chronométrer inventerait un délai.
      */
     const refresh = () => {
         invalidate('audience.detail', 'audience.stats');
@@ -65,10 +56,8 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onEdit
     return (
         <div className={styles.detail} style={sticky.style}>
             <header ref={sticky.ref} className={styles.detailHead}>
-                {/* Le bouton de retour des autres fiches, à l'identique :
-                    `Button` fantôme, flèche à gauche, le nom pluriel de la
-                    liste — comme « Dépôts » (Git) et « Bases ». Une feature qui
-                    invente son propre retour se remarque, et pas en bien. */}
+                {/* Le bouton de retour des autres fiches, à l'identique : `Button`
+                    fantôme, flèche à gauche, le nom pluriel de la liste. */}
                 <Button variant='ghost' icon='arrow-left' onClick={onBack}>
                     Sites
                 </Button>
@@ -76,8 +65,8 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onEdit
                 <div className={styles.detailTitle}>
                     <h2 className={styles.detailName}>
                         {site.name}
-                        {/* Sans cette pastille, rien ne distingue un site local
-                            d'une fenêtre sur l'espace voisin. */}
+                        {/* Sans cette pastille, rien ne distingue un site local d'une
+                            fenêtre sur l'espace voisin. */}
                         {site.foreign && (
                             <span title='Ce site appartient à un autre espace qui le partage ici'>
                                 {' '}
@@ -89,9 +78,8 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onEdit
                 </div>
 
                 <div className={styles.detailActions}>
-                    {/* Rien à rafraîchir tant que rien n'est jamais entré : le
-                        bouton n'apparaît qu'une fois la première mesure reçue,
-                        sinon il proposerait de relire un écran vide. */}
+                    {/* Rien à rafraîchir tant que rien n'est entré : sinon le bouton
+                        proposerait de relire un écran vide. */}
                     {site.lastEventAt !== null && (
                         <Button
                             variant='secondary'
@@ -106,10 +94,8 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onEdit
                         </Button>
                     )}
 
-                    {/* L'installation est mise en avant tant qu'aucune mesure
-                        n'est arrivée : c'est la seule chose à faire à ce
-                        moment-là, et la chercher dans un menu ferait perdre du
-                        temps sur le seul écran où l'on est bloqué. */}
+                    {/* L'installation est mise en avant tant qu'aucune mesure n'est
+                        arrivée : c'est la seule chose à faire à ce moment-là. */}
                     <Button
                         variant={site.lastEventAt === null ? 'primary' : 'secondary'}
                         icon='terminal'
@@ -118,23 +104,16 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onEdit
                         Installer
                     </Button>
                     {/* `!site.foreign` : l'identité d'un site (nom, plateforme,
-                        origines) appartient à son espace. Le serveur le refuse,
-                        l'écran ne le propose donc pas ; les chiffres, eux, sont
-                        tout l'objet de la projection.
-
-                        « Modifier » + icône `edit`, comme dans toutes les
-                        fiches : « Paramètres » avec un engrenage, à côté du
-                        bouton « Réglages » et son même engrenage, se lisait
-                        comme deux fois le même bouton. */}
+                        origines) appartient à son espace, le serveur le refuse et
+                        l'écran ne le propose donc pas ; les chiffres, eux, sont tout
+                        l'objet de la projection. */}
                     {canWrite && !site.foreign && (
                         <Button variant='secondary' icon='edit' onClick={onEdit}>
                             Modifier
                         </Button>
                     )}
-                    {/* Les réglages de CE site : la mesure, la reconnaissance
-                        des visiteurs et la conservation (panneau Général), le
-                        partage vers d'autres espaces, les restrictions par
-                        rôle. Le bouton se garde de lui-même. */}
+                    {/* Les réglages de ce site : mesure, visiteurs et conservation,
+                        partage, restrictions par rôle. Le bouton se garde lui-même. */}
                     <FeatureSettingsButton
                         scope={{ kind: 'item', feature: 'audience', itemId: site.id, itemLabel: site.name }}
                     />
@@ -155,13 +134,9 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onEdit
                     <ul className={styles.usageList}>
                         {usage.map((project) => (
                             <li key={project.projectId}>
-                                {/* La téléportation est le chemin commun : le
-                                    même que la feature Git emprunte pour son
-                                    « ouvrir le projet ». Un canal de navigation
-                                    dédié aurait fait un second mécanisme pour
-                                    le même besoin. `openFeature` écrit le
-                                    chemin ; le module ne l'écrit jamais
-                                    lui-même. */}
+                                {/* La téléportation est le chemin commun : un canal de
+                                    navigation dédié ferait un second mécanisme pour le
+                                    même besoin. */}
                                 <button
                                     type='button'
                                     className={styles.usageLink}

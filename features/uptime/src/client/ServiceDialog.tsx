@@ -6,13 +6,9 @@ import { api } from './api';
 import styles from './style.module.css';
 
 /**
- * Ce que le dialogue règle : l'identité du service, et rien d'autre.
- *
- * La cadence de relève, le délai, le seuil de défaillance et la rétention
- * vivaient ici aussi ; ils sont partis dans le panneau Général des réglages
- * du service (`ServiceGeneralPanel`, coquille commune), là où se règle le
- * reste (canaux, partage, permissions). Le dialogue les conserve tels quels
- * quand il enregistre : le contrat d'`uptime.update` prend le service entier.
+ * Ce que le dialogue règle : l'identité du service. Cadence, délai, seuil et
+ * rétention se règlent dans le panneau Général ; le dialogue les conserve tels
+ * quels quand il enregistre (`uptime.update` prend le service entier).
  */
 interface ServiceDraft {
     name: string;
@@ -23,7 +19,7 @@ interface ServiceDraft {
     enabled: boolean;
 }
 
-/** Les quatre réglages que le dialogue ne montre plus, mais réécrit tels quels. */
+/** Réglages que le dialogue ne montre pas, mais réécrit tels quels. */
 interface ServiceTuning {
     intervalSeconds: number;
     timeoutSeconds: number;
@@ -64,16 +60,9 @@ export const TUNING_DEFAULTS: ServiceTuning = {
 };
 
 /**
- * Ajouter / régler un service surveillé.
- *
- * **Contrôlé, pas impérative.** Cette feature a longtemps vécu derrière
- * `OpenPopup`/`ClosePopup`, un registre global à clé unique, qu'un deuxième
- * montage écrase (`FeatureKeepAlive` en garde plusieurs à la fois vivants).
- * Cela suffisait tant que le formulaire n'ouvrait que depuis la feature Uptime
- * elle-même ; l'onglet Déploiement d'un projet doit désormais pouvoir déclarer
- * un service à la volée, exactement comme `TargetDialog` pour une cible de
- * déploiement, d'où ce même patron `open`/`service`/`onSaved` (offert à
- * Projets par le contrat client du module).
+ * Ajouter / régler un service surveillé. Contrôlé (`open`/`service`/`onSaved`)
+ * plutôt qu'impératif : l'onglet Déploiement d'un projet l'ouvre aussi, par le
+ * contrat client du module.
  */
 export function ServiceDialog({ open, service, onClose, onSaved, onRemoved }: ServiceDialogProps) {
     const [draft, setDraft] = useState<ServiceDraft>(DEFAULTS);
@@ -222,12 +211,8 @@ export function ServiceDialog({ open, service, onClose, onSaved, onRemoved }: Se
                     />
                 </label>
 
-                {/* Cadence, délai, seuil et rétention : dans les réglages du
-                    service (bouton commun de sa fiche, onglet Général), pas
-                    ici. « M'alerter quand ce service tombe » y vivait aussi,
-                    en doublon muet de la section Notifications : les canaux et
-                    le silence se règlent à un seul endroit, Réglages →
-                    Notifications. */}
+                {/* Cadence, délai, seuil, rétention et canaux d'alerte : dans les
+                    réglages du service, pas ici. */}
                 <Checkbox checked={draft.enabled} onChange={(v) => set('enabled', v)}>
                     Surveillance active
                 </Checkbox>

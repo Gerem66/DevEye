@@ -2,14 +2,10 @@ import { useSyncExternalStore } from 'react';
 import { openFeature } from 'deveye-sdk-client';
 
 /**
- * L'intention « ouvrir la flotte », la navigation interne du module.
- *
- * Le segment « Flotte » vit dans la vue complète (`Devices.tsx`), mais celui
- * qui le demande peut être ailleurs : le panneau d'un appareil ouvert depuis
- * une tuile de l'accueil (« Gérer les appareils »). On pose l'intention, on
- * ouvre la feature par l'hôte (une téléportation, la garde d'accès reste la
- * sienne), et la vue la consomme à son montage ou à son prochain rendu si
- * elle est déjà là, parquée ou visible.
+ * L'intention « ouvrir la flotte » : le segment vit dans `Devices.tsx`, mais
+ * qui le demande peut être ailleurs (le panneau d'un appareil ouvert depuis
+ * l'accueil). On pose l'intention, on ouvre la feature par l'hôte (une
+ * téléportation), et la vue la consomme au montage ou au prochain rendu.
  */
 let wanted = false;
 let version = 0;

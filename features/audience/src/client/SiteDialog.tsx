@@ -27,22 +27,16 @@ const PLATFORM_OPTIONS = audiencePlatformSchema.options.map((value) => ({ value,
 /**
  * Déclarer ou renommer un site suivi : son identité.
  *
- * Quatre champs, et un seul demande à être expliqué : la **plateforme**, parce
- * qu'elle décide si les origines autorisées sont appliquées. Les autres se
- * lisent seuls, d'où l'absence de texte d'aide ailleurs : une phrase sous
- * chaque champ finit par ne plus être lue nulle part.
+ * Quatre champs, et un seul demande à être expliqué : la plateforme, parce
+ * qu'elle décide si les origines autorisées sont appliquées. Une phrase d'aide
+ * sous chaque champ finirait par n'être lue nulle part.
  *
- * La mesure, la reconnaissance des visiteurs et la conservation ne sont plus
- * ici : ce sont des réglages, ils vivent dans le panneau Général de la coquille
- * (`SiteGeneralPanel`), à côté du partage et des permissions du site. Le
- * contrat, lui, prend le site entier : à la création on envoie leurs défauts
- * (mesure active, visiteurs anonymes, la conservation par défaut du contrat),
- * à la modification ceux du site chargé, inchangés.
+ * La mesure, la reconnaissance des visiteurs et la conservation se règlent dans
+ * le panneau Général ; le contrat prenant le site entier, on envoie ici leurs
+ * défauts à la création et les valeurs du site chargé à la modification.
  *
- * La suppression vit ici, et non sur la carte : on supprime un site une fois
- * dans sa vie, et le geste emporte tout son historique. Ce n'est pas ce qui
- * mérite d'être le plus accessible de l'écran — même arbitrage que « Archiver »
- * dans « Modifier le projet ».
+ * La suppression vit ici et non sur la carte : on supprime un site une fois
+ * dans sa vie, et le geste emporte tout son historique.
  */
 export function SiteDialog({ open, site, onClose, onSaved, onRemoved }: SiteDialogProps) {
     const [name, setName] = useState('');
@@ -75,17 +69,14 @@ export function SiteDialog({ open, site, onClose, onSaved, onRemoved }: SiteDial
                 name: name.trim(),
                 description: description.trim(),
                 platform,
-                // Une ligne par origine à la saisie ; le serveur normalise et
-                // dédoublonne, donc on lui envoie tel quel plutôt que de
-                // reproduire ici une règle qui vit déjà là-bas.
+                // Une ligne par origine à la saisie ; le serveur normalise et dédoublonne,
+                // donc on lui envoie tel quel plutôt que de reproduire sa règle ici.
                 origins: origins
                     .split('\n')
                     .map((line) => line.trim())
                     .filter((line) => line.length > 0),
-                // Le contrat prend le site entier ; ce qui n'est pas de
-                // l'identité vient du site chargé (ou de ses défauts à la
-                // création) et repart tel quel : ces trois réglages se
-                // changent dans le panneau Général, pas ici.
+                // Le contrat prend le site entier ; ce qui n'est pas de l'identité vient
+                // du site chargé (ou de ses défauts à la création) et repart tel quel.
                 visitorMode: site?.visitorMode ?? 'anonymous',
                 active: site?.active ?? true,
                 retentionDays: site?.retentionDays ?? AUDIENCE_RETENTION_DEFAULT_DAYS
@@ -179,9 +170,8 @@ export function SiteDialog({ open, site, onClose, onSaved, onRemoved }: SiteDial
                         />
                     </label>
 
-                    {/* Trois choix fixes, tous visibles : un déroulant cachait
-                        derrière un clic la seule décision de ce formulaire qui
-                        change ce que le serveur accepte. */}
+                    {/* Trois choix fixes, tous visibles : un déroulant cacherait derrière
+                        un clic la seule décision qui change ce que le serveur accepte. */}
                     <div className={styles.field}>
                         <span className={styles.label}>Plateforme</span>
                         <SegmentedControl

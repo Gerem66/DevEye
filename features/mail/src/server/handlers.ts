@@ -36,9 +36,8 @@ import type { MailRepo } from './repo';
 import { mailGetSettingsFeature, mailSetSettingsFeature } from './settings';
 
 /**
- * Les vingt-six commandes du module, réparties par sujet (comptes, dossiers,
- * messages, réglages). Same order as `mailCommands` in the contract, so the
- * two lists diff against each other.
+ * Les commandes du module, dans le même ordre que `mailCommands` du contrat,
+ * pour que les deux listes se comparent.
  */
 export const mailHandlers: readonly SdkFeatureDefinition<MailRepo, string, ZodType, ZodType>[] = [
     mailAccountListFeature,

@@ -10,23 +10,16 @@ interface PaginationProps {
     onGo: (page: number) => void;
 }
 
-/** Combien de pages sont nommées de chaque côté quand il y en a trop pour tout dire. */
+/** Pages nommées à chaque extrémité. */
 const EDGE = 2;
-/** Combien de voisines de la page courante restent nommées. */
+/** Voisines de la page courante nommées. */
 const AROUND = 2;
-/** En deçà, toutes les pages tiennent : aucune raison d'en cacher. */
+/** En deçà, toutes les pages sont nommées. */
 const ALL_UP_TO = 10;
 
 /**
- * Les pages à écrire, `null` pour une coupure.
- *
- * La règle tient en une phrase : **les extrémités, et le voisinage d'où l'on
- * est**. C'est ce qui permet d'aller au début, à la fin, ou à côté sans jamais
- * lire plus d'une douzaine de nombres — et c'est ce qui manquait à un simple
- * « Précédent / Suivant », qui savait avancer d'un pas et rien d'autre.
- *
- * Une coupure n'apparaît que si elle **cache au moins deux pages** : remplacer
- * « 5 » par « … » ne raccourcit rien et fait perdre un raccourci.
+ * Les pages à écrire, `null` pour une coupure : les extrémités et le voisinage
+ * de la page courante. Une coupure n'apparaît que si elle cache deux pages.
  */
 export function pageSteps(page: number, pageCount: number): (number | null)[] {
     if (pageCount <= ALL_UP_TO) return Array.from({ length: pageCount }, (_, i) => i + 1);
@@ -43,7 +36,7 @@ export function pageSteps(page: number, pageCount: number): (number | null)[] {
     let previous = 0;
     for (const value of sorted) {
         if (previous !== 0 && value - previous > 1) {
-            // Un seul trou : le nommer coûte moins qu'une coupure.
+            // Un seul trou se nomme.
             if (value - previous === 2) out.push(previous + 1);
             else out.push(null);
         }
@@ -53,15 +46,6 @@ export function pageSteps(page: number, pageCount: number): (number | null)[] {
     return out;
 }
 
-/**
- * Parcourir les pages d'une table.
- *
- * Les deux boutons restent — c'est le geste qu'on fait le plus, et il n'a pas à
- * demander de viser un nombre. Les numéros s'ajoutent à côté, discrets, pour
- * tout ce que « page suivante » ne sait pas faire : revenir au début d'une table
- * de deux mille pages, ou sauter à la fin pour voir les dernières lignes
- * écrites.
- */
 export function Pagination({ page, pageCount, disabled, onGo }: PaginationProps) {
     if (pageCount <= 1) return null;
 

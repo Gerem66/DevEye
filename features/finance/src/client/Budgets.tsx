@@ -15,15 +15,8 @@ interface BudgetsProps {
 }
 
 /**
- * Les enveloppes: un plafond par catégorie, sur une période qui se renouvelle.
- *
- * Rien n'est stocké de ce qui est affiché ici en dehors du plafond lui-même:
- * consommé et restant sont recalculés à chaque lecture, sur la période en cours.
- * Un budget est une règle, pas un compteur, et mémoriser le compteur le ferait
- * diverger dès qu'une opération passée est corrigée.
- *
- * Une seule enveloppe par catégorie: deux n'auraient aucun sens et il faudrait
- * ensuite les départager.
+ * Les enveloppes. Consommé et restant sont recalculés à chaque lecture : un
+ * budget est une règle, pas un compteur. Une seule par catégorie.
  */
 export function Budgets({ base }: BudgetsProps) {
     const [dialog, setDialog] = useState<{ budget: FinanceBudget | null } | null>(null);
@@ -67,8 +60,7 @@ export function Budgets({ base }: BudgetsProps) {
                     </p>
                     {base.canWrite &&
                         (spendable.length === 0 ? (
-                            // Sans catégorie de dépenses, rien à budgéter : le
-                            // bouton commun mène aux réglages, où elles se créent.
+                            // Sans catégorie de dépenses, rien à budgéter : le bouton mène aux réglages.
                             <FeatureSettingsButton
                                 scope={{ kind: 'feature', feature: 'finance' }}
                                 initialSection='categories'

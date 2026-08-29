@@ -3,24 +3,10 @@ import { parsePhoneNumberFromString } from 'libphonenumber-js/max';
 import { field, type OsintLink, type OsintProbeAdapter, type OsintTargetKind } from './shared';
 
 /**
- * Pivots : des requêtes composées, pas des pages récupérées.
- *
- * ## Pourquoi composer des liens plutôt que d'aller chercher les résultats
- *
- * Trois raisons, dans l'ordre d'importance :
- *  1. **Ça marche durablement.** Un scraper de moteur de recherche casse au
- *     prochain changement de balisage ; une URL de requête, non.
- *  2. **Ça ne fait pas blacklister le serveur.** Interroger Google depuis l'IP
- *     du serveur, pour tous les membres de l'espace, mène au captcha permanent.
- *  3. **Ça respecte les CGU** de moteurs qui interdisent tous l'extraction
- *     automatisée.
- *
- * Le résultat pratique est le même : un clic, et la recherche s'ouvre — mais
- * dans le navigateur de l'utilisateur, avec sa session et son IP à lui.
- *
- * C'est cette sonde qui porte les « recherches avancées sur nom/prénom » : la
- * valeur est dans les **opérateurs** (`site:`, guillemets, variantes de format),
- * qu'on ne tape pas à la main correctement.
+ * Pivots : des requêtes composées, pas des pages récupérées. Un scraper casse au
+ * prochain changement de balisage, fait blacklister l'IP du serveur et viole les
+ * CGU des moteurs ; une URL de requête s'ouvre dans le navigateur de
+ * l'utilisateur, avec sa session.
  */
 
 const g = (q: string): string => `https://www.google.com/search?q=${encodeURIComponent(q)}`;

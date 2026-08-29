@@ -1,15 +1,10 @@
 import { z } from 'zod';
 
 /**
- * La planification d'un projet : ses jalons, et les dépendances entre cartes.
- *
- * Ce sont les deux choses que le kanban ne sait pas dire. Un tableau montre
- * *où en est* chaque carte ; une frise montre *quand*, et ce qui attend quoi.
- *
- * Découpage clair / chiffré habituel : les dates, l'atteinte et le graphe des
- * dépendances sont en colonnes claires — c'est ce qui permet de dessiner la
- * frise et de détecter un cycle sans déchiffrer quoi que ce soit. Seuls le nom
- * et la description d'un jalon sont chiffrés.
+ * La planification d'un projet : ses jalons, et les dépendances entre cartes. Les
+ * dates, l'atteinte et le graphe des dépendances restent en colonnes claires, ce
+ * qui permet de dessiner la frise et de détecter un cycle sans déchiffrer ; seuls
+ * le nom et la description d'un jalon sont chiffrés.
  */
 
 export const PROJECT_MILESTONE_NAME_MAX_LENGTH = 80;
@@ -20,9 +15,8 @@ export const projectMilestoneSchema = z.object({
     projectId: z.number().int().positive(),
     name: z.string().max(PROJECT_MILESTONE_NAME_MAX_LENGTH),
     description: z.string().max(PROJECT_MILESTONE_DESCRIPTION_MAX_LENGTH),
-    /** Échéance visée, en secondes unix. Un jalon est toujours daté. */
+    /** Échéance visée, en secondes unix. */
     dueDate: z.number().int(),
-    /** Horodatage d'atteinte, ou `null` s'il est encore devant nous. */
     reachedAt: z.number().int().nullable(),
     sortOrder: z.number().int().nonnegative()
 });
@@ -36,10 +30,8 @@ export const projectMilestoneDraftSchema = z.object({
 export type ProjectMilestoneDraft = z.infer<typeof projectMilestoneDraftSchema>;
 
 /**
- * Une dépendance : `cardId` est bloquée par `blockedByCardId`.
- *
- * Le sens est fixé une fois pour toutes — « bloquée par » et non « bloque » —
- * pour qu'il n'y ait jamais à se demander dans quel sens lire une arête.
+ * Une dépendance : `cardId` est bloquée par `blockedByCardId`. Le sens est fixé une
+ * fois pour toutes, pour n'avoir jamais à se demander comment lire une arête.
  */
 export const projectCardDepSchema = z.object({
     cardId: z.number().int().positive(),

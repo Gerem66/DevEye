@@ -1,22 +1,13 @@
 -- Projets / git : avance-retard des branches, et pull requests.
+-- Découpage clair / chiffré inchangé (voir 061) : compteurs, états et
+-- horodatages en clair, titres, descriptions, auteurs et noms de branches dans
+-- `content`.
 --
--- Deux manques constatés à l'usage de l'onglet Git : une liste de branches ne
--- dit pas laquelle est en retard sur la principale, et les pull requests — là
--- où se discute le travail — n'y figuraient pas du tout.
---
--- Découpage clair / chiffré inchangé (voir 061) : restent en clair les
--- compteurs, les états et les horodatages — ce sur quoi on trie et on filtre ;
--- passent par `content` le titre, la description, le nom d'auteur et les noms
--- de branches, qui identifient.
---
--- Ajouts de colonnes via INFORMATION_SCHEMA + SQL dynamique, JAMAIS via
--- `ADD COLUMN IF NOT EXISTS` : cette clause a fait tomber la production au
--- démarrage (voir 038_uptime_order.sql).
+-- Ajouts de colonnes via INFORMATION_SCHEMA + SQL dynamique, jamais
+-- `ADD COLUMN IF NOT EXISTS` (extension MariaDB, cf. 038).
 
--- Avance et retard d'une branche sur la branche par défaut, tels que le
--- fournisseur les calcule. NULL = jamais comparée (branche par défaut
--- elle-même, ou comparaison pas encore faite) — et non « zéro », qui voudrait
--- dire « à jour » et serait un mensonge.
+-- Avance et retard sur la branche par défaut, tels que le fournisseur les
+-- calcule. NULL = jamais comparée, et non « zéro », qui voudrait dire « à jour ».
 SET @ahead_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'project_branches' AND COLUMN_NAME = 'ahead_count');
 SET @add_ahead = IF(@ahead_exists = 0,
@@ -31,11 +22,9 @@ SET @add_behind = IF(@behind_exists = 0,
     'SELECT 1');
 PREPARE stmt FROM @add_behind; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
--- Le couple « base..tête » sur lequel l'avance-retard a été calculée. Sans lui
--- on ne saurait pas si les compteurs sont encore valides : ils cessent de
--- l'être dès qu'un des deux côtés bouge, et recomparer toutes les branches à
--- chaque tour coûterait un appel par branche pour un résultat le plus souvent
--- identique.
+-- Le couple « base..tête » sur lequel l'avance-retard a été calculé : les
+-- compteurs cessent d'être valides dès qu'un des deux côtés bouge, et
+-- recomparer toutes les branches à chaque tour coûterait un appel par branche.
 SET @cmp_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'project_branches' AND COLUMN_NAME = 'compared_sha');
 SET @add_cmp = IF(@cmp_exists = 0,
@@ -43,11 +32,8 @@ SET @add_cmp = IF(@cmp_exists = 0,
     'SELECT 1');
 PREPARE stmt FROM @add_cmp; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
--- Les pull requests du dépôt lié.
---
--- `number` porte l'unicité : c'est l'identité publique et stable d'une PR chez
--- le fournisseur, et elle est déjà un entier — pas besoin d'un condensé `*_ref`
--- comme pour les branches et les tags, dont le nom seul identifie.
+-- Les pull requests du dépôt lié. `number` porte l'unicité : identité publique
+-- et stable d'une PR, déjà un entier, pas besoin d'un condensé `*_ref`.
 CREATE TABLE IF NOT EXISTS project_pull_requests (
     id           INT AUTO_INCREMENT PRIMARY KEY,
     project_id   INT         NOT NULL,

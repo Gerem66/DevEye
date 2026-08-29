@@ -3,17 +3,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 /**
  * La largeur réelle d'un élément, suivie par `ResizeObserver`.
  *
- * Le reste du dépôt dessine ses graphes dans un `viewBox` fixe étiré par
- * `preserveAspectRatio='none'` (`features/uptime/src/client/UptimeChart.tsx`,
- * `Features/Monitoring/MiniGraph.tsx`). C'est parfait pour une courbe : un trait
- * étiré reste un trait. Ça ne l'est pas ici, où l'on dessine des **disques** —
- * l'étirement les transforme en ellipses, et l'étiquette d'axe change de corps
- * avec la largeur de la fenêtre.
- *
- * D'où la mesure : le graphe des commits travaille en pixels réels. C'est la
- * seule chose que le `viewBox` ne sait pas faire.
- *
- * `ResizeObserver` est une primitive du navigateur — aucune dépendance ajoutée.
+ * Le graphe des commits dessine des disques : un `viewBox` fixe étiré par
+ * `preserveAspectRatio='none'` les rendrait elliptiques et ferait varier le corps
+ * des étiquettes avec la largeur. D'où la mesure en pixels réels.
  */
 export function useElementWidth<T extends HTMLElement>(): [(node: T | null) => void, number] {
     const [width, setWidth] = useState(0);

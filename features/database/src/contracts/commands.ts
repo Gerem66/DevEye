@@ -28,24 +28,15 @@ import {
 } from './domain';
 
 /**
- * Commandes des bases de données de l'espace.
+ * Commandes des bases de données de l'espace, préfixe `database.` en camelCase.
  *
- * Préfixe unique `database.`, comme `git.` et `projects.` — d'où le camelCase
- * derrière le point.
+ * Piège : le filet de démarrage (`MUTATION_VERB` dans `src/features/_topics.ts`)
+ * cherche un verbe juste après le point et ne verra aucune de ces commandes ;
+ * un `mutates` oublié ne produit aucun avertissement.
  *
- * ⚠️ Conséquence à connaître : le filet de démarrage (`MUTATION_VERB` dans
- * `src/features/_topics.ts`) cherche un verbe **juste après le point**. Il ne
- * verra donc **aucune** de ces commandes, et un `mutates` oublié ne produira
- * aucun avertissement. Il se relit à la main.
- *
- * ## Rien ne se connecte tout seul
- *
- * Seules `test`, `inspect`, `tableList`, `tableRows` et `alertTest` joignent la
- * base, et toutes sont déclenchées par un geste explicite. `list` et `get`
- * lisent le cache local — ouvrir la feature ne réveille aucun serveur.
- *
- * L'espace visé n'apparaît dans aucune entrée : il voyage sur l'enveloppe WS et
- * le dispatcheur le résout, appartenance vérifiée, avant le handler.
+ * Seules les commandes qui lisent ou écrivent chez le serveur joignent la base,
+ * sur un geste explicite ; `list` et `get` lisent le cache local. L'espace visé
+ * voyage sur l'enveloppe WS, jamais en entrée.
  */
 
 const databaseId = z.number().int().positive();
@@ -60,13 +51,10 @@ const accessInput = z.object({
     auth: databaseSshAuthSchema,
     /**
      * Mot de passe SSH ou clé privée. Absent = on garde celui en place ; une
-     * chaîne vide l'efface. Le client ne le reçoit jamais, il ne peut donc pas
-     * le renvoyer inchangé — d'où cette convention plutôt qu'un champ obligatoire.
+     * chaîne vide l'efface. Le client ne le reçoit jamais.
      */
     secret: z.string().max(DATABASE_SECRET_MAX_LENGTH).optional()
 });
-
-// ------------------------------------------------------------------- bases
 
 /** Le nombre de bases de l'espace, pour la tuile de l'accueil. */
 export const databaseCount = {
@@ -75,14 +63,13 @@ export const databaseCount = {
     output: z.object({ count: z.number().int().nonnegative() })
 };
 
-/** Les bases de l'espace, dans l'ordre de l'utilisateur. Lit le cache local. */
+/** Dans l'ordre de l'utilisateur ; lit le cache local. */
 export const databaseList = {
     command: 'database.list' as const,
     input: z.object({}),
     output: z.object({ databases: z.array(databaseSchema) })
 };
 
-/** Une base, avec les projets qui s'en servent et ses alertes. */
 export const databaseGet = {
     command: 'database.get' as const,
     input: z.object({ databaseId }),
@@ -111,11 +98,7 @@ export const databaseAdd = {
     output: z.object({ database: databaseSchema })
 };
 
-/**
- * Modifie une base. `password` absent = on garde celui en place ; une chaîne
- * vide l'efface. Même convention que le secret du tunnel, et pour la même
- * raison : un secret rendu au client est un secret qu'on ne peut plus reprendre.
- */
+/** `password` absent = on garde celui en place ; une chaîne vide l'efface. */
 export const databaseUpdate = {
     command: 'database.update' as const,
     input: z.object({
@@ -134,37 +117,21 @@ export const databaseUpdate = {
     output: z.object({ database: databaseSchema })
 };
 
-/**
- * Retire une base de l'espace, avec ses alertes et toutes ses liaisons.
- *
- * Les projets liés ne sont **pas** touchés : ils perdent leur base, rien
- * d'autre. Le serveur distant, lui, n'est évidemment jamais atteint.
- */
+/** Retire la base, ses alertes et ses liaisons ; les projets liés ne perdent que leur base. */
 export const databaseRemove = {
     command: 'database.remove' as const,
     input: z.object({ databaseId }),
     output: z.object({ databaseId })
 };
 
-/**
- * Range les bases de l'espace : `ids` est la liste **complète** dans son ordre
- * final. Une nouvelle base prend le rang suivant, donc la fin de la liste.
- */
+/** `ids` est la liste complète dans son ordre final. */
 export const databaseReorder = {
     command: 'database.reorder' as const,
     input: z.object({ ids: z.array(databaseId).min(1) }),
     output: z.object({ ids: z.array(databaseId) })
 };
 
-// ------------------------------------------------------- à la demande
-
-/**
- * Essaie de joindre la base, maintenant.
- *
- * Ne lève **jamais** sur un échec de connexion : un serveur injoignable est une
- * réponse, pas une erreur de commande. Le message revient dans `error`, déjà
- * traduit, et l'interface le montre sans rien bloquer.
- */
+/** Ne lève jamais sur un échec de connexion : le message revient dans `error`. */
 export const databaseTest = {
     command: 'database.test' as const,
     input: z.object({ databaseId }),
@@ -172,16 +139,9 @@ export const databaseTest = {
 };
 
 /**
- * Essaie une connexion **avant** de l'enregistrer.
- *
- * Le formulaire d'ajout décrit une base qui n'existe pas encore : `test` ne peut
- * rien pour lui, il part d'un identifiant. Celui-ci prend les réglages tels
- * qu'ils sont saisis, et n'écrit rien — ni ligne, ni état.
- *
- * `databaseId` sert à la modification : les secrets ne redescendant jamais au
- * client, un champ laissé intact n'a rien à renvoyer, et le serveur reprend
- * alors celui qu'il détient déjà. Sans cela, « Tester » échouerait sur une base
- * qui fonctionne, faute de mot de passe.
+ * Essaie des réglages pas encore enregistrés, sans rien écrire. `databaseId`
+ * sert à la modification : un secret laissé intact ne redescend jamais au
+ * client, le serveur reprend alors celui qu'il détient.
  */
 export const databaseTestDraft = {
     command: 'database.testDraft' as const,
@@ -198,11 +158,7 @@ export const databaseTestDraft = {
     output: z.object({ probe: databaseProbeSchema })
 };
 
-/**
- * Relève l'inventaire maintenant : version du serveur, taille, nombre de
- * tables, et l'état des alertes. C'est ce que fait le relevé périodique, sur
- * demande explicite — ce qui le rend utile même sur une base au repos.
- */
+/** Le relevé périodique, sur demande : inventaire et alertes, même sur une base au repos. */
 export const databaseInspect = {
     command: 'database.inspect' as const,
     input: z.object({ databaseId }),
@@ -217,19 +173,9 @@ export const databaseTableList = {
 };
 
 /**
- * Le contenu d'une table, page par page.
- *
- * ## Rien de ce qui vient du client n'entre tel quel dans une requête
- *
- * Un identifiant ne peut pas être un paramètre lié : nom de table, nom de
- * colonne, sens du tri sont donc **confrontés au catalogue réel** avant d'être
- * cités, et un nom qui n'y figure pas n'atteint jamais le moteur. Les valeurs,
- * elles, sont toujours liées ; l'opérateur d'un filtre est choisi dans une
- * énumération fermée. Aucun fragment de SQL ne traverse le contrat.
- *
- * `withStructure` évite un second aller-retour à la sélection d'une table : la
- * structure et la première page arrivent alors dans la **même session**, ce qui
- * compte quand chaque connexion rouvre un tunnel SSH.
+ * Table, colonnes et sens du tri sont confrontés au catalogue réel avant d'être
+ * cités ; les valeurs sont toujours liées. `withStructure` rend la structure
+ * dans la même session (chaque connexion peut rouvrir un tunnel SSH).
  */
 export const databaseTableRows = {
     command: 'database.tableRows' as const,
@@ -258,23 +204,9 @@ export const databaseTableStructure = {
     output: z.object({ structure: databaseStructureSchema })
 };
 
-// ------------------------------------------------------- écrire des lignes
-
 /**
- * Les trois écritures de l'explorateur.
- *
- * ## Ce que le serveur refuse, et pourquoi
- *
- * Modifier ou supprimer exige une **clé primaire**. Sans elle, aucune condition
- * ne désigne *une* ligne : un `UPDATE` en toucherait plusieurs, un `DELETE` en
- * emporterait autant, et rien ne permettrait de revenir en arrière. Le serveur
- * refuse alors, avec la raison ; l'interface ne propose même pas le geste.
- *
- * ## Ce qui décide en dernier ressort
- *
- * Le compte saisi dans les réglages de la base. DevEye peut demander une
- * écriture ; c'est le serveur distant qui l'accorde ou la refuse. Un compte en
- * lecture seule rend donc tout ceci inoffensif, ce que dit le formulaire.
+ * Modifier ou supprimer exige une clé primaire : sans elle, rien ne désigne une
+ * ligne. Le compte saisi pour la base décide en dernier ressort.
  */
 export const databaseRowInsert = {
     command: 'database.rowInsert' as const,
@@ -313,13 +245,8 @@ export const databaseRowDelete = {
 };
 
 /**
- * Une instruction libre, écriture comprise — le terminal.
- *
- * Distincte de `query`, qui refuse tout ce qui n'est pas une lecture parce
- * qu'elle sert à mettre au point une condition d'alerte. Ici l'intention est
- * l'inverse : administrer. Une seule instruction à la fois malgré tout, le
- * point-virgule interne restant refusé — c'est ce qui empêche qu'un copier-coller
- * en exécute trois quand on en visait une.
+ * Une instruction libre, écriture comprise (le terminal). Une seule à la fois :
+ * le point-virgule interne est refusé.
  */
 export const databaseExecute = {
     command: 'database.execute' as const,
@@ -328,18 +255,9 @@ export const databaseExecute = {
 };
 
 /**
- * Exporte une table, ou toute la base.
- *
- * L'export est **complet** : il lit tout ce que la portée désigne, page par
- * page. Le seul plafond qui subsiste est un garde-fou mémoire du serveur, très
- * au-dessus de ce qu'un export normal atteint ; s'il est touché, `truncated` le
- * dit et l'interface le répète. Pour une copie fidèle d'un serveur entier,
- * `mysqldump` et `pg_dump` restent malgré tout les bons outils — eux savent
- * rejouer schéma, index et contraintes.
- *
- * `idRanges` restreint l'export aux lignes dont la **clé primaire** tombe dans
- * l'une des plages. Réservé à une portée d'une seule table : sur toute la base,
- * les clés n'ont ni le même nom ni le même sens d'une table à l'autre.
+ * Export complet, page par page ; seul un garde-fou mémoire du serveur peut
+ * tronquer, et `truncated` le dit. `idRanges` borne la clé primaire, sur une
+ * seule table.
  */
 export const databaseExport = {
     command: 'database.export' as const,
@@ -361,8 +279,6 @@ export const databaseExport = {
         truncated: z.boolean()
     })
 };
-
-// ----------------------------------------------------------------- alertes
 
 export const databaseAlertList = {
     command: 'database.alertList' as const,
@@ -402,14 +318,7 @@ export const databaseAlertRemove = {
     output: z.object({ alertId })
 };
 
-/**
- * Évalue une alerte tout de suite et rend ce que chaque condition a mesuré,
- * **sans notifier personne**.
- *
- * C'est ce qui rend une condition écrivable : on voit le nombre que rend sa
- * requête avant de choisir un seuil, au lieu d'attendre une notification pour
- * découvrir qu'on s'est trompé de colonne.
- */
+/** Évalue des conditions tout de suite, sans rien enregistrer ni notifier. */
 export const databaseAlertTest = {
     command: 'database.alertTest' as const,
     input: z.object({
@@ -420,7 +329,7 @@ export const databaseAlertTest = {
     output: z.object({
         firing: z.boolean(),
         values: z.array(z.number().nullable()),
-        /** L'erreur de chaque condition, à sa place — `null` si elle a abouti. */
+        /** L'erreur de chaque condition, à sa place ; `null` si elle a abouti. */
         errors: z.array(z.string().nullable()),
         elapsedMs: z.number().int().nonnegative()
     })

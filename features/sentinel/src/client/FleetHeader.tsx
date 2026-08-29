@@ -5,11 +5,8 @@ import type { DeviceSentinelState, FindingSeverity } from '../contracts/domain';
 import styles from './style.module.css';
 
 /**
- * L'en-tête de la vue de flotte : où en est l'espace, et de quoi filtrer.
- *
- * Le score n'y figure pas, il est porté par le bouton de tête, dans la barre
- * latérale, qui sert à la fois de résumé et de retour à l'accueil de la feature.
- * L'afficher aux deux endroits faisait lire deux fois le même chiffre.
+ * L'en-tête de la vue de flotte. Le score est porté par le bouton de tête de
+ * la barre latérale, pas répété ici.
  */
 
 const FILTERS: { id: FindingSeverity | null; label: string }[] = [
@@ -52,17 +49,7 @@ export default function FleetHeader({ devices, minSeverity, onMinSeverity, showS
                     </p>
                 </div>
 
-                {/*
-                 * Le score vit dans le bouton de tête, à gauche : le répéter ici
-                 * faisait lire deux fois le même chiffre à deux endroits de
-                 * l'écran. La place revient donc à l'action qui gouverne la
-                 * flotte, qui n'en avait aucune.
-                 */}
                 <div className={styles.headerActions}>
-                    {/* Même variante que dans les autres features : la
-                        silhouette du bouton Réglages ne change pas d'un écran
-                        à l'autre. Ses onglets viennent du manifest (Appareils)
-                        et du descripteur (Notifications). */}
                     <FeatureSettingsButton scope={{ kind: 'feature', feature: 'sentinel' }} />
                 </div>
             </div>

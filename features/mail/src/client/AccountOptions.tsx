@@ -17,19 +17,16 @@ interface AccountOptionsProps {
 
 /**
  * Everything that acts on *this mailbox*, sitting between the selected-account
- * header and its folder tree — the only place in the feature where the scope is
- * unambiguously one account. The toolbar up top is deliberately left for global
- * actions (compose, feature settings); the refresh lived there before and read
- * as global when it never was.
+ * header and its folder tree: the only place in the feature where the scope is
+ * unambiguously one account, the toolbar up top being left for global actions
+ * (compose, feature settings).
  *
- * Actions only. Anything with a value to set lives in the settings dialog of
- * the selected account (the common settings button, top right of the feature):
- * a strip of buttons is the wrong place for a field.
+ * Actions only. Anything with a value to set lives in the settings dialog of the
+ * selected account: a strip of buttons is the wrong place for a field.
  *
- * Le rafraîchissement est une relève, pas une reconstruction : il n'attend pas
- * le prochain passage de la synchro de fond, mais fait le même travail qu'elle.
- * La reconstruction du cache, elle, vit dans l'onglet Synchronisation des
- * réglages de la boîte : deux gestes trop différents pour se ressembler.
+ * Le rafraîchissement est une relève, pas une reconstruction : il fait le même
+ * travail que la synchro de fond, sans attendre son prochain passage. La
+ * reconstruction du cache vit dans l'onglet Synchronisation des réglages.
  */
 export function AccountOptions({ canRefresh, refreshing, foreign, onEdit, onRefresh, onDelete }: AccountOptionsProps) {
     return (

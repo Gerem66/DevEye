@@ -57,10 +57,9 @@ export function userInvitesRepo(pool: Q): UserInvitesRepo {
             return r.rows;
         },
         async consume(token, email) {
-            // Incrémenter ET valider d'un seul coup : deux inscriptions
-            // simultanées sur le dernier usage ne peuvent pas passer toutes les
-            // deux. Le verrou d'adresse fait partie de la condition, donc un
-            // jeton nominatif ne se consomme pas au profit de quelqu'un d'autre.
+            // Incrémenter et valider d'un seul coup : deux inscriptions simultanées
+            // sur le dernier usage ne passent pas toutes les deux. Le verrou
+            // d'adresse fait partie de la condition.
             const res = await pool.query(
                 `UPDATE user_invites SET uses = uses + 1
                  WHERE token = ? AND ${LIVE} AND (email IS NULL OR email = ?)`,

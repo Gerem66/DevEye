@@ -1,27 +1,23 @@
 import type { SdkQueryable } from '@deveye/types/sdk/server';
 
 /**
- * La conversion d'un projet d'un étage de chiffrement vers l'autre : un seul
- * projet passe de l'étage ouvert à l'étage gardé (ou l'inverse) quand son
- * auteur change `security_tier`.
+ * La conversion d'un projet d'un étage de chiffrement vers l'autre, quand son auteur
+ * change `security_tier`.
  *
- * ⚠️ **Liste à tenir à jour.** Toute nouvelle colonne chiffrée suspendue à un
- * projet doit y figurer, sinon son contenu resterait sous l'ancienne clé et
- * deviendrait illisible à la bascule. Rien ne peut le détecter : un blob chiffré
- * est indistinguable d'un autre.
+ * ⚠️ Liste à tenir à jour : toute nouvelle colonne chiffrée suspendue à un projet
+ * doit y figurer, sinon son contenu reste sous l'ancienne clé et devient illisible à
+ * la bascule. Rien ne peut le détecter, un blob chiffré est indistinguable d'un
+ * autre.
  *
- * N'y figurent PAS, et c'est volontaire : les jetons des modules
- * (`ft_git_credentials.secret_enc`, `ft_deploy_credentials.secret_enc`), le
- * cache git (`git_*`) et le déploiement (`deploy_targets`, `deployments`),
- * toujours sous l'étage ouvert quel que soit le tier des projets qui s'y
- * rattachent : les services de fond doivent pouvoir les lire sans session.
+ * N'y figurent pas, volontairement : les jetons des modules, le cache git et le
+ * déploiement, toujours sous l'étage ouvert quel que soit le palier des projets qui
+ * s'y rattachent, les services de fond devant les lire sans session.
  */
 interface EncryptedCell {
     table: string;
     /**
-     * Colonne identifiante, **unique à elle seule**. Aucune de ces tables n'a de
-     * clé composite : cibler une ligne par deux colonnes n'est pas exprimable
-     * ici, ce qui explique les clés de substitution ailleurs dans le schéma.
+     * Colonne identifiante, unique à elle seule : cibler une ligne par deux colonnes
+     * n'est pas exprimable ici.
      */
     idColumn: string;
     column: string;
@@ -33,18 +29,11 @@ const COLUMNS: EncryptedCell[] = [
     { table: 'project_messages', idColumn: 'id', column: 'content' },
     { table: 'project_milestones', idColumn: 'id', column: 'content' },
     { table: 'project_events', idColumn: 'id', column: 'content' }
-    // ⚠️ **Le cache git n'y figure pas, et ce n'est pas un oubli.** Depuis la
-    // migration `064`, un dépôt appartient à l'espace et non à un projet : il
-    // est chiffré à l'étage ouvert une fois pour toutes, et plusieurs projets
-    // peuvent s'y rattacher. Il ne peut donc suivre le tier d'aucun d'eux. Un
-    // projet qui passe en confidentiel **perd sa liaison** (voir
-    // `projects.setSecurityTier`) ; le dépôt et son cache, eux, ne bougent pas.
-    //
-    // ⚠️ **Le déploiement n'y figure pas non plus**, et pour la même raison que
-    // le git juste au-dessus : depuis la migration `080`, une cible appartient à
-    // l'espace, plusieurs projets peuvent la déployer, et elle est chiffrée à
-    // l'étage ouvert une fois pour toutes. Un projet qui passe en confidentiel
-    // **perd sa liaison** ; la cible et son historique ne bougent pas.
+    // ⚠️ Ni le cache git ni le déploiement n'y figurent, et ce n'est pas un oubli :
+    // un dépôt comme une cible appartient à l'espace, plusieurs projets peuvent s'y
+    // rattacher, et l'un et l'autre sont chiffrés à l'étage ouvert une fois pour
+    // toutes. Ils ne peuvent donc suivre le palier d'aucun projet ; celui qui passe
+    // en confidentiel perd sa liaison, le dépôt et la cible ne bougent pas.
 ];
 
 export interface ProjectEncryptedCell {
@@ -88,13 +77,11 @@ export function projectRekeyRepo(q: SdkQueryable): ProjectRekeyRepo {
         },
         async write(projectId, { table, column, id, value }) {
             // Garde-fou : `table`, `column` et la colonne identifiante sont
-            // interpolés dans le SQL ; ils ne doivent venir que de la liste
-            // ci-dessus, jamais d'une entrée.
+            // interpolés dans le SQL, ils ne peuvent venir que de la liste ci-dessus.
             const c = meta(table, column);
             if (!c) throw new Error(`Unknown project encrypted column ${table}.${column}`);
-            // `project_id` dans le WHERE même quand l'identifiant suffit : c'est
-            // ce qui rend une conversion incapable de déborder sur un autre
-            // projet, quoi qu'il arrive en amont.
+            // `project_id` dans le WHERE même quand l'identifiant suffit : une
+            // conversion ne peut alors pas déborder sur un autre projet.
             await q.execute(`UPDATE ${c.table} SET ${c.column} = ? WHERE ${c.idColumn} = ? AND project_id = ?`, [
                 value,
                 id,

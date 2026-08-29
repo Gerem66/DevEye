@@ -17,14 +17,7 @@ import {
 } from '../_shared';
 import { withConsumption } from './budgets';
 
-/**
- * Le tableau de bord: tout ce qu'on lit d'un coup d'œil, en une réponse.
- *
- * Une seule commande et non six, parce que ces chiffres se lisent **ensemble**
- * et doivent être cohérents entre eux. Six allers-retours indépendants
- * laisseraient un écran où le solde vient d'avant une écriture et la répartition
- * d'après, et personne ne saurait laquelle des deux moitiés croire.
- */
+/** Le tableau de bord en une réponse : ces chiffres doivent être cohérents entre eux. */
 
 /** Combien de mois la frise couvre. Un an, pour que la saisonnalité se voie. */
 const SERIES_MONTHS = 12;
@@ -34,17 +27,9 @@ const UPCOMING_DAYS = 45;
 const UPCOMING_MAX = 8;
 
 /**
- * La courbe du solde, mois par mois.
- *
- * Reconstituée depuis un **point de départ** plutôt que par douze requêtes de
- * solde: on demande le solde à la veille de la fenêtre, puis on lui ajoute les
- * flux de chaque mois. Un virement n'y change rien par construction, puisqu'il
- * sort d'une poche pour entrer dans une autre et que la somme des deux est nulle
- * une fois tous les comptes réunis.
- *
- * Les mois sans la moindre opération ne remontent pas de SQL (un `GROUP BY` ne
- * rend que ce qui existe): la grille est reconstituée complète, sans quoi deux
- * mois séparés par un trou se toucheraient et la courbe mentirait sur le rythme.
+ * La courbe du solde : le solde à la veille de la fenêtre, puis les flux de
+ * chaque mois (un virement s'annule). Les mois vides sont reconstitués : un
+ * `GROUP BY` ne rend que ce qui existe.
  */
 async function buildSeries(ctx: Ctx, endMonth: string): Promise<FinanceMonthPoint[]> {
     const lastStart = startOfMonth(endMonth);
@@ -87,10 +72,8 @@ async function buildUpcoming(ctx: Ctx, now: string): Promise<FinanceUpcoming[]> 
                 accountId: row.account_id,
                 categoryId: row.category_id,
                 automatic: row.automatic === 1,
-                // Une automatique en retard n'existe pas: le rattrapage vient de
-                // tourner juste au-dessus. Ne restent en retard que les
-                // manuelles, celles qui attendent un clic, et le dire les fait
-                // remonter en tête de liste dans l'écran.
+                // Une automatique en retard n'existe pas (le rattrapage vient de
+                // tourner) : ne restent en retard que les manuelles.
                 overdue: row.next_date < now
             } satisfies FinanceUpcoming;
         })
@@ -109,9 +92,7 @@ export const financeOverviewFeature = defineSdkFeature({
         const [netBalance, savings, projected, current, previous, categories, months, budgetRows, upcoming, vatTotals] =
             await Promise.all([
                 ctx.repo.totalBalance(ctx.workspaceId, now),
-                // L'épargne à part: avoir 8 000 € dont 7 000 bloqués sur un livret
-                // n'est pas la même situation que 8 000 € sur un compte courant, et
-                // c'est la première chose qu'on veut savoir en regardant un total.
+                // L'épargne à part : 7 000 bloqués sur un livret ne sont pas du disponible.
                 ctx.repo.totalBalance(ctx.workspaceId, now, ['savings']),
                 ctx.repo.projectedBalance(ctx.workspaceId),
                 ctx.repo.sumTransactions(ctx.workspaceId, { from, to }),
@@ -147,9 +128,8 @@ export const financeOverviewFeature = defineSdkFeature({
                 })),
                 budgets,
                 upcoming,
-                // Hors mode entreprise, `null` plutôt que des zéros: un
-                // récapitulatif de TVA à zéro laisserait croire qu'il n'y en a
-                // pas eu, là où la vérité est qu'on ne la suit pas.
+                // Hors mode entreprise, `null` plutôt que des zéros : on ne suit
+                // pas la TVA, il n'y en a pas « zéro ».
                 vat: config.vatEnabled
                     ? {
                           collected: vatTotals.collected,

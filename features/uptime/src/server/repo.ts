@@ -80,9 +80,9 @@ export interface UptimeServicesRepo {
     /** Write back the outcome of a probe. */
     recordProbe(id: number, result: UptimeProbeResult): Promise<void>;
     /**
-     * Counts of the **active** services of one workspace (`null` = personal).
-     * `up + down` can be below `total`: a service awaiting its first probe is
-     * neither, and must not be reported as a failure.
+     * Counts of the **active** services of one workspace. `up + down` can be
+     * below `total`: a service awaiting its first probe is neither, and must
+     * not be reported as a failure.
      */
     countByWorkspace(workspaceId: number): Promise<{ total: number; up: number; down: number }>;
 }
@@ -146,12 +146,6 @@ export interface UptimeHistoryRepo {
     pruneByRetention(now: number): Promise<number>;
 }
 
-/**
- * Le dépôt du module : les deux anciens dépôts de l'app (`uptimeServices` et
- * `uptimeHistory`), composés plutôt qu'aplatis. Les handlers et le service
- * lisent `repo.services` et `repo.history`, et chaque méthode garde le nom
- * qu'elle avait.
- */
 export interface UptimeRepo {
     services: UptimeServicesRepo;
     history: UptimeHistoryRepo;
@@ -567,7 +561,6 @@ function historyRepo(q: SdkQueryable): UptimeHistoryRepo {
     };
 }
 
-/** Même dépôt qu'avant le rapatriement, porté sur le `SdkQueryable` du module. */
 export function createRepo(q: SdkQueryable): UptimeRepo {
     return { services: servicesRepo(q), history: historyRepo(q) };
 }

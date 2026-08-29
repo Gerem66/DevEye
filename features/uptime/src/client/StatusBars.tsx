@@ -83,17 +83,13 @@ interface StatusBarsProps {
     to: number;
     resolution: UptimeResolution;
     /**
-     * Placé au bout de la ligne de légende, poussé à l'opposé. La bande n'a rien
-     * à savoir de ce qu'on y met : elle prête ce coin, qui est vide de toute
-     * façon, à qui a un chiffre à poser en face de ses couleurs. Sans effet en
-     * `inline`, qui n'a pas de légende où l'accrocher.
+     * Placé au bout de la ligne de légende, poussé à l'opposé. Sans effet en
+     * `inline`, qui n'a pas de légende.
      */
     trailing?: ReactNode;
     /**
-     * `full` : sous un titre, avec sa légende. `inline` : dans une rangée qu'on
-     * parcourt, donc plus basse et sans légende (répétée à chaque ligne, elle
-     * pèserait plus que les barres elles-mêmes, et la bulle dit déjà tout ce
-     * qu'elle dirait).
+     * `full` : sous un titre, avec sa légende. `inline` : dans une rangée, plus
+     * basse et sans légende (la bulle dit déjà tout).
      */
     variant?: 'full' | 'inline';
 }
@@ -108,10 +104,8 @@ interface StatusBarsProps {
  * millisecond count: a 20 ms endpoint and a 400 ms one are both normal, and only
  * a departure from their own baseline is worth flagging.
  *
- * **La bulle plutôt que `title`.** L'infobulle du navigateur se fait attendre une
- * seconde, ne suit pas le thème, et surtout ne dit jamais *quelle* barre elle
- * décrit ; sur des tranches de trois pixels, c'est précisément la question. Celle
- * d'ici paraît sans délai et désigne sa barre en la relevant.
+ * La bulle plutôt que `title` : l'infobulle du navigateur se fait attendre, ne
+ * suit pas le thème et ne dit jamais quelle barre elle décrit.
  */
 export function StatusBars({ points, from, to, resolution, trailing, variant = 'full' }: StatusBarsProps) {
     const slots = useMemo(() => toSlots(points, from, to), [points, from, to]);

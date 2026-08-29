@@ -4,11 +4,8 @@ import { pct } from './utils';
 import styles from './style.module.css';
 
 /**
- * Human-readable bytes (binary units), used for RAM and disks.
- *
- * Distinct de `utils.formatBytes` par un palier : l'inventaire matériel affiche
- * des capacités de disque, où le téraoctet est courant. Les graphes, eux, ne
- * dépassent jamais le gigaoctet et s'arrêtent là.
+ * Human-readable bytes (binary units). Distinct de `utils.formatBytes` par un
+ * palier : les capacités de disque atteignent le téraoctet.
  */
 function formatBytes(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
@@ -52,13 +49,9 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
 }
 
 /**
- * Body of the per-device hardware/agent dialog (opened from the panel's chip
- * icon, via openInfo). Lays out the static inventory the agent reports — CPU,
- * RAM, GPU, connectivity, storage — plus how & when the agent collected it.
- *
- * `hardware` is `null` on legacy reports (agents older than this feature): we
- * then still show what the report carries (OS, disks, agent identity) and tell
- * the user the detailed inventory will arrive at the next report.
+ * Body of the per-device hardware/agent dialog: the static inventory the agent
+ * reports, plus how and when it collected it. `hardware` is `null` on legacy
+ * reports: what the report carries is still shown.
  */
 export function HardwareInfo({ report, device }: { report: DeviceReport | null; device: Device }) {
     if (!report) {

@@ -52,8 +52,7 @@ function PortChip({ group }: { group: PortGroup }) {
 
 /** One reachability section, optionally split per interface. */
 function PortSection({ reach, groups }: { reach: Reachability; groups: PortGroup[] }) {
-    // Only introduce an interface level when there is actually more than one to
-    // tell apart — a single-NIC machine gets no useless nesting.
+    // An interface level only when there is more than one to tell apart.
     const byInterface = new Map<string, PortGroup[]>();
     for (const g of groups) {
         const key = g.interfaceName ?? '';
@@ -92,13 +91,7 @@ function PortSection({ reach, groups }: { reach: Reachability; groups: PortGroup
 }
 
 /**
- * Listening ports, grouped into what can actually be reached from where.
- *
- * The agent reports one entry per bind address; rendering those raw produced
- * visually identical chips for one service (a dual-stack listener binds both
- * `0.0.0.0` and `::`). Grouping (in `ports.ts`) turns each port into a single
- * bubble per reachability bucket and interface, merging protocols and families.
- *
+ * Listening ports, grouped by reachability then interface (see `ports.ts`).
  * `null` = the agent predates port collection; `[]` = collected and none found.
  */
 export function OpenPorts({ groups, privileged }: OpenPortsProps) {

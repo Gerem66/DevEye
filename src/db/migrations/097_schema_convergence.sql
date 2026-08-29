@@ -1,15 +1,9 @@
--- Convergence du schéma historique avec une installation neuve.
---
--- Une base neuve migrée depuis le dépôt et la base historique ont été comparées
--- colonne à colonne le 26 août 2026. Trois écarts, tous nés de migrations mail
--- écrites en août 2026 pendant le chantier puis fondues dans `039_mail.sql`
--- avant d'être commitées : leurs noms (`041_mail_settings_extra`,
--- `042_mail_sync_interval`, `043_mail_folder_backfill`,
--- `044_mail_account_sync_interval`) restent dans `_migrations` sans fichier, et
--- deux colonnes qu'elles avaient posées ne sont lues nulle part.
---
--- Chaque étape est sans effet sur une base neuve : les colonnes se retirent par
--- INFORMATION_SCHEMA + SQL dynamique (`DROP COLUMN` échouerait sinon).
+-- Convergence du schéma historique avec une installation neuve. Trois écarts,
+-- nés de migrations mail fondues dans `039_mail.sql` avant d'être commitées :
+-- leurs noms restent dans `_migrations` sans fichier, et deux colonnes qu'elles
+-- avaient posées ne sont lues nulle part.
+-- Chaque étape est sans effet sur une base neuve (INFORMATION_SCHEMA + SQL
+-- dynamique).
 
 -- 1. `mail_folders.first_seen_uid` : INT dans l'historique, BIGINT dans le dépôt
 --    (un UID IMAP est un entier 32 bits non signé, INT signé ne le couvre pas).

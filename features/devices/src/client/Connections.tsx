@@ -9,12 +9,9 @@ function endpoint(addr: string, port: number): string {
 }
 
 /**
- * Body of the "Connexions TCP établies" dialog (opened from the Connexions KPI).
- * Lists the established TCP sockets the agent captured in its latest report —
- * local and remote endpoint of each. Both the KPI count and this detail come
- * from the same socket probe, but the KPI rides every collection tick while the
- * report is hourly, so the two can differ; the caption states the report's own
- * time and count.
+ * Body of the "Connexions TCP établies" dialog: the established TCP sockets of
+ * the latest report. The KPI count rides every collection tick while the report
+ * is hourly, so the two can differ; the caption states the report's own time.
  */
 export function Connections({ report }: { report: DeviceReport | null }) {
     if (!report) {

@@ -143,10 +143,9 @@ pub fn spawn_scan(
         let epoch = events.as_ref().map(|e| e.load(Ordering::Relaxed));
         match scan(&session_id, &assignment, &tx) {
             Ok(fingerprint) => {
-                // Le partage n'est déclaré propre que si RIEN n'a bougé pendant
-                // le parcours, et jamais quand le watcher est absent (`events`
-                // à `None`) : sans surveillance, rien ne pourrait plus jamais
-                // invalider la marque.
+                // Propre seulement si RIEN n'a bougé pendant le parcours, et
+                // jamais sans watcher (`events` à `None`) : rien ne pourrait
+                // plus invalider la marque.
                 if let (Some(events), Some(epoch)) = (events, epoch) {
                     if events.load(Ordering::Relaxed) == epoch {
                         *clean.lock().expect("clean lock") = CleanMark {
@@ -209,8 +208,7 @@ fn scan(
         };
         // Un dossier n'est indexé que s'il est VIDE une fois les exclusions
         // appliquées : un dossier peuplé est implicite (ses fichiers le
-        // recréent partout), l'indexer coûterait une ligne par dossier pour
-        // rien. On compte donc ce qui survit au filtrage.
+        // recréent partout). On compte donc ce qui survit au filtrage.
         let mut kept = 0usize;
         for entry in entries.flatten() {
             walked += 1;
@@ -218,7 +216,7 @@ fn scan(
                 anyhow::bail!("scan abandonné : plus de {SCAN_BUDGET} entrées");
             }
             let path = entry.path();
-            // symlink_metadata : ne JAMAIS suivre les liens (boucles, évasions).
+            // `DirEntry::metadata` ne suit pas les liens : jamais (boucles, évasions).
             let meta = match entry.metadata() {
                 Ok(m) => m,
                 Err(_) => continue,
@@ -334,9 +332,8 @@ fn scan(
                         mtime,
                         mode,
                     });
-                    // Vidange comme pour un fichier : sans elle, une arborescence
-                    // de nombreux dossiers vides construisait UN lot géant, que le
-                    // serveur rejette au-delà de `SYNC_INDEX_BATCH_MAX`.
+                    // Vidange comme pour un fichier : une arborescence de nombreux
+                    // dossiers vides dépasserait sinon `SYNC_INDEX_BATCH_MAX`.
                     if batch.len() >= BATCH {
                         let full = std::mem::replace(&mut batch, Vec::with_capacity(BATCH));
                         tx.blocking_send(SyncEvent::Index {

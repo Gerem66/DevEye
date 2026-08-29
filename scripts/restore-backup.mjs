@@ -1,29 +1,19 @@
 #!/usr/bin/env node
 /**
- * Ouvre une archive de sauvegarde chiffrée par DevEye — **sans DevEye**.
- *
- * C'est la contrepartie indispensable du chiffrement des archives. Une
- * sauvegarde qu'on ne peut rouvrir qu'avec l'application qu'on est en train de
- * restaurer n'est pas une sauvegarde, c'est un pari. Ce fichier n'a donc :
- *
- *  - aucune dépendance (Node seul, `node:crypto`) ;
- *  - aucun accès à la base, au réseau, ni au reste du dépôt ;
- *  - aucune notion de DevEye au-delà du format d'octets.
- *
- * On peut le copier sur une clé USB avec les archives. C'est même recommandé.
+ * Ouvre une archive de sauvegarde chiffrée par DevEye, sans DevEye : aucune
+ * dépendance (Node seul), aucun accès à la base ni au réseau, aucune notion de
+ * DevEye au-delà du format d'octets. À copier avec les archives.
  *
  *   node restore-backup.mjs <archive.enc> [sortie]
  *
- * La clé est dérivée de CRYPT_KEY_A / CRYPT_KEY_B, lues dans l'environnement ou
- * dans un `.env` passé par `--env`. Ce sont les mêmes valeurs que celles du
- * serveur qui a produit l'archive : les avoir changées depuis rend les archives
- * d'avant illisibles, ce qui est le seul piège de ce système et mérite d'être
- * répété ici.
+ * La clé est dérivée de CRYPT_KEY_A / CRYPT_KEY_B (environnement, ou `.env`
+ * passé par `--env`), celles du serveur qui a produit l'archive : les avoir
+ * changées depuis rend les archives d'avant illisibles.
  *
- * Format lu : `DEVB` v2 — magic (4) | version (1) | nonce de base (12), puis des
- * blocs `ciphertext | tag` de 1 Mio de clair, chacun scellé en AES-256-GCM avec
- * un nonce dérivé de son rang et une AAD portant ce rang et un marqueur de fin.
- * Le marqueur ferme la troncature, le rang ferme le réordonnancement.
+ * Format lu : `DEVB` v2 : magic (4) | version (1) | nonce de base (12), puis
+ * des blocs `ciphertext | tag` de 1 Mio de clair, chacun scellé en AES-256-GCM
+ * avec un nonce dérivé de son rang et une AAD portant ce rang et un marqueur
+ * de fin (le marqueur ferme la troncature, le rang le réordonnancement).
  */
 
 import crypto from 'node:crypto';
@@ -44,12 +34,9 @@ function die(message) {
 }
 
 /**
- * Une panne survenue **pendant le flux**.
- *
- * Distincte de `die` : tout ce qui se produit une fois l'écriture commencée doit
- * remonter par une exception, pour que le `.part` soit effacé avant de rendre la
- * main. Un `process.exit` à cet endroit laissait derrière lui un demi-fichier —
- * précisément ce qu'un outil de restauration ne doit jamais faire.
+ * Une panne survenue pendant le flux. Distincte de `die` : une fois l'écriture
+ * commencée, tout doit remonter par une exception pour que le `.part` soit
+ * effacé avant de rendre la main.
  */
 class ArchiveError extends Error {}
 
@@ -191,10 +178,9 @@ async function main() {
     const { a, b } = readKeys(envPath);
     const key = backupKey(a, b);
 
-    // Le condensé du **clair** est ce que DevEye a enregistré à la sauvegarde
-    // (colonne `checksum` de l'exécution) : le recalculer ici permet de vérifier
-    // la restauration sans faire confiance à la destination qui a rendu le
-    // fichier.
+    // Le condensé du clair est ce que DevEye a enregistré à la sauvegarde
+    // (`checksum` de l'exécution) : la restauration se vérifie sans faire
+    // confiance à la destination.
     const digest = crypto.createHash('sha256');
     const tmp = `${output}.part`;
     try {

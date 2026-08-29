@@ -33,12 +33,9 @@ function toLocation(row: WeatherLocationRow): WeatherLocation {
 }
 
 /**
- * Decrypt the API key to use for a location: its own per-city key if set,
- * otherwise the workspace key for the provider, if any.
- *
- * `tryDecrypt` et non `decrypt` : les clés d'avant le rapatriement sont
- * scellées à l'ancien format, que l'étage ouvert sait encore relire ; une clé
- * illisible vaut « pas de clé », jamais une erreur.
+ * The API key to use for a location: its own per-city key if set, otherwise
+ * the workspace key for the provider. `tryDecrypt`: an unreadable key reads as
+ * "no key", never an error.
  */
 async function resolveLocationKey(ctx: Ctx, row: WeatherLocationRow): Promise<string | null> {
     const cipher = ctx.cipher();
@@ -195,8 +192,8 @@ export const weatherHandlers = [
     }),
     defineSdkFeature({
         ...weatherSetKey,
-        // La démonstration des permissions déclarées : l'écriture ne suffit
-        // pas, il faut que le rôle confie la gestion des clés (voir manifest).
+        // L'écriture ne suffit pas : le rôle doit confier la gestion des clés
+        // (voir manifest).
         access: { level: 'write', extras: ['manageKeys'] },
         mutates: true,
         handler: async (ctx: Ctx, input) => {

@@ -59,12 +59,9 @@ export class SecretKeyService {
     }
 
     /**
-     * Pose la clé de données d'un espace partagé (WDK), à sa naissance.
-     *
-     * Toujours emballée par la clé serveur, jamais par un mot de passe : c'est
-     * précisément ce qui permet à **tout** membre de lire l'espace, et aux tâches
-     * de fond d'y travailler sans session. Même schéma que la BMK de CloudSync et
-     * que l'étage ouvert. Sans effet si l'espace a déjà la sienne.
+     * Pose la clé de données d'un espace partagé (WDK), à sa naissance. Toujours
+     * emballée par la clé serveur, jamais par un mot de passe : tout membre lit
+     * l'espace, les tâches de fond aussi. Sans effet si l'espace a déjà la sienne.
      */
     async createWorkspaceDek(workspaceId: number): Promise<void> {
         await this.db.workspaceSecretKeys.create(workspaceId, this.crypt.seal(crypto.randomBytes(DEK_BYTES)));

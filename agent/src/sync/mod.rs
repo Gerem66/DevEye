@@ -67,16 +67,11 @@ pub enum SyncEvent {
 
 /// Ce que l'agent sait de la fraîcheur d'un partage.
 ///
-/// « Propre » veut dire : le dernier scan complet s'est terminé sans qu'aucun
-/// événement de watcher ne soit survenu depuis, donc `fingerprint` décrit
-/// encore exactement ce qu'un nouveau scan produirait.
-///
-/// `epoch: None` est l'état de départ, et il porte tout le travail
-/// d'invalidation à lui seul : un partage tout juste attaché, un agent qui vient
-/// de démarrer (l'agent était peut-être éteint pendant trois jours), un chemin
-/// local qui a changé, un jeu d'exclusions modifié — tous ces cas remettent la
-/// marque à `None` et forcent donc un parcours complet, sans qu'aucun d'eux
-/// n'ait besoin d'un traitement particulier.
+/// « Propre » : le dernier scan complet s'est terminé sans qu'aucun événement de
+/// watcher ne soit survenu depuis, donc `fingerprint` décrit encore ce qu'un
+/// nouveau scan produirait. `epoch: None` est l'état de départ et porte toute
+/// l'invalidation : partage attaché, agent qui démarre, chemin ou exclusions
+/// modifiés forcent un parcours complet sans traitement particulier.
 #[derive(Default)]
 pub struct CleanMark {
     pub epoch: Option<u64>,
@@ -129,21 +124,12 @@ impl SyncManager {
                 index_cache::IndexCache::remove(share_id);
                 self.applier.invalidate_cache(share_id);
             }
-            // La marque de propreté ne survit qu'à une assignation RIGOUREUSEMENT
-            // identique. Les exclusions comptent autant que le chemin : le cache
-            // de l'agent a été produit sous les anciennes, donc son empreinte
-            // décrit un jeu d'entrées que le serveur ne calcule plus pareil.
-            //
-            // C'est bien ici, et surtout PAS dans le hachage, que se fait cette
-            // invalidation. Mélanger un digest de la config à l'empreinte ferait
-            // changer les deux copies au même instant alors que les jeux
-            // d'entrées, eux, diffèrent encore : une fausse égalité, c'est-à-dire
-            // une non-convergence silencieuse.
-            //
-            // Le cas « assignation identique » n'est pas une optimisation
-            // gratuite : `notifyConfigChanged` re-pousse la config à chaque
-            // attache et à chaque restauration, et repartir de zéro à chaque fois
-            // rendrait le chemin rapide inatteignable en pratique.
+            // La marque de propreté ne survit qu'à une assignation identique,
+            // exclusions comprises : le cache de l'agent a été produit sous les
+            // anciennes, donc son empreinte décrit un jeu d'entrées que le serveur
+            // ne calcule plus pareil. C'est ici, et pas dans le hachage, que se
+            // fait cette invalidation (voir `fingerprint.rs`). Le cas identique
+            // compte : `notifyConfigChanged` re-pousse la config à chaque attache.
             let same_shape = previous.as_ref().is_some_and(|s| {
                 s.assignment.local_path == assignment.local_path
                     && s.assignment.exclusions.len() == assignment.exclusions.len()
@@ -219,18 +205,14 @@ impl SyncManager {
     /// Scan d'un partage ; partage inconnu/en pause → lot d'erreur.
     ///
     /// `mode` vient du serveur. En `auto`, un partage que le watcher sait intact
-    /// depuis son dernier scan répond immédiatement : aucune entrée, aucun
-    /// parcours de disque, juste l'empreinte de ce qu'il détient. C'est au
-    /// serveur de la comparer à sa propre baseline — l'agent ne conclut rien, il
-    /// rapporte un fait sur lui-même, et une réponse rapide qui se révélerait
-    /// fausse coûte au pire un scan complet de plus.
+    /// depuis son dernier scan répond immédiatement par la seule empreinte de ce
+    /// qu'il détient ; le serveur la compare à sa baseline, et une réponse rapide
+    /// fausse coûte au pire un scan complet de plus. En `full` (filet de sécurité
+    /// horaire), le parcours est obligatoire : un événement de watcher raté ne
+    /// peut jamais laisser deux appareils divergents indéfiniment.
     ///
-    /// En `full` (le filet de sécurité horaire), le parcours est obligatoire :
-    /// c'est ce qui garantit qu'un événement de watcher raté ne peut jamais
-    /// laisser deux appareils divergents indéfiniment.
-    ///
-    /// `&mut` : le scan va réécrire le cache d'index sur disque, donc la copie
-    /// mémorisée par l'applier doit être oubliée maintenant.
+    /// `&mut` : le scan réécrit le cache d'index sur disque, donc la copie
+    /// mémorisée par l'applier doit être oubliée.
     pub fn start_scan(&mut self, session_id: String, share_id: i64, mode: Option<String>) {
         let full = mode.as_deref() != Some("auto");
         // La réponse rapide ne touche pas au cache d'index : l'applier peut

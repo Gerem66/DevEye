@@ -6,28 +6,15 @@ import { useLivePresence, type LiveSegmentKind } from '@/stores/live';
 import { divergingSegment } from './paths';
 
 /**
- * Entoure un nœud de la couleur de qui s'y trouve.
+ * Entoure un nœud de la couleur de qui s'y trouve. Dans une liste, un hook par
+ * ligne est impossible : {@link useLiveOutlines} rend alors une fonction de
+ * consultation, appelée autant de fois qu'il y a de lignes. La règle elle-même,
+ * quel nœud désigner pour un pair donné, vit dans `paths.ts`.
  *
- * C'est la seconde moitié du moteur, et elle tient en un appel :
- *
- * ```tsx
- * <div className={styles.card} {...useLiveOutline('l1', String(service.id))}>
- * ```
- *
- * Dans une liste, un hook par ligne est impossible : {@link useLiveOutlines}
- * rend alors une fonction de consultation, appelée autant de fois qu'il y a de
- * lignes.
- *
- * La règle elle-même — quel nœud désigner pour un pair donné — vit dans
- * `paths.ts`, isolée du rendu et vérifiable directement.
- *
- * ## Plusieurs occupants
- *
- * Pas de demi-bordures : une seule couleur à la fois, qui **alterne toutes les
- * trois secondes** avec un fondu (la transition vit dans `Styles/live.css`).
- * L'alternance est pilotée par un compteur unique partagé par toute
- * l'application — un `setInterval` au total, pas un par élément entouré, et tous
- * les nœuds changent donc de teinte en même temps plutôt qu'en ordre dispersé.
+ * Plusieurs occupants ne se partagent pas la bordure : une seule couleur à la
+ * fois, qui alterne toutes les trois secondes avec un fondu (`Styles/live.css`).
+ * L'alternance suit un compteur unique partagé par toute l'application, pour que
+ * tous les nœuds changent de teinte ensemble et non en ordre dispersé.
  */
 
 const ROTATE_MS = 3000;
@@ -60,13 +47,13 @@ export interface LiveOutlineProps {
 }
 
 /**
- * Forme liste : rend une fonction qui donne les propriétés d'un nœud de ce
- * niveau, à appeler dans un `map`. Tout le travail est fait une fois pour tous
- * les pairs, quel que soit le nombre de lignes.
+ * Forme liste : rend une fonction qui donne les propriétés d'un nœud de ce niveau,
+ * à appeler dans un `map`. Le travail est fait une fois pour tous les pairs, quel
+ * que soit le nombre de lignes.
  */
 export function useLiveOutlines(kind: LiveSegmentKind): (value: string | null) => LiveOutlineProps {
-    // Vue étroite : les contours ne dépendent pas des curseurs, et ne doivent
-    // donc pas se redessiner vingt fois par seconde parce qu'un pair bouge.
+    // Vue étroite : les contours ne dépendent pas des curseurs, et ne doivent pas
+    // se redessiner vingt fois par seconde parce qu'un pair bouge.
     const { peers, path } = useLivePresence();
     const [, bump] = useReducer((n: number) => n + 1, 0);
 
@@ -84,8 +71,7 @@ export function useLiveOutlines(kind: LiveSegmentKind): (value: string | null) =
                 map.set(value, [peer.color]);
             }
         }
-        // Trié : l'alternance doit être stable d'un rendu à l'autre, sinon la
-        // couleur affichée sauterait au gré de l'ordre du roster.
+        // Trié : sans quoi la couleur affichée sauterait au gré de l'ordre du roster.
         for (const colors of map.values()) colors.sort();
         return map;
     }, [peers, path, kind]);

@@ -26,11 +26,10 @@ function formatSize(bytes: number | null): string {
 }
 
 /**
- * Two-step "Télécharger l'agent" picker: pick an OS (Apple / Linux / Windows),
- * then the exact architecture. Availability comes from `/api/agent/targets` so
- * targets whose binary isn't shipped are shown disabled. The download itself is
- * a plain authenticated GET (the session cookie rides along, same origin). Both
- * routes stay HTTP: they serve binaries, which the socket does not carry.
+ * Two-step "Télécharger l'agent" picker: an OS, then the architecture.
+ * Availability comes from `/api/agent/targets`; targets without a shipped binary
+ * are disabled. Both routes stay HTTP: they serve binaries, which the socket
+ * does not carry.
  */
 export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () => void }) {
     const [os, setOs] = useState<AgentOs | null>(null);
@@ -38,10 +37,10 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
     const [agentVersion, setAgentVersion] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    /** Cible en cours de téléchargement (un seul à la fois suffit largement). */
+    /** Cible en cours de téléchargement (un seul à la fois). */
     const [downloading, setDownloading] = useState<string | null>(null);
 
-    // Reset to the OS step and (re)load availability each time the dialog opens.
+    // Back to the OS step and reload availability each time the dialog opens.
     useEffect(() => {
         if (!open) return;
         setOs(null);
@@ -56,19 +55,14 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
             .finally(() => setLoading(false));
     }, [open]);
 
-    // id -> availability, to merge onto the static AGENT_TARGETS metadata.
+    // id -> availability, merged onto the static AGENT_TARGETS metadata.
     const statusById = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses]);
 
     /**
-     * Télécharge un binaire, en récupérant d'abord un cookie d'accès frais.
-     *
-     * Le lien `<a href download>` d'origine était une NAVIGATION, pas un `fetch` :
-     * elle échappait entièrement au client HTTP, donc au rejeu sur 401. Passé le
-     * quart d'heure de vie du cookie, le navigateur enregistrait sagement
-     * l'enveloppe JSON du 401 sous le nom du binaire — un fichier corrompu, sans
-     * le moindre message. On passe donc par `fetch`, ce qui permet de VÉRIFIER la
-     * réponse avant d'enregistrer quoi que ce soit ; l'ancre n'est plus qu'un
-     * moyen de déclencher l'enregistrement du blob obtenu.
+     * Télécharge un binaire par `fetch`, après un cookie d'accès frais : une
+     * navigation `<a href download>` échappe au rejeu sur 401, et le navigateur
+     * enregistrerait l'enveloppe JSON du 401 sous le nom du binaire. L'ancre ne
+     * sert qu'à déclencher l'enregistrement du blob.
      */
     const download = async (id: string, filename: string) => {
         setError(null);
@@ -100,11 +94,9 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
         }
     };
 
-    // Make sure, at download time, the agent matches the running DevEye version.
-    // The *direction* of the gap decides the message: a served set NEWER than this
-    // interface is a deploy still rolling out (transient, wait it out), whereas a
-    // served set OLDER is a stale `agent/dist` — the boot sync never replaced it,
-    // so the binaries offered here are frozen and nothing will fix that on its own.
+    // The direction of the version gap decides the message: a served set NEWER
+    // than this interface is a deploy still rolling out (transient), a served
+    // set OLDER is a stale `agent/dist` that nothing will fix on its own.
     const versionGap = agentVersion === null ? 0 : compareVersions(agentVersion, APP_VERSION);
     const servedStale = versionGap < 0;
     const versionMismatch = versionGap !== 0;

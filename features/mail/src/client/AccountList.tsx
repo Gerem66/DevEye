@@ -36,11 +36,7 @@ function reordered(accounts: MailAccount[], draggedId: number, gap: number): num
     return ids.every((id, i) => id === accounts[i].id) ? null : ids;
 }
 
-/**
- * The account list, with drag & drop ordering — same pointer-events technique
- * as `features/uptime/src/client/ServiceList` (see that file for why HTML5 `draggable`
- * is deliberately avoided).
- */
+/** The account list, with drag & drop ordering on pointer events, not HTML5 `draggable`. */
 export function AccountList({
     accounts,
     selectedId,
@@ -125,15 +121,11 @@ export function AccountList({
     onDragStateChangeRef.current = onDragStateChange;
 
     /**
-     * Every window handler below is `useCallback(..., [])`, i.e. one identity
-     * for the component's whole lifetime, and reads everything it needs
-     * through a ref. This is load-bearing, not tidiness: handlers re-created
-     * per render (a plain `function` in the body) make `removeEventListener`
-     * a no-op, so a drag that outlives a single render leaves its
-     * `pointermove` listener subscribed forever — and each of those runs
-     * `getBoundingClientRect()` over every card on every pointer move, which
-     * is what eventually wedged the whole page. Stable identities also make
-     * `addEventListener` idempotent, so a re-entrant press can't double-subscribe.
+     * Every window handler below is `useCallback(..., [])`, one identity for the
+     * component's whole lifetime, reading what it needs through a ref. Load-bearing:
+     * handlers re-created per render make `removeEventListener` a no-op, so a drag
+     * outliving a single render would leave its `pointermove` listener subscribed
+     * forever. Stable identities also make `addEventListener` idempotent.
      */
     const endDragRef = useRef<() => void>(() => {});
 
@@ -202,9 +194,8 @@ export function AccountList({
     ]);
     endDragRef.current = endDrag;
 
-    // Unmount only. Tying this to `endDrag`'s identity is what used to abort a
-    // drag the instant anything re-rendered the list — including the host's
-    // own sync-progress poll, every 1.5s.
+    // Unmount only: tying this to `endDrag`'s identity would abort a drag the
+    // instant anything re-rendered the list, the sync-progress poll included.
     useEffect(() => () => endDragRef.current(), []);
 
     function handlePointerDown(e: React.PointerEvent, accountId: number) {

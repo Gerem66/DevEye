@@ -32,10 +32,9 @@ const fmtExact = (t: number) =>
     new Date(t).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
 /**
- * Small time-aware line chart. The x-axis spans the real timestamp range across
- * all series, so irregular sample gaps are drawn to scale. Filled area under the
- * first series for a denser look. In `tall` mode it also draws discreet hourly
- * grid lines and, on hover, highlights the nearest point with a value/time panel.
+ * Small time-aware line chart: the x-axis spans the real timestamp range, so
+ * irregular gaps are drawn to scale. In `tall` mode it also draws hourly grid
+ * lines and a hover readout.
  */
 export function MiniGraph({ title, series, yMax, stat, onClick, tall, format }: MiniGraphProps) {
     const id = useId();
@@ -43,19 +42,12 @@ export function MiniGraph({ title, series, yMax, stat, onClick, tall, format }: 
     const [hoverT, setHoverT] = useState<number | null>(null);
 
     const all = series.flatMap((s) => s.points);
-    /**
-     * Un seul relevé reste un relevé.
-     *
-     * Le seuil était à deux points, faute de quoi il n'y a pas de ligne à
-     * tracer — mais une sélection étroite, ou large sur une cadence lente, n'en
-     * contient parfois qu'un : toutes les cartes affichaient alors « — » sur
-     * fond gris, indiscernables d'une absence de données, alors que la valeur
-     * était bien là et que la frise montrait sa marque. On dessine le point.
-     */
+    // Un seul relevé reste un relevé : une sélection étroite n'en contient
+    // parfois qu'un, et on dessine le point plutôt qu'une carte vide
+    // indiscernable d'une absence de données.
     const hasData = all.length >= 1;
-    // Réductions et non `Math.min(...tableau)` : l'étalement passe chaque point
-    // en argument, et au-delà de ~100 000 arguments l'appel lève un
-    // `RangeError` — atteignable sur un panneau laissé ouvert en direct.
+    // Réductions et non `Math.min(...tableau)` : au-delà de ~100 000 arguments
+    // l'étalement lève un `RangeError`.
     const tMin = hasData ? minOf(all, (p) => p.t) : 0;
     const tMax = hasData ? maxOf(all, (p) => p.t) : 0;
     const tSpan = Math.max(1, tMax - tMin);
@@ -75,8 +67,8 @@ export function MiniGraph({ title, series, yMax, stat, onClick, tall, format }: 
         const dataMax = maxOf(all, (p) => p.v);
         const yTop = yMax ?? Math.max(1, dataMax * 1.15);
 
-        // Tous les points au même instant (un seul relevé) : la fraction serait
-        // 0/1 et les collerait au bord gauche. On les centre.
+        // Tous les points au même instant : la fraction serait 0/1 et les
+        // collerait au bord gauche.
         const flat = tMax === tMin;
         const xPct = (t: number) => (flat ? 50 : ((t - tMin) / tSpan) * 100);
         const yPct = (v: number) => (1 - Math.max(0, Math.min(1, v / yTop))) * 100;
@@ -117,9 +109,8 @@ export function MiniGraph({ title, series, yMax, stat, onClick, tall, format }: 
                     })}
                     {series.map((s, si) => {
                         if (s.points.length === 0) return null;
-                        // Un point isolé : un marqueur, pas une ligne. Le viewBox
-                        // est étiré (`preserveAspectRatio='none'`), donc un rect
-                        // large-de-rien plutôt qu'un cercle, qui s'ovaliserait.
+                        // Un point isolé : un marqueur. Le viewBox est étiré
+                        // (`preserveAspectRatio='none'`), un cercle s'ovaliserait.
                         if (s.points.length === 1) {
                             const [x, y] = toXY(s.points[0]);
                             return (

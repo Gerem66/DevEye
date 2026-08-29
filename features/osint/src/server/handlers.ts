@@ -23,16 +23,9 @@ import type { OsintRepo } from './repo';
 type Ctx = SdkFeatureContext<OsintRepo>;
 
 /**
- * OSINT — planification, exécution d'une sonde, historique, clés.
- *
- * Le partage du travail est le point à retenir : `osint.lookup` **ne sonde
- * rien**. Il reconnaît la cible, journalise, et rend la liste des sondes à
- * faire. L'historique s'écrit au niveau `read`, à dessein : chercher EST
- * l'usage de la feature, et un rôle en lecture n'a rien d'autre à y écrire ;
- * `mutates` suffit à rafraîchir l'historique des autres onglets. Le client
- * tire ensuite un `osint.probe` par sonde, en parallèle, ce qui
- * donne l'affichage progressif sans qu'aucun sujet live ni protocole particulier
- * n'ait été inventé pour ça.
+ * `osint.lookup` ne sonde rien : il reconnaît la cible, journalise et rend la
+ * liste des sondes ; le client tire un `osint.probe` par sonde. L'historique
+ * s'écrit au niveau `read`, à dessein : chercher est l'usage de la feature.
  */
 
 async function toHistoryEntry(ctx: Ctx, row: OsintLookupRow): Promise<OsintHistoryEntry> {
@@ -63,10 +56,7 @@ function trustedTarget(query: string): ReturnType<typeof detectTarget> {
 }
 
 /**
- * La clé d'un fournisseur, déchiffrée, ou `null` si elle n'est pas posée.
- *
- * `tryDecrypt` et non `decrypt` : les clés d'avant le rapatriement sont
- * scellées à l'ancien format, que l'étage ouvert sait encore relire ; une clé
+ * La clé d'un fournisseur, déchiffrée, ou `null`. `tryDecrypt` : une clé
  * illisible vaut « pas de clé », jamais une erreur.
  */
 async function providerKey(ctx: Ctx, provider: OsintProvider | undefined): Promise<string | null> {
@@ -76,13 +66,8 @@ async function providerKey(ctx: Ctx, provider: OsintProvider | undefined): Promi
 }
 
 /**
- * Compte les sondes disponibles / le total.
- *
- * Le total est fixe : le nombre de sondes enregistrées, qui ne varie pas selon
- * les clés posées. Seule une sonde qui **exige** une clé (`requiresKey`) et
- * dont le fournisseur n'est pas tenu compte comme indisponible — une sonde
- * qu'une clé ne fait qu'enrichir (`phone` avec Numverify) répond déjà sans
- * elle, et compte donc comme disponible dans les deux cas.
+ * Le total est fixe (le registre) ; seule une sonde qui exige une clé absente
+ * compte comme indisponible. Une clé qui ne fait qu'enrichir ne change rien.
  */
 function countProbeAvailability(held: ReadonlySet<OsintProvider>): { available: number; total: number } {
     const probes = Object.values(PROBES);
@@ -123,9 +108,9 @@ export const osintHandlers = [
             const target = trustedTarget(input.target.query);
             const adapter = PROBES[input.probe];
 
-            // Deux gardes, et les deux comptent. La nature re-déduite doit
-            // correspondre à celle annoncée — sinon le client a bâti sa cible à la
-            // main — et la sonde doit accepter cette nature.
+            // Deux gardes : la nature re-déduite doit correspondre à celle
+            // annoncée (sinon le client a bâti sa cible à la main), et la sonde
+            // doit accepter cette nature.
             if (target.kind !== input.target.kind || target.value !== input.target.value) {
                 throw new FeatureError('validation', 'Cible incohérente avec la requête.');
             }
@@ -179,9 +164,8 @@ export const osintHandlers = [
         handler: async (ctx: Ctx) => {
             const rows = await ctx.repo.listKeys(ctx.workspaceId);
             const held = new Set(rows.map((r) => r.provider));
-            // Tous les fournisseurs sont rendus, posés ou non : l'écran de réglages
-            // doit pouvoir proposer ceux qui manquent, pas seulement lister l'acquis.
-            // La clé elle-même ne sort jamais — seulement le fait qu'elle existe.
+            // Tous les fournisseurs sont rendus, posés ou non : l'écran doit
+            // proposer ceux qui manquent. La clé elle-même ne sort jamais.
             const { available: probesAvailable, total: probesTotal } = countProbeAvailability(held);
             return {
                 providers: osintProviderSchema.options.map((provider) => ({

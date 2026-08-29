@@ -9,65 +9,31 @@ import { logger } from '@/logger';
 import { env, isDev } from '@/Utils/Env';
 
 /**
- * Le serveur **public** : un second écouteur, sur son propre port, qui ne porte
- * que ce qui a le droit d'être atteint depuis Internet : les routes publiques
- * des modules (capacité `routes.public`), et c'est la seule chose que ce port
- * sert. Aujourd'hui l'ingestion d'audience et son script (`features/audience`).
+ * Le serveur public : un second écouteur, sur son propre port, qui ne porte que
+ * les routes publiques des modules (capacité `routes.public`).
  *
- * ## Pourquoi un second écouteur plutôt qu'une garde
+ * Écouteur séparé plutôt que garde sur `Host` ou règle de proxy : les routes
+ * internes n'y sont pas enregistrées, la séparation ne dépend d'aucune
+ * configuration. D'où l'absence de cookies, WebSocket, statiques et repli SPA.
  *
- * L'application vit derrière le VPN ; l'ingestion d'audience doit être joignable
- * sans lui. On peut obtenir cela de trois façons, et deux sont moins sûres :
+ * Même processus que `app.ts` par contrainte : les modules préviennent les
+ * écrans par `LiveHub`, dont l'état est local au processus ; les routes viennent
+ * des services déjà créés par `buildApp`.
  *
- * - **une règle de chemin dans le proxy** : elle vit hors du dépôt, se perd à un
- *   redéploiement, et rien dans le code ne dit qu'elle est indispensable ;
- * - **une garde sur l'en-tête `Host`** dans le serveur unique : les routes
- *   internes restent *déclarées*, et seul un `if` les sépare du monde. Un défaut
- *   dans ce `if`, ou un accès direct au conteneur, et tout est atteignable.
- * - **un écouteur séparé** : les routes internes n'y sont **pas enregistrées**.
- *   Il n'existe aucun chemin de code de ce port vers l'authentification, la
- *   socket, la flotte d'appareils ou le client web. La séparation ne dépend
- *   d'aucune configuration.
- *
- * C'est la troisième, et c'est ce qui explique tout ce que ce fichier ne fait
- * pas : ni cookies, ni WebSocket, ni fichiers statiques, ni repli SPA.
- *
- * ## Pourquoi le **même processus**
- *
- * Ce n'est pas un confort, c'est une contrainte. L'ingestion d'audience
- * prévient les écrans ouverts par `LiveHub` (par `deps.live.changed`), dont
- * l'état est **local au processus** (voir LIVE.md §6). Un second conteneur
- * écrirait donc les mesures sans que personne ne soit averti : le
- * rafraîchissement à la minute cesserait de fonctionner, silencieusement.
- * Partager le processus, c'est partager la file d'ingestion, les caches de
- * sites et de libellés, et le hub. C'est aussi pourquoi les routes viennent
- * des **services déjà créés** par `buildApp` : le module déclare les mêmes
- * routes sur chaque écouteur, c'est l'écouteur qui change, pas l'ingestion.
- *
- * ## Ce qui est volontairement dupliqué depuis `app.ts`
- *
- * Le harnais (helmet, plafond de débit, analyseur `text/plain`, gestionnaire
- * d'erreurs) est réécrit ici plutôt que partagé. Les deux serveurs appliquent
- * des **politiques différentes** sur les mêmes plugins — un CORS ouvert à tous
- * ici, restreint et porteur de cookies là-bas — et une fabrique commune
- * paramétrée aurait rendu difficile à lire ce qui doit rester évident : ce port
- * n'expose rien d'autre.
+ * Le harnais (helmet, débit, analyseurs, erreurs) est volontairement dupliqué
+ * depuis `app.ts` : les politiques diffèrent, et ce port doit se relire seul.
  */
 export async function buildPublicApp(): Promise<FastifyInstance> {
     const app = Fastify({
         loggerInstance: logger.child({ surface: 'public' }) as FastifyBaseLogger,
-        // Indispensable, et pas seulement cosmétique : le plafond de débit
-        // compte par IP. Sans cela il verrait celle du proxy, et le premier
-        // visiteur un peu actif fermerait la porte à tous les autres.
+        // Le plafond de débit compte par IP : sans cela il verrait celle du
+        // proxy, et un seul visiteur actif fermerait la porte à tous.
         trustProxy: !isDev
     });
 
     await app.register(fastifyHelmet, { contentSecurityPolicy: false });
 
-    // Tout ce que ce port sert est fait pour être chargé depuis ailleurs : pas
-    // de délégateur ici, contrairement à `app.ts`. **Sans identifiants** — il
-    // n'y a aucune session à transporter, et l'annoncer ferme la porte à une
-    // erreur de configuration future.
+    // Toute origine, sans identifiants : il n'y a aucune session à transporter.
     await app.register(fastifyCors, { origin: '*', credentials: false, methods: ['GET', 'POST'] });
 
     await app.register(fastifyRateLimit, {
@@ -112,13 +78,8 @@ export async function buildPublicApp(): Promise<FastifyInstance> {
         return reply.code(status).send(err(code, status >= 500 ? 'Erreur interne' : 'Requête invalide'));
     });
 
-    /**
-     * Une sonde de vivacité, et rien d'autre.
-     *
-     * Elle ne dit ni la version, ni l'état de la base, ni l'avancement du
-     * démarrage : `/api/status` reste sur le port privé. Un orchestrateur a
-     * besoin de savoir que le port répond, pas de ce qu'il y a derrière.
-     */
+    // Sonde de vivacité seulement : ni version ni état de la base, `/api/status`
+    // reste sur le port privé.
     app.get('/api/health', { logLevel: 'silent' }, async () => ({ ok: true }));
 
     modulePublicRoutes(app, 'public');

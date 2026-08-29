@@ -17,12 +17,8 @@ import { agent } from './api';
 import styles from './style.module.css';
 
 /**
- * Plafond du tampon d'un flux de journaux.
- *
- * Le tampon n'est vidé que par la trame `done` : un agent qui disparaît en
- * plein flux ne l'envoie jamais, et le mode direct relance une interrogation
- * toutes les trois secondes. Assez large pour couvrir la plus grande fenêtre
- * qu'on demande, assez bas pour qu'une panne ne remplisse pas la mémoire.
+ * Plafond du tampon d'un flux de journaux : le tampon n'est vidé que par la
+ * trame `done`, qu'un agent disparu en plein flux n'envoie jamais.
  */
 const MAX_BUFFERED_LINES = 20_000;
 
@@ -54,10 +50,8 @@ const KIND_GROUP: Record<DeviceLogSourceKind, string> = {
 };
 
 /**
- * Ce qu'on dit quand aucun conteneur n'est listé. L'agent ne peut pas distinguer
- * « pas de moteur installé » de « socket refusée » sans se plaindre à tort sur une
- * machine qui n'en a tout simplement pas : la note dit donc la condition, une fois,
- * et seulement là où elle manque.
+ * Quand aucun conteneur n'est listé : l'agent ne peut pas distinguer « pas de
+ * moteur » de « socket refusée », la note dit donc la condition.
  */
 const NO_CONTAINERS_HINT =
     'Aucun conteneur listé. L’agent les énumère avec « docker ps » / « podman ps » : il lui faut ' +
@@ -74,25 +68,17 @@ const TIME_PRESETS: { label: string; seconds: number | null }[] = [
 const LIVE_INTERVAL_MS = 3000;
 
 /**
- * Délai au-delà duquel on cesse d'attendre une interrogation.
- *
- * Filet de sécurité, pas la vraie limite : l'agent abandonne une lecture trop
- * longue au bout de 45 s et rend une erreur qui dit quoi faire, laquelle arrive
- * donc la première. Celui-ci ne sert qu'au cas où l'agent disparaît en plein vol
- * — sans lui, plus aucune trame terminale ne vient et le panneau tourne
- * indéfiniment.
+ * Délai au-delà duquel on cesse d'attendre une interrogation. Filet de sécurité :
+ * l'agent abandonne lui-même au bout de 45 s avec une erreur, celui-ci ne sert
+ * qu'à un agent disparu en plein vol.
  */
 const QUERY_TIMEOUT_MS = 60_000;
 
 /**
- * On-device log viewer for one device. Lists the device's log sources (system
- * journal, one entry per Docker/Podman container, files…), runs filtered queries
- * against the selected one, and renders the matched lines. Advanced search: free
- * text or regex, a severity floor, a journald unit, and a time window — plus a live
- * (auto-refresh) mode. The inventory itself is re-askable, containers being the
- * moving part. Everything streams over the device's push channel
- * (`device.logSources` / `device.logLines`), so the panel acquires the shared live
- * subscription.
+ * Log viewer for one device: its log sources (system journal, one entry per
+ * container, files), filtered queries against the selected one, a live mode.
+ * Everything streams over the device's push channel, so the panel acquires the
+ * shared live subscription.
  */
 export function LogsPanel({ deviceId }: { deviceId: string }) {
     const [sources, setSources] = useState<DeviceLogSource[] | null>(null);
@@ -123,8 +109,7 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
         }
     }, []);
 
-    // Le chien de garde survivrait au démontage du panneau et écrirait dans un
-    // composant parti.
+    // Le chien de garde survivrait au démontage du panneau.
     useEffect(() => clearWatchdog, [clearWatchdog]);
 
     useEffect(() => acquireMetrics(deviceId), [deviceId]);
@@ -139,11 +124,7 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
         setError(null);
     }, [deviceId]);
 
-    /**
-     * (Re)demande l'inventaire des sources. Rejouable à la demande : les conteneurs
-     * vont et viennent, et une liste figée à l'ouverture du panneau ne montre jamais
-     * celui qu'on vient de démarrer.
-     */
+    /** (Re)demande l'inventaire des sources : les conteneurs vont et viennent. */
     const requestSources = useCallback(() => {
         setSourcesLoading(true);
         void agent.send('agent.logSources', { deviceId }).catch(() => {
@@ -158,17 +139,14 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
             if (d.deviceId !== deviceId) return;
             setSources(d.sources);
             setSourcesLoading(false);
-            // Une source qui a disparu entre deux inventaires (conteneur
-            // supprimé) ne doit pas rester sélectionnée : la requête
-            // suivante échouerait sur un identifiant que l'agent ne
-            // reconnaît plus.
+            // Une source disparue entre deux inventaires ne doit pas rester
+            // sélectionnée : la requête suivante échouerait.
             setSourceId((cur) => (d.sources.some((s) => s.id === cur) ? cur : (d.sources[0]?.id ?? '')));
         });
         const offLines = onServerEvent(DEVICE_LOG_LINES_EVENT, deviceLogLinesPushSchema, (d) => {
             if (d.deviceId !== deviceId || d.queryId !== queryIdRef.current) return;
-            // Borné : sans `done` — un agent qui meurt en plein flux — le
-            // tampon grossissait à chaque interrogation du mode direct, qui
-            // repart toutes les 3 s. On garde la queue, c'est ce qu'on lit.
+            // Borné : sans `done` (un agent mort en plein flux), le tampon
+            // grossirait à chaque interrogation du mode direct. On garde la queue.
             const merged = bufferRef.current.concat(d.lines);
             bufferRef.current = merged.length > MAX_BUFFERED_LINES ? merged.slice(-MAX_BUFFERED_LINES) : merged;
             if (d.done) {
@@ -194,8 +172,8 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
         setError(null);
         clearWatchdog();
         watchdogRef.current = setTimeout(() => {
-            // Une interrogation plus récente est passée devant : c'est elle qui
-            // porte l'attente maintenant, et son propre chien de garde.
+            // Une interrogation plus récente est passée devant, avec son propre
+            // chien de garde.
             if (queryIdRef.current !== queryId) return;
             setLoading(false);
             setError("L'appareil n'a pas répondu. Resserrez la fenêtre de temps ou le filtre, puis réessayez.");
@@ -230,14 +208,10 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
     }, [runQuery, sourceId]);
 
     /**
-     * Mode direct : réinterroger périodiquement, mais **jamais par-dessus** une
-     * interrogation encore en vol.
-     *
-     * Chaque relance change l'identifiant courant, et le routeur de push jette
-     * tout ce qui ne le porte pas. Sur une source qui met plus de trois secondes à
-     * répondre — un gros conteneur — chaque tic condamnait donc le résultat du
-     * précédent : plus une ligne ne s'affichait, l'attente ne se terminait jamais,
-     * et l'appareil accumulait une lecture de plus toutes les trois secondes.
+     * Mode direct : réinterroger périodiquement, jamais par-dessus une
+     * interrogation en vol. Chaque relance change l'identifiant courant et le
+     * routeur jette tout ce qui ne le porte pas : une source lente ne rendrait
+     * plus jamais rien.
      */
     useEffect(() => {
         if (!live || !sourceId) return;

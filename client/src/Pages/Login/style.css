@@ -49,15 +49,10 @@
 }
 
 /*
- * The login card. On submit it collapses straight down into a thin progress bar:
- * the surface shrinks (height → 3px), its content fades out, and the accent bar
- * fills left-to-right.
- *
- * `height` is driven by `--card-height`, an inline var the component sets to the
- * content's measured height (see LoginPage). Measuring instead of hard-coding
- * means the card always hugs its content — login or the taller 2FA step — with
- * no magic numbers, no clipping and no phantom padding, while keeping `height`
- * animatable (unlike `auto`).
+ * The login card. On submit it collapses into a thin progress bar. `height` is
+ * driven by `--card-height`, set by the component to the content's measured
+ * height: the card hugs its content (login or the taller 2FA step) while
+ * `height` stays animatable (unlike `auto`).
  */
 .login .login-card {
     position: relative;
@@ -66,11 +61,8 @@
     margin-bottom: 48px;
     border-radius: var(--radius-md);
     background-color: var(--glass-bg-light);
-    /* Frame drawn as an inset shadow, NOT a border: with box-sizing: border-box a
-       1px border eats into the collapsed bar (inset:0 → the accent would be 2px
-       inside a 4px card — the "halved height" layout bug). A shadow takes no layout
-       space, so the bar fills the full collapsed height; it fades as the card
-       collapses. */
+    /* Frame drawn as an inset shadow, not a border: with border-box a 1px border
+       eats into the 3px collapsed bar. A shadow takes no layout space. */
     box-shadow: inset 0 0 0 1px var(--glass-border);
     overflow: hidden;
     transition:
@@ -108,19 +100,12 @@
 }
 
 /*
- * The fill is driven by ONE boolean (`filling` → the `.filling` class). Rigour
- * comes from where the transition lives:
- *
- * - At rest the bar has NO transition, so dropping `.filling` snaps it back to
- *   scaleX(0) INSTANTLY. A re-fill therefore always starts from the far left,
- *   even if you retry mid-reset — never from a half-emptied position.
- * - The transition lives on `.filling`, so only the fill animates (the sweep).
- *
- * The 0.5s delay equals the card-collapse duration: the bar stays scaleX(0)
- * (invisible) for the whole collapse, then sweeps — so it only ever paints at the
- * final, collapsed bar height (no mid-collapse height wobble). `transform`/`opacity`
- * are composited, so the sweep keeps running even while a successful login mounts
- * the heavy HomePage on the main thread.
+ * The fill is driven by one boolean (the `.filling` class). At rest the bar has
+ * no transition, so dropping `.filling` snaps it back to scaleX(0): a re-fill
+ * always starts from the far left. The delay keeps the bar invisible during the
+ * card collapse, so it only paints at the final bar height. `transform` and
+ * `opacity` are composited, so the sweep keeps running while a successful login
+ * mounts the heavy HomePage on the main thread.
  */
 .login .progress-bar {
     position: absolute;
@@ -230,8 +215,7 @@
     cursor: default;
 }
 
-/* Spinner shown on the "Back" button while the 2FA code auto-verifies (replaces
-   the removed "Verify" button — the code submits as soon as 6 digits are in). */
+/* Spinner on the "Back" button while the 2FA code auto-verifies. */
 .login .login-spin {
     vertical-align: middle;
     animation: login-spin 0.7s linear infinite;
@@ -242,12 +226,8 @@
     }
 }
 
-/*
- * Écran d'inscription sur invitation. Il réutilise toute la scène du login
- * (fond, titre, carte, effondrement en barre) — ci-dessous uniquement ce qui
- * lui est propre : une phrase d'accueil, et la ligne d'aide sous le mot de
- * passe qui devient le message d'erreur.
- */
+/* Écran d'inscription sur invitation : il réutilise la scène du login,
+   ci-dessous seulement ce qui lui est propre. */
 .login .register-intro {
     margin: 0 0 20px;
     color: var(--text-secondary);

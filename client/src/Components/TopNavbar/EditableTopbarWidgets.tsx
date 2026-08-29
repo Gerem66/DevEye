@@ -93,11 +93,9 @@ function AddDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
 }
 
 /**
- * In-place editor for the navbar mini-widgets, shown while organizing the home.
- * It replaces the live widgets exactly where they sit, so the topbar is arranged
- * right there (no detour through the grid): chips are drag-reorderable, each
- * carries a remove ×, and a trailing + opens the add picker. Always visible in
- * edit mode — even with no widgets — so the first one can be added.
+ * In-place editor for the navbar mini-widgets, shown while organizing the home:
+ * chips are drag-reorderable, each carries a remove ×, a trailing + opens the
+ * add picker. Always visible in edit mode so the first one can be added.
  */
 export function EditableTopbarWidgets() {
     const layout = useHomeLayout();

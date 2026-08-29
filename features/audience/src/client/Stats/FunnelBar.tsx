@@ -9,18 +9,12 @@ interface FunnelBarProps {
 }
 
 /**
- * Un entonnoir ramené à **une seule barre**, cliquable.
+ * Un entonnoir ramené à une seule barre, cliquable : les parts somment à 1, et
+ * l'œil lit la proportion sans comparer des hauteurs entre elles.
  *
- * Le tout vaut les visites entrées ; chaque part est ce qui s'est perdu à une
- * marche, la dernière ce qui est arrivé au bout. Les parts somment donc à 1, et
- * l'œil lit la proportion sans avoir à comparer des hauteurs entre elles —
- * exactement ce qu'une suite de barres décroissantes ne sait pas faire d'un
- * coup d'œil.
- *
- * Trois teintes, et pas une de plus : ce qui a converti, l'abandon le plus
- * coûteux, et tout le reste. Colorer chaque marche différemment aurait demandé
- * une légende, c'est-à-dire un second aller-retour du regard pour une vue qui
- * n'existe que pour éviter le premier. Le détail est à un clic.
+ * Trois teintes, pas une de plus : ce qui a converti, l'abandon le plus
+ * coûteux, et le reste. Colorer chaque marche demanderait une légende, donc un
+ * aller-retour du regard pour une vue qui existe pour l'éviter.
  */
 export function FunnelBar({ funnel, onOpen }: FunnelBarProps) {
     const counts = funnel.steps.map((step) => step.sessions);
@@ -39,8 +33,8 @@ export function FunnelBar({ funnel, onOpen }: FunnelBarProps) {
 
             <span className={styles.funnelSegments}>
                 {segments.length === 0 ? (
-                    // Rien à répartir : une barre pleine de zéros laisserait
-                    // croire à une mesure. On montre la piste vide, sans plus.
+                    // Rien à répartir : une barre pleine de zéros laisserait croire à
+                    // une mesure, on montre la piste vide.
                     <span className={styles.funnelSegmentEmpty} />
                 ) : (
                     segments.map((segment) => (

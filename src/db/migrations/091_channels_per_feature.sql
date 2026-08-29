@@ -1,40 +1,20 @@
--- Chaque émetteur a SES canaux : `notification_channels` gagne `feature`.
+-- Chaque émetteur a SES canaux : `notification_channels` gagne `feature`. Un
+-- canal devient une source de sa fonctionnalité, comme un jeton Dokploy l'est du
+-- Déploiement. Prix assumé : deux features qui préviennent le même salon le
+-- déclarent deux fois.
 --
--- La 087 avait fait des canaux des entités d'espace, partagées par les cinq
--- émetteurs — c'était sa raison d'être (« le même salon redéclaré cinq fois »).
--- À l'usage, c'est l'inverse du patron des sources : la même liste se gérait
--- depuis les réglages de cinq features, et « ajouter un canal » dans Uptime le
--- faisait apparaître dans Sauvegardes. Un canal devient donc une **source de sa
--- fonctionnalité**, comme un jeton Dokploy l'est du Déploiement. Le prix,
--- assumé : deux features qui préviennent le même salon le déclarent deux fois.
+-- Répartition de l'existant, par les features qui routent le canal :
+--   - une seule le désigne : il devient le sien,
+--   - plusieurs : il est recopié (les cryptogrammes se déplacent tels quels,
+--     pas d'AAD), une copie par feature de plus, liaisons re-pointées.
+--     `split_from` corrèle copie et original le temps de la migration,
+--   - aucune : supprimé, rien ne partait par lui.
 --
--- ## La répartition de l'existant
---
--- Un canal se rattache aux features qui le **routent** :
---   - une seule feature le désigne → il devient le sien ;
---   - plusieurs le désignent → il est recopié (cryptogrammes compris : pas
---     d'AAD, un blob se déplace tel quel), une copie par feature de plus, et
---     leurs liaisons sont re-pointées. `split_from` corrèle copie et original
---     le temps de la migration ;
---   - aucune route ne le désigne → il est supprimé. Rien ne partait par lui,
---     le comportement est donc préservé à l'identique ; on perd une ligne de
---     configuration jamais branchée, qu'on ne saurait attribuer à personne.
---
--- ## Rejouabilité
---
--- `migrate.ts` exécute sans transaction et rejoue depuis le début en cas
--- d'interruption (voir 087). Deux verrous :
---   - la phase A (ajout des colonnes) est gardée sur l'absence de `feature` ;
---   - la phase B est gardée sur la présence de `split_from`, sa colonne de
---     travail, qu'elle supprime en dernier. Chacune de ses instructions est
---     idempotente : l'UPDATE ne vise que les `feature IS NULL`, l'INSERT passe
---     par IGNORE sur la clé unique `(split_from, feature)`, le re-pointage ne
---     matche plus rien une fois fait, le DELETE et le NOT NULL se rejouent
---     sans effet.
---
--- Collations : les comparaisons colonne-à-colonne (`c2.feature = r.feature`)
--- restent entre colonnes de tables déclarées `utf8mb4_general_ci` (087 et
--- celle-ci) ; pas de « Illegal mix of collations » possible (voir 080/087).
+-- Rejouable : la phase A est gardée sur l'absence de `feature`, la phase B sur
+-- la présence de `split_from`, supprimée en dernier. Chaque instruction est
+-- idempotente (`feature IS NULL`, INSERT IGNORE sur `(split_from, feature)`).
+-- Les comparaisons colonne-à-colonne restent entre tables en
+-- `utf8mb4_general_ci` (087 et celle-ci).
 
 -- ── Phase A : les colonnes ──────────────────────────────────────────────────
 
@@ -54,7 +34,7 @@ SET @has_scratch = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'notification_channels' AND COLUMN_NAME = 'split_from');
 
 -- La première feature qui route le canal (MIN : déterministe) devient la
--- sienne ; les autres recevront une copie.
+-- sienne, les autres recevront une copie.
 SET @s = IF(@has_scratch = 1, "
 UPDATE notification_channels c
    SET c.feature = (SELECT MIN(r.feature)
@@ -64,10 +44,9 @@ UPDATE notification_channels c
  WHERE c.feature IS NULL", 'SELECT 1');
 PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
--- Une copie par feature supplémentaire. INSERT…SELECT sur sa propre table est
--- permis (MySQL matérialise la lecture) ; l'idempotence tient à la clé unique
--- `(split_from, feature)` + IGNORE, jamais à un EXISTS sur la table visée,
--- le motif que la 087 signalait comme refusé selon les versions.
+-- Une copie par feature supplémentaire. L'idempotence tient à la clé unique
+-- `(split_from, feature)` + IGNORE, jamais à un EXISTS sur la table visée
+-- (refusé selon les versions de MySQL).
 SET @s = IF(@has_scratch = 1, "
 INSERT IGNORE INTO notification_channels
     (workspace_id, feature, kind, label_enc, target_enc, mail_account_id, enabled, position, created, split_from)

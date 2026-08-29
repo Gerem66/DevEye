@@ -6,15 +6,9 @@ import { manifest } from '../manifest';
 import type { ProjectPriority, ProjectTagKind } from '../contracts/domain';
 
 /**
- * L'envoi typé des commandes du module, partagé par toutes ses vues.
- *
- * Le portefeuille et les compteurs s'appellent tels quels : ils ne lisent que
- * l'étage ouvert (un projet gardé y revient masqué), et c'est pour ça que la
- * feature s'ouvre sans jamais demander de mot de passe. Tout appel qui touche
- * un projet **confidentiel** passe par le `withSecrecy` du barrel, qui ouvre
- * l'invite globale sur un `locked` puis rejoue une fois ; `humanizeError`
- * vient du barrel aussi. Les deux vivaient ici du temps du natif, recopiés de
- * Notes et Mot de passe.
+ * L'envoi typé des commandes du module. Le portefeuille et les compteurs
+ * s'appellent tels quels ; tout appel touchant un projet confidentiel passe par
+ * le `withSecrecy` du barrel, qui ouvre l'invite sur un `locked` puis rejoue.
  */
 export const api = featureApi(manifest);
 
@@ -37,7 +31,6 @@ export const PRIORITY_LABELS: Record<ProjectPriority, string> = {
     high: 'Haute'
 };
 
-/** Date courte à la française, ou `null` si l'échéance n'est pas posée. */
 export function formatDate(seconds: number | null): string | null {
     if (seconds === null) return null;
     return new Date(seconds * 1000).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });

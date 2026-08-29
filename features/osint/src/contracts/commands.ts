@@ -11,18 +11,10 @@ import {
 } from './domain';
 
 /**
- * OSINT — sept commandes, dont deux portent toute la feature.
- *
- * `osint.lookup` ne sonde rien : il **planifie**. Il reconnaît la cible,
- * enregistre la recherche et rend la liste des sondes applicables. Le client
- * affiche aussitôt une carte squelette par sonde, puis tire un `osint.probe`
- * par carte, toutes en parallèle.
- *
- * C'est ce découpage qui fait l'affichage progressif sans inventer de protocole :
- * une sonde lente (crt.sh, ~3 s) n'en retarde aucune autre, une sonde en échec
- * n'a qu'une carte à elle, et « réessayer » ne relance qu'elle. Une commande
- * unique qui aurait tout attendu aurait laissé l'écran vide pendant la plus
- * lente des sondes.
+ * `osint.lookup` ne sonde rien : il planifie (reconnaît la cible, journalise,
+ * rend les sondes applicables). Le client tire ensuite un `osint.probe` par
+ * carte, en parallèle : une sonde lente n'en retarde aucune autre, et
+ * « réessayer » ne relance qu'elle.
  */
 
 const lookupId = z.uuid();
@@ -39,9 +31,8 @@ export const osintLookup = {
 };
 
 /**
- * Exécute **une** sonde. La cible vient du client : le serveur la revalide par
- * `detectTarget()` et refuse une sonde qui ne s'applique pas à sa nature — le
- * `kind` reçu n'est jamais cru sur parole.
+ * Exécute une sonde. Le serveur revalide la cible par `detectTarget()` et refuse
+ * une sonde qui ne s'applique pas à sa nature : le `kind` reçu n'est jamais cru.
  */
 export const osintProbe = {
     command: 'osint.probe' as const,
@@ -76,11 +67,8 @@ export const osintKeyList = {
     output: z.object({
         providers: z.array(osintProviderStatusSchema),
         /**
-         * Combien de sondes peuvent rendre quelque chose aujourd'hui, sur le
-         * total du registre — la plupart n'exigent aucune clé, seules
-         * quelques-unes en dépendent (`skipped` sans elle). Rendu ici plutôt
-         * que par une commande à part : le calcul part du même ensemble de
-         * fournisseurs posés que `providers`, pas la peine de le relire deux fois.
+         * Sondes qui peuvent rendre quelque chose, sur le total du registre :
+         * seules celles qui exigent une clé absente sont décomptées.
          */
         probesAvailable: z.number().int().nonnegative(),
         probesTotal: z.number().int().positive()

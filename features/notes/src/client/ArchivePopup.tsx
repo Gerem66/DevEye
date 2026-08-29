@@ -11,7 +11,7 @@ import type { NoteSummary } from '../contracts/domain';
 
 export const NOTE_ARCHIVE_POPUP = 'popup-note-archives';
 
-/** Full date + time of an archiving, epoch seconds. */
+/** `time` is in epoch seconds. */
 function formatArchivedAt(time: number): string {
     return new Date(time * 1000).toLocaleDateString('fr-FR', {
         day: 'numeric',
@@ -23,21 +23,15 @@ function formatArchivedAt(time: number): string {
 }
 
 /**
- * The archive: notes removed from the main list but not destroyed. Each row can
- * be restored or, only from here, deleted for good: the two-step the server
- * enforces (`notes.delete` refuses an active note). Une note projetée depuis
- * un autre espace se restaure d'ici, mais ne s'y détruit pas : le serveur le
- * refuse, et la rangée ne le propose pas.
- *
- * Owns its own fetch rather than receiving the list, so the archive stays a
- * self-contained view. Resolves OpenPopup with `true` when anything changed, so
- * the caller knows whether to re-list.
+ * Deleting for good is only offered here: `notes.delete` refuses an active note.
+ * Une note projetée depuis un autre espace se restaure d'ici, mais ne s'y détruit
+ * pas : le serveur le refuse. Resolves with `true` when something changed, so the
+ * caller knows whether to re-list.
  */
 export default function ArchivePopup() {
     const [notes, setNotes] = useState<NoteSummary[]>([]);
     const [loaded, setLoaded] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    // Whether a restore/delete happened, so the caller re-lists on close.
     const changed = useRef(false);
 
     const load = useCallback(async () => {
@@ -64,7 +58,6 @@ export default function ArchivePopup() {
         ClosePopup(NOTE_ARCHIVE_POPUP, changed.current);
     }
 
-    /** Drop the row locally after a successful mutation and flag the change. */
     function forget(noteId: number) {
         changed.current = true;
         setNotes((prev) => prev.filter((n) => n.id !== noteId));
@@ -173,7 +166,7 @@ export default function ArchivePopup() {
     );
 }
 
-/** What to show for a row: a masked note never handed over its title. */
+/** A masked note never handed over its title. */
 function noteLabel(note: NoteSummary): string {
     if (note.masked) return 'Note privée';
     return note.title || 'Sans titre';

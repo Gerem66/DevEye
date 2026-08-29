@@ -6,15 +6,9 @@ import { agentConfigFor } from '@/agent/config';
 import type { Database } from '@/db';
 
 /**
- * Le point d'attache de l'hôte pour l'assemblage SDK : le hub agents et la
- * base, déposés une fois au boot.
- *
- * La façade `deveye.agents` d'un contexte de requête a besoin du hub (portée
- * flotte), que le `FeatureContext` natif ne transporte pas : lui ne connaît
- * que `monitor`, le transport du socket appelant. Le hub est unique par
- * processus et vit dans `buildApp` ; il se dépose ici une fois, avant
- * l'enregistrement des WS, et l'assemblage le lit à la demande. La base sert
- * à recomposer la config de collecte d'un appareil (`pushAgentConfig`).
+ * Le point d'attache de l'hôte pour l'assemblage SDK : le hub agents (portée
+ * flotte, que le `FeatureContext` natif ne transporte pas) et la base, déposés
+ * une fois au boot, avant l'enregistrement des WS.
  */
 let HUB: MonitorHub | null = null;
 let DB: Database | null = null;
@@ -35,15 +29,10 @@ function sdkDb(): Database {
 }
 
 /**
- * Pousse à l'agent la config de collecte de son appareil, recomposée par l'app
- * depuis la ligne appareil et ce que les modules y contribuent
- * (`agentConfigFor`, qui demande à Sentinelle sa part). Faux quand l'agent est
- * hors ligne : il recevra la config à sa prochaine connexion, le chemin de
- * `agent/ws.ts` la rejoue à chaque poignée de main.
- *
- * `agent/config.ts` importe `_sdk/register`, qui remonte jusqu'ici par la
- * façade : le cycle est assumé et sans effet, rien n'y est évalué au
- * chargement (deux fonctions qui s'appellent à l'exécution).
+ * Pousse à l'agent la config de collecte de son appareil (`agentConfigFor`).
+ * Faux quand l'agent est hors ligne : il la recevra à sa prochaine connexion.
+ * Le cycle d'import avec `agent/config.ts` est sans effet : rien n'y est évalué
+ * au chargement.
  */
 export async function pushAgentConfig(deviceId: string): Promise<boolean> {
     const hub = sdkHub();
@@ -54,10 +43,9 @@ export async function pushAgentConfig(deviceId: string): Promise<boolean> {
 }
 
 /**
- * Les dérivations de la clé serveur offertes à un module (`keys` du contexte
- * et des services) : sceller/ouvrir des octets sous la clé serveur, et l'HKDF
- * que `scripts/restore-backup.mjs` refait sans DevEye à partir des deux
- * seules variables CRYPT_KEY_A / CRYPT_KEY_B. La clé elle-même ne sort jamais.
+ * Les dérivations de la clé serveur offertes à un module : sceller/ouvrir des
+ * octets, et l'HKDF que `scripts/restore-backup.mjs` refait sans DevEye. La
+ * clé elle-même ne sort jamais.
  */
 export function serverKeysOf(crypt: Encryption): SdkServerKeys {
     return {

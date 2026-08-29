@@ -1,10 +1,7 @@
 import type { UptimeServiceRow, UptimeStatus } from '../contracts/domain';
 import type { FeatureService, FeatureServiceDeps, SdkCipher } from '@deveye/types/sdk/server';
 
-// Privilège de native rapatriée, commenté à chaque usage : l'horodatage et la
-// durée des corps d'alerte sont ceux de `Services/notifications`, partagés par
-// les cinq émetteurs de l'app (une alerte de base horodatée autrement qu'une
-// alerte de disponibilité donnerait l'impression de venir d'un autre produit).
+// Horodatage et durée partagés par tous les émetteurs de l'app : importés, pas recopiés.
 import { formatDuration, formatMoment } from '@/Services/notifications';
 
 import { decryptError, decryptService, encryptError, type ServicePayload } from './_shared';
@@ -23,23 +20,13 @@ import type { UptimeRepo } from './repo';
  *
  * It runs with **no session and no password**, so every encrypted field it
  * touches (target, error messages, notification channels) goes through the
- * workspace's *open* cipher (`deps.cipherFor`, mémoïsé par le SDK) ; voir
- * `Docs/SECURITY_MODEL.md`.
- *
- * Depuis le rapatriement, la boucle est un ticker du SDK (`deps.createTicker`,
- * le patron des services natifs : setInterval + garde de réentrance + unref),
- * et l'élagage horaire des pings bruts, qui vivait dans le balayage de
- * rétention d'`index.ts`, est un second ticker du module.
+ * workspace's *open* cipher (`deps.cipherFor`); see `Docs/SECURITY_MODEL.md`.
  */
 
-/**
- * Les variables d'environnement propres à la feature se lisent ici, pas dans
- * `Utils/Env` : la cadence de réveil (recherche des services à sonder) et le
- * nombre de sondes menées en parallèle.
- */
+/** Les variables d'environnement de la feature se lisent ici, pas dans `Utils/Env`. */
 const TICK_SECONDS = Number(process.env.UPTIME_TICK_SECONDS) || 10;
 const CONCURRENCY = Number(process.env.UPTIME_CONCURRENCY) || 8;
-/** L'élagage des pings bruts : une fois par heure, comme le balayage de rétention de l'app. */
+/** Élagage des pings bruts, une fois par heure. */
 const PRUNE_INTERVAL_MS = 60 * 60 * 1000;
 
 /** Outcome of a single HTTP probe. */
@@ -111,13 +98,8 @@ export async function probeService(target: ServicePayload, row: UptimeServiceRow
 }
 
 /**
- * Les champs structurés d'une alerte, pour un point d'entrée maison qui veut
- * filtrer sans analyser du texte.
- *
- * Le message lui-même n'est pas construit ici : `deliver` porte le texte
- * (`content` pour Discord, `text` pour Slack) et `UptimeNotice` la mise en page
- * Discord. Ce qui reste est ce que ni l'un ni l'autre ne dit : de quel service
- * il s'agit, et quand.
+ * Les champs structurés d'une alerte, pour un point d'entrée maison qui filtre
+ * sans analyser du texte : ce que ni le corps ni l'embed ne disent.
  */
 function webhookPayload(alert: {
     event: 'down' | 'recovered';
@@ -153,9 +135,8 @@ export class UptimeMonitor {
     start(): void {
         this.ticker.start();
         this.pruner.start();
-        // Un tour tout de suite, comme avant : un serveur qui redémarre ne
-        // laisse pas ses services attendre le premier réveil. L'élagage aussi,
-        // au boot puis toutes les heures, comme le balayage de rétention.
+        // Un tour tout de suite : un serveur qui redémarre ne laisse pas ses
+        // services attendre le premier réveil.
         void this.tick();
         void this.prune();
         this.deps.logger.info({ tickSeconds: TICK_SECONDS }, 'Uptime monitor started');
@@ -263,12 +244,9 @@ export class UptimeMonitor {
             error: encryptedError
         });
 
-        // Uniquement sur une **transition d'état**, jamais à chaque tour.
-        //
-        // La boucle tourne toutes les dix secondes sur tous les services : y
-        // diffuser sans condition ferait re-solliciter le serveur par tous les
-        // clients de tous les espaces, en permanence. Ce qui intéresse une
-        // interface, c'est le moment où un service tombe ou revient.
+        // Diffusé sur une transition d'état seulement : la boucle tourne toutes
+        // les dix secondes sur tous les services, diffuser à chaque tour ferait
+        // re-solliciter le serveur par tous les clients en permanence.
         if (status !== row.status) {
             this.deps.live.changed(row.workspace_id);
         }
@@ -304,11 +282,9 @@ export class UptimeMonitor {
                 description: `Service « ${target.name} » injoignable`,
                 metadata: { serviceId: row.id, httpStatus: probe.httpStatus }
             });
-            // Toujours tenté : c'est la route qui décide. Un service réglé
-            // « silencieux » a une route sans canal, la façade ne fait alors
-            // rien et l'incident reste non-notifié, donc pas de « c'est
-            // revenu » orphelin. (L'interrupteur `notify` par service a été
-            // retiré : deux endroits décidaient d'une même alerte, migration 090.)
+            // Toujours tenté : c'est la route qui décide. Un service « silencieux »
+            // a une route sans canal, la façade ne fait rien et l'incident reste
+            // non-notifié, donc pas de « c'est revenu » orphelin.
             const sent = await this.notify(row, target, {
                 subject: `⚠️ ${target.name} est hors ligne`,
                 body: [
@@ -374,17 +350,10 @@ export class UptimeMonitor {
     }
 
     /**
-     * Livre une alerte sur chaque canal réglé, et dit si l'un d'eux l'a acceptée.
-     *
-     * Le corps de l'envoi vit dans `Services/notifications.ts`, derrière la
-     * façade `notify` du SDK : `send` rend `false` sans canal routé, et c'est
-     * ce booléen qui marque l'incident `notified`, donc ce qui interdit
-     * d'envoyer un « c'est revenu » sans avoir envoyé le « c'est tombé ».
-     *
-     * `itemId` est passé, et c'est ce qui active la surcharge par élément :
-     * un service qui a sa propre route écrit là où elle dit, les autres suivent
-     * celle d'Uptime. Sans cet argument la fonctionnalité entière partagerait
-     * un seul jeu de destinations, ce qui était précisément la limite d'avant.
+     * Livre une alerte sur chaque canal réglé et dit si l'un l'a acceptée : c'est
+     * ce booléen qui marque l'incident `notified`, donc ce qui interdit un
+     * « c'est revenu » sans « c'est tombé ». `itemId` active la route propre au
+     * service ; sans lui, tout Uptime partagerait un seul jeu de destinations.
      */
     private async notify(
         row: UptimeServiceRow,
@@ -401,9 +370,8 @@ export class UptimeMonitor {
                     url: target.url,
                     at: alert.notice.at
                 }),
-                // La même alerte, mise en page pour Discord. Le corps en clair
-                // au-dessus reste ce que reçoivent le mail et les autres
-                // webhooks : rien n'est remplacé, une forme est ajoutée.
+                // La même alerte, mise en page pour Discord ; le corps en clair
+                // reste pour les autres canaux.
                 embeds: buildNotice(alert.notice)
             },
             { itemId: row.id }

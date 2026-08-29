@@ -3,13 +3,8 @@ import { connect, type PeerCertificate } from 'tls';
 import { daysUntil, field, formatDate, tag, type OsintProbeAdapter, type OsintTag } from './shared';
 
 /**
- * Certificat TLS présenté par le domaine.
- *
- * La carte la plus rentable de la famille, pour une raison qui n'est pas
- * évidente : le champ **SAN** (Subject Alternative Name) énumère tous les noms
- * que le certificat couvre. Une machine qui sert `example.com` révèle donc
- * souvent `staging.example.com`, `vpn.example.com`, `mail.example.com` — de
- * l'infrastructure interne, publiée sans y penser, et lisible en une connexion.
+ * Certificat TLS présenté par le domaine. Le champ SAN énumère tous les noms
+ * couverts : de l'infrastructure interne, publiée sans y penser.
  */
 
 const TLS_TIMEOUT_MS = 6000;
@@ -30,9 +25,8 @@ function peerCertificate(host: string): Promise<PeerCertificate> {
             host,
             port: 443,
             servername: host,
-            // On veut *décrire* le certificat, y compris s'il est invalide —
-            // un certificat expiré ou auto-signé est précisément ce qu'on
-            // cherche à voir. La validation est faite ensuite, à la main.
+            // On décrit le certificat, y compris invalide : un certificat expiré
+            // ou auto-signé est ce qu'on cherche à voir. Validation faite ensuite.
             rejectUnauthorized: false,
             timeout: TLS_TIMEOUT_MS
         });
@@ -78,8 +72,8 @@ export const tlsProbe: OsintProbeAdapter = {
         const to = formatDate(cert.valid_to);
         if (to) fields.push(field("Valide jusqu'au", to));
 
-        // `asn1Curve` n'est présent que sur une clé elliptique — c'est ce qui
-        // distingue EC de RSA sans avoir à décoder la clé publique.
+        // `asn1Curve` n'est présent que sur une clé elliptique : ce qui distingue
+        // EC de RSA sans décoder la clé publique.
         const algo = cert.asn1Curve ? `EC (${cert.asn1Curve})` : 'RSA';
         if (extra.bits) fields.push(field('Clé', `${algo}, ${extra.bits} bits`));
         if (cert.fingerprint256) fields.push(field('Empreinte SHA-256', cert.fingerprint256, { mono: true }));

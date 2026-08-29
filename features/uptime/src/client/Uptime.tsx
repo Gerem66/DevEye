@@ -17,12 +17,7 @@ import ServiceList from './ServiceList';
 import { refreshUptime } from './store';
 import styles from './style.module.css';
 
-/**
- * La vue complète : la liste des services, la fiche d'un service, le journal.
- *
- * Depuis le rapatriement, l'espace vient de `useActiveWorkspace()` et non
- * d'une prop : la vue d'un module ne reçoit que `closeFeature`.
- */
+/** La vue complète : la liste des services, la fiche d'un service, le journal. */
 export default function Uptime(_props: FeatureViewProps) {
     const [services, setServices] = useState<UptimeService[]>([]);
     const [loading, setLoading] = useState(true);
@@ -62,10 +57,8 @@ export default function Uptime(_props: FeatureViewProps) {
         // Relu quand l'espace change : la liste est celle d'un espace.
     }, [workspaceId]);
 
-    // Relecture à l'ouverture, à chaque (re)connexion, et quand le sujet
-    // `uptime` bouge (une écriture d'un autre membre, ou une transition d'état
-    // signalée par le service de fond). Plus de minuteur : la liste ne vieillit
-    // plus toute seule, elle est prévenue.
+    // Relecture à chaque (re)connexion et quand le sujet `uptime` bouge (une
+    // écriture d'un autre membre, une transition d'état du service de fond).
     useEffect(() => {
         const offInvalidate = onResourceChange('uptime.list', () => {
             // Une relecture réordonne la liste sous le pointeur : jamais pendant

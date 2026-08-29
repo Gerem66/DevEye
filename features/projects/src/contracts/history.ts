@@ -1,30 +1,19 @@
 import { z } from 'zod';
 
 /**
- * L'historique d'un projet : la frise verticale de tout ce qui lui est arrivé.
- *
- * C'est le pendant du principe « rien ne se supprime, tout s'archive ». Un bloc
- * archivé quitte l'espace de travail mais reste ici, consultable en lecture
- * seule ; un renommage, un changement de version ou de statut y laisse aussi sa
- * trace. L'historique est donc la mémoire du projet, pas un journal technique —
- * ce dernier existe déjà, c'est l'audit (`ctx.audit`, page Journaux).
- *
- * Découpage clair / chiffré : le **type**, l'auteur, l'horodatage et la
- * référence à l'objet concerné sont en clair (ils servent à trier et à router
- * sans clé) ; le libellé et le avant/après sont chiffrés — ce sont eux qui
- * portent le contenu.
+ * L'historique d'un projet : la mémoire de ce qui lui est arrivé, pas un journal
+ * technique (celui-là existe déjà, c'est l'audit). Le type, l'auteur, l'horodatage
+ * et la référence à l'objet restent en clair pour trier et router sans clé ; le
+ * libellé et le avant/après sont chiffrés.
  */
 
 export const PROJECT_EVENT_LABEL_MAX_LENGTH = 200;
 export const PROJECT_EVENT_PAGE_SIZE = 50;
 
 /**
- * Ce qui mérite d'entrer dans l'histoire d'un projet.
- *
- * Volontairement court : une frise qui consigne tout ne se lit plus. Y figurent
- * les changements qu'on cherche des mois plus tard — « quand a-t-on archivé
- * ça ? », « depuis quand est-on en v2 ? » — et rien du va-et-vient quotidien
- * des cartes entre colonnes.
+ * Ce qui mérite d'entrer dans l'histoire d'un projet. Volontairement court : une
+ * frise qui consigne tout ne se lit plus, le va-et-vient quotidien des cartes entre
+ * colonnes n'y figure pas.
  */
 export const projectEventKindSchema = z.enum([
     'projects.created',
@@ -53,9 +42,8 @@ export const projectEventSchema = z.object({
     /** `null` = une tâche de fond, ou un compte supprimé depuis. */
     actorUserId: z.number().int().positive().nullable(),
     /**
-     * Un type inconnu ne fait pas disparaître la ligne : un client plus ancien
-     * qu'un serveur doit encore pouvoir lire la frise, quitte à afficher une
-     * entrée générique. Même parti pris que `shortcutTemplateSchema`.
+     * Un type inconnu ne fait pas disparaître la ligne : un client plus ancien que
+     * le serveur doit pouvoir lire la frise, quitte à afficher une entrée générique.
      */
     kind: projectEventKindSchema.catch('projects.status'),
     refType: projectEventRefSchema.nullable(),

@@ -18,16 +18,8 @@ interface DashboardProps {
 }
 
 /**
- * Le tableau de bord: la réponse à « où j'en suis », en un écran.
- *
- * Tout vient d'**une seule** commande (`finance.overview`). Six lectures
- * indépendantes laisseraient un écran où le solde vient d'avant une écriture et
- * la répartition d'après, et personne ne saurait laquelle des deux moitiés
- * croire.
- *
- * L'ordre de lecture descend du général au particulier: combien j'ai, comment ça
- * a bougé, où c'est parti, ce qui m'attend. Chaque bloc renvoie vers l'onglet qui
- * permet d'agir dessus, pour qu'on n'ait jamais à repasser par la barre.
+ * Le tableau de bord, tout d'une seule commande (`finance.overview`) : six
+ * lectures indépendantes laisseraient un écran incohérent.
  */
 export function Dashboard({ base, onOpenTab, onNewTransaction }: DashboardProps) {
     const [range, setRange] = useState<FinanceRange>('month');
@@ -93,9 +85,7 @@ export function Dashboard({ base, onOpenTab, onNewTransaction }: DashboardProps)
                 </span>
             </div>
 
-            {/* Les quatre nombres qu'on vient chercher, dans l'ordre où on les
-                lit. Ils apparaissent en cascade au montage, brièvement: assez
-                pour que l'œil suive la lecture, trop peu pour qu'on l'attende. */}
+            {/* En cascade au montage, brièvement : assez pour que l'œil suive. */}
             <div className={styles.kpis}>
                 {[
                     {
@@ -180,8 +170,6 @@ export function Dashboard({ base, onOpenTab, onNewTransaction }: DashboardProps)
                 <section className={styles.card}>
                     <header className={styles.cardHead}>
                         <h3 className={styles.cardTitle}>Où part l’argent</h3>
-                        {/* La grille de lecture se règle dans les réglages de la
-                            feature (panneau Catégories) : le bouton commun y mène. */}
                         <FeatureSettingsButton
                             scope={{ kind: 'feature', feature: 'finance' }}
                             initialSection='categories'

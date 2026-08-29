@@ -27,14 +27,10 @@ const WEATHER_SERVICES: ExternalService[] = [
 const LINK_PREVIEW_SERVICES = ['GitHub', 'npm', 'Spotify', 'SoundCloud', 'Twitch', 'TikTok', 'Wikipédia', 'YouTube'];
 
 /**
- * Ce que plusieurs fonctionnalités partagent, sans que ce soit une liaison de
- * l'une vers l'autre.
- *
- * Trois socles, et la liste de chacun est **dérivée** de ce que le catalogue et
- * le modèle savent déjà : le chiffrement se lit sur `holdSecrecy`, le canal
- * d'alerte sur les liaisons déclarées vers Mail. Seul le socle « appareils »
- * est écrit à la main, faute d'un drapeau qui le dise — et c'est précisément
- * pour ça qu'il est le seul à pouvoir se démoder.
+ * Ce que plusieurs fonctionnalités partagent sans liaison de l'une vers
+ * l'autre. Le chiffrement se lit sur `holdSecrecy`, le canal d'alerte sur les
+ * liaisons vers Mail ; seul le socle « appareils » est écrit à la main, faute
+ * de drapeau, et peut donc se démoder.
  */
 const AGENT_FEATURES: HomeFeatureId[] = ['devices', 'sentinel', 'cloudsync'];
 
@@ -53,21 +49,14 @@ function FeatureChip({ entry }: { entry: FeatureCatalogEntry }) {
     );
 }
 
-/**
- * Une fonctionnalité et ce qu'elle relie.
- *
- * Les liaisons sont lues **dans les deux sens** : posté sur Git, on veut savoir
- * que les projets s'y raccrochent, sans avoir à parcourir toutes les autres
- * fiches pour s'en assurer. La phrase change de sujet selon le bout où l'on se
- * trouve, ce qui est exactement ce qui rend le graphe lisible d'un seul côté.
- */
+/** Une fonctionnalité et ce qu'elle relie, dans les deux sens : la phrase
+ *  change de sujet selon le bout où l'on se trouve. */
 function FeatureRow({ entry }: { entry: FeatureCatalogEntry }) {
     const relations = featureRelations(entry.id);
     return (
         <li className={styles.feature}>
-            {/* La vignette à côté du texte, pas au-dessus : quinze illustrations
-                empilées feraient de cette fiche un dépliant à dérouler, alors
-                qu'on y vient pour lire ce qui relie les fonctionnalités. */}
+            {/* La vignette à côté du texte, pas au-dessus : empilées, elles
+                feraient de cette fiche un dépliant. */}
             <FeatureArt id={entry.id} className={styles.featureArt} />
             <div className={styles.featureText}>
                 <span className={styles.featureHead}>
@@ -98,12 +87,9 @@ function FeatureRow({ entry }: { entry: FeatureCatalogEntry }) {
 }
 
 /**
- * Body of the "About" info dialog, opened from the navbar's version pill.
- *
- * Trois parties : ce que DevEye fait, **les fonctionnalités et leurs liens**,
- * puis les services tiers auxquels il parle. La partie du milieu est construite
- * depuis le catalogue de l'accueil, donc elle ne peut pas décrire une
- * fonctionnalité qui n'existe plus ni oublier celle qu'on vient d'ajouter.
+ * Body of the "About" info dialog, opened from the navbar's version pill. Les
+ * fonctionnalités et leurs liens sont construits depuis le catalogue, donc
+ * jamais en retard sur lui.
  */
 export default function AboutContent() {
     const encrypted = featureCatalog().filter((f) => f.holdSecrecy);

@@ -6,27 +6,17 @@ import styles from './style.module.css';
 
 interface MyTasksProps {
     /**
-     * Les projets projetés depuis un autre espace, relevés sur le portefeuille
-     * (`ProjectSummary.foreign`) : une tâche qui en vient porte la pastille
-     * « partagé » à côté du titre de son projet d'origine. La tâche elle-même
-     * ne dit pas d'où vient son projet ; le portefeuille, chargé au même
-     * moment, le sait.
+     * Les projets projetés depuis un autre espace : une tâche ne dit pas d'où
+     * vient son projet, le portefeuille chargé au même moment le sait.
      */
     foreignProjectIds: ReadonlySet<number>;
-    /** Ouvre le projet auquel appartient la tâche. */
     onOpenProject: (projectId: number) => void;
 }
 
 /**
- * Toutes mes tâches, tous projets de l'espace confondus.
- *
- * Rendue possible par le fait qu'`assignee_user_id` est en clair : une seule
- * requête serveur, aucun déchiffrement pour trier. C'est la vue qu'on ouvre le
- * matin, et la raison pour laquelle cette colonne n'a pas été chiffrée.
- *
- * Ne demande **jamais** de mot de passe : les cartes d'un projet confidentiel
- * verrouillé reviennent masquées plutôt qu'absentes — une liste de tâches
- * incomplète serait pire qu'une liste qui dit ce qu'elle ne peut pas lire.
+ * Toutes mes tâches, tous projets confondus : `assignee_user_id` est en clair,
+ * donc une requête sans déchiffrement. Ne demande jamais de mot de passe, les
+ * cartes d'un projet verrouillé reviennent masquées plutôt qu'absentes.
  */
 export function MyTasks({ foreignProjectIds, onOpenProject }: MyTasksProps) {
     const [tasks, setTasks] = useState<MyTask[] | null>(null);

@@ -25,15 +25,10 @@ function AppRoot() {
             {status === 'authenticated' && <HomePage />}
             {status === 'authenticated' && <SecrecyGate />}
 
-            {/* Un lien d'inscription prend l'écran : celui qui le suit n'a
-                justement pas encore de compte, l'écran de connexion ne lui sert
-                à rien.
-
-                Il reste monté même une fois le compte créé et la session
-                ouverte : c'est lui qui décide de s'effacer, à la fin de son
-                animation. Le démonter dès que le statut passe à « authentifié »
-                couperait la barre de progression en plein vol — au moment le
-                plus visible du parcours. */}
+            {/* Un lien d'inscription prend l'écran, celui qui le suit n'ayant pas
+                encore de compte. Il reste monté après l'ouverture de la session et
+                décide lui-même de s'effacer, à la fin de son animation : le démonter
+                sur le statut couperait sa barre de progression en plein vol. */}
             {registerToken ? (
                 <RegisterPage
                     token={registerToken}
@@ -52,8 +47,7 @@ function AppRoot() {
 function App() {
     return (
         // `reducedMotion="user"` honours the OS "reduce motion" setting: framer
-        // skips the heavy transform/layout morphs (keeping cheap opacity fades),
-        // which is both an accessibility win and lighter on low-end GPUs.
+        // skips the heavy transform/layout morphs, keeping cheap opacity fades.
         <MotionConfig reducedMotion='user'>
             <AuthProvider>
                 <AppRoot />

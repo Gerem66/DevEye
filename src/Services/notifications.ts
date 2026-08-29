@@ -14,57 +14,26 @@ import type { Database } from '@/db';
 import { moduleProvider } from '@/features/_sdk/register';
 
 /**
- * L'acheminement des alertes : résoudre les canaux d'une cible, puis livrer.
- *
- * ## Ce qui a changé, et pourquoi
- *
- * Ce module résolvait **deux** canaux — un mail, un webhook — lus dans une ligne
- * par couple `(espace, feature)`. Il en résout désormais une **liste**, tirée de
- * `notification_channels` par une route. Trois conséquences :
- *
- *  - une même destination sert plusieurs fonctionnalités sans être redéclarée ;
- *  - une fonctionnalité peut écrire à plusieurs endroits ;
- *  - un élément peut router ailleurs que sa fonctionnalité.
- *
- * ## Discord n'est plus deviné
- *
- * `webhookBody` reniflait l'URL pour décider entre les embeds et le texte. Ça
- * marchait, mais décidait à la place de l'utilisateur, et le commentaire de
- * `discord.ts` le reconnaissait déjà comme un pis-aller. C'est maintenant le
- * **type déclaré** du canal qui tranche. `isDiscordWebhook` survit, mais comme
- * contrôle de saisie : avertir que l'URL collée dans un canal « Discord » n'en
- * est pas une.
- *
- * ## Le courriel passe par le module Mail
- *
- * Ce module lisait `mail_accounts` et parlait SMTP lui-même (`readyMailAccount`,
- * `decryptCredentials`, `sendMail`) tant que Mail était native. Depuis son
- * rapatriement, tout ce qui touche à une boîte passe par le contrat que le
- * module publie sur son service (`MAIL_TRANSPORT_PROVIDER` : les expéditeurs
- * prêts, l'état d'un compte, l'envoi d'un texte), relu à l'appel par
- * {@link mailTransport}. Sans module Mail installé, un canal e-mail n'est
- * jamais prêt, et l'écran des canaux le dit.
+ * L'acheminement des alertes : résoudre les canaux d'une cible (une liste tirée
+ * de `notification_channels` par une route), puis livrer. Le type déclaré du
+ * canal décide de la charge utile, jamais l'URL. Le courriel passe par le
+ * contrat du module Mail (`MAIL_TRANSPORT_PROVIDER`) ; sans module, un canal
+ * e-mail n'est jamais prêt.
  */
 
 /**
  * Le transport des alertes e-mail, tel que le module Mail l'offre ; `undefined`
- * sans module. Relu à chaque appel et non retenu : l'ordre du boot ne compte
- * pas, et c'est ce que `moduleProvider` promet. (L'import de `_sdk/register`
- * ferme un cycle avec `facade.ts`, qui importe ce fichier : assumé et sans
- * effet, rien n'est évalué au chargement, deux fonctions qui s'appellent à
- * l'exécution.)
+ * sans module. Relu à chaque appel : l'ordre du boot ne compte pas. Le cycle
+ * d'import avec `facade.ts` est sans effet, rien n'est évalué au chargement.
  */
 function mailTransport(): MailTransportProvider | undefined {
     return moduleProvider<MailTransportProvider>(MAIL_TRANSPORT_PROVIDER);
 }
 
 /**
- * Un canal prêt à recevoir, tel que la livraison en a besoin.
- *
- * Un canal que rien ne rend exploitable — compte expéditeur disparu, désactivé
- * ou gardé, URL illisible — **n'apparaît pas** dans la liste résolue plutôt que
- * d'y figurer inerte. La livraison n'a ainsi jamais à revérifier ce que la
- * résolution a déjà tranché.
+ * Un canal prêt à recevoir, tel que la livraison en a besoin : un canal
+ * inexploitable n'apparaît pas dans la liste résolue, la livraison n'a jamais
+ * à revérifier.
  */
 export interface ResolvedChannel {
     id: number;
@@ -87,13 +56,8 @@ export function discordChannels(channels: ResolvedChannel[]): ResolvedChannel[] 
 }
 
 /**
- * Comment nommer un canal que personne n'a nommé.
- *
- * La reprise de la 087 laisse `label_enc` à NULL : aucune requête SQL ne peut
- * produire un cryptogramme, et y écrire du clair rendrait `tryDecrypt` nul à la
- * lecture. Retomber sur la **destination** est la meilleure description
- * possible — et, sur les doublons que la reprise crée forcément, c'est
- * précisément ce qui les donne à voir comme des doublons.
+ * Comment nommer un canal que personne n'a nommé : la destination est la
+ * meilleure description possible.
  */
 export function fallbackLabel(kind: NotificationChannelKind, target: string | null): string {
     if (kind === 'email') return target?.trim() || 'Compte expéditeur';
@@ -119,14 +83,9 @@ async function decodeChannel(
 }
 
 /**
- * Un compte mail est-il réellement capable d'envoyer sans intervention ?
- *
- * Trois conditions, et l'interface a besoin de la réponse pour dire « ce canal
- * ne partira pas » plutôt que d'afficher un réglage qui ment : le compte doit
- * exister **dans cet espace**, être actif, et appartenir au palier « open » —
- * un compte gardé exige un déverrouillage que l'ordonnanceur de fond n'a jamais.
- * Les trois sont la définition d'un expéditeur prêt chez le module Mail, qui
- * répond ; sans module, personne n'est prêt.
+ * Un compte mail est-il réellement capable d'envoyer sans intervention ? Dans
+ * cet espace, actif, et au palier ouvert (un compte gardé exige un
+ * déverrouillage que l'ordonnanceur de fond n'a jamais). Sans module, personne.
  */
 async function readyMailAccount(workspaceId: number, mailAccountId: number | null): Promise<boolean> {
     if (!mailAccountId) return false;
@@ -134,25 +93,17 @@ async function readyMailAccount(workspaceId: number, mailAccountId: number | nul
 }
 
 /**
- * Un canal tel que l'écran de réglages le montre.
- *
- * Distinct de {@link ResolvedChannel} exprès : celui-ci décrit, l'autre livre.
- * Un canal cassé doit **apparaître** dans la liste, accompagné de son `ready`
- * faux, pour qu'on puisse le réparer ; il doit **disparaître** de la livraison,
- * pour qu'on n'essaie pas de s'en servir. Une seule structure servirait mal les
- * deux besoins.
+ * Un canal tel que l'écran de réglages le montre. Distinct de
+ * {@link ResolvedChannel} : un canal cassé doit apparaître ici avec `ready`
+ * faux, pour qu'on le répare, et disparaître de la livraison.
  */
 export async function describeChannel(
     cipher: Cipher,
     row: NotificationChannelRow,
     usageCount: number,
     /**
-     * L'appelant a-t-il le droit de **lire la destination** ?
-     *
-     * Le libellé et l'état sortent toujours : il faut voir les destinations pour
-     * router une fonctionnalité vers l'une d'elles. L'adresse, non — et c'est ce
-     * qui permet de confier le réglage d'Uptime sans confier l'adresse de
-     * l'astreinte ni l'URL du salon de production.
+     * L'appelant a-t-il le droit de lire la destination ? Libellé et état
+     * sortent toujours (il faut voir les destinations pour router) ; l'adresse, non.
      */
     reveal: boolean
 ): Promise<NotificationChannel> {
@@ -179,14 +130,12 @@ async function resolveChannel(cipher: Cipher, row: NotificationChannelRow): Prom
     if (row.kind === 'email') {
         const transport = mailTransport();
         if (!transport || !row.mail_account_id) return null;
-        // L'expéditeur tel que le module le liste : prêt (actif, étage ouvert,
-        // adresse lisible), ou absent de la liste, et alors rien ne peut
-        // partir de ce canal.
+        // L'expéditeur tel que le module le liste : prêt, ou absent de la liste
+        // et alors rien ne peut partir de ce canal.
         const senders = await transport.listSenders(row.workspace_id);
         const sender = senders.find((s) => s.id === row.mail_account_id);
         if (!sender) return null;
-        // Destinataire vide = l'adresse du compte expéditeur lui-même, ce que
-        // `notification_settings.email_enc IS NULL` voulait déjà dire.
+        // Destinataire vide = l'adresse du compte expéditeur lui-même.
         const to = target?.trim() || sender.address;
         return {
             id: row.id,
@@ -202,17 +151,9 @@ async function resolveChannel(cipher: Cipher, row: NotificationChannelRow): Prom
 }
 
 /**
- * Les canaux d'une cible : sa sélection, ou rien.
- *
- * La règle tient en une ligne depuis la 092 : la cible (un élément, ou la
- * fonctionnalité elle-même pour un émetteur sans éléments comme Sentinelle) a
- * une route → ses canaux ; sinon rien ne part. L'héritage « élément → route de
- * sa fonctionnalité » a été retiré : la sélection se fait sur l'élément, et un
- * élément qui n'a rien coché est silencieux.
- *
- * Rien n'est deviné : sans route enregistrée, rien ne part. C'est le défaut qui
- * compte — une fonctionnalité qui se met à écrire à des gens sans qu'ils
- * l'aient demandé est précisément ce qu'on corrige depuis la 075.
+ * Les canaux d'une cible (un élément, ou la fonctionnalité elle-même pour un
+ * émetteur sans éléments) : sa sélection, ou rien. Pas d'héritage, rien n'est
+ * deviné : sans route enregistrée, rien ne part.
  */
 export async function resolveRoute(
     db: Database,
@@ -234,15 +175,9 @@ export async function resolveRoute(
 }
 
 /**
- * Résout des canaux **par identifiant**, sans passer par une route.
- *
- * L'essai d'un canal isolé n'a pas de route : il vise la ligne telle qu'elle est
- * enregistrée. C'est ce qui supprime le détour de l'ancien dialogue, qui devait
- * enregistrer avant de tester sous peine d'éprouver les réglages précédents.
- *
- * Les identifiants étrangers à l'espace tombent d'eux-mêmes : chaque ligne est
- * relue pour cet espace, et une absence ne résout rien. La feature n'entre pas
- * en jeu : on vise des lignes précises, quelle que soit leur propriétaire.
+ * Résout des canaux par identifiant, sans passer par une route (l'essai d'un
+ * canal isolé). Les identifiants étrangers à l'espace tombent d'eux-mêmes :
+ * chaque ligne est relue pour cet espace.
  */
 export async function resolveChannelIds(
     db: Database,
@@ -258,13 +193,7 @@ export async function resolveChannelIds(
     return resolved.filter((c): c is ResolvedChannel => c !== null);
 }
 
-/**
- * Date et heure dans le corps d'une alerte, en français.
- *
- * Ici et non dans l'émetteur : les cinq features écrivent des corps de message,
- * et une alerte de base horodatée autrement qu'une alerte de disponibilité
- * donnerait l'impression de venir d'un autre produit.
- */
+/** Date et heure dans le corps d'une alerte, en français, les mêmes pour tous les émetteurs. */
 export function formatMoment(epochSeconds: number): string {
     return new Date(epochSeconds * 1000).toLocaleString('fr-FR', {
         day: '2-digit',
@@ -295,12 +224,7 @@ export interface Alert {
      * point d'entrée maison de filtrer sans analyser du texte.
      */
     payload: Record<string, unknown>;
-    /**
-     * La mise en page Discord de cette alerte, quand la feature en a une.
-     *
-     * Facultative : une feature qui n'en fournit pas garde le texte, y compris
-     * sur un canal déclaré Discord — mieux vaut un message simple qu'aucun.
-     */
+    /** La mise en page Discord de cette alerte, quand la feature en a une ; sinon le texte. */
     embeds?: DiscordMessage['embeds'];
 }
 
@@ -310,11 +234,7 @@ export interface Alert {
  */
 const WEBHOOK_TEXT_MAX = 1900;
 
-/**
- * Un webhook refusé, expliqué : les mots du fournisseur valent mieux qu'« HTTP
- * 400 ». Discord dit « Cannot send an empty message », Slack nomme le champ
- * manquant ; le code seul n'a jamais permis de corriger une URL.
- */
+/** Un webhook refusé, expliqué : les mots du fournisseur valent mieux qu'« HTTP 400 ». */
 async function webhookRejection(response: Response): Promise<string> {
     const detail = await response
         .text()
@@ -324,18 +244,10 @@ async function webhookRejection(response: Response): Promise<string> {
 }
 
 /**
- * La charge utile envoyée au webhook, **décidée par le type du canal**.
- *
- * Sur un canal `webhook`, charge utile à trois têtes : `content` pour Discord,
- * `text` pour Slack, les champs structurés pour un point d'entrée maison. Aucune
- * des trois ne gêne les autres, ce qui évite d'avoir à demander « quel
- * service ? » — c'est le canal générique, et il le reste.
- *
- * Sur un canal `discord` fourni d'embeds, `content` est **retiré** : le garder
- * afficherait deux fois la même alerte, le pavé de texte au-dessus de sa propre
- * mise en page. Sans embeds, Discord reçoit le texte comme n'importe qui.
- *
- * Séparée pour être vérifiable : le choix se juge sur l'objet rendu, sans réseau.
+ * La charge utile envoyée au webhook, décidée par le type du canal. Sur un
+ * canal `webhook`, trois têtes : `content` pour Discord, `text` pour Slack, les
+ * champs structurés pour un point d'entrée maison. Sur un canal `discord`
+ * fourni d'embeds, `content` est retiré : le garder afficherait l'alerte deux fois.
  */
 export function webhookBody(kind: NotificationChannelKind, alert: Alert): Record<string, unknown> {
     const text = alert.body.slice(0, WEBHOOK_TEXT_MAX);
@@ -348,10 +260,8 @@ export function webhookBody(kind: NotificationChannelKind, alert: Alert): Record
 /** Livre une alerte sur un seul canal, et dit s'il l'a acceptée. */
 async function deliverOne(channel: ResolvedChannel, alert: Alert, logger: Logger): Promise<boolean> {
     if (channel.email) {
-        // Le module Mail envoie et journalise lui-même un échec ; il ne lève
-        // jamais, il répond. Sans module (retiré entre la résolution et la
-        // livraison), rien ne part, et le canal l'apprendra à la prochaine
-        // résolution.
+        // Le module Mail ne lève jamais, il répond. Sans module (retiré entre
+        // la résolution et la livraison), rien ne part.
         const transport = mailTransport();
         if (!transport) return false;
         const sent = await transport.send(channel.email.accountId, channel.email.workspaceId, {
@@ -381,17 +291,10 @@ async function deliverOne(channel: ResolvedChannel, alert: Alert, logger: Logger
 }
 
 /**
- * Livre une alerte sur tous les canaux donnés, et dit si **au moins un** l'a
- * acceptée.
- *
- * Les canaux sont indépendants et livrés de front : un webhook en panne ne doit
- * ni supprimer le mail, ni retarder les autres, ni arrêter la boucle qui a
- * produit l'alerte. Chaque erreur est journalisée puis avalée.
- *
- * Le booléen n'est pas décoratif. Uptime marque son incident `notified` sur
- * cette réponse, et ne peut donc envoyer un « c'est revenu » que s'il a bien
- * envoyé le « c'est tombé » — sans quoi on recevrait un rétablissement sans
- * contexte. Un POST refusé n'est **pas** une livraison.
+ * Livre une alerte sur tous les canaux donnés, de front (un webhook en panne
+ * ne retarde pas le mail), et dit si au moins un l'a accepté. Le booléen
+ * compte : Uptime marque son incident `notified` dessus. Un POST refusé n'est
+ * pas une livraison.
  */
 export async function deliver(channels: ResolvedChannel[], alert: Alert, logger: Logger): Promise<boolean> {
     const results = await Promise.all(channels.map((c) => deliverOne(c, alert, logger)));
@@ -399,12 +302,8 @@ export async function deliver(channels: ResolvedChannel[], alert: Alert, logger:
 }
 
 /**
- * Le squelette d'un envoi d'essai : refuse poliment s'il n'y a rien à joindre,
- * livre sinon.
- *
- * « Aucun canal activé » y est une **réponse**, pas une exception : l'écran
- * affiche la phrase telle quelle au lieu d'un « échec » qui laisserait croire à
- * une panne d'envoi.
+ * Un envoi d'essai. « Aucun canal exploitable » est une réponse, pas une
+ * exception : l'écran affiche la phrase telle quelle.
  */
 export async function sendTest(
     channels: ResolvedChannel[],

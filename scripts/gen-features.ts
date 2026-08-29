@@ -1,27 +1,18 @@
 /**
- * Génère la glue des modules de features.
+ * Génère la glue des modules de features. Deux configs, deux jeux de sorties :
+ *  - `features.config.json` (committée) : les modules publics ; sorties
+ *    committées (`installed.ts`, `features.ts`, `icons.generated.css`, SVG
+ *    copiés), la CI (`--check`) refuse toute dérive ;
+ *  - `features.local.json` (gitignorée) : les modules privés, résolus par
+ *    chemin ; sorties gitignorées mais toujours présentes (stubs vides sans
+ *    config), importées statiquement par la glue committée.
  *
- * Deux configs, deux jeux de sorties :
+ * Modes : défaut = tout ; `--ensure-local` = seulement les fichiers locaux ;
+ * `--check` = vérifie les sorties committées, répare les locales.
  *
- *  - `features.config.json` (COMMITTÉE) : les modules publics. Sorties
- *    committées : `src/features/_generated/installed.ts`,
- *    `client/src/generated/features.ts`, `client/src/Styles/icons.generated.css`
- *    (+ copie des SVG). La CI (`--check`) refuse toute dérive.
- *  - `features.local.json` (GITIGNORÉE) : les modules PRIVÉS de cette
- *    installation, résolus par chemin (`{ "package": ..., "path": "../X" }`).
- *    Sorties gitignorées mais TOUJOURS présentes (stubs vides sans config) :
- *    `installed.local.ts`, `features.local.ts`, `icons.local.css`, importées
- *    statiquement par la glue committée. La CI publique ne voit jamais un
- *    module privé et reste verte sans lui.
- *
- * Modes : défaut = tout ; `--ensure-local` = seulement les trois fichiers
- * locaux (rapide, tourne en prestart et en tête de ci) ; `--check` = vérifie
- * les sorties committées, RÉPARE les locales.
- *
- * Le générateur est aussi la première sentinelle : ids valides et uniques (les
- * deux configs confondues), version minimale de @deveye/types, préfixe de table
- * `ft_<slug>_` vérifié par balayage statique des migrations SQL (allowlist
- * `deveye-feature.json` pour les tables historiques d'une native rapatriée).
+ * Aussi la première sentinelle : ids valides et uniques, version minimale de
+ * @deveye/types, préfixe de table `ft_<slug>_` vérifié dans les migrations SQL
+ * (allowlist `deveye-feature.json.tables` pour les tables historiques).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -122,7 +113,7 @@ async function resolveModule(entry: FeatureConfigEntry): Promise<ResolvedModule>
         fail(`${entry.package}: deveye-feature.json.id (${meta.id}) ≠ manifest.id (${manifest.id})`);
 
     // Préfixe de table : ft_<slug>_ (slug = l'id sans son « x- »), l'allowlist
-    // couvrant les tables historiques d'une native rapatriée.
+    // couvrant les tables héritées d'un module issu d'une native.
     const prefix = tablePrefix(manifest.id);
     const allowed = new Set(meta.tables ?? []);
     const migrationsDir = path.join(dir, 'src', 'server', 'migrations');
@@ -143,9 +134,9 @@ async function resolveModule(entry: FeatureConfigEntry): Promise<ResolvedModule>
         }
     }
 
-    // Le SQL de démontage (scripts/uninstall-feature.ts) : il ne peut détruire
-    // QUE les tables du préfixe — l'allowlist ne s'applique pas, les tables
-    // historiques d'une native rapatriée sont des données de l'app.
+    // Le SQL de démontage (scripts/uninstall-feature.ts) ne peut détruire que
+    // les tables du préfixe : l'allowlist ne s'applique pas, les tables
+    // héritées sont des données de l'app.
     const uninstallPath = path.join(dir, 'src', 'server', 'uninstall.sql');
     if (fs.existsSync(uninstallPath)) {
         const outlaw = forbiddenUninstallTargets(manifest.id, fs.readFileSync(uninstallPath, 'utf8'));
@@ -155,7 +146,7 @@ async function resolveModule(entry: FeatureConfigEntry): Promise<ResolvedModule>
     }
 
     // Icône : embarquée (assets/icons/<icon>.svg, copiée sous nom préfixé) ou
-    // classe déjà existante de l'app (une native rapatriée garde la sienne).
+    // classe déjà existante de l'app (un module issu d'une native garde la sienne).
     const iconSource = path.join(dir, 'assets', 'icons', `${manifest.icon}.svg`);
     if (fs.existsSync(iconSource)) {
         return { pkg: entry.package, dir, manifest, icon: `${manifest.id}-${manifest.icon}`, iconSource, localPath };
@@ -230,10 +221,8 @@ const SIDES: Record<Side, SideSpec> = {
 
 /**
  * La glue d'un côté, committée (elle étale le tableau local derrière ses
- * entrées) ou locale (stub vide sans module). Une seule fabrique pour les
- * quatre fichiers : seuls changent les noms, le dossier de sortie et l'entrée
- * importée (`serverEntry` / `clientEntry`). Le texte produit est conservé à
- * l'octet près, la CI (`--check`) le compare.
+ * entrées) ou locale (stub vide sans module). Le texte produit est comparé à
+ * l'octet près par la CI (`--check`).
  */
 function glueFile(side: Side, local: boolean, mods: ResolvedModule[]): string {
     const s = SIDES[side];
@@ -339,11 +328,9 @@ function iconCopies(mods: ResolvedModule[]): { from: string; to: string }[] {
 const EXCLUDE_MARKER = '# gen-features: icônes des modules privés (bloc géré, ne pas éditer)';
 
 /**
- * Les icônes copiées pour les modules PRIVÉS ne doivent laisser aucune trace
- * dans le dépôt public — mais le `.gitignore` committé ne peut pas les nommer,
- * ce serait déjà une trace. Elles s'inscrivent donc dans `.git/info/exclude`,
- * l'ignore local au clone, entretenu ici comme les trois fichiers locaux
- * (bloc réécrit à chaque génération, retiré quand plus rien ne l'exige).
+ * Les icônes des modules privés ne doivent laisser aucune trace dans le dépôt
+ * public, et le `.gitignore` committé ne peut pas les nommer : elles
+ * s'inscrivent dans `.git/info/exclude` (bloc réécrit à chaque génération).
  */
 function ensureLocalIconsExcluded(localMods: ResolvedModule[]): void {
     const gitDir = path.join(ROOT, '.git');
@@ -352,9 +339,7 @@ function ensureLocalIconsExcluded(localMods: ResolvedModule[]): void {
 
     const current = fs.existsSync(excludeFile) ? fs.readFileSync(excludeFile, 'utf8') : '';
     // Tout sauf nos blocs (du marqueur aux lignes pleines qui le suivent).
-    // Littéral, pas de RegExp : le marqueur contient des parenthèses, et une
-    // première version en regex ne retirait jamais rien — les blocs
-    // s'empilaient à chaque génération.
+    // Littéral, pas de RegExp : le marqueur contient des parenthèses.
     const keptLines: string[] = [];
     let inBlock = false;
     for (const line of current.split('\n')) {

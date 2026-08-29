@@ -6,13 +6,10 @@ import { FeatureError } from '@deveye/types/sdk/server';
 import type { FeatureKvRepo } from '@/db/repos/featureKv';
 
 /**
- * Le FeatureStore du SDK : `feature_kv` (migration 095) + le bon cipher.
- *
- * Le mode est figé sur la ligne à l'écriture ; la lecture le relit et choisit
- * le déchiffrement en conséquence. `guarded: null` est la variante sessionless
- * des services d'arrière-plan : écrire en 'private' y est déjà inexprimable
- * (type du SDK), et LIRE une ligne 'private' y lève `locked`, fort, plutôt que
- * de rendre un blob illisible.
+ * Le FeatureStore du SDK : `feature_kv` + le bon cipher. Le mode est figé sur
+ * la ligne à l'écriture ; la lecture le relit. `guarded: null` est la variante
+ * sessionless : lire une ligne 'private' y lève `locked` plutôt que de rendre
+ * un blob illisible.
  */
 export function createFeatureStore(
     kv: FeatureKvRepo,

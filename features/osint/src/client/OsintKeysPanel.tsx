@@ -7,21 +7,10 @@ import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import { api } from './api';
 
 /**
- * Les clés des fournisseurs OSINT — le panneau Sources de la fonctionnalité.
- *
- * Autonome, comme tous les panneaux de la coquille de réglages : il se charge
- * et s'invalide tout seul, la coquille ne lui passe que la portée et le droit
- * d'écriture. Rangées canoniques des réglages (`settingsStyles`), comme le
- * panneau des clés de la Météo : les deux écrans de sources se lisent pareil.
- *
- * **Aucune clé n'est requise** : tout l'écran OSINT fonctionne sans. Une clé
- * posée ne fait qu'enrichir une sonde (Pappers ouvre le registre du commerce,
- * Numverify donne l'opérateur réel).
- *
- * La clé elle-même ne revient **jamais** du serveur — seulement le fait
- * qu'elle existe. Le champ reste donc vide à l'ouverture même quand une clé
- * est posée. Et sans le droit d'écriture sur OSINT, les champs ne sont pas
- * proposés : un formulaire que le serveur refuserait est un écran qui ment.
+ * Le panneau Sources : les clés des fournisseurs OSINT. Aucune n'est requise,
+ * une clé ne fait qu'enrichir une sonde. La clé ne revient jamais du serveur,
+ * seulement le fait qu'elle existe : le champ reste vide même quand une clé est
+ * posée. Sans droit d'écriture, les champs ne sont pas proposés.
  */
 export default function OsintKeysPanel({ canWrite }: SettingsPanelProps) {
     const [held, setHeld] = useState<Record<string, boolean>>({});

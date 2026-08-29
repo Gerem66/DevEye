@@ -68,11 +68,9 @@
 /* ── Le dossier déployé ──────────────────────────────────────────────────── */
 
 /*
- * La couche du déploiement.
- *
- * Sous la popup de fonctionnalité (même palier `--z-popup-overlay`, mais posée
- * avant elle dans l'arbre) : ouvrir une carte du dossier doit voiler le dossier,
- * pas l'inverse. Et sous la barre du haut, qui garde l'intitulé et le retour.
+ * Sous la popup de fonctionnalité (même palier, posée avant elle dans l'arbre) :
+ * ouvrir une carte du dossier doit voiler le dossier. Sous la barre du haut,
+ * qui garde l'intitulé et le retour.
  */
 .layer {
     position: fixed;
@@ -88,12 +86,8 @@
     background: rgba(4, 7, 12, 0.45);
 }
 
-/*
- * La même boîte que la colonne de l'accueil (`Dashboard.module.css`) : même
- * largeur maximale, mêmes marges, donc **les mêmes colonnes de grille**. C'est
- * ce qui fait que les cartes arrivent exactement sur les places des tuiles
- * ordinaires, sans qu'aucune position ne soit calculée à la main.
- */
+/* La même boîte que la colonne de l'accueil (`Dashboard.module.css`), donc les
+   mêmes colonnes de grille : les cartes arrivent sur les places des tuiles. */
 .content {
     position: relative;
     width: 100%;
@@ -115,12 +109,8 @@
     visibility: hidden;
 }
 
-/*
- * Le couvercle : la copie de la tuile, exactement là où elle se trouve, et
- * au-dessus des cartes pour qu'elles semblent en sortir puis y rentrer.
- * Décoratif de bout en bout : le clic doit tomber sur la couche derrière, qui
- * referme.
- */
+/* Le couvercle : la copie de la tuile, au-dessus des cartes. Décoratif : le
+   clic doit tomber sur la couche derrière, qui referme. */
 .lid {
     position: fixed;
     pointer-events: none;

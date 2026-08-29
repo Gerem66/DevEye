@@ -1,16 +1,12 @@
 /**
- * Warm the browser cache with every UI icon at first load.
+ * Warm the browser cache with every UI icon at first load. Icons are SVGs applied
+ * as CSS `mask-image`, so a browser fetches each one only when an element using it
+ * first renders; that leaves the WS-reconnect overlay's icons unreachable, since
+ * they would need fetching exactly when the connection is down.
  *
- * Icons are SVGs applied as CSS `mask-image` (see `icons.css`), so a browser only
- * fetches each one the first time an element using it is actually rendered. That
- * makes some icons appear a beat late — and makes the ones in the WS-reconnect
- * overlay effectively unreachable, since they'd first need fetching exactly when
- * the connection is down. We pull every icon up front so it is already cached,
- * whatever happens next.
- *
- * `icons.css` stays the single source of truth: the URLs are read straight from
- * the loaded stylesheets (CSSOM), so adding an icon to the CSS preloads it for
- * free — no list to keep in sync here.
+ * `icons.css` stays the single source of truth: the URLs are read from the loaded
+ * stylesheets (CSSOM), so adding an icon to the CSS preloads it with no list to
+ * keep in sync here.
  */
 
 /** Pull every `/icons/*.svg` URL declared as a (webkit-)mask-image in the CSSOM. */
@@ -43,8 +39,8 @@ function warmCache(): void {
 }
 
 /**
- * Preload all icons once the document (and its stylesheets) are parsed, so the
- * CSSOM scan sees every rule. Idempotent enough to call once at startup.
+ * Preload all icons once the document and its stylesheets are parsed, so the CSSOM
+ * scan sees every rule.
  */
 export function preloadIcons(): void {
     if (document.readyState === 'complete') warmCache();

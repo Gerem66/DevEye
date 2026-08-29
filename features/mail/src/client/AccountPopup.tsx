@@ -39,17 +39,14 @@ const DEFAULT_DRAFT: MailAccountDraft = {
 
 /**
  * Add / edit form for a mail account. OAuth accounts (Gmail/Microsoft) are
- * created entirely server-side via the popup-window consent flow — this form
- * only drives password-auth accounts, plus the "Connect with..." buttons that
- * kick off OAuth for a brand new account. The Fournisseurs/Connexion manuelle
- * tabs stay in the same two spots in both modes for consistency, and editing a
- * password account lands straight on the manual tab.
+ * created entirely server-side via the popup-window consent flow: this form only
+ * drives password-auth accounts, plus the "Connect with..." buttons that kick
+ * off OAuth for a brand new account.
  *
- * Opening an **OAuth** account here is read-only: its settings live with the
+ * Opening an OAuth account here is read-only: its settings live with the
  * provider and `mail.accountUpdate` rejects it outright, so the form is locked
- * and only the delete action stays live. It still has to open, though — the
- * delete button lives nowhere else, so gating this popup on auth method used to
- * leave an OAuth mailbox with no way to remove it at all.
+ * and only the delete action stays live. It still has to open, the delete button
+ * living nowhere else.
  */
 export function AccountPopup() {
     const [mode, setMode] = useState<'add' | 'edit'>('add');
@@ -73,15 +70,14 @@ export function AccountPopup() {
     /**
      * A mailbox was connected during *this* opening of the form. The account
      * already exists server-side at that point, so even a plain "Fermer" has to
-     * tell the caller to reload — otherwise a freshly connected mailbox stays
-     * missing from the list until the next background poll.
+     * tell the caller to reload.
      */
     const [connected, setConnected] = useState(false);
     const initial = useRef<MailAccountDraft>(DEFAULT_DRAFT);
     /**
      * An OAuth mailbox: its servers and secrets belong to the provider, so the
-     * manual form is out — but the label, the storage tier and the proxy are
-     * ours either way, and stay editable through `mail.accountSetProfile`.
+     * manual form is out, but the label, the storage tier and the proxy stay
+     * editable through `mail.accountSetProfile`.
      */
     const providerManaged = mode === 'edit' && authMethod !== 'password';
     const showManualFields = !providerManaged && tab === 'manual';
@@ -228,15 +224,12 @@ export function AccountPopup() {
     }
 
     /**
-     * Waits for the consent window to finish, by message or by closing.
-     *
-     * Never rejects on close, and never trusts the message as the verdict. The
-     * callback page is served from `PUBLIC_ORIGIN`, which is not necessarily the
-     * origin the app itself was loaded from — in dev it is the API port while
-     * the SPA is on Vite's — and `postMessage` to a mismatched target origin is
-     * dropped without a word. Treating that silence as failure reported a
-     * connection error for a mailbox the server had just created. The message
-     * is now only a way to stop waiting early; the account list decides.
+     * Waits for the consent window to finish, by message or by closing. Never
+     * rejects on close, and never trusts the message as the verdict: the callback
+     * page is served from the app origin, which is not necessarily the one the SPA
+     * was loaded from (in dev, the API port against Vite's), and `postMessage` to
+     * a mismatched target origin is dropped without a word. The message is only a
+     * way to stop waiting early; the account list decides.
      */
     function awaitConsentWindow(popup: Window): Promise<{ error: string | null }> {
         return new Promise((resolve) => {
@@ -300,8 +293,7 @@ export function AccountPopup() {
                     onChange={(e) => set('displayName', e.target.value)}
                 />
                 {/* A provider-managed mailbox has its address shown on the card
-                    below, where it belongs — a disabled copy of it here was just
-                    a dead field taking up the form. */}
+                    below, where it belongs. */}
                 {!providerManaged && (
                     <TextInput
                         type='email'
@@ -313,11 +305,10 @@ export function AccountPopup() {
                 )}
 
                 {/* Le palier ne se choisit qu'à la création : il détermine sous
-                    quelle clé la boîte naît. Ensuite, il se change dans l'onglet
-                    Chiffrement de ses réglages, comme pour les autres features :
-                    deux surfaces pour le même champ finissaient par s'écraser.
-                    Et seulement dans l'espace personnel : un espace partagé n'a
-                    qu'une clé, lisible par tout membre, donc un seul palier. */}
+                    quelle clé la boîte naît, et se change ensuite dans l'onglet
+                    Chiffrement de ses réglages. Seulement dans l'espace personnel :
+                    un espace partagé n'a qu'une clé, lisible par tout membre, donc
+                    un seul palier. */}
                 {mode === 'add' && workspace?.kind === 'personal' && (
                     <div className={styles.tierChoice}>
                         <SegmentedControl
@@ -485,9 +476,6 @@ export function AccountPopup() {
                         </Checkbox>
                         {proxyEnabled && draft.proxy && (
                             <div className={styles.formRow}>
-                                {/* Le type du proxy, qui n'avait pas de champ : la case
-                                    promettait SOCKS5 ou HTTP, et le brouillon naissait
-                                    toujours en SOCKS5. */}
                                 <SegmentedControl
                                     aria-label='Type de proxy'
                                     value={draft.proxy.kind}
@@ -520,7 +508,7 @@ export function AccountPopup() {
                             </div>
                         )}
                         {/* The DTO never echoes proxy credentials back, so there is
-                            nothing to prefill — saying so beats silently dropping them. */}
+                            nothing to prefill; saying so beats silently dropping them. */}
                         {proxyPreconfigured && !proxyTouched && (
                             <span className={styles.fieldHint}>
                                 Un proxy est déjà configuré sur ce compte. Il est conservé tel quel tant que vous ne

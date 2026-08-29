@@ -23,13 +23,10 @@ import {
 } from './_shared';
 
 /**
- * Jalons et dépendances : ce que la frise chronologique lit en plus du tableau.
- *
- * Les dates et le graphe des arêtes vivent en clair : c'est ce qui permet de
- * dessiner la frise, de repérer un retard et de refuser un cycle sans rien
- * déchiffrer. Seul le libellé d'un jalon passe par le chiffre, sous le codec
- * du projet, chez lui : la frise d'un projet projeté (`Docs/SHARING.md`) se
- * lit et se dessine depuis la fenêtre comme chez lui.
+ * Jalons et dépendances : ce que la frise chronologique lit en plus du tableau. Les
+ * dates et le graphe des arêtes vivent en clair, ce qui permet de dessiner la frise,
+ * de repérer un retard et de refuser un cycle sans rien déchiffrer. Seul le libellé
+ * d'un jalon passe par le chiffre, sous le codec du projet.
  */
 
 interface StoredMilestone {
@@ -69,8 +66,8 @@ function toMilestone(row: ProjectMilestoneRow, payload: StoredMilestone): Projec
 }
 
 /**
- * Charge le jalon **et** son projet, visible d'ici au niveau demandé. Le jalon
- * se lit par son seul identifiant : c'est le projet qui est l'élément gardé.
+ * Charge le jalon et son projet, visible d'ici au niveau demandé. Le jalon se lit par
+ * son seul identifiant : c'est le projet qui est l'élément gardé.
  */
 async function loadMilestone(
     ctx: Ctx,
@@ -84,12 +81,10 @@ async function loadMilestone(
 }
 
 /**
- * `from` mène-t-il à `target` en suivant les arêtes « bloquée par » ?
- *
- * Parcours en largeur sur le graphe complet du projet, chargé d'un coup : à
- * l'échelle d'un projet (quelques centaines d'arêtes au pire) c'est une lecture
- * et un parcours en mémoire, là où une requête récursive coûterait plus cher à
- * écrire qu'à exécuter.
+ * `from` mène-t-il à `target` en suivant les arêtes « bloquée par » ? Parcours en
+ * largeur sur le graphe complet du projet, chargé d'un coup : quelques centaines
+ * d'arêtes au pire, là où une requête récursive coûterait plus cher à écrire qu'à
+ * exécuter.
  */
 function reaches(deps: ProjectCardDepRow[], from: number, target: number): boolean {
     const blockers = new Map<number, number[]>();
@@ -185,8 +180,8 @@ export const projectMilestoneSetReachedFeature = defineSdkFeature({
         if (!row) throw new FeatureError('not_found', 'Jalon introuvable');
         const cipher = await projectCipher(ctx, project);
         const payload = await decryptMilestone(cipher, row.content);
-        // Seule l'atteinte entre dans la frise : c'est un fait daté du projet.
-        // Créer ou renommer un jalon n'en est pas un.
+        // Seule l'atteinte entre dans la frise : c'est un fait daté du projet, créer
+        // ou renommer un jalon n'en est pas un.
         if (input.reached) {
             await recordEvent(ctx, project, {
                 kind: 'milestone.reached',
@@ -206,8 +201,7 @@ export const projectMilestoneRemoveFeature = defineSdkFeature({
     handler: async (ctx: Ctx, input) => {
         const { project } = await loadMilestone(ctx, input.milestoneId, 'write');
         await assertProjectUnlocked(ctx, project);
-        // Les cartes rattachées survivent : la contrainte est `ON DELETE SET
-        // NULL`, elles se retrouvent simplement sans jalon.
+        // Les cartes rattachées survivent, la contrainte est `ON DELETE SET NULL`.
         const ok = await ctx.repo.plan.deleteMilestone(input.milestoneId, project.workspace_id);
         if (!ok) throw new FeatureError('not_found', 'Jalon introuvable');
         return { milestoneId: input.milestoneId };
@@ -223,8 +217,8 @@ export const projectCardSetMilestoneFeature = defineSdkFeature({
         if (!card) throw new FeatureError('not_found', 'Carte introuvable');
         const project = await loadProject(ctx, card.project_id, 'write');
 
-        // Un jalon d'un autre projet n'a aucun sens ici : la contrainte SQL ne
-        // le dit pas (elle ne connaît que l'existence), c'est donc à vérifier.
+        // La contrainte SQL ne connaît que l'existence du jalon, pas son projet :
+        // l'appartenance est donc à vérifier ici.
         if (input.milestoneId !== null) {
             const { milestone } = await loadMilestone(ctx, input.milestoneId);
             if (milestone.project_id !== card.project_id) {
@@ -255,13 +249,13 @@ export const projectDepAddFeature = defineSdkFeature({
         await loadProject(ctx, card.project_id, 'write');
         if (card.project_id !== blocker.project_id) {
             // Introuvable avant d'être « d'un autre projet » : l'existence d'une
-            // carte qu'on ne voit pas d'ici n'a pas à fuiter.
+            // carte invisible d'ici n'a pas à fuiter.
             await loadProject(ctx, blocker.project_id);
             throw new FeatureError('validation', 'Une dépendance ne traverse pas deux projets.');
         }
 
-        // Le cycle se referme si le bloqueur dépend déjà, de proche en proche,
-        // de la carte qu'on s'apprête à bloquer.
+        // Le cycle se referme si le bloqueur dépend déjà, de proche en proche, de la
+        // carte qu'on s'apprête à bloquer.
         const deps = await ctx.repo.plan.listDeps(card.project_id);
         if (reaches(deps, input.blockedByCardId, input.cardId)) {
             throw new FeatureError(

@@ -44,22 +44,12 @@ interface BoardProps {
 }
 
 /**
- * Le kanban.
- *
- * Le glisser-déposer passe par **dnd-kit**, déjà utilisé par l'éditeur
- * d'accueil (`Pages/Home/organize/EditableHome.tsx`) pour exactement ce
- * problème : des conteneurs multiples entre lesquels un élément circule. On en
- * reprend la mécanique — la carte rejoint la colonne survolée dès qu'elle y
- * entre (`onDragOver`), et non au lâcher, pour que les voisines s'écartent et
- * que la colonne d'origine se referme.
- *
- * À noter : `nativeDrag.ts` neutralise tous les glissers HTML5 natifs de
- * l'application. dnd-kit travaille en événements pointeur, il n'est donc pas
- * concerné — mais un `draggable` maison le serait.
- *
- * Les colonnes se réordonnent par des flèches plutôt qu'au glisser : imbriquer
- * un second niveau de tri dans le même DndContext coûte cher en cas limites
- * pour un geste qu'on fait trois fois dans la vie d'un projet.
+ * Le kanban, sur dnd-kit. La carte rejoint la colonne survolée dès qu'elle y
+ * entre (`onDragOver`) et non au lâcher, pour que les voisines s'écartent et que
+ * la colonne d'origine se referme. Les colonnes, elles, se réordonnent par des
+ * flèches : un second niveau de tri dans le même DndContext coûte cher en cas
+ * limites. `nativeDrag.ts` neutralisant les glissers HTML5 natifs de
+ * l'application, un `draggable` maison serait mort-né ici.
  */
 export function Board({
     columns,
@@ -78,10 +68,8 @@ export function Board({
     // `l3` : l'onglet du projet occupe `l2` (voir `ProjectDetail`).
     const outlineFor = useLiveOutlines('l3');
 
-    // Le tableau réclame à la popup la largeur de ses colonnes — ni plus (un
-    // tableau de trois colonnes n'a rien à faire aux bords de l'écran), ni moins
-    // (à huit colonnes, la largeur de confort de lecture en cache la moitié).
-    // La demande est relâchée au démontage, donc en quittant l'onglet.
+    // Le tableau réclame à la popup la largeur exacte de ses colonnes ; la
+    // demande est relâchée au démontage, donc en quittant l'onglet.
     useRequestPopupWidth(boardNaturalWidth(columns.length, canWrite));
 
     const sensors = useSensors(
@@ -116,7 +104,7 @@ export function Board({
     );
 
     const collisionDetection = useCallback<CollisionDetection>((args) => {
-        // `pointerWithin` d'abord : il seul distingue une colonne vide survolée.
+        // `pointerWithin` d'abord : lui seul distingue une colonne vide survolée.
         const pointer = pointerWithin(args);
         return pointer.length > 0 ? pointer : closestCenter(args);
     }, []);
@@ -217,8 +205,8 @@ export function Board({
                 )}
             </div>
 
-            {/* La copie flottante reprend exactement la carte, sans son contour
-                de présence — deux cadres superposés seraient illisibles. */}
+            {/* La copie flottante reprend la carte sans son contour de présence :
+                deux cadres superposés seraient illisibles. */}
             <DragOverlay>{activeCard && <CardBody card={activeCard} dragging />}</DragOverlay>
         </DndContext>
     );
@@ -257,8 +245,8 @@ function Column({
     onEdit,
     onMove
 }: ColumnProps) {
-    // Droppable propre à la colonne : c'est ce qui rend une colonne **vide**
-    // capable de recevoir une carte.
+    // Droppable propre à la colonne : c'est ce qui rend une colonne vide capable
+    // de recevoir une carte.
     const { setNodeRef, isOver } = useDroppable({ id: `col:${column.id}` });
     const ids = cards.map((c) => c.id);
     // La limite est indicative : on la signale, on ne refuse jamais le dépôt.
@@ -330,12 +318,6 @@ function Column({
                         />
                     ))}
                 </SortableContext>
-                {/* Pas de « Aucune carte » : le bouton « + » juste dessous dit
-                    déjà qu'il n'y en a pas, et le dire deux fois alourdit une
-                    colonne vide au lieu de l'alléger. */}
-
-                {/* Dans la zone défilante, donc **juste sous la dernière carte**
-                    et non collé au bas d'une colonne pleine hauteur. */}
                 {canWrite && (
                     <Button variant='ghost' icon='add' onClick={() => onCardCreate(column.id)}>
                         Tâche
@@ -357,8 +339,8 @@ function SortableCard({ card, outline, onOpen }: SortableCardProps) {
     const style = {
         transform: CSS.Translate.toString(transform),
         transition,
-        // framer-motion n'intervient pas ici, mais on reste sur `filter` par
-        // cohérence avec le reste de la feature.
+        // `filter` et non `opacity` : dans le reste de la feature, c'est
+        // framer-motion qui possède l'opacité.
         filter: isDragging ? 'opacity(0.35)' : undefined
     };
 
@@ -403,13 +385,11 @@ function CardBody({ card, dragging, onOpen }: CardBodyProps) {
                     />
                 )}
                 <span className={styles.card2Title}>{card.title || 'Sans titre'}</span>
-                {/* Badge visible uniquement quand il y a réellement du non-lu. */}
                 {card.unread > 0 && <span className={styles.unread}>{card.unread}</span>}
             </div>
 
-            {/* Le début de la description : de quoi reconnaître une tâche sans
-                l'ouvrir. Bornée à trois lignes par le CSS — au-delà, c'est un
-                cahier des charges, et la colonne n'en montrerait plus qu'une. */}
+            {/* Bornée à trois lignes par le CSS : de quoi reconnaître une tâche
+                sans l'ouvrir. */}
             {card.description && <p className={styles.card2Desc}>{card.description}</p>}
 
             <div className={styles.card2Meta}>

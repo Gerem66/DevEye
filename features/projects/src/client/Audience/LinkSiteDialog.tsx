@@ -16,17 +16,10 @@ interface LinkSiteDialogProps {
 
 /**
  * Ajouter un site suivi au projet : en choisir un de l'espace, ou en créer un.
- *
- * **La création passe par le vrai dialogue de la feature** (`SiteDialog`, lu
- * par le contrat client du module Audience), pas par une copie réduite. Même
- * parti pris que `LinkDatabaseDialog` et que `RepoPicker` de l'onglet Git : un
- * site a une plateforme et des origines autorisées, et en réécrire un
- * formulaire ici garantirait qu'il diverge au premier réglage ajouté. Ce
- * dialogue-ci ne fait que l'ouvrir, puis relier ce qu'il a créé. Module absent,
- * le dialogue le dit et ne propose rien.
- *
- * Rien n'est exclusif : un site déjà suivi par un autre projet peut être choisi
- * ici sans lui être retiré.
+ * La création ouvre le dialogue de la feature (`SiteDialog`, par le contrat
+ * client d'Audience) plutôt qu'une copie réduite, qui divergerait au premier
+ * réglage ajouté ; module absent, rien n'est proposé. Rien n'est exclusif : un
+ * site relié ailleurs peut être choisi ici.
  */
 export function LinkSiteDialog({ open, projectId, linkedIds, onClose, onSaved }: LinkSiteDialogProps) {
     const provider = moduleClientProvider<AudienceClientProvider>(AUDIENCE_CLIENT_PROVIDER);

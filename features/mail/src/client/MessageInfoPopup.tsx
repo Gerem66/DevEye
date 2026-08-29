@@ -42,12 +42,10 @@ function Row({ label, children }: RowProps) {
 
 /**
  * Everything the protocol actually told us about one message, unabridged: the
- * IMAP coordinates that identify it server-side, and every header line in
- * receipt order. Deliberately not curated — the point is tracing a message
- * after the fact (delivery path, authentication verdicts, list plumbing), and
- * any summary would be the wrong one for whatever question prompted opening
- * this. Nothing here is fetched separately: it all rides along with the body,
- * which is read live from IMAP and never stored.
+ * IMAP coordinates that identify it server-side, and every header line in receipt
+ * order. Deliberately not curated, the point being tracing a message after the
+ * fact (delivery path, authentication verdicts, list plumbing). Nothing here is
+ * fetched separately: it rides along with the body, read live from IMAP.
  */
 export function MessageInfoPopup() {
     const [message, setMessage] = useState<MailMessage | null>(null);

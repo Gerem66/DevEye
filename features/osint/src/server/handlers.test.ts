@@ -19,14 +19,9 @@ import { osintHandlers } from './handlers';
 import type { OsintRepo } from './repo';
 
 /**
- * Les handlers du module, sur le harnais du SDK.
- *
- * Ce qui mérite d'être tenu, ce sont les **gardes** : la cible d'une sonde est
- * re-déduite de la requête et jamais crue sur parole, et une sonde ne
- * s'applique qu'aux natures qu'elle déclare. Ces deux refus sont exactement ce
- * qu'un client bricolé essaierait de contourner, et rien d'autre ne les
- * vérifie — un contournement ne lèverait nulle part, il sonderait juste ce
- * qu'il ne devrait pas.
+ * Ce qui se vérifie ici ne lève nulle part ailleurs : la cible d'une sonde est
+ * re-déduite de la requête, et une sonde ne s'applique qu'aux natures qu'elle
+ * déclare. Un contournement ne lèverait pas, il sonderait ce qu'il ne devrait pas.
  */
 
 /** Le handler d'un contrat, typé par ce contrat (le registre est hétérogène). */

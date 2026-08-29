@@ -4,17 +4,9 @@ import { describe, it } from 'node:test';
 import { nextRunAt } from './schedule';
 
 /**
- * Le calendrier d'un travail décide de ce qui part la nuit. Deux fautes y sont
- * invisibles jusqu'au jour où l'on cherche une archive qui n'existe pas :
- *
- *  - une échéance calculée **dans le passé**, qui fait repartir le travail à
- *    chaque tour de boucle et remplit la destination d'archives inutiles ;
- *  - une échéance calculée **à l'instant même** de l'enregistrement, qui
- *    déclenche une sauvegarde fantôme dès qu'on corrige une faute de frappe
- *    dans l'intitulé.
- *
- * Ces cas figent la règle : toujours strictement dans le futur, et jamais
- * d'échéance du tout pour ce qui ne doit pas partir seul.
+ * Deux fautes invisibles jusqu'à chercher une archive absente : une échéance
+ * dans le passé (le travail repart à chaque tour) ou à l'instant même
+ * (sauvegarde fantôme à chaque édition).
  */
 
 const at = (iso: string): Date => new Date(iso);

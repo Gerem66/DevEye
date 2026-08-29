@@ -1,13 +1,9 @@
 import type { NoteColor } from '../contracts/domain';
 
 /**
- * The Notes colour palette, UI side. The set of names is owned by
- * `noteColorSchema` in @deveye/types; here we attach a French label and the
- * order shown in the swatch pickers. The actual colour value always comes from
- * the `--note-<name>` palette token, declared by this module's own stylesheet
- * (style.module.css, on `:root`): never a hex here, so the palette stays a
- * single source. Not the app theme: the names are the user's choices, owned by
- * the feature, and the app has no light theme to give them a variant.
+ * The set of names is owned by `noteColorSchema` in @deveye/types; here they get
+ * a French label and the swatch order. The colour value always comes from the
+ * `--note-<name>` token (style.module.css), never a hex here.
  */
 export interface NoteColorOption {
     value: NoteColor;
@@ -23,7 +19,6 @@ export const NOTE_COLOR_OPTIONS: NoteColorOption[] = [
     { value: 'purple', label: 'Violet' }
 ];
 
-/** CSS value tinting to a palette colour, via its palette token. */
 export function colorVar(color: NoteColor): string {
     return `var(--note-${color})`;
 }

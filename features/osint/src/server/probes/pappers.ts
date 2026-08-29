@@ -1,18 +1,11 @@
-// Privilège de native rapatriée : le garde SSRF est partagé par toute l'app, pas propre au module.
+// Le garde SSRF est celui de l'app, partagé, pas propre au module.
 import { fetchJson } from '@/Services/netFetch';
 import { field, skipped, tag, type OsintProbeAdapter, type OsintLink } from './shared';
 
 /**
- * Registre du commerce français, via Pappers.
- *
- * La seule sonde de la famille « personne » qui rende de la donnée *structurée*
- * plutôt que des liens : à partir d'un nom et d'un prénom, elle liste les
- * mandats de dirigeant et les entreprises rattachées. C'est de l'information
- * légalement publique — le RCS est ouvert par construction — et c'est
- * généralement le point de départ le plus productif sur une personne en France.
- *
- * Sans clé, la carte rend `skipped` avec le lien d'inscription : jamais une
- * erreur, puisque ne pas avoir de clé n'est pas une panne.
+ * Registre du commerce français, via Pappers : mandats de dirigeant et
+ * entreprises rattachées à partir d'un nom. Sans clé, `skipped` avec le lien
+ * d'inscription, jamais une erreur.
  */
 
 interface PappersDirigeant {

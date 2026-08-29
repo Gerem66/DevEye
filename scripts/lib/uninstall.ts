@@ -2,19 +2,14 @@ import { tablePrefix } from './features-config';
 import { sqlTableTargets } from './sql-tables';
 
 /**
- * La part PURE de la désinstallation d'un module : les nettoyages de JSON et
- * la sentinelle du `uninstall.sql`, sans base ni fichier. C'est ce que les
- * tests exercent ; `uninstall-feature.ts` ne fait qu'orchestrer autour.
+ * La part pure de la désinstallation d'un module : les nettoyages de JSON et la
+ * sentinelle du `uninstall.sql`, sans base ni fichier.
  */
 
 /**
- * Le `uninstall.sql` d'un module ne peut détruire QUE ses tables `ft_<slug>_*`.
- *
- * Volontairement SANS l'allowlist `deveye-feature.json.tables` : les tables
- * historiques d'une native rapatriée (weather_locations, osint_lookups…) sont
- * des données de l'application — un module qui les détruirait à sa
- * désinstallation emporterait autre chose que lui. Rend les tables hors
- * contrat, vide si tout est en règle.
+ * Le `uninstall.sql` d'un module ne peut détruire que ses tables `ft_<slug>_*`.
+ * Sans l'allowlist `deveye-feature.json.tables` : les tables historiques sont
+ * des données de l'application. Rend les tables hors contrat.
  */
 export function forbiddenUninstallTargets(featureId: string, sql: string): string[] {
     const prefix = tablePrefix(featureId);

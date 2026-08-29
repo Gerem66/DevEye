@@ -10,20 +10,11 @@ import type { SdkQueryable } from '@deveye/types/sdk/server';
 type Q = SdkQueryable;
 
 /**
- * Sauvegardes : les destinations de l'espace, les travaux qui y écrivent, et
- * l'historique de ce qui est parti.
- *
- * Trois tables et un seul dépôt, parce qu'elles ne se lisent jamais séparément :
- * une liste de travaux affiche le nom de sa destination, une fiche de travail
- * affiche ses exécutions, et la rétention traverse les trois.
- *
- * Tout est chiffré à l'étage **ouvert** : l'ordonnanceur lit ces lignes sans
- * session, à l'heure où personne n'est devant l'écran. Ne restent en clair que
- * `kind`, `source_kind`, `device_id`, le calendrier et les drapeaux, assez pour
- * choisir une branche de code et trouver les travaux dus sans déchiffrer.
+ * Trois tables, un dépôt : elles ne se lisent jamais séparément. Tout est
+ * chiffré à l'étage ouvert (l'ordonnanceur lit sans session) ; ne restent en
+ * clair que `kind`, `source_kind`, `device_id`, le calendrier et les drapeaux.
  */
 export interface BackupRepo {
-    // -- destinations -------------------------------------------------------
     listDestinations(workspaceId: number): Promise<BackupDestinationWithUsageRow[]>;
     findDestination(id: number, workspaceId: number): Promise<BackupDestinationRow | null>;
     /** La destination d'un travail, retrouvée sans repasser par l'espace. */
@@ -52,7 +43,6 @@ export interface BackupRepo {
     deleteDestination(id: number, workspaceId: number): Promise<boolean>;
     countJobsUsing(destinationId: number): Promise<number>;
 
-    // -- travaux ------------------------------------------------------------
     listJobs(workspaceId: number): Promise<BackupJobWithStateRow[]>;
     /** Comme `listJobs`, plus les travaux projetés vers cet espace. */
     listVisibleJobs(workspaceId: number): Promise<BackupJobWithStateRow[]>;
@@ -100,19 +90,14 @@ export interface BackupRepo {
     ): Promise<BackupJobRow | null>;
     deleteJob(id: number, workspaceId: number): Promise<boolean>;
     /**
-     * Les travaux qu'il est temps de lancer, le plus en retard d'abord.
-     *
-     * `next_run_at IS NULL` les exclut par construction (index seul, pas de
-     * condition sur `enabled` à évaluer ligne à ligne) : désactiver un travail
-     * ou le passer en manuel remet cette colonne à NULL, ce qui est le même
-     * fait dit une seule fois.
+     * Les travaux dus, le plus en retard d'abord. `next_run_at IS NULL` (manuel
+     * ou désactivé) les exclut par l'index seul.
      */
     listJobsDue(now: number, limit: number): Promise<BackupJobRow[]>;
     /** Repousse l'échéance. Appelé avant l'exécution, jamais après : un travail
      *  qui plante ne doit pas repartir en boucle au tour suivant. */
     setNextRun(id: number, nextRunAt: number | null): Promise<void>;
 
-    // -- exécutions ---------------------------------------------------------
     listRuns(jobId: number, workspaceId: number, limit: number): Promise<BackupRunRow[]>;
     listWorkspaceRuns(workspaceId: number, limit: number): Promise<BackupRunRow[]>;
     findRun(id: number): Promise<BackupRunRow | null>;
@@ -139,11 +124,7 @@ export interface BackupRepo {
      */
     listRunsToPrune(jobId: number, keepLast: number): Promise<BackupRunRow[]>;
     markPruned(id: number): Promise<void>;
-    /**
-     * Les exécutions restées `running` alors que le processus est mort en cours
-     * de route. Soldées au démarrage : sans ça, un travail resterait « en cours »
-     * pour toujours et son écran ne dirait jamais ce qui s'est passé.
-     */
+    /** Les exécutions restées `running` après une mort du processus, soldées au démarrage. */
     failStaleRuns(before: number): Promise<number>;
 }
 
@@ -182,7 +163,6 @@ export function createRepo(q: Q): BackupRepo {
     };
 
     return {
-        // -- destinations ---------------------------------------------------
         listDestinations: (workspaceId) =>
             q.query<BackupDestinationWithUsageRow>(
                 `${DEST_SELECT} WHERE d.workspace_id = ? ORDER BY d.created ASC, d.id ASC`,
@@ -257,7 +237,6 @@ export function createRepo(q: Q): BackupRepo {
             return Number(rows[0]?.n ?? 0);
         },
 
-        // -- travaux --------------------------------------------------------
         listJobs: (workspaceId) =>
             q.query<BackupJobWithStateRow>(`${JOB_SELECT} WHERE j.workspace_id = ? ORDER BY j.created ASC, j.id ASC`, [
                 workspaceId
@@ -411,7 +390,6 @@ export function createRepo(q: Q): BackupRepo {
             await q.execute('UPDATE backup_jobs SET next_run_at = ? WHERE id = ?', [nextRunAt, id]);
         },
 
-        // -- exécutions -----------------------------------------------------
         listRuns: (jobId, workspaceId, limit) =>
             q.query<BackupRunRow>(
                 `SELECT * FROM backup_runs

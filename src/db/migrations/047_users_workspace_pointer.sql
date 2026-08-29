@@ -1,18 +1,10 @@
--- `users` pointe désormais vers ses espaces, et perd ce qui a déménagé dessus.
+-- `users` pointe vers ses espaces, et perd ce qui a déménagé dessus (046).
 --
--- Deux pointeurs, deux rôles distincts :
---   - `personal_workspace_id` : l'espace personnel du compte. Obligatoire, unique
---     (c'est cette contrainte UNIQUE qui garantit « au plus un espace personnel
---     par compte », plutôt qu'un index sur `workspaces` qui limiterait à tort le
---     nombre d'espaces *partagés* possédés). Donne aussi un accès O(1) à l'espace
---     personnel, dont les jobs de fond et le chargement de session ont besoin en
---     permanence.
---   - `default_workspace_id` : l'espace « favori », chargé en premier à la
---     connexion et au rechargement. NULL = l'espace personnel.
---
--- L'ancien `default_workspace INT NOT NULL DEFAULT 0` valait 0 partout (aucun
--- code ne l'a jamais écrit à autre chose) et signifiait « l'espace personnel ».
--- Il est remplacé par le favori nullable, dont NULL a exactement ce sens.
+--   - `personal_workspace_id` : obligatoire, UNIQUE (c'est cette contrainte qui
+--     garantit « au plus un espace personnel par compte », sans limiter le
+--     nombre d'espaces partagés possédés). Accès O(1) pour les jobs de fond.
+--   - `default_workspace_id` : l'espace favori, chargé en premier. NULL =
+--     l'espace personnel, ce que valait l'ancien `default_workspace = 0`.
 
 -- 1. Pointeur vers l'espace personnel.
 SET @c = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
@@ -58,8 +50,8 @@ SET @c = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
 SET @s = IF(@c > 0, 'ALTER TABLE users DROP COLUMN default_workspace', 'SELECT 1');
 PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
--- 3. État du compte au niveau du site. `suspended` refuse la connexion sans rien
---    détruire — une révocation réversible. Piloté par la page Utilisateurs (P6).
+-- 3. État du compte au niveau du site : `suspended` refuse la connexion sans
+--    rien détruire.
 SET @c = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'status');
 SET @s = IF(@c = 0,
@@ -67,9 +59,8 @@ SET @s = IF(@c = 0,
     'SELECT 1');
 PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
--- 4. Ce qui a déménagé sur l'espace personnel en 046 disparaît du compte.
---    Le contenu a déjà été recopié : ces colonnes sont maintenant des doublons
---    qui divergeraient silencieusement.
+-- 4. Ce qui a déménagé sur l'espace personnel en 046 disparaît du compte : des
+--    doublons qui divergeraient silencieusement.
 SET @c = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'features');
 SET @s = IF(@c > 0, 'ALTER TABLE users DROP COLUMN features', 'SELECT 1');

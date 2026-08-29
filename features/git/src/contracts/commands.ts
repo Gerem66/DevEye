@@ -22,48 +22,24 @@ import {
 } from './domain';
 
 /**
- * Commandes des dépôts git de l'espace.
+ * Commandes des dépôts git de l'espace, préfixe `git.` en camelCase.
  *
- * Préfixe unique `git.`, comme `projects.` — d'où le camelCase derrière le point.
- *
- * ⚠️ Conséquence à connaître : le filet de démarrage (`MUTATION_VERB` dans
- * `src/features/_topics.ts`) cherche un verbe **juste après le point**. Il ne
- * verra donc **aucune** de ces commandes, et un `mutates` oublié ne produira
- * aucun avertissement. Il se relit à la main.
- *
- * L'espace visé n'apparaît dans aucune entrée : il voyage sur l'enveloppe WS et
- * le dispatcheur le résout, appartenance vérifiée, avant le handler.
+ * Piège : le filet de démarrage (`MUTATION_VERB` dans `src/features/_topics.ts`)
+ * cherche un verbe juste après le point et ne verra aucune de ces commandes ;
+ * un `mutates` oublié ne produit aucun avertissement. L'espace visé voyage sur
+ * l'enveloppe WS, jamais en entrée.
  */
 
 const repoId = z.number().int().positive();
 const credentialId = z.number().int().positive();
 
-// ------------------------------------------------------------- identifiants
-
-/**
- * Les jetons **GitHub** de l'espace.
- *
- * Ils vivent ici et non dans les projets : un même jeton ouvre en général
- * plusieurs dépôts. Les secrets n'en sortent jamais — la sortie ne porte qu'un
- * `hasSecret`.
- *
- * Les clés **Dokploy** ne sont plus ici : elles ont leur propre feature
- * (`deploy.credential*`). Elles n'avaient atterri dans cet écran que faute d'un
- * module de déploiement pour les accueillir, et poser la clé qui met en
- * production ne relève pas du droit de lire des dépôts. La table est restée
- * commune ; c'est la porte, et le droit, qui se sont séparés.
- */
+/** Les jetons GitHub de l'espace ; les secrets n'en sortent jamais. */
 export const gitCredentialList = {
     command: 'git.credentialList' as const,
     input: z.object({}),
     output: z.object({ credentials: z.array(gitCredentialSchema) })
 };
 
-/**
- * Aucun `provider` ni `baseUrl` en entrée : GitHub, et son API publique. Le
- * fournisseur se choisissait autrefois dans un sélecteur, parce que le même
- * écran servait les deux — il n'y a plus rien à choisir ici.
- */
 export const gitCredentialAdd = {
     command: 'git.credentialAdd' as const,
     input: z.object({
@@ -73,11 +49,7 @@ export const gitCredentialAdd = {
     output: z.object({ credential: gitCredentialSchema })
 };
 
-/**
- * Modifie un jeton. `secret` absent = on garde celui en place ; une chaîne non
- * vide le remplace. Il n'y a pas de « vider » : un accès sans secret ne sert à
- * rien, on retire le jeton entier.
- */
+/** `secret` absent = on garde celui en place ; pas de « vider », on retire le jeton entier. */
 export const gitCredentialUpdate = {
     command: 'git.credentialUpdate' as const,
     input: z.object({
@@ -88,20 +60,12 @@ export const gitCredentialUpdate = {
     output: z.object({ credential: gitCredentialSchema })
 };
 
-/**
- * Retire un jeton.
- *
- * Les dépôts qui s'en servaient gardent leur lien mais perdent leur accès
- * (`ON DELETE SET NULL`) : la synchronisation s'arrête proprement et le dit, au
- * lieu de disparaître avec le jeton.
- */
+/** Les dépôts qui s'en servaient restent, sans jeton : la synchronisation s'arrête et le dit. */
 export const gitCredentialRemove = {
     command: 'git.credentialRemove' as const,
     input: z.object({ credentialId }),
     output: z.object({ credentialId })
 };
-
-// -------------------------------------------------------------------- dépôts
 
 /** Le nombre de dépôts de l'espace, pour la tuile de l'accueil. */
 export const gitCount = {
@@ -116,7 +80,7 @@ export const gitRepoList = {
     output: z.object({ repos: z.array(gitRepoSchema) })
 };
 
-/** Un dépôt, avec les projets qui s'en servent — tout doit être cliquable. */
+/** Un dépôt, avec les projets qui s'en servent. */
 export const gitRepoGet = {
     command: 'git.repoGet' as const,
     input: z.object({ repoId }),
@@ -124,12 +88,8 @@ export const gitRepoGet = {
 };
 
 /**
- * Ajoute un dépôt à l'espace.
- *
- * **Idempotente** : le même `owner/repo` déjà présent rend la ligne existante
- * (avec son jeton mis à jour) au lieu d'un doublon. C'est ce qui permet à un
- * projet de « créer » un dépôt sans savoir s'il existe déjà ailleurs, et
- * garantit qu'un dépôt n'est jamais synchronisé deux fois.
+ * Idempotente : un `owner/repo` déjà présent rend la ligne existante, jeton mis
+ * à jour, au lieu d'un doublon.
  */
 export const gitRepoAdd = {
     command: 'git.repoAdd' as const,
@@ -143,13 +103,8 @@ export const gitRepoAdd = {
 };
 
 /**
- * Les dépôts d'un propriétaire ou d'une organisation, chez le fournisseur.
- *
- * Interroge GitHub **au moment de la demande** — c'est, avec le diff d'un
- * commit, la seule commande du module dans ce cas. La liste dépend du jeton
- * choisi (un jeton donne accès aux dépôts privés, l'absence de jeton n'ouvre que
- * le public), d'où le `credentialId` en entrée : changer de jeton change le
- * résultat, et l'interface doit pouvoir le re-demander.
+ * Les dépôts d'un propriétaire, lus chez GitHub à la demande. La liste dépend
+ * du jeton (privés compris), d'où `credentialId` en entrée.
  */
 export const gitRepoCandidates = {
     command: 'git.repoCandidates' as const,
@@ -160,15 +115,7 @@ export const gitRepoCandidates = {
     output: z.object({ repos: z.array(gitRepoCandidateSchema) })
 };
 
-/**
- * Range les dépôts de l'espace : `ids` est la liste **complète** dans son ordre
- * final (rang le plus faible en tête).
- *
- * Rien d'autre ne positionne un dépôt — un nouveau prend le rang suivant, donc
- * la fin de la liste — de sorte que l'ordre appartient entièrement à
- * l'utilisateur, comme celui des services surveillés et des notes. Ne touche ni
- * au cache ni à l'état de synchronisation : ranger n'est pas configurer.
- */
+/** `ids` est la liste complète dans son ordre final. Ne touche ni au cache ni à la synchronisation. */
 export const gitRepoReorder = {
     command: 'git.repoReorder' as const,
     input: z.object({ ids: z.array(repoId).min(1) }),
@@ -182,22 +129,14 @@ export const gitRepoUpdate = {
     output: z.object({ repo: gitRepoSchema })
 };
 
-/**
- * Supprime un dépôt de l'espace, avec son cache et toutes ses liaisons.
- *
- * Les projets liés ne sont **pas** touchés : ils perdent leur dépôt, rien
- * d'autre. Le dépôt chez le fournisseur, lui, n'est évidemment jamais atteint.
- */
+/** Supprime le dépôt, son cache et ses liaisons ; les projets liés ne perdent que leur dépôt. */
 export const gitRepoRemove = {
     command: 'git.repoRemove' as const,
     input: z.object({ repoId }),
     output: z.object({ repoId })
 };
 
-/**
- * Force une synchronisation immédiate, sans attendre le tour de
- * l'ordonnanceur. N'écrit rien elle-même : elle réveille le service de fond.
- */
+/** Réveille le service de fond ; n'écrit rien elle-même. */
 export const gitRepoSyncNow = {
     command: 'git.repoSyncNow' as const,
     input: z.object({ repoId }),
@@ -205,21 +144,9 @@ export const gitRepoSyncNow = {
 };
 
 /**
- * Jette le cache local du dépôt et repart de zéro.
- *
- * À distinguer de `gitRepoSyncNow`, qui reprend là où le service s'était
- * arrêté : ici on efface commits, branches, releases et pull requests, ainsi que
- * les ETags et le drapeau de backfill, de sorte que le tour suivant relise
- * **tout** l'historique depuis le fournisseur.
- *
- * Deux choses survivent, et ce n'est pas un oubli :
- *
- *  - le **rattachement des auteurs** à des membres de l'espace, qui est du
- *    travail fait à la main et que rien ne permettrait de reconstituer ;
- *  - les **liaisons aux projets**, qui ne relèvent pas du cache.
- *
- * N'écrit rien elle-même côté fournisseur : elle vide, puis réveille
- * l'ordonnanceur.
+ * Jette le cache (commits, branches, releases, pull requests, ETags, drapeau de
+ * backfill) et réveille l'ordonnanceur pour tout relire. Le rattachement des
+ * auteurs et les liaisons aux projets survivent.
  */
 export const gitRepoResync = {
     command: 'git.repoResync' as const,
@@ -227,38 +154,19 @@ export const gitRepoResync = {
     output: z.object({ repo: gitRepoSchema })
 };
 
-/**
- * L'avancement de la synchronisation d'un dépôt.
- *
- * Lecture pure et **très bon marché** : elle n'interroge qu'une table en
- * mémoire du service de fond. C'est ce qui la rend sondable pendant qu'une
- * synchronisation tourne, sans passer par une diffusion `live` qui ferait
- * re-solliciter tout l'écran à chaque étape, chez tous les membres.
- */
+/** L'avancement d'un dépôt, lu en mémoire du service : sondable sans coût. */
 export const gitRepoSyncStatus = {
     command: 'git.repoSyncStatus' as const,
     input: z.object({ repoId }),
     output: z.object({ status: gitSyncStatusSchema })
 };
 
-/**
- * Les synchronisations en cours dans l'espace, toutes d'un coup.
- *
- * **Aucune requête, aucun déchiffrement** : le service tient l'avancement en
- * mémoire le temps d'un tour. C'est ce qui rend la liste des dépôts sondable à
- * la seconde pour y animer une bande de progression, sans que cela coûte quoi
- * que ce soit — même parti pris que la barre d'une synchro mail.
- *
- * Un dépôt absent de la réponse ne synchronise pas : il n'y a pas d'entrée
- * « au repos », seulement celles qui tournent.
- */
+/** Les synchronisations en cours dans l'espace, en mémoire du service ; un dépôt absent ne tourne pas. */
 export const gitSyncStatuses = {
     command: 'git.syncStatuses' as const,
     input: z.object({}),
     output: z.object({ statuses: z.array(gitRepoSyncStateSchema) })
 };
-
-// ------------------------------------------------------------------- lecture
 
 export const gitBranchList = {
     command: 'git.branchList' as const,
@@ -266,13 +174,7 @@ export const gitBranchList = {
     output: z.object({ branches: z.array(gitBranchSchema) })
 };
 
-/**
- * Les derniers commits, en clair, pour la liste (pas pour le graphe).
- *
- * Pagination par **curseur** `(committedAt, id)` et non par identifiant seul :
- * voir `gitCommitCursorSchema`. La page suivante se demande avec le couple porté
- * par le dernier commit reçu.
- */
+/** Les commits pour la liste, paginés par curseur `(committedAt, id)` (voir `gitCommitCursorSchema`). */
 export const gitCommitList = {
     command: 'git.commitList' as const,
     input: z.object({
@@ -283,13 +185,7 @@ export const gitCommitList = {
     output: z.object({ commits: z.array(gitCommitSchema), hasMore: z.boolean() })
 };
 
-/**
- * Le graphe : un point par commit, du premier au dernier, avec la liste des
- * auteurs et leur couleur.
- *
- * Les points ne portent **pas** les messages — un graphe en affiche des
- * milliers, et les déchiffrer tous pour dessiner des ronds serait absurde.
- */
+/** Un point par commit, sans message, avec les auteurs et leur couleur. */
 export const gitCommitGraph = {
     command: 'git.commitGraph' as const,
     input: z.object({ repoId }),
@@ -326,13 +222,7 @@ export const gitPullRequestList = {
     output: z.object({ pullRequests: z.array(gitPullRequestSchema) })
 };
 
-/**
- * Le diff d'un commit, lu **chez le fournisseur au moment de la demande**.
- *
- * La seule commande du module qui sorte du cache local : voir
- * `gitCommitDetailSchema` pour la raison. Elle est donc aussi la seule dont la
- * latence dépend d'une API tierce — l'interface doit l'annoncer.
- */
+/** Le diff d'un commit, lu chez le fournisseur à la demande (voir `gitCommitDetailSchema`). */
 export const gitCommitDetail = {
     command: 'git.commitDetail' as const,
     input: z.object({ repoId, sha: z.string().min(7).max(40) }),

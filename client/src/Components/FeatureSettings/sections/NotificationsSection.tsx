@@ -27,45 +27,13 @@ import { numericItemId, type SettingsScope } from '../scope';
 import styles from '../FeatureSettings.module.css';
 
 /**
- * Où partent les alertes — **la liste des canaux de l'espace, et ce qui y est
- * relié**.
- *
- * ## Ce que ça remplace
- *
- * Cinq dialogues identiques réglant chacun deux cases à cocher : « par e-mail »
- * et « par webhook ». Le même salon Discord y était redéclaré cinq fois, une URL
- * à corriger se corrigeait cinq fois, et router deux bases vers deux
- * destinataires différents était impossible.
- *
- * Ici les destinations sont les **sources de la fonctionnalité** : chaque
- * émetteur a les siennes (091), déclarées dans ses réglages, comme un jeton
- * Dokploy est une source du Déploiement. On coche celles que la cible courante
- * doit servir. « Utilisé par N » dit immédiatement lesquelles portent tout le
- * trafic. La 087 les avait faites communes aux cinq émetteurs : on retrouvait
- * une même liste gérée depuis cinq endroits, l'inverse du patron des sources.
- *
- * ## Deux droits, deux moitiés d'écran
- *
- * Cocher relève de la fonctionnalité (`<feature>: write`). Ajouter, corriger ou
- * supprimer un canal relève de la gestion des canaux de CETTE fonctionnalité
- * (le champ `channels` de son grant de rôle, migration 093) : sans elle, la
- * destination elle-même n'est pas rendue par le serveur, on voit
- * « Astreinte · e-mail », on peut y router, on ne peut pas lire l'adresse.
- *
- * ## Deux échelles, deux gestes
- *
- * À l'échelle de la **fonctionnalité** : la liste de ses canaux (ses sources
- * disponibles) et leur gestion (ajouter, corriger, tester, supprimer). Pas de
- * cases à cocher : une sélection à cette échelle ne viserait aucun élément
- * nommable (092). À l'échelle d'un **élément** : les cases, directement
- * actives (cocher un ou plusieurs canaux est LE geste de cet écran), et le
- * bouton « Gérer les canaux » qui ouvre les réglages de la fonctionnalité
- * par-dessus (`onManageChannels`). L'interrupteur « Suivre la fonctionnalité »
- * a été retiré avec l'héritage : il grisait les cases par défaut, et l'écran
- * semblait interdire précisément ce qu'il servait à faire.
- *
- * Exception mécanique : un émetteur **sans éléments** (Sentinelle) garde ses
- * cases à l'échelle de la fonctionnalité — il n'a pas d'échelle plus fine.
+ * Où partent les alertes : les canaux de la fonctionnalité (ses sources) et ce
+ * qui y est relié. Cocher relève de `<feature>: write` ; ajouter, corriger ou
+ * supprimer un canal relève du champ `channels` du grant, sans lequel le
+ * serveur ne rend pas la destination. À l'échelle de la fonctionnalité : la
+ * liste et sa gestion, sans cases (sauf émetteur sans éléments, qui n'a pas
+ * d'échelle plus fine). À l'échelle d'un élément : les cases, et « Gérer les
+ * canaux » qui ouvre les réglages de la fonctionnalité par-dessus.
  */
 
 const KIND_LABEL: Record<NotificationChannelKind, string> = {
@@ -75,12 +43,8 @@ const KIND_LABEL: Record<NotificationChannelKind, string> = {
 };
 
 /**
- * Icônes prises dans `Styles/icons.css`, et **seulement** là.
- *
- * Aucun jeu Discord ni « send » n'y existe : une classe absente se rend en
- * carré vide, que ni TypeScript ni le typage des modules CSS n'attrapent —
- * `icon-*` est une chaîne, pas une clé. D'où ce tableau explicite, relu contre
- * la feuille plutôt que deviné.
+ * Icônes prises dans `Styles/icons.css` seulement : une classe absente se rend
+ * en carré vide, que rien n'attrape (`icon-*` est une chaîne, pas une clé).
  */
 const KIND_ICON: Record<NotificationChannelKind, string> = {
     email: 'mail',
@@ -95,11 +59,8 @@ type MailSender = Awaited<ReturnType<MailClientProvider['listSenders']>>[number]
 
 interface Props {
     scope: SettingsScope;
-    /**
-     * Ouvre les réglages de la **fonctionnalité** sur cet onglet, fourni par
-     * la coquille à l'échelle d'un élément seulement, où les canaux ne se
-     * gèrent pas sur place.
-     */
+    /** Ouvre les réglages de la fonctionnalité sur cet onglet ; fourni à
+     *  l'échelle d'un élément seulement. */
     onManageChannels?: () => void;
 }
 
@@ -108,33 +69,22 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
     const descriptor = featureDescriptor(scope.feature);
     const permissions = useWorkspacePermissions();
     const canManage = permissions.canChannels(scope.feature);
-    /**
-     * Le module Mail, par son contrat client : les expéditeurs d'un canal
-     * e-mail et le dialogue de compte. `undefined` sans le module, et le
-     * formulaire ne propose alors pas de canal e-mail.
-     */
+    /** Le module Mail par son contrat client ; `undefined` sans le module, et
+     *  pas de canal e-mail alors. */
     const mail = moduleClientProvider<MailClientProvider>(MAIL_CLIENT_PROVIDER);
-    // Le droit fin, pas `write` : c'est ce qui permet de confier le routage des
-    // alertes sans confier la modification des services surveillés.
 
     const channelsVersion = useResourceVersion('notify.channelList');
     const routeVersion = useResourceVersion('notify.routeGet');
 
     const [channels, setChannels] = useState<NotificationChannel[]>([]);
     /**
-     * Les canaux de la route qui vivent dans un **autre** espace.
-     *
-     * Le cas d'un élément projeté : ses destinations appartiennent à son
-     * espace d'origine. Les omettre afficherait « aucun canal » sur un élément
-     * qui prévient — précisément le mensonge que la projection devait éviter.
+     * Les canaux de la route qui vivent dans un autre espace (élément projeté) :
+     * les omettre afficherait « aucun canal » sur un élément qui prévient.
      */
     const [foreign, setForeign] = useState<NotificationChannel[]>([]);
     /**
-     * Cette route se règle-t-elle d'ici ?
-     *
-     * Faux sur un élément projeté : ses canaux appartiennent à son espace
-     * d'origine. Sans ce drapeau, l'écran offrait un interrupteur et un bouton
-     * « Ajouter un canal » que le serveur refuse — un écran qui ment.
+     * Cette route se règle-t-elle d'ici ? Faux sur un élément projeté : ses
+     * canaux appartiennent à son espace d'origine, le serveur refuse d'ici.
      */
     const [managedHere, setManagedHere] = useState(true);
     /** L'espace où la route se règle : le domicile de l'élément. */
@@ -148,29 +98,21 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
     const [busy, setBusy] = useState(false);
     /** Le dialogue de compte Mail, monté à la demande par le « + » du formulaire. */
     const [mailAdd, setMailAdd] = useState(false);
-    /**
-     * Les boîtes connues au moment d'ouvrir le dialogue Mail : celle qui
-     * apparaît ensuite vient d'y être créée, et c'est pour ce canal-ci ; elle
-     * se sélectionne donc toute seule au retour.
-     */
+    /** Les boîtes connues à l'ouverture du dialogue Mail : celle qui apparaît
+     *  ensuite vient d'être créée pour ce canal, et se sélectionne toute seule. */
     const knownMailIds = useRef<Set<number> | null>(null);
 
-    /**
-     * Le droit fin, pas `write` : c'est ce qui permet de confier le routage des
-     * alertes sans confier la modification des services surveillés. Et jamais
-     * sur un élément projeté, dont les canaux vivent ailleurs.
-     */
     // Régler où une fonctionnalité prévient est un réglage de cette
-    // fonctionnalité : son droit d'écriture suffit. L'étage de « droits fins »
-    // qui distinguait le routage de l'écriture a été essayé puis retiré.
+    // fonctionnalité : son droit d'écriture suffit. Jamais sur un élément
+    // projeté, dont les canaux vivent ailleurs.
     const canRoute = permissions.canFeature(feature, 'write') && managedHere;
 
     const itemId = numericItemId(scope) ?? undefined;
 
     /**
      * La sélection se rend-elle ici ? Sur un élément toujours ; à l'échelle de
-     * la fonctionnalité seulement quand elle n'a pas d'éléments (Sentinelle) —
-     * sinon cette échelle ne fait que lister les sources disponibles.
+     * la fonctionnalité seulement sans éléments, sinon cette échelle ne fait
+     * que lister les sources disponibles.
      */
     const showSelection = scope.kind === 'item' || !descriptor.hasItems;
 
@@ -199,10 +141,8 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
         void reload().catch(() => setStatus('Chargement impossible.'));
     }, [reload, channelsVersion, routeVersion]);
 
-    // Les expéditeurs ne servent qu'au formulaire d'ajout, et seulement à qui
-    // peut en ajouter : les demander sinon serait une requête pour un champ
-    // que personne ne verra. Le module les rend déjà filtrés : seuls les
-    // comptes « open » peuvent envoyer sans déverrouillage.
+    // Les expéditeurs ne servent qu'au formulaire d'ajout, donc à qui peut
+    // ajouter. Le module les rend déjà filtrés (comptes « open »).
     useEffect(() => {
         if (!canManage || !mail) return;
         void mail
@@ -243,12 +183,8 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
         }, 'Enregistrement impossible.');
     };
 
-    /**
-     * La confirmation nomme ce qui va cesser de prévenir.
-     *
-     * Les cibles sont demandées **avant** de l'afficher : « Êtes-vous sûr ? »
-     * sans dire de quoi ne fait pas confirmer, il fait cliquer.
-     */
+    /** La confirmation nomme ce qui va cesser de prévenir : les cibles sont
+     *  demandées avant de l'afficher. */
     const askDelete = (channel: NotificationChannel): void => {
         void run(async () => {
             const usage = await ws.send('notify.channelUsage', { id: channel.id });
@@ -316,10 +252,9 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
     }, []);
 
     /**
-     * Une boîte est sortie du dialogue Mail : relire les expéditeurs, adopter
-     * celui qui vient de naître. Une boîte créée au palier gardé n'est pas un
-     * expéditeur (le module ne rend que les boîtes prêtes) : rien à adopter
-     * alors, le sélecteur reste tel quel.
+     * Une boîte est sortie du dialogue Mail : relire les expéditeurs et adopter
+     * la nouvelle. Une boîte au palier gardé n'est pas un expéditeur : rien à
+     * adopter alors.
      */
     const onMailAddSaved = useCallback((): void => {
         setMailAdd(false);
@@ -358,10 +293,9 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
 
             <div className={styles.channelList}>
                 {channels.length === 0 && foreign.length === 0 && (
-                    // L'état vide porte le geste : le « + » ouvre les réglages
-                    // de la fonctionnalité sur cet onglet, où les canaux se
-                    // déclarent. Offert même sans le droit de gérer : le
-                    // chemin reste le même, on y lira simplement sans ajouter.
+                    // L'état vide porte le geste : le « + » ouvre les réglages de
+                    // la fonctionnalité, même sans le droit de gérer (on y lira
+                    // sans ajouter).
                     <div className={styles.emptyRow}>
                         <span>
                             {`Aucun canal pour ${descriptor.label}.`}
@@ -403,19 +337,15 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                                 {!channel.ready && <span className={styles.channelBroken}>ne partira pas</span>}
                             </span>
                             {/* La cible seule sur la ligne tronquable : une URL de
-                                webhook est longue par nature, et c'est le seul
-                                élément qu'on peut couper sans rien perdre. */}
+                                webhook est longue par nature. */}
                             <span className={styles.channelMeta}>
                                 {KIND_LABEL[channel.kind]}
                                 {channel.target && ` · ${channel.target}`}
                             </span>
                         </span>
 
-                        {/* « Utilisé par N » **hors** de la ligne tronquable, et
-                            c'est la raison d'être de cette pastille : mesuré, la
-                            meta ne disposait que de 101 px pour 387 px de texte,
-                            si bien que le compteur — ce qui donne à voir les
-                            doublons de la reprise 087 — n'apparaissait jamais. */}
+                        {/* « Utilisé par N » hors de la ligne tronquable, sinon la
+                            pastille n'apparaissait jamais. */}
                         <span
                             className={`${styles.channelUsage} ${channel.usageCount === 0 ? styles.channelUsageIdle : ''}`}
                             title={
@@ -431,10 +361,8 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                             « Gérer les canaux » mène au bon endroit. */}
                         {scope.kind === 'feature' && canManage && (
                             <span className={styles.channelActions}>
-                                {/* Icônes seules : trois boutons libellés prenaient
-                                    361 px des 554 de la ligne et étouffaient ce
-                                    qu'ils accompagnaient. Même parti que la liste
-                                    des rôles de « Gérer l'espace ». */}
+                                {/* Icônes seules : trois boutons libellés étouffaient
+                                    la ligne. */}
                                 <button
                                     type='button'
                                     className={styles.rowAction}
@@ -470,9 +398,8 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                     </div>
                 ))}
 
-                {/* Ceux d'un autre espace : on voit qu'ils existent et ce qu'ils
-                    sont, jamais qui ils désignent. Ni case ni action — on ne
-                    règle pas depuis une fenêtre ce qui appartient à la maison. */}
+                {/* Ceux d'un autre espace : ni case ni action, on ne règle pas
+                    d'ici ce qui appartient à la maison. */}
                 {foreign.map((channel) => (
                     <div key={`f${channel.id}`} className={`${styles.channelRow} ${styles.channelRowForeign}`}>
                         <span className={styles.foreignMark} aria-hidden='true'>
@@ -493,9 +420,8 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                 <p className={styles.sectionHint}>
                     Ce {descriptor.itemNoun ?? 'élément'} vient d’un autre espace : ses canaux s’y règlent, et
                     l’ordonnanceur qui le surveille y tourne. Un canal ajouté ici ne le concernerait pas.
-                    {/* Le refus expliqué devient un chemin : si l'appelant est
-                        membre de l'espace d'origine, on l'y emmène, fiche
-                        ouverte, réglages rouverts sur ce même onglet. */}
+                    {/* Si l'appelant est membre de l'espace d'origine, on l'y
+                        emmène, réglages rouverts sur ce même onglet. */}
                     {scope.kind === 'item' &&
                         homeWorkspaceId !== null &&
                         accessibleWorkspaceName(homeWorkspaceId) !== null && (
@@ -558,9 +484,7 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
             )}
 
             {/* L'ajout et la correction passent par un dialogue empilé, comme
-                toutes les sources : un formulaire qui pousse la liste sous lui
-                faisait sauter le panneau, et deux méthodes d'ajout dans une
-                même popup de réglages étaient une de trop. */}
+                toutes les sources. */}
             <Dialog
                 open={draft !== null}
                 onClose={() => {
@@ -703,9 +627,8 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
 
             {status && <p className={styles.notice}>{status}</p>}
 
-            {/* Le vrai dialogue de la feature Mail, jamais une copie réduite (le
-                patron des dialogues de liaison des Projets) : le module l'offre
-                par son contrat client, et le monte à la demande. */}
+            {/* Le vrai dialogue de la feature Mail, offert par son contrat client
+                et monté à la demande. */}
             {mail && <mail.AccountDialog open={mailAdd} onClose={onMailAddClose} onSaved={onMailAddSaved} />}
 
             <ConfirmDialog request={confirm} busy={busy} onClose={() => setConfirm(null)} />
@@ -715,12 +638,8 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
 
 /**
  * Miroir client d'`isDiscordWebhook` (`Services/discord.ts`) : analysée, jamais
- * cherchée dans la chaîne — `includes('discord.com')` dirait oui à
- * `https://exemple.com/?ref=discord.com`.
- *
- * Ici c'est un **avertissement**, pas un refus : le serveur ne devine plus, donc
- * déclarer un canal Discord sur une autre URL reste possible. On dit simplement
- * que ça ne fonctionnera probablement pas.
+ * cherchée dans la chaîne (`includes('discord.com')` dirait oui à
+ * `https://exemple.com/?ref=discord.com`). Un avertissement, pas un refus.
  */
 function looksLikeDiscord(url: string): boolean {
     try {

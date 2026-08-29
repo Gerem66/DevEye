@@ -53,12 +53,10 @@ type MarkerBlock = NoteBulletBlock | NoteNumberBlock | NoteCheckBlock | NoteDivi
 
 const MARKER_TYPES = new Set<NoteBlock['type']>(['bullet', 'number', 'check', 'divider']);
 
-/** Narrowing guard so the format menu can read a marker block's `color`. */
 function isMarkerBlock(block: NoteBlock): block is MarkerBlock {
     return MARKER_TYPES.has(block.type);
 }
 
-/** The format menu's contextual label for a marker block's colour picker. */
 function markerColorLabel(type: NoteBlock['type']): string {
     switch (type) {
         case 'bullet':
@@ -83,47 +81,36 @@ const TYPING_MERGE_MS = 700;
 interface BlockEditorProps {
     blocks: NoteBlock[];
     onChange: (blocks: NoteBlock[]) => void;
-    /** Let the block list flex to fill its parent and be the only scroll area
-     *  (used when the editor popup is in its large, fixed-height layout). */
+    /** Let the block list flex to fill its parent and be the only scroll area. */
     fill?: boolean;
-    /** The note's icon actions (delete / pin / lock / export). */
     footerActions?: React.ReactNode;
-    /** The created/modified stamps. */
     footerDates?: React.ReactNode;
-    /** The cancel / save buttons. */
     footerButtons?: React.ReactNode;
-    /** Rendered between the block list and the footer (e.g. a pending privacy change). */
+    /** Rendered between the block list and the footer. */
     notice?: React.ReactNode;
 }
 
-/**
- * Heading size class for a block. `level` is 1–5 per the note schema but typed
- * as a plain `number`, so it can't index the stylesheet directly.
- */
+/** `level` is 1–5 per the note schema, but typed as a plain `number`. */
 function headingClass(level: number): string {
     const classes = [styles.heading1, styles.heading2, styles.heading3, styles.heading4, styles.heading5];
     return classes[level - 1] ?? styles.heading1;
 }
 
 interface DragState {
-    /** Original index of the row being dragged. */
     from: number;
-    /** Insertion position among the *remaining* rows (0..length-1): where the
-     *  dragged row would land if dropped now. */
+    /** Insertion position among the *remaining* rows: where the dragged row
+     *  would land if dropped now. */
     to: number;
     /** Add to `clientY` to get the dragged row's vertical centre, so the switch
      *  is driven by the element's middle, not wherever the grip was grabbed. */
     centerOffset: number;
-    /** Ascending Y boundaries (viewport px) *between* consecutive rows in the
-     *  resting layout, frozen at drag start. `to` = how many boundaries the
-     *  dragged row's centre has passed. Boundaries (not midpoints) make the
-     *  switch symmetric: the centre rests exactly half a row from each, so
-     *  half a row up flips to the previous slot and half a row down to the next.
-     *  Independent of which row is dragged, and free of any reflow feedback. */
+    /** Ascending Y boundaries (viewport px) between consecutive rows in the
+     *  resting layout, frozen at drag start; `to` counts how many the dragged
+     *  row's centre has passed. Boundaries, not midpoints, keep the switch
+     *  symmetric and free of any reflow feedback. */
     thresholds: number[];
 }
 
-/** A state the editor can go back to: the blocks, and where the user was. */
 interface Snapshot {
     blocks: NoteBlock[];
     selection: BlockRange | null;
@@ -133,16 +120,13 @@ interface Snapshot {
  * The modular note body: an ordered list of typed blocks (paragraph, heading,
  * checklist / list item, divider), rendered inside **one** contentEditable host.
  *
- * That single host is the whole design. The caret and a selection move over the
- * list exactly as they would over a plain document, within a wrapped line, from
- * one block to the next, across several of them, so navigation, selection and
- * copy are the browser's, not ours. What the browser cannot be trusted with is
- * *structure*: an edit reaching across blocks would merge the elements
- * themselves and desynchronise the model. Those are intercepted and replayed on
- * the model instead (see {@link blockOps}):
- *  - Enter splits the block at the caret into a sibling of the same kind (a
- *    heading yields a paragraph); Ctrl/⌘+Enter and Shift+Enter insert a line
- *    break in place.
+ * That single host is the whole design: the caret and a selection move over the
+ * list as they would over a plain document, so navigation, selection and copy
+ * are the browser's, not ours. What it cannot be trusted with is *structure*, an
+ * edit reaching across blocks would merge the elements themselves. Those are
+ * intercepted and replayed on the model (see {@link blockOps}):
+ *  - Enter splits the block at the caret; Ctrl/⌘+Enter and Shift+Enter insert a
+ *    line break in place.
  *  - Backspace at the start of a typed item / heading demotes it to a paragraph,
  *    then merges it into the block above; Delete at the end pulls the next one in.
  *  - Anything typed, pasted or deleted over a multi-block selection stitches the
@@ -150,16 +134,9 @@ interface Snapshot {
  *  - Start-of-line prefixes convert a paragraph: `[]` → checklist, `- ` → bullet,
  *    `1. ` → numbered, `# `…`##### ` → heading, a lone `---` → divider.
  *
- * Undo/redo is ours too: the blocks are re-rendered from the model, which wipes
- * the browser's own edit history, so every change is committed through
- * {@link commit} with the previous state pushed on a stack (runs of keystrokes
- * folding into one step).
- *
- * Inline emphasis (bold/italic/underline/strike) is typed as markdown markers
- * and rendered live by {@link BlockText}; Ctrl+B/I/U and the "Aa" menu wrap the
- * selection. New blocks are added through the discreet "+" menu.
- *
- * Rows reorder by dragging the grip on the left (see {@link DragState}).
+ * Undo/redo is ours too: re-rendering the blocks from the model wipes the
+ * browser's own edit history, so every change goes through {@link commit}, which
+ * pushes the previous state on a stack.
  */
 export default function BlockEditor({
     blocks,
@@ -171,20 +148,18 @@ export default function BlockEditor({
     notice
 }: BlockEditorProps) {
     const rootRef = useRef<HTMLDivElement>(null);
-    /** The last selection seen inside the list. Kept because clicking a menu
-     *  button moves focus out, yet the format tools act on what was selected. */
+    /** Kept because clicking a menu button moves focus out, yet the format tools
+     *  act on what was selected. */
     const selectionRef = useRef<BlockRange | null>(null);
     /** Where the selection must land once the pending change has rendered. */
     const pending = useRef<BlockRange | null>(null);
     const past = useRef<Snapshot[]>([]);
     const future = useRef<Snapshot[]>([]);
-    /** Until when consecutive typing keeps folding into the same undo step. */
     const coalesceUntil = useRef(0);
-    /** The last list this editor produced; anything else came from the outside
-     *  (another note opened), which makes the history moot. */
+    /** The last list this editor produced: anything else came from the outside
+     *  (another note opened), and its history is not ours to undo. */
     const owned = useRef(blocks);
-    /** The block the format menu targets, where the caret is, or a divider the
-     *  user clicked. Drives the contextual colour picker. */
+    /** What the format menu targets: where the caret is, or a divider clicked. */
     const [active, setActive] = useState<number | null>(null);
     const [drag, setDrag] = useState<DragState | null>(null);
     const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -192,8 +167,6 @@ export default function BlockEditor({
     const addMenuRef = useRef<HTMLDivElement | null>(null);
     const formatMenuRef = useRef<HTMLDivElement | null>(null);
 
-    // A list this editor did not produce means another note was opened: its
-    // history is not ours to undo.
     useEffect(() => {
         if (blocks === owned.current) return;
         owned.current = blocks;
@@ -215,8 +188,8 @@ export default function BlockEditor({
         setActive(target.start.index);
     });
 
-    // Follow the caret wherever it goes, keeping it out of the rows' chrome,
-    // so the format menu stays contextual.
+    // Follow the caret, keeping it out of the rows' chrome, so the format menu
+    // stays contextual.
     useEffect(() => {
         const onSelectionChange = () => {
             const root = rootRef.current;
@@ -229,8 +202,6 @@ export default function BlockEditor({
         return () => document.removeEventListener('selectionchange', onSelectionChange);
     }, []);
 
-    // Close the menus on an outside click (same lightweight pattern as the
-    // per-card move menu).
     useEffect(() => {
         if (!addMenuOpen && !formatMenuOpen) return;
         const onDocClick = (e: MouseEvent) => {
@@ -241,8 +212,7 @@ export default function BlockEditor({
         return () => document.removeEventListener('mousedown', onDocClick);
     }, [addMenuOpen, formatMenuOpen]);
 
-    /** Hand `next` to the parent, remembering where the selection must land
-     *  (null leaves it wherever it is). */
+    /** Hand `next` to the parent; a null caret leaves the selection where it is. */
     const apply = useCallback(
         (next: NoteBlock[], caret: BlockPoint | BlockRange | null) => {
             owned.current = next;
@@ -252,9 +222,8 @@ export default function BlockEditor({
         [onChange]
     );
 
-    /** Apply a change and make it undoable. `typing` folds a run of keystrokes
-     *  into the step already on the stack, so undo goes back by words, not
-     *  characters. */
+    /** `typing` folds a run of keystrokes into the step already on the stack, so
+     *  undo goes back by words rather than characters. */
     const commit = useCallback(
         (next: NoteBlock[], caret: BlockPoint | BlockRange | null, typing = false) => {
             const now = Date.now();
@@ -270,7 +239,6 @@ export default function BlockEditor({
 
     const commitEdit = useCallback((edit: Edit, typing = false) => commit(edit.blocks, edit.caret, typing), [commit]);
 
-    /** Pop one state off `from`, pushing the current one onto `to`. */
     const travel = useCallback(
         (from: Snapshot[], to: Snapshot[]) => {
             const snapshot = from.pop();
@@ -305,11 +273,11 @@ export default function BlockEditor({
     );
 
     /**
-     * Pull the model back in line with the DOM after an edit the browser was
-     * left to make. Only text can have changed, everything structural was
-     * intercepted before it happened, so the blocks' surfaces are read back and
-     * the ones that moved are committed. Reading them all rather than the one
-     * under the caret costs a handful of microseconds and cannot drift.
+     * Pull the model back in line with the DOM after an edit the browser was left
+     * to make. Only text can have changed, everything structural was intercepted
+     * before it happened, so every surface is read back and the ones that moved
+     * are committed; reading them all rather than the one under the caret cannot
+     * drift.
      */
     const onInput = useCallback(() => {
         const root = rootRef.current;
@@ -328,13 +296,13 @@ export default function BlockEditor({
     }, [blocks, commit, commitEdit]);
 
     /**
-     * The browser may only edit *inside* a block. Anything reaching across two
-     * of them, typing or deleting over a multi-block selection, is replayed on
-     * the model, as is its own undo (whose stack our re-rendering has wiped) and
-     * its own styling commands (which would inject tags into the source text).
+     * The browser may only edit *inside* a block. Anything reaching across two of
+     * them is replayed on the model, as is its own undo (whose stack our
+     * re-rendering has wiped) and its styling commands (which would inject tags
+     * into the source text).
      *
-     * Listened to natively: React's `onBeforeInput` is a legacy polyfill built
-     * on keypress/textInput, which knows neither `inputType` nor deletions.
+     * Listened to natively: React's `onBeforeInput` is a legacy polyfill built on
+     * keypress/textInput, which knows neither `inputType` nor deletions.
      */
     useEffect(() => {
         const root = rootRef.current;
@@ -351,9 +319,8 @@ export default function BlockEditor({
                 e.preventDefault();
                 return;
             }
-            // Left to the browser only within one block's text; from anywhere
-            // else (across blocks, or from a caret beside a row's chrome) the
-            // edit is replayed on the model at the position it maps to.
+            // Left to the browser only within one block's text; from anywhere else
+            // the edit is replayed on the model at the position it maps to.
             const selection = readSelection(root);
             if (!selection || (!spansBlocks(selection) && selectionInText(root))) return;
             e.preventDefault();
@@ -385,7 +352,7 @@ export default function BlockEditor({
         [blocks, commit]
     );
 
-    /** Colour the current selection (wrap in `{c:…}{/c}`), mirroring applyMark. */
+    /** Wrap the current selection in `{c:…}{/c}`, mirroring applyMark. */
     const applyColor = useCallback(
         (color: NoteColor) => {
             setFormatMenuOpen(false);
@@ -428,8 +395,7 @@ export default function BlockEditor({
         if (cleared) commit(setText(blocks, index, cleared.text), { index, offset: cleared.caret });
     }, [blocks, commit]);
 
-    /** Set (or clear, with `undefined`) the marker colour of the active marker
-     *  block, the bullet dot, ordinal, checkbox or divider rule. */
+    /** `undefined` clears the marker's colour, back to the default tint. */
     const setBlockColor = useCallback(
         (color: NoteColor | undefined) => {
             setFormatMenuOpen(false);
@@ -558,16 +524,13 @@ export default function BlockEditor({
             const row = root && blockRow(root, index);
             if (!root || !row) return;
             const rect = row.getBoundingClientRect();
-            // Where the centre of the row sits relative to the cursor, so the
-            // target follows the element's middle rather than the grab point.
             const centerOffset = rect.height / 2 - (e.clientY - rect.top);
 
             e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('text/plain', String(index));
             // The row is transparent and sits on translucent popups, so
-            // snapshotting it in place bakes whatever is painted underneath
-            // (the home grid behind the popups) into the drag ghost. Overlay
-            // an opaque clone on the row for one frame and snapshot that.
+            // snapshotting it in place would bake whatever is painted underneath
+            // into the drag ghost: an opaque clone is overlaid for one frame.
             const snapshot = row.cloneNode(true) as HTMLElement;
             snapshot.classList.add(styles.dragSnapshot);
             snapshot.style.top = `${rect.top}px`;
@@ -576,8 +539,7 @@ export default function BlockEditor({
             document.body.appendChild(snapshot);
             e.dataTransfer.setDragImage(snapshot, e.clientX - rect.left, e.clientY - rect.top);
 
-            // Boundaries between consecutive rows = midpoints of adjacent row
-            // centres (see DragState.thresholds).
+            // Boundaries between rows: the midpoints of adjacent row centres.
             const mids = blocks.map((_, i) => {
                 const r = blockRow(root, i)?.getBoundingClientRect();
                 return r ? r.top + r.height / 2 : Number.POSITIVE_INFINITY;
@@ -603,8 +565,7 @@ export default function BlockEditor({
         const { clientY } = e;
         setDrag((d) => {
             if (!d) return d;
-            // Compare the dragged row's centre, not the cursor, against the
-            // rows' midpoints: the slot flips once the element is half past.
+            // The dragged row's centre, not the cursor, decides the slot.
             const center = clientY + d.centerOffset;
             let to = 0;
             while (to < d.thresholds.length && center >= d.thresholds[to]) to++;
@@ -614,9 +575,8 @@ export default function BlockEditor({
 
     const finishDrag = useCallback(
         (e: React.DragEvent) => {
-            // Block the browser's native drop handling: dropping over the editable
-            // surface would otherwise insert the drag's text/plain payload (the
-            // row index) straight into the text.
+            // Without this the browser inserts the drag's text/plain payload (the
+            // row index) into the editable surface it was dropped on.
             e.preventDefault();
             setDrag((d) => {
                 if (d && d.to !== d.from) {
@@ -630,14 +590,13 @@ export default function BlockEditor({
         [blocks, commit]
     );
 
-    // Render order, with the placeholder injected among the remaining rows.
     // `placeholderBefore` is the original index the gap sits before, or -1 for
     // "after the last row".
     const remaining = drag === null ? [] : blocks.map((_, i) => i).filter((i) => i !== drag.from);
     const placeholderBefore = drag === null ? null : drag.to < remaining.length ? remaining[drag.to] : -1;
 
     // Display index of each numbered item, restarting at 1 after any non-number
-    // block, so consecutive numbered rows read 1, 2, 3… and stay coherent.
+    // block.
     const numbering: number[] = [];
     let run = 0;
     for (let i = 0; i < blocks.length; i++) {
@@ -645,9 +604,9 @@ export default function BlockEditor({
         numbering[i] = run;
     }
 
-    // Everything that isn't the block's own text is chrome: kept out of the
-    // editing host so the caret never lands in it and a selection never drags it
-    // along (`contentEditable={false}` plus `user-select: none` in the CSS).
+    // Everything that isn't the block's own text is chrome, kept out of the
+    // editing host (`contentEditable={false}` plus `user-select: none`) so the
+    // caret never lands in it and a selection never drags it along.
     const renderRow = (block: NoteBlock, index: number) => (
         <div
             key={index}
@@ -739,9 +698,8 @@ export default function BlockEditor({
         </div>
     );
 
-    // Landing preview: a translucent copy of the dragged block, shown at the
-    // target slot so its real content makes clear what lands where. It mirrors
-    // the row's content, so it naturally takes the same height as the source.
+    // Landing preview: a copy of the dragged block, in the same layout so it
+    // takes the same height as the source.
     const placeholder =
         drag !== null &&
         (() => {
@@ -786,15 +744,12 @@ export default function BlockEditor({
             );
         })();
 
-    // The block currently targeted by the format menu, and, when it carries a
-    // colourable marker, that block, so the menu can offer its marker picker.
     const activeBlock = active !== null ? (blocks[active] ?? null) : null;
     const activeMarkerBlock = activeBlock && isMarkerBlock(activeBlock) ? activeBlock : null;
 
-    // A row of colour swatches (+ a "Défaut" reset), reused by the text-colour
-    // and marker-colour pickers. `selected` marks the current choice: a colour
-    // highlights its swatch, `null` highlights "Défaut", `undefined` (text
-    // colour, where a selection has no single colour) highlights nothing.
+    // Shared by the text-colour and marker-colour pickers. `selected` marks the
+    // current choice: a colour highlights its swatch, `null` highlights "Défaut",
+    // and `undefined` highlights nothing.
     const swatchRow = (onPick: (c: NoteColor) => void, onClear: () => void, selected?: NoteColor | null) => (
         <div className={styles.swatches}>
             {NOTE_COLOR_OPTIONS.map((o) => (
@@ -820,8 +775,7 @@ export default function BlockEditor({
         </div>
     );
 
-    // The "+" (add block) and "Aa" (format) tools, placed in the footer when the
-    // editor is large, or on their own row above it when compact.
+    // Placed in the footer when the editor is large, on their own row when compact.
     const tools = (
         <div className={styles.addTools}>
             <div className={styles.addMenu} ref={addMenuRef}>

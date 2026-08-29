@@ -6,16 +6,9 @@ import { describe, it } from 'node:test';
 import { S3Client, S3_PART_BYTES } from './s3';
 
 /**
- * Ce qui peut corrompre une archive S3 sans qu'aucune erreur ne remonte.
- *
- * Un dépôt S3 ne dit jamais « ton objet est faux » : il dit 200. Les deux fautes
- * qui produisent une archive silencieusement inutilisable sont l'ordre des
- * parties et leur taille — S3 n'admet une taille inégale que sur la **dernière**
- * partie, et recolle les autres dans l'ordre déclaré, pas dans celui d'arrivée.
- *
- * Ces cas montent un faux service S3 en local, y poussent des flux de tailles
- * choisies autour du seuil de bascule, et vérifient que l'objet recollé est
- * exactement le flux d'origine.
+ * Un dépôt S3 dit 200 même quand l'objet est faux : ordre et taille des parties
+ * (inégale seulement sur la dernière). Faux service local, flux de tailles
+ * choisies autour du seuil de bascule.
  */
 
 interface FakeS3 {
@@ -228,9 +221,7 @@ describe('dépôt S3', () => {
                     for await (const _ of clientFor(s3.port).getObject('jamais-ecrit')) void _;
                 },
                 (e: Error) => {
-                    // Ni « HTTP 404 » ni une trace : la phrase doit dire où
-                    // chercher, parce que c'est l'erreur la plus fréquente
-                    // d'une première configuration.
+                    // La phrase doit dire où chercher, pas « HTTP 404 ».
                     assert.match(e.message, /bucket|introuvable/i);
                     return true;
                 }

@@ -19,21 +19,13 @@ interface RepoDialogProps {
 /**
  * Ajouter un dépôt à l'espace, ou changer ses réglages.
  *
- * `owner`/`repo` ne se modifient pas après coup, et c'est délibéré : ce couple
- * **est** l'identité du dépôt (voir `slug_ref`). Le changer ferait d'une ligne
- * existante un autre dépôt, avec le cache du précédent — on en ajoute un
- * nouveau, et on supprime l'ancien si l'on veut.
+ * `owner`/`repo` ne se modifient pas après coup : ce couple est l'identité du
+ * dépôt (voir `slug_ref`), et le changer ferait d'une ligne existante un autre
+ * dépôt, avec le cache du précédent.
  *
- * Il charge lui-même les jetons de l'espace : c'est ce qui permet de l'ouvrir
- * aussi bien depuis la feature que depuis un projet, sans que chaque appelant
- * ait à les lire d'abord.
- *
- * Les jetons ne se créent pas ici : ce sont les sources de la feature, gérées
- * dans Réglages → Sources. Le sélecteur, lui, reste (c'est le geste courant),
- * et son « + » est le bouton commun de la coquille, ouvert sur cet onglet, le
- * jeton créé pendant ce temps étant adopté à la fermeture. Le dialogue montait
- * lui-même `FeatureSettingsDialog` par un chemin interne de l'app : c'était la
- * dette de coquille de la feature, réglée par son rapatriement.
+ * Il charge lui-même les jetons de l'espace, ce qui permet de l'ouvrir aussi bien
+ * depuis la feature que depuis un projet. Ils se choisissent ici mais ne s'y
+ * créent pas : ce sont les sources de la feature, gérées dans Réglages → Sources.
  */
 export function RepoDialog({ open, repo, onClose, onSaved, onRemove }: RepoDialogProps) {
     const [credentials, setCredentials] = useState<GitCredential[] | null>(null);
@@ -47,8 +39,7 @@ export function RepoDialog({ open, repo, onClose, onSaved, onRemove }: RepoDialo
     const [confirmResync, setConfirmResync] = useState(false);
     /**
      * Les jetons connus au moment d'ouvrir les réglages : celui qui apparaît
-     * ensuite vient d'y être créé, et c'est pour ce dépôt-ci ; il se
-     * sélectionne donc tout seul au retour.
+     * ensuite vient d'y être créé pour ce dépôt, et se sélectionne tout seul.
      */
     const knownIds = useRef<Set<number> | null>(null);
 
@@ -80,11 +71,9 @@ export function RepoDialog({ open, repo, onClose, onSaved, onRemove }: RepoDialo
     }, [open, repo, reloadCredentials]);
 
     /**
-     * La coquille s'ouvre : on photographie les jetons connus. Elle se ferme :
-     * relire les jetons, adopter celui qui vient de naître, comme les dialogues
-     * de liaison des Projets relient ce qu'ils viennent de créer. `knownIds`
-     * n'est posé qu'à l'ouverture, donc le `false` que le bouton émet au
-     * montage et au démontage ne relit rien.
+     * À l'ouverture on photographie les jetons connus, à la fermeture on relit et
+     * on adopte le nouveau venu. `knownIds` n'est posé qu'à l'ouverture, donc le
+     * `false` que le bouton émet au montage et au démontage ne relit rien.
      */
     const onSettingsOpenChange = (opened: boolean) => {
         if (opened) {
@@ -102,11 +91,9 @@ export function RepoDialog({ open, repo, onClose, onSaved, onRemove }: RepoDialo
     const canSubmit = target.owner.trim() !== '' && target.repo.trim() !== '';
 
     /**
-     * Vide le cache et relance une lecture complète.
-     *
-     * On referme derrière : `git.repoResync` remet `lastSyncAt` à zéro, ce qui
-     * fait réapparaître le voile de progression de `RepoView` tout seul — rester
-     * sur le dialogue le cacherait précisément au moment où il devient utile.
+     * Vide le cache et relance une lecture complète. On referme derrière :
+     * `git.repoResync` remet `lastSyncAt` à zéro, ce qui fait réapparaître le
+     * voile de progression de `RepoView`, que le dialogue cacherait.
      */
     const resync = async () => {
         if (!repo || busy) return;
@@ -166,8 +153,6 @@ export function RepoDialog({ open, repo, onClose, onSaved, onRemove }: RepoDialo
             }
         >
             <div className={styles.form}>
-                {/* À la création, le trio jeton → propriétaire → dépôt, dans cet
-                    ordre : le jeton décide de ce que la liste peut montrer. */}
                 {!repo && (
                     <RepoPicker
                         credentials={credentials ?? []}
@@ -178,8 +163,8 @@ export function RepoDialog({ open, repo, onClose, onSaved, onRemove }: RepoDialo
                     />
                 )}
 
-                {/* En modification, `owner/repo` est figé — c'est l'identité du
-                    dépôt (voir `slug_ref`) — et seul le jeton reste réglable. */}
+                {/* En modification, `owner/repo` est figé, c'est l'identité du
+                    dépôt, et seul le jeton reste réglable. */}
                 {repo && (
                     <>
                         <p className={styles.repoName}>
@@ -208,11 +193,9 @@ export function RepoDialog({ open, repo, onClose, onSaved, onRemove }: RepoDialo
                                         </option>
                                     ))}
                                 </SelectInput>
-                                {/* Le « + » : les jetons se gèrent dans Réglages →
-                                    Sources, jamais ici. Le bouton commun ouvre
-                                    donc ces réglages par-dessus, et le jeton créé
-                                    est adopté au retour (`onOpenChange` fige la
-                                    liste connue à l'ouverture). */}
+                                {/* Le bouton commun ouvre les réglages par-dessus,
+                                    et le jeton qui y est créé est adopté au
+                                    retour. */}
                                 <FeatureSettingsButton
                                     scope={{ kind: 'feature', feature: 'git' }}
                                     initialSection='sources'
@@ -240,16 +223,10 @@ export function RepoDialog({ open, repo, onClose, onSaved, onRemove }: RepoDialo
                     </Checkbox>
                 )}
 
-                {/*
-                 * Relire tout l'historique, par opposition au « Synchroniser »
-                 * de l'en-tête qui reprend là où le service s'était arrêté.
-                 *
-                 * Ici plutôt que dans l'en-tête, et derrière une confirmation :
-                 * c'est le geste rare qu'on fait quand on soupçonne le cache
-                 * d'être faux, et il coûte quelques minutes et quelques
-                 * centaines de requêtes au quota — il n'a pas à côtoyer le
-                 * bouton qu'on presse tous les jours.
-                 */}
+                {/* Relire tout l'historique, quand le « Synchroniser » de l'en-tête
+                    reprend là où le service s'était arrêté. Ici et derrière une
+                    confirmation : il coûte quelques minutes et quelques centaines
+                    de requêtes au quota. */}
                 {repo && (
                     <div className={styles.actionZone}>
                         <div className={styles.dangerText}>

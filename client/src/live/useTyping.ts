@@ -5,31 +5,26 @@ import { ws } from '@/api/ws';
 import { getActiveWorkspaceId } from '@/stores/workspace';
 
 /**
- * « Untel est en train d'écrire… », côté client.
+ * « Untel est en train d'écrire… », côté client. Deux moitiés séparées, une
+ * feature pouvant n'avoir besoin que de l'une : {@link useTypingSignal} annonce
+ * ma frappe, {@link useTypers} écoute celle des autres.
  *
- * Deux moitiés volontairement séparées : {@link useTypingSignal} **annonce** ma
- * frappe, {@link useTypers} **écoute** celle des autres. Une feature peut n'avoir
- * besoin que de l'une des deux.
- *
- * Le lieu n'est jamais transmis : le serveur ne diffuse la frappe qu'aux pairs
- * situés au même chemin que l'émetteur (le dernier `live.here`), exactement
- * comme pour les curseurs. Déclarer `useLiveSegment` suffit donc à cadrer qui
+ * Le lieu n'est jamais transmis : le serveur ne diffuse la frappe qu'aux pairs au
+ * même chemin que l'émetteur, donc déclarer `useLiveSegment` suffit à cadrer qui
  * verra quoi.
  */
 
 /**
- * Cadence de rappel de « j'écris toujours ».
- *
- * Doit rester **nettement sous** la péremption du serveur (6 s, voir
- * `src/live/hub.ts`) : sinon l'indicateur clignoterait entre deux rappels.
+ * Cadence de rappel de « j'écris toujours ». Doit rester nettement sous la
+ * péremption du serveur (6 s, voir `src/live/hub.ts`), sinon l'indicateur
+ * clignoterait entre deux rappels.
  */
 const HEARTBEAT_MS = 2_500;
 
 /**
- * Silence au bout duquel on considère que la frappe s'est arrêtée.
- *
- * Sans lui, quitter le champ sans le vider laisserait le pair annoncé jusqu'à
- * la péremption serveur — trois secondes de mensonge, ce qui se voit.
+ * Silence au bout duquel la frappe est considérée comme arrêtée. Sans lui,
+ * quitter le champ sans le vider laisserait le pair annoncé jusqu'à la péremption
+ * serveur.
  */
 const IDLE_MS = 3_000;
 
@@ -78,12 +73,9 @@ export function useTypers(): Typer[] {
 }
 
 /**
- * Annonce ma frappe.
- *
- * Appeler `onInput()` à chaque frappe : le rappel périodique et l'arrêt
- * automatique après un silence sont gérés ici. `stop()` coupe immédiatement
- * (envoi, fermeture du champ). Tout est démonté proprement — un composant qui
- * disparaît en cours de frappe ne laisse pas son annonce derrière lui.
+ * Annonce ma frappe. Appeler `onInput()` à chaque touche : le rappel périodique
+ * et l'arrêt après un silence sont gérés ici, et `stop()` coupe immédiatement. Un
+ * composant qui disparaît en cours de frappe ne laisse pas son annonce derrière.
  */
 export function useTypingSignal(): { onInput: () => void; stop: () => void } {
     const typing = useRef(false);
@@ -98,7 +90,7 @@ export function useTypingSignal(): { onInput: () => void; stop: () => void } {
     useEffect(() => {
         const post = (value: boolean) => {
             // `ws.post` et non `ws.send` : trame sans réponse, sans promesse en
-            // attente ni délai de 15 s — c'est la voie rapide du moteur.
+            // attente ni délai de 15 s.
             ws.post(LIVE_TYPING_COMMAND, { typing: value });
         };
 

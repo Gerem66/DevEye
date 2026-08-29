@@ -40,13 +40,9 @@ export const PROBES: Record<OsintProbeId, OsintProbeAdapter> = {
 };
 
 /**
- * Les sondes applicables à cette nature de cible.
- *
- * La table partagée (`OSINT_PROBES_BY_KIND`) fait foi — c'est elle que le client
- * lit aussi — mais on la filtre ici par ce que le registre déclare réellement
- * supporter. Les deux ne peuvent donc pas diverger silencieusement : une sonde
- * listée pour une nature qu'elle ne gère pas disparaît au lieu d'échouer à
- * l'exécution.
+ * La table partagée (`OSINT_PROBES_BY_KIND`) fait foi, filtrée par ce que le
+ * registre déclare : une sonde listée pour une nature qu'elle ne gère pas
+ * disparaît au lieu d'échouer à l'exécution.
  */
 export function probesFor(kind: OsintTargetKind): OsintProbeId[] {
     return OSINT_PROBES_BY_KIND[kind].filter((id) => PROBES[id].appliesTo.includes(kind));

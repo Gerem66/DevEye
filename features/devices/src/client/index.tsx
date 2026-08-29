@@ -10,10 +10,8 @@ import { refreshDevices, resetDevices, useDevices } from './store';
 import DevicesTopbarWidget from './TopbarWidget';
 
 /**
- * Ce que le module offre aux écrans de l'app (`DEVICES_CLIENT_PROVIDER`) :
- * la liste vivante des appareils de l'espace (l'accueil pose une tuile par
- * appareil, le marché les propose), le panneau d'un appareil (la vue qu'une
- * tuile ouvre) et sa tuile. Sans le module, l'accueil ne pose aucun appareil.
+ * Ce que le module offre aux écrans de l'app (`DEVICES_CLIENT_PROVIDER`) : la
+ * liste vivante des appareils de l'espace, le panneau d'un appareil et sa tuile.
  */
 const clientProvider: DevicesClientProvider = {
     useDevices,

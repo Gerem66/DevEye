@@ -14,14 +14,9 @@ interface LogsDialogProps {
 }
 
 /**
- * Le journal complet d'un déploiement, tel que Dokploy l'a produit.
- *
- * Rejoué depuis un point d'entrée de Dokploy qui n'a rien d'officiel (aucune
- * procédure tRPC ne le documente — voir l'adaptateur) : une instance qui
- * l'authentifie autrement que le reste de l'API peut le refuser. L'état
- * d'erreur montre donc le message tel que Dokploy (ou le réseau) l'a formulé
- * (`dokployError`, pas `humanizeError`) — c'est souvent la seule piste pour
- * distinguer un refus d'authentification d'une instance simplement injoignable.
+ * Le journal complet d'un déploiement, rejoué depuis un point d'entrée Dokploy
+ * non documenté (voir l'adaptateur) : une instance peut le refuser, d'où le
+ * message tel que Dokploy l'a formulé (`dokployError`, pas `humanizeError`).
  */
 export function LogsDialog({ open, targetId, externalId, onClose }: LogsDialogProps) {
     const [log, setLog] = useState<string | null>(null);

@@ -19,37 +19,24 @@ import { loadHomeSite, loadSite, nameRef, rangeWindow, readLabel, siteCipher, ty
 /**
  * Les entonnoirs d'un site : où les gens décrochent.
  *
- * ## Le découpage, et pourquoi il tient tout
+ * Le site suivi émet des signaux nommés ; l'entonnoir se compose ici, à partir
+ * de ce qui a déjà été observé. Mesurer un autre parcours ne demande donc aucun
+ * redéploiement du site, un entonnoir supprimé ne perd aucune donnée, et un
+ * entonnoir défini avant que le signal n'existe compte zéro sans se tromper.
  *
- * Le site suivi émet des **signaux nommés** — une page vue, un
- * `deveye.event('etape-email')`. L'entonnoir, lui, se compose **ici**, à partir
- * de ce qui a déjà été observé. Trois conséquences, et ce sont elles qui font
- * la valeur de la feature :
- *
- * - mesurer un autre parcours ne demande **aucun redéploiement** du site ;
- * - un entonnoir supprimé ne perd **aucune donnée** — le recréer à l'identique
- *   rend exactement les mêmes chiffres ;
- * - un entonnoir peut être défini **avant** que le site n'émette le signal : la
- *   marche compte alors zéro, ce qui est la vérité, pas une erreur.
- *
- * ## La règle de rétention, et il faut la connaître
- *
- * Une visite « atteint la marche i » si la **première occurrence** de chacune
- * des marches 1..i s'est produite dans l'ordre. C'est déterministe et ça tient
- * en une requête ; le prix est qu'un visiteur qui revient en arrière puis repart
- * peut ne pas être compté. Une définition floue aurait été pire qu'une
- * définition stricte qu'on énonce.
+ * Une visite atteint la marche i si la première occurrence de chacune des
+ * marches 1..i s'est produite dans l'ordre : déterministe et tenant en une
+ * requête, au prix d'un visiteur qui revient en arrière et n'est pas compté.
  */
 
 /** La normalisation d'une marche, la même que celle de l'ingestion. */
 function stepValue(kind: AudienceFunnelStepKind, raw: string): string {
-    // Un chemin passe par `normalizePath` — sans quoi une marche écrite
-    // « /tarifs/ » ne reconnaîtrait jamais la page « /tarifs » que l'ingestion a
-    // rangée. Un nom d'événement est pris tel quel, comme à l'entrée.
+    // Un chemin passe par `normalizePath`, sans quoi une marche écrite « /tarifs/ »
+    // ne reconnaîtrait jamais la page « /tarifs » rangée par l'ingestion. Un nom
+    // d'événement est pris tel quel, comme à l'entrée.
     return kind === 'path' ? normalizePath(raw) : raw.trim();
 }
 
-/** Ce qu'on écrit pour une marche : sa valeur normalisée et son condensé. */
 async function toStoredStep(
     cipher: SdkCipher,
     step: AudienceFunnelStepDraft
@@ -79,9 +66,8 @@ export const audienceFunnelListFeature = defineSdkFeature({
         ]);
         if (rows.length === 0) return { funnels: [] };
 
-        // Les libellés de **toutes** les marches en une fois : un site a
-        // quelques entonnoirs de quelques marches, une requête par marche aurait
-        // été une rafale pour rien.
+        // Les libellés de toutes les marches en une fois : une requête par marche
+        // aurait été une rafale pour rien.
         const labels = await ctx.repo.resolveLabels(
             input.siteId,
             stepRows.map((step) => ({ kind: step.match_kind, labelRef: step.label_ref }))
@@ -116,8 +102,7 @@ export const audienceFunnelAddFeature = defineSdkFeature({
     mutates: true,
     access: { level: 'write' },
     handler: async (ctx: Ctx, input) => {
-        // Domicile seulement : un entonnoir appartient au site, donc à son
-        // espace — comme ses autres réglages.
+        // Domicile seulement : un entonnoir appartient au site, donc à son espace.
         await loadHomeSite(ctx, input.siteId);
         if ((await ctx.repo.countFunnels(input.siteId)) >= AUDIENCE_MAX_FUNNELS) {
             throw new FeatureError(
@@ -175,8 +160,8 @@ export const audienceFunnelRemoveFeature = defineSdkFeature({
     access: { level: 'write' },
     handler: async (ctx: Ctx, input) => {
         const funnel = await loadFunnel(ctx, input.funnelId);
-        // Pas de confirmation lourde côté serveur, et c'est justifié : aucune
-        // mesure ne disparaît. Seule la lecture qu'on en faisait s'en va.
+        // Pas de confirmation lourde : aucune mesure ne disparaît, seule la lecture
+        // qu'on en faisait s'en va.
         await ctx.repo.removeFunnel(funnel.id);
         return { ok: true as const };
     }

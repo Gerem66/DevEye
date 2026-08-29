@@ -4,15 +4,13 @@ import type { SdkQueryable } from '@deveye/types/sdk/server';
 /** Les tables `project_messages` et `project_card_reads` : le fil d'une carte. */
 export interface ProjectChatRepo {
     /**
-     * Une page du fil, **du plus récent au plus ancien** (c'est l'ordre où l'on
-     * pagine), à charge de l'appelant de la retourner pour l'affichage.
-     * `before` exclu ; `limit + 1` lignes sont lues pour savoir s'il en reste.
+     * Une page du fil, du plus récent au plus ancien, l'ordre où l'on pagine : à
+     * l'appelant de la retourner pour l'affichage. `before` exclu.
      */
     listByCard(cardId: number, workspaceId: number, before: number | null, limit: number): Promise<ProjectMessageRow[]>;
     /**
      * Par identifiant seul : l'espace du message est celui de son projet, que
-     * l'appelant vérifie (`loadProject`) avant d'agir. Les écritures, elles,
-     * prennent le domicile du projet.
+     * l'appelant vérifie avant d'agir. Les écritures prennent le domicile du projet.
      */
     findById(messageId: number): Promise<ProjectMessageRow | null>;
     create(input: {
@@ -60,8 +58,8 @@ export function projectChatRepo(q: SdkQueryable): ProjectChatRepo {
                     content
                 ]
             );
-            // Compteur dénormalisé : c'est lui qui rend le badge « des messages
-            // ici » calculable sans parcourir le fil ni rien déchiffrer.
+            // Compteur dénormalisé : le badge « des messages ici » se calcule sans
+            // parcourir le fil ni rien déchiffrer.
             await q.execute(
                 `UPDATE project_cards SET message_count = message_count + 1, last_message_at = UNIX_TIMESTAMP()
                  WHERE id = ? AND workspace_id = ?`,
@@ -82,8 +80,8 @@ export function projectChatRepo(q: SdkQueryable): ProjectChatRepo {
             return this.findById(messageId);
         },
         async markRead(cardId, workspaceId, userId, lastMessageId) {
-            // `GREATEST` : la marque ne recule jamais. Deux onglets qui lisent
-            // en désordre ne doivent pas faire réapparaître des non-lus.
+            // `GREATEST` : la marque ne recule jamais, deux onglets qui lisent en
+            // désordre ne doivent pas faire réapparaître des non-lus.
             await q.execute(
                 `INSERT INTO project_card_reads (card_id, user_id, workspace_id, last_read_message_id, read_at)
                  VALUES (?, ?, ?, ?, UNIX_TIMESTAMP())

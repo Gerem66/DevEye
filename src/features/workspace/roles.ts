@@ -14,12 +14,7 @@ import { invalidateAccess } from '../_access';
 import { validateGrantExtras } from '../_sdk/register';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 
-/**
- * Rôles d'un espace : le paramétrage des droits.
- *
- * Un espace personnel n'en a pas — son propriétaire y est seul et peut tout.
- * Créer des rôles y serait un réglage sans objet.
- */
+/** Un espace personnel n'a pas de rôles : son propriétaire y est seul et peut tout. */
 function assertShared(ctx: FeatureContext): void {
     if (ctx.workspace.kind === 'personal') {
         throw new FeatureError('validation', 'L’espace personnel n’a pas de rôles');
@@ -114,10 +109,9 @@ export const workspaceRoleUpdateFeature: FeatureDefinition<
 > = defineFeature({
     ...workspaceRoleUpdate,
     mutates: true,
-    // Identité et droits d'un rôle relèvent de la même capacité : c'est le
-    // choix qui garde UN écran et UNE règle. Le découpage plus fin (identité vs
-    // contenu, `workspace.permissions`) a été essayé puis retiré — deux
-    // capacités pour un même formulaire produisaient des demi-refus illisibles.
+    // Identité et droits d'un rôle relèvent de la même capacité : un écran,
+    // une règle ; deux capacités pour un même formulaire produiraient des
+    // demi-refus illisibles.
     access: { capabilities: ['workspace.roles'] },
     handler: async (ctx, input) => {
         assertShared(ctx);
@@ -156,10 +150,8 @@ export const workspaceRoleDeleteFeature: FeatureDefinition<
         const row = await ctx.db.workspaceRoles.findById(input.roleId, ctx.workspaceId);
         if (!row) throw new FeatureError('not_found', 'Rôle introuvable');
 
-        // Refus explicite plutôt qu'une révocation en cascade : supprimer un rôle
-        // porté retirerait silencieusement l'accès à ses membres. La FK est en
-        // `SET NULL` pour ne pas gêner la suppression d'un espace entier, donc
-        // rien ne l'empêche au niveau base — c'est ici que ça se joue.
+        // Refus explicite : supprimer un rôle porté retirerait silencieusement
+        // l'accès à ses membres, et la FK en `SET NULL` ne l'empêche pas.
         const members = await ctx.db.workspaceRoles.memberCount(row.id);
         if (members > 0) {
             throw new FeatureError(

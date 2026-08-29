@@ -11,15 +11,9 @@ import { createFacade } from './facade';
 import { setSdkHost } from './host';
 
 /**
- * La façade des natives : le SEUL chemin d'un module vers les données des
- * autres features, gardé membre par membre par `nativeCapabilities`.
- *
- * Deux choses à tenir : la garde vient AVANT tout accès (une base vide ne
- * doit même pas être touchée sans la capacité), et derrière la garde chaque
- * membre projette ce qu'il promet : `notify` route par la feature du module,
- * `mail` relit le contrat du module Mail, `devices.authorize` a la sémantique
- * d'`authorizeDevice` (introuvable, puis appartenance sauf admin), `agents`
- * délègue au hub sous le même nom.
+ * La façade des natives, gardée membre par membre par `nativeCapabilities` :
+ * la garde vient avant tout accès (une base vide ne doit même pas être
+ * touchée), et derrière elle chaque membre projette ce qu'il promet.
  */
 
 const WS = 3;
@@ -377,8 +371,7 @@ describe('createFacade : devices', () => {
     });
 
     it("list : l'admin global dans son espace personnel voit la flotte, ailleurs son espace", async () => {
-        // La règle de `device.list`, reprise telle quelle : c'est dans son
-        // espace personnel qu'un administrateur surveille ses machines.
+        // La règle de `device.list`, reprise telle quelle.
         const { db, listAllCalls } = devicesDb({});
         const listed = await facadeWith(['devices.read'], db, true).devices.list();
         assert.deepEqual(

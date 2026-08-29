@@ -1,12 +1,8 @@
 import { CountWidget, useWorkspaceCount } from 'deveye-sdk-client';
 
 /**
- * Carte compacte de l'accueil : le nombre de projets actifs de l'espace.
- *
- * Adossée à `projects.count`, qui ne compte que des colonnes claires — les
- * projets confidentiels y sont comptés comme les autres, et la carte n'ouvre
- * donc jamais l'invite de mot de passe. Les projets archivés en sont exclus,
- * comme dans le portefeuille.
+ * Le nombre de projets actifs de l'espace. `projects.count` ne lit que des
+ * colonnes claires : la carte n'ouvre jamais l'invite de mot de passe.
  */
 export function ProjectsWidget() {
     const state = useWorkspaceCount('projects.count');

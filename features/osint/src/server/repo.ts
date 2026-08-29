@@ -22,7 +22,6 @@ export interface OsintRepo {
     deleteKey(workspaceId: number, provider: OsintProvider): Promise<void>;
 }
 
-/** Même dépôt qu'avant le rapatriement, porté sur le `SdkQueryable` du module. */
 export function createRepo(q: SdkQueryable): OsintRepo {
     return {
         async listLookups(workspaceId, limit) {

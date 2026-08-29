@@ -1,11 +1,10 @@
 import type { MailSuspiciousLink } from '../contracts/domain';
 
 /**
- * Cheap, local heuristics over the already-sanitized HTML — no external calls,
- * no metadata leaves the server. Flags for user awareness; never blocks a
- * click. `unsafe-scheme` links (javascript:/vbscript:/data:) are handled
- * structurally by {@link sanitizeMailHtml} instead (the scheme is stripped
- * outright, so there's nothing left here to flag).
+ * Cheap, local heuristics over the already-sanitized HTML: no external calls, no
+ * metadata leaves the server. Flags for user awareness; never blocks a click.
+ * `unsafe-scheme` links are handled structurally by {@link sanitizeMailHtml},
+ * which strips the scheme outright.
  */
 
 /** A short list of commonly-impersonated brands worth a typosquat check. */
@@ -55,7 +54,6 @@ function editDistanceWithin(a: string, b: string, max: number): number {
     return prev[b.length];
 }
 
-/** Strip tags to get an anchor's plain visible text. */
 function stripTags(html: string): string {
     return html.replace(/<[^>]+>/g, '').trim();
 }

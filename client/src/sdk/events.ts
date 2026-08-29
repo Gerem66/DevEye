@@ -3,19 +3,16 @@ import type { ZodType } from 'zod';
 import { ws } from '@/api/ws';
 
 /**
- * Les primitives d'événements serveur du SDK client.
- *
- * Un module ne voit jamais la socket brute : il s'abonne à UN événement typé,
- * et à la réouverture de la connexion. C'est tout ce que les flux poussés
- * demandent (progression, état, chunks de téléchargement), et c'est ce qui
- * permet à la socket de rester interne (reconnexion, enveloppes, file
- * d'attente : rien de tout ça n'est un contrat).
+ * Les primitives d'événements serveur du SDK client. Un module ne voit jamais la
+ * socket brute : il s'abonne à un événement typé et à la réouverture de la
+ * connexion, ce qui suffit aux flux poussés et laisse la reconnexion, les
+ * enveloppes et la file d'attente hors contrat.
  */
 
 /**
- * Abonne `cb` aux trames poussées `event`. Le payload est validé par `schema` ;
- * une trame qui ne colle pas est ignorée (un serveur plus récent peut pousser
- * plus que ce que ce client connaît). Rend le désabonnement.
+ * Abonne `cb` aux trames poussées `event`, validées par `schema` ; une trame qui
+ * ne colle pas est ignorée, un serveur plus récent pouvant pousser plus que ce
+ * client ne connaît. Rend le désabonnement.
  */
 export function onServerEvent<T>(event: string, schema: ZodType<T>, cb: (payload: T) => void): () => void {
     return ws.onMessage((msg) => {
@@ -26,7 +23,7 @@ export function onServerEvent<T>(event: string, schema: ZodType<T>, cb: (payload
 }
 
 /**
- * Appelle `cb` maintenant si la socket est ouverte, puis à CHAQUE réouverture :
+ * Appelle `cb` maintenant si la socket est ouverte, puis à chaque réouverture :
  * la primitive « réabonne-toi après une coupure ». Rend le désabonnement.
  */
 export function onSocketOpen(cb: () => void): () => void {
@@ -36,7 +33,7 @@ export function onSocketOpen(cb: () => void): () => void {
     });
 }
 
-/** La socket est-elle ouverte à cet instant ? (pour distinguer une vraie erreur d'une coupure.) */
+/** La socket est-elle ouverte, pour distinguer une vraie erreur d'une coupure. */
 export function isSocketOpen(): boolean {
     return ws.state === 'open';
 }

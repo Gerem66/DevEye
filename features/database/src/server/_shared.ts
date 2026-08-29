@@ -16,21 +16,12 @@ import type { DatabaseMonitor } from './service';
 import type { TunnelConfig } from './tunnel';
 
 /**
- * Le socle de la feature Bases de données.
- *
- * **Un seul chiffre, toujours l'étage ouvert.** Une base appartient à l'espace
- * et peut servir plusieurs projets de paliers différents ; elle ne peut donc
- * suivre aucun d'eux. Corollaire pratique : rien ici ne demande jamais de mot de
- * passe, et le relevé périodique lit tout sans session — ce qui est exactement
- * ce dont il a besoin. `ctx.cipher()` est cet étage (l'ex `ctx.secure.open`).
- *
- * **Aucun secret ne sort.** Ni le mot de passe de la base, ni celui du tunnel :
- * les DTO n'en portent qu'un booléen. C'est la même discipline que les jetons
- * d'accès git, et pour la même raison — un secret rendu au client est un secret
- * qu'on ne peut plus reprendre.
+ * Le socle de la feature : un seul chiffre, toujours l'étage ouvert (une base
+ * appartient à l'espace, le relevé périodique lit tout sans session), et aucun
+ * secret ne sort, les DTO n'en portent qu'un booléen.
  */
 
-/** Le contexte d'une commande de Bases de données : le contexte du SDK, sur le dépôt du module. */
+/** Le contexte du SDK, sur le dépôt du module. */
 export type Ctx = SdkFeatureContext<DatabaseRepo>;
 
 /** Ce que porte `database_alerts.content`, chiffré. */
@@ -49,13 +40,7 @@ export interface StoredDatabase {
     port: number;
     database: string;
     username: string;
-    /**
-     * Charger les tables à l'ouverture de la fiche.
-     *
-     * Ici et non dans une colonne : c'est un réglage d'affichage, il n'entre
-     * dans aucune requête et ne se trie sur rien. Le blob chiffré est fait pour
-     * ça, et l'ajouter n'a donc coûté aucune migration.
-     */
+    /** Dans le blob et non en colonne : un réglage d'affichage, qui n'entre dans aucune requête. */
     autoLoadTables?: boolean;
 }
 
@@ -68,12 +53,7 @@ export interface StoredAccess {
     auth: TunnelConfig['auth'];
 }
 
-/**
- * Le service de relevé du module, posé par `createService` au démarrage : le
- * remplaçant du `ctx.databases` natif. Un singleton d'étendue module, assumé
- * (patron `setEngine` de CloudSync) : le relevé est unique par processus,
- * exactement comme avant le rapatriement.
- */
+/** Le service de relevé, posé par `createService` au démarrage : un singleton par processus. */
 let monitorRef: DatabaseMonitor | null = null;
 
 export function setMonitor(monitor: DatabaseMonitor | null): void {
@@ -87,11 +67,8 @@ export function monitorOf(): DatabaseMonitor {
 }
 
 /**
- * L'identité d'une base dans l'espace.
- *
- * Le chiffrement étant non déterministe, `content` ne peut porter aucune
- * contrainte d'unicité : deux chiffrés de « Prod » diffèrent. Ce condensé la
- * porte à sa place — même motif que `slugRef` pour un dépôt git.
+ * L'identité d'une base dans l'espace : le chiffrement étant non déterministe,
+ * `content` ne peut porter l'unicité, ce condensé la porte à sa place.
  */
 export function nameRef(name: string): string {
     return createHash('sha256').update(name.trim().toLowerCase()).digest('hex').slice(0, 16);
@@ -110,17 +87,9 @@ export async function readJson<T>(cipher: SdkCipher, blob: string | null): Promi
 }
 
 /**
- * Charge une base de l'espace actif, ou lève `not_found`.
- *
- * C'est **la** frontière d'espace de la feature : toute commande qui prend un
- * `databaseId` commence par là, sans quoi elle répondrait sur la base d'autrui.
- */
-/**
- * Une base visible depuis cet espace — la sienne, ou une qu'on y projette.
- *
- * `level` décide de la garde : `ctx.items.assert` (l'ex `assertItem`) refuse
- * en plus les bases qu'une restriction de rôle masque ou passe en lecture
- * seule.
+ * Une base visible depuis cet espace (la sienne ou projetée), ou `not_found`.
+ * Toute commande qui prend un `databaseId` commence par là ; `ctx.items.assert`
+ * refuse en plus ce qu'une restriction de rôle masque ou passe en lecture seule.
  */
 export async function loadDatabase(
     ctx: Ctx,
@@ -133,38 +102,19 @@ export async function loadDatabase(
     return row;
 }
 
-/**
- * Le codec d'une base **là où elle vit**.
- *
- * Une base projetée reste chiffrée sous la clé de son espace d'origine : la
- * déchiffrer avec celle d'ici rendrait un nom vide et une cible illisible — une
- * base qu'on croirait mal enregistrée plutôt qu'une base d'ailleurs.
- * `ctx.sharing.scope()` est l'ex `shareScope(ctx, 'database')`.
- */
+/** Le codec d'une base là où elle vit : une base projetée reste chiffrée sous la clé de son domicile. */
 export async function databaseCipherFor(ctx: Ctx, row: Pick<DatabaseRow, 'id' | 'workspace_id'>): Promise<SdkCipher> {
     if (row.workspace_id === ctx.workspaceId) return ctx.cipher();
     const scope = await ctx.sharing.scope();
     return scope.cipherFor(row.id);
 }
 
-/**
- * Le contrat de Projets, relu à l'appel : offert par l'app tant que Projets
- * était native, par son module depuis ; d'ici, aucune différence. Absent (rien
- * n'offre la clé), la feature dégrade proprement : zéro projet partout, aucune
- * commande ne casse.
- */
+/** Le contrat de Projets ; absent, zéro projet partout et aucune commande ne casse. */
 export function projectsProvider(ctx: Pick<Ctx, 'providers'>): ProjectsUsageProvider | undefined {
     return ctx.providers.get<ProjectsUsageProvider>(PROJECTS_USAGE_PROVIDER);
 }
 
-/**
- * Combien de projets de l'espace **appelant** relient chaque base.
- *
- * Le module ne lit aucune table de Projets : le compte vient de son contrat,
- * et les projets comptés sont ceux d'ICI, les mêmes que `database.get` liste
- * (une base projetée montre les projets de la fenêtre, pas ceux de son
- * domicile).
- */
+/** Combien de projets de l'espace appelant relient chaque base (le module ne lit aucune table de Projets). */
 export async function projectCountsOf(ctx: Ctx): Promise<ReadonlyMap<number, number>> {
     return (await projectsProvider(ctx)?.countByItem('database', ctx.workspaceId)) ?? new Map<number, number>();
 }
@@ -239,14 +189,7 @@ export async function toAlert(cipher: SdkCipher, row: DatabaseAlertRow): Promise
     });
 }
 
-/**
- * Recharge une base avec ses compteurs, pour la rendre au client.
- *
- * Une requête de plus après chaque écriture, assumée : sans elle, le nombre de
- * projets et d'alertes serait absent ou deviné, et la liste afficherait « 0
- * projet » sur une base qui en sert trois — un chiffre faux est pire qu'un
- * aller-retour.
- */
+/** Recharge une base avec ses compteurs après une écriture, pour la rendre au client. */
 export async function reloadDatabase(ctx: Ctx, databaseId: number): Promise<Database> {
     const row = await ctx.repo.findVisibleWithStats(databaseId, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Base de données introuvable');

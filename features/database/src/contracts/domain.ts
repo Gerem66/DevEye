@@ -2,28 +2,11 @@ import { z } from 'zod';
 import { projectStatusSchema } from '@deveye/types';
 
 /**
- * Les bases de données d'un espace.
- *
- * Même renversement que pour les dépôts git : une base appartient à l'espace,
- * pas à un projet, et plusieurs projets peuvent pointer la même. Elle vit donc à
- * l'étage **ouvert** du chiffrement — un projet confidentiel ne peut pas en
- * lier, exactement comme pour un dépôt.
- *
- * ## Ce qui est chiffré, et ce qui ne sort jamais
- *
- * `content` porte l'adresse, le port, le nom de la base et l'identifiant, tous
- * chiffrés. Le **mot de passe** vit à part, dans sa propre colonne, et ne quitte
- * jamais le serveur : les DTO ci-dessous n'en portent qu'un `hasPassword`. Même
- * règle pour le secret du tunnel. C'est la même discipline que les jetons
- * d'accès git, et pour la même raison — un secret rendu au client est un secret
- * qu'on ne peut plus reprendre.
- *
- * ## À la demande par défaut
- *
- * Rien ne se connecte tout seul : ouvrir la feature ne joint aucune base. Le
- * relevé périodique (`monitorEnabled`) est une option, activée base par base, et
- * c'est **seulement** quand elle est active que les alertes ont un sens — il
- * faut bien que quelque chose les évalue.
+ * Les bases de données d'un espace. Une base appartient à l'espace, pas à un
+ * projet, donc toujours à l'étage ouvert du chiffrement. Le mot de passe et le
+ * secret du tunnel ne quittent jamais le serveur : les DTO n'en portent qu'un
+ * booléen. Rien ne se connecte tout seul ; le relevé périodique s'active base
+ * par base, et lui seul évalue les alertes.
  */
 
 export const DATABASE_NAME_MAX_LENGTH = 96;
@@ -34,32 +17,20 @@ export const DATABASE_ALERT_NAME_MAX_LENGTH = 96;
 export const DATABASE_ALERT_MESSAGE_MAX_LENGTH = 1000;
 export const DATABASE_SQL_MAX_LENGTH = 4000;
 
-/** Les moteurs joignables. Deux dialectes, deux adaptateurs, rien d'autre. */
 export const databaseEngineSchema = z.enum(['mysql', 'postgres']);
 export type DatabaseEngine = z.infer<typeof databaseEngineSchema>;
 
 /**
- * Par où passe la connexion.
- *
- * `direct` — le serveur joint l'hôte lui-même.
- * `ssh` — un tunnel TCP est ouvert dans le processus, sans binaire externe ni
- * fichier de clé sur disque.
- * `socks` — la connexion transite par un proxy SOCKS5 déjà en place.
+ * `direct` : le serveur joint l'hôte lui-même. `ssh` : tunnel TCP ouvert dans
+ * le processus, sans binaire externe ni clé sur disque. `socks` : proxy SOCKS5.
  */
 export const databaseAccessKindSchema = z.enum(['direct', 'ssh', 'socks']);
 export type DatabaseAccessKind = z.infer<typeof databaseAccessKindSchema>;
 
-/** Comment le tunnel s'authentifie, quand il y en a un. */
 export const databaseSshAuthSchema = z.enum(['password', 'key']);
 export type DatabaseSshAuth = z.infer<typeof databaseSshAuthSchema>;
 
-/**
- * L'état de la dernière connexion connue.
- *
- * `unknown` n'est pas une panne : c'est l'état normal d'une base qu'on n'a
- * jamais jointe, ce qui est le cas par défaut de toutes. Le confondre avec
- * `down` ferait passer une feature au repos pour une feature en alerte.
- */
+/** `unknown` est l'état normal d'une base jamais jointe, pas une panne. */
 export const databaseStatusSchema = z.enum(['unknown', 'up', 'down']);
 export type DatabaseStatus = z.infer<typeof databaseStatusSchema>;
 
@@ -87,16 +58,9 @@ export const databaseSchema = z.object({
     /** Le nom de la base sur le serveur (`schema` chez PostgreSQL). */
     database: z.string().max(DATABASE_NAME_MAX_LENGTH),
     username: z.string().max(DATABASE_USER_MAX_LENGTH),
-    /** Un mot de passe est enregistré — jamais lequel. */
-    /**
-     * Cet élément vient d'un **autre espace**, qui le projette ici.
-     *
-     * L'écran le signale d'une pastille : sans elle, rien ne distingue une
-     * ligne locale d'une fenêtre sur l'espace voisin — et les gestes réservés
-     * au domicile (supprimer, re-partager) sembleraient cassés au lieu de
-     * s'expliquer.
-     */
+    /** Cet élément vient d'un autre espace, qui le projette ici. */
     foreign: z.boolean(),
+    /** Un mot de passe est enregistré, jamais lequel. */
     hasPassword: z.boolean(),
     access: databaseAccessSchema,
     /** Le relevé périodique tourne-t-il ? Désactivé par défaut. */
@@ -104,23 +68,12 @@ export const databaseSchema = z.object({
     /** Cadence du relevé, en secondes. Sans effet si le relevé est éteint. */
     intervalSeconds: z.number().int().positive(),
     /**
-     * Charger l'inventaire des tables dès l'ouverture de la fiche.
-     *
-     * Éteint par défaut, comme tout ce qui joint un serveur dans cette feature.
-     * Allumé, c'est le **seul** endroit où une connexion part sans qu'on ait
-     * cliqué — d'où le réglage par base plutôt qu'un comportement global.
+     * Charger l'inventaire des tables dès l'ouverture de la fiche. Éteint par
+     * défaut : c'est le seul endroit où une connexion part sans clic.
      */
     autoLoadTables: z.boolean(),
     lastCheckAt: z.number().int().nullable(),
-    /**
-     * Ce qu'a duré le dernier relevé, en millisecondes.
-     *
-     * Mesuré de l'ouverture de la connexion à la fin de l'inventaire : c'est le
-     * temps de réponse **du serveur tel qu'on l'atteint**, tunnel compris, et
-     * non celui d'une requête isolée. Renseigné même sur un échec — un relevé
-     * qui met douze secondes à échouer dit quelque chose qu'un simple
-     * « injoignable » ne dit pas.
-     */
+    /** Durée du dernier relevé en ms, tunnel compris ; renseignée même sur un échec. */
     lastElapsedMs: z.number().int().nonnegative().nullable(),
     status: databaseStatusSchema,
     /** Message du dernier échec, ou `null` après un succès. */
@@ -131,18 +84,13 @@ export const databaseSchema = z.object({
     /** Combien d'alertes sont définies, et combien sont actuellement franchies. */
     alertCount: z.number().int().nonnegative(),
     firingCount: z.number().int().nonnegative(),
-    /** Combien de projets s'en servent — l'interconnexion, comme pour un dépôt. */
+    /** Combien de projets s'en servent. */
     projectCount: z.number().int().nonnegative(),
     created: z.number().int()
 });
 export type Database = z.infer<typeof databaseSchema>;
 
-/**
- * Un projet qui utilise cette base.
- *
- * Ne remonte que des projets à l'étage ouvert — un projet confidentiel ne peut
- * pas être lié, donc le titre est toujours lisible sans session.
- */
+/** Un projet qui utilise cette base ; à l'étage ouvert, donc lisible sans session. */
 export const databaseUsageSchema = z.object({
     projectId: z.number().int().positive(),
     title: z.string(),
@@ -164,24 +112,15 @@ export type DatabaseProbe = z.infer<typeof databaseProbeSchema>;
 export const databaseTableSchema = z.object({
     schema: z.string(),
     name: z.string(),
-    /**
-     * Nombre de lignes **estimé**, tel que le moteur le tient dans ses
-     * statistiques : un `COUNT(*)` exact sur chaque table d'un serveur de
-     * production coûterait bien plus que ce que cette colonne apporte. `null`
-     * quand le moteur n'a pas encore analysé la table.
-     */
+    /** Estimation du moteur, jamais un `COUNT(*)` ; `null` si la table n'est pas analysée. */
     rowCount: z.number().int().nonnegative().nullable(),
     sizeBytes: z.number().int().nonnegative().nullable()
 });
 export type DatabaseTable = z.infer<typeof databaseTableSchema>;
 
 /**
- * Le contenu d'une table, ou le résultat d'une requête.
- *
- * Les valeurs voyagent en **chaînes**, jamais dans leur type d'origine : un
- * `BIGINT` dépasse le nombre sûr de JavaScript, une date n'a pas la même forme
- * chez les deux moteurs, et un `BLOB` n'a aucune représentation JSON. Le
- * formatage appartient à l'affichage ; le transport, lui, doit être fidèle.
+ * Les valeurs voyagent en chaînes : un `BIGINT` dépasse le nombre sûr de
+ * JavaScript, les dates diffèrent entre moteurs, un `BLOB` n'a pas de JSON.
  */
 export const databaseRowsSchema = z.object({
     columns: z.array(z.string()),
@@ -192,9 +131,6 @@ export const databaseRowsSchema = z.object({
 });
 export type DatabaseRows = z.infer<typeof databaseRowsSchema>;
 
-// ------------------------------------------------------------- structure
-
-/** Une colonne, telle que le catalogue du moteur la décrit. */
 export const databaseColumnSchema = z.object({
     name: z.string(),
     /** Le type tel que le moteur le nomme : `varchar(255)`, `int unsigned`… */
@@ -203,23 +139,13 @@ export const databaseColumnSchema = z.object({
     /** L'expression par défaut, telle quelle ; `null` quand il n'y en a pas. */
     default: z.string().nullable(),
     primaryKey: z.boolean(),
-    /**
-     * Le moteur la remplit seul : auto-incrément, identité, colonne générée.
-     * Le formulaire d'ajout ne la propose donc pas — la renseigner à la main
-     * serait au mieux ignoré, au pire refusé.
-     */
+    /** Le moteur la remplit seul (auto-incrément, identité, colonne générée). */
     generated: z.boolean(),
     comment: z.string()
 });
 export type DatabaseColumn = z.infer<typeof databaseColumnSchema>;
 
-/**
- * Une clé étrangère, et ce qu'elle vise.
- *
- * `columns` et `refColumns` sont **appariées par position** : la première de
- * l'une pointe la première de l'autre. C'est ce qui permet de suivre une
- * contrainte composite sans deviner.
- */
+/** `columns` et `refColumns` sont appariées par position (clé composite). */
 export const databaseForeignKeySchema = z.object({
     name: z.string(),
     columns: z.array(z.string()).min(1),
@@ -229,7 +155,7 @@ export const databaseForeignKeySchema = z.object({
 });
 export type DatabaseForeignKey = z.infer<typeof databaseForeignKeySchema>;
 
-/** Un index, clé primaire exclue — celle-ci est portée par les colonnes. */
+/** Un index, clé primaire exclue. */
 export const databaseIndexSchema = z.object({
     name: z.string(),
     columns: z.array(z.string()),
@@ -238,24 +164,16 @@ export const databaseIndexSchema = z.object({
 export type DatabaseIndex = z.infer<typeof databaseIndexSchema>;
 
 /**
- * La structure d'une table : ce qu'il faut pour la lire, l'écrire et la suivre.
- *
- * Un seul objet parce que ses trois usages sont indissociables : le panneau
- * « Structure » l'affiche, le formulaire de ligne en tire ses champs, et la
- * navigation par clé étrangère en tire ses liens. Les charger séparément
- * multiplierait les allers-retours pour une même sélection de table.
+ * Un seul objet pour le panneau Structure, le formulaire de ligne et la
+ * navigation par clé étrangère : ils se chargent pour la même sélection.
  */
 export const databaseStructureSchema = z.object({
     schema: z.string(),
     table: z.string(),
     columns: z.array(databaseColumnSchema),
     /**
-     * Les colonnes qui désignent une ligne, dans l'ordre de la clé.
-     *
-     * **Vide = pas de clé primaire**, et c'est décisif : sans elle, aucune
-     * modification ni suppression n'est proposée. Une table sans clé ne permet
-     * pas de nommer *une* ligne, et un `DELETE` qui en emporterait deux est un
-     * accident qu'on ne peut pas rattraper.
+     * Dans l'ordre de la clé. Vide = pas de clé primaire : aucune modification
+     * ni suppression n'est alors proposée, rien ne désignant une ligne.
      */
     primaryKey: z.array(z.string()),
     foreignKeys: z.array(databaseForeignKeySchema),
@@ -263,14 +181,9 @@ export const databaseStructureSchema = z.object({
 });
 export type DatabaseStructure = z.infer<typeof databaseStructureSchema>;
 
-// --------------------------------------------------------------- recherche
-
 /**
- * Comment une colonne est confrontée à une valeur.
- *
- * Fermé, et c'est le point : la recherche ne transporte jamais de fragment de
- * SQL. Le serveur choisit l'opérateur dans cette liste et lie la valeur en
- * paramètre — une valeur ne peut donc pas devenir du code.
+ * Fermé : la recherche ne transporte jamais de SQL, le serveur choisit
+ * l'opérateur ici et lie la valeur en paramètre.
  */
 export const databaseFilterOperatorSchema = z.enum([
     'eq',
@@ -302,15 +215,9 @@ export const databaseSortSchema = z.object({
 });
 export type DatabaseSort = z.infer<typeof databaseSortSchema>;
 
-// ------------------------------------------------------- écriture de lignes
-
 /**
- * La valeur d'une colonne, à l'écriture.
- *
- * `null` est un vrai `NULL`, et non la chaîne vide : les deux se distinguent à
- * la saisie, et les confondre viderait une colonne « non nulle » au lieu de
- * refuser. Tout le reste voyage en chaîne, comme à la lecture — le moteur
- * convertit, le paramètre étant lié.
+ * `null` est un vrai `NULL`, distinct de la chaîne vide. Le reste voyage en
+ * chaîne, lié en paramètre ; le moteur convertit.
  */
 export const databaseCellSchema = z.object({
     column: z.string().min(1).max(DATABASE_NAME_MAX_LENGTH),
@@ -328,18 +235,12 @@ export const databaseExecutionSchema = z.object({
 });
 export type DatabaseExecution = z.infer<typeof databaseExecutionSchema>;
 
-/** Les formats d'export proposés. */
 export const databaseExportFormatSchema = z.enum(['csv', 'json', 'sql']);
 export type DatabaseExportFormat = z.infer<typeof databaseExportFormatSchema>;
 
 /**
- * Une plage d'identifiants à exporter, bornes comprises.
- *
- * Deux nombres et non un fragment de texte : « 1-500, 900 » est une commodité de
- * saisie, elle est analysée dans le navigateur et ne traverse jamais le contrat.
- * Le serveur ne reçoit donc que des bornes, qu'il lie en paramètres — un
- * identifiant saisi ne peut pas devenir du SQL. Une valeur seule s'écrit
- * `{ from: n, to: n }`.
+ * Bornes comprises. Deux nombres et non du texte : « 1-500, 900 » est analysé
+ * dans le navigateur, le serveur ne reçoit que des bornes qu'il lie.
  */
 export const databaseIdRangeSchema = z.object({
     from: z.number().int(),
@@ -347,19 +248,10 @@ export const databaseIdRangeSchema = z.object({
 });
 export type DatabaseIdRange = z.infer<typeof databaseIdRangeSchema>;
 
-/** Comment une mesure est comparée à son seuil. */
 export const databaseComparatorSchema = z.enum(['gt', 'gte', 'lt', 'lte', 'eq', 'ne']);
 export type DatabaseComparator = z.infer<typeof databaseComparatorSchema>;
 
-/**
- * Une condition d'alerte : une requête qui rend **un seul nombre**, comparée à
- * un seuil.
- *
- * Un seul nombre, et c'est la contrainte qui rend le reste possible : un
- * `SELECT COUNT(*) …` ou un `SELECT AVG(…) …` se compare, se raconte dans un
- * message et se relit dans l'historique. Une requête qui rendrait un tableau
- * n'aurait pas de vérité à confronter à un seuil.
- */
+/** Une requête qui rend un seul nombre, comparée à un seuil. */
 export const databaseConditionSchema = z.object({
     sql: z.string().min(1).max(DATABASE_SQL_MAX_LENGTH),
     comparator: databaseComparatorSchema,
@@ -369,21 +261,12 @@ export const databaseConditionSchema = z.object({
 });
 export type DatabaseCondition = z.infer<typeof databaseConditionSchema>;
 
-/** Comment les conditions se combinent. */
 export const databaseCombinatorSchema = z.enum(['and', 'or']);
 export type DatabaseCombinator = z.infer<typeof databaseCombinatorSchema>;
 
 /**
- * Une alerte : des conditions, un opérateur qui les relie, un message.
- *
- * Évaluée par le relevé périodique, donc **seulement si celui-ci est actif** sur
- * la base. Une alerte définie sur une base au repos est inerte, et l'interface
- * le dit plutôt que de laisser croire à une surveillance qui n'existe pas.
- *
- * La notification part sur les canaux de l'espace — le compte mail et le webhook
- * réglés dans Uptime — parce que ce sont les mêmes canaux pour les mêmes
- * personnes, et qu'en avoir deux jeux à tenir à jour serait une source d'erreur
- * de plus.
+ * Évaluée par le relevé périodique, donc seulement si celui-ci est actif sur
+ * la base ; inerte sinon, et l'interface le dit.
  */
 export const databaseAlertSchema = z.object({
     id: z.number().int().positive(),
@@ -392,13 +275,9 @@ export const databaseAlertSchema = z.object({
     enabled: z.boolean(),
     combinator: databaseCombinatorSchema,
     conditions: z.array(databaseConditionSchema),
-    /**
-     * Le message envoyé. `{label}` y est remplacé par la valeur mesurée de la
-     * condition portant ce nom — c'est ce qui permet d'écrire « déjà {erreurs}
-     * erreurs cette heure-ci » plutôt qu'un texte qui ne dit rien de la mesure.
-     */
+    /** `{label}` y est remplacé par la valeur mesurée de la condition portant ce nom. */
     message: z.string().max(DATABASE_ALERT_MESSAGE_MAX_LENGTH),
-    /** L'alerte est-elle franchie **en ce moment** ? */
+    /** Franchie en ce moment. */
     firing: z.boolean(),
     /** Dernière évaluation, et dernier déclenchement (deux dates distinctes). */
     lastCheckAt: z.number().int().nullable(),
@@ -411,8 +290,6 @@ export const databaseAlertSchema = z.object({
 });
 export type DatabaseAlert = z.infer<typeof databaseAlertSchema>;
 
-// --------------------------------------------------------------- lignes SQL
-
 /** Ligne SQL (serveur uniquement). */
 export interface DatabaseRow {
     id: number;
@@ -424,7 +301,7 @@ export interface DatabaseRow {
     monitor_enabled: number;
     interval_seconds: number;
     last_check_at: number | null;
-    /** Durée du dernier relevé, en ms. Renseignée aussi sur un échec. */
+    /** En ms ; renseignée aussi sur un échec. */
     last_elapsed_ms: number | null;
     status: string;
     last_error: string | null;

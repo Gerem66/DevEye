@@ -1,15 +1,11 @@
-// Privilège de native rapatriée : le garde SSRF est partagé par toute l'app, pas propre au module.
+// Le garde SSRF est celui de l'app, partagé, pas propre au module.
 import { BROWSER_UA, isSafePublicUrl, titleTag } from '@/Services/netFetch';
 import { field, tag, type OsintProbeAdapter, type OsintTag } from './shared';
 
 /**
- * Ce que le serveur web dit de lui-même : chaîne de redirections, technologie
- * annoncée, et surtout **en-têtes de sécurité manquants**.
- *
- * Les redirections sont suivies à la main (`redirect: 'manual'`) plutôt que par
- * `fetch` : la chaîne elle-même est le renseignement — un `http://` qui part
- * chez un tiers, un domaine parqué, un raccourcisseur. La suivre en aveugle
- * n'en montrerait que la destination.
+ * Chaîne de redirections, technologie annoncée, en-têtes de sécurité manquants.
+ * Redirections suivies à la main (`redirect: 'manual'`) : la chaîne elle-même
+ * est le renseignement.
  */
 
 const MAX_HOPS = 6;

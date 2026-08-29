@@ -1,15 +1,7 @@
 -- `workspace_id` devient la vraie clé de cloisonnement pour les notes, leurs
--- dossiers et les mots de passe.
---
--- La colonne existait déjà mais était nullable et — surtout — n'apparaissait
--- dans AUCUNE clause WHERE : les handlers listaient par `user_id` puis
--- filtraient en JS. Ici NULL (« espace personnel ») devient l'id réel de
--- l'espace personnel du propriétaire, et la colonne passe NOT NULL. Les repos
--- filtrent ensuite par `workspace_id` seul.
---
--- `user_id` est CONSERVÉ : dans un espace partagé il dira qui a créé la ligne
--- (attribution, et plus tard filtrage « mes éléments »). Il cesse simplement
--- d'être la frontière d'accès.
+-- dossiers et les mots de passe : NULL (« espace personnel ») devient l'id réel
+-- de l'espace personnel du propriétaire, et la colonne passe NOT NULL.
+-- `user_id` est CONSERVÉ pour l'attribution, il cesse d'être la frontière d'accès.
 
 -- 1. Backfill : NULL → l'espace personnel du propriétaire de la ligne.
 UPDATE passwords p
@@ -33,10 +25,9 @@ ALTER TABLE passwords MODIFY COLUMN workspace_id INT NOT NULL;
 ALTER TABLE notes MODIFY COLUMN workspace_id INT NOT NULL;
 ALTER TABLE note_folders MODIFY COLUMN workspace_id INT NOT NULL;
 
--- 3. Les rangs étaient numérotés par utilisateur ; ils doivent l'être par espace,
---    sinon deux membres d'un même espace partagé produiraient des rangs qui se
---    télescopent. Motif idempotent (renumérotation à partir de l'ordre courant) :
---    rejouer la migration ne change rien.
+-- 3. Les rangs se numérotent par espace et non par utilisateur, sinon deux
+--    membres d'un même espace partagé produiraient des rangs qui se télescopent.
+--    Renumérotation depuis l'ordre courant : rejouer ne change rien.
 UPDATE note_folders f
 JOIN (
     SELECT id, ROW_NUMBER() OVER (PARTITION BY workspace_id ORDER BY sort_order ASC, id ASC) - 1 AS rn

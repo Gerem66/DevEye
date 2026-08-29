@@ -4,26 +4,12 @@ import type { HomeFeatureId } from '@deveye/types';
 import styles from './FeatureArt.module.css';
 
 /**
- * Les vignettes des fonctionnalités : un dessin par feature, au format allongé,
- * posé en tête de sa carte au marché et de sa fiche dans « À propos ».
- *
- * ## Un vocabulaire commun, pas quinze illustrations
- *
- * Toutes partagent le même cadre (160 × 90), la même épaisseur de trait, les
- * mêmes bouts arrondis et la même palette : l'accent du thème pour ce qui porte
- * le sens, `--text-muted` pour la structure autour, et les couleurs d'état
- * seulement là où l'état **est** le sujet (une sonde tombée, une alerte). C'est
- * ce qui fait qu'elles se lisent comme une famille quand on les voit côte à côte
- * dans le marché, au lieu de quinze petits tableaux sans rapport.
- *
- * Chaque dessin montre la **forme** de l'écran, pas son icône agrandie : des
- * lignes masquées pour les mots de passe, la frise de barres d'Uptime, le
- * graphe de commits de Git. On doit pouvoir reconnaître la page avant d'avoir lu
- * son nom.
- *
- * Les couleurs sont des variables CSS, jamais des valeurs en dur : l'accent d'un
- * espace est réglable, et une vignette qui ne suivrait pas jurerait avec tout ce
- * qui l'entoure. Le fond, lui, appartient au cadre (voir le module CSS).
+ * Les vignettes des fonctionnalités : un dessin par feature (cadre 160 × 90),
+ * en tête de sa carte au marché et de sa fiche « À propos ». Même trait, même
+ * palette : l'accent pour ce qui porte le sens, `--text-muted` pour la
+ * structure, les couleurs d'état seulement là où l'état est le sujet. Chaque
+ * dessin montre la forme de l'écran, pas son icône agrandie. Couleurs en
+ * variables CSS, jamais en dur : l'accent d'un espace est réglable.
  */
 
 const A = 'var(--accent)';
@@ -61,24 +47,15 @@ function Card({ x, y, w, h, c = M, o = 0.22 }: { x: number; y: number; w: number
 }
 
 /**
- * Ce qu'une vignette peut représenter : une fonctionnalité, ou l'un des deux
- * autres genres de carte que le marché propose.
- *
- * Ces deux-là existent parce que le marché mélange les genres sur une même
- * grille : une carte d'appareil sans vignette au milieu de cartes qui en ont se
- * lirait comme une carte cassée, pas comme une carte d'un autre genre.
+ * Une fonctionnalité, ou l'un des deux autres genres de carte du marché : une
+ * carte d'appareil sans vignette au milieu des autres se lirait comme cassée.
  */
 export type ArtId = HomeFeatureId | 'device' | 'shortcut';
 
 /**
- * La zone utile, commune aux dix-sept dessins : x 16 → 144, contenu centré sur
- * y 45.
- *
- * Elle n'apparaît nulle part dans le code, et c'est bien le problème qu'elle
- * résout : chaque dessin ayant d'abord été cadré pour lui-même, leurs marges ne
- * tombaient pas au même endroit. Côte à côte dans une grille, ça ne se lit pas
- * comme dix-sept intentions mais comme un alignement raté. Toute nouvelle
- * vignette se cadre donc là-dedans, bords compris.
+ * La zone utile, commune à tous les dessins : x 16 → 144, contenu centré sur
+ * y 45. Toute nouvelle vignette se cadre là-dedans, bords compris, sinon les
+ * marges ne tombent pas au même endroit d'une carte à l'autre.
  */
 const ART: Record<ArtId, ReactNode> = {
     // Une courbe d'activité, et les trois jauges qui l'accompagnent partout.
@@ -226,12 +203,8 @@ const ART: Record<ArtId, ReactNode> = {
             <Card x={108} y={50} w={32} h={14} o={0.14} />
         </>
     ),
-    // Le graphe des commits : deux voies, une bifurcation, une fusion.
-    //
-    // Deux hauteurs franches, bien écartées, et des raccords en S **courts** :
-    // c'est ce qui fait lire des voies. Avec un écart plus faible et des
-    // raccords étalés, l'ensemble se lisait comme une colline au-dessus d'un
-    // trait, pas comme une branche qui part et qui revient.
+    // Le graphe des commits : deux voies, une bifurcation, une fusion. Deux
+    // hauteurs franches et des raccords en S courts, sinon on lit une colline.
     git: (
         <>
             <line x1='16' y1='56' x2='144' y2='56' stroke={M} strokeWidth='2.4' strokeLinecap='round' />
@@ -311,9 +284,8 @@ const ART: Record<ArtId, ReactNode> = {
             <Line x={104} y={64} w={22} c={KO} o={0.7} />
         </>
     ),
-    // L'entonnoir des visiteurs — visites, sessions, conversions — et la
-    // tendance à côté. Un entonnoir plutôt qu'une courbe : Monitoring en porte
-    // déjà une, et deux aires empilées voisines ne se distingueraient pas.
+    // L'entonnoir des visiteurs et la tendance à côté. Un entonnoir plutôt
+    // qu'une courbe : Monitoring en porte déjà une.
     audience: (
         <>
             <rect x='16' y='18' width='78' height='14' rx='7' fill={A} opacity='0.75' />
@@ -354,7 +326,6 @@ const ART: Record<ArtId, ReactNode> = {
         </>
     ),
 
-    // ── Les deux autres genres de carte ─────────────────────────────────────
     // Une machine : son nom, son état, et l'activité qui la traverse.
     device: (
         <>

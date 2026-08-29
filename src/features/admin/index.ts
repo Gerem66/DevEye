@@ -15,12 +15,9 @@ import { invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 
 /**
- * Administration des comptes, à l'échelle du site.
- *
- * Toutes les commandes déclarent `admin: true` — le dispatcheur applique la
- * garde avant le handler — et `scope: 'account'`, parce que ce sont des actions
- * sur le site et non dans un espace : viser un espace partagé dans l'enveloppe
- * ne doit pas en changer la cible.
+ * Administration des comptes, à l'échelle du site : `admin: true`, et
+ * `scope: 'account'` parce que ce sont des actions sur le site et non dans un
+ * espace.
  */
 const ADMIN = { admin: true, scope: 'account' } as const;
 
@@ -92,17 +89,13 @@ export const adminSetUserStatusFeature: FeatureDefinition<
         assertNotSelf(ctx, input.userId, 'suspendre');
         await ctx.db.users.setStatus(input.userId, input.status);
 
-        // Suspendre, c'est mettre dehors maintenant — pas la prochaine fois
-        // qu'on essaiera d'entrer. Les jetons de rafraîchissement tombent, donc
-        // plus de renouvellement ; `invalidateAccess()` fait recharger le statut
-        // aux sockets déjà ouvertes, qui se voient refuser dès la commande
-        // suivante. Sans ces deux lignes, une session en cours survivait à la
-        // suspension aussi longtemps qu'elle restait ouverte.
+        // Suspendre, c'est mettre dehors maintenant : les jetons de
+        // rafraîchissement tombent, `invalidateAccess()` fait refuser les sockets
+        // déjà ouvertes dès la commande suivante.
         if (input.status === 'suspended') {
             await ctx.db.refreshTokens.revokeUser(input.userId);
-            // Troisième verrou, pour la présence : sans lui le suspendu resterait
-            // visible dans le roster des autres, et continuerait de recevoir
-            // leurs curseurs, jusqu'à ce qu'il émette une commande.
+            // Et la présence : sinon le suspendu resterait dans le roster des
+            // autres jusqu'à sa prochaine commande.
             ctx.live?.evictEverywhere(input.userId);
         }
         invalidateAccess();

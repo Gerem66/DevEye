@@ -22,20 +22,11 @@ export interface AuthorStatRow {
 }
 
 /**
- * Les dépôts git de l'espace, leurs jetons, et le cache de ce qu'on y a lu.
- *
- * Depuis le rapatriement en module, deux choses ont changé de dépôt. Les
- * liaisons vers les projets (`project_repo_links`) et ce qui en découlait
- * (`listUsage`, le `project_count` que chaque liste joignait) ont rejoint
- * `db/repos/projectLinks.ts` : c'est une table de Projets, que le module ne
- * lit pas ; le compte et la liste des projets viennent de son contrat
- * (`PROJECTS_USAGE_PROVIDER`), et `toRepo` reçoit le compte en paramètre. Les
- * jetons GitHub sont entrés ici à la place (`ft_git_credentials`, migration 100
- * du socle) : un module possède ses accès, et `workspace_credentials`, la table
- * à deux propriétaires, n'existe plus.
+ * Les dépôts git de l'espace, leurs jetons, et le cache de ce qu'on y a lu. Les
+ * liaisons vers les projets appartiennent à Projets, dont le module ne lit aucune
+ * table : le compte et la liste des projets viennent de son contrat.
  */
 export interface GitRepo {
-    // -- dépôts ------------------------------------------------------------
     listRepos(workspaceId: number): Promise<GitRepoRow[]>;
     /** Comme `listRepos`, plus les dépôts projetés vers cet espace. */
     listVisibleRepos(workspaceId: number): Promise<GitRepoRow[]>;
@@ -59,20 +50,16 @@ export interface GitRepo {
     ): Promise<GitRepoRow | null>;
     deleteRepo(id: number, workspaceId: number): Promise<boolean>;
     /**
-     * Range les dépôts de l'espace : `ids` est la liste complète, rang = indice.
-     *
-     * Ne touche à rien d'autre — ni jeton, ni état de synchronisation : ranger
-     * n'est pas configurer, et un glisser-déposer ne doit pas relancer une
-     * lecture chez le fournisseur.
+     * Range les dépôts de l'espace : `ids` est la liste complète, rang = indice. Ne
+     * touche ni jeton ni état de synchronisation, un glisser-déposer ne devant pas
+     * relancer une lecture chez le fournisseur.
      */
     reorderRepos(workspaceId: number, ids: number[]): Promise<void>;
 
-    // -- jetons GitHub -----------------------------------------------------
     /**
-     * Les jetons GitHub de l'espace, chiffrés à l'étage ouvert (la
-     * synchronisation tourne sans session). Le secret n'est rendu qu'à travers
-     * la ligne brute, que seule la couche feature manipule ; le DTO n'en porte
-     * qu'un booléen.
+     * Les jetons GitHub de l'espace, chiffrés à l'étage ouvert (la synchronisation
+     * tourne sans session). Le secret ne sort que par la ligne brute, que seule la
+     * couche feature manipule ; le DTO n'en porte qu'un booléen.
      */
     listCredentials(workspaceId: number): Promise<GitCredentialRow[]>;
     findCredential(id: number, workspaceId: number): Promise<GitCredentialRow | null>;
@@ -84,19 +71,16 @@ export interface GitRepo {
         input: { label: string; secretEnc?: string }
     ): Promise<GitCredentialRow | null>;
     /**
-     * Retire un jeton. Les dépôts qui s'en servaient **restent**, sans jeton :
-     * la synchronisation s'arrête proprement et le dit, plutôt que de faire
-     * disparaître le dépôt avec son accès.
+     * Retire un jeton. Les dépôts qui s'en servaient restent, sans jeton : leur
+     * synchronisation s'arrête en le disant, plutôt que de disparaître avec l'accès.
      */
     removeCredential(id: number, workspaceId: number): Promise<boolean>;
     /**
-     * Combien de dépôts s'appuient sur chaque jeton de l'espace : c'est ce
-     * chiffre qui dit à l'écran ce qu'une suppression va couper, **avant** de
-     * cliquer.
+     * Combien de dépôts s'appuient sur chaque jeton de l'espace : ce chiffre dit à
+     * l'écran ce qu'une suppression va couper, avant de cliquer.
      */
     countCredentialUses(workspaceId: number): Promise<Map<number, number>>;
 
-    // -- synchronisation ---------------------------------------------------
     /** Résultat d'un tour de synchronisation : succès (erreur nulle) ou échec. */
     markSynced(
         repoId: number,
@@ -105,16 +89,12 @@ export interface GitRepo {
     /** Les dépôts que l'ordonnanceur doit traiter, les plus en retard d'abord. */
     listDue(limit: number): Promise<GitRepoRow[]>;
     /**
-     * Jette le cache d'un dépôt pour qu'il soit relu entièrement.
-     *
-     * Les **auteurs sont épargnés** : leur rattachement à un membre de l'espace
-     * est du travail fait à la main, que rien ne permettrait de reconstituer.
-     * Leurs lignes seront simplement réécrites par la synchronisation suivante
-     * (`upsertAuthor` ne touche jamais `user_id`).
+     * Jette le cache d'un dépôt pour qu'il soit relu entièrement. Les auteurs sont
+     * épargnés : leur rattachement à un membre est fait à la main et rien ne
+     * permettrait de le reconstituer.
      */
     resetCache(repoId: number, workspaceId: number): Promise<boolean>;
 
-    // -- cache git ---------------------------------------------------------
     upsertBranch(input: {
         repoId: number;
         workspaceId: number;
@@ -128,8 +108,8 @@ export interface GitRepo {
     pruneBranches(repoId: number, keepRefs: string[]): Promise<void>;
     listBranches(repoId: number, workspaceId: number): Promise<GitBranchRow[]>;
     /**
-     * Inscrit l'avance-retard d'une branche, avec le couple de sha qui l'a
-     * produit — c'est lui qui dira, au tour suivant, si le calcul tient encore.
+     * Inscrit l'avance-retard d'une branche, avec le couple de sha qui l'a produit :
+     * c'est lui qui dira, au tour suivant, si le calcul tient encore.
      */
     setBranchComparison(
         repoId: number,
@@ -180,11 +160,9 @@ export interface GitRepo {
     /** Horodatage du commit le plus récent connu, pour reprendre la lecture. */
     latestCommitAt(repoId: number): Promise<number | null>;
     /**
-     * Ce commit est-il déjà en cache ?
-     *
-     * Sert à sauter les branches qui n'ont pas bougé : si l'on connaît déjà la
-     * tête d'une branche, on connaît tout ce qu'elle porte. En régime établi,
-     * c'est ce qui ramène le balayage des branches à zéro requête.
+     * Ce commit est-il déjà en cache ? Sert à sauter les branches qui n'ont pas
+     * bougé : connaître la tête d'une branche, c'est connaître tout ce qu'elle
+     * porte, ce qui ramène le balayage à zéro requête en régime établi.
      */
     hasCommit(repoId: number, sha: string): Promise<boolean>;
 
@@ -224,9 +202,8 @@ export function createRepo(q: SdkQueryable): GitRepo {
             );
         },
         async listVisibleRepos(workspaceId) {
-            // `sort_order` appartient à l'espace d'origine : un dépôt projeté
-            // se range après les locaux, par identifiant — même arbitrage que
-            // les services Uptime.
+            // `sort_order` appartient à l'espace d'origine : un dépôt projeté se
+            // range après les locaux, par identifiant.
             return q.query<GitRepoRow>(
                 `SELECT r.* FROM git_repos r WHERE r.workspace_id = ?
                  UNION
@@ -341,14 +318,10 @@ export function createRepo(q: SdkQueryable): GitRepo {
             return findCredential(id, workspaceId);
         },
         async removeCredential(id, workspaceId) {
-            // Le ménage explicite qui remplace la clé étrangère
-            // `fk_git_repo_credential` (064, `ON DELETE SET NULL`), retirée par
-            // la 100 et non recréée vers la table du module : InnoDB revalidait
-            // la ligne mise à NULL contre un parent que la même cascade
-            // supprimait, et la suppression d'un espace échouait dessus. Les
-            // dépôts du jeton passent donc à NULL ICI, dans l'espace du jeton,
-            // avant que la ligne ne parte : ce que la contrainte faisait sans
-            // le dire.
+            // Le ménage explicite qui remplace la clé étrangère : InnoDB revalidait
+            // la ligne mise à NULL contre un parent que la même cascade supprimait,
+            // et la suppression d'un espace échouait dessus. Les dépôts du jeton
+            // passent donc à NULL avant que la ligne ne parte.
             await q.execute('UPDATE git_repos SET credential_id = NULL WHERE credential_id = ? AND workspace_id = ?', [
                 id,
                 workspaceId
@@ -370,11 +343,9 @@ export function createRepo(q: SdkQueryable): GitRepo {
         },
 
         async markSynced(repoId, { at, error, syncState, defaultBranch }) {
-            // Plus de garde atomique sur le tier d'un projet, contrairement à ce
-            // que faisait l'ancienne table : un dépôt est d'espace et toujours
-            // chiffré à l'étage ouvert, donc la course « le projet passe en
-            // confidentiel pendant que le service écrit » n'existe plus — elle a
-            // disparu avec sa cause, pas avec sa garde.
+            // Aucune garde sur le palier d'un projet : un dépôt est d'espace et
+            // toujours chiffré à l'étage ouvert, la course « le projet passe en
+            // confidentiel pendant que le service écrit » n'existe pas.
             const sql = `UPDATE git_repos
                  SET last_sync_at = ?, last_sync_error = ?, sync_state = ?
                      ${defaultBranch === undefined ? '' : ', default_branch = ?'}
@@ -400,11 +371,9 @@ export function createRepo(q: SdkQueryable): GitRepo {
             await q.execute('DELETE FROM git_releases WHERE repo_id = ?', [repoId]);
             await q.execute('DELETE FROM git_pull_requests WHERE repo_id = ?', [repoId]);
 
-            // `sync_state` porte les ETags **et** le drapeau de backfill : le
-            // vider est ce qui fait repartir la lecture de zéro plutôt que de
-            // reprendre où elle s'était arrêtée. `last_sync_at` à NULL remet le
-            // dépôt en tête de `listDue`, et fait réapparaître le voile de
-            // progression côté interface.
+            // `sync_state` porte les ETags et le drapeau de backfill : le vider fait
+            // repartir la lecture de zéro. `last_sync_at` à NULL remet le dépôt en
+            // tête de `listDue` et fait réapparaître le voile de progression.
             await q.execute(
                 `UPDATE git_repos
                  SET sync_state = NULL, last_sync_at = NULL, last_sync_error = NULL
@@ -426,10 +395,9 @@ export function createRepo(q: SdkQueryable): GitRepo {
         },
 
         async upsertBranch({ repoId, workspaceId, nameRef, headSha, isDefault, updatedAt, content }) {
-            // `ahead_count`, `behind_count` et `compared_sha` ne sont pas touchés
-            // ici : ils appartiennent à `setBranchComparison`, qui seul sait sur
-            // quel couple de sha ils portent. Les remettre à zéro à chaque tour
-            // reviendrait à refaire la comparaison à chaque tour.
+            // `ahead_count`, `behind_count` et `compared_sha` appartiennent à
+            // `setBranchComparison`, seul à savoir sur quel couple de sha ils
+            // portent : les toucher ici referait la comparaison à chaque tour.
             await q.execute(
                 `INSERT INTO git_branches (repo_id, workspace_id, name_ref, head_sha, is_default, updated_at, content)
                  VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -502,12 +470,10 @@ export function createRepo(q: SdkQueryable): GitRepo {
             );
         },
         async listCommits(repoId, workspaceId, before, limit) {
-            // Curseur sur le **couple de tri** `(committed_at, id)`, et non sur
-            // `id` seul : les identifiants suivent l'ordre d'insertion — celui
-            // où le fournisseur a rendu les commits — pas l'ordre
-            // chronologique. Un `id <` sur une liste triée par date sautait donc
-            // des commits, en répétait d'autres, et rendait une seconde page
-            // presque vide.
+            // Curseur sur le couple de tri `(committed_at, id)` et non sur `id`
+            // seul : les identifiants suivent l'ordre où le fournisseur a rendu les
+            // commits, pas l'ordre chronologique, et un `id <` sauterait des
+            // commits tout en en répétant d'autres.
             return q.query<GitCommitRow>(
                 `SELECT * FROM git_commits
                  WHERE repo_id = ? AND workspace_id = ?
@@ -520,11 +486,9 @@ export function createRepo(q: SdkQueryable): GitRepo {
             );
         },
         async listCommitPoints(repoId, workspaceId, limit) {
-            // `DESC` : la borne du graphe est un filet de sécurité, jamais
-            // atteint sur un dépôt ordinaire. Le jour où elle mord, mieux vaut
-            // avoir écrêté l'histoire **ancienne** que la récente — c'est celle
-            // qu'on regarde. L'ordre du nuage, lui, n'a aucune importance : on
-            // dessine des points indépendants.
+            // `DESC` : le jour où la borne du graphe mord, mieux vaut avoir écrêté
+            // l'histoire ancienne que la récente. L'ordre du nuage lui-même n'a
+            // aucune importance, les points sont indépendants.
             const rows = await q.query<CommitPointRow>(
                 `SELECT sha, committed_at, author_ref FROM git_commits
                  WHERE repo_id = ? AND workspace_id = ?
@@ -618,8 +582,8 @@ export function createRepo(q: SdkQueryable): GitRepo {
             );
         },
         async listPullRequests(repoId, workspaceId) {
-            // Les ouvertes d'abord — ce sont elles qui demandent une action —
-            // puis les plus récemment actives.
+            // Les ouvertes d'abord, ce sont elles qui demandent une action, puis les
+            // plus récemment actives.
             return q.query<GitPullRequestRow>(
                 `SELECT * FROM git_pull_requests WHERE repo_id = ? AND workspace_id = ?
                  ORDER BY state IN ('open', 'draft') DESC, updated_at DESC, number DESC`,

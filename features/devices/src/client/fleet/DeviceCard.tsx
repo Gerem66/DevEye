@@ -16,12 +16,9 @@ export function DeviceCard({ device, actions }: { device: Device; actions: Devic
     const autostartBusy = serviceActive && actions.serviceBusy?.kind === 'autostart';
     const rootBusy = serviceActive && actions.serviceBusy?.kind === 'privilege';
     const note = actions.deviceNote?.id === device.id ? actions.deviceNote : null;
-    // An update is worth offering when the agent runs an older build than this
-    // interface (or the server advertises a newer signed binary).
     const updatable = device.online && agentUpdatable(device);
-    // Combien d'espaces voient cette machine. Toujours au moins un (l'espace
-    // d'appairage) : le compte ne s'affiche donc qu'à partir de deux, où il
-    // apprend quelque chose.
+    // Toujours au moins un (l'espace d'appairage) : le compte ne s'affiche qu'à
+    // partir de deux.
     const shareCount = device.workspaceIds.length;
 
     return (
@@ -80,9 +77,8 @@ export function DeviceCard({ device, actions }: { device: Device; actions: Devic
 
             {agent && !pendingDeletion && (
                 <div className={styles.serviceBox}>
-                    {/* Each toggle's "on" colour reflects the agent's *reported* scope
-                        (the confirmed state), never the action that was requested.
-                        Offline: the toggles stay (last-known state) but are disabled. */}
+                    {/* Each toggle reflects the agent's reported scope, never the
+                        requested action. Offline: last-known state, disabled. */}
                     <div className={styles.toggleRow}>
                         <button
                             className={`${styles.iconBtn} ${scope !== 'none' ? styles.iconApprove : ''}`}
@@ -136,7 +132,7 @@ export function DeviceCard({ device, actions }: { device: Device; actions: Devic
                     {!device.online && (
                         <span className={styles.serviceOfflineHint}>Hors ligne — dernière configuration connue</span>
                     )}
-                    {/* Le verdict de l'agent, là où on vient de cliquer. */}
+                    {/* Le verdict de l'agent, sur la carte visée. */}
                     {note && (
                         <span className={note.tone === 'ok' ? styles.serviceNoteOk : styles.serviceNoteError}>
                             <span className={`icon ${note.tone === 'ok' ? 'icon-check-circle' : 'icon-x-circle'}`} />{' '}
@@ -214,9 +210,8 @@ export function DeviceCard({ device, actions }: { device: Device; actions: Devic
                             <span className={`icon ${updating ? `icon-spinner ${styles.spinning}` : 'icon-cloud'}`} />
                         </button>
                     )}
-                    {/* Agent process lifecycle — online only. Restart is offered only
-                        without autostart: supervised, an interrupt already comes back
-                        by itself, so a dedicated restart would be redundant. */}
+                    {/* Restart is offered only without autostart: supervised, an
+                        interrupt already comes back by itself. */}
                     {device.online && device.status === 'active' && scope === 'none' && (
                         <button
                             className={styles.actionBtn}

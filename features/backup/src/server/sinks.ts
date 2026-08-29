@@ -12,24 +12,10 @@ import { env } from './env';
 import { S3Client, type S3Config } from './s3';
 
 /**
- * Les trois façons d'écrire une archive quelque part.
- *
- * Une seule interface, parce qu'un travail de sauvegarde ne veut savoir qu'une
- * chose de sa destination : sait-elle accepter un flux d'octets et le rendre
- * plus tard. Le reste — un `write()` POSIX, une trame WebSocket vers un agent,
- * un envoi multiple S3 — est un détail que le moteur n'a pas à connaître.
- *
- * Chaque implémentation doit respecter trois règles, et elles ne sont pas
- * négociables pour une sauvegarde :
- *
- *  1. **jamais l'archive entière en mémoire** — le flux passe, il ne s'accumule
- *     pas. Une base de 40 Gio ne doit pas coûter 40 Gio de RSS ;
- *  2. **une écriture ratée ne laisse pas de demi-archive présentable** — on
- *     écrit sous un nom temporaire puis on renomme, ou on abandonne l'envoi
- *     multiple. Une archive tronquée qui a l'air complète est pire qu'une
- *     archive absente : la première fait croire qu'on est couvert ;
- *  3. **`remove()` est idempotent** — la rétention repasse, et un fichier déjà
- *     parti n'est pas une erreur.
+ * Écrire une archive quelque part. Trois règles non négociables : jamais
+ * l'archive entière en mémoire ; une écriture ratée ne laisse pas de
+ * demi-archive présentable (temporaire puis renommage, ou envoi multiple
+ * abandonné) ; `remove()` est idempotent, la rétention repasse.
  */
 export interface BackupSink {
     /** Où l'archive va atterrir, en une ligne lisible pour l'écran. */
@@ -46,11 +32,8 @@ export interface BackupSink {
 const SAFE_SEGMENT = /^[A-Za-z0-9._-]+$/;
 
 /**
- * Normalise un chemin relatif saisi par l'utilisateur.
- *
- * Refuse `..`, les segments vides et tout ce qui n'est pas alphanumérique : ce
- * champ finit interpolé dans un chemin de fichier du serveur, et un `../..`
- * accepté ici écrirait une archive n'importe où sur le disque du conteneur.
+ * Refuse `..`, les segments vides et le non-alphanumérique : ce champ finit
+ * interpolé dans un chemin de fichier du serveur.
  */
 export function safeRelPath(input: string): string {
     const segments = input
@@ -65,15 +48,7 @@ export function safeRelPath(input: string): string {
     return segments.join('/');
 }
 
-// ------------------------------------------------------------------- local
-
-/**
- * Un dossier du serveur, sous `BACKUP_STORAGE_DIR`.
- *
- * Cloisonné par espace (`ws-<id>/`) : deux espaces d'une même instance ne
- * doivent pas pouvoir se marcher dessus en choisissant le même sous-dossier,
- * et l'isolation par convention de nommage tombe au premier oubli.
- */
+/** Un dossier du serveur sous `BACKUP_STORAGE_DIR`, cloisonné par espace (`ws-<id>/`). */
 export class LocalSink implements BackupSink {
     private readonly dir: string;
 
@@ -81,9 +56,8 @@ export class LocalSink implements BackupSink {
         const root = path.resolve(env.BACKUP_STORAGE_DIR, `ws-${workspaceId}`);
         const rel = safeRelPath(relPath);
         const dir = rel === '' ? root : path.resolve(root, rel);
-        // Ceinture et bretelles : `safeRelPath` refuse déjà `..`, mais la
-        // vérification de confinement est ce qui reste vrai si quelqu'un
-        // assouplit la règle du dessus un jour.
+        // `safeRelPath` refuse déjà `..` ; le confinement reste vrai si cette
+        // règle s'assouplit un jour.
         if (dir !== root && !dir.startsWith(`${root}${path.sep}`)) {
             throw new Error('Dossier de sauvegarde hors de la racine autorisée.');
         }
@@ -160,49 +134,25 @@ export class LocalSink implements BackupSink {
     }
 }
 
-// ------------------------------------------------------------------ device
-
 /**
- * Un dossier d'une machine enrôlée, écrit **par son agent**.
- *
- * C'est ce qui fait d'un Raspberry Pi une cible de sauvegarde sans rien y
- * installer : l'agent y tourne déjà, et il sait écrire un fichier par morceaux
- * (`files.upload`) depuis le premier jour. **Aucune modification de l'agent
- * n'est nécessaire** — c'est délibéré, un changement de protocole imposant de
- * recompiler huit cibles et d'attendre que toute la flotte se mette à jour.
- *
- * ## Contre-pression
- *
- * Les trames partent aussi vite que la source produit, et une socket WebSocket
- * accepte tout sans se plaindre : sans surveillance du tampon d'envoi, la
- * mémoire du serveur suivrait la taille de l'archive. On attend donc que le
- * tampon redescende avant d'envoyer la suite.
+ * Un dossier d'une machine enrôlée, écrit par son agent avec `files.upload` :
+ * aucune modification de l'agent, un changement de protocole imposant de
+ * recompiler huit cibles. Contre-pression : on attend que le tampon d'envoi
+ * redescende, sinon la mémoire du serveur suivrait la taille de l'archive.
  */
 export class DeviceSink implements BackupSink {
     /**
-     * 512 Kio de clair par trame, soit ~683 Kio en base64 — sous la borne de
+     * 512 Kio de clair par trame, soit ~683 Kio en base64 : sous la borne de
      * 1,4 Mio du schéma `files.upload`, avec de la marge pour l'enveloppe JSON.
      */
     private static readonly CHUNK_BYTES = 512 * 1024;
     /** Au-delà, on laisse la socket respirer avant d'en remettre. */
     private static readonly BACKPRESSURE_BYTES = 8 * 1024 * 1024;
-    /**
-     * Un agent qui ne répond pas à un ordre **court** (mkdir, rename, delete)
-     * dans ce délai est perdu. Ces trois-là sont instantanés côté machine.
-     */
+    /** Un agent muet sur un ordre court (mkdir, rename, delete) dans ce délai est perdu. */
     private static readonly OP_TIMEOUT_MS = 120_000;
     /**
-     * Le verdict d'un **dépôt**, lui, doit couvrir tout le transfert.
-     *
-     * L'agent ne répond qu'à la trame finale (ou au premier échec d'écriture) :
-     * la promesse est donc armée avant la première trame et n'est tenue qu'à la
-     * dernière. Lui donner l'échéance des ordres courts ferait échouer toute
-     * archive dont l'envoi dure plus de deux minutes — c'est-à-dire toutes
-     * celles qui comptent — avec un message parlant d'agent muet alors que
-     * l'agent travaille.
-     *
-     * On reprend donc le budget d'exécution d'une sauvegarde, celui-là même que
-     * `BackupService` applique par-dessus.
+     * Le verdict d'un dépôt couvre tout le transfert : l'agent ne répond qu'à
+     * la trame finale. Même budget que l'exécution d'une sauvegarde.
      */
     private static readonly TRANSFER_TIMEOUT_MS = env.BACKUP_RUN_TIMEOUT_SECONDS * 1000;
 
@@ -332,19 +282,14 @@ export class DeviceSink implements BackupSink {
                 this.hub.requestFilesMutate(this.deviceId, { opId, op: 'delete', path: target, dest: undefined })
             );
         } catch {
-            // Un partiel oublié sur la machine est un désagrément, pas une
-            // panne : il porte le suffixe `.part` et sera écrasé au prochain
-            // passage. Le masquer derrière l'erreur d'origine serait pire.
+            // Un partiel oublié (`.part`) est écrasé au prochain passage ; le
+            // masquer derrière l'erreur d'origine serait pire.
         }
     }
 
     /**
-     * Attend que le tampon d'envoi vers l'agent redescende.
-     *
-     * L'échéance reste celle des ordres courts, et non celle du transfert : ici
-     * on ne guette pas la fin d'un travail long mais un agent qui a cessé de
-     * consommer. Deux minutes sans qu'un seul octet parte, c'est une socket
-     * morte, quelle que soit la taille de l'archive.
+     * Échéance des ordres courts, pas du transfert : deux minutes sans qu'un
+     * octet parte, c'est une socket morte.
      */
     private async waitForDrain(): Promise<void> {
         let waited = 0;
@@ -382,17 +327,13 @@ export class DeviceSink implements BackupSink {
             if (!result.ok) throw new Error(result.error ?? "L'agent n'a pas pu écrire dans ce dossier.");
             await this.removeQuietly(witness);
             // L'agent ne rend ni occupation ni espace libre par un ordre de
-            // fichier : la page Monitoring de la machine les donne déjà, et
-            // ajouter une commande au protocole pour les répéter ici obligerait
-            // à recompiler huit cibles pour un chiffre décoratif.
+            // fichier ; Monitoring les donne déjà.
             return { ok: true, error: null, usedBytes: null, freeBytes: null };
         } catch (e) {
             return { ok: false, error: (e as Error).message, usedBytes: null, freeBytes: null };
         }
     }
 }
-
-// ---------------------------------------------------------------------- s3
 
 /** Un bucket S3 : Garage, MinIO, Scaleway, Backblaze, AWS. */
 export class S3Sink implements BackupSink {
@@ -416,10 +357,8 @@ export class S3Sink implements BackupSink {
 
     async write(name: string, source: AsyncIterable<Buffer>): Promise<{ artifact: string; size: number }> {
         const key = this.keyFor(name);
-        // Pas de temporaire ici, et ce n'est pas un oubli : un objet S3 n'existe
-        // qu'une fois l'envoi terminé (`CompleteMultipartUpload`), donc une
-        // interruption ne laisse jamais de clé à moitié écrite — c'est le
-        // protocole qui offre l'atomicité que le renommage donne sur disque.
+        // Pas de temporaire : un objet S3 n'existe qu'une fois l'envoi terminé,
+        // le protocole offre l'atomicité du renommage.
         const size = await this.client.putStream(key, source);
         return { artifact: key, size };
     }

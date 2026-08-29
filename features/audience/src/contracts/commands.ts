@@ -24,21 +24,13 @@ import {
 } from './domain';
 
 /**
- * Commandes de l'audience d'un espace.
+ * Commandes de l'audience d'un espace, sous le préfixe unique `audience.` et en
+ * camelCase derrière le point. Conséquence : le filet de démarrage
+ * (`MUTATION_VERB`) cherche un verbe juste après le point et ne reconnaît aucune
+ * de ces commandes, donc un `mutates` oublié ne produit aucun avertissement.
  *
- * Préfixe unique `audience.`, comme `git.`, `database.` et `projects.` — d'où le
- * camelCase derrière le point.
- *
- * ⚠️ Conséquence à connaître : le filet de démarrage (`MUTATION_VERB` dans
- * `src/features/_topics.ts`) cherche un verbe **juste après le point**. Il ne
- * verra donc **aucune** de ces commandes, et un `mutates` oublié ne produira
- * aucun avertissement. Il se relit à la main.
- *
- * ## Ce qui n'est pas ici
- *
- * L'**ingestion** n'est pas une commande. Elle entre par HTTP, sans session,
- * depuis des machines qui ne connaissent pas DevEye — voir `POST /api/t/b`. Ces
- * commandes-ci ne font que *lire* ce qu'elle a écrit, et *déclarer* les sites.
+ * L'ingestion n'est pas une commande : elle entre par HTTP sans session, et ces
+ * commandes ne font que lire ce qu'elle a écrit et déclarer les sites.
  *
  * L'espace visé n'apparaît dans aucune entrée : il voyage sur l'enveloppe WS et
  * le dispatcheur le résout, appartenance vérifiée, avant le handler.
@@ -53,9 +45,8 @@ const siteBody = {
     platform: audiencePlatformSchema,
     visitorMode: audienceVisitorModeSchema,
     /**
-     * Les hôtes autorisés à écrire. Le client envoie des hôtes nus
-     * (`exemple.fr`) ou des origines complètes (`https://exemple.fr`) : le
-     * serveur normalise, parce que c'est lui qui compare.
+     * Les hôtes autorisés à écrire. Le client envoie des hôtes nus ou des
+     * origines complètes : le serveur normalise, parce que c'est lui qui compare.
      */
     origins: z.array(z.string().max(AUDIENCE_ORIGIN_MAX_LENGTH)).max(AUDIENCE_MAX_ORIGINS),
     active: z.boolean(),
@@ -80,12 +71,9 @@ export const audienceList = {
 
 /**
  * Un site, avec les projets qui le suivent et l'adresse de sa balise.
- *
- * `ingestOrigin` vient du serveur (`AUDIENCE_ORIGIN`, à défaut `PUBLIC_ORIGIN`)
- * et non de l'origine du navigateur : l'application est derrière le VPN, alors
- * que l'ingestion doit être joignable sans lui — les deux adresses diffèrent
- * donc par construction. La déduire côté client aurait donné une balise juste en
- * développement et fausse en production, ce qui est le pire des deux mondes.
+ * `ingestOrigin` vient du serveur et non de l'origine du navigateur :
+ * l'application est derrière le VPN alors que l'ingestion doit être joignable
+ * sans lui, donc les deux adresses diffèrent par construction.
  */
 export const audienceGet = {
     command: 'audience.get' as const,
@@ -98,8 +86,8 @@ export const audienceGet = {
 };
 
 /**
- * Déclare un site. La clé publique est **engendrée par le serveur** : la laisser
- * choisir permettrait de viser celle d'un site existant d'un autre espace.
+ * Déclare un site. La clé publique est engendrée par le serveur : la laisser
+ * choisir permettrait de viser celle d'un site d'un autre espace.
  */
 export const audienceSiteAdd = {
     command: 'audience.siteAdd' as const,
@@ -114,11 +102,8 @@ export const audienceSiteUpdate = {
 };
 
 /**
- * Supprime un site **et tout son historique**.
- *
- * Contrairement aux projets, rien ne s'archive ici : un site retiré n'a pas de
- * seconde vie, et garder des millions d'événements orphelins pour un objet que
- * plus rien ne nomme ne rendrait service à personne. Les liaisons de projet
+ * Supprime un site et tout son historique : rien ne s'archive ici, garder des
+ * millions d'événements orphelins ne servirait personne. Les liaisons de projet
  * tombent avec (`CASCADE`), les projets eux-mêmes ne bougent pas.
  */
 export const audienceSiteRemove = {
@@ -128,11 +113,9 @@ export const audienceSiteRemove = {
 };
 
 /**
- * Renouvelle la clé publique.
- *
- * Le geste utile quand une clé s'est retrouvée là où elle n'aurait pas dû —
- * dépôt public, capture d'écran. L'ancienne cesse d'entrer **immédiatement** ;
- * l'historique déjà collecté, lui, reste : il a été mesuré, il est vrai.
+ * Renouvelle la clé publique, quand une clé s'est retrouvée là où elle n'aurait
+ * pas dû. L'ancienne cesse d'entrer immédiatement ; l'historique déjà collecté
+ * reste, il a été mesuré.
  */
 export const audienceSiteRotateKey = {
     command: 'audience.siteRotateKey' as const,
@@ -156,11 +139,9 @@ export const audienceOverview = {
 };
 
 /**
- * Un classement sur l'axe demandé.
- *
- * Une commande pour les neuf axes plutôt que neuf commandes : ils rendent tous
- * la même forme, se lisent par la même requête, et l'écran en affiche plusieurs
- * côte à côte. Neuf entrées auraient divergé au premier ajustement.
+ * Un classement sur l'axe demandé. Une commande pour les neuf axes plutôt que
+ * neuf commandes : ils rendent la même forme, se lisent par la même requête, et
+ * neuf entrées auraient divergé au premier ajustement.
  */
 export const audienceBreakdown = {
     command: 'audience.breakdown' as const,
@@ -181,11 +162,9 @@ export const audienceActivity = {
 };
 
 /**
- * Qui est là en ce moment (cinq dernières minutes).
- *
- * Volontairement séparée de `overview` : elle est minuscule, elle se relit
- * souvent, et la faire voyager avec le bandeau obligerait à recalculer tout
- * l'agrégat pour rafraîchir un compteur.
+ * Qui est là en ce moment (cinq dernières minutes). Séparée de `overview` : elle
+ * est minuscule et se relit souvent, la faire voyager avec le bandeau
+ * obligerait à recalculer tout l'agrégat pour rafraîchir un compteur.
  */
 export const audienceLive = {
     command: 'audience.live' as const,
@@ -201,11 +180,9 @@ const funnelId = z.number().int().positive();
 const steps = z.array(audienceFunnelStepDraftSchema).min(2).max(AUDIENCE_FUNNEL_MAX_STEPS);
 
 /**
- * Les entonnoirs d'un site, **avec leurs chiffres** sur la fenêtre demandée.
- *
+ * Les entonnoirs d'un site, avec leurs chiffres sur la fenêtre demandée.
  * Définitions et mesures dans la même réponse : l'écran n'affiche jamais l'une
- * sans l'autre, et les séparer aurait fait deux allers-retours pour dessiner un
- * seul graphique. Les entonnoirs se comptent en unités, pas en milliers.
+ * sans l'autre, et les séparer ferait deux allers-retours pour un seul dessin.
  */
 export const audienceFunnelList = {
     command: 'audience.funnelList' as const,
@@ -214,11 +191,8 @@ export const audienceFunnelList = {
 };
 
 /**
- * Définit un entonnoir à partir de ce que le site a **déjà** émis.
- *
- * C'est tout le découpage : le site pose des signaux nommés, l'entonnoir se
- * compose ici. Mesurer autre chose ne demande donc aucun redéploiement — ni
- * même de prévenir qui que ce soit.
+ * Définit un entonnoir à partir de ce que le site a déjà émis : mesurer un
+ * autre parcours ne demande aucun redéploiement.
  */
 export const audienceFunnelAdd = {
     command: 'audience.funnelAdd' as const,
@@ -241,9 +215,8 @@ export const audienceFunnelUpdate = {
 };
 
 /**
- * Supprime un entonnoir. **Aucune mesure n'est perdue** : un entonnoir n'est
- * qu'une lecture des événements déjà là, jamais une collecte à part. Le
- * recréer à l'identique rendrait exactement les mêmes chiffres.
+ * Supprime un entonnoir. Aucune mesure n'est perdue : un entonnoir n'est qu'une
+ * lecture des événements déjà là, et le recréer rendrait les mêmes chiffres.
  */
 export const audienceFunnelRemove = {
     command: 'audience.funnelRemove' as const,

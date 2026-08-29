@@ -16,7 +16,7 @@ interface MessageListProps {
     loading: boolean;
     /** Shown when the list settles on nothing. `null` leaves it blank, for when the caller says it better itself. */
     emptyLabel: string | null;
-    /** The actual scrolling ancestor (`.messageColumn`, in index.tsx) — this list itself doesn't scroll. */
+    /** The actual scrolling ancestor (`.messageColumn`), this list itself not scrolling. */
     scrollRootRef: React.RefObject<HTMLElement | null>;
 }
 
@@ -40,10 +40,9 @@ interface MessageRowProps {
 
 /**
  * One row, memoized on its own props. Opening a message rewrites the `messages`
- * array (to flip its read state) and the host re-renders on every sync poll —
- * without this, each of those repainted all ~50 rows and their icons at once,
- * which is what made selecting a message feel like several stuttered redraws.
- * The callbacks it receives are stable by contract (see index.tsx).
+ * array (to flip its read state) and the host re-renders on every refresh;
+ * without this, each of those repaints all ~50 rows and their icons at once. The
+ * callbacks it receives are stable by contract.
  */
 const MessageRow = memo(function MessageRow({
     message,

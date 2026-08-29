@@ -13,22 +13,12 @@ export type { PresenceRepo } from './presence';
 export type { ProcessSampleRepo, SnapshotStorage } from './processSamples';
 
 /**
- * Le dépôt du module, sur les tables du socle.
- *
- * Deux lecteurs, un schéma, et c'est assumé : les six tables allowlistées
+ * Le dépôt du module, sur les tables du socle. Les six tables allowlistées
  * (`devices`, `device_workspaces`, `device_link_codes`, `device_metrics`,
- * `device_process_samples`, `device_presence`) sont écrites HORS session par
- * l'infrastructure de l'app (l'enrôlement, l'ingestion de la télémétrie, la
- * présence : `src/agent/**`, par les dépôts du socle
- * `src/db/repos/{devices,metrics,processSamples,presence}.ts`), qui garde ses
- * requêtes pour ce qu'elle y écrit. Le module tient ici les siennes, un
- * fichier par table comme le socle : la FLOTTE (statut, nom, configuration de
- * collecte, espaces, codes de liaison) et l'HISTORIQUE (fenêtres de
- * métriques, présence, processus, épinglage, purges). Une colonne, une
- * contrainte, un index se changent par une migration du socle : le module
- * n'en possède aucune, et n'en écrira (`ft_devices_`) que pour une table à lui.
- *
- * Les dépôts ne déchiffrent rien : aucune de ces tables n'est chiffrée.
+ * `device_process_samples`, `device_presence`) sont aussi écrites hors session
+ * par l'infrastructure de l'app (`src/agent/**`), qui garde ses propres
+ * requêtes. Une colonne, une contrainte, un index se changent par une migration
+ * du socle. Rien n'est chiffré.
  */
 export interface DevicesRepo {
     devices: DeviceRepo;

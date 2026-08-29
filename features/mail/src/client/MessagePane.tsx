@@ -43,12 +43,11 @@ function rawDocument(bodyHtml: string): string {
 }
 
 /**
- * Reading pane. `message.bodyHtml` is already sanitized server-side (see
- * `src/mail/sanitize.ts`) — no `<script>`, no event handlers — so rendering
- * it directly is safe; blocked remote images show as a banner instead of
- * silently loading. In `raw` render mode the body instead goes into a
- * `sandbox=""` iframe: fully script-disabled and opaque-origin, so the
- * message's own `<style>`/inline CSS (preserved by the server only in that
+ * Reading pane. `message.bodyHtml` is already sanitized server-side (no
+ * `<script>`, no event handlers), so rendering it directly is safe; blocked
+ * remote images show as a banner instead of silently loading. In `raw` render
+ * mode the body instead goes into a `sandbox=""` iframe, script-disabled and
+ * opaque-origin, so the message's own CSS (preserved by the server only in that
  * mode) can't reach or be reached by the rest of the app.
  */
 /** Short collapsed-banner label — combines both alert kinds into one line. */

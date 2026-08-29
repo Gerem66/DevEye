@@ -29,10 +29,9 @@ const NATIVE_TOPBAR_WIDGETS: TopbarWidgetMeta[] = [
 ];
 
 /**
- * Le catalogue complet : les natifs, puis les widgets déclarés par les modules
- * (manifest `topbarWidget` + composant de l'entrée client). PARESSEUX, même
- * régime que le catalogue des tuiles : figé au premier appel, toujours au
- * rendu, jamais à l'import.
+ * Le catalogue complet : les natifs, puis les widgets des modules. PARESSEUX,
+ * même régime que le catalogue des tuiles : figé au premier appel, jamais à
+ * l'import.
  */
 let MERGED_TOPBAR: TopbarWidgetMeta[] | null = null;
 
@@ -56,16 +55,10 @@ function topbarCatalog(): TopbarWidgetMeta[] {
 }
 
 /**
- * Les widgets proposables dans cet espace.
- *
- * « Présence » n'a aucun sens dans un espace personnel : c'est une salle d'une
- * seule personne, le widget y afficherait à vie « vous, tout seul ». Il n'est
- * donc pas seulement masqué, il n'est **pas proposé** au choix, et un espace
- * personnel qui en hériterait par une disposition venue d'ailleurs ne
- * l'afficherait pas davantage.
- *
- * Une seule fonction pour les trois usages (liste vivante, éditeur, dialogue
- * d'ajout) : la règle ne peut pas diverger entre eux.
+ * Les widgets proposables dans cet espace. « Présence » n'a aucun sens dans un
+ * espace personnel : il n'y est pas proposé, et une disposition qui l'y
+ * porterait ne l'afficherait pas. Une seule fonction pour la liste vivante,
+ * l'éditeur et le dialogue d'ajout.
  */
 export function availableTopbarWidgets(
     kind: WorkspaceKind | undefined,
@@ -73,10 +66,9 @@ export function availableTopbarWidgets(
 ): TopbarWidgetMeta[] {
     return topbarCatalog().filter((w) => {
         if (w.id === 'live' && kind !== 'shared') return false;
-        // Le widget d'un module suit le droit de SA feature : même règle que
-        // sa carte de grille, l'absence du droit vaut absence du widget. Le
-        // composant ne reçoit d'ailleurs AUCUNE prop : tout ce qu'il montre
-        // repasse par ses propres commandes, autorisées côté serveur.
+        // Le widget d'un module suit le droit de sa feature, comme sa carte de
+        // grille. Le composant ne reçoit aucune prop : tout repasse par ses
+        // propres commandes, autorisées côté serveur.
         if (w.feature && !canFeature(w.feature)) return false;
         return true;
     });
@@ -100,9 +92,8 @@ export function renderTopbarWidget(id: HomeTopbarWidgetId, onOpenSecurity?: (e: 
         case 'live':
             return <LivePresence />;
         default: {
-            // Widget d'un module (Météo, Uptime et Appareils compris) : l'hôte
-            // fournit le cadre stylé et le titre, le module fournit le contenu,
-            // sans props.
+            // Widget d'un module : l'hôte fournit le cadre et le titre, le
+            // module le contenu, sans props.
             const meta = topbarCatalog().find((w) => w.id === id);
             const Widget = moduleClient(id)?.TopbarWidget;
             if (!meta || !Widget) return null;

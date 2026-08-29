@@ -10,17 +10,13 @@ interface FunnelStepsProps {
 /**
  * Le détail d'un entonnoir, marche par marche.
  *
- * **L'abandon est un lien entre deux marches, pas une propriété de l'une
- * d'elles.** Il est donc rendu *au-dessus* de la marche dans laquelle il
- * conduit, et jamais sous celle qu'on vient de quitter. La première marche n'en
- * a pas — rien ne la précède — et c'est le seul écart légitime dans le rythme.
- * Le poser en dessous, comme au premier jet, collait la première marche à la
- * deuxième et désalignait toute la colonne.
+ * L'abandon est un lien entre deux marches et non une propriété de l'une
+ * d'elles : il est rendu au-dessus de la marche dans laquelle il conduit, et la
+ * première n'en a pas, puisque rien ne la précède.
  *
- * La largeur d'une barre est rapportée à la **première** marche : un entonnoir
- * se lit comme une part de ceux qui sont entrés. La rapporter à la marche
- * précédente aurait donné des barres presque pleines partout, masquant
- * exactement ce qu'on vient voir.
+ * La largeur d'une barre est rapportée à la première marche : un entonnoir se
+ * lit comme une part de ceux qui sont entrés, et la rapporter à la marche
+ * précédente donnerait des barres presque pleines partout.
  */
 export function FunnelSteps({ funnel }: FunnelStepsProps) {
     const entered = funnel.steps[0]?.sessions ?? 0;

@@ -1,49 +1,27 @@
 import { useEffect, useSyncExternalStore } from 'react';
 
 /**
- * Largeur demandée par la vue ouverte dans la popup de feature.
+ * Largeur demandée par la vue ouverte dans la popup de feature : une vue
+ * horizontale par nature annonce la largeur que son contenu réclame, entre le
+ * plancher commun et la fenêtre, marges déduites.
  *
- * Certaines vues sont *horizontales par nature* — un kanban, une frise — et la
- * largeur maximale confortable pour lire du texte (1240 px) leur coûte des
- * colonnes entières sur un écran large. Elles annoncent donc la largeur que
- * **leur contenu** réclame, et la rendent en quittant.
+ * Un store et pas une prop, le contenu d'une feature étant porté dans la popup
+ * par un portail (`FeatureKeepAlive`). Les demandes forment un multi-ensemble et
+ * la plus large gagne : deux vues élargies à la fois, dont une gardée en vie
+ * derrière, ne doivent pas se marcher dessus.
  *
- * Une largeur en pixels, et non un booléen « pleine largeur » : un tableau de
- * trois colonnes n'a aucune raison de s'étaler jusqu'aux bords de l'écran. La
- * popup s'ajuste au contenu entre le plancher commun à toutes les features
- * (1240 px) et le maximum absolu (la fenêtre, marges déduites).
- *
- * Pourquoi un store et pas une prop : le contenu d'une feature est **porté dans
- * la popup par un portail** (`FeatureKeepAlive`), pas rendu en enfant de
- * `WidgetPopup`. Faire redescendre l'information par les props obligerait
- * `Pages/Home` à connaître les onglets de chaque feature — exactement le
- * couplage que le module Projets cherche à éviter. Même parti pris que le
- * maintien de la clé (`acquireSecrecyHold`).
- *
- * Un **multi-ensemble** de demandes, et non une valeur unique : deux vues
- * élargies simultanément (une feature et une autre gardée en vie derrière) ne
- * doivent pas se marcher dessus — c'est la plus large qui gagne, et la popup ne
- * rétrécit qu'une fois la dernière relâchée.
- *
- * L'animation reste une **transition CSS** (`transition: max-width`) : la taille
- * se règle après le rendu, donc framer-motion — qui possède la popup via son
- * `layoutId` — n'y voit aucun saut de mise en page à rattraper et ne double pas
- * l'animation d'une projection en `scale` qui déformerait le contenu.
+ * L'animation reste une transition CSS : framer-motion, qui possède la popup via
+ * son `layoutId`, ne doit pas la doubler d'une projection en `scale` qui
+ * déformerait le contenu.
  */
 
 /** Le plancher : la largeur de confort de lecture, commune à toutes les vues. */
 export const BASE_MAX_WIDTH = 1240;
 
 /**
- * Marge totale que la popup laisse de chaque côté (`left`/`right: --space-lg`),
- * plus une poignée de pixels de sécurité.
- *
- * L'écrêtage qu'elle permet n'est pas cosmétique : `.popup` a des `inset`
- * gauche/droite, donc sa largeur réelle est déjà bornée par la fenêtre. Animer
- * `max-width` **au-delà** de cette borne ferait saturer la transition en plein
- * vol — la boîte cesserait de grandir à mi-course tout en continuant d'animer
- * une valeur qui ne se voit plus. On n'anime donc jamais vers une valeur
- * inatteignable.
+ * Marge totale que la popup laisse de chaque côté, plus quelques pixels. `.popup`
+ * a des `inset` gauche/droite, donc animer `max-width` au-delà de la fenêtre
+ * saturerait la transition à mi-course.
  */
 const VIEWPORT_MARGIN = 64;
 
@@ -100,12 +78,9 @@ export function usePopupMaxWidth(): number {
 }
 
 /**
- * Réclame une largeur tant que `px` n'est pas `null`.
- *
- * Le démontage relâche : une feature fermée en plein onglet « Tableau » ne
- * laisse pas la popup élargie derrière elle. Une valeur qui change remplace la
- * demande — c'est ce qui fait suivre la popup quand on ajoute une colonne au
- * kanban ou qu'on change le zoom de la frise.
+ * Réclame une largeur tant que `px` n'est pas `null`. Le démontage relâche, pour
+ * qu'une feature fermée ne laisse pas la popup élargie derrière elle, et une
+ * valeur qui change remplace la demande.
  */
 export function useRequestPopupWidth(px: number | null): void {
     useEffect(() => {

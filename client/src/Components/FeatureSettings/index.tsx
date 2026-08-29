@@ -15,21 +15,10 @@ import { numericItemId, scopeDescription, scopeTitle, type SettingsScope, type S
 import styles from './FeatureSettings.module.css';
 
 /**
- * La coquille de réglages — **une seule pour toutes les fonctionnalités et tous
- * leurs éléments**.
- *
- * ## Le principe qui la gouverne
- *
- * Une section n'apparaît que si elle mène à quelque chose d'utilisable, et
- * **quand il n'en reste aucune, le bouton lui-même n'existe pas**. C'est le
- * prolongement direct de ce que faisaient déjà les onglets de l'écran Espace :
- * construits par l'appelant en fonction des droits, plutôt qu'affichés puis
- * grisés. Un panneau vide et un bouton qui n'ouvre rien sont deux façons de
- * faire perdre un clic.
- *
- * D'où la forme : `FeatureSettingsButton` rend `null` plutôt que de laisser
- * chaque feature décider — sinon la règle serait à retenir cinq fois, et la
- * sixième l'oublierait.
+ * La coquille de réglages, une seule pour toutes les fonctionnalités et leurs
+ * éléments. Une section n'apparaît que si elle mène à quelque chose
+ * d'utilisable, et sans section le bouton lui-même n'existe pas
+ * (`FeatureSettingsButton` rend `null`).
  */
 
 interface SectionDef {
@@ -39,20 +28,16 @@ interface SectionDef {
 }
 
 /**
- * La lecture élargie de cette fonctionnalité est-elle branchée ? Les natives
- * par la liste publiée, les modules par leur manifest : la même question que
- * le serveur pose (`isShareWired`), et c'est ce qui garde l'onglet Partage
- * derrière ce que le code fait, jamais derrière ce que `shareTier` promet.
+ * Le partage est-il branché ? La même question que le serveur (`isShareWired`) :
+ * l'onglet suit ce que le code fait, jamais ce que `shareTier` promet.
  */
 function isShareWired(feature: FeatureId): boolean {
     return (SHARE_WIRED_FEATURES as readonly FeatureId[]).includes(feature) || isModuleShareWired(feature);
 }
 
 /**
- * Les sections visibles pour cette cible, dans l'ordre d'affichage.
- *
- * Exporté : les appelants s'en servent pour décider s'il y a un bouton à rendre,
- * sans avoir à monter le dialogue pour le découvrir.
+ * Les sections visibles pour cette cible, dans l'ordre. Exporté pour que les
+ * appelants décident s'il y a un bouton à rendre.
  */
 export function useSettingsSections(scope: SettingsScope): SectionDef[] {
     const permissions = useWorkspacePermissions();
@@ -66,30 +51,13 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
         const descriptor = featureDescriptor(scope.feature);
         const sections: SectionDef[] = [];
 
-        // Partage : à l'échelle d'un **élément** seulement, on projette une
-        // ligne, pas une fonctionnalité entière.
-        //
-        // Le branchement (`isShareWired`) et non `shareTier` : le premier dit
-        // ce que le code fait, le second ce que le chiffrement autoriserait.
-        // Se fier au second ouvrirait, sur une note ou un compte mail, un
-        // onglet que le serveur refuse, un onglet qui ne mène nulle part,
-        // exactement ce que cette coquille refuse.
-        //
-        // Permissions : à l'échelle d'un **élément** seulement, ce que chaque
-        // rôle voit de cette ligne-là. À l'échelle de la fonctionnalité, la
-        // question n'existe pas ici : « qui a accès à Uptime » se règle sur le
-        // rôle, dans Gérer l'espace. Un panneau qui la reposerait par
-        // fonctionnalité a été essayé puis retiré, deux endroits pour un même
-        // droit finissent toujours par se contredire.
-        //
-        // Derrière `workspace.roles` : restreindre un élément, c'est régler ce
-        // qu'un rôle peut voir. Un espace personnel n'a pas de rôles, donc rien
-        // à montrer. Et le branchement comme pour le partage : une restriction
-        // n'existe que là où les listages la font respecter ; ailleurs, le
-        // serveur la refuse, donc l'onglet mentirait.
-        //
-        // Commun aux natives et aux modules : les deux échelles se règlent
-        // pareil, seule la source du branchement diffère.
+        // Partage et Permissions : à l'échelle d'un élément seulement. Le
+        // branchement (`isShareWired`) et non `shareTier` : le premier dit ce
+        // que le code fait, le second ce que le chiffrement autoriserait, et le
+        // serveur refuse ce qui n'est pas branché. Permissions derrière
+        // `workspace.roles` : restreindre un élément, c'est régler ce qu'un rôle
+        // voit, et un espace personnel n'a pas de rôles. « Qui a accès à la
+        // fonctionnalité » se règle sur le rôle, dans Gérer l'espace.
         const pushSharingSections = (into: SectionDef[]): void => {
             if (scope.kind !== 'item' || !isShareWired(scope.feature)) return;
             if (permissions.canFeature(scope.feature, 'write') && scope.shareable !== false) {
@@ -103,28 +71,22 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
             }
         };
 
-        // Un module installé déclare ses onglets dans son manifest ; les
-        // règles que la coquille ajoute d'elle-même sont celles des natives
-        // aussi : Notifications suit `notifies`, Partage et Permissions
-        // suivent le branchement au partage (plus bas, commun aux deux).
+        // Un module déclare ses onglets dans son manifest ; la coquille ajoute
+        // les siens : Notifications suit `notifies`, Partage et Permissions
+        // suivent le branchement au partage.
         const manifest = moduleManifest(scope.feature);
         if (manifest) {
             for (const tab of manifest.settings?.[scope.kind] ?? []) {
-                // Général : les réglages de la fonctionnalité qui ne sont ni
-                // des sources ni des notifications (l'affichage des messages
-                // de Mail, ses images approuvées). En tête chez qui le déclare
-                // en premier : c'est l'onglet le plus large.
+                // Général : les réglages ni sources ni notifications ; en tête
+                // chez qui le déclare en premier.
                 if (tab === 'general') sections.push({ id: 'general', label: 'Général', icon: 'settings' });
                 else if (tab === 'sources' && scope.kind === 'feature') {
                     sections.push({ id: 'sources', label: 'Sources', icon: 'key' });
                 } else if (tab === 'sync' && scope.kind === 'item') {
-                    // Synchronisation : le rythme de relève d'un élément, et sa
-                    // maintenance. À l'échelle d'un élément seulement.
+                    // Synchronisation : rythme de relève et maintenance d'un élément.
                     sections.push({ id: 'sync', label: 'Synchronisation', icon: 'refresh' });
                 } else if (tab === 'encryption' && scope.kind === 'item') {
-                    // Chiffrement : sous quelle clé la donnée de l'élément vit,
-                    // quand la fonctionnalité laisse le choix. À l'échelle d'un
-                    // élément seulement.
+                    // Chiffrement : sous quelle clé la donnée de l'élément vit.
                     sections.push({ id: 'encryption', label: 'Chiffrement', icon: 'lock' });
                 } else if (typeof tab === 'object') {
                     sections.push({ id: tab.id, label: tab.label, icon: tab.icon ?? 'settings' });
@@ -137,14 +99,9 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
             return sections;
         }
 
-        // Une native n'a plus d'onglet propre : Général, Sources,
-        // Synchronisation et Chiffrement viennent tous du manifest d'un module
-        // (plus haut), depuis que Mail, dernier occupant des tables de câblage
-        // natif de la coquille, est un module. Il ne lui reste que ce que la
-        // coquille rend elle-même.
-
-        // Notifications : réservé aux émetteurs, et à l'échelle d'un élément
-        // seulement quand la fonctionnalité en a de réglables.
+        // Une native n'a que ce que la coquille rend elle-même. Notifications :
+        // réservé aux émetteurs, et à l'échelle d'un élément seulement quand la
+        // fonctionnalité en a de réglables.
         if (descriptor.notifies && (scope.kind === 'feature' || descriptor.hasItems)) {
             sections.push({ id: 'notifications', label: 'Notifications', icon: 'mail' });
         }
@@ -161,24 +118,16 @@ export interface FeatureSettingsDialogProps {
     open: boolean;
     onClose: () => void;
     scope: SettingsScope;
-    /**
-     * La section à montrer à l'ouverture.
-     *
-     * C'est ce qui permet aux dialogues d'élément de **mener quelque part** :
-     * le « + » d'un sélecteur de source ouvre ces réglages directement sur
-     * l'onglet Sources, plutôt que de laisser chercher.
-     */
+    /** La section à montrer à l'ouverture : le « + » d'un sélecteur de source
+     *  ouvre directement l'onglet Sources. */
     initialSection?: SettingsSectionId;
 }
 
 export function FeatureSettingsDialog({ open, onClose, scope, initialSection }: FeatureSettingsDialogProps) {
     const sections = useSettingsSections(scope);
     const [active, setActive] = useState<SettingsSectionId>(initialSection ?? 'notifications');
-    /**
-     * Depuis les réglages d'un élément, « Gérer les canaux » ouvre ceux de sa
-     * fonctionnalité, par-dessus. La récursion s'arrête là : la coquille d'une
-     * fonctionnalité ne propose pas ce saut.
-     */
+    /** « Gérer les canaux » d'un élément ouvre les réglages de sa fonctionnalité
+     *  par-dessus ; la coquille d'une fonctionnalité ne propose pas ce saut. */
     const [manageChannels, setManageChannels] = useState(false);
     const current = sections.some((s) => s.id === active) ? active : (sections[0]?.id ?? 'notifications');
 
@@ -206,11 +155,7 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection }: 
             >
                 <div className={styles.layout}>
                     {/* Toujours visible, même à une seule section : tous les
-                        dialogues de réglages ont la même silhouette, et c'est
-                        cette constance qui fait qu'on s'y retrouve — un panneau
-                        qui apparaît et disparaît selon le nombre de sections
-                        ferait chercher les réglages à deux endroits selon la
-                        feature. */}
+                        dialogues de réglages ont la même silhouette. */}
                     <SideNav
                         items={items}
                         active={current}
@@ -218,11 +163,9 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection }: 
                         label={`Réglages · ${scopeTitle(scope)}`}
                     />
                     <div className={styles.panel}>
-                        {/* Les trois sections génériques de la coquille, les
-                            mêmes pour une native et pour un module : les
-                            canaux, le partage, les restrictions. Le reste
-                            vient du module : ses panneaux (`settingsPanels`).
-                            Une native n'en a plus. */}
+                        {/* Sections génériques de la coquille (canaux, partage,
+                            restrictions) ; le reste vient des panneaux du module
+                            (`settingsPanels`). */}
                         {current === 'notifications' && (
                             <NotificationsSection
                                 scope={scope}
@@ -235,10 +178,8 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection }: 
                     </div>
                 </div>
             </Dialog>
-            {/* Les réglages de la fonctionnalité, empilés par-dessus ceux de
-                l'élément : le geste « je règle cette base » qui débouche sur
-                « il me manque un canal » ne doit pas faire fermer, chercher,
-                rouvrir. La pile de couches route Échap vers le plus haut. */}
+            {/* Les réglages de la fonctionnalité empilés par-dessus ceux de
+                l'élément ; la pile de couches route Échap vers le plus haut. */}
             {scope.kind === 'item' && (
                 <FeatureSettingsDialog
                     open={manageChannels}
@@ -256,32 +197,19 @@ export interface FeatureSettingsButtonProps {
     variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
     /** Intitulé ; « Réglages » par défaut. */
     label?: string;
-    /**
-     * La section ouverte par un clic manuel ; la première à défaut.
-     *
-     * C'est ce qui permet à un bouton posé dans une fiche de MENER quelque
-     * part : le « + » d'un sélecteur ouvre les réglages sur l'onglet qui crée
-     * ce qu'il sélectionne (Sources, Catégories), plutôt que de laisser chercher.
-     */
+    /** La section ouverte par un clic manuel ; la première à défaut. Le « + »
+     *  d'un sélecteur ouvre l'onglet qui crée ce qu'il sélectionne. */
     initialSection?: SettingsSectionId;
     /**
-     * La coquille s'ouvre ou se ferme (le démontage vaut fermeture).
-     *
-     * Pour le composant qui DÉTIENT la présence (`useLiveSegment`) quand rien
-     * d'autre n'annonce l'élément : une carte sans fiche, où la coquille est un
-     * lieu au même titre que les autres dialogues de l'élément. La coquille ne
-     * déclare jamais le niveau elle-même : le registre n'admet qu'un déclarant
-     * par niveau, et elle effacerait ce qu'une fiche déjà ouverte a posé.
+     * Ouverture et fermeture (le démontage vaut fermeture), pour le composant
+     * qui détient la présence (`useLiveSegment`) : la coquille ne déclare jamais
+     * le niveau elle-même, le registre n'admet qu'un déclarant par niveau.
      */
     onOpenChange?: (open: boolean) => void;
 }
 
-/**
- * Le bouton qui ouvre les réglages — **ou rien du tout**.
- *
- * Une ligne par point d'appel, et la règle « pas de section, pas de bouton »
- * tenue en un seul endroit.
- */
+/** Le bouton qui ouvre les réglages, ou rien : « pas de section, pas de
+ *  bouton », tenu en un seul endroit. */
 export function FeatureSettingsButton({
     scope,
     variant = 'secondary',
@@ -306,11 +234,9 @@ export function FeatureSettingsButton({
     }, [open]);
 
     /**
-     * L'intention « ouvrir les réglages de cet élément » posée avant une
-     * bascule d'espace (« Régler dans <espace> » d'un élément projeté). La
-     * consommer ICI, dans le bouton commun, est ce qui rend le saut gratuit
-     * pour toutes les features : monter le bouton suffit, aucune n'a de code à
-     * écrire. L'intention périmée ou visant un autre élément rend `null`.
+     * L'intention « ouvrir les réglages de cet élément » posée avant une bascule
+     * d'espace, consommée ici pour toutes les features : monter le bouton
+     * suffit. Périmée ou visant un autre élément, elle rend `null`.
      */
     const itemId = numericItemId(scope);
     useEffect(() => {
@@ -330,9 +256,8 @@ export function FeatureSettingsButton({
                 variant={variant}
                 icon='settings'
                 onClick={() => {
-                    // Une ouverture manuelle repart de la section demandée par
-                    // le bouton, ou de la première : l'onglet d'une intention
-                    // passée n'a plus rien de demandé.
+                    // Une ouverture manuelle repart de la section du bouton :
+                    // l'onglet d'une intention passée n'a plus rien de demandé.
                     setSection(initialSection);
                     setOpen(true);
                 }}
@@ -347,31 +272,24 @@ export function FeatureSettingsButton({
 export type { SettingsScope, SettingsSectionId } from './scope';
 
 /**
- * Le panneau d'un module pour la section courante : fourni par son entrée
- * client (`settingsPanels`), qui reçoit la portée réduite du SDK et le droit
- * d'écriture. Rien à rendre si le module n'a pas fourni ce panneau : la
- * section ne devrait alors pas être proposée, mais un manifest et une entrée
- * client peuvent brièvement diverger pendant un développement.
+ * Le panneau d'un module pour la section courante (`settingsPanels`). Rien à
+ * rendre s'il manque : manifest et entrée client peuvent brièvement diverger
+ * en développement.
  */
 function ModulePanel({ scope, section }: { scope: SettingsScope; section: SettingsSectionId }) {
     const permissions = useWorkspacePermissions();
     const client = moduleClient(scope.feature);
     const Panel = client?.settingsPanels?.[section];
     if (!Panel) return null;
-    // La phrase de tête des Sources vient du registre (`sources.hint`), comme
-    // du temps des natives : elle dit à quoi servent ces réglages d'espace
-    // avant que le panneau du module ne les liste. Les cinq features à
-    // sources sont des modules depuis le rapatriement de Git ; c'est donc ici
-    // qu'elle s'affiche, et nulle part ailleurs.
+    // La phrase de tête des Sources vient du registre (`sources.hint`).
     const hint = section === 'sources' ? featureDescriptor(scope.feature).sources?.hint : undefined;
     return (
         <>
             {hint && <p className={styles.sectionHint}>{hint}</p>}
             <Panel
                 // L'id est un nombre ou un texte (un appareil est un UUID) ; le
-                // panneau d'un module se déclare pour l'un des deux
-                // (`SettingsPanelProps<number | string>`), et c'est ici, une
-                // fois, que la coquille lui remet ce qu'elle tient.
+                // panneau se déclare pour l'un des deux
+                // (`SettingsPanelProps<number | string>`).
                 scope={
                     scope.kind === 'feature'
                         ? { kind: 'feature' }

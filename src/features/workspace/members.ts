@@ -5,18 +5,10 @@ import { invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 
 /**
- * Gestion des membres d'un espace.
- *
- * Les droits ne sont plus « propriétaire ou rien » : ils passent par les
- * capacités `workspace.members` (ajouter, exclure) et `workspace.manage`
- * (renommer, supprimer), déclarées sur chaque commande et appliquées par le
- * dispatcheur. Le propriétaire les possède toutes d'office.
- *
- * On rejoint un espace parce qu'un membre vous y met, jamais parce qu'on
- * détient un lien : l'inscription étant déjà sur invitation d'un
- * administrateur, tout compte candidat existe et une adresse suffit à le
- * désigner. Un jeton d'invitation n'aurait fait qu'ajouter un secret
- * transmissible, à expirer et à révoquer, pour le même résultat.
+ * Gestion des membres d'un espace, par les capacités `workspace.members` et
+ * `workspace.manage`. On rejoint un espace parce qu'un membre vous y met,
+ * jamais par un lien : l'inscription est déjà sur invitation, une adresse
+ * suffit à désigner un compte.
  */
 
 /** Un espace personnel n'a pas de membres : il est personnel. */
@@ -117,9 +109,7 @@ export const workspaceAddMemberFeature: FeatureDefinition<
         assertShared(ctx);
         const email = input.email.trim().toLowerCase();
         const target = await ctx.db.users.findByEmail(email);
-        // L'inscription est sur invitation d'un administrateur : on ne crée pas
-        // de compte ici. Le dire explicitement vaut mieux qu'un échec muet — la
-        // personne qui ajoute saura qu'il faut d'abord faire créer le compte.
+        // On ne crée pas de compte ici : l'inscription est sur invitation.
         if (!target) {
             throw new FeatureError('not_found', 'Aucun compte DevEye avec cette adresse');
         }
@@ -132,19 +122,17 @@ export const workspaceAddMemberFeature: FeatureDefinition<
 
         await ctx.db.workspaceMembers.add({ userId: target.id, workspaceId: ctx.workspaceId });
 
-        // Sans rôle, un nouvel arrivant n'aurait aucun droit : la résolution est
-        // fail-closed. Le rôle par défaut de l'espace est donc attribué d'office.
-        // S'il n'y en a pas, le membre entre sans droits — visible et corrigeable
-        // depuis l'onglet Membres, plutôt qu'un accès accordé par défaut.
+        // Sans rôle, un arrivant n'a aucun droit (fail-closed) : le rôle par
+        // défaut est attribué d'office ; s'il n'y en a pas, le membre entre sans
+        // droits, corrigeable depuis l'onglet Membres.
         const fallback = await ctx.db.workspaceRoles.findDefault(ctx.workspaceId);
         if (fallback) {
             await ctx.db.workspaceRoles.assign(target.id, ctx.workspaceId, fallback.id);
         }
 
         invalidateAccess();
-        // L'arrivant, lui, n'est PAS dans la salle de cet espace : la diffusion
-        // ordinaire ne l'atteint pas. S'il est connecté ailleurs, on le vise par
-        // compte pour que l'espace apparaisse dans son menu sans rechargement.
+        // L'arrivant n'est pas dans la salle de cet espace : s'il est connecté
+        // ailleurs, on le vise par compte pour que l'espace apparaisse dans son menu.
         ctx.live?.userChanged(target.id, ctx.workspaceId, ['workspace'], ctx.userId);
         ctx.audit({
             action: 'workspace.member.add',

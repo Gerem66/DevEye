@@ -29,24 +29,18 @@ function formatAgo(epochSeconds: number | null): string {
 }
 
 /**
- * One configured mail account, as a centered tile (not a list row) — deleting
- * an account lives one step further away, in the edit popup's own danger
- * button, since it's rare and shouldn't be a one-click affair from here. That
- * popup is also the only route to delete, which is why the edit button shows
- * for every account and not just password-auth ones: an OAuth mailbox opens it
- * read-only (see `AccountPopup`), but it does open.
+ * One configured mail account, as a centered tile. Deleting lives one step
+ * further away, in the edit popup's own danger button, and that popup is the
+ * only route to it, which is why the edit button shows for every account: an
+ * OAuth mailbox opens it read-only, but it does open.
  *
- * The drag grab surface is the small top-left handle only, not the whole
- * card (a full-card grab cursor over something you mostly just click to open
- * felt wrong) — same pointer-events technique as `features/uptime/src/client/ServiceCard`
- * otherwise (see `AccountList` for why). Both corners fade in on hover/focus
- * so the tile stays calm at rest.
+ * The drag grab surface is the small top-left handle only, not the whole card;
+ * both corners fade in on hover/focus so the tile stays calm at rest.
  *
- * Un compte **projeté** d'un autre espace (`foreign`) porte une pastille et
- * perd le bouton d'édition : le formulaire qu'il ouvre réécrit les
- * identifiants et porte la suppression, deux gestes que le serveur réserve au
- * domicile. La pause, elle, reste : suspendre la relève de ce qu'on voit est
- * un geste de fenêtre.
+ * Un compte projeté d'un autre espace (`foreign`) porte une pastille et perd le
+ * bouton d'édition : le formulaire qu'il ouvre réécrit les identifiants et porte
+ * la suppression, deux gestes que le serveur réserve au domicile. La pause reste :
+ * suspendre la relève de ce qu'on voit est un geste de fenêtre.
  */
 export function AccountCard({
     account,

@@ -9,16 +9,12 @@ import { agentBrief, usageExamples } from './usage';
 import styles from './style.module.css';
 
 /**
- * Un dépliant, animé et **exclusif**.
+ * Un dépliant animé et exclusif : `<details>` natif ne sait ni s'animer ni se
+ * refermer quand son voisin s'ouvre, et trois panneaux ouverts font un mur de
+ * code. L'ouverture est donc pilotée par l'appelant, qui n'en garde qu'une.
  *
- * `<details>` natif ne sait ni s'animer ni se refermer quand son voisin
- * s'ouvre : trois panneaux ouverts en même temps transformaient la fenêtre en
- * mur de code. L'ouverture est donc pilotée par l'appelant, qui n'en garde
- * qu'une seule.
- *
- * La hauteur est animée par framer-motion, comme le reste de l'application.
- * `overflow: hidden` pendant la transition, sans quoi le contenu déborderait
- * du panneau replié pendant la fraction de seconde où il se ferme.
+ * `overflow: hidden` pendant la transition, sans quoi le contenu déborderait du
+ * panneau replié pendant la fraction de seconde où il se ferme.
  */
 function Disclosure({
     title,
@@ -60,36 +56,29 @@ interface InstallDialogProps {
     site: AudienceSite;
     /**
      * L'adresse par laquelle les pages suivies atteignent l'ingestion, telle que
-     * le serveur la connaît (`AUDIENCE_ORIGIN`, à défaut `PUBLIC_ORIGIN`).
-     *
-     * **Jamais `window.location.origin`.** L'application est derrière le VPN et
-     * l'ingestion doit être joignable sans lui : les deux adresses diffèrent par
-     * construction. La déduire du navigateur donnait une balise juste en
-     * développement et fausse en production — fausse là où elle compte.
+     * le serveur la connaît. Jamais `window.location.origin` : l'application est
+     * derrière le VPN et l'ingestion doit être joignable sans lui, donc la
+     * déduire du navigateur donnerait une balise fausse en production.
      */
     ingestOrigin: string;
     canWrite: boolean;
     onClose: () => void;
     /**
      * La clé vient d'être renouvelée. Facultatif : le dialogue ravive lui-même
-     * la fiche et la liste, un appelant qui tient le site par `useResource`
-     * (le bloc d'un projet) n'a rien à faire de plus.
+     * la fiche et la liste, un appelant qui tient le site par `useResource` n'a
+     * rien à faire de plus.
      */
     onRotated?: (site: AudienceSite) => void;
 }
 
 /**
- * Comment brancher un site, et tout ce qu'on peut en faire ensuite.
+ * Comment brancher un site, et tout ce qu'on peut en faire ensuite. Trois
+ * dépliants, du plus courant au plus spécialisé ; les deux derniers sont
+ * repliés pour ne pas noyer l'étape qui compte, coller la balise et voir la
+ * première mesure arriver.
  *
- * Trois dépliants, du plus courant au plus spécialisé : ce qu'on fait le jour
- * de l'installation, comment appeler l'API dans son langage, et le mémo à
- * donner à un agent de code. Les deux derniers sont repliés parce qu'on ne les
- * ouvre qu'une fois — les laisser dépliés aurait noyé l'étape qui compte
- * vraiment, coller la balise et voir la première mesure arriver.
- *
- * Tous les blocs sont bâtis depuis la **vraie** clé et la **vraie** adresse
- * d'ingestion : un exemple qu'il faut adapter avant de s'en servir est un
- * exemple qu'on adapte mal.
+ * Tous les blocs sont bâtis depuis la vraie clé et la vraie adresse
+ * d'ingestion : un exemple qu'il faut adapter est un exemple qu'on adapte mal.
  */
 export function InstallDialog({ open, site, ingestOrigin, canWrite, onClose, onRotated }: InstallDialogProps) {
     /** Le bloc dont la copie vient d'aboutir, pour le retour visuel. */
@@ -102,10 +91,9 @@ export function InstallDialog({ open, site, ingestOrigin, canWrite, onClose, onR
     const [section, setSection] = useState<string | null>(null);
     const toggle = (id: string) => setSection((current) => (current === id ? null : id));
 
-    // Tout ce que montre cette fenêtre suit le mode réglé sur le site : la
-    // balise, les exemples serveur et le mémo. Donner une balise sans
-    // `data-visitor` à qui vient d'activer le mode persistant reviendrait à lui
-    // laisser croire que les visiteurs connus vont se mesurer.
+    // Tout ce que montre cette fenêtre suit le mode réglé sur le site : une balise
+    // sans `data-visitor` donnée à qui vient d'activer le mode persistant laisserait
+    // croire que les visiteurs connus se mesurent.
     const persistent = site.visitorMode === 'persistent';
     const snippet = snippetFor(site.publicKey, ingestOrigin, persistent);
     // Mémorisés : ce sont des chaînes bâties par concaténation, et rien ne les
@@ -155,11 +143,9 @@ export function InstallDialog({ open, site, ingestOrigin, canWrite, onClose, onR
             onSubmit={onClose}
             footer={
                 <>
-                    {/* Poussé tout à gauche du pied : c'est un geste rare et
-                        conséquent, il n'a pas à côtoyer « Fermer » qu'on presse
-                        à chaque visite. Le mettre en pleine largeur au bas du
-                        corps lui donnait au contraire le poids d'une action
-                        principale. */}
+                    {/* Poussé tout à gauche du pied : geste rare et conséquent, il n'a
+                        pas à côtoyer « Fermer » qu'on presse à chaque visite, et une
+                        pleine largeur lui donnerait le poids d'une action principale. */}
                     {canWrite &&
                         (confirmRotate ? (
                             <div className={styles.footerLeft}>
@@ -207,13 +193,10 @@ export function InstallDialog({ open, site, ingestOrigin, canWrite, onClose, onR
                         : `Première mesure reçue — dernière ${formatAgo(site.lastEventAt)}.`}
                 </p>
 
-                {/* Les trois dépliants dans un groupe **sans gouttière** : le
-                    `gap` de `.install` s'ajoutait au-dessus de chaque filet, si
-                    bien qu'un titre était plus loin de sa propre ligne que du
-                    bloc précédent. Le seul espacement est désormais celui, égal,
-                    du bouton de titre. */}
+                {/* Les trois dépliants dans un groupe sans gouttière : le `gap` de
+                    `.install` s'ajouterait au-dessus de chaque filet, si bien qu'un titre
+                    serait plus loin de sa propre ligne que du bloc précédent. */}
                 <div className={styles.disclosures}>
-                    {/* -------------------------------------- utilisation de base */}
                     <Disclosure
                         title='Utilisation de base : marquer des étapes, nommer un utilisateur'
                         open={section === 'base'}
@@ -244,7 +227,6 @@ window.deveye?.identify(user.id);`}</pre>
                         </p>
                     </Disclosure>
 
-                    {/* ------------------------------------- exemples par langage */}
                     <Disclosure
                         title='Exemples de code : navigateur, Node.js, PHP'
                         open={section === 'code'}
@@ -273,7 +255,6 @@ window.deveye?.identify(user.id);`}</pre>
                         </div>
                     </Disclosure>
 
-                    {/* --------------------------------------- mémo pour un agent */}
                     <Disclosure
                         title='Mémo pour un agent de code'
                         open={section === 'agent'}
@@ -285,9 +266,8 @@ window.deveye?.identify(user.id);`}</pre>
                             débogage.
                         </p>
                         {/* Un `textarea` en lecture seule plutôt qu'un `pre` : on
-                        sélectionne tout d'un Ctrl+A sans attraper le reste de la
-                        page, et le presse-papiers reste accessible même si
-                        l'API de copie est refusée par le navigateur. */}
+                        sélectionne tout d'un Ctrl+A sans attraper le reste de la page,
+                        même si l'API de copie est refusée par le navigateur. */}
                         <textarea className={styles.brief} value={brief} readOnly spellCheck={false} rows={14} />
                         <div className={styles.installActions}>
                             <Button variant='secondary' icon='copy' onClick={() => void copy(brief, 'brief')}>

@@ -16,22 +16,10 @@ import type {
 import type { SdkQueryable } from '@deveye/types/sdk/server';
 
 /**
- * Les dépôts des finances.
- *
- * ## Les colonnes `DATE` sont toujours projetées
- *
- * Le pilote mysql2 rend un objet `Date` pour une colonne `DATE`, recalé sur le
- * fuseau du processus Node: le 2026-01-31 stocké en base ressort alors comme un
- * instant qui, formaté ailleurs, peut redevenir le 30. Toutes les lectures
- * passent donc par les listes de colonnes ci-dessous, qui projettent chaque
- * `DATE` par `DATE_FORMAT(..., '%Y-%m-%d')`. C'est la raison pour laquelle on ne
- * trouvera **aucun `SELECT *`** dans ce fichier.
- *
- * ## Tout est borné par l'espace
- *
- * Chaque requête filtre sur `workspace_id`, y compris celles qui visent déjà une
- * ligne par son identifiant: c'est la frontière, et la faire porter par la
- * requête plutôt que par l'appelant la rend non contournable.
+ * Aucun `SELECT *` sur une table à colonne `DATE` : le pilote rendrait un
+ * objet `Date` recalé sur le fuseau du processus, d'où les projections
+ * `DATE_FORMAT(..., '%Y-%m-%d')`. Chaque requête filtre sur `workspace_id`,
+ * même par identifiant.
  */
 
 /** Colonnes d'une opération, la date projetée en `AAAA-MM-JJ`. */
@@ -49,12 +37,8 @@ const REC_COLUMNS = `r.id, r.workspace_id, r.account_id, r.transfer_account_id, 
     r.automatic, r.active, r.content, r.created`;
 
 /**
- * Les mouvements d'argent, vus depuis le compte qu'ils touchent.
- *
- * Un virement touche **deux** comptes: il sort du compte de départ et entre sur
- * celui d'arrivée. Cette union le fait donc apparaître deux fois, une par côté,
- * avec le signe qui convient. C'est ce qui permet ensuite de calculer les trois
- * soldes d'un compte en une seule agrégation, sans six sous-requêtes corrélées.
+ * Les mouvements vus depuis le compte qu'ils touchent : un virement apparaît
+ * deux fois, une par côté, ce qui permet les trois soldes en une agrégation.
  */
 const MOVEMENTS = `
     SELECT account_id AS acc, date, cleared,
@@ -140,31 +124,17 @@ export interface FinanceMonthRow {
 }
 
 export interface FinanceRepo {
-    /* Réglages */
     getConfig(workspaceId: number): Promise<FinanceConfigRow | null>;
     upsertConfig(workspaceId: number, currency: string, vatEnabled: boolean): Promise<FinanceConfigRow>;
 
-    /* Comptes */
     /**
-     * Les comptes et leurs soldes.
-     *
-     * `includeArchived` ne joue que sur la **liste**, jamais sur les totaux (voir
-     * `totalBalance`): les sélecteurs ne proposent que les comptes vivants,
-     * l'écran des comptes les montre tous.
-     *
-     * `today` est passé et non lu par `CURDATE()`: le fuseau de MySQL et celui du
-     * processus Node n'ont aucune raison de coïncider, et un « aujourd'hui » qui
-     * diffère selon qui le calcule ferait osciller un solde autour de minuit sans
-     * que rien ne bouge dans le livre.
+     * `includeArchived` ne joue que sur la liste, jamais sur les totaux.
+     * `today` est passé et non lu par `CURDATE()` : le fuseau de MySQL et celui
+     * de Node peuvent différer.
      */
     listAccounts(workspaceId: number, includeArchived: boolean, today: string): Promise<FinanceAccountBalanceRow[]>;
     findAccount(id: number, workspaceId: number, today: string): Promise<FinanceAccountBalanceRow | null>;
-    /**
-     * Le compte, sans ses soldes. Une seule ligne lue par sa clé primaire, là où
-     * {@link findAccount} déroule l'agrégation de tous les mouvements de
-     * l'espace. C'est cette version-là que veulent les gardes de cohérence,
-     * appelées à chaque saisie et qui ne demandent qu'une existence.
-     */
+    /** Sans les soldes : une lecture par clé, là où {@link findAccount} déroule l'agrégation de tous les mouvements. */
     findAccountPlain(id: number, workspaceId: number): Promise<FinanceAccountRow | null>;
     createAccount(workspaceId: number, input: FinanceAccountInput): Promise<number>;
     updateAccount(id: number, workspaceId: number, input: FinanceAccountInput): Promise<boolean>;
@@ -172,15 +142,9 @@ export interface FinanceRepo {
     reorderAccounts(workspaceId: number, accountIds: number[]): Promise<void>;
     /** Combien d'opérations touchent ce compte, des deux côtés d'un virement. */
     countAccountUsage(id: number, workspaceId: number): Promise<number>;
-    /**
-     * Combien d'échéances s'appuient sur ce compte, des deux côtés d'un
-     * virement. La clé étrangère est en CASCADE: sans ce décompte, supprimer un
-     * compte encore vierge d'opérations emporterait en silence les échéances
-     * réglées dessus.
-     */
+    /** La clé étrangère est en CASCADE : sans ce décompte, supprimer un compte emporterait ses échéances en silence. */
     countAccountRecurring(id: number, workspaceId: number): Promise<number>;
 
-    /* Catégories */
     listCategories(workspaceId: number): Promise<FinanceCategoryRow[]>;
     findCategory(id: number, workspaceId: number): Promise<FinanceCategoryRow | null>;
     createCategory(workspaceId: number, input: FinanceCategoryInput): Promise<number>;
@@ -188,7 +152,6 @@ export interface FinanceRepo {
     deleteCategory(id: number, workspaceId: number): Promise<boolean>;
     reorderCategories(workspaceId: number, categoryIds: number[]): Promise<void>;
 
-    /* Opérations */
     listTransactions(
         workspaceId: number,
         filter: FinanceTransactionFilter,
@@ -202,32 +165,17 @@ export interface FinanceRepo {
         filter: FinanceTransactionFilter
     ): Promise<{ income: number; expense: number }>;
     findTransaction(id: number, workspaceId: number): Promise<FinanceTransactionRow | null>;
-    /**
-     * L'occurrence d'une échéance à une date donnée, servie par l'index unique
-     * `(recurring_id, date)`. Sert à dire clairement « cette date est déjà
-     * prise » plutôt que de laisser remonter une erreur de contrainte.
-     */
+    /** L'occurrence d'une échéance à une date, servie par l'index unique `(recurring_id, date)`. */
     findOccurrence(workspaceId: number, recurringId: number, date: string): Promise<FinanceTransactionRow | null>;
     createTransaction(workspaceId: number, input: FinanceTransactionInput): Promise<number>;
     updateTransaction(id: number, workspaceId: number, input: FinanceTransactionInput): Promise<boolean>;
     deleteTransaction(id: number, workspaceId: number): Promise<boolean>;
     setCleared(workspaceId: number, ids: number[], cleared: boolean): Promise<void>;
 
-    /* Agrégats du tableau de bord */
     /**
-     * Somme des soldes à la date `today`, éventuellement restreinte à certaines
-     * natures de compte.
-     *
-     * **Les comptes archivés y comptent**, et c'est une règle assumée: archiver
-     * range un compte, cela ne fait pas disparaître ce qu'il contient. Les
-     * exclure ferait qu'archiver un compte non soldé retirerait de l'argent du
-     * patrimoine sans qu'aucune opération ne l'explique, et que la somme des
-     * cartes affichées ne retomberait plus sur le total annoncé.
-     *
-     * `today` est un paramètre et non `CURDATE()`, ce qui sert deux fois: le
-     * fuseau reste celui du serveur applicatif, et l'on peut demander le solde à
-     * **n'importe quelle** date passée, ce dont se sert la courbe du tableau de
-     * bord pour son point de départ.
+     * Somme des soldes à `today`, archivés compris (archiver ne fait pas
+     * disparaître l'argent). `today` en paramètre : le fuseau reste celui du
+     * serveur, et la courbe demande un solde à une date passée.
      */
     totalBalance(workspaceId: number, today: string, kinds?: FinanceAccountKind[]): Promise<number>;
     /** La même, en tenant compte des opérations déjà datées plus tard. */
@@ -241,7 +189,6 @@ export interface FinanceRepo {
     /** Consommé d'une catégorie sur `[from, to)`, sorties seules. */
     spentByCategory(workspaceId: number, categoryId: number, from: string, toExclusive: string): Promise<number>;
 
-    /* Budgets */
     listBudgets(workspaceId: number): Promise<FinanceBudgetRow[]>;
     findBudget(id: number, workspaceId: number): Promise<FinanceBudgetRow | null>;
     upsertBudget(
@@ -252,7 +199,6 @@ export interface FinanceRepo {
     ): Promise<FinanceBudgetRow>;
     deleteBudget(id: number, workspaceId: number): Promise<boolean>;
 
-    /* Échéances */
     listRecurring(workspaceId: number): Promise<FinanceRecurringRow[]>;
     /** Les échéances actives dont l'occurrence est due au plus tard à `onOrBefore`. */
     listDueRecurring(workspaceId: number, onOrBefore: string, automatic?: boolean): Promise<FinanceRecurringRow[]>;
@@ -260,12 +206,7 @@ export interface FinanceRepo {
     createRecurring(workspaceId: number, input: FinanceRecurringInput): Promise<number>;
     updateRecurring(id: number, workspaceId: number, input: FinanceRecurringInput): Promise<boolean>;
     deleteRecurring(id: number, workspaceId: number): Promise<boolean>;
-    /**
-     * Avance l'échéance: prochaine date, et date de la dernière occurrence
-     * écrite. `lastPostedDate` à `null` laisse la valeur en place (sauter une
-     * occurrence avance la date sans prétendre avoir écrit quoi que ce soit), et
-     * `active` à `null` laisse l'état en place.
-     */
+    /** `lastPostedDate` et `active` à `null` laissent la valeur en place. */
     advanceRecurring(
         id: number,
         workspaceId: number,
@@ -275,19 +216,12 @@ export interface FinanceRepo {
     ): Promise<void>;
 }
 
-/**
- * Construit la clause `WHERE` d'un filtre de journal.
- *
- * Les fragments sont **écrits ici**, une fois, et jamais bâtis depuis une
- * donnée reçue: seules les valeurs voyagent, en paramètres.
- */
+/** Les fragments sont écrits ici, jamais bâtis depuis une donnée reçue : seules les valeurs voyagent. */
 function whereOf(workspaceId: number, f: FinanceTransactionFilter): { sql: string; params: unknown[] } {
     const parts = ['t.workspace_id = ?'];
     const params: unknown[] = [workspaceId];
     if (f.accountId !== undefined) {
-        // Des deux côtés: un virement vers ce compte le concerne autant qu'un
-        // virement qui en part, et ne pas le voir dans son journal alors qu'il
-        // bouge son solde serait incompréhensible.
+        // Des deux côtés : un virement vers ce compte bouge son solde.
         parts.push('(t.account_id = ? OR t.transfer_account_id = ?)');
         params.push(f.accountId, f.accountId);
     }
@@ -323,16 +257,8 @@ async function nextRank(q: SdkQueryable, table: 'finance_accounts' | 'finance_ca
     return Number(rows[0]?.next ?? 0);
 }
 
-/** Même dépôt qu'avant le rapatriement, porté sur le `SdkQueryable` du module. */
 export function createRepo(q: SdkQueryable): FinanceRepo {
-    /**
-     * Les comptes de l'espace, avec leurs trois soldes en une passe.
-     *
-     * `balance` s'arrête à aujourd'hui, `projected` prend tout (les opérations
-     * déjà saisies pour plus tard), `cleared` ne compte que ce qui a été pointé
-     * et donc vu sur le relevé. Le solde initial du compte est ajouté aux trois:
-     * c'est le point de départ du livre, il vaut à toutes les dates.
-     */
+    /** Les trois soldes en une passe ; le solde initial est ajouté aux trois. */
     const accountsQuery = (extra: string) => `
         WITH mv AS (${MOVEMENTS})
         SELECT a.id, a.workspace_id, a.kind, a.color, a.initial_balance, a.archived,
@@ -349,7 +275,6 @@ export function createRepo(q: SdkQueryable): FinanceRepo {
          ORDER BY a.sort_order ASC, a.id ASC`;
 
     return {
-        /* ----------------------------------------------------------- réglages */
         async getConfig(workspaceId) {
             const rows = await q.query<FinanceConfigRow>('SELECT * FROM finance_config WHERE workspace_id = ?', [
                 workspaceId
@@ -368,7 +293,6 @@ export function createRepo(q: SdkQueryable): FinanceRepo {
             return rows[0];
         },
 
-        /* ------------------------------------------------------------ comptes */
         async listAccounts(workspaceId, includeArchived, today) {
             return q.query<FinanceAccountBalanceRow>(accountsQuery(includeArchived ? '' : 'AND a.archived = 0'), [
                 workspaceId,
@@ -448,7 +372,6 @@ export function createRepo(q: SdkQueryable): FinanceRepo {
             return Number(rows[0]?.count ?? 0);
         },
 
-        /* --------------------------------------------------------- catégories */
         async countAccountRecurring(id, workspaceId) {
             const rows = await q.query<{ count: number }>(
                 `SELECT COUNT(*) AS count FROM finance_recurring
@@ -505,7 +428,6 @@ export function createRepo(q: SdkQueryable): FinanceRepo {
             }
         },
 
-        /* ---------------------------------------------------------- opérations */
         async listTransactions(workspaceId, filter, limit, offset) {
             const { sql, params } = whereOf(workspaceId, filter);
             return q.query<FinanceTransactionRow>(
@@ -526,9 +448,7 @@ export function createRepo(q: SdkQueryable): FinanceRepo {
         },
         async sumTransactions(workspaceId, filter) {
             const { sql, params } = whereOf(workspaceId, filter);
-            // Les virements sont exclus des deux sommes: déplacer de l'argent
-            // d'une poche à l'autre n'est ni une recette ni une dépense, et les
-            // compter gonflerait les deux totaux d'un même montant.
+            // Les virements sont exclus : déplacer de l'argent n'est ni une recette ni une dépense.
             const rows = await q.query<{ income: number; expense: number }>(
                 `SELECT COALESCE(SUM(CASE WHEN t.kind = 'income' THEN t.amount END), 0) AS income,
                         COALESCE(SUM(CASE WHEN t.kind = 'expense' THEN t.amount END), 0) AS expense
@@ -618,7 +538,6 @@ export function createRepo(q: SdkQueryable): FinanceRepo {
             );
         },
 
-        /* ------------------------------------------------------------ agrégats */
         async totalBalance(workspaceId, today, kinds) {
             const kindClause = kinds && kinds.length > 0 ? `AND a.kind IN (${kinds.map(() => '?').join(', ')})` : '';
             // `SUM(a.initial_balance)` sur une jointure dupliquerait le solde
@@ -714,7 +633,6 @@ export function createRepo(q: SdkQueryable): FinanceRepo {
             return Number(rows[0]?.total ?? 0);
         },
 
-        /* ------------------------------------------------------------- budgets */
         async listBudgets(workspaceId) {
             return q.query<FinanceBudgetRow>('SELECT * FROM finance_budgets WHERE workspace_id = ? ORDER BY id ASC', [
                 workspaceId
@@ -747,7 +665,6 @@ export function createRepo(q: SdkQueryable): FinanceRepo {
             return res.affectedRows > 0;
         },
 
-        /* ------------------------------------------------------------ échéances */
         async listRecurring(workspaceId) {
             return q.query<FinanceRecurringRow>(
                 `SELECT ${REC_COLUMNS} FROM finance_recurring r WHERE r.workspace_id = ?

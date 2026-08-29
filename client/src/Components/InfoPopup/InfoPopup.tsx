@@ -26,10 +26,8 @@ export function openInfo(input: InfoPopupInput): Promise<unknown> {
 }
 
 /**
- * The single info dialog, mounted once near the app root (alongside the other
- * global popups in HomePage). Reads its content from the {@link openInfo} call
- * and renders it. Mounted outside any feature popup, so its own backdrop closes
- * it — never a popup underneath. The backdrop/✕ close it (Popup's default).
+ * The single info dialog, mounted once near the app root, outside any feature
+ * popup: its own backdrop closes it, never a popup underneath.
  */
 export default function InfoPopup() {
     const [data, setData] = useState<InfoPopupInput>({ title: '', body: null });

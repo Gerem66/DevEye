@@ -33,25 +33,11 @@ const FLOWS: { value: FinanceFlow; label: string }[] = [
 ];
 
 /**
- * La grille de lecture: les catégories de dépenses et de recettes, le panneau
- * Catégories de la coquille de réglages.
- *
- * Un panneau de réglages et non un onglet: on y vient deux fois par an, et lui
- * donner une place permanente dans la barre pousserait vers le bas ce qu'on
- * ouvre tous les jours. Les fiches d'opération et de budget ne font que
- * **choisir** dans la liste ; quand il n'y a rien à choisir, elles mènent ici
- * par le bouton commun, au moment exact où on en a besoin (patron des sources).
- *
- * Autonome, comme tous les panneaux de la coquille : il se charge et
- * s'invalide tout seul. Sa liste est lue sur la clé `finance.accountList`,
- * celle du socle de l'écran (réglages, comptes, catégories, chargés en une
- * requête groupée) : une catégorie changée ici ravive les deux d'un coup, par
- * `refreshFinance`, et l'écran resté ouvert derrière suit sans re-cliquer.
- *
- * **Le sens d'une catégorie ne se change pas.** Le basculer rendrait fausses
- * toutes les opérations déjà classées dessous, et la répartition compterait une
- * sortie comme une entrée. Le formulaire ne le propose donc qu'à la création, et
- * le serveur refuse le changement de son côté.
+ * Les catégories, panneau Catégories de la coquille de réglages. Sa liste est
+ * lue sur la clé `finance.accountList`, celle du socle de l'écran : une
+ * catégorie changée ici ravive les deux d'un coup par `refreshFinance`. Le
+ * sens d'une catégorie ne se change pas : toutes les opérations classées
+ * dessous deviendraient fausses.
  */
 export default function FinanceCategoriesPanel({ canWrite }: SettingsPanelProps) {
     const [draft, setDraft] = useState<Draft>(EMPTY);
@@ -88,17 +74,11 @@ export default function FinanceCategoriesPanel({ canWrite }: SettingsPanelProps)
                     : api.send('finance.categoryUpdate', { categoryId: draft.id, category: payload }),
             'Enregistrement impossible.'
         );
-        // Le formulaire se vide après un ajout réussi, comme partout ailleurs
-        // dans l'application, pour enchaîner sans avoir à effacer.
+        // Vidé après un ajout réussi, pour enchaîner.
         if (ok) setDraft({ ...EMPTY, flow: draft.flow });
     };
 
-    /**
-     * Le jeu de départ, posé en une fois.
-     *
-     * Séquentiel et non en parallèle: chaque création prend son rang en bout de
-     * liste, et les lancer ensemble les ferait toutes viser le même.
-     */
+    /** Séquentiel : chaque création prend son rang en bout de liste, en parallèle elles viseraient le même. */
     const seed = () =>
         run(async () => {
             for (const entry of DEFAULT_CATEGORIES) {

@@ -26,7 +26,7 @@ pub enum Outcome {
 /// Try to become a root/system service. See the module docs for the hybrid flow.
 pub fn elevate() -> Result<Outcome> {
     if service::installed_scope() == ServiceScope::System {
-        return Ok(Outcome::Done); // already a system service
+        return Ok(Outcome::Done);
     }
     if !has_interactive_session() {
         return Ok(Outcome::NeedsManual);
@@ -46,7 +46,7 @@ pub fn drop_privileges() -> Result<Outcome> {
     if service::installed_scope() == ServiceScope::System {
         Ok(Outcome::NeedsManual)
     } else {
-        Ok(Outcome::Done) // not elevated — nothing to undo
+        Ok(Outcome::Done)
     }
 }
 
@@ -56,16 +56,13 @@ fn current_exe_str() -> Result<String> {
 
 /// Le fichier d'enrôlement que le service élevé devra lire.
 ///
-/// C'est **nous** qui le connaissons : nous tournons dessus. Le processus élevé,
-/// lui, hérite de l'environnement de root (`pkexec` comme `sudo` réécrivent
-/// `$HOME`) et ne peut que le deviner — il gravait ainsi
-/// `/root/.config/deveye/agent.toml`, un fichier qui n'existe pas, et le service
-/// système démarrait sans jamais trouver d'enrôlement.
+/// C'est nous qui le connaissons : nous tournons dessus. Le processus élevé
+/// hérite de l'environnement de root (`pkexec` comme `sudo` réécrivent `$HOME`)
+/// et graverait `/root/.config/deveye/agent.toml`, qui n'existe pas.
 fn enrolled_config() -> String {
     crate::config::Config::path().to_string_lossy().into_owned()
 }
 
-// ───────────────────────── interactive-session probe ───────────────────────
 #[cfg(target_os = "macos")]
 fn has_interactive_session() -> bool {
     // The owner of /dev/console is the GUI console user, or "root" when nobody is
@@ -95,7 +92,6 @@ fn has_interactive_session() -> bool {
     true
 }
 
-// ───────────────────────── OS-prompted privileged install ───────────────────
 /// Quote a string for a POSIX shell (single-quoted; an embedded `'` becomes `'\''`).
 #[cfg(target_os = "macos")]
 fn shell_quote(s: &str) -> String {

@@ -4,18 +4,15 @@ import type { MailAddress, MailFolderSpecialUse, MailOAuthProvider, MailProxy } 
 import { oauthProviderEndpoints, refreshAccessToken } from './oauth';
 
 /**
- * Talks IMAP/SMTP for one mail account, for either auth method:
- *  - `password`: plain username/password, as submitted by the user.
- *  - `oauth`: SASL XOAUTH2 against the provider's standard IMAP/SMTP
- *    endpoints (not the Gmail/Graph API) — one code path regardless of auth
- *    method. The access token is refreshed here on demand; the caller
- *    supplies {@link ResolveAuthOptions.onTokenRefreshed} to persist it.
+ * Talks IMAP/SMTP for one mail account, for either auth method: `password`
+ * (plain username/password) or `oauth` (SASL XOAUTH2 against the provider's
+ * standard IMAP/SMTP endpoints, not the Gmail/Graph API), so one code path
+ * covers both. An expiring access token is refreshed here; the caller supplies
+ * {@link TokenRefreshCallback} to persist it.
  *
- * TLS is never optional: implicit TLS (port 993/465) uses `secure: true`;
- * every other port requires STARTTLS via `doSTARTTLS`/`requireTLS`, which
- * fails the connection outright if the server doesn't support it — no silent
- * plaintext fallback. `secureConnection` is asserted again after connecting as
- * defense in depth.
+ * TLS is never optional: implicit TLS (port 993/465) uses `secure: true`, every
+ * other port requires STARTTLS via `doSTARTTLS`/`requireTLS`, which fails the
+ * connection outright rather than falling back to plaintext.
  */
 
 export interface MailPasswordCredentials {
@@ -33,7 +30,7 @@ export interface MailOAuthCredentials {
     refreshToken: string | null;
     /** Epoch ms. */
     expiresAt: number;
-    /** Same manual proxy option as a password account — absent on a blob written before this existed, which reads as "none". */
+    /** Same manual proxy option as a password account. */
     proxy: MailProxy | null;
 }
 
@@ -41,8 +38,7 @@ export type MailCredentials = MailPasswordCredentials | MailOAuthCredentials;
 
 /**
  * Called when an OAuth access token had to be minted mid-operation, so the
- * caller can persist it — see `persistRefreshedToken` in `_shared.ts`.
- * Every exported function here takes one; it is `undefined` for password auth.
+ * caller can persist it. `undefined` for password auth.
  */
 export type TokenRefreshCallback = (accessToken: string, expiresAt: number) => Promise<void>;
 
@@ -53,7 +49,7 @@ interface ResolvedAuth {
     smtpPort: number;
     imapAuth: { user: string; pass?: string; accessToken?: string };
     smtpAuth: { type: 'login'; user: string; pass: string } | { type: 'OAuth2'; user: string; accessToken: string };
-    /** Proxy URL (socks5:/http:/https:) for the IMAP connection, or null. SMTP-side proxy is a V2 gap. */
+    /** Proxy URL (socks5:/http:/https:) for the IMAP connection, or null; SMTP is not proxied. */
     imapProxy: string | null;
 }
 
@@ -109,11 +105,9 @@ export async function resolveAuth(
 type StrictImapFlowOptions = ImapFlowOptions & { doSTARTTLS?: boolean };
 
 /**
- * imapflow never folds the server's own explanation into `Error.message` — a
- * failed IMAP command (bad password, missing mailbox, disabled login…) throws
- * a generic `Error('Command failed')` with the real reason on `.responseText`
- * (or `.response` for `AuthenticationFailure`). Without this, every failure
- * surfaces identically as the unhelpful "Command failed".
+ * imapflow never folds the server's own explanation into `Error.message`: a
+ * failed IMAP command throws a generic `Error('Command failed')` with the real
+ * reason on `.responseText` (or `.response` for `AuthenticationFailure`).
  */
 function describeError(e: unknown): string {
     if (e && typeof e === 'object') {
@@ -138,10 +132,9 @@ async function withImap<T>(auth: ResolvedAuth, fn: (client: ImapFlow) => Promise
         doSTARTTLS: implicitTls ? undefined : true,
         auth: auth.imapAuth,
         proxy: auth.imapProxy ?? undefined,
-        // Délais resserrés sur ceux d'imapflow (90 s / 16 s / 5 min). La relève de
-        // fond n'a que `MAIL_SYNC_CONCURRENCY` places : un serveur qui ne répond
-        // plus en immobilisait une cinq minutes durant, pendant lesquelles les
-        // autres boîtes attendaient leur tour pour rien.
+        // Délais resserrés sur ceux d'imapflow (90 s / 16 s / 5 min) : la relève
+        // de fond n'a que `MAIL_SYNC_CONCURRENCY` places, et un serveur muet en
+        // immobiliserait une cinq minutes durant.
         connectionTimeout: 30_000,
         greetingTimeout: 15_000,
         socketTimeout: 60_000,
@@ -308,10 +301,9 @@ function mapFetchedMessage(msg: FetchMessageObject): RemoteEnvelope {
 
 const FETCH_QUERY = { uid: true, envelope: true, flags: true, bodyStructure: true, internalDate: true } as const;
 
-/** Réconciliation : les drapeaux et rien d'autre — l'enveloppe est déjà en cache et, elle, ne change jamais. */
+/** Réconciliation : les drapeaux seuls, l'enveloppe en cache ne changeant jamais. */
 const FLAGS_QUERY = { uid: true, flags: true } as const;
 
-/** Drapeaux relus sur une fenêtre déjà en cache : ni enveloppe, ni bodyStructure. */
 export interface RemoteFlags {
     uid: number;
     seen: boolean;
@@ -331,9 +323,8 @@ export interface SyncFolderOptions {
     sinceUid: number | null;
     initialLimit: number;
     /**
-     * Fenêtre déjà en cache à relire au passage. Même connexion et même verrou
-     * de boîte que le fetch avant : ouvrir la boîte est le coût dominant, la
-     * relecture des drapeaux n'ajoute qu'un aller-retour dessus.
+     * Fenêtre déjà en cache à relire au passage, sur la connexion et le verrou
+     * du fetch avant : ouvrir la boîte est le coût dominant.
      */
     reconcile?: ReconcileWindow | null;
     onTokenRefreshed?: TokenRefreshCallback;
@@ -345,30 +336,25 @@ export interface FolderSyncResult {
     uidValidity: number;
     messages: RemoteEnvelope[];
     /**
-     * Ce que le serveur possède **encore** dans la fenêtre demandée. `null`
-     * quand aucune réconciliation n'a été demandée — à ne pas confondre avec
-     * `[]`, qui veut dire « plus rien de cette fenêtre n'existe ».
+     * Ce que le serveur possède encore dans la fenêtre demandée. `null` quand
+     * aucune réconciliation n'a été demandée, à ne pas confondre avec `[]`, qui
+     * veut dire « plus rien de cette fenêtre n'existe ».
      */
     reconciled: RemoteFlags[] | null;
 }
 
 /**
  * Envelopes for `imapPath`, from `sinceUid + 1` onward (or exactly the most
- * recent `initialLimit` messages when `sinceUid` is null — first sync of a
- * folder). The caller is responsible for detecting a `uidValidity` change
- * against its cache and clearing it first; this always fetches against the
- * mailbox as it currently is.
+ * recent `initialLimit` messages when `sinceUid` is null). Detecting a
+ * `uidValidity` change against the cache and clearing it first is the caller's
+ * job; this always fetches the mailbox as it currently is.
  *
- * `onProgress`, if given, fires after every message actually yielded by the
- * fetch — `estimatedTotal` is an upper bound from the UID range (deleted
- * messages leave gaps IMAP doesn't report ahead of time), so progress can
- * jump to 1 on the last message rather than creeping up to it; still the
- * finest-grained signal available without a second round-trip just to count.
+ * The `estimatedTotal` given to `onProgress` is an upper bound from the UID
+ * range: deleted messages leave gaps IMAP doesn't report ahead of time.
  *
- * Avec `reconcile`, la fenêtre déjà en cache est relue au passage : un fetch de
- * drapeaux dans la même boîte déjà ouverte, dont le caller tire ce qui a changé
- * et ce qui a disparu. C'est ce qui rend la relève de fond capable d'apprendre
- * autre chose que l'arrivée d'un message.
+ * Avec `reconcile`, la fenêtre déjà en cache est relue au passage, dans la même
+ * boîte déjà ouverte : c'est ce qui rend la relève capable d'apprendre autre
+ * chose que l'arrivée d'un message.
  */
 export async function syncFolder({
     credentials,
@@ -397,9 +383,8 @@ export async function syncFolder({
         } else if (box.exists > 0) {
             // First sync, addressed by *sequence number*, which counts messages.
             // The UID equivalent (`uidNext - initialLimit`) is a window of UID
-            // values, not of messages: UIDs are sparse wherever mail has ever
-            // been deleted or moved, so that window routinely held a handful of
-            // messages instead of `initialLimit` — the folder just looked empty.
+            // values, sparse wherever mail was ever deleted or moved, and would
+            // hold a handful of messages instead of `initialLimit`.
             const firstSeq = Math.max(1, box.exists - initialLimit + 1);
             const estimatedTotal = box.exists - firstSeq + 1;
             for await (const msg of client.fetch(`${firstSeq}:${box.exists}`, FETCH_QUERY)) {
@@ -408,20 +393,18 @@ export async function syncFolder({
             }
         }
 
-        // Après le fetch avant, et sans recouvrement avec lui : la fenêtre à
-        // réconcilier est par construction sous `sinceUid`. `onProgress` continue
-        // donc de ne compter que les nouveaux messages, et la barre de progression
-        // garde exactement le sens qu'elle avait.
+        // Sans recouvrement avec le fetch avant : la fenêtre à réconcilier est
+        // par construction sous `sinceUid`, donc `onProgress` ne compte toujours
+        // que les nouveaux messages.
         let reconciled: RemoteFlags[] | null = null;
         if (reconcile) {
             // Une boîte vidée côté serveur ne rend rien : c'est une réponse, pas
-            // une absence de réponse — le cache doit se vider avec elle.
+            // une absence de réponse, et le cache doit se vider avec elle.
             reconciled = [];
             if (box.exists > 0) {
                 // Une plage `a:b` ne rend que les UID qui existent encore
-                // (contrairement à `n:*`, qui rend toujours au moins un message) :
-                // les absents de la réponse sont exactement ceux que le serveur
-                // n'a plus.
+                // (contrairement à `n:*`) : les absents de la réponse sont
+                // exactement ceux que le serveur n'a plus.
                 for await (const msg of client.fetch(`${reconcile.fromUid}:${reconcile.toUid}`, FLAGS_QUERY, {
                     uid: true
                 })) {
@@ -447,14 +430,10 @@ export interface OlderMessagesResult {
 }
 
 /**
- * Exactly the `limit` newest messages older than `beforeUid` (exclusive) — the
- * backward counterpart to `syncFolder`'s forward-only "since" fetch, used to
- * backfill history beyond a folder's initial sync window (see
- * `MailSyncService`/`mail.folderBackfill`).
- *
- * `limit` counts messages, not UID values; the two are only ever equal in a
- * mailbox nothing was deleted from. `reachedStart` is true once the batch
- * consumed every remaining older message, so the caller can stop.
+ * Exactly the `limit` newest messages older than `beforeUid` (exclusive), the
+ * backward counterpart to `syncFolder`'s forward-only fetch. `limit` counts
+ * messages, not UID values; the two are only ever equal in a mailbox nothing
+ * was deleted from. `reachedStart` is true once nothing older remains.
  */
 export async function fetchOlderMessages(
     credentials: MailCredentials,
@@ -470,17 +449,15 @@ export async function fetchOlderMessages(
         if (box.exists === 0 || upperBound < 1) return { messages: [], reachedStart: true };
 
         // Ask the server which UIDs actually exist below the boundary instead
-        // of assuming the range is dense. A window of `limit` UID *values*
-        // holds `limit` messages only in a mailbox nothing was ever deleted
-        // from; anywhere else it holds fewer, very often none — and an empty
-        // batch used to read as "nothing older left", ending the backfill for
-        // good with most of the history still unfetched.
+        // of assuming the range is dense: a window of `limit` UID *values* holds
+        // fewer messages wherever mail was deleted, often none, and an empty
+        // batch would read as "nothing older left".
         const older = await client.search({ uid: `1:${upperBound}` }, { uid: true });
         if (!older || older.length === 0) return { messages: [], reachedStart: true };
 
-        // `older` is ascending, so the tail is the newest of the older ones —
-        // the batch that continues the cache downwards. Every existing UID
-        // between its ends is in the batch too, so a range addresses it exactly.
+        // `older` is ascending: its tail is the batch that continues the cache
+        // downwards, and every existing UID between its ends is in it too, so a
+        // range addresses it exactly.
         const batch = older.slice(-limit);
         const messages: RemoteEnvelope[] = [];
         for await (const msg of client.fetch(`${batch[0]}:${batch[batch.length - 1]}`, FETCH_QUERY, { uid: true })) {
@@ -491,18 +468,14 @@ export async function fetchOlderMessages(
 }
 
 /**
- * UIDs matching every one of `terms`, searched by the IMAP server itself —
- * so this reaches message **bodies** and messages that were never synced,
- * neither of which the local envelope cache can offer.
+ * UIDs matching every one of `terms`, searched by the IMAP server itself, so
+ * this reaches message bodies and messages that were never synced.
  *
  * One `SEARCH` per term, intersected, rather than a single query: IMAP ANDs
  * top-level search keys, and each term has to be an OR across the fields, so
  * "all terms match, each one anywhere" is not expressible as one key set.
- * They run on the same open connection, and a query is a handful of words.
- *
- * `BODY` rather than `TEXT` on purpose — `TEXT` also matches raw headers, so a
- * search would hit `Received:` chains and Message-IDs, which is noise nobody
- * asked for. imapflow adds `CHARSET UTF-8` on its own when a term is non-ASCII.
+ * `BODY` rather than `TEXT` on purpose: `TEXT` also matches raw headers, so a
+ * search would hit `Received:` chains and Message-IDs.
  */
 export async function searchMessageUids(
     credentials: MailCredentials,
@@ -520,11 +493,10 @@ export async function searchMessageUids(
                 { uid: true }
             );
             // imapflow answers `false` when the mailbox isn't selected or the
-            // server refused the search — not an empty result, but no result.
+            // server refused the search: no result, not an empty result.
             if (found === false) throw new Error('Recherche refusée par le serveur IMAP');
             const current = new Set<number>(found);
             hits = hits === null ? found : hits.filter((uid) => current.has(uid));
-            // Nothing survives an empty intersection; stop asking the server.
             if (hits.length === 0) break;
         }
         return hits ?? [];
@@ -649,8 +621,6 @@ export async function sendMail(
         });
         return { messageId: info.messageId };
     } catch (e) {
-        // Le journal est celui de l'appelant (une commande, le transport des
-        // alertes) : le client ne lit pas le logger de l'app, il rend la cause.
         throw new Error(`Envoi du mail impossible : ${e instanceof Error ? e.message : String(e)}`);
     } finally {
         transport.close();

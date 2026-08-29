@@ -8,15 +8,10 @@ import { rangeWindow } from './format';
 /**
  * L'historique d'un service, pour qui n'affiche que la bande d'état.
  *
- * **Pas de minuteur : `stamp`.** On lui passe `service.lastCheckedAt`, qui bouge
- * à chaque sonde : c'est ce qui rafraîchit les barres. Et parce qu'il ne bouge
- * que pour *ce* service, une liste de vingt cartes ne relit pas vingt historiques
- * quand une seule sonde tombe : seule la carte concernée repart.
- *
- * Une lecture manquée ne remonte pas d'erreur. Ce n'est jamais la raison d'être
- * de l'endroit qui l'appelle (il reste le nom, l'état, les chiffres), et une
- * bannière rouge pour un aperçu absent coûterait plus qu'elle ne rapporte. Les
- * barres se taisent, la sonde suivante les ramène.
+ * Pas de minuteur : `stamp` reçoit `service.lastCheckedAt`, qui ne bouge que
+ * pour ce service, donc une liste de vingt cartes ne relit pas vingt
+ * historiques quand une seule sonde tombe. Une lecture manquée ne remonte pas
+ * d'erreur : les barres se taisent, la sonde suivante les ramène.
  */
 export function useServiceHistory(
     id: number,
@@ -36,7 +31,7 @@ export function useServiceHistory(
                     setResolution(res.resolution);
                 }
             } catch {
-                // Voir le commentaire de tête : l'aperçu se tait, rien d'autre.
+                // L'aperçu se tait, rien d'autre.
             }
         })();
         return () => {

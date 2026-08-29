@@ -6,15 +6,8 @@ import { BLOB_CHUNK_BYTES } from '@deveye/types/sdk/server';
 import { openSealedStream, sealStream } from './crypto';
 
 /**
- * Le scellement des archives est le seul endroit du système où une erreur ne se
- * voit **jamais** au moment où on la commet : une archive mal scellée s'écrit
- * sans broncher, se liste normalement, et n'échoue que le jour de la
- * restauration — c'est-à-dire le pire jour possible.
- *
- * Ces cas figent les quatre propriétés dont dépend une restauration : l'aller-
- * retour est fidèle quelle que soit la taille, le découpage d'entrée n'a aucune
- * influence sur la sortie, une troncature est détectée, et une altération l'est
- * aussi.
+ * Une archive mal scellée n'échoue qu'à la restauration : aller-retour fidèle,
+ * indépendance du découpage d'entrée, troncature et altération détectées.
  */
 
 const KEY = crypto.createHash('sha256').update('clé de test').digest();
@@ -36,9 +29,7 @@ async function roundTrip(data: Buffer, source?: AsyncIterable<Buffer>): Promise<
 
 describe('scellement des archives de sauvegarde', () => {
     it('rend exactement ce qu’on lui a donné, archive vide comprise', async () => {
-        // L'archive vide n'est pas un cas d'école : un partage CloudSync sans
-        // fichier produit un `tar` de deux blocs nuls, gzippé, et il doit se
-        // relire comme les autres.
+        // Un partage CloudSync sans fichier produit un `tar` vide gzippé : il doit se relire.
         for (const size of [0, 1, 1024, BLOB_CHUNK_BYTES - 1, BLOB_CHUNK_BYTES, BLOB_CHUNK_BYTES + 1]) {
             const data = crypto.randomBytes(size);
             assert.deepEqual(await roundTrip(data), data, `taille ${size}`);
@@ -51,11 +42,8 @@ describe('scellement des archives de sauvegarde', () => {
     });
 
     it('ignore le découpage de la source', async () => {
-        // LE cas qui compte : `mysqldump` rend des morceaux de taille
-        // arbitraire, jamais alignés sur un bloc. Si le scellement suivait ce
-        // découpage, deux exécutions du même vidage produiraient des archives
-        // de structures différentes — et l'ouvreur, qui compte les blocs, n'en
-        // relirait aucune.
+        // `mysqldump` rend des morceaux de taille arbitraire : le scellement ne
+        // doit pas suivre ce découpage.
         const data = crypto.randomBytes(BLOB_CHUNK_BYTES + 9999);
         async function* ragged(): AsyncGenerator<Buffer> {
             let offset = 0;

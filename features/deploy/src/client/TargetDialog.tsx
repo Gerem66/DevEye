@@ -41,22 +41,11 @@ const KIND_OPTIONS: readonly { value: DeployTargetKind; label: string; title: st
 ];
 
 /**
- * Déclarer une cible de déploiement, ou la régler.
- *
- * **Rien ne se crée chez le fournisseur** : DevEye ne fait que pointer une
- * application ou une pile qui existe déjà chez Dokploy. Le dialogue interroge
- * donc l'instance pour proposer ce qu'elle déclare, et garde un repli manuel
- * pour le jour où le décodeur ne reconnaîtra pas une forme de réponse.
- *
- * Il charge lui-même les accès de l'espace et dit ce qui manque quand il n'y en
- * a aucun — c'est ce qui permet de l'ouvrir aussi bien depuis la feature que
- * depuis un projet, sans que chaque appelant ait à les lire d'abord.
- *
- * Les accès se gèrent dans Réglages → Sources, jamais ici : le « + » du
- * sélecteur est le bouton commun de la coquille, ouvert sur cet onglet, et
- * l'accès créé pendant ce temps est adopté à la fermeture. Le dialogue
- * montait lui-même `FeatureSettingsDialog` par un chemin interne de l'app :
- * c'était la dette de coquille de la feature, réglée par son rapatriement.
+ * Déclarer une cible de déploiement, ou la régler. Rien ne se crée chez le
+ * fournisseur : le dialogue interroge l'instance pour proposer ce qu'elle
+ * déclare, avec un repli manuel. Il charge lui-même les accès de l'espace ; ils
+ * se gèrent dans Réglages → Sources, et l'accès créé pendant ce temps est
+ * adopté à la fermeture.
  */
 export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: TargetDialogProps) {
     const [credentials, setCredentials] = useState<DeployCredential[] | null>(null);
@@ -122,19 +111,9 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
     };
 
     /*
-     * Les applications de l'instance, chargées **d'elles-mêmes**.
-     *
-     * C'est la seule commande du module qui appelle un service externe en
-     * direct : attendre un tour d'ordonnanceur pour remplir un sélecteur
-     * n'aurait aucun sens. Elle se déclenchait autrefois sur un bouton
-     * « Lister les applications » — un geste que personne n'avait de raison de
-     * ne pas faire, donc un clic imposé avant le vrai choix. Le sélecteur se
-     * remplit maintenant dès qu'une instance est désignée, et se recharge quand
-     * on en change.
-     *
+     * Les applications de l'instance, chargées dès qu'une instance est désignée.
      * `busy` reste au dépôt du formulaire : une interrogation en cours ne doit
-     * pas se lire comme un enregistrement en cours, seul le sélecteur s'en
-     * trouve occupé.
+     * pas se lire comme un enregistrement en cours.
      */
     useEffect(() => {
         if (!open || !credentialId) {
@@ -158,8 +137,7 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
                 setError(null);
             } catch (e) {
                 // Une instance injoignable n'empêche pas de déclarer la cible :
-                // le repli manuel plus bas reste ouvert, d'où l'erreur affichée
-                // sans que rien ne se ferme.
+                // le repli manuel reste ouvert.
                 if (alive) setError(humanizeError(e, 'Impossible de joindre l’instance Dokploy.'));
             } finally {
                 if (alive) setLoadingCandidates(false);
@@ -250,9 +228,8 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
                             sera sélectionné ici à votre retour.
                         </p>
                         <div>
-                            {/* Le bouton commun, ouvert sur l'onglet Sources :
-                                la seule porte vers les accès, ici comme dans
-                                l'en-tête de la feature. */}
+                            {/* Le bouton commun, ouvert sur l'onglet Sources : la
+                                seule porte vers les accès. */}
                             <FeatureSettingsButton
                                 scope={{ kind: 'feature', feature: 'deploy' }}
                                 initialSection='sources'
@@ -273,11 +250,8 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
                                         </option>
                                     ))}
                                 </SelectInput>
-                                {/* Le « + » : les accès se gèrent dans Réglages →
-                                    Sources, jamais ici. Le bouton commun ouvre
-                                    donc ces réglages par-dessus, et l'accès créé
-                                    est adopté au retour (`onOpenChange` fige la
-                                    liste connue à l'ouverture). */}
+                                {/* Le « + » ouvre Réglages → Sources par-dessus ;
+                                    l'accès créé est adopté au retour. */}
                                 <FeatureSettingsButton
                                     scope={{ kind: 'feature', feature: 'deploy' }}
                                     initialSection='sources'
@@ -288,11 +262,9 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
                             </div>
                         </label>
 
-                        {/* Toujours présent, y compris vide : c'est le champ par
-                            lequel on choisit, et le faire apparaître seulement
+                        {/* Toujours présent, y compris vide : l'afficher seulement
                             une fois rempli déplacerait le formulaire sous les
-                            yeux au moment où l'instance répond. Sa première
-                            ligne porte donc son propre état. */}
+                            yeux. Sa première ligne porte son état. */}
                         <label className={styles.field}>
                             <span className={styles.label}>Cible</span>
                             <SelectInput
@@ -307,11 +279,9 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
                                           ? 'Cette instance ne déclare aucune application'
                                           : 'Choisir…'}
                                 </option>
-                                {/* La cible réglée mais absente de la liste — une
-                                    application retirée chez le fournisseur, ou
-                                    saisie à la main. Sans cette entrée, le
-                                    sélecteur afficherait « Choisir… » sur une
-                                    cible qui en a pourtant une. */}
+                                {/* La cible réglée mais absente de la liste (retirée
+                                    chez le fournisseur, ou saisie à la main) : sans
+                                    cette entrée, le sélecteur afficherait « Choisir… ». */}
                                 {externalId !== '' && !candidates.some((c) => c.externalId === externalId) && (
                                     <option value={externalId}>{externalId} — hors liste</option>
                                 )}
@@ -325,9 +295,8 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
                             </SelectInput>
                         </label>
 
-                        {/* Repli manuel : si l'instance répond dans une forme que
-                            le décodeur ne reconnaît pas, on doit quand même
-                            pouvoir déclarer la cible. */}
+                        {/* Repli manuel, pour une réponse que le décodeur ne
+                            reconnaît pas. */}
                         <label className={styles.field}>
                             <span className={styles.label}>…ou identifiant de cible</span>
                             <TextInput

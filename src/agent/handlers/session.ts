@@ -10,18 +10,14 @@ import type { MonitorHub } from '../hub';
 /**
  * Everything an agent-message handler needs, captured once at connection time and
  * shared by every handler in this folder. `device` is the snapshot taken at
- * connect (son `status` est relu à la volée quand il refuse — voir `gated` —,
- * son `name` alimente les descriptions d.audit) ; les handlers qui écrivent la
- * ligne appareil la relisent eux-mêmes.
+ * connect; handlers that write the device row re-read it themselves.
  */
 export interface AgentSession {
     socket: WebSocket;
     db: Database;
     hub: MonitorHub;
     /**
-     * Les hooks agent des modules installés (agrégat no-op par défaut) : le
-     * remplaçant des moteurs câblés en dur d'avant les rapatriements (CloudSync
-     * pour la synchro, Sentinelle pour la télémétrie et ses deux relevés). Les
+     * Les hooks agent des modules installés (agrégat no-op par défaut) : les
      * handlers leur tendent ce qu'ils ont persisté, et n'évaluent rien.
      */
     hooks: Required<FeatureAgentHooks>;

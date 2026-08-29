@@ -1,40 +1,19 @@
 -- Sentinelle : ligne de base, constats, autorisations.
 --
--- Monitoring collecte déjà tout ce qu'il faut pour détecter un corps étranger —
--- la liste complète des programmes toutes les 60 s, les ports en écoute avec
--- leur adresse de bind, les connexions établies. Il manquait le détecteur.
--- Ces trois tables le portent.
---
--- ## En clair, comme le reste de la télémétrie d'appareil
---
--- Rien ici n'est chiffré. C'est délibéré et cohérent : `devices.report_json`
--- l'est déjà, et surtout le moteur tourne **sans session et sans mot de passe**,
--- comme l'ordonnanceur d'Uptime. Chiffrer l'obligerait au détour par le chiffre
--- « open » (voir `Docs/SECURITY_MODEL.md`) pour des données qui décrivent des
--- machines, pas des secrets d'utilisateur.
---
--- ## Pas de table de posture
---
--- Un défaut de posture (pare-feu éteint, SSH qui accepte root) est un **constat
--- comme un autre**. Il entre donc dans `device_findings`, ce qui lui donne
--- gratuitement le cycle de vie ouvrir/acquitter/résoudre, le dédoublonnage, et
--- le même chemin de notification. Le score de posture se recalcule à la lecture.
+-- Rien ici n'est chiffré, comme `devices.report_json` : le moteur tourne sans
+-- session et sans mot de passe, et ces données décrivent des machines, pas des
+-- secrets d'utilisateur (voir `Docs/SECURITY_MODEL.md`).
+-- Un défaut de posture (pare-feu éteint, SSH qui accepte root) est un constat
+-- comme un autre : il entre dans `device_findings`, avec le même cycle de vie et
+-- le même chemin de notification.
 
--- La ligne de base : ce qui a été **observé**. Des faits, sans jugement.
+-- La ligne de base : ce qui a été observé, une ligne par (appareil, nature,
+-- élément). Elle ne grandit plus une fois la machine connue.
 --
--- Une ligne par (appareil, nature, élément). Alimentée à chaque instant, elle
--- ne grandit plus une fois la machine connue : ~300 programmes, ~30 écoutes et
--- ~500 entrées de persistance par appareil, puis c'est stable.
--- ⚠️ La collation de `device_id` est **héritée**, jamais déclarée.
---
--- Une clé étrangère exige que les deux colonnes partagent jeu de caractères
--- *et* collation. `devices.id` (migration 004) est un `CHAR(36)` nu : il porte
--- la collation par défaut de la base, quelle qu'elle soit. Nommer une collation
--- ici reviendrait à parier sur cette valeur — et le pari est perdu dès que la
--- base a été créée avec le défaut de MySQL 8 (`utf8mb4_0900_ai_ci`) au lieu de
--- `utf8mb4_general_ci`. Un `CHAR(36)` nu hérite du même défaut que la colonne
--- référencée : les deux bougent ensemble, sur n'importe quel hôte. C'est ce que
--- font les treize autres clés étrangères vers `devices`.
+-- La collation de `device_id` est héritée, jamais déclarée : une clé étrangère
+-- exige que les deux colonnes partagent jeu de caractères et collation, et
+-- `devices.id` est un `CHAR(36)` nu qui porte le défaut de la base, quel qu'il
+-- soit (`utf8mb4_0900_ai_ci` sur MySQL 8 récent, `utf8mb4_general_ci` ailleurs).
 CREATE TABLE IF NOT EXISTS device_baseline (
     id         BIGINT AUTO_INCREMENT PRIMARY KEY,
     device_id  CHAR(36) NOT NULL,
@@ -48,9 +27,9 @@ CREATE TABLE IF NOT EXISTS device_baseline (
     -- composé dépasserait alors la limite InnoDB de 3072. L'empreinte fixe le
     -- coût à 32 octets quelle que soit la longueur du chemin.
     item_hash  BINARY(32)   NOT NULL,
-    -- Unix **ms**, comme `device_metrics.ts` : une entrée de ligne de base se
-    -- rapproche d'un instant, et mélanger deux unités dans la même feature est
-    -- la meilleure façon de produire des comparaisons fausses.
+    -- Unix ms, comme `device_metrics.ts` : une entrée de ligne de base se
+    -- rapproche d'un instant, deux unités dans la même feature fausseraient les
+    -- comparaisons.
     first_seen BIGINT       NOT NULL,
     last_seen  BIGINT       NOT NULL,
     -- Nombre d'instants où l'élément a été vu. Sert à distinguer un programme
@@ -66,21 +45,17 @@ CREATE TABLE IF NOT EXISTS device_baseline (
     CONSTRAINT fk_baseline_device FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
 );
 
--- Les constats : un écart **jugé** digne d'être montré.
---
--- `state` porte l'état courant, en clair, exactement comme `database_alerts.firing` :
--- c'est ce qui permet de ne notifier qu'aux transitions plutôt qu'à chaque tour.
--- Une machine compromise déclenche vingt règles ; renotifier chaque minute
--- rendrait le canal inutilisable dès la première nuit.
+-- Les constats : un écart jugé digne d'être montré. `state` porte l'état courant
+-- en clair, comme `database_alerts.firing` : c'est ce qui permet de ne notifier
+-- qu'aux transitions plutôt qu'à chaque tour.
 CREATE TABLE IF NOT EXISTS device_findings (
     id          BIGINT AUTO_INCREMENT PRIMARY KEY,
     -- Collation héritée pour la même raison que sur `device_baseline`.
     device_id   CHAR(36) NOT NULL,
     -- Identifiant de règle du catalogue figé (`sentinelRuleIdSchema`).
     rule        VARCHAR(48)  NOT NULL,
-    -- sha256(rule + subject). Un constat par situation, pas un par tour : c'est
-    -- cette clé qui transforme « ce port est ouvert » en une ligne dont le
-    -- compteur monte, au lieu de mille quatre cents lignes par jour.
+    -- sha256(rule + subject). Un constat par situation, pas un par tour : une
+    -- ligne dont le compteur monte, au lieu de mille quatre cents par jour.
     dedup_hash  BINARY(32)   NOT NULL,
     -- 1 info | 2 low | 3 high | 4 critical. Le **rang** et non le nom : trier
     -- sur 'critical' < 'low' en ordre lexical remonterait l'inverse de l'urgence.
@@ -91,8 +66,7 @@ CREATE TABLE IF NOT EXISTS device_findings (
     -- autorisations réutilisent, d'où son absence du blob de preuve.
     subject     VARCHAR(512) NOT NULL,
     -- Paires libellé/valeur déjà mises en forme par le serveur, figées au
-    -- premier déclenchement. L'interface n'a alors aucun rendu par règle à
-    -- écrire, et une règle nouvelle s'affiche le jour où elle est écrite.
+    -- premier déclenchement : l'interface n'a aucun rendu par règle à écrire.
     evidence    JSON         NOT NULL,
     -- L'instant épinglé qui porte la preuve (unix ms), ou NULL pour les
     -- constats qui ne naissent pas d'un instant (posture, persistance, auth).
@@ -114,19 +88,14 @@ CREATE TABLE IF NOT EXISTS device_findings (
     CONSTRAINT fk_finding_acked_by FOREIGN KEY (acked_by) REFERENCES users(id) ON DELETE SET NULL
 );
 
--- Les autorisations : les décisions **humaines**.
---
--- Rangées à part de la ligne de base, et c'est le point important. La ligne de
--- base est reconstructible (`sentinel.resetBaseline` après une montée de version
--- d'agent) ; les décisions ne le sont pas. Les mélanger ferait redemander à
--- l'utilisateur, machine par machine, de rejuger ce qu'il avait déjà jugé — la
--- façon la plus sûre de faire abandonner la feature.
+-- Les autorisations : les décisions humaines, rangées à part de la ligne de
+-- base. Celle-ci est reconstructible (`sentinel.resetBaseline`), les décisions
+-- ne le sont pas.
 CREATE TABLE IF NOT EXISTS sentinel_allowlist (
     id           INT AUTO_INCREMENT PRIMARY KEY,
     workspace_id INT          NOT NULL,
     -- NULL = toute la flotte de l'espace, y compris les machines qui le
-    -- rejoindront plus tard. C'est la portée qu'on veut pour « ce programme est
-    -- notre agent de sauvegarde », qu'on ne souhaite pas rejuger huit fois.
+    -- rejoindront plus tard (« ce programme est notre agent de sauvegarde »).
     -- Collation héritée pour la même raison que sur `device_baseline`.
     device_id    CHAR(36) NULL,
     rule         VARCHAR(48)  NOT NULL,
@@ -146,17 +115,13 @@ CREATE TABLE IF NOT EXISTS sentinel_allowlist (
     CONSTRAINT fk_allow_user FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Réglages par appareil.
---
--- Éteint par défaut, comme le relevé des bases (migration 068) et pour la même
--- raison : activer une feature ne doit lire les journaux d'authentification de
--- personne. C'est un geste explicite, appareil par appareil.
+-- Réglages par appareil. Éteint par défaut, comme le relevé des bases (068) :
+-- activer une feature ne doit lire les journaux d'authentification de personne.
 ALTER TABLE devices
     ADD COLUMN sentinel_enabled TINYINT NOT NULL DEFAULT 0,
     -- Fin de la fenêtre d'apprentissage, unix ms. Pendant qu'elle court, tout
-    -- est absorbé dans la ligne de base et les règles de dérive restent muettes :
-    -- sans elle, le premier jour produirait des centaines de « nouveau
-    -- programme » et la liste serait illisible avant d'avoir servi.
+    -- est absorbé dans la ligne de base et les règles de dérive restent muettes
+    -- (sinon le premier jour produirait des centaines de « nouveau programme »).
     ADD COLUMN sentinel_learning_until BIGINT NULL,
     -- Cadence du manifeste de persistance, en minutes. Séparée de
     -- `metric_interval_seconds` : empreinter cinq cents fichiers ne se fait pas

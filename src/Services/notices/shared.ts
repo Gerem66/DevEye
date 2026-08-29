@@ -1,17 +1,4 @@
-/**
- * Ce que toutes les mises en page Discord partagent.
- *
- * Il existait deux jeux de ces helpers — un dans `UptimeNotice`, un dans
- * `DeployNotice` — recopiés à quelques mots près, et l'un d'eux avait **dérivé** :
- * `duration()` traitait les jours côté Uptime et s'arrêtait aux heures côté
- * Déploiement, si bien qu'une panne de trois jours se lisait « 72 h » d'un côté
- * et « 3 j » de l'autre. C'est exactement le genre d'écart qu'une copie garantit
- * et qu'on ne découvre que le jour où il se voit.
- *
- * Les trois émetteurs qui n'avaient aucune mise en page — Sentinelle, Bases de
- * données, Sauvegardes — s'appuient dessus dès le premier jour, ce qui est la
- * vraie raison de l'extraire maintenant plutôt que de la laisser en double.
- */
+/** Ce que toutes les mises en page Discord partagent. */
 
 /** Couleurs de la charte Discord : la bordure dit l'état avant la lecture. */
 export const COLOR_DANGER = 0xed4245;
@@ -23,25 +10,14 @@ export const COLOR_WARNING = 0xfee75c;
 export const FIELD_MAX = 1000;
 
 /**
- * Un instant, rendu par Discord dans le fuseau **du lecteur**.
- *
- * `<t:epoch:f>` plutôt qu'une date que nous formaterions ici : le message reste
- * juste pour qui le lit d'un autre fuseau, et `:R` (« il y a 4 minutes ») se met
- * à jour tout seul, ce qu'aucune chaîne figée ne sait faire — y compris entre
- * deux modifications d'un même message de suivi.
+ * Un instant, rendu par Discord dans le fuseau du lecteur : `:R` (« il y a
+ * 4 minutes ») se met à jour tout seul.
  */
 export function moment(epochSeconds: number, style: 'f' | 'R' | 'T' = 'f'): string {
     return `<t:${epochSeconds}:${style}>`;
 }
 
-/**
- * « 3 j 02 h », « 2 h 05 min », « 45 s ».
- *
- * L'échelle va jusqu'aux **jours** : c'était la version d'Uptime, et c'est la
- * bonne. Celle du déploiement s'arrêtait aux heures, ce qui n'avait pas d'effet
- * visible tant qu'aucun déploiement ne durait un jour — une hypothèse, pas une
- * garantie.
- */
+/** « 3 j 02 h », « 2 h 05 min », « 45 s ». */
 export function duration(seconds: number): string {
     if (seconds < 60) return `${seconds} s`;
     const minutes = Math.floor(seconds / 60);
@@ -58,16 +34,9 @@ export function trim(value: string): string {
 }
 
 /**
- * Un texte quelconque, en bloc de code.
- *
- * Le bloc n'est pas décoratif : une erreur vient d'un point d'entrée quelconque
- * et peut contenir n'importe quoi — des `*`, des `_`, un `#` en début de ligne.
- * Rendue en Markdown, elle arriverait à moitié en gras et à moitié en titre. Le
- * code la montre telle qu'elle est.
- *
- * Les triples accents graves du contenu sont neutralisés : sans ça, un journal
- * qui en contient referme le bloc au milieu et le reste du message part en
- * Markdown.
+ * Un texte quelconque, en bloc de code : rendue en Markdown, une erreur
+ * arriverait à moitié en gras et à moitié en titre. Les triples accents graves
+ * sont neutralisés, sinon ils refermeraient le bloc au milieu.
  */
 export function block(body: string): string {
     const clean = body.replace(/```/g, "'''").trim();

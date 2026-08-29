@@ -18,21 +18,10 @@ interface FlowChartProps {
 
 /**
  * Douze mois d'entrées et de sorties, et la courbe du solde par-dessus.
- *
- * **`viewBox` fixe, sans `ResizeObserver`**: le SVG s'adapte à son conteneur par
- * simple mise à l'échelle, donc le dessin ne coûte aucun recalcul au
- * redimensionnement. C'est le parti pris de `Features/Uptime/UptimeChart.tsx` et
- * de `Features/Audience/Stats/TrendChart.tsx`, pour la même raison.
- *
- * **Deux échelles, et c'est assumé.** Les barres se lisent sur les flux du mois
- * (quelques milliers), la courbe sur le patrimoine (parfois cent fois plus): les
- * mettre sur la même échelle écraserait les barres contre l'axe. La courbe est
- * donc là pour sa **forme** (monte-t-elle ?) et non pour se mesurer aux barres,
- * ce que dit la légende, et ses valeurs se lisent au survol.
- *
- * **Les mois vides sont dessinés vides**, pas sautés: le serveur reconstitue la
- * grille complète des douze mois, sans quoi deux mois séparés par un trou se
- * toucheraient et la frise mentirait sur le rythme.
+ * `viewBox` fixe, sans `ResizeObserver` : le SVG se met à l'échelle seul.
+ * Deux échelles : les barres sur les flux du mois, la courbe sur le
+ * patrimoine (parfois cent fois plus), là pour sa forme. Les mois vides sont
+ * dessinés vides, pas sautés.
  */
 export function FlowChart({ months, currency }: FlowChartProps) {
     const [hover, setHover] = useState<number | null>(null);

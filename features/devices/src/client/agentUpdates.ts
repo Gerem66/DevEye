@@ -4,22 +4,10 @@ import { agent } from './api';
 import { currentDevices, onDevicesChange, refreshDevices } from './store';
 
 /**
- * Shared, socket-global state for agent self-updates in flight. One source of
- * truth so **every** surface that shows an update affordance for a device (the
- * Monitoring sidebar, the Monitoring panel header and the fleet card) spins
- * together and stays spinning for the *whole* process, not just while the order is
- * being sent.
- *
- * An update is "in flight" from the moment its order is sent until the agent has
- * actually swapped its binary and reconnected. We detect that completion from the
- * device list the {@link import('./store')} store keeps live: the agent reports
- * its version on reconnect (`agent.hello`), so when the reported `agentVersion`
- * changes from the value captured at trigger time (or the server stops
- * advertising an update for it) the swap is done and the spinner clears.
- *
- * A safety timeout caps the spinner so an update that never completes (agent
- * offline mid-swap, signed binary missing, …) can't pin it forever; the failure is
- * also surfaced by the caller when the *order* itself is refused.
+ * Socket-global state for agent self-updates in flight, so every surface with an
+ * update affordance spins together for the whole process. An update is in flight
+ * from the order until the agent reconnects with another `agentVersion` (or the
+ * server stops advertising one); a safety timeout caps the spinner.
  */
 
 /** Max time a spinner stays up without an observed completion, as a fallback. */
@@ -56,11 +44,7 @@ function clear(deviceId: string): void {
     emit();
 }
 
-/**
- * Reconcile in-flight updates against the latest device list: an update completes
- * once the agent reconnects with a different version (or the server no longer
- * advertises one for it).
- */
+/** An update completes once the agent reconnects with a different version (or none is advertised). */
 function reconcile(): void {
     if (inFlight.size === 0) return;
     const devices = currentDevices();
@@ -73,10 +57,9 @@ function reconcile(): void {
 }
 
 /**
- * Start (and track) an agent self-update for one device. Resolves once the order is
- * accepted by the server; rejects with the server's reason if it's refused, after
- * clearing the in-flight state so the spinner doesn't hang. The spinner then stays
- * up until {@link reconcile} sees the agent reconnect on the newer version.
+ * Start (and track) an agent self-update for one device. Resolves once the order
+ * is accepted; rejects with the server's reason if refused, clearing the
+ * in-flight state so the spinner doesn't hang.
  */
 export async function startAgentUpdate(deviceId: string): Promise<void> {
     if (inFlight.has(deviceId)) return;
@@ -88,7 +71,7 @@ export async function startAgentUpdate(deviceId: string): Promise<void> {
 
     try {
         await agent.send('agent.update', { deviceId });
-        // Pull the list promptly so completion is detected without waiting the topic.
+        // Completion is detected without waiting for the topic.
         void refreshDevices();
     } catch (e) {
         clear(deviceId);
@@ -105,10 +88,7 @@ function getSnapshot(): number {
     return revision;
 }
 
-/**
- * Reactive view of in-flight agent updates. Consumers re-render whenever any
- * update starts or completes, so their spinners stay in lock-step.
- */
+/** Reactive view of in-flight agent updates: consumers re-render on every start or completion. */
 export function useAgentUpdates(): {
     isUpdating: (deviceId: string) => boolean;
     anyUpdating: boolean;

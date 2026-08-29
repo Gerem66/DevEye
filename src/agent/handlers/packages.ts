@@ -20,8 +20,8 @@ export function handlePkgProgress(s: AgentSession, payload: PayloadOf<typeof AGE
 
 export function handlePkgDone(s: AgentSession, payload: PayloadOf<typeof AGENT_PKG_DONE>): void {
     // Le verrou tombe avant la diffusion : les écrans qui reçoivent la fin
-    // ré-interrogent la liste dans la foulée, et elle doit déjà dire « plus rien
-    // en cours » — sinon le bouton resterait grisé jusqu'au prochain passage.
+    // ré-interrogent la liste aussitôt, et elle doit déjà dire « plus rien en
+    // cours ».
     s.hub.endUpgrade(s.device.id, payload.manager);
     s.hub.publishPackageDone(payload);
     s.audit.record({

@@ -18,24 +18,10 @@ import { refreshSentinel } from './store';
 import styles from './style.module.css';
 
 /**
- * Les réglages de Sentinelle, appareil par appareil : l'onglet Appareils de
- * la coquille de réglages, à l'échelle de la FEATURE.
- *
- * Sentinelle n'a pas d'éléments (ses « éléments » sont des appareils, que la
- * feature Appareils possède) : l'échelle élément de la coquille ne s'applique
- * pas, et ce panneau liste donc les appareils visibles avec, pour chacun, sa
- * configuration en ligne. Il remplace le dialogue maison par appareil derrière
- * un second engrenage (la dette de la coquille) : un dialogue est un endroit
- * où l'on va régler, et il n'y en a qu'un par feature.
- *
- * Sentinelle est **éteinte par défaut**, appareil par appareil : c'est
- * l'activation qui autorise la lecture des journaux d'authentification, et cela
- * ne doit pas arriver par effet de bord de l'ouverture d'une feature.
- *
- * Autonome, comme tous les panneaux de la coquille : il se charge sur
- * `sentinel.overview` (dont il relit l'état après chaque écriture, par la même
- * invalidation qui prévient la vue restée derrière lui), et se sauvegarde par
- * `sentinel.setConfig`.
+ * Les réglages, appareil par appareil : l'onglet Appareils de la coquille de
+ * réglages (Sentinelle n'a pas d'éléments). Éteinte par défaut : c'est
+ * l'activation qui autorise la lecture des journaux d'authentification.
+ * Se charge sur `sentinel.overview` et se sauvegarde par `sentinel.setConfig`.
  */
 
 /** Fenêtres d'apprentissage proposées. La valeur libre n'apporterait rien ici. */
@@ -112,8 +98,7 @@ function DeviceRow({ device, canWrite }: { device: DeviceSentinelState; canWrite
                 deviceId: device.deviceId,
                 enabled,
                 // La fenêtre ne se relance qu'à l'allumage : la repartir à chaque
-                // passage dans les réglages ferait taire la dérive sept jours de
-                // plus, sans que personne l'ait demandé.
+                // passage ferait taire la dérive sept jours de plus.
                 learningDays: enabled && !device.enabled ? draft.learningDays : null,
                 integrityMinutes: draft.integrityMinutes,
                 authEvents: draft.authEvents

@@ -4,26 +4,14 @@ import styles from './style.module.css';
 import type { UptimeService } from '../contracts/domain';
 
 /**
- * La disponibilité sur les trois fenêtres usuelles.
- *
- * Toujours les trois, toujours dans cet ordre : le chiffre d'une seule fenêtre
- * ne veut rien dire seul. « 100 % sur 24 h » se lit autrement à côté d'un
- * « 97 % sur 30 j », qui dit qu'il s'est passé quelque chose la semaine dernière.
- *
- * Deux formes, parce que deux endroits les montrent pour deux raisons. Dans la
- * liste des services, c'est une colonne qu'on parcourt du regard d'une ligne à
- * l'autre : elle est alignée et lisible. Sous les barres d'un projet, c'est une
- * note de bas de graphique : elle chiffre ce que les couleurs viennent de dire,
- * et n'a aucune raison de peser autant que la légende qui lui fait face.
+ * La disponibilité sur les trois fenêtres usuelles, toujours les trois et dans
+ * cet ordre : un chiffre seul ne veut rien dire. Deux formes : colonne alignée
+ * dans la liste, note de bas de graphique sous les barres d'un projet.
  */
 
 const WINDOWS = ['24 h', '7 j', '30 j'] as const;
 
-/**
- * Les trois taux, et rien d'autre : c'est ce qui permet à Projets de poser ce
- * composant sur le service réduit du contrat client (`UptimeLinkedService`),
- * qui ne porte pas le reste de la fiche.
- */
+/** Les trois taux seuls : Projets pose ce composant sur `UptimeLinkedService`. */
 export type RatiosService = Pick<UptimeService, 'ratio24h' | 'ratio7d' | 'ratio30d'>;
 
 function valuesOf(service: RatiosService): (number | null)[] {

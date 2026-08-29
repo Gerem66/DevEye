@@ -12,8 +12,7 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    /* border-box (global): 158px of content + the 24px×2 padding ≈ 206px tall,
-       the card's pre-border-box height — preserved so the grid rhythm is unchanged. */
+    /* 206px = 158px of content + 2 × 24px padding (border-box). */
     min-height: 206px;
     position: relative;
     /* Le verre part sur-le-champ, mais ne revient qu'après le délai que lui
@@ -28,12 +27,9 @@
     color: inherit;
 }
 
-/* Cartes courtes : appareils et raccourcis, une seule et même hauteur.
-   `min-height` est la hauteur réelle de la carte (border-box, marge intérieure
-   resserrée). 104px, c'est-à-dire de quoi loger un raccourci riche (avatar +
-   ligne + statistiques) : les deux genres se côtoient sur une même ligne depuis
-   l'unification des sections, et deux hauteurs presque égales voisines se
-   lisent comme un défaut d'alignement plutôt que comme une intention. */
+/* Cartes courtes : appareils et raccourcis, une seule hauteur (104px, de quoi
+   loger un raccourci riche) : deux hauteurs presque égales côte à côte se
+   liraient comme un défaut d'alignement. */
 .widget.compact {
     min-height: 104px;
     padding: var(--space-md);
@@ -101,12 +97,9 @@
     white-space: nowrap;
 }
 
-/*
- * Coin haut-droite du titre : une case de largeur fixe où le bouclier (au repos)
- * et la flèche (au survol) se superposent. Empilés en absolu plutôt que posés
- * l'un après l'autre — sinon la case changerait de largeur au survol et le titre
- * sauterait.
- */
+/* Coin haut-droite du titre : une case de largeur fixe où le bouclier (repos)
+   et la flèche (survol) se superposent en absolu, sinon la case changerait de
+   largeur au survol et le titre sauterait. */
 .headerMark {
     position: relative;
     flex: none;

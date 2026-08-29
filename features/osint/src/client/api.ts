@@ -6,13 +6,9 @@ import { manifest } from '../manifest';
 export const api = featureApi(manifest);
 
 /**
- * Les liens internes que les sondes émettent (`osint:domain/example.com`).
- *
- * Une sonde ne connaît pas le client : elle ne peut pas fabriquer un
- * gestionnaire de clic. Elle émet donc une pseudo-URL, que la carte reconnaît
- * ici pour en faire un rebond vers une nouvelle recherche plutôt qu'un lien
- * sortant mort. C'est ce qui rend les adresses d'un DNS et les noms d'un
- * certificat directement cliquables.
+ * Les liens internes que les sondes émettent (`osint:domain/example.com`) : une
+ * sonde ne connaît pas le client, elle émet une pseudo-URL que la carte
+ * transforme en rebond vers une nouvelle recherche.
  */
 export function internalPivot(href: string): string | null {
     if (!href.startsWith('osint:')) return null;

@@ -115,7 +115,6 @@
     background-color: currentColor;
 }
 
-/* ── Add picker dialog ──────────────────────────────────────────────────── */
 .empty {
     font-size: 0.85rem;
     color: var(--text-muted);

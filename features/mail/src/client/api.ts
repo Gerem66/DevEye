@@ -21,9 +21,8 @@ function fieldErrorSummary(details: unknown): string | null {
 /**
  * La traduction des erreurs de Mail, plus large que le `humanizeError` du
  * barrel : elle connaît les deux codes d'authentification d'une boîte
- * (`auth_required`, `auth_invalid`), déplie les détails de validation par
- * champ, et laisse passer le message de tout autre code. Le barrel fournit
- * `WsError` ; la lecture des codes reste celle de la feature.
+ * (`auth_required`, `auth_invalid`), déplie les détails de validation par champ,
+ * et laisse passer le message de tout autre code.
  */
 export function humanizeError(e: unknown, fallback: string): string {
     if (e instanceof WsError) {
@@ -31,10 +30,8 @@ export function humanizeError(e: unknown, fallback: string): string {
         if (e.code === 'auth_invalid') return 'Identifiants invalides.';
         if (e.code === 'forbidden') return 'Accès refusé.';
         if (e.code === 'not_found') return 'Introuvable.';
-        // Anything else: say what actually went wrong. `protocol` in particular
-        // is raised client-side by `ws.send` when the payload fails its own
-        // schema — swallowing that into a generic sentence left both the user
-        // and the logs with nothing to go on.
+        // Anything else: say what actually went wrong. `protocol` in particular is
+        // raised client-side by `ws.send` when the payload fails its own schema.
         const detail = fieldErrorSummary(e.details);
         if (detail) return e.message ? `${e.message} : ${detail}` : detail;
         if (e.message) return e.message;
@@ -43,10 +40,9 @@ export function humanizeError(e: unknown, fallback: string): string {
 }
 
 /**
- * Fills in defaults for any field a `mail.getSettings` response is missing —
- * guards a `mail.setSettings` round-trip against sending back `undefined`
- * (which `JSON.stringify` drops entirely, failing that command's validation)
- * if the server briefly lags behind a newly added settings field.
+ * Fills in defaults for any field a `mail.getSettings` response is missing: an
+ * `undefined` sent back to `mail.setSettings` is dropped by `JSON.stringify`
+ * and fails that command's validation.
  */
 export function withSettingsDefaults(settings: MailSettings): MailSettings {
     return {

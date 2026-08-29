@@ -32,12 +32,9 @@ const MANAGER_LABELS: Record<PackageManagerId, string> = {
 };
 
 /**
- * Au-delà de quoi on cesse d'attendre l'inventaire.
- *
- * La détection interroge chaque gestionnaire présent, et certains sont lents par
- * nature (`softwareupdate -l` interroge Apple, `apt-get -s upgrade` attend le
- * verrou dpkg). L'agent plafonne chaque sonde ; ce délai-ci couvre leur somme et
- * n'existe que pour ne jamais laisser l'écran sur un « détection… » éternel.
+ * Au-delà de quoi on cesse d'attendre l'inventaire : certains gestionnaires sont
+ * lents (`softwareupdate -l`, le verrou dpkg), et ce délai couvre la somme des
+ * sondes que l'agent plafonne une à une.
  */
 const DETECT_TIMEOUT_MS = 150_000;
 
@@ -54,15 +51,10 @@ interface UpgradeState {
 const ALREADY_RUNNING: UpgradeState = { percent: null, line: 'Mise à jour en cours…', done: false };
 
 /**
- * Live package-update panel for one device. Subscribes to the device's push
- * stream, asks the agent to enumerate its managers, and drives an upgrade with
- * live progress (percent when the tool emits it, else the latest output line).
- *
- * L'état d'avancement ne vient **jamais** du clic : il naît des événements du
- * serveur (`package.started`, `.progress`, `.done`) et de la liste, qui dit ce
- * qui tourne déjà. Une mise à jour lancée depuis un autre écran, un autre
- * onglet ou par quelqu'un d'autre s'affiche donc ici de la même façon, et le
- * bouton correspondant est grisé partout au même instant.
+ * Live package-update panel for one device: the agent enumerates its managers,
+ * an upgrade runs with live progress. L'état d'avancement ne vient jamais du
+ * clic mais des événements du serveur (`package.started`, `.progress`, `.done`)
+ * et de la liste : une mise à jour lancée ailleurs s'affiche de la même façon.
  */
 export function PackagesPanel({ deviceId, privileged }: { deviceId: string; privileged: boolean | null }) {
     const [managers, setManagers] = useState<PackageManager[] | null>(null);
@@ -88,9 +80,8 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
             setListError('L’agent n’a pas répondu — la détection a peut-être échoué sur l’appareil.');
         });
         agent.send('agent.listPackages', { deviceId }).catch((e: unknown) => {
-            // La raison vient du serveur (agent hors ligne, droits…). L'afficher
-            // telle quelle : un « aucun gestionnaire détecté » à sa place était
-            // faux, et envoyait chercher le problème sur la machine.
+            // La raison vient du serveur (agent hors ligne, droits…) : l'afficher
+            // telle quelle plutôt qu'un « aucun gestionnaire détecté » faux.
             if (detectTimer.current !== null) window.clearTimeout(detectTimer.current);
             setRefreshing(false);
             setListError(e instanceof Error ? e.message : 'Détection impossible.');
@@ -98,8 +89,8 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
     }, [deviceId, armDetect]);
 
     useEffect(() => {
-        // Changer d'appareil sans démonter le panneau ne doit pas lui laisser
-        // l'inventaire et les avancements du précédent.
+        // Changer d'appareil sans démonter ne doit pas laisser l'inventaire du
+        // précédent.
         setManagers(null);
         setUpgrades({});
         setRefreshing(false);
@@ -110,8 +101,8 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
                 setManagers(d.managers);
                 setListError(null);
                 setRefreshing(false);
-                // Le serveur joint ce qui tourne déjà : c'est ce qui rend le
-                // verrou visible quand on (r)ouvre la fenêtre en cours de route.
+                // Le serveur joint ce qui tourne déjà : le verrou est visible
+                // quand on (r)ouvre la fenêtre en cours de route.
                 setUpgrades((prev) => {
                     const next = { ...prev };
                     for (const manager of d.running) next[manager] = next[manager] ?? ALREADY_RUNNING;
@@ -137,9 +128,8 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
                 setUpgrades((prev) => ({
                     ...prev,
                     [d.manager]: {
-                        // Une commande terminée remplit sa barre. Sans ça elle
-                        // restait affichée et vide : l'écran donnait l'impression
-                        // d'un travail abandonné en route.
+                        // Une commande terminée remplit sa barre, sinon elle
+                        // reste affichée et vide.
                         percent: 100,
                         line: prev[d.manager]?.line ?? '',
                         done: true,
@@ -148,10 +138,9 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
                         error: d.error
                     }
                 }));
-                // Les compteurs sont périmés dès qu'une mise à jour aboutit. Le
-                // serveur relance l'inventaire pour l'ensemble des abonnés — on
-                // l'attend, sans le redemander : autant de demandes que d'écrans
-                // ouverts, c'est autant de détections sur la machine.
+                // Le serveur relance l'inventaire pour tous les abonnés : on
+                // l'attend sans le redemander, chaque demande est une détection
+                // sur la machine.
                 if (d.ok) {
                     setRefreshing(true);
                     armDetect(() => setRefreshing(false));
@@ -166,13 +155,11 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
     }, [deviceId, requestList, armDetect]);
 
     const upgrade = (manager: PackageManagerId) => {
-        // Optimiste et immédiat : le `package.started` du serveur confirmera, et
-        // c'est lui qui fait foi — ceci n'est que la réponse au clic.
+        // Optimiste : le `package.started` du serveur fait foi.
         setUpgrades((prev) => ({ ...prev, [manager]: { percent: null, line: 'Démarrage…', done: false } }));
         agent.send('agent.upgradePackages', { deviceId, manager }).catch((e: unknown) => {
-            // `conflict` = le verrou serveur a parlé : une mise à jour tourne
-            // bel et bien, simplement pas la nôtre. L'afficher comme un échec
-            // mentirait sur l'état de la machine — on montre celle qui tourne.
+            // `conflict` : une mise à jour tourne, simplement pas la nôtre. On
+            // montre celle qui tourne, pas un échec.
             if (e instanceof WsError && e.code === 'conflict') {
                 setUpgrades((prev) => ({ ...prev, [manager]: prev[manager] ?? ALREADY_RUNNING }));
                 return;
@@ -225,8 +212,7 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
                 const pending = m.pendingCount;
                 const state = upgrades[m.id];
                 const running = state !== undefined && !state.done;
-                // Root requis alors que l'agent ne l'a pas : l'agent refuserait,
-                // autant le dire ici plutôt qu'après un aller-retour.
+                // Root requis sans l'avoir : l'agent refuserait, autant le dire ici.
                 const rootMissing = m.needsRoot && privileged === false;
                 const disabled = busy || pending === 0 || rootMissing;
                 return (

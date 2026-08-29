@@ -30,10 +30,9 @@ export interface DialogProps {
     /** Max dialog width in px. */
     width?: number;
     /**
-     * When false, the overlay click and Escape no longer close the dialog (only
-     * the close button / explicit actions do). Use for dialogs where an
-     * accidental dismissal is costly — e.g. 2FA setup, which mints a fresh
-     * secret each time it opens. Defaults to true.
+     * When false, overlay click and Escape no longer close the dialog (only the
+     * close button / explicit actions do): for dialogs where an accidental
+     * dismissal is costly, e.g. 2FA setup. Defaults to true.
      */
     dismissible?: boolean;
     /**
@@ -70,26 +69,16 @@ export interface DialogProps {
      */
     tall?: boolean;
     /**
-     * Let the dialog's height **follow its content**, up to the viewport cap,
-     * and make the body the single scroll area once that cap is reached.
-     *
-     * Different from `tall`, and the difference is the point: `tall` pins the
-     * dialog to the full viewport height whatever it contains — a short form
-     * then floats in a mostly empty panel. `fill` keeps the natural height and
-     * only takes what it needs, which is what a dialog holding a growing region
-     * (a conversation) wants: it grows with the thread, stops at the edge of the
-     * screen, and never produces a second scrollbar around the first.
-     *
-     * The content is responsible for claiming the leftover space (`flex: 1` down
-     * to the scrollable region); everything else keeps its natural size.
+     * Let the dialog's height follow its content up to the viewport cap, the
+     * body becoming the single scroll area once reached. Unlike `tall`, which
+     * pins the full viewport height whatever the content. The content claims
+     * the leftover space itself (`flex: 1` down to the scrollable region).
      */
     fill?: boolean;
     /**
-     * When true, hold the password-encryption DEK alive for as long as this
-     * dialog is open: a long edit then never trips the re-validation prompt
-     * mid-action, and a fresh window restarts the instant the dialog closes (for
-     * any reason). A no-op when the feature is off / locked. Set on any dialog
-     * whose primary purpose is to *perform* an encrypted action (forms, editors).
+     * Hold the password-encryption DEK alive while this dialog is open: a long
+     * edit never trips the re-validation prompt mid-action, and a fresh window
+     * restarts when it closes. No-op when the feature is off / locked.
      */
     holdSecrecy?: boolean;
 }
@@ -105,14 +94,10 @@ function viewportTall(): number {
 }
 
 /**
- * The single modal/dialog used across the app (link codes, 2FA, password forms,
- * confirmations…). Animated glass surface, closes on overlay click or Escape.
- * Feature-specific dialogs render their content as children + footer.
- *
- * Escape is handled through a shared dismiss-layer stack (see {@link useDismissLayer}),
- * so a dialog stacked over a feature panel or another dialog closes that topmost
- * layer only, in tree order. Enter triggers `onSubmit`, and the dialog autofocuses
- * its first field on open — so the behavior is uniform across every popup.
+ * The single modal used across the app. Escape goes through the shared
+ * dismiss-layer stack (see {@link useDismissLayer}), so a stacked dialog closes
+ * the topmost layer only; Enter triggers `onSubmit`; the first field is
+ * autofocused on open.
  */
 export default function Dialog({
     open,
@@ -210,11 +195,9 @@ export default function Dialog({
         onSave?.();
     };
 
-    // Render through a portal to <body> so every dialog escapes its declaring
-    // subtree: its full-screen backdrop always sits at the document root, above
-    // any feature popup it was opened from. Clicking the backdrop then dismisses
-    // *this* dialog, never a popup underneath — and ancestor transforms (the
-    // morphing widget popup) can't shift or clip it.
+    // Portal to <body>: the backdrop always sits at the document root, above any
+    // feature popup, and ancestor transforms (the morphing widget popup) can't
+    // shift or clip it.
     const portal = createPortal(
         <AnimatePresence>
             {open && (
@@ -262,12 +245,9 @@ export default function Dialog({
         document.body
     );
 
-    // The unsaved-changes confirmation, normalised here so every dirty Dialog
-    // gets the same three-way prompt. It's a plain (non-guarded) Dialog stacked
-    // over this one, so it owns the topmost dismiss layer.
-    // The confirmation is only ever needed by a dialog that can save, so gate it
-    // on `onSave`. This also stops the self-recursion: the confirmation Dialog
-    // below carries no `onSave`, so it renders no confirmation of its own.
+    // The unsaved-changes confirmation: a plain Dialog stacked over this one, so
+    // it owns the topmost dismiss layer. Gated on `onSave`, which also stops the
+    // recursion: the confirmation carries no `onSave`.
     return (
         <>
             {portal}

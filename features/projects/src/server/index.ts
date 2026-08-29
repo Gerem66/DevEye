@@ -10,37 +10,22 @@ import { tryDecryptProject } from './_shared';
 import { createProjectsUsageProvider } from './usageProvider';
 
 /**
- * L'entrée serveur du module.
- *
- * `createService` ne fait tourner aucune boucle : rien de Projets ne travaille
- * en fond (la synchronisation des dépôts et le suivi des déploiements sont
- * les services des modules Git et Déploiement). Il ne sert qu'à PUBLIER le
- * contrat que les autres modules lisent (`PROJECTS_USAGE_PROVIDER`, l'ex
- * `registerNativeProvider` d'`app.ts`) : les projets qui relient un élément,
- * combien par élément, la frise d'un projet pour un déploiement parti de son
- * onglet, la version d'un projet qui suit les releases d'un dépôt. Les
- * modules Bases de données, Déploiement, Git et Audience le lisent par
- * `providers.get`, comme avant.
- *
- * Dans l'autre sens, Projets consomme leurs contrats d'éléments
- * (`*_ITEMS_PROVIDER`) par `ctx.providers` : `exists` avant de poser une
- * liaison, `labelOf` pour nommer celles qui existent.
+ * L'entrée serveur du module. `createService` ne fait tourner aucune boucle : rien
+ * de Projets ne travaille en fond, il ne sert qu'à publier le contrat que les
+ * modules Bases de données, Déploiement, Git et Audience lisent par `providers.get`
+ * (`PROJECTS_USAGE_PROVIDER` : les projets qui relient un élément, la frise où
+ * inscrire un déploiement, la version qui suit les releases d'un dépôt). Dans
+ * l'autre sens, Projets consomme leurs contrats d'éléments (`*_ITEMS_PROVIDER`) :
+ * `exists` avant de poser une liaison, `labelOf` pour nommer celles qui existent.
  *
  * `items` est ce que le partage sait des projets sans ouvrir la feature
- * (`Docs/SHARING.md`) : le domicile d'un projet visible d'ici (le sien, ou
- * l'espace qui le projette), son titre déchiffré par le codec ouvert de
- * l'espace appelant, et son palier (`shareable` : un projet ouvert se
- * projette, un projet gardé est chiffré par le mot de passe de son auteur et
- * ne se lit nulle part ailleurs). `shareTier: 'perItem'`, hérité du
- * descripteur, l'exige ; le boot refuse un module qui déclare sans l'offrir.
+ * (`Docs/SHARING.md`) ; `shareTier: 'perItem'` l'exige, le boot refuse un module qui
+ * déclare sans l'offrir.
  *
- * `migrationsDir` : les treize tables du module datent du socle (060, 061 et
- * leurs suites, jamais déplacées, allowlist dans deveye-feature.json) ; la
- * seule migration du module (`001`) renomme les genres d'événements stockés
- * (`project.*` → `projects.*`, le préfixe du module), sur une table de
- * l'allowlist. Une nouvelle table prendra le préfixe `ft_projects_`. Pas
- * d'`uninstall.sql` : le module ne possède aucune table à lui, et le SQL de
- * démontage ne peut pas toucher aux tables historiques (comme Mail).
+ * Les treize tables du module datent du socle et l'allowlist de
+ * `deveye-feature.json` les dispense du préfixe `ft_projects_`, qu'une nouvelle
+ * table prendrait. Pas d'`uninstall.sql` : le module ne possède aucune table à lui,
+ * et le SQL de démontage ne peut pas toucher aux tables historiques.
  */
 export const serverEntry: FeatureServer<ProjectsRepo> = {
     createRepo,
@@ -56,10 +41,8 @@ export const serverEntry: FeatureServer<ProjectsRepo> = {
     items: {
         homeOf: async (repo, itemId, workspaceId) =>
             (await repo.projects.findVisible(itemId, workspaceId))?.workspace_id ?? null,
-        // Le titre vit dans le blob chiffré ; un projet gardé (étage gardé, que
-        // le codec ouvert ne sait pas lire), un blob illisible ou un projet
-        // disparu valent `null`. Le titre vide se nomme comme partout à
-        // l'écran. Demandé avec le domicile du projet.
+        // Le titre vit dans le blob chiffré : un projet gardé, que le codec ouvert
+        // ne sait pas lire, un blob illisible ou un projet disparu valent `null`.
         labelOf: async (repo, cipher, itemId, workspaceId) => {
             const row = await repo.projects.findById(itemId, workspaceId);
             if (!row || row.security_tier !== 'open') return null;
@@ -67,10 +50,9 @@ export const serverEntry: FeatureServer<ProjectsRepo> = {
             if (!payload) return null;
             return payload.title.length > 0 ? payload.title : 'Sans titre';
         },
-        // Le palier, projet par projet : seul un projet ouvert se lit sous une
-        // clé que le serveur tient seul, donc dans un autre espace. Projeter un
-        // projet gardé ouvrirait une fenêtre sur rien ; `share.set` refuse en
-        // le disant. Demandé avec le domicile du projet.
+        // Seul un projet ouvert se lit sous une clé que le serveur tient seul, donc
+        // depuis un autre espace : projeter un projet gardé ouvrirait une fenêtre
+        // sur rien, et `share.set` refuse en le disant.
         shareable: async (repo, itemId, workspaceId) =>
             (await repo.projects.findById(itemId, workspaceId))?.security_tier === 'open'
     }

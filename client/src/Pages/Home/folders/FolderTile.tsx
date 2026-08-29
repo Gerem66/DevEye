@@ -7,16 +7,9 @@ import styles from './folders.module.css';
 const PREVIEW = 5;
 
 /**
- * Le corps de la carte d'un dossier : ce qu'il tient, en pastilles.
- *
- * Une carte de dossier a la même tête que les autres, donc son corps doit dire
- * ce qu'il y a derrière, sinon rien ne distingue deux dossiers l'un de l'autre.
- * Les pastilles portent l'icône **et** le nom de chaque fonctionnalité : c'est
- * ce qu'on retrouvera déployé au clic, dans cet ordre.
- *
- * Le contenu est relu ici plutôt que reçu en props, comme le font les autres
- * corps de tuiles : la même carte sert la grille et l'organiseur, et ni l'un ni
- * l'autre n'a à savoir qu'un dossier ignore les identifiants inconnus.
+ * Le corps de la carte d'un dossier : ce qu'il tient, en pastilles (icône et
+ * nom), dans l'ordre du déploiement. Le contenu est relu ici plutôt que reçu en
+ * props : la même carte sert la grille et l'organiseur.
  */
 export function FolderTile({ folder }: { folder: HomeFolder }) {
     const entries = folderFeatures(folder.items);

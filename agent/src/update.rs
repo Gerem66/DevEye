@@ -93,12 +93,8 @@ pub async fn apply(
 /// Parse the embedded base64 public key into a verifier; `None` when no key was
 /// baked in (a dev build that predates `deveye-sign keygen`).
 ///
-/// `const_is_empty` voit une constante et conclut « toujours faux ». C'est vrai
-/// **de ce build-là** : `UPDATE_PUBKEY_B64` vient d'`env!`, donc sa valeur est
-/// figée à la compilation. Mais le garde protège l'autre configuration — celle
-/// d'un build sans clé signée —, et l'écart entre les deux est exactement ce que
-/// la fonction est censée absorber. Clippy 1.97 ne le signale plus ; 1.91, celui
-/// des paquets Fedora, si.
+/// `const_is_empty` : la constante vient d'`env!`, donc figée pour ce build ;
+/// le garde protège l'autre configuration, un build sans clé.
 #[allow(clippy::const_is_empty)]
 fn embedded_key() -> Option<VerifyingKey> {
     if UPDATE_PUBKEY_B64.is_empty() {
@@ -164,23 +160,18 @@ pub fn cleanup_after_update() {
 /// Restart into the (already-swapped) binary at `exe` and terminate this process.
 /// Never returns.
 ///
-/// We restart by letting a **fresh process** load the new binary, never by
-/// re-exec-ing in place: macOS refuses to exec a just-replaced executable image
-/// (code-signing/AMFI kills it), so an in-place re-exec leaves the agent stuck on
-/// the old version. A clean exit + relaunch is the portable, reliable path.
+/// A fresh process loads the new binary, never an in-place re-exec: macOS
+/// refuses to exec a just-replaced executable image (code-signing/AMFI kills it).
 ///
-/// - **Supervised** (systemd `Restart=always`, launchd `KeepAlive`): just exit; the
-///   manager relaunches us at once (tuned via `RestartSec` / `ThrottleInterval`).
-/// - **Unsupervised** (foreground/detached) **or Windows** (Task Scheduler won't
-///   relaunch a task that exits): spawn a detached successor ourselves, then exit.
+/// - Supervised (systemd `Restart=always`, launchd `KeepAlive`): just exit; the
+///   manager relaunches us.
+/// - Unsupervised or Windows (Task Scheduler won't relaunch a task that exits):
+///   spawn a detached successor, then exit.
 pub fn restart_and_exit(exe: &Path) -> ! {
-    // Hand off the single-instance lock: the successor (spawned below, or
-    // relaunched by the service manager) checks the runtime-state file on
-    // startup and must not find one still pointing at this exiting process.
+    // Hand off the single-instance lock: the successor checks the runtime-state
+    // file on startup and must not find one pointing at this exiting process.
     crate::state::clear();
     let _ = std::fs::remove_file(Config::pid_path());
-    // On Windows nothing relaunches us on exit; on Unix a service manager does
-    // (when we're managed). Otherwise we respawn ourselves.
     let respawn_ourselves = cfg!(windows) || !crate::managed();
     if respawn_ourselves {
         if let Err(e) = relaunch_detached(exe) {
@@ -190,16 +181,13 @@ pub fn restart_and_exit(exe: &Path) -> ! {
     std::process::exit(0);
 }
 
-/// Spawn a fresh **unmanaged** background `run` of `exe`, mirroring the detach path
+/// Spawn a fresh unmanaged background `run` of `exe`, mirroring the detach path
 /// in `main.rs`: log to the config dir, record the new PID. Used for the Windows
-/// update restart (and as the Unix re-exec fallback), and for the autostart-disable
-/// handoff (where a supervised agent hands off to a standalone copy before the
-/// service that supervises it is removed).
+/// update restart and for the autostart-disable handoff.
 pub(crate) fn relaunch_detached(exe: &Path) -> Result<()> {
-    // Hand off the single-instance lock before spawning (see restart_and_exit;
-    // also called directly for the autostart-disable handoff, where *we* keep
-    // running until the service teardown kills us — the successor must not see
-    // our runtime-state file and refuse to start).
+    // Hand off the single-instance lock before spawning: in the autostart-disable
+    // handoff we keep running until the service teardown kills us, and the
+    // successor must not find our runtime-state file.
     crate::state::clear();
     let _ = std::fs::remove_file(Config::pid_path());
     let log = std::fs::File::create(Config::log_path()).context("creating log file")?;

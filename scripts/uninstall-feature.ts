@@ -1,49 +1,22 @@
 /**
- * Désinstallation PROPRE d'un module de feature : toutes ses traces, partout.
+ * Désinstallation propre d'un module de feature : toutes ses traces, partout.
+ * Dans l'ordre : ses tables `ft_<slug>_*` (via son `src/server/uninstall.sql`,
+ * borné au préfixe), son magasin clé-valeur, ses migrations enregistrées, ses
+ * canaux et routes de notification, ses partages et restrictions d'éléments,
+ * ses grants dans les rôles, ses tuiles dans toutes les dispositions d'accueil.
+ * Le journal d'audit reste.
  *
- * Installer un module = dépendance + entrée de config + `gen:features`. Le
- * chemin inverse n'existait pas : retirer l'entrée laissait ses tables, son
- * KV, ses permissions dans les rôles, ses tuiles posées. Ce script est le
- * geste manquant. Il nettoie, dans l'ordre :
- *
- *  1. ses tables `ft_<slug>_*` — via le `src/server/uninstall.sql` du module
- *     (le pendant destructif de ses migrations ; vérifié : il ne peut toucher
- *     QUE le préfixe du module, jamais une table historique de l'allowlist) ;
- *  2. son magasin clé-valeur (`feature_kv`) ;
- *  3. ses migrations enregistrées (`_migrations` en `<id>/...`) ;
- *  4. ses canaux et routes de notification (`notification_channels`,
- *     `notification_routes` — les liaisons suivent par cascade) ;
- *  5. ses partages et restrictions d'éléments (`item_shares`,
- *     `item_role_grants`) ;
- *  6. ses grants dans les rôles de tous les espaces (droit + extras + canaux :
- *     le JSON `workspace_roles.features`) ;
- *  7. ses tuiles et son mini-widget de topbar dans TOUTES les dispositions
- *     d'accueil (`workspaces.home_layout`).
- *
- * Le journal d'audit reste : c'est de l'histoire, pas une dépendance.
- *
- * **Dry-run par défaut** : il énumère ce qu'il ferait, avec les comptes réels,
- * et n'écrit qu'avec `--yes` — même discipline que les migrations (rejouées
- * sur copie du dump avant toute prod). Ordre d'exécution pensé pour être
- * REJOUABLE : chaque étape est idempotente (écrire un `uninstall.sql` en
- * `DROP TABLE IF EXISTS`), un échec au milieu se répare en relançant.
+ * Dry-run par défaut, n'écrit qu'avec `--yes`. Chaque étape est idempotente :
+ * un échec au milieu se répare en relançant.
  *
  * Usage :
  *   npm run uninstall:feature -- <package> [--yes]
- *   npm run uninstall:feature -- deveye-feature-machin            # état des lieux
- *   npm run uninstall:feature -- deveye-feature-machin --yes      # nettoie
  *
- * Après le nettoyage : retirer l'entrée de features.config.json (ou
- * features.local.json), `npm uninstall <package>` s'il vient de npm, puis
- * `npm run gen:features`. Le script s'exécute AVANT, tant que le module est
- * encore résoluble (il faut son deveye-feature.json et son uninstall.sql),
- * et de préférence serveur ARRÊTÉ (un serveur qui tourne encore avec le
- * module recréerait du KV derrière le nettoyage).
- *
- * Un module DÉJÀ disparu (paquet retiré avant le nettoyage) se nettoie par
- * son id : `--id x-machin` saute la résolution du paquet. Seule la part app
- * est alors couverte — sans le paquet, pas d'uninstall.sql, donc d'éventuelles
- * tables ft_* restent ; le script le dit et refuse d'en faire semblant.
+ * S'exécute avant de retirer l'entrée de config et le paquet (il faut son
+ * deveye-feature.json et son uninstall.sql), serveur arrêté (un serveur qui
+ * tourne encore recréerait du KV derrière le nettoyage). Un module déjà disparu
+ * se nettoie par `--id=x-machin` : seule la part app est alors couverte,
+ * d'éventuelles tables ft_* restent, et le script le dit.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -172,9 +145,8 @@ async function main(): Promise<void> {
 
     // --- exécution ----------------------------------------------------------
     if (uninstallSql) {
-        // Le fichier entier en une requête, comme une migration : le pool est en
-        // `multipleStatements`, et découper sur `;` faisait sauter tout statement
-        // précédé d'une ligne de commentaire.
+        // Le fichier entier en une requête, comme une migration (pool en
+        // `multipleStatements`) : découper sur `;` casserait sur les commentaires.
         await q.query(uninstallSql);
         console.log('\n✓ uninstall.sql exécuté');
     }

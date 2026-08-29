@@ -21,11 +21,9 @@ interface RepoDetailProps {
 }
 
 /**
- * Un dépôt ouvert : son en-tête, ses projets, et son contenu.
- *
- * Le contenu est `RepoView`, partagé mot pour mot avec l'onglet Git d'un
- * projet — c'est le même dépôt, il n'y a aucune raison qu'il se présente
- * autrement selon la porte par laquelle on entre.
+ * Un dépôt ouvert : son en-tête, ses projets, et son contenu. Ce contenu est
+ * `RepoView`, partagé mot pour mot avec l'onglet Git d'un projet : c'est le même
+ * dépôt, quelle que soit la porte par laquelle on entre.
  */
 export function RepoDetail({
     repo,
@@ -38,16 +36,11 @@ export function RepoDetail({
     onSyncNow,
     onOpenProject
 }: RepoDetailProps) {
-    // `RepoView` sonde l'avancement ; l'en-tête, lui, porte les boutons. Tant
-    // qu'une synchronisation tourne, ni « Synchroniser » ni « Modifier » n'ont
-    // de sens : le contenu est déjà voilé et va être remplacé.
+    // `RepoView` sonde l'avancement ; l'en-tête, lui, porte les boutons, qu'une
+    // synchronisation en cours désactive : le contenu va être remplacé.
     const [syncing, setSyncing] = useState(false);
     const onSyncingChange = useCallback((v: boolean) => setSyncing(v), []);
-    /**
-     * Chaque pression sur « Synchroniser » incrémente ce compteur, que
-     * `RepoView` observe pour se mettre à sonder. C'est le pendant du signal
-     * ci-dessus : l'en-tête sait qu'on a demandé, la vue sait où ça en est.
-     */
+    /** Chaque pression sur « Synchroniser » l'incrémente ; `RepoView` s'y remet à sonder. */
     const [syncRequest, setSyncRequest] = useState(0);
 
     return (
@@ -60,8 +53,6 @@ export function RepoDetail({
                     <div className={styles.repoIdent}>
                         <p className={styles.repoName}>
                             <span className='icon icon-branch' /> {repo.owner}/{repo.repo}
-                            {/* Sans cette pastille, rien ne distingue un dépôt
-                                local d'une fenêtre sur l'espace voisin. */}
                             {repo.foreign && (
                                 <span title='Ce dépôt appartient à un autre espace qui le partage ici'>
                                     {' '}
@@ -98,17 +89,15 @@ export function RepoDetail({
                             {syncing ? 'Synchronisation…' : 'Synchroniser'}
                         </Button>
                     )}
-                    {/* `!repo.foreign` : le jeton d'un dépôt se choisit parmi les
-                        clés de SON espace — le serveur le refuse, l'écran ne le
-                        propose donc pas. Synchroniser, lui, reste permis. */}
+                    {/* Le jeton d'un dépôt se choisit parmi les clés de son espace :
+                        le serveur refuse la modification d'un dépôt étranger. */}
                     {canWrite && !repo.foreign && (
                         <Button variant='secondary' icon='edit' onClick={onEdit} disabled={busy || syncing}>
                             Modifier
                         </Button>
                     )}
-                    {/* Les réglages de CE dépôt : partage vers d'autres espaces,
-                        restrictions par rôle. Le bouton se garde de lui-même
-                        (aucune section accessible ⇒ il ne s'affiche pas). */}
+                    {/* Les réglages de ce dépôt ; le bouton se garde de lui-même,
+                        sans section accessible il ne s'affiche pas. */}
                     <FeatureSettingsButton
                         scope={{
                             kind: 'item',
@@ -127,14 +116,8 @@ export function RepoDetail({
                 onSyncingChange={onSyncingChange}
                 syncRequest={syncRequest}
             >
-                {/*
-                 * Les projets qui s'en servent, sous le graphe.
-                 *
-                 * C'est le second sens de l'interconnexion : depuis un projet on
-                 * atteint son dépôt, et depuis un dépôt on retrouve d'un clic
-                 * tous les projets qui l'utilisent. Masqué quand il n'y en a
-                 * aucun — un panneau vide n'apprend rien.
-                 */}
+                {/* L'autre sens de la liaison : depuis un dépôt, les projets qui
+                    l'utilisent. Masqué quand il n'y en a aucun. */}
                 {usage.length > 0 && (
                     <section className={styles.usage}>
                         <h3 className={styles.gitTitle}>

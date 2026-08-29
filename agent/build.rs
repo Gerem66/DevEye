@@ -18,14 +18,10 @@ fn agent_target(triple: &str) -> &'static str {
     }
 }
 
-/// Single source of truth for the agent version = the root DevEye `package.json`
-/// (the very file the web client bakes into `__APP_VERSION__` and the server reads
-/// in `version.ts`). We read it at build time and expose it as `DEVEYE_VERSION`, so
-/// the server, the web client and the agent always report the same version — the
-/// agent is no longer flagged "too old" just because it lived on its own scale.
-///
-/// Falls back to the crate's own `version` if the file can't be read (e.g. the
-/// crate is built standalone, outside the monorepo checkout).
+/// The agent version comes from the root DevEye `package.json` (the file the web
+/// client bakes into `__APP_VERSION__` and the server reads in `version.ts`),
+/// exposed as `DEVEYE_VERSION` so all three report the same version. Falls back
+/// to the crate's own `version` when the file can't be read (standalone build).
 fn main() {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR unset");
     let pkg_path = Path::new(&manifest_dir).join("../package.json");

@@ -5,18 +5,10 @@ import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 import { assertAtHome, linkLabels, loadProject, WRITE, type Ctx } from './_shared';
 
 /**
- * Le pointeur d'un projet vers des sites suivis.
- *
- * Exactement la même forme que `repoLink.ts` et `databaseLink.ts`, et pour les
- * mêmes raisons : le site appartient à l'espace, le projet n'en garde qu'une
- * liaison, et supprimer l'un ne supprime jamais l'autre.
- *
- * Gardé sous `projects: write` : c'est le projet qu'on modifie ici, pas le
- * site. Lire les statistiques relève, elles, du droit `audience` : un membre
- * peut avoir l'un sans l'autre, et l'onglet le dit plutôt que d'afficher un
- * écran vide qui se lirait comme un bug. Les sites sont nommés par le contrat
- * du module (`labelOf`, sous le codec du domicile du projet), et la liaison se
- * pose et se retire au domicile seulement (`assertAtHome`).
+ * Le pointeur d'un projet vers des sites suivis, même forme que `repoLink.ts` : le
+ * site appartient à l'espace, le projet n'en garde qu'une liaison. Gardé sous
+ * `projects: write` : lire les statistiques relève du droit `audience`, qu'un membre
+ * peut ne pas avoir, et l'onglet le dit plutôt que de montrer un écran vide.
  */
 
 export const projectAudienceListFeature = defineSdkFeature({
@@ -37,21 +29,15 @@ export const projectAudienceLinkFeature = defineSdkFeature({
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'relier un site suivi');
 
-        // Un projet confidentiel ne peut pas être lié : la liaison est une ligne
-        // en clair, le site vit à l'étage ouvert, et son ingestion tourne sans
-        // session. Accepter la liaison reviendrait à promettre une
-        // confidentialité qu'on ne tient pas.
+        // La liaison est une ligne en clair, le site vit à l'étage ouvert et son
+        // ingestion tourne sans session : même refus que pour un dépôt.
         if (project.security_tier === 'guarded') {
             throw new FeatureError('validation', 'Un projet confidentiel ne peut pas être relié à un site suivi.');
         }
 
-        // Le site existe-t-il, et dans **cet** espace ? Sans cette garde on
-        // lierait n'importe quel identifiant, y compris celui d'un site d'un
-        // autre espace, dont l'existence même n'a pas à fuiter.
-        //
-        // La question passe par le contrat que le module Audience offre
-        // (`AUDIENCE_ITEMS_PROVIDER`) : Projets ne lit pas sa table, et dégrade
-        // proprement quand le module est absent.
+        // Seule l'existence est vérifiée, et par le contrat qu'offre le module :
+        // sans cette garde on lierait l'identifiant d'un site d'un autre espace,
+        // dont l'existence n'a pas à fuiter.
         const audience = ctx.providers.get<AudienceItemsProvider>(AUDIENCE_ITEMS_PROVIDER);
         if (!audience) throw new FeatureError('validation', 'Le module Audience n’est pas installé.');
         if (!(await audience.exists(input.siteId, project.workspace_id))) {

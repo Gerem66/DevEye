@@ -1,10 +1,6 @@
 import type { MetricSeriesPoint } from '@deveye/types';
 
-/**
- * Shared formatting + activity helpers for the monitoring views. Kept here so
- * both the full panel ({@link ./MonitoringPanel}) and the compact device tile
- * ({@link ./DeviceWidget}) derive the same numbers and labels (DRY).
- */
+/** Shared formatting + activity helpers for the monitoring views. */
 
 export function formatBytes(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
@@ -17,9 +13,7 @@ export function formatRate(bytesPerSec: number): string {
     return `${formatBytes(Math.max(0, Math.round(bytesPerSec)))}/s`;
 }
 
-// Le format d'octets à la française est celui de l'app (CloudSync et Backup
-// s'en servent aussi) ; ré-exporté ici pour que les écrans de Monitoring ne
-// bougent pas.
+// Le format d'octets à la française est celui de l'app.
 export { formatBytesFr } from 'deveye-sdk-client';
 
 export function formatUptime(seconds: number): string {
@@ -61,9 +55,7 @@ const NICE_STEPS_MS = [
 
 /**
  * Vertical grid tick timestamps for a [tMin, tMax] window: a handful of round
- * local-clock instants (aligned to the chosen step), so the graph shows the
- * order of magnitude in hours without labelling every point. Aligns to the local
- * day to keep hour labels on the clock (handles the local UTC offset).
+ * local-clock instants, aligned to the local day so hour labels stay on the clock.
  */
 export function niceTimeTicks(tMin: number, tMax: number, target = 5): number[] {
     const span = tMax - tMin;
@@ -94,12 +86,8 @@ export function pct(used: number, total: number): number {
 }
 
 /**
- * Extremums d'une collection, par réduction.
- *
- * `Math.min(...tableau)` passe chaque élément en argument et lève un
- * `RangeError` au-delà de ~100 000 — une limite que les séries d'un panneau
- * laissé ouvert en direct peuvent atteindre. Rendent 0 sur une collection vide,
- * les appelants ne s'en servant qu'après avoir vérifié qu'elle ne l'est pas.
+ * Extremums d'une collection, par réduction : `Math.min(...tableau)` lève un
+ * `RangeError` au-delà de ~100 000 éléments. Rendent 0 sur une collection vide.
  */
 export function minOf<T>(items: readonly T[], of: (item: T) => number): number {
     let min = Infinity;
@@ -120,11 +108,8 @@ export function maxOf<T>(items: readonly T[], of: (item: T) => number): number {
 }
 
 /**
- * L'élément dont la date est la plus proche de `target`, ou `null` si vide.
- *
- * L'horodatage est lu par `at` plutôt qu'imposé sous un nom fixe : les séries de
- * graphe le portent en `t`, les relevés en `timestamp`, et les faire converger
- * obligerait un appelant à recopier toute sa collection à chaque appel.
+ * L'élément dont la date est la plus proche de `target`, ou `null` si vide. La
+ * date est lue par `at` : les séries la portent en `t`, les relevés en `timestamp`.
  */
 export function nearestBy<T>(items: readonly T[], target: number, at: (item: T) => number): T | null {
     let best: T | null = null;

@@ -1,16 +1,11 @@
 import { ws } from '@/api/ws';
 
 /**
- * Client-side ref-counting for live metric subscriptions.
- *
- * The server hub keys subscriptions by *socket* (`src/agent/hub.ts`), and the
- * client has a single `/ws` socket. If two consumers (e.g. the full Monitoring
- * view and a device popup, both kept alive) subscribed to the same device with
- * raw `agent.subscribe`/`unsubscribe`, one closing would unsubscribe the
- * other. Routing every live subscriber through this store coalesces them: a
- * device is subscribed once (on 0→1) and unsubscribed once (on 1→0). It also
- * re-subscribes everything when the socket (re)opens, so live data survives a
- * reconnect.
+ * Client-side ref-counting for live metric subscriptions. The server hub keys
+ * subscriptions by socket and the client has a single one, so two consumers of the
+ * same device using raw `agent.subscribe`/`unsubscribe` would unsubscribe each
+ * other. Routing every subscriber through this store coalesces them, and
+ * everything is re-subscribed when the socket reopens.
  */
 const refCounts = new Map<string, number>();
 let offState: (() => void) | null = null;
@@ -38,15 +33,9 @@ export function acquireMetrics(deviceId: string): () => void {
     const next = (refCounts.get(deviceId) ?? 0) + 1;
     refCounts.set(deviceId, next);
     ensureStateSub();
-    // Envoyé à **chaque** prise, et pas seulement à la première : le serveur
-    // répond à `agent.subscribe` par le dernier instant enregistré, et c'est
-    // de là que vient l'affichage « en direct » avant la première poussée. Le
-    // compte de références n'existe que pour ne pas désabonner sous les pieds
-    // d'un autre consommateur ; s'en servir aussi pour éviter le ré-abonnement
-    // privait tout consommateur suivant de cet instant initial — un panneau
-    // ouvert alors qu'un autre écran suivait déjà la machine restait sans
-    // valeur courante jusqu'à la poussée suivante. Côté serveur l'abonnement
-    // est un ensemble : le renvoyer ne coûte que sa réponse.
+    // Envoyé à chaque prise et pas seulement à la première : le serveur répond par
+    // le dernier instant enregistré, sans quoi un second consommateur resterait sans
+    // valeur jusqu'à la poussée suivante. L'abonnement y est un ensemble.
     sendSubscribe(deviceId);
 
     let released = false;

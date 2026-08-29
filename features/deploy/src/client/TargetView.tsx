@@ -21,11 +21,8 @@ interface TargetViewProps {
     /** Droit `deploy: write` — c'est lui qui autorise à mettre en production. */
     canWrite: boolean;
     /**
-     * Le projet d'où part le geste, quand il en part d'un.
-     *
-     * Sert à inscrire le déclenchement dans **sa** frise. Absent depuis la
-     * feature : un déploiement lancé de là n'appartient à aucun projet en
-     * particulier, et l'attribuer à l'un d'eux au hasard serait faux.
+     * Le projet d'où part le geste, pour inscrire le déclenchement dans sa
+     * frise. Absent depuis la feature : le déploiement n'appartient à aucun projet.
      */
     projectId?: number;
     onEdit?: () => void;
@@ -33,39 +30,24 @@ interface TargetViewProps {
     after?: ReactNode;
     /**
      * L'historique complet du fournisseur, à la place du suivi local
-     * (`deployments`) : il couvre aussi ce qui n'est jamais passé par DevEye.
-     * `null` = en cours de chargement. **Absent dans l'onglet d'un projet** —
-     * `deployments` y suffit, et interroger Dokploy pour chaque cible reliée
-     * coûterait une requête externe par carte pour peu d'apport.
+     * (`deployments`). `null` = en cours de chargement. Absent dans l'onglet
+     * d'un projet : une requête externe par cible reliée coûterait trop.
      */
     fullHistory?: DeployHistoryEntry[] | null;
-    /** Dokploy injoignable pendant le chargement de `fullHistory` — n'empêche
-     *  pas le reste de la fiche (nom, déclenchement) de fonctionner. */
+    /** Dokploy injoignable pendant le chargement de `fullHistory` ; le reste de la fiche fonctionne. */
     fullHistoryError?: string | null;
-    /**
-     * Ouvre le journal d'une ligne — absent dans l'onglet d'un projet, où le
-     * geste n'a pas de sens sans `fullHistory` pour lui donner un identifiant
-     * fournisseur sûr.
-     */
+    /** Ouvre le journal d'une ligne ; absent dans l'onglet d'un projet, sans `fullHistory`. */
     onOpenLogs?: (externalId: string) => void;
     /**
-     * Affiche la section dédiée à l'historique complet, sous l'en-tête.
-     *
-     * `false` dans l'onglet « Déploiement » d'un projet : ce panneau ne le
-     * concerne pas. La fiche s'y limite à l'identité et au dernier déploiement
-     * (`blockLastDeploy`), comme avant que l'historique n'y gagne sa propre
-     * carte. Réservée à la feature Déploiement elle-même, où l'historique
-     * complet a de la place pour respirer, surtout sur sa page dédiée.
-     * Par défaut `true`.
+     * Affiche la section de l'historique complet sous l'en-tête. `false` dans
+     * l'onglet d'un projet, qui se limite à l'identité et au dernier
+     * déploiement. Par défaut `true`.
      */
     showHistory?: boolean;
     /**
-     * Rend les actions (Déployer, Modifier, Réglages) dans le bloc d'identité.
-     *
-     * `false` sur la page dédiée de la feature : les actions y vivent dans la
-     * rangée d'en-tête, à côté du bouton retour, comme dans toutes les fiches
-     * d'élément ; c'est l'appelant qui monte alors {@link TargetActions}. Le
-     * défaut `true` sert l'onglet d'un projet, qui n'a pas cette rangée.
+     * Rend les actions dans le bloc d'identité. `false` sur la page dédiée de
+     * la feature, où l'appelant monte {@link TargetActions} dans la rangée
+     * d'en-tête ; le défaut `true` sert l'onglet d'un projet.
      */
     showActions?: boolean;
 }
@@ -81,12 +63,9 @@ interface TargetActionsProps {
 }
 
 /**
- * Les actions d'une cible : déclencher, modifier, régler.
- *
- * À part de {@link TargetView} pour pouvoir vivre à deux endroits sans se
- * dédoubler : la rangée d'en-tête de la page dédiée (retour + actions, comme
- * toutes les fiches d'élément) et le bloc d'identité d'un onglet de projet.
- * Le dialogue de déclenchement lui appartient, l'appelant n'a rien à porter.
+ * Les actions d'une cible : déclencher, modifier, régler. À part de
+ * {@link TargetView} pour vivre à deux endroits : la rangée d'en-tête de la
+ * page dédiée et le bloc d'identité d'un onglet de projet.
  */
 export function TargetActions({ target, canWrite, projectId, onEdit, after }: TargetActionsProps) {
     const [triggerOpen, setTriggerOpen] = useState(false);
@@ -101,22 +80,15 @@ export function TargetActions({ target, canWrite, projectId, onEdit, after }: Ta
                 </Button>
             )}
             {/* `!target.foreign` : modifier une cible exige les clés de SON
-                espace — le serveur le refuse, l'écran ne le propose donc pas.
-                Déployer, lui, reste permis : c'est tout l'objet de la
-                projection. */}
+                espace, le serveur le refuse. Déployer reste permis. */}
             {canWrite && onEdit && !target.foreign && (
                 <Button variant='secondary' icon='edit' onClick={onEdit}>
                     Modifier
                 </Button>
             )}
-            {/* Les réglages **de cette cible** : ses propres canaux, ou ceux du
-                Déploiement tant qu'elle les suit — un salon par application
-                devient possible.
-
-                Hors du `canWrite && onEdit` qui précède : la fiche est aussi
-                rendue dans l'onglet d'un projet, où `onEdit` est absent, et les
-                réglages y valent autant. Le bouton se garde de lui-même (aucune
-                section accessible ⇒ il ne s'affiche pas). */}
+            {/* Les réglages de cette cible (ses propres canaux). Hors du
+                `canWrite && onEdit` : la fiche est aussi rendue dans l'onglet
+                d'un projet, où `onEdit` est absent. Le bouton se garde lui-même. */}
             <FeatureSettingsButton
                 scope={{
                     kind: 'item',
@@ -136,8 +108,7 @@ export function TargetActions({ target, canWrite, projectId, onEdit, after }: Ta
                 onClose={() => setTriggerOpen(false)}
                 onDone={() => {
                     setTriggerOpen(false);
-                    // La liste, la fiche **et** l'onglet du projet qui la
-                    // déploie montrent le même état : les trois se relisent.
+                    // La liste, la fiche et l'onglet du projet se relisent.
                     invalidate('deploy.list', 'deploy.detail', 'projects.board');
                 }}
             />
@@ -159,13 +130,9 @@ interface HistoryRow {
 }
 
 /**
- * Une cible et son historique — le cœur partagé entre la feature et l'onglet
- * d'un projet.
- *
- * Même parti pris que `RepoView`, `DatabaseView` et `SiteView` : une cible ne se
- * présente pas autrement selon la porte par laquelle on entre. Ce composant
- * porte donc l'en-tête, le bouton qui déclenche et la liste de ce qui est parti ;
- * l'appelant n'ajoute que ce qui lui est propre, par `after`.
+ * Une cible et son historique, partagés entre la feature et l'onglet d'un
+ * projet : une cible ne se présente pas autrement selon la porte par laquelle
+ * on entre. L'appelant n'ajoute que ce qui lui est propre, par `after`.
  */
 export function TargetView({
     target,
@@ -184,8 +151,7 @@ export function TargetView({
     const orphan = target.credentialId === null;
 
     // Toujours calculées, `showHistory` ou pas : l'en-tête a besoin de la
-    // première ligne (son titre) pour son propre résumé du dernier
-    // déploiement, que la section dédiée soit rendue ou non.
+    // première ligne pour son résumé du dernier déploiement.
     const historyRows: HistoryRow[] | null =
         fullHistory === undefined
             ? deployments.map((d) => ({
@@ -200,9 +166,7 @@ export function TargetView({
             : fullHistory === null
               ? null
               : fullHistory.map((d, i) => ({
-                    // Pas d'id DevEye pour une ligne que Dokploy seul connaît ;
-                    // son identifiant chez le fournisseur en tient lieu, avec
-                    // l'index en dernier repli s'il n'en donne aucun.
+                    // Pas d'id DevEye pour une ligne que Dokploy seul connaît.
                     key: d.externalId ?? `${d.startedAt}-${i}`,
                     status: d.status,
                     title: d.title,
@@ -212,11 +176,8 @@ export function TargetView({
                     externalId: d.externalId
                 }));
 
-    // La section dédiée, elle, respecte `showHistory` : c'est elle que
-    // l'onglet d'un projet n'affiche pas, pas le calcul qui la nourrit.
     const rows = showHistory ? historyRows : null;
-    // La ligne la plus récente, pour le résumé compact de l'en-tête : les deux
-    // sources sont triées du plus récent au plus ancien (voir le serveur).
+    // Les deux sources sont triées du plus récent au plus ancien (voir le serveur).
     const lastRow = historyRows?.[0] ?? null;
 
     return (
@@ -244,9 +205,7 @@ export function TargetView({
                                 </span>
                             )}
                         </p>
-                        {/* Le dernier état à même hauteur que l'identité : le détail de
-                            la fiche n'oblige plus à descendre jusqu'à l'historique pour
-                            savoir si ça tient toujours debout. */}
+                        {/* Le dernier état à même hauteur que l'identité. */}
                         <p className={styles.blockLastDeploy}>
                             {target.lastStatus === null ? (
                                 <span className={styles.hint}>Aucun déploiement pour l’instant.</span>
@@ -255,9 +214,8 @@ export function TargetView({
                                     <span className={styles.statusTag} data-tone={statusTone(target.lastStatus)}>
                                         {STATUS_LABELS[target.lastStatus]}
                                     </span>
-                                    {/* Le titre du dernier déploiement, pas seulement son état : le
-                                        même que celui de la première ligne de l'historique, tronqué
-                                        si besoin plutôt que de pousser la date hors du cadre. */}
+                                    {/* Le titre de la première ligne de l'historique, tronqué
+                                        plutôt que de pousser la date hors du cadre. */}
                                     {lastRow?.title && (
                                         <span className={styles.lastDeployName} title={lastRow.title}>
                                             {lastRow.title}
@@ -284,11 +242,8 @@ export function TargetView({
                 </header>
             </section>
 
-            {/* Section à part entière, et non plus nichée sous l'en-tête : l'historique
-                complet a désormais sa propre carte, avec sa propre respiration, surtout
-                sensible sur la page dédiée de la feature, plus large qu'un onglet de projet.
-                Absente de l'onglet d'un projet (`showHistory` à `false`), qui n'a que faire
-                de ce second panneau (voir la doc de la prop). */}
+            {/* L'historique complet a sa propre carte ; absente de l'onglet d'un
+                projet (`showHistory` à `false`). */}
             {showHistory && (
                 <section className={`${styles.block} ${styles.historyBlock} ${styles.history}`}>
                     <h3 className={styles.sectionTitle}>Déploiements</h3>
@@ -324,8 +279,7 @@ export function TargetView({
                                 );
                                 return (
                                     <li key={row.key}>
-                                        {/* Toute la ligne est la cible du clic — pas une
-                                            icône à part qu'il faudrait viser — quand un
+                                        {/* Toute la ligne est la cible du clic quand un
                                             journal existe pour elle. */}
                                         {clickable ? (
                                             <button
@@ -339,9 +293,8 @@ export function TargetView({
                                         ) : (
                                             <div className={styles.itemRow}>{content}</div>
                                         )}
-                                        {/* Le message du fournisseur, pas une simple
-                                            étiquette rouge : c'est lui qui dit pourquoi,
-                                            pas seulement que ça a échoué. */}
+                                        {/* Le message du fournisseur : c'est lui qui dit
+                                            pourquoi. */}
                                         {row.status === 'failed' && row.description && (
                                             <p className={styles.itemError} title={row.description}>
                                                 {row.description}

@@ -31,22 +31,10 @@ interface Result {
 }
 
 /**
- * Le journal: la liste des opérations, filtrée, et la saisie qui va avec.
- *
- * ## Ce qui est filtré où, et pourquoi
- *
- * Compte, catégorie, nature, période et pointage sont filtrés **en SQL**, sur des
- * colonnes en clair. La **recherche textuelle**, elle, se fait dans le
- * navigateur, sur ce qui a été chargé: l'intitulé et le tiers sont chiffrés, donc
- * aucun `LIKE` ne les atteint côté serveur. C'est honnête tant que la fenêtre est
- * bornée par une période, ce que le sélecteur impose par défaut, et l'écran le
- * dit quand la recherche ne porte que sur une page.
- *
- * ## Les totaux ne sont pas ceux de la page
- *
- * Ils viennent du serveur et couvrent **tout** le filtre. Un total qui ne
- * compterait que les cent lignes affichées sur trois cents induirait en erreur
- * précisément là où on vient chercher un chiffre juste.
+ * Le journal. Compte, catégorie, nature, période et pointage sont filtrés en
+ * SQL ; la recherche textuelle se fait dans le navigateur, sur ce qui est
+ * chargé (intitulé et tiers sont chiffrés). Les totaux viennent du serveur et
+ * couvrent tout le filtre, pas la page.
  */
 export function Transactions({ base, onEdit }: TransactionsProps) {
     const [windowId, setWindowId] = useState('90');
@@ -119,12 +107,8 @@ export function Transactions({ base, onEdit }: TransactionsProps) {
     };
 
     /**
-     * L'export CSV, fabriqué dans le navigateur.
-     *
-     * Rien à demander au serveur: les lignes affichées sont déjà déchiffrées ici,
-     * et lui demander de les rechiffrer en fichier ne ferait qu'ajouter une
-     * commande et un chemin où le contenu en clair transiterait à nouveau.
-     * L'export porte donc exactement ce qui est à l'écran, filtre compris.
+     * Export CSV fabriqué dans le navigateur : les lignes sont déjà déchiffrées
+     * ici. Porte exactement ce qui est à l'écran, filtre compris.
      */
     const exportCsv = () => {
         const escape = (value: string) => `"${value.replace(/"/g, '""')}"`;
@@ -137,9 +121,8 @@ export function Transactions({ base, onEdit }: TransactionsProps) {
                 escape(row.counterparty),
                 escape(accountName(base.accounts, row.accountId)),
                 escape(categoryOf(base.categories, row.categoryId)?.name ?? ''),
-                // Le point décimal et non la virgule: c'est ce qu'attend un
-                // tableur configuré en anglais, et c'est le seul format qu'aucun
-                // n'interprète comme un séparateur de colonnes.
+                // Point décimal : le seul format qu'aucun tableur n'interprète
+                // comme séparateur de colonnes.
                 (row.amount / 100).toFixed(2),
                 row.vatAmount === null ? '' : (row.vatAmount / 100).toFixed(2),
                 row.cleared ? 'oui' : 'non'

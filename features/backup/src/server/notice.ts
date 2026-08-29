@@ -1,28 +1,16 @@
-// Privilège de native rapatriée, commenté à chaque usage : les helpers Discord
-// (`moment`, `block`, `trim`, `footer`, la charte des couleurs) sont réellement
-// partagés par les émetteurs de l'app, et deux copies avaient déjà divergé une
-// fois (voir l'en-tête de `Services/notices/shared.ts`). Ils restent donc à
-// l'app, et le module les importe plutôt que de les recopier.
+// Les helpers Discord restent à l'app : partagés par tous les émetteurs, et deux
+// copies avaient déjà divergé (voir `Services/notices/shared.ts`).
 import { COLOR_DANGER, block, footer, moment, trim } from '@/Services/notices/shared';
 
 /**
- * L'avis d'échec de sauvegarde tel que Discord doit le montrer.
- *
- * **Un seul état, et c'est délibéré** : seuls les échecs sont annoncés. Une
- * sauvegarde qui réussit ne dit rien, sinon le canal se remplirait de succès
- * quotidiens et l'échec s'y perdrait — c'est précisément l'un des rares
- * messages qu'on ne peut pas se permettre de manquer.
- *
- * D'où l'absence de variante « rétablie », qui existe pour Uptime et les bases :
- * il n'y a rien à rétablir, seulement une exécution suivante à réussir.
+ * L'avis d'échec de sauvegarde pour Discord. Seuls les échecs sont annoncés :
+ * un canal rempli de succès quotidiens noierait celui qui compte. Pas de
+ * variante « rétablie » : rien à rétablir.
  */
 
 export interface BackupNotice {
-    /** L'intitulé du travail de sauvegarde. */
     job: string;
-    /** La destination visée, quand on la connaît. */
     destination: string | null;
-    /** Le message d'erreur, tel que le moteur l'a produit. */
     error: string;
     at: number;
 }

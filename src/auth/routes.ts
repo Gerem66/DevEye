@@ -84,16 +84,9 @@ function loginGraceMs(reAuthIntervalSeconds: number | null): number {
 
 /**
  * Unwrap the user's DEK at login so the imminent WS session starts already
- * unlocked — no second password prompt right after signing in. Returns the DEK
- * and the grace window, or `null` when there's nothing to pre-cache:
- *  - the feature is off (DEK is server-wrapped; no prompt happens anyway), or
- *  - the user set a `0` re-auth interval (they explicitly want every action to
- *    re-prompt), or
- *  - the password no longer unwraps the DEK (defensive; never blocks login).
- *
- * Critically this only runs on a real login (the POST that carries the
- * password). A page reload / auto-login reuses the access cookie and never hits
- * these routes, so it never pre-caches — exactly the intended behavior.
+ * unlocked. Returns `null` when there's nothing to pre-cache: feature off, a `0`
+ * re-auth interval, or a password that no longer unwraps the DEK (never blocks
+ * login). Only runs on a real login: a reload reuses the access cookie.
  */
 async function unwrapDekForLogin(
     db: Database,
@@ -133,9 +126,8 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit }: Aut
             return reply.code(409).send(err('conflict', 'Username or email already in use'));
         }
 
-        // Consommer l'invitation AVANT de créer le compte : un usage brûlé pour
-        // rien vaut mieux qu'un compte créé sur une invitation déjà épuisée.
-        // Même compromis que les codes de liaison d'appareil.
+        // Consommer l'invitation avant de créer le compte : un usage brûlé pour
+        // rien vaut mieux qu'un compte créé sur une invitation épuisée.
         const invite = await db.userInvites.consume(parsed.data.inviteToken, email);
         if (!invite) {
             return reply
@@ -365,10 +357,9 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit }: Aut
     });
 
     /**
-     * Abandon an in-progress 2FA challenge ("Back" on the prompt): clear the
-     * challenge cookie and release any DEK stashed at the password step so it
-     * doesn't linger until its TTL. Always succeeds — a missing/expired challenge
-     * is a no-op so the client can call it unconditionally on Back.
+     * Abandon an in-progress 2FA challenge: clear the cookie and release any DEK
+     * stashed at the password step. Always succeeds, so the client can call it
+     * unconditionally.
      */
     app.post('/api/auth/2fa/cancel', async (req, reply) => {
         const challengeToken = req.cookies[TWOFA_COOKIE];
@@ -381,12 +372,9 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit }: Aut
     });
 
     /**
-     * Espace où le client se trouve, transmis en `?workspace=`.
-     *
-     * Sans lui, `/me` et `/refresh` recalculeraient l'espace actif et
-     * renverraient le thème, la disposition et les droits d'un autre espace que
-     * celui affiché. Le serveur reste juge de l'accès : un id inaccessible est
-     * simplement ignoré.
+     * Espace où le client se trouve (`?workspace=`) : sans lui, `/me` et
+     * `/refresh` renverraient thème, disposition et droits d'un autre espace.
+     * Un id inaccessible est simplement ignoré.
      */
     const requestedWorkspace = (req: FastifyRequest): number | undefined => {
         const raw = (req.query as { workspace?: string } | undefined)?.workspace;

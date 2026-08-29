@@ -15,18 +15,9 @@ interface RecurringProps {
 }
 
 /**
- * Les échéances: loyer, salaire, abonnements, remboursements de prêt.
- *
- * ## Automatique ou proposée
- *
- * Une échéance **automatique** s'écrit toute seule à la première lecture qui suit
- * sa date, parce qu'un salaire tombe qu'on regarde ou non. Une échéance
- * **manuelle** attend un clic, ce qui est exactement ce qu'on veut d'une facture
- * dont le montant varie: la voir apparaître à un montant faux serait pire que de
- * ne pas la voir.
- *
- * Il n'y a donc aucune tâche de fond derrière cet écran, et rien à réparer si le
- * serveur était arrêté: le retard est rattrapé au premier affichage.
+ * Les échéances. Automatique : écrite seule à la première lecture après sa
+ * date. Manuelle : attend un clic (montant variable). Aucune tâche de fond :
+ * le retard est rattrapé au premier affichage.
  */
 export function Recurring({ base }: RecurringProps) {
     const [dialog, setDialog] = useState<{ recurring: FinanceRecurring | null } | null>(null);

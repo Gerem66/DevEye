@@ -15,11 +15,9 @@ import { SecretKeyService } from './SecretKeyService';
 export const DEFAULT_DEK_GRACE_MS = 60_000;
 
 /**
- * Safety bridge for a single-use DEK (`re_auth_interval = 0`, "validate on every
- * action"). The DEK is normally wiped as soon as the command(s) it unlocked
- * finish (see {@link exitSessionCommand}); this only bounds how long an *unused*
- * unlock lingers — long enough to bridge the unlock → action round-trip on a slow
- * link, short enough that an abandoned unlock doesn't sit in memory.
+ * Safety bridge for a single-use DEK (`re_auth_interval = 0`). The DEK is wiped
+ * as soon as the command(s) it unlocked finish (see {@link exitSessionCommand});
+ * this only bounds how long an unused unlock lingers.
  */
 const SINGLE_USE_BRIDGE_MS = 30_000;
 
@@ -47,20 +45,16 @@ interface DekEntry {
     id: number;
     /**
      * Lease deadline (epoch ms) of an active "popup hold": while `now < heldUntil`
-     * the DEK is pinned and the grace window cannot flush it. Renewed by client
-     * heartbeats ({@link holdSessionDek}); `0` means no hold. The lease is short
-     * by design so a popup that disappears without releasing (crash, navigation)
-     * lets the DEK fall back to a normal countdown within {@link DEK_HOLD_TTL_MS}.
+     * the DEK is pinned. Renewed by client heartbeats ({@link holdSessionDek});
+     * `0` means no hold.
      */
     heldUntil: number;
 }
 
 /**
- * Lease length of a single popup-hold heartbeat. The client re-sends a hold
- * every ~10s while an action popup is open; this must comfortably exceed that
- * cadence (tolerate one dropped beat) yet stay short enough that an abandoned
- * popup releases the DEK quickly. After the last beat the DEK lives at most
- * `DEK_HOLD_TTL_MS + graceMs` — never indefinitely.
+ * Lease length of a single popup-hold heartbeat (the client re-sends every ~10s):
+ * must tolerate one dropped beat, yet let an abandoned popup release the DEK
+ * quickly. After the last beat the DEK lives at most `DEK_HOLD_TTL_MS + graceMs`.
  */
 export const DEK_HOLD_TTL_MS = 25_000;
 
@@ -131,14 +125,10 @@ export function peekDekExpiry(sessionId: string): number | null {
 }
 
 /**
- * Pin or release the session DEK for an open action popup.
- *
- * `active` renews a short lease ({@link DEK_HOLD_TTL_MS}) so the DEK survives a
- * long-running popup even with no encrypted activity, and slides the underlying
- * grace window to `lease + graceMs` so releasing (or the lease simply lapsing)
- * leaves a fresh, full countdown. `!active` clears the lease and restarts a
- * fresh grace window immediately. A no-op when the session holds no DEK (locked
- * or feature off) — there is nothing to keep alive.
+ * Pin or release the session DEK for an open action popup. `active` renews a
+ * short lease ({@link DEK_HOLD_TTL_MS}) and slides the grace window to
+ * `lease + graceMs`; `!active` clears the lease and restarts a fresh grace
+ * window. A no-op when the session holds no DEK.
  */
 export function holdSessionDek(sessionId: string, active: boolean, graceMs: number): void {
     const entry = sessionDeks.get(sessionId);
@@ -254,14 +244,10 @@ export function exitSessionCommand(sessionId: string, ticketId: number): void {
 }
 
 /**
- * Short-lived holding area for a DEK unwrapped at login time but not yet bound to
- * a WS session — the 2FA bridge. The login POST has the password (so it can
- * unwrap the DEK) but, for a 2FA account, the session is only issued after the
- * TOTP step. Rather than carrying the password through the 2FA challenge, we
- * unwrap once and stash the DEK here under an opaque, single-use token that
- * travels inside the challenge JWT. The TOTP step claims it and binds it to the
- * freshly issued session. Entries self-expire so an abandoned challenge leaks
- * nothing for long.
+ * Short-lived holding area for a DEK unwrapped at login but not yet bound to a
+ * WS session (the 2FA bridge): rather than carrying the password through the
+ * challenge, the DEK is stashed under an opaque single-use token that travels
+ * inside the challenge JWT. Entries self-expire.
  */
 interface PendingDek {
     userId: number;
@@ -286,13 +272,9 @@ function sweepPendingDeks(now: number): void {
 
 /**
  * Stash a login-unwrapped DEK for an imminent 2FA completion. Returns an opaque
- * token to embed in the challenge; pass it to {@link claimPendingDek} once the
- * TOTP step issues the session. `graceMs` is carried so the eventual
- * {@link rememberSessionDek} uses the user's configured window.
- *
- * Any prior pending DEK for the same user is dropped first: a fresh login
- * supersedes an abandoned challenge (e.g. the user hit "Back" on the 2FA prompt
- * and signed in again), so stale key material never piles up across retries.
+ * token to embed in the challenge; pass it to {@link claimPendingDek}. Any prior
+ * pending DEK for the same user is dropped first: a fresh login supersedes an
+ * abandoned challenge.
  */
 export function stashPendingDek(userId: number, dek: Buffer, graceMs: number): string {
     const now = Date.now();
@@ -396,22 +378,13 @@ function openDekOf(keys: SecretKeyService, scope: WorkspaceKeyScope): Promise<Bu
 
 /**
  * The unified storage-encryption gateway handed to feature handlers as
- * `ctx.secure`. Features call `encrypt`/`decrypt` and never see the DEK, the
- * server key, the password or the storage of the wrapped key — this is the
- * single place that turns plaintext into a stored blob and back.
+ * `ctx.secure`: features never see the DEK, the server key or the password.
  *
- * Scoped to one (workspace, session), it exposes two tiers:
- *  - the store itself — the **guarded** tier. In a personal workspace it is
- *    keyed by the owner's main DEK: when password encryption is on, reading or
- *    writing it requires a live session unlock (`locked` otherwise). Default
- *    for feature data.
- *  - {@link open} — the **open** tier, keyed by a DEK the server can always
- *    unwrap. For data a feature must serve with no prompt at all, while still
- *    being encrypted at rest.
- *
- * In a shared workspace both tiers resolve the workspace's own key (WDK),
- * server-wrapped: every member reads the workspace without depending on
- * anyone's password, and there is nothing to unlock.
+ * Scoped to one (workspace, session), two tiers: the store itself is the
+ * guarded tier (in a personal workspace, keyed by the owner's main DEK, which
+ * requires a live unlock when password encryption is on); {@link open} is keyed
+ * by a DEK the server can always unwrap. In a shared workspace both tiers
+ * resolve the workspace's own server-wrapped key: nothing to unlock.
  */
 export class SecureStore implements Cipher {
     private cachedRow: UserSecretKeyRow | null = null;
@@ -467,10 +440,8 @@ export class SecureStore implements Cipher {
      *  - feature ON, locked → `FeatureError('locked')` so the client prompts.
      */
     private async resolveDek(): Promise<Buffer> {
-        // La clé d'un espace partagé sert aussi l'étage gardé : emballée par la
-        // clé serveur, un second niveau serait déballable de la même façon et
-        // n'apporterait rien. Chaque membre lit l'espace sans dépendre du mot de
-        // passe d'un autre.
+        // La clé d'un espace partagé sert aussi l'étage gardé : un second
+        // niveau serait déballable de la même façon et n'apporterait rien.
         if (this.scope.kind === 'shared') return this.resolveOpenDek();
         const row = await this.row();
         if (!this.keys.isPasswordWrapped(row)) {
@@ -542,11 +513,9 @@ export function createSecureStore(
 }
 
 /**
- * L'étage **ouvert** d'un espace, sans session derrière : pour les tâches de
- * fond qui lisent ou écrivent alors que personne n'est connecté (ordonnanceur
- * uptime, synchro mail), et pour servir un élément projeté depuis son espace
- * d'origine. Seul cet étage est atteignable ainsi, par construction : l'étage
- * gardé exige un déverrouillage de session et n'aurait ici aucun sens.
+ * L'étage ouvert d'un espace, sans session derrière : pour les tâches de fond
+ * et pour servir un élément projeté depuis son espace d'origine. Seul cet étage
+ * est atteignable ainsi : le gardé exige un déverrouillage de session.
  */
 export function createOpenCipher(db: Database, crypt: Encryption, workspaceId: number): Cipher {
     const keys = new SecretKeyService(db, crypt);

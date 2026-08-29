@@ -1,20 +1,14 @@
 /*
- * La palette des notes : les couleurs qu'un utilisateur choisit pour un texte
- * (`{c:red}…{/c}` dans un bloc) ou un marqueur (`color` d'une puce, d'un
- * ordinal, d'une case, d'un filet). Ce n'est pas le thème (l'accent, les
- * surfaces) : c'est une donnée de la feature, dont les noms sont ceux de
- * `noteColorSchema` (contracts/domain.ts). Elle vit donc ici, avec la
- * feature, et non dans Styles/theme.css.
+ * La palette des notes : une donnée de la feature, dont les noms sont ceux de
+ * `noteColorSchema` (contracts/domain.ts), et non le thème de l'app.
  *
- * Sur `:root` (un module CSS ne hache que les classes), parce que l'éditeur
+ * Sur `:root` (un module CSS ne hache que les classes) parce que l'éditeur
  * s'ouvre dans un Popup porté hors de `.container`, et que l'export PDF relit
- * ces jetons sur `document.documentElement` pour les recopier dans son
- * document isolé. Réglée pour rester lisible sur les surfaces de verre
- * sombres ; l'app n'a pas de thème clair, donc pas de variante.
+ * ces jetons sur `document.documentElement` pour les recopier dans son document
+ * isolé.
  *
  * Les jetons `--note-print-*` sont l'encre du document imprimé : du papier
- * blanc, donc PAS les jetons du thème sombre. Seule source des couleurs de
- * `exportPdf.ts`, qui les relit de la même façon que la palette.
+ * blanc, donc PAS ceux du thème sombre.
  */
 :root {
     --note-red: #ff6b81;
@@ -51,7 +45,6 @@
     min-width: 0;
 }
 
-/* Header buttons: "Déchiffrer" only appears while private notes stay masked. */
 .headerActions {
     display: flex;
     align-items: center;
@@ -85,7 +78,6 @@
     max-width: 460px;
 }
 
-/* Discreet entry point to the archive, pushed to the trailing edge of the row. */
 .archiveBtn {
     margin-left: auto;
 }
@@ -100,7 +92,6 @@
     margin-bottom: var(--space-md);
 }
 
-/* Folder section */
 .folderSection {
     margin-bottom: var(--space-lg);
 }
@@ -122,7 +113,6 @@
     letter-spacing: 0.04em;
 }
 
-/* Per-folder actions: hidden until the section is hovered, to stay sober. */
 .folderActions {
     display: inline-flex;
     align-items: center;
@@ -182,7 +172,6 @@
     border-radius: var(--radius-pill);
 }
 
-/* Notes grid */
 .grid {
     position: relative; /* anchors the drop bar */
     display: grid;
@@ -190,7 +179,6 @@
     gap: var(--space-md);
 }
 
-/* Note card */
 .card {
     position: relative;
     display: flex;
@@ -222,9 +210,8 @@
     transform: none;
 }
 
-/* Insertion marker: a bar standing in the gap the dragged note would fall into,
-   so the landing spot is literal. Positioned by NoteGrid straight through the
-   DOM (transform + height), which is why it carries no layout of its own. */
+/* A bar standing in the gap the dragged note would fall into. NoteGrid positions
+   it straight through the DOM (transform + height), hence no layout of its own. */
 .dropBar {
     position: absolute;
     top: 0;
@@ -237,8 +224,6 @@
     transition: opacity 0.1s ease;
 }
 
-/* Trailing "add a note" card: same footprint as a real card but dashed and
-   empty, so the grid reads as "…and one more slot here". */
 .addCard {
     display: flex;
     align-items: center;
@@ -267,8 +252,6 @@
     height: 30px;
 }
 
-/* Masked (private + locked) note: centered column, a large padlock with a
-   small label beneath, and nothing else to give the content away. */
 .cardMasked {
     cursor: pointer;
     align-items: center;
@@ -309,7 +292,6 @@
     color: var(--text-muted);
 }
 
-/* Discreet per-card move menu. */
 .cardMenu {
     position: relative;
     display: inline-flex;
@@ -320,9 +302,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    /* Collapsed at rest so the lock/star badges sit flush against the right
-       edge; expands on hover, smoothly pushing the badges left to make room for
-       the folder (move) button. */
+    /* Collapsed at rest so the badges sit flush against the right edge; hovering
+       expands it and pushes them left. */
     width: 0;
     height: 22px;
     padding: 0;
@@ -437,7 +418,6 @@
     gap: 4px;
 }
 
-/* Last-modified stamp, pushed to the trailing corner of the card. */
 .cardDate {
     margin-left: auto;
     white-space: nowrap;
@@ -452,7 +432,6 @@
     font-size: 0.85rem;
 }
 
-/* Empty state */
 .empty {
     display: flex;
     flex-direction: column;
@@ -466,7 +445,6 @@
     user-select: none;
 }
 
-/* The icon + message are decorative; only the action button stays interactive. */
 .empty > .emptyIcon,
 .empty > p {
     pointer-events: none;
@@ -477,7 +455,6 @@
     opacity: 0.6;
 }
 
-/* --- Editor popup --- */
 .editor {
     position: relative;
     display: flex;
@@ -485,17 +462,14 @@
     gap: var(--space-md);
 }
 
-/* In the large layout the editor fills the tall dialog body so its block list
-   (.blocksFill) can flex and scroll while the title/footer stay pinned. */
+/* Fills the tall dialog body so .blocksFill can flex and scroll inside it. */
 .editorFill {
     flex: 1 1 auto;
     min-height: 0;
     height: 100%;
 }
 
-/* Info button rendered in the Dialog's top-right corner cluster (headerAction),
-   styled like the info buttons on the Security page. The Dialog owns its
-   placement next to the ×, so there's no manual positioning here. */
+/* The Dialog places it next to the ×, so nothing is positioned here. */
 .editorInfoBtn {
     flex-shrink: 0;
     display: flex;
@@ -525,18 +499,16 @@
 }
 
 .editorTitleInput {
-    /* Its natural line height, never more: the editor is a flex *column*, so a
-       growing title would split the tall layout's free space with .blocksFill
-       and leave a mostly-empty band above the content. All slack goes to the
-       block list; never shrink either, so the title can't be crushed. */
+    /* Never grows nor shrinks: in the tall layout all the free height belongs to
+       the block list, and the title must not be crushed either. */
     flex: 0 0 auto;
     border: none;
     background: transparent;
     color: var(--text-primary);
     font-size: 1.25rem;
     font-weight: 700;
-    /* Clear the Dialog's top-right corner cluster (info + ×) so a long title
-       never slides under it. */
+    /* Clear the Dialog's corner cluster (info + ×) so a long title never slides
+       under it. */
     padding: 0 64px 0 0;
     outline: none;
 }
@@ -545,7 +517,6 @@
     color: var(--text-muted);
 }
 
-/* Footer-left cluster: understated pin / hide / delete icon buttons. */
 .footerLeft {
     display: flex;
     align-items: center;
@@ -593,9 +564,8 @@
     margin: 0;
 }
 
-/* Created / last-modified stamps shown when editing, sitting in the footer just
-   left of the "Annuler" button. Allowed to shrink (and ellipsize) so they never
-   force the footer wider than the popup. */
+/* Allowed to shrink and ellipsize, so the stamps never force the footer wider
+   than the popup. */
 .editorDates {
     flex: 0 1 auto;
     min-width: 0;
@@ -608,9 +578,8 @@
     text-overflow: ellipsis;
 }
 
-/* Blocks editor. The list itself is the contentEditable host (see BlockEditor),
-   so the caret and a selection run over the whole note; its focus ring would
-   frame the entire body, hence `outline: none`. */
+/* The list itself is the contentEditable host (see BlockEditor), so its focus
+   ring would frame the entire note body: hence `outline: none`. */
 .blocks {
     display: flex;
     flex-direction: column;
@@ -620,8 +589,7 @@
     outline: none;
 }
 
-/* Large editor layout: the block list fills the available height and is the
-   sole scroll area, keeping the title and footer pinned. */
+/* Large layout: the sole scroll area, so the title and footer stay pinned. */
 .blocksFill {
     flex: 1 1 auto;
     min-height: 0;
@@ -641,8 +609,8 @@
     background: var(--surface-subtle);
 }
 
-/* During a drag, suppress per-row hover affordances (background, grip and
-   delete button): the hovered row is incidental to the cursor and looks noisy. */
+/* During a drag the hovered row is incidental to the cursor: its affordances
+   would only add noise. */
 .dragging .block:hover {
     background: transparent;
 }
@@ -652,10 +620,9 @@
     opacity: 0;
 }
 
-/* Row chrome (grip, checkbox, markers, delete) lives inside the editable host
-   but is none of the note's text: `user-select: none`, with the elements'
-   `contentEditable={false}`, keeps it out of any selection, so dragging across
-   rows selects the text alone and copying it never picks up an affordance. */
+/* Row chrome lives inside the editable host but is none of the note's text:
+   `user-select: none`, with the elements' `contentEditable={false}`, keeps it out
+   of any selection. */
 .blockGrip,
 .checkButton,
 .blockBullet,
@@ -665,8 +632,7 @@
     user-select: none;
 }
 
-/* Drag-to-reorder grip: hidden until the row is hovered, à la native editors.
-   Centred vertically (a row-level control), unlike the first-line checkbox. */
+/* Centred vertically, being a row-level control, unlike the first-line checkbox. */
 .blockGrip {
     flex-shrink: 0;
     align-self: center;
@@ -689,8 +655,8 @@
     cursor: grabbing;
 }
 
-/* Single-block note: reordering is meaningless, so the grip is inert. It keeps
-   its slot so the text doesn't shift when a second block appears. */
+/* Nothing to reorder in a single-block note, but the grip keeps its slot so the
+   text doesn't shift once a second block appears. */
 .blockGripHidden {
     visibility: hidden;
 }
@@ -713,9 +679,9 @@
     pointer-events: none;
 }
 
-/* Opaque clone of the grabbed row, overlaid on it for a single frame as the
-   `setDragImage` source (see onGripDragStart): an opaque backdrop keeps the
-   content painted under the translucent popups out of the drag ghost. */
+/* `setDragImage` source, overlaid on the grabbed row for a single frame: an
+   opaque backdrop keeps whatever the translucent popup lets through out of the
+   drag ghost. */
 .dragSnapshot {
     position: fixed;
     z-index: var(--z-toast);
@@ -727,8 +693,7 @@
     opacity: 1;
 }
 
-/* Landing preview: a translucent copy of the grabbed row, mirroring its layout
-   so the content shows exactly where (and how) it will drop in. */
+/* Landing preview: a translucent copy of the grabbed row, in the same layout. */
 .blockGhost {
     display: flex;
     align-items: flex-start;
@@ -787,7 +752,6 @@
     color: var(--success, var(--accent));
 }
 
-/* Bullet list marker: a small solid dot aligned with the first text line. */
 .blockBullet {
     flex-shrink: 0;
     align-self: flex-start;
@@ -798,8 +762,7 @@
     background: var(--text-secondary);
 }
 
-/* Numbered list marker: the item's ordinal, sharing the text metrics so its
-   baseline lines up with the first line of the textarea. */
+/* Shares the text metrics so the ordinal's baseline lines up with the first line. */
 .blockNumber {
     flex-shrink: 0;
     align-self: flex-start;
@@ -832,14 +795,12 @@
     color: var(--text-muted);
 }
 
-/* Placeholder for a block's text surface when it's empty. */
 .blockText[data-empty='true']::before {
     content: attr(data-placeholder);
     color: var(--text-muted);
     pointer-events: none;
 }
 
-/* Heading blocks: same surface, larger/bolder type per level (1 = largest). */
 .heading1,
 .heading2,
 .heading3,
@@ -870,9 +831,8 @@
     color: var(--text-secondary);
 }
 
-/* Divider block. The visible rule is slim, but it sits inside a taller,
-   pointer-cursor hit area (`.dividerHit`) so it is easy to click-select for
-   colouring, a bare 1px line is nearly impossible to hit. */
+/* A bare 1px rule is nearly impossible to click, so it sits inside a taller hit
+   area that can be selected for colouring. */
 .dividerHit {
     flex: 1 1 auto;
     align-self: stretch;
@@ -911,21 +871,18 @@
 .mdStrike {
     text-decoration: line-through;
 }
-/* Coloured run: the tint itself is applied inline (via the --note-<name> token);
-   this class only marks the span. */
 .mdColor {
-    /* intentionally empty, colour comes from the inline style */
+    /* Empty on purpose: the tint is applied inline, via the --note-<name> token. */
 }
 
-/* Divider selected for colouring (it has no caret to show it's targeted): a
-   clear highlighted band across the whole hit area, kept on hover too. */
+/* A divider has no caret to show it is targeted, hence a band across the whole
+   hit area, kept on hover too. */
 .dividerSelected,
 .dividerSelected:hover {
     background: var(--accent-bg);
     box-shadow: inset 0 0 0 1px var(--accent-glow);
 }
 
-/* Colour swatch pickers inside the format menu. */
 .swatches {
     display: flex;
     flex-wrap: wrap;
@@ -997,8 +954,7 @@
     height: 14px;
 }
 
-/* Compact layout only: the +/Aa tools share a row above the footer with the
-   note's date stamps (pushed to the right). */
+/* Compact layout only: the +/Aa tools share a row with the date stamps. */
 .addBar {
     display: flex;
     align-items: flex-end;
@@ -1007,21 +963,18 @@
     margin-top: var(--space-sm);
 }
 
-/* The "+" (add block) and "Aa" (format) menu triggers, grouped together. */
 .addTools {
     display: inline-flex;
     align-items: center;
     gap: var(--space-sm);
 }
 
-/* Anchor for one trigger button + its popover menu. */
 .addMenu {
     position: relative;
     display: inline-flex;
     align-items: center;
 }
 
-/* Thin vertical rule separating the icon actions from the +/Aa tools. */
 .vsep {
     width: 1px;
     height: 20px;
@@ -1052,8 +1005,7 @@
     color: var(--text-primary);
 }
 
-/* Opens upward from the small trigger (anchored bottom-left), since it sits at
-   the foot of the block list. Reuses the shared `.menu` look. */
+/* Opens upward: the trigger sits at the foot of the block list. */
 .addMenuList {
     top: auto;
     bottom: calc(100% + 4px);
@@ -1098,8 +1050,7 @@
     line-height: 1.5;
 }
 
-/* Pending privacy-change notice shown in the editor before saving (temporary,
-   so kept noticeable rather than blending into the metadata line). */
+/* Announces a privacy change before saving: temporary, so kept noticeable. */
 .privateNotice {
     display: inline-flex;
     align-items: center;
@@ -1114,7 +1065,6 @@
     height: 13px;
 }
 
-/* --- Archive popup --- */
 .archiveList {
     display: flex;
     flex-direction: column;
@@ -1185,7 +1135,6 @@
     color: var(--text-muted);
 }
 
-/* Loading skeleton */
 .skeletonCard {
     min-height: 120px;
     border-radius: var(--radius-md);

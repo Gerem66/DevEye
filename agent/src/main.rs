@@ -1,13 +1,5 @@
-//! DevEye Agent — lightweight cross-platform monitoring daemon (Linux, macOS &
-//! Windows).
-//!
-//! Subcommands:
-//!   - `link <code>`  Enroll this machine with a one-time code from the web UI.
-//!   - `run`          Stream metrics to the server (foreground, or `--detach`).
-//!   - `stop`         Stop a backgrounded agent.
-//!   - `status`       Print the local enrollment + running state.
-//!   - `unlink`       Forget the local enrollment (config + token).
-//!   - `uninstall`    Remove the agent entirely from this machine.
+//! DevEye Agent: lightweight cross-platform monitoring daemon (Linux, macOS,
+//! Windows). The subcommands are documented on `Command`.
 
 mod authlog;
 mod commands;
@@ -36,11 +28,9 @@ use std::fs;
 use std::sync::OnceLock;
 
 /// Whether this process is supervised by a service manager (systemd/launchd/task),
-/// set once at startup from `run --managed`. Drives the self-update restart (a
-/// supervised agent just exits and lets the manager relaunch it; otherwise it
-/// respawns itself — see `update::restart_and_exit`), is reported to the server,
-/// and is used when disabling autostart (we must hand off before the supervising
-/// service is removed, or it would kill us).
+/// set once at startup from `run --managed`. A supervised agent exits on
+/// self-update and lets the manager relaunch it (`update::restart_and_exit`),
+/// and must hand off before its own service is removed when autostart is disabled.
 static MANAGED: OnceLock<bool> = OnceLock::new();
 
 pub fn managed() -> bool {
@@ -208,10 +198,8 @@ fn service_cmd(action: ServiceCmd) -> Result<()> {
         } => {
             service::install(system, config.as_deref())?;
             // En ligne de commande, « installer » veut dire « et démarre-le » :
-            // c'est le point d'entrée autonome, notamment la commande que
-            // l'interface propose quand l'agent ne peut pas ouvrir lui-même la
-            // fenêtre d'autorisation. Le démarrage est une étape distincte pour
-            // le passage de relais interne (voir `service::install`), pas ici.
+            // c'est le point d'entrée autonome. Le démarrage reste une étape
+            // distincte pour le passage de relais interne (voir `service::install`).
             let started = service::start(system);
             let scope = if system { "système" } else { "utilisateur" };
             match started {
@@ -287,8 +275,7 @@ async fn run(
     if let Some(path) = config_path {
         std::env::set_var("DEVEYE_CONFIG", path);
     }
-    // `--managed` (set by the service) or a `DEVEYE_MANAGED` env both mark us as
-    // supervised — either way a self-update exits and lets the manager relaunch us.
+    // `--managed` (set by the service) or a `DEVEYE_MANAGED` env both mark us as supervised.
     let _ = MANAGED.set(managed || std::env::var_os("DEVEYE_MANAGED").is_some());
 
     // Sweep any binary a previous self-update left behind (Windows `.old`).
@@ -296,12 +283,9 @@ async fn run(
 
     let config = Config::load().context("loading config (run `link` first)")?;
 
-    // Single-instance guard: this enrollment already has a live monitoring loop
-    // (terminal run + installed service, stale --detach, a second manual start…).
-    // Duplicate instances share one device token and each streams its own
-    // snapshots — the server sees doubled data with *no error anywhere*, so the
-    // only safe answer is to refuse to start. (`--once` stays allowed: it's a
-    // one-shot connectivity probe, and the server throttles duplicates anyway.)
+    // Single-instance guard: duplicate instances share one device token and each
+    // streams its own snapshots, so the server sees doubled data with no error
+    // anywhere. `--once` stays allowed: a one-shot probe, throttled server-side.
     if !once {
         if let Some(existing) = state::read_running() {
             anyhow::bail!(
@@ -320,9 +304,8 @@ async fn run(
         return spawn_detached(interval);
     }
 
-    // Record our PID so `stop`/`status` can find a foreground agent too, plus the
-    // richer runtime state (the account we run as) so `status` reports *our* facts
-    // even when asked from another user's session.
+    // PID file so `stop`/`status` find a foreground agent too, plus the runtime
+    // state so `status` reports our facts even from another user's session.
     let _ = fs::write(Config::pid_path(), std::process::id().to_string());
     state::write_running();
 
@@ -444,13 +427,10 @@ fn status() {
         .unwrap_or_else(report::current_user);
     let running_text = match &running {
         Some(s) => format!("yes (pid {})", s.pid),
-        // Fall back to the bare pid file (detach-handshake window, or an older agent
-        // that predates the state file).
+        // Fall back to the bare pid file (detach-handshake window).
         None => running_state(),
     };
 
-    // Grouped so each block answers one question: which machine this is, how this
-    // local agent install is wired, and whether it's operating right now.
     status_section("Device");
     status_row("Name", &c.name);
     status_row("Platform", identity::current_platform());

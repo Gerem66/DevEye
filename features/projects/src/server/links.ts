@@ -22,26 +22,18 @@ import {
 } from './_shared';
 
 /**
- * Le transverse : mes tâches à travers tous les projets, et les services
- * surveillés qu'un projet rattache.
- *
- * Les deux répondent à la même question posée dans les deux sens (« qu'est-ce
- * qui touche ce projet ? » et « qu'est-ce qui me touche, moi, dans tous les
- * projets ? »), d'où leur cohabitation dans ce fichier.
- *
- * Les liaisons vivent au **domicile** du projet (`Docs/SHARING.md`) : depuis
- * une fenêtre elles se lisent, nommées par le contrat d'éléments de la
- * feature visée sous le codec de là-bas (`labels`), mais ne se posent ni ne
- * se retirent, parce qu'elles référencent des objets de l'espace d'origine
- * que la fenêtre ne voit pas (`assertAtHome`).
+ * Le transverse : mes tâches à travers tous les projets, et les services surveillés
+ * qu'un projet rattache, la même question posée dans les deux sens. Les liaisons
+ * vivent au domicile du projet : depuis une fenêtre elles se lisent, nommées par le
+ * contrat d'éléments de la feature visée, mais ne se posent ni ne se retirent
+ * (`assertAtHome`).
  */
 
 export const projectMyTasksFeature = defineSdkFeature({
     ...projectMyTasks,
     handler: async (ctx: Ctx) => {
         // Les projets visibles d'ici, projetés compris, moins ceux qu'une
-        // restriction masque : un projet projeté compte dans « mes tâches » de
-        // la fenêtre, et une carte d'un projet qu'on ne voit pas n'existe pas.
+        // restriction masque : une carte d'un projet qu'on ne voit pas n'existe pas.
         const [visible, hidden, scope] = await Promise.all([
             ctx.repo.projects.listVisible(ctx.workspaceId, false),
             ctx.items.restrictions(),
@@ -53,8 +45,8 @@ export const projectMyTasksFeature = defineSdkFeature({
         const rows = await ctx.repo.board.listAssignedIn([...projects.keys()], ctx.userId);
         if (rows.length === 0) return { tasks: [] };
 
-        // Un projet gardé n'est lisible que si la session l'est déjà. On ne le
-        // demande qu'une fois, et seulement s'il y a vraiment du gardé en jeu :
+        // Un projet gardé n'est lisible que si la session l'est déjà. La question
+        // n'est posée qu'une fois, et seulement s'il y a du gardé en jeu :
         // interroger le coffre fait glisser la fenêtre de grâce.
         const concerned = [...new Set(rows.map((r) => r.project_id))].map((id) => projects.get(id));
         const anyGuarded = concerned.some((p) => p?.security_tier === 'guarded');
@@ -70,8 +62,8 @@ export const projectMyTasksFeature = defineSdkFeature({
             // Le codec du projet, chez lui : celui d'ici ou celui de son domicile.
             const cipher = await projectCipher(ctx, project, scope);
 
-            // Masqué plutôt qu'absent : une liste de tâches incomplète serait
-            // pire qu'une liste qui dit ce qu'elle ne peut pas lire.
+            // Masqué plutôt qu'absent : une liste de tâches incomplète serait pire
+            // qu'une liste qui dit ce qu'elle ne peut pas lire.
             const payload = masked
                 ? { title: '', description: '', checklist: [] }
                 : await decryptCard(cipher, row.content);
@@ -93,10 +85,9 @@ export const projectLinkCountsFeature = defineSdkFeature({
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId);
         const home = project.workspace_id;
-        // Les listes plutôt que quatre `COUNT(*)` : ce sont des poignées
-        // d'identifiants, les requêtes existent déjà et sont celles que les
-        // onglets eux-mêmes appellent. Une seconde famille de requêtes pour
-        // rendre le même fait ne se serait payée qu'en occasions de diverger.
+        // Les listes plutôt que quatre `COUNT(*)` : des poignées d'identifiants, et
+        // les requêtes que les onglets appellent déjà. Une seconde famille pour
+        // rendre le même fait ne se paierait qu'en occasions de diverger.
         const [repos, databases, sites, targets, services] = await Promise.all([
             ctx.repo.links.listRepoIds(input.projectId, home),
             ctx.repo.links.listDatabaseIds(input.projectId, home),
@@ -109,9 +100,8 @@ export const projectLinkCountsFeature = defineSdkFeature({
                 git: repos.length,
                 database: databases.length,
                 audience: sites.length,
-                // L'onglet Déploiement montre deux choses : les cibles reliées
-                // et les services surveillés. Il a donc de quoi s'ouvrir dès que
-                // l'une des deux existe.
+                // L'onglet Déploiement montre les cibles reliées et les services
+                // surveillés : il s'ouvre dès que l'un des deux existe.
                 deploy: targets.length + services.length
             }
         };
@@ -123,8 +113,8 @@ export const projectUptimeListFeature = defineSdkFeature({
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId);
         const serviceIds = await ctx.repo.links.listServiceIds(input.projectId, project.workspace_id);
-        // Nommés par le contrat d'Uptime, au domicile du projet : c'est là que
-        // les services vivent, et la seule façon pour une fenêtre de les nommer.
+        // Nommés par le contrat d'Uptime, au domicile du projet : c'est là que les
+        // services vivent, et la seule façon pour une fenêtre de les nommer.
         const uptime = ctx.providers.get<UptimeItemsProvider>(UPTIME_ITEMS_PROVIDER);
         return { serviceIds, labels: await linkLabels(uptime, serviceIds, project.workspace_id) };
     }
@@ -137,15 +127,12 @@ export const projectUptimeLinkFeature = defineSdkFeature({
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'relier un service surveillé');
-        // La cible existe-t-elle, et dans **cet** espace ? Sans cette garde on
-        // rattacherait n'importe quel identifiant, y compris celui d'un service
-        // d'un autre espace, dont l'existence même n'a pas à fuiter. On ne
-        // vérifie que l'existence : le **droit** de l'ouvrir reste celui
-        // d'Uptime, vérifié au moment où on l'ouvre.
-        //
-        // La question passe par le contrat que le module Uptime offre
-        // (`UPTIME_ITEMS_PROVIDER`, lu par `ctx.providers`) : Projets ne lit
-        // pas sa table, et dégrade proprement quand le module est absent.
+        // Le service existe-t-il, et dans cet espace ? Sans cette garde on
+        // rattacherait n'importe quel identifiant, dont celui d'un service d'un autre
+        // espace, dont l'existence n'a pas à fuiter. Seule l'existence est vérifiée,
+        // le droit de l'ouvrir reste celui d'Uptime. La question passe par le contrat
+        // qu'offre le module : Projets ne lit pas sa table, et dégrade proprement
+        // quand il est absent.
         const uptime = ctx.providers.get<UptimeItemsProvider>(UPTIME_ITEMS_PROVIDER);
         if (!uptime) throw new FeatureError('validation', 'Le module Uptime n’est pas installé.');
         if (!(await uptime.exists(input.serviceId, project.workspace_id))) {

@@ -1,14 +1,9 @@
 import type { FinanceAccount, FinanceCategory, FinanceColor, FinanceConfig } from '../contracts/domain';
 
 /**
- * Le socle que tous les écrans des finances reçoivent.
- *
- * Réglages, comptes et catégories sont chargés **une fois** par la coquille
- * (`Finance.tsx`) et passés en propriété, plutôt que relus par chaque onglet.
- * Trois raisons: ils changent rarement, ils sont nécessaires partout (aucune
- * ligne du journal ne s'affiche sans le nom de son compte et la couleur de sa
- * catégorie), et surtout deux onglets qui les reliraient chacun de leur côté
- * pourraient les afficher différemment à la même seconde.
+ * Le socle chargé une fois par `Finance.tsx` et passé aux onglets : deux
+ * onglets qui reliraient chacun pourraient afficher différemment à la même
+ * seconde.
  */
 export interface FinanceBase {
     config: FinanceConfig;
@@ -36,13 +31,7 @@ export function categoryOf(categories: FinanceCategory[], id: number | null): Fi
     return categories.find((category) => category.id === id) ?? null;
 }
 
-/**
- * Le jeton de thème d'une couleur nommée.
- *
- * Passe par une variable CSS et jamais par un hexadécimal en dur: c'est ce qui
- * fait qu'une catégorie suit les réglages du thème au lieu de jurer avec eux le
- * jour où la palette est retouchée.
- */
+/** Une variable CSS, jamais un hexadécimal : la catégorie suit le thème. */
 export function colorVar(color: FinanceColor): string {
     return `var(--finance-${color})`;
 }

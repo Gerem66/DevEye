@@ -5,10 +5,8 @@ import { moduleClientProvider } from '@/sdk/registry';
 
 /**
  * Les appareils, vus de l'app : ce que le module Appareils offre par
- * `DEVICES_CLIENT_PROVIDER` (la liste vivante de l'espace, le panneau et la
- * tuile d'un appareil), et rien d'autre. L'app ne tient plus aucune liste
- * d'appareils elle-même ; sans le module, elle n'en connaît aucun, ne pose
- * aucune tuile et n'en élague aucune.
+ * `DEVICES_CLIENT_PROVIDER`, et rien d'autre. L'app ne tient aucune liste
+ * d'appareils elle-même ; sans le module, elle n'en connaît aucun.
  */
 export function devicesProvider(): DevicesClientProvider | undefined {
     return moduleClientProvider<DevicesClientProvider>(DEVICES_CLIENT_PROVIDER);
@@ -28,11 +26,10 @@ export interface DevicesSnapshot {
 const NO_DEVICES: DevicesSnapshot = { devices: [], loading: false, error: null };
 
 /**
- * La liste vivante des appareils de l'espace actif, par le provider du module.
- *
- * Le provider est lu au rendu, jamais à l'import : le registre est rempli par
- * l'initialiseur avant le premier rendu, et n'en bouge plus, donc la suite
- * des hooks d'un composant est la même à chaque rendu.
+ * La liste vivante des appareils de l'espace actif, par le provider du module. Il
+ * est lu au rendu, jamais à l'import : le registre est rempli par l'initialiseur
+ * avant le premier rendu et n'en bouge plus, donc la suite des hooks d'un
+ * composant est la même à chaque fois.
  */
 export function useDevices(): DevicesSnapshot {
     const provider = devicesProvider();

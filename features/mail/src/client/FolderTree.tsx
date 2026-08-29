@@ -20,7 +20,6 @@ const SPECIAL_ICONS: Record<string, string> = {
     archive: 'archive'
 };
 
-/** Plain sorted list — folder drag & drop reorder is a V2 nicety, not V1 scope. */
 export function FolderTree({ folders, selectedId, onSelect }: FolderTreeProps) {
     // Quelqu'un est dans l'un de ces dossiers : sa couleur sur la ligne. La
     // forme liste évite d'extraire un composant par ligne juste pour un hook.

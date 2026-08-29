@@ -13,26 +13,10 @@ import {
 import { api } from './api';
 
 /**
- * La forme des archives d'un travail : l'onglet Chiffrement de ses réglages.
- *
- * Deux formes, et deux seulement :
- *
- * - **En clair** : lisible par qui tient la destination. À réserver aux
- *   destinations déjà sous la même garde que le serveur.
- * - **Chiffrée (clé du serveur)** : scellée en AES-256-GCM sous une clé
- *   dérivée de CRYPT_KEY_A / CRYPT_KEY_B, jamais stockée, donc jamais dans
- *   l'archive qu'elle protège. `scripts/restore-backup.mjs` la re-dérive avec
- *   ces deux seules variables, sans base ni serveur.
- *
- * Le chiffrement **par mot de passe** n'existe pas ici, et ce n'est pas un
- * oubli : l'ordonnanceur tourne la nuit sans session, or la clé dérivée du
- * mot de passe ne vit que dans une session déverrouillée, en mémoire, à
- * fenêtre glissante. Un tel mode ne pourrait ni tourner planifié, ni survivre
- * à un vidage de plusieurs heures (même raison que CloudSync, voir
- * Docs/SECURITY_MODEL.md).
- *
- * Le choix vaut pour les archives **à venir** : chaque exécution fige la forme
- * qu'elle a réellement écrite, et l'historique l'affiche par passage.
+ * La forme des archives d'un travail, pour les archives à venir (chaque
+ * exécution fige la sienne). Pas de chiffrement par mot de passe : la clé
+ * dérivée du mot de passe ne vit qu'en session déverrouillée, et
+ * l'ordonnanceur tourne sans session (voir Docs/SECURITY_MODEL.md).
  */
 export default function JobEncryptionPanel({ scope, canWrite }: SettingsPanelProps) {
     const jobId = scope.kind === 'item' ? scope.itemId : null;
@@ -46,9 +30,8 @@ export default function JobEncryptionPanel({ scope, canWrite }: SettingsPanelPro
     const [busy, setBusy] = useState(false);
     const [status, setStatus] = useState<string | null>(null);
 
-    // Le choix affiché suit le travail chargé, et lui seul : une relecture
-    // (le sujet live bat à chaque exécution) ne doit pas effacer un choix en
-    // cours tant qu'il n'a pas changé côté serveur.
+    // Suit le travail chargé seulement : une relecture (le sujet live bat à
+    // chaque exécution) ne doit pas effacer un choix en cours.
     useEffect(() => {
         if (job) setMode(job.encryption);
     }, [job?.encryption, job]);

@@ -25,20 +25,12 @@ import { deployHandlers } from './handlers';
 import type { DeployRepo, DeployTargetWithUsageRow } from './repo';
 
 /**
- * Les handlers du module, sur le harnais du SDK.
- *
- * Ce qui mérite d'être tenu, c'est ce qui ne lève nulle part quand ça se
- * dérègle : les **restrictions par élément** (une cible masquée pour ce rôle
- * disparaît de la liste et du compte), le **partage inter-espaces** (une
- * projection se liste avec `foreign: true` sous le codec de son espace
- * d'origine, son historique est celui du domicile, et elle ne se modifie
- * jamais depuis la fenêtre), le **contrat de Projets** (le compte et la liste
- * des projets viennent du provider, et son absence vaut zéro plutôt qu'une
- * erreur), l'**idempotence** de la déclaration, le **ménage** à la
- * suppression (`ctx.items.forget`), et les **clés Dokploy** dans la table du
- * module (secret jamais rendu, absent = conservé ; retirer une clé met ses
- * cibles à NULL, le ménage explicite qui remplace la contrainte retirée par la
- * 099).
+ * Les handlers du module, sur le harnais du SDK : les restrictions par élément,
+ * le partage inter-espaces (projection listée sous le codec de son domicile,
+ * jamais modifiable depuis la fenêtre), le contrat de Projets (absent = zéro),
+ * l'idempotence de la déclaration, le ménage à la suppression et les clés
+ * Dokploy (secret jamais rendu, absent = conservé, retrait qui met les cibles à
+ * NULL).
  */
 
 /** Le handler d'un contrat, typé par ce contrat (le registre est hétérogène). */
@@ -103,11 +95,10 @@ function deployment(
 }
 
 /**
- * Un dépôt en mémoire, même contrat que le vrai. `projections` reproduit la
- * table `item_shares` : `targetId → espaces où elle est projetée`, ce qui
- * donne à `listVisibleTargets` / `findVisibleTarget` leur seconde branche, et
- * ce que le harnais (`shares`) doit dire en écho pour que `ctx.sharing.scope()`
- * connaisse le domicile.
+ * Un dépôt en mémoire, même contrat que le vrai. `projections` reproduit
+ * `item_shares` (`targetId → espaces où elle est projetée`) ; le harnais
+ * (`shares`) doit le dire en écho pour que `ctx.sharing.scope()` connaisse le
+ * domicile.
  */
 function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
     let seq = 100;
@@ -213,8 +204,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             return c;
         },
         async removeCredential(id, workspaceId) {
-            // Le ménage du vrai dépôt : les cibles de la clé passent à NULL
-            // avant que la ligne ne parte.
+            // Comme le vrai dépôt : les cibles de la clé passent à NULL.
             for (const t of targets) {
                 if (t.credential_id === id && t.workspace_id === workspaceId) t.credential_id = null;
             }
@@ -312,8 +302,7 @@ describe('le partage inter-espaces', () => {
         const repo = seed(fakeRepo({ 7: [1] }), target({ id: 7, workspace_id: 42 }));
         const ctx = createTestContext({ repo, workspaceId: 1, shares: { 7: 42 } });
 
-        // Le codec est demandé pour la ligne : le harnais rend l'identité,
-        // l'appel est ce qui se vérifie.
+        // Le harnais chiffre à l'identité : c'est l'appel qui se vérifie.
         const asked: number[] = [];
         const scope = ctx.sharing.scope;
         ctx.sharing = {
@@ -441,8 +430,7 @@ describe('deploy.add', () => {
             ['deploy.add']
         );
 
-        // Idempotente sur (clé, identifiant externe) : la même application est
-        // la même cible, dont l'intitulé se met à jour.
+        // Idempotente sur (clé, identifiant externe).
         const again = await handlerFor(deployAdd)(ctx, { ...body, name: 'Pile renommée' });
         assert.equal(again.target.id, first.target.id);
         assert.equal(again.target.name, 'Pile renommée');
@@ -582,8 +570,8 @@ describe('les clés Dokploy', () => {
         const ctx = createTestContext({ repo });
 
         assert.deepEqual(await handlerFor(deployCredentialRemove)(ctx, { credentialId: 10 }), { credentialId: 10 });
-        // Le ménage explicite : la cible de la clé passe à NULL, les autres
-        // gardent la leur, et l'espace voisin n'est pas touché.
+        // La cible de la clé passe à NULL, les autres gardent la leur, et
+        // l'espace voisin n'est pas touché.
         assert.deepEqual(
             repo.targets.map((t) => [t.id, t.credential_id]),
             [

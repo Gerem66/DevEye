@@ -3,20 +3,16 @@ import type { DatabaseComparator, DatabaseCondition } from '../contracts/domain'
 import { explainError, singleNumber, type Session } from './engine';
 
 /**
- * L'évaluation d'une alerte, en fonctions pures : comparer une mesure à son
- * seuil, mesurer chaque condition, décider si l'alerte est franchie, rendre
- * son message. Le relevé périodique (`service.ts`) et l'essai à blanc
- * (`database.alertTest`) passent tous deux par ici, pour qu'une condition ne
- * puisse pas franchir d'un côté et pas de l'autre.
+ * L'évaluation d'une alerte, en fonctions pures, partagées par le relevé
+ * périodique et l'essai à blanc.
  */
 
-/** L'issue d'une évaluation de condition : une valeur, ou la raison de son absence. */
+/** Une valeur, ou la raison de son absence. */
 export interface ConditionOutcome {
     value: number | null;
     error: string | null;
 }
 
-/** Compare une mesure à son seuil. */
 export function compare(value: number, comparator: DatabaseComparator, threshold: number): boolean {
     switch (comparator) {
         case 'gt':
@@ -32,20 +28,12 @@ export function compare(value: number, comparator: DatabaseComparator, threshold
         case 'ne':
             return value !== threshold;
         default:
-            // Le `default` n'est pas décoratif : il rend la fonction totale pour
-            // le compilateur tout en restant inatteignable, l'entrée étant
-            // validée par `databaseComparatorSchema`.
+            // Inatteignable, l'entrée étant validée par `databaseComparatorSchema`.
             return false;
     }
 }
 
-/**
- * Évalue chaque condition sur une session ouverte.
- *
- * Une condition en échec **n'interrompt pas** les autres : on veut voir d'un
- * coup d'œil laquelle des cinq est mal écrite, pas découvrir la deuxième après
- * avoir corrigé la première.
- */
+/** Évalue chaque condition ; une condition en échec n'interrompt pas les autres. */
 export async function runConditions(
     session: Pick<Session, 'query'>,
     conditions: DatabaseCondition[]
@@ -62,12 +50,8 @@ export async function runConditions(
 }
 
 /**
- * L'alerte est-elle franchie ?
- *
- * Une condition qui n'a pas pu être mesurée **ne franchit pas** : en `and` elle
- * empêche le déclenchement, en `or` elle ne l'entraîne pas. Le contraire ferait
- * d'une requête mal écrite une source d'alertes permanentes, ce qui est la
- * meilleure façon de faire ignorer un canal d'alerte.
+ * Une condition non mesurée ne franchit pas (en `and` elle empêche, en `or`
+ * elle n'entraîne pas) : une requête mal écrite ne doit pas alerter en permanence.
  */
 export function isFiring(
     conditions: DatabaseCondition[],

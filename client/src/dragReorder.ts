@@ -14,11 +14,9 @@ const DRAG_THRESHOLD = 6;
 type RowId = string | number;
 
 /**
- * Comment la liste est disposée — donc où se glisse un interstice.
- *
  * `rows` : une colonne, les interstices sont horizontaux, la barre aussi.
- * `grid` : plusieurs colonnes, les interstices sont **entre deux cartes d'une
- * même rangée**, et la barre est verticale, haute comme la rangée visée.
+ * `grid` : plusieurs colonnes, les interstices sont entre deux cartes d'une même
+ * rangée, et la barre est verticale, haute comme la rangée visée.
  */
 type Layout = 'rows' | 'grid';
 
@@ -29,7 +27,7 @@ export interface DragReorder<L extends HTMLElement, B extends HTMLElement> {
     barRef: RefObject<B | null>;
     /** À câbler sur le `onPointerDown` de la poignée d'une ligne. */
     onGripPointerDown: (e: ReactPointerEvent, id: RowId) => void;
-    /** La ligne en cours de déplacement, à estomper. `null` hors glissé. */
+    /** La ligne en cours de déplacement, à estomper. */
     draggingId: RowId | null;
 }
 
@@ -42,16 +40,14 @@ interface DragReorderOptions {
     onReorder: (ids: RowId[]) => void;
     /** Un glissé commence ou finit — l'appelant suspend ses relectures. */
     onDragStateChange?: (dragging: boolean) => void;
-    /** La disposition de la liste. Une colonne par défaut. */
     layout?: Layout;
 }
 
 /**
  * Où poser la barre d'insertion, en coordonnées de la fenêtre.
  *
- * `x` à `null` : la barre garde la largeur que lui donne la feuille de style
- * (elle traverse la liste, cas d'une colonne). `height` à `null` : elle garde
- * son épaisseur, et `y` en est alors le **centre** et non le haut.
+ * `x` et `height` à `null` : la barre garde de la feuille de style sa largeur et
+ * son épaisseur, et `y` en est alors le centre et non le haut.
  */
 interface Spot {
     /** L'interstice visé : 0 = avant la première ligne. */
@@ -61,17 +57,14 @@ interface Spot {
     height: number | null;
 }
 
-/** La moitié de l'écart entre deux cases, où se centre la barre d'insertion. */
 function halfGap(list: HTMLElement, axis: 'rowGap' | 'columnGap'): number {
     return (parseFloat(getComputedStyle(list)[axis]) || 0) / 2;
 }
 
 /**
  * L'interstice visé dans une colonne : chaque bord horizontal est un candidat.
- *
- * Le centre de l'interstice se prend sur la case qui le borde, à la moitié de
- * l'écart : la barre est centrée par construction, et non par un décalage
- * correctif qu'il faudrait ajuster à chaque changement d'écart.
+ * Son centre se prend sur la case qui le borde, à la moitié de l'écart, pour que
+ * la barre soit centrée par construction plutôt que par un décalage correctif.
  */
 function rowsSpot(list: HTMLElement, boxes: DOMRect[], clientY: number): Spot {
     const half = halfGap(list, 'rowGap');
@@ -99,11 +92,9 @@ function edgeDistance(clientX: number, clientY: number, box: DOMRect, edge: numb
 }
 
 /**
- * Les cartes regroupées par rangée, dans l'ordre de lecture.
- *
- * Le critère est le **chevauchement vertical** avec la rangée en cours, et non
- * l'égalité des `top` : deux cartes d'une même rangée s'étirent à la même
- * hauteur, mais un pixel d'écart suffirait à faire éclater le regroupement.
+ * Les cartes regroupées par rangée, dans l'ordre de lecture. Le critère est le
+ * chevauchement vertical et non l'égalité des `top` : un pixel d'écart entre
+ * deux cartes d'une même rangée suffirait à faire éclater le regroupement.
  */
 function rowsOf(boxes: DOMRect[]): DOMRect[][] {
     const rows: DOMRect[][] = [];
@@ -116,25 +107,15 @@ function rowsOf(boxes: DOMRect[]): DOMRect[][] {
 }
 
 /**
- * L'interstice visé dans une grille : **combien de cartes le pointeur a-t-il
- * dépassées**, dans l'ordre de lecture.
+ * L'interstice visé dans une grille : combien de cartes le pointeur a dépassées,
+ * dans l'ordre de lecture. Un comptage rangée par rangée, car la recherche du
+ * bord le plus proche se décide sur l'abscisse et rend la dernière position
+ * inatteignable dès que la grille se replie sur une colonne.
  *
- * Un comptage rangée par rangée, et non la recherche du bord le plus proche.
- * Celle-ci se trompait dès que la grille se repliait sur une seule colonne :
- * l'intention y est purement verticale, alors que le bord le plus proche se
- * décide sur l'abscisse — et la poignée étant à gauche de la carte, le pointeur
- * y traîne. « Déposer à la fin » donnait alors « avant la dernière carte », et
- * la dernière position devenait tout bonnement inatteignable.
- *
- * Dans la rangée que le pointeur traverse, c'est l'axe qui offre réellement un
- * choix qui tranche : l'abscisse quand plusieurs cartes s'y partagent la
- * largeur, l'ordonnée quand elle n'en porte qu'une — c'est-à-dire exactement la
- * règle des listes en colonne, retrouvée sans être écrite deux fois.
- *
- * Reste à placer la barre. Un interstice qui tombe sur un retour à la ligne se
- * dessine à **deux** endroits — fin d'une rangée, début de la suivante — pour un
- * seul et même rang. On garde celui que le pointeur désigne ; ailleurs les deux
- * candidats se confondent, la gouttière étant partagée.
+ * Dans la rangée traversée, c'est l'axe qui offre un choix qui tranche :
+ * l'abscisse quand plusieurs cartes s'y partagent la largeur, l'ordonnée sinon.
+ * Un interstice qui tombe sur un retour à la ligne se dessine à deux endroits
+ * pour un seul rang ; on garde celui que le pointeur désigne.
  */
 function gridSpot(list: HTMLElement, boxes: DOMRect[], clientX: number, clientY: number): Spot {
     const half = halfGap(list, 'columnGap');
@@ -146,8 +127,8 @@ function gridSpot(list: HTMLElement, boxes: DOMRect[], clientX: number, clientY:
             gap += row.length;
             continue;
         }
-        // Entièrement en dessous : celle-ci et toutes les suivantes restent
-        // devant lui — y compris quand il flotte dans l'écart entre deux rangées.
+        // Entièrement en dessous : celle-ci et les suivantes restent devant lui,
+        // y compris quand il flotte dans l'écart entre deux rangées.
         if (clientY < top) break;
         for (const box of row) {
             const past = row.length > 1 ? clientX > (box.left + box.right) / 2 : clientY > (top + bottom) / 2;
@@ -181,50 +162,22 @@ function reordered(ids: RowId[], draggedId: RowId, gap: number): RowId[] | null 
 }
 
 /**
- * Réordonner une liste au glisser-déposer, partout de la même façon.
+ * Réordonner une liste au glisser-déposer. La feature ne garde en propre que
+ * l'apparence de ses lignes, de sa poignée et de sa barre d'insertion.
  *
- * Uptime, Git, Monitoring et les bases de données rangent tous une liste
- * verticale ; ce geste avait été écrit trois fois avant d'être rassemblé ici.
- * Chaque feature garde en propre ce qui la distingue vraiment — l'apparence de
- * ses lignes, de sa poignée et de sa barre d'insertion — et rien d'autre.
- *
- * ## Une colonne, ou une grille
- *
- * Le portefeuille des projets est une grille à plusieurs colonnes : deux cartes
- * côte à côte y partagent le même haut et le même bas, et un interstice choisi
- * sur la seule ordonnée n'y voudrait rien dire. `layout: 'grid'` change donc les
- * candidats — les bords **verticaux** plutôt qu'horizontaux — et la barre, qui
- * se dresse dans la gouttière, haute comme la rangée visée.
- *
- * Ce qui ne change pas : l'ordre résultant. Une grille reste une suite, et
- * {@link reordered} n'a jamais besoin de savoir combien de colonnes elle a.
- *
- * ## Pointer Events, jamais l'API `draggable` du HTML5
- *
- * Celle-ci confie le geste à la session de glissé du navigateur, et sur cette
- * plateforme une session interrompue peut laisser la page entière convaincue
- * qu'un glissé est toujours en cours : plus rien ne répond au clic, pas même le
- * menu contextuel, jusqu'à ce qu'un événement extérieur la casse. C'est une
- * défaillance de plateforme, qu'aucun soin apporté à `dragend` ne rattrape —
- * la seule parade est de ne jamais lui confier le geste. Voir aussi
+ * Pointer Events, jamais l'API `draggable` du HTML5 : une session de glissé du
+ * navigateur interrompue peut laisser la page entière convaincue qu'un glissé
+ * est en cours, plus rien ne répondant au clic. Aucun soin apporté à `dragend`
+ * ne rattrape cela ; la parade est de ne jamais lui confier le geste. Voir
  * {@link ./nativeDrag}, qui refuse celles que le navigateur ouvre tout seul.
  *
- * ## Ce qui bouge, et ce qui n'est pas touché
+ * Aucune ligne n'est déplacée ni restylée pendant le geste : seule la barre
+ * bouge, pilotée par le DOM et non par un état React, un rendu par mouvement du
+ * pointeur coûtant cher pour une position que seul un style traduit.
  *
- * La barre d'insertion se tient **dans l'interstice visé** ; aucune ligne n'est
- * déplacée ni restylée pendant le geste, de sorte que ce qu'on voit est
- * exactement là où ça tombe. Elle est pilotée par le DOM, pas par un état React :
- * un rendu à chaque mouvement du pointeur coûterait cher pour une position que
- * seul le style d'un élément traduit.
- *
- * ## Une poignée, pas la ligne entière
- *
- * C'est ce qui garde la ligne cliquable, et c'est ce qui rend le geste possible
- * au doigt : seule la poignée doit renoncer au défilement tactile
- * (`touch-action: none`), donc une pression ailleurs fait toujours défiler la
- * page. Le clic qui suit une pression sur la poignée ne peut pas ouvrir la
- * ligne dès lors que la poignée n'est pas un descendant de la zone cliquable —
- * c'est la disposition que suivent les listes appelantes.
+ * Le geste part d'une poignée et non de la ligne entière : elle seule renonce au
+ * défilement tactile (`touch-action: none`), et elle doit rester hors de la zone
+ * cliquable pour que le clic qui suit n'ouvre pas la ligne.
  */
 export function useDragReorder<L extends HTMLElement = HTMLElement, B extends HTMLElement = HTMLElement>({
     ids,
@@ -235,20 +188,17 @@ export function useDragReorder<L extends HTMLElement = HTMLElement, B extends HT
 }: DragReorderOptions): DragReorder<L, B> {
     const listRef = useRef<L | null>(null);
     const barRef = useRef<B | null>(null);
-    /** Où se tient la barre, ou `null` tant qu'elle est cachée. */
     const spotRef = useRef<Spot | null>(null);
-    /** La pression suivie, tant que le seuil n'est pas franchi. */
     const pressRef = useRef<{ id: RowId; pointerId: number; x: number; y: number } | null>(null);
     /** La ligne réellement glissée (seuil franchi). La logique lit celle-ci. */
     const draggedRef = useRef<RowId | null>(null);
-    /** Le même identifiant, en état, seulement pour estomper la ligne : posé
-     *  deux fois par glissé, jamais à chaque mouvement du pointeur. */
+    /** Le même identifiant en état, seulement pour estomper la ligne : deux
+     *  rendus par glissé, et non un par mouvement du pointeur. */
     const [draggingId, setDraggingId] = useState<RowId | null>(null);
 
-    // Les entrées volatiles passent par des `ref` : les écouteurs ci-dessous
-    // sont créés **une seule fois**, ce qui garantit que celui qu'on retire est
-    // exactement celui qu'on avait posé. Des fonctions recréées à chaque rendu
-    // rendraient ce couple bancal, et une fuite d'écouteur en découlerait.
+    // Les entrées volatiles passent par des `ref` pour que les écouteurs plus bas
+    // soient créés une seule fois : celui qu'on retire est alors exactement celui
+    // qu'on avait posé, là où des fonctions recréées à chaque rendu fuiraient.
     const idsRef = useRef(ids);
     idsRef.current = ids;
     const rowSelectorRef = useRef(rowSelector);
@@ -282,22 +232,18 @@ export function useDragReorder<L extends HTMLElement = HTMLElement, B extends HT
             const spot =
                 layoutRef.current === 'grid' ? gridSpot(list, boxes, clientX, clientY) : rowsSpot(list, boxes, clientY);
 
-            // Rien à réécrire tant que la barre est déjà là : sur une grille, le
-            // même numéro d'interstice peut désigner deux endroits (fin d'une
-            // rangée, début de la suivante), d'où la comparaison de la position
-            // entière et non du seul numéro.
+            // Sur une grille, un même numéro d'interstice peut désigner deux
+            // endroits : on compare la position entière, pas le seul numéro.
             const held = spotRef.current;
             if (held && held.gap === spot.gap && held.x === spot.x && held.y === spot.y) return;
             spotRef.current = spot;
 
             const listBox = list.getBoundingClientRect();
-            // La barre garde de la feuille de style de la feature ce qui lui
-            // appartient : son épaisseur en liste, sa largeur en grille. On ne
-            // pose ici que ce que la disposition impose.
+            // Épaisseur en liste et largeur en grille viennent de la feuille de
+            // style de la feature ; on ne pose ici que ce que la disposition impose.
             if (spot.height !== null) bar.style.height = `${spot.height}px`;
-            // Aux deux extrémités d'une rangée, la gouttière n'existe pas : la
-            // barre se retrouverait à cheval sur le bord de la liste, donc
-            // rognée par la boîte défilante. On la ramène juste à l'intérieur.
+            // Aux extrémités d'une rangée il n'y a pas de gouttière : sans ce
+            // recentrage la barre déborde et la boîte défilante la rogne.
             const half = bar.offsetWidth / 2;
             const centre = spot.x === null ? 0 : Math.min(Math.max(spot.x - listBox.left, half), listBox.width - half);
             const dx = spot.x === null ? 0 : centre - half;
@@ -311,9 +257,8 @@ export function useDragReorder<L extends HTMLElement = HTMLElement, B extends HT
     const showBarRef = useRef(showBar);
     showBarRef.current = showBar;
 
-    // Les cinq écouteurs, créés une fois pour toutes (voir la note sur les
-    // `ref` plus haut). `handlers.current` casse la circularité : `endDrag` doit
-    // retirer des fonctions qui, elles, doivent pouvoir l'appeler.
+    // `handlers.current` casse la circularité : `endDrag` doit retirer des
+    // fonctions qui, elles, doivent pouvoir l'appeler.
     const handlers = useRef<{
         move: (e: PointerEvent) => void;
         up: (e: PointerEvent) => void;
@@ -376,8 +321,7 @@ export function useDragReorder<L extends HTMLElement = HTMLElement, B extends HT
                 if (pressRef.current?.pointerId !== e.pointerId) return;
                 endDragRef.current();
             },
-            // Un glissé quitté en plein geste (alt-tab, dialogue natif) ne doit
-            // pas rester en suspens.
+            // Un glissé quitté en plein geste (alt-tab, dialogue natif).
             blur: () => endDragRef.current(),
             keydown: (e) => {
                 if (e.key === 'Escape') endDragRef.current();
@@ -385,13 +329,11 @@ export function useDragReorder<L extends HTMLElement = HTMLElement, B extends HT
         };
     }
 
-    // Ceinture et bretelles : tout relâcher si la liste disparaît en plein geste
-    // (la popup de la feature qui se ferme, par exemple).
+    // Tout relâcher si la liste disparaît en plein geste, popup refermée compris.
     useEffect(() => () => endDragRef.current(), []);
 
     const onGripPointerDown = useCallback((e: ReactPointerEvent, id: RowId) => {
-        // Bouton principal / premier contact seulement. Rien d'autre à filtrer :
-        // c'est câblé sur la poignée seule.
+        // Bouton principal / premier contact seulement.
         if (e.button !== 0) return;
         const h = handlers.current;
         if (!h) return;

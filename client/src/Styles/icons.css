@@ -225,7 +225,6 @@
     mask-image: url(/icons/folder-plus.svg);
 }
 
-/* Dashboard icons (homepage refonte) */
 .icon.icon-plus {
     -webkit-mask-image: url(/icons/add.svg);
     mask-image: url(/icons/add.svg);
@@ -294,8 +293,8 @@
     -webkit-mask-image: url(/icons/info.svg);
     mask-image: url(/icons/info.svg);
 }
-/* Manquait, alors qu'une feature la demandait déjà : sans masque, `.icon` ne
-   montre pas « rien » mais un carré plein de la couleur du texte. */
+/* Sans masque, `.icon` ne montre pas « rien » mais un carré plein de la
+   couleur du texte : toute icône employée doit avoir sa règle ici. */
 .icon.icon-search {
     -webkit-mask-image: url(/icons/search.svg);
     mask-image: url(/icons/search.svg);

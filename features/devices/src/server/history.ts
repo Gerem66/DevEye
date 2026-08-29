@@ -16,14 +16,9 @@ import { WRITE } from './_shared';
 
 /**
  * L'historique d'un appareil, lu et entretenu en base : métriques, présence,
- * processus, instants épinglés. La part de la feature qui ne parle jamais à
- * l'agent ; l'abonnement en direct et la collecte à la demande sont du
- * transport (`agent.subscribe`, `agent.collect`, natifs).
- *
- * Chaque commande ouvre sur `ctx.deveye.devices.authorize` : la garde unique
- * des appareils, qui répond « de quel appareil parle-t-on, et m'est-il
- * visible ? ». Le *niveau* exigé est déclaré dans `access` : lecture par
- * défaut, `write` pour ce qui efface ou soustrait des relevés à la purge.
+ * processus, instants épinglés. Chaque commande ouvre sur
+ * `ctx.deveye.devices.authorize`, la garde unique des appareils ; le niveau
+ * exigé est déclaré dans `access` (`write` pour ce qui efface ou épingle).
  */
 
 export const devicesMetricsFeature = defineSdkFeature<
@@ -99,18 +94,15 @@ export const devicesSnapshotsFeature = defineSdkFeature<
     ...devicesSnapshots,
     handler: async (ctx, input) => {
         await ctx.deveye.devices.authorize(input.deviceId);
-        // The marks are the *metric* instants: process capture is optional, and
-        // keying them on the process blob left a `processCapture: 'off'` device
-        // with an empty timeline (no marks, and the ‹ › / arrow-key stepping
-        // permanently disabled). The process samples only qualify which instants
-        // carry a list.
+        // The marks are the metric instants: process capture is optional, and a
+        // `processCapture: 'off'` device still has instants to navigate. The
+        // process samples only qualify which instants carry a list.
         const [instants, samples] = await Promise.all([
             ctx.repo.metrics.instantTimes(input.deviceId, input.from, input.to),
             ctx.repo.processSamples.snapshotTimes(input.deviceId, input.from, input.to)
         ]);
-        // Les épingles sont posées sur les deux tables dans une seule
-        // instruction (`devices.setSnapshotsPinned`) : les instants métriques
-        // font foi, et il n'y a pas de moitié d'épingle à rattraper.
+        // Les épingles sont posées sur les deux tables en une seule instruction :
+        // les instants métriques font foi.
         return {
             deviceId: input.deviceId,
             timestamps: instants.timestamps,
@@ -143,9 +135,7 @@ export const devicesDeleteSnapshotsFeature = defineSdkFeature<
 >({
     ...devicesDeleteSnapshots,
     mutates: true,
-    // Effacer définitivement l'historique d'une machine n'est pas de la
-    // lecture : tout membre de l'espace ne doit pas pouvoir supprimer les
-    // relevés conservés par un autre.
+    // Effacer l'historique d'une machine n'est pas de la lecture.
     access: WRITE,
     handler: async (ctx, input) => {
         const device = await ctx.deveye.devices.authorize(input.deviceId);
@@ -173,23 +163,19 @@ export const devicesSetSnapshotsPinnedFeature = defineSdkFeature<
 >({
     ...devicesSetSnapshotsPinned,
     mutates: true,
-    // Épingler soustrait des relevés à la purge, désépingler les y rend, et
-    // peut en supprimer sur-le-champ. Même niveau que la suppression.
+    // Désépingler peut supprimer sur-le-champ : même niveau que la suppression.
     access: WRITE,
     handler: async (ctx, input) => {
         const device = await ctx.deveye.devices.authorize(input.deviceId);
         const { deviceId, from, to, pinned } = input;
 
-        // Pin/unpin the whole instant (process list + metric point) so a saved
-        // moment stays fully consultable past the device's retention. Le compte
-        // porte sur les instants **métriques** : une machine en
-        // `processCapture: 'off'` n'a aucune liste de processus, et le compter
-        // sur elles rendait « 0 épinglé », sans la moindre ligne de journal,
-        // alors que les relevés venaient bien d'être conservés.
+        // Pin/unpin the whole instant (process list + metric point). Le compte
+        // porte sur les instants métriques : une machine en `processCapture:
+        // 'off'` n'a aucune liste de processus, et compter dessus rendait zéro.
         const snapshots = await ctx.repo.metrics.setInstantsPinned(deviceId, from, to, pinned);
 
-        // On unpin, the rows revert to normal retention: drop those already past
-        // their deadline right now; the rest expire at the next hourly sweep.
+        // On unpin, drop the rows already past their deadline right now; the
+        // rest expire at the next sweep.
         let deletedSnapshots = 0;
         if (!pinned) {
             const [proc] = await Promise.all([

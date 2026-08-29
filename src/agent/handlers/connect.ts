@@ -15,11 +15,9 @@ export async function handleHello(s: AgentSession, payload: PayloadOf<typeof AGE
     } catch (e) {
         s.logger.warn({ err: (e as Error).message }, 'Failed to persist agent version/target');
     }
-    // An agent older than the server may not understand the frames we push: the
-    // protocol only ever moves forward (no compatibility shims), so a stale agent
-    // silently drops what it can't parse — `agent.config` included, which leaves it
-    // collecting on its own bootstrap cadence forever. Say so once per connection;
-    // this is the trace that was missing while a whole fleet ignored its settings.
+    // The protocol only moves forward (no compatibility shims): an agent older
+    // than the server silently drops frames it can't parse, `agent.config`
+    // included. Say so once per connection.
     const server = appVersion();
     if (isNewerVersion(server, payload.agentVersion)) {
         s.logger.warn(

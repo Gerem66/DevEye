@@ -7,12 +7,9 @@ import { api } from './api';
  * Shared "services up / total" store, read by the home card and the topbar
  * widget so both show the same number from a single query.
  *
- * Ce compteur change tout seul (le serveur sonde les services en tâche de
- * fond) mais il ne sonde plus lui-même : le service de fond du module diffuse
- * `live.changed` à chaque **transition** d'état, et c'est ce qui déclenche la
- * relecture (`uptime.count` est une ressource du manifest, ravivée par le
- * sujet). La vue Uptime appelle {@link refreshUptime} après ses propres
- * mutations, dont le serveur ne lui renvoie pas l'écho.
+ * Pas de sondage : le service de fond diffuse `live.changed` à chaque transition
+ * d'état, ce qui ravive `uptime.count`. La vue Uptime appelle {@link refreshUptime}
+ * après ses propres mutations, dont le serveur ne lui renvoie pas l'écho.
  */
 
 export interface UptimeCountState {

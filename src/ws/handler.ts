@@ -51,11 +51,7 @@ function send(socket: WebSocket, msg: ServerMessage): void {
 
 /**
  * Les espaces qui voient l'appareil visé par cette commande, s'il y en a un.
- *
- * Lu sur la charge brute plutôt que sur l'entrée validée : l'appel doit pouvoir
- * se faire *avant* que le handler ne tourne, et un `deviceId` qui ne serait pas
- * un identifiant valide ne rend simplement rien. Vide pour toute commande qui ne
- * parle pas d'un appareil, donc pour l'immense majorité d'entre elles.
+ * Lu sur la charge brute : l'appel doit pouvoir se faire avant le handler.
  */
 async function deviceWorkspacesOf(db: Database, command: string, payload: unknown): Promise<number[]> {
     if (!command.startsWith('agent.') && !command.startsWith('devices.')) return [];
@@ -103,10 +99,9 @@ export async function registerWS(
 
         const monitor = createMonitorTransport(hub, socket);
 
-        // Inscrite dès la poignée de main, avant tout `live.here` : sans ça le
-        // battement de cœur ne couvrirait que les utilisateurs ayant ouvert une
-        // vue instrumentée, et les sockets zombies des autres passeraient au
-        // travers. Entrer dans une *salle* reste conditionné à `live.here`.
+        // Inscrite dès la poignée de main, avant tout `live.here` : le battement
+        // de cœur doit couvrir toutes les sockets, pas seulement les vues
+        // instrumentées. Entrer dans une salle reste conditionné à `live.here`.
         const live = liveHub.register(socket, session.userId, session.sessionId);
 
         send(socket, { command: 'session', payload: ok({ userId: session.userId }) });
@@ -137,28 +132,17 @@ export async function registerWS(
             const { command, payload, requestId: clientReqId, workspaceId } = parsed.data;
             const replyId = clientReqId ?? requestId;
 
-            // Voie rapide des curseurs, avant la recherche de commande.
-            //
-            // À ~20 Hz, ce qui suit coûterait par mouvement : la validation zod
-            // de l'entrée, l'allocation de la fermeture d'audit, un ticket DEK,
-            // la résolution asynchrone du scope, six fermetures de garde, la
-            // validation de sortie — et une trame de réponse dont personne
-            // n'attend rien.
-            //
-            // L'espace annoncé par l'enveloppe est **ignoré** ici : il n'est
-            // validé que par `access.forWorkspace()`, que cette voie
-            // court-circuite. Seule la salle posée par un `live.here` — passé,
-            // lui, par tout le pipeline — fait foi. La trame ne porte donc que
-            // des coordonnées, jamais un lieu.
+            // Voie rapide des curseurs (~20 Hz), avant la recherche de commande :
+            // pas de validation de scope, d'audit ni de réponse. L'espace de
+            // l'enveloppe est ignoré : seule la salle posée par un `live.here`,
+            // passé lui par tout le pipeline, fait foi.
             if (command === LIVE_CURSOR_COMMAND) {
                 const frame = liveCursorFrameSchema.safeParse(payload);
                 if (frame.success) liveHub.cursor(socket, frame.data.cursor);
                 return;
             }
 
-            // Même voie rapide, mêmes raisons, pour « en train d'écrire » : une
-            // trame sans réponse ni audit, dont le lieu vient du dernier
-            // `live.here` et jamais de l'enveloppe.
+            // Même voie rapide pour « en train d'écrire ».
             if (command === LIVE_TYPING_COMMAND) {
                 const frame = liveTypingFrameSchema.safeParse(payload);
                 if (frame.success) liveHub.typing(socket, frame.data.typing);
@@ -185,14 +169,9 @@ export async function registerWS(
                 return;
             }
 
-            // Per-request audit binding: actor, IP and channel are fixed here;
-            // category defaults to the command's prefix (e.g. `notes` for
-            // `notes.add`) so handlers usually only describe the event.
-            //
-            // L'espace est estampillé ici plutôt que par chaque handler : toute
-            // ligne d'audit devient attribuable à un espace sans qu'aucune
-            // feature n'ait à y penser. Renseigné dès la résolution du scope, il
-            // reste absent des rares événements émis avant (aucun aujourd'hui).
+            // Per-request audit binding: actor, IP, channel and workspace are
+            // fixed here; category defaults to the command's prefix so handlers
+            // usually only describe the event.
             const defaultCategory = command.includes('.') ? command.slice(0, command.indexOf('.')) : command;
             let auditWorkspaceId: number | undefined;
             const recordAudit = (entry: FeatureAuditEntry): void => {
@@ -225,18 +204,13 @@ export async function registerWS(
                         : await access.forWorkspace(workspaceId);
                 auditWorkspaceId = scope.workspace.id;
 
-                // Les droits résolus sont confiés au hub de présence, qui filtre
-                // ses diffusions dessus. Les y déposer ici plutôt que de les
-                // faire re-résoudre au moment de diffuser garde la diffusion
-                // entièrement synchrone — et fait que n'importe quelle commande
+                // Les droits résolus sont confiés aux hubs, qui filtrent leurs
+                // diffusions dessus sans rien attendre ; n'importe quelle commande
                 // répare un instantané périmé.
                 const epoch = accessEpochNow();
                 liveHub.rememberGrants(socket, scope.workspace.id, scope.features, epoch);
-                // Même dépôt pour le hub de supervision, et pour la même raison :
-                // sa diffusion (métriques, rapports, sortie de terminal, morceaux
-                // de fichiers) doit pouvoir se refuser sans rien attendre. Un
-                // administrateur garde le droit — la page Appareils porte sur la
-                // flotte entière, hors de tout rôle d'espace.
+                // Un administrateur garde le droit sur la flotte entière, hors de
+                // tout rôle d'espace.
                 hub.rememberGrants(socket, scope.isAdmin || scope.features.has('devices'), epoch);
 
                 const assertAdmin = (): void => {
@@ -334,25 +308,17 @@ export async function registerWS(
                 }
                 send(socket, { requestId: replyId, command, payload: ok(outputParse.data) });
 
-                // La commande a écrit : l'espace en est averti, et toute vue qui
-                // lit ce sujet se remet à jour d'elle-même.
-                //
-                // Posé ici — après la réponse, dans le `try` — et non dans le
-                // `finally` : une commande qui a échoué n'invalide rien. La
-                // sortie vers `auditWorkspaceId` (et jamais vers l'espace de
-                // l'enveloppe) est ce qui rend `scope: 'account'` correct :
-                // `secrecy.enable` émis depuis un espace partagé n'avertit que
-                // l'espace **personnel** de l'appelant.
-                //
-                // L'émetteur est exclu : il tient déjà sa propre réponse.
+                // La commande a écrit : l'espace en est averti. Dans le `try` et
+                // non dans le `finally` : une commande qui a échoué n'invalide
+                // rien. Vers `auditWorkspaceId` et jamais vers l'espace de
+                // l'enveloppe, ce qui rend `scope: 'account'` correct. L'émetteur
+                // est exclu : il tient déjà sa propre réponse.
                 let topics = topicsOf(command);
                 let extraWorkspace: number | null = null;
-                // Les commandes de partage portent leur fonctionnalité en
-                // ENTRÉE : leur préfixe ne peut pas dire quel sujet diffuser.
-                // On le lit dans la requête — le sujet d'une feature branchée
-                // au partage porte le même nom qu'elle — et on prévient aussi
-                // l'espace visé : après un retrait, la table ne le relie plus,
-                // donc l'éventail des projections ne le trouverait pas.
+                // Les commandes de partage portent leur fonctionnalité en entrée :
+                // le sujet se lit dans la requête, et l'espace visé est prévenu
+                // aussi (après un retrait, l'éventail des projections ne le
+                // trouverait plus).
                 if (topics && command.startsWith('share.')) {
                     const body = inputParse.data as { feature?: string; workspaceId?: number };
                     const asTopic = liveTopicSchema.safeParse(body.feature);
@@ -364,25 +330,17 @@ export async function registerWS(
                     if (extraWorkspace !== null && extraWorkspace !== auditWorkspaceId) {
                         liveHub.changed(extraWorkspace, topics, session!.userId);
                     }
-                    // Un appareil est partageable entre plusieurs espaces, et le
-                    // dispatcheur ne connaît que celui de l'enveloppe : sans cet
-                    // éventail, les autres destinataires resteraient sur une
-                    // liste figée — présence, renommage, configuration, tout
-                    // leur échapperait jusqu'au rechargement.
-                    //
-                    // L'union avant/après est nécessaire dans les deux sens :
-                    // `devices.delete` efface les rattachements (seul « avant »
-                    // les connaît), `devices.setWorkspaces` en crée (seul
-                    // « après » les voit).
+                    // Un appareil est partageable entre plusieurs espaces : tous ses
+                    // destinataires sont prévenus. Union avant/après :
+                    // `devices.delete` efface les rattachements, `devices.setWorkspaces`
+                    // en crée.
                     for (const wid of unionWorkspaces(sharedBefore, await deviceWorkspacesOf(db, command, payload))) {
                         if (wid !== auditWorkspaceId) liveHub.changed(wid, topics, session!.userId);
                     }
                 }
             } catch (e) {
-                // Le duck-typing double l'instanceof exprès : si un module et
-                // l'app résolvent deux instances distinctes de @deveye/types
-                // (miroir node_modules d'un côté, alias de l'autre), l'erreur
-                // typée d'un module resterait sinon un `internal` opaque.
+                // Le duck-typing double l'instanceof exprès : un module et l'app
+                // peuvent résoudre deux instances distinctes de @deveye/types.
                 if (!(e instanceof FeatureError) && e instanceof Error && e.name === 'FeatureError' && 'code' in e) {
                     const dup = e as Error & { code: string; details?: unknown };
                     reqLogger.warn({ command, code: dup.code, msg: dup.message }, 'Feature error');

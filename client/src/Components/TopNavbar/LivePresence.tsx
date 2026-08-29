@@ -9,28 +9,21 @@ import { getActiveWorkspaceId, useActiveWorkspace } from '@/stores/workspace';
 import styles from './LivePresence.module.css';
 
 /**
- * Mini-widget « Présence » : qui d'autre est dans l'espace, et où.
- *
- * Une bulle par personne — jamais par onglet — bordée de sa couleur. Le survol
- * dit où elle se trouve ; le clic l'y rejoindra (S4).
- *
- * **Invisible dans un espace personnel**, qui est par construction une salle
- * d'une seule personne : le widget y afficherait à vie « vous, tout seul ».
- */
-/**
- * Aller où ce pair se trouve.
- *
- * L'intention est posée **avant** l'éventuelle bascule d'espace : elle vit hors
- * de l'arbre React, donc elle attend tranquillement que les niveaux se montent
- * et se laisse consommer par chacun au fur et à mesure. Un pair à l'accueil
- * donne un chemin vide, ce qui referme ce qui est ouvert — c'est la même
- * mécanique dans les deux sens.
+ * Aller où ce pair se trouve. L'intention est posée avant l'éventuelle bascule
+ * d'espace : elle vit hors de l'arbre React et se laisse consommer par chaque
+ * niveau à mesure qu'il se monte. Un pair à l'accueil donne un chemin vide, ce
+ * qui referme ce qui est ouvert.
  */
 function joinPeer(peer: PresentUser): void {
     startTeleport(peer.workspaceId, peer.path);
     if (peer.workspaceId !== getActiveWorkspaceId()) requestSelectWorkspace(peer.workspaceId);
 }
 
+/**
+ * Mini-widget « Présence » : qui d'autre est dans l'espace, et où. Une bulle par
+ * personne, bordée de sa couleur ; le clic la rejoint. Invisible dans un espace
+ * personnel, salle d'une seule personne.
+ */
 export function LivePresence() {
     const workspace = useActiveWorkspace();
     const peers = usePresentUsers();

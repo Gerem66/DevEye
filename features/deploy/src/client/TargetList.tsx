@@ -16,12 +16,8 @@ interface TargetListProps {
 }
 
 /**
- * La liste des cibles de déploiement, réordonnable au glisser-déposer.
- *
- * Le geste vit dans `useDragReorder` (le barrel du SDK), partagé avec Uptime,
- * Git, Monitoring, les bases et les sites suivis. Ne restent ici que
- * l'apparence de la carte, celle de la poignée et celle de la barre
- * d'insertion.
+ * La liste des cibles, réordonnable au glisser-déposer (`useDragReorder`). Ne
+ * restent ici que l'apparence de la carte, de la poignée et de la barre.
  */
 export function TargetList({ targets, outlineFor, canWrite, onOpen, onReorder, onDragStateChange }: TargetListProps) {
     const drag = useDragReorder<HTMLUListElement, HTMLLIElement>({
@@ -43,8 +39,7 @@ export function TargetList({ targets, outlineFor, canWrite, onOpen, onReorder, o
                     onDragPointerDown={canWrite ? (e) => drag.onGripPointerDown(e, target.id) : undefined}
                 />
             ))}
-            {/* Un `<li>` et non un `<span>` : dans une `<ul>`, seul un `<li>` est
-                un enfant valide. Sorti du flux par `position: absolute`, il
+            {/* Un `<li>` : seul enfant valide d'une `<ul>`. Sorti du flux, il
                 n'occupe aucune cellule de la grille. */}
             <li ref={drag.barRef} className={styles.dropBar} aria-hidden='true' />
         </ul>
@@ -60,16 +55,15 @@ interface TargetCardProps {
 }
 
 function TargetCard({ target, outline, dragging, onOpen, onDragPointerDown }: TargetCardProps) {
-    // Un accès retiré prime sur l'état du dernier déploiement : peu importe
-    // qu'il ait réussi, plus rien ne partira tant que la clé n'est pas revenue.
+    // Un accès retiré prime sur l'état du dernier déploiement : plus rien ne
+    // partira tant que la clé n'est pas revenue.
     const orphan = target.credentialId === null;
     const tone = orphan ? 'danger' : statusTone(target.lastStatus);
 
     return (
         <li className={`${styles.card} ${dragging ? styles.cardDragging : ''}`} data-target-card='' {...outline}>
             {/* La poignée est sœur du corps cliquable, et non son enfant : un
-                clic parti d'ici ne peut donc pas remonter jusqu'à « ouvrir la
-                cible », même sans le neutraliser. */}
+                clic parti d'ici ne remonte pas jusqu'à « ouvrir la cible ». */}
             {onDragPointerDown && (
                 <button
                     type='button'
@@ -82,8 +76,7 @@ function TargetCard({ target, outline, dragging, onOpen, onDragPointerDown }: Ta
             )}
 
             {/* `div role="button"` et non `<button>` : la carte contient des
-                paragraphes, c'est-à-dire du contenu de flux, interdit dans un
-                bouton dont le modèle de contenu est phrasé. */}
+                paragraphes, interdits dans un bouton. */}
             <div
                 className={styles.cardBody}
                 role='button'
@@ -100,8 +93,7 @@ function TargetCard({ target, outline, dragging, onOpen, onDragPointerDown }: Ta
                     <p className={styles.cardName}>
                         <span className={styles.statusDot} data-tone={tone} aria-hidden='true' />
                         {target.name}
-                        {/* Sans cette pastille, rien ne distingue une ligne
-                            locale d'une fenêtre sur l'espace voisin. */}
+                        {/* Distingue une ligne locale d'une fenêtre sur l'espace voisin. */}
                         {target.foreign && (
                             <span
                                 className={styles.statusTag}

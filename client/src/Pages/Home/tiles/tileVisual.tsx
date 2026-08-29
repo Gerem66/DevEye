@@ -18,14 +18,9 @@ export interface TileVisual {
     title?: string;
     icon?: string;
     /**
-     * Carte courte : appareils et raccourcis.
-     *
-     * **La même hauteur pour les deux**, et c'est le point : les deux genres
-     * cohabitent désormais dans une même section, donc une même ligne peut les
-     * mêler. Deux cartes courtes de hauteurs différentes côte à côte se lisaient
-     * comme un défaut d'alignement. Une carte de fonctionnalité, elle, reste
-     * haute : mêler les hauteurs sur une ligne est assumé, mêler deux hauteurs
-     * *presque* égales ne l'est pas.
+     * Carte courte : appareils et raccourcis, à la même hauteur puisqu'une même
+     * ligne peut les mêler ; deux cartes courtes de hauteurs différentes se
+     * liraient comme un défaut d'alignement.
      */
     compact?: boolean;
     /** When set, the tile is a real link (anchor) opening this URL in a new tab. */
@@ -58,11 +53,8 @@ export function featureTileVisual(tile: HomeTile): TileVisual | null {
     };
 }
 
-/**
- * La carte d'un appareil : celle que le module Appareils fournit par son
- * provider. `null` sans le module, mais on n'y arrive pas : sans lui, la
- * liste d'appareils est vide et aucune tuile d'appareil ne se rend.
- */
+/** La carte d'un appareil, fournie par le provider du module Appareils. `null`
+ *  sans le module (la liste est alors vide de toute façon). */
 export function deviceTileVisual(device: SdkDeviceSummary, opts?: { editing?: boolean }): TileVisual | null {
     const DeviceWidget = devicesProvider()?.DeviceWidget;
     if (!DeviceWidget) return null;
@@ -86,13 +78,9 @@ export function shortcutTileVisual(item: ShortcutItem, opts?: { editing?: boolea
 }
 
 /**
- * La carte d'une tuile, quel que soit son genre.
- *
- * Le seul aiguillage de l'accueil : la grille et l'organiseur passent par lui,
- * donc une section n'a jamais à savoir ce qu'elle tient. Rend `null` quand la
- * tuile ne désigne plus rien (appareil supprimé, identifiant écrit par une
- * version plus récente) ; l'appelant décide alors s'il l'escamote ou s'il pose
- * une carte « indisponible ».
+ * La carte d'une tuile, quel que soit son genre : le seul aiguillage de
+ * l'accueil. `null` quand la tuile ne désigne plus rien ; l'appelant décide
+ * s'il l'escamote ou pose une carte « indisponible ».
  */
 export function homeTileVisual(
     tile: HomeTile,

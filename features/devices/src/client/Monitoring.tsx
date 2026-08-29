@@ -17,18 +17,13 @@ import { useDevices } from './store';
 import { useAgentUpdate } from './useAgentUpdate';
 import styles from './style.module.css';
 
-// ─── Widget compact ─────────────────────────────────────────────────────────
-
 export function MonitoringWidget() {
     const { devices: allDevices } = useDevices();
-    // Archived devices are former machines kept only for their history; don't
-    // count them among the live fleet.
+    // Archived devices are kept only for their history.
     const devices = allDevices.filter((d) => d.status !== 'archived');
     const onlineCount = devices.filter((d) => d.online).length;
-    // The list is a fixed 2×2 grid anchored to the bottom of the card: two rows
-    // is all the widget's height budget allows, and two columns use the width
-    // that a single column wasted. Past four devices the last slot becomes a
-    // "+N autres" marker, so the block's height never varies with the fleet.
+    // A fixed 2×2 grid: past four devices the last slot becomes a "+N autres"
+    // marker, so the block's height never varies with the fleet.
     const SLOTS = 4;
     const visible = devices.slice(0, devices.length > SLOTS ? SLOTS - 1 : SLOTS);
     const hidden = devices.length - visible.length;
@@ -55,14 +50,10 @@ export function MonitoringWidget() {
     );
 }
 
-// ─── Full view ──────────────────────────────────────────────────────────────
-
 /**
- * Feature title + "how it works" info button (right-aligned, hugging the panel),
- * with an optional "update all agents" button to its left, and the common
- * settings button last: the feature's header, where the shell's button lives
- * in every feature. Rendered in the sidebar (grid view) so it doesn't eat a
- * full-width band, or above the loading/empty states.
+ * The feature's header: title, "update all agents", info button and the common
+ * settings button last. Rendered in the sidebar so it doesn't eat a full-width
+ * band, or above the loading/empty states.
  */
 function MonitoringTitle({
     onInfo,
@@ -111,19 +102,16 @@ export default function Monitoring() {
     const canWrite = useWorkspacePermissions().canFeature('devices', 'write');
 
     /**
-     * L'ordre posé à la main, en attendant que le serveur le confirme.
-     *
-     * La liste vient d'un magasin partagé (accueil, topbar, Monitoring) qui n'a
-     * pas de setter : on superpose donc l'ordre local le temps de l'aller-retour,
-     * plutôt que de laisser la carte revenir à sa place avant d'y repartir.
+     * L'ordre posé à la main, en attendant que le serveur le confirme : le
+     * magasin partagé n'a pas de setter, on superpose l'ordre local le temps de
+     * l'aller-retour.
      */
     const [ordered, setOrdered] = useState<Device[] | null>(null);
     /** Un glissé est en cours : la liste ne doit pas bouger dessous. */
     const dragging = useRef(false);
     const devices = ordered ?? stored;
 
-    // Le serveur reprend la main dès qu'il a répondu — mais jamais pendant un
-    // glissé, où une relecture réordonnerait les lignes sous le pointeur.
+    // Le serveur reprend la main dès qu'il a répondu, jamais pendant un glissé.
     useEffect(() => {
         if (!dragging.current) setOrdered(null);
     }, [stored]);
@@ -134,9 +122,8 @@ export default function Monitoring() {
     currentList.current = devices;
 
     /**
-     * Applique un dépôt : on range d'abord localement, pour que la carte reste
-     * là où on l'a lâchée sans aller-retour, puis on persiste. Un échec rend la
-     * main au serveur, seul détenteur de l'ordre réellement enregistré.
+     * Applique un dépôt : localement d'abord, pour que la carte reste là où on
+     * l'a lâchée, puis on persiste. Un échec rend la main au serveur.
      */
     const reorder = useCallback((ids: (string | number)[]) => {
         const byId = new Map(currentList.current.map((d) => [d.id, d]));
@@ -153,11 +140,10 @@ export default function Monitoring() {
         }
     });
 
-    // Devices whose agent runs an older build than this interface (online).
     const updatableIds = devices.filter((d) => d.online && agentUpdatable(d)).map((d) => d.id);
 
-    // Keep a valid selection: auto-select the first device, and drop a selection
-    // that points at a device which no longer exists (e.g. deleted elsewhere).
+    // Auto-select the first device, and drop a selection that points at a
+    // device which no longer exists.
     useEffect(() => {
         if (devices.length === 0) {
             if (selectedId !== null) setSelectedId(null);
@@ -207,10 +193,8 @@ export default function Monitoring() {
                             onUpdateAll={() => void updater.updateAll(updatableIds)}
                             updating={updater.anyBusy}
                         />
-                        {/* Boîte intérieure, et non `.deviceListFull` : c'est
-                            elle qui ancre la barre d'insertion, et comme elle
-                            n'est pas le conteneur défilant, sa position suit le
-                            défilement toute seule. */}
+                        {/* Boîte intérieure, et non `.deviceListFull` : elle ancre
+                            la barre d'insertion et suit le défilement. */}
                         <div ref={drag.listRef} className={styles.deviceCards}>
                             {devices.map((d) => {
                                 const canUpdate = d.online && agentUpdatable(d);
@@ -227,10 +211,7 @@ export default function Monitoring() {
                                             if (e.key === 'Enter' || e.key === ' ') setSelectedId(d.id);
                                         }}
                                     >
-                                        {/* Poignée d'abord, comme dans Uptime, Git et les
-                                            bases de données : seule elle renonce au
-                                            défilement tactile, le reste de la carte
-                                            continue de faire défiler la liste. */}
+                                        {/* Seule la poignée renonce au défilement tactile. */}
                                         {canWrite && (
                                             <button
                                                 type='button'
@@ -278,8 +259,7 @@ export default function Monitoring() {
                         </div>
                     </div>
 
-                    {/* Right: per-device panel (shared with the home device popup),
-                        wrapped so it scrolls independently of the device list. */}
+                    {/* Right: per-device panel, scrolling independently of the list. */}
                     {selectedId && (
                         <div className={styles.panelScroll}>
                             <MonitoringPanel deviceId={selectedId} />

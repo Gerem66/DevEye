@@ -5,12 +5,8 @@ import styles from '../FeatureSettings.module.css';
 import ItemGrantsPanel from './ItemGrantsPanel';
 
 /**
- * L'onglet Permissions d'un élément : le panneau de restrictions, pour
- * l'espace **actif**.
- *
- * Tout le contenu vit dans `ItemGrantsPanel`, partagé avec l'onglet Partage du
- * domicile — c'est ce qui garantit que régler une fenêtre depuis chez soi et
- * depuis là-bas est le même écran.
+ * L'onglet Permissions d'un élément, pour l'espace actif. Tout le contenu vit
+ * dans `ItemGrantsPanel`, partagé avec l'onglet Partage du domicile.
  */
 
 interface Props {

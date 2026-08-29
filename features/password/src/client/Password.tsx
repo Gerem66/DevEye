@@ -21,8 +21,7 @@ import { PasswordPopupAdd, type PopupResult } from './popups-add-password';
 import styles from './style.module.css';
 
 function Password({ closeFeature }: FeatureViewProps) {
-    // L'espace vient du SDK, plus des props : c'est lui qui borne le coffre,
-    // et son changement recharge la liste.
+    // L'espace borne le coffre ; son changement recharge la liste.
     const workspaceId = useActiveWorkspace()?.id ?? null;
     const [loaded, setLoaded] = useState(false);
     const [search, setSearch] = useState('');
@@ -44,11 +43,8 @@ function Password({ closeFeature }: FeatureViewProps) {
                 setAllPasswords(res.entries);
             } catch (e) {
                 setAllPasswords([]);
-                // Nothing to show without the password: close instead of leaving
-                // an empty, unusable view behind.
-                // `withSecrecy` rejette une `UnlockCancelledError` quand
-                // l'utilisateur referme l'invite sans saisir son mot de passe :
-                // un renoncement délibéré, pas une panne.
+                // L'invite refermée sans mot de passe (`UnlockCancelledError`) :
+                // rien à montrer, on ferme plutôt que de laisser une vue vide.
                 if (e instanceof UnlockCancelledError) closeFeatureRef.current();
             } finally {
                 setLoaded(true);
@@ -70,16 +66,9 @@ function Password({ closeFeature }: FeatureViewProps) {
     }, [reload]);
 
     /**
-     * Une entrée ajoutée ou modifiée par quelqu'un d'autre apparaît sans
-     * recharger. Le sujet `password` était déjà diffusé et la clé invalidée ;
-     * il manquait l'abonnement.
-     *
-     * **Sans `withSecrecy`, délibérément.** Le coffre est gardé : relire la
-     * liste sur une session reverrouillée renverrait `locked`, et passer par
-     * `withSecrecy` ferait alors surgir une demande de mot de passe déclenchée
-     * par le geste de quelqu'un d'autre. On garde donc simplement ce qui est à
-     * l'écran : la prochaine action de l'utilisateur redemandera le
-     * déverrouillage, au moment où il l'aura lui-même provoqué.
+     * Sans `withSecrecy`, délibérément : relire la liste sur une session
+     * reverrouillée renverrait `locked`, et une invite déclenchée par le geste
+     * de quelqu'un d'autre n'a pas de sens. On garde ce qui est à l'écran.
      */
     const listVersion = useResourceVersion('password.list');
     useEffect(() => {

@@ -8,70 +8,25 @@ import { isFiring, renderMessage, runConditions } from './rules';
 import { readJson, type StoredAccess, type StoredAlert, type StoredDatabase } from './_shared';
 
 /**
- * Le relevé périodique des bases de données, et l'évaluation de leurs alertes.
- *
- * **Éteint par défaut, base par base.** C'est la différence de fond avec
- * `UptimeMonitor`, qui surveille tout ce qu'on lui confie : ici, ouvrir la
- * feature ne joint aucun serveur, et seule une base dont `monitor_enabled` vaut
- * 1 entre dans cette boucle. Une base au repos ne coûte rien et ne réveille
- * personne — ce qui est le comportement qu'on attend d'un inventaire.
- *
- * Corollaire à connaître : **une alerte n'est évaluée que si le relevé est
- * actif** sur sa base. Une alerte définie sur une base au repos est inerte, et
- * l'interface le dit plutôt que de laisser croire à une surveillance qui
- * n'existe pas.
- *
- * ## Les canaux de notification sont les siens
- *
- * Ils ne l'ont pas toujours été : ce service appelait `UptimeMonitor.resolveChannels`,
- * au motif que c'étaient « les mêmes canaux pour les mêmes personnes, et en
- * tenir deux jeux à jour serait une source d'erreur de plus ». C'est mot pour
- * mot le raisonnement que Sentinelle avait suivi avant la migration 075, et il
- * a produit le même effet : un seuil SQL franchi arrivait sur le salon désigné
- * pour la disponibilité, sans qu'on puisse l'éteindre sans éteindre Uptime.
- *
- * Depuis la migration 085, la ligne `database` de `notification_settings` est la
- * sienne — reprise à l'identique de celle d'Uptime, pour que personne ne perde
- * au redémarrage une alerte qu'il recevait la veille. La dépendance à
- * `UptimeMonitor` a disparu avec sa cause. Depuis le rapatriement en module,
- * l'envoi passe par la façade `notify` du SDK (`deps.deveyeFor(ws).notify.send`,
- * la route de LA base par `itemId`), et le service ne voit plus ni les canaux
- * ni leur résolution.
- *
- * ## Notifier aux transitions, jamais à chaque relevé
- *
- * `database_alerts.firing` porte l'état courant. Une alerte franchie qui le
- * reste ne renotifie pas : sans cela, une base qui dépasse son seuil pendant la
- * nuit enverrait un message toutes les cinq minutes, et le lendemain personne ne
- * lirait plus aucune alerte.
- *
- * Tourne **sans session ni mot de passe** : tout ce qu'il lit de chiffré passe
- * par le codec ouvert de l'espace (`deps.cipherFor`, mémoïsé par le SDK), et
- * la boucle est un ticker du SDK (`deps.createTicker`, le patron des services
- * natifs : setInterval + garde de réentrance + unref).
+ * Le relevé périodique des bases, et l'évaluation de leurs alertes. Éteint par
+ * défaut, base par base : seule une base à `monitor_enabled = 1` entre dans la
+ * boucle, et une alerte n'est évaluée que si le relevé est actif. Notifie aux
+ * transitions seulement (`database_alerts.firing`), par la façade `notify` du
+ * SDK sur la route de la base. Tourne sans session : codec ouvert de l'espace.
  */
 
-/** Cadence de l'ordonnanceur. La cadence *par base* est sa propre colonne. */
+/** Cadence de l'ordonnanceur ; la cadence par base est sa propre colonne. */
 const TICK_SECONDS = 30;
 
 /** Bases relevées par tour : borne la rafale de connexions sortantes. */
 const BATCH = 4;
 
-/**
- * La couture de test du service : l'ouverture de session, injectable.
- *
- * Le vrai `openSession` d'`engine.ts` par défaut ; un test en simule une, sans
- * réseau, et décide de ce que la base répond (inventaire, conditions, panne).
- * Rien d'autre n'est simulable ici, et c'est voulu : le reste du chemin
- * (écritures, transitions, notifications) est précisément ce qu'on veut voir
- * tourner tel quel.
- */
+/** La couture de test : l'ouverture de session, injectable ; rien d'autre ne se simule. */
 export interface DatabaseEngine {
     openSession(target: EngineTarget): Promise<Session>;
 }
 
 export class DatabaseMonitor {
-    /** La boucle du relevé : un ticker du SDK. */
     private readonly ticker: FeatureService;
     /** Une base à la fois : deux relevés simultanés ouvriraient deux tunnels. */
     private readonly inFlight = new Map<number, Promise<DatabaseProbe>>();
@@ -103,13 +58,8 @@ export class DatabaseMonitor {
     }
 
     /**
-     * Relève une base maintenant, alertes comprises.
-     *
-     * **Le même chemin que l'ordonnanceur**, appelé aussi par `database.inspect`
-     * : c'est ce qui garantit qu'un relevé manuel donne exactement le même
-     * résultat qu'un relevé automatique, alertes et notifications incluses.
-     *
-     * Ne lève jamais : un serveur injoignable est une réponse, pas une erreur.
+     * Relève une base maintenant, alertes comprises ; le même chemin pour
+     * l'ordonnanceur et `database.inspect`. Ne lève jamais.
      */
     checkNow(databaseId: number, workspaceId: number): Promise<DatabaseProbe> {
         const running = this.inFlight.get(databaseId);
@@ -174,23 +124,20 @@ export class DatabaseMonitor {
             };
         } catch (e) {
             const message = explainError(e);
-            // Le message brut part dans les journaux, la phrase claire à
-            // l'écran : l'un sert au diagnostic, l'autre à la correction.
+            // Le message brut aux journaux, la phrase claire à l'écran.
             this.deps.logger.warn(
                 { databaseId, err: e instanceof Error ? e.message : String(e) },
                 'Database check failed'
             );
             await this.deps.repo.recordCheck(databaseId, {
                 at: Math.floor(Date.now() / 1000),
-                // Le temps d'un échec compte autant que celui d'un succès : un
-                // relevé qui met douze secondes à tomber dit qu'on a attendu un
-                // délai d'attente, pas qu'on s'est fait refuser tout de suite.
+                // Le temps d'un échec compte : douze secondes disent un délai
+                // d'attente, pas un refus immédiat.
                 elapsedMs: Date.now() - started,
                 status: 'down',
                 error: await cipher.encrypt(message),
-                // La version et la taille connues sont **conservées** : elles
-                // décrivent la dernière fois où l'on a pu regarder, ce qui vaut
-                // mieux qu'un écran vide pendant une coupure.
+                // Version et taille connues sont conservées : la dernière fois
+                // où l'on a pu regarder.
                 serverVersion: row.server_version,
                 sizeBytes: row.size_bytes,
                 tableCount: row.table_count
@@ -236,8 +183,7 @@ export class DatabaseMonitor {
                     )
                 });
 
-                // Aux transitions seulement — dans les deux sens, pour qu'un
-                // retour à la normale se sache sans avoir à aller vérifier.
+                // Aux transitions seulement, dans les deux sens.
                 if (firing !== wasFiring) {
                     await this.notify(row.workspace_id, row.id, {
                         databaseName: name,
@@ -270,21 +216,12 @@ export class DatabaseMonitor {
     }
 
     /**
-     * Délivre une alerte sur les canaux de la feature **Bases de données**.
-     *
-     * Trois choses tenaient ici et n'y sont plus. Les canaux, empruntés à Uptime
-     * — ce sont les siens depuis la migration 085. L'envoi, recopié mot pour mot
-     * depuis `UptimeMonitor` alors que `Services/notifications.ts` existait
-     * précisément pour l'éviter. Et la gestion d'erreur qui allait avec : c'est
-     * `deliver`, derrière la façade `notify` du SDK, qui journalise puis avale,
-     * canal par canal, pour qu'un webhook en panne ne supprime pas le mail ni
-     * n'arrête la boucle de relevé. La façade rend `false` sans canal routé, ce
-     * que ce service n'a pas à savoir : une alerte se tente, la route décide.
+     * Délivre une alerte par la façade `notify` du SDK, qui journalise et avale
+     * les échecs canal par canal : un webhook en panne n'arrête pas le relevé.
      */
     private async notify(
         workspaceId: number,
-        // La base concernée : c'est elle qui décide de la route, et donc ce qui
-        // permet d'envoyer les alertes de deux bases à deux endroits différents.
+        // La base décide de la route.
         databaseId: number,
         alert: { databaseName: string; alertName: string; firing: boolean; body: string; at: number }
     ): Promise<void> {
@@ -300,9 +237,7 @@ export class DatabaseMonitor {
                     alert: alert.alertName,
                     at: alert.at
                 },
-                // La même alerte, mise en page pour Discord. Elle n'en avait pas :
-                // les bases empruntaient les canaux d'Uptime jusqu'à la 085, et
-                // n'ont jamais eu de forme propre depuis.
+                // La même alerte, mise en page pour Discord.
                 embeds: buildNotice({
                     database: alert.databaseName,
                     alert: alert.alertName,

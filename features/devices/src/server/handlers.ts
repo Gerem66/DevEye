@@ -35,11 +35,7 @@ import {
 } from './linkCodes';
 import type { DevicesRepo } from './repo';
 
-/**
- * Les vingt-cinq commandes du module, réparties par sujet (la flotte,
- * l'historique, les codes de liaison). Same order as `devicesCommands` in the
- * contract, so the two lists diff against each other.
- */
+/** Les commandes du module, dans le même ordre que `devicesCommands` : les deux listes se comparent. */
 export const devicesHandlers: readonly SdkFeatureDefinition<DevicesRepo, string, ZodType, ZodType>[] = [
     devicesListFeature,
     devicesConfirmFeature,

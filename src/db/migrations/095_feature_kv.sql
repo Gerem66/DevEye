@@ -1,20 +1,10 @@
--- Le magasin clé-valeur des modules de features.
---
--- Un module tiers persiste sans déclarer de table : une ligne par
--- (espace, feature, clé), avec le mode de protection FIGÉ SUR LA LIGNE
--- ('server' = étage ouvert, 'private' = étage gardé, 'none' = clair). Le mode
--- voyage avec la valeur parce que c'est la lecture qui doit choisir le bon
--- déchiffrement : le déclarer à part, c'est garantir qu'un jour une ligne se
--- lira avec la mauvaise clé. Les données relationnelles d'un module vont dans
--- ses propres tables `ft_<slug>_*` ; ce magasin ne porte que le simple.
---
--- `feature` est un VARCHAR et non un enum SQL : la liste des modules dépend de
--- l'installation, pas du schéma. `k` est bornée court exprès, une clé est un
--- nom, pas un document.
---
--- ## Rejouabilité
---
--- Une seule création, sous garde d'existence.
+-- Le magasin clé-valeur des modules de features : une ligne par (espace,
+-- feature, clé), avec le mode de protection FIGÉ SUR LA LIGNE ('server' =
+-- étage ouvert, 'private' = étage gardé, 'none' = clair). Le mode voyage avec
+-- la valeur parce que c'est la lecture qui doit choisir le bon déchiffrement.
+-- `feature` est un VARCHAR et non un enum : la liste des modules dépend de
+-- l'installation, pas du schéma.
+-- Rejouable : création sous garde d'existence.
 
 SET @has_table = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'feature_kv');

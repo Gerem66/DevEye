@@ -5,15 +5,9 @@ import type { OsintHistoryEntry, OsintTargetKind } from '../contracts/domain';
 import styles from './Osint.module.css';
 
 /**
- * L'historique, en tiroir depuis la droite.
- *
- * Masqué par défaut : la grille de cartes est ce qu'on vient voir, et une
- * colonne latérale permanente lui prenait de la largeur en dehors des moments
- * où on rouvre une recherche passée.
- *
- * Animations et inscription à la pile Échap reprises de
- * `Components/SettingsPanel` — même ressort, même voile, pour que les deux
- * tiroirs de l'application se comportent exactement pareil.
+ * L'historique, en tiroir depuis la droite : masqué par défaut, la grille de
+ * cartes est ce qu'on vient voir. Mêmes animations et même pile Échap que
+ * `Components/SettingsPanel`.
  */
 
 interface Props {

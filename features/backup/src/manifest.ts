@@ -4,32 +4,20 @@ import type { FeatureManifest } from '@deveye/types/sdk';
 import { backupCommands } from './contracts/commands';
 
 /**
- * Sauvegardes, au format manifest. Native rapatriée : l'id `backup` et son
- * descripteur restent dans le registre publié (les droits, les grants et les
- * routes de notification persistés les référencent), tout le reste vit ici.
+ * L'id `backup` et son descripteur restent dans le registre publié : droits,
+ * grants et routes de notification persistés les référencent.
  */
 const descriptor = featureDescriptor('backup');
 
 export const manifest = {
     ...descriptor,
     category: 'dev',
-    /**
-     * Les clés de cache de la feature, telles que les écrans les invalident :
-     * la tuile (`count`), les deux listes, la fiche d'un travail (`detail`) et
-     * la vue d'ensemble des exécutions (`runs`).
-     */
     resources: ['backup.count', 'backup.destinationList', 'backup.jobList', 'backup.detail', 'backup.runs'],
-    /**
-     * Les destinations (les sources de la feature) se gèrent à l'échelle de
-     * la fonctionnalité ; la forme des archives se choisit par TRAVAIL, dans
-     * l'onglet Chiffrement de ses réglages. Notifications, partage et
-     * permissions viennent du descripteur (`notifies`, `shareTier`).
-     */
+    /** Les destinations se gèrent à l'échelle de la feature, la forme des archives par travail. */
     settings: { feature: ['sources'], item: ['encryption'] },
     /**
-     * La flotte d'agents pour écrire une archive sur une machine par son
-     * agent (`DeviceSink`), et la lecture des appareils de l'espace pour
-     * n'accepter comme destination qu'une machine qui lui appartient.
+     * `agents` pour écrire par l'agent d'une machine (`DeviceSink`),
+     * `devices.read` pour n'accepter comme destination qu'une machine de l'espace.
      */
     nativeCapabilities: ['agents', 'devices.read'],
     links: [

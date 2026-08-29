@@ -41,13 +41,7 @@ export const RUN_LABELS: Record<BackupRunStatus, string> = {
 
 export const WEEKDAYS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
 
-/**
- * La teinte d'un état.
- *
- * « En cours » reste neutre et non colorée : c'est l'état normal d'une
- * sauvegarde qui vient de partir, et la peindre ferait passer un travail en
- * cours pour un incident — même règle que Déploiement et Bases de données.
- */
+/** « En cours » reste neutre : peindre un travail qui vient de partir le ferait passer pour un incident. */
 export function runTone(status: BackupRunStatus | null): 'neutral' | 'online' | 'danger' {
     if (status === 'success') return 'online';
     if (status === 'failed') return 'danger';
@@ -118,11 +112,7 @@ export function describeSchedule(job: {
 }
 
 /**
- * Budget client pour les commandes qui parlent à un tiers.
- *
- * `backup.destinationTest` écrit puis relit puis efface un objet témoin sur un
- * service qui peut être au bout d'un VPN : le défaut de la socket (15 s) est
- * trop court, et abandonner avant le serveur ferait afficher « échec » là où le
- * contrôle est simplement lent.
+ * `backup.destinationTest` écrit, relit et efface un objet chez un tiers
+ * parfois au bout d'un VPN : le défaut de la socket (15 s) est trop court.
  */
 export const BACKUP_PROBE_TIMEOUT_MS = 60_000;

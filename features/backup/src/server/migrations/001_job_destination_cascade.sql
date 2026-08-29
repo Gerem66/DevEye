@@ -1,20 +1,11 @@
 -- La clé étrangère des travaux vers leur destination passe de RESTRICT à
--- CASCADE.
+-- CASCADE. Le refus de retirer une destination encore visée vit dans le
+-- handler (`backup.destinationRemove`). En RESTRICT, supprimer un espace
+-- cascadait `workspaces` vers `backup_destinations` pendant que `backup_jobs`
+-- les référençait encore (ordre non garanti par MySQL) et `workspace.delete`
+-- échouait sur `fk_bkp_job_destination`.
 --
--- Le RESTRICT de la 086 voulait protéger la configuration de quelqu'un : ne
--- pas effacer en silence les travaux qui visent une destination qu'on retire.
--- Mais cette garde vit déjà dans le handler (`backup.destinationRemove`
--- refuse, en disant combien de travaux bloquent), et la clé étrangère
--- mordait ailleurs : supprimer un ESPACE cascade `workspaces` vers
--- `backup_destinations` pendant que `backup_jobs` (cascadé lui aussi par
--- l'espace, mais dans un ordre que MySQL ne garantit pas) référence encore
--- ces destinations. `workspace.delete` échouait sur
--- `fk_bkp_job_destination` pour tout espace ayant au moins un travail, sans
--- qu'aucun écran ne puisse le dire.
---
--- Rejouable : la règle est lue dans INFORMATION_SCHEMA avant de toucher à la
--- contrainte, et le second pas est gardé par l'absence de la contrainte. Un
--- rejeu interrompu entre les deux ne refait que le pas manquant.
+-- Rejouable : chaque pas est gardé par l'état lu dans INFORMATION_SCHEMA.
 
 SET @rule = (SELECT DELETE_RULE FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
               WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'backup_jobs'

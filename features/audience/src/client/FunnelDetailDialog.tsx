@@ -14,12 +14,10 @@ interface FunnelDetailDialogProps {
 }
 
 /**
- * Le détail d'un entonnoir, ouvert depuis sa barre.
- *
- * La barre compacte répond à « est-ce que ça passe ? » ; cette fenêtre répond à
- * « où exactement, et combien ». Séparer les deux est ce qui permet à la liste
- * de rester lisible quand un site porte cinq entonnoirs : cinq détails empilés
- * auraient rempli l'écran d'une information qu'on ne consulte qu'une à la fois.
+ * Le détail d'un entonnoir, ouvert depuis sa barre. La barre compacte répond à
+ * « est-ce que ça passe ? », cette fenêtre à « où exactement, et combien » :
+ * cinq détails empilés rempliraient l'écran d'une information qu'on ne consulte
+ * qu'une à la fois.
  */
 export function FunnelDetailDialog({ funnel, canWrite, onClose, onEdit }: FunnelDetailDialogProps) {
     const entered = funnel?.steps[0]?.sessions ?? 0;

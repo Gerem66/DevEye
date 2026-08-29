@@ -20,12 +20,9 @@ import { mailRoutes } from './routes';
  *
  * Ce qui se tient ici est ce que l'hôte ne vérifie pas pour nous : les deux
  * routes ne montent que sur l'origine de l'app ; une pièce jointe ne sort que
- * contre un ticket valide, sous le codec du palier du compte (l'étage gardé
- * d'une session verrouillée entre-temps est un refus, pas une tentative), et
- * celle d'un compte projeté d'un autre espace sous le codec ouvert de ce
- * domicile-là, pas celui du ticket ; le retour OAuth crée le compte sous le
- * bon codec et referme sa fenêtre en postant vers l'origine de l'app, et un
- * `state` invalide rend la page d'échec sans rien écrire.
+ * contre un ticket valide, sous le codec du domicile du compte ; le retour OAuth
+ * crée le compte sous le bon codec et poste vers l'origine de l'app, un `state`
+ * invalide rendant la page d'échec sans rien écrire.
  */
 
 interface Route {
@@ -129,8 +126,8 @@ const MESSAGE: MailMessageRow = {
 
 /**
  * Un dépôt en mémoire : la chaîne message → dossier → compte, et la création
- * d'un compte. `projections` reproduit `item_shares` (`accountId → espaces où
- * il est projeté`), la seconde branche de `findVisible`.
+ * d'un compte. `projections` reproduit `item_shares`, la seconde branche de
+ * `findVisible`.
  */
 function fakeRepo(accountRows: MailAccountRow[], projections: Record<number, number[]> = {}): FakeRepo {
     let seq = 100;
@@ -202,13 +199,11 @@ function fakeRepo(accountRows: MailAccountRow[], projections: Record<number, num
 }
 
 /**
- * Un codec qui étiquette son étage : le harnais rend les deux étages d'un
- * ticket à l'identité, ce qui ne dit pas SOUS LEQUEL une route a lu ou écrit.
- * Le rendu du harnais est enveloppé pour étiqueter ses codecs, verrou compris,
- * et `deps.cipherFor` étiquette par espace : `server` pour l'espace 1 (celui
- * des fixtures, le même que l'étage ouvert d'un ticket posé là), `ws<n>` pour
- * tout autre, de sorte qu'une pièce lue sous le codec du ticket plutôt que
- * sous celui du domicile du compte se voit.
+ * Un codec qui étiquette son étage : le harnais rend les deux étages d'un ticket
+ * à l'identité, ce qui ne dirait pas sous lequel une route a lu ou écrit.
+ * `deps.cipherFor` étiquette par espace (`server` pour l'espace 1 des fixtures,
+ * `ws<n>` pour tout autre), de sorte qu'une pièce lue sous le codec du ticket
+ * plutôt que sous celui du domicile du compte se voit.
  */
 function taggedCipher(tag: string): SdkCipher {
     return {
