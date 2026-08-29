@@ -141,19 +141,83 @@ function isShellLike(name: string): boolean {
 }
 
 /**
- * Noms que le noyau se réserve. Un processus qui les porte **et** vient du
- * disque ment sur ce qu'il est : un fil du noyau n'a pas d'exécutable.
+ * Noms que le noyau se réserve, pour les fils dont le nom ne porte pas d'index.
+ * Ceux qui en portent un sont reconnus par leur `/` (voir `looksLikeKernelThread`).
  */
-const KERNEL_THREAD_PREFIXES = ['kworker/', 'kthreadd', 'ksoftirqd/', 'migration/', 'rcu_', 'watchdog/'];
+const KERNEL_THREAD_NAMES = [
+    'kthreadd',
+    'kswapd',
+    'kcompactd',
+    'khugepaged',
+    'khungtaskd',
+    'oom_reaper',
+    'kauditd',
+    'kdevtmpfs',
+    'kintegrityd',
+    'kblockd',
+    'writeback',
+    'kdmflush',
+    'netns',
+    'ksmd',
+    'zswap',
+    'edac-poller',
+    'devfreq_wq',
+    'acpi_thermal_pm',
+    'ipv6_addrconf'
+];
 
+/**
+ * Un nom de fil du noyau, à l'oeil. Le discriminant qui porte tout est le `/` :
+ * `comm` est le nom de base d'un exécutable, qui n'en contient jamais, alors
+ * que le noyau y range l'index de ses fils (`kworker/6:0H-kblockd`,
+ * `jbd2/nvme1n1p1-8`, `irq/34-nvme0q0`). C'est aussi cet index qu'il recycle,
+ * donc exactement les noms dont la volatilité fait le bruit.
+ *
+ * Heuristique, et assumée comme telle : `kernel` du rapport est le verdict, ceci
+ * n'est que le repli pour un agent qui ne le remonte pas encore.
+ */
 function looksLikeKernelThread(name: string): boolean {
     if (name.startsWith('[') && name.endsWith(']')) return true;
-    return KERNEL_THREAD_PREFIXES.some((prefix) => name.startsWith(prefix));
+    if (name.includes('/')) return true;
+    return KERNEL_THREAD_NAMES.some((known) => name === known || name.startsWith(`${known}/`));
+}
+
+/**
+ * Un fil du noyau, dont rien ne se surveille : il n'a pas d'exécutable, et le
+ * noyau recycle son nom en continu. L'y laisser entrer fait passer ce recyclage
+ * pour des programmes qui apparaissent et disparaissent, et noie le reste.
+ *
+ * Le drapeau `PF_KTHREAD` du rapport tranche quand il est là. Sinon le nom en
+ * tient lieu, mais seulement à défaut de chemin : un binaire du disque qui se
+ * fait appeler `kworker/0:1` est précisément ce que `exec.masquerade` cherche.
+ */
+export function isKernelThread(p: ReportProcess): boolean {
+    if (p.kernel !== null && p.kernel !== undefined) return p.kernel;
+    return p.execPath === null && looksLikeKernelThread(p.name);
 }
 
 function isSuspiciousPath(path: string): boolean {
     if (SUSPICIOUS_EXEC_PREFIXES.some((prefix) => path.startsWith(prefix))) return true;
     return SUSPICIOUS_EXEC_FRAGMENTS.some((fragment) => path.includes(fragment));
+}
+
+/**
+ * Plancher de la plage éphémère, celle que le système attribue tout seul :
+ * 32768 sous Linux, 49152 sous Windows, donc le plus bas des deux. Un port
+ * au-dessus change à chaque lancement du programme, et le confronter à une
+ * habitude ne dit rien de personne : un navigateur en ouvre un nouveau chaque
+ * matin. L'exposition réelle reste couverte par `port.exposed`, qui juge sur
+ * l'adresse de bind et n'a pas ce plancher.
+ */
+const EPHEMERAL_PORT_FLOOR = 32768;
+
+/**
+ * Les ports d'écoute qu'il vaut la peine de retenir : ceux que le programme a
+ * choisis. Ce filtre vaut pour la règle **et** pour la ligne de base, les deux
+ * devant regarder la même liste sous peine de comparer à côté.
+ */
+export function stableListenPorts(ports: number[]): number[] {
+    return ports.filter((port) => port < EPHEMERAL_PORT_FLOOR);
 }
 
 /** Une adresse de bind joignable depuis l'extérieur de la machine. */
@@ -193,7 +257,9 @@ function execRules(ctx: EvalContext): FindingDraft[] {
                     )
                 );
             }
-            if (looksLikeKernelThread(p.name)) {
+            // `kernel` vrai avec un chemin ne devrait pas exister ; si l'agent le
+            // dit quand même, on le croit plutôt que d'accuser un fil du noyau.
+            if (looksLikeKernelThread(p.name) && p.kernel !== true) {
                 out.push(
                     draft(
                         'exec.masquerade',
@@ -345,6 +411,7 @@ function processRules(ctx: EvalContext): FindingDraft[] {
     const ts = ctx.snapshot.ts;
 
     for (const p of ctx.snapshot.processes) {
+        if (isKernelThread(p)) continue;
         const key = processKey(p);
         const known = ctx.baseline.process.get(key);
 
@@ -391,7 +458,7 @@ function processRules(ctx: EvalContext): FindingDraft[] {
             );
         }
 
-        const newPorts = p.listenPorts.filter((port) => !attrs.listenPorts.includes(port));
+        const newPorts = stableListenPorts(p.listenPorts).filter((port) => !attrs.listenPorts.includes(port));
         if (newPorts.length > 0) {
             out.push(
                 draft(

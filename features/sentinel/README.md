@@ -214,28 +214,38 @@ appareil). Les taire sans le dire aurait remplacé un bug voyant par un bug muet
     fichier ? — chaque `dnf update` faisait sonner en `critical` la moitié des
     processus au long cours d'un serveur. → Voir `proc_exe` et son test jumeau.
 
-11. **Un manifeste tronqué ne prouve aucune suppression.** `truncated` coupe
+11. **Un fil du noyau n'entre pas dans la ligne de base.** Son nom encode un CPU
+    et un index que le noyau recycle en continu (`kworker/6:0H-kblockd`,
+    `jbd2/nvme1n1p1-8`), si bien que chacun franchissait les seuils de
+    `process.vanished` puis s'évaporait sans jamais se résoudre : des centaines de
+    constats ouverts pour un phénomène qui n'est pas un événement. Le discriminant
+    est `PF_KTHREAD`, que l'agent lit dans `/proc/<pid>/stat` et remonte en
+    `kernel` ; le nom ne sert que de repli, sur son `/` qu'un nom de base
+    d'exécutable n'a jamais. Un nom de fil du noyau porté par un binaire du disque
+    reste ce que `exec.masquerade` cherche.
+
+12. **Un manifeste tronqué ne prouve aucune suppression.** `truncated` coupe
     `persistence.removed` **et** l'oubli en ligne de base : il ne dit pas qu'une
     entrée a disparu, seulement qu'on a cessé de regarder.
 
-12. **Éteint par défaut, appareil par appareil.** Activer Sentinelle est un geste
+13. **Éteint par défaut, appareil par appareil.** Activer Sentinelle est un geste
     explicite : c'est lui qui autorise la lecture des journaux d'authentification,
     et cela ne doit pas arriver par effet de bord de l'ouverture d'une feature.
     La sonde d'auth a son propre interrupteur sous celui de la feature.
 
-13. **Rien n'est chiffré.** Ce sont des faits sur des machines, même palier que
+14. **Rien n'est chiffré.** Ce sont des faits sur des machines, même palier que
     `devices.report_json`. C'est ce qui laisse le moteur tourner **sans session ni
     mot de passe**, sans le détour par le chiffre « open » qu'impose Uptime (voir
     `Docs/SECURITY_MODEL.md`). → Ne pas y ranger de secret d'utilisateur.
 
-14. **Le séparateur des clés composées est un `�`,** déclaré une fois
+15. **Le séparateur des clés composées est un `�`,** déclaré une fois
     (`KEY_SEP` dans `features/sentinel/src/server/repo.ts`) et lu par `allowSubject()`. Un NUL
     plutôt qu'un espace parce qu'un sujet est souvent un chemin ; écrit en
     échappement parce qu'un octet invisible en source disparaît au premier
     copier-coller — et le perdre changerait **toutes** les empreintes de
     dédoublonnage d'un coup. → Ne jamais le retaper à la main ailleurs.
 
-15. **Une règle ne se rejoue qu'à la cadence de ce qui la nourrit.** Chaque flux
+16. **Une règle ne se rejoue qu'à la cadence de ce qui la nourrit.** Chaque flux
     a la sienne (tableau plus haut) : l'instant toutes les 60 s, le rapport
     toutes les heures. `evaluateSnapshot` ne prend que ce qui lit `ctx.snapshot`,
     `evaluateReport` ce qui lit `ctx.report` ; persistance et authentification

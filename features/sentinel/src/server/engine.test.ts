@@ -139,6 +139,7 @@ function proc(over: Partial<ReportProcess> & { name: string }): ReportProcess {
     return {
         execPath: null,
         deleted: null,
+        kernel: null,
         instances: 1,
         cpuPercent: 0.1,
         memBytes: 1024 * 1024,
@@ -235,6 +236,37 @@ describe('un tour du moteur', () => {
         assert.equal(critical.occurrences, 2);
         assert.equal(deps.recorded.notifications.length, 1);
         assert.deepEqual(deps.recorded.liveChanges, [1]);
+    });
+
+    it('ne laisse pas les fils du noyau entrer dans la ligne de base', async () => {
+        const repo = fakeRepo([config({ device_id: 'dev-1' })]);
+        const deps = createTestServiceDeps({
+            repo,
+            devices: [testDevice({ id: 'dev-1', workspaceId: 1 })],
+            snapshots: [
+                {
+                    ts: TS,
+                    // Le noyau recycle ces noms en continu : les retenir revient à
+                    // fabriquer autant d'éléments qui apparaissent puis disparaissent.
+                    processes: [
+                        proc({ name: 'kworker/6:0H-kblockd', kernel: true }),
+                        proc({ name: 'jbd2/nvme1n1p1-8' }),
+                        proc({ name: 'nginx', execPath: '/usr/sbin/nginx', kernel: false })
+                    ],
+                    activeConnections: 3
+                }
+            ]
+        });
+        const engine = new SentinelEngine(deps);
+
+        await engine.onMetricsBatch('dev-1', [metric(TS)]);
+        await deps.recorded.tickers[0].tick();
+
+        assert.deepEqual([...(await repo.baseline.known('dev-1', 'process')).keys()], ['nginx|/usr/sbin/nginx']);
+        assert.deepEqual(
+            repo.findings.rows.map((r) => r.subject),
+            ['nginx|/usr/sbin/nginx']
+        );
     });
 
     it('n’évalue rien pour un appareil non surveillé, ni pour une sonde éteinte', async () => {

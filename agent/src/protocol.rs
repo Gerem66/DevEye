@@ -364,6 +364,10 @@ pub struct ProcessInfo {
     /// L'exécutable a été effacé du disque mais le processus tourne toujours
     /// (implant résident en mémoire). `None` là où la plateforme ne l'expose pas.
     pub deleted: Option<bool>,
+    /// Fil du noyau (`PF_KTHREAD`), qui n'a ni exécutable ni nom stable : le
+    /// noyau recycle ses kworkers en encodant un CPU et un index dedans. Le
+    /// serveur les écarte de la dérive. `None` hors Linux.
+    pub kernel: Option<bool>,
     /// Number of PIDs aggregated under this name.
     pub instances: u32,
     #[serde(rename = "cpuPercent")]

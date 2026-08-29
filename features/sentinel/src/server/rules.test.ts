@@ -22,6 +22,7 @@ function proc(over: Partial<ReportProcess> & { name: string }): ReportProcess {
         name: over.name,
         execPath: over.execPath ?? null,
         deleted: over.deleted ?? null,
+        kernel: over.kernel ?? null,
         instances: over.instances ?? 1,
         cpuPercent: over.cpuPercent ?? 0.1,
         memBytes: over.memBytes ?? 1024 * 1024,
@@ -318,6 +319,60 @@ describe('Règles de dérive', () => {
                 })
             ),
             ['exec.suspicious_path']
+        );
+    });
+});
+
+describe('Fils du noyau', () => {
+    it('un kworker ne produit aucune dérive, connu ou pas', () => {
+        const kworker = proc({ name: 'kworker/6:0H-kblockd', kernel: true, user: 'root' });
+        expectRules(evaluateSnapshot(ctx({ snapshot: snap([kworker]) })), []);
+        expectRules(evaluateSnapshot(ctx({ snapshot: snap([kworker]), baseline: known('kworker/6:0H-kblockd') })), []);
+    });
+    it('sans le drapeau, le nom indexé suffit : c’est lui que le noyau recycle', () => {
+        for (const name of ['kworker/u134:1-ttm', 'jbd2/nvme1n1p1-8', 'irq/34-nvme0q0', '[kthreadd]']) {
+            expectRules(evaluateSnapshot(ctx({ snapshot: snap([proc({ name })]) })), []);
+        }
+    });
+    it('un programme du disque garde sa dérive, même à nom nu', () => {
+        expectRules(evaluateSnapshot(ctx({ snapshot: snap([proc({ name: 'sshd', kernel: false })]) })), [
+            'process.new'
+        ]);
+    });
+    it('USURPATION : nom de fil du noyau porté par un binaire du disque', () => {
+        expectRules(
+            evaluateSnapshot(
+                ctx({ snapshot: snap([proc({ name: 'kworker/0:1', execPath: '/tmp/kworker', kernel: false })]) })
+            ),
+            ['exec.masquerade', 'exec.suspicious_path', 'process.new']
+        );
+    });
+});
+
+describe('Ports éphémères', () => {
+    const firefox = (listenPorts: number[]) =>
+        proc({ name: 'firefox', execPath: '/usr/lib64/firefox/firefox', user: 'www-data', listenPorts });
+
+    it('un port attribué par le système ne fait pas une nouvelle écoute', () => {
+        expectRules(
+            evaluateSnapshot(
+                ctx({
+                    snapshot: snap([firefox([45231])]),
+                    baseline: known('firefox|/usr/lib64/firefox/firefox')
+                })
+            ),
+            []
+        );
+    });
+    it('un port choisi, lui, se signale toujours', () => {
+        expectRules(
+            evaluateSnapshot(
+                ctx({
+                    snapshot: snap([firefox([4444, 45231])]),
+                    baseline: known('firefox|/usr/lib64/firefox/firefox')
+                })
+            ),
+            ['process.new_listener']
         );
     });
 });

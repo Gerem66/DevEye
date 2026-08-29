@@ -457,6 +457,8 @@ struct RawProcess {
     /// Le binaire a été effacé du disque alors que le processus tourne encore.
     /// `None` là où la plateforme ne permet pas de le savoir.
     deleted: Option<bool>,
+    /// Fil du noyau. `None` là où la plateforme ne permet pas de le savoir.
+    kernel: Option<bool>,
     cpu_percent: f64,
     mem_percent: f64,
     rss_bytes: u64,
@@ -568,6 +570,7 @@ struct Aggregate {
     /// groupe, donc retenu une fois à la première absorption.
     exec_path: Option<String>,
     deleted: Option<bool>,
+    kernel: Option<bool>,
     instances: u32,
     cpu_percent: f64,
     mem_percent: f64,
@@ -588,6 +591,9 @@ impl Aggregate {
     fn absorb(&mut self, p: &RawProcess, sock: Option<&ProcSockets>, io: Option<&ProcessIo>) {
         if self.instances == 0 {
             self.exec_path = p.exec_path.clone();
+            // Même raison que `exec_path` : la clé d'agrégation porte le chemin,
+            // et un fil du noyau n'en a jamais un, donc le groupe est homogène.
+            self.kernel = p.kernel;
         }
         // Un seul processus au binaire effacé suffit à marquer le groupe :
         // c'est l'anomalie qu'on cherche.
@@ -635,6 +641,7 @@ impl Aggregate {
             name,
             exec_path: self.exec_path,
             deleted: self.deleted,
+            kernel: self.kernel,
             instances: self.instances,
             cpu_percent: (self.cpu_percent * 10.0).round() / 10.0,
             mem_bytes: self.rss_bytes,
@@ -815,6 +822,7 @@ fn scan_processes_sysinfo(sys: &mut System) -> Vec<RawProcess> {
                 // Aucune plateforme n'expose ici l'équivalent du « (deleted) »
                 // de Linux : inconnu, jamais « pas supprimé ».
                 deleted: None,
+                kernel: None,
                 cpu_percent: proc.cpu_usage() as f64,
                 mem_percent: (rss as f64 / total_mem) * 100.0,
                 rss_bytes: rss,
@@ -900,6 +908,13 @@ fn proc_exe(pid: u32) -> (Option<String>, Option<bool>) {
 #[cfg(target_os = "linux")]
 const USER_HZ: f64 = 100.0;
 
+/// `PF_KTHREAD` dans les drapeaux de tâche : le noyau marque lui-même ses fils.
+/// C'est le seul discriminant exact. L'absence de `/proc/<pid>/exe` ne l'est
+/// pas, elle se confond avec un lien illisible faute de droits, et le nom pas
+/// davantage, un programme du disque étant libre de s'appeler `kworker/0:1`.
+#[cfg(target_os = "linux")]
+const PF_KTHREAD: u64 = 0x0020_0000;
+
 #[cfg(target_os = "linux")]
 fn parse_proc_stat(
     pid: u32,
@@ -920,6 +935,7 @@ fn parse_proc_stat(
     // page de manuel) : l'indice i vaut donc le champ i+3.
     let f: Vec<&str> = stat.get(close + 1..)?.split_whitespace().collect();
     let num = |i: usize| -> Option<u64> { f.get(i)?.parse().ok() };
+    let flags = num(6)?; // champ 9
     let utime = num(11)?; // champ 14
     let stime = num(12)?; // champ 15
     let threads = num(17).map(|t| t as u32); // champ 20
@@ -945,6 +961,7 @@ fn parse_proc_stat(
         name,
         exec_path,
         deleted,
+        kernel: Some(flags & PF_KTHREAD != 0),
         cpu_percent,
         mem_percent,
         rss_bytes,
@@ -1078,6 +1095,9 @@ fn parse_ps_line_with(line: &str, layout: PsLayout) -> Option<RawProcess> {
         // macOS n'expose pas l'équivalent du suffixe « (deleted) » de Linux :
         // inconnu, et non « pas supprimé ».
         deleted: None,
+        // `ps` n'expose pas les drapeaux de tâche : le noyau XNU n'a de toute
+        // façon pas l'équivalent des kworkers dans sa table de processus.
+        kernel: None,
         cpu_percent,
         mem_percent,
         rss_bytes: rss_kb * 1024,
@@ -1861,6 +1881,74 @@ mod tests {
         }
     }
 
+    /// `PF_KTHREAD` est lu à un indice compté à la main dans une ligne dont le
+    /// `comm` peut contenir espaces et parenthèses : c'est cet indice qu'on
+    /// vérifie, sur le noyau vivant, où kthreadd (PID 2) porte le drapeau et
+    /// l'appelant ne le porte pas.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn parse_proc_stat_reads_the_kernel_thread_flag() {
+        let users = HashMap::new();
+        let read = |pid: u32| -> Option<RawProcess> {
+            let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+            parse_proc_stat(pid, &stat, 1000.0, 1_000_000, &users)
+        };
+
+        let me = std::process::id();
+        assert_eq!(
+            read(me).and_then(|p| p.kernel),
+            Some(false),
+            "le processus de test vient du disque"
+        );
+
+        // kthreadd est le père de tous les fils du noyau, et existe partout.
+        match read(2) {
+            Some(p) => assert_eq!(p.kernel, Some(true), "kthreadd est un fil du noyau"),
+            None => eprintln!("/proc/2/stat illisible — vérification sautée"),
+        }
+    }
+
+    /// Un `comm` qui contient espaces et parenthèses décale tout ce qui suit si
+    /// on coupe sur la mauvaise borne, et les drapeaux comme le temps CPU se
+    /// liraient alors dans le champ du voisin.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn parse_proc_stat_survives_a_comm_full_of_parentheses() {
+        // Champs 1 et 2, puis state, ppid, pgrp, session, tty, tpgid, flags.
+        let flags = 0x0020_0000u64 | 0x4000;
+        let mut fields = vec![
+            "7".to_string(),
+            "((a b) c)".to_string(),
+            "S".into(),
+            "2".into(),
+            "0".into(),
+            "0".into(),
+            "0".into(),
+            "-1".into(),
+            flags.to_string(),
+        ];
+        // Jusqu'au champ 24 (rss), les valeurs intermédiaires n'importent pas.
+        while fields.len() < 24 {
+            fields.push(match fields.len() + 1 {
+                14 => "300".into(), // utime
+                15 => "100".into(), // stime
+                20 => "3".into(),   // threads
+                22 => "0".into(),   // starttime
+                24 => "10".into(),  // rss en pages
+                _ => "0".into(),
+            });
+        }
+        let stat = fields.join(" ");
+        let p = parse_proc_stat(7, &stat, 4.0, 1000, &HashMap::new()).expect("ligne lisible");
+        assert_eq!(
+            p.name, "(a b) c",
+            "le nom se coupe sur la dernière parenthèse"
+        );
+        assert_eq!(p.kernel, Some(true));
+        assert_eq!(p.threads, Some(3), "le champ 20 n'a pas glissé");
+        assert_eq!(p.cpu_percent, 100.0, "4 s de CPU sur 4 s de vie");
+    }
+
     /// Exécution depuis un répertoire temporaire, puis binaire effacé alors que
     /// le processus tourne. Vérifié pour de vrai : c'est le noyau qui pose le
     /// suffixe « (deleted) », une chaîne fabriquée ne prouverait rien.
@@ -1990,6 +2078,7 @@ mod tests {
                     name: "chrome".into(),
                     exec_path: Some("/opt/google/chrome/chrome".into()),
                     deleted: Some(false),
+                    kernel: Some(false),
                     cpu_percent: 10.0,
                     mem_percent: 1.0,
                     rss_bytes: 1000,
@@ -2024,6 +2113,7 @@ mod tests {
                 name: "nginx".into(),
                 exec_path: Some("/usr/sbin/nginx".into()),
                 deleted: Some(false),
+                kernel: Some(false),
                 cpu_percent: 1.0,
                 mem_percent: 0.5,
                 rss_bytes: 100,

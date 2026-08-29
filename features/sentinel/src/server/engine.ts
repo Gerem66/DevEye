@@ -23,12 +23,14 @@ import {
     authRules,
     evaluateReport,
     evaluateSnapshot,
+    isKernelThread,
     isWorldBound,
     listenerKey,
     persistenceRules,
     processKey,
     REPORT_RULES,
     SNAPSHOT_RULES,
+    stableListenPorts,
     type EvalContext
 } from './rules';
 
@@ -80,6 +82,14 @@ const VANISHED_AFTER_SAMPLES = 10;
 
 /** Ancienneté minimale d'un programme avant qu'on juge sa disparition notable. */
 const VANISHED_MIN_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Au-delà de quelle absence un programme sort de la ligne de base sans rien
+ * produire. Généreux exprès : oublier trop tôt ferait sonner `process.new` à
+ * chaque exécution d'un programme intermittent, une sauvegarde nocturne ou un
+ * gestionnaire de paquets.
+ */
+const BASELINE_FORGET_MS = 30 * 24 * 60 * 60 * 1000;
 
 /** Lissage de l'enveloppe p95. Voir `blendP95`. */
 const P95_ALPHA = 0.05;
@@ -465,6 +475,11 @@ export class SentinelEngine {
         const items: BaselineObservation[] = [];
 
         for (const p of snapshot.processes) {
+            // Un fil du noyau n'entre pas dans la ligne de base : le noyau recycle
+            // ses noms en continu, et chacun deviendrait un élément qui apparaît
+            // puis disparaît. Écarté ici plutôt que dans les seules règles, sans
+            // quoi la table grossirait d'autant de lignes mortes.
+            if (isKernelThread(p)) continue;
             const key = processKey(p);
             const known = baseline.process.get(key);
             const previous = attrsOf(known);
@@ -474,7 +489,7 @@ export class SentinelEngine {
             const attrs: BaselineAttrs = {
                 ...previous,
                 users: mergeList(previous.users, p.user, 16),
-                listenPorts: mergePorts(previous.listenPorts, p.listenPorts, 64),
+                listenPorts: mergePorts(previous.listenPorts, stableListenPorts(p.listenPorts), 64),
                 cpuP95: blendP95(previous.cpuP95, p.cpuPercent),
                 memP95: previous.memP95 === null ? p.memBytes : Math.max(previous.memP95, p.memBytes)
             };
@@ -597,22 +612,37 @@ export class SentinelEngine {
                 'process',
                 now - VANISHED_AFTER_SAMPLES * interval
             );
-            const drafts: FindingDraft[] = stale
-                // Un programme aperçu trois fois la semaine dernière n'a pas disparu :
-                // il n'était pas installé, il passait.
-                .filter((row) => now - row.first_seen >= VANISHED_MIN_AGE_MS && row.samples >= 500)
-                .map((row) => ({
-                    rule: 'process.vanished' as SentinelRuleId,
-                    severity: SENTINEL_RULES['process.vanished'].severity,
-                    subject: row.item_key,
-                    evidence: [
-                        { label: 'Programme', value: row.item_key },
-                        { label: 'Vu pour la dernière fois', value: new Date(row.last_seen).toISOString() },
-                        { label: 'Connu depuis', value: new Date(row.first_seen).toISOString().slice(0, 10) },
-                        { label: 'Instants observés', value: String(row.samples) }
-                    ],
-                    snapshotTs: null
-                }));
+            // Un programme aperçu trois fois la semaine dernière n'a pas disparu :
+            // il n'était pas installé, il passait.
+            const gone = stale.filter((row) => now - row.first_seen >= VANISHED_MIN_AGE_MS && row.samples >= 500);
+            const drafts: FindingDraft[] = gone.map((row) => ({
+                rule: 'process.vanished' as SentinelRuleId,
+                severity: SENTINEL_RULES['process.vanished'].severity,
+                subject: row.item_key,
+                evidence: [
+                    { label: 'Programme', value: row.item_key },
+                    { label: 'Vu pour la dernière fois', value: new Date(row.last_seen).toISOString() },
+                    { label: 'Connu depuis', value: new Date(row.first_seen).toISOString().slice(0, 10) },
+                    { label: 'Instants observés', value: String(row.samples) }
+                ],
+                snapshotTs: null
+            }));
+
+            // Ce qui a produit sa disparition sort de la ligne de base, comme le
+            // manifeste de persistance : la ligne a dit tout ce qu'elle avait à
+            // dire, et la garder ferait re-constater la même disparition à chaque
+            // passe, indéfiniment. Le reste ne part qu'après une longue absence.
+            const forget = [
+                ...gone.map((row) => row.item_key),
+                ...stale.filter((row) => now - row.last_seen >= BASELINE_FORGET_MS).map((row) => row.item_key)
+            ];
+            if (forget.length > 0) {
+                await this.deps.repo.baseline.forget(device.id, 'process', forget);
+                const cached = this.baselines.get(device.id);
+                // Le cache doit suivre, sinon le retour du programme ne serait pas
+                // vu comme nouveau : la base l'aurait oublié, pas la mémoire.
+                if (cached) for (const key of forget) cached.process.delete(key);
+            }
 
             if (drafts.length === 0) continue;
             // Aucune famille rejouée : `process.vanished` se constate par absence,
