@@ -429,6 +429,17 @@ describe('GET /api/mail/oauth/callback', () => {
         assert.equal(deps.recorded.audits.at(-1)?.action, 'mail.oauthConnect');
     });
 
+    it('le nom saisi au formulaire nomme la boîte ; sans lui, c’est l’adresse', async () => {
+        const named = mount([]);
+        await named.call('/api/mail/oauth/callback', {
+            code: 'code-n',
+            state: ticket({ provider: 'google', securityTier: 'open', displayName: 'Perso Gmail' })
+        });
+        assert.equal(named.repo.accountRows[0]?.display_name_enc, 'server:Perso Gmail');
+        // L'adresse, elle, reste celle du fournisseur : elle n'est pas saisie.
+        assert.equal(named.repo.accountRows[0]?.email_address_enc, 'server:moi@gmail.com');
+    });
+
     it('un compte gardé s’écrit sous le codec gardé ; une session verrouillée entre-temps échoue sans écrire', async () => {
         const open = mount([]);
         await open.call('/api/mail/oauth/callback', {

@@ -369,7 +369,7 @@ export const mailOAuthStartFeature = defineSdkFeature<
         }
         assertTierAllowed(ctx, input.securityTier);
         const state = await ctx.secrecy.ticket(
-            { provider: input.provider, securityTier: input.securityTier },
+            { provider: input.provider, securityTier: input.securityTier, displayName: input.displayName },
             { ttlSeconds: 600 }
         );
         return { authUrl: buildAuthorizationUrl(input.provider, state, ctx.origins.app) };

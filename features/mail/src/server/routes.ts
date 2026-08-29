@@ -49,7 +49,9 @@ export const attachmentTicketSchema = z.object({
 /** La charge du `state` OAuth, telle que `mail.oauthStart` la pose. */
 export const oauthStateSchema = z.object({
     provider: mailOAuthProviderSchema,
-    securityTier: mailSecurityTierSchema
+    securityTier: mailSecurityTierSchema,
+    /** Le nom saisi au formulaire. Vide : le compte prend son adresse. */
+    displayName: z.string().default('')
 });
 
 const attachmentQuerySchema = z.object({ token: z.string().min(1) });
@@ -217,7 +219,7 @@ export function mailRoutes(app: SdkPublicApp, deps: MailRouteDeps, seam: MailRou
             const account = await deps.repo.accounts.create({
                 userId: ticket.userId,
                 workspaceId: ticket.workspaceId,
-                displayNameEnc: await cipher.encrypt(tokens.email),
+                displayNameEnc: await cipher.encrypt(claims.data.displayName || tokens.email),
                 emailAddressEnc: await cipher.encrypt(tokens.email),
                 securityTier: claims.data.securityTier,
                 authMethod: claims.data.provider === 'google' ? 'oauth_google' : 'oauth_microsoft',

@@ -399,25 +399,32 @@ describe('mail.oauthStart', () => {
             repo: fakeRepo(),
             origins: { app: 'https://app.test', public: 'https://p.test' }
         });
-        const { authUrl } = await handlerFor(mailOAuthStart)(ctx, { provider: 'google', securityTier: 'open' });
+        const { authUrl } = await handlerFor(mailOAuthStart)(ctx, {
+            provider: 'google',
+            securityTier: 'open',
+            displayName: 'Perso Gmail'
+        });
         const url = new URL(authUrl);
         assert.equal(url.origin + url.pathname, 'https://accounts.google.com/o/oauth2/v2/auth');
         assert.equal(url.searchParams.get('client_id'), 'google-client');
         assert.equal(url.searchParams.get('redirect_uri'), 'https://app.test/api/mail/oauth/callback');
+        // Le nom saisi voyage avec le ticket : la route de callback crée le
+        // compte hors session et n'a aucun autre moyen de le connaître.
         assert.deepEqual(ticketPayload(url.searchParams.get('state') ?? ''), {
             provider: 'google',
-            securityTier: 'open'
+            securityTier: 'open',
+            displayName: 'Perso Gmail'
         });
     });
 
     it('refuse un fournisseur non configuré, et un compte gardé dans un espace partagé', async () => {
         const ctx = createTestContext({ repo: fakeRepo(), kind: 'shared' });
         await assert.rejects(
-            handlerFor(mailOAuthStart)(ctx, { provider: 'microsoft', securityTier: 'open' }),
+            handlerFor(mailOAuthStart)(ctx, { provider: 'microsoft', securityTier: 'open', displayName: '' }),
             failsWith('validation')
         );
         await assert.rejects(
-            handlerFor(mailOAuthStart)(ctx, { provider: 'google', securityTier: 'guarded' }),
+            handlerFor(mailOAuthStart)(ctx, { provider: 'google', securityTier: 'guarded', displayName: '' }),
             failsWith('validation')
         );
     });

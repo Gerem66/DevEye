@@ -122,7 +122,17 @@ export const mailAccountTestConnection = {
  */
 export const mailOAuthStart = {
     command: 'mail.oauthStart' as const,
-    input: z.object({ provider: mailOAuthProviderSchema, securityTier: mailSecurityTierSchema }),
+    input: z.object({
+        provider: mailOAuthProviderSchema,
+        securityTier: mailSecurityTierSchema,
+        /**
+         * Le nom que la boîte portera dans la liste. Il voyage dans le `state`
+         * parce que le compte naît dans la route de callback, hors de toute
+         * session : sans lui, la seule chose que le serveur sache nommer est
+         * l'adresse rendue par le fournisseur. Vide = l'adresse.
+         */
+        displayName: z.string().trim().max(MAIL_DISPLAY_NAME_MAX_LENGTH).default('')
+    }),
     output: z.object({ authUrl: z.string().url() })
 };
 
