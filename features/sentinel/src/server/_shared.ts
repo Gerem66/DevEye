@@ -96,6 +96,9 @@ export function toAllow(row: AllowRow, deviceName: string | null): AllowEntry {
 }
 
 /** L'état d'une machine dans la vue de flotte ; `config` à `null` : machine non surveillée, valeurs par défaut. */
+/** Un appareil sans constat ouvert : le décompte groupé ne rend pas de ligne pour lui. */
+export const EMPTY_COUNTS: SeverityCounts = { info: 0, low: 0, high: 0, critical: 0 };
+
 export function stateOf(device: SdkDevice, config: DeviceConfigRow | null, open: SeverityCounts): DeviceSentinelState {
     const learningUntil = config?.learning_until ?? null;
     return {

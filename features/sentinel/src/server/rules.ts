@@ -60,7 +60,9 @@ function draft(
 }
 
 function ev(label: string, value: string | number | null | undefined): EvidenceItem {
-    return { label, value: value === null || value === undefined ? ',' : String(value).slice(0, 512) };
+    // Une valeur absente se dit, plutôt que de laisser une ligne de preuve vide :
+    // l'agent ne remonte pas toujours un chemin ou un compte.
+    return { label, value: value === null || value === undefined ? 'inconnu' : String(value).slice(0, 512) };
 }
 
 /**
@@ -390,7 +392,7 @@ function processRules(ctx: EvalContext): FindingDraft[] {
         }
 
         const newPorts = p.listenPorts.filter((port) => !attrs.listenPorts.includes(port));
-        if (newPorts.length > 0 && attrs.listenPorts.length >= 0) {
+        if (newPorts.length > 0) {
             out.push(
                 draft(
                     'process.new_listener',

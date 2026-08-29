@@ -170,6 +170,30 @@ pub fn spawn_scan(
     });
 }
 
+/// Envoie le lot dès qu'il atteint `BATCH` : au-delà, la trame dépasserait
+/// `SYNC_INDEX_BATCH_MAX` et le serveur la refuserait.
+fn flush_if_full(
+    batch: &mut Vec<SyncIndexEntry>,
+    tx: &Sender<SyncEvent>,
+    session_id: &str,
+    share_id: i64,
+) -> anyhow::Result<()> {
+    if batch.len() < BATCH {
+        return Ok(());
+    }
+    let full = std::mem::replace(batch, Vec::with_capacity(BATCH));
+    tx.blocking_send(SyncEvent::Index {
+        session_id: session_id.to_string(),
+        share_id,
+        entries: full,
+        done: false,
+        scanned: true,
+        fingerprint: None,
+        error: None,
+    })
+    .map_err(|_| anyhow::anyhow!("session terminée"))
+}
+
 fn scan(
     session_id: &str,
     assignment: &SyncShareAssignment,
@@ -287,19 +311,7 @@ fn scan(
                 mtime,
                 mode,
             });
-            if batch.len() >= BATCH {
-                let full = std::mem::replace(&mut batch, Vec::with_capacity(BATCH));
-                tx.blocking_send(SyncEvent::Index {
-                    session_id: session_id.to_string(),
-                    share_id: assignment.share_id,
-                    entries: full,
-                    done: false,
-                    scanned: true,
-                    fingerprint: None,
-                    error: None,
-                })
-                .map_err(|_| anyhow::anyhow!("session terminée"))?;
-            }
+            flush_if_full(&mut batch, tx, session_id, assignment.share_id)?;
         }
 
         // Rien n'a survécu au filtrage : ce dossier est vide, il mérite sa
@@ -334,19 +346,7 @@ fn scan(
                     });
                     // Vidange comme pour un fichier : une arborescence de nombreux
                     // dossiers vides dépasserait sinon `SYNC_INDEX_BATCH_MAX`.
-                    if batch.len() >= BATCH {
-                        let full = std::mem::replace(&mut batch, Vec::with_capacity(BATCH));
-                        tx.blocking_send(SyncEvent::Index {
-                            session_id: session_id.to_string(),
-                            share_id: assignment.share_id,
-                            entries: full,
-                            done: false,
-                            scanned: true,
-                            fingerprint: None,
-                            error: None,
-                        })
-                        .map_err(|_| anyhow::anyhow!("session terminée"))?;
-                    }
+                    flush_if_full(&mut batch, tx, session_id, assignment.share_id)?;
                 }
             }
         }

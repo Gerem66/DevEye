@@ -4,6 +4,7 @@ import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import { UPTIME_THRESHOLD_MAX, UPTIME_TIMEOUT_MAX, UPTIME_TIMEOUT_MIN, type UptimeService } from '../contracts/domain';
 
 import { api } from './api';
+import { clamp, type ServiceTuning } from './format';
 
 /** Cadences offered, in seconds: from "nearly live" to a daily heartbeat. */
 const INTERVALS: { value: number; label: string }[] = [
@@ -31,19 +32,7 @@ const RETENTIONS: { value: number | null; label: string }[] = [
 ];
 
 /** Keep a typed number inside its contract bounds (empty / NaN → `min`). */
-function clamp(raw: string, min: number, max: number): number {
-    return Math.min(max, Math.max(min, Number(raw) || min));
-}
-
-/** Les quatre réglages du panneau, découpés du service chargé. */
-interface Tuning {
-    intervalSeconds: number;
-    timeoutSeconds: number;
-    failureThreshold: number;
-    retentionDays: number | null;
-}
-
-function tuningOf(service: UptimeService): Tuning {
+function tuningOf(service: UptimeService): ServiceTuning {
     return {
         intervalSeconds: service.intervalSeconds,
         timeoutSeconds: service.timeoutSeconds,
@@ -62,7 +51,7 @@ function tuningOf(service: UptimeService): Tuning {
 export default function ServiceGeneralPanel({ scope, canWrite }: SettingsPanelProps) {
     const itemId = scope.kind === 'item' ? scope.itemId : null;
     const [service, setService] = useState<UptimeService | null>(null);
-    const [draft, setDraft] = useState<Tuning | null>(null);
+    const [draft, setDraft] = useState<ServiceTuning | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -114,7 +103,8 @@ export default function ServiceGeneralPanel({ scope, canWrite }: SettingsPanelPr
         return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
     }
 
-    const set = <K extends keyof Tuning>(key: K, value: Tuning[K]) => setDraft((d) => (d ? { ...d, [key]: value } : d));
+    const set = <K extends keyof ServiceTuning>(key: K, value: ServiceTuning[K]) =>
+        setDraft((d) => (d ? { ...d, [key]: value } : d));
 
     return (
         <div className={shell.section}>

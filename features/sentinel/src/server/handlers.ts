@@ -19,7 +19,7 @@ import { SENTINEL_RULES, type BaselineEntry } from '../contracts/domain';
 
 import { LEARNING_DAYS } from './env';
 import { allowSubject } from './repo';
-import { deviceNames, engine, nameOf, posturize, stateOf, toAllow, toFinding, type Ctx } from './_shared';
+import { type Ctx, deviceNames, EMPTY_COUNTS, engine, nameOf, posturize, stateOf, toAllow, toFinding } from './_shared';
 
 /**
  * Constats, ligne de base, posture, autorisations. Les lectures passent par les
@@ -35,15 +35,16 @@ export const sentinelHandlers = [
             const devices = await ctx.deveye.devices.list();
             const ids = devices.map((d) => d.id);
 
-            // Un décompte groupé pour la flotte, une lecture des réglages, puis un
-            // décompte par appareil : les machines sont peu nombreuses par nature,
-            // c'est le décompte global qui devait éviter le N+1.
+            // Trois requêtes pour toute la flotte : le décompte global, les
+            // réglages, et le décompte éclaté par appareil.
             const [open, configs, perDevice] = await Promise.all([
                 ctx.repo.findings.openCounts(ids),
                 ctx.repo.deviceConfig.forDevices(ids),
-                Promise.all(devices.map(async (d) => [d, await ctx.repo.findings.openCounts([d.id])] as const))
+                ctx.repo.findings.openCountsByDevice(ids)
             ]);
-            const states = perDevice.map(([device, counts]) => stateOf(device, configs.get(device.id) ?? null, counts));
+            const states = devices.map((device) =>
+                stateOf(device, configs.get(device.id) ?? null, perDevice.get(device.id) ?? EMPTY_COUNTS)
+            );
 
             const scored = states.filter((d) => d.postureScore !== null);
             const fleetScore =

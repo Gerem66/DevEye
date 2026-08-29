@@ -3,15 +3,9 @@ import { isIPv4 } from 'net';
 
 // Le garde SSRF est celui de l'app, partagé, pas propre au module.
 import { fetchJson, isPublicIp } from '@/Services/netFetch';
-import { field, mapLimit, tag, type OsintProbeAdapter, type OsintTag } from './shared';
+import { field, mapLimit, type OsintProbeAdapter, type OsintTag, publicResolver, tag } from './shared';
 
 /* --------------------------------- Reverse -------------------------------- */
-
-function resolver(): Resolver {
-    const r = new Resolver({ timeout: 4000, tries: 2 });
-    r.setServers(['1.1.1.1', '8.8.8.8']);
-    return r;
-}
 
 export const ptrProbe: OsintProbeAdapter = {
     id: 'ptr',
@@ -20,7 +14,7 @@ export const ptrProbe: OsintProbeAdapter = {
     async run({ target }) {
         let names: string[] = [];
         try {
-            names = await resolver().reverse(target.value);
+            names = await publicResolver().reverse(target.value);
         } catch {
             names = [];
         }

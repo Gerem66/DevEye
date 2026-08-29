@@ -15,6 +15,7 @@ import { grantsFor, invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { moduleItems } from '../_sdk/register';
 import { isShareWired, shareBlockerFor } from '../_sharing';
+import { parseJsonArray } from '@/Utils/json';
 
 /**
  * Rendre un élément visible depuis un autre espace, et restreindre qui le voit.
@@ -290,7 +291,7 @@ async function grantState(
         workspaceId: target.workspaceId,
         workspaceName: target.workspaceName,
         roles: roles.map((role) => {
-            const featureGrants = parseGrants(role.features);
+            const featureGrants = parseJsonArray<WorkspaceFeatureGrant>(role.features);
             return {
                 roleId: role.id,
                 name: role.name,
@@ -300,19 +301,6 @@ async function grantState(
             };
         })
     };
-}
-
-function parseGrants(raw: unknown): WorkspaceFeatureGrant[] {
-    if (Array.isArray(raw)) return raw as WorkspaceFeatureGrant[];
-    if (typeof raw === 'string') {
-        try {
-            const parsed: unknown = JSON.parse(raw);
-            return Array.isArray(parsed) ? (parsed as WorkspaceFeatureGrant[]) : [];
-        } catch {
-            return [];
-        }
-    }
-    return [];
 }
 
 const grantListFeature = defineFeature({

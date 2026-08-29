@@ -1,10 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import { featureApi, isSocketOpen, onResourceChange, onSocketOpen } from 'deveye-sdk-client';
+import { isSocketOpen, onResourceChange, onSocketOpen } from 'deveye-sdk-client';
 import type { WeatherLocation, WeatherReport } from '../contracts/domain';
-
-import { manifest } from '../manifest';
-
-const api = featureApi(manifest);
+import { api } from './api';
 
 /**
  * Shared weather store: resolves the primary city and keeps its live report

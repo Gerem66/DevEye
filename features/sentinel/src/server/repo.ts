@@ -255,6 +255,8 @@ export interface FindingsRepo {
     find(findingId: number): Promise<FindingRow | null>;
     list(filter: FindingsFilter): Promise<{ rows: FindingRow[]; total: number }>;
     openCounts(deviceIds: string[]): Promise<Record<FindingSeverity, number>>;
+    /** Le même décompte, éclaté par appareil : une requête pour toute la flotte. */
+    openCountsByDevice(deviceIds: string[]): Promise<Map<string, Record<FindingSeverity, number>>>;
     acknowledge(findingId: number, userId: number, at: number): Promise<void>;
     /**
      * Ferme un constat parce que la situation a cessé, sans le juger normal. Même
@@ -429,6 +431,24 @@ export function findingsRepo(q: Q): FindingsRepo {
                 if (name) empty[name] = Number(row.n);
             }
             return empty;
+        },
+
+        async openCountsByDevice(deviceIds) {
+            const out = new Map<string, Record<FindingSeverity, number>>();
+            if (deviceIds.length === 0) return out;
+            const rows = await q.query<{ device_id: string; severity: number; n: number }>(
+                `SELECT device_id, severity, COUNT(*) AS n FROM device_findings
+                 WHERE state = 'open' AND device_id IN (${marksFor(deviceIds)})
+                 GROUP BY device_id, severity`,
+                deviceIds
+            );
+            for (const id of deviceIds) out.set(id, { info: 0, low: 0, high: 0, critical: 0 });
+            for (const row of rows) {
+                const name = SEVERITY_BY_RANK[Number(row.severity)];
+                const counts = out.get(row.device_id);
+                if (name && counts) counts[name] = Number(row.n);
+            }
+            return out;
         },
 
         async acknowledge(findingId, userId, at) {

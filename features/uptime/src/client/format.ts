@@ -89,3 +89,16 @@ export function formatBucket(epochSeconds: number, daily: boolean): string {
         ? date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' })
         : date.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
+
+/** Les quatre réglages fins d'un service, tels que le dialogue et le panneau les éditent. */
+export interface ServiceTuning {
+    intervalSeconds: number;
+    timeoutSeconds: number;
+    failureThreshold: number;
+    retentionDays: number | null;
+}
+
+/** Un champ numérique ramené dans ses bornes ; vide ou illisible vaut le minimum. */
+export function clamp(raw: string, min: number, max: number): number {
+    return Math.min(max, Math.max(min, Number(raw) || min));
+}

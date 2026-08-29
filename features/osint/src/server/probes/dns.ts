@@ -1,21 +1,6 @@
-import { Resolver } from 'dns/promises';
+import { field, publicResolver, tag, type OsintProbeAdapter, type OsintProbeDraft } from './shared';
 
-import { field, tag, type OsintProbeAdapter, type OsintProbeDraft } from './shared';
-
-/**
- * Relevé DNS complet d'un domaine.
- *
- * Un résolveur **dédié** plutôt que le résolveur par défaut du processus : celui
- * du système peut être un cache d'entreprise ou un menteur (DNS captif, filtrage
- * FAI), et une reconnaissance qui rend la vue biaisée de l'hébergeur ne sert à
- * rien. Cloudflare et Google en secours, avec un délai borné.
- */
-function resolver(): Resolver {
-    const r = new Resolver({ timeout: 4000, tries: 2 });
-    r.setServers(['1.1.1.1', '8.8.8.8']);
-    return r;
-}
-
+/** Relevé DNS complet d'un domaine, par le résolveur public (voir `publicResolver`). */
 /** Une absence d'enregistrement n'est pas une panne : elle se lit comme une liste vide. */
 async function tryResolve<T>(fn: () => Promise<T[]>): Promise<T[]> {
     try {
@@ -30,7 +15,7 @@ export const dnsProbe: OsintProbeAdapter = {
     appliesTo: ['domain', 'url'],
     ttlMs: 5 * 60 * 1000,
     async run({ target }) {
-        const r = resolver();
+        const r = publicResolver();
         const domain = target.value;
 
         const [a, aaaa, mx, ns, txt, cname, soa, dmarc] = await Promise.all([

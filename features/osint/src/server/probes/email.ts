@@ -1,7 +1,6 @@
 import { createHash } from 'crypto';
-import { Resolver } from 'dns/promises';
 
-import { field, tag, type OsintProbeAdapter, type OsintScore, type OsintTag } from './shared';
+import { field, type OsintProbeAdapter, type OsintScore, type OsintTag, publicResolver, tag } from './shared';
 import { DISPOSABLE_DOMAINS } from './disposable';
 
 /**
@@ -12,12 +11,6 @@ import { DISPOSABLE_DOMAINS } from './disposable';
  * fait bloquer, et prévient l'intéressé qu'on le cherche. On s'en tient à ce qui
  * se déduit du domaine et de sources publiques.
  */
-
-function resolver(): Resolver {
-    const r = new Resolver({ timeout: 4000, tries: 2 });
-    r.setServers(['1.1.1.1', '8.8.8.8']);
-    return r;
-}
 
 /**
  * Gravatar indexe par MD5 de l'adresse en minuscules : un `404` sur l'avatar dit
@@ -57,7 +50,7 @@ export const emailProbe: OsintProbeAdapter = {
         const at = email.lastIndexOf('@');
         const local = email.slice(0, at);
         const domain = email.slice(at + 1);
-        const r = resolver();
+        const r = publicResolver();
 
         const [mx, txt, dmarcTxt, gravatar] = await Promise.all([
             r.resolveMx(domain).catch(() => []),

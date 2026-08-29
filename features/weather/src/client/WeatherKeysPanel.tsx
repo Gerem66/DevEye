@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { weatherProviderSchema, type WeatherProvider } from '../contracts/domain';
 
-import { Button, featureApi, settingsStyles as shell, TextInput, useWorkspacePermissions } from 'deveye-sdk-client';
-
-import { manifest } from '../manifest';
-
-const api = featureApi(manifest);
+import { Button, settingsStyles as shell, TextInput, useWorkspacePermissions } from 'deveye-sdk-client';
+import { api } from './api';
 
 /**
  * Le panneau Sources : les clés d'API des fournisseurs, à l'échelle de l'espace.

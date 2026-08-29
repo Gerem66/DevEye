@@ -4,6 +4,7 @@ import type { UptimeMethod, UptimeService } from '../contracts/domain';
 
 import { api } from './api';
 import styles from './style.module.css';
+import { clamp, type ServiceTuning } from './format';
 
 /**
  * Ce que le dialogue règle : l'identité du service. Cadence, délai, seuil et
@@ -20,13 +21,6 @@ interface ServiceDraft {
 }
 
 /** Réglages que le dialogue ne montre pas, mais réécrit tels quels. */
-interface ServiceTuning {
-    intervalSeconds: number;
-    timeoutSeconds: number;
-    failureThreshold: number;
-    retentionDays: number | null;
-}
-
 interface ServiceDialogProps {
     open: boolean;
     /** Le service modifié, ou `null` pour un ajout. */
@@ -38,10 +32,6 @@ interface ServiceDialogProps {
 }
 
 /** Keep a typed number inside its contract bounds (empty / NaN → `min`). */
-function clamp(raw: string, min: number, max: number): number {
-    return Math.min(max, Math.max(min, Number(raw) || min));
-}
-
 const DEFAULTS: ServiceDraft = {
     name: '',
     url: '',

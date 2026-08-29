@@ -13,6 +13,7 @@ import type { WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRole, Workspa
 import { invalidateAccess } from '../_access';
 import { validateGrantExtras } from '../_sdk/register';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
+import { parseJsonArray } from '@/Utils/json';
 
 /** Un espace personnel n'a pas de rôles : son propriétaire y est seul et peut tout. */
 function assertShared(ctx: FeatureContext): void {
@@ -27,24 +28,11 @@ async function toRole(ctx: FeatureContext, row: WorkspaceRoleRow): Promise<Works
         name: row.name,
         color: row.color,
         position: row.position,
-        capabilities: parse<WorkspaceCapability>(row.capabilities),
-        features: parse<WorkspaceFeatureGrant>(row.features),
+        capabilities: parseJsonArray<WorkspaceCapability>(row.capabilities),
+        features: parseJsonArray<WorkspaceFeatureGrant>(row.features),
         isDefault: Number(row.is_default) === 1,
         memberCount: await ctx.db.workspaceRoles.memberCount(row.id)
     };
-}
-
-function parse<T>(raw: unknown): T[] {
-    if (Array.isArray(raw)) return raw as T[];
-    if (typeof raw === 'string') {
-        try {
-            const p: unknown = JSON.parse(raw);
-            return Array.isArray(p) ? (p as T[]) : [];
-        } catch {
-            return [];
-        }
-    }
-    return [];
 }
 
 export const workspaceRoleListFeature: FeatureDefinition<

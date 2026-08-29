@@ -94,8 +94,7 @@ function fakeRepo(over: Partial<UptimeServiceRow> = {}): FakeRepo {
                 target.last_response_ms = result.responseMs;
                 target.last_http_status = result.httpStatus;
                 target.last_error = result.error;
-            },
-            countByWorkspace: unused
+            }
         },
         history: {
             addCheck: async ({ serviceId, checkedAt, up, httpStatus, responseMs, error }) => {

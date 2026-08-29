@@ -16,6 +16,7 @@ import type { Database } from '@/db';
 import { WORKSPACE_CAPABILITIES, WORKSPACE_FEATURE_IDS } from '@deveye/types';
 import { FeatureError } from './_define';
 import { moduleManifests } from './_sdk/register';
+import { parseJsonArray } from '@/Utils/json';
 
 /**
  * Résolution d'autorisation des commandes de feature : le seul endroit qui
@@ -147,19 +148,6 @@ export function grantsFor(
     };
 }
 
-function parseJsonArray<T>(raw: unknown): T[] {
-    if (Array.isArray(raw)) return raw as T[];
-    if (typeof raw === 'string') {
-        try {
-            const parsed: unknown = JSON.parse(raw);
-            return Array.isArray(parsed) ? (parsed as T[]) : [];
-        } catch {
-            return [];
-        }
-    }
-    return [];
-}
-
 export interface AccessResolver {
     /**
      * Résout l'espace visé. `undefined` → l'espace personnel de l'appelant.
@@ -185,16 +173,7 @@ function toContext(row: WorkspaceRow): WorkspaceContext {
 }
 
 function parseFeatures(raw: unknown): string[] {
-    if (Array.isArray(raw)) return raw.map(String);
-    if (typeof raw === 'string') {
-        try {
-            const parsed: unknown = JSON.parse(raw);
-            return Array.isArray(parsed) ? parsed.map(String) : [];
-        } catch {
-            return [];
-        }
-    }
-    return [];
+    return parseJsonArray<unknown>(raw).map(String);
 }
 
 /**

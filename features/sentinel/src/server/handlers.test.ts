@@ -114,6 +114,19 @@ function fakeRepo(findings: FindingRow[] = [], configs: DeviceConfigRow[] = []):
                 }
                 return out;
             },
+            openCountsByDevice: async (deviceIds) => {
+                const out = new Map<string, Record<FindingSeverity, number>>();
+                for (const id of deviceIds) out.set(id, { info: 0, low: 0, high: 0, critical: 0 });
+                for (const r of findingRows) {
+                    const counts = r.state === 'open' ? out.get(r.device_id) : undefined;
+                    if (!counts) continue;
+                    if (r.severity === SEVERITY_RANK.critical) counts.critical++;
+                    else if (r.severity === SEVERITY_RANK.high) counts.high++;
+                    else if (r.severity === SEVERITY_RANK.low) counts.low++;
+                    else counts.info++;
+                }
+                return out;
+            },
             acknowledge: async (id, userId, at) => {
                 const row = findingRows.find((r) => r.id === id)!;
                 row.state = 'acknowledged' as FindingState;

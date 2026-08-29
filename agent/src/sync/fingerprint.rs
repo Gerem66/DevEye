@@ -130,11 +130,15 @@ mod tests {
         );
     }
 
-    /// Un `touch` ne doit RIEN changer : la baseline du serveur n'est réécrite
-    /// qu'au changement de hash.
+    /// Deux relevés du même arbre donnent la même empreinte : c'est ce qui
+    /// évite de réécrire la baseline du serveur à chaque scan. Un `touch` n'y
+    /// change rien par construction, `FingerprintEntry` ne portant pas de date.
     #[test]
-    fn a_touch_does_not_move_the_fingerprint() {
-        assert_eq!(compute(&fixture()), compute(&fixture()));
+    fn two_scans_of_the_same_tree_agree() {
+        let first = compute(&fixture());
+        let mut same_tree_seen_later = fixture();
+        same_tree_seen_later.rotate_left(1);
+        assert_eq!(first, compute(&same_tree_seen_later));
     }
 
     #[test]

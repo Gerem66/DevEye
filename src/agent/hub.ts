@@ -693,14 +693,23 @@ export class MonitorHub {
         return g !== undefined && g.allowed && g.epoch === epoch;
     }
 
-    private publishToSubscribers(deviceId: string, command: string, data: unknown): void {
+    /**
+     * La diffusion vers les navigateurs qui suivent un appareil, filtrée par
+     * l'époque d'accès de chaque socket. La trame est construite à la demande :
+     * sans abonné, les métriques ne sérialisent rien.
+     */
+    private fanOut(deviceId: string, buildFrame: () => string): void {
         const set = this.subscribers.get(deviceId);
         if (!set || set.size === 0) return;
-        const frame = JSON.stringify({ command, payload: { ok: true, data } });
+        const frame = buildFrame();
         const epoch = accessEpochNow();
         for (const socket of set) {
             if (this.mayReceive(socket, epoch)) socket.send(frame);
         }
+    }
+
+    private publishToSubscribers(deviceId: string, command: string, data: unknown): void {
+        this.fanOut(deviceId, () => JSON.stringify({ command, payload: { ok: true, data } }));
     }
 
     onlineDevices(deviceIds: string[]): Record<string, boolean> {
@@ -759,23 +768,11 @@ export class MonitorHub {
     }
 
     publishMetric(deviceId: string, snapshot: MetricSnapshot): void {
-        const set = this.subscribers.get(deviceId);
-        if (!set || set.size === 0) return;
-        const frame = metricFrame(deviceId, snapshot);
-        const epoch = accessEpochNow();
-        for (const socket of set) {
-            if (this.mayReceive(socket, epoch)) socket.send(frame);
-        }
+        this.fanOut(deviceId, () => metricFrame(deviceId, snapshot));
     }
 
     publishReport(deviceId: string, report: DeviceReport): void {
-        const set = this.subscribers.get(deviceId);
-        if (!set || set.size === 0) return;
-        const frame = reportFrame(deviceId, report);
-        const epoch = accessEpochNow();
-        for (const socket of set) {
-            if (this.mayReceive(socket, epoch)) socket.send(frame);
-        }
+        this.fanOut(deviceId, () => reportFrame(deviceId, report));
     }
 
     /**
@@ -806,21 +803,10 @@ export class MonitorHub {
     }
 
     private publishPresence(deviceId: string, online: boolean): void {
-        const set = this.subscribers.get(deviceId);
-        if (!set || set.size === 0) return;
-        const presence: DevicePresence = {
-            deviceId,
-            online,
-            lastSeen: Math.floor(Date.now() / 1000)
-        };
-        const frame = JSON.stringify({
-            command: DEVICE_PRESENCE_EVENT,
-            payload: { ok: true, data: presence }
+        this.fanOut(deviceId, () => {
+            const presence: DevicePresence = { deviceId, online, lastSeen: Math.floor(Date.now() / 1000) };
+            return JSON.stringify({ command: DEVICE_PRESENCE_EVENT, payload: { ok: true, data: presence } });
         });
-        const epoch = accessEpochNow();
-        for (const socket of set) {
-            if (this.mayReceive(socket, epoch)) socket.send(frame);
-        }
     }
 }
 

@@ -579,6 +579,25 @@ pub fn apply_dir(root: &Path, rel_path: &str, kind: &str, mode: Option<u32>) -> 
     Ok(())
 }
 
+/// Le chemin d'une source dont le contenu est celui que le serveur croit :
+/// un fichier régulier, de la bonne taille et du bon hash. Vérifié AVANT toute
+/// écriture, sans quoi un fichier modifié entre le scan et l'ordre serait
+/// installé sous un nom qui promet autre chose.
+fn verified_source(root: &Path, rel_path: &str, hash: &str, size: u64) -> Result<PathBuf> {
+    let src = safe_join(root, rel_path)?;
+    let meta = std::fs::symlink_metadata(&src).context("source introuvable")?;
+    if !meta.is_file() {
+        bail!("la source n'est pas un fichier régulier");
+    }
+    if meta.len() != size {
+        bail!("taille de la source inattendue");
+    }
+    if hash_file(&src)? != hash {
+        bail!("contenu de la source inattendu");
+    }
+    Ok(src)
+}
+
 /// Installe un contenu déjà présent ailleurs dans le partage, par copie locale.
 /// Le hash de la source est VÉRIFIÉ d'abord : sans ça, une source périmée
 /// écrirait un contenu faux sous un chemin dont le serveur croit tout savoir.
@@ -592,17 +611,7 @@ pub fn apply_local(
     mtime: i64,
     mode: Option<u32>,
 ) -> Result<()> {
-    let src = safe_join(root, source_rel_path)?;
-    let meta = std::fs::symlink_metadata(&src).context("source introuvable")?;
-    if !meta.is_file() {
-        bail!("la source n'est pas un fichier régulier");
-    }
-    if meta.len() != size {
-        bail!("taille de la source inattendue");
-    }
-    if hash_file(&src)? != hash {
-        bail!("contenu de la source inattendu");
-    }
+    let src = verified_source(root, source_rel_path, hash, size)?;
 
     let dest = safe_join(root, rel_path)?;
     let tmp_dir = root.join(".deveye-tmp");
@@ -649,17 +658,7 @@ pub fn move_file(
     mtime: i64,
     mode: Option<u32>,
 ) -> Result<()> {
-    let src = safe_join(root, from_rel_path)?;
-    let meta = std::fs::symlink_metadata(&src).context("source introuvable")?;
-    if !meta.is_file() {
-        bail!("la source n'est pas un fichier régulier");
-    }
-    if meta.len() != size {
-        bail!("taille de la source inattendue");
-    }
-    if hash_file(&src)? != hash {
-        bail!("contenu de la source inattendu");
-    }
+    let src = verified_source(root, from_rel_path, hash, size)?;
 
     let dest = safe_join(root, rel_path)?;
     if std::fs::symlink_metadata(&dest).is_ok() {

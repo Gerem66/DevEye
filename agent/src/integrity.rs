@@ -301,9 +301,10 @@ fn file_owner(
     None
 }
 
-/// uid → nom de compte, lu une fois par relevé.
+/// uid → nom de compte, lu une fois par relevé. `/etc/passwd` ne couvre pas les
+/// comptes d'un annuaire distant : un uid non résolu reste sans nom.
 #[cfg(unix)]
-fn passwd_owners() -> std::collections::HashMap<u32, String> {
+pub(crate) fn passwd_owners() -> std::collections::HashMap<u32, String> {
     let mut map = std::collections::HashMap::new();
     let Ok(text) = std::fs::read_to_string("/etc/passwd") else {
         return map;
@@ -321,7 +322,7 @@ fn passwd_owners() -> std::collections::HashMap<u32, String> {
 }
 
 #[cfg(not(unix))]
-fn passwd_owners() -> std::collections::HashMap<u32, String> {
+pub(crate) fn passwd_owners() -> std::collections::HashMap<u32, String> {
     std::collections::HashMap::new()
 }
 

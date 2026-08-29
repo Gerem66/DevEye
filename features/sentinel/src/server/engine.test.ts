@@ -97,6 +97,7 @@ function fakeRepo(configs: DeviceConfigRow[]): FakeRepo {
             find: unused,
             list: unused,
             openCounts: unused,
+            openCountsByDevice: unused,
             acknowledge: unused,
             resolve: unused,
             reopen: unused,

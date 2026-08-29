@@ -4,6 +4,7 @@ import { useDialogSubmit } from '@/Components/Dialog';
 import { openInfo } from '@/Components/InfoPopup';
 import Button from '@/Components/Button';
 import TextInput from '@/Components/TextInput';
+import Switch from '@/Components/Switch';
 import type { ShortcutItem, ShortcutPreview, ShortcutTemplate } from '@deveye/types';
 import { addShortcut, updateShortcut } from '@/stores/homeLayout';
 import { TemplateGallery } from './TemplateGallery';
@@ -85,37 +86,6 @@ function isValidUrl(url: string): boolean {
     } catch {
         return false;
     }
-}
-
-/** Small on/off switch, matching the app's switch style. */
-function Switch({
-    checked,
-    onChange,
-    label,
-    hint
-}: {
-    checked: boolean;
-    onChange: (v: boolean) => void;
-    label: string;
-    hint?: string;
-}) {
-    return (
-        <button
-            type='button'
-            role='switch'
-            aria-checked={checked}
-            className={`${styles.switch} ${checked ? styles.switchOn : ''}`}
-            onClick={() => onChange(!checked)}
-        >
-            <span className={styles.switchTrack}>
-                <span className={styles.switchThumb} />
-            </span>
-            <span className={styles.switchText}>
-                {label}
-                {hint && <span className={styles.switchHint}>{hint}</span>}
-            </span>
-        </button>
-    );
 }
 
 function SupportedTemplates() {
@@ -308,6 +278,7 @@ export function ShortcutForm({ sectionId, initial, onDone }: ShortcutFormProps) 
             )}
 
             <Switch
+                className={styles.shortcutSwitch}
                 checked={forceSimple}
                 onChange={setForceSimple}
                 label='Traiter comme un lien simple'

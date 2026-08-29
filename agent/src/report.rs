@@ -842,7 +842,7 @@ fn scan_processes_proc() -> Vec<RawProcess> {
     };
     let uptime = proc_uptime_seconds().unwrap_or(0.0);
     let total_mem_kb = proc_mem_total_kb().unwrap_or(0);
-    let users = passwd_names();
+    let users = crate::integrity::passwd_owners();
 
     let mut out = Vec::new();
     for entry in entries.flatten() {
@@ -1003,26 +1003,6 @@ fn proc_uid(pid: u32) -> Option<u32> {
         .nth(2)?
         .parse()
         .ok()
-}
-
-/// uid → nom, lu une fois par balayage. `/etc/passwd` ne couvre pas les comptes
-/// d'un annuaire distant ; un uid non résolu reste simplement sans nom.
-#[cfg(target_os = "linux")]
-fn passwd_names() -> HashMap<u32, String> {
-    let mut map = HashMap::new();
-    let Ok(passwd) = std::fs::read_to_string("/etc/passwd") else {
-        return map;
-    };
-    for line in passwd.lines() {
-        let mut f = line.split(':');
-        let (Some(name), Some(_), Some(uid)) = (f.next(), f.next(), f.next()) else {
-            continue;
-        };
-        if let Ok(uid) = uid.parse::<u32>() {
-            map.insert(uid, name.to_string());
-        }
-    }
-    map
 }
 
 /// Windows scan via `sysinfo`. The `System` lives across ticks, so the CPU delta

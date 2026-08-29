@@ -1,3 +1,5 @@
+import { Resolver } from 'dns/promises';
+
 import {
     OSINT_PROBE_LABELS,
     OSINT_RAW_MAX_LENGTH,
@@ -76,10 +78,6 @@ export function tag(label: string, tone: OsintTone = 'neutral'): OsintTag {
     return { label, tone };
 }
 
-export function link(label: string, href: string): OsintLink {
-    return { label, href };
-}
-
 /** Coupe une réponse brute à la taille que le contrat autorise. */
 export function clampRaw(raw: string): string {
     if (raw.length <= OSINT_RAW_MAX_LENGTH) return raw;
@@ -89,10 +87,6 @@ export function clampRaw(raw: string): string {
 /** Rend un `skipped` explicite : ce qui manque, et où l'obtenir. */
 export function skipped(message: string, links: OsintLink[] = []): OsintProbeDraft {
     return { status: 'skipped', summary: message, links };
-}
-
-export function empty(message: string): OsintProbeDraft {
-    return { status: 'empty', summary: message };
 }
 
 /**
@@ -264,4 +258,16 @@ export function daysUntil(iso: string | null | undefined): number | null {
     const t = Date.parse(iso);
     if (Number.isNaN(t)) return null;
     return Math.round((t - Date.now()) / 86_400_000);
+}
+
+/**
+ * Un résolveur DNS qui n'emprunte PAS celui du système : une sonde doit
+ * interroger la zone publique, pas le cache d'un réseau local qui pourrait
+ * répondre autre chose. Deux essais de quatre secondes, sans quoi une zone
+ * lente immobiliserait toute la fiche.
+ */
+export function publicResolver(): Resolver {
+    const r = new Resolver({ timeout: 4000, tries: 2 });
+    r.setServers(['1.1.1.1', '8.8.8.8']);
+    return r;
 }

@@ -1,21 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion, Reorder, useDragControls } from 'framer-motion';
-import {
-    Button,
-    Dialog,
-    featureApi,
-    FeatureSettingsButton,
-    TextInput,
-    useLiveOutline,
-    useLiveSegment
-} from 'deveye-sdk-client';
+import { Button, Dialog, FeatureSettingsButton, TextInput, useLiveOutline, useLiveSegment } from 'deveye-sdk-client';
 import { useWeather, syncWeatherLocations } from './store';
 import { wmoIcon } from './wmoIcon';
 import type { WeatherLocation, WeatherProvider, WeatherReport } from '../contracts/domain';
-import { manifest } from '../manifest';
 import styles from './Weather.module.css';
-
-const api = featureApi(manifest);
+import { api } from './api';
 
 const REFRESH_MS = 10 * 60 * 1000;
 

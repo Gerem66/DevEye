@@ -140,15 +140,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                 });
             },
             listDue: async () => [],
-            recordProbe: async () => undefined,
-            countByWorkspace: async (workspaceId) => {
-                const own = rows.filter((r) => r.workspace_id === workspaceId && r.enabled === 1);
-                return {
-                    total: own.length,
-                    up: own.filter((r) => r.status === 'up').length,
-                    down: own.filter((r) => r.status === 'down').length
-                };
-            }
+            recordProbe: async () => undefined
         },
         history: {
             addCheck: async () => undefined,

@@ -84,7 +84,6 @@ export interface UptimeServicesRepo {
      * below `total`: a service awaiting its first probe is neither, and must
      * not be reported as a failure.
      */
-    countByWorkspace(workspaceId: number): Promise<{ total: number; up: number; down: number }>;
 }
 
 export interface UptimeHistoryRepo {
@@ -352,18 +351,6 @@ function servicesRepo(q: SdkQueryable): UptimeServicesRepo {
                     id
                 ]
             );
-        },
-        async countByWorkspace(workspaceId) {
-            const rows = await q.query<{ total: number; up: number; down: number }>(
-                `SELECT COUNT(*)             AS total,
-                        SUM(status = 'up')   AS up,
-                        SUM(status = 'down') AS down
-                 FROM uptime_services
-                 WHERE workspace_id = ? AND enabled = 1`,
-                [workspaceId]
-            );
-            const row = rows[0];
-            return { total: Number(row?.total ?? 0), up: Number(row?.up ?? 0), down: Number(row?.down ?? 0) };
         }
     };
 }
