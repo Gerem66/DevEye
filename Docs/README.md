@@ -1,8 +1,8 @@
 # Les docs de DevEye
 
 Chaque document dit **pourquoi** les choses sont ainsi ; le code dit comment.
-Les docs de features écrites à la fin de leur chantier portent leur date et,
-quand elles ont été relues depuis, la date de relecture.
+Ce dossier porte le transverse ; la doc d'une feature vit dans son module,
+à côté de son manifest (`features/<id>/README.md`).
 
 ## Guides
 
@@ -18,7 +18,7 @@ quand elles ont été relues depuis, la date de relecture.
 | ---------------------------------------- | ------------------------------------------------------------------------------ |
 | [WORKSPACES.md](./WORKSPACES.md)         | les espaces (isolation, rôles, clés), à lire avant de toucher à l'un des trois |
 | [SECURITY_MODEL.md](./SECURITY_MODEL.md) | le chiffrement : étages ouvert/gardé, DEK, mot de passe                        |
-| [KEY_ROTATION.md](./KEY_ROTATION.md)     | changer la clé serveur (`CRYPT_KEY_A/B`) : ce qu'elle emballe, la procédure      |
+| [KEY_ROTATION.md](./KEY_ROTATION.md)     | changer la clé serveur (`CRYPT_KEY_A/B`) : ce qu'elle emballe, la procédure    |
 | [AUTH_PROMPTS.md](./AUTH_PROMPTS.md)     | le prompt de déverrouillage unique, et qui le réutilise                        |
 | [PERMISSIONS.md](./PERMISSIONS.md)       | les quatre étages de droits, et les décisions actées                           |
 | [SHARING.md](./SHARING.md)               | la projection d'éléments entre espaces                                         |
@@ -29,17 +29,17 @@ quand elles ont été relues depuis, la date de relecture.
 
 ## Features
 
-| Doc                              | Quoi                                                              |
-| -------------------------------- | ----------------------------------------------------------------- |
-| [AUDIENCE.md](./AUDIENCE.md)     | le suivi d'usage des sites livrés                                 |
-| [BACKUP.md](./BACKUP.md)         | les sauvegardes : sources, destinations, chiffrement des archives |
-| [DATABASES.md](./DATABASES.md)   | l'inventaire des bases et leurs alertes                           |
-| [DEPLOY.md](./DEPLOY.md)         | les mises en production via Dokploy                               |
-| [FINANCE.md](./FINANCE.md)       | le livre de comptes de l'espace                                   |
-| [GIT.md](./GIT.md)               | les dépôts de l'espace et leur cache                              |
-| [MAIL.md](./MAIL.md)             | les boîtes mail de l'espace, leurs deux paliers, les alertes      |
-| [MONITORING.md](./MONITORING.md) | la supervision des machines enrôlées                              |
-| [NOTES.md](./NOTES.md)           | les notes et leurs dossiers, la note privée, la note projetée     |
-| [PROJECTS.md](./PROJECTS.md)     | le pilotage du travail, et ses liaisons vers les objets d'espace  |
-| [SENTINEL.md](./SENTINEL.md)     | la posture de sécurité des machines                               |
-| [UPTIME.md](./UPTIME.md)         | la disponibilité des services externes                            |
+| Doc                                                | Quoi                                                              |
+| -------------------------------------------------- | ----------------------------------------------------------------- |
+| [Audience](../features/audience/README.md)         | le suivi d'usage des sites livrés                                 |
+| [Sauvegardes](../features/backup/README.md)        | les sauvegardes : sources, destinations, chiffrement des archives |
+| [Bases de données](../features/database/README.md) | l'inventaire des bases et leurs alertes                           |
+| [Déploiements](../features/deploy/README.md)       | les mises en production via Dokploy                               |
+| [Finances](../features/finance/README.md)          | le livre de comptes de l'espace                                   |
+| [Git](../features/git/README.md)                   | les dépôts de l'espace et leur cache                              |
+| [Mail](../features/mail/README.md)                 | les boîtes mail de l'espace, leurs deux paliers, les alertes      |
+| [Appareils](../features/devices/README.md)         | la supervision des machines enrôlées                              |
+| [Notes](../features/notes/README.md)               | les notes et leurs dossiers, la note privée, la note projetée     |
+| [Projets](../features/projects/README.md)          | le pilotage du travail, et ses liaisons vers les objets d'espace  |
+| [Sentinelle](../features/sentinel/README.md)       | la posture de sécurité des machines                               |
+| [Uptime](../features/uptime/README.md)             | la disponibilité des services externes                            |

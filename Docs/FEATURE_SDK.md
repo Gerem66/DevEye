@@ -19,10 +19,10 @@ première, la preuve que le contrat suffit ; Appareils la seizième et dernière
 
 1. **`@deveye/types/sdk`** (publié) : le contrat. Ids `x-<slug>` pour les
    modules externes, l'id natif pour une native rapatriée, `FeatureManifest`
-   + `validateManifest`, le contexte serveur (`SdkFeatureContext`,
-   `FeatureStore`, façade), les contrats client (`FeatureClient`), les deux
-   harnais de test (`createTestContext`, `createTestServiceDeps`). **C'est la
-   surface publique** : elle se versionne, elle ne casse plus.
+    - `validateManifest`, le contexte serveur (`SdkFeatureContext`,
+      `FeatureStore`, façade), les contrats client (`FeatureClient`), les deux
+      harnais de test (`createTestContext`, `createTestServiceDeps`). **C'est la
+      surface publique** : elle se versionne, elle ne casse plus.
 2. **Le serveur** : `src/features/_sdk/` adapte. `register.ts` projette les
    définitions SDK en `FeatureDefinition` natives (accès de LA feature +
    extras en enveloppe), le dispatcheur ne sait pas qu'un module existe.
@@ -588,7 +588,7 @@ id texte, un appareil étant un UUID), `commandsApi` (les commandes `agent.*`
 typées), `acquireMetrics` / `releaseMetrics`, `joinPath`, et le contrat
 `DEVICES_CLIENT_PROVIDER`. Le module se teste sur le harnais (37 tests :
 handlers et service), là où la native n'en avait aucun. Voir
-[MONITORING.md](./MONITORING.md) pour la carte et les invariants.
+[Appareils](../features/devices/README.md) pour la carte et les invariants.
 
 ## La désinstallation d'un module (22 août 2026)
 

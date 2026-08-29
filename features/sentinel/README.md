@@ -5,7 +5,7 @@ Monitoring **collecte**, Sentinelle **interprète** : rien ici n'ouvre une sonde
 son propre chef sans que ce document l'explique.
 
 Sentinelle est un **module** (`features/sentinel/`, septième native rapatriée
-sur le SDK des features, voir [FEATURE_SDK.md](FEATURE_SDK.md)). Ses contrats
+sur le SDK des features, voir [Docs/FEATURE_SDK.md](../../Docs/FEATURE_SDK.md)). Ses contrats
 vivent dans `features/sentinel/src/contracts/` (`domain.ts`, `commands.ts`) ;
 `@deveye/types` ne garde que le protocole agent (`domain/report.ts`,
 `protocol/agent.ts`), l'identité de la feature (id, descripteur, sujet live,
@@ -15,16 +15,16 @@ vivent dans `features/sentinel/src/contracts/` (`domain.ts`, `commands.ts`) ;
 
 ## Où vit le code
 
-| Où | Quoi |
-|---|---|
-| `src/server/engine.ts` | le moteur (l'ex `SecurityMonitor`) : file d'ingestion, évaluation par tour, ligne de base en mémoire, plancher d'évaluation, passe lente, notifications groupées, `live.changed` ; ses hooks agent |
-| `src/server/rules.ts` | le catalogue de règles, fonctions pures ; `rules.test.ts` les vérifie (31 cas) |
-| `src/server/repo.ts` | ligne de base, constats, autorisations, config par appareil (`deviceConfig`) |
-| `src/server/handlers.ts` | les 13 commandes `sentinel.*` ; `_shared.ts` la posture, les DTO, le singleton du moteur |
-| `src/server/notice.ts` | la mise en page Discord d'un constat |
-| `src/server/env.ts` | `SENTINEL_TICK_SECONDS` (60), `SENTINEL_LEARNING_DAYS` (7), `SENTINEL_FINDING_RETENTION_DAYS` (180), lues par le module |
-| `src/server/uninstall.sql` | démonte `ft_sentinel_device_config`, la seule table du module au préfixe |
-| `src/client/` | la vue (`Sentinel.tsx`), la carte (`SentinelWidget`), le panneau Appareils de la coquille (`SentinelDevicesPanel`), le magasin du décompte (`store.ts`) |
+| Où                         | Quoi                                                                                                                                                                                               |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/server/engine.ts`     | le moteur (l'ex `SecurityMonitor`) : file d'ingestion, évaluation par tour, ligne de base en mémoire, plancher d'évaluation, passe lente, notifications groupées, `live.changed` ; ses hooks agent |
+| `src/server/rules.ts`      | le catalogue de règles, fonctions pures ; `rules.test.ts` les vérifie (31 cas)                                                                                                                     |
+| `src/server/repo.ts`       | ligne de base, constats, autorisations, config par appareil (`deviceConfig`)                                                                                                                       |
+| `src/server/handlers.ts`   | les 13 commandes `sentinel.*` ; `_shared.ts` la posture, les DTO, le singleton du moteur                                                                                                           |
+| `src/server/notice.ts`     | la mise en page Discord d'un constat                                                                                                                                                               |
+| `src/server/env.ts`        | `SENTINEL_TICK_SECONDS` (60), `SENTINEL_LEARNING_DAYS` (7), `SENTINEL_FINDING_RETENTION_DAYS` (180), lues par le module                                                                            |
+| `src/server/uninstall.sql` | démonte `ft_sentinel_device_config`, la seule table du module au préfixe                                                                                                                           |
+| `src/client/`              | la vue (`Sentinel.tsx`), la carte (`SentinelWidget`), le panneau Appareils de la coquille (`SentinelDevicesPanel`), le magasin du décompte (`store.ts`)                                            |
 
 Ce que l'app garde : les handlers agent (`src/agent/handlers/telemetry.ts`,
 `security.ts`), qui persistent puis tendent la télémétrie aux hooks des modules
@@ -33,7 +33,7 @@ recompose la config poussée à l'agent (`agent.config`) avec la part du module
 (le provider) ; et la façade du SDK (`devices`, `telemetry`, `agents`,
 `notify`), seul chemin du module vers les appareils, les instants et la flotte.
 
-À lire avec [MONITORING.md](MONITORING.md), dont les invariants 1, 2, 6, 8 et 9
+À lire avec [Appareils](../devices/README.md), dont les invariants 1, 2, 6, 8 et 9
 s'appliquent ici tels quels.
 
 ## Ce que Sentinelle ne fait pas
@@ -50,11 +50,11 @@ la même ligne, et ne l'emporte pas.
 
 ## Trois notions, à ne pas confondre
 
-| | Quoi | Où | Reconstructible ? |
-|---|---|---|---|
-| **Ligne de base** | ce qui a été *observé* — des faits, sans jugement | `device_baseline` | oui (`sentinel.resetBaseline`) |
-| **Constat** | un écart *jugé* digne d'être montré | `device_findings` | non — c'est une preuve |
-| **Autorisation** | une décision *humaine* : « ceci est légitime ici » | `sentinel_allowlist` | **jamais** |
+|                   | Quoi                                               | Où                   | Reconstructible ?              |
+| ----------------- | -------------------------------------------------- | -------------------- | ------------------------------ |
+| **Ligne de base** | ce qui a été _observé_ — des faits, sans jugement  | `device_baseline`    | oui (`sentinel.resetBaseline`) |
+| **Constat**       | un écart _jugé_ digne d'être montré                | `device_findings`    | non — c'est une preuve         |
+| **Autorisation**  | une décision _humaine_ : « ceci est légitime ici » | `sentinel_allowlist` | **jamais**                     |
 
 Les autorisations sont rangées à part de la ligne de base, et c'est le point le
 plus important du schéma. Les mélanger ferait redemander à l'utilisateur, machine
@@ -63,12 +63,12 @@ d'agent — la façon la plus sûre de faire abandonner la feature.
 
 ## Les flux
 
-| Flux | Cadence (défaut) | Contenu | Stockage |
-|---|---|---|---|
-| **Instant** | 60 s | réutilise `metrics.batch` : processus (nom, **chemin**, compte, ports, connexions) | déjà en base |
-| **Rapport** | 1 h | réutilise `agent.report` : posture étendue (sshd, MAC, reboot, correctifs de sécurité) | `devices.report_json` |
-| **Persistance** | 6 h (+ connexion, + `agent.scan`) | empreintes SHA-256 des surfaces d'installation au démarrage | **diffé, jamais stocké brut** |
-| **Authentification** | 1 h | compteurs + ≤50 adresses + ≤50 connexions | **conclusions seules** |
+| Flux                 | Cadence (défaut)                  | Contenu                                                                                | Stockage                      |
+| -------------------- | --------------------------------- | -------------------------------------------------------------------------------------- | ----------------------------- |
+| **Instant**          | 60 s                              | réutilise `metrics.batch` : processus (nom, **chemin**, compte, ports, connexions)     | déjà en base                  |
+| **Rapport**          | 1 h                               | réutilise `agent.report` : posture étendue (sshd, MAC, reboot, correctifs de sécurité) | `devices.report_json`         |
+| **Persistance**      | 6 h (+ connexion, + `agent.scan`) | empreintes SHA-256 des surfaces d'installation au démarrage                            | **diffé, jamais stocké brut** |
+| **Authentification** | 1 h                               | compteurs + ≤50 adresses + ≤50 connexions                                              | **conclusions seules**        |
 
 Réglages par appareil : `ft_sentinel_device_config` (une ligne par appareil
 surveillé ou l'ayant été, migration 098 du socle ; l'absence de ligne vaut
@@ -103,8 +103,8 @@ Deux gardes, délibérément aux deux bouts :
   d'une reconnexion serait immédiatement rejoué. `agent.collect` et `agent.scan`
   ne sont jamais bornés : ce sont des ordres explicites.
 - **Serveur** (`features/sentinel/src/server/engine.ts`) : `EVAL_FLOOR_MS` (10 min) plafonne la
-  réévaluation de `report` / `auth` / `integrity` par appareil. Nécessaire *en
-  plus* du garde agent, pour deux raisons : la flotte se met à jour à son rythme,
+  réévaluation de `report` / `auth` / `integrity` par appareil. Nécessaire _en
+  plus_ du garde agent, pour deux raisons : la flotte se met à jour à son rythme,
   et un `Instant` est relatif au processus, donc un agent qui **plante** en boucle
   repart sans mémoire. L'ingestion n'est pas touchée — `report_json`, les ports et
   la ligne de base s'écrivent comme avant ; seule la relecture des règles est
@@ -183,21 +183,21 @@ appareil). Les taire sans le dire aurait remplacé un bug voyant par un bug muet
    l'autorisation — sinon le moteur refiltrerait le constat au tour suivant et la
    réouverture s'annulerait toute seule.
 
-   Corollaire d'interface : les décisions doivent rester **visibles et
-   révocables** (section « Décisions »). Sans cet écran, acquitter était un aller
-   sans retour — on créait des autorisations sans jamais pouvoir savoir
-   lesquelles existaient ni revenir dessus, et une décision d'un jour devenait un
-   angle mort permanent.
+    Corollaire d'interface : les décisions doivent rester **visibles et
+    révocables** (section « Décisions »). Sans cet écran, acquitter était un aller
+    sans retour — on créait des autorisations sans jamais pouvoir savoir
+    lesquelles existaient ni revenir dessus, et une décision d'un jour devenait un
+    angle mort permanent.
 
-   **« Réglé » n'est pas « légitime », et les deux sorties doivent exister.** Le
-   moteur ne résout de lui-même que ce qu'il sait rejouer (`SNAPSHOT_RULES`, via
-   `resolveMissing`) : un constat d'événement — `auth.*`, `persistence.*` — décrit
-   un fait passé, donc plus aucun relevé ne cessera de le porter, et il reste
-   ouvert indéfiniment même après correction. `sentinel.resolve` le ferme **sans
-   écrire d'autorisation** : il rouvrira au premier relevé qui le revoit, là où un
-   acquittement l'aurait fait taire pour toujours. N'offrir que l'acquittement
-   revenait à faire déclarer normal ce qui venait d'être corrigé — et à empoisonner
-   l'allowlist, qui est le seul état que rien ne reconstruit.
+    **« Réglé » n'est pas « légitime », et les deux sorties doivent exister.** Le
+    moteur ne résout de lui-même que ce qu'il sait rejouer (`SNAPSHOT_RULES`, via
+    `resolveMissing`) : un constat d'événement — `auth.*`, `persistence.*` — décrit
+    un fait passé, donc plus aucun relevé ne cessera de le porter, et il reste
+    ouvert indéfiniment même après correction. `sentinel.resolve` le ferme **sans
+    écrire d'autorisation** : il rouvrira au premier relevé qui le revoit, là où un
+    acquittement l'aurait fait taire pour toujours. N'offrir que l'acquittement
+    revenait à faire déclarer normal ce qui venait d'être corrigé — et à empoisonner
+    l'allowlist, qui est le seul état que rien ne reconstruit.
 
 9. **Un constat ≥ `high` épingle son instant.** Via `telemetry.pinInstant` de la
    façade du SDK, qui traite les deux tables en une instruction. Sans cela la rétention
@@ -226,9 +226,9 @@ appareil). Les taire sans le dire aurait remplacé un bug voyant par un bug muet
 13. **Rien n'est chiffré.** Ce sont des faits sur des machines, même palier que
     `devices.report_json`. C'est ce qui laisse le moteur tourner **sans session ni
     mot de passe**, sans le détour par le chiffre « open » qu'impose Uptime (voir
-    `SECURITY_MODEL.md`). → Ne pas y ranger de secret d'utilisateur.
+    `Docs/SECURITY_MODEL.md`). → Ne pas y ranger de secret d'utilisateur.
 
-14. **Le séparateur des clés composées est un ` `,** déclaré une fois
+14. **Le séparateur des clés composées est un `�`,** déclaré une fois
     (`KEY_SEP` dans `features/sentinel/src/server/repo.ts`) et lu par `allowSubject()`. Un NUL
     plutôt qu'un espace parce qu'un sujet est souvent un chemin ; écrit en
     échappement parce qu'un octet invisible en source disparaît au premier
@@ -272,7 +272,7 @@ qu'on a appris d'elle, les décisions prises à son sujet.
 
 Une première version rangeait ces quatre choses derrière des onglets. C'était une
 erreur de découpage : elles ne s'excluent pas, elles se lisent **ensemble et dans
-cet ordre**. On ne consulte pas la posture d'une machine *ou* ses constats — on
+cet ordre**. On ne consulte pas la posture d'une machine _ou_ ses constats — on
 regarde les constats et on se demande aussitôt si sa configuration les explique.
 
 Trois règles en découlent, à préserver :
@@ -289,7 +289,7 @@ Trois règles en découlent, à préserver :
   appareils visibles avec, pour chacun, surveillance, fenêtre d'apprentissage,
   cadence du manifeste, journal d'authentification et réapprentissage. Le
   dialogue maison par appareil derrière un second engrenage a disparu au
-  rapatriement (dette de `SETTINGS.md`). Sentinelle n'a pas d'éléments : ses
+  rapatriement (dette de `Docs/SETTINGS.md`). Sentinelle n'a pas d'éléments : ses
   « éléments » sont des appareils, l'échelle élément de la coquille ne
   s'applique pas.
 - **Ce qui est long est replié** (ligne de base, décisions) et chargé seulement à
@@ -331,20 +331,20 @@ connaître l'état précédent, et deviendrait intestable.
 
 ## Coût
 
-| Poste | Ordre de grandeur |
-|---|---|
-| Ligne de base | ~830 lignes/appareil, **statique** après apprentissage |
-| Tick agent | +2–5 ms (`readlink /proc/<pid>/exe`, ~700 syscalls) sur les ~40 ms existants |
-| Relevé de persistance | ~57 entrées mesurées sur un poste Fedora ; ~50 ms toutes les 6 h |
-| Relevé d'authentification | une fenêtre `journalctl --since`, ~20 ms par heure |
-| Manifeste sur le fil | 60–240 Ko par relevé, **jamais stocké brut** |
+| Poste                     | Ordre de grandeur                                                            |
+| ------------------------- | ---------------------------------------------------------------------------- |
+| Ligne de base             | ~830 lignes/appareil, **statique** après apprentissage                       |
+| Tick agent                | +2–5 ms (`readlink /proc/<pid>/exe`, ~700 syscalls) sur les ~40 ms existants |
+| Relevé de persistance     | ~57 entrées mesurées sur un poste Fedora ; ~50 ms toutes les 6 h             |
+| Relevé d'authentification | une fenêtre `journalctl --since`, ~20 ms par heure                           |
+| Manifeste sur le fil      | 60–240 Ko par relevé, **jamais stocké brut**                                 |
 
 ## Pièges connus
 
-- **`@deveye/types` est miroité, pas symlinké** — voir `MONITORING.md`.
+- **`@deveye/types` est miroité, pas symlinké** — voir `features/devices/README.md`.
 - **La collation des clés étrangères se déclare.** `devices.id` est en
   `utf8mb4_general_ci` ; un `CHAR(36)` nu hérite de la collation par défaut de la
-  base *cible*, `utf8mb4_0900_ai_ci` sur tout MySQL 8 récent. Une FK exige les
+  base _cible_, `utf8mb4_0900_ai_ci` sur tout MySQL 8 récent. Une FK exige les
   deux identiques : la migration 074 déclare donc la sienne explicitement, sans
   quoi elle passerait ici et échouerait sur une base restaurée ailleurs — au
   démarrage, hors transaction, à moitié appliquée.

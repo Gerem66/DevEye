@@ -15,21 +15,21 @@ ré-emballer, jamais des Go de contenu à re-chiffrer.
 
 ## Ce qu'elle emballe, exhaustivement
 
-| Où | Quoi | Écrit par |
-|---|---|---|
+| Où                                                             | Quoi                                                                   | Écrit par                                      |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------- |
 | `user_secret_keys.dek_wrapped` (lignes `wrap_mode = 'server'`) | la DEK gardée d'un compte dont le chiffrement par mot de passe est OFF | `SecretKeyService.ensureRow`, `wrapWithServer` |
-| `user_secret_keys.open_dek_wrapped` | la DEK ouverte de chaque compte | `SecretKeyService.resolveOpenDek` |
-| `workspace_secret_keys.dek_wrapped` | la WDK de chaque espace partagé | `SecretKeyService.createWorkspaceDek` |
-| `user_2fa.secret_enc` | le secret TOTP, scellé (pas une clé, mais lisible avant toute session) | `features/twofa` |
-| `sync_meta` (`k = 'blob_key_wrapped'`) | la BMK de CloudSync, via `deps.keys.sealBytes` | module CloudSync |
-| tout module qui appelle `deps.keys.sealBytes` | son matériel de clé, là où il le range | le module |
+| `user_secret_keys.open_dek_wrapped`                            | la DEK ouverte de chaque compte                                        | `SecretKeyService.resolveOpenDek`              |
+| `workspace_secret_keys.dek_wrapped`                            | la WDK de chaque espace partagé                                        | `SecretKeyService.createWorkspaceDek`          |
+| `user_2fa.secret_enc`                                          | le secret TOTP, scellé (pas une clé, mais lisible avant toute session) | `features/twofa`                               |
+| `sync_meta` (`k = 'blob_key_wrapped'`)                         | la BMK de CloudSync, via `deps.keys.sealBytes`                         | module CloudSync                               |
+| tout module qui appelle `deps.keys.sealBytes`                  | son matériel de clé, là où il le range                                 | le module                                      |
 
 Et une dérivation, sans stockage :
 
-| Quoi | Comment |
-|---|---|
-| `BAK`, la clé des archives de sauvegarde | `HKDF(serverKey, 'deveye-backup')`, `src/backup/crypto.ts` |
-| le sel des visiteurs d'Audience | `HKDF(serverKey, 'audience', 'visitor-salt')`, `features/audience/src/server/service.ts` : entre dans chaque condensé de visiteur (`visitor_ref`). Changer la clé serveur change donc les condensés une fois : un visiteur persistant est compté « nouveau » une fois, les condensés anonymes tournaient déjà chaque jour. Rien à re-sceller, rien n'est stocké |
+| Quoi                                     | Comment                                                                                                                                                                                                                                                                                                                                                         |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BAK`, la clé des archives de sauvegarde | `HKDF(serverKey, 'deveye-backup')`, `src/backup/crypto.ts`                                                                                                                                                                                                                                                                                                      |
+| le sel des visiteurs d'Audience          | `HKDF(serverKey, 'audience', 'visitor-salt')`, `features/audience/src/server/service.ts` : entre dans chaque condensé de visiteur (`visitor_ref`). Changer la clé serveur change donc les condensés une fois : un visiteur persistant est compté « nouveau » une fois, les condensés anonymes tournaient déjà chaque jour. Rien à re-sceller, rien n'est stocké |
 
 **Ce qui n'en dépend pas** : tout le contenu des features (sous DEK ou WDK),
 les blobs CloudSync (sous BMK), les DEK emballées par mot de passe
@@ -66,12 +66,12 @@ sous l'ancienne clé, et n'écrit rien.
    serveur vivant pourrait écrire sous l'ancienne clé pendant la conversion.
 4. **Dry-run** avec l'environnement de prod (dans le conteneur, ou avec
    `--env-file`) :
-   ```bash
-   NEW_CRYPT_KEY_A=… NEW_CRYPT_KEY_B=… npm run rotate:server-key
-   ```
-   Attendu : chaque ligne « à ré-emballer », zéro « illisible ». Un blob
-   illisible sous l'ancienne clé signifie que l'environnement courant n'est pas
-   celui qui a écrit la base : on s'arrête là.
+    ```bash
+    NEW_CRYPT_KEY_A=… NEW_CRYPT_KEY_B=… npm run rotate:server-key
+    ```
+    Attendu : chaque ligne « à ré-emballer », zéro « illisible ». Un blob
+    illisible sous l'ancienne clé signifie que l'environnement courant n'est pas
+    celui qui a écrit la base : on s'arrête là.
 5. **Exécution** : la même commande avec `-- --yes`. Tout ou rien : une seule
    ligne qui ne se relit pas sous la nouvelle clé annule la transaction.
 6. **Basculer l'environnement** (Dokploy › Environment, ou `.env`) sur les

@@ -17,7 +17,7 @@
 > contexte (`workspace.*`, `user.*`, `admin.*`, `secrecy.*`, `twofa.*`,
 > `notify.*`, `share.*`, `logs.*`, `home.*`, `live.here`) et au **transport
 > des agents** (`agent.*`, des relais du hub, voir
-> [MONITORING.md](./MONITORING.md)). Suis-la pour ajouter une commande à
+> [Appareils](../features/devices/README.md)). Suis-la pour ajouter une commande à
 > l'app elle-même ; pour tout ce qui a un widget, une page ou des données
 > d'espace, c'est un module.
 
@@ -69,15 +69,16 @@ Tout passe par des schémas zod partagés. Le serveur **et** le client importent
    fois (table `_migrations`, clé = nom de fichier). MySQL : un fichier = exécuté
    en une requête (multi-statements activés).
 
-   ⚠️ **Ne jamais modifier un fichier de migration déjà commité** dès l'instant où
-   il a pu tourner quelque part (prod, une autre machine de dev) : `_migrations`
-   ne rejoue jamais un nom déjà vu, donc l'édition est un no-op silencieux là où
-   le fichier est déjà passé — la base et le fichier divergent sans erreur ni
-   avertissement. Un besoin de schéma supplémentaire sur une table existante
-   est **toujours** une nouvelle migration numérotée, jamais une retouche de
-   l'ancienne (même si ça semble anodin en dev, où `tsx watch` peut avoir déjà
-   appliqué une version intermédiaire du fichier avant qu'elle ne soit stabilisée
-   — ce qui masque le problème en local tout en le laissant intact en prod).
+    ⚠️ **Ne jamais modifier un fichier de migration déjà commité** dès l'instant où
+    il a pu tourner quelque part (prod, une autre machine de dev) : `_migrations`
+    ne rejoue jamais un nom déjà vu, donc l'édition est un no-op silencieux là où
+    le fichier est déjà passé — la base et le fichier divergent sans erreur ni
+    avertissement. Un besoin de schéma supplémentaire sur une table existante
+    est **toujours** une nouvelle migration numérotée, jamais une retouche de
+    l'ancienne (même si ça semble anodin en dev, où `tsx watch` peut avoir déjà
+    appliqué une version intermédiaire du fichier avant qu'elle ne soit stabilisée
+    — ce qui masque le problème en local tout en le laissant intact en prod).
+
 2. **Repo** — `src/db/repos/<feature>.ts` : `export interface XRepo { … }` +
    `export function xRepo(pool: Queryable): XRepo`. Requêtes paramétrées
    uniquement (`?`). Le `content` sensible est **chiffré** (voir section E).
@@ -146,8 +147,8 @@ handler })` par commande. Le handler reçoit un `FeatureContext` (`ctx.db`,
       ajout réussi (appareils, raccourcis, features, formulaires — tous pareils).
 3. **Enregistrement** — - widget de grille → ajouter à `FEATURE_CATALOG` dans
    **`src/Pages/Home/catalog.tsx`** (`{ id, title, icon, description, category,
-   links?, WidgetContent, FullComponent, cacheDurationMinutes, preload?,
-   holdSecrecy? }`). Cela suffit à le faire apparaître dans la grille, dans le
+links?, WidgetContent, FullComponent, cacheDurationMinutes, preload?,
+holdSecrecy? }`). Cela suffit à le faire apparaître dans la grille, dans le
    **marché d'ajout** (`organize/AddTileMarket.tsx` : `category` décide du rayon,
    `description` du sous-titre de la carte) **et** dans la fiche « À propos »
    (`Pages/Home/about/` : `links` y dessine les liaisons vers les autres

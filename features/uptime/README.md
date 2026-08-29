@@ -7,7 +7,7 @@ panneau) plus un mini-widget de topbar.
 ## Le module
 
 Uptime est un **module in-repo** depuis son rapatriement sur le SDK des
-features (`features/uptime/`, voir [FEATURE_SDK.md](./FEATURE_SDK.md)) :
+features (`features/uptime/`, voir [Docs/FEATURE_SDK.md](../../Docs/FEATURE_SDK.md)) :
 
 - `src/contracts/{domain,commands}.ts` : les schémas zod, sortis de
   `@deveye/types`, qui ne garde que l'identité (id, descripteur, sujet live,
@@ -42,7 +42,7 @@ réveille toutes les `UPTIME_TICK_SECONDS`, réclame les services dont la
 prochaine sonde est due et les exécute `UPTIME_CONCURRENCY` à la fois (deux
 variables d'environnement lues par le module lui-même, pas par `Utils/Env`).
 Il tourne **sans session ni mot de passe** : voir
-la section « Uptime » de [SECURITY_MODEL.md](./SECURITY_MODEL.md) pour ce qui est
+la section « Uptime » de [Docs/SECURITY_MODEL.md](../../Docs/SECURITY_MODEL.md) pour ce qui est
 chiffré et ce qui reste en clair.
 
 Une sonde est réussie si :
@@ -57,11 +57,11 @@ Un échec isolé ne fait pas une panne : le service ne bascule `down` qu'après
 
 ## Les trois niveaux d'historique
 
-| Table              | Contenu                    | Purge                                     |
-| ------------------ | -------------------------- | ----------------------------------------- |
-| `uptime_checks`    | chaque ping                | `retention_days` du service (NULL = tout) |
-| `uptime_daily`     | agrégat par jour UTC       | **jamais**                                |
-| `uptime_incidents` | pannes (début / fin)       | **jamais**                                |
+| Table              | Contenu              | Purge                                     |
+| ------------------ | -------------------- | ----------------------------------------- |
+| `uptime_checks`    | chaque ping          | `retention_days` du service (NULL = tout) |
+| `uptime_daily`     | agrégat par jour UTC | **jamais**                                |
+| `uptime_incidents` | pannes (début / fin) | **jamais**                                |
 
 C'est ce découpage qui tient la promesse « remonter des mois ou des années » :
 l'agrégat journalier est écrit dans le même souffle que le ping brut
@@ -100,7 +100,7 @@ un incident, pas à une sonde.
   enverrait un « c'est revenu » sans contexte).
 
 Canaux — **une liste de destinations de l'espace, et une route qui les
-désigne** (migration `087`). Voir [NOTIFICATIONS.md](./NOTIFICATIONS.md), qui
+désigne** (migration `087`). Voir [Docs/NOTIFICATIONS.md](../../Docs/NOTIFICATIONS.md), qui
 porte le modèle complet ; ce qui compte ici :
 
 - un service peut avoir **ses propres canaux** ; sans réglage propre il suit
@@ -141,7 +141,7 @@ Chaque bascule est aussi journalisée dans les logs d'audit (`uptime.down`,
 Le panneau de détail superpose deux lectures de la **même** fenêtre, sur le même
 axe des x (`rangeWindow()` dans `features/uptime/src/client/format.ts`) :
 
-- la **bande d'état** (`StatusBars`) — un nombre *fixe* de créneaux découpant la
+- la **bande d'état** (`StatusBars`) — un nombre _fixe_ de créneaux découpant la
   période choisie, vert / jaune / rouge / gris (aucune mesure). Une barre
   représente une tranche de temps, pas un échantillon : la bande a donc la même
   allure avec dix mesures ou cent mille, et un service ajouté il y a dix minutes
@@ -160,7 +160,7 @@ où les trois pourcentages se posent en face de la légende (`trailing`). `inlin
 plus basse, sans légende — dans chaque ligne de la liste : répétée vingt fois, une
 légende pèserait plus que les barres, et la **bulle de survol** dit déjà ce
 qu'elle dirait. Cette bulle remplace l'attribut `title` : l'infobulle native se
-fait attendre une seconde et ne désigne jamais *quelle* barre elle décrit, ce qui
+fait attendre une seconde et ne désigne jamais _quelle_ barre elle décrit, ce qui
 est précisément la question sur des tranches de trois pixels.
 
 ## Les trois étages du panneau

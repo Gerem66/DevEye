@@ -1,16 +1,16 @@
 # Audience — le suivi d'usage des projets livrés
 
 > Écrit le 13 août 2026, à la fin du chantier qui l'a introduite ; relu le
-> 21 août 2026. Compagnon de [PROJECTS.md](./PROJECTS.md) : celui-ci suit le
-> travail, [GIT.md](./GIT.md) suit le code, celui-là suit **ce que les gens en
-> font**. Il dit *pourquoi* ; le code dit comment.
+> 21 août 2026. Compagnon de [Projets](../projects/README.md) : celui-ci suit le
+> travail, [Git](../git/README.md) suit le code, celui-là suit **ce que les gens en
+> font**. Il dit _pourquoi_ ; le code dit comment.
 >
 > Depuis : les sites se **partagent entre espaces** comme les autres éléments
-> de premier rang (`SHARING.md`), et la fiche d'un site porte le bouton de
-> réglages commun (partage, permissions par rôle : `SETTINGS.md`).
+> de premier rang (`Docs/SHARING.md`), et la fiche d'un site porte le bouton de
+> réglages commun (partage, permissions par rôle : `Docs/SETTINGS.md`).
 >
 > 28 août 2026 : Audience est la **douzième native rapatriée** sur le SDK des
-> modules (`features/audience`, [FEATURE_SDK.md](./FEATURE_SDK.md)), et la
+> modules (`features/audience`, [Docs/FEATURE_SDK.md](../../Docs/FEATURE_SDK.md)), et la
 > première à ouvrir des routes HTTP publiques (capacité `routes.public`). Ce
 > document décrit l'état après ce rapatriement ; la section 6 en est la carte.
 
@@ -18,9 +18,9 @@ DevEye savait piloter le travail, suivre le code, surveiller l'infra — mais ri
 ne disait ce que les visiteurs faisaient des projets une fois livrés. Il
 manquait la boucle de retour.
 
-Documents voisins à respecter : [WORKSPACES.md](./WORKSPACES.md),
-[LIVE.md](./LIVE.md), [DATABASES.md](./DATABASES.md),
-[SECURITY_MODEL.md](./SECURITY_MODEL.md).
+Documents voisins à respecter : [Docs/WORKSPACES.md](../../Docs/WORKSPACES.md),
+[Docs/LIVE.md](../../Docs/LIVE.md), [Bases de données](../database/README.md),
+[Docs/SECURITY_MODEL.md](../../Docs/SECURITY_MODEL.md).
 
 ---
 
@@ -74,7 +74,7 @@ de rekey au lieu de six, un seul cache, un seul chemin de résolution.
 
 `public_key`, `origins`, `active`, `platform`. Ce sont exactement les champs dont
 l'ingestion a besoin pour **router une requête sans session ni clé** — ce que
-[PROJECTS.md](./PROJECTS.md) §1.2 autorise explicitement. Ils sont de toute
+[Projets](../projects/README.md) §1.2 autorise explicitement. Ils sont de toute
 façon publics : la balise les expose dans le HTML de chaque page suivie.
 
 ### 2.4 Aucun cookie, aucun identifiant persistant
@@ -128,11 +128,11 @@ rend un 404 — la balise semble cassée alors que le serveur la sert parfaiteme
 L'application vit derrière le VPN ; l'ingestion doit être joignable sans lui.
 Trois façons d'y arriver, et deux sont moins sûres :
 
-| Approche | Ce qui la sépare du monde |
-|---|---|
-| Règle de chemin dans le proxy | une configuration hors dépôt, qu'un redéploiement peut perdre |
-| Garde sur l'en-tête `Host` | un `if`, avec les routes internes toujours déclarées derrière |
-| **Second écouteur** | **rien à séparer : les routes internes n'y sont pas enregistrées** |
+| Approche                      | Ce qui la sépare du monde                                          |
+| ----------------------------- | ------------------------------------------------------------------ |
+| Règle de chemin dans le proxy | une configuration hors dépôt, qu'un redéploiement peut perdre      |
+| Garde sur l'en-tête `Host`    | un `if`, avec les routes internes toujours déclarées derrière      |
+| **Second écouteur**           | **rien à séparer : les routes internes n'y sont pas enregistrées** |
 
 C'est la troisième. `PUBLIC_LISTEN_PORT` démarre un serveur qui ne déclare que
 les **routes publiques des modules** (`modulePublicRoutes`, capacité
@@ -152,7 +152,7 @@ un peu actif fermerait la porte à tous les autres.
 
 **Même processus, et c'est une contrainte.** Le service du module
 (`AudienceIngest`) prévient les écrans par `deps.live.changed`, donc par
-`LiveHub`, dont l'état est local au processus ([LIVE.md](./LIVE.md) §6). Un
+`LiveHub`, dont l'état est local au processus ([Docs/LIVE.md](../../Docs/LIVE.md) §6). Un
 conteneur séparé écrirait les mesures sans que personne ne soit averti : le
 rafraîchissement à la minute cesserait de fonctionner, **silencieusement**.
 Partager le processus, c'est partager la file, les caches et le hub. C'est
@@ -231,7 +231,7 @@ contenu ajouté dans `app.ts` — aucune autre route n'accepte ce type.
 ### 3.6 Ce qui prépare React Native sans le construire
 
 Le contrat d'ingestion ne suppose **rien du navigateur** : aucun champ web n'est
-requis, `path` désigne une route *ou* un écran, les trois champs d'appareil
+requis, `path` désigne une route _ou_ un écran, les trois champs d'appareil
 peuvent être renseignés explicitement par un client natif qui les connaît, et
 `at` permet de livrer ce qu'on a mis de côté hors ligne (borné à 24 h côté
 serveur — une horloge fausse ne doit pas dater une visite de 2038).
@@ -250,12 +250,12 @@ ce que font Plausible et PostHog ; il n'existe pas mieux sans imposer un compte
 
 ## 4. Ce que ça donne à l'usage
 
-| Vue | Contenu |
-|---|---|
-| **Sites** | tous les sites de l'espace, visiteurs et vues sur 24 h, état, nombre de projets |
-| **Un site** | bandeau (vues, visiteurs, visites, durée, rebond) avec **écart à la période précédente** · courbe · top pages et provenances · navigateurs / systèmes / appareils · carte jour × heure · fuseaux · événements · utilisateurs |
-| **Installer** | la balise à copier, et l'état « première mesure reçue » |
-| **Onglet d'un projet** | les sites reliés, même `SiteView` |
+| Vue                    | Contenu                                                                                                                                                                                                                      |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Sites**              | tous les sites de l'espace, visiteurs et vues sur 24 h, état, nombre de projets                                                                                                                                              |
+| **Un site**            | bandeau (vues, visiteurs, visites, durée, rebond) avec **écart à la période précédente** · courbe · top pages et provenances · navigateurs / systèmes / appareils · carte jour × heure · fuseaux · événements · utilisateurs |
+| **Installer**          | la balise à copier, et l'état « première mesure reçue »                                                                                                                                                                      |
+| **Onglet d'un projet** | les sites reliés, même `SiteView`                                                                                                                                                                                            |
 
 Trois décisions d'écran qui méritent d'être connues :
 
@@ -290,7 +290,7 @@ Les graphes sont du **SVG écrit à la main**, `viewBox` fixe, sans
 
 ⚠️ **Ne pas déplacer cette coalescence dans le hub.** `TOPIC_FLOOR_MS` (200 ms)
 doit rester strictement sous l'anti-rebond client de 250 ms, sinon on ouvre une
-fenêtre d'écritures jamais vues ([LIVE.md](./LIVE.md) §4). Les deux valeurs
+fenêtre d'écritures jamais vues ([Docs/LIVE.md](../../Docs/LIVE.md) §4). Les deux valeurs
 n'ont rien à voir : l'une est un invariant du moteur, l'autre un choix de
 produit.
 
@@ -298,7 +298,7 @@ produit.
 regarde, rien ne part. Il n'y avait donc pas de seconde garde à écrire.
 
 **Le sujet `audience` invalide les quatre clés d'un coup** — `count`, `list`,
-`detail`, `stats`. C'est délibéré : ce battement doit rafraîchir *tout* ce qui
+`detail`, `stats`. C'est délibéré : ce battement doit rafraîchir _tout_ ce qui
 montre de l'audience au même instant (tuile d'accueil, liste, fiche ouverte,
 onglet d'un projet), sinon deux écrans de la même donnée divergeraient à la même
 seconde chez la même personne. `audience.stats` reste distincte de
@@ -324,8 +324,8 @@ font la valeur du découpage :
 
 ### La règle de rétention, et il faut la connaître
 
-> Une visite atteint la marche *i* si la **première occurrence** de chacune des
-> marches 1..*i* s'est produite **dans l'ordre**.
+> Une visite atteint la marche _i_ si la **première occurrence** de chacune des
+> marches 1.._i_ s'est produite **dans l'ordre**.
 
 Deux choses en découlent, et les taire serait malhonnête : un visiteur qui
 revient en arrière puis repart peut ne pas être compté ; et un entonnoir dont
@@ -473,7 +473,7 @@ mince) et `LinkSiteDialog.tsx`, qui composent le contrat client du module par
 `moduleClientProvider(AUDIENCE_CLIENT_PROVIDER)`. L'onglet **n'apparaît qu'à
 partir du premier site relié** ; sans liaison, il repart dans le menu « + » de
 la barre d'onglets, qui rouvre le même `LinkSiteDialog` (voir
-[PROJECTS.md](./PROJECTS.md) §2).
+[Projets](../projects/README.md) §2).
 
 ---
 
@@ -644,7 +644,7 @@ dev qui porte déjà des données réelles.
    chez l'autre **dans la minute**, sur la liste, la fiche et l'onglet du projet.
    Et pas plus souvent.
 7. **Droits** — un rôle sans `audience` : tuile désaturée, `handleExpand` refuse,
-   l'onglet d'un projet en « accès restreint ». ⚠️ *Fail-closed* : les rôles
+   l'onglet d'un projet en « accès restreint ». ⚠️ _Fail-closed_ : les rôles
    existants ne l'accordent pas.
 8. **Confidentialité** — passer un projet en confidentiel retire ses liaisons ;
    les sites survivent.

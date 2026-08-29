@@ -39,10 +39,10 @@ modules. Sous une DEK ou une WDK : tout le reste.
 `ctx.secure` expose **deux** codecs (`Cipher`), chacun adossé à une clé
 différente — c'est le choix du codec qui fait le contrôle d'accès :
 
-| Étage | Clé | Emballage | Lisible sans mot de passe ? |
-| --- | --- | --- | --- |
-| `ctx.secure` (gardé) | `dek_wrapped` | `server` **ou** `password` | non quand la feature est ON |
-| `ctx.secure.open` | `open_dek_wrapped` | **toujours** `server` | oui, toujours |
+| Étage                | Clé                | Emballage                  | Lisible sans mot de passe ? |
+| -------------------- | ------------------ | -------------------------- | --------------------------- |
+| `ctx.secure` (gardé) | `dek_wrapped`      | `server` **ou** `password` | non quand la feature est ON |
+| `ctx.secure.open`    | `open_dek_wrapped` | **toujours** `server`      | oui, toujours               |
 
 La DEK ouverte est une seconde clé aléatoire par utilisateur, créée
 paresseusement à la première écriture ouverte et **jamais** ré-emballée par les
@@ -123,7 +123,7 @@ Application directe des deux étages ci-dessus (`features/notes/src/server/handl
   à l'enregistrement ;
 - `notes.edit` / `notes.archive` / `notes.restore` / `notes.delete` sur une note
   privée exigent en plus une session déverrouillée : ces chemins n'ont pas besoin
-  de *lire* le corps, sans ce garde une session verrouillée pourrait écraser,
+  de _lire_ le corps, sans ce garde une session verrouillée pourrait écraser,
   escamoter ou détruire ce qu'elle ne voit pas. `notes.reorder` (positionnement
   pur, n'expose ni ne réécrit le corps) reste libre, même sur une note masquée.
 
@@ -186,7 +186,7 @@ serveur seul qui travaille, souvent alors que personne n'est connecté. Elle
 utilise donc systématiquement l'**étage ouvert** :
 
 - chiffrés (`ctx.cipher()` côté handlers, `deps.cipherFor()` côté ordonnanceur,
-  qui n'expose *que* cet étage, l'étage gardé n'ayant aucun sens sans session) : le nom
+  qui n'expose _que_ cet étage, l'étage gardé n'ayant aucun sens sans session) : le nom
   du service, son URL, le mot-clé attendu, les messages d'erreur (ligne du
   service, ligne de chaque ping, ligne d'incident) et les canaux de notification
   — libellé, adresse mail, URL de webhook, dans `notification_channels`
@@ -194,7 +194,7 @@ utilise donc systématiquement l'**étage ouvert** :
 - en clair : ce qui pilote la planification (`interval_seconds`,
   `timeout_seconds`, `enabled`, `last_checked_at`) et ce qu'agrègent les
   graphiques (`status`, `response_ms`, `http_status`, horodatages, agrégat
-  journalier). Aucune de ces colonnes ne dit *quoi* est surveillé.
+  journalier). Aucune de ces colonnes ne dit _quoi_ est surveillé.
 
 Même garantie que la BMK CloudSync : protégé au repos, lisible par un serveur
 vivant compromis. Le choix est ici structurel — un moniteur qui exigerait le mot
@@ -252,7 +252,7 @@ afficher un écran.
 - **Les dates, `archived_at`, `counts_as_done`** — la frise, les retards et
   l'avancement, tous calculés sans clé.
 
-Aucune de ces colonnes ne dit *quoi* est fait, par qui hors de l'espace, ni ce
+Aucune de ces colonnes ne dit _quoi_ est fait, par qui hors de l'espace, ni ce
 qui est écrit. Les titres, descriptions, messages, noms de branches et messages
 de commit passent tous par le chiffre.
 

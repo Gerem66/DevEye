@@ -1,122 +1,122 @@
 /* Glassmorphism design tokens */
 :root {
-  --glass-bg: rgba(18, 26, 38, 0.62);
-  --glass-bg-light: rgba(38, 52, 68, 0.5);
-  --glass-border: rgba(255, 255, 255, 0.09);
-  --glass-border-strong: rgba(255, 255, 255, 0.16);
-  --glass-blur: 16px;
-  /*
+    --glass-bg: rgba(18, 26, 38, 0.62);
+    --glass-bg-light: rgba(38, 52, 68, 0.5);
+    --glass-border: rgba(255, 255, 255, 0.09);
+    --glass-border-strong: rgba(255, 255, 255, 0.16);
+    --glass-blur: 16px;
+    /*
    * Le verre d'une surface en un jeton, pour qu'un ancêtre puisse le couper net
    * (voir `.recessed`, `Pages/Home/Dashboard.module.css`) : tout élément portant
    * un `filter` devient un backdrop root, et une surface de verre posée dessous
    * échantillonne un fond vide, jusqu'à disparaître dans Gecko.
    */
-  --glass-backdrop: blur(var(--glass-blur));
+    --glass-backdrop: blur(var(--glass-blur));
 
-  --surface-widget: var(--glass-bg);
-  --surface-popup: rgba(14, 21, 32, 0.92);
-  /* Opaque twin of --surface-popup, for surfaces that must not let anything
+    --surface-widget: var(--glass-bg);
+    --surface-popup: rgba(14, 21, 32, 0.92);
+    /* Opaque twin of --surface-popup, for surfaces that must not let anything
      bleed through (e.g. drag-image snapshots). */
-  --surface-popup-solid: rgb(14, 21, 32);
-  --surface-navbar: rgba(9, 14, 22, 0.78);
-  --surface-subtle: rgba(255, 255, 255, 0.04);
+    --surface-popup-solid: rgb(14, 21, 32);
+    --surface-navbar: rgba(9, 14, 22, 0.78);
+    --surface-subtle: rgba(255, 255, 255, 0.04);
 
-  --text-primary: rgba(255, 255, 255, 0.95);
-  --text-secondary: rgba(255, 255, 255, 0.66);
-  --text-muted: rgba(255, 255, 255, 0.42);
+    --text-primary: rgba(255, 255, 255, 0.95);
+    --text-secondary: rgba(255, 255, 255, 0.66);
+    --text-muted: rgba(255, 255, 255, 0.42);
 
-  /* Accent — cyan/teal (DevEye brand) */
-  --accent: #22d3ee;
-  --accent-hover: #4fe3f5;
-  --accent-strong: #0bbcd6;
-  --accent-glow: rgba(34, 211, 238, 0.35);
-  --accent-bg: rgba(34, 211, 238, 0.14);
-  --on-accent: #05222a;
+    /* Accent — cyan/teal (DevEye brand) */
+    --accent: #22d3ee;
+    --accent-hover: #4fe3f5;
+    --accent-strong: #0bbcd6;
+    --accent-glow: rgba(34, 211, 238, 0.35);
+    --accent-bg: rgba(34, 211, 238, 0.14);
+    --on-accent: #05222a;
 
-  --success: #2ed8b6;
-  --success-bg: rgba(46, 216, 182, 0.14);
-  --warning: #ffb64d;
-  --warning-bg: rgba(255, 182, 77, 0.14);
-  --danger: #ff5370;
-  --danger-bg: rgba(255, 83, 112, 0.13);
+    --success: #2ed8b6;
+    --success-bg: rgba(46, 216, 182, 0.14);
+    --warning: #ffb64d;
+    --warning-bg: rgba(255, 182, 77, 0.14);
+    --danger: #ff5370;
+    --danger-bg: rgba(255, 83, 112, 0.13);
 
-  /* La palette nommée des comptes et des catégories (`--finance-<nom>`, miroir
+    /* La palette nommée des comptes et des catégories (`--finance-<nom>`, miroir
      de financeColorSchema dans @deveye/types). Huit teintes, parce qu'un
      camembert de catégories en demande beaucoup, et sans cyan : c'est celui de
      --accent, et une part de cette couleur se lirait comme un élément de
      l'interface. */
-  --finance-red: #ff6b81;
-  --finance-orange: #ff9f43;
-  --finance-yellow: #ffd54a;
-  --finance-green: #38d9a9;
-  --finance-blue: #4da8ff;
-  --finance-indigo: #7c8cff;
-  --finance-purple: #b088ff;
-  --finance-pink: #ff7ac6;
+    --finance-red: #ff6b81;
+    --finance-orange: #ff9f43;
+    --finance-yellow: #ffd54a;
+    --finance-green: #38d9a9;
+    --finance-blue: #4da8ff;
+    --finance-indigo: #7c8cff;
+    --finance-purple: #b088ff;
+    --finance-pink: #ff7ac6;
 
-  /* L'identité visuelle d'un compte dans la présence en direct (`--user-<nom>`,
+    /* L'identité visuelle d'un compte dans la présence en direct (`--user-<nom>`,
      miroir de userColorSchema dans @deveye/types) : son curseur chez les autres,
      sa bulle, la bordure du nœud où il se trouve. Huit teintes bien séparées, et
      surtout pas de cyan : c'est celui de --accent, un curseur de cette couleur
      se lirait comme un élément de l'interface plutôt que comme quelqu'un. */
-  --user-red: #ff6b81;
-  --user-orange: #ff9f43;
-  --user-yellow: #ffd54a;
-  --user-green: #5ed17c;
-  --user-blue: #4da8ff;
-  --user-indigo: #7c8cff;
-  --user-purple: #b088ff;
-  --user-pink: #ff7ac6;
+    --user-red: #ff6b81;
+    --user-orange: #ff9f43;
+    --user-yellow: #ffd54a;
+    --user-green: #5ed17c;
+    --user-blue: #4da8ff;
+    --user-indigo: #7c8cff;
+    --user-purple: #b088ff;
+    --user-pink: #ff7ac6;
 
-  --input-bg: rgba(255, 255, 255, 0.04);
-  --input-border: var(--glass-border);
-  --input-focus: var(--accent);
-  --input-placeholder: var(--text-muted);
+    --input-bg: rgba(255, 255, 255, 0.04);
+    --input-border: var(--glass-border);
+    --input-focus: var(--accent);
+    --input-placeholder: var(--text-muted);
 
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.28);
-  --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.42);
-  --shadow-glow: 0 0 0 1px var(--accent-bg), 0 8px 32px var(--accent-glow);
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.28);
+    --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.42);
+    --shadow-glow: 0 0 0 1px var(--accent-bg), 0 8px 32px var(--accent-glow);
 
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 18px;
-  --radius-xl: 26px;
-  --radius-pill: 999px;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 18px;
+    --radius-xl: 26px;
+    --radius-pill: 999px;
 
-  --space-xs: 4px;
-  --space-sm: 8px;
-  --space-md: 16px;
-  --space-lg: 24px;
-  --space-xl: 32px;
+    --space-xs: 4px;
+    --space-sm: 8px;
+    --space-md: 16px;
+    --space-lg: 24px;
+    --space-xl: 32px;
 
-  --font-sans: 'Open Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+    --font-sans: 'Open Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 
-  --navbar-height: 56px;
-  /* Hauteur commune des pastilles de la barre du haut. Fixée, et surtout pas
+    --navbar-height: 56px;
+    /* Hauteur commune des pastilles de la barre du haut. Fixée, et surtout pas
      déduite de leur texte : elle dépendrait alors des métriques de la police,
      donc du navigateur, et deux pastilles voisines ne s'aligneraient plus. */
-  --topbar-pill-height: 28px;
+    --topbar-pill-height: 28px;
 
-  --z-wallpaper: -1;
-  --z-base: 1;
-  --z-popup-overlay: 900;
-  --z-popup: 1000;
-  --z-navbar: 1200;
-  --z-modal: 1400;
-  --z-toast: 1600;
+    --z-wallpaper: -1;
+    --z-base: 1;
+    --z-popup-overlay: 900;
+    --z-popup: 1000;
+    --z-navbar: 1200;
+    --z-modal: 1400;
+    --z-toast: 1600;
 
-  --transition-fast: 150ms ease;
-  --transition-normal: 250ms ease;
-  /*
+    --transition-fast: 150ms ease;
+    --transition-normal: 250ms ease;
+    /*
    * La durée de la lente se lit séparément parce qu'un autre réglage doit s'y
    * caler par `calc` (voir `--glass-backdrop-delay`,
    * `Pages/Home/Dashboard.module.css`), et qu'un jeton portant sa courbe en plus
    * de sa durée n'entre pas dans un `calc`.
    */
-  --transition-slow-ms: 400ms;
-  --transition-slow: var(--transition-slow-ms) ease;
+    --transition-slow-ms: 400ms;
+    --transition-slow: var(--transition-slow-ms) ease;
 }
 
 /* Monitoring's activity tint (idle grey to normal green to intensive orange),
@@ -128,9 +128,9 @@
    dot. It sits here rather than in the feature's CSS module because at-rules are
    not scoped by CSS Modules, so the registration is global wherever written. */
 @property --activity-color {
-  syntax: '<color>';
-  inherits: true;
-  initial-value: transparent;
+    syntax: '<color>';
+    inherits: true;
+    initial-value: transparent;
 }
 
 /* Global box model: border-box everywhere, so `width`/`min-height` + padding
@@ -138,7 +138,7 @@
 *,
 *::before,
 *::after {
-  box-sizing: border-box;
+    box-sizing: border-box;
 }
 
 /* Global page reset. `height: 100%` rather than `100vh`: the latter includes the
@@ -146,57 +146,57 @@
    scroll and layout jumps. `overflow-x: hidden` guards against stray overflow. */
 html,
 body {
-  height: 100%;
+    height: 100%;
 }
 
 html {
-  color: #fff;
-  -webkit-text-size-adjust: 100%;
-  -webkit-tap-highlight-color: transparent;
+    color: #fff;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
 }
 
 body {
-  margin: 0;
-  padding: 0;
-  overflow-x: hidden;
-  background: #06080f;
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    background: #06080f;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 .glass {
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
 }
 
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+    width: 8px;
+    height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: transparent;
+    background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--glass-border-strong);
-  border-radius: var(--radius-pill);
+    background: var(--glass-border-strong);
+    border-radius: var(--radius-pill);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.28);
+    background: rgba(255, 255, 255, 0.28);
 }
 
 /* Honour the OS "reduce motion" preference for CSS-driven animations/transitions
    (framer-motion is handled separately via <MotionConfig reducedMotion="user">). */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
 }

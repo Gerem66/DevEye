@@ -17,7 +17,9 @@
     border: 1px solid var(--input-border);
     border-radius: var(--radius-sm);
     outline: none;
-    transition: border-color var(--transition-fast), background-color var(--transition-fast);
+    transition:
+        border-color var(--transition-fast),
+        background-color var(--transition-fast);
 }
 
 .input:focus {

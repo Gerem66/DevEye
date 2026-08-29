@@ -2,15 +2,15 @@
 
 > Écrit le 28 août 2026, le jour où Mail est devenue la **treizième native
 > rapatriée** sur le SDK des modules (`features/mail`,
-> [FEATURE_SDK.md](./FEATURE_SDK.md)), par deux agents en parallèle (serveur +
-> app, client + écrans natifs). Il dit *pourquoi* ; le code dit comment.
+> [Docs/FEATURE_SDK.md](../../Docs/FEATURE_SDK.md)), par deux agents en parallèle (serveur +
+> app, client + écrans natifs). Il dit _pourquoi_ ; le code dit comment.
 >
-> Documents voisins : [SECURITY_MODEL.md](./SECURITY_MODEL.md) (les deux
-> étages), [AUTH_PROMPTS.md](./AUTH_PROMPTS.md) (l'invite de déverrouillage),
-> [NOTIFICATIONS.md](./NOTIFICATIONS.md) (le canal e-mail des alertes),
-> [SHARING.md](./SHARING.md) (le partage inter-espaces, branché ici le 28 août
-> 2026), [SETTINGS.md](./SETTINGS.md) (la coquille de réglages),
-> [LIVE.md](./LIVE.md).
+> Documents voisins : [Docs/SECURITY_MODEL.md](../../Docs/SECURITY_MODEL.md) (les deux
+> étages), [Docs/AUTH_PROMPTS.md](../../Docs/AUTH_PROMPTS.md) (l'invite de déverrouillage),
+> [Docs/NOTIFICATIONS.md](../../Docs/NOTIFICATIONS.md) (le canal e-mail des alertes),
+> [Docs/SHARING.md](../../Docs/SHARING.md) (le partage inter-espaces, branché ici le 28 août
+> 2026), [Docs/SETTINGS.md](../../Docs/SETTINGS.md) (la coquille de réglages),
+> [Docs/LIVE.md](../../Docs/LIVE.md).
 
 Des boîtes IMAP/SMTP lues et écrites depuis DevEye : des comptes par espace,
 leurs dossiers et leurs enveloppes en cache, le corps d'un message lu en
@@ -99,7 +99,7 @@ origine qui figure dans le `redirect_uri` enregistré chez le fournisseur.
 ## 4. Le transport des alertes
 
 Les autres features préviennent par e-mail **depuis une boîte ouverte et active
-de l'espace** (NOTIFICATIONS.md §3). Tant que Mail était native,
+de l'espace** (Docs/NOTIFICATIONS.md §3). Tant que Mail était native,
 `Services/notifications.ts` lisait `mail_accounts` et parlait SMTP lui-même.
 Depuis le rapatriement, il lit le contrat que le service du module publie,
 `MAIL_TRANSPORT_PROVIDER` (`transport.ts`) : `listSenders(ws)` (les
@@ -172,7 +172,7 @@ dossiers et ses messages en cache le suivent, parce que la chaîne message →
 dossier → compte remonte toujours jusqu'à lui (`loadAccount`, sur
 `findVisible`). Un compte projeté vers un autre espace y apparaît dans la
 liste avec `foreign: true`, après les comptes locaux, et le compte de la carte
-d'accueil compte les mêmes lignes (SHARING.md §8 : une carte qui compte autre
+d'accueil compte les mêmes lignes (Docs/SHARING.md §8 : une carte qui compte autre
 chose que la liste qu'elle ouvre se lit comme un bug). Les restrictions par
 élément s'appliquent (`ctx.items.restrictions()` sur la liste,
 `ctx.items.assert(id, level)` sur chaque commande qui vise un compte).
@@ -198,7 +198,7 @@ existant passe par là (`credentialsFor`, `imapFor`, les DTO) ; `cipherFor(ctx,
 tier)` ne sert plus qu'à la création et au changement de palier, qui n'ont
 lieu qu'au domicile.
 
-**Une fenêtre lit et agit, le domicile configure** (SHARING.md §2). Depuis
+**Une fenêtre lit et agit, le domicile configure** (Docs/SHARING.md §2). Depuis
 la fenêtre : lister les dossiers, lire, marquer, déplacer, supprimer un
 message, envoyer, relever, rattraper, reconstruire un dossier, renommer la
 boîte, régler sa cadence, la mettre en pause. Au domicile seulement, refusé
@@ -206,7 +206,7 @@ d'ici par `assertAtHome` (`validation`) et non proposé par l'écran : supprimer
 la boîte, changer son palier, retoucher ses identifiants ou son proxy
 (`mail.accountUpdate` en entier, `mail.accountSetProfile` dès que le palier ou
 le proxy bougent), reconnecter par OAuth (supprimer puis reconnecter, donc au
-domicile aussi). Le critère est celui de SHARING.md : ces gestes relient la
+domicile aussi). Le critère est celui de Docs/SHARING.md : ces gestes relient la
 boîte à des objets de son espace d'origine, le mot de passe de son auteur au
 premier chef.
 
@@ -214,7 +214,7 @@ premier chef.
 d'un espace, pas ce qu'on y voit : un compte projeté vers trois espaces n'est
 pas relevé quatre fois. La diffusion, elle, traverse la projection : le
 `deps.live.changed(domicile)` d'un tour est rejoué par l'hôte dans chaque
-espace relié par `item_shares` (SHARING.md §8), sans que le service ait à
+espace relié par `item_shares` (Docs/SHARING.md §8), sans que le service ait à
 connaître la règle ; une relève faite depuis une fenêtre (`mail.folderSync`)
 écrit le cache du domicile et rafraîchit les deux côtés par `mutates`.
 
@@ -232,7 +232,7 @@ du ticket : une boîte naît chez elle.
 - **Le codec vient du compte, jamais de la feature ni de l'espace actif.**
   Une commande qui prendrait `ctx.cipher()` par réflexe écrirait une boîte
   gardée sous la clé de l'espace, et une qui prendrait `cipherFor(ctx,
-  account.security_tier)` sur un compte projeté le lirait sous la clé d'ici,
+account.security_tier)` sur un compte projeté le lirait sous la clé d'ici,
   qui ne l'ouvre pas. Tout ce qui touche un compte existant passe par
   `accountCipher(ctx, account)`.
 - **Un geste réservé au domicile se refuse des deux côtés.** `assertAtHome`

@@ -13,7 +13,10 @@ button.submit {
     font-size: 1em;
     line-height: 1.5;
     border-radius: var(--radius-sm);
-    transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out;
+    transition:
+        color 0.15s ease-in-out,
+        background-color 0.15s ease-in-out,
+        border-color 0.15s ease-in-out;
     color: var(--on-accent);
     background-color: var(--accent);
 }

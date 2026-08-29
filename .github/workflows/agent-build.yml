@@ -6,13 +6,9 @@ name: Agent build
 # manage: a push to main builds the agents while Dokploy deploys in parallel,
 # and the server picks up the new build on its next boot.
 #
-# Trigger vs. actual build: the `paths` below keep the workflow off unrelated
-# pushes, but `package.json` is noisy (a dependency bump — e.g. @deveye/types —
-# edits it without changing anything the agents care about). So the `gate` job
-# is the real filter: it only lets the matrix build run when agent/** changed,
-# this workflow changed, or package.json's `.version` actually changed — the
-# version being what the manifest carries and what installed agents self-update
-# on. A dep-only bump therefore no longer burns a full 8-target build.
+# The `paths` below keep the workflow off unrelated pushes, but `package.json`
+# is noisy: a dependency bump edits it without changing anything the agents care
+# about. The `gate` job below is the real filter.
 on:
   push:
     branches: [main]
@@ -30,11 +26,10 @@ permissions:
   contents: read
 
 jobs:
-  # Cheap guard: decide whether the (expensive) matrix build should actually
-  # run, so a push that only touched package.json for a dependency bump doesn't
-  # rebuild the agents. Builds when: manual dispatch, agent/** or this workflow
-  # changed, or package.json's `.version` changed. Defaults to building on any
-  # ambiguity (missing parent ref, force-push) so we never silently skip.
+  # Builds when: manual dispatch, agent/** or this workflow changed, or
+  # package.json's `.version` changed (the version the manifest carries, and
+  # what installed agents self-update on). Any ambiguity (missing parent ref,
+  # force-push) builds rather than skips.
   gate:
     name: should build?
     runs-on: ubuntu-latest

@@ -65,9 +65,9 @@ and exercise the same flow (no token needed; the sync is skipped).
 
 Two workflows:
 
-| Workflow      | Trigger                                                | Does                                                                                  |
-| ------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| `ci.yml`      | every push / PR                                        | server + client + agent: lint, typecheck, build                                       |
+| Workflow          | Trigger                                                | Does                                                                                  |
+| ----------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `ci.yml`          | every push / PR                                        | server + client + agent: lint, typecheck, build                                       |
 | `agent-build.yml` | push to `main` touching `agent/**` (or a version bump) | build the 8-target matrix natively → rolling `agent-latest` release + `manifest.json` |
 
 So every push is checked (the agent on Linux); the full matrix is rebuilt and
@@ -103,7 +103,7 @@ connect, so the dashboard shows data without waiting a full interval.
 | `status`                                                                    | Print platform, server, enrollment and running state.                                                                                                                                                                                                                                                                                  |
 | `service install [--system] \| uninstall \| status`                         | Manage the autostart service (launchd / systemd / Task Scheduler). Per-user by default, `--system` needs root. Also driven from the UI (« Démarrage auto »).                                                                                                                                                                           |
 | `unlink`                                                                    | Forget the local enrollment (deletes the config + token).                                                                                                                                                                                                                                                                              |
-| `uninstall [--yes] [--purge-shares]`                                        | **Retrait complet** de la machine : autostart, linger, processus, config, jeton, journal, caches, binaire. Voir [Retrait complet](#retrait-complet-uninstall).                                                                                                                                                                          |
+| `uninstall [--yes] [--purge-shares]`                                        | **Retrait complet** de la machine : autostart, linger, processus, config, jeton, journal, caches, binaire. Voir [Retrait complet](#retrait-complet-uninstall).                                                                                                                                                                         |
 
 Test a freshly approved device end-to-end:
 
@@ -116,7 +116,7 @@ deveye-agent run --once     # one instant + report, then exits
 Both surface only on a real machine, and one of them only on the Fedora family.
 
 1. **The elevated process has root's `$HOME`.** `pkexec` (Linux), `osascript …
-   with administrator privileges` (macOS) and `sudo` on the distributions that
+with administrator privileges` (macOS) and `sudo` on the distributions that
    set `always_set_home` all rewrite it, so a config path computed inside the
    elevated install pointed at `/root/.config/deveye/agent.toml` — a file that
    does not exist. The running agent knows its own config, so it now passes
@@ -234,7 +234,7 @@ format, et [`uninstall`](#retrait-complet-uninstall) pour tout reprendre.
 Designed to stay light, with **one cadence pushed by the server** (`agent.config`,
 sent on connect and whenever you change it in the **Appareils** page):
 
-- **Collection — every ~60 s** (configurable): one *instant*, sent as one message
+- **Collection — every ~60 s** (configurable): one _instant_, sent as one message
   under one timestamp — the graph signals (CPU %, RAM, disk usage, network
   counters, load, CPU temperature, GPU %, uptime, logged-in users, active TCP
   connections), the **process count**, **disk I/O**, and the **process list**
@@ -254,7 +254,7 @@ tick on a 700-process machine — less than the old heavy cycle cost.
 heaviest, scored on **CPU % + memory %**), or `off` (no process history).
 Processes are aggregated **by program name** (a browser spreads work over many
 helpers), carrying instance count, threads, owner, uptime, disk I/O and
-established connections in/out. Per-process network *bytes* are not collected: no
+established connections in/out. Per-process network _bytes_ are not collected: no
 OS exposes them without eBPF or packet capture. Fields needing privileges we
 don't have are reported as `null`, never as zero.
 
@@ -295,6 +295,6 @@ and token are still wiped).
 and process samples so the dashboard can "go back in time" and survive the agent
 going offline (last-known data is kept, live rates show 0). Retention is a
 **single per-device duration** (default 30 days), configurable from the device's
-"Configurer la collecte" dialog: one tick produces one *instant* carrying metrics,
+"Configurer la collecte" dialog: one tick produces one _instant_ carrying metrics,
 presence and the process list together, and they expire together. Pinned instants
 are kept regardless of age.

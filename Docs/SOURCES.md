@@ -37,14 +37,14 @@ boîte créée.
 
 ## Ce qui est branché
 
-| Feature | Sources | Table | Sélecteur côté élément |
-|---|---|---|---|
-| Déploiements | accès Dokploy (adresse + clé d'API) | `ft_deploy_credentials` (le module `features/deploy`) | `TargetDialog`, champ « Instance Dokploy » |
-| Git | jetons GitHub | `ft_git_credentials` (le module `features/git`) | `RepoPicker` / `RepoDialog`, champ « Jeton d'accès » |
-| Sauvegardes | destinations d'archives | `backup_destinations` | `JobDialog`, champ « Où l'écrire » |
-| chaque émetteur | ses canaux d'alerte | `notification_channels` (colonne `feature`) | section Notifications (cases) |
-| Météo | clés d'API des fournisseurs | `weather_provider_keys` | le dialogue d'un lieu peut porter la sienne en surcharge |
-| OSINT | clés d'API des fournisseurs | `osint_provider_keys` | aucun : les sondes les résolvent seules |
+| Feature         | Sources                             | Table                                                 | Sélecteur côté élément                                   |
+| --------------- | ----------------------------------- | ----------------------------------------------------- | -------------------------------------------------------- |
+| Déploiements    | accès Dokploy (adresse + clé d'API) | `ft_deploy_credentials` (le module `features/deploy`) | `TargetDialog`, champ « Instance Dokploy »               |
+| Git             | jetons GitHub                       | `ft_git_credentials` (le module `features/git`)       | `RepoPicker` / `RepoDialog`, champ « Jeton d'accès »     |
+| Sauvegardes     | destinations d'archives             | `backup_destinations`                                 | `JobDialog`, champ « Où l'écrire »                       |
+| chaque émetteur | ses canaux d'alerte                 | `notification_channels` (colonne `feature`)           | section Notifications (cases)                            |
+| Météo           | clés d'API des fournisseurs         | `weather_provider_keys`                               | le dialogue d'un lieu peut porter la sienne en surcharge |
+| OSINT           | clés d'API des fournisseurs         | `osint_provider_keys`                                 | aucun : les sondes les résolvent seules                  |
 
 ## La mécanique
 

@@ -17,12 +17,11 @@ quelle salle ? » :
 3. **Les changements** — « quelque chose a bougé, re-sollicitez ».
 
 Vocabulaire : **`live`** dans le code, « **Présence** » dans l'interface. Le mot
-`presence` était déjà pris par la présence des *agents* (`src/agent/presence.ts`,
+`presence` était déjà pris par la présence des _agents_ (`src/agent/presence.ts`,
 `DEVICE_PRESENCE_EVENT`) ; le mot « présence » côté interface, lui, était libre.
 
-> **Le transport n'était pas le sujet.** Toutes les commandes (394 au 21 août
-> 2026) passaient déjà par `/ws` avant ce chantier. Ce qui manquait, c'était un
-> registre des connexions vivantes, une notion de *lieu*, et une invalidation
+> **Le transport n'était pas le sujet.** Toutes les commandes (394 au 21 août 2026) passaient déjà par `/ws` avant ce chantier. Ce qui manquait, c'était un
+> registre des connexions vivantes, une notion de _lieu_, et une invalidation
 > poussée par le serveur.
 
 ---
@@ -40,11 +39,11 @@ Un utilisateur est un **chemin de segments**, chacun `kind:value` :
 
 Trois règles, et elles suffisent à tout :
 
-| Mon chemin vs celui du pair | Ce que je vois |
-|---|---|
-| **identiques** | son curseur, pseudo au-dessus, à sa couleur |
-| divergents à partir du niveau *k* | le segment `pair[k]` est **entouré** |
-| il est en amont de moi | rien : il est derrière moi |
+| Mon chemin vs celui du pair       | Ce que je vois                              |
+| --------------------------------- | ------------------------------------------- |
+| **identiques**                    | son curseur, pseudo au-dessus, à sa couleur |
+| divergents à partir du niveau _k_ | le segment `pair[k]` est **entouré**        |
+| il est en amont de moi            | rien : il est derrière moi                  |
 
 Descendre l'arbre fait donc glisser le surlignage d'un cran à chaque niveau,
 jusqu'à ce que les chemins coïncident et que les curseurs prennent le relais.
@@ -55,7 +54,7 @@ Aucun cas particulier nulle part.
 >
 > Sa première version exigeait que le chemin du pair **commence** par le mien.
 > C'était trop étroit : ouvrir une boîte mail sélectionne d'office la boîte de
-> réception, donc on est toujours déjà *dans* un dossier — jamais au niveau
+> réception, donc on est toujours déjà _dans_ un dossier — jamais au niveau
 > au-dessus, seule position où cette version pouvait s'appliquer. Aucun dossier ne
 > se surlignait donc jamais. Même piège pour Monitoring, qui sélectionne d'office
 > le premier appareil. Le niveau de divergence, lui, couvre aussi les nœuds
@@ -81,7 +80,7 @@ const outlineOf = useLiveOutlines('l2');
 ```
 
 Les tuiles de l'accueil n'ont **rien** à écrire : `Widget.tsx` porte
-`useLiveOutline('view', widgetId)`, et le `widgetId` *est* le segment de vue.
+`useLiveOutline('view', widgetId)`, et le `widgetId` _est_ le segment de vue.
 
 **Un seul déclarant par niveau.** `useLiveSegment` écrit dans une map indexée par
 `kind` : deux composants sur le même niveau s'écraseraient, et celui qui se
@@ -109,21 +108,21 @@ l'envers.
 
 ### Où chaque feature en est
 
-| Feature | Niveaux | Valeur `l1` |
-|---|---|---|
-| Mail | boîte puis `l2` dossier | l'id |
-| Projets | projet, `l2` onglet, `l3` carte, `l4` onglet de carte | l'id |
-| Uptime | le service ouvert | l'id |
-| Git | le dépôt ouvert | l'id |
-| Déploiement | la cible ouverte | l'id |
-| Bases de données | la base ouverte | l'id |
-| Audience | le site ouvert | l'id |
-| Sauvegardes | le travail ouvert | l'id |
-| Monitoring / Sentinelle | l'appareil sélectionné | l'uuid |
-| Météo | la ville consultée | l'id |
-| Notes / Coffre / CloudSync | la note, l'entrée, le partage ouvert | l'id |
-| Finance | l'onglet actif | son nom |
-| Appareils, Journaux, Utilisateurs… | aucun | (la vue suffit) |
+| Feature                            | Niveaux                                               | Valeur `l1`     |
+| ---------------------------------- | ----------------------------------------------------- | --------------- |
+| Mail                               | boîte puis `l2` dossier                               | l'id            |
+| Projets                            | projet, `l2` onglet, `l3` carte, `l4` onglet de carte | l'id            |
+| Uptime                             | le service ouvert                                     | l'id            |
+| Git                                | le dépôt ouvert                                       | l'id            |
+| Déploiement                        | la cible ouverte                                      | l'id            |
+| Bases de données                   | la base ouverte                                       | l'id            |
+| Audience                           | le site ouvert                                        | l'id            |
+| Sauvegardes                        | le travail ouvert                                     | l'id            |
+| Monitoring / Sentinelle            | l'appareil sélectionné                                | l'uuid          |
+| Météo                              | la ville consultée                                    | l'id            |
+| Notes / Coffre / CloudSync         | la note, l'entrée, le partage ouvert                  | l'id            |
+| Finance                            | l'onglet actif                                        | son nom         |
+| Appareils, Journaux, Utilisateurs… | aucun                                                 | (la vue suffit) |
 
 La valeur `l1` d'un élément est son identifiant nu, partout : le préfixe
 `view:<feature>` du chemin dit déjà de quelle sorte d'élément il s'agit. Six
@@ -161,7 +160,7 @@ L'appartenance reste la frontière, et la présence ne la contourne pas.
   `forWorkspace()` rend une promesse qui peut rejeter, et un rejet dans un
   minuteur est un rejet non traité. Époque périmée = **aucun droit**.
 - **L'expulsion est explicite.** `invalidateAccess()` n'incrémente qu'un compteur
-  relu par la *commande suivante* ; une socket assise dans une salle n'en émet pas
+  relu par la _commande suivante_ ; une socket assise dans une salle n'en émet pas
   forcément. D'où `evict` / `evictRoom` / `evictEverywhere` posés à côté de chaque
   `invalidateAccess()` qui **retire** un accès, et `resync` pour un rôle
   simplement rétréci. `userChanged`, lui, vise un compte **hors de sa salle** :
@@ -202,7 +201,7 @@ que fait Projets pour `projectsChat`, le fil de discussion d'une carte changeant
 inscrit en dur dans `@deveye/types` (`nativeLiveTopicSchema`, `TOPIC_FEATURE`),
 il est depuis le rapatriement de Projets le premier sujet secondaire de module :
 le droit d'accès est celui de la feature qui le déclare, et l'app ne le connaît
-que par le manifest (voir [PROJECTS.md](./PROJECTS.md) §3).
+que par le manifest (voir [Projets](../features/projects/README.md) §3).
 
 ### Le filet, et pourquoi il est porteur
 
@@ -352,11 +351,11 @@ des trames qui sautent, un léger clignotement.
 
 D'où trois vues étroites, à côté de `useLive()` :
 
-| Hook | Ce qu'il rend | Qui s'en sert |
-|---|---|---|
-| `usePeers()` | le roster seul | la barre du haut (`usePresentUsers`) |
+| Hook                | Ce qu'il rend                | Qui s'en sert                                   |
+| ------------------- | ---------------------------- | ----------------------------------------------- |
+| `usePeers()`        | le roster seul               | la barre du haut (`usePresentUsers`)            |
 | `useTeleportPath()` | la cible d'une téléportation | `useLiveSegment`, donc **toute** feature montée |
-| `useLivePresence()` | `{ peers, path }` | `useLiveOutlines`, donc toute liste entourée |
+| `useLivePresence()` | `{ peers, path }`            | `useLiveOutlines`, donc toute liste entourée    |
 
 La téléportation a deux clients : « rejoindre quelqu'un » (la bulle de la barre
 du haut) et « Régler dans <espace> » (les réglages inertes d'un élément
@@ -379,17 +378,17 @@ l'on retomberait sur un rendu permanent, ce qui serait pire que le mal.
 ## 5 bis. « En train d'écrire »
 
 Une seconde voie rapide, jumelle de celle des curseurs, et **générique** : elle
-ne dit pas *quoi* est en train d'être écrit. La feature Projets s'en sert pour
+ne dit pas _quoi_ est en train d'être écrit. La feature Projets s'en sert pour
 les fils de discussion de ses cartes ; n'importe quelle autre peut s'en servir
 sans toucher au moteur.
 
-| Élément | Où |
-|---|---|
-| `LIVE_TYPING_COMMAND` = `live.typing`, trame `{ typing: boolean }` | `DevEye-Types/src/features/live.ts` |
-| `LIVE_TYPERS_EVENT` = `live.typers`, poussée `{ workspaceId, typers[] }` | idem |
-| Voie rapide, à côté de celle du curseur | `DevEye/src/ws/handler.ts` |
-| `typing()` sur `LiveTransport`, diffusion et péremption | `DevEye/src/live/hub.ts` |
-| `useTypingSignal()` / `useTypers()` | `DevEye/client/src/live/useTyping.ts` |
+| Élément                                                                  | Où                                    |
+| ------------------------------------------------------------------------ | ------------------------------------- |
+| `LIVE_TYPING_COMMAND` = `live.typing`, trame `{ typing: boolean }`       | `DevEye-Types/src/features/live.ts`   |
+| `LIVE_TYPERS_EVENT` = `live.typers`, poussée `{ workspaceId, typers[] }` | idem                                  |
+| Voie rapide, à côté de celle du curseur                                  | `DevEye/src/ws/handler.ts`            |
+| `typing()` sur `LiveTransport`, diffusion et péremption                  | `DevEye/src/live/hub.ts`              |
+| `useTypingSignal()` / `useTypers()`                                      | `DevEye/client/src/live/useTyping.ts` |
 
 **Hors du registre des commandes**, postée par `ws.post`, pour exactement la
 raison écrite plus haut à propos des curseurs : `ws.send` y trouverait un

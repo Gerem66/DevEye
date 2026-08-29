@@ -23,7 +23,7 @@ export const env = {
 
     // Racine du stockage CloudSync vue par le serveur (dans le conteneur) ;
     // `CLOUDSYNC_STORAGE_ROOT` est le chemin côté hôte que le compose y monte.
-    // Ne change que hors conteneur. Voir `Docs/CLOUDSYNC.md`.
+    // Ne change que hors conteneur.
     CLOUDSYNC_STORAGE_DIR: getEnvVar('CLOUDSYNC_STORAGE_DIR', 'string', false) || '/data/cloudsync',
 
     SSL_PRIVATE_KEY_PATH: getEnvVar('SSL_PRIVATE_KEY_PATH', 'string', false),

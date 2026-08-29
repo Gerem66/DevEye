@@ -22,7 +22,9 @@
     filter: blur(var(--wallpaper-blur, 0px));
     transform: scale(calc(1 + var(--wallpaper-blur, 0px) / 100));
     animation: fade-in var(--transition-slow) ease both;
-    transition: filter var(--transition-normal) ease, transform var(--transition-normal) ease;
+    transition:
+        filter var(--transition-normal) ease,
+        transform var(--transition-normal) ease;
     will-change: transform;
 }
 
@@ -33,8 +35,7 @@
     position: absolute;
     inset: 0;
     background:
-        linear-gradient(rgba(6, 9, 15, 0.18), rgba(6, 9, 15, 0.32)),
-        rgba(6, 9, 15, var(--wallpaper-scrim, 0.4));
+        linear-gradient(rgba(6, 9, 15, 0.18), rgba(6, 9, 15, 0.32)), rgba(6, 9, 15, var(--wallpaper-scrim, 0.4));
     transition: background var(--transition-normal) ease;
 }
 

@@ -1,6 +1,6 @@
 # Bases de données — l'inventaire d'un espace
 
-Feature de premier rang, bâtie sur le même patron que [GIT.md](GIT.md) : une base
+Feature de premier rang, bâtie sur le même patron que [Git](../git/README.md) : une base
 appartient à **l'espace**, plusieurs projets peuvent s'en servir, et certaines ne
 servent aucun projet. Un projet ne fait qu'y **pointer**.
 
@@ -9,13 +9,13 @@ features, 28 août 2026) : contrats dans `src/contracts/`, relevé, moteur et
 handlers dans `src/server/`, écrans dans `src/client/`. L'app ne garde que
 l'identité (`database` dans le registre publié), les deux contrats que le
 module publie ou consomme (`sdk/providers.ts`) et la table de liaison de
-Projets. Voir [FEATURE_SDK.md](FEATURE_SDK.md), section « La migration des
+Projets. Voir [Docs/FEATURE_SDK.md](../../Docs/FEATURE_SDK.md), section « La migration des
 natives ».
 
 Relu et mis à jour le 28 août 2026 (rapatriement en module).
-Documents voisins à respecter : [WORKSPACES.md](WORKSPACES.md), [LIVE.md](LIVE.md),
-[GIT.md](GIT.md), [PROJECTS.md](PROJECTS.md), [AUDIENCE.md](AUDIENCE.md),
-[BACKUP.md](BACKUP.md).
+Documents voisins à respecter : [Docs/WORKSPACES.md](../../Docs/WORKSPACES.md), [Docs/LIVE.md](../../Docs/LIVE.md),
+[Git](../git/README.md), [Projets](../projects/README.md), [Audience](../audience/README.md),
+[Sauvegardes](../backup/README.md).
 
 ---
 
@@ -25,18 +25,18 @@ Documents voisins à respecter : [WORKSPACES.md](WORKSPACES.md), [LIVE.md](LIVE.
 la liste et la fiche lisent le dernier relevé enregistré. Cinq commandes
 seulement sortent vers un serveur tiers, et toutes sur un geste explicite :
 
-| Commande | Ce qu'elle fait |
-|---|---|
-| `database.test` | un essai de connexion, rien d'autre |
-| `database.testDraft` | le même essai, sur des réglages **pas encore enregistrés** |
-| `database.inspect` | un relevé complet (version, taille, tables) **et** les alertes |
-| `database.tableList` | les tables, avec leur taille et leur nombre de lignes |
-| `database.tableStructure` | colonnes, clé primaire, clés étrangères, index |
-| `database.tableRows` | une page du contenu, filtres et tri compris |
-| `database.rowInsert` / `rowUpdate` / `rowDelete` | l'écriture d'une ligne |
-| `database.execute` | une instruction libre — le terminal |
-| `database.export` | une table, ou la base, en CSV / JSON / SQL |
-| `database.query` / `alertTest` | une requête de lecture, pour mettre au point une condition |
+| Commande                                         | Ce qu'elle fait                                                |
+| ------------------------------------------------ | -------------------------------------------------------------- |
+| `database.test`                                  | un essai de connexion, rien d'autre                            |
+| `database.testDraft`                             | le même essai, sur des réglages **pas encore enregistrés**     |
+| `database.inspect`                               | un relevé complet (version, taille, tables) **et** les alertes |
+| `database.tableList`                             | les tables, avec leur taille et leur nombre de lignes          |
+| `database.tableStructure`                        | colonnes, clé primaire, clés étrangères, index                 |
+| `database.tableRows`                             | une page du contenu, filtres et tri compris                    |
+| `database.rowInsert` / `rowUpdate` / `rowDelete` | l'écriture d'une ligne                                         |
+| `database.execute`                               | une instruction libre — le terminal                            |
+| `database.export`                                | une table, ou la base, en CSV / JSON / SQL                     |
+| `database.query` / `alertTest`                   | une requête de lecture, pour mettre au point une condition     |
 
 Une seule exception à « rien ne part sans clic » : `autoLoadTables`, réglage
 **par base et éteint par défaut**, charge l'inventaire des tables à l'ouverture
@@ -64,7 +64,7 @@ l'écran :
   pendant l'essai puis affiche l'issue, et **l'efface au bout de dix secondes**.
   Un « est-ce que ça répond ? » répond pour l'instant où on l'a posé ; laissé à
   l'écran, il se lirait une heure plus tard comme un état courant.
-- **Relever** écrit. Son résultat *est* le bandeau « État / Temps de réponse /
+- **Relever** écrit. Son résultat _est_ le bandeau « État / Temps de réponse /
   Dernier relevé / Taille / Tables / Version » — il n'a donc pas de phrase du
   tout. Il en affichait une jusqu'au 2026-08-09, qui doublait mot pour mot ce que
   le bandeau disait déjà juste en dessous.
@@ -94,7 +94,7 @@ assumées :
   confidentiel délie les siennes (les bases, elles, survivent).
 
 Une base **projetée** vers un autre espace (`shareTier: 'open'`, voir
-[SHARING.md](SHARING.md)) reste chiffrée chez elle : les listages choisissent
+[Docs/SHARING.md](../../Docs/SHARING.md)) reste chiffrée chez elle : les listages choisissent
 le codec ligne par ligne (`ctx.sharing.scope().cipherFor`), la fiche et les
 alertes se lisent sous la clé du domicile, et toute session ouverte depuis la
 fenêtre (tables, requête, relevé manuel) déchiffre la cible sous cette même
@@ -137,11 +137,11 @@ bases que l'ordre d'affichage (une jointure admise, comme pour un dépôt git).
 Trois contrats publiés dans `@deveye/types/sdk/providers.ts` portent tout le
 reste :
 
-| Contrat | Qui l'offre | Qui le lit | Ce qu'il dit |
-|---|---|---|---|
-| `DATABASE_ITEMS_PROVIDER` | le service du module | `projects.databaseLink` (module Projets) | « cette base existe-t-elle dans cet espace ? » (domicile seul), avant de relier ; module absent = liaison refusée proprement |
-| `PROJECTS_USAGE_PROVIDER` | le service du module Projets (`features/projects/src/server/usageProvider.ts`) | `database.list` / `get` (module) | combien de projets de l'espace **appelant** relient chaque base, et lesquels, avec leur titre (étage ouvert, `'Sans titre'` à défaut) ; contrat absent = zéro projet, jamais une erreur |
-| `DATABASE_BACKUP_PROVIDER` | le service du module | Sauvegardes | ses bases nommées et un accès ouvert, tunnel compris (voir [BACKUP.md](BACKUP.md)) |
+| Contrat                    | Qui l'offre                                                                    | Qui le lit                               | Ce qu'il dit                                                                                                                                                                            |
+| -------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_ITEMS_PROVIDER`  | le service du module                                                           | `projects.databaseLink` (module Projets) | « cette base existe-t-elle dans cet espace ? » (domicile seul), avant de relier ; module absent = liaison refusée proprement                                                            |
+| `PROJECTS_USAGE_PROVIDER`  | le service du module Projets (`features/projects/src/server/usageProvider.ts`) | `database.list` / `get` (module)         | combien de projets de l'espace **appelant** relient chaque base, et lesquels, avec leur titre (étage ouvert, `'Sans titre'` à défaut) ; contrat absent = zéro projet, jamais une erreur |
+| `DATABASE_BACKUP_PROVIDER` | le service du module                                                           | Sauvegardes                              | ses bases nommées et un accès ouvert, tunnel compris (voir [Sauvegardes](../backup/README.md))                                                                                          |
 
 Corollaire visible : les projets listés et comptés sur une base sont ceux de
 l'espace **d'où l'on regarde**. Une base projetée montre les projets de la
@@ -195,7 +195,7 @@ personne. Le mécanisme d'envoi, lui, est celui commun aux émetteurs
 copie mot pour mot, alors que ce module existait précisément pour l'éviter.
 La mise en page Discord est `src/server/notice.ts`, sur les helpers partagés
 de `Services/notices/shared.ts` (le seul import de l'app par le module, au
-privilège de native commenté). Voir `NOTIFICATIONS.md`.
+privilège de native commenté). Voir `Docs/NOTIFICATIONS.md`.
 
 Les alertes s'écrivent dans l'onglet **Alertes** des réglages de la base
 (onglet personnalisé du manifest, `DatabaseAlertsPanel`), qui ouvre le
@@ -217,11 +217,11 @@ pas de l'autre.
 
 Trois chemins, décrits par `access.kind` :
 
-| Chemin | Quand |
-|---|---|
-| `direct` | le serveur joint l'hôte lui-même |
-| `ssh` | on a un compte sur une machine du réseau (rebond) |
-| `socks` | un VPN est déjà monté ailleurs et expose un proxy SOCKS5 |
+| Chemin   | Quand                                                    |
+| -------- | -------------------------------------------------------- |
+| `direct` | le serveur joint l'hôte lui-même                         |
+| `ssh`    | on a un compte sur une machine du réseau (rebond)        |
+| `socks`  | un VPN est déjà monté ailleurs et expose un proxy SOCKS5 |
 
 **Un écouteur local, pas une socket passée au pilote.** `mysql2` accepte une
 socket existante, `pg` non — il veut ouvrir la sienne vers un hôte et un port. Un
@@ -234,7 +234,7 @@ La clé privée reste **en mémoire** : jamais de fichier temporaire, qui
 survivrait à un arrêt brutal.
 
 **Un tunnel est toujours rendu avec son `close()`, et l'appelant le ferme dans un
-`finally`** — y compris quand la session échoue à s'ouvrir *après* le tunnel.
+`finally`** — y compris quand la session échoue à s'ouvrir _après_ le tunnel.
 Sur un relevé périodique, quelques heures d'écouteurs oubliés suffiraient à
 épuiser le processus.
 
@@ -267,7 +267,7 @@ Les jokers d'un `LIKE` sont en revanche **rendus tels quels** : `%` remplace
 n'importe quelle suite, `_` un caractère, `\%` un pourcentage littéral. La
 recherche est une grille sur du vrai SQL, et pouvoir écrire `2026-%-01` vaut
 mieux que de n'avoir aucun moyen d'exprimer un motif. Rien n'en devient
-dangereux : la valeur reste liée, seul son *sens* pour `LIKE` change. Les deux
+dangereux : la valeur reste liée, seul son _sens_ pour `LIKE` change. Les deux
 moteurs prennent `\` comme caractère d'échappement par défaut, la convention est
 donc la même des deux côtés. C'était l'inverse jusqu'au 2026-08-09, avec une
 phrase d'écran pour l'expliquer — une phrase qui prévient d'un comportement
@@ -290,7 +290,7 @@ ressort. DevEye demande, le serveur distant accorde ou refuse.
 ### 5.4 Sans clé primaire, pas d'écriture
 
 `primaryKey` vide interdit modification et suppression, côté serveur comme dans
-l'interface. Sans clé, aucune condition ne désigne *une* ligne : un `UPDATE` en
+l'interface. Sans clé, aucune condition ne désigne _une_ ligne : un `UPDATE` en
 toucherait plusieurs, un `DELETE` en emporterait autant, et rien ne permettrait
 de revenir en arrière. Mieux vaut ne pas savoir faire que faire trop.
 
@@ -300,7 +300,7 @@ Cliquer une cellule contrainte ouvre la table visée **filtrée sur la valeur
 pointée**, et auréole la ligne quelques secondes. Filtrer plutôt que calculer la
 page où elle se trouve : ce calcul supposerait un ordre stable et une clé d'une
 seule colonne, deux hypothèses que rien ne garantit. Le critère reste visible et
-se retire d'un clic — on voit donc *pourquoi* on ne voit qu'une ligne.
+se retire d'un clic — on voit donc _pourquoi_ on ne voit qu'une ligne.
 
 ### 5.6 Un export lit tout ce qu'on lui désigne
 
@@ -425,7 +425,7 @@ l'espace, une base reliée montrée en entier, le dialogue de déclaration : le
 vrai formulaire, jamais une copie réduite), et dégrade proprement quand le
 module est absent. Il **n'apparaît qu'à partir de la première base reliée** ;
 sans liaison, il repart dans le menu « + » de la barre d'onglets — voir
-[PROJECTS.md](./PROJECTS.md) §2.
+[Projets](../projects/README.md) §2.
 
 ---
 
@@ -515,19 +515,19 @@ d'instruction.
 **Vérifié contre un vrai serveur MySQL 8.0**, sur des bases jetables créées et
 détruites pour l'occasion — jamais sur les tables de DevEye :
 
-- *le socle* — inventaire, liste des tables, pagination, requête libre, les
+- _le socle_ — inventaire, liste des tables, pagination, requête libre, les
   quatre messages d'erreur de connexion, l'évaluation des conditions (y compris
   une condition cassée qui n'interrompt pas les autres), l'interpolation du
   message, le chemin nominal d'un **tunnel SOCKS5** (proxy d'essai monté pour
   l'occasion, avec contrôle qu'aucun écouteur ne reste ouvert), et `testDraft` ;
-- *l'explorateur* (33 cas) — structure lue au complet (ordre des colonnes, clé
+- _l'explorateur_ (33 cas) — structure lue au complet (ordre des colonnes, clé
   primaire, auto-incrément, défaut, commentaire, index unique ou non, clé
   étrangère et sa cible, table sans clé), insertion, modification par clé,
   suppression multiple, recherche `contient` / `est nul` / deux critères en OU
   avec tri, **le `%` saisi cherché littéralement**, une valeur d'injection qui
   reste une valeur, le refus du serveur sur une clé étrangère orpheline et sur
   la suppression d'un parent référencé, le terminal en lecture et en écriture ;
-- *l'export* (18 cas) — les trois formats sur des valeurs piégeuses (guillemet,
+- _l'export_ (18 cas) — les trois formats sur des valeurs piégeuses (guillemet,
   apostrophe, virgule, `NULL`, accents), JSON qui reste **un document valide**
   y compris sur une base entière avec une table vide, pagination par 3 sur 12
   lignes sans perte ni doublon, les deux plafonds atteints et signalés, et une
@@ -536,12 +536,12 @@ détruites pour l'occasion — jamais sur les tables de DevEye :
 **Vérifié hors serveur**, sur les fonctions découpées dans les fichiers livrés
 plutôt que recopiées :
 
-- *la fabrication des requêtes* (32 cas) — citation d'un identifiant hostile,
+- _la fabrication des requêtes_ (32 cas) — citation d'un identifiant hostile,
   valeur qui reste liée, numérotation PostgreSQL qui se poursuit au-delà du
   `WHERE`, jokers d'un `LIKE` transmis tels quels, `IS NULL` plutôt que `= NULL`,
   appariement d'une clé composite, regroupement des index, les deux gardes
   d'instruction ;
-- *les gardes d'écriture* (13 cas) — colonne inconnue refusée, clé composite
+- _les gardes d'écriture_ (13 cas) — colonne inconnue refusée, clé composite
   acceptée dans le désordre mais refusée si incomplète, une colonne quelconque
   qui ne fait pas une clé, et le refus global sur une table sans clé primaire.
 
@@ -553,7 +553,7 @@ commandes nouvelles franchissent donc le filet.
 
 - le chemin nominal de **PostgreSQL** — seuls ses chemins d'erreur l'ont été. Ses
   requêtes de catalogue (`pg_attribute`, `unnest(conkey, confkey) WITH
-  ORDINALITY`) sont écrites avec soin mais n'ont jamais tourné : c'est à essayer
+ORDINALITY`) sont écrites avec soin mais n'ont jamais tourné : c'est à essayer
   en premier ;
 - le chemin nominal du **rebond SSH** ;
 - **l'interface**, qu'aucun navigateur n'a affichée : disposition de la barre

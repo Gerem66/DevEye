@@ -21,15 +21,15 @@ close (voir en fin de fichier).
 `useSettingsSections` (le seul juge) compose les onglets d'une cible, dans cet
 ordre :
 
-| Onglet | Échelle | Qui l'a | Contenu |
-|---|---|---|---|
-| Général | feature (et élément pour Mail, Uptime, CloudSync, Bases de données, Audience, Appareils) | `settings` du manifest d'un module (plus aucune native n'en déclare) | les réglages qui ne sont ni sources ni notifications |
-| Sources | feature | `settings.feature` du manifest d'un module (plus aucune native n'en déclare) | jetons, destinations, clés d'API (voir `SOURCES.md`) |
-| Notifications | feature + élément | registre `notifies` | canaux et sélection (voir `NOTIFICATIONS.md`) |
-| Synchronisation | élément | `settings.item` du manifest d'un module (Mail) | cadence de relève, maintenance |
-| Chiffrement | élément | `settings.item` du manifest d'un module | sous quelle clé (ou sous quelle forme) la donnée de l'élément vit |
-| Partage | élément | `SHARE_WIRED_FEATURES` + écriture | où l'élément est visible (voir `SHARING.md`) |
-| Permissions | élément | `SHARE_WIRED_FEATURES` + `workspace.roles` | ce que chaque rôle voit de la ligne |
+| Onglet          | Échelle                                                                                  | Qui l'a                                                                      | Contenu                                                           |
+| --------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Général         | feature (et élément pour Mail, Uptime, CloudSync, Bases de données, Audience, Appareils) | `settings` du manifest d'un module (plus aucune native n'en déclare)         | les réglages qui ne sont ni sources ni notifications              |
+| Sources         | feature                                                                                  | `settings.feature` du manifest d'un module (plus aucune native n'en déclare) | jetons, destinations, clés d'API (voir `SOURCES.md`)              |
+| Notifications   | feature + élément                                                                        | registre `notifies`                                                          | canaux et sélection (voir `NOTIFICATIONS.md`)                     |
+| Synchronisation | élément                                                                                  | `settings.item` du manifest d'un module (Mail)                               | cadence de relève, maintenance                                    |
+| Chiffrement     | élément                                                                                  | `settings.item` du manifest d'un module                                      | sous quelle clé (ou sous quelle forme) la donnée de l'élément vit |
+| Partage         | élément                                                                                  | `SHARE_WIRED_FEATURES` + écriture                                            | où l'élément est visible (voir `SHARING.md`)                      |
+| Permissions     | élément                                                                                  | `SHARE_WIRED_FEATURES` + `workspace.roles`                                   | ce que chaque rôle voit de la ligne                               |
 
 Général, Sources, Synchronisation et Chiffrement viennent tous du manifest
 d'un module : l'onglet est déclaré dans `settings.feature` ou `settings.item`,

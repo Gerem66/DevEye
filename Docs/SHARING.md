@@ -33,11 +33,11 @@ pas être projeté : ce n'est pas une prudence, c'est une impossibilité mécani
 
 Le registre porte la règle dans `shareTier` :
 
-| | Partageable |
-|---|---|
-| `'open'` — Uptime, Bases, Déploiement, Git, Audience, Sauvegardes | oui, sans condition |
-| `'perItem'` — Notes, Mail, Projets | selon la ligne : note ordinaire oui, note privée non ; compte mail « open » oui, « guarded » non |
-| `'never'` — Mots de passe, CloudSync, Appareils, Météo, Finances, Sentinelle, OSINT | non |
+|                                                                                     | Partageable                                                                                      |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `'open'` — Uptime, Bases, Déploiement, Git, Audience, Sauvegardes                   | oui, sans condition                                                                              |
+| `'perItem'` — Notes, Mail, Projets                                                  | selon la ligne : note ordinaire oui, note privée non ; compte mail « open » oui, « guarded » non |
+| `'never'` — Mots de passe, CloudSync, Appareils, Météo, Finances, Sentinelle, OSINT | non                                                                                              |
 
 Trois `never` méritent leur justification :
 
@@ -93,17 +93,17 @@ La ligne de partage est la même partout : **une fenêtre lit et agit, le
 domicile configure.** Ce qui distingue les features est la nature de leurs
 gestes :
 
-| | Depuis la fenêtre | Domicile seulement |
-|---|---|---|
-| Uptime | tout (la ligne est autonome : réécrite sous SA clé) | supprimer |
-| Bases de données | consulter, explorer, relever | modifier, supprimer, alertes |
-| Déploiement | **déclencher**, historique, journal | modifier, supprimer (le jeton est une clé de SON espace) |
-| Git | commits, branches, PR, releases, **synchroniser** | réglages, supprimer, rattacher un auteur |
-| Audience | toutes les statistiques, entonnoirs en lecture | réglages, clé, entonnoirs, supprimer |
-| Sauvegardes | fiche, historique, **déclencher** | modifier, supprimer (destination et source vivent chez lui) |
-| Notes | lire, éditer le corps, archiver, restaurer (chez elle, sous sa clé ; rangée à la racine, hors classement d'ici) | classer (dossier, rang), passer en privée, détruire |
-| Mail | dossiers, lire, marquer, déplacer, envoyer, relever, renommer, cadence, pause | supprimer le compte, changer de palier, identifiants et proxy, reconnexion OAuth |
-| Projets | tout l'arbre (colonnes, cartes, assignation parmi les membres d'ici, jalons, dépendances, discussion, historique), profil, statut, archivage, version manuelle ; liaisons lues et nommées | changer de palier, version suivie d'une release, relier / délier, classer le portefeuille |
+|                  | Depuis la fenêtre                                                                                                                                                                         | Domicile seulement                                                                        |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Uptime           | tout (la ligne est autonome : réécrite sous SA clé)                                                                                                                                       | supprimer                                                                                 |
+| Bases de données | consulter, explorer, relever                                                                                                                                                              | modifier, supprimer, alertes                                                              |
+| Déploiement      | **déclencher**, historique, journal                                                                                                                                                       | modifier, supprimer (le jeton est une clé de SON espace)                                  |
+| Git              | commits, branches, PR, releases, **synchroniser**                                                                                                                                         | réglages, supprimer, rattacher un auteur                                                  |
+| Audience         | toutes les statistiques, entonnoirs en lecture                                                                                                                                            | réglages, clé, entonnoirs, supprimer                                                      |
+| Sauvegardes      | fiche, historique, **déclencher**                                                                                                                                                         | modifier, supprimer (destination et source vivent chez lui)                               |
+| Notes            | lire, éditer le corps, archiver, restaurer (chez elle, sous sa clé ; rangée à la racine, hors classement d'ici)                                                                           | classer (dossier, rang), passer en privée, détruire                                       |
+| Mail             | dossiers, lire, marquer, déplacer, envoyer, relever, renommer, cadence, pause                                                                                                             | supprimer le compte, changer de palier, identifiants et proxy, reconnexion OAuth          |
+| Projets          | tout l'arbre (colonnes, cartes, assignation parmi les membres d'ici, jalons, dépendances, discussion, historique), profil, statut, archivage, version manuelle ; liaisons lues et nommées | changer de palier, version suivie d'une release, relier / délier, classer le portefeuille |
 
 Le critère n'est pas le goût : un geste reste au domicile quand il **référence
 d'autres objets de l'espace d'origine** (une clé d'API, une destination, les
@@ -131,7 +131,7 @@ ouvert de n'importe quel espace du serveur.
 
 Contrôle mené sur base de copie : un contenu chiffré dans un espace est
 illisible avec la clé d'un autre espace, et lisible avec la sienne. Le codec
-d'origine est donc *indispensable et suffisant*.
+d'origine est donc _indispensable et suffisant_.
 
 ---
 

@@ -10,7 +10,7 @@ DevEye est une stack moderne pour le monitorage décentralisé :
 
 **Monitoring zero-knowledge**: Le serveur ne voit jamais les données en clair.
 
-Pour les détails d'implémentation, voir [docs/architecture.md](./docs/architecture.md).
+Pour les détails d'implémentation, voir [Docs/README.md](./Docs/README.md).
 
 ## Quick Start
 

@@ -44,19 +44,19 @@ catégorie « Nouvelle feature » avec les instructions et l'import.
 
 La colonne de droite est l'état réel au 20/08/2026 :
 
-| Besoin | Contrat visé | Aujourd'hui |
-|---|---|---|
-| Descripteur (id, libellé, icône, capacités) | `manifest.ts` | ✅ `FEATURE_REGISTRY` (`@deveye/types/domain/featureRegistry.ts`) — le descriptif dit une fois |
-| Commandes typées | schémas zod input/output | ✅ `defineFeature()` + dispatcheur WS qui valide, autorise, diffuse |
-| Stockage | migrations embarquées | ⚠️ migrations **globales** numérotées (`0NN_*.sql`) — pas de namespace par feature |
-| Widget d'accueil | une entrée de manifeste | ⚠️ `FEATURE_CATALOG` (client) à éditer à la main |
-| Permissions | rien à écrire | ✅ acquis par construction : `access` déclaratif + contrôle de boot ; le rôle accorde `read`/`write` ; restrictions par élément via `SHARE_WIRED` |
-| Espaces / partage | `shareTier` du manifeste | ✅ le registre le porte ; le branchement (`listVisible` + codec) reste par feature |
-| Live (présence, curseurs, surbrillance) | une API de segments | ✅ `useLiveSegment(niveau, valeur)` + `useLiveOutlines` — déjà générique |
-| Notifications | `notifies: true` au manifeste | ✅ canaux + routes génériques (`notify.*`), la coquille de réglages rend l'onglet toute seule |
-| Chiffrement serveur (défaut) | `ctx.secure.open` | ✅ unifié |
-| Chiffrement par mot de passe | `ctx.secure` + invite unifiée | ✅ `assertSecureUnlocked` côté serveur, `withSecrecy`/`holdSecrecy` côté client |
-| Réglages | rien à écrire | ✅ `FeatureSettingsButton` : les sections viennent du manifeste et des droits |
+| Besoin                                      | Contrat visé                  | Aujourd'hui                                                                                                                                       |
+| ------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Descripteur (id, libellé, icône, capacités) | `manifest.ts`                 | ✅ `FEATURE_REGISTRY` (`@deveye/types/domain/featureRegistry.ts`) — le descriptif dit une fois                                                    |
+| Commandes typées                            | schémas zod input/output      | ✅ `defineFeature()` + dispatcheur WS qui valide, autorise, diffuse                                                                               |
+| Stockage                                    | migrations embarquées         | ⚠️ migrations **globales** numérotées (`0NN_*.sql`) — pas de namespace par feature                                                                |
+| Widget d'accueil                            | une entrée de manifeste       | ⚠️ `FEATURE_CATALOG` (client) à éditer à la main                                                                                                  |
+| Permissions                                 | rien à écrire                 | ✅ acquis par construction : `access` déclaratif + contrôle de boot ; le rôle accorde `read`/`write` ; restrictions par élément via `SHARE_WIRED` |
+| Espaces / partage                           | `shareTier` du manifeste      | ✅ le registre le porte ; le branchement (`listVisible` + codec) reste par feature                                                                |
+| Live (présence, curseurs, surbrillance)     | une API de segments           | ✅ `useLiveSegment(niveau, valeur)` + `useLiveOutlines` — déjà générique                                                                          |
+| Notifications                               | `notifies: true` au manifeste | ✅ canaux + routes génériques (`notify.*`), la coquille de réglages rend l'onglet toute seule                                                     |
+| Chiffrement serveur (défaut)                | `ctx.secure.open`             | ✅ unifié                                                                                                                                         |
+| Chiffrement par mot de passe                | `ctx.secure` + invite unifiée | ✅ `assertSecureUnlocked` côté serveur, `withSecrecy`/`holdSecrecy` côté client                                                                   |
+| Réglages                                    | rien à écrire                 | ✅ `FeatureSettingsButton` : les sections viennent du manifeste et des droits                                                                     |
 
 Le contrat n'est donc pas à inventer : **il existe, dispersé**. Le chantier est
 de le rassembler derrière un point d'entrée unique par feature, puis de faire

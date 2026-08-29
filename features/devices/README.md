@@ -30,7 +30,7 @@ Deux préfixes de commandes, et c'est la frontière :
   (`devices.linkCodeCreate` / `linkCodeList` / `linkCodeSetAutoApprove` /
   `linkCodeRevoke`), qui étaient quatre routes HTTP de session et sont
   devenues des commandes de socket comme les autres (seule leur
-  *consommation*, l'enrôlement, reste en HTTP : elle est publique). La
+  _consommation_, l'enrôlement, reste en HTTP : elle est publique). La
   rétention est un service du module.
 
 Le module parle au hub par la façade `agents` du SDK : `resetAgentSession`
@@ -127,25 +127,25 @@ feature.
 Toute la collecte est **réglable par appareil** et **poussée par le serveur** à
 l'agent (`agent.config`) à la connexion **et** à chaque changement.
 
-Un tick = **un instant** : métriques *et* processus, sous un seul `ts`, dans un
+Un tick = **un instant** : métriques _et_ processus, sous un seul `ts`, dans un
 seul message (`metrics.batch`). Un point de graphe ne peut donc jamais exister
 sans les processus qui l'expliquent.
 
-| Flux | Cadence (défaut) | Contenu | Stockage |
-|---|---|---|---|
-| **Collecte** | 60 s | CPU/RAM/disque/réseau/charge/temp/GPU/batterie/users/connexions + `process_count` + E/S disque + **liste des processus** (`all`/`top`/`off`). Chaque point est cliquable sur la frise. | `device_metrics` + `device_process_samples` |
-| **Report** | 1 h (+ connexion) | OS + posture sécurité + par-disque (`disks[]`) + ports en écoute + connexions. Dernier état seulement. | `devices.report_json` |
-| **Presence** | sur transition | online/offline de l'agent (frise de disponibilité). | `device_presence` |
+| Flux         | Cadence (défaut)  | Contenu                                                                                                                                                                                | Stockage                                    |
+| ------------ | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| **Collecte** | 60 s              | CPU/RAM/disque/réseau/charge/temp/GPU/batterie/users/connexions + `process_count` + E/S disque + **liste des processus** (`all`/`top`/`off`). Chaque point est cliquable sur la frise. | `device_metrics` + `device_process_samples` |
+| **Report**   | 1 h (+ connexion) | OS + posture sécurité + par-disque (`disks[]`) + ports en écoute + connexions. Dernier état seulement.                                                                                 | `devices.report_json`                       |
+| **Presence** | sur transition    | online/offline de l'agent (frise de disponibilité).                                                                                                                                    | `device_presence`                           |
 
 Défauts serveur dans [`DevEye-Types/src/domain/device.ts`](../../DevEye-Types/src/domain/device.ts)
 (`DEFAULT_METRIC_INTERVAL_SECONDS` = 60, `DEFAULT_PROCESS_CAPTURE` = `all`,
-`DEFAULT_RETENTION_DAYS` = 30) — source unique, lue par le serveur *et* par le
+`DEFAULT_RETENTION_DAYS` = 30) — source unique, lue par le serveur _et_ par le
 panneau de configuration.
 
 Rétention : **une seule durée**, `devices.retention_days` (défaut serveur
 `MONITORING_RETENTION_DAYS`, 30 j, lue par le module dans son `env.ts`), qui
 régit les métriques, la présence **et** les processus. Un relevé est un
-*instant* : les faire expirer séparément ne produisait que des instants à
+_instant_ : les faire expirer séparément ne produisait que des instants à
 moitié lisibles. Balayée chaque heure par le service du module
 (`features/devices/src/server/service.ts`, un passage au démarrage puis un
 ticker du SDK) ; les instants épinglés y échappent, les appareils archivés
@@ -161,7 +161,7 @@ Le coût du tick vient de deux sondes, partagées par tous les signaux :
 - **`ss -tuanpH`** (`sockets::read_sockets`) → ports en écoute, connexions
   établies, `activeConnections` **et** connexions entrantes/sortantes par process.
   Cette sonde unique remplace les trois d'avant (`ss -tulnH` + `ss -tn state
-  established` ×2) et coûte moins cher au total.
+established` ×2) et coûte moins cher au total.
 
 Mesuré sur une machine à 700 processus : **~40 ms par tick**, soit moins que
 l'ancien cycle lourd, pour 10× plus d'instants historisés.
@@ -195,12 +195,12 @@ maintenable**.
    module) ne garde donc plus que les sondes réellement optionnelles (GPU,
    température, charge, batterie, E/S disque). → Un nouveau champ best-effort
    doit être `nullable` ; ne l'ajouter à `SPARSE_FIELDS` que s'il est
-   *intermittent*.
+   _intermittent_.
 
-   Corollaire côté types : `metricSnapshotSchema` (ce que l'agent envoie) porte
-   `processes`, `metricSeriesPointSchema` (ce que `devices.metrics` relit) ne les
-   porte pas — une fenêtre de graphe contient des centaines de points et
-   trimballer chaque liste coûterait des mégaoctets pour rien.
+    Corollaire côté types : `metricSnapshotSchema` (ce que l'agent envoie) porte
+    `processes`, `metricSeriesPointSchema` (ce que `devices.metrics` relit) ne les
+    porte pas — une fenêtre de graphe contient des centaines de points et
+    trimballer chaque liste coûterait des mégaoctets pour rien.
 
 3. **Downsample : moyenne pour les jauges, max pour les compteurs.** Le `SELECT`
    bucketisé (`(FLOOR(ts/?)*?) AS ts`) et le `GROUP BY` utilisent **la même
@@ -258,7 +258,7 @@ maintenable**.
 
 11. **Ports : une bulle = un port joignable de la même façon.** L'agent renvoie
     une entrée **par adresse de bind** (correct : un service dual-stack écoute
-    vraiment sur `0.0.0.0` *et* `::`). C'est l'UI qui fusionne, par
+    vraiment sur `0.0.0.0` _et_ `::`). C'est l'UI qui fusionne, par
     `(port, joignabilité, interface)`, en unissant protocoles et familles IP
     (`ports.ts` du client du module). → Ne pas dédupliquer côté agent sur autre
     chose que des lignes strictement identiques : l'adresse porte l'information
@@ -266,7 +266,7 @@ maintenable**.
 
 12. **La liste de l'espace vient de la façade, les lignes du module.**
     `devices.list` en portée `workspace` demande à `ctx.deveye.devices.list`
-    *quels* appareils l'espace voit et dans quel ordre (le rang de l'espace, la
+    _quels_ appareils l'espace voit et dans quel ordre (le rang de l'espace, la
     date pour départager ; l'espace personnel d'un administrateur voit tout),
     puis relit les lignes entières par son dépôt. La portée `fleet` exige
     `ctx.isAdmin` et lit tout. → Ne pas réécrire la règle de visibilité dans le
@@ -289,14 +289,14 @@ Statuts (`devices.status`) : `pending` → `active`, `revoked` (réversible via
   (`agents.disconnectAgent`), l'agent refusé à la reconnexion. Réactivable.
 - **Suppression gérée** (`devices.requestDelete`, page Appareils) : passe en
   `pending_deletion` en mémorisant le statut précédent (`status_before_delete`).
-  - Agent **en ligne** → ordre `agent.destroy` immédiat (`agents.requestDestroy`).
-  - Agent **hors ligne** → l'ordre part à sa prochaine connexion (`agent/ws.ts`).
-  - L'agent **s'auto-détruit** (`config.rs::self_destruct` : config + token + pid +
-    log + binaire) puis répond `agent.destroyed{ok}`. Le serveur **archive** alors
-    l'appareil (dépôt du socle, `archive` : statut `archived`, `token_hash=''`).
-  - En cas d'échec (`ok:false`) : `failDeletion` restaure le statut précédent et
-    stocke `delete_error` (affiché sur la carte). La suppression est **interrompue**.
-  - Annulable (`devices.cancelDelete`) tant que l'agent ne s'est pas reconnecté.
+    - Agent **en ligne** → ordre `agent.destroy` immédiat (`agents.requestDestroy`).
+    - Agent **hors ligne** → l'ordre part à sa prochaine connexion (`agent/ws.ts`).
+    - L'agent **s'auto-détruit** (`config.rs::self_destruct` : config + token + pid +
+      log + binaire) puis répond `agent.destroyed{ok}`. Le serveur **archive** alors
+      l'appareil (dépôt du socle, `archive` : statut `archived`, `token_hash=''`).
+    - En cas d'échec (`ok:false`) : `failDeletion` restaure le statut précédent et
+      stocke `delete_error` (affiché sur la carte). La suppression est **interrompue**.
+    - Annulable (`devices.cancelDelete`) tant que l'agent ne s'est pas reconnecté.
 - **Archive** : l'appareil disparaît de la page Appareils mais reste **consultable
   en lecture seule** dans Monitoring (voyage temporel). Ses données sont **figées**
   (les balayages de rétention **excluent** `status='archived'`). Pas de config, pas

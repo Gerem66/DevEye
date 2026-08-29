@@ -6,20 +6,20 @@ premières phases au déclenchement d'un déploiement.
 
 Relu le 28 août 2026, au rapatriement de la feature en module
 (`features/projects`, la quatorzième native portée sur le SDK des features,
-[FEATURE_SDK.md](./FEATURE_SDK.md)) et au branchement du partage inter-espaces
+[Docs/FEATURE_SDK.md](../../Docs/FEATURE_SDK.md)) et au branchement du partage inter-espaces
 (§4, « Le partage »). Elle est branchée, par le SDK, sur les quatre systèmes
-transverses du dépôt : [WORKSPACES.md](./WORKSPACES.md),
-[LIVE.md](./LIVE.md), [SECURITY_MODEL.md](./SECURITY_MODEL.md) et
-[SHARING.md](./SHARING.md).
+transverses du dépôt : [Docs/WORKSPACES.md](../../Docs/WORKSPACES.md),
+[Docs/LIVE.md](../../Docs/LIVE.md), [Docs/SECURITY_MODEL.md](../../Docs/SECURITY_MODEL.md) et
+[Docs/SHARING.md](../../Docs/SHARING.md).
 
-> ⚠️ **Les objets d'espace ne sont pas ici.** Dépôts ([GIT.md](./GIT.md)), bases
-> ([DATABASES.md](./DATABASES.md)), sites suivis ([AUDIENCE.md](./AUDIENCE.md))
-> et cibles de déploiement ([DEPLOY.md](./DEPLOY.md)) sont des features de
+> ⚠️ **Les objets d'espace ne sont pas ici.** Dépôts ([Git](../git/README.md)), bases
+> ([Bases de données](../database/README.md)), sites suivis ([Audience](../audience/README.md))
+> et cibles de déploiement ([Déploiements](../deploy/README.md)) sont des features de
 > premier rang : un projet n'en garde qu'une **liaison**, et l'onglet
 > correspondant n'est qu'une vue sur la feature.
 
 > ⚠️ **Le git n'est plus ici.** Les dépôts sont devenus une feature de premier
-> rang, portée par l'espace : voir [GIT.md](./GIT.md). Un projet n'en garde
+> rang, portée par l'espace : voir [Git](../git/README.md). Un projet n'en garde
 > qu'une **liaison**, et l'onglet Git n'est qu'une vue sur ce dépôt-là.
 
 ---
@@ -45,18 +45,18 @@ détruirait des cartes que rien d'autre ne permet de supprimer.
 Reste en **clair** ce sur quoi le serveur doit filtrer, trier, compter ou router
 sans clé. Passe par `content` **chiffré** tout ce qui identifie.
 
-| En clair | Pourquoi |
-|---|---|
-| `workspace_id`, `column_id`, `sort_order` | la frontière d'accès et l'ordre |
-| `assignee_user_id` | « mes tâches, tous projets » en **une** requête |
-| `due_date`, `start_date`, `archived_at` | la frise et les retards |
-| `message_count` + `project_card_reads` | le badge de non-lus, sans lire un message |
-| `counts_as_done` | l'avancement d'un projet, calculé en SQL |
+| En clair                                  | Pourquoi                                        |
+| ----------------------------------------- | ----------------------------------------------- |
+| `workspace_id`, `column_id`, `sort_order` | la frontière d'accès et l'ordre                 |
+| `assignee_user_id`                        | « mes tâches, tous projets » en **une** requête |
+| `due_date`, `start_date`, `archived_at`   | la frise et les retards                         |
+| `message_count` + `project_card_reads`    | le badge de non-lus, sans lire un message       |
+| `counts_as_done`                          | l'avancement d'un projet, calculé en SQL        |
 
 Corollaire : **ce qui doit être unique ne peut pas être chiffré**, le chiffrement
 étant non déterministe. D'où les colonnes `*_ref` — condensés stables qui portent
 l'unicité pendant que la valeur lisible vit dans `content`. Le module git en fait
-l'usage le plus systématique (voir [GIT.md](./GIT.md) §2.2).
+l'usage le plus systématique (voir [Git](../git/README.md) §2.2).
 
 ### 1.3 Le tier est choisi par projet, et tout son arbre le suit
 
@@ -73,7 +73,7 @@ Dans le module, l'étage est le codec du SDK : `cipherFor(ctx, tier)` rend
 Choisir le codec **est** le contrôle d'accès.
 
 - `guarded` n'existe **qu'en espace personnel**. En espace partagé, cette clé
-  serait celle du *propriétaire* : le projet deviendrait illisible pour les
+  serait celle du _propriétaire_ : le projet deviendrait illisible pour les
   autres membres, ou (si l'espace a sa propre clé) lisible par tous tout en
   s'annonçant confidentiel. Les deux issues sont pires que le refus.
 - Un espace partagé n'est pas pour autant en clair : son arbre est chiffré sous
@@ -97,7 +97,7 @@ avec un événement de frise par famille. Le dépôt, lui, n'est pas touché : i
 appartient à l'espace.
 
 > La règle vivait auparavant dans la requête `listDue` (`AND p.security_tier =
-> 'open'`), le cache git étant alors suspendu au projet. Depuis [GIT.md](./GIT.md),
+'open'`), le cache git étant alors suspendu au projet. Depuis [Git](../git/README.md),
 > un dépôt n'a plus de tier à suivre : la garde n'a plus lieu d'être là, et la
 > course qu'elle protégeait a disparu avec sa cause.
 
@@ -105,18 +105,18 @@ appartient à l'espace.
 
 ## 2. Ce que ça donne à l'usage
 
-| Vue | Contenu |
-|---|---|
-| **Portefeuille** | tous les projets, avancement, retards, prochaine échéance, non-lus |
-| **Mes tâches** | mes cartes assignées, tous projets visibles d'ici confondus, projetés compris |
-| **Archives** | projets archivés, restaurables |
-| **Tableau** | kanban, glisser-déposer (dnd-kit), colonnes, limites WIP |
-| **Frise** | cartes datées, jalons, dépendances « bloque / bloqué par » |
-| **Git** | les dépôts reliés — une vue sur la feature Git, voir [GIT.md](./GIT.md) |
-| **Bases de données** | les bases reliées — une vue sur la feature Bases, voir [DATABASES.md](./DATABASES.md) |
-| **Audience** | les sites suivis reliés — une vue sur la feature Audience, voir [AUDIENCE.md](./AUDIENCE.md) |
-| **Déploiement** | les cibles reliées — une vue sur la feature Déploiement, voir [DEPLOY.md](./DEPLOY.md) — et les services surveillés |
-| **Historique** | frise verticale des faits marquants, blocs archivés en lecture seule |
+| Vue                  | Contenu                                                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **Portefeuille**     | tous les projets, avancement, retards, prochaine échéance, non-lus                                                             |
+| **Mes tâches**       | mes cartes assignées, tous projets visibles d'ici confondus, projetés compris                                                  |
+| **Archives**         | projets archivés, restaurables                                                                                                 |
+| **Tableau**          | kanban, glisser-déposer (dnd-kit), colonnes, limites WIP                                                                       |
+| **Frise**            | cartes datées, jalons, dépendances « bloque / bloqué par »                                                                     |
+| **Git**              | les dépôts reliés — une vue sur la feature Git, voir [Git](../git/README.md)                                                   |
+| **Bases de données** | les bases reliées — une vue sur la feature Bases, voir [Bases de données](../database/README.md)                               |
+| **Audience**         | les sites suivis reliés — une vue sur la feature Audience, voir [Audience](../audience/README.md)                              |
+| **Déploiement**      | les cibles reliées — une vue sur la feature Déploiement, voir [Déploiements](../deploy/README.md) — et les services surveillés |
+| **Historique**       | frise verticale des faits marquants, blocs archivés en lecture seule                                                           |
 
 ### La barre d'onglets suit le contenu du projet
 
@@ -165,7 +165,7 @@ et le geste d'ajout **au pied de la page**.
 Le Déploiement fut le dernier à s'y ranger, et il a fallu pour cela le sortir
 d'ici : il vivait **dans** le projet, avec sa clé d'API rangée dans la feature
 Git faute de mieux. Il est devenu une feature d'espace à son tour
-([DEPLOY.md](./DEPLOY.md)), et son onglet une enveloppe mince comme les trois
+([Déploiements](../deploy/README.md)), et son onglet une enveloppe mince comme les trois
 autres. Il garde une particularité : les **services surveillés** du projet y
 vivent aussi, au-dessus des cibles, parce que « est-ce en ligne ? » se lit juste
 après « qu'ai-je livré ? ».
@@ -221,7 +221,7 @@ présence, téléportation.
   onglet) ;
 - `useLiveOutlines('l2')` sur les cartes du kanban et les barres de la frise.
 
-⚠️ Règle **un seul déclarant par niveau** (voir `LIVE.md`) : le niveau `l1`
+⚠️ Règle **un seul déclarant par niveau** (voir `Docs/LIVE.md`) : le niveau `l1`
 appartient à `Projects.tsx`, le `l2` à `ProjectDetail.tsx`. Ne pas en poser un
 second.
 
@@ -246,7 +246,7 @@ l'autre sens, le module ravive `projects` lui-même quand un autre module écrit
 chez lui par son contrat (§4) : une frise qui reçoit un déploiement, une
 version qui suit une release (`deps.live.changed`).
 
-**L'exception : `live.typing`.** Voir `LIVE.md`, section « En train d'écrire ».
+**L'exception : `live.typing`.** Voir `Docs/LIVE.md`, section « En train d'écrire ».
 
 **La téléportation est honorée.** `Projects.tsx` consomme la cible `l1` que lui
 rend `useLiveSegment` : rejoindre quelqu'un qui regarde un projet l'ouvre pour
@@ -413,7 +413,7 @@ a disparu avec Projets natif).
 ### Le partage
 
 Le descripteur publié dit `'perItem'`, et le module le tient
-([SHARING.md](./SHARING.md)) : un projet **ouvert** se projette vers d'autres
+([Docs/SHARING.md](../../Docs/SHARING.md)) : un projet **ouvert** se projette vers d'autres
 espaces de ses membres, un projet **gardé** jamais (`items.shareable`, que
 `share.set` refuse en le disant : il est chiffré par le mot de passe de son
 auteur, illisible partout ailleurs). Un projet projeté garde **un seul
@@ -454,8 +454,8 @@ des questions de sens que les Notes et le Mail n'avaient pas :
   domicile : une liaison référence un objet de l'espace d'origine, que la
   fenêtre ne voit pas.
 
-| | Depuis la fenêtre | Domicile seulement |
-|---|---|---|
+|         | Depuis la fenêtre                                                                                                                                                                                                                                                                                                                                                                                                        | Domicile seulement                                                                                                                                                                |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Projets | lire (portefeuille avec `foreign: true`, compteurs, non-lus) ; tout l'arbre : colonnes, cartes (ajout, édition, déplacement, archivage, assignation parmi les membres d'ici), jalons, dépendances, discussion (envoi, édition, marquage lu), historique ; le profil (`update` : titre, description, étiquettes, statut, dates), `setStatus`, une version `manual`, archiver, restaurer ; les liaisons se lisent, nommées | `setSecurityTier`, `setVersion` en `github_release` (un dépôt de là-bas), relier et délier toute liaison, le classement du portefeuille (`reorder` refuse un identifiant projeté) |
 
 Aucune commande de suppression n'existe (§1.1) : rien à interdire de ce côté.

@@ -8,7 +8,7 @@ schémas (`features/finance/src/contracts/domain.ts`) et le « comment » dans l
 code, qui est commenté.
 
 Depuis le 27 août 2026, Finances est un **module in-repo** sur le SDK des
-features (`DevEye/features/finance`, voir `FEATURE_SDK.md`) : ses contrats, son
+features (`DevEye/features/finance`, voir `Docs/FEATURE_SDK.md`) : ses contrats, son
 dépôt, ses handlers et son client vivent tous dans ce répertoire, et
 `@deveye/types` n'en garde que l'identité (l'id, le descripteur du registre).
 
@@ -107,11 +107,11 @@ par construction ; seul un service de fond du module l'aurait).
 Trois par compte, et les confondre est la source d'erreur la plus courante d'un
 livre de comptes :
 
-| Champ       | Ce qu'il répond                                                |
-| ----------- | -------------------------------------------------------------- |
+| Champ       | Ce qu'il répond                                                  |
+| ----------- | ---------------------------------------------------------------- |
 | `balance`   | Ce qu'il y a **aujourd'hui**. Le solde, sans autre qualificatif. |
-| `projected` | Le même, opérations déjà datées plus tard comprises.            |
-| `cleared`   | Seulement ce qui a été **pointé**, donc vu sur le relevé.       |
+| `projected` | Le même, opérations déjà datées plus tard comprises.             |
+| `cleared`   | Seulement ce qui a été **pointé**, donc vu sur le relevé.        |
 
 Ils sont calculés en une passe par la CTE `mv` (« les mouvements, vus depuis le
 compte qu'ils touchent »). Un **virement** y apparaît deux fois, une par côté,
@@ -184,16 +184,16 @@ fournis par l'entrée client (`settingsPanels`) :
 
 Tout vit dans `DevEye/features/finance/` (module in-repo).
 
-| Rôle                          | Fichier                                     |
-| ----------------------------- | ------------------------------------------- |
-| Manifest                      | `src/manifest.ts`                           |
-| Schémas et types              | `src/contracts/domain.ts`                   |
-| Contrats des 28 commandes     | `src/contracts/commands.ts`                 |
-| Schéma SQL (socle, jamais déplacé) | `DevEye/src/db/migrations/084_finance.sql` |
-| Requêtes                      | `src/server/repo.ts`                        |
-| Socle serveur (chiffre, calendrier, gardes, rattrapage) | `src/server/_shared.ts` |
-| Handlers (un fichier par nature) | `src/server/handlers/`                   |
-| Tests (calendrier, handlers)  | `src/server/calendar.test.ts`, `src/server/handlers.test.ts` |
-| Entrée client, panneaux de réglages | `src/client/index.tsx`, `src/client/Finance*Panel.tsx` |
-| Coquille et onglets           | `src/client/Finance.tsx`                    |
-| Mise en forme et vocabulaire  | `src/client/format.ts`                      |
+| Rôle                                                    | Fichier                                                      |
+| ------------------------------------------------------- | ------------------------------------------------------------ |
+| Manifest                                                | `src/manifest.ts`                                            |
+| Schémas et types                                        | `src/contracts/domain.ts`                                    |
+| Contrats des 28 commandes                               | `src/contracts/commands.ts`                                  |
+| Schéma SQL (socle, jamais déplacé)                      | `DevEye/src/db/migrations/084_finance.sql`                   |
+| Requêtes                                                | `src/server/repo.ts`                                         |
+| Socle serveur (chiffre, calendrier, gardes, rattrapage) | `src/server/_shared.ts`                                      |
+| Handlers (un fichier par nature)                        | `src/server/handlers/`                                       |
+| Tests (calendrier, handlers)                            | `src/server/calendar.test.ts`, `src/server/handlers.test.ts` |
+| Entrée client, panneaux de réglages                     | `src/client/index.tsx`, `src/client/Finance*Panel.tsx`       |
+| Coquille et onglets                                     | `src/client/Finance.tsx`                                     |
+| Mise en forme et vocabulaire                            | `src/client/format.ts`                                       |

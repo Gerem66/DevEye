@@ -4,7 +4,7 @@
 > module Projets ; relu et mis à jour le 21 août 2026 (sources, notifications
 > par cible, coquille de réglages), puis le 28 août 2026 (rapatriement au
 > format module, `features/deploy`, voir §9). Compagnon de
-> [PROJECTS.md](./PROJECTS.md) et jumeau de [GIT.md](./GIT.md) : c'est le
+> [Projets](../projects/README.md) et jumeau de [Git](../git/README.md) : c'est le
 > même renversement, appliqué au dernier module qui ne l'avait pas eu. Il dit
 > **pourquoi** ; le code dit comment.
 
@@ -27,7 +27,7 @@ Trois symptômes, une seule cause :
    de raison d'être : c'est l'anomalie qui a déclenché ce chantier, et elle
    n'était pas un oubli mais une conséquence — la feature Git fut la première à
    savoir gérer un secret, et le déploiement n'avait pas d'écran où loger le
-   sien (voir [GIT.md](./GIT.md) §1, qui le reconnaissait déjà).
+   sien (voir [Git](../git/README.md) §1, qui le reconnaissait déjà).
 
 La cible est donc devenue une **entité de l'espace**. Un projet n'en garde
 qu'une **liaison** — une ligne dans `project_deploy_links`, et rien d'autre.
@@ -53,7 +53,7 @@ Trois conséquences, toutes bonnes :
 - la feature ne demande **jamais** de mot de passe ;
 - le suivi d'état, qui tourne sans session, lit tout ce dont il a besoin ;
 - la garde atomique que portait l'ancien `updateDeployment` (`JOIN projects p ON
-  p.security_tier = 'open'`, contre la course « le projet passe en confidentiel
+p.security_tier = 'open'`, contre la course « le projet passe en confidentiel
   pendant que le service de fond écrit ») **a disparu avec sa cause**, pas avec
   sa garde. Exactement ce qui était arrivé à `markSynced` en 064.
 
@@ -115,14 +115,14 @@ visible. Il portait sur les **lignes encore en vol** ; il porte désormais sur l
 
 ## 3. Ce que ça donne à l'usage
 
-| Vue | Contenu |
-|---|---|
-| **Cibles** | toutes les cibles de l'espace, état du dernier déploiement, nombre de projets, rangeables au glisser-déposer |
-| **Fiche** | l'en-tête de la cible (retour, titre, actions, dont le bouton de réglages commun), « Déployer », et l'historique de ce qui est parti |
-| **Réglages → Sources** | les clés d'API Dokploy de l'espace, avec ce que chacune dessert : l'ancien bouton « Accès Dokploy », absorbé par la coquille commune (voir `SOURCES.md`) |
+| Vue                          | Contenu                                                                                                                                                                     |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Cibles**                   | toutes les cibles de l'espace, état du dernier déploiement, nombre de projets, rangeables au glisser-déposer                                                                |
+| **Fiche**                    | l'en-tête de la cible (retour, titre, actions, dont le bouton de réglages commun), « Déployer », et l'historique de ce qui est parti                                        |
+| **Réglages → Sources**       | les clés d'API Dokploy de l'espace, avec ce que chacune dessert : l'ancien bouton « Accès Dokploy », absorbé par la coquille commune (voir `Docs/SOURCES.md`)               |
 | **Réglages → Notifications** | les canaux de la feature (ses sources d'avis) ; chaque **cible** coche les siens dans ses propres réglages (092). Sur Discord, un message qui suit le déploiement en direct |
-| **Réglages d'une cible** | notifications, partage entre espaces et permissions par rôle (`SETTINGS.md`, `SHARING.md`) |
-| **Onglet d'un projet** | les cibles reliées — une vue sur cette feature, voir [PROJECTS.md](./PROJECTS.md) |
+| **Réglages d'une cible**     | notifications, partage entre espaces et permissions par rôle (`Docs/SETTINGS.md`, `Docs/SHARING.md`)                                                                        |
+| **Onglet d'un projet**       | les cibles reliées — une vue sur cette feature, voir [Projets](../projects/README.md)                                                                                       |
 
 Une cible se **déclare** (elle existe déjà chez Dokploy), elle ne se crée pas :
 le dialogue interroge l'instance **dès qu'on en désigne une** et propose ce
@@ -294,7 +294,7 @@ utiles enveloppées par superjson. Il n'y a pas d'`application.all` (les cibles 
 découvrent par `project.all`, imbriquées dans les environnements), et une infra
 Dokploy est surtout faite de piles **compose**, pas d'applications — d'où
 `target_kind`, sans lequel une cible est indéployable. Le détail est dans
-[PROJECTS.md](./PROJECTS.md) §5, où il a été écrit.
+[Projets](../projects/README.md) §5, où il a été écrit.
 
 ---
 
@@ -318,13 +318,13 @@ frise complète sans que personne n'ait ouvert sa fiche.
 
 ### 6.2 Trois bornes, parce que c'est du sondage
 
-| Borne | Valeur | Ce qu'elle empêche |
-|---|---|---|
-| `DEPLOY_TICK_SECONDS` | 10 s | — *c'est la cadence, voir 6.6* |
-| `DEPLOY_BATCH` | 6 cibles / tour | quarante cibles = quarante requêtes d'un coup |
-| `DEPLOY_MIN_INTERVAL_SECONDS` | 60 s **au repos** | réinterroger une cible qui n'a rien à dire |
-| `DEPLOY_IMPORT_LIMIT` | 20 lignes / appel | recopier des centaines d'entrées anciennes |
-| `DEPLOY_STALE_SECONDS` | 6 h | entretenir sans fin un déploiement que le fournisseur a oublié |
+| Borne                         | Valeur            | Ce qu'elle empêche                                             |
+| ----------------------------- | ----------------- | -------------------------------------------------------------- |
+| `DEPLOY_TICK_SECONDS`         | 10 s              | — _c'est la cadence, voir 6.6_                                 |
+| `DEPLOY_BATCH`                | 6 cibles / tour   | quarante cibles = quarante requêtes d'un coup                  |
+| `DEPLOY_MIN_INTERVAL_SECONDS` | 60 s **au repos** | réinterroger une cible qui n'a rien à dire                     |
+| `DEPLOY_IMPORT_LIMIT`         | 20 lignes / appel | recopier des centaines d'entrées anciennes                     |
+| `DEPLOY_STALE_SECONDS`        | 6 h               | entretenir sans fin un déploiement que le fournisseur a oublié |
 
 Une cible qui a un déploiement **en vol** échappe à la deuxième et passe à chaque
 tour : c'est là que l'état bouge à la minute. Le tri est fait en SQL
@@ -369,7 +369,7 @@ jamais. Au bout de six heures, ce n'est plus un déploiement en cours mais un
 **suivi perdu** — elle passe à `failed` avec une description qui le dit, et
 **sans avis** : on ne sait justement pas ce qui s'est passé, et annoncer un échec
 qu'on n'a pas constaté serait pire que de se taire. Sans cette borne, la ligne
-resterait `queued` pour toujours *et* garderait sa cible dans la voie rapide à
+resterait `queued` pour toujours _et_ garderait sa cible dans la voie rapide à
 chaque tour.
 
 ### 6.5 Les avis ont leurs propres canaux
@@ -381,7 +381,7 @@ et il a changé deux fois depuis l'écriture de ce document : les canaux
 appartiennent à **la feature** (091, plus de liste commune aux cinq émetteurs
 ni de `notification_settings`, supprimée en 087), et la sélection vit sur
 **chaque cible** (092) : une cible sans canal coché ne prévient personne, il
-n'y a plus d'héritage depuis la feature. Voir `NOTIFICATIONS.md`.
+n'y a plus d'héritage depuis la feature. Voir `Docs/NOTIFICATIONS.md`.
 
 Un avis part à l'**atterrissage**, échec comme succès, y compris pour un
 déploiement lancé ailleurs. Il n'y a pas de « retour à la normale » à annoncer,
@@ -508,7 +508,7 @@ sautant les canaux dont le message vivant a conclu. Le corps de tout cela
 
 ⚠️ Corollaire à ne pas manquer : **quand le suivi vivant a conclu, le webhook est
 retiré de la livraison finale**. Sans cela Discord recevrait le message modifié
-*et* un second message en clair juste en dessous. Le mail, lui, est toujours
+_et_ un second message en clair juste en dessous. Le mail, lui, est toujours
 servi — il ne sait pas se modifier.
 
 Les identifiants des messages vivent dans le blob chiffré de la ligne
@@ -544,7 +544,7 @@ garde l'historique en base (§6). Trois précautions :
 
 Le bornage à [0, 100] % a d'ailleurs un piège que le test a trouvé :
 `Math.min`/`Math.max` **laissent passer `NaN`**, et `repeat(NaN)` rend une chaîne
-vide sans lever — la barre *disparaissait* au lieu d'être bornée. D'où le
+vide sans lever — la barre _disparaissait_ au lieu d'être bornée. D'où le
 `Number.isFinite` en tête de `progressBar`.
 
 ### 7.4 Le journal, et pourquoi sa lecture est brève
@@ -622,7 +622,7 @@ mysql DevEye_migdry < src/db/migrations/0XX_….sql  # deux fois : ré-entrance
    partage, et délier de l'un ne retire rien à l'autre.
 3. **Droits** — un rôle sans `deploy` : la tuile disparaît, l'onglet d'un projet
    passe en « accès restreint », et le « + » de la barre d'onglets ne propose
-   plus le déploiement. ⚠️ *Fail-closed* : les rôles existants n'ont pas ce
+   plus le déploiement. ⚠️ _Fail-closed_ : les rôles existants n'ont pas ce
    droit tant qu'on ne le leur accorde pas — le propriétaire, lui, l'a d'office.
 4. **Jeton retiré** — la cible reste, se peint en danger, annonce « accès
    retiré » et refuse de se déclencher.
@@ -634,7 +634,7 @@ mysql DevEye_migdry < src/db/migrations/0XX_….sql  # deux fois : ré-entrance
    ligne apparaît d'elle-même dans la liste et dans la fiche, au plus tard au
    quart d'heure, sans avoir ouvert quoi que ce soit.
 8. **Premier import** — déclarer une cible qui a déjà de l'historique : il entre
-   en base, et **aucun avis ne part**. Le déploiement *suivant*, lui, en produit
+   en base, et **aucun avis ne part**. Le déploiement _suivant_, lui, en produit
    un.
 9. **Avis** — régler un webhook dans « Notifications », déployer, vérifier qu'un
    seul message arrive à l'atterrissage. Puis redémarrer le serveur au milieu
@@ -648,11 +648,10 @@ mysql DevEye_migdry < src/db/migrations/0XX_….sql  # deux fois : ré-entrance
 12. **Barre sans référence** — première mise en production d'une cible neuve : le
     message affiche le temps écoulé et **aucune barre**.
 
-
 ## 9. Le module (28 août 2026)
 
 Déploiements est la dixième native rapatriée sur le SDK des features
-(`FEATURE_SDK.md`, « La migration des natives »). Ce que le rapatriement a
+(`Docs/FEATURE_SDK.md`, « La migration des natives »). Ce que le rapatriement a
 changé, en plus des chemins du §4 :
 
 - **Les clés Dokploy ont leur table** (`ft_deploy_credentials`, migration
@@ -693,7 +692,7 @@ changé, en plus des chemins du §4 :
   lui-même. `deploy.remove` et `deploy.trigger` déclaraient
   `['deploy', 'projects']` en natif.
 - **Le service accepte une couture de test** (`new DeploySync(deps, { listDeployments,
-  listTargets, fetchDeploymentLog })`, patron `{ openSession }` de Bases de
+listTargets, fetchDeploymentLog })`, patron `{ openSession }` de Bases de
   données) : `service.test.ts` rejoue le premier import silencieux, le message
   ouvert puis modifié puis conclu, l'avis en texte avec `except`, le suivi
   perdu, sans réseau.

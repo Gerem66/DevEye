@@ -61,7 +61,7 @@ const MIN_CONNECT_SNAPSHOT_GAP: Duration = Duration::from_secs(60);
 /// Idem pour le rapport et le relevé Sentinelle, dont la cadence nominale est
 /// l'heure : quinze minutes suffisent à éteindre une boucle de reconnexion sans
 /// qu'un vrai démarrage perde quoi que ce soit (le jalon est alors `None`).
-/// Détail dans `Docs/SENTINEL.md`.
+/// Détail dans `features/sentinel/README.md`.
 const MIN_CONNECT_WORK_GAP: Duration = Duration::from_secs(15 * 60);
 /// Échelle de reprise après un vrai refus du serveur (appareil révoqué, inconnu
 /// ou pas encore approuvé), doublée à chaque refus consécutif et remise à zéro

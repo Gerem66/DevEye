@@ -3,7 +3,7 @@
 > Écrit le 7 août 2026, à la fin du chantier qui a sorti le git du module
 > Projets ; relu le 21 août 2026 (sources, coquille de réglages), et le 28 août
 > 2026, au rapatriement de la feature en module (`features/git`, §8).
-> Compagnon de [PROJECTS.md](./PROJECTS.md) : celui-ci suit le travail,
+> Compagnon de [Projets](../projects/README.md) : celui-ci suit le travail,
 > celui-là suit le code. Il dit **pourquoi** ; le code dit comment.
 
 ---
@@ -23,15 +23,16 @@ d'abord qu'ils avaient la même cause :
    que l'onglet Déploiement en réclamait un et renvoyait vers un écran incapable
    de le fournir.
 
-   > Ce chantier les a donc tous accueillis ici, y compris les clés Dokploy, qui
-   > n'avaient rien à y faire : c'était le seul écran capable de gérer un secret.
-   > Elles sont parties dans la feature Déploiement ([DEPLOY.md](./DEPLOY.md)),
-   > qui n'existait pas encore à l'époque, puis dans la table de son module
-   > (`ft_deploy_credentials`, migration 099). Les jetons GitHub ont suivi le
-   > même chemin à leur tour (`ft_git_credentials`, migration 100), et la table
-   > commune `workspace_credentials` a disparu avec le comportement partagé
-   > (`_credentials.ts`) : chaque module possède ses accès, et poser la clé qui
-   > met en production ne relève pas du droit de lire des dépôts.
+    > Ce chantier les a donc tous accueillis ici, y compris les clés Dokploy, qui
+    > n'avaient rien à y faire : c'était le seul écran capable de gérer un secret.
+    > Elles sont parties dans la feature Déploiement ([Déploiements](../deploy/README.md)),
+    > qui n'existait pas encore à l'époque, puis dans la table de son module
+    > (`ft_deploy_credentials`, migration 099). Les jetons GitHub ont suivi le
+    > même chemin à leur tour (`ft_git_credentials`, migration 100), et la table
+    > commune `workspace_credentials` a disparu avec le comportement partagé
+    > (`_credentials.ts`) : chaque module possède ses accès, et poser la clé qui
+    > met en production ne relève pas du droit de lire des dépôts.
+
 2. Un dépôt partagé par deux projets aurait été **synchronisé deux fois**, dans
    deux caches distincts, sous deux quotas de fournisseur.
 3. Un dépôt qu'on veut seulement **regarder**, sans projet autour, n'avait pas
@@ -92,8 +93,8 @@ La clé primaire de `project_repo_links` est le couple `(project_id, repo_id)`
 depuis la migration 069. L'invariant « un projet, un dépôt » qui la précédait
 était une supposition, pas une contrainte du domaine : un projet réel se compose
 souvent d'un client, d'un serveur et de contrats partagés, chacun dans son
-dépôt — et une clé sur `project_id` seul faisait *remplacer* là où l'on voulait
-*ajouter*.
+dépôt — et une clé sur `project_id` seul faisait _remplacer_ là où l'on voulait
+_ajouter_.
 
 Les liaisons d'un projet ont désormais la même forme — dépôts (069), services
 surveillés (067), bases de données (068), cibles de déploiement (080) — et
@@ -122,19 +123,19 @@ que deux onglets d'un même projet ne se distinguent pas par ce genre de détail
 
 L'onglet lui-même **n'apparaît qu'à partir du premier dépôt relié** : sans
 liaison, il repart dans le menu « + » de la barre, qui rouvre le même dialogue
-d'ajout. Voir [PROJECTS.md](./PROJECTS.md) §2.
+d'ajout. Voir [Projets](../projects/README.md) §2.
 
 ---
 
 ## 3. Ce que ça donne à l'usage
 
-| Vue | Contenu |
-|---|---|
-| **Dépôts** | tous les dépôts de l'espace, dernière synchro, nombre de projets, cause d'un blocage |
-| **Un dépôt** | graphe des commits, branches, releases, pull requests, derniers commits, projets liés |
-| **Réglages → Sources** | les jetons GitHub de l'espace, ajout / modification / suppression, avec ce que chacun sert : l'ancien bouton « Jetons GitHub », absorbé par la coquille commune. Le « + » du sélecteur de jeton (RepoPicker / RepoDialog) y mène, et le dépôt adopte le jeton créé au retour |
-| **Réglages d'un dépôt** | partage entre espaces et permissions par rôle (`SETTINGS.md`, `SHARING.md`) |
-| **Onglet Git d'un projet** | le même dépôt, vu depuis le projet |
+| Vue                        | Contenu                                                                                                                                                                                                                                                                      |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Dépôts**                 | tous les dépôts de l'espace, dernière synchro, nombre de projets, cause d'un blocage                                                                                                                                                                                         |
+| **Un dépôt**               | graphe des commits, branches, releases, pull requests, derniers commits, projets liés                                                                                                                                                                                        |
+| **Réglages → Sources**     | les jetons GitHub de l'espace, ajout / modification / suppression, avec ce que chacun sert : l'ancien bouton « Jetons GitHub », absorbé par la coquille commune. Le « + » du sélecteur de jeton (RepoPicker / RepoDialog) y mène, et le dépôt adopte le jeton créé au retour |
+| **Réglages d'un dépôt**    | partage entre espaces et permissions par rôle (`Docs/SETTINGS.md`, `Docs/SHARING.md`)                                                                                                                                                                                        |
+| **Onglet Git d'un projet** | le même dépôt, vu depuis le projet                                                                                                                                                                                                                                           |
 
 Les deux derniers écrans sont **le même composant** (`RepoView`, composé par
 l'onglet d'un projet à travers `GIT_CLIENT_PROVIDER`). Un dépôt n'a pas à se
@@ -238,8 +239,8 @@ Lire le dépôt d'un projet relève de `git: read`, pas de `projects`. L'onglet 
 d'un projet le dit explicitement quand le rôle ne l'accorde pas, plutôt que
 d'afficher un écran vide qui se lirait comme un bug.
 
-⚠️ **Les rôles existants n'accordent pas `git`** — *fail-closed*, voir
-WORKSPACES.md §3. Le propriétaire a tout d'office ; les autres membres doivent
+⚠️ **Les rôles existants n'accordent pas `git`** — _fail-closed_, voir
+Docs/WORKSPACES.md §3. Le propriétaire a tout d'office ; les autres membres doivent
 recevoir le droit dans « Gérer l'espace › Rôles ».
 
 ### La progression se sonde, elle ne se diffuse pas
@@ -294,7 +295,7 @@ son module, quand `applyVersion` a changé la version d'un projet
 ### Désigner un dépôt : l'ordre des champs est le sujet
 
 `RepoPicker` pose **jeton → propriétaire → dépôt**, dans cet ordre, parce que le
-jeton *change le résultat* des deux autres : sans lui GitHub ne rend que le
+jeton _change le résultat_ des deux autres : sans lui GitHub ne rend que le
 public, avec lui il rend aussi les dépôts privés du compte ou de l'organisation.
 Le placer sous la liste revenait à demander de choisir avant d'avoir dit ce que
 la liste devait contenir. La liste se recharge donc à chaque changement de l'un
@@ -305,7 +306,7 @@ pas la même chose selon qui demande :
 
 1. **`/user/repos`** quand le jeton appartient au propriétaire demandé — le
    **seul** endpoint qui rende ses dépôts privés. `/users/{login}/repos` ne rend
-   que le public *même avec le jeton de l'intéressé* : c'est le piège de cette
+   que le public _même avec le jeton de l'intéressé_ : c'est le piège de cette
    API, et la raison de l'aller-retour sur `/user` ;
 2. **`/orgs/{owner}/repos`** — une organisation, dont un jeton membre voit aussi
    les dépôts privés ;
@@ -341,7 +342,7 @@ Tant qu'elle n'est pas finie, le dépôt est réinscrit au tour suivant sans
 attendre les dix minutes du régime ordinaire : un historique à moitié rapatrié
 fait mentir le graphe sur l'âge du dépôt.
 
-> ⚠️ **La date d'un commit est celle du *committer*, pas de l'auteur.**
+> ⚠️ **La date d'un commit est celle du _committer_, pas de l'auteur.**
 >
 > Ce n'est pas un détail de présentation, c'est ce qui fait converger le
 > backfill. Les paramètres `since` et `until` de GitHub filtrent sur la date du
@@ -435,7 +436,7 @@ sous le codec de son espace) : le chercher dans la fenêtre répondrait
 
 `.gitContent` est plus haut que la fenêtre dès qu'un dépôt a quelques branches.
 Un voile en `position: absolute; inset: 0` centrait donc son texte au milieu du
-*contenu* — c'est-à-dire hors écran — et débordait sous la barre de défilement.
+_contenu_ — c'est-à-dire hors écran — et débordait sous la barre de défilement.
 Le voile couvre toujours toute la boîte, mais son panneau est en
 `position: sticky`, calé sur le corps défilant de la popup.
 
@@ -460,14 +461,14 @@ La migration `064` a été rejouée deux fois sur une copie du dump du 5 août
 (`DevEye_migtest`), avec vérification d'invariants de **données** et non
 seulement de succès du DDL :
 
-| Invariant | Attendu |
-|---|---|
-| anciennes tables `project_{repos,commits,branches,releases,pull_requests,commit_authors}` | 0 |
-| nouvelles tables `git_*` | 6 |
-| `project_repo_links` créée, `project_credentials` **conservée** | oui |
-| mots de passe préservés | 308 |
-| second démarrage | « Migrations up to date », zéro migration rejouée |
-| démarrage | zéro avertissement `mutates`, aucun préfixe inconnu |
+| Invariant                                                                                 | Attendu                                             |
+| ----------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| anciennes tables `project_{repos,commits,branches,releases,pull_requests,commit_authors}` | 0                                                   |
+| nouvelles tables `git_*`                                                                  | 6                                                   |
+| `project_repo_links` créée, `project_credentials` **conservée**                           | oui                                                 |
+| mots de passe préservés                                                                   | 308                                                 |
+| second démarrage                                                                          | « Migrations up to date », zéro migration rejouée   |
+| démarrage                                                                                 | zéro avertissement `mutates`, aucun préfixe inconnu |
 
 La `100` se rejoue de la même façon (`DevEye_migdry`) : `ft_git_credentials`
 créée et remplie avec les identifiants d'origine, `git_repos.credential_id`
@@ -516,7 +517,7 @@ partis).
 ## 8. Le module (28 août 2026)
 
 Git est la onzième native rapatriée sur le SDK des features
-(`FEATURE_SDK.md`, « La migration des natives »). Ce que le rapatriement a
+(`Docs/FEATURE_SDK.md`, « La migration des natives »). Ce que le rapatriement a
 changé, en plus des chemins du §4 :
 
 - **Les jetons GitHub ont leur table** (`ft_git_credentials`, migration `100`

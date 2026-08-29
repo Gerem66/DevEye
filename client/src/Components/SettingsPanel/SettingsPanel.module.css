@@ -63,7 +63,9 @@
     border-radius: var(--radius-sm);
     color: var(--text-secondary);
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
 }
 
 .closeBtn:hover {
@@ -220,7 +222,9 @@
     color: var(--text-secondary);
     cursor: pointer;
     opacity: 0;
-    transition: opacity var(--transition-fast), color var(--transition-fast);
+    transition:
+        opacity var(--transition-fast),
+        color var(--transition-fast);
 }
 
 .slot:hover .slotDelete,
@@ -252,7 +256,9 @@
     font-weight: 600;
     white-space: nowrap;
     cursor: pointer;
-    transition: background var(--transition-fast), border-color var(--transition-fast);
+    transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast);
 }
 
 .fileBtn:hover {
@@ -277,7 +283,9 @@
     font-size: 0.9rem;
     font-weight: 600;
     cursor: pointer;
-    transition: background var(--transition-fast), border-color var(--transition-fast);
+    transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast);
 }
 
 .fileBtnWide:hover {
@@ -377,7 +385,9 @@
     border-radius: var(--radius-pill);
     background: var(--surface-subtle);
     border: 1px solid var(--glass-border);
-    transition: background var(--transition-fast), border-color var(--transition-fast);
+    transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast);
 }
 
 .switch::after {
@@ -390,7 +400,9 @@
     border-radius: 50%;
     background: var(--text-secondary);
     transform: translateY(-50%);
-    transition: transform var(--transition-fast), background var(--transition-fast);
+    transition:
+        transform var(--transition-fast),
+        background var(--transition-fast);
 }
 
 .switchInput:checked + .switch {
@@ -417,7 +429,9 @@
     color: var(--text-secondary);
     font-size: 0.85rem;
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
 }
 
 .resetBtn:hover {

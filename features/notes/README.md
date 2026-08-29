@@ -2,14 +2,14 @@
 
 > Écrit le 28 août 2026, le jour où les Notes sont devenues le premier module
 > à **palier par élément** branché sur le partage inter-espaces
-> (`features/notes`, [FEATURE_SDK.md](./FEATURE_SDK.md)). Il dit *pourquoi* ;
+> (`features/notes`, [Docs/FEATURE_SDK.md](../../Docs/FEATURE_SDK.md)). Il dit _pourquoi_ ;
 > le code dit comment.
 >
-> Documents voisins : [SECURITY_MODEL.md](./SECURITY_MODEL.md) (les deux
-> étages, section « Notes privées »), [SHARING.md](./SHARING.md) (le
-> mécanisme de projection), [PERMISSIONS.md](./PERMISSIONS.md) (les
-> restrictions par élément), [SETTINGS.md](./SETTINGS.md) (la coquille de
-> réglages), [LIVE.md](./LIVE.md).
+> Documents voisins : [Docs/SECURITY_MODEL.md](../../Docs/SECURITY_MODEL.md) (les deux
+> étages, section « Notes privées »), [Docs/SHARING.md](../../Docs/SHARING.md) (le
+> mécanisme de projection), [Docs/PERMISSIONS.md](../../Docs/PERMISSIONS.md) (les
+> restrictions par élément), [Docs/SETTINGS.md](../../Docs/SETTINGS.md) (la coquille de
+> réglages), [Docs/LIVE.md](../../Docs/LIVE.md).
 
 Des notes à blocs (paragraphes, cases à cocher, listes, titres, filets)
 rangées dans des dossiers, par espace ; une archive à deux temps ; et, pour
@@ -55,12 +55,12 @@ claires, pour lister, grouper et classer sans rien déchiffrer.
 Le drapeau n'existe que dans l'**espace personnel** : dans un espace partagé,
 les deux étages utilisent la clé de l'espace, et une note « privée » y serait
 lisible par tous. Le serveur refuse (`validation`), l'éditeur ne propose pas le
-bouton. Le détail dans [SECURITY_MODEL.md](./SECURITY_MODEL.md).
+bouton. Le détail dans [Docs/SECURITY_MODEL.md](../../Docs/SECURITY_MODEL.md).
 
 ## 3. Le partage inter-espaces
 
 Le registre dit `shareTier: 'perItem'` et le module tient l'engagement
-([SHARING.md](./SHARING.md) §2) : l'entrée `items` de son serveur (domicile,
+([Docs/SHARING.md](../../Docs/SHARING.md) §2) : l'entrée `items` de son serveur (domicile,
 intitulé, `shareable`), `ctx.sharing.scope()` dans ses listages, et
 `ctx.items.restrictions()` / `ctx.items.assert()` sur ce qu'ils rendent.
 
@@ -87,13 +87,13 @@ d'affichage ne vaut pas.
 
 ### Ce qui reste au domicile
 
-| Depuis la fenêtre | Domicile seulement |
-|---|---|
+| Depuis la fenêtre                          | Domicile seulement          |
+| ------------------------------------------ | --------------------------- |
 | lire, éditer le corps, archiver, restaurer | **classer** (dossier, rang) |
-| | **passer en privé** |
-| | **détruire** |
+|                                            | **passer en privé**         |
+|                                            | **détruire**                |
 
-Le critère est celui de SHARING.md : un geste reste au domicile quand il
+Le critère est celui de Docs/SHARING.md : un geste reste au domicile quand il
 référence d'autres objets de l'espace d'origine ou en changerait la clé.
 
 - **classer** : un dossier d'ici n'existe pas chez elle. `notes.edit` avec un
@@ -150,7 +150,7 @@ DEK, aucun verrou, les privées comme les autres). Une carte qui compte autre
 chose que la liste qu'elle ouvre se lit comme un bug.
 
 Le sujet `notes`, battu après chaque écriture, est rejoué par le hub dans les
-espaces reliés par une projection ([SHARING.md](./SHARING.md) §8) : une note
+espaces reliés par une projection ([Docs/SHARING.md](../../Docs/SHARING.md) §8) : une note
 éditée depuis sa fenêtre rafraîchit son domicile, et inversement.
 
 ## 4. Les tests

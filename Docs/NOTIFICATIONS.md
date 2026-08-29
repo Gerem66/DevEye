@@ -4,7 +4,7 @@
 > fonctionnalité. Il dit **pourquoi** ; le code dit comment.
 >
 > Documents voisins : [SECURITY_MODEL.md](./SECURITY_MODEL.md),
-> [UPTIME.md](./UPTIME.md), [WORKSPACES.md](./WORKSPACES.md).
+> [Uptime](../features/uptime/README.md), [WORKSPACES.md](./WORKSPACES.md).
 
 ---
 
@@ -45,11 +45,11 @@ et 3, eux, restent acquis : plusieurs canaux par émetteur, routage par
 
 ## 2. Les trois tables, et pourquoi trois
 
-| Table | Ce qu'elle porte |
-|---|---|
-| `notification_channels` | les destinations : type, libellé, cible, compte expéditeur |
-| `notification_routes` | une cible de routage : `(espace, feature, item_id)` |
-| `notification_route_channels` | quels canaux cette route sert |
+| Table                         | Ce qu'elle porte                                           |
+| ----------------------------- | ---------------------------------------------------------- |
+| `notification_channels`       | les destinations : type, libellé, cible, compte expéditeur |
+| `notification_routes`         | une cible de routage : `(espace, feature, item_id)`        |
+| `notification_route_channels` | quels canaux cette route sert                              |
 
 La liaison est séparée parce qu'une sélection est un ensemble : plusieurs
 canaux par route, un canal dans plusieurs routes. Une route dont la sélection
@@ -94,7 +94,7 @@ discord  la mise en page riche (embeds, couleurs, champs) et, pour le
 
 ### Le courriel passe par le module Mail
 
-Depuis le rapatriement de Mail en module (28 août 2026, [MAIL.md](./MAIL.md)),
+Depuis le rapatriement de Mail en module (28 août 2026, [Mail](../features/mail/README.md)),
 `Services/notifications.ts` ne lit plus `mail_accounts` et ne parle plus SMTP :
 tout ce qui touche à une boîte passe par le contrat que le service du module
 publie, `MAIL_TRANSPORT_PROVIDER` (`listSenders` : les expéditeurs prêts,
@@ -186,12 +186,12 @@ les doublons de la reprise comme des doublons.
 
 ## 5. Autorisation : deux étages, et ils ne se confondent pas
 
-| | Qui |
-|---|---|
-| Déclarer, corriger, supprimer un canal | gestion des canaux de SA feature (`channels`) |
-| Lire la **liste** des canaux d'une feature | `<feature>: read` |
-| Lire la **destination** d'un canal | gestion des canaux de SA feature (`channels`) |
-| Router une fonctionnalité vers un canal | `<feature>: write` |
+|                                            | Qui                                           |
+| ------------------------------------------ | --------------------------------------------- |
+| Déclarer, corriger, supprimer un canal     | gestion des canaux de SA feature (`channels`) |
+| Lire la **liste** des canaux d'une feature | `<feature>: read`                             |
+| Lire la **destination** d'un canal         | gestion des canaux de SA feature (`channels`) |
+| Router une fonctionnalité vers un canal    | `<feature>: write`                            |
 
 La gestion des canaux est **par fonctionnalité** depuis la migration 093 : le
 champ `channels` du grant de feature du rôle, qui exige aussi la lecture de la

@@ -15,7 +15,6 @@ permissions:
   packages: read
 
 jobs:
-  # Server + client: lint, format, typecheck, tests, build (the `npm run ci` of each).
   web:
     name: server + client
     runs-on: ubuntu-latest
@@ -28,15 +27,15 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      # Installs the server deps (brings @deveye/types into ./node_modules, which
-      # the client also resolves by walking up the tree).
+      # Le client résout `@deveye/types` en remontant l'arbre : c'est cette
+      # installation-ci qui le lui apporte.
       - name: Install server deps
         run: npm ci
 
       - name: Server CI (lint + format + typecheck + tests, app only)
         run: npm run ci
 
-      # Client has no lockfile; install then run its CI (lint + typecheck + build).
+      # `npm install` et non `npm ci` : le client n'a pas de lockfile.
       - name: Install client deps
         working-directory: client
         run: npm install
@@ -45,8 +44,8 @@ jobs:
         working-directory: client
         run: npm run ci
 
-  # In-repo feature modules (features/*): their own lint, format, typecheck
-  # and tests, apart from the app's — same split as ./ci.sh.
+  # Les modules in-repo passent leurs contrôles à part de ceux de l'app, comme
+  # dans ./ci.sh.
   features:
     name: features
     runs-on: ubuntu-latest
@@ -123,8 +122,8 @@ jobs:
       - name: Smoke every installed module
         run: npm run ci:smoke
 
-  # Agent: format + clippy + build on Linux (the per-OS binaries ship via
-  # agent-build.yml on pushes to main).
+  # Ici seulement Linux : les binaires par système partent d'agent-build.yml,
+  # sur les poussées vers main.
   agent:
     name: agent
     runs-on: ubuntu-latest

@@ -17,13 +17,13 @@ données. Basculer d'espace change tout l'écran.
 
 Deux natures, portées par `workspaces.kind` :
 
-| | `personal` | `shared` |
-|---|---|---|
-| Combien par compte | exactement un | autant qu'on veut |
-| Membres | son propriétaire, seul | plusieurs |
-| Supprimable | non | par son propriétaire |
-| Clé de chiffrement | celle du compte | la sienne (cf. §5) |
-| Rôles | aucun | oui |
+|                    | `personal`             | `shared`             |
+| ------------------ | ---------------------- | -------------------- |
+| Combien par compte | exactement un          | autant qu'on veut    |
+| Membres            | son propriétaire, seul | plusieurs            |
+| Supprimable        | non                    | par son propriétaire |
+| Clé de chiffrement | celle du compte        | la sienne (cf. §5)   |
+| Rôles              | aucun                  | oui                  |
 
 **Terme d'interface : « espace ».** Court, tient dans un menu, se décline
 (Espace personnel, Nouvel espace, Quitter l'espace). Le code garde `workspace`.
@@ -40,7 +40,7 @@ système était une façade.
 Aujourd'hui l'espace personnel est une vraie ligne, pointée par
 `users.personal_workspace_id` (NOT NULL + FK). Ce pointeur, plutôt qu'un index
 unique sur `(kind, owner_user_id)` : ce dernier aurait limité chaque compte à un
-seul espace *partagé*, ce qui est faux.
+seul espace _partagé_, ce qui est faux.
 
 ---
 
@@ -68,10 +68,10 @@ dispatcheur avant le handler**, exactement comme la validation zod l'est déjà 
 ```ts
 export interface FeatureAccessSpec {
     feature?: WorkspaceFeatureId;
-    level?: FeatureAccess;              // défaut 'read'
+    level?: FeatureAccess; // défaut 'read'
     capabilities?: WorkspaceCapability[];
-    admin?: true;                       // flotte / pages système
-    scope?: 'account';                  // force l'espace personnel de l'appelant
+    admin?: true; // flotte / pages système
+    scope?: 'account'; // force l'espace personnel de l'appelant
 }
 ```
 
@@ -97,7 +97,7 @@ chantier. Ne pas le brader.
 
 Deux dimensions **orthogonales**, volontairement.
 
-**Capacités** — enum fermé et court, sur la *gouvernance* :
+**Capacités** — enum fermé et court, sur la _gouvernance_ :
 
 ```
 workspace.manage      renommer, logo, supprimer
@@ -139,7 +139,7 @@ Monitoring exigerait à la fois un droit feature et une capacité.
 2. **propriétaire** → tout, non révocable, **sans ligne de rôle**. Lui en donner
    une laisserait croire qu'on peut le lui retirer.
 3. **membre avec rôle** → exactement ce que son rôle accorde.
-4. **membre sans rôle** → rien. *Fail-closed* : un oubli d'attribution retire
+4. **membre sans rôle** → rien. _Fail-closed_ : un oubli d'attribution retire
    l'accès, il ne le donne jamais.
 
 ### Le quatrième étage : les restrictions par élément
@@ -279,31 +279,31 @@ rien re-chiffrer : sous la WDK, les deux paliers lisent le même octet).
 - **La vue ouverte survit à la bascule** quand l'accueil de la cible propose la
   même tuile et que le rôle l'ouvre — son contenu, lui, repart de zéro par
   l'epoch ci-dessus. Sinon elle se referme.
-  > **L'identité de morphe (`layoutId`) est préfixée par l'epoch d'espace**, et
-  > celle de la popup est figée à son ouverture. Sans ça la bascule cassait
-  > l'affichage : la disposition remplacée démonte puis remonte toutes les tuiles
-  > (les sections sont clés par `section.id`, qui diffère d'un espace à l'autre),
-  > la nouvelle tuile reparaît avec le `layoutId` de la popup ouverte, et
-  > framer-motion — qui n'admet qu'un élément par identité — projette la popup
-  > **dans** la tuile. Mesuré : 1143×743 → 290×206, sans jamais se refermer côté
-  > React, d'où un fond assombri qui restait. Après une bascule la popup n'a donc
-  > plus de partenaire et se referme par un fondu, ce qui est de toute façon plus
-  > juste : sa carte d'origine n'existe plus. La composition de l'accueil d'un
-  autre espace n'étant **pas** embarquée dans la session, la décision ne peut
-  tomber qu'après `workspace.activate` : le contenu est donc démonté le temps de
-  la bascule, faute de quoi il interrogerait le nouvel espace avec les droits de
-  l'ancien. Les vues sans tuile (profil, sécurité, journaux, gestion de l'espace)
-  échappent à la règle : elles ne sont pas composées dans l'accueil.
+    > **L'identité de morphe (`layoutId`) est préfixée par l'epoch d'espace**, et
+    > celle de la popup est figée à son ouverture. Sans ça la bascule cassait
+    > l'affichage : la disposition remplacée démonte puis remonte toutes les tuiles
+    > (les sections sont clés par `section.id`, qui diffère d'un espace à l'autre),
+    > la nouvelle tuile reparaît avec le `layoutId` de la popup ouverte, et
+    > framer-motion — qui n'admet qu'un élément par identité — projette la popup
+    > **dans** la tuile. Mesuré : 1143×743 → 290×206, sans jamais se refermer côté
+    > React, d'où un fond assombri qui restait. Après une bascule la popup n'a donc
+    > plus de partenaire et se referme par un fondu, ce qui est de toute façon plus
+    > juste : sa carte d'origine n'existe plus. La composition de l'accueil d'un
+    > autre espace n'étant **pas** embarquée dans la session, la décision ne peut
+    > tomber qu'après `workspace.activate` : le contenu est donc démonté le temps de
+    > la bascule, faute de quoi il interrogerait le nouvel espace avec les droits de
+    > l'ancien. Les vues sans tuile (profil, sécurité, journaux, gestion de l'espace)
+    > échappent à la règle : elles ne sont pas composées dans l'accueil.
 - **Menu de la topbar** — section « Espaces » **en tête** (elle dit où l'on est,
   et tout ce qui suit en dépend), création via un « + » sur l'intitulé.
 - **Bouton de profil** — `pseudo · Nom de l'espace`, uniquement pour les espaces
   partagés : répéter « Espace personnel » à qui y est déjà n'apprend rien.
 - **En-tête de l'accueil** :
 
-  | | Titre | Sous-titre |
-  |---|---|---|
-  | Personnel | `Bonsoir, Gerem` | `Mercredi 5 août` |
-  | Partagé | `Studio Design` | `Bonsoir Gerem · 3 membres · mercredi 5 août` |
+    |           | Titre            | Sous-titre                                    |
+    | --------- | ---------------- | --------------------------------------------- |
+    | Personnel | `Bonsoir, Gerem` | `Mercredi 5 août`                             |
+    | Partagé   | `Studio Design`  | `Bonsoir Gerem · 3 membres · mercredi 5 août` |
 
 ### Gating des features non accordées
 
@@ -328,23 +328,23 @@ n'en dépendent d'aucune : elles ont leurs propres gardes.
 
 ## 7. Base de données
 
-| # | Fichier | Contenu |
-|---|---|---|
-| 046 | `workspace_kind` | `kind`, `owner_user_id`, `theme`, `home_layout` ; un espace personnel par compte |
-| 047 | `users_workspace_pointer` | `personal_workspace_id`, favori, `status` ; drop de `features`/`theme`/`home_layout` sur `users` |
-| 048 | `scope_notes_passwords` | |
-| 049–053 | `scope_uptime`, `scope_mail`, `scope_weather`, `scope_sync`, `scope_devices` | |
-| 054 | `workspace_invites` | *(table supprimée depuis par 058 ; pose `uniq_workspace_member`, qui reste)* |
-| 055 | `workspace_secret_keys` | la WDK |
-| 056 | `workspace_roles` | rôles + `members.role_id` |
-| 057 | `user_invites` | invitations **de compte** — toujours en service |
-| 058 | `drop_workspace_invites` | fin des invitations d'espace |
-| 087 | `notification_channels` | les canaux d'alerte deviennent des objets d'espace ; `notification_settings` supprimée |
+| #       | Fichier                                                                      | Contenu                                                                                          |
+| ------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 046     | `workspace_kind`                                                             | `kind`, `owner_user_id`, `theme`, `home_layout` ; un espace personnel par compte                 |
+| 047     | `users_workspace_pointer`                                                    | `personal_workspace_id`, favori, `status` ; drop de `features`/`theme`/`home_layout` sur `users` |
+| 048     | `scope_notes_passwords`                                                      |                                                                                                  |
+| 049–053 | `scope_uptime`, `scope_mail`, `scope_weather`, `scope_sync`, `scope_devices` |                                                                                                  |
+| 054     | `workspace_invites`                                                          | _(table supprimée depuis par 058 ; pose `uniq_workspace_member`, qui reste)_                     |
+| 055     | `workspace_secret_keys`                                                      | la WDK                                                                                           |
+| 056     | `workspace_roles`                                                            | rôles + `members.role_id`                                                                        |
+| 057     | `user_invites`                                                               | invitations **de compte** — toujours en service                                                  |
+| 058     | `drop_workspace_invites`                                                     | fin des invitations d'espace                                                                     |
+| 087     | `notification_channels`                                                      | les canaux d'alerte deviennent des objets d'espace ; `notification_settings` supprimée           |
 
 La suite du chantier est documentée ailleurs : 089 partage d'éléments entre
 espaces (`SHARING.md`), 090–092 routes de notification par élément
 (`NOTIFICATIONS.md`), 093 canaux par feature dans les rôles (`PERMISSIONS.md`),
-094 chiffrement des sauvegardes par travail (`BACKUP.md`). Le trou 088 est le
+094 chiffrement des sauvegardes par travail (`features/backup/README.md`). Le trou 088 est le
 chantier des droits fins, retiré (§3).
 
 ### Contrainte impérative sur les migrations
@@ -369,7 +369,7 @@ Toute migration se rejoue **sur une copie du dump de production** avant d'être
 livrée, deux fois, en vérifiant des **invariants de données** — pas seulement le
 succès du DDL. Cette méthode a attrapé de vrais bugs, dont une migration qui
 aurait planté en production (`workspace_members.roles`, JSON NOT NULL, devait
-être supprimée *avant* l'insertion des adhésions).
+être supprimée _avant_ l'insertion des adhésions).
 
 ```bash
 mysql … -e "DROP DATABASE IF EXISTS DevEye_migtest; CREATE DATABASE DevEye_migtest …"
@@ -403,7 +403,7 @@ DB_DATABASE=DevEye_migtest LISTEN_PORT=3099 npx tsx index.ts   # ×2
   alors que la nouvelle disposition est active → suppression définitive de tuiles.
   Le prune est gardé sur l'estampille d'espace du store.
 - **`resolveChannels` (UptimeMonitor)** joint uptime → compte mail. Aucune FK ne
-  peut exprimer « même espace » : double garde, à l'écriture *et* à la lecture.
+  peut exprimer « même espace » : double garde, à l'écriture _et_ à la lecture.
 - **Un serveur de test orphelin sur le port 3099** a servi du code périmé et
   invalidé des résultats en silence. Toujours tuer le port avant de relancer.
 - **Le serveur indexe les assets statiques au boot** : un `npm run build` pendant
@@ -422,10 +422,10 @@ DB_DATABASE=DevEye_migtest LISTEN_PORT=3099 npx tsx index.ts   # ×2
 - **Trois dépôts** : `DevEye/` (serveur + client), `DevEye-Types/`, et un miroir
   dans `DevEye/node_modules/@deveye/types/`. Après **toute** modification des
   contrats :
-  ```bash
-  rsync -a --delete DevEye-Types/src/ DevEye/node_modules/@deveye/types/src/
-  diff -rq DevEye-Types/src DevEye/node_modules/@deveye/types/src   # doit être vide
-  ```
+    ```bash
+    rsync -a --delete DevEye-Types/src/ DevEye/node_modules/@deveye/types/src/
+    diff -rq DevEye-Types/src DevEye/node_modules/@deveye/types/src   # doit être vide
+    ```
 - **`./ci.sh`** à la racine : lint + typecheck des trois, tests du serveur,
   build du client.
 - **`npm run gen:css-types`** dans `client/` après toute nouvelle classe CSS —

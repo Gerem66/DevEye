@@ -13,11 +13,11 @@ celui-ci.
 
 Trois notions, et la séparation est la feature elle-même :
 
-| Notion            | Ce que c'est                                        | Fréquence de changement |
-| ----------------- | --------------------------------------------------- | ----------------------- |
-| **Destination**   | Un endroit qui accepte des octets                    | On la déclare une fois  |
-| **Travail**       | Quoi sauvegarder, où, quand, combien de copies       | Rarement                |
-| **Exécution**     | Ce qu'un travail a produit une fois                  | À chaque passage        |
+| Notion          | Ce que c'est                                   | Fréquence de changement |
+| --------------- | ---------------------------------------------- | ----------------------- |
+| **Destination** | Un endroit qui accepte des octets              | On la déclare une fois  |
+| **Travail**     | Quoi sauvegarder, où, quand, combien de copies | Rarement                |
+| **Exécution**   | Ce qu'un travail a produit une fois            | À chaque passage        |
 
 Les croiser est tout l'intérêt : la même base part vers le Raspberry **et** vers
 un S3 distant en déclarant deux travaux, sans dupliquer la configuration
@@ -180,7 +180,7 @@ serverKey = SHA-256("CRYPT_KEY_A:CRYPT_KEY_B")
 Elle est **dérivée, jamais stockée** (`deps.keys.derive`, la dérivation du
 SDK). La BMK de CloudSync est rangée wrappée dans
 la table `sync_meta` : l'utiliser ici aurait mis la clé qui déchiffre l'archive
-*à l'intérieur* de l'archive. Le jour où on restaure — c'est-à-dire le jour où la
+_à l'intérieur_ de l'archive. Le jour où on restaure — c'est-à-dire le jour où la
 base a disparu — on n'aurait eu aucun moyen de l'ouvrir.
 
 > ⚠️ **`CRYPT_KEY_A` et `CRYPT_KEY_B` sont la sauvegarde.**
@@ -199,7 +199,7 @@ scellé ('server'), le défaut sûr.
 Il n'y a pas de mode « mot de passe », et ce n'est pas un oubli :
 l'ordonnanceur tourne sans session, or la clé dérivée du mot de passe ne vit
 que dans une session déverrouillée, en mémoire, à fenêtre glissante (voir
-`SECURITY_MODEL.md`). Un tel mode ne pourrait ni tourner planifié, ni survivre
+`Docs/SECURITY_MODEL.md`). Un tel mode ne pourrait ni tourner planifié, ni survivre
 à un vidage de plusieurs heures.
 
 ### Rouvrir une archive sans DevEye
@@ -234,7 +234,7 @@ Même forme que les autres services de fond : un ticker du SDK
 (`deps.createTicker`), démarré par le service du module. Trois différences
 structurelles, qui tiennent toutes au fait qu'une sauvegarde **dure** :
 
-1. **Un travail à la fois** — la réservation est prise *avant* le premier `await`
+1. **Un travail à la fois** — la réservation est prise _avant_ le premier `await`
    (deux clics rapprochés passeraient un contrôle placé après, et lanceraient deux
    vidages simultanés de la même base).
 2. **L'échéance est repoussée AVANT l'exécution**, jamais après. Un travail qui
@@ -275,7 +275,7 @@ les ordres de l'explorateur de fichiers, sans rien changer à l'agent.
 
 ## Sécurité
 
-Tout vit à l'étage **ouvert** du chiffrement (voir `SECURITY_MODEL.md`), sans
+Tout vit à l'étage **ouvert** du chiffrement (voir `Docs/SECURITY_MODEL.md`), sans
 exception : l'ordonnanceur passe à 3 h du matin, sans session ni mot de passe. Un
 secret S3 qu'il ne pourrait pas lire serait un travail qui ne part jamais.
 
@@ -285,7 +285,7 @@ dans le handler (qui dit combien de travaux bloquent), et la suppression d'un
 espace ne bute plus dessus.
 
 Le droit d'espace est `backup`, distinct de `database` exprès. Sa **lecture** est
-déjà lourde : la liste des destinations dit *où sont les copies de tout*. Qui la
+déjà lourde : la liste des destinations dit _où sont les copies de tout_. Qui la
 lit sait quel bucket viser pour obtenir la base entière sans jamais toucher à
 DevEye.
 

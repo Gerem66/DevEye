@@ -11,12 +11,12 @@
 
 ## 1. Les quatre étages
 
-| # | Étage | Où | Ce qu'il tranche |
-|---|---|---|---|
-| 1 | Compte DevEye | `users.role` | administrateur ou utilisateur : la flotte et les pages système |
-| 2 | Appartenance à l'espace | `workspace_members` | la frontière absolue — même un admin n'entre pas chez autrui |
-| 3 | Rôle : capacités + features | `workspace_roles.capabilities` / `.features` | gouverner l'espace ; ouvrir une fonctionnalité en lecture ou en écriture |
-| 4 | Restrictions par élément | `item_role_grants` | ce qu'un rôle voit de **cette** ligne-là : masquée, ou en lecture seule |
+| #   | Étage                       | Où                                           | Ce qu'il tranche                                                         |
+| --- | --------------------------- | -------------------------------------------- | ------------------------------------------------------------------------ |
+| 1   | Compte DevEye               | `users.role`                                 | administrateur ou utilisateur : la flotte et les pages système           |
+| 2   | Appartenance à l'espace     | `workspace_members`                          | la frontière absolue — même un admin n'entre pas chez autrui             |
+| 3   | Rôle : capacités + features | `workspace_roles.capabilities` / `.features` | gouverner l'espace ; ouvrir une fonctionnalité en lecture ou en écriture |
+| 4   | Restrictions par élément    | `item_role_grants`                           | ce qu'un rôle voit de **cette** ligne-là : masquée, ou en lecture seule  |
 
 Les étages 3 et 4 sont **hiérarchiques** : une restriction d'élément abaisse ce
 que le rôle accorde, elle n'ouvre jamais ce qu'il ferme. L'absence de ligne au
@@ -77,7 +77,7 @@ illisibles sur un même formulaire.
 ```ts
 export interface FeatureAccessSpec {
     feature?: WorkspaceFeatureId;
-    level?: FeatureAccess;              // défaut 'read'
+    level?: FeatureAccess; // défaut 'read'
     capabilities?: WorkspaceCapability[];
     admin?: true;
     scope?: 'account';
@@ -117,7 +117,7 @@ qu'il faut en retenir ici :
 - gardé par `workspace.roles` : restreindre un élément, c'est régler ce qu'un
   rôle voit ;
 - `ctx.itemRestrictions(feature)` côté lecture, `ctx.assertItem(feature, id,
-  level)` côté commande — chargés paresseusement, mémoïsés sous `accessEpoch`,
+level)` côté commande — chargés paresseusement, mémoïsés sous `accessEpoch`,
   invalidés par `share.grantSet`.
 
 ## 6. Reste à faire
