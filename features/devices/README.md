@@ -327,6 +327,12 @@ Statuts (`devices.status`) : `pending` → `active`, `revoked` (réversible via
 
 ## Pièges connus
 
+- **Le passage `DeviceRow` → `Device` existe en deux exemplaires** :
+  `src/agent/mappers.ts` côté app (l'enrôlement et les commandes `agent.*` en
+  rendent un) et `src/server/_shared.ts` côté module (pour ses propres
+  lignes). Le publier dans `@deveye/types` réunirait les deux ; vivre avec est
+  tenable tant que `Device` ne bouge pas.
+
 - **`@deveye/types` est miroité, pas symlinké.** Après édition de
   `DevEye-Types/src`, refaire le miroir depuis la racine du workspace
   (`rsync -a --delete DevEye-Types/src/ DevEye/node_modules/@deveye/types/src/`,

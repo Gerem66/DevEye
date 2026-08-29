@@ -460,6 +460,13 @@ DB_DATABASE=DevEye_migtest LISTEN_PORT=3099 npx tsx index.ts   # ×2
       26 août 2026 (cf. §5).
 - [ ] Sept comptes de test (`sectest_*`, `rep_*`) traînent en base, chacun avec
       son espace personnel. Sans gravité, candidats au ménage.
+- [ ] Tables mortes, `DROP` sur décision (destructif, sauvegarde d'abord) :
+      dix tables de l'ère PHP importées le 30 mars 2026, qu'aucun code ne lit
+      (`Users`, `Workspaces`, `WorkspaceMembers`, `Logs`, `Services`,
+      `ServiceHistory`, `_Mails`, `_Notes`, `_Passwords`, `_Projects`), et
+      `uptime_settings` (037, 040, 049), remplacée par les réglages par
+      service. La colonne héritée `workspaces.features` contient encore de
+      vieux identifiants : la laisser, rien ne la lit (§6).
 
 ### Hors périmètre, décidé
 

@@ -197,3 +197,11 @@ Tout vit dans `DevEye/features/finance/` (module in-repo).
 | Entrée client, panneaux de réglages                     | `src/client/index.tsx`, `src/client/Finance*Panel.tsx`       |
 | Coquille et onglets                                     | `src/client/Finance.tsx`                                     |
 | Mise en forme et vocabulaire                            | `src/client/format.ts`                                       |
+
+## Une question ouverte : `hasItems`
+
+Le descripteur publié dit `hasItems: true, itemNoun: 'compte'`, mais le
+manifest ne déclare de réglages qu'à l'échelle de la feature
+(`settings.feature`) : aucun écran ne règle un compte en particulier, et le
+drapeau ne produit donc rien. Le passer à `false`, ou lui donner un onglet
+d'élément le jour où un compte mérite ses propres réglages.
