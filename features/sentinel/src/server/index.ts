@@ -1,3 +1,6 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { SENTINEL_AGENT_CONFIG_PROVIDER, type SentinelAgentConfigProvider } from '@deveye/types/sdk';
 import type { FeatureServer } from '@deveye/types/sdk/server';
 
@@ -12,13 +15,14 @@ import { setEngine } from './_shared';
  * et offre le contrat `SENTINEL_AGENT_CONFIG_PROVIDER` : la part de Sentinelle
  * dans la config poussée à un agent.
  *
- * Pas de `migrationsDir` : les tables du module datent du socle, une nouvelle
- * inaugurerait `src/server/migrations/`. Pas d'entrée `items` : `shareTier:
- * 'never'`, Sentinelle n'a pas d'éléments.
+ * `migrationsDir` : les tables datent du socle, la séquence du module ne porte
+ * que ce qui les corrige. Pas d'entrée `items` : `shareTier: 'never'`,
+ * Sentinelle n'a pas d'éléments.
  */
 export const serverEntry: FeatureServer<SentinelRepo> = {
     createRepo,
     features: sentinelHandlers,
+    migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
     createService(deps) {
         const engine = new SentinelEngine(deps);
         // Ce que l'app recompose dans `agent.config` : les sondes que l'agent relève

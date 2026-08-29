@@ -130,6 +130,7 @@ function config(over: Partial<DeviceConfigRow> & { device_id: string }): DeviceC
         learning_until: null,
         integrity_minutes: 360,
         auth_events: 1,
+        pin_evidence: 1,
         last_integrity_at: null,
         ...over
     };

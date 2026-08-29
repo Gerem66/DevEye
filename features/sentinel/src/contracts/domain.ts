@@ -497,7 +497,12 @@ export const sentinelConfigSchema = z.object({
      */
     learningUntil: z.number().int().positive().nullable(),
     integrityMinutes: z.number().int().min(SENTINEL_INTEGRITY_MINUTES_MIN).max(SENTINEL_INTEGRITY_MINUTES_MAX),
-    authEvents: z.boolean()
+    authEvents: z.boolean(),
+    /**
+     * Un constat sérieux garde-t-il l'instant qui le porte ? Ces relevés
+     * apparaissent dans l'historique de Monitoring et survivent à la rétention.
+     */
+    pinEvidence: z.boolean()
 });
 export type SentinelConfig = z.infer<typeof sentinelConfigSchema>;
 
@@ -526,6 +531,7 @@ export const deviceSentinelStateSchema = z.object({
     lastIntegrityAt: z.number().int().positive().nullable(),
     /** Tels qu'enregistrés (défauts sans ligne), pour que le panneau de réglages parte de ce qui est réglé. */
     integrityMinutes: z.number().int().min(SENTINEL_INTEGRITY_MINUTES_MIN).max(SENTINEL_INTEGRITY_MINUTES_MAX),
-    authEvents: z.boolean()
+    authEvents: z.boolean(),
+    pinEvidence: z.boolean()
 });
 export type DeviceSentinelState = z.infer<typeof deviceSentinelStateSchema>;

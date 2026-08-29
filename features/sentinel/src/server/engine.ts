@@ -387,7 +387,7 @@ export class SentinelEngine {
             drafts.push(...authRules(ctx, pending.auth));
         }
 
-        const opened = await this.record(device, drafts, replayed);
+        const opened = await this.record(device, drafts, replayed, config.pin_evidence === 1);
 
         // La ligne de base s'écrit après l'évaluation : l'inverse rendrait un
         // programme nouveau déjà connu, et `process.new` ne sonnerait jamais.
@@ -408,7 +408,8 @@ export class SentinelEngine {
     private async record(
         device: SdkDevice,
         drafts: FindingDraft[],
-        replayed: SentinelRuleId[]
+        replayed: SentinelRuleId[],
+        pinEvidence: boolean
     ): Promise<{ draft: FindingDraft; id: number }[]> {
         const now = Date.now();
         const workspaceId = device.workspaceId;
@@ -439,16 +440,21 @@ export class SentinelEngine {
         // Épingler l'instant qui porte la preuve, pour les constats sérieux : sans
         // cela la rétention effacerait la seule liste de processus qui explique le
         // constat. `pinInstant` épingle les deux tables en une instruction, une
-        // preuve à moitié épinglée disparaissant à la purge suivante.
-        const toPin = [
-            ...new Set(
-                opened
-                    .filter(
-                        ({ draft }) => SEVERITY_RANK[draft.severity] >= SEVERITY_RANK.high && draft.snapshotTs !== null
-                    )
-                    .map(({ draft }) => draft.snapshotTs!)
-            )
-        ];
+        // preuve à moitié épinglée disparaissant à la purge suivante. Refusable
+        // par appareil : ces instants gardés se voient dans l'historique de
+        // Monitoring, et tout le monde ne veut pas les y trouver.
+        const toPin = pinEvidence
+            ? [
+                  ...new Set(
+                      opened
+                          .filter(
+                              ({ draft }) =>
+                                  SEVERITY_RANK[draft.severity] >= SEVERITY_RANK.high && draft.snapshotTs !== null
+                          )
+                          .map(({ draft }) => draft.snapshotTs!)
+                  )
+              ]
+            : [];
         for (const ts of toPin) {
             try {
                 await this.deps.telemetry.pinInstant(device.id, ts);
@@ -647,7 +653,7 @@ export class SentinelEngine {
             if (drafts.length === 0) continue;
             // Aucune famille rejouée : `process.vanished` se constate par absence,
             // c'est le retour du programme qui le ferme, pas ce balayage.
-            const opened = await this.record(device, drafts, []);
+            const opened = await this.record(device, drafts, [], config.pin_evidence === 1);
             if (opened.length > 0) await this.announce(device, opened);
         }
 

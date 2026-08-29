@@ -206,6 +206,11 @@ appareil). Les taire sans le dire aurait remplacé un bug voyant par un bug muet
    preuves. Seuls les `resolved` sont balayés, après
    `SENTINEL_FINDING_RETENTION_DAYS` (180 j) ; les ouverts jamais.
 
+    Refusable par appareil (`pin_evidence`, actif par défaut). Ces instants gardés
+    apparaissent dans l'historique de Monitoring, où rien ne disait d'où ils
+    venaient : une feature qui pose des relevés durables chez une autre doit
+    pouvoir se laisser refuser depuis ses propres réglages.
+
 10. **« Binaire supprimé » veut dire « plus rien à ce chemin ».** Le noyau
     suffixe `/proc/<pid>/exe` de « (deleted) » pour deux situations opposées :
     l'exécutable a disparu (implant résident, ce qu'on cherche) ou il a été

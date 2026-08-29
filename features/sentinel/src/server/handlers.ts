@@ -279,7 +279,8 @@ export const sentinelHandlers = [
                 enabled: input.enabled,
                 ...(learningUntil === undefined ? {} : { learningUntil }),
                 ...(input.integrityMinutes === null ? {} : { integrityMinutes: input.integrityMinutes }),
-                ...(input.authEvents === null ? {} : { authEvents: input.authEvents })
+                ...(input.authEvents === null ? {} : { authEvents: input.authEvents }),
+                ...(input.pinEvidence === null ? {} : { pinEvidence: input.pinEvidence })
             });
 
             const updated = await ctx.repo.deviceConfig.get(device.id);
@@ -297,7 +298,8 @@ export const sentinelHandlers = [
                     deviceId: device.id,
                     enabled: input.enabled,
                     integrityMinutes: updated.integrity_minutes,
-                    authEvents: updated.auth_events === 1
+                    authEvents: updated.auth_events === 1,
+                    pinEvidence: updated.pin_evidence === 1
                 }
             });
 

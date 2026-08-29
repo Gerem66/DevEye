@@ -654,6 +654,13 @@ export interface DeviceConfigRow {
     integrity_minutes: number;
     /** Relever les issues d'authentification (interrupteur propre). */
     auth_events: number;
+    /**
+     * Un constat sérieux garde-t-il l'instant qui le porte ? Ces instants
+     * apparaissent dans l'historique de Monitoring comme des relevés que la
+     * rétention n'efface pas. Actif par défaut : un constat sans sa preuve ne
+     * vaut pas grand-chose.
+     */
+    pin_evidence: number;
     /** Unix ms du dernier manifeste reçu ; `null` = jamais mesuré. */
     last_integrity_at: number | null;
 }
@@ -665,6 +672,7 @@ export interface DeviceConfigPatch {
     learningUntil?: number | null;
     integrityMinutes?: number;
     authEvents?: boolean;
+    pinEvidence?: boolean;
 }
 
 export interface DeviceConfigRepo {
@@ -688,7 +696,8 @@ export interface DeviceConfigRepo {
     listEnabled(): Promise<string[]>;
 }
 
-const CONFIG_SELECT = `SELECT device_id, enabled, learning_until, integrity_minutes, auth_events, last_integrity_at
+const CONFIG_SELECT = `SELECT device_id, enabled, learning_until, integrity_minutes, auth_events,
+                              pin_evidence, last_integrity_at
                        FROM ft_sentinel_device_config`;
 
 function hydrateConfig(row: DeviceConfigRow): DeviceConfigRow {
@@ -698,6 +707,7 @@ function hydrateConfig(row: DeviceConfigRow): DeviceConfigRow {
         learning_until: row.learning_until === null ? null : Number(row.learning_until),
         integrity_minutes: Number(row.integrity_minutes),
         auth_events: Number(row.auth_events),
+        pin_evidence: Number(row.pin_evidence),
         last_integrity_at: row.last_integrity_at === null ? null : Number(row.last_integrity_at)
     };
 }
@@ -736,7 +746,8 @@ export function deviceConfigRepo(q: Q): DeviceConfigRepo {
                 enabled: 'enabled',
                 learningUntil: 'learning_until',
                 integrityMinutes: 'integrity_minutes',
-                authEvents: 'auth_events'
+                authEvents: 'auth_events',
+                pinEvidence: 'pin_evidence'
             };
             const sets: string[] = [];
             const params: unknown[] = [];
@@ -744,7 +755,7 @@ export function deviceConfigRepo(q: Q): DeviceConfigRepo {
                 const value = patch[key];
                 if (value === undefined) continue;
                 sets.push(columns[key]);
-                // Les deux drapeaux sont des TINYINT : passer des booléens JS
+                // Les drapeaux sont des TINYINT : passer des booléens JS
                 // marcherait, mais une relecture rendrait alors un autre type que
                 // celui qu'on croit écrire.
                 params.push(typeof value === 'boolean' ? (value ? 1 : 0) : value);

@@ -163,7 +163,8 @@ export const sentinelSetConfig = {
             .max(SENTINEL_INTEGRITY_MINUTES_MAX)
             .nullable()
             .default(null),
-        authEvents: z.boolean().nullable().default(null)
+        authEvents: z.boolean().nullable().default(null),
+        pinEvidence: z.boolean().nullable().default(null)
     }),
     output: z.object({ device: deviceSentinelStateSchema })
 };

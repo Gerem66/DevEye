@@ -112,7 +112,8 @@ export function stateOf(device: SdkDevice, config: DeviceConfigRow | null, open:
         probes: probesOf(device, config),
         lastIntegrityAt: config?.last_integrity_at ?? null,
         integrityMinutes: config?.integrity_minutes ?? DEFAULT_SENTINEL_INTEGRITY_MINUTES,
-        authEvents: config === null ? true : config.auth_events === 1
+        authEvents: config === null ? true : config.auth_events === 1,
+        pinEvidence: config === null ? true : config.pin_evidence === 1
     };
 }
 

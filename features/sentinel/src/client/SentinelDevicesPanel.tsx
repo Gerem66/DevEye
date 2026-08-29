@@ -59,18 +59,20 @@ export default function SentinelDevicesPanel({ canWrite }: SettingsPanelProps) {
     );
 }
 
-/** Les trois cadrans d'une machine, tels que le formulaire les tient. */
+/** Les cadrans d'une machine, tels que le formulaire les tient. */
 interface Draft {
     learningDays: number;
     integrityMinutes: number;
     authEvents: boolean;
+    pinEvidence: boolean;
 }
 
 function draftOf(device: DeviceSentinelState): Draft {
     return {
         learningDays: DEFAULT_SENTINEL_LEARNING_DAYS,
         integrityMinutes: device.integrityMinutes,
-        authEvents: device.authEvents
+        authEvents: device.authEvents,
+        pinEvidence: device.pinEvidence
     };
 }
 
@@ -101,7 +103,8 @@ function DeviceRow({ device, canWrite }: { device: DeviceSentinelState; canWrite
                 // passage ferait taire la dérive sept jours de plus.
                 learningDays: enabled && !device.enabled ? draft.learningDays : null,
                 integrityMinutes: draft.integrityMinutes,
-                authEvents: draft.authEvents
+                authEvents: draft.authEvents,
+                pinEvidence: draft.pinEvidence
             });
             refreshSentinelViews();
             void refreshSentinel();
@@ -206,6 +209,20 @@ function DeviceRow({ device, canWrite }: { device: DeviceSentinelState; canWrite
                 <span className={shell.fieldHint}>
                     Échecs, réussites et leur origine, créations de compte. Des compteurs agrégés, pas un flux de
                     journal : l’activité des sessions n’est jamais remontée.
+                </span>
+            </Checkbox>
+
+            <Checkbox
+                checked={draft.pinEvidence}
+                disabled={!canWrite || busy}
+                onChange={(next) => setDraft((d) => ({ ...d, pinEvidence: next }))}
+                className={styles.fieldCheck}
+            >
+                <span className={shell.fieldLabel}>Garder l’instant qui prouve un constat sérieux</span>
+                <span className={shell.fieldHint}>
+                    À l’ouverture d’un constat élevé ou critique, le relevé de processus correspondant est conservé et
+                    apparaît dans l’historique de Monitoring, à l’abri de la rétention. Sans lui, le constat reste mais
+                    ce qui l’explique disparaît au bout de quelques semaines.
                 </span>
             </Checkbox>
 

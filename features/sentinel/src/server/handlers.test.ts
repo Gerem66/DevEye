@@ -174,6 +174,7 @@ function fakeRepo(findings: FindingRow[] = [], configs: DeviceConfigRow[] = []):
                     learning_until: null,
                     integrity_minutes: 360,
                     auth_events: 1,
+                    pin_evidence: 1,
                     last_integrity_at: null
                 };
                 configMap.set(deviceId, {
@@ -181,7 +182,8 @@ function fakeRepo(findings: FindingRow[] = [], configs: DeviceConfigRow[] = []):
                     enabled: patch.enabled === undefined ? current.enabled : patch.enabled ? 1 : 0,
                     learning_until: patch.learningUntil === undefined ? current.learning_until : patch.learningUntil,
                     integrity_minutes: patch.integrityMinutes ?? current.integrity_minutes,
-                    auth_events: patch.authEvents === undefined ? current.auth_events : patch.authEvents ? 1 : 0
+                    auth_events: patch.authEvents === undefined ? current.auth_events : patch.authEvents ? 1 : 0,
+                    pin_evidence: patch.pinEvidence === undefined ? current.pin_evidence : patch.pinEvidence ? 1 : 0
                 });
             },
             touchIntegrity: unused,
@@ -196,6 +198,7 @@ const WATCHED: DeviceConfigRow = {
     learning_until: null,
     integrity_minutes: 180,
     auth_events: 0,
+    pin_evidence: 1,
     last_integrity_at: 1_700_000_000_000
 };
 
@@ -304,7 +307,8 @@ describe('sentinel.scanNow et sentinel.setConfig : l’agent par la façade', ()
             enabled: true,
             learningDays: 3,
             integrityMinutes: 60,
-            authEvents: false
+            authEvents: false,
+            pinEvidence: null
         });
         assert.equal(out.device.enabled, true);
         assert.equal(out.device.learning, true);
@@ -323,10 +327,14 @@ describe('sentinel.scanNow et sentinel.setConfig : l’agent par la façade', ()
             enabled: true,
             learningDays: null,
             integrityMinutes: 120,
-            authEvents: null
+            authEvents: null,
+            pinEvidence: false
         });
         assert.equal(repo.configs.get('dev-c')!.learning_until, until);
         assert.equal(repo.configs.get('dev-c')!.integrity_minutes, 120);
+        // L'épinglage se refuse comme le reste : ce que le moteur garde dans
+        // l'historique de Monitoring n'a pas à s'imposer.
+        assert.equal(repo.configs.get('dev-c')!.pin_evidence, 0);
     });
 });
 
