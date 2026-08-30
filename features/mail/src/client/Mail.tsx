@@ -922,8 +922,6 @@ export default function Mail(_props: FeatureViewProps) {
                             onAdd={() => void openAccountForm(null)}
                             folders={folders}
                             viewState={viewState}
-                            onSync={() => void syncNow()}
-                            syncing={refreshing}
                             selectedFolderId={selectedFolderId}
                             onSelectFolder={(f) => {
                                 setSelectedFolderId(f.id);
