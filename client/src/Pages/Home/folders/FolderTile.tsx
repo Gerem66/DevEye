@@ -1,6 +1,6 @@
 import type { HomeFolder } from '@deveye/types';
 
-import { folderFeatures } from '../catalog';
+import { catalogEntries } from '../catalog';
 import styles from './folders.module.css';
 
 /** Combien de pastilles la carte montre avant de compter le reste. */
@@ -12,7 +12,7 @@ const PREVIEW = 5;
  * props : la même carte sert la grille et l'organiseur.
  */
 export function FolderTile({ folder }: { folder: HomeFolder }) {
-    const entries = folderFeatures(folder.items);
+    const entries = catalogEntries(folder.items);
 
     if (entries.length === 0) {
         return (

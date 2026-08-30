@@ -138,11 +138,29 @@ export function findFolder(layout: HomeLayout, folderId: string): { section: Hom
 }
 
 // ── Sections ───────────────────────────────────────────────────────────────
+/**
+ * Pose une section garnie en une seule écriture : un modèle d'accueil ne doit
+ * ni peupler la grille tuile par tuile, ni envoyer au serveur une disposition
+ * intermédiaire. Une fonctionnalité déjà posée est sautée, donc un modèle
+ * s'applique par-dessus un autre. Rend l'id de la section.
+ */
+export function addSectionWith(title: string, featureIds: readonly HomeFeatureId[]): string {
+    const id = uid();
+    const placed = new Set<string>(placedFeatureIds(state));
+    const items: HomeTile[] = [];
+    for (const featureId of featureIds) {
+        if (placed.has(featureId) || items.length >= HOME_SECTION_MAX_TILES) continue;
+        placed.add(featureId);
+        items.push(featureId);
+    }
+    const next = title.trim().slice(0, 40);
+    commit({ ...state, sections: [...state.sections, { id, items, ...(next ? { title: next } : {}) }] });
+    return id;
+}
+
 /** Append an empty section and return its id, so the UI can focus it. */
 export function addSection(): string {
-    const id = uid();
-    commit({ ...state, sections: [...state.sections, { id, items: [] }] });
-    return id;
+    return addSectionWith('', []);
 }
 
 export function removeSection(sectionId: string): void {

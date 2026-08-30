@@ -120,10 +120,10 @@ export function featureCatalogEntry(id: HomeFeatureId): FeatureCatalogEntry | un
 }
 
 /**
- * Le contenu d'un dossier, dans l'ordre. Un id inconnu (disposition plus
- * récente, module retiré) est ignoré plutôt que de faire tomber l'écran.
+ * Ces ids, dans cet ordre. Un id inconnu (disposition plus récente, module
+ * retiré) est ignoré plutôt que de faire tomber l'écran.
  */
-export function folderFeatures(items: readonly HomeFeatureId[]): FeatureCatalogEntry[] {
+export function catalogEntries(items: readonly HomeFeatureId[]): FeatureCatalogEntry[] {
     return items
         .map((id) => featureCatalogEntry(id))
         .filter((entry): entry is FeatureCatalogEntry => entry !== undefined);

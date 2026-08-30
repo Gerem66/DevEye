@@ -4,7 +4,14 @@ import type { HomeSection, ShortcutItem } from '@deveye/types';
 import { Dialog } from '@/Components/Dialog';
 import TextInput from '@/Components/TextInput';
 import { useDevices } from '@/devicesProvider';
-import { addDevice, addFeature, placedDeviceIds, placedFeatureIds, useHomeLayout } from '@/stores/homeLayout';
+import {
+    addDevice,
+    addFeature,
+    getHomeLayout,
+    placedDeviceIds,
+    placedFeatureIds,
+    useHomeLayout
+} from '@/stores/homeLayout';
 import {
     featureCatalog,
     FEATURE_CATEGORIES,
@@ -12,31 +19,34 @@ import {
     FEATURE_CATEGORY_LABEL,
     type FeatureCategory
 } from '../catalog';
+import { allRecommendedPlaced, recommendedFeatures } from '../starters';
 import { FeatureArt, type ArtId } from '../art';
 import { ShortcutForm } from './ShortcutForm';
 import styles from './organize.module.css';
 
-/** Les rayons du marché : `all` (le rayon par défaut), les appareils, les
- *  rayons du catalogue, puis la création d'un raccourci. */
-type Rayon = 'all' | 'devices' | FeatureCategory | 'shortcut';
+/** Les rayons du marché : les fonctionnalités mises en avant, l'étal complet,
+ *  les appareils, les rayons du catalogue, puis la création d'un raccourci. */
+type Rayon = 'recommended' | 'all' | 'devices' | FeatureCategory | 'shortcut';
 
 // « Par appareil » et non « Appareils », qui est le nom de la feature : deux
 // boutons du même nom dans un même marché se confondent.
-const RAYON_LABEL: Record<'all' | 'devices' | 'shortcut', string> = {
+const RAYON_LABEL: Record<'recommended' | 'all' | 'devices' | 'shortcut', string> = {
+    recommended: 'Recommandé',
     all: 'Tout',
     devices: 'Par appareil',
     shortcut: 'Raccourcis'
 };
 
-const RAYON_ICON: Record<'all' | 'devices' | 'shortcut', string> = {
+const RAYON_ICON: Record<'recommended' | 'all' | 'devices' | 'shortcut', string> = {
+    recommended: 'star',
     all: 'list',
     devices: 'server',
     shortcut: 'move-to-right'
 };
 
-/** Le rail en trois groupes séparés d'un filet : l'étal complet, ce qui vient
+/** Le rail en trois groupes séparés d'un filet : par où entrer, ce qui vient
  *  de vous (machines, liens), les fonctionnalités par usage. */
-const RAIL_GROUPS: Rayon[][] = [['all'], ['devices', 'shortcut'], [...FEATURE_CATEGORIES]];
+const RAIL_GROUPS: Rayon[][] = [['recommended', 'all'], ['devices', 'shortcut'], [...FEATURE_CATEGORIES]];
 
 function rayonLabel(rayon: Rayon): string {
     return rayon in RAYON_LABEL
@@ -66,6 +76,8 @@ interface MarketItem {
     /** Déjà sur l'accueil : la carte reste à l'étal, éteinte, plutôt que d'en
      *  disparaître ; une seule tuile par fonctionnalité ou par appareil. */
     placed?: boolean;
+    /** Mise en avant : le rayon « Recommandé » traverse les autres. */
+    recommended?: boolean;
     onPick: () => void;
 }
 
@@ -113,12 +125,22 @@ export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketP
     const open = section !== null;
     const sectionId = section?.id ?? null;
 
-    // Une réouverture repart de l'étal complet, pas d'une popup déjà filtrée.
+    // Une réouverture repart du rayon d'entrée, pas d'une popup déjà filtrée :
+    // les recommandées tant qu'il en reste à poser, l'étal complet ensuite.
+    // L'état est lu au store plutôt qu'au rendu, pour décrire l'accueil de
+    // l'instant où la popup s'ouvre.
     useEffect(() => {
         if (!open) return;
-        setRayon('all');
+        setRayon(allRecommendedPlaced(getHomeLayout()) ? 'all' : 'recommended');
         setQuery('');
     }, [open]);
+
+    const recommendedIds = new Set<string>(recommendedFeatures().map((feature) => feature.id));
+
+    // Rien à recommander (aucun de ces modules installé) : le rayon s'efface,
+    // un rail vide ne s'explique pas.
+    const railGroups =
+        recommendedIds.size > 0 ? RAIL_GROUPS : RAIL_GROUPS.map((group) => group.filter((id) => id !== 'recommended'));
 
     /** L'étal, volontairement non mémorisé : la liste de dépendances serait plus
      *  longue que le calcul, pour une quarantaine d'articles. */
@@ -159,6 +181,7 @@ export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketP
                 title: feature.title,
                 description: feature.description,
                 placed: placedFeatures.has(feature.id),
+                recommended: recommendedIds.has(feature.id),
                 onPick: () => {
                     addFeature(sectionId, feature.id);
                     onClose();
@@ -198,12 +221,15 @@ export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketP
           )
         : rayon === 'all'
           ? items
-          : items.filter((item) => item.rayon === rayon);
+          : rayon === 'recommended'
+            ? items.filter((item) => item.recommended)
+            : items.filter((item) => item.rayon === rayon);
 
     /** Combien d'articles par rayon, posés ou non : c'est un inventaire, pas un stock. */
     const counts = new Map<Rayon, number>();
     for (const item of items) counts.set(item.rayon, (counts.get(item.rayon) ?? 0) + 1);
     counts.set('all', items.length);
+    counts.set('recommended', items.filter((item) => item.recommended).length);
 
     // Le rayon des raccourcis montre son formulaire, pas des cartes — sauf
     // pendant une recherche, qui traverse tout et reprend la main sur l'affichage.
@@ -232,7 +258,7 @@ export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketP
 
                         <div className={styles.marketBody}>
                             <div className={styles.marketRails}>
-                                {RAIL_GROUPS.flatMap((group, groupIndex) => [
+                                {railGroups.flatMap((group, groupIndex) => [
                                     ...(groupIndex > 0
                                         ? [<span key={`sep${groupIndex}`} className={styles.marketRailSep} />]
                                         : []),
@@ -269,7 +295,11 @@ export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketP
                                     <ShortcutForm sectionId={section.id} onDone={onClose} />
                                 ) : shown.length === 0 ? (
                                     <p className={styles.addEmpty}>
-                                        {search ? 'Rien ne correspond à cette recherche.' : 'Aucun appareil connecté.'}
+                                        {search
+                                            ? 'Rien ne correspond à cette recherche.'
+                                            : rayon === 'devices'
+                                              ? 'Aucun appareil connecté.'
+                                              : 'Ce rayon est vide.'}
                                     </p>
                                 ) : (
                                     <div className={styles.marketGrid}>
@@ -298,7 +328,7 @@ export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketP
                                                             Déjà sur l’accueil
                                                         </span>
                                                     ) : (
-                                                        (search || rayon === 'all') && (
+                                                        (search || rayon === 'all' || rayon === 'recommended') && (
                                                             <span className={styles.marketCardRayon}>
                                                                 {rayonLabel(item.rayon)}
                                                             </span>

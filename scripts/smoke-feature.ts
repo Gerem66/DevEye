@@ -385,6 +385,12 @@ async function checkCatalogue(page: Page): Promise<void> {
         return false;
     });
 
+    // Le marché ouvre sur un rayon (les recommandées, ou l'étal complet une fois
+    // celles-ci posées) : la recherche est le seul chemin qui les traverse tous.
+    await waitFor('champ de recherche du marché', 5_000, () =>
+        page.setInput(`${MARKET_SELECTOR} input[placeholder*="Rechercher"]`, LABEL)
+    );
+
     await waitFor(`« ${LABEL} » dans le marché d'ajout — la feature est-elle au catalogue ?`, 5_000, () =>
         page.evaluate<boolean>(`(() => {
             ${MARKET_ROOT_JS}

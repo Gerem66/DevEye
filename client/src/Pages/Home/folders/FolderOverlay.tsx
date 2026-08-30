@@ -184,7 +184,7 @@ function FolderLid({ count, source, children }: { count: number; source: DOMRect
 export interface FolderOverlayProps {
     /** Le dossier déployé, ou `null` quand rien ne l'est. */
     folder: HomeFolder | null;
-    /** Son contenu visible, dans l'ordre du dossier (voir `folderFeatures`). */
+    /** Son contenu visible, dans l'ordre du dossier (voir `catalogEntries`). */
     entries: FeatureCatalogEntry[];
     /** La tuile d'origine, mesurée au clic : le point de départ et de retour. */
     source: DOMRect | null;

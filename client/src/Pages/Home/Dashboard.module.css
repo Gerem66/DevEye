@@ -192,17 +192,6 @@
     border-radius: var(--radius-lg);
     background: transparent;
     color: var(--text-secondary);
-    cursor: pointer;
-    transition:
-        border-color var(--transition-fast),
-        color var(--transition-fast),
-        background var(--transition-fast);
-}
-
-.emptyHome:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-    background: var(--accent-bg);
 }
 
 .emptyHomeIcon {
@@ -215,8 +204,84 @@
 }
 
 .emptyHomeHint {
+    max-width: 46ch;
     font-size: 0.85rem;
     color: var(--text-muted);
+    text-align: center;
+}
+
+/* Les modèles : une rangée de cartes sous l'invite, assez sobres pour que
+   l'écran reste une invitation et non un choix imposé. */
+.starters {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+}
+
+.starter {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 210px;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: var(--glass-bg-light);
+    color: var(--text-primary);
+    text-align: left;
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast);
+}
+
+.starter:hover {
+    background: var(--glass-bg);
+    border-color: var(--accent);
+}
+
+.starterHead {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.starterIcon {
+    width: 16px;
+    flex-shrink: 0;
+    color: var(--accent);
+}
+
+.starterName {
+    font-size: 0.88rem;
+    font-weight: 600;
+}
+
+.starterFeatures {
+    font-size: 0.78rem;
+    line-height: 1.35;
+    color: var(--text-muted);
+}
+
+/* Le chemin manuel : toujours offert, jamais mis en avant face aux modèles. */
+.emptyManual {
+    margin-top: var(--space-sm);
+    padding: 4px var(--space-sm);
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+    transition: color var(--transition-fast);
+}
+
+.emptyManual:hover {
+    color: var(--accent);
 }
 
 .greeting {

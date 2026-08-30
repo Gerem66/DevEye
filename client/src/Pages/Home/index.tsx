@@ -45,7 +45,8 @@ import FeatureLogs from '@/Features/Logs';
 import FeatureWorkspace from '@/Features/Workspace';
 import FeatureUsers from '@/Features/Users';
 
-import { featureCatalog, folderFeatures } from './catalog';
+import { catalogEntries, featureCatalog } from './catalog';
+import { EmptyHome } from './EmptyHome';
 import { isForceReload } from './forceReload';
 import {
     DEVICE_VIEW_PREFIX,
@@ -590,7 +591,7 @@ export default function HomePage() {
         () => (openFolder ? (findFolder(layout, openFolder.id)?.folder ?? null) : null),
         [openFolder, layout]
     );
-    const folderEntries = useMemo(() => (folderView ? folderFeatures(folderView.items) : []), [folderView]);
+    const folderEntries = useMemo(() => (folderView ? catalogEntries(folderView.items) : []), [folderView]);
     useEffect(() => {
         if (openFolder !== null && folderEntries.length === 0) setOpenFolder(null);
     }, [openFolder, folderEntries.length]);
@@ -801,7 +802,7 @@ export default function HomePage() {
                 // Un dossier rempli dont plus rien n'est connu (modules retirés)
                 // s'efface ; un dossier vraiment vide reste, inerte : on vient
                 // de le créer.
-                const visible = folderFeatures(tile.items);
+                const visible = catalogEntries(tile.items);
                 if (visible.length === 0 && tile.items.length > 0) continue;
                 const folderId = tile.id;
                 tiles.push(
@@ -967,24 +968,9 @@ export default function HomePage() {
                             <div className={styles.switching} role='status' aria-label='Chargement de l’espace'>
                                 <span className={`icon icon-spinner ${styles.switchingSpinner}`} aria-hidden='true' />
                             </div>
-                        ) : // A fresh home has no section: point the way in. Sans le
-                        // droit de composer, dire seulement pourquoi c'est vide.
-                        canLayout ? (
-                            <button type='button' className={styles.emptyHome} onClick={() => startOrganizing(true)}>
-                                <span className={`icon icon-plus ${styles.emptyHomeIcon}`} />
-                                <span className={styles.emptyHomeTitle}>Votre accueil est vide</span>
-                                <span className={styles.emptyHomeHint}>
-                                    Composez une section : appareils, fonctionnalités et raccourcis y cohabitent.
-                                </span>
-                            </button>
                         ) : (
-                            <div className={styles.emptyHome}>
-                                <span className={`icon icon-plus ${styles.emptyHomeIcon}`} />
-                                <span className={styles.emptyHomeTitle}>L’accueil de cet espace est vide</span>
-                                <span className={styles.emptyHomeHint}>
-                                    Votre rôle ne permet pas d’en modifier la disposition.
-                                </span>
-                            </div>
+                            // A fresh home has no section: point the way in.
+                            <EmptyHome canLayout={canLayout} onCompose={() => startOrganizing(true)} />
                         )}
                     </div>
                 </motion.main>
