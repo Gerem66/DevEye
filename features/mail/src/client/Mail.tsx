@@ -16,6 +16,8 @@ import type { FeatureViewProps } from '@deveye/types/sdk/client';
 
 import AccountPanel from './AccountPanel';
 import AccountPopup, { ACCOUNT_POPUP, type AccountPopupResult } from './AccountPopup';
+import EmptyState from './EmptyState';
+import { mailViewState } from './viewState';
 import ComposePopup, { COMPOSE_POPUP, type ComposeInput } from './ComposePopup';
 import ConfirmPopup, { MAIL_CONFIRM_POPUP } from './ConfirmPopup';
 import MessageInfoPopup, { MESSAGE_INFO_POPUP } from './MessageInfoPopup';
@@ -474,14 +476,26 @@ export default function Mail(_props: FeatureViewProps) {
      * Une relève déjà en vol pour le même dossier n'est pas relancée, c'est la
      * garde du double-clic ; changer de dossier, en revanche, la périme.
      */
-    const syncFolder = useCallback(async () => {
+    /**
+     * Relève ce qui est ouvert : le dossier s'il y en a un, l'arborescence de la
+     * boîte sinon. Le bouton portait autrefois le seul cas du dossier et se
+     * désactivait sans lui, c'est-à-dire exactement quand il était le seul
+     * recours : une boîte dont les dossiers n'ont pas pu être lus n'offrait plus
+     * rien du tout.
+     */
+    const syncNow = useCallback(async () => {
+        const accountId = selectedAccountIdRef.current;
         const folderId = selectedFolderIdRef.current;
         const run = folderRunRef.current;
-        if (folderId === null || syncRunRef.current === run) return;
+        if (accountId === null || syncRunRef.current === run) return;
         syncRunRef.current = run;
         setRefreshing(true);
         setError(null);
         try {
+            if (folderId === null) {
+                await loadFolders(accountId);
+                return;
+            }
             await withSecrecy(() => api.send('mail.folderSync', { folderId }));
             if (folderRunRef.current !== run) return;
             await refreshMessageHead();
@@ -494,7 +508,7 @@ export default function Mail(_props: FeatureViewProps) {
                 setRefreshing(false);
             }
         }
-    }, [refreshMessageHead, refreshFolders]);
+    }, [loadFolders, refreshMessageHead, refreshFolders]);
 
     /**
      * Ouvrir un dossier : la page la plus récente d'abord, depuis le cache local,
@@ -508,9 +522,9 @@ export default function Mail(_props: FeatureViewProps) {
             const run = folderRunRef.current;
             await loadMessages(folderId, null);
             if (folderRunRef.current !== run || selectedAccountTierRef.current === 'guarded') return;
-            await syncFolder();
+            await syncNow();
         },
-        [loadMessages, syncFolder]
+        [loadMessages, syncNow]
     );
 
     useEffect(() => {
@@ -766,6 +780,20 @@ export default function Mail(_props: FeatureViewProps) {
         return `${noun} trouvé${count > 1 ? 's' : ''}${scope}.`;
     })();
 
+    // L'état de la vue, posé une fois : les trois surfaces qui s'en servent (les
+    // deux colonnes vides et le bouton de relève) répondaient chacune à leur
+    // façon, et se contredisaient dès qu'une boîte n'avait pas de dossiers.
+    const viewState = mailViewState({
+        accountsLoading,
+        foldersLoading,
+        accounts,
+        selectedAccount,
+        folders,
+        selectedFolderId
+    });
+
+    const refreshLabel = selectedFolderId === null ? 'Relever les dossiers' : 'Relever le dossier ouvert';
+
     const headline = accountsLoading
         ? 'Chargement…'
         : accounts.length === 0
@@ -795,18 +823,17 @@ export default function Mail(_props: FeatureViewProps) {
                 )}
                 <p className={styles.headline}>{headline}</p>
                 <div className={styles.toolbarActions}>
-                    {/* La relève du dossier ouvert, à côté du bouton commun : c'est
-                        un geste de fenêtre, pas un réglage, et il n'a plus de barre
-                        à lui sous la boîte. Elle fait le même travail que la synchro
-                        de fond, sans attendre son prochain passage ; la
+                    {/* La relève de ce qui est ouvert, à côté du bouton commun :
+                        c'est un geste de fenêtre, pas un réglage. Elle fait le même
+                        travail que la synchro de fond sans attendre son passage ; la
                         reconstruction du cache, elle, est dans l'onglet Avancé. */}
                     <button
                         type='button'
                         className={styles.iconBtn}
-                        title='Relever le dossier ouvert maintenant'
-                        aria-label='Relever le dossier ouvert maintenant'
-                        disabled={selectedFolderId === null || refreshing}
-                        onClick={() => void syncFolder()}
+                        title={refreshLabel}
+                        aria-label={refreshLabel}
+                        disabled={selectedAccountId === null || refreshing}
+                        onClick={() => void syncNow()}
                     >
                         <span className={`icon icon-refresh ${refreshing ? styles.spinning : ''}`} />
                     </button>
@@ -894,7 +921,9 @@ export default function Mail(_props: FeatureViewProps) {
                             }}
                             onAdd={() => void openAccountForm(null)}
                             folders={folders}
-                            foldersLoading={foldersLoading}
+                            viewState={viewState}
+                            onSync={() => void syncNow()}
+                            syncing={refreshing}
                             selectedFolderId={selectedFolderId}
                             onSelectFolder={(f) => {
                                 setSelectedFolderId(f.id);
@@ -964,7 +993,7 @@ export default function Mail(_props: FeatureViewProps) {
                             />
                         ) : (
                             <div className={styles.messageColumnEmpty}>
-                                <p className={styles.empty}>Sélectionnez une boîte mail.</p>
+                                <EmptyState state={viewState} busy={refreshing} onAction={() => void syncNow()} />
                             </div>
                         )}
                     </div>

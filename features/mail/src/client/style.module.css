@@ -213,6 +213,13 @@
     max-width: 60ch;
 }
 
+/* La première ligne d'un état vide : ce qui manque, avant le pourquoi. */
+.emptyTitle {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
 /*
  * Panel A — a two-slide horizontal track (see AccountPanel.tsx): the
  * account list, and the selected account + its folders. `.panelA` clips

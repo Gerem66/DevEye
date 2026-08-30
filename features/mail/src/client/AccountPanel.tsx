@@ -1,9 +1,12 @@
 import { StatusBadge } from 'deveye-sdk-client';
 
 import AccountList from './AccountList';
+import EmptyState from './EmptyState';
 import FolderTree from './FolderTree';
 import SyncProgressBar from './SyncProgressBar';
 import styles from './style.module.css';
+
+import type { MailViewState } from './viewState';
 
 import type { MailAccount, MailFolder } from '../contracts/domain';
 
@@ -18,7 +21,11 @@ interface AccountPanelProps {
     onDragStateChange: (dragging: boolean) => void;
     onAdd: () => void;
     folders: MailFolder[];
-    foldersLoading: boolean;
+    /** L'état de la vue, pour dire ce qui manque quand l'arborescence est vide. */
+    viewState: MailViewState;
+    /** Relève ce qui est ouvert : ici, les dossiers de la boîte. */
+    onSync: () => void;
+    syncing: boolean;
     selectedFolderId: number | null;
     onSelectFolder: (folder: MailFolder) => void;
     /** Which slide shows — controlled by the host, which also sizes the column around it. */
@@ -48,7 +55,9 @@ export function AccountPanel({
     onDragStateChange,
     onAdd,
     folders,
-    foldersLoading,
+    viewState,
+    onSync,
+    syncing,
     selectedFolderId,
     onSelectFolder,
     showList,
@@ -101,8 +110,8 @@ export function AccountPanel({
                             </button>
                             <div className={styles.folderScroll}>
                                 <h4 className={styles.sidebarSubhead}>Dossiers</h4>
-                                {foldersLoading ? (
-                                    <p className={styles.empty}>Chargement…</p>
+                                {folders.length === 0 ? (
+                                    <EmptyState state={viewState} busy={syncing} onAction={onSync} />
                                 ) : (
                                     <FolderTree
                                         folders={folders}

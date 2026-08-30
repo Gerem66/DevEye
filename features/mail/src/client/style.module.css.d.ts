@@ -40,6 +40,7 @@ declare const styles: {
     readonly dropBar: string;
     readonly empty: string;
     readonly emptyState: string;
+    readonly emptyTitle: string;
     readonly error: string;
     readonly feature: string;
     readonly fieldHint: string;
