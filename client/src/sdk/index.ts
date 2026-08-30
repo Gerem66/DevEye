@@ -37,6 +37,10 @@ export { Dialog, DialogCancelButton, useDialogClose, useDialogSubmit, useDismiss
 export { default as Popup, ClosePopup, OpenPopup } from '@/Components/Popup';
 export { openInfo } from '@/Components/InfoPopup';
 export { FeatureSettingsButton } from '@/Components/FeatureSettings';
+// La liste des fournisseurs d'une feature et la clé qu'ils demandent : l'état et
+// le geste sur la même rangée, la saisie dans un dialogue.
+export { ProviderKeys } from '@/Components/FeatureSettings/sections/ProviderKeys';
+export type { ProviderKeyRow } from '@/Components/FeatureSettings/sections/ProviderKeys';
 export { DeviceFolderPicker } from '@/Components/DeviceFolderPicker';
 /**
  * Les appareils de l'espace actif, tels que le module Appareils les offre à l'app

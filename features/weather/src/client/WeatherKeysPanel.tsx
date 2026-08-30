@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { weatherProviderSchema, type WeatherProvider } from '../contracts/domain';
 
-import { Button, settingsStyles as shell, TextInput, useWorkspacePermissions } from 'deveye-sdk-client';
+import { ProviderKeys, settingsStyles as shell, useWorkspacePermissions, type ProviderKeyRow } from 'deveye-sdk-client';
 import { api } from './api';
 
 /**
@@ -9,10 +9,13 @@ import { api } from './api';
  * Un lieu peut porter la sienne, et sans elle retombe sur celle-ci
  * (`resolveLocationKey`). La clé ne revient jamais du serveur, seulement le fait
  * qu'elle existe.
+ *
+ * La liste et le dialogue de saisie viennent de la coquille (`ProviderKeys`) :
+ * ce panneau n'apporte que le catalogue des fournisseurs et les deux commandes.
  */
 
 /** Ce que chaque fournisseur attend. Le registre est court et fermé. */
-const PROVIDER_META: Record<WeatherProvider, { label: string; needsKey: boolean; hint: string }> = {
+const PROVIDER_META: Record<WeatherProvider, { label: string; needsKey: boolean; hint: string; signupUrl?: string }> = {
     'open-meteo': {
         label: 'Open-Meteo',
         needsKey: false,
@@ -21,7 +24,8 @@ const PROVIDER_META: Record<WeatherProvider, { label: string; needsKey: boolean;
     openweathermap: {
         label: 'OpenWeatherMap',
         needsKey: true,
-        hint: 'Exige une clé d’API (gratuite à créer sur openweathermap.org).'
+        hint: 'Exige une clé d’API, gratuite à créer.',
+        signupUrl: 'https://openweathermap.org/api'
     }
 };
 
@@ -29,9 +33,7 @@ export default function WeatherKeysPanel() {
     // Poser une clé exige la permission déclarée `manageKeys`, pas seulement l'écriture.
     const canManage = useWorkspacePermissions().canExtra('weather', 'manageKeys');
     const [held, setHeld] = useState<Record<string, boolean>>({});
-    const [drafts, setDrafts] = useState<Record<string, string>>({});
     const [status, setStatus] = useState<string | null>(null);
-    const [saving, setSaving] = useState<WeatherProvider | null>(null);
 
     const load = useCallback(async () => {
         try {
@@ -46,81 +48,32 @@ export default function WeatherKeysPanel() {
         void load();
     }, [load]);
 
-    const save = useCallback(async (provider: WeatherProvider, key: string) => {
-        setSaving(provider);
+    const save = useCallback(async (provider: string, key: string) => {
         setStatus(null);
-        try {
-            const res = await api.send('weather.setKey', { provider, key });
-            setHeld((prev) => ({ ...prev, [provider]: res.hasKey }));
-            setDrafts((prev) => ({ ...prev, [provider]: '' }));
-        } catch {
-            setStatus('La clé n’a pas pu être enregistrée.');
-        } finally {
-            setSaving(null);
-        }
+        const res = await api.send('weather.setKey', { provider: provider as WeatherProvider, key });
+        setHeld((prev) => ({ ...prev, [provider]: res.hasKey }));
     }, []);
 
+    const rows: ProviderKeyRow[] = weatherProviderSchema.options.map((provider) => ({
+        id: provider,
+        label: PROVIDER_META[provider].label,
+        hint: PROVIDER_META[provider].hint,
+        held: held[provider] === true,
+        needsKey: PROVIDER_META[provider].needsKey,
+        signupUrl: PROVIDER_META[provider].signupUrl,
+        icon: 'cloud'
+    }));
+
     return (
-        <div className={shell.section}>
-            <div className={shell.channelList}>
-                {weatherProviderSchema.options.map((provider) => {
-                    const meta = PROVIDER_META[provider];
-                    const has = held[provider] === true;
-                    return (
-                        <div key={provider} className={shell.channelRow}>
-                            <span className={`icon icon-cloud ${shell.channelIcon}`} aria-hidden='true' />
-                            <span className={shell.channelText}>
-                                <span className={shell.channelLabel}>
-                                    {meta.label}
-                                    {meta.needsKey && (
-                                        <span className={has ? shell.channelUsage : shell.channelOff}>
-                                            {has ? 'clé enregistrée' : 'aucune clé'}
-                                        </span>
-                                    )}
-                                </span>
-                                <span className={shell.channelMeta}>{meta.hint}</span>
-                            </span>
-                        </div>
-                    );
-                })}
-            </div>
-
-            {canManage ? (
-                weatherProviderSchema.options
-                    .filter((p) => PROVIDER_META[p].needsKey)
-                    .map((provider) => (
-                        <div key={provider} className={shell.field}>
-                            <span className={shell.sectionLabel}>Clé {PROVIDER_META[provider].label}</span>
-                            <div className={shell.sectionActions}>
-                                <TextInput
-                                    type='password'
-                                    enableShowHideButton
-                                    value={drafts[provider] ?? ''}
-                                    onChange={(e) => setDrafts((prev) => ({ ...prev, [provider]: e.target.value }))}
-                                    placeholder={held[provider] === true ? 'Remplacer la clé…' : 'Coller la clé…'}
-                                />
-                                <Button
-                                    onClick={() => void save(provider, (drafts[provider] ?? '').trim())}
-                                    disabled={saving === provider || !(drafts[provider] ?? '').trim()}
-                                >
-                                    {saving === provider ? '…' : 'Enregistrer'}
-                                </Button>
-                                {held[provider] === true && (
-                                    <Button variant='danger' onClick={() => void save(provider, '')}>
-                                        Retirer
-                                    </Button>
-                                )}
-                            </div>
-                        </div>
-                    ))
-            ) : (
-                <p className={shell.sectionHint}>
-                    Votre rôle ne permet pas de modifier ces clés : leur gestion se confie dans les permissions de la
-                    Météo.
-                </p>
-            )}
-
+        <>
+            <ProviderKeys
+                rows={rows}
+                canWrite={canManage}
+                onSave={save}
+                onRemove={(provider) => save(provider, '')}
+                readOnlyHint='Votre rôle ne permet pas de modifier ces clés : leur gestion se confie dans les permissions de la Météo.'
+            />
             {status && <p className={shell.notice}>{status}</p>}
-        </div>
+        </>
     );
 }
