@@ -109,7 +109,7 @@ export default function ServiceGeneralPanel({ scope, canWrite }: SettingsPanelPr
     return (
         <div className={shell.section}>
             <div className={shell.field}>
-                <span className={shell.fieldLabel}>Fréquence de relève</span>
+                <span className={shell.sectionLabel}>Fréquence de relève</span>
                 <SelectInput
                     value={draft.intervalSeconds}
                     disabled={!canWrite}
@@ -124,7 +124,7 @@ export default function ServiceGeneralPanel({ scope, canWrite }: SettingsPanelPr
             </div>
 
             <div className={shell.field}>
-                <span className={shell.fieldLabel}>Délai maximum d’une sonde (secondes)</span>
+                <span className={shell.sectionLabel}>Délai maximum d’une sonde (secondes)</span>
                 <TextInput
                     type='number'
                     min={UPTIME_TIMEOUT_MIN}
@@ -138,7 +138,7 @@ export default function ServiceGeneralPanel({ scope, canWrite }: SettingsPanelPr
             </div>
 
             <div className={shell.field}>
-                <span className={shell.fieldLabel}>Échecs consécutifs avant alerte</span>
+                <span className={shell.sectionLabel}>Échecs consécutifs avant alerte</span>
                 <TextInput
                     type='number'
                     min={1}
@@ -154,7 +154,7 @@ export default function ServiceGeneralPanel({ scope, canWrite }: SettingsPanelPr
             </div>
 
             <div className={shell.field}>
-                <span className={shell.fieldLabel}>Conservation de l’historique détaillé</span>
+                <span className={shell.sectionLabel}>Conservation de l’historique détaillé</span>
                 <SelectInput
                     value={draft.retentionDays === null ? '' : String(draft.retentionDays)}
                     disabled={!canWrite}

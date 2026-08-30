@@ -210,7 +210,7 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
             >
                 <div className={shell.section}>
                     <label className={shell.field}>
-                        <span className={shell.fieldLabel}>Nom de l’accès</span>
+                        <span className={shell.sectionLabel}>Nom de l’accès</span>
                         <TextInput
                             data-autofocus
                             value={label}
@@ -221,7 +221,7 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                     </label>
 
                     <label className={shell.field}>
-                        <span className={shell.fieldLabel}>Adresse de l’instance</span>
+                        <span className={shell.sectionLabel}>Adresse de l’instance</span>
                         <TextInput
                             value={baseUrl}
                             placeholder='https://dokploy.exemple.fr'
@@ -230,7 +230,7 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                     </label>
 
                     <label className={shell.field}>
-                        <span className={shell.fieldLabel}>
+                        <span className={shell.sectionLabel}>
                             {editing?.credential ? 'Nouvelle clé d’API (facultatif)' : 'Clé d’API'}
                         </span>
                         {/* Un secret se relit une fois à la saisie, jamais après. */}

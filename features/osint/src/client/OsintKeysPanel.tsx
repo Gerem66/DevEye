@@ -46,7 +46,7 @@ export default function OsintKeysPanel({ canWrite }: SettingsPanelProps) {
     }, []);
 
     return (
-        <>
+        <div className={shell.section}>
             <div className={shell.channelList}>
                 {osintProviderSchema.options.map((provider) => {
                     const meta = OSINT_PROVIDER_META[provider];
@@ -63,7 +63,12 @@ export default function OsintKeysPanel({ canWrite }: SettingsPanelProps) {
                                 </span>
                                 <span className={shell.channelMeta}>
                                     {meta.enables}{' '}
-                                    <a href={meta.signupUrl} target='_blank' rel='noopener noreferrer'>
+                                    <a
+                                        className={shell.link}
+                                        href={meta.signupUrl}
+                                        target='_blank'
+                                        rel='noopener noreferrer'
+                                    >
                                         Obtenir une clé
                                     </a>
                                 </span>
@@ -76,7 +81,7 @@ export default function OsintKeysPanel({ canWrite }: SettingsPanelProps) {
             {canWrite ? (
                 osintProviderSchema.options.map((provider) => (
                     <div key={provider} className={shell.field}>
-                        <span className={shell.fieldLabel}>Clé {OSINT_PROVIDER_META[provider].label}</span>
+                        <span className={shell.sectionLabel}>Clé {OSINT_PROVIDER_META[provider].label}</span>
                         <div className={shell.sectionActions}>
                             <TextInput
                                 type='password'
@@ -106,6 +111,6 @@ export default function OsintKeysPanel({ canWrite }: SettingsPanelProps) {
             )}
 
             {error && <p className={shell.notice}>{error}</p>}
-        </>
+        </div>
     );
 }

@@ -61,7 +61,7 @@ export default function WeatherKeysPanel() {
     }, []);
 
     return (
-        <>
+        <div className={shell.section}>
             <div className={shell.channelList}>
                 {weatherProviderSchema.options.map((provider) => {
                     const meta = PROVIDER_META[provider];
@@ -90,7 +90,7 @@ export default function WeatherKeysPanel() {
                     .filter((p) => PROVIDER_META[p].needsKey)
                     .map((provider) => (
                         <div key={provider} className={shell.field}>
-                            <span className={shell.fieldLabel}>Clé {PROVIDER_META[provider].label}</span>
+                            <span className={shell.sectionLabel}>Clé {PROVIDER_META[provider].label}</span>
                             <div className={shell.sectionActions}>
                                 <TextInput
                                     type='password'
@@ -121,6 +121,6 @@ export default function WeatherKeysPanel() {
             )}
 
             {status && <p className={shell.notice}>{status}</p>}
-        </>
+        </div>
     );
 }

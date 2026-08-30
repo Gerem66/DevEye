@@ -138,7 +138,7 @@ export default function SiteGeneralPanel({ scope, canWrite }: SettingsPanelProps
             />
 
             <div className={shell.field}>
-                <span className={shell.fieldLabel}>Reconnaissance des visiteurs</span>
+                <span className={shell.sectionLabel}>Reconnaissance des visiteurs</span>
                 <SegmentedControl
                     value={draft.visitorMode}
                     options={VISITOR_OPTIONS}
@@ -154,7 +154,7 @@ export default function SiteGeneralPanel({ scope, canWrite }: SettingsPanelProps
             </div>
 
             <div className={shell.field}>
-                <span className={shell.fieldLabel}>Conservation des événements (jours)</span>
+                <span className={shell.sectionLabel}>Conservation des événements (jours)</span>
                 <TextInput
                     type='number'
                     value={draft.retentionDays}

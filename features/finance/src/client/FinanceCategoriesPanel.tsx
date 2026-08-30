@@ -176,7 +176,7 @@ export default function FinanceCategoriesPanel({ canWrite }: SettingsPanelProps)
 
                     <div className={styles.formRow}>
                         <div className={`${shell.field} ${styles.fieldWide}`}>
-                            <span className={shell.fieldLabel}>Nom</span>
+                            <span className={shell.sectionLabel}>Nom</span>
                             <TextInput
                                 placeholder='ex. Logement'
                                 maxLength={FINANCE_NAME_MAX_LENGTH}
@@ -186,7 +186,7 @@ export default function FinanceCategoriesPanel({ canWrite }: SettingsPanelProps)
                         </div>
 
                         <div className={shell.field}>
-                            <span className={shell.fieldLabel}>Sens</span>
+                            <span className={shell.sectionLabel}>Sens</span>
                             {draft.id === null ? (
                                 <SegmentedControl
                                     aria-label='Sens'
@@ -204,7 +204,7 @@ export default function FinanceCategoriesPanel({ canWrite }: SettingsPanelProps)
                     </div>
 
                     <div className={shell.field}>
-                        <span className={shell.fieldLabel}>Couleur</span>
+                        <span className={shell.sectionLabel}>Couleur</span>
                         <div className={styles.swatches}>
                             {FINANCE_COLORS.map((color) => (
                                 <button
@@ -221,7 +221,7 @@ export default function FinanceCategoriesPanel({ canWrite }: SettingsPanelProps)
                     </div>
 
                     <div className={shell.field}>
-                        <span className={shell.fieldLabel}>Icône</span>
+                        <span className={shell.sectionLabel}>Icône</span>
                         <div className={styles.iconGrid}>
                             {CATEGORY_ICONS.map((icon) => (
                                 <button

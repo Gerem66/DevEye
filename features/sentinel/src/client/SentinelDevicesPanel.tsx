@@ -161,7 +161,7 @@ function DeviceRow({ device, canWrite }: { device: DeviceSentinelState; canWrite
 
             {!device.enabled && (
                 <div className={shell.field}>
-                    <span className={shell.fieldLabel}>Fenêtre d’apprentissage à l’activation</span>
+                    <span className={shell.sectionLabel}>Fenêtre d’apprentissage à l’activation</span>
                     <SelectInput
                         value={String(draft.learningDays)}
                         disabled={!canWrite || busy}
@@ -181,7 +181,7 @@ function DeviceRow({ device, canWrite }: { device: DeviceSentinelState; canWrite
             )}
 
             <div className={shell.field}>
-                <span className={shell.fieldLabel}>Relevé de persistance</span>
+                <span className={shell.sectionLabel}>Relevé de persistance</span>
                 <SelectInput
                     value={String(draft.integrityMinutes)}
                     disabled={!canWrite || busy}

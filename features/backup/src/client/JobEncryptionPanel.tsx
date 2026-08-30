@@ -76,7 +76,7 @@ export default function JobEncryptionPanel({ scope, canWrite }: SettingsPanelPro
     return (
         <div className={shell.section}>
             <div className={shell.field}>
-                <span className={shell.fieldLabel}>Forme des archives</span>
+                <span className={shell.sectionLabel}>Forme des archives</span>
                 <SegmentedControl
                     aria-label='Forme des archives'
                     value={mode}

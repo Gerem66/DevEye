@@ -62,7 +62,7 @@ export default function FinanceGeneralPanel({ canWrite }: SettingsPanelProps) {
     return (
         <div className={shell.section}>
             <div className={shell.field}>
-                <span className={shell.fieldLabel}>Devise</span>
+                <span className={shell.sectionLabel}>Devise</span>
                 <SelectInput
                     value={draft.currency}
                     disabled={!canWrite}

@@ -95,7 +95,7 @@ export default function MailEncryptionPanel({ scope, canWrite }: SettingsPanelPr
     return (
         <div className={shell.section}>
             <div className={shell.field}>
-                <span className={shell.fieldLabel}>Palier</span>
+                <span className={shell.sectionLabel}>Palier</span>
                 <SegmentedControl
                     aria-label='Palier de chiffrement'
                     value={tier}

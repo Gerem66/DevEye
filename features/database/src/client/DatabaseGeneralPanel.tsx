@@ -127,7 +127,7 @@ export default function DatabaseGeneralPanel({ scope, canWrite }: SettingsPanelP
 
             {draft.monitorEnabled && (
                 <div className={shell.field}>
-                    <span className={shell.fieldLabel}>Fréquence de relève</span>
+                    <span className={shell.sectionLabel}>Fréquence de relève</span>
                     <SelectInput
                         value={draft.intervalSeconds}
                         disabled={!editable}

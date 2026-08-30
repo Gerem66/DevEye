@@ -19,7 +19,7 @@ export function TerminalSettings({ canWrite }: { canWrite: boolean }) {
                 Relancer la session » applique le nouveau.
             </p>
             <label className={shell.field}>
-                <span className={shell.fieldLabel}>Utilisateur par défaut</span>
+                <span className={shell.sectionLabel}>Utilisateur par défaut</span>
                 <TextInput
                     value={prefs.defaultUser}
                     onChange={(e) => setTerminalPrefs({ defaultUser: e.target.value })}
@@ -37,7 +37,7 @@ export function TerminalSettings({ canWrite }: { canWrite: boolean }) {
             </label>
 
             <label className={shell.field}>
-                <span className={shell.fieldLabel}>À la fin de la session</span>
+                <span className={shell.sectionLabel}>À la fin de la session</span>
                 <SelectInput
                     value={prefs.closeOnExit ? 'close' : 'keep'}
                     disabled={!canWrite}

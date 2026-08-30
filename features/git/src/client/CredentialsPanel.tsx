@@ -208,7 +208,7 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
             >
                 <div className={shell.section}>
                     <label className={shell.field}>
-                        <span className={shell.fieldLabel}>Nom du jeton</span>
+                        <span className={shell.sectionLabel}>Nom du jeton</span>
                         <TextInput
                             data-autofocus
                             value={label}
@@ -219,7 +219,7 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                     </label>
 
                     <label className={shell.field}>
-                        <span className={shell.fieldLabel}>
+                        <span className={shell.sectionLabel}>
                             {editing?.credential ? 'Nouveau jeton (facultatif)' : 'Jeton'}
                         </span>
                         {/* `enableShowHideButton` : un secret se relit une fois à

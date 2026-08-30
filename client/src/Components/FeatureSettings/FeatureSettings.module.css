@@ -80,12 +80,17 @@
     overflow-y: auto;
 }
 
+/* L'écart entre deux blocs de réglage. Nettement plus large que celui d'un
+   `.field` (4 px) : un intitulé de bloc doit se lire comme appartenant à ce qui
+   le suit, et `--space-md` l'en séparait presque autant que du bloc du dessus. */
 .section {
     display: flex;
     flex-direction: column;
-    gap: var(--space-md);
+    gap: var(--space-lg);
 }
 
+/* L'intitulé d'un bloc de réglage : le premier enfant d'un `.field`. C'est le
+   défaut, et le seul des deux qui marque un début de bloc. */
 .sectionLabel {
     font-size: 0.7rem;
     font-weight: 700;
@@ -328,6 +333,10 @@
     gap: var(--space-xs);
 }
 
+/* Le texte attaché à un contrôle, à l'intérieur d'un bloc : le libellé d'une
+   case à cocher, la ligne d'un encart. Pas l'intitulé du bloc, qui est
+   `.sectionLabel` : les deux mêlés donnaient un titre différent des autres sans
+   qu'on sache pourquoi. */
 .fieldLabel {
     color: var(--text-secondary);
     font-size: 0.8rem;
@@ -338,6 +347,18 @@
     color: var(--text-muted);
     font-size: 0.75rem;
     line-height: 1.45;
+}
+
+/* Un lien dans un panneau : « Obtenir une clé » chez un fournisseur tiers. Sans
+   lui, le lien tombe sur le style natif du navigateur, bleu et souligné, qui n'a
+   rien à voir avec le reste. */
+.link {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+.link:hover {
+    text-decoration: underline;
 }
 
 /* Un sélecteur et son « + » : le champ prend la place, le geste qui crée ce
