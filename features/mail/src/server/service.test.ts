@@ -4,7 +4,9 @@ import { describe, it } from 'node:test';
 import type { MailAccountRow, MailFolderRow, MailMessageRow } from '../contracts/domain';
 import { createTestServiceDeps } from '@deveye/types/sdk/testing';
 
+import { MailReauthRequiredError } from './client';
 import type { MailCredentials, OutgoingMail, RemoteEnvelope } from './client';
+import { classifyMailError } from './_shared';
 import type { MailRepo } from './repo';
 import { MailSync } from './service';
 import type { SyncClient } from './sync';
@@ -369,6 +371,27 @@ describe('la relève de fond', () => {
         await sync.syncOne(1);
         assert.deepEqual(repo.synced, [{ id: 1, status: 'ok', error: null }]);
         assert.deepEqual(deps.recorded.liveChanges, [1]);
+    });
+});
+
+describe('la lecture d’un échec', () => {
+    it('range un refus passager du fournisseur dans « injoignable », pas dans « erreur »', () => {
+        // Gmail répond ceci quand son stockage ne rend pas encore une boîte dont
+        // l'autorisation vient d'être accordée. La relève reprendra seule : le
+        // dire « erreur » enverrait toucher des réglages qui vont bien.
+        assert.equal(classifyMailError(new Error('Command failed : Lookup failed 5b1f17b1804b1-49a97')), 'unreachable');
+        assert.equal(classifyMailError(new Error('[UNAVAILABLE] Temporary System Error')), 'unreachable');
+    });
+
+    it('un refus de renouveler l’accès reste une impasse d’authentification', () => {
+        // Classé sur ce qu'il EST : la raison vient du fournisseur telle quelle
+        // et n'a aucune forme garantie, « Bad Request » comprise.
+        const refusal = new MailReauthRequiredError('google', new Error('Bad Request'));
+        assert.equal(classifyMailError(refusal), 'auth');
+    });
+
+    it('ce qu’on ne reconnaît pas reste une erreur, sans conduite à tenir inventée', () => {
+        assert.equal(classifyMailError(new Error('quelque chose d’inattendu')), 'error');
     });
 });
 

@@ -5,7 +5,8 @@ import {
     mailFolderReset,
     mailFolderSync
 } from '../contracts/commands';
-import { defineSdkFeature } from '@deveye/types/sdk/server';
+import type { MailAccountRow, MailFolderRow } from '../contracts/domain';
+import { defineSdkFeature, type SdkCipher } from '@deveye/types/sdk/server';
 
 import * as mailClient from './client';
 import type { MailRepo } from './repo';
@@ -13,10 +14,12 @@ import { backfillFolder, resetFolder, syncAccountFolders, syncOneFolder } from '
 import {
     accountCipher,
     assertMailUnlocked,
+    classifyMailError,
     imapFor,
     loadAccount,
     loadFolderWithAccount,
     toFolderDTO,
+    type Ctx,
     WRITE
 } from './_shared';
 
@@ -29,6 +32,31 @@ import {
  * du domicile (`accountCipher`), et une relève faite depuis la fenêtre écrit le
  * cache du domicile.
  */
+
+/** Délai avant la seconde tentative de la toute première synchro. */
+const INITIAL_SYNC_RETRY_MS = 1500;
+
+/**
+ * La toute première liste de dossiers d'une boîte, avec une seconde chance.
+ *
+ * C'est le moment où Gmail refuse le plus volontiers, son stockage ne rendant
+ * pas encore une boîte dont l'autorisation vient d'être accordée (« Lookup
+ * failed »). Sans reprise, la boîte s'ouvrait vide et le rester jusqu'à ce que
+ * quelqu'un rouvre la feature. Une seule reprise, et seulement sur un refus
+ * passager : deux tentatives contre un mot de passe faux ne valent pas mieux
+ * qu'une, et retenter contre un serveur muet ferait attendre deux fois.
+ */
+async function syncFoldersWithRetry(ctx: Ctx, account: MailAccountRow, cipher: SdkCipher): Promise<MailFolderRow[]> {
+    const attempt = () =>
+        imapFor(ctx, account, (credentials) => syncAccountFolders(mailClient, ctx.repo, cipher, account, credentials));
+    try {
+        return await attempt();
+    } catch (e) {
+        if (classifyMailError(e) !== 'unreachable') throw e;
+        await new Promise((resolve) => setTimeout(resolve, INITIAL_SYNC_RETRY_MS));
+        return attempt();
+    }
+}
 
 export const mailFolderListFeature = defineSdkFeature<
     MailRepo,
@@ -49,9 +77,7 @@ export const mailFolderListFeature = defineSdkFeature<
         let rows = account.security_tier === 'guarded' ? [] : await ctx.repo.folders.listByAccount(account.id);
         if (rows.length === 0) {
             try {
-                rows = await imapFor(ctx, account, (credentials) =>
-                    syncAccountFolders(mailClient, ctx.repo, cipher, account, credentials)
-                );
+                rows = await syncFoldersWithRetry(ctx, account, cipher);
             } catch (e) {
                 if (account.security_tier === 'guarded') throw e;
                 // Open account, first-ever load, sync unreachable: serve whatever

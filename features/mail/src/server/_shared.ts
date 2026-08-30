@@ -89,7 +89,12 @@ export function classifyMailError(error: unknown): Exclude<MailAccountStatus, 'o
         /econnrefused|enotfound|etimedout|econnreset|ehostunreach|enetunreach|epipe/.test(m) ||
         /timed? ?out|timeout|socket closed|connection closed|n['’]a pas répondu à temps/.test(m) ||
         // Le refus de chiffrer la connexion est un problème de lien, pas d'identité.
-        /tls|starttls|certificate/.test(m)
+        /tls|starttls|certificate/.test(m) ||
+        // Refus passagers de Gmail, qui répond ceci quand son propre stockage ne
+        // rend pas la boîte : une autorisation encore en cours de propagation,
+        // une indisponibilité de quelques secondes. La conduite à tenir est
+        // d'attendre, pas de toucher aux réglages.
+        /lookup failed|temporary (system )?(error|failure)|unavailable|too many simultaneous/.test(m)
     ) {
         return 'unreachable';
     }
