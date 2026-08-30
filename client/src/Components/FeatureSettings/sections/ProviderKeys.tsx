@@ -89,22 +89,11 @@ export function ProviderKeys({ rows, canWrite, onSave, onRemove, readOnlyHint }:
                                     </span>
                                 )}
                             </span>
-                            <span className={styles.channelMeta}>
-                                {row.hint}
-                                {!row.held && row.signupUrl && (
-                                    <>
-                                        {' '}
-                                        <a
-                                            className={styles.link}
-                                            href={row.signupUrl}
-                                            target='_blank'
-                                            rel='noopener noreferrer'
-                                        >
-                                            Obtenir une clé
-                                        </a>
-                                    </>
-                                )}
-                            </span>
+                            {/* `channelMeta` coupe à une ligne : tout ce qui suit
+                                le texte y disparaît sur une description un peu
+                                longue. Le lien vers le fournisseur est donc dans le
+                                dialogue, où il accompagne le geste qui en a besoin. */}
+                            <span className={styles.channelMeta}>{row.hint}</span>
                         </span>
                         {canWrite && row.needsKey !== false && (
                             <span className={styles.channelActions}>
@@ -142,6 +131,16 @@ export function ProviderKeys({ rows, canWrite, onSave, onRemove, readOnlyHint }:
                                 ? 'La clé enregistrée n’est jamais réaffichée. Laissez vide pour la conserver.'
                                 : 'Elle est chiffrée puis conservée pour cet espace.'}
                         </span>
+                        {!editing?.held && editing?.signupUrl && (
+                            <a
+                                className={styles.link}
+                                href={editing.signupUrl}
+                                target='_blank'
+                                rel='noopener noreferrer'
+                            >
+                                Obtenir une clé chez {editing.label}
+                            </a>
+                        )}
                     </div>
 
                     {error && <p className={styles.errorText}>{error}</p>}
