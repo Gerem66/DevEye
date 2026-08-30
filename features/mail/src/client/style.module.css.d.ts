@@ -104,6 +104,7 @@ declare const styles: {
     readonly popupActions: string;
     readonly popupActionsLeft: string;
     readonly providerCard: string;
+    readonly providerCardAction: string;
     readonly providerCardAddress: string;
     readonly providerCardBody: string;
     readonly providerCardCheck: string;

@@ -51,7 +51,13 @@ export const oauthStateSchema = z.object({
     provider: mailOAuthProviderSchema,
     securityTier: mailSecurityTierSchema,
     /** Le nom saisi au formulaire. Vide : le compte prend son adresse. */
-    displayName: z.string().default('')
+    displayName: z.string().default(''),
+    /**
+     * La boîte à renouveler, déjà vérifiée par `mail.oauthStart` (existence,
+     * domicile, méthode) : le ticket est signé, cet identifiant ne se falsifie
+     * pas. `null` pour une création.
+     */
+    accountId: z.number().int().positive().nullable().default(null)
 });
 
 const attachmentQuerySchema = z.object({ token: z.string().min(1) });
@@ -216,13 +222,52 @@ export function mailRoutes(app: SdkPublicApp, deps: MailRouteDeps, seam: MailRou
                 proxy: null
             };
 
+            const provider = claims.data.provider === 'google' ? 'Google' : 'Microsoft';
+            const authMethod =
+                claims.data.provider === 'google' ? ('oauth_google' as const) : ('oauth_microsoft' as const);
+
+            if (claims.data.accountId !== null) {
+                const existing = await deps.repo.accounts.findById(claims.data.accountId, ticket.workspaceId);
+                if (!existing) return page(false, 'Boîte introuvable : elle a pu être supprimée entre-temps');
+                // L'adresse consentie doit être celle de la boîte : sans ce contrôle,
+                // se tromper de compte chez le fournisseur écraserait les jetons
+                // d'une boîte par ceux d'une autre, dont elle porterait le nom.
+                const known = await cipher.tryDecrypt(existing.email_address_enc);
+                if (known !== null && known.toLowerCase() !== tokens.email.toLowerCase()) {
+                    return page(false, `Ce consentement porte sur ${tokens.email}, pas sur ${known}`);
+                }
+                await deps.repo.accounts.update(existing.id, ticket.workspaceId, {
+                    displayNameEnc: existing.display_name_enc,
+                    emailAddressEnc: existing.email_address_enc,
+                    securityTier: existing.security_tier,
+                    authMethod,
+                    credentialsEnc: await encryptCredentials(cipher, credentials),
+                    enabled: existing.enabled === 1,
+                    syncIntervalSeconds: existing.sync_interval_seconds
+                });
+                // L'état d'erreur ne survit pas au renouvellement : le laisser
+                // ferait dire à la boîte qu'elle est toujours refusée.
+                await deps.repo.accounts.recordStatus(existing.id, Math.floor(Date.now() / 1000), null, 'ok');
+                deps.audit({
+                    action: 'mail.oauthReconnect',
+                    userId: ticket.userId,
+                    description: `Compte mail reconnecté via ${provider}`,
+                    metadata: {
+                        accountId: existing.id,
+                        provider: claims.data.provider,
+                        workspaceId: ticket.workspaceId
+                    }
+                });
+                return page(true);
+            }
+
             const account = await deps.repo.accounts.create({
                 userId: ticket.userId,
                 workspaceId: ticket.workspaceId,
                 displayNameEnc: await cipher.encrypt(claims.data.displayName || tokens.email),
                 emailAddressEnc: await cipher.encrypt(tokens.email),
                 securityTier: claims.data.securityTier,
-                authMethod: claims.data.provider === 'google' ? 'oauth_google' : 'oauth_microsoft',
+                authMethod,
                 credentialsEnc: await encryptCredentials(cipher, credentials),
                 enabled: true,
                 syncIntervalSeconds: MAIL_SYNC_INTERVAL_DEFAULT_MINUTES * 60
@@ -231,7 +276,7 @@ export function mailRoutes(app: SdkPublicApp, deps: MailRouteDeps, seam: MailRou
             deps.audit({
                 action: 'mail.oauthConnect',
                 userId: ticket.userId,
-                description: `Compte mail connecté via ${claims.data.provider === 'google' ? 'Google' : 'Microsoft'}`,
+                description: `Compte mail connecté via ${provider}`,
                 metadata: { accountId: account.id, provider: claims.data.provider, workspaceId: ticket.workspaceId }
             });
 

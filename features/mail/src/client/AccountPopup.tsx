@@ -11,6 +11,8 @@ import {
 } from 'deveye-sdk-client';
 
 import { api, humanizeError } from './api';
+import { awaitConsentWindow } from './oauthWindow';
+import { ProviderCard } from './ProviderCard';
 import { SECURITY_TIER_HINT, SECURITY_TIER_OPTIONS } from './securityTier';
 import styles from './style.module.css';
 
@@ -73,6 +75,8 @@ export function AccountPopup() {
      * tell the caller to reload.
      */
     const [connected, setConnected] = useState(false);
+    /** La boîte telle que le serveur la rend, une fois le consentement abouti. */
+    const [adopted, setAdopted] = useState<MailAccount | null>(null);
     const initial = useRef<MailAccountDraft>(DEFAULT_DRAFT);
     /**
      * An OAuth mailbox: its servers and secrets belong to the provider, so the
@@ -101,6 +105,7 @@ export function AccountPopup() {
 
     /** Point the form at an existing account, with nothing counted as unsaved yet. */
     function adopt(account: MailAccount): void {
+        setAdopted(account);
         setAccountId(account.id);
         setMode('edit');
         setAuthMethod(account.authMethod);
@@ -118,6 +123,7 @@ export function AccountPopup() {
         setErrorName('');
         setErrorEmail('');
         setConnected(false);
+        setAdopted(input);
         setAccountId(input?.id ?? null);
         setMode(input ? 'edit' : 'add');
         setAuthMethod(input?.authMethod ?? 'password');
@@ -221,35 +227,6 @@ export function AccountPopup() {
         } catch (e) {
             setTestResult(humanizeError(e, 'Enregistrement impossible.'));
         }
-    }
-
-    /**
-     * Attend la fin du consentement : le verdict du serveur s'il parvient à
-     * traverser, la fermeture de la fenêtre sinon.
-     *
-     * La page de callback est servie sur l'origine de l'app, qui n'est pas
-     * forcément celle d'où le SPA a été chargé (en développement, le port de
-     * l'API contre celui de Vite) : un `postMessage` dont l'origine cible ne
-     * correspond pas est jeté sans un mot. D'où `verdict: null` quand seule la
-     * fermeture a parlé : on ne sait pas, et l'appelant va demander à la liste.
-     */
-    function awaitConsentWindow(popup: Window): Promise<{ verdict: { ok: boolean; error: string | null } | null }> {
-        return new Promise((resolve) => {
-            const finish = (result: { verdict: { ok: boolean; error: string | null } | null }) => {
-                window.removeEventListener('message', onMessage);
-                clearInterval(poll);
-                resolve(result);
-            };
-            function onMessage(e: MessageEvent) {
-                const data = e.data as { source?: string; ok?: boolean; error?: string } | undefined;
-                if (data?.source !== 'deveye-mail-oauth') return;
-                finish({ verdict: { ok: data.ok === true, error: data.error ?? null } });
-            }
-            const poll = window.setInterval(() => {
-                if (popup.closed) finish({ verdict: null });
-            }, 500);
-            window.addEventListener('message', onMessage);
-        });
     }
 
     /**
@@ -383,21 +360,10 @@ export function AccountPopup() {
                     </div>
                 )}
 
-                {providerManaged && (
-                    <div className={styles.providerCard}>
-                        <span className={`icon icon-check-circle ${styles.providerCardCheck}`} aria-hidden='true' />
-                        <span className={styles.providerCardBody}>
-                            <strong className={styles.providerCardTitle}>
-                                Connecté via {authMethod === 'oauth_google' ? 'Google' : 'Microsoft'}
-                            </strong>
-                            <span className={styles.providerCardAddress}>{draft.emailAddress}</span>
-                            <span className={styles.fieldHint}>
-                                Les identifiants et les serveurs sont gérés par le fournisseur — il n’y a rien à
-                                configurer ici. Pour repartir de zéro, supprimez cette boîte puis reconnectez-la.
-                            </span>
-                        </span>
-                    </div>
-                )}
+                {/* La boîte que le consentement vient de créer : son état sort de
+                    la liste, seule à le connaître. La reconnexion n'est pas
+                    proposée ici, elle est dans les réglages de la boîte. */}
+                {providerManaged && adopted && <ProviderCard account={adopted} />}
 
                 {!providerManaged && tab === 'providers' && (
                     <div className={styles.oauthButtons}>

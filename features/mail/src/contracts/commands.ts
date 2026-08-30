@@ -119,12 +119,19 @@ export const mailAccountTestConnection = {
  * callback HTTP route, never over this WS command; the callback page closes
  * itself via `window.opener.postMessage`, which the client uses to detect
  * completion and refresh `mail.accountList`.
+ *
+ * Avec `accountId`, le consentement RENOUVELLE cette boîte au lieu d'en créer
+ * une : ses messages et ses dossiers restent, seuls ses jetons sont remplacés.
+ * C'est la sortie d'un accès révoqué, que supprimer puis recréer paierait du
+ * cache entier.
  */
 export const mailOAuthStart = {
     command: 'mail.oauthStart' as const,
     input: z.object({
         provider: mailOAuthProviderSchema,
         securityTier: mailSecurityTierSchema,
+        /** La boîte à renouveler ; `null` pour en créer une. */
+        accountId: accountId.nullable().default(null),
         /**
          * Le nom que la boîte portera dans la liste. Il voyage dans le `state`
          * parce que le compte naît dans la route de callback, hors de toute

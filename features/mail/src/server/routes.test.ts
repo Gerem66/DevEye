@@ -157,12 +157,28 @@ function fakeRepo(accountRows: MailAccountRow[], projections: Record<number, num
                 accountRows.push(row);
                 return row;
             },
-            update: unused,
+            update: async (id, ws, c) => {
+                const row = accountRows.find((a) => a.id === id && a.workspace_id === ws);
+                if (!row) return null;
+                Object.assign(row, {
+                    display_name_enc: c.displayNameEnc,
+                    email_address_enc: c.emailAddressEnc,
+                    security_tier: c.securityTier,
+                    auth_method: c.authMethod,
+                    credentials_enc: c.credentialsEnc,
+                    enabled: c.enabled ? 1 : 0,
+                    sync_interval_seconds: c.syncIntervalSeconds
+                });
+                return row;
+            },
             setEnabled: unused,
             delete: unused,
             reorder: unused,
             recordSync: unused,
-            recordStatus: unused,
+            recordStatus: async (id, _at, errorEnc, status) => {
+                const row = accountRows.find((a) => a.id === id);
+                if (row) Object.assign(row, { last_sync_error_enc: errorEnc, last_sync_status: status });
+            },
             updateCredentials: unused,
             updateSyncError: unused,
             listSyncDue: unused
@@ -427,6 +443,44 @@ describe('GET /api/mail/oauth/callback', () => {
         assert.ok(html.includes('"ok":true'));
         assert.ok(html.includes('window.close()'));
         assert.equal(deps.recorded.audits.at(-1)?.action, 'mail.oauthConnect');
+    });
+
+    it('avec `accountId`, le consentement renouvelle la boîte au lieu d’en créer une', async () => {
+        const existing = account({
+            id: 7,
+            auth_method: 'oauth_google',
+            email_address_enc: 'server:moi@gmail.com',
+            display_name_enc: 'server:Perso Gmail',
+            last_sync_status: 'auth',
+            last_sync_error_enc: 'server:accès refusé'
+        });
+        const { call, repo } = mount([existing]);
+        const state = await call('/api/mail/oauth/callback', {
+            code: 'code-r',
+            state: ticket({ provider: 'google', securityTier: 'open', displayName: '', accountId: 7 })
+        });
+
+        assert.ok(String(state.payload).includes('"ok":true'));
+        assert.equal(repo.accountRows.length, 1, 'aucune boîte de plus');
+        // Le nom et l'adresse survivent : seuls les jetons sont remplacés.
+        assert.equal(repo.accountRows[0].display_name_enc, 'server:Perso Gmail');
+        assert.equal(JSON.parse(repo.accountRows[0].credentials_enc.slice('server:'.length)).refreshToken, 'refresh');
+        // L'accès refusé ne survit pas au renouvellement.
+        assert.equal(repo.accountRows[0].last_sync_status, 'ok');
+        assert.equal(repo.accountRows[0].last_sync_error_enc, null);
+    });
+
+    it('un consentement donné sur une autre adresse n’écrase pas la boîte visée', async () => {
+        const other = account({ id: 8, auth_method: 'oauth_google', email_address_enc: 'server:pro@gmail.com' });
+        const { call, repo } = mount([other]);
+        const state = await call('/api/mail/oauth/callback', {
+            code: 'code-x',
+            state: ticket({ provider: 'google', securityTier: 'open', displayName: '', accountId: 8 })
+        });
+
+        assert.ok(String(state.payload).includes('"ok":false'));
+        assert.ok(String(state.payload).includes('moi@gmail.com'));
+        assert.equal(repo.accountRows[0].credentials_enc, other.credentials_enc, 'les jetons n’ont pas bougé');
     });
 
     it('le nom saisi au formulaire nomme la boîte ; sans lui, c’est l’adresse', async () => {

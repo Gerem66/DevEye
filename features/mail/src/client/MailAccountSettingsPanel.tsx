@@ -13,6 +13,8 @@ import {
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
 import { api, humanizeError } from './api';
+import { ProviderCard } from './ProviderCard';
+import { awaitConsentWindow } from './oauthWindow';
 import styles from './style.module.css';
 
 import type { MailAccount, MailAccountDraft, MailAccountEdit, MailProxy } from '../contracts/domain';
@@ -47,6 +49,7 @@ export default function MailAccountSettingsPanel({ scope, canWrite }: SettingsPa
     const [deleted, setDeleted] = useState(false);
     const [errorName, setErrorName] = useState('');
     const [errorEmail, setErrorEmail] = useState('');
+    const [reconnecting, setReconnecting] = useState(false);
     /** Les secrets ne sont jamais renvoyés : ils partent vides et le restent sauf saisie. */
     const blank = useRef(true);
 
@@ -158,6 +161,35 @@ export default function MailAccountSettingsPanel({ scope, canWrite }: SettingsPa
         }
     }
 
+    /**
+     * Repasse par le consentement du fournisseur pour CETTE boîte : ses messages
+     * et ses dossiers restent, seuls ses jetons sont remplacés. La suppression
+     * suivie d'un nouvel ajout ferait le même travail au prix du cache entier.
+     */
+    async function reconnect(): Promise<void> {
+        if (!account) return;
+        setReconnecting(true);
+        setStatus(null);
+        try {
+            const res = await api.send('mail.oauthStart', {
+                provider: account.authMethod === 'oauth_google' ? 'google' : 'microsoft',
+                securityTier: account.securityTier,
+                displayName: '',
+                accountId: account.id
+            });
+            const popup = window.open(res.authUrl, 'deveye-mail-oauth', 'width=520,height=680');
+            if (!popup) throw new Error('Fenêtre bloquée par le navigateur — autorisez les popups pour DevEye.');
+            const { verdict } = await awaitConsentWindow(popup);
+            if (verdict && !verdict.ok) throw new Error(verdict.error ?? 'Échec de connexion.');
+            invalidate('mail.accountList');
+            setStatus(verdict?.ok ? 'Boîte reconnectée.' : 'Fenêtre fermée : vérifiez l’état de la boîte.');
+        } catch (e) {
+            setStatus(humanizeError(e, 'Reconnexion impossible.'));
+        } finally {
+            setReconnecting(false);
+        }
+    }
+
     function requestDelete(): void {
         if (!account) return;
         setConfirm({
@@ -192,19 +224,11 @@ export default function MailAccountSettingsPanel({ scope, canWrite }: SettingsPa
                     onChange={(e) => set('displayName', e.target.value)}
                 />
                 {providerManaged ? (
-                    <div className={styles.providerCard}>
-                        <span className={`icon icon-check-circle ${styles.providerCardCheck}`} aria-hidden='true' />
-                        <span className={styles.providerCardBody}>
-                            <strong className={styles.providerCardTitle}>
-                                Connecté via {account.authMethod === 'oauth_google' ? 'Google' : 'Microsoft'}
-                            </strong>
-                            <span className={styles.providerCardAddress}>{account.emailAddress}</span>
-                            <span className={shell.fieldHint}>
-                                Les identifiants et les serveurs sont gérés par le fournisseur : il n’y a rien à
-                                configurer ici. Pour repartir de zéro, supprimez cette boîte puis reconnectez-la.
-                            </span>
-                        </span>
-                    </div>
+                    <ProviderCard
+                        account={account}
+                        busy={reconnecting}
+                        onReconnect={readOnly ? undefined : () => void reconnect()}
+                    />
                 ) : (
                     <TextInput
                         type='email'

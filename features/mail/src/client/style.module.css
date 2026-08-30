@@ -1208,7 +1208,9 @@
     border-radius: var(--radius-sm);
 }
 
-/* Replaces the whole server-configuration area once a provider is connected. */
+/* Replaces the whole server-configuration area once a provider is connected.
+   Le ton suit l'état réel de la boîte : une carte verte sur une boîte que le
+   fournisseur refuse est le seul endroit de l'écran qui prétendrait le contraire. */
 .providerCard {
     display: flex;
     align-items: flex-start;
@@ -1219,11 +1221,34 @@
     background: var(--success-bg);
 }
 
+.providerCard[data-tone='warning'] {
+    border-color: var(--warning);
+    background: var(--warning-bg);
+}
+
+.providerCard[data-tone='danger'] {
+    border-color: var(--danger);
+    background: var(--danger-bg);
+}
+
 .providerCardCheck {
     flex-shrink: 0;
     color: var(--success);
     font-size: 1.25rem;
     line-height: 1.2;
+}
+
+.providerCard[data-tone='warning'] .providerCardCheck {
+    color: var(--warning);
+}
+
+.providerCard[data-tone='danger'] .providerCardCheck {
+    color: var(--danger);
+}
+
+/* Le bouton de reconnexion, sous le texte de la carte. */
+.providerCardAction {
+    margin-top: var(--space-sm);
 }
 
 .providerCardBody {

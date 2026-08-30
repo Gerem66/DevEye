@@ -402,7 +402,8 @@ describe('mail.oauthStart', () => {
         const { authUrl } = await handlerFor(mailOAuthStart)(ctx, {
             provider: 'google',
             securityTier: 'open',
-            displayName: 'Perso Gmail'
+            displayName: 'Perso Gmail',
+            accountId: null
         });
         const url = new URL(authUrl);
         assert.equal(url.origin + url.pathname, 'https://accounts.google.com/o/oauth2/v2/auth');
@@ -413,18 +414,29 @@ describe('mail.oauthStart', () => {
         assert.deepEqual(ticketPayload(url.searchParams.get('state') ?? ''), {
             provider: 'google',
             securityTier: 'open',
-            displayName: 'Perso Gmail'
+            displayName: 'Perso Gmail',
+            accountId: null
         });
     });
 
     it('refuse un fournisseur non configuré, et un compte gardé dans un espace partagé', async () => {
         const ctx = createTestContext({ repo: fakeRepo(), kind: 'shared' });
         await assert.rejects(
-            handlerFor(mailOAuthStart)(ctx, { provider: 'microsoft', securityTier: 'open', displayName: '' }),
+            handlerFor(mailOAuthStart)(ctx, {
+                provider: 'microsoft',
+                securityTier: 'open',
+                displayName: '',
+                accountId: null
+            }),
             failsWith('validation')
         );
         await assert.rejects(
-            handlerFor(mailOAuthStart)(ctx, { provider: 'google', securityTier: 'guarded', displayName: '' }),
+            handlerFor(mailOAuthStart)(ctx, {
+                provider: 'google',
+                securityTier: 'guarded',
+                displayName: '',
+                accountId: null
+            }),
             failsWith('validation')
         );
     });

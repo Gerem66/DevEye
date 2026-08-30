@@ -151,7 +151,7 @@ export class MailSync {
                 }
             } catch (e) {
                 const message = e instanceof Error ? e.message : String(e);
-                const status = classifyMailError(message);
+                const status = classifyMailError(e);
                 this.deps.logger.warn({ accountId, status, err: message }, 'Mail account sync failed');
                 await this.deps.repo.accounts.recordSync(
                     row.id,

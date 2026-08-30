@@ -13,6 +13,7 @@ import type {
 } from '../contracts/domain';
 import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
 
+import { MailReauthRequiredError } from './client';
 import type { MailCredentials, MailOAuthCredentials, MailPasswordCredentials, TokenRefreshCallback } from './client';
 import { oauthProviderEndpoints } from './oauth';
 import type { MailRepo } from './repo';
@@ -64,14 +65,17 @@ export function assertAtHome(ctx: Ctx, account: MailAccountRow, gesture: string)
 }
 
 /**
- * Range un échec dans l'une des trois familles d'{@link MailAccountStatus}, sur
+ * Range un échec dans l'une des trois familles d'{@link MailAccountStatus}. Sur
  * le message faute de mieux : IMAP n'a pas de code exploitable, imapflow lève
  * `Error('Command failed')` et laisse la raison dans le message. La
  * classification n'a pas à être exhaustive : elle choisit ce que l'interface
  * propose, et `error` couvre tout ce qu'on ne reconnaît pas.
  */
-export function classifyMailError(message: string): Exclude<MailAccountStatus, 'ok'> {
-    const m = message.toLowerCase();
+export function classifyMailError(error: unknown): Exclude<MailAccountStatus, 'ok'> {
+    // Le seul cas où la conduite à tenir est connue sans lire de texte : le
+    // fournisseur a refusé de renouveler l'accès, et lui seul peut le rendre.
+    if (error instanceof MailReauthRequiredError) return 'auth';
+    const m = (error instanceof Error ? error.message : String(error)).toLowerCase();
     if (
         /authenticationfailed|invalid credentials|invalid_grant|authentication failed|login failed/.test(m) ||
         // Formulation de Google quand le consentement a été retiré ou a expiré.
@@ -116,7 +120,7 @@ export async function runWithAccountStatus<T>(
         return result;
     } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
-        const status = classifyMailError(message);
+        const status = classifyMailError(e);
         const encrypted = await cipher.encrypt(message);
         await repo.accounts.recordStatus(account.id, now, encrypted, status);
         // Le message chiffré diffère à chaque écriture (nonce), donc on compare
@@ -249,8 +253,12 @@ export async function toAccountDTO(cipher: SdkCipher, row: MailAccountRow, forei
         smtpHost = endpoints.smtpHost;
         smtpPort = endpoints.smtpPort;
         proxyConfigured = credentials.proxy != null;
-        // No refresh token and a stale access token: only a new OAuth flow recovers.
-        needsReauth = !credentials.refreshToken && Date.now() >= credentials.expiresAt;
+        // Deux impasses dont seule une reconnexion sort : plus de jeton de
+        // rafraîchissement avec un accès périmé, ou un fournisseur qui a refusé
+        // de le renouveler (`auth` sur un compte géré ne peut venir que de là,
+        // ses identifiants n'étant jamais saisis).
+        needsReauth =
+            (!credentials.refreshToken && Date.now() >= credentials.expiresAt) || row.last_sync_status === 'auth';
     }
 
     const syncStatus = getAccountSyncStatus(row.id);

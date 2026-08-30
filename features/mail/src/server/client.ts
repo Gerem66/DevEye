@@ -42,6 +42,25 @@ export type MailCredentials = MailPasswordCredentials | MailOAuthCredentials;
  */
 export type TokenRefreshCallback = (accessToken: string, expiresAt: number) => Promise<void>;
 
+/**
+ * Le fournisseur refuse de renouveler l'accès : consentement retiré, jeton de
+ * rafraîchissement révoqué, secret client changé. Seule une reconnexion en sort,
+ * et c'est une classe et non un motif de message parce que la raison arrive du
+ * fournisseur telle quelle et n'a aucune forme garantie (« Bad Request » en est
+ * une). Le message d'origine reste en `cause`, c'est lui qu'on montre.
+ */
+export class MailReauthRequiredError extends Error {
+    constructor(
+        readonly provider: MailOAuthProvider,
+        cause: unknown
+    ) {
+        const detail = cause instanceof Error ? cause.message : String(cause);
+        super(`Le fournisseur a refusé de renouveler l’accès : ${detail}`);
+        this.name = 'MailReauthRequiredError';
+        this.cause = cause;
+    }
+}
+
 interface ResolvedAuth {
     imapHost: string;
     imapPort: number;
@@ -86,7 +105,15 @@ export async function resolveAuth(
         if (!credentials.refreshToken) {
             throw new Error('La session Google/Microsoft a expiré : reconnectez le compte');
         }
-        const refreshed = await refreshAccessToken(credentials.provider, credentials.refreshToken);
+        // Un refus ici n'est pas un incident de relève : le compte ne repartira
+        // pas tout seul, et le dire dès la source évite d'avoir à deviner la
+        // conduite à tenir depuis le texte du fournisseur.
+        let refreshed;
+        try {
+            refreshed = await refreshAccessToken(credentials.provider, credentials.refreshToken);
+        } catch (e) {
+            throw new MailReauthRequiredError(credentials.provider, e);
+        }
         accessToken = refreshed.accessToken;
         if (onTokenRefreshed) await onTokenRefreshed(refreshed.accessToken, refreshed.expiresAt);
     }

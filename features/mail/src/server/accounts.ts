@@ -368,8 +368,24 @@ export const mailOAuthStartFeature = defineSdkFeature<
             throw new FeatureError('validation', `OAuth ${input.provider} n'est pas configuré sur ce serveur`);
         }
         assertTierAllowed(ctx, input.securityTier);
+        // Renouvellement : la boîte est vérifiée ICI, pendant qu'on a la session
+        // et ses droits. La route de callback n'en a plus, elle ne fera que
+        // reprendre l'identifiant que ce ticket scelle.
+        if (input.accountId !== null) {
+            const account = await ctx.repo.accounts.findById(input.accountId, ctx.workspaceId);
+            if (!account) throw new FeatureError('not_found', 'Boîte introuvable');
+            assertAtHome(ctx, account, 'reconnecter cette boîte');
+            if (account.auth_method === 'password') {
+                throw new FeatureError('validation', 'Cette boîte utilise une connexion manuelle : rien à reconnecter');
+            }
+        }
         const state = await ctx.secrecy.ticket(
-            { provider: input.provider, securityTier: input.securityTier, displayName: input.displayName },
+            {
+                provider: input.provider,
+                securityTier: input.securityTier,
+                displayName: input.displayName,
+                accountId: input.accountId
+            },
             { ttlSeconds: 600 }
         );
         return { authUrl: buildAuthorizationUrl(input.provider, state, ctx.origins.app) };
