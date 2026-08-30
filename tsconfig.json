@@ -23,6 +23,8 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "paths": {
+      "zod": ["./node_modules/zod"],
+      "zod/*": ["./node_modules/zod/*"],
       "@/*": ["./src/*"]
     }
   },

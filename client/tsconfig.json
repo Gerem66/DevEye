@@ -14,6 +14,8 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "paths": {
+      "zod": ["../node_modules/zod"],
+      "zod/*": ["../node_modules/zod/*"],
       "@/*": ["./src/*"],
       "deveye-sdk-client": ["./src/sdk/index.ts"]
     }
