@@ -60,10 +60,10 @@ notify = "8"
 filetime = "0.2"
 unicode-normalization = "0.1"
 
-# Reprise du propriétaire des fichiers installés par CloudSync. L'agent tourne
-# souvent en root (service système) : sans `chown`, tout fichier qu'il crée
-# appartient à root, et l'utilisateur ne peut plus ni le modifier ni le
-# supprimer dans son propre dossier.
+# Reprise du propriétaire de ce que l'agent pose sur le disque (téléversements
+# de l'explorateur, installations CloudSync). Il tourne souvent en root (service
+# système) : sans `chown`, tout fichier qu'il crée appartient à root, et
+# l'utilisateur ne peut plus ni le modifier ni le supprimer chez lui.
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 

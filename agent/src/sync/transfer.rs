@@ -21,6 +21,7 @@ use sha2::{Digest, Sha256};
 use tokio::sync::mpsc::Sender;
 use tracing::debug;
 
+use crate::ownership::adopt_owner;
 use crate::sync::index_cache::IndexCache;
 use crate::sync::paths::safe_join;
 use crate::sync::scanner::hash_file;
@@ -492,41 +493,6 @@ fn apply_mode(path: &Path, mode: Option<u32>) {
 
 #[cfg(not(unix))]
 fn apply_mode(_path: &Path, _mode: Option<u32>) {}
-
-/// Rend un fichier installé au propriétaire du dossier du partage.
-///
-/// L'agent tourne le plus souvent en root : tout ce qu'il crée appartient à
-/// root, et l'utilisateur se retrouve avec des fichiers qu'il ne peut ni
-/// modifier ni supprimer dans son propre dossier. La racine du partage dit à
-/// qui le dossier appartient. Best-effort : sans privilège `chown` échoue, mais
-/// le fichier a alors déjà le bon propriétaire.
-#[cfg(unix)]
-fn adopt_owner(root: &Path, path: &Path) {
-    use std::ffi::CString;
-    use std::os::unix::ffi::OsStrExt;
-    use std::os::unix::fs::MetadataExt;
-
-    let Ok(reference) = std::fs::metadata(root) else {
-        return;
-    };
-    let Ok(current) = std::fs::symlink_metadata(path) else {
-        return;
-    };
-    if current.uid() == reference.uid() && current.gid() == reference.gid() {
-        return;
-    }
-    let Ok(raw) = CString::new(path.as_os_str().as_bytes()) else {
-        return;
-    };
-    // `lchown` et non `chown` : ne jamais suivre un lien symbolique, on ne veut
-    // pas changer le propriétaire de sa cible.
-    unsafe {
-        libc::lchown(raw.as_ptr(), reference.uid(), reference.gid());
-    }
-}
-
-#[cfg(not(unix))]
-fn adopt_owner(_root: &Path, _path: &Path) {}
 
 /// Crée les dossiers parents d'une cible ET les rend au propriétaire du
 /// partage. `create_dir_all` peut en créer plusieurs d'un coup : les laisser à

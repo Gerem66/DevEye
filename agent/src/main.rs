@@ -11,6 +11,7 @@ mod identity;
 mod integrity;
 mod logs;
 mod metrics;
+mod ownership;
 mod packages;
 mod power;
 mod protocol;

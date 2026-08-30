@@ -429,7 +429,8 @@ pub fn mutate(op: &str, path: &str, dest: Option<&str>) -> Result<()> {
                 std::fs::remove_file(path).with_context(|| format!("suppression de {path}"))
             }
         }
-        "mkdir" => std::fs::create_dir_all(path).with_context(|| format!("création de {path}")),
+        "mkdir" => crate::ownership::create_dir_all_owned(Path::new(path))
+            .with_context(|| format!("création de {path}")),
         "rename" => {
             let dest = dest.context("destination requise pour le renommage")?;
             std::fs::rename(path, dest).with_context(|| format!("renommage de {path}"))
@@ -444,12 +445,19 @@ pub fn mutate(op: &str, path: &str, dest: Option<&str>) -> Result<()> {
 pub fn upload_chunk(path: &str, offset: u64, data: &[u8]) -> Result<()> {
     use std::io::{Seek, SeekFrom, Write};
     let mut file = if offset == 0 {
-        std::fs::OpenOptions::new()
+        // Only a file the agent creates takes the folder's owner: overwriting an
+        // existing one leaves it to whoever owned it.
+        let fresh = std::fs::symlink_metadata(path).is_err();
+        let f = std::fs::OpenOptions::new()
             .create(true)
             .write(true)
             .truncate(true)
             .open(path)
-            .with_context(|| format!("création de {path}"))?
+            .with_context(|| format!("création de {path}"))?;
+        if fresh {
+            crate::ownership::adopt_from_parent(Path::new(path));
+        }
+        f
     } else {
         let mut f = std::fs::OpenOptions::new()
             .write(true)
