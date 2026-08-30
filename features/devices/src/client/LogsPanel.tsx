@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { acquireMetrics, Button, onServerEvent, SelectInput, TextInput } from 'deveye-sdk-client';
 import {
     DEVICE_LOG_LEVELS,
     DEVICE_LOG_LINES_EVENT,
+    DEVICE_LOG_PAGE_DEFAULT,
     DEVICE_LOG_SOURCES_EVENT,
     deviceLogLinesPushSchema,
     deviceLogSourcesPushSchema,
+    type DeviceLogAnchor,
     type DeviceLogFilter,
     type DeviceLogLevel,
     type DeviceLogLine,
@@ -21,6 +23,12 @@ import styles from './style.module.css';
  * trame `done`, qu'un agent disparu en plein flux n'envoie jamais.
  */
 const MAX_BUFFERED_LINES = 20_000;
+
+/**
+ * Plafond de ce qu'on empile en remontant l'historique. La liste n'est pas
+ * virtualisée : au-delà, la fenêtre devient poisseuse à faire défiler.
+ */
+const MAX_LOADED_LINES = 10_000;
 
 const LEVEL_LABELS: Record<DeviceLogLevel, string> = {
     debug: 'Debug',
@@ -49,6 +57,8 @@ const KIND_GROUP: Record<DeviceLogSourceKind, string> = {
     docker: 'Conteneurs'
 };
 
+const CONTAINER_GROUP = KIND_GROUP.docker;
+
 /**
  * Quand aucun conteneur n'est listé : l'agent ne peut pas distinguer « pas de
  * moteur » de « socket refusée », la note dit donc la condition.
@@ -75,6 +85,19 @@ const LIVE_INTERVAL_MS = 3000;
 const QUERY_TIMEOUT_MS = 60_000;
 
 /**
+ * `replace` repart de l'extrémité choisie, `more` réclame la page suivante dans la
+ * direction que dicte l'ancre : plus ancien depuis `newest`, plus récent depuis
+ * `oldest`.
+ */
+type LoadMode = 'replace' | 'more';
+
+/** Ce que le rendu suivant doit faire du défilement, décidé à la fusion. */
+type ScrollAction = 'bottom' | 'top' | 'keep' | null;
+
+/** Une ligne et sa clé de rendu, stable même quand une page s'insère en tête. */
+type KeyedLine = { key: number; line: DeviceLogLine };
+
+/**
  * Log viewer for one device: its log sources (system journal, one entry per
  * container, files), filtered queries against the selected one, a live mode.
  * Everything streams over the device's push channel, so the panel acquires the
@@ -89,17 +112,31 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
     const [levelMin, setLevelMin] = useState<DeviceLogLevel | ''>('');
     const [unit, setUnit] = useState('');
     const [sinceSec, setSinceSec] = useState<number | null>(null);
-    const [lines, setLines] = useState<DeviceLogLine[]>([]);
+    const [anchor, setAnchor] = useState<DeviceLogAnchor>('newest');
+    const [lines, setLines] = useState<KeyedLine[]>([]);
+    const [hasMore, setHasMore] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [live, setLive] = useState(false);
 
-    const queryIdRef = useRef('');
+    /** L'interrogation en vol : le routeur ne retient que ses trames. */
+    const pendingRef = useRef<{ queryId: string; mode: LoadMode; anchor: DeviceLogAnchor }>({
+        queryId: '',
+        mode: 'replace',
+        anchor: 'newest'
+    });
     const bufferRef = useRef<DeviceLogLine[]>([]);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const sentinelRef = useRef<HTMLDivElement>(null);
     /** Lu par le minuteur du mode direct, qui ne doit pas dépendre du rendu. */
     const loadingRef = useRef(false);
     loadingRef.current = loading;
+    /** Lignes déjà empilées, en ref : l'offset ne doit pas refabriquer `runQuery`. */
+    const linesRef = useRef<KeyedLine[]>([]);
+    const nextKeyRef = useRef(0);
+    const scrollActionRef = useRef<ScrollAction>(null);
+    /** Distance au bas du contenu, relevée avant une insertion en tête. */
+    const bottomGapRef = useRef(0);
     const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const clearWatchdog = useCallback(() => {
@@ -121,7 +158,10 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
         setSources(null);
         setSourceId('');
         setLines([]);
+        setAnchor('newest');
+        setHasMore(false);
         setError(null);
+        linesRef.current = [];
     }, [deviceId]);
 
     /** (Re)demande l'inventaire des sources : les conteneurs vont et viennent. */
@@ -144,17 +184,38 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
             setSourceId((cur) => (d.sources.some((s) => s.id === cur) ? cur : (d.sources[0]?.id ?? '')));
         });
         const offLines = onServerEvent(DEVICE_LOG_LINES_EVENT, deviceLogLinesPushSchema, (d) => {
-            if (d.deviceId !== deviceId || d.queryId !== queryIdRef.current) return;
+            const pending = pendingRef.current;
+            if (d.deviceId !== deviceId || d.queryId !== pending.queryId) return;
             // Borné : sans `done` (un agent mort en plein flux), le tampon
             // grossirait à chaque interrogation du mode direct. On garde la queue.
             const merged = bufferRef.current.concat(d.lines);
             bufferRef.current = merged.length > MAX_BUFFERED_LINES ? merged.slice(-MAX_BUFFERED_LINES) : merged;
-            if (d.done) {
-                clearWatchdog();
-                setLines(bufferRef.current);
-                setLoading(false);
-                setError(d.error ?? null);
+            if (!d.done) return;
+
+            clearWatchdog();
+            setLoading(false);
+            setError(d.error ?? null);
+            if (d.error) {
+                // Ne pas relancer la sentinelle en rafale sur une source en erreur.
+                setHasMore(false);
+                return;
             }
+
+            const page = bufferRef.current;
+            const prepend = pending.mode === 'more' && pending.anchor === 'newest';
+            if (prepend) {
+                const el = scrollRef.current;
+                bottomGapRef.current = el ? el.scrollHeight - el.scrollTop : 0;
+            }
+            scrollActionRef.current =
+                pending.mode === 'replace' ? (pending.anchor === 'newest' ? 'bottom' : 'top') : prepend ? 'keep' : null;
+
+            const keyed = page.map((line) => ({ key: nextKeyRef.current++, line }));
+            const prev = linesRef.current;
+            const next = pending.mode === 'replace' ? keyed : prepend ? [...keyed, ...prev] : [...prev, ...keyed];
+            linesRef.current = next;
+            setLines(next);
+            setHasMore(page.length >= DEVICE_LOG_PAGE_DEFAULT && next.length < MAX_LOADED_LINES);
         });
         requestSources();
         return () => {
@@ -163,69 +224,105 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
         };
     }, [deviceId, requestSources, clearWatchdog]);
 
-    const runQuery = useCallback(() => {
-        if (!sourceId) return;
-        const queryId = crypto.randomUUID();
-        queryIdRef.current = queryId;
-        bufferRef.current = [];
-        setLoading(true);
-        setError(null);
-        clearWatchdog();
-        watchdogRef.current = setTimeout(() => {
-            // Une interrogation plus récente est passée devant, avec son propre
-            // chien de garde.
-            if (queryIdRef.current !== queryId) return;
-            setLoading(false);
-            setError("L'appareil n'a pas répondu. Resserrez la fenêtre de temps ou le filtre, puis réessayez.");
-        }, QUERY_TIMEOUT_MS);
-        const filter: DeviceLogFilter = {};
-        if (search.trim()) {
-            filter.search = search.trim();
-            if (regex) filter.regex = true;
-        }
-        if (levelMin) filter.levelMin = levelMin;
-        if (unit.trim() && selectedSource?.kind === 'journald') filter.unit = unit.trim();
-        if (sinceSec) filter.since = Math.floor(Date.now() / 1000) - sinceSec;
-        agent
-            .send('agent.logQuery', {
-                deviceId,
-                sourceId,
-                queryId,
-                filter: Object.keys(filter).length ? filter : undefined
-            })
-            .catch((e) => {
-                clearWatchdog();
+    const runQuery = useCallback(
+        (mode: LoadMode) => {
+            if (!sourceId) return;
+            const queryId = crypto.randomUUID();
+            pendingRef.current = { queryId, mode, anchor };
+            bufferRef.current = [];
+            setLoading(true);
+            setError(null);
+            clearWatchdog();
+            watchdogRef.current = setTimeout(() => {
+                // Une interrogation plus récente est passée devant, avec son propre
+                // chien de garde.
+                if (pendingRef.current.queryId !== queryId) return;
                 setLoading(false);
-                setError(e instanceof Error ? e.message : 'Échec de la requête');
-            });
-    }, [deviceId, sourceId, search, regex, levelMin, unit, sinceSec, selectedSource, clearWatchdog]);
+                setHasMore(false);
+                setError("L'appareil n'a pas répondu. Resserrez la fenêtre de temps ou le filtre, puis réessayez.");
+            }, QUERY_TIMEOUT_MS);
+            const filter: DeviceLogFilter = {};
+            if (search.trim()) {
+                filter.search = search.trim();
+                if (regex) filter.regex = true;
+            }
+            if (levelMin) filter.levelMin = levelMin;
+            if (unit.trim() && selectedSource?.kind === 'journald') filter.unit = unit.trim();
+            if (sinceSec) filter.since = Math.floor(Date.now() / 1000) - sinceSec;
+            agent
+                .send('agent.logQuery', {
+                    deviceId,
+                    sourceId,
+                    queryId,
+                    filter: Object.keys(filter).length ? filter : undefined,
+                    limit: DEVICE_LOG_PAGE_DEFAULT,
+                    offset: mode === 'replace' ? 0 : linesRef.current.length,
+                    anchor
+                })
+                .catch((e) => {
+                    clearWatchdog();
+                    setLoading(false);
+                    setHasMore(false);
+                    setError(e instanceof Error ? e.message : 'Échec de la requête');
+                });
+        },
+        [deviceId, sourceId, search, regex, levelMin, unit, sinceSec, anchor, selectedSource, clearWatchdog]
+    );
 
-    // Debounced auto-run on any filter/source change.
+    // Debounced auto-run on any filter/source/anchor change.
     useEffect(() => {
         if (!sourceId) return;
-        const t = setTimeout(runQuery, 300);
+        const t = setTimeout(() => runQuery('replace'), 300);
         return () => clearTimeout(t);
     }, [runQuery, sourceId]);
 
     /**
-     * Mode direct : réinterroger périodiquement, jamais par-dessus une
-     * interrogation en vol. Chaque relance change l'identifiant courant et le
-     * routeur jette tout ce qui ne le porte pas : une source lente ne rendrait
-     * plus jamais rien.
+     * Remonter (ou descendre) dans l'historique et le mode direct s'excluent :
+     * celui-ci réinterroge toutes les 3 s et écraserait la lecture en cours.
      */
+    const loadMore = useCallback(() => {
+        if (loadingRef.current || !hasMore) return;
+        setLive(false);
+        runQuery('more');
+    }, [hasMore, runQuery]);
+
     useEffect(() => {
         if (!live || !sourceId) return;
         const iv = setInterval(() => {
             if (loadingRef.current) return;
-            runQuery();
+            runQuery('replace');
         }, LIVE_INTERVAL_MS);
         return () => clearInterval(iv);
     }, [live, sourceId, runQuery]);
 
-    // Stick to the bottom (newest) when results land.
+    // La sentinelle est en tête quand on remonte, en pied quand on part du début.
     useEffect(() => {
+        if (!hasMore || loading) return;
+        const sentinel = sentinelRef.current;
+        const root = scrollRef.current;
+        if (!sentinel || !root) return;
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0]?.isIntersecting) loadMore();
+            },
+            { root, rootMargin: '200px' }
+        );
+        observer.observe(sentinel);
+        return () => observer.disconnect();
+    }, [hasMore, loading, loadMore, lines.length]);
+
+    /**
+     * Le défilement se règle avant la peinture, sinon une page insérée en tête
+     * fait sauter la ligne qu'on lisait.
+     */
+    useLayoutEffect(() => {
         const el = scrollRef.current;
-        if (el) el.scrollTop = el.scrollHeight;
+        const action = scrollActionRef.current;
+        scrollActionRef.current = null;
+        if (!el || !action) return;
+        if (action === 'bottom') el.scrollTop = el.scrollHeight;
+        else if (action === 'top') el.scrollTop = 0;
+        else el.scrollTop = el.scrollHeight - bottomGapRef.current;
     }, [lines]);
 
     const grouped = useMemo(() => {
@@ -236,6 +333,15 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
             list.push(s);
             g.set(key, list);
         }
+        // Les conteneurs arrivent dans l'ordre de `docker ps` (création
+        // décroissante) : illisible passé quelques-uns. Les autres groupes gardent
+        // leur ordre, qui est délibéré côté agent.
+        const containers = g.get(CONTAINER_GROUP);
+        containers?.sort(
+            (a, b) =>
+                Number(b.running ?? false) - Number(a.running ?? false) ||
+                a.label.localeCompare(b.label, 'fr', { numeric: true })
+        );
         return [...g.entries()];
     }, [sources]);
 
@@ -255,6 +361,17 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
             </div>
         );
     }
+
+    const sentinel = hasMore ? (
+        <div ref={sentinelRef} className={styles.logSentinel}>
+            {loading ? 'Chargement…' : ''}
+        </div>
+    ) : lines.length >= MAX_LOADED_LINES ? (
+        <p className={styles.logSentinel}>
+            Plafond de {MAX_LOADED_LINES.toLocaleString('fr-FR')} lignes atteint. Resserrez la recherche ou la fenêtre
+            de temps.
+        </p>
+    ) : null;
 
     return (
         <div className={styles.logsPanel}>
@@ -334,7 +451,7 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
                     <span className={`icon ${live ? 'icon-refresh ' + styles.spinning : 'icon-refresh'}`} />
                     Live
                 </button>
-                <Button variant='secondary' onClick={runQuery} disabled={loading}>
+                <Button variant='secondary' onClick={() => runQuery('replace')} disabled={loading}>
                     {loading ? '…' : 'Actualiser'}
                 </Button>
             </div>
@@ -350,6 +467,27 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
                         {p.label}
                     </button>
                 ))}
+                <div className={styles.logAnchorGroup}>
+                    <button
+                        type='button'
+                        className={`${styles.logTimeBtn} ${anchor === 'oldest' ? styles.logTimeBtnOn : ''}`}
+                        onClick={() => {
+                            setLive(false);
+                            setAnchor('oldest');
+                        }}
+                        title='Sauter aux toutes premières lignes du journal, sans charger ce qu’il y a entre'
+                    >
+                        Début du journal
+                    </button>
+                    <button
+                        type='button'
+                        className={`${styles.logTimeBtn} ${anchor === 'newest' ? styles.logTimeBtnOn : ''}`}
+                        onClick={() => setAnchor('newest')}
+                        title='Revenir aux lignes les plus récentes'
+                    >
+                        Plus récent
+                    </button>
+                </div>
                 <span className={styles.logCount}>
                     {loading ? 'Chargement…' : `${lines.length} ligne${lines.length > 1 ? 's' : ''}`}
                 </span>
@@ -363,16 +501,22 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
                 ) : lines.length === 0 && !loading ? (
                     <p className={styles.logHint}>Aucune ligne pour ces critères.</p>
                 ) : (
-                    lines.map((l, i) => (
-                        <div key={i} className={styles.logLine}>
-                            <span className={styles.logTs}>
-                                {l.ts ? new Date(l.ts).toLocaleString('fr-FR', { hour12: false }) : '—'}
-                            </span>
-                            {l.level && <span className={`${styles.logLvl} ${LEVEL_CLASS[l.level]}`}>{l.level}</span>}
-                            {l.unit && <span className={styles.logUnit}>{l.unit}</span>}
-                            <span className={styles.logMsg}>{l.message}</span>
-                        </div>
-                    ))
+                    <>
+                        {anchor === 'newest' && sentinel}
+                        {lines.map(({ key, line: l }) => (
+                            <div key={key} className={styles.logLine}>
+                                <span className={styles.logTs}>
+                                    {l.ts ? new Date(l.ts).toLocaleString('fr-FR', { hour12: false }) : '—'}
+                                </span>
+                                {l.level && (
+                                    <span className={`${styles.logLvl} ${LEVEL_CLASS[l.level]}`}>{l.level}</span>
+                                )}
+                                {l.unit && <span className={styles.logUnit}>{l.unit}</span>}
+                                <span className={styles.logMsg}>{l.message}</span>
+                            </div>
+                        ))}
+                        {anchor === 'oldest' && sentinel}
+                    </>
                 )}
             </div>
         </div>

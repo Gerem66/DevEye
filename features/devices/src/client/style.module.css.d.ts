@@ -141,6 +141,7 @@ declare const styles: {
     readonly instantArrow: string;
     readonly instantNav: string;
     readonly loader: string;
+    readonly logAnchorGroup: string;
     readonly logCount: string;
     readonly logErr: string;
     readonly logHint: string;
@@ -155,6 +156,7 @@ declare const styles: {
     readonly logLvlWarning: string;
     readonly logMsg: string;
     readonly logSearch: string;
+    readonly logSentinel: string;
     readonly logSourceSelect: string;
     readonly logTimeBtn: string;
     readonly logTimeBtnOn: string;

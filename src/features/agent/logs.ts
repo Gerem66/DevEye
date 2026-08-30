@@ -42,7 +42,9 @@ export const agentLogQueryFeature: FeatureDefinition<
                 queryId: input.queryId,
                 sourceId: input.sourceId,
                 filter: input.filter,
-                limit: input.limit
+                limit: input.limit,
+                offset: input.offset,
+                anchor: input.anchor
             }) ?? false;
         if (!ok) throw new FeatureError('conflict', 'Agent hors ligne');
         return { ok: true };

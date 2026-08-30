@@ -224,6 +224,17 @@ pub struct LogLine {
     pub unit: Option<String>,
 }
 
+/// Which end of the log a query's `offset` counts from (mirrors
+/// `deviceLogAnchorSchema`). `Oldest` is how the viewer reaches a log's very first
+/// lines without paging through everything newer.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LogAnchor {
+    #[default]
+    Newest,
+    Oldest,
+}
+
 /// Advanced log-query filter as the server sends it (mirrors `deviceLogFilterSchema`).
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct LogFilter {
@@ -791,6 +802,11 @@ pub enum ServerMessage {
         filter: Option<LogFilter>,
         #[serde(default)]
         limit: Option<u32>,
+        /// Lines to skip from the `anchor` end before the returned window.
+        #[serde(default)]
+        offset: Option<u32>,
+        #[serde(default)]
+        anchor: Option<LogAnchor>,
     },
     /// Open an interactive PTY session. `user`, when set, runs the shell under that
     /// account (`su -l`); otherwise it's the account the agent runs as.

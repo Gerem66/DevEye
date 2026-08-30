@@ -15,11 +15,14 @@ use std::time::{Duration, Instant};
 use anyhow::{bail, Context, Result};
 use tokio::sync::mpsc::Sender;
 
-use crate::protocol::{LogFilter, LogLine, LogSource};
+use crate::protocol::{LogAnchor, LogFilter, LogLine, LogSource};
 
 /// Default / hard cap on the lines returned for one query.
-pub const DEFAULT_LIMIT: usize = 200;
+pub const DEFAULT_LIMIT: usize = 500;
 pub const MAX_LIMIT: usize = 1000;
+/// Hard cap on how far a query may skip back, so a runaway offset can't turn into
+/// an unbounded read (mirrors `DEVICE_LOG_OFFSET_MAX`).
+pub const MAX_OFFSET: usize = 20_000;
 /// How many raw lines to scan when a search/severity filter is active (so matches
 /// older than the last page can still surface), bounded to keep memory in check.
 const MAX_RAW: usize = 10_000;
@@ -32,6 +35,16 @@ const MAX_MSG: usize = 8192;
 
 /// Severities, coarsest → highest. Index = rank, used for the `levelMin` floor.
 const LEVELS: [&str; 6] = ["debug", "info", "notice", "warning", "error", "critical"];
+
+/// The slice of a source one query asks for: `limit` lines, skipping `offset` from
+/// the `anchor` end. A page shorter than `limit` means the source held nothing more
+/// in that direction, which is how the viewer knows it has hit the end.
+#[derive(Debug, Clone, Copy)]
+pub struct LogWindow {
+    pub limit: usize,
+    pub offset: usize,
+    pub anchor: LogAnchor,
+}
 
 /// Events a log task streams back to the session loop (which stamps the device id).
 pub enum LogEvent {
@@ -144,8 +157,53 @@ fn run_bounded<S: AsRef<std::ffi::OsStr>>(
     args: &[S],
     timeout: Duration,
 ) -> Result<(Vec<u8>, Vec<u8>)> {
-    use std::io::Read;
+    run_bounded_capped(label, program, args, timeout, None)
+}
+
+/// Drain one pipe, stopping early once `max_lines` newlines have been seen across
+/// every pipe sharing `seen`. Both pipes share the counter because a container's
+/// output can land entirely on stderr.
+fn drain_pipe(
+    pipe: &mut dyn std::io::Read,
+    max_lines: Option<usize>,
+    seen: &std::sync::atomic::AtomicUsize,
+) -> Vec<u8> {
+    use std::sync::atomic::Ordering;
+
+    let mut buf = Vec::new();
+    let Some(cap) = max_lines else {
+        let _ = pipe.read_to_end(&mut buf);
+        return buf;
+    };
+    let mut chunk = [0u8; 64 * 1024];
+    loop {
+        let n = match pipe.read(&mut chunk) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => n,
+        };
+        let newlines = chunk[..n].iter().filter(|b| **b == b'\n').count();
+        buf.extend_from_slice(&chunk[..n]);
+        if seen.fetch_add(newlines, Ordering::Relaxed) + newlines >= cap {
+            break;
+        }
+    }
+    buf
+}
+
+/// `run_bounded`, plus an optional line cap: reading a source from its beginning
+/// has no `--tail` to bound it, so the cap is what keeps a multi-GB journal from
+/// being swallowed whole. Reaching it kills the child, which is a success here, not
+/// the failure a non-zero status usually means.
+fn run_bounded_capped<S: AsRef<std::ffi::OsStr>>(
+    label: &str,
+    program: &str,
+    args: &[S],
+    timeout: Duration,
+    max_lines: Option<usize>,
+) -> Result<(Vec<u8>, Vec<u8>)> {
     use std::process::Stdio;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
 
     let mut child = Command::new(program)
         .args(args)
@@ -157,13 +215,11 @@ fn run_bounded<S: AsRef<std::ffi::OsStr>>(
 
     let mut out_pipe = child.stdout.take().expect("stdout demandé au spawn");
     let mut err_pipe = child.stderr.take().expect("stderr demandé au spawn");
-    let drain = |pipe: &mut dyn Read| {
-        let mut buf = Vec::new();
-        let _ = pipe.read_to_end(&mut buf);
-        buf
-    };
-    let out_reader = std::thread::spawn(move || drain(&mut out_pipe));
-    let err_reader = std::thread::spawn(move || drain(&mut err_pipe));
+    let seen = Arc::new(AtomicUsize::new(0));
+    let seen_out = Arc::clone(&seen);
+    let seen_err = Arc::clone(&seen);
+    let out_reader = std::thread::spawn(move || drain_pipe(&mut out_pipe, max_lines, &seen_out));
+    let err_reader = std::thread::spawn(move || drain_pipe(&mut err_pipe, max_lines, &seen_err));
 
     let deadline = Instant::now() + timeout;
     let status = loop {
@@ -172,6 +228,12 @@ fn run_bounded<S: AsRef<std::ffi::OsStr>>(
             .with_context(|| format!("attente de {label}"))?
         {
             Some(status) => break status,
+            None if max_lines.is_some_and(|cap| seen.load(Ordering::Relaxed) >= cap) => {
+                let _ = child.kill();
+                break child
+                    .wait()
+                    .with_context(|| format!("attente de {label}"))?;
+            }
             None if Instant::now() >= deadline => {
                 let _ = child.kill();
                 let _ = child.wait();
@@ -188,7 +250,10 @@ fn run_bounded<S: AsRef<std::ffi::OsStr>>(
     // la main tout seuls.
     let stdout = out_reader.join().unwrap_or_default();
     let stderr = err_reader.join().unwrap_or_default();
-    if !status.success() {
+    // Le plafond atteint ferme le tuyau sous l'outil : le SIGPIPE (ou le kill) qui
+    // s'ensuit est la fin normale de la lecture, pas un échec à rapporter.
+    let capped = max_lines.is_some_and(|cap| seen.load(Ordering::Relaxed) >= cap);
+    if !capped && !status.success() {
         bail!("{label}: {}", String::from_utf8_lossy(&stderr).trim());
     }
     Ok((stdout, stderr))
@@ -319,9 +384,13 @@ pub fn detect_sources() -> Vec<LogSource> {
 }
 
 /// Run one log query: read raw lines from the source, then apply the uniform
-/// post-filter (text/regex, severity floor, time window) and tail to `limit`.
-pub fn run_query(source_id: &str, filter: &LogFilter, limit: usize) -> Result<Vec<LogLine>> {
-    let limit = limit.clamp(1, MAX_LIMIT);
+/// post-filter (text/regex, severity floor, time window) and cut out `window`.
+pub fn run_query(source_id: &str, filter: &LogFilter, window: LogWindow) -> Result<Vec<LogLine>> {
+    let window = LogWindow {
+        limit: window.limit.clamp(1, MAX_LIMIT),
+        offset: window.offset.min(MAX_OFFSET),
+        anchor: window.anchor,
+    };
     let searching =
         filter.search.as_deref().is_some_and(|s| !s.is_empty()) || filter.level_min.is_some();
 
@@ -337,23 +406,29 @@ pub fn run_query(source_id: &str, filter: &LogFilter, limit: usize) -> Result<Ve
     } else {
         MAX_RAW
     };
-    let raw_cap = if searching { max_raw.max(limit) } else { limit };
+    // Assez de lignes brutes pour couvrir la page demandée ET tout ce qu'on saute
+    // pour l'atteindre. Élargir le balayage d'une page à l'autre ne fait que
+    // préfixer des lignes plus anciennes, donc un offset compté depuis une
+    // extrémité désigne toujours la même fenêtre.
+    let span = window.offset.saturating_add(window.limit);
+    let raw_cap = if searching { max_raw.max(span) } else { span };
+    let anchor = window.anchor;
 
     let raw = if source_id == "journald" {
-        read_journald(filter, raw_cap)?
+        read_journald(filter, raw_cap, anchor)?
     } else if let Some((bin, id)) = container {
-        read_container(bin, id, filter, raw_cap)?
+        read_container(bin, id, filter, raw_cap, anchor)?
     } else if let Some(path) = source_id.strip_prefix("file:") {
-        read_file(path, raw_cap)?
+        read_file(path, raw_cap, anchor)?
     } else if source_id == "oslog" {
-        read_oslog(raw_cap)?
+        read_oslog(raw_cap, anchor)?
     } else if let Some(channel) = source_id.strip_prefix("eventlog:") {
         read_eventlog(channel, raw_cap)?
     } else {
         bail!("source de logs inconnue : {source_id}");
     };
 
-    post_filter(raw, filter, limit)
+    post_filter(raw, filter, window)
 }
 
 /// Matcher built from the query's `search`/`regex` fields.
@@ -386,9 +461,13 @@ fn build_matcher(filter: &LogFilter) -> Result<Option<Matcher>> {
     }
 }
 
-/// Apply the severity floor, time window and text/regex match uniformly, then tail
-/// to `limit` (keep the newest matching lines).
-fn post_filter(mut lines: Vec<LogLine>, filter: &LogFilter, limit: usize) -> Result<Vec<LogLine>> {
+/// Apply the severity floor, time window and text/regex match uniformly, then cut
+/// out the requested window of matching lines.
+fn post_filter(
+    mut lines: Vec<LogLine>,
+    filter: &LogFilter,
+    window: LogWindow,
+) -> Result<Vec<LogLine>> {
     let min_rank = filter.level_min.as_deref().map(level_rank);
     let since_ms = filter.since.map(|s| s * 1000);
     let until_ms = filter.until.map(|u| u * 1000);
@@ -420,21 +499,34 @@ fn post_filter(mut lines: Vec<LogLine>, filter: &LogFilter, limit: usize) -> Res
         true
     });
 
-    if lines.len() > limit {
-        let start = lines.len() - limit;
-        lines.drain(0..start);
-    }
+    let len = lines.len();
+    let (start, end) = match window.anchor {
+        LogAnchor::Newest => {
+            let end = len.saturating_sub(window.offset);
+            (end.saturating_sub(window.limit), end)
+        }
+        LogAnchor::Oldest => {
+            let start = window.offset.min(len);
+            (start, start.saturating_add(window.limit).min(len))
+        }
+    };
+    lines.truncate(end);
+    lines.drain(0..start);
     Ok(lines)
 }
 
-fn read_journald(filter: &LogFilter, raw_cap: usize) -> Result<Vec<LogLine>> {
-    let mut args: Vec<String> = vec![
-        "-o".into(),
-        "json".into(),
-        "--no-pager".into(),
-        "-n".into(),
-        raw_cap.to_string(),
-    ];
+fn read_journald(filter: &LogFilter, raw_cap: usize, anchor: LogAnchor) -> Result<Vec<LogLine>> {
+    let mut args: Vec<String> = vec!["-o".into(), "json".into(), "--no-pager".into()];
+    // `-n` ne borne que par la queue : pour lire le début, on laisse journalctl
+    // dérouler dans l'ordre et c'est le plafond de lignes qui l'arrête.
+    let max_lines = match anchor {
+        LogAnchor::Newest => {
+            args.push("-n".into());
+            args.push(raw_cap.to_string());
+            None
+        }
+        LogAnchor::Oldest => Some(raw_cap),
+    };
     if let Some(u) = filter.unit.as_deref().filter(|s| !s.is_empty()) {
         args.push("-u".into());
         args.push(u.to_string());
@@ -452,7 +544,8 @@ fn read_journald(filter: &LogFilter, raw_cap: usize) -> Result<Vec<LogLine>> {
         args.push(level_to_journald_priority(min).to_string());
     }
 
-    let (stdout, _) = run_bounded("journalctl", "journalctl", &args, READ_TIMEOUT)?;
+    let (stdout, _) =
+        run_bounded_capped("journalctl", "journalctl", &args, READ_TIMEOUT, max_lines)?;
     let text = String::from_utf8_lossy(&stdout);
     let mut lines = Vec::new();
     for raw in text.lines() {
@@ -512,13 +605,24 @@ fn journald_line(v: &serde_json::Value) -> LogLine {
 
 /// Read one container's logs through its engine's CLI (`bin` is `docker`/`podman`,
 /// both taking the same flags).
-fn read_container(bin: &str, id: &str, filter: &LogFilter, raw_cap: usize) -> Result<Vec<LogLine>> {
-    let mut args: Vec<String> = vec![
-        "logs".into(),
-        "--timestamps".into(),
-        "--tail".into(),
-        raw_cap.to_string(),
-    ];
+fn read_container(
+    bin: &str,
+    id: &str,
+    filter: &LogFilter,
+    raw_cap: usize,
+    anchor: LogAnchor,
+) -> Result<Vec<LogLine>> {
+    let mut args: Vec<String> = vec!["logs".into(), "--timestamps".into()];
+    // Sans `--tail`, l'engin rejoue le conteneur depuis sa première ligne ; le
+    // plafond de lignes est alors la seule borne.
+    let max_lines = match anchor {
+        LogAnchor::Newest => {
+            args.push("--tail".into());
+            args.push(raw_cap.to_string());
+            None
+        }
+        LogAnchor::Oldest => Some(raw_cap),
+    };
     if let Some(s) = filter.since {
         args.push("--since".into());
         args.push(s.to_string());
@@ -532,7 +636,8 @@ fn read_container(bin: &str, id: &str, filter: &LogFilter, raw_cap: usize) -> Re
     // The engine sends the container's stdout to our stdout and its stderr to our
     // stderr; both are real log output. Parse the leading RFC3339 timestamp added
     // by --timestamps, then merge the two streams chronologically.
-    let (stdout, stderr) = run_bounded(&format!("{bin} logs"), bin, &args, READ_TIMEOUT)?;
+    let (stdout, stderr) =
+        run_bounded_capped(&format!("{bin} logs"), bin, &args, READ_TIMEOUT, max_lines)?;
     let mut lines = Vec::new();
     for data in [&stdout, &stderr] {
         for raw in String::from_utf8_lossy(data).lines() {
@@ -555,22 +660,32 @@ fn read_container(bin: &str, id: &str, filter: &LogFilter, raw_cap: usize) -> Re
     Ok(lines)
 }
 
-fn read_file(path: &str, raw_cap: usize) -> Result<Vec<LogLine>> {
+fn read_file(path: &str, raw_cap: usize, anchor: LogAnchor) -> Result<Vec<LogLine>> {
     use std::collections::VecDeque;
     use std::io::BufRead;
 
     let file = std::fs::File::open(path).with_context(|| format!("ouverture de {path}"))?;
     let reader = std::io::BufReader::new(file);
-    // Ring buffer of the last `raw_cap` lines, so a multi-GB file stays bounded.
-    let mut ring: VecDeque<String> = VecDeque::with_capacity(raw_cap.min(4096));
-    for line in reader.lines() {
-        let line = line.unwrap_or_default();
-        if ring.len() >= raw_cap {
-            ring.pop_front();
+    let raw: Vec<String> = match anchor {
+        // Ring buffer of the last `raw_cap` lines, so a multi-GB file stays bounded.
+        LogAnchor::Newest => {
+            let mut ring: VecDeque<String> = VecDeque::with_capacity(raw_cap.min(4096));
+            for line in reader.lines() {
+                let line = line.unwrap_or_default();
+                if ring.len() >= raw_cap {
+                    ring.pop_front();
+                }
+                ring.push_back(line);
+            }
+            ring.into()
         }
-        ring.push_back(line);
-    }
-    Ok(ring
+        LogAnchor::Oldest => reader
+            .lines()
+            .take(raw_cap)
+            .map(|l| l.unwrap_or_default())
+            .collect(),
+    };
+    Ok(raw
         .into_iter()
         .filter(|l| !l.is_empty())
         .map(|l| LogLine {
@@ -582,7 +697,9 @@ fn read_file(path: &str, raw_cap: usize) -> Result<Vec<LogLine>> {
         .collect())
 }
 
-fn read_oslog(raw_cap: usize) -> Result<Vec<LogLine>> {
+/// `LogAnchor::Oldest` reaches the start of the hour `log show` returns, not the
+/// start of the unified log: the tool is time-bounded, not line-bounded.
+fn read_oslog(raw_cap: usize, anchor: LogAnchor) -> Result<Vec<LogLine>> {
     // `log show` is time-based, not line-bounded; default to the last hour and cap
     // the lines afterwards (precise time windows are applied in post_filter only
     // when the source carries timestamps — best-effort on macOS).
@@ -604,12 +721,19 @@ fn read_oslog(raw_cap: usize) -> Result<Vec<LogLine>> {
         })
         .collect();
     if lines.len() > raw_cap {
-        let start = lines.len() - raw_cap;
-        lines.drain(0..start);
+        match anchor {
+            LogAnchor::Newest => {
+                let start = lines.len() - raw_cap;
+                lines.drain(0..start);
+            }
+            LogAnchor::Oldest => lines.truncate(raw_cap),
+        }
     }
     Ok(lines)
 }
 
+/// Always reads the newest events: `Get-WinEvent` only counts back from the top, so
+/// `LogAnchor::Oldest` reaches the start of that window, not the start of the channel.
 fn read_eventlog(channel: &str, raw_cap: usize) -> Result<Vec<LogLine>> {
     let max = raw_cap.min(MAX_RAW);
     let script = format!(
@@ -701,11 +825,11 @@ pub async fn run_query_task(
     query_id: String,
     source_id: String,
     filter: LogFilter,
-    limit: usize,
+    window: LogWindow,
     tx: Sender<LogEvent>,
 ) {
     const CHUNK: usize = 500;
-    let res = tokio::task::spawn_blocking(move || run_query(&source_id, &filter, limit)).await;
+    let res = tokio::task::spawn_blocking(move || run_query(&source_id, &filter, window)).await;
     let lines = match res {
         Ok(Ok(lines)) => lines,
         Ok(Err(e)) => return send_error(&tx, query_id, e.to_string()).await,
@@ -751,6 +875,31 @@ async fn send_error(tx: &Sender<LogEvent>, query_id: String, error: String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn newest(limit: usize, offset: usize) -> LogWindow {
+        LogWindow {
+            limit,
+            offset,
+            anchor: LogAnchor::Newest,
+        }
+    }
+
+    fn oldest(limit: usize, offset: usize) -> LogWindow {
+        LogWindow {
+            limit,
+            offset,
+            anchor: LogAnchor::Oldest,
+        }
+    }
+
+    fn line(ts: i64, message: &str) -> LogLine {
+        LogLine {
+            ts: Some(ts),
+            level: Some("info"),
+            message: message.into(),
+            unit: None,
+        }
+    }
 
     #[test]
     fn level_rank_orders_severities() {
@@ -801,7 +950,7 @@ mod tests {
             level_min: Some("warning".into()),
             ..Default::default()
         };
-        let out = post_filter(lines.clone(), &filter, 100).unwrap();
+        let out = post_filter(lines.clone(), &filter, newest(100, 0)).unwrap();
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].message, "boom failure");
 
@@ -809,9 +958,56 @@ mod tests {
             search: Some("HELLO".into()),
             ..Default::default()
         };
-        let out = post_filter(lines, &filter, 100).unwrap();
+        let out = post_filter(lines, &filter, newest(100, 0)).unwrap();
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].message, "hello world");
+    }
+
+    /// Le contrat de la pagination : les deux ancres découpent la même liste par
+    /// pages contiguës, et une page courte dit qu'il n'y a plus rien au-delà.
+    #[test]
+    fn post_filter_cuts_the_requested_window() {
+        let lines: Vec<LogLine> = (0..10).map(|i| line(i, &format!("l{i}"))).collect();
+        let f = LogFilter::default();
+
+        let page0 = post_filter(lines.clone(), &f, newest(4, 0)).unwrap();
+        let page1 = post_filter(lines.clone(), &f, newest(4, 4)).unwrap();
+        assert_eq!(page0.first().unwrap().message, "l6");
+        assert_eq!(page0.last().unwrap().message, "l9");
+        assert_eq!(page1.first().unwrap().message, "l2");
+        assert_eq!(page1.last().unwrap().message, "l5");
+
+        let head = post_filter(lines.clone(), &f, oldest(4, 0)).unwrap();
+        let head1 = post_filter(lines.clone(), &f, oldest(4, 4)).unwrap();
+        assert_eq!(head.first().unwrap().message, "l0");
+        assert_eq!(head1.first().unwrap().message, "l4");
+
+        // Une page plus courte que `limit` : il n'y a plus rien dans cette direction.
+        let tail = post_filter(lines.clone(), &f, newest(4, 8)).unwrap();
+        assert_eq!(tail.len(), 2);
+        assert_eq!(tail.first().unwrap().message, "l0");
+        // Au-delà du journal, rien plutôt qu'un débordement.
+        assert!(post_filter(lines.clone(), &f, newest(4, 50))
+            .unwrap()
+            .is_empty());
+        assert!(post_filter(lines, &f, oldest(4, 50)).unwrap().is_empty());
+    }
+
+    /// L'arrêt anticipé : un producteur sans fin doit rendre la main au plafond de
+    /// lignes, et sans être compté comme un échec malgré le kill.
+    #[cfg(unix)]
+    #[test]
+    fn run_bounded_capped_stops_at_the_line_cap() {
+        let (stdout, _) = run_bounded_capped(
+            "sh",
+            "sh",
+            &["-c", "i=0; while :; do echo $i; i=$((i+1)); done"],
+            Duration::from_secs(10),
+            Some(50),
+        )
+        .expect("le plafond n'est pas une erreur");
+        let seen = String::from_utf8_lossy(&stdout).lines().count();
+        assert!(seen >= 50, "au moins le plafond demandé, vu {seen}");
     }
 
     /// La raison d'être du helper : un outil qui ne rend jamais la main doit

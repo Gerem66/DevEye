@@ -2246,6 +2246,19 @@
     padding: var(--space-md);
     word-break: break-word;
 }
+.logAnchorGroup {
+    display: flex;
+    gap: var(--space-xs);
+    margin-left: var(--space-sm);
+}
+/* Cible d'IntersectionObserver : invisible au repos, pour ne pas se lire comme
+   une ligne de journal vide en tête ou en pied de liste. */
+.logSentinel {
+    padding: 2px 0;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    text-align: center;
+}
 
 /* ── Remote terminal (device.term*) ── */
 .terminalWrap {

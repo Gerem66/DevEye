@@ -715,12 +715,18 @@ async fn stream_session(
                                 source_id,
                                 filter,
                                 limit,
+                                offset,
+                                anchor,
                             }) => {
                                 tokio::spawn(crate::logs::run_query_task(
                                     query_id,
                                     source_id,
                                     filter.unwrap_or_default(),
-                                    limit.map(|l| l as usize).unwrap_or(crate::logs::DEFAULT_LIMIT),
+                                    crate::logs::LogWindow {
+                                        limit: limit.map(|l| l as usize).unwrap_or(crate::logs::DEFAULT_LIMIT),
+                                        offset: offset.unwrap_or(0) as usize,
+                                        anchor: anchor.unwrap_or_default(),
+                                    },
                                     log_tx.clone(),
                                 ));
                             }
