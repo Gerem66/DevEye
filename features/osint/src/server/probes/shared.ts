@@ -128,12 +128,19 @@ interface CachedProbe {
 
 const cache = new Map<string, CachedProbe>();
 
-function cacheKey(probe: OsintProbeId, target: OsintTarget): string {
-    return `${probe}|${target.kind}|${target.value}`;
+/**
+ * La présence d'une clé entre dans l'identité d'un résultat : une sonde rend
+ * autre chose selon qu'elle en a une, et sans cela poser sa clé ne changeait
+ * rien avant l'expiration, sur une feature dont le TTL va jusqu'à 24 h. La clé
+ * elle-même n'y est pas, seulement le fait qu'il y en ait une : un secret n'a
+ * rien à faire dans une clé de cache.
+ */
+function cacheKey(probe: OsintProbeId, target: OsintTarget, keyed: boolean): string {
+    return `${probe}|${target.kind}|${target.value}|${keyed ? 'k' : '-'}`;
 }
 
-export function readCache(probe: OsintProbeId, target: OsintTarget): OsintProbeResult | null {
-    const key = cacheKey(probe, target);
+export function readCache(probe: OsintProbeId, target: OsintTarget, keyed: boolean): OsintProbeResult | null {
+    const key = cacheKey(probe, target, keyed);
     const hit = cache.get(key);
     if (!hit) return null;
     if (hit.expires <= Date.now()) {
@@ -146,6 +153,7 @@ export function readCache(probe: OsintProbeId, target: OsintTarget): OsintProbeR
 export function writeCache(
     probe: OsintProbeId,
     target: OsintTarget,
+    keyed: boolean,
     result: OsintProbeResult,
     ttlMs = DEFAULT_TTL_MS
 ): void {
@@ -158,14 +166,14 @@ export function writeCache(
         const oldest = cache.keys().next().value;
         if (oldest !== undefined) cache.delete(oldest);
     }
-    cache.set(cacheKey(probe, target), { result, expires: Date.now() + ttlMs });
+    cache.set(cacheKey(probe, target, keyed), { result, expires: Date.now() + ttlMs });
 }
 
-/** Oublie tout ce qui est en cache pour cette cible. */
+/** Oublie tout ce qui est en cache pour cette cible, clé posée ou non. */
 export function dropCache(target: OsintTarget): void {
-    const suffix = `|${target.kind}|${target.value}`;
+    const fragment = `|${target.kind}|${target.value}|`;
     for (const key of [...cache.keys()]) {
-        if (key.endsWith(suffix)) cache.delete(key);
+        if (key.includes(fragment)) cache.delete(key);
     }
 }
 

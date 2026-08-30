@@ -118,12 +118,14 @@ export const osintHandlers = [
                 throw new FeatureError('validation', `La sonde « ${input.probe} » ne s'applique pas à cette cible.`);
             }
 
-            const cached = readCache(input.probe, target);
+            // La clé est lue avant le cache : ce qu'une sonde rend en dépend,
+            // et un résultat d'avant sa pose n'a plus rien à voir avec elle.
+            const key = await providerKey(ctx, adapter.provider);
+            const cached = readCache(input.probe, target, Boolean(key));
             if (cached) return { result: cached };
 
-            const key = await providerKey(ctx, adapter.provider);
             const result = await runProbe(adapter, { target, key });
-            writeCache(input.probe, target, result, adapter.ttlMs);
+            writeCache(input.probe, target, Boolean(key), result, adapter.ttlMs);
 
             return { result };
         }

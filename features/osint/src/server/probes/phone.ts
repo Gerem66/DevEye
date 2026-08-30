@@ -96,13 +96,33 @@ function scoreOf(parsed: PhoneNumber | undefined, type: string | undefined): Osi
     return { value, label, tone, signals };
 }
 
+/**
+ * apilayer répond 200 même quand il refuse : l'échec est dans le corps, sous
+ * `success: false`, et `info` n'est pas garanti. Sans lire `success`, un refus
+ * (clé invalide, quota, plan gratuit limité à HTTP) ne laissait aucune trace :
+ * ni champ, ni erreur, exactement comme une réponse vide.
+ */
 interface NumverifyResponse {
+    success?: boolean;
     valid?: boolean;
     carrier?: string;
     line_type?: string;
     location?: string;
     country_name?: string;
-    error?: { info?: string };
+    error?: { code?: number; type?: string; info?: string };
+}
+
+/** Ce qu'on affiche d'un refus, `info` manquant compris. */
+function numverifyError(nv: NumverifyResponse): string | null {
+    if (nv.success === false || nv.error) {
+        const detail = nv.error?.info ?? nv.error?.type ?? 'refus sans explication';
+        // Le plan gratuit d'apilayer ne sert que HTTP : le piège coûte une heure
+        // à qui ne connaît pas, et le message brut ne le dit pas toujours.
+        const hint =
+            nv.error?.type === 'https_access_restricted' ? ' (le plan gratuit de Numverify ne permet pas HTTPS)' : '';
+        return `${detail}${hint}`;
+    }
+    return null;
 }
 
 export const phoneProbe: OsintProbeAdapter = {
@@ -147,21 +167,28 @@ export const phoneProbe: OsintProbeAdapter = {
         if (type === 'PREMIUM_RATE') tags.push(tag('Surtaxé', 'bad'));
         if (type === 'TOLL_FREE') tags.push(tag('Gratuit', 'neutral'));
 
-        // Enrichissement facultatif : l'opérateur réel, portages compris.
+        // Enrichissement facultatif : l'opérateur réel, portages compris. Une clé
+        // posée doit toujours laisser une trace de ce qu'elle a donné, ne
+        // serait-ce que « rien » : sans cela, une clé refusée est indiscernable
+        // d'une clé qui marche sur un numéro que le fournisseur ne connaît pas.
         if (key) {
             try {
                 const nv = await fetchJson<NumverifyResponse>(
                     `https://apilayer.net/api/validate?access_key=${encodeURIComponent(key)}&number=${encodeURIComponent(parsed.number)}`
                 );
-                if (nv.error?.info) {
-                    fields.push(field('Numverify', `Erreur : ${nv.error.info}`));
+                const refusal = numverifyError(nv);
+                if (refusal) {
+                    fields.push(field('Numverify', `Refusé : ${refusal}`));
                 } else {
                     if (nv.carrier) fields.push(field('Opérateur (Numverify)', nv.carrier));
                     if (nv.location) fields.push(field('Zone (Numverify)', nv.location));
                     if (nv.line_type) fields.push(field('Type (Numverify)', nv.line_type));
+                    if (!nv.carrier && !nv.location && !nv.line_type) {
+                        fields.push(field('Numverify', 'Aucune donnée pour ce numéro'));
+                    }
                 }
-            } catch {
-                fields.push(field('Numverify', 'Fournisseur injoignable'));
+            } catch (e) {
+                fields.push(field('Numverify', `Injoignable : ${e instanceof Error ? e.message : String(e)}`));
             }
         }
 
