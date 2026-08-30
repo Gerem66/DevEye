@@ -177,7 +177,9 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection }: 
                         )}
                         {current === 'permissions' && scope.kind === 'item' && <ItemPermissionsSection scope={scope} />}
                         {current === 'sharing' && <SharingSection scope={scope} />}
-                        {current && !GENERIC_SECTIONS.has(current) && <ModulePanel scope={scope} section={current} />}
+                        {current && !GENERIC_SECTIONS.has(current) && (
+                            <ModulePanel scope={scope} section={current} onClose={onClose} />
+                        )}
                     </div>
                 </div>
             </Dialog>
@@ -279,7 +281,15 @@ export type { SettingsScope, SettingsSectionId } from './scope';
  * rendre s'il manque : manifest et entrée client peuvent brièvement diverger
  * en développement.
  */
-function ModulePanel({ scope, section }: { scope: SettingsScope; section: SettingsSectionId }) {
+function ModulePanel({
+    scope,
+    section,
+    onClose
+}: {
+    scope: SettingsScope;
+    section: SettingsSectionId;
+    onClose: () => void;
+}) {
     const permissions = useWorkspacePermissions();
     const client = moduleClient(scope.feature);
     const Panel = client?.settingsPanels?.[section];
@@ -299,6 +309,11 @@ function ModulePanel({ scope, section }: { scope: SettingsScope; section: Settin
                         : { kind: 'item', itemId: scope.itemId as never, itemLabel: scope.itemLabel }
                 }
                 canWrite={permissions.canFeature(scope.feature, 'write')}
+                // Pour le panneau qui supprime l'élément qu'il règle : la portée
+                // sur laquelle le dialogue s'est ouvert n'existe plus, et la
+                // coquille retomberait sinon sur les onglets de la
+                // fonctionnalité, sous le nom de l'élément disparu.
+                close={onClose}
             />
         </>
     );

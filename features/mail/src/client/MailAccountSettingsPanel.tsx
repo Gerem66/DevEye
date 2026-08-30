@@ -32,7 +32,7 @@ import type { MailAccount, MailAccountDraft, MailAccountEdit, MailProxy } from '
  * lui appartiennent, et `mail.accountUpdate` la refuse. Restent le nom et le
  * proxy, par `mail.accountSetProfile`.
  */
-export default function MailAccountSettingsPanel({ scope, canWrite }: SettingsPanelProps) {
+export default function MailAccountSettingsPanel({ scope, canWrite, close }: SettingsPanelProps) {
     const accountId = scope.kind === 'item' ? scope.itemId : null;
     const version = useResourceVersion('mail.accountList');
     const [account, setAccount] = useState<MailAccount | null>(null);
@@ -46,7 +46,6 @@ export default function MailAccountSettingsPanel({ scope, canWrite }: SettingsPa
     const [busy, setBusy] = useState(false);
     const [testing, setTesting] = useState(false);
     const [status, setStatus] = useState<string | null>(null);
-    const [deleted, setDeleted] = useState(false);
     const [errorName, setErrorName] = useState('');
     const [errorEmail, setErrorEmail] = useState('');
     const [reconnecting, setReconnecting] = useState(false);
@@ -54,7 +53,7 @@ export default function MailAccountSettingsPanel({ scope, canWrite }: SettingsPa
     const blank = useRef(true);
 
     useEffect(() => {
-        if (accountId === null || deleted) return;
+        if (accountId === null) return;
         void api
             .send('mail.accountList', {})
             .then((res) => {
@@ -75,10 +74,9 @@ export default function MailAccountSettingsPanel({ scope, canWrite }: SettingsPa
                 blank.current = true;
             })
             .catch((e) => setStatus(humanizeError(e, 'Chargement impossible.')));
-    }, [accountId, version, deleted]);
+    }, [accountId, version]);
 
     if (accountId === null) return null;
-    if (deleted) return <p className={shell.notice}>Boîte supprimée. Fermez ces réglages.</p>;
     if (!account || !draft) return <p className={shell.notice}>{status ?? 'Chargement…'}</p>;
 
     const providerManaged = account.authMethod !== 'password';
@@ -204,7 +202,10 @@ export default function MailAccountSettingsPanel({ scope, canWrite }: SettingsPa
                     .send('mail.accountDelete', { id: account.id })
                     .then(() => {
                         invalidate('mail.accountCount', 'mail.accountList');
-                        setDeleted(true);
+                        // La boîte qu'on réglait n'existe plus : rester
+                        // afficherait les réglages de la fonctionnalité sous son
+                        // nom, le temps que la vue se ravise.
+                        close();
                     })
                     .catch((e) => setStatus(humanizeError(e, 'Suppression impossible.')))
                     .finally(() => setBusy(false));
