@@ -839,7 +839,7 @@ export default function Mail(_props: FeatureViewProps) {
                 qui remplace le « la liste est vide, allez savoir pourquoi ». */}
             {accountStatus && (
                 <div className={styles.accountAlert} data-tone={accountStatus.tone} role='status'>
-                    <span className='icon icon-error' />
+                    <span className='icon icon-x-circle' />
                     <span>
                         {accountStatus.headline}
                         {selectedAccount?.lastSyncError && (

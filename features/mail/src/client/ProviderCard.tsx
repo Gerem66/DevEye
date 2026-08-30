@@ -36,7 +36,7 @@ export function ProviderCard({
     return (
         <div className={styles.providerCard} data-tone={status?.tone}>
             <span
-                className={`icon icon-${status ? 'error' : 'check-circle'} ${styles.providerCardCheck}`}
+                className={`icon icon-${status ? 'x-circle' : 'check-circle'} ${styles.providerCardCheck}`}
                 aria-hidden='true'
             />
             <span className={styles.providerCardBody}>

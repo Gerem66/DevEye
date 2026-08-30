@@ -1064,7 +1064,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
 
             {readError && (
                 <div className={styles.offlineBanner}>
-                    <span className='icon icon-error' />
+                    <span className='icon icon-x-circle' />
                     Certaines données n’ont pas pu être chargées. Les cartes vides ne signifient pas forcément une
                     absence de relevés.
                 </div>
