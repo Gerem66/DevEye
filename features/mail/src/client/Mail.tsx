@@ -186,6 +186,15 @@ export default function Mail(_props: FeatureViewProps) {
         return () => clearInterval(id);
     }, [anySyncing, reloadAccounts]);
 
+    // Une boîte qui n'est plus dans la liste ne peut pas rester sélectionnée :
+    // supprimée depuis ses réglages, retirée par un autre membre ou départagée,
+    // la face du compte n'aurait plus rien à montrer, pas même sa flèche de
+    // retour. La sélection tombe, et l'effet suivant ramène à la liste.
+    useEffect(() => {
+        if (accountsLoading || selectedAccountId === null) return;
+        if (!accounts.some((a) => a.id === selectedAccountId)) setSelectedAccountId(null);
+    }, [accounts, accountsLoading, selectedAccountId]);
+
     useEffect(() => {
         // Driven only by the id actually changing, not by every render, so the
         // manual back-arrow toggle (same id, `showAccountList` flipped locally) is
