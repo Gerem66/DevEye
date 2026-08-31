@@ -1,0 +1,577 @@
+/* La carte de grille. */
+.widget {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
+    gap: var(--space-sm);
+}
+
+.widgetStat {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-sm);
+}
+
+.widgetValue {
+    font-size: 2.2rem;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+}
+
+.widgetAlert {
+    color: var(--danger);
+}
+
+.widgetLabel {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.widgetFoot {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+/* La vue complète. */
+.root {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    gap: var(--space-md);
+    /* Cette vue ne défile jamais en travers : ce qui dépasse est rogné plutôt
+       que de faire naître une barre horizontale dans le cadre de la popup.
+       `clip` et non `hidden` : `hidden` sur un seul axe force l'autre à `auto`,
+       ce qui ferait de cette racine un conteneur de défilement, et la fiche
+       collante se recalerait sur lui au lieu du cadre de la popup, donc ne
+       collerait plus du tout. */
+    overflow-x: clip;
+}
+
+.head {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+/* Trois colonnes de bords égaux : la recherche tombe au centre de la popup, et
+   n'y bouge pas quand le titre ou les actions changent de largeur. */
+.headRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 560px) minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-md);
+}
+
+.headRow > *:last-child {
+    justify-self: end;
+}
+
+.title {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* Bloc, pas flex : l'enveloppe de TextInput est un div qui prend alors toute la
+   largeur, et l'icône se pose par-dessus au lieu de se ranger à côté. */
+.searchBox {
+    position: relative;
+    width: 100%;
+    min-width: 0;
+}
+
+.searchIcon {
+    position: absolute;
+    top: 50%;
+    left: 11px;
+    width: 15px;
+    height: 15px;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    /* L'icône est un décor : le clic doit atteindre le champ dessous. */
+    pointer-events: none;
+    z-index: 1;
+}
+
+.searchInput {
+    padding-left: 34px;
+    padding-right: 32px;
+}
+
+/* La croix d'effacement, à nous et non au moteur : celle d'un `type="search"`
+   n'est dessinée que par Blink et WebKit, en gris et sans curseur de clic, et
+   Firefox n'offre aucun sélecteur pour la reprendre. Un bouton à nous se rend
+   pareil partout. */
+.clearInput {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    transform: translateY(-50%);
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: color var(--transition-fast);
+}
+
+.clearInput:hover {
+    color: var(--accent);
+}
+
+.clearInput .icon {
+    width: 13px;
+    height: 13px;
+    background-color: currentColor;
+}
+
+.filters {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+
+.severityChips {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.chip {
+    padding: 4px 10px;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.chip:hover {
+    color: var(--text-primary);
+    background: var(--glass-bg-light);
+}
+
+.chipActive {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    background: var(--accent-bg);
+}
+
+/* Sortir de la recherche est le même geste que d'y entrer : un seul bouton,
+   là où l'onglet se tenait. */
+.clearSearch {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    border-radius: var(--radius-pill);
+    background: var(--accent-bg);
+    color: var(--accent);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.clearIcon {
+    width: 12px;
+    height: 12px;
+}
+
+.status {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+/* Le bandeau d'échec : ce qui s'est passé, et le code quand la phrase seule ne
+   permettrait pas de le rapporter. */
+.error {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+    border-radius: var(--radius-md);
+    background: var(--danger-bg);
+    color: var(--danger);
+    font-size: 0.85rem;
+}
+
+.errorIcon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    background-color: currentColor;
+}
+
+.errorCode {
+    flex-shrink: 0;
+    margin-left: auto;
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--danger) 18%, transparent);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.72rem;
+}
+
+/* Pas de gouttière ici : une `gap` appartient au parent et ne s'anime pas avec
+   l'enfant. En fin de fermeture, le panneau atteignait zéro puis se démontait,
+   et la liste s'élargissait d'un coup de toute la gouttière. L'écart vit donc
+   DANS le panneau, où l'animation de largeur le rogne avec le reste. */
+.split {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    align-items: flex-start;
+}
+
+.listPane {
+    flex: 1;
+    min-width: 0;
+}
+
+.empty {
+    margin: 0;
+    padding: var(--space-lg) 0;
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    text-align: center;
+}
+
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.row {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    background: var(--glass-bg-light);
+    transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast);
+}
+
+.row:hover {
+    background: var(--glass-bg);
+}
+
+.rowSelected {
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    background: var(--accent-bg);
+}
+
+.rowMain {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.rowHead {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+
+.rowId {
+    font-weight: 600;
+    font-size: 0.88rem;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.rowAge {
+    font-size: 0.76rem;
+    color: var(--text-muted);
+}
+
+/* Deux lignes au plus : une description de CVE fait volontiers dix lignes, et
+   la liste doit rester parcourable. */
+.rowSummary {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    color: var(--text-secondary);
+}
+
+/* L'étoile et le lien vers la fiche officielle, groupés en haut de rangée pour
+   qu'ils s'alignent sur le titre plutôt que de flotter au milieu du résumé. */
+.rowActions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.starBtn,
+.iconBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: 4px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    cursor: pointer;
+    transition:
+        color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.starBtn:hover:not(:disabled),
+.iconBtn:hover:not(:disabled) {
+    color: var(--accent);
+    background: var(--glass-bg);
+}
+
+.starBtn:disabled,
+.iconBtn:disabled {
+    cursor: default;
+    /* framer-motion possède l'opacité de ses éléments : atténuer par un filtre. */
+    filter: opacity(0.45);
+}
+
+.starBtn[aria-pressed='true'] {
+    color: var(--accent);
+}
+
+.detailPane {
+    position: sticky;
+    top: 0;
+    flex-shrink: 0;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+/*
+ * Le contenu, à largeur figée pendant que le panneau anime la sienne : la
+ * valeur vient de `Cve.tsx`, avec celle de l'animation, une seule source pour
+ * les deux. Ici, seulement de quoi rendre le rognage propre.
+ */
+.detailInner {
+    flex-shrink: 0;
+    /* L'écart d'avec la liste, compris dans la largeur qu'anime framer-motion
+       (`box-sizing: border-box` est global). */
+    padding-left: var(--space-md);
+}
+
+.detail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--glass-bg-light);
+}
+
+.detailHead {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.detailTitle {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.detailMeta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+
+.detailDate {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.detailSummary {
+    margin: 0;
+    font-size: 0.84rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.detailFacts {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px var(--space-sm);
+    margin: 0;
+    font-size: 0.78rem;
+}
+
+.detailFacts dt {
+    color: var(--text-muted);
+}
+
+.detailFacts dd {
+    margin: 0;
+    color: var(--text-secondary);
+}
+
+.detailVector {
+    word-break: break-all;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.74rem;
+}
+
+.detailSection {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.detailSectionTitle {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.refList {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.8rem;
+}
+
+/* Le nom d'hôte porte le lien, l'étiquette du NVD dit ce qu'on y trouvera : sans
+   elle, cinq entrées d'un même site se lisent comme cinq fois la même chose. */
+.refRow {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-sm);
+    min-width: 0;
+}
+
+.refLink {
+    flex-shrink: 0;
+    max-width: 55%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--accent);
+    text-decoration: none;
+}
+
+.refLink:hover {
+    text-decoration: underline;
+}
+
+.refTags {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.detailMore {
+    margin: 0;
+    font-size: 0.76rem;
+    color: var(--text-muted);
+}
+
+/* Sous 880 px, l'en-tête ne tient plus sur une ligne : la recherche descend sous
+   le titre et le bouton de réglages, sur toute la largeur, plutôt que de les
+   comprimer tous les trois. */
+@media (max-width: 880px) {
+    .headRow {
+        grid-template-columns: 1fr auto;
+        row-gap: var(--space-sm);
+    }
+
+    .title {
+        grid-area: 1 / 1;
+    }
+
+    .headRow > *:last-child {
+        grid-area: 1 / 2;
+    }
+
+    .searchBox {
+        grid-area: 2 / 1 / 3 / -1;
+    }
+}
+
+/* Sous 1000 px il n'y a plus la place de deux colonnes : la fiche d'une CVE
+   devient une page à part entière. La liste n'est pas démontée mais cachée, si
+   bien que le retour la retrouve telle qu'elle était, onglet, filtres et
+   résultats compris. */
+@media (max-width: 1000px) {
+    .hasDetail .head,
+    .hasDetail .listPane {
+        display: none;
+    }
+
+    .hasDetail .detailPane {
+        position: static;
+        width: 100% !important;
+    }
+
+    .hasDetail .detailInner {
+        width: 100% !important;
+        /* Pleine page : plus de liste à côté, donc plus d'écart à ménager. */
+        padding-left: 0;
+    }
+}

@@ -6,6 +6,7 @@ import { useActiveWorkspace, useWorkspacePermissions } from '@/stores/workspace'
 import { clientModules, moduleClient } from '@/sdk/registry';
 import { SecrecyTimer } from './SecrecyTimer';
 import { LivePresence } from './LivePresence';
+import { PublicIp } from './PublicIp';
 import styles from './TopNavbar.module.css';
 
 /**
@@ -25,7 +26,13 @@ export interface TopbarWidgetMeta {
 
 const NATIVE_TOPBAR_WIDGETS: TopbarWidgetMeta[] = [
     { id: 'secrecy', title: 'Chiffrement', icon: 'lock', description: 'Minuteur du chiffrement par mot de passe' },
-    { id: 'live', title: 'Présence', icon: 'user', description: 'Qui est dans cet espace, et où' }
+    { id: 'live', title: 'Présence', icon: 'user', description: 'Qui est dans cet espace, et où' },
+    {
+        id: 'publicIp',
+        title: 'Mon IP',
+        icon: 'globe',
+        description: 'L’adresse publique par laquelle ce navigateur sort'
+    }
 ];
 
 /**
@@ -84,13 +91,22 @@ export function usableTopbarWidgetIds(
     return ids.filter((id) => allowed.has(id));
 }
 
-/** Render a single topbar widget by id (shared by the live navbar and the editor). */
-export function renderTopbarWidget(id: HomeTopbarWidgetId, onOpenSecurity?: (e: ReactMouseEvent) => void): ReactNode {
+/**
+ * Render a single topbar widget by id (shared by the live navbar and the editor).
+ * `editing` : l'éditeur monte le widget vivant en aperçu, et certains y offrent
+ * leur réglage plutôt que leur geste courant.
+ */
+export function renderTopbarWidget(
+    id: HomeTopbarWidgetId,
+    opts: { onOpenSecurity?: (e: ReactMouseEvent) => void; editing?: boolean } = {}
+): ReactNode {
     switch (id) {
         case 'secrecy':
-            return <SecrecyTimer onOpenSecurity={onOpenSecurity} />;
+            return <SecrecyTimer onOpenSecurity={opts.onOpenSecurity} />;
         case 'live':
             return <LivePresence />;
+        case 'publicIp':
+            return <PublicIp editing={opts.editing} />;
         default: {
             // Widget d'un module : l'hôte fournit le cadre et le titre, le
             // module le contenu, sans props.
@@ -120,7 +136,7 @@ export function TopbarWidgets({ onOpenSecurity }: { onOpenSecurity?: (e: ReactMo
     return (
         <div className={styles.status}>
             {items.map((id) => (
-                <span key={id}>{renderTopbarWidget(id, onOpenSecurity)}</span>
+                <span key={id}>{renderTopbarWidget(id, { onOpenSecurity })}</span>
             ))}
         </div>
     );

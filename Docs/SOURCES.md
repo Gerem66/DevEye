@@ -45,6 +45,7 @@ boîte créée.
 | chaque émetteur | ses canaux d'alerte                 | `notification_channels` (colonne `feature`)           | section Notifications (cases)                            |
 | Météo           | clés d'API des fournisseurs         | `weather_provider_keys`                               | le dialogue d'un lieu peut porter la sienne en surcharge |
 | OSINT           | clés d'API des fournisseurs         | `osint_provider_keys`                                 | aucun : les sondes les résolvent seules                  |
+| Veille CVE      | clé d'API du NVD                    | `feature_kv` (clé `nvdApiKey`)                        | aucun : les lectures la résolvent seules                 |
 
 ## La mécanique
 

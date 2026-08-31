@@ -298,7 +298,7 @@ function ModulePanel({
     const hint = section === 'sources' ? featureDescriptor(scope.feature).sources?.hint : undefined;
     return (
         <>
-            {hint && <p className={styles.sectionHint}>{hint}</p>}
+            {hint && <p className={`${styles.sectionHint} ${styles.panelLead}`}>{hint}</p>}
             <Panel
                 // L'id est un nombre ou un texte (un appareil est un UUID) ; le
                 // panneau se déclare pour l'un des deux

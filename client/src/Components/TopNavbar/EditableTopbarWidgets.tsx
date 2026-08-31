@@ -41,8 +41,9 @@ function SortableChip({ id }: { id: HomeTopbarWidgetId }) {
             {...listeners}
             title='Glisser pour réordonner'
         >
-            {/* Live preview, but inert: the drag/remove own the interactions. */}
-            <span className={styles.preview}>{renderTopbarWidget(id)}</span>
+            {/* Aperçu vivant, inerte par défaut : le glisser et le retrait tiennent
+                les interactions, sauf pour un widget qui offre ici son réglage. */}
+            <span className={styles.preview}>{renderTopbarWidget(id, { editing: true })}</span>
             <button
                 className={styles.remove}
                 onPointerDown={(e) => e.stopPropagation()}

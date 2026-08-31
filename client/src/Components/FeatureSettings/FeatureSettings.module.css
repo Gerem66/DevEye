@@ -106,6 +106,12 @@
     line-height: 1.5;
 }
 
+/* La phrase de tete d'une section, posee juste au-dessus du panneau : sans ce
+   souffle, le tableau lui colle et le bloc entier se lit comme un pave. */
+.panelLead {
+    margin-bottom: var(--space-sm);
+}
+
 .sectionActions {
     display: flex;
     gap: var(--space-sm);

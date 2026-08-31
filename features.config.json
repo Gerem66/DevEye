@@ -45,6 +45,9 @@
     },
     {
       "package": "deveye-feature-devices"
+    },
+    {
+      "package": "deveye-feature-cve"
     }
   ]
 }

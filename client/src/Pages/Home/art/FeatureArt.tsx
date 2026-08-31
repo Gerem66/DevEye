@@ -18,7 +18,7 @@ const OK = 'var(--success)';
 const KO = 'var(--danger)';
 const WARN = 'var(--warning)';
 
-/** Le trait courant : ce qui donne leur air de famille aux quinze dessins. */
+/** Le trait courant : ce qui donne leur air de famille à tous les dessins. */
 const stroke = { fill: 'none', strokeWidth: 2.4, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
 const thin = { fill: 'none', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
 
@@ -323,6 +323,30 @@ const ART: Record<ArtId, ReactNode> = {
             <rect x='16' y='32' width='128' height='44' rx='5' stroke={A} {...stroke} />
             <path d='M16 36 80 60 144 36' stroke={A} {...stroke} />
             <circle cx='138' cy='38' r='6' fill={KO} />
+        </>
+    ),
+
+    // Le fil des vulnérabilités : le champ de recherche, puis les constats
+    // rangés par gravité, dont un épinglé.
+    cve: (
+        <>
+            <rect x='16' y='10' width='128' height='16' rx='8' fill={M} opacity='0.14' />
+            <circle cx='27' cy='17' r='4' stroke={M} {...thin} />
+            <path d='M30 20 33 23' stroke={M} {...thin} />
+            <Line x={39} y={15} w={42} o={0.4} h={6} />
+
+            <rect x='16' y='34' width='22' height='9' rx='4.5' fill={KO} />
+            <Line x={44} y={35} w={70} c={A} o={0.8} h={7} />
+            <path
+                d='M132 31.5 133.7 36.15 138.66 36.34 134.76 39.4 136.11 44.16 132 41.4 127.89 44.16 129.24 39.4 125.34 36.34 130.3 36.15Z'
+                fill={A}
+            />
+
+            <rect x='16' y='50' width='22' height='9' rx='4.5' fill={WARN} opacity='0.85' />
+            <Line x={44} y={51} w={56} o={0.45} h={7} />
+
+            <rect x='16' y='66' width='22' height='9' rx='4.5' fill={M} opacity='0.45' />
+            <Line x={44} y={67} w={64} o={0.3} h={7} />
         </>
     ),
 

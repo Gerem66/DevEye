@@ -38,6 +38,9 @@ export type ResourceKey =
     | 'sentinel.baseline'
     | 'weather.list'
     | 'osint.history'
+    | 'cve.news'
+    | 'cve.favorites'
+    | 'cve.keyList'
     | 'workspace.roleList'
     /** L'état de l'espace actif tel que `workspace.activate` le rend : droits, apparence, disposition. */
     | 'workspace.activate'

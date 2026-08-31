@@ -342,3 +342,13 @@
     -webkit-mask-image: url(/icons/play-thin.svg);
     mask-image: url(/icons/play-thin.svg);
 }
+
+.icon.icon-globe {
+    -webkit-mask-image: url(/icons/globe.svg);
+    mask-image: url(/icons/globe.svg);
+}
+
+.icon.icon-bug {
+    -webkit-mask-image: url(/icons/bug.svg);
+    mask-image: url(/icons/bug.svg);
+}

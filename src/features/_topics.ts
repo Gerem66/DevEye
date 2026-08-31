@@ -26,6 +26,9 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     audience: 'audience',
     backup: 'backup',
     cloudSync: 'cloudsync',
+    // Le fil des vulnérabilités a son propre sujet secondaire (`cveFeed`), battu
+    // par l'ingestion : le sujet nommé ici ne sert qu'aux écritures d'un membre.
+    cve: 'cve',
     database: 'database',
     deploy: 'deploy',
     devices: 'devices',
