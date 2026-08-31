@@ -59,13 +59,13 @@ export const deployHandlers = [
             // Les cibles qu'une restriction masque pour ce rôle disparaissent de la
             // liste plutôt que d'y figurer grisées.
             const hidden = await ctx.items.restrictions();
-            const visible = rows.filter((r) => hidden.get(r.id) !== 'none');
+            const visible = rows.filter((r) => hidden.get(String(r.id)) !== 'none');
             const [scope, counts] = await Promise.all([ctx.sharing.scope(), projectCountsOf(ctx)]);
             return {
                 targets: await Promise.all(
                     visible.map(async (row) =>
                         toTarget(
-                            await scope.cipherFor(row.id),
+                            await scope.cipherFor(String(row.id)),
                             row,
                             row.workspace_id !== ctx.workspaceId,
                             counts.get(row.id) ?? 0
@@ -82,7 +82,7 @@ export const deployHandlers = [
             // déduites : la carte doit compter ce que la liste montre.
             const rows = await ctx.repo.listVisibleTargets(ctx.workspaceId);
             const hidden = await ctx.items.restrictions();
-            return { count: rows.filter((r) => hidden.get(r.id) !== 'none').length };
+            return { count: rows.filter((r) => hidden.get(String(r.id)) !== 'none').length };
         }
     }),
     defineSdkFeature({
@@ -185,7 +185,7 @@ export const deployHandlers = [
             // Projections, restrictions et route de notification ne tiennent à
             // aucune clé étrangère : sans ce ménage, elles s'appliqueraient à la
             // prochaine cible à hériter de l'identifiant.
-            await ctx.items.forget(input.targetId);
+            await ctx.items.forget(String(input.targetId));
             ctx.audit({
                 action: 'deploy.remove',
                 description: 'Cible de déploiement supprimée',

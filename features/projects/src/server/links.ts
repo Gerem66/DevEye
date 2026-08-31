@@ -40,7 +40,7 @@ export const projectMyTasksFeature = defineSdkFeature({
             ctx.sharing.scope()
         ]);
         const projects = new Map<number, ProjectRow>(
-            visible.filter((p) => hidden.get(p.id) !== 'none').map((p) => [p.id, p])
+            visible.filter((p) => hidden.get(String(p.id)) !== 'none').map((p) => [p.id, p])
         );
         const rows = await ctx.repo.board.listAssignedIn([...projects.keys()], ctx.userId);
         if (rows.length === 0) return { tasks: [] };

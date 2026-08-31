@@ -22,9 +22,9 @@ Deux préfixes de commandes, et c'est la frontière :
   publique) et la distribution des binaires (`src/agent/routes.ts`), la
   composition de `agent.config` (`src/agent/config.ts`), et **la garde
   unique** `authorizeDevice` (`src/agent/authorize.ts`).
-- **`devices.*`, la feature, module `features/devices`.** Vingt-cinq
-  commandes : la flotte (liste, approbation, révocation, réactivation,
-  renommage, rangement, configuration de collecte, partage entre espaces,
+- **`devices.*`, la feature, module `features/devices`.** Vingt-trois
+  commandes : la flotte de l'espace (liste, approbation, révocation,
+  réactivation, renommage, rangement, configuration de collecte,
   suppression), l'historique stocké (métriques, présence, processus,
   disponibilité, instantanés, épinglage, stockage) et les **codes de liaison**
   (`devices.linkCodeCreate` / `linkCodeList` / `linkCodeSetAutoApprove` /
@@ -39,17 +39,15 @@ forcée), `requestDestroy` (suppression gérée), `pushConfig` (cadence ou
 capture changée ; l'app recompose la config entière, part des modules
 comprise) et `servedManifest` (le manifest des binaires servis, pour signaler
 un agent à mettre à jour). Il atteint un appareil par
-`ctx.deveye.devices.authorize` (la garde de `src/agent/authorize.ts`, qui porte
-déjà « l'administrateur dans son espace personnel voit la flotte »), la liste
-de l'espace par `ctx.deveye.devices.list`, les espaces par
-`ctx.deveye.workspaces.list` (administrateur). Les gestes de flotte déclarent
-`access: { admin: true }` ; ranger, régler la collecte, effacer ou épingler des
-relevés, `access: { level: 'write' }` ; le reste se lit sous le droit
-`devices`.
+`ctx.deveye.devices.authorize` (la garde de `src/agent/authorize.ts` : le
+domicile de l'appareil, ou une projection vers l'espace actif) et la liste de
+l'espace par `ctx.deveye.devices.list`. Tout ce qui appaire, range, règle ou
+efface déclare `access: { level: 'write' }`, doublé de `ctx.items.assert` sur
+la ligne visée ; le reste se lit sous le droit `devices`. Plus rien n'exige
+l'administrateur global.
 
-**Tables partagées, assumé.** Les six tables (`devices`, `device_workspaces`,
-`device_link_codes`, `device_metrics`, `device_process_samples`,
-`device_presence`) datent du socle et le restent (allowlist de
+**Tables partagées, assumé.** Les cinq tables (`devices`, `device_link_codes`,
+`device_metrics`, `device_process_samples`, `device_presence`) datent du socle et le restent (allowlist de
 `deveye-feature.json`) : l'infrastructure les écrit par ses dépôts
 (`src/db/repos/{devices,metrics,presence,processSamples}.ts`, réduits à ce
 qu'elle écrit et à ce que la façade lit), le module lit et écrit ce qui relève
@@ -67,14 +65,13 @@ src/manifest.ts             nativeCapabilities: agents, devices.read, workspaces
                             topbarWidget (appareils en ligne)
 src/server/index.ts         serverEntry : createRepo, features, createService (rétention)
 src/server/env.ts           MONITORING_RETENTION_DAYS, LINK_CODE_TTL_SECONDS
-src/server/_shared.ts       loadDevice (garde + ligne entière), toDevice / rowToDevice,
-                            computeAgentUpdate, les accès WRITE et ADMIN
-src/server/fleet.ts         les 13 commandes de flotte
+src/server/_shared.ts       loadDevice (garde + restriction + ligne entière),
+                            toDevice / rowToDevice, computeAgentUpdate, l'accès WRITE
+src/server/fleet.ts         les 11 commandes de flotte
 src/server/history.ts       les 8 commandes d'historique
 src/server/linkCodes.ts     les 4 commandes de codes de liaison
 src/server/service.ts       RetentionSweep : le balayage horaire, sur un ticker du SDK
-src/server/repo/            devices (+ device_workspaces), linkCodes, metrics, presence,
-                            processSamples
+src/server/repo/            devices, linkCodes, metrics, presence, processSamples
 src/server/*.test.ts        handlers (35) et service (2), sur le harnais du SDK
 ```
 
@@ -85,16 +82,14 @@ index.tsx                   clientEntry : Widget, Full, settingsPanels.general, 
                             providers (DEVICES_CLIENT_PROVIDER)
 api.ts                      featureApi(manifest) pour devices.*, commandsApi(agentCommands)
                             pour agent.*
-store.ts                    les listes espace / flotte, ravivées par le sujet devices
-navigation.ts               l'intention « ouvrir la flotte »
-Devices.tsx                 la vue : Monitoring, et pour l'admin dans son espace personnel
-                            le segment Flotte
-Monitoring.tsx              la tuile et la vue Monitoring
+store.ts                    la liste des appareils de l'espace, ravivée par le sujet devices
+Devices.tsx                 la vue : la barre (aide, réglages, appairage) au-dessus de la liste
+Monitoring.tsx              la tuile, la liste des appareils et la sélection
 MonitoringPanel.tsx         le panneau d'un appareil (DevicePanel du provider)
 ConfigPanel.tsx             le panneau general d'un appareil : cadence, capture, rétention
                             (l'ancien ConfigDialog)
 TerminalSettings.tsx        le panneau general de la feature (réglages du terminal)
-SettingsPanel.tsx           l'aiguillage SettingsPanelProps<string> selon scope.kind
+SettingsPanel.tsx           l'aiguillage SettingsPanelProps selon scope.kind
 TopbarWidget.tsx            le compteur d'appareils en ligne
 TerminalPanel.tsx, FilesPanel.tsx, LogsPanel.tsx, PackagesPanel.tsx, PowerMenu.tsx
                             le transport agent.* et onServerEvent
@@ -106,13 +101,14 @@ Connections.tsx, DeviceActionsMenu.tsx, GraphDetail.tsx, HardwareInfo.tsx, MiniG
 MonitoringInfo.tsx, MonthPicker.tsx, OpenPorts.tsx, PrivilegeInfo.tsx, Timeline.tsx, ports.ts
                             les composants du panneau
 style.module.css, terminalFont.css
-fleet/Fleet.tsx             la page d'administration de la flotte
-fleet/useLinkCodes.tsx      les quatre devices.linkCode*
-fleet/useDeviceActions.tsx, fleet/WorkspaceShareDialog.tsx, fleet/DeviceCard.tsx,
-fleet/LinkCodesDialog.tsx, fleet/LinkInfo.tsx
-                            les gestes de flotte et leurs dialogues
-fleet/DownloadAgent.tsx     la distribution des binaires, sur /api/agent/* en HTTP
-fleet/format.ts, fleet/style.module.css
+manage/useLinkCodes.tsx     les quatre devices.linkCode*
+manage/LinkCodesDialog.tsx, manage/LinkInfo.tsx
+                            l'appairage : émettre un code, et comment s'en servir
+manage/useDeviceActions.tsx, manage/lifecycleActions.ts, manage/DeviceDialogs.tsx
+                            le cycle de vie d'un appareil, ses entrées de menu et
+                            ses dialogues de confirmation
+manage/DownloadAgent.tsx    la distribution des binaires, sur /api/agent/* en HTTP
+manage/format.ts, manage/style.module.css
 ```
 
 Le client offre à l'app `DEVICES_CLIENT_PROVIDER` (`useDevices`, `DevicePanel`,
@@ -237,12 +233,13 @@ maintenable**.
 
 9. **Une seule garde d'accès à un appareil.** `authorizeDevice`
    (`src/agent/authorize.ts`) répond à « de quel appareil parle-t-on, et
-   m'est-il visible ? » : la ligne existe et est partagée avec l'espace actif
-   (`device_workspaces`), l'administrateur global passant outre. Le transport
-   l'appelle directement, le module par `ctx.deveye.devices.authorize`, la
-   façade du SDK pour les autres modules. Le **niveau** exigé (`read`, `write`,
-   `admin`) est déclaré par chaque commande dans son `access`, appliqué par le
-   dispatcheur avant le handler. → Ne jamais refaire la règle ailleurs, ni
+   m'est-il visible ? » : la ligne habite l'espace actif, ou y est projetée
+   (`item_shares`). Sans dérogation, l'administrateur global compris. Le
+   transport l'appelle directement, le module par
+   `ctx.deveye.devices.authorize`, la façade du SDK pour les autres modules. Le
+   **niveau** exigé (`read`, `write`) est déclaré par chaque commande dans son
+   `access`, appliqué par le dispatcheur avant le handler, et la restriction
+   par élément se pose par `ctx.items.assert`. → Ne jamais refaire la règle ailleurs, ni
    décider d'un niveau dans un handler.
 
 10. **Frise : clic = instant, glissé = plage.** Distinction par seuil
@@ -266,10 +263,10 @@ maintenable**.
 
 12. **La liste de l'espace vient de la façade, les lignes du module.**
     `devices.list` en portée `workspace` demande à `ctx.deveye.devices.list`
-    _quels_ appareils l'espace voit et dans quel ordre (le rang de l'espace, la
-    date pour départager ; l'espace personnel d'un administrateur voit tout),
-    puis relit les lignes entières par son dépôt. La portée `fleet` exige
-    `ctx.isAdmin` et lit tout. → Ne pas réécrire la règle de visibilité dans le
+    _quels_ appareils l'espace voit et dans quel ordre : les siens et ceux qui y
+    sont projetés, rangés selon le rang propre à cet espace
+    (`devices.sort_order` chez lui, `item_shares.sort_order` pour une fenêtre),
+    la date départageant. → Ne pas réécrire la règle de visibilité dans le
     module : elle est celle de la garde.
 
 ## Cycle de vie d'un appareil & suppression
@@ -277,9 +274,8 @@ maintenable**.
 Statuts (`devices.status`) : `pending` → `active`, `revoked` (réversible via
 `devices.reactivate`), `pending_deletion`, `archived`.
 
-- **Appairage** : un administrateur émet un code (`devices.linkCodeCreate`,
-  dans l'espace actif, ou dans tout espace existant s'il le nomme : la même
-  liste que le partage, `workspaces.list`), l'agent le présente à
+- **Appairage** : qui tient `devices: write` émet un code
+  (`devices.linkCodeCreate`, toujours pour l'espace actif), l'agent le présente à
   `POST /api/agent/enroll` qui crée l'appareil (`pending`, ou `active` si le
   code approuve d'office) et diffuse `devices` à l'espace.
 - **Approbation** (`devices.confirm`) : l'appareil passe `active` et le hub
@@ -287,7 +283,7 @@ Statuts (`devices.status`) : `pending` → `active`, `revoked` (réversible via
   déjà connecté verrait sa télémétrie accusée puis jetée.
 - **Révocation** (`devices.revoke`) : la session est coupée tout de suite
   (`agents.disconnectAgent`), l'agent refusé à la reconnexion. Réactivable.
-- **Suppression gérée** (`devices.requestDelete`, page Appareils) : passe en
+- **Suppression gérée** (`devices.requestDelete`, menu d'actions de la fiche) : passe en
   `pending_deletion` en mémorisant le statut précédent (`status_before_delete`).
     - Agent **en ligne** → ordre `agent.destroy` immédiat (`agents.requestDestroy`).
     - Agent **hors ligne** → l'ordre part à sa prochaine connexion (`agent/ws.ts`).
@@ -295,10 +291,10 @@ Statuts (`devices.status`) : `pending` → `active`, `revoked` (réversible via
       log + binaire) puis répond `agent.destroyed{ok}`. Le serveur **archive** alors
       l'appareil (dépôt du socle, `archive` : statut `archived`, `token_hash=''`).
     - En cas d'échec (`ok:false`) : `failDeletion` restaure le statut précédent et
-      stocke `delete_error` (affiché sur la carte). La suppression est **interrompue**.
+      stocke `delete_error` (affiché sur la fiche). La suppression est **interrompue**.
     - Annulable (`devices.cancelDelete`) tant que l'agent ne s'est pas reconnecté.
-- **Archive** : l'appareil disparaît de la page Appareils mais reste **consultable
-  en lecture seule** dans Monitoring (voyage temporel). Ses données sont **figées**
+- **Archive** : l'appareil n'est plus gérable mais reste **consultable
+  en lecture seule** (voyage temporel). Ses données sont **figées**
   (les balayages de rétention **excluent** `status='archived'`). Pas de config, pas
   d'approbation. L'agent est refusé définitivement. `devices.forceDelete`
   archive sans attendre l'auto-destruction (agent disparu), en coupant la
@@ -320,7 +316,7 @@ Statuts (`devices.status`) : `pending` → `active`, `revoked` (réversible via
   (`REJECTED_RETRY`), pas en boucle serrée. Une session établie qui se ferme
   reconnecte vite.
 - **Les codes de liaison sont des secrets d'enrôlement.** Émis, relus,
-  retouchés et révoqués par leur émetteur seul, administrateur global ; un
+  retouchés et révoqués par leur émetteur seul, sous `devices: write` ; un
   code se compare en majuscules sans ses espaces ; le journal dit qu'un code a
   été émis (espace, durée, auto-approbation), jamais sa valeur. L'enrôlement
   est plafonné par adresse (`rateLimit` de la route).

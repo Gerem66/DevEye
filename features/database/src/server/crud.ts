@@ -52,7 +52,7 @@ export const databaseCrudFeatures = [
             // Les mêmes lignes que la liste, restrictions déduites.
             const rows = await ctx.repo.listVisible(ctx.workspaceId);
             const hidden = await ctx.items.restrictions();
-            return { count: rows.filter((r) => hidden.get(r.id) !== 'none').length };
+            return { count: rows.filter((r) => hidden.get(String(r.id)) !== 'none').length };
         }
     }),
     defineSdkFeature({
@@ -62,13 +62,13 @@ export const databaseCrudFeatures = [
             // Une base masquée pour ce rôle disparaît de la liste plutôt que d'y
             // figurer grisée : la voir apprendrait déjà qu'elle existe.
             const hidden = await ctx.items.restrictions();
-            const visible = rows.filter((r) => hidden.get(r.id) !== 'none');
+            const visible = rows.filter((r) => hidden.get(String(r.id)) !== 'none');
             const [scope, counts] = await Promise.all([ctx.sharing.scope(), projectCountsOf(ctx)]);
             return {
                 databases: await Promise.all(
                     visible.map(async (row) =>
                         toDatabase(
-                            await scope.cipherFor(row.id),
+                            await scope.cipherFor(String(row.id)),
                             row,
                             row.workspace_id !== ctx.workspaceId,
                             counts.get(row.id) ?? 0
@@ -85,7 +85,7 @@ export const databaseCrudFeatures = [
             // depuis la fenêtre.
             const row = await ctx.repo.findVisibleWithStats(input.databaseId, ctx.workspaceId);
             if (!row) throw new FeatureError('not_found', 'Base de données introuvable');
-            await ctx.items.assert(input.databaseId);
+            await ctx.items.assert(String(input.databaseId));
             // La base est chiffrée chez elle ; les projets liés sont ceux d'ici,
             // via le contrat de Projets.
             const homeCipher = await databaseCipherFor(ctx, row);
@@ -216,7 +216,7 @@ export const databaseCrudFeatures = [
             // Projections, restrictions et route de notification ne tiennent à
             // aucune clé étrangère : sans ce ménage, elles s'appliqueraient à la
             // prochaine base à hériter de l'identifiant.
-            await ctx.items.forget(input.databaseId);
+            await ctx.items.forget(String(input.databaseId));
             ctx.audit({
                 action: 'database.remove',
                 description: 'Base de données retirée de l’espace',

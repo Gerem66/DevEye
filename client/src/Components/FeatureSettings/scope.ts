@@ -11,8 +11,8 @@ export type SettingsScope =
     | {
           kind: 'item';
           feature: FeatureId;
-          /** Un nombre pour toute feature à lignes, un texte pour un appareil (UUID). */
-          itemId: number | string;
+          /** Texte : la clé de la table de la feature, entière ou non (un appareil est un UUID). */
+          itemId: string;
           itemLabel: string;
           /**
            * `false` quand le serveur refuserait de projeter cet élément (palier
@@ -57,10 +57,12 @@ export function scopeDescription(scope: SettingsScope): string {
 }
 
 /**
- * L'id numérique d'un élément, pour les sections que la coquille rend elle-même
- * (partage, permissions, notifications) : leurs tables sont à clé numérique.
- * `null` pour une portée de feature ou un id texte.
+ * L'id d'un élément pour les routes de notification, seules à garder une clé
+ * numérique. `null` pour une portée de feature, comme pour une feature dont les
+ * éléments ont un identifiant texte : elle n'a pas de route.
  */
-export function numericItemId(scope: SettingsScope): number | null {
-    return scope.kind === 'item' && typeof scope.itemId === 'number' ? scope.itemId : null;
+export function routeItemId(scope: SettingsScope): number | null {
+    if (scope.kind !== 'item') return null;
+    const id = Number(scope.itemId);
+    return Number.isInteger(id) ? id : null;
 }

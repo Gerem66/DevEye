@@ -372,6 +372,17 @@
     white-space: nowrap;
 }
 
+/* Un appareil venu d'un autre espace : la marque suit son nom. */
+.sharedTag {
+    margin-left: 0.4rem;
+    padding: 0.05rem 0.3rem;
+    border-radius: 4px;
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-size: 0.65rem;
+    vertical-align: middle;
+}
+
 .deviceCardPlatform {
     font-size: 0.72rem;
     color: var(--text-muted);

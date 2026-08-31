@@ -12,13 +12,13 @@ import {
 } from '../contracts/commands';
 import { env } from './env';
 import type { DevicesRepo } from './repo';
-import { WRITE } from './_shared';
+import { assertDevice, loadDevice, WRITE } from './_shared';
 
 /**
  * L'historique d'un appareil, lu et entretenu en base : métriques, présence,
- * processus, instants épinglés. Chaque commande ouvre sur
- * `ctx.deveye.devices.authorize`, la garde unique des appareils ; le niveau
- * exigé est déclaré dans `access` (`write` pour ce qui efface ou épingle).
+ * processus, instants épinglés. Chaque commande ouvre sur `assertDevice` (la
+ * garde unique des appareils, plus la restriction de rôle sur cette ligne) ; le
+ * niveau exigé est déclaré dans `access` (`write` pour ce qui efface ou épingle).
  */
 
 export const devicesMetricsFeature = defineSdkFeature<
@@ -29,7 +29,7 @@ export const devicesMetricsFeature = defineSdkFeature<
 >({
     ...devicesMetrics,
     handler: async (ctx, input) => {
-        await ctx.deveye.devices.authorize(input.deviceId);
+        await assertDevice(ctx, input.deviceId);
         const points = await ctx.repo.metrics.query({
             deviceId: input.deviceId,
             from: input.from,
@@ -48,7 +48,7 @@ export const devicesPresenceFeature = defineSdkFeature<
 >({
     ...devicesPresence,
     handler: async (ctx, input) => {
-        await ctx.deveye.devices.authorize(input.deviceId);
+        await assertDevice(ctx, input.deviceId);
         const [onlineAtStart, events] = await Promise.all([
             ctx.repo.presence.onlineAt(input.deviceId, input.from),
             ctx.repo.presence.query(input.deviceId, input.from, input.to)
@@ -65,7 +65,7 @@ export const devicesProcessesAtFeature = defineSdkFeature<
 >({
     ...devicesProcessesAt,
     handler: async (ctx, input) => {
-        await ctx.deveye.devices.authorize(input.deviceId);
+        await assertDevice(ctx, input.deviceId);
         const sample = await ctx.repo.processSamples.nearest(input.deviceId, input.at);
         return { deviceId: input.deviceId, sample };
     }
@@ -79,7 +79,7 @@ export const devicesAvailabilityFeature = defineSdkFeature<
 >({
     ...devicesAvailability,
     handler: async (ctx, input) => {
-        await ctx.deveye.devices.authorize(input.deviceId);
+        await assertDevice(ctx, input.deviceId);
         const days = await ctx.repo.metrics.availableDays(input.deviceId, input.tzOffsetMinutes);
         return { deviceId: input.deviceId, days };
     }
@@ -93,7 +93,7 @@ export const devicesSnapshotsFeature = defineSdkFeature<
 >({
     ...devicesSnapshots,
     handler: async (ctx, input) => {
-        await ctx.deveye.devices.authorize(input.deviceId);
+        await assertDevice(ctx, input.deviceId);
         // The marks are the metric instants: process capture is optional, and a
         // `processCapture: 'off'` device still has instants to navigate. The
         // process samples only qualify which instants carry a list.
@@ -121,7 +121,7 @@ export const devicesStorageFeature = defineSdkFeature<
 >({
     ...devicesStorage,
     handler: async (ctx, input) => {
-        await ctx.deveye.devices.authorize(input.deviceId);
+        await assertDevice(ctx, input.deviceId);
         const usage = await ctx.repo.processSamples.storage(input.deviceId);
         return { deviceId: input.deviceId, ...usage };
     }
@@ -138,7 +138,7 @@ export const devicesDeleteSnapshotsFeature = defineSdkFeature<
     // Effacer l'historique d'une machine n'est pas de la lecture.
     access: WRITE,
     handler: async (ctx, input) => {
-        const device = await ctx.deveye.devices.authorize(input.deviceId);
+        const device = await loadDevice(ctx, input.deviceId, 'write');
         const { snapshots } = await ctx.repo.processSamples.deleteRange(input.deviceId, input.from, input.to);
         if (snapshots > 0) {
             const single = input.from === input.to;
@@ -166,7 +166,7 @@ export const devicesSetSnapshotsPinnedFeature = defineSdkFeature<
     // Désépingler peut supprimer sur-le-champ : même niveau que la suppression.
     access: WRITE,
     handler: async (ctx, input) => {
-        const device = await ctx.deveye.devices.authorize(input.deviceId);
+        const device = await loadDevice(ctx, input.deviceId, 'write');
         const { deviceId, from, to, pinned } = input;
 
         // Pin/unpin the whole instant (process list + metric point). Le compte

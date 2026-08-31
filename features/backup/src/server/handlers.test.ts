@@ -414,7 +414,7 @@ describe('Backup : handlers', () => {
         assert.deepEqual(await handlerFor(backupJobRemove)(ctx, { jobId: 10 }), { jobId: 10 });
 
         assert.deepEqual(repo.jobs, []);
-        assert.deepEqual(ctx.forgotten, [10]);
+        assert.deepEqual(ctx.forgotten, ['10']);
     });
 
     it('un travail en cours ne se supprime pas', async () => {

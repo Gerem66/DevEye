@@ -24,7 +24,7 @@ const FEATURE_ACCESS_LABEL: Record<'none' | 'read' | 'write', string> = {
 
 interface Props {
     feature: FeatureId;
-    itemId: number;
+    itemId: string;
     /** L'espace visé ; absent = l'espace actif. */
     workspaceId?: number;
 }

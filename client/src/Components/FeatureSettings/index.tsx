@@ -11,7 +11,7 @@ import ItemPermissionsSection from './sections/ItemPermissionsSection';
 import SharingSection from './sections/SharingSection';
 import SideNav, { type SideNavItem } from './SideNav';
 import { isModuleShareWired, moduleClient, moduleManifest } from '@/sdk/registry';
-import { numericItemId, scopeDescription, scopeTitle, type SettingsScope, type SettingsSectionId } from './scope';
+import { scopeDescription, scopeTitle, type SettingsScope, type SettingsSectionId } from './scope';
 import styles from './FeatureSettings.module.css';
 
 /**
@@ -243,7 +243,7 @@ export function FeatureSettingsButton({
      * d'espace, consommée ici pour toutes les features : monter le bouton
      * suffit. Périmée ou visant un autre élément, elle rend `null`.
      */
-    const itemId = numericItemId(scope);
+    const itemId = scope.kind === 'item' ? scope.itemId : null;
     useEffect(() => {
         if (itemId === null) return;
         const wanted = consumeItemSettings(getActiveWorkspaceId(), scope.feature, itemId);
@@ -300,13 +300,10 @@ function ModulePanel({
         <>
             {hint && <p className={`${styles.sectionHint} ${styles.panelLead}`}>{hint}</p>}
             <Panel
-                // L'id est un nombre ou un texte (un appareil est un UUID) ; le
-                // panneau se déclare pour l'un des deux
-                // (`SettingsPanelProps<number | string>`).
                 scope={
                     scope.kind === 'feature'
                         ? { kind: 'feature' }
-                        : { kind: 'item', itemId: scope.itemId as never, itemLabel: scope.itemLabel }
+                        : { kind: 'item', itemId: scope.itemId, itemLabel: scope.itemLabel }
                 }
                 canWrite={permissions.canFeature(scope.feature, 'write')}
                 // Pour le panneau qui supprime l'élément qu'il règle : la portée

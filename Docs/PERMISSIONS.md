@@ -13,7 +13,7 @@
 
 | #   | Étage                       | Où                                           | Ce qu'il tranche                                                         |
 | --- | --------------------------- | -------------------------------------------- | ------------------------------------------------------------------------ |
-| 1   | Compte DevEye               | `users.role`                                 | administrateur ou utilisateur : la flotte et les pages système           |
+| 1   | Compte DevEye               | `users.role`                                 | administrateur ou utilisateur : les pages système (journal, comptes)     |
 | 2   | Appartenance à l'espace     | `workspace_members`                          | la frontière absolue — même un admin n'entre pas chez autrui             |
 | 3   | Rôle : capacités + features | `workspace_roles.capabilities` / `.features` | gouverner l'espace ; ouvrir une fonctionnalité en lecture ou en écriture |
 | 4   | Restrictions par élément    | `item_role_grants`                           | ce qu'un rôle voit de **cette** ligne-là : masquée, ou en lecture seule  |
@@ -21,6 +21,12 @@
 Les étages 3 et 4 sont **hiérarchiques** : une restriction d'élément abaisse ce
 que le rôle accorde, elle n'ouvre jamais ce qu'il ferme. L'absence de ligne au
 niveau 4 vaut « rien de particulier » — seules les exceptions existent en base.
+
+Les **appareils** ne relèvent plus de l'étage 1 : un appareil habite l'espace où
+il a été appairé, et tout ce qui le concerne (l'appairer, l'approuver, le
+renommer, le révoquer, le supprimer, lui parler) relève du droit `devices` de
+cet espace, doublé de la restriction par élément. L'administrateur global n'a
+rien de particulier sur un espace où il n'entre pas.
 
 ## 2. Une décision actée : pas d'étage intermédiaire
 

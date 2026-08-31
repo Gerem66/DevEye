@@ -159,9 +159,10 @@ export default function Monitoring() {
                     <MonitoringTitle />
                     <div className={styles.empty}>
                         <span className={`icon icon-server ${styles.emptyIcon}`} />
-                        <p>Aucun appareil configuré</p>
+                        <p>Aucun appareil dans cet espace</p>
                         <p className={styles.hint}>
-                            Liez un agent depuis le segment « Flotte » (administrateur, espace personnel).
+                            Appairez une machine depuis la barre du haut, ou partagez un appareil d’un autre espace
+                            depuis ses réglages.
                         </p>
                     </div>
                 </>
@@ -209,7 +210,12 @@ export default function Monitoring() {
                                             className={`${styles.statusDot} ${d.online ? styles.online : styles.offline}`}
                                         />
                                         <div className={styles.deviceCardInfo}>
-                                            <span className={styles.deviceCardName}>{d.name}</span>
+                                            <span className={styles.deviceCardName}>
+                                                {d.name}
+                                                {/* Venu d'un autre espace : il se règle et se
+                                                    supprime chez lui, pas d'ici. */}
+                                                {d.foreign && <span className={styles.sharedTag}>partagé</span>}
+                                            </span>
                                             <span className={styles.deviceCardPlatform}>
                                                 {d.platform}
                                                 {d.agentVersion && ` · v${d.agentVersion}`}

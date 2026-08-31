@@ -154,7 +154,7 @@ export function ServiceDetail({ service, onBack, onEdit, onCheckNow }: ServiceDe
                         scope={{
                             kind: 'item',
                             feature: 'uptime',
-                            itemId: service.id,
+                            itemId: String(service.id),
                             itemLabel: service.name
                         }}
                     />

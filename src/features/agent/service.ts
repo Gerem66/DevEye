@@ -1,6 +1,6 @@
 import { agentDropPrivileges, agentElevate, agentSetAutostart } from '@deveye/types';
 
-import { authorizeOnlineDevice, toDevice } from '@/agent/authorize';
+import { authorizeReachableDevice, toDevice } from '@/agent/authorize';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 
 /**
@@ -29,7 +29,7 @@ export const agentSetAutostartFeature: FeatureDefinition<
     access: { admin: true },
     mutates: true,
     handler: async (ctx, input) => {
-        const row = await authorizeOnlineDevice(ctx, input.deviceId);
+        const row = await authorizeReachableDevice(ctx, input.deviceId);
         const pushed = ctx.monitor?.requestService(row.id, {
             action: input.enabled ? 'install-user' : 'uninstall-user'
         });
@@ -52,7 +52,7 @@ export const agentElevateFeature: FeatureDefinition<
     access: { admin: true },
     mutates: true,
     handler: async (ctx, input) => {
-        const row = await authorizeOnlineDevice(ctx, input.deviceId);
+        const row = await authorizeReachableDevice(ctx, input.deviceId);
         const pushed = ctx.monitor?.requestService(row.id, { action: 'elevate' });
         if (!pushed) throw new FeatureError('conflict', 'Agent hors ligne');
         ctx.audit({
@@ -74,7 +74,7 @@ export const agentDropPrivilegesFeature: FeatureDefinition<
     access: { admin: true },
     mutates: true,
     handler: async (ctx, input) => {
-        const row = await authorizeOnlineDevice(ctx, input.deviceId);
+        const row = await authorizeReachableDevice(ctx, input.deviceId);
         const pushed = ctx.monitor?.requestService(row.id, { action: 'drop' });
         if (!pushed) throw new FeatureError('conflict', 'Agent hors ligne');
         ctx.audit({

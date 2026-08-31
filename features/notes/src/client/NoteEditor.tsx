@@ -200,7 +200,7 @@ export default function NoteEditor() {
                             scope={{
                                 kind: 'item',
                                 feature: 'notes',
-                                itemId: stored.id,
+                                itemId: String(stored.id),
                                 itemLabel: title.trim() || 'Sans titre',
                                 shareable: !stored.private
                             }}

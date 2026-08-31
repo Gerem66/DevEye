@@ -118,7 +118,7 @@ export const serverEntry: FeatureServer<DatabaseRepo> = {
     },
     items: {
         homeOf: async (repo, itemId, workspaceId) =>
-            (await repo.findVisible(itemId, workspaceId))?.workspace_id ?? null,
-        labelOf
+            (await repo.findVisible(Number(itemId), workspaceId))?.workspace_id ?? null,
+        labelOf: (repo, cipher, itemId, workspaceId) => labelOf(repo, cipher, Number(itemId), workspaceId)
     }
 };

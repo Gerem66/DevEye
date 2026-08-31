@@ -30,7 +30,7 @@ import type { MailAccount, MailSecurityTier } from '../contracts/domain';
  * changement depuis une fenêtre. L'onglet le dit plutôt que d'ouvrir sur un refus.
  */
 export default function MailEncryptionPanel({ scope, canWrite }: SettingsPanelProps) {
-    const accountId = scope.kind === 'item' ? scope.itemId : null;
+    const accountId = scope.kind === 'item' ? Number(scope.itemId) : null;
     const version = useResourceVersion('mail.accountList');
     const workspace = useActiveWorkspace();
     const [account, setAccount] = useState<MailAccount | null>(null);

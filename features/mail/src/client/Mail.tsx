@@ -851,7 +851,7 @@ export default function Mail(_props: FeatureViewProps) {
                                 ? {
                                       kind: 'item',
                                       feature: 'mail',
-                                      itemId: selectedAccount.id,
+                                      itemId: String(selectedAccount.id),
                                       itemLabel: selectedAccount.displayName,
                                       shareable: selectedAccount.securityTier === 'open'
                                   }

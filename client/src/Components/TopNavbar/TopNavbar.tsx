@@ -34,8 +34,6 @@ export interface TopNavbarProps {
     onOpenProfile?: (e: ReactMouseEvent) => void;
     /** Open the security feature. Receives the click (Ctrl/Cmd = force reload). */
     onOpenSecurity?: (e: ReactMouseEvent) => void;
-    /** Open the devices page (admins only). Receives the click (Ctrl/Cmd = force reload). */
-    onOpenDevices?: (e: ReactMouseEvent) => void;
     /** Open the logs feature (admins only). Click carries the force-reload modifier. */
     onOpenLogs?: (e: ReactMouseEvent) => void;
     /** Open the settings panel. Absent = pas le droit de changer l'apparence. */
@@ -72,7 +70,6 @@ export default function TopNavbar({
     onBack,
     onOpenProfile,
     onOpenSecurity,
-    onOpenDevices,
     onOpenLogs,
     onOpenSettings,
     onOrganize,
@@ -107,10 +104,10 @@ export default function TopNavbar({
     }, [menuOpen]);
 
     // Une bascule remet les droits à zéro le temps que le serveur réponde, et
-    // inconnu n'est pas refusé : lues telles quelles, ces trois entrées
+    // inconnu n'est pas refusé : lues telles quelles, ces deux entrées
     // disparaîtraient sous les yeux de qui vient de cliquer. Le menu garde donc
     // celles qu'il montrait au clic jusqu'à sa fermeture.
-    const live = { onOpenSettings, onOrganize, onOpenDevices };
+    const live = { onOpenSettings, onOrganize };
     const shownRef = useRef(live);
     if (!lingering) shownRef.current = live;
     const shown = shownRef.current;
@@ -343,25 +340,9 @@ export default function TopNavbar({
                                     <span className='icon icon-edit' /> Organiser l’accueil
                                 </button>
                             )}
-                            {/* Second separator: groups "fleet" entries (Appareils,
-                                Logs) apart from the personal settings above. */}
-                            {(shown.onOpenDevices || onOpenLogs || onOpenUsers) && <hr className={styles.divider} />}
-                            {shown.onOpenDevices && (
-                                <button
-                                    className={styles.menuItem}
-                                    onClick={(e) => {
-                                        shown.onOpenDevices?.(e);
-                                        setMenuOpen(false);
-                                    }}
-                                >
-                                    <span className='icon icon-server' /> Appareils
-                                    <span
-                                        className={`icon icon-shield ${styles.adminBadge}`}
-                                        title='Réservé aux administrateurs'
-                                        aria-label='Réservé aux administrateurs'
-                                    />
-                                </button>
-                            )}
+                            {/* Second separator: groups the system pages (Logs,
+                                Utilisateurs) apart from the personal settings above. */}
+                            {(onOpenLogs || onOpenUsers) && <hr className={styles.divider} />}
                             {onOpenLogs && (
                                 <button
                                     className={styles.menuItem}

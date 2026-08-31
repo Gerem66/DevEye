@@ -67,7 +67,7 @@ export default function JobView({ job, canWrite, onBack, onEdit, onRun, running 
                         </Button>
                     )}
                     <FeatureSettingsButton
-                        scope={{ kind: 'item', feature: 'backup', itemId: job.id, itemLabel: job.name }}
+                        scope={{ kind: 'item', feature: 'backup', itemId: String(job.id), itemLabel: job.name }}
                     />
                 </div>
             </div>

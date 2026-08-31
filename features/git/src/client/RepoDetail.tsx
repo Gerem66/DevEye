@@ -102,7 +102,7 @@ export function RepoDetail({
                         scope={{
                             kind: 'item',
                             feature: 'git',
-                            itemId: repo.id,
+                            itemId: String(repo.id),
                             itemLabel: `${repo.owner}/${repo.repo}`
                         }}
                     />

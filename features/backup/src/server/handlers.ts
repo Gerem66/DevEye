@@ -237,7 +237,7 @@ const jobListFeature = defineSdkFeature({
         const rows = await ctx.repo.listVisibleJobs(ctx.workspaceId);
         // Un travail masqué pour ce rôle disparaît de la liste plutôt que d'y figurer grisé.
         const hidden = await ctx.items.restrictions();
-        const visible = rows.filter((r) => hidden.get(r.id) !== 'none');
+        const visible = rows.filter((r) => hidden.get(String(r.id)) !== 'none');
         const shares = await ctx.sharing.scope();
         return { jobs: await Promise.all(visible.map((row) => toJob(ctx, row, shares))) };
     }
@@ -251,7 +251,7 @@ const countFeature = defineSdkFeature({
         // que la liste montre.
         const rows = await ctx.repo.listVisibleJobs(ctx.workspaceId);
         const hidden = await ctx.items.restrictions();
-        const visible = rows.filter((r) => hidden.get(r.id) !== 'none' && r.enabled === 1);
+        const visible = rows.filter((r) => hidden.get(String(r.id)) !== 'none' && r.enabled === 1);
         return {
             count: visible.length,
             failing: visible.filter((r) => r.last_status === 'failed').length
@@ -265,9 +265,9 @@ const jobGetFeature = defineSdkFeature({
     handler: async (ctx: Ctx, input) => {
         const row = await ctx.repo.findVisibleJobWithState(input.jobId, ctx.workspaceId);
         if (!row) throw new FeatureError('not_found', 'Travail de sauvegarde introuvable');
-        await ctx.items.assert(input.jobId);
+        await ctx.items.assert(String(input.jobId));
         const shares = await ctx.sharing.scope();
-        const cipher = await shares.cipherFor(row.id);
+        const cipher = await shares.cipherFor(String(row.id));
         // L'historique vit chez le travail : pour un projeté, le chercher ici
         // rendrait une fiche vide qu'on croirait jamais exécutée.
         const runs = await ctx.repo.listRuns(input.jobId, row.workspace_id, input.limit ?? 20);
@@ -402,7 +402,7 @@ const jobRemoveFeature = defineSdkFeature({
         // Projections, restrictions et route de notification ne tiennent à
         // aucune clé étrangère : sans ce ménage, elles s'appliqueraient au
         // prochain travail à hériter de l'identifiant.
-        await ctx.items.forget(input.jobId);
+        await ctx.items.forget(String(input.jobId));
 
         ctx.audit({
             action: 'backup.jobRemove',
@@ -425,7 +425,7 @@ const jobRunFeature = defineSdkFeature({
         // travail, jamais depuis celui de l'appelant.
         const engine = requireEngine();
         const job = await loadJob(ctx, input.jobId, 'write');
-        const cipher = await (await ctx.sharing.scope()).cipherFor(job.id);
+        const cipher = await (await ctx.sharing.scope()).cipherFor(String(job.id));
         const name = (await readJsonWith<StoredJob>(cipher, job.content)).name ?? 'Sauvegarde';
         let run;
         try {

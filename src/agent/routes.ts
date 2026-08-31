@@ -17,7 +17,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { ACCESS_COOKIE } from '@/auth/cookies';
 import { signDeviceToken, verifyAccessToken, verifyDeviceToken } from '@/auth/jwt';
-import { isAdminUser } from '@/features/_access';
+import { holdsFeatureIn } from '@/features/_access';
 import { sha256hex } from '@/Utils/hash';
 import type { AuditLog } from '@/Services/AuditLog';
 import { agentDistDir, readSyncedManifest } from './sync';
@@ -65,16 +65,18 @@ async function serveBinary(reply: FastifyReply, target: AgentTarget): Promise<Fa
 /**
  * Les routes HTTP de l'infrastructure des agents : l'enrôlement (public, échange
  * un code de liaison contre un jeton d'appareil) et la distribution des binaires
- * (admin, ou jeton d'appareil pour l'auto-mise à jour). L'émission des codes de
- * liaison est une commande du module `features/devices`.
+ * (le droit d'appairer dans l'espace visé, ou un jeton d'appareil pour
+ * l'auto-mise à jour). L'émission des codes de liaison est une commande du
+ * module `features/devices`.
  */
 export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }: AgentRouteDeps): Promise<void> {
     /**
-     * Resolve the caller as an admin: binary distribution enforces the role
-     * server-side, hiding the menu entry is not a boundary. Returns `false`
-     * after already sending the 401/403.
+     * Le droit d'appairer dans l'espace visé (`?workspace=`), le même que celui
+     * qui émet un code de liaison : télécharger un binaire n'a de sens que pour
+     * y brancher une machine. La garde est ici et pas seulement à l'écran.
+     * Rend `false` après avoir déjà répondu 400/401/403.
      */
-    const requireAdmin = async (req: FastifyRequest, reply: FastifyReply): Promise<boolean> => {
+    const requirePairing = async (req: FastifyRequest, reply: FastifyReply): Promise<boolean> => {
         const accessToken = req.cookies[ACCESS_COOKIE];
         if (!accessToken) {
             void reply.code(401).send(err('auth_required', 'No session'));
@@ -85,8 +87,13 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }
             void reply.code(401).send(err('auth_expired', 'Access token expired'));
             return false;
         }
-        if (!(await isAdminUser(db, Number(claims.sub)))) {
-            void reply.code(403).send(err('forbidden', 'Réservé aux administrateurs'));
+        const workspaceId = Number((req.query as { workspace?: string }).workspace);
+        if (!Number.isInteger(workspaceId) || workspaceId <= 0) {
+            void reply.code(400).send(err('validation', 'Espace manquant'));
+            return false;
+        }
+        if (!(await holdsFeatureIn(db, Number(claims.sub), workspaceId, 'devices', 'write'))) {
+            void reply.code(403).send(err('forbidden', 'Vous ne gérez pas les appareils de cet espace'));
             return false;
         }
         return true;
@@ -95,7 +102,7 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }
     // Availability of each shippable agent binary, so the UI can grey out the
     // targets whose file isn't present (e.g. a dev box that only built its own).
     app.get('/api/agent/targets', async (req, reply) => {
-        if (!(await requireAdmin(req, reply))) return;
+        if (!(await requirePairing(req, reply))) return;
 
         const targets = await Promise.all(
             AGENT_TARGETS.map(async (t) => {
@@ -114,10 +121,10 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }
         return reply.send(ok(agentTargetsResponseSchema.parse({ agentVersion: manifest?.version ?? null, targets })));
     });
 
-    // Stream a prebuilt agent binary as a download. Admin-only like the rest of
-    // the Appareils page (binaries aren't secret, but no non-admin enumeration).
+    // Stream a prebuilt agent binary as a download. Gated like the pairing it
+    // serves (binaries aren't secret, but no enumeration by a passer-by).
     app.get<{ Params: { target: string } }>('/api/agent/download/:target', async (req, reply) => {
-        if (!(await requireAdmin(req, reply))) return;
+        if (!(await requirePairing(req, reply))) return;
 
         const parsed = agentTargetSchema.safeParse(req.params.target);
         if (!parsed.success) return reply.code(400).send(err('validation', 'Unknown agent target'));

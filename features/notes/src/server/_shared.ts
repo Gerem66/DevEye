@@ -35,7 +35,7 @@ export function cipherFor(ctx: Ctx, isPrivate: boolean): SdkCipher {
  * clé d'ici donnerait une ligne illisible, prise pour corrompue.
  */
 export function bodyCipher(ctx: Ctx, scope: SdkShareScope, row: NoteRow): Promise<SdkCipher> {
-    return row.is_private === 1 ? Promise.resolve(ctx.cipher('private')) : scope.cipherFor(row.id);
+    return row.is_private === 1 ? Promise.resolve(ctx.cipher('private')) : scope.cipherFor(String(row.id));
 }
 
 /** Vrai quand la note vient d'un autre espace, qui la projette ici. */
@@ -59,7 +59,7 @@ export async function resolveFolderId(ctx: Ctx, folderId: number | null): Promis
 export async function loadNote(ctx: Ctx, noteId: number, level: 'read' | 'write' = 'read'): Promise<NoteRow> {
     const row = await ctx.repo.findVisible(noteId, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Note not found');
-    await ctx.items.assert(noteId, level);
+    await ctx.items.assert(String(noteId), level);
     return row;
 }
 

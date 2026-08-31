@@ -24,8 +24,9 @@ export interface CreateDeviceInput {
 export interface DevicesRepo {
     findById(id: string): Promise<DeviceRow | null>;
     findByWorkspaceFingerprint(workspaceId: number, fingerprint: string): Promise<DeviceRow | null>;
+    /** Un appareil visible depuis cet espace : chez lui, ou projeté ici. */
+    findVisible(id: string, workspaceId: number): Promise<DeviceRow | null>;
     listByWorkspace(workspaceId: number): Promise<DeviceRow[]>;
-    listAll(): Promise<DeviceRow[]>;
     create(input: CreateDeviceInput): Promise<DeviceRow>;
     setTokenHash(id: string, tokenHash: string): Promise<void>;
     touchSeen(id: string, lastSeen: number): Promise<void>;
@@ -43,12 +44,6 @@ export interface DevicesRepo {
     archive(id: string): Promise<void>;
     /** Abort a deletion after a self-destruct failure: restore status + record why. */
     failDeletion(id: string, message: string): Promise<void>;
-
-    // Le partage lui-même (`devices.setWorkspaces`) s'écrit dans le module.
-    /** Les espaces ayant accès à cet appareil. */
-    workspaceIdsOf(deviceId: string): Promise<number[]>;
-    /** Cet espace a-t-il accès à cet appareil ? La frontière, en une question. */
-    hasWorkspace(deviceId: string, workspaceId: number): Promise<boolean>;
 }
 
 export function devicesRepo(pool: Q): DevicesRepo {
@@ -64,20 +59,31 @@ export function devicesRepo(pool: Q): DevicesRepo {
             ]);
             return r.rows[0] ?? null;
         },
-        async listByWorkspace(workspaceId) {
-            // La jonction est la frontière : un appareil apparaît dans chaque
-            // espace avec lequel il est partagé, rangé selon ce rang-là.
+        async findVisible(id, workspaceId) {
             const r = await pool.query<DeviceRow>(
                 `SELECT d.* FROM devices d
-                 JOIN device_workspaces dw ON dw.device_id = d.id
-                 WHERE dw.workspace_id = ?
-                 ORDER BY dw.sort_order ASC, d.created DESC`,
-                [workspaceId]
+                  WHERE d.id = ?
+                    AND (d.workspace_id = ?
+                         OR EXISTS (SELECT 1 FROM item_shares sh
+                                     WHERE sh.feature = 'devices' AND sh.item_id = d.id
+                                       AND sh.home_workspace_id = d.workspace_id AND sh.workspace_id = ?))`,
+                [id, workspaceId, workspaceId]
             );
-            return r.rows;
+            return r.rows[0] ?? null;
         },
-        async listAll() {
-            const r = await pool.query<DeviceRow>('SELECT * FROM devices ORDER BY created DESC');
+        async listByWorkspace(workspaceId) {
+            // La frontière est l'espace : les appareils d'ici, et ceux qu'une
+            // projection y rend visibles, rangés selon le rang d'ici.
+            const r = await pool.query<DeviceRow>(
+                `SELECT d.*, d.sort_order AS rank_in_ws FROM devices d WHERE d.workspace_id = ?
+                 UNION ALL
+                 SELECT d.*, sh.sort_order AS rank_in_ws FROM devices d
+                   JOIN item_shares sh
+                     ON sh.feature = 'devices' AND sh.item_id = d.id AND sh.home_workspace_id = d.workspace_id
+                  WHERE sh.workspace_id = ?
+                 ORDER BY rank_in_ws ASC, created DESC`,
+                [workspaceId, workspaceId]
+            );
             return r.rows;
         },
         async create({ ownerId, workspaceId, name, fingerprint, platform, publicKey, tokenHash }) {
@@ -87,12 +93,16 @@ export function devicesRepo(pool: Q): DevicesRepo {
                  VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
                 [id, ownerId, workspaceId, name, fingerprint, platform, publicKey, tokenHash]
             );
-            // L'espace d'appairage est le premier à y avoir accès ; un nouvel
-            // appareil atterrit à la fin de sa liste, l'ordre appartient à l'utilisateur.
+            // Un nouvel appareil atterrit à la fin de la liste de son espace :
+            // l'ordre appartient à l'utilisateur.
             await pool.query(
-                `INSERT INTO device_workspaces (device_id, workspace_id, sort_order)
-                 SELECT ?, ?, COALESCE(MAX(sort_order) + 1, 0) FROM device_workspaces WHERE workspace_id = ?`,
-                [id, workspaceId, workspaceId]
+                `UPDATE devices SET sort_order =
+                     (SELECT rank_end FROM (
+                          SELECT COALESCE(MAX(sort_order), -1) + 1 AS rank_end
+                            FROM devices WHERE workspace_id = ? AND id <> ?
+                      ) AS t)
+                  WHERE id = ?`,
+                [workspaceId, id, id]
             );
             const r = await pool.query<DeviceRow>('SELECT * FROM devices WHERE id = ?', [id]);
             return r.rows[0];
@@ -136,20 +146,6 @@ export function devicesRepo(pool: Q): DevicesRepo {
                  WHERE id = ?`,
                 [message.slice(0, 255), id]
             );
-        },
-        async workspaceIdsOf(deviceId) {
-            const r = await pool.query<{ workspace_id: number }>(
-                'SELECT workspace_id FROM device_workspaces WHERE device_id = ?',
-                [deviceId]
-            );
-            return r.rows.map((row) => Number(row.workspace_id));
-        },
-        async hasWorkspace(deviceId, workspaceId) {
-            const r = await pool.query<{ n: number }>(
-                'SELECT 1 AS n FROM device_workspaces WHERE device_id = ? AND workspace_id = ? LIMIT 1',
-                [deviceId, workspaceId]
-            );
-            return r.rows.length > 0;
         }
     };
 }

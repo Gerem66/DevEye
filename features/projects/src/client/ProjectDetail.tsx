@@ -450,7 +450,7 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
                             scope={{
                                 kind: 'item',
                                 feature: 'projects',
-                                itemId: project.id,
+                                itemId: String(project.id),
                                 itemLabel: project.title || 'Sans titre',
                                 shareable: project.securityTier === 'open'
                             }}

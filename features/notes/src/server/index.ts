@@ -17,11 +17,11 @@ export const serverEntry: FeatureServer<NotesRepo> = {
     features: notesHandlers,
     items: {
         homeOf: async (repo, itemId, workspaceId) =>
-            (await repo.findVisible(itemId, workspaceId))?.workspace_id ?? null,
+            (await repo.findVisible(Number(itemId), workspaceId))?.workspace_id ?? null,
         // Le titre vit dans le blob chiffré : une note privée (étage gardé),
         // un blob illisible ou une note disparue valent `null`.
         labelOf: async (repo, cipher, itemId, workspaceId) => {
-            const row = await repo.findNote(itemId, workspaceId);
+            const row = await repo.findNote(Number(itemId), workspaceId);
             if (!row || row.is_private === 1) return null;
             const payload = await tryDecryptPayload(cipher, row.content);
             if (!payload) return null;
@@ -31,7 +31,7 @@ export const serverEntry: FeatureServer<NotesRepo> = {
         // qu'aucun autre espace ne détient : la projeter ouvrirait une fenêtre
         // sur rien.
         shareable: async (repo, itemId, workspaceId) => {
-            const row = await repo.findNote(itemId, workspaceId);
+            const row = await repo.findNote(Number(itemId), workspaceId);
             return row !== null && row.is_private === 0;
         }
     }

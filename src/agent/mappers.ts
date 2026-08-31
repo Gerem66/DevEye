@@ -49,15 +49,15 @@ export function parseDeviceReport(reportJson: string | null): DeviceReport | nul
  * the self-update status (from {@link computeAgentUpdate}); it defaults to "no
  * update" for call sites that don't have the manifest at hand (e.g. enrollment).
  *
- * `workspaceIds` vient de la table de jonction, que la ligne ne porte pas : les
- * appelants qui l'ont chargée la passent, les autres (enrôlement, où le partage
- * ne fait que naître) laissent la liste vide.
+ * `foreign` se juge contre l'espace qui regarde, que la ligne ne connaît pas :
+ * les appelants qui en ont un le passent, l'enrôlement (où l'appareil naît chez
+ * lui) s'en dispense.
  */
 export function deviceRowToDevice(
     row: DeviceRow,
     online: boolean,
     update: AgentUpdateInfo = { latest: null, available: false },
-    workspaceIds: number[] = []
+    foreign = false
 ): Device {
     return {
         id: row.id,
@@ -76,7 +76,7 @@ export function deviceRowToDevice(
         metricIntervalSeconds: row.metric_interval_seconds === null ? null : Number(row.metric_interval_seconds),
         processCapture: (row.process_capture as ProcessCapture | null) ?? null,
         retentionDays: row.retention_days === null ? null : Number(row.retention_days),
-        workspaceIds,
+        foreign,
         deleteError: row.delete_error ?? null
     };
 }

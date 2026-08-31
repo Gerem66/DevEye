@@ -26,7 +26,7 @@ import type { MailAccount } from '../contracts/domain';
  * ne se changent pas.
  */
 export default function MailSyncPanel({ scope, canWrite }: SettingsPanelProps) {
-    const accountId = scope.kind === 'item' ? scope.itemId : null;
+    const accountId = scope.kind === 'item' ? Number(scope.itemId) : null;
     const version = useResourceVersion('mail.accountList');
     const [account, setAccount] = useState<MailAccount | null>(null);
     const [intervalMinutes, setIntervalMinutes] = useState('');

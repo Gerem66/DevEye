@@ -22,11 +22,13 @@ import { isModuleShareWired } from './_sdk/register';
 
 export interface ShareScope {
     /** Les identifiants projetés vers l'espace actif, par élément. */
-    readonly foreignIds: ReadonlySet<number>;
+    readonly foreignIds: ReadonlySet<string>;
     /** L'espace d'origine d'un élément projeté, ou `null` s'il est chez lui. */
-    homeOf(itemId: number): number | null;
+    homeOf(itemId: string): number | null;
     /** Le codec ouvert de l'espace où vit cet élément (celui de l'espace actif s'il est chez lui). */
-    cipherFor(itemId: number): Promise<Cipher>;
+    cipherFor(itemId: string): Promise<Cipher>;
+    /** Le rang d'un élément projeté dans l'espace actif, ou `null` s'il est chez lui. */
+    orderOf(itemId: string): number | null;
 }
 
 /**
@@ -35,7 +37,8 @@ export interface ShareScope {
  */
 export async function shareScope(ctx: FeatureContext, feature: FeatureId): Promise<ShareScope> {
     const rows = await ctx.db.itemSharing.sharedInto(ctx.workspaceId, feature);
-    const homes = new Map<number, number>(rows.map((r) => [r.item_id, r.home_workspace_id]));
+    const homes = new Map<string, number>(rows.map((r) => [r.item_id, r.home_workspace_id]));
+    const orders = new Map<string, number>(rows.map((r) => [r.item_id, r.sort_order]));
     const ciphers = new Map<number, Promise<Cipher>>();
 
     const openCipherOf = (workspaceId: number): Promise<Cipher> => {
@@ -49,6 +52,7 @@ export async function shareScope(ctx: FeatureContext, feature: FeatureId): Promi
     return {
         foreignIds: new Set(homes.keys()),
         homeOf: (itemId) => homes.get(itemId) ?? null,
+        orderOf: (itemId) => orders.get(itemId) ?? null,
         cipherFor: async (itemId) => {
             const home = homes.get(itemId);
             // Chez lui, ou pas projeté du tout : le codec de l'espace actif. Un

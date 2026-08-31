@@ -5,7 +5,6 @@ import {
     metricsResolutionSchema,
     processCaptureSchema,
     processSampleSchema,
-    workspaceKindSchema,
     linkCodeRequestSchema,
     linkCodeResponseSchema,
     linkCodesListResponseSchema,
@@ -22,17 +21,10 @@ import {
 const deviceId = z.uuid();
 
 /** List devices visible to the caller (own devices; all devices for admins). */
+/** Les appareils que l'espace actif voit : les siens, et ceux qui y sont projetés. */
 export const devicesList = {
     command: 'devices.list' as const,
-    input: z.object({
-        /**
-         * `workspace` (défaut) : les appareils de l'espace actif — ce qu'affichent
-         * l'accueil, la topbar et Monitoring.
-         * `fleet` : toute la flotte, tous espaces confondus. Réservé aux
-         * administrateurs, pour la page Appareils.
-         */
-        scope: z.enum(['workspace', 'fleet']).optional()
-    }),
+    input: z.object({}),
     output: z.object({ devices: z.array(deviceSchema) })
 };
 
@@ -93,47 +85,6 @@ export const devicesSetConfig = {
     output: z.object({ device: deviceSchema })
 };
 
-/** Un espace candidat au partage d'un appareil, tel que l'affiche la popup. */
-export const deviceShareTargetSchema = z.object({
-    id: z.number().int().positive(),
-    name: z.string(),
-    kind: workspaceKindSchema,
-    /** L'espace a-t-il accès à cet appareil ? */
-    shared: z.boolean()
-});
-export type DeviceShareTarget = z.infer<typeof deviceShareTargetSchema>;
-
-/**
- * Les espaces avec lesquels un appareil peut être partagé, et lesquels le sont.
- * Réservé aux administrateurs : la seule commande qui énumère des espaces dont
- * l'appelant n'est pas membre.
- */
-export const devicesWorkspaceList = {
-    command: 'devices.workspaceList' as const,
-    input: z.object({ deviceId }),
-    output: z.object({
-        /**
-         * Espace d'appairage : toujours partagé, jamais retirable. `null` si cet
-         * espace a été supprimé depuis : tous les partages sont alors révocables.
-         */
-        originWorkspaceId: z.number().int().positive().nullable(),
-        workspaces: z.array(deviceShareTargetSchema)
-    })
-};
-
-/**
- * Fixe l'ensemble des espaces ayant accès à un appareil. La liste est complète :
- * un espace absent perd l'accès. L'espace d'appairage est réintégré d'office.
- */
-export const devicesSetWorkspaces = {
-    command: 'devices.setWorkspaces' as const,
-    input: z.object({
-        deviceId,
-        workspaceIds: z.array(z.number().int().positive())
-    }),
-    output: z.object({ device: deviceSchema })
-};
-
 /** Reactivate a revoked device, moving it back to `active`. */
 export const devicesReactivate = {
     command: 'devices.reactivate' as const,
@@ -187,8 +138,6 @@ const lifecycleCommands = [
     devicesRename,
     devicesReorder,
     devicesSetConfig,
-    devicesWorkspaceList,
-    devicesSetWorkspaces,
     devicesRequestDelete,
     devicesCancelDelete,
     devicesForceDelete,

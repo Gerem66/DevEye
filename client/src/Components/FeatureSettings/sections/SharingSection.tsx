@@ -8,7 +8,7 @@ import Switch from '@/Components/Switch';
 import { moduleManifest } from '@/sdk/registry';
 import { invalidate, type ResourceKey } from '@/stores/invalidation';
 
-import { numericItemId, type SettingsScope } from '../scope';
+import { type SettingsScope } from '../scope';
 import styles from '../FeatureSettings.module.css';
 import { goToItemSettings } from '../goToHome';
 import ItemGrantsPanel from './ItemGrantsPanel';
@@ -41,7 +41,7 @@ export default function SharingSection({ scope }: Props) {
     /** L'espace dont on règle les permissions ; `null` = aucun dialogue ouvert. */
     const [grantsFor, setGrantsFor] = useState<{ workspaceId: number; workspaceName: string } | null>(null);
 
-    const itemId = numericItemId(scope) ?? 0;
+    const itemId = scope.kind === 'item' ? scope.itemId : '';
 
     const reload = useCallback(async () => {
         const res = await ws.send('share.get', { feature, itemId });

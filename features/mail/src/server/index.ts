@@ -39,11 +39,11 @@ export const serverEntry: FeatureServer<MailRepo> = {
     },
     items: {
         homeOf: async (repo, itemId, workspaceId) =>
-            (await repo.accounts.findVisible(itemId, workspaceId))?.workspace_id ?? null,
+            (await repo.accounts.findVisible(Number(itemId), workspaceId))?.workspace_id ?? null,
         // Le nom, ou à défaut l'adresse : un compte gardé ou disparu vaut `null`,
         // ce que l'écran montre comme « une cible disparue ».
         labelOf: async (repo, cipher, itemId, workspaceId) => {
-            const row = await repo.accounts.findById(itemId, workspaceId);
+            const row = await repo.accounts.findById(Number(itemId), workspaceId);
             if (!row) return null;
             const name = await cipher.tryDecrypt(row.display_name_enc);
             if (name) return name;
@@ -52,6 +52,6 @@ export const serverEntry: FeatureServer<MailRepo> = {
         // Demandé avec le domicile du compte : seule une boîte ouverte se lit
         // sous une clé que le serveur tient seul, donc dans un autre espace.
         shareable: async (repo, itemId, workspaceId) =>
-            (await repo.accounts.findById(itemId, workspaceId))?.security_tier === 'open'
+            (await repo.accounts.findById(Number(itemId), workspaceId))?.security_tier === 'open'
     }
 };

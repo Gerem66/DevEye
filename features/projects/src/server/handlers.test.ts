@@ -712,6 +712,7 @@ function windowTagging(ctx: TestContext<FakeRepo>, homeTag = 'home'): TestContex
     tagging(ctx);
     const scope = ctx.sharing.scope;
     ctx.sharing = {
+        ...ctx.sharing,
         scope: async () => {
             const real = await scope();
             return {
@@ -1967,14 +1968,14 @@ describe('le partage inter-espaces', () => {
         // Le ménage est demandé à l'app une seule fois, et seulement vers le palier
         // gardé.
         await handlerFor(projectSetSecurityTier)(home, { projectId: 1, securityTier: 'guarded' });
-        assert.deepEqual(home.forgotten, [1]);
+        assert.deepEqual(home.forgotten, ['1']);
         assert.equal(repo.rows.projects[0].security_tier, 'guarded');
         // Avant même le ménage de l'app, la fenêtre ne voit plus un projet gardé : la
         // projection ne rend que l'étage ouvert.
         assert.deepEqual((await handlerFor(projectList)(window, {})).projects, []);
         await assert.rejects(handlerFor(projectGet)(window, { projectId: 1 }), failsWith('not_found'));
         await handlerFor(projectSetSecurityTier)(home, { projectId: 1, securityTier: 'open' });
-        assert.deepEqual(home.forgotten, [1]);
+        assert.deepEqual(home.forgotten, ['1']);
 
         // Après l'oubli, la projection n'existe plus et la fenêtre ne voit plus rien,
         // ni en liste, ni au compte, ni par l'id.
@@ -1997,22 +1998,22 @@ describe("l'entrée items", () => {
         const items = serverEntry.items!;
 
         // Chez lui, par sa fenêtre, et depuis un espace qui ne le voit pas.
-        assert.equal(await items.homeOf(repo, 1, 1), 1);
-        assert.equal(await items.homeOf(repo, 1, 7), 1);
-        assert.equal(await items.homeOf(repo, 1, 9), null);
-        assert.equal(await items.homeOf(repo, 99, 1), null);
+        assert.equal(await items.homeOf(repo, '1', 1), 1);
+        assert.equal(await items.homeOf(repo, '1', 7), 1);
+        assert.equal(await items.homeOf(repo, '1', 9), null);
+        assert.equal(await items.homeOf(repo, '99', 1), null);
 
         // Le titre à l'étage ouvert, demandé avec le domicile ; un projet gardé,
         // disparu ou d'ailleurs vaut `null`.
         const open = contextWith(repo).cipher();
-        assert.equal(await items.labelOf(repo, open, 1, 1), 'Projet 1');
-        assert.equal(await items.labelOf(repo, open, 2, 1), 'Sans titre');
-        assert.equal(await items.labelOf(repo, open, 3, 1), null);
-        assert.equal(await items.labelOf(repo, open, 99, 1), null);
-        assert.equal(await items.labelOf(repo, open, 1, 7), null);
+        assert.equal(await items.labelOf(repo, open, '1', 1), 'Projet 1');
+        assert.equal(await items.labelOf(repo, open, '2', 1), 'Sans titre');
+        assert.equal(await items.labelOf(repo, open, '3', 1), null);
+        assert.equal(await items.labelOf(repo, open, '99', 1), null);
+        assert.equal(await items.labelOf(repo, open, '1', 7), null);
 
-        assert.equal(await items.shareable!(repo, 1, 1), true);
-        assert.equal(await items.shareable!(repo, 3, 1), false);
-        assert.equal(await items.shareable!(repo, 99, 1), false);
+        assert.equal(await items.shareable!(repo, '1', 1), true);
+        assert.equal(await items.shareable!(repo, '3', 1), false);
+        assert.equal(await items.shareable!(repo, '99', 1), false);
     });
 });

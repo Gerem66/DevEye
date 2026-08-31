@@ -46,7 +46,7 @@ async function canWriteItemIn(
     ctx: FeatureContext,
     workspaceId: number,
     feature: FeatureId,
-    itemId: number
+    itemId: string
 ): Promise<boolean> {
     const workspace = await ctx.db.workspaces.findById(workspaceId);
     if (!workspace) return false;
@@ -62,7 +62,7 @@ async function canWriteItemIn(
 }
 
 /** Où vit cet élément, et l'appelant peut-il en disposer ? */
-async function loadHome(ctx: FeatureContext, feature: FeatureId, itemId: number): Promise<number> {
+async function loadHome(ctx: FeatureContext, feature: FeatureId, itemId: string): Promise<number> {
     // L'élément doit être chez l'appelant : on ne re-projette pas depuis un
     // espace où l'on ne fait que le voir, l'espace d'origine perdrait la
     // maîtrise de sa donnée.
@@ -82,7 +82,7 @@ async function loadHome(ctx: FeatureContext, feature: FeatureId, itemId: number)
  * module : `shareBlockerFor` a déjà refusé sur `shareTier`, et mieux vaut
  * « introuvable » qu'une projection vers rien.
  */
-async function itemHomeWorkspace(ctx: FeatureContext, feature: FeatureId, itemId: number): Promise<number | null> {
+async function itemHomeWorkspace(ctx: FeatureContext, feature: FeatureId, itemId: string): Promise<number | null> {
     const items = moduleItems(feature, ctx.db);
     if (items) return items.homeOf(itemId, ctx.workspaceId);
     return null;
@@ -92,7 +92,7 @@ async function itemHomeWorkspace(ctx: FeatureContext, feature: FeatureId, itemId
 async function shareState(
     ctx: FeatureContext,
     feature: FeatureId,
-    itemId: number,
+    itemId: string,
     blocker: ShareBlocker | null,
     /** Le domicile de l'élément, et non l'espace actif (un élément regardé depuis une fenêtre). */
     homeWorkspaceId: number
@@ -237,7 +237,7 @@ const setFeature = defineFeature({
  */
 async function resolveGrantTarget(
     ctx: FeatureContext,
-    input: { feature: FeatureId; itemId: number; workspaceId?: number },
+    input: { feature: FeatureId; itemId: string; workspaceId?: number },
     level: 'read' | 'write'
 ): Promise<{ workspaceId: number; workspaceName: string }> {
     ctx.assertFeature(input.feature, level);
@@ -279,7 +279,7 @@ async function resolveGrantTarget(
 async function grantState(
     ctx: FeatureContext,
     feature: FeatureId,
-    itemId: number,
+    itemId: string,
     target: { workspaceId: number; workspaceName: string }
 ): Promise<ItemGrantState> {
     const [roles, grants] = await Promise.all([

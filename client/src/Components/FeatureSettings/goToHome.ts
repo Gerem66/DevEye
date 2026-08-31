@@ -21,7 +21,7 @@ export function accessibleWorkspaceName(workspaceId: number | null): string | nu
     return getWorkspaceState().workspaces.find((w) => w.id === workspaceId)?.name ?? null;
 }
 
-export function goToItemSettings(workspaceId: number, feature: FeatureId, itemId: number, section: string): void {
+export function goToItemSettings(workspaceId: number, feature: FeatureId, itemId: string, section: string): void {
     requestItemSettings({ workspaceId, feature, itemId, section });
     startTeleport(workspaceId, [`view:${feature}`, `l1:${itemId}`]);
     requestSelectWorkspace(workspaceId);

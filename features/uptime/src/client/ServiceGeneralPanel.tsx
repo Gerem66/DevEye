@@ -49,7 +49,7 @@ function tuningOf(service: UptimeService): ServiceTuning {
  * lisibles mais figés.
  */
 export default function ServiceGeneralPanel({ scope, canWrite }: SettingsPanelProps) {
-    const itemId = scope.kind === 'item' ? scope.itemId : null;
+    const itemId = scope.kind === 'item' ? Number(scope.itemId) : null;
     const [service, setService] = useState<UptimeService | null>(null);
     const [draft, setDraft] = useState<ServiceTuning | null>(null);
     const [busy, setBusy] = useState(false);

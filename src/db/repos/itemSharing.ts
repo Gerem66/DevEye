@@ -11,15 +11,18 @@ type Q = Queryable;
  */
 export interface ItemSharingRepo {
     /** Les espaces où cet élément est projeté, l'origine exclue. */
-    sharesOf(feature: string, itemId: number, homeWorkspaceId: number): Promise<ItemShareRow[]>;
+    sharesOf(feature: string, itemId: string, homeWorkspaceId: number): Promise<ItemShareRow[]>;
     /** Les éléments d'une feature projetés vers cet espace (lu une fois par listage). */
     sharedInto(workspaceId: number, feature: string): Promise<ItemShareRow[]>;
     /** Cet élément précis est-il projeté vers cet espace ? */
-    findShare(workspaceId: number, feature: string, itemId: number): Promise<ItemShareRow | null>;
-    share(row: Omit<ItemShareRow, 'created'>): Promise<void>;
-    unshare(workspaceId: number, feature: string, itemId: number): Promise<void>;
-    /** Retire toutes les projections d'un élément — à sa suppression. */
-    forgetItem(feature: string, itemId: number, homeWorkspaceId: number): Promise<void>;
+    findShare(workspaceId: number, feature: string, itemId: string): Promise<ItemShareRow | null>;
+    /** Le rang est celui de fin de liste dans l'espace destinataire : une projection arrive en dernier. */
+    share(row: Omit<ItemShareRow, 'created' | 'sort_order'>): Promise<void>;
+    unshare(workspaceId: number, feature: string, itemId: string): Promise<void>;
+    /** Le rang d'un élément projeté, dans l'espace qui le reçoit. */
+    setOrder(workspaceId: number, feature: string, itemId: string, order: number): Promise<void>;
+    /** Retire toutes les projections d'un élément, à sa suppression. */
+    forgetItem(feature: string, itemId: string, homeWorkspaceId: number): Promise<void>;
     /**
      * Les espaces reliés à celui-ci par au moins une projection de cette
      * feature, dans les deux sens : l'éventail de la diffusion live.
@@ -27,13 +30,13 @@ export interface ItemSharingRepo {
     linkedWorkspaces(workspaceId: number, feature: string): Promise<number[]>;
 
     /** Les restrictions posées depuis cet espace sur cet élément. */
-    grantsOf(workspaceId: number, feature: string, itemId: number): Promise<ItemRoleGrantRow[]>;
+    grantsOf(workspaceId: number, feature: string, itemId: string): Promise<ItemRoleGrantRow[]>;
     /** Les restrictions qui touchent un rôle, pour toute une feature (résolution d'accès). */
     grantsForRole(workspaceId: number, feature: string, roleId: number): Promise<ItemRoleGrantRow[]>;
     setGrant(
         workspaceId: number,
         feature: string,
-        itemId: number,
+        itemId: string,
         roleId: number,
         access: ItemAccess | null
     ): Promise<void>;
@@ -67,11 +70,21 @@ export function itemSharingRepo(pool: Q): ItemSharingRepo {
         },
 
         async share({ workspace_id, feature, item_id, home_workspace_id, shared_by_user_id }) {
+            // La projection arrive en fin de liste chez son destinataire.
             await pool.query(
-                `INSERT INTO item_shares (workspace_id, feature, item_id, home_workspace_id, shared_by_user_id)
-                 VALUES (?, ?, ?, ?, ?)
+                `INSERT INTO item_shares (workspace_id, feature, item_id, home_workspace_id, shared_by_user_id, sort_order)
+                 SELECT ?, ?, ?, ?, ?, COALESCE(MAX(sort_order) + 1, 0)
+                   FROM item_shares WHERE workspace_id = ? AND feature = ?
                  ON DUPLICATE KEY UPDATE home_workspace_id = VALUES(home_workspace_id)`,
-                [workspace_id, feature, item_id, home_workspace_id, shared_by_user_id]
+                [workspace_id, feature, item_id, home_workspace_id, shared_by_user_id, workspace_id, feature]
+            );
+        },
+
+        async setOrder(workspaceId, feature, itemId, order) {
+            await pool.query(
+                `UPDATE item_shares SET sort_order = ?
+                  WHERE workspace_id = ? AND feature = ? AND item_id = ?`,
+                [order, workspaceId, feature, itemId]
             );
         },
 

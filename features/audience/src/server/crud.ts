@@ -57,7 +57,7 @@ export const audienceCountFeature = defineSdkFeature({
         // la carte doit compter ce que la liste montre.
         const rows = await ctx.repo.listVisible(ctx.workspaceId);
         const hidden = await ctx.items.restrictions();
-        return { count: rows.filter((r) => hidden.get(r.id) !== 'none').length };
+        return { count: rows.filter((r) => hidden.get(String(r.id)) !== 'none').length };
     }
 });
 
@@ -68,13 +68,13 @@ export const audienceListFeature = defineSdkFeature({
         // Les sites qu'une restriction masque pour ce rôle disparaissent de la
         // liste plutôt que d'y figurer grisés.
         const hidden = await ctx.items.restrictions();
-        const visible = rows.filter((r) => hidden.get(r.id) !== 'none');
+        const visible = rows.filter((r) => hidden.get(String(r.id)) !== 'none');
         const [shares, counts] = await Promise.all([ctx.sharing.scope(), projectCountsOf(ctx)]);
         return {
             sites: await Promise.all(
                 visible.map(async (row) =>
                     toSite(
-                        await shares.cipherFor(row.id),
+                        await shares.cipherFor(String(row.id)),
                         row,
                         row.workspace_id !== ctx.workspaceId,
                         counts.get(row.id) ?? 0
@@ -211,7 +211,7 @@ export const audienceSiteRemoveFeature = defineSdkFeature({
         // Projections, restrictions et route de notification ne tiennent à aucune clé
         // étrangère : sans ce ménage, elles s'appliqueraient au prochain site à hériter
         // de l'identifiant.
-        await ctx.items.forget(input.siteId);
+        await ctx.items.forget(String(input.siteId));
         ingestOf()?.invalidate();
         ctx.audit({
             level: 'warning',

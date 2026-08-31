@@ -60,7 +60,7 @@ function assertRouteAccess(ctx: FeatureContext, feature: NotificationFeature, le
  */
 async function itemLabelOf(ctx: FeatureContext, feature: NotificationFeature, itemId: number): Promise<string | null> {
     const items = moduleItems(feature, ctx.db);
-    if (items) return items.labelOf(ctx.secure.open, itemId, ctx.workspaceId);
+    if (items) return items.labelOf(ctx.secure.open, String(itemId), ctx.workspaceId);
     return null;
 }
 
@@ -69,7 +69,7 @@ async function itemLabelOf(ctx: FeatureContext, feature: NotificationFeature, it
  * élément inconnu de la table de projections est chez lui.
  */
 async function homeWorkspaceOf(ctx: FeatureContext, feature: NotificationFeature, itemId: number): Promise<number> {
-    const share = await ctx.db.itemSharing.findShare(ctx.workspaceId, feature, itemId);
+    const share = await ctx.db.itemSharing.findShare(ctx.workspaceId, feature, String(itemId));
     return share?.home_workspace_id ?? ctx.workspaceId;
 }
 

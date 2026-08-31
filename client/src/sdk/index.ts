@@ -127,7 +127,7 @@ export function useWorkspaceMembers(): readonly MinimalUser[] {
  * `itemId` est donné, par la téléportation de l'hôte. La garde d'accès reste
  * celle de l'hôte, et une cible disparue s'ignore après dix secondes.
  */
-export function openFeature(feature: string, itemId?: number): void {
+export function openFeature(feature: string, itemId?: number | string): void {
     const workspaceId = getActiveWorkspaceId();
     if (workspaceId === null) return;
     startTeleport(workspaceId, itemId === undefined ? [`view:${feature}`] : [`view:${feature}`, `l1:${itemId}`]);

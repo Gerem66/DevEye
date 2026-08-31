@@ -1,113 +1,20 @@
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Button, Dialog, TextInput } from 'deveye-sdk-client';
+import type { Device } from '@deveye/types';
 
-import { agentUpdatable } from '../agentVersion';
-import { useFleetDevices } from '../store';
-import { DownloadAgent } from './DownloadAgent';
-import { DeviceCard } from './DeviceCard';
-import { LinkCodesDialog } from './LinkCodesDialog';
-import { WorkspaceShareDialog } from './WorkspaceShareDialog';
-import { useLinkCodes } from './useLinkCodes';
-import { useDeviceActions } from './useDeviceActions';
+import type { DeviceActions } from './useDeviceActions';
 import styles from './style.module.css';
 
 /**
- * The fleet segment (admin): the device grid ({@link DeviceCard}), link codes
- * ({@link useLinkCodes}) and the device actions ({@link useDeviceActions}).
+ * Les dialogues de confirmation des gestes qui engagent : renommer, interrompre
+ * l'agent, supprimer. Montés par la fiche d'un appareil, à côté de son menu
+ * d'actions ({@link deviceLifecycleActions}) qui les ouvre.
  */
-export default function Fleet() {
-    // La flotte entière, tous espaces confondus.
-    const { devices, loading, error, refresh } = useFleetDevices();
-    const [showDownloadModal, setShowDownloadModal] = useState(false);
-    const links = useLinkCodes(refresh);
-    const actions = useDeviceActions(refresh);
-
-    // Archived devices are gone from management; Monitoring keeps their history.
-    const visibleDevices = devices.filter((d) => d.status !== 'archived');
-
-    // Same condition as each card's update button; the bulk button needs 2+.
-    const updatableDevices = visibleDevices.filter(
-        (d) => d.status !== 'pending_deletion' && d.online && agentUpdatable(d)
-    );
-    const anyUpdating = updatableDevices.some((d) => actions.isUpdating(d.id));
-
-    // The stop-agent dialog's consequences depend on the target's autostart.
-    const stopDevice = actions.stopTarget ? devices.find((d) => d.id === actions.stopTarget?.id) : undefined;
-    const stopSupervised = (stopDevice?.report?.agent?.serviceScope ?? 'none') !== 'none';
+export function DeviceDialogs({ actions, device }: { actions: DeviceActions; device: Device }) {
+    // Les conséquences d'un arrêt dépendent du démarrage auto de la machine.
+    const stopSupervised = (device.report?.agent?.serviceScope ?? 'none') !== 'none';
 
     return (
-        <div className={styles.container}>
-            <div className={styles.header}>
-                <div className={styles.headerText}>
-                    <h2 className={styles.title}>Flotte</h2>
-                    <p className={styles.subtitle}>Gérez vos agents DevEye, tous espaces confondus</p>
-                </div>
-                <div className={styles.headerActions}>
-                    {updatableDevices.length >= 2 && (
-                        <button
-                            className={styles.updateAllBtn}
-                            onClick={() => void actions.updateAllAgents(updatableDevices.map((d) => d.id))}
-                            disabled={anyUpdating}
-                            title='Mettre à jour tous les agents dont une mise à jour est disponible'
-                        >
-                            <span
-                                className={`icon ${anyUpdating ? `icon-spinner ${styles.spinning}` : 'icon-cloud'}`}
-                            />
-                            {anyUpdating ? 'Mise à jour…' : `Tout mettre à jour (${updatableDevices.length})`}
-                        </button>
-                    )}
-                    <button className={styles.addBtn} onClick={links.openLinkModal} disabled={links.generatingCode}>
-                        {links.generatingCode ? (
-                            <span className={styles.spinner} />
-                        ) : (
-                            <>
-                                <span className='icon icon-plus' />
-                                Ajouter un appareil
-                            </>
-                        )}
-                    </button>
-                </div>
-            </div>
-
-            {actions.actionError && <div className={styles.errorBanner}>{actions.actionError}</div>}
-
-            {loading && devices.length === 0 ? (
-                <div className={styles.loader}>Chargement…</div>
-            ) : error && devices.length === 0 ? (
-                <div className={styles.empty}>
-                    <span className={styles.emptyIcon}>⚠️</span>
-                    <p>{error}</p>
-                </div>
-            ) : visibleDevices.length === 0 ? (
-                <div className={styles.empty}>
-                    <span className={styles.emptyIcon}>🖥️</span>
-                    <p>Aucun appareil lié</p>
-                    <p className={styles.hint}>
-                        Cliquez sur &quot;Ajouter un appareil&quot; pour générer un code de liaison.
-                    </p>
-                </div>
-            ) : (
-                <div className={styles.deviceGrid}>
-                    {/* No entrance/layout animation: the cards morph in and out with
-                        the popup (shared-element transition). Only deletions animate. */}
-                    <AnimatePresence initial={false}>
-                        {visibleDevices.map((device) => (
-                            <motion.div
-                                key={device.id}
-                                className={styles.deviceCard}
-                                exit={{ opacity: 0, scale: 0.96 }}
-                                transition={{ duration: 0.2, ease: 'easeOut' }}
-                            >
-                                <DeviceCard device={device} actions={actions} />
-                            </motion.div>
-                        ))}
-                    </AnimatePresence>
-                </div>
-            )}
-
-            <LinkCodesDialog links={links} onDownload={() => setShowDownloadModal(true)} />
-
+        <>
             <Dialog
                 open={actions.deleteTarget !== null}
                 onClose={() => actions.setDeleteTarget(null)}
@@ -131,7 +38,7 @@ export default function Fleet() {
             >
                 <p className={styles.deleteExplainNote}>
                     En cas d’échec de l’auto-destruction, la suppression est interrompue et l’erreur s’affiche sur la
-                    carte de l’appareil.
+                    fiche de l’appareil.
                 </p>
             </Dialog>
 
@@ -200,7 +107,7 @@ export default function Fleet() {
             >
                 <p className={styles.deleteExplainNote}>
                     L’agent ne sera pas auto-détruit. À utiliser s’il n’existe plus, ou si peu importe qu’il se nettoie.
-                    Ses données restent consultables dans Monitoring.
+                    Ses relevés restent consultables.
                 </p>
             </Dialog>
 
@@ -231,15 +138,6 @@ export default function Fleet() {
                         : 'Démarrage auto inactif : l’appareil restera hors ligne et ne pourra plus être administré à distance (configuration, mises à jour, terminal, fichiers…) jusqu’à un relancement manuel de l’agent sur la machine.'}
                 </p>
             </Dialog>
-
-            <WorkspaceShareDialog
-                open={actions.shareTarget !== null}
-                target={actions.shareTarget}
-                onClose={() => actions.setShareTarget(null)}
-                onSaved={() => void refresh()}
-            />
-
-            <DownloadAgent open={showDownloadModal} onClose={() => setShowDownloadModal(false)} />
-        </div>
+        </>
     );
 }

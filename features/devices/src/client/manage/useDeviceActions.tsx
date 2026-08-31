@@ -51,8 +51,9 @@ function awaitServiceResult(deviceId: string): {
 }
 
 /**
- * All device-management actions for the fleet segment, with their in-flight
- * state, as one object shared by `DeviceCard` and the dialogs.
+ * Les gestes de gestion d'un appareil et leur état en vol, en un objet que le
+ * menu d'actions de sa fiche et les dialogues se partagent. Le partage entre
+ * espaces n'est pas ici : c'est l'onglet « Partage » de la coquille commune.
  */
 export function useDeviceActions(refresh: () => Promise<void> | void) {
     // Refresh, wait for the agent to re-report its scope, refresh again: a
@@ -99,8 +100,6 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
     const [stopTarget, setStopTarget] = useState<Target>(null);
     const [stopping, setStopping] = useState(false);
     const [restartingId, setRestartingId] = useState<string | null>(null);
-    // La popup de partage charge et enregistre elle-même.
-    const [shareTarget, setShareTarget] = useState<Target>(null);
 
     const confirmDevice = async (id: string) => {
         setActionError(null);
@@ -389,8 +388,6 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
         stopTarget,
         setStopTarget,
         stopping,
-        shareTarget,
-        setShareTarget,
         confirmStopAgent,
         restartAgent,
         restartingId,

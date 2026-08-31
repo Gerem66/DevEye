@@ -147,10 +147,10 @@ export function moduleItems(
     db: Database
 ):
     | {
-          homeOf(itemId: number, workspaceId: number): Promise<number | null>;
-          labelOf(cipher: SdkCipher, itemId: number, workspaceId: number): Promise<string | null>;
+          homeOf(itemId: string, workspaceId: number): Promise<number | null>;
+          labelOf(cipher: SdkCipher, itemId: string, workspaceId: number): Promise<string | null>;
           /** Vrai par défaut : seule une feature à palier par élément répond parfois non. */
-          shareable(itemId: number, workspaceId: number): Promise<boolean>;
+          shareable(itemId: string, workspaceId: number): Promise<boolean>;
       }
     | undefined {
     const mod = BY_ID.get(featureId);

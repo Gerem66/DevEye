@@ -34,10 +34,8 @@ import {
     devicesRevoke,
     devicesSetConfig,
     devicesSetSnapshotsPinned,
-    devicesSetWorkspaces,
     devicesSnapshots,
-    devicesStorage,
-    devicesWorkspaceList
+    devicesStorage
 } from '../contracts/commands';
 import type { DevicesRepo, LinkCode } from './repo';
 
@@ -98,6 +96,7 @@ function row(over: Partial<DeviceRow> & { id: string }): DeviceRow {
         retention_days: null,
         status_before_delete: null,
         delete_error: null,
+        sort_order: 0,
         ...over
     };
 }
@@ -147,7 +146,7 @@ interface StoredSample extends StoredInstant {
 
 interface FakeRepo extends DevicesRepo {
     deviceRows: DeviceRow[];
-    /** La jonction `device_workspaces` : appareil → espaces qui y ont accès. */
+    /** Les projections `item_shares` : appareil → espaces où il est visible en plus du sien. */
     shares: Map<string, number[]>;
     codes: StoredCode[];
     /** L'historique d'UN appareil (les tests d'historique n'en regardent qu'un). */
@@ -200,7 +199,17 @@ function fakeRepo(deviceRows: DeviceRow[], shares: Record<string, number[]> = {}
         devices: {
             findById: async (id) => copy(find(id)),
             findByIds: async (ids) => ids.flatMap((id) => copy(find(id)) ?? []),
-            listAll: async () => [...deviceRows].sort((a, b) => b.created - a.created).map((r) => ({ ...r })),
+            listVisible: async (workspaceId) =>
+                deviceRows
+                    .filter((r) => r.workspace_id === workspaceId || (shareMap.get(r.id) ?? []).includes(workspaceId))
+                    .sort((a, b) => a.sort_order - b.sort_order || b.created - a.created)
+                    .map((r) => ({ ...r })),
+            findVisible: async (id, workspaceId) => {
+                const r = find(id);
+                if (!r) return null;
+                const visible = r.workspace_id === workspaceId || (shareMap.get(id) ?? []).includes(workspaceId);
+                return visible ? { ...r } : null;
+            },
             async setStatus(id, status) {
                 const r = find(id);
                 if (r) r.status = status;
@@ -247,11 +256,6 @@ function fakeRepo(deviceRows: DeviceRow[], shares: Record<string, number[]> = {}
             },
             async reorder(workspaceId, ids) {
                 calls.push(`reorder:${workspaceId}:${ids.join(',')}`);
-            },
-            workspaceIdsOf: async (id) => [...(shareMap.get(id) ?? [])],
-            workspaceIdsFor: async (ids) => new Map(ids.map((id) => [id, [...(shareMap.get(id) ?? [])]])),
-            async setWorkspaces(id, workspaceIds) {
-                shareMap.set(id, [...workspaceIds]);
             }
         },
         linkCodes: {
@@ -369,6 +373,10 @@ interface CtxOverrides {
     userId?: number;
     workspaceId?: number;
     workspaces?: readonly SdkWorkspaceSummary[];
+    /** Ce que le rôle de l'appelant voit autrement, par identifiant d'appareil. */
+    itemRestrictions?: Readonly<Record<string, 'none' | 'read'>>;
+    /** Les appareils projetés vers l'espace actif : identifiant → espace d'origine. */
+    shares?: Readonly<Record<string, number>>;
     /** Ce que la façade révèle ; par défaut, chaque ligne du dépôt, A seule en ligne. */
     devices?: readonly SdkDevice[];
 }
@@ -385,15 +393,15 @@ function contextFor(repo: FakeRepo, over: CtxOverrides = {}): TestContext<Device
     });
 }
 
-/** Trois appareils : A et B actifs, C archivé, du plus ancien au plus récent. */
+/** Trois appareils de l'espace 1 : A et B actifs, C archivé, rangés dans cet ordre. */
 function fleet(): FakeRepo {
     return fakeRepo(
         [
-            row({ id: DEVICE_A, created: 1000 }),
-            row({ id: DEVICE_B, created: 2000 }),
-            row({ id: DEVICE_C, created: 3000, status: 'archived', token_hash: '' })
+            row({ id: DEVICE_A, created: 1000, sort_order: 0 }),
+            row({ id: DEVICE_B, created: 2000, sort_order: 1 }),
+            row({ id: DEVICE_C, created: 3000, sort_order: 2, status: 'archived', token_hash: '' })
         ],
-        { [DEVICE_A]: [1, 2], [DEVICE_B]: [1], [DEVICE_C]: [1] }
+        { [DEVICE_A]: [2] }
     );
 }
 
@@ -401,9 +409,11 @@ const agentOrders = (ctx: TestContext<DevicesRepo>, method: string) =>
     ctx.recorded.agentRequests.filter((r) => r.method === method).map((r) => r.deviceId);
 
 describe('devices.list', () => {
-    it("la portée d'espace suit la façade : ses appareils, dans son ordre, avec leurs espaces et leur présence", async () => {
+    it("les appareils de l'espace actif, dans son rang, avec leur présence", async () => {
         const repo = fleet();
-        // La façade rend B avant A : c'est le rang de l'espace, pas la date.
+        // B se range avant A : c'est le rang de l'espace, pas la date.
+        repo.deviceRows[0].sort_order = 1;
+        repo.deviceRows[1].sort_order = 0;
         const ctx = contextFor(repo, {
             devices: [testDevice({ id: DEVICE_B, online: false }), testDevice({ id: DEVICE_A, online: true })]
         });
@@ -411,33 +421,41 @@ describe('devices.list', () => {
         devicesList.output.parse(out);
         assert.deepEqual(
             out.devices.map((d) => d.id),
-            [DEVICE_B, DEVICE_A]
+            [DEVICE_B, DEVICE_A, DEVICE_C]
         );
         assert.equal(out.devices[0].online, false);
         assert.equal(out.devices[1].online, true);
-        assert.deepEqual(out.devices[1].workspaceIds, [1, 2]);
+        assert.equal(out.devices[1].foreign, false);
         // Rien de synchronisé : aucune mise à jour à proposer.
         assert.equal(out.devices[1].latestAgentVersion, null);
         assert.equal(out.devices[1].agentUpdateAvailable, false);
     });
 
-    it("la flotte : l'administrateur voit tout, du plus récent au plus ancien, archivés compris", async () => {
-        const repo = fleet();
-        const ctx = contextFor(repo, { isAdmin: true, kind: 'shared', devices: [] });
-        const out = await handlerFor(devicesList)(ctx, { scope: 'fleet' });
+    it("un appareil projeté figure dans la liste, marqué comme venant d'ailleurs", async () => {
+        const repo = fakeRepo([row({ id: DEVICE_A, workspace_id: 1 })], { [DEVICE_A]: [2] });
+        const ctx = contextFor(repo, { workspaceId: 2 });
+        const out = await handlerFor(devicesList)(ctx, {});
         assert.deepEqual(
-            out.devices.map((d) => [d.id, d.status]),
-            [
-                [DEVICE_C, 'archived'],
-                [DEVICE_B, 'active'],
-                [DEVICE_A, 'active']
-            ]
+            out.devices.map((d) => [d.id, d.foreign]),
+            [[DEVICE_A, true]]
         );
     });
 
-    it("la flotte est refusée à qui n'est pas administrateur", async () => {
-        const ctx = contextFor(fleet());
-        await assert.rejects(handlerFor(devicesList)(ctx, { scope: 'fleet' }), failsWith('forbidden'));
+    it('un appareil masqué à ce rôle disparaît de la liste', async () => {
+        const repo = fleet();
+        const ctx = contextFor(repo, { itemRestrictions: { [DEVICE_B]: 'none' } });
+        const out = await handlerFor(devicesList)(ctx, {});
+        assert.deepEqual(
+            out.devices.map((d) => d.id),
+            [DEVICE_A, DEVICE_C]
+        );
+    });
+
+    it("les appareils d'un autre espace n'y figurent pas", async () => {
+        const repo = fleet();
+        const ctx = contextFor(repo, { workspaceId: 7 });
+        const out = await handlerFor(devicesList)(ctx, {});
+        assert.deepEqual(out.devices, []);
     });
 
     it("la mise à jour de l'agent : un binaire signé, strictement plus récent, pour la cible déclarée", () => {
@@ -592,46 +610,39 @@ describe('la configuration de collecte et le rangement', () => {
         assert.deepEqual(out.ids, [DEVICE_B, DEVICE_A]);
         assert.deepEqual(repo.calls, [`reorder:4:${DEVICE_B},${DEVICE_A}`]);
     });
+
+    it("le rang d'un appareil projeté appartient à l'espace qui le reçoit", async () => {
+        const repo = fakeRepo([row({ id: DEVICE_A, workspace_id: 1 }), row({ id: DEVICE_B, workspace_id: 4 })], {
+            [DEVICE_A]: [4]
+        });
+        const ctx = contextFor(repo, { workspaceId: 4, shares: { [DEVICE_A]: 1 } });
+        await handlerFor(devicesReorder)(ctx, { ids: [DEVICE_A, DEVICE_B] });
+        // Seul B habite ici : lui seul est rangé par le dépôt, A par sa projection.
+        assert.deepEqual(repo.calls, [`reorder:4:${DEVICE_B}`]);
+    });
 });
 
-const WORKSPACES: SdkWorkspaceSummary[] = [
-    { id: 1, name: 'Moi', kind: 'personal', ownerUserId: 1 },
-    { id: 2, name: 'Équipe', kind: 'shared', ownerUserId: 1 },
-    { id: 3, name: 'Labo', kind: 'shared', ownerUserId: 9 },
-    { id: 4, name: 'Autrui', kind: 'personal', ownerUserId: 9 }
-];
+/**
+ * La frontière d'espace elle-même est celle de l'app (`src/agent/authorize.ts`,
+ * testée dans `_sdk/facade.test.ts`) : le harnais rend un appareil pour tout
+ * identifiant. Ici, la restriction que le rôle porte sur la ligne.
+ */
+describe("la garde d'un appareil", () => {
+    it("un appareil que le rôle ne voit pas ne se gère pas, même visible dans l'espace", async () => {
+        const repo = fleet();
+        const ctx = contextFor(repo, { itemRestrictions: { [DEVICE_A]: 'none' } });
+        await assert.rejects(handlerFor(devicesRename)(ctx, { deviceId: DEVICE_A, name: 'x' }), failsWith('forbidden'));
+    });
 
-describe('le partage entre espaces', () => {
-    it("les espaces proposés sont les partagés plus l'espace d'appairage, avec leur état", async () => {
-        const repo = fakeRepo([row({ id: DEVICE_A, workspace_id: 1 })], { [DEVICE_A]: [1, 3] });
-        const ctx = contextFor(repo, { isAdmin: true, workspaces: WORKSPACES });
-        const out = await handlerFor(devicesWorkspaceList)(ctx, { deviceId: DEVICE_A });
-        assert.equal(out.originWorkspaceId, 1);
-        assert.deepEqual(
-            out.workspaces.map((w) => [w.id, w.shared]),
-            [
-                [1, true],
-                [2, false],
-                [3, true]
-            ]
+    it('un appareil en lecture seule pour ce rôle se lit, mais ne se règle pas', async () => {
+        const repo = fleet();
+        const ctx = contextFor(repo, { itemRestrictions: { [DEVICE_A]: 'read' } });
+        await assert.rejects(
+            handlerFor(devicesSetConfig)(ctx, { deviceId: DEVICE_A, retentionDays: 7 }),
+            failsWith('forbidden')
         );
-    });
-
-    it("un espace inconnu est ignoré, l'espace d'appairage réintégré d'office, et le changement journalisé", async () => {
-        const repo = fakeRepo([row({ id: DEVICE_A, workspace_id: 1 })], { [DEVICE_A]: [1, 3] });
-        const ctx = contextFor(repo, { isAdmin: true, workspaces: WORKSPACES });
-        const out = await handlerFor(devicesSetWorkspaces)(ctx, { deviceId: DEVICE_A, workspaceIds: [2, 99] });
-        assert.deepEqual([...repo.shares.get(DEVICE_A)!].sort(), [1, 2]);
-        assert.deepEqual([...devicesSetWorkspaces.output.parse(out).device.workspaceIds].sort(), [1, 2]);
-        assert.equal(ctx.recorded.audits.length, 1);
-        assert.match(ctx.recorded.audits[0].description, /2 espace\(s\)/);
-    });
-
-    it("un partage inchangé n'écrit pas de ligne de journal", async () => {
-        const repo = fakeRepo([row({ id: DEVICE_A, workspace_id: 1 })], { [DEVICE_A]: [1, 2] });
-        const ctx = contextFor(repo, { isAdmin: true, workspaces: WORKSPACES });
-        await handlerFor(devicesSetWorkspaces)(ctx, { deviceId: DEVICE_A, workspaceIds: [1, 2] });
-        assert.deepEqual(ctx.recorded.audits, []);
+        const out = await handlerFor(devicesList)(ctx, {});
+        assert.ok(out.devices.some((d) => d.id === DEVICE_A));
     });
 });
 
@@ -649,23 +660,13 @@ describe('les codes de liaison', () => {
         assert.doesNotMatch(ctx.recorded.audits[0].description, /CODE-/);
     });
 
-    it("un espace explicite doit exister : n'importe lequel de la liste, comme pour le partage ; un id absent est introuvable", async () => {
+    it("un code sans expiration reste valable, et range toujours dans l'espace actif", async () => {
         const repo = fakeRepo([]);
-        const ctx = contextFor(repo, { isAdmin: true, workspaceId: 1, workspaces: WORKSPACES });
-        // L'espace 3 appartient à un autre compte : listé, donc accepté.
-        const listed = await handlerFor(devicesLinkCodeCreate)(ctx, {
-            autoApprove: true,
-            ttlSeconds: null,
-            workspaceId: 3
-        });
-        assert.equal(listed.expiresAt, null);
-        assert.equal(listed.autoApprove, true);
+        const ctx = contextFor(repo, { workspaceId: 3 });
+        const out = await handlerFor(devicesLinkCodeCreate)(ctx, { autoApprove: true, ttlSeconds: null });
+        assert.equal(out.expiresAt, null);
+        assert.equal(out.autoApprove, true);
         assert.equal(repo.codes[0].workspace_id, 3);
-        await assert.rejects(
-            handlerFor(devicesLinkCodeCreate)(ctx, { autoApprove: false, workspaceId: 99 }),
-            failsWith('not_found')
-        );
-        assert.equal(repo.codes.length, 1);
     });
 
     it('la liste ne rend que les codes encore valables de leur émetteur', async () => {
@@ -867,32 +868,27 @@ describe('le contrat', () => {
         );
     });
 
-    it("la table des accès : l'administrateur pour la flotte et les codes, `write` pour ce qui range, règle ou efface, lecture ailleurs ; toute écriture bat `devices`", () => {
-        const admin = new Set([
+    it('la table des accès : `write` pour tout ce qui appaire, range, règle ou efface, lecture ailleurs ; toute écriture bat `devices`', () => {
+        const write = new Set([
             'devices.confirm',
             'devices.revoke',
             'devices.reactivate',
             'devices.rename',
-            'devices.workspaceList',
-            'devices.setWorkspaces',
+            'devices.reorder',
+            'devices.setConfig',
             'devices.requestDelete',
             'devices.cancelDelete',
             'devices.forceDelete',
             'devices.delete',
+            'devices.setSnapshotsPinned',
+            'devices.deleteSnapshots',
             'devices.linkCodeCreate',
             'devices.linkCodeList',
             'devices.linkCodeSetAutoApprove',
             'devices.linkCodeRevoke'
         ]);
-        const write = new Set([
-            'devices.reorder',
-            'devices.setConfig',
-            'devices.setSnapshotsPinned',
-            'devices.deleteSnapshots'
-        ]);
         const reads = new Set([
             'devices.list',
-            'devices.workspaceList',
             'devices.linkCodeList',
             'devices.metrics',
             'devices.presence',
@@ -902,7 +898,9 @@ describe('le contrat', () => {
             'devices.storage'
         ]);
         for (const h of devicesHandlers) {
-            assert.equal(h.access?.admin === true, admin.has(h.command), `${h.command} : administrateur`);
+            // Plus rien n'est réservé à l'administrateur global : un appareil
+            // relève de l'espace où il est appairé, et de son droit.
+            assert.equal(h.access?.admin, undefined, `${h.command} : administrateur`);
             assert.equal(h.access?.level ?? 'read', write.has(h.command) ? 'write' : 'read', `${h.command} : niveau`);
             if (reads.has(h.command)) assert.equal(h.mutates, undefined, `${h.command} lit, et ne doit rien battre`);
             else assert.equal(h.mutates, true, `${h.command} écrit sans déclarer mutates`);

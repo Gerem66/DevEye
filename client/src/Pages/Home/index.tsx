@@ -911,13 +911,6 @@ export default function HomePage() {
                     onBack={expandedWidget ? handleClose : folderView ? closeFolder : undefined}
                     onOpenProfile={(e) => handleExpand('profile', isForceReload(e))}
                     onOpenSecurity={(e) => handleExpand('security', isForceReload(e))}
-                    // Le segment « Flotte » du module n'existe que dans l'espace
-                    // personnel : ailleurs, l'entrée n'offre rien de plus que la tuile.
-                    onOpenDevices={
-                        user.role === 'admin' && devicesModule && currentWorkspace.kind === 'personal'
-                            ? (e) => handleExpand('devices', isForceReload(e))
-                            : undefined
-                    }
                     onOpenLogs={user.role === 'admin' ? (e) => handleExpand('logs', isForceReload(e)) : undefined}
                     onOpenUsers={user.role === 'admin' ? (e) => handleExpand('users', isForceReload(e)) : undefined}
                     onOpenSettings={canAppearance ? () => setSettingsOpen(true) : undefined}

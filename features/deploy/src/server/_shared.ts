@@ -82,7 +82,7 @@ export async function loadTarget(
 ): Promise<DeployTargetRow> {
     const row = await ctx.repo.findVisibleTarget(targetId, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Cible de déploiement introuvable');
-    await ctx.items.assert(targetId, level);
+    await ctx.items.assert(String(targetId), level);
     return row;
 }
 
@@ -110,7 +110,7 @@ export async function loadHomeTarget(ctx: Ctx, targetId: number): Promise<Deploy
 export async function targetCipherFor(ctx: Ctx, row: Pick<DeployTargetRow, 'id' | 'workspace_id'>): Promise<SdkCipher> {
     if (row.workspace_id === ctx.workspaceId) return ctx.cipher();
     const scope = await ctx.sharing.scope();
-    return scope.cipherFor(row.id);
+    return scope.cipherFor(String(row.id));
 }
 
 export async function toTarget(

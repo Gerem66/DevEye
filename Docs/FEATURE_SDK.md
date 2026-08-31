@@ -556,9 +556,10 @@ plutôt qu'en enveloppant le hub :
   ne duplique plus), et les **23 commandes de transport** `agent.*`
   (`src/features/agent/`) qui ne font que relayer une méthode du hub :
   natives, sous le droit `devices`.
-- **Module `features/devices`** : la flotte (liste, approbation, révocation,
-  renommage, rangement, configuration de collecte, partage par
-  `device_workspaces`, suppression), l'historique stocké (métriques,
+- **Module `features/devices`** : la flotte de l'espace (liste, appairage,
+  approbation, révocation, renommage, rangement, configuration de collecte,
+  suppression ; le partage entre espaces est celui de la coquille commune,
+  `item_shares`), l'historique stocké (métriques,
   présence, processus, disponibilité, instantanés, épinglage, stockage), les
   **codes de liaison** (quatre routes HTTP de session devenues les commandes
   `devices.linkCode*`, l'enrôlement public restant en HTTP), la rétention
@@ -576,15 +577,15 @@ plutôt qu'en enveloppant le hub :
   Deux lecteurs, un schéma.
 
 Ce que le SDK a gagné : `ctx.isAdmin` et `access: { admin: true }` (le
-dispatcheur exige l'administrateur global en plus du droit de feature : les
-gestes de flotte) ; la capacité `workspaces.read` (`ctx.deveye.workspaces.list`,
-administrateur seulement : tous les espaces, pour rattacher un appareil) ;
+dispatcheur exige l'administrateur global en plus du droit de feature ; les
+appareils n'en relèvent plus, mais les pages système oui) ; la capacité
+`workspaces.read` (`ctx.deveye.workspaces.list`, administrateur seulement) ;
 sur la façade `agents`, les trois ordres du cycle de vie
 (`resetAgentSession`, `disconnectAgent`, `requestDestroy`) et
 `servedManifest()` (le manifest des binaires servis, pour signaler un agent
 à mettre à jour sans que le module ne lise le disque) ; côté client,
-`SettingsPanelProps<Id>` (la portée d'un élément de la coquille accepte un
-id texte, un appareil étant un UUID), `commandsApi` (les commandes `agent.*`
+`SettingsPanelProps` (la portée d'un élément de la coquille porte un id
+texte, un appareil étant un UUID), `commandsApi` (les commandes `agent.*`
 typées), `acquireMetrics` / `releaseMetrics`, `joinPath`, et le contrat
 `DEVICES_CLIENT_PROVIDER`. Le module se teste sur le harnais (37 tests :
 handlers et service), là où la native n'en avait aucun. Voir

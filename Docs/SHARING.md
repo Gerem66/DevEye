@@ -33,17 +33,14 @@ pas être projeté : ce n'est pas une prudence, c'est une impossibilité mécani
 
 Le registre porte la règle dans `shareTier` :
 
-|                                                                                     | Partageable                                                                                      |
-| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `'open'` — Uptime, Bases, Déploiement, Git, Audience, Sauvegardes                   | oui, sans condition                                                                              |
-| `'perItem'` — Notes, Mail, Projets                                                  | selon la ligne : note ordinaire oui, note privée non ; compte mail « open » oui, « guarded » non |
-| `'never'` — Mots de passe, CloudSync, Appareils, Météo, Finances, Sentinelle, OSINT | non                                                                                              |
+|                                                                              | Partageable                                                                                      |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `'open'` — Uptime, Bases, Déploiement, Git, Audience, Sauvegardes, Appareils | oui, sans condition                                                                              |
+| `'perItem'` — Notes, Mail, Projets                                           | selon la ligne : note ordinaire oui, note privée non ; compte mail « open » oui, « guarded » non |
+| `'never'` — Mots de passe, CloudSync, Météo, Finances, Sentinelle, OSINT     | non                                                                                              |
 
-Trois `never` méritent leur justification :
+Deux `never` méritent leur justification :
 
-- **Appareils** ont **déjà** leur partage inter-espaces, antérieur et d'une autre
-  nature : `device_workspaces` (migration 072) est une adhésion à part entière,
-  pas une projection. Les deux mécanismes ne se superposent pas.
 - **Mots de passe** vivent toujours à l'étage gardé. Le serveur sait les lire
   quand le chiffrement par mot de passe est éteint — mais un partage dont la
   survie dépend d'un réglage de sécurité qu'on encourage n'est pas un partage.
@@ -103,6 +100,7 @@ gestes :
 | Sauvegardes      | fiche, historique, **déclencher**                                                                                                                                                         | modifier, supprimer (destination et source vivent chez lui)                               |
 | Notes            | lire, éditer le corps, archiver, restaurer (chez elle, sous sa clé ; rangée à la racine, hors classement d'ici)                                                                           | classer (dossier, rang), passer en privée, détruire                                       |
 | Mail             | dossiers, lire, marquer, déplacer, envoyer, relever, renommer, cadence, pause                                                                                                             | supprimer le compte, changer de palier, identifiants et proxy, reconnexion OAuth          |
+| Appareils        | superviser, terminal, fichiers, logs, paquets, commandes système, ranger dans SA liste                                                                                                    | appairer, approuver, renommer, révoquer, régler la collecte, supprimer                    |
 | Projets          | tout l'arbre (colonnes, cartes, assignation parmi les membres d'ici, jalons, dépendances, discussion, historique), profil, statut, archivage, version manuelle ; liaisons lues et nommées | changer de palier, version suivie d'une release, relier / délier, classer le portefeuille |
 
 Le critère n'est pas le goût : un geste reste au domicile quand il **référence
@@ -113,6 +111,18 @@ la donnée à un autre monde. Le serveur refuse, et l'écran ne propose pas.
 ---
 
 ## 3. Le mécanisme
+
+L'identifiant d'un élément est un **texte** de bout en bout (`item_shares`,
+`item_role_grants`, `ItemRef`, `ctx.items`, `ctx.sharing`) : une feature choisit
+la clé de sa table, entière ou non, et celle d'un appareil est un UUID. Une
+feature à lignes numérotées convertit au point de contact (`String(row.id)` en
+écriture, `Number(itemId)` dans son entrée `items`). Les routes de notification
+gardent leur clé numérique, la leur.
+
+Le **rang** d'un élément projeté appartient à l'espace qui le reçoit
+(`item_shares.sort_order`) : la même ligne se range indépendamment dans chaque
+liste qui l'affiche. Chez lui, le rang reste porté par la table de la feature.
+`ctx.sharing.setOrder` écrit le premier, le dépôt de la feature le second.
 
 `features/_sharing.ts` est **le seul endroit du dépôt qui déchiffre hors de son
 espace**. Deux gardes le rendent sûr, et il faut les deux :

@@ -80,11 +80,16 @@ export function createSdkContext(
             // route de notification, qu'aucune clé étrangère ne rattache à sa table.
             forget: async (itemId) => {
                 await ctx.db.itemSharing.forgetItem(manifest.id, itemId, ctx.workspaceId);
-                await ctx.db.notificationChannels.clearRoute(
-                    ctx.workspaceId,
-                    manifest.id as NotificationFeature,
-                    itemId
-                );
+                // Les routes de notification sont à clé numérique : une feature
+                // dont les éléments ont un identifiant texte n'en a aucune.
+                const routeItemId = Number(itemId);
+                if (Number.isInteger(routeItemId)) {
+                    await ctx.db.notificationChannels.clearRoute(
+                        ctx.workspaceId,
+                        manifest.id as NotificationFeature,
+                        routeItemId
+                    );
+                }
             }
         },
         sharing: {
@@ -98,10 +103,12 @@ export function createSdkContext(
                 return {
                     foreignIds: scope.foreignIds,
                     homeOf: scope.homeOf,
+                    orderOf: scope.orderOf,
                     // Le Cipher de l'app est structurellement un SdkCipher.
                     cipherFor: (itemId) => scope.cipherFor(itemId)
                 };
-            }
+            },
+            setOrder: (itemId, order) => ctx.db.itemSharing.setOrder(ctx.workspaceId, manifest.id, itemId, order)
         },
         providers,
         audit: (entry) =>

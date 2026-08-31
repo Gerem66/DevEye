@@ -6,14 +6,13 @@ import { RetentionSweep } from './service';
 
 /**
  * L'entrée serveur du module : le balayage horaire de rétention
- * (`RetentionSweep`) sur le dépôt du module. Aucun hook agent (la télémétrie
- * est ingérée par l'app, hors session), aucun provider, aucune notification.
+ * (`RetentionSweep`) sur le dépôt du module, et l'entrée `items` sans laquelle
+ * un `shareTier` autre que `'never'` est refusé au démarrage. Aucun hook agent
+ * (la télémétrie est ingérée par l'app, hors session), aucune notification.
  *
- * Pas de `migrationsDir` : les six tables datent du socle (voir `repo/index.ts`
+ * Pas de `migrationsDir` : les cinq tables datent du socle (voir `repo/index.ts`
  * et l'allowlist de `deveye-feature.json`) ; une table propre au module
- * inaugurera `src/server/migrations/` avec le préfixe `ft_devices_`. Pas
- * d'entrée `items` : `shareTier: 'never'`, le partage d'un appareil est le sien
- * (`device_workspaces`).
+ * inaugurera `src/server/migrations/` avec le préfixe `ft_devices_`.
  */
 export const serverEntry: FeatureServer<DevicesRepo> = {
     createRepo,
@@ -28,5 +27,12 @@ export const serverEntry: FeatureServer<DevicesRepo> = {
                 sweep.stop();
             }
         };
+    },
+    items: {
+        homeOf: async (repo, itemId, workspaceId) =>
+            (await repo.devices.findVisible(itemId, workspaceId))?.workspace_id ?? null,
+        // Le nom d'un appareil est en clair : le codec ne sert pas ici.
+        labelOf: async (repo, _cipher, itemId, workspaceId) =>
+            (await repo.devices.findVisible(itemId, workspaceId))?.name ?? null
     }
 };

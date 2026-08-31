@@ -63,7 +63,7 @@ export const serverEntry: FeatureServer<UptimeRepo> = {
     },
     items: {
         homeOf: async (repo, itemId, workspaceId) =>
-            (await repo.services.findVisible(itemId, workspaceId))?.workspace_id ?? null,
-        labelOf
+            (await repo.services.findVisible(Number(itemId), workspaceId))?.workspace_id ?? null,
+        labelOf: (repo, cipher, itemId, workspaceId) => labelOf(repo, cipher, Number(itemId), workspaceId)
     }
 };

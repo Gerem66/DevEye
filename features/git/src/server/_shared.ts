@@ -83,7 +83,7 @@ export async function loadRepo(ctx: Ctx, repoId: number, level: 'read' | 'write'
     if (!row) throw new FeatureError('not_found', 'Dépôt introuvable');
     // `ctx.items.assert` refuse en plus les dépôts qu'une restriction de rôle
     // masque ou passe en lecture seule.
-    await ctx.items.assert(repoId, level);
+    await ctx.items.assert(String(repoId), level);
     return row;
 }
 
@@ -108,7 +108,7 @@ export async function loadHomeRepo(ctx: Ctx, repoId: number): Promise<GitRepoRow
  * `cipherFor` ne rend un codec étranger que si la projection existe réellement.
  */
 export async function repoCipher(ctx: Ctx, repoId: number): Promise<SdkCipher> {
-    return (await ctx.sharing.scope()).cipherFor(repoId);
+    return (await ctx.sharing.scope()).cipherFor(String(repoId));
 }
 
 export async function toRepo(

@@ -1,6 +1,6 @@
 import { featureDescriptor } from '@deveye/types';
 
-import { numericItemId, type SettingsScope } from '../scope';
+import { type SettingsScope } from '../scope';
 import styles from '../FeatureSettings.module.css';
 import ItemGrantsPanel from './ItemGrantsPanel';
 
@@ -15,7 +15,7 @@ interface Props {
 
 export default function ItemPermissionsSection({ scope }: Props) {
     const feature = scope.feature;
-    const itemId = numericItemId(scope) ?? 0;
+    const itemId = scope.kind === 'item' ? scope.itemId : '';
     const noun = featureDescriptor(scope.feature).itemNoun ?? 'élément';
 
     return (

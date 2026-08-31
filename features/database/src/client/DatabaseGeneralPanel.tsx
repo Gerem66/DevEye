@@ -37,7 +37,7 @@ function tuningOf(database: Database): Tuning {
  * envoyés donc conservés). Une base projetée se lit ici mais se règle chez elle.
  */
 export default function DatabaseGeneralPanel({ scope, canWrite }: SettingsPanelProps) {
-    const itemId = scope.kind === 'item' ? scope.itemId : null;
+    const itemId = scope.kind === 'item' ? Number(scope.itemId) : null;
     const [database, setDatabase] = useState<Database | null>(null);
     const [draft, setDraft] = useState<Tuning | null>(null);
     const [busy, setBusy] = useState(false);

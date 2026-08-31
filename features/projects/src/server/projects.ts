@@ -83,7 +83,7 @@ export const projectListFeature = defineSdkFeature({
         ]);
         // Les projets qu'une restriction masque disparaissent de la liste plutôt
         // que d'y figurer grisés : une ligne qu'on voit apprend déjà qu'elle existe.
-        const rows = visible.filter((r) => hidden.get(r.id) !== 'none');
+        const rows = visible.filter((r) => hidden.get(String(r.id)) !== 'none');
 
         // Les compteurs ne dépendent d'aucune clé : ils s'affichent même sur un
         // projet gardé qu'on ne sait pas déchiffrer. Les non-lus sont ceux de
@@ -140,7 +140,7 @@ export const projectCountFeature = defineSdkFeature({
             ctx.repo.projects.listVisible(ctx.workspaceId, false),
             ctx.items.restrictions()
         ]);
-        return { count: visible.filter((r) => hidden.get(r.id) !== 'none').length };
+        return { count: visible.filter((r) => hidden.get(String(r.id)) !== 'none').length };
     }
 });
 
@@ -398,7 +398,7 @@ export const projectSetSecurityTierFeature = defineSdkFeature({
         // élément, sans perte puisqu'un projet gardé vit dans un espace personnel.
         // Sans ce ménage, une ligne `item_shares` dormante remontrerait le projet le
         // jour où il rouvre.
-        if (input.securityTier === 'guarded') await ctx.items.forget(input.projectId);
+        if (input.securityTier === 'guarded') await ctx.items.forget(String(input.projectId));
 
         await recordEvent(ctx, settled, {
             kind: 'projects.securityTier',
@@ -463,7 +463,7 @@ export const projectReorderFeature = defineSdkFeature({
         // silencieux : le client ne le propose pas au glisser, un appel qui l'inclut
         // est une erreur qu'il vaut mieux voir.
         const [scope, hidden] = await Promise.all([ctx.sharing.scope(), ctx.items.restrictions()]);
-        if (input.projectIds.some((id) => scope.foreignIds.has(id))) {
+        if (input.projectIds.some((id) => scope.foreignIds.has(String(id)))) {
             throw new FeatureError(
                 'validation',
                 'Un projet partagé depuis un autre espace se classe chez lui, pas ici.'
@@ -471,7 +471,7 @@ export const projectReorderFeature = defineSdkFeature({
         }
         // Un projet que ce rôle ne peut pas écrire est laissé de côté en silence :
         // c'est le portefeuille d'ici qu'on range, avec ce qu'on y voit.
-        const projectIds = input.projectIds.filter((id) => !hidden.has(id));
+        const projectIds = input.projectIds.filter((id) => !hidden.has(String(id)));
         // Ne touche jamais au corps chiffré : fonctionne sur des projets masqués.
         await ctx.repo.projects.reorder(ctx.workspaceId, projectIds);
         return { projectIds };

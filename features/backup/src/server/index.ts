@@ -33,11 +33,11 @@ export const serverEntry: FeatureServer<BackupRepo> = {
     },
     items: {
         homeOf: async (repo, itemId, workspaceId) =>
-            (await repo.findVisibleJob(itemId, workspaceId))?.workspace_id ?? null,
+            (await repo.findVisibleJob(Number(itemId), workspaceId))?.workspace_id ?? null,
         // Un blob illisible ou un travail disparu vaut `null` : « une cible
         // disparue » pour l'écran des canaux.
         labelOf: async (repo, cipher, itemId, workspaceId) => {
-            const row = await repo.findJob(itemId, workspaceId);
+            const row = await repo.findJob(Number(itemId), workspaceId);
             if (!row) return null;
             const plain = await cipher.tryDecrypt(row.content);
             if (plain === null) return null;

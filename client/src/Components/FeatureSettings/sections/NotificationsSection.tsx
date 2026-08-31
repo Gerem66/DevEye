@@ -23,7 +23,7 @@ import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { useWorkspacePermissions } from '@/stores/workspace';
 import { accessibleWorkspaceName, goToItemSettings } from '../goToHome';
 
-import { numericItemId, type SettingsScope } from '../scope';
+import { routeItemId, type SettingsScope } from '../scope';
 import styles from '../FeatureSettings.module.css';
 
 /**
@@ -107,7 +107,7 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
     // projeté, dont les canaux vivent ailleurs.
     const canRoute = permissions.canFeature(feature, 'write') && managedHere;
 
-    const itemId = numericItemId(scope) ?? undefined;
+    const itemId = routeItemId(scope) ?? undefined;
 
     /**
      * La sélection se rend-elle ici ? Sur un élément toujours ; à l'échelle de
@@ -431,7 +431,7 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                                     type='button'
                                     className={styles.jumpBtn}
                                     onClick={() =>
-                                        goToItemSettings(homeWorkspaceId, feature, itemId ?? 0, 'notifications')
+                                        goToItemSettings(homeWorkspaceId, feature, scope.itemId, 'notifications')
                                     }
                                 >
                                     Régler dans « {accessibleWorkspaceName(homeWorkspaceId)} »

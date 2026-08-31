@@ -115,7 +115,7 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onEdit
                     {/* Les réglages de ce site : mesure, visiteurs et conservation,
                         partage, restrictions par rôle. Le bouton se garde lui-même. */}
                     <FeatureSettingsButton
-                        scope={{ kind: 'item', feature: 'audience', itemId: site.id, itemLabel: site.name }}
+                        scope={{ kind: 'item', feature: 'audience', itemId: String(site.id), itemLabel: site.name }}
                     />
                 </div>
             </header>

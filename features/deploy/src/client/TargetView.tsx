@@ -93,7 +93,7 @@ export function TargetActions({ target, canWrite, projectId, onEdit, after }: Ta
                 scope={{
                     kind: 'item',
                     feature: 'deploy',
-                    itemId: target.id,
+                    itemId: String(target.id),
                     itemLabel: target.name
                 }}
             />

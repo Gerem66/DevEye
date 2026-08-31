@@ -49,21 +49,6 @@ function send(socket: WebSocket, msg: ServerMessage): void {
     socket.send(JSON.stringify(msg));
 }
 
-/**
- * Les espaces qui voient l'appareil visé par cette commande, s'il y en a un.
- * Lu sur la charge brute : l'appel doit pouvoir se faire avant le handler.
- */
-async function deviceWorkspacesOf(db: Database, command: string, payload: unknown): Promise<number[]> {
-    if (!command.startsWith('agent.') && !command.startsWith('devices.')) return [];
-    const deviceId = (payload as { deviceId?: unknown } | null)?.deviceId;
-    if (typeof deviceId !== 'string' || deviceId.length === 0) return [];
-    return db.devices.workspaceIdsOf(deviceId);
-}
-
-function unionWorkspaces(a: readonly number[], b: readonly number[]): number[] {
-    return [...new Set([...a, ...b])];
-}
-
 export async function registerWS(
     app: FastifyInstance,
     { db, crypt, hub, live: liveHub, audit }: WSDeps
@@ -187,10 +172,6 @@ export async function registerWS(
                 });
             };
 
-            // Les espaces qui voient cet appareil *avant* que la commande ne
-            // tourne — la seule occasion de les connaître quand elle les efface.
-            const sharedBefore = await deviceWorkspacesOf(db, command, payload);
-
             // Bracket the call for single-use DEK accounting ("validate on every
             // action"): the unlocked DEK is wiped as soon as this command — and
             // any concurrent siblings unlocked alongside it — finish.
@@ -244,7 +225,7 @@ export async function registerWS(
                 };
                 const assertItem = async (
                     f: FeatureId,
-                    itemId: number,
+                    itemId: string,
                     level: FeatureAccess = 'read'
                 ): Promise<void> => {
                     // La feature d'abord : une restriction d'élément ne peut
@@ -329,13 +310,6 @@ export async function registerWS(
                     liveHub.changed(auditWorkspaceId, topics, session!.userId, socket);
                     if (extraWorkspace !== null && extraWorkspace !== auditWorkspaceId) {
                         liveHub.changed(extraWorkspace, topics, session!.userId);
-                    }
-                    // Un appareil est partageable entre plusieurs espaces : tous ses
-                    // destinataires sont prévenus. Union avant/après :
-                    // `devices.delete` efface les rattachements, `devices.setWorkspaces`
-                    // en crée.
-                    for (const wid of unionWorkspaces(sharedBefore, await deviceWorkspacesOf(db, command, payload))) {
-                        if (wid !== auditWorkspaceId) liveHub.changed(wid, topics, session!.userId);
                     }
                 }
             } catch (e) {

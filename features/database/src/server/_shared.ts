@@ -98,7 +98,7 @@ export async function loadDatabase(
 ): Promise<DatabaseRow> {
     const row = await ctx.repo.findVisible(databaseId, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Base de données introuvable');
-    await ctx.items.assert(databaseId, level);
+    await ctx.items.assert(String(databaseId), level);
     return row;
 }
 
@@ -106,7 +106,7 @@ export async function loadDatabase(
 export async function databaseCipherFor(ctx: Ctx, row: Pick<DatabaseRow, 'id' | 'workspace_id'>): Promise<SdkCipher> {
     if (row.workspace_id === ctx.workspaceId) return ctx.cipher();
     const scope = await ctx.sharing.scope();
-    return scope.cipherFor(row.id);
+    return scope.cipherFor(String(row.id));
 }
 
 /** Le contrat de Projets ; absent, zéro projet partout et aucune commande ne casse. */

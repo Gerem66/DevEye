@@ -106,7 +106,7 @@ export async function loadDestination(ctx: Ctx, destinationId: number): Promise<
 export async function loadJob(ctx: Ctx, jobId: number, level: 'read' | 'write' = 'read') {
     const row = await ctx.repo.findVisibleJob(jobId, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Travail de sauvegarde introuvable');
-    await ctx.items.assert(jobId, level);
+    await ctx.items.assert(String(jobId), level);
     return row;
 }
 
@@ -150,7 +150,7 @@ export async function toJob(ctx: Ctx, row: BackupJobWithStateRow, shares?: SdkSh
     // Le codec du **domicile** de la ligne : un travail projeté, et tout ce qui
     // pend à lui, sa destination, sa dernière erreur, reste chiffré sous la clé
     // de son espace d'origine.
-    const cipher = shares ? await shares.cipherFor(row.id) : ctx.cipher();
+    const cipher = shares ? await shares.cipherFor(String(row.id)) : ctx.cipher();
     const [job, destination] = await Promise.all([
         readJsonWith<StoredJob>(cipher, row.content),
         readJsonWith<StoredDestination>(cipher, row.destination_content)

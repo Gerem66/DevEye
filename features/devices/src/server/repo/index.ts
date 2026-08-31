@@ -13,8 +13,8 @@ export type { PresenceRepo } from './presence';
 export type { ProcessSampleRepo, SnapshotStorage } from './processSamples';
 
 /**
- * Le dépôt du module, sur les tables du socle. Les six tables allowlistées
- * (`devices`, `device_workspaces`, `device_link_codes`, `device_metrics`,
+ * Le dépôt du module, sur les tables du socle. Les cinq tables allowlistées
+ * (`devices`, `device_link_codes`, `device_metrics`,
  * `device_process_samples`, `device_presence`) sont aussi écrites hors session
  * par l'infrastructure de l'app (`src/agent/**`), qui garde ses propres
  * requêtes. Une colonne, une contrainte, un index se changent par une migration

@@ -68,7 +68,7 @@ export function isForeign(ctx: Ctx, row: ProjectRow): boolean {
  */
 export async function projectCipher(ctx: Ctx, row: ProjectRow, scope?: SdkShareScope): Promise<SdkCipher> {
     if (!isForeign(ctx, row)) return cipherFor(ctx, row.security_tier);
-    return (scope ?? (await ctx.sharing.scope())).cipherFor(row.id);
+    return (scope ?? (await ctx.sharing.scope())).cipherFor(String(row.id));
 }
 
 /**
@@ -196,7 +196,7 @@ function withStats(
 export async function loadProject(ctx: Ctx, projectId: number, level: ItemLevel = 'read'): Promise<ProjectRow> {
     const row = await ctx.repo.projects.findVisible(projectId, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Projet introuvable');
-    await ctx.items.assert(projectId, level);
+    await ctx.items.assert(String(projectId), level);
     return row;
 }
 

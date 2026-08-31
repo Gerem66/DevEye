@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { APP_VERSION, Button, Dialog, ensureFreshAccess, httpGet } from 'deveye-sdk-client';
+import { APP_VERSION, Button, Dialog, ensureFreshAccess, httpGet, useActiveWorkspace } from 'deveye-sdk-client';
 import {
     AGENT_TARGETS,
     agentTargetsResponseSchema,
@@ -32,6 +32,9 @@ function formatSize(bytes: number | null): string {
  * does not carry.
  */
 export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () => void }) {
+    // Les deux routes exigent le droit d'appairer dans l'espace visé : elles
+    // n'ont pas de session de socket pour le déduire.
+    const workspaceId = useActiveWorkspace()?.id;
     const [os, setOs] = useState<AgentOs | null>(null);
     const [statuses, setStatuses] = useState<AgentTargetStatus[]>([]);
     const [agentVersion, setAgentVersion] = useState<string | null>(null);
@@ -46,14 +49,14 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
         setOs(null);
         setError(null);
         setLoading(true);
-        httpGet('/api/agent/targets', agentTargetsResponseSchema)
+        httpGet(`/api/agent/targets?workspace=${workspaceId ?? ''}`, agentTargetsResponseSchema)
             .then((res) => {
                 setStatuses(res.targets);
                 setAgentVersion(res.agentVersion);
             })
             .catch(() => setError('Impossible de récupérer les versions disponibles.'))
             .finally(() => setLoading(false));
-    }, [open]);
+    }, [open, workspaceId]);
 
     // id -> availability, merged onto the static AGENT_TARGETS metadata.
     const statusById = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses]);
@@ -69,7 +72,9 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
         setDownloading(id);
         try {
             await ensureFreshAccess();
-            const res = await fetch(`/api/agent/download/${id}`, { credentials: 'include' });
+            const res = await fetch(`/api/agent/download/${id}?workspace=${workspaceId ?? ''}`, {
+                credentials: 'include'
+            });
             if (!res.ok) {
                 setError(
                     res.status === 404

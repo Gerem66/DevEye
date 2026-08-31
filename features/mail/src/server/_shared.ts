@@ -47,7 +47,7 @@ export function isForeign(ctx: Ctx, account: MailAccountRow): boolean {
  */
 export async function accountCipher(ctx: Ctx, account: MailAccountRow): Promise<SdkCipher> {
     if (!isForeign(ctx, account)) return cipherFor(ctx, account.security_tier);
-    return (await ctx.sharing.scope()).cipherFor(account.id);
+    return (await ctx.sharing.scope()).cipherFor(String(account.id));
 }
 
 /**
@@ -414,7 +414,7 @@ export type ItemLevel = 'read' | 'write';
 export async function loadAccount(ctx: Ctx, id: number, level: ItemLevel = 'read'): Promise<MailAccountRow> {
     const row = await ctx.repo.accounts.findVisible(id, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Compte mail introuvable');
-    await ctx.items.assert(id, level);
+    await ctx.items.assert(String(id), level);
     return row;
 }
 
@@ -510,7 +510,7 @@ export async function rekeyTier(
     // Une boîte gardée ne se lit que chez son auteur : ses projections n'ont
     // plus d'objet, et sans ce ménage une ligne `item_shares` dormante
     // remontrerait la boîte le jour où elle rouvre.
-    if (nextTier === 'guarded') await ctx.items.forget(previous.id);
+    if (nextTier === 'guarded') await ctx.items.forget(String(previous.id));
     ctx.logger.info(
         { accountId: previous.id, from: previous.security_tier, to: nextTier },
         'Mail account tier changed'

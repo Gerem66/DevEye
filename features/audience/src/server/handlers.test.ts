@@ -322,12 +322,13 @@ describe('le partage inter-espaces', () => {
         const asked: number[] = [];
         const scope = ctx.sharing.scope;
         ctx.sharing = {
+            ...ctx.sharing,
             scope: async () => {
                 const real = await scope();
                 return {
                     ...real,
                     cipherFor: (itemId) => {
-                        asked.push(itemId);
+                        asked.push(Number(itemId));
                         return real.cipherFor(itemId);
                     }
                 };
@@ -449,7 +450,7 @@ describe('audience.siteRotateKey, audience.siteRemove et audience.reorder', () =
         const ingest = mountIngest();
         assert.deepEqual(await handlerFor(audienceSiteRemove)(ctx, { siteId: 1 }), { ok: true });
         assert.deepEqual(repo.sites, []);
-        assert.deepEqual(ctx.forgotten, [1]);
+        assert.deepEqual(ctx.forgotten, ['1']);
         assert.equal(ingest.invalidated, 1);
         assert.equal(ctx.recorded.audits[0].action, 'audience.siteRemove');
 

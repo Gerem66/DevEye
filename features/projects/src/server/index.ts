@@ -40,11 +40,11 @@ export const serverEntry: FeatureServer<ProjectsRepo> = {
     },
     items: {
         homeOf: async (repo, itemId, workspaceId) =>
-            (await repo.projects.findVisible(itemId, workspaceId))?.workspace_id ?? null,
+            (await repo.projects.findVisible(Number(itemId), workspaceId))?.workspace_id ?? null,
         // Le titre vit dans le blob chiffré : un projet gardé, que le codec ouvert
         // ne sait pas lire, un blob illisible ou un projet disparu valent `null`.
         labelOf: async (repo, cipher, itemId, workspaceId) => {
-            const row = await repo.projects.findById(itemId, workspaceId);
+            const row = await repo.projects.findById(Number(itemId), workspaceId);
             if (!row || row.security_tier !== 'open') return null;
             const payload = await tryDecryptProject(cipher, row.content);
             if (!payload) return null;
@@ -54,6 +54,6 @@ export const serverEntry: FeatureServer<ProjectsRepo> = {
         // depuis un autre espace : projeter un projet gardé ouvrirait une fenêtre
         // sur rien, et `share.set` refuse en le disant.
         shareable: async (repo, itemId, workspaceId) =>
-            (await repo.projects.findById(itemId, workspaceId))?.security_tier === 'open'
+            (await repo.projects.findById(Number(itemId), workspaceId))?.security_tier === 'open'
     }
 };

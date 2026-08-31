@@ -170,14 +170,11 @@ catalogue dont la migration de reprise dit la même chose.
 
 ### L'admin global
 
-Il ne bypass que la flotte d'appareils et les pages système (Logs, Utilisateurs).
-La flotte, ce sont les commandes du module Appareils déclarées
-`access: { admin: true }` (approuver, révoquer, renommer, partager, supprimer,
-émettre un code de liaison), que le dispatcheur exige en plus du droit
-`devices` de l'espace, et la règle de la garde `authorizeDevice` : l'admin
-atteint un appareil de n'importe quel espace, et son espace **personnel** voit
-toute la flotte sans partage. Ranger et régler la collecte relèvent de
-`devices: write`, pas de l'admin.
+Il ne bypass que les pages système (Logs, Utilisateurs). Les appareils n'en
+relèvent plus : un appareil habite l'espace où il a été appairé, tout ce qui le
+concerne tient au droit `devices` de cet espace, et `authorizeDevice` ne connaît
+aucune dérogation. Un administrateur ne voit d'un espace où il n'entre pas ni
+ses appareils ni le reste.
 Il n'accède **pas** aux mots de passe ni aux notes d'autrui — ce serait
 contredire `SECURITY_MODEL.md`, et c'est de toute façon
 mécaniquement impossible sur un espace personnel chiffré par mot de passe.

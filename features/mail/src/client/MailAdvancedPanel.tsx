@@ -29,7 +29,7 @@ import type { MailAccount, MailFolder } from '../contracts/domain';
  * déverrouillage rien que pour afficher l'onglet.
  */
 export default function MailAdvancedPanel({ scope, canWrite }: SettingsPanelProps) {
-    const accountId = scope.kind === 'item' ? scope.itemId : null;
+    const accountId = scope.kind === 'item' ? Number(scope.itemId) : null;
     const version = useResourceVersion('mail.accountList');
     const [account, setAccount] = useState<MailAccount | null>(null);
     const [folders, setFolders] = useState<MailFolder[]>([]);

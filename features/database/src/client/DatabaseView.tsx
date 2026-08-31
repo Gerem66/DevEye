@@ -97,7 +97,7 @@ export function DatabaseView({
                             scope={{
                                 kind: 'item',
                                 feature: 'database',
-                                itemId: database.id,
+                                itemId: String(database.id),
                                 itemLabel: database.name
                             }}
                             initialSection='alerts'

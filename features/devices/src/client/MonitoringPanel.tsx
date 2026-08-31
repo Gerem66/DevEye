@@ -6,8 +6,8 @@ import {
     FeatureSettingsButton,
     onServerEvent,
     openInfo,
-    useActiveWorkspace,
-    useCurrentUser
+    useCurrentUser,
+    useWorkspacePermissions
 } from 'deveye-sdk-client';
 import {
     DEVICE_PRESENCE_EVENT,
@@ -36,13 +36,15 @@ import { PackagesPanel } from './PackagesPanel';
 import { PowerMenu } from './PowerMenu';
 import { LogsPanel } from './LogsPanel';
 import { useAgentUpdate } from './useAgentUpdate';
+import { DeviceDialogs } from './manage/DeviceDialogs';
+import { deviceLifecycleActions } from './manage/lifecycleActions';
+import { useDeviceActions } from './manage/useDeviceActions';
 
 // xterm.js and the file explorer are heavy and rarely opened: loaded on demand.
 const TerminalPanel = lazy(() => import('./TerminalPanel').then((m) => ({ default: m.TerminalPanel })));
 const FilesPanel = lazy(() => import('./FilesPanel').then((m) => ({ default: m.FilesPanel })));
 import { agentUpdatable } from './agentVersion';
 import { agent, api } from './api';
-import { openFleet } from './navigation';
 import { useDevices } from './store';
 import {
     ACTIVITY_META,
@@ -229,8 +231,10 @@ export interface MonitoringPanelProps {
  */
 export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const user = useCurrentUser();
-    const workspace = useActiveWorkspace();
-    const { devices: baseDevices, loading } = useDevices();
+    const { devices: baseDevices, loading, refresh } = useDevices();
+    const canWrite = useWorkspacePermissions().canFeature('devices', 'write');
+    // Les gestes de cycle de vie et leurs dialogues, montés avec la fiche.
+    const actions = useDeviceActions(refresh);
     const [override, setOverride] = useState<{ online?: boolean; report?: DeviceReport | null }>({});
     const [packagesOpen, setPackagesOpen] = useState(false);
     const [powerOpen, setPowerOpen] = useState(false);
@@ -983,11 +987,9 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                   { icon: 'icon-power', label: 'Commandes système', onClick: () => setPowerOpen(true) }
               ]
             : []),
-        // Jump to the fleet segment, offered where it exists: the administrator
-        // in their personal workspace.
-        ...(user?.role === 'admin' && workspace?.kind === 'personal'
-            ? [{ icon: 'icon-server', label: 'Gérer les appareils', onClick: openFleet }]
-            : [])
+        // Le cycle de vie de l'appareil ferme la liste : approuver, renommer,
+        // révoquer, supprimer, sous le droit d'écriture de l'espace.
+        ...deviceLifecycleActions(selected, actions, canWrite)
     ];
 
     return (
@@ -1525,6 +1527,9 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                         : `Le snapshot du ${deleteTarget ? new Date(deleteTarget.from).toLocaleString('fr-FR') : ''} et sa liste de processus seront supprimés. Les graphiques de métriques ne sont pas affectés.`}
                 </p>
             </Dialog>
+
+            <DeviceDialogs actions={actions} device={selected} />
+            {actions.actionError && <p className={styles.waitingMsg}>{actions.actionError}</p>}
         </div>
     );
 }

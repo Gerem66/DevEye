@@ -62,7 +62,7 @@ function LinkedSite({ siteId, canWrite, onUnlink }: LinkedSiteProps) {
                             y a droit. Le bouton se supprime seul quand aucune section
                             n'est lisible. */}
                         <FeatureSettingsButton
-                            scope={{ kind: 'item', feature: 'audience', itemId: site.id, itemLabel: site.name }}
+                            scope={{ kind: 'item', feature: 'audience', itemId: String(site.id), itemLabel: site.name }}
                         />
                         {/* La feature sait mener aux projets d'un site ; l'onglet d'un
                             projet doit savoir mener au site. Par la téléportation, garde

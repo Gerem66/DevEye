@@ -5,19 +5,16 @@ import type { Device } from '@deveye/types';
 import { api } from './api';
 
 /**
- * Listes d'appareils partagées, vivantes tant qu'un consommateur est monté. Pas
- * de sondage : la liste se relit quand le sujet `devices` bouge (une commande
- * de flotte, un agent qui se connecte ou se déconnecte). Deux portées, deux
- * listes indépendantes : l'espace actif (accueil, topbar, Monitoring) et la
- * flotte entière (administrateurs), qui ne décrivent pas le même ensemble.
+ * La liste des appareils de l'espace actif, partagée et vivante tant qu'un
+ * consommateur est monté. Pas de sondage : elle se relit quand le sujet
+ * `devices` bouge (une écriture de flotte, un agent qui se connecte ou se
+ * déconnecte).
  */
 interface DevicesState {
     devices: Device[];
     loading: boolean;
     error: string | null;
 }
-
-type Scope = 'workspace' | 'fleet';
 
 interface DeviceListStore {
     refresh: () => Promise<void>;
@@ -27,7 +24,7 @@ interface DeviceListStore {
     onChange: (cb: () => void) => () => void;
 }
 
-function createDeviceList(scope: Scope): DeviceListStore {
+function createDeviceList(): DeviceListStore {
     let state: DevicesState = { devices: [], loading: true, error: null };
     const listeners = new Set<() => void>();
     let offInvalidate: (() => void) | null = null;
@@ -44,7 +41,7 @@ function createDeviceList(scope: Scope): DeviceListStore {
         // clignoter un faux « Connexion indisponible ». La réouverture relance.
         if (!isSocketOpen()) return;
         try {
-            const res = await api.send('devices.list', scope === 'fleet' ? { scope } : {});
+            const res = await api.send('devices.list', {});
             emit({ devices: res.devices, loading: false, error: null });
         } catch {
             emit({ loading: false, error: 'Connexion indisponible' });
@@ -94,26 +91,20 @@ function createDeviceList(scope: Scope): DeviceListStore {
     };
 }
 
-/** Les appareils de l'espace actif : accueil, topbar, Monitoring. */
-const workspaceList = createDeviceList('workspace');
-
-/** Toute la flotte : segment « Flotte », administrateurs uniquement. */
-const fleetList = createDeviceList('fleet');
+/** Les appareils de l'espace actif : accueil, topbar, vue Appareils. */
+const workspaceList = createDeviceList();
 
 export const refreshDevices = workspaceList.refresh;
 export const useDevices = workspaceList.use;
 export const currentDevices = workspaceList.current;
 export const onDevicesChange = workspaceList.onChange;
 
-export const useFleetDevices = fleetList.use;
-
 /**
- * Vide les deux listes et repasse en chargement, à la déconnexion et à chaque
- * bascule d'espace. Sans ça, le nouvel espace démarre avec les appareils du
- * précédent et `loading: false` : l'accueil élague ses tuiles contre une liste
- * étrangère et les supprime définitivement.
+ * Vide la liste et repasse en chargement, à la déconnexion et à chaque bascule
+ * d'espace. Sans ça, le nouvel espace démarre avec les appareils du précédent
+ * et `loading: false` : l'accueil élague ses tuiles contre une liste étrangère
+ * et les supprime définitivement.
  */
 export function resetDevices(): void {
     workspaceList.reset();
-    fleetList.reset();
 }

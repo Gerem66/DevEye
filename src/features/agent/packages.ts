@@ -1,6 +1,6 @@
 import { agentListPackages, agentUpgradePackages } from '@deveye/types';
 
-import { authorizeOnlineDevice } from '@/agent/authorize';
+import { authorizeReachableDevice } from '@/agent/authorize';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 
 /**
@@ -15,7 +15,7 @@ export const agentListPackagesFeature: FeatureDefinition<
     ...agentListPackages,
     access: { admin: true },
     handler: async (ctx, input) => {
-        const row = await authorizeOnlineDevice(ctx, input.deviceId);
+        const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestPkgList(row.id) ?? false;
         if (!ok) throw new FeatureError('conflict', 'Agent hors ligne');
         return { ok: true };
@@ -34,7 +34,7 @@ export const agentUpgradePackagesFeature: FeatureDefinition<
     ...agentUpgradePackages,
     access: { admin: true },
     handler: async (ctx, input) => {
-        const row = await authorizeOnlineDevice(ctx, input.deviceId);
+        const row = await authorizeReachableDevice(ctx, input.deviceId);
         const monitor = ctx.monitor;
         if (!monitor) throw new FeatureError('conflict', 'Agent hors ligne');
         // Le verrou d'abord : la seule barrière qui tienne quel que soit l'écran

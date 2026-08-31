@@ -10,12 +10,12 @@ import { TerminalSettings } from './TerminalSettings';
  */
 
 /** Les préférences du terminal, à l'échelle de la fonctionnalité. */
-export function DevicesTerminalPanel({ canWrite }: SettingsPanelProps<string>) {
+export function DevicesTerminalPanel({ canWrite }: SettingsPanelProps) {
     return <TerminalSettings canWrite={canWrite} />;
 }
 
 /** Ce que l'agent d'un appareil relève, et à quelle cadence. */
-export function DevicesCollectPanel({ scope, canWrite }: SettingsPanelProps<string>) {
+export function DevicesCollectPanel({ scope, canWrite }: SettingsPanelProps) {
     if (scope.kind !== 'item') return null;
     return <ConfigPanel deviceId={scope.itemId} canWrite={canWrite} />;
 }

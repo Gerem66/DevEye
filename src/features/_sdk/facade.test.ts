@@ -303,7 +303,8 @@ describe('createFacade : devices', () => {
         report_json: null
     });
     const rows = [row('dev-1', 'Portable'), row('dev-2', 'Serveur')];
-    const fleet = [...rows, row('dev-3', 'Ailleurs')];
+    /** `dev-3` habite un autre espace et n'y est pas projeté : invisible d'ici. */
+    const elsewhere = row('dev-3', 'Ailleurs');
     /** Ce que la façade révèle d'une ligne : l'identité, la présence, l'état, le rapport. */
     const revealed = (id: string, name: string, online: boolean) => ({
         id,
@@ -315,83 +316,56 @@ describe('createFacade : devices', () => {
         metricIntervalSeconds: null,
         report: null
     });
-    function devicesDb(membership: Record<string, boolean>) {
-        const hasWorkspaceCalls: [string, number][] = [];
-        const listAllCalls: number[] = [];
+    function devicesDb() {
+        const findVisibleCalls: [string, number][] = [];
         const db = {
             devices: {
-                findById: async (id: string) => fleet.find((r) => r.id === id) ?? null,
-                hasWorkspace: async (id: string, ws: number) => {
-                    hasWorkspaceCalls.push([id, ws]);
-                    return membership[id] ?? false;
+                findVisible: async (id: string, ws: number) => {
+                    findVisibleCalls.push([id, ws]);
+                    return rows.find((r) => r.id === id) ?? null;
                 },
-                listByWorkspace: async () => rows,
-                listAll: async () => {
-                    listAllCalls.push(1);
-                    return fleet;
-                }
+                listByWorkspace: async () => rows
             }
         };
-        return { db, hasWorkspaceCalls, listAllCalls };
+        return { db, findVisibleCalls };
     }
 
-    it('authorize : not_found quand la ligne manque', async () => {
-        const { db } = devicesDb({});
-        await assert.rejects(facadeWith(['devices.read'], db).devices.authorize('dev-9'), {
+    it("authorize : not_found quand l'appareil n'est pas visible d'ici", async () => {
+        const { db, findVisibleCalls } = devicesDb();
+        await assert.rejects(facadeWith(['devices.read'], db).devices.authorize(elsewhere.id), {
+            name: 'FeatureError',
+            code: 'not_found'
+        });
+        assert.deepEqual(findVisibleCalls, [[elsewhere.id, WS]]);
+    });
+
+    it("authorize : l'administrateur global n'y échappe pas", async () => {
+        const { db } = devicesDb();
+        await assert.rejects(facadeWith(['devices.read'], db, true).devices.authorize(elsewhere.id), {
             name: 'FeatureError',
             code: 'not_found'
         });
     });
 
-    it("authorize : forbidden quand l'appareil ne relève pas de cet espace", async () => {
-        const { db, hasWorkspaceCalls } = devicesDb({ 'dev-1': false });
-        await assert.rejects(facadeWith(['devices.read'], db).devices.authorize('dev-1'), forbidden);
-        assert.deepEqual(hasWorkspaceCalls, [['dev-1', WS]]);
-    });
-
-    it("authorize : l'admin global passe outre l'appartenance, sans même la consulter", async () => {
-        const { db, hasWorkspaceCalls } = devicesDb({ 'dev-1': false });
-        const device = await facadeWith(['devices.read'], db, true).devices.authorize('dev-1');
-        assert.deepEqual(device, revealed('dev-1', 'Portable', true));
-        assert.deepEqual(hasWorkspaceCalls, []);
-    });
-
     it("authorize : l'appareil de l'espace, avec sa présence", async () => {
-        const { db } = devicesDb({ 'dev-2': true });
+        const { db } = devicesDb();
         const device = await facadeWith(['devices.read'], db).devices.authorize('dev-2');
         assert.deepEqual(device, revealed('dev-2', 'Serveur', false));
     });
 
     it("list : les appareils de l'espace, avec leur présence", async () => {
-        const { db } = devicesDb({});
+        const { db } = devicesDb();
         assert.deepEqual(await facadeWith(['devices.read'], db).devices.list(), [
             revealed('dev-1', 'Portable', true),
             revealed('dev-2', 'Serveur', false)
         ]);
     });
 
-    it("list : l'admin global dans son espace personnel voit la flotte, ailleurs son espace", async () => {
-        // La règle de `device.list`, reprise telle quelle.
-        const { db, listAllCalls } = devicesDb({});
+    it("list : l'administrateur global voit le même espace que les autres", async () => {
+        const { db } = devicesDb();
         const listed = await facadeWith(['devices.read'], db, true).devices.list();
         assert.deepEqual(
             listed.map((d) => d.id),
-            ['dev-1', 'dev-2', 'dev-3']
-        );
-        assert.deepEqual(listAllCalls, [1]);
-        const shared = await createFacade({
-            db: db as unknown as Database,
-            cipher,
-            workspaceId: WS,
-            ownerUserId: OWNER,
-            isAdmin: true,
-            workspaceKind: 'shared',
-            manifest: manifest(['devices.read']),
-            logger,
-            providers: { get: () => undefined }
-        }).devices.list();
-        assert.deepEqual(
-            shared.map((d) => d.id),
             ['dev-1', 'dev-2']
         );
     });

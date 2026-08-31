@@ -67,7 +67,7 @@ export const notesHandlers = [
             // Une note masquée pour ce rôle disparaît plutôt que de figurer
             // grisée : la voir apprend déjà qu'elle existe.
             const rows = visible.filter(
-                (r) => hidden.get(r.id) !== 'none' && (r.archived_at !== null) === wantArchived
+                (r) => hidden.get(String(r.id)) !== 'none' && (r.archived_at !== null) === wantArchived
             );
             // The archive reads as a history: most recently archived first.
             if (wantArchived) rows.sort((a, b) => (b.archived_at ?? 0) - (a.archived_at ?? 0));
@@ -108,7 +108,9 @@ export const notesHandlers = [
                 ctx.repo.listVisible(ctx.workspaceId),
                 ctx.items.restrictions()
             ]);
-            return { count: visible.filter((r) => r.archived_at === null && hidden.get(r.id) !== 'none').length };
+            return {
+                count: visible.filter((r) => r.archived_at === null && hidden.get(String(r.id)) !== 'none').length
+            };
         }
     }),
     defineSdkFeature({
@@ -180,7 +182,7 @@ export const notesHandlers = [
             // tiers. Une note ordinaire est réécrite sous la clé ouverte de son
             // domicile : la chiffrer avec celle d'ici la rendrait illisible chez elle.
             const scope = await ctx.sharing.scope();
-            const cipher = input.note.private ? ctx.cipher('private') : await scope.cipherFor(input.noteId);
+            const cipher = input.note.private ? ctx.cipher('private') : await scope.cipherFor(String(input.noteId));
             const content = await encryptPayload(cipher, toPayload(input.note));
             const updated = await ctx.repo.updateNote(input.noteId, existing.workspace_id, {
                 folderId,
@@ -191,7 +193,7 @@ export const notesHandlers = [
             // Devenue privée, plus aucun autre espace ne peut la lire : ses
             // projections partent, et ses restrictions avec (une note privée
             // n'existe que dans un espace personnel, sans restriction de rôle).
-            if (becomesPrivate) await ctx.items.forget(input.noteId);
+            if (becomesPrivate) await ctx.items.forget(String(input.noteId));
             ctx.audit({
                 action: 'note.edit',
                 description: 'Note modifiée',
@@ -210,7 +212,7 @@ export const notesHandlers = [
             // qu'abandon silencieux : le client ne la propose pas au glisser,
             // un appel qui l'inclut est une erreur à voir.
             const scope = await ctx.sharing.scope();
-            if (input.noteIds.some((id) => scope.foreignIds.has(id))) {
+            if (input.noteIds.some((id) => scope.foreignIds.has(String(id)))) {
                 throw new FeatureError(
                     'validation',
                     'Une note partagée depuis un autre espace se classe chez elle, pas ici.'
@@ -221,7 +223,7 @@ export const notesHandlers = [
             const hidden = await ctx.items.restrictions();
             const eligible = new Set(
                 (await ctx.repo.listNotes(ctx.workspaceId))
-                    .filter((r) => r.archived_at === null && !hidden.has(r.id))
+                    .filter((r) => r.archived_at === null && !hidden.has(String(r.id)))
                     .map((r) => r.id)
             );
             const noteIds = input.noteIds.filter((id) => eligible.has(id));
@@ -286,7 +288,7 @@ export const notesHandlers = [
             // Projections et restrictions ne sont rattachées par aucune clé
             // étrangère : sans ce ménage, une ligne orpheline s'appliquerait à
             // la prochaine note à hériter de l'identifiant.
-            await ctx.items.forget(input.noteId);
+            await ctx.items.forget(String(input.noteId));
             ctx.audit({
                 action: 'note.delete',
                 level: 'warning',

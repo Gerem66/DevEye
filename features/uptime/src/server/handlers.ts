@@ -37,7 +37,7 @@ const DAY = 86400;
 async function loadService(ctx: Ctx, id: number, level: 'read' | 'write' = 'read'): Promise<UptimeServiceRow> {
     const row = await ctx.repo.services.findVisible(id, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Uptime service not found');
-    await ctx.items.assert(id, level);
+    await ctx.items.assert(String(id), level);
     return row;
 }
 
@@ -97,7 +97,7 @@ async function toServices(ctx: Ctx, rows: UptimeServiceRow[]): Promise<UptimeSer
     return Promise.all(
         rows.map(async (row) =>
             toService(
-                await shares.cipherFor(row.id),
+                await shares.cipherFor(String(row.id)),
                 row,
                 stats.get(row.id) ?? EMPTY_STATS,
                 downSince.get(row.id) ?? null,
@@ -143,7 +143,7 @@ export const uptimeHandlers = [
             // la liste plutôt que d'y figurer grisés : une ligne qu'on voit sans
             // pouvoir l'ouvrir apprend déjà qu'elle existe.
             const hidden = await ctx.items.restrictions();
-            const visible = rows.filter((r) => hidden.get(r.id) !== 'none');
+            const visible = rows.filter((r) => hidden.get(String(r.id)) !== 'none');
             return { services: await toServices(ctx, visible) };
         }
     }),
@@ -155,7 +155,7 @@ export const uptimeHandlers = [
             // lit comme un bug, dans un sens comme dans l'autre.
             const rows = await ctx.repo.services.listVisible(ctx.workspaceId);
             const hidden = await ctx.items.restrictions();
-            const visible = rows.filter((r) => hidden.get(r.id) !== 'none' && r.enabled === 1);
+            const visible = rows.filter((r) => hidden.get(String(r.id)) !== 'none' && r.enabled === 1);
             return {
                 total: visible.length,
                 up: visible.filter((r) => r.status === 'up').length,
@@ -209,7 +209,7 @@ export const uptimeHandlers = [
             // monde y compris l'ordonnanceur qui le sonde.
             const shares = await ctx.sharing.scope();
             const row = await ctx.repo.services.update(input.id, existing.workspace_id, {
-                content: await encryptService(await shares.cipherFor(input.id), {
+                content: await encryptService(await shares.cipherFor(String(input.id)), {
                     name: draft.name,
                     url: draft.url,
                     keyword: draft.keyword
@@ -271,7 +271,7 @@ export const uptimeHandlers = [
             // Projections, restrictions et route de notification ne sont
             // rattachées par aucune clé étrangère : sans ce ménage, une ligne
             // orpheline s'appliquerait au prochain service à hériter de l'id.
-            await ctx.items.forget(input.id);
+            await ctx.items.forget(String(input.id));
             ctx.audit({
                 action: 'uptime.remove',
                 description: 'Service surveillé supprimé',

@@ -60,7 +60,7 @@ async function listVisibleAccounts(ctx: Ctx): Promise<MailAccountRow[]> {
         ctx.repo.accounts.listVisible(ctx.workspaceId),
         ctx.items.restrictions()
     ]);
-    return rows.filter((row) => hidden.get(row.id) !== 'none');
+    return rows.filter((row) => hidden.get(String(row.id)) !== 'none');
 }
 
 export const mailAccountListFeature = defineSdkFeature<
@@ -274,7 +274,7 @@ export const mailAccountDeleteFeature = defineSdkFeature<
         // Le ménage d'un élément supprimé (restrictions par rôle, projections,
         // route de notification), qu'aucune clé étrangère ne rattache à la table
         // des comptes.
-        await ctx.items.forget(input.id);
+        await ctx.items.forget(String(input.id));
         ctx.audit({
             action: 'mail.accountDelete',
             level: 'warning',

@@ -54,7 +54,7 @@ function tuningOf(site: AudienceSite): Tuning {
  * ligne se réécrit sous la clé de son espace, et le serveur refuserait.
  */
 export default function SiteGeneralPanel({ scope, canWrite }: SettingsPanelProps) {
-    const itemId = scope.kind === 'item' ? scope.itemId : null;
+    const itemId = scope.kind === 'item' ? Number(scope.itemId) : null;
     const [site, setSite] = useState<AudienceSite | null>(null);
     const [draft, setDraft] = useState<Tuning | null>(null);
     const [busy, setBusy] = useState(false);

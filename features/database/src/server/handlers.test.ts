@@ -287,12 +287,13 @@ describe('le partage inter-espaces', () => {
         const asked: number[] = [];
         const scope = ctx.sharing.scope;
         ctx.sharing = {
+            ...ctx.sharing,
             scope: async () => {
                 const real = await scope();
                 return {
                     ...real,
                     cipherFor: (itemId) => {
-                        asked.push(itemId);
+                        asked.push(Number(itemId));
                         return real.cipherFor(itemId);
                     }
                 };
@@ -468,7 +469,7 @@ describe('database.remove et database.reorder', () => {
         const ctx = createTestContext({ repo });
         assert.deepEqual(await handlerFor(databaseRemove)(ctx, { databaseId: 1 }), { databaseId: 1 });
         assert.deepEqual(repo.rows, []);
-        assert.deepEqual(ctx.forgotten, [1]);
+        assert.deepEqual(ctx.forgotten, ['1']);
         assert.equal(ctx.recorded.audits[0].action, 'database.remove');
 
         await assert.rejects(handlerFor(databaseRemove)(ctx, { databaseId: 1 }), failsWith('not_found'));

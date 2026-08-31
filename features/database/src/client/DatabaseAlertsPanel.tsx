@@ -14,7 +14,7 @@ import styles from './style.module.css';
  * (`settingsStyles`). Autonome : `database.get` rend la base et ses alertes.
  */
 export default function DatabaseAlertsPanel({ scope, canWrite }: SettingsPanelProps) {
-    const itemId = scope.kind === 'item' ? scope.itemId : null;
+    const itemId = scope.kind === 'item' ? Number(scope.itemId) : null;
     const { data, error: loadError } = useResource(
         'database.detail',
         () => api.send('database.get', { databaseId: itemId ?? 0 }),

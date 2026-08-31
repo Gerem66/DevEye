@@ -19,7 +19,7 @@ import { api } from './api';
  * l'ordonnanceur tourne sans session (voir Docs/SECURITY_MODEL.md).
  */
 export default function JobEncryptionPanel({ scope, canWrite }: SettingsPanelProps) {
-    const jobId = scope.kind === 'item' ? scope.itemId : null;
+    const jobId = scope.kind === 'item' ? Number(scope.itemId) : null;
     const { data: job, error: loadError } = useResource(
         'backup.detail',
         () => api.send('backup.jobGet', { jobId: jobId ?? 0, limit: 1 }).then((res) => res.job),

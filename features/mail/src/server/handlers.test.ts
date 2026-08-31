@@ -614,7 +614,7 @@ describe('le partage inter-espaces', () => {
         const home = createTestContext({ repo, workspaceId: 42 });
         assert.deepEqual(await handlerFor(mailAccountDelete)(home, { id: 7 }), { id: 7 });
         assert.equal(repo.accountRows.length, 0);
-        assert.deepEqual(home.forgotten, [7]);
+        assert.deepEqual(home.forgotten, ['7']);
         assert.equal(home.recorded.audits.at(-1)?.action, 'mail.accountDelete');
     });
 
@@ -633,7 +633,7 @@ describe('le partage inter-espaces', () => {
         assert.equal(repo.accountRows[0].security_tier, 'guarded');
         // Projections et restrictions par élément partent avec le palier
         // (`ctx.items.forget`) : plus de ligne `item_shares` dormante.
-        assert.deepEqual(home.forgotten, [7]);
+        assert.deepEqual(home.forgotten, ['7']);
 
         // Le retour à l'étage ouvert ne touche à rien : il n'y a plus rien à
         // oublier, et un oubli de plus retirerait des restrictions posées depuis.
@@ -644,7 +644,7 @@ describe('le partage inter-espaces', () => {
             syncIntervalMinutes: 10
         });
         assert.equal(repo.accountRows[0].security_tier, 'open');
-        assert.deepEqual(home.forgotten, [7]);
+        assert.deepEqual(home.forgotten, ['7']);
     });
 
     it('`items` : le domicile d’un compte visible, son intitulé, et un compte gardé qui ne se projette pas', async () => {
@@ -658,19 +658,19 @@ describe('le partage inter-espaces', () => {
         assert.ok(items);
         const open = createTestContext({ repo }).cipher('server');
 
-        assert.equal(await items.homeOf(repo, 7, 42), 42);
-        assert.equal(await items.homeOf(repo, 7, 1), 42);
-        assert.equal(await items.homeOf(repo, 7, 9), null);
+        assert.equal(await items.homeOf(repo, '7', 42), 42);
+        assert.equal(await items.homeOf(repo, '7', 1), 42);
+        assert.equal(await items.homeOf(repo, '7', 9), null);
 
-        assert.equal(await items.labelOf(repo, open, 7, 42), 'Ailleurs');
+        assert.equal(await items.labelOf(repo, open, '7', 42), 'Ailleurs');
         // Sans nom, l'adresse ; disparu, rien.
-        assert.equal(await items.labelOf(repo, open, 9, 42), 'c9@exemple.fr');
-        assert.equal(await items.labelOf(repo, open, 99, 42), null);
+        assert.equal(await items.labelOf(repo, open, '9', 42), 'c9@exemple.fr');
+        assert.equal(await items.labelOf(repo, open, '99', 42), null);
 
         assert.ok(items.shareable);
-        assert.equal(await items.shareable(repo, 7, 42), true);
-        assert.equal(await items.shareable(repo, 8, 42), false);
-        assert.equal(await items.shareable(repo, 99, 42), false);
+        assert.equal(await items.shareable(repo, '7', 42), true);
+        assert.equal(await items.shareable(repo, '8', 42), false);
+        assert.equal(await items.shareable(repo, '99', 42), false);
     });
 });
 

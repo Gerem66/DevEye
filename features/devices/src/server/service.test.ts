@@ -30,7 +30,8 @@ function fakeRepo(pruned: string[]): DevicesRepo {
         devices: {
             findById: unused,
             findByIds: unused,
-            listAll: unused,
+            listVisible: unused,
+            findVisible: unused,
             setStatus: unused,
             rename: unused,
             setConfig: unused,
@@ -38,10 +39,7 @@ function fakeRepo(pruned: string[]): DevicesRepo {
             cancelDeletion: unused,
             archive: unused,
             delete: unused,
-            reorder: unused,
-            workspaceIdsOf: unused,
-            workspaceIdsFor: unused,
-            setWorkspaces: unused
+            reorder: unused
         },
         linkCodes: { create: unused, listActive: unused, setAutoApprove: unused, revoke: unused },
         metrics: {

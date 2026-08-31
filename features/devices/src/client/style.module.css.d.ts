@@ -254,6 +254,7 @@ declare const styles: {
     readonly segment: string;
     readonly selected: string;
     readonly selectionBox: string;
+    readonly sharedTag: string;
     readonly skelGraphBody: string;
     readonly skelHeroLabel: string;
     readonly skelLine: string;

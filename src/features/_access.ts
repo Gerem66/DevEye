@@ -55,6 +55,27 @@ export async function isAdminUser(db: Database, userId: number): Promise<boolean
     return user?.role === 'admin';
 }
 
+/**
+ * Un compte tient-il ce droit sur cette fonctionnalité, dans cet espace ? Les
+ * routes HTTP de la flotte, qui n'ont pas de dispatcheur, s'en servent : le
+ * propriétaire a tout, un membre ce que son rôle accorde, un non-membre rien.
+ */
+export async function holdsFeatureIn(
+    db: Database,
+    userId: number,
+    workspaceId: number,
+    feature: FeatureId,
+    level: FeatureAccess
+): Promise<boolean> {
+    const workspace = await db.workspaces.findById(workspaceId);
+    if (!workspace) return false;
+    const isOwner = workspace.owner_user_id === userId;
+    if (!isOwner && !(await db.workspaceMembers.isMember(userId, workspaceId))) return false;
+    const role = isOwner ? null : await db.workspaceRoles.findForMember(userId, workspaceId);
+    const granted = grantsFor(isOwner, role).features.get(feature);
+    return granted === 'write' || (level === 'read' && granted === 'read');
+}
+
 /** L'espace visé par une commande, tel que le voit un handler. */
 export interface WorkspaceContext {
     id: number;
@@ -93,7 +114,7 @@ export interface ResolvedScope {
      * l'appelant. Chargées paresseusement, par feature. Vide pour le
      * propriétaire, qui passe outre.
      */
-    itemRestrictions: (feature: FeatureId) => Promise<ReadonlyMap<number, ItemAccess>>;
+    itemRestrictions: (feature: FeatureId) => Promise<ReadonlyMap<string, ItemAccess>>;
     /** Coffre chiffré de cet espace, lié à cette session. */
     secure: SecureStore;
     secretKeys: SecretKeyService;
@@ -222,14 +243,14 @@ export function createAccessResolver(
         // Mémoïsées dans le scope, lui-même mémoïsé sous `accessEpoch` : une
         // restriction modifiée doit donc bumper l'époque (`share.grantSet`
         // appelle `invalidateAccess()`).
-        const restrictionCache = new Map<string, Promise<ReadonlyMap<number, ItemAccess>>>();
-        const itemRestrictions = (feature: FeatureId): Promise<ReadonlyMap<number, ItemAccess>> => {
+        const restrictionCache = new Map<string, Promise<ReadonlyMap<string, ItemAccess>>>();
+        const itemRestrictions = (feature: FeatureId): Promise<ReadonlyMap<string, ItemAccess>> => {
             if (isOwner || !role) return Promise.resolve(new Map());
             const hit = restrictionCache.get(feature);
             if (hit) return hit;
             const loaded = db.itemSharing
                 .grantsForRole(row.id, feature, role.id)
-                .then((rows) => new Map(rows.map((g) => [g.item_id, g.access])) as ReadonlyMap<number, ItemAccess>);
+                .then((rows) => new Map(rows.map((g) => [g.item_id, g.access])) as ReadonlyMap<string, ItemAccess>);
             restrictionCache.set(feature, loaded);
             return loaded;
         };

@@ -234,12 +234,13 @@ describe('le partage inter-espaces', () => {
         const asked: number[] = [];
         const scope = ctx.sharing.scope;
         ctx.sharing = {
+            ...ctx.sharing,
             scope: async () => {
                 const real = await scope();
                 return {
                     ...real,
                     cipherFor: (itemId) => {
-                        asked.push(itemId);
+                        asked.push(Number(itemId));
                         return real.cipherFor(itemId);
                     }
                 };
@@ -282,7 +283,7 @@ describe('le partage inter-espaces', () => {
         const home = createTestContext({ repo, workspaceId: 42 });
         assert.deepEqual(await handlerFor(uptimeRemove)(home, { id: 7 }), { id: 7 });
         assert.equal(repo.rows.length, 0);
-        assert.deepEqual(home.forgotten, [7]);
+        assert.deepEqual(home.forgotten, ['7']);
         assert.equal(home.recorded.audits[0].action, 'uptime.remove');
     });
 });

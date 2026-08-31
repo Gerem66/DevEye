@@ -33,7 +33,7 @@ import type { MailAccount, MailAccountDraft, MailAccountEdit, MailProxy } from '
  * proxy, par `mail.accountSetProfile`.
  */
 export default function MailAccountSettingsPanel({ scope, canWrite, close }: SettingsPanelProps) {
-    const accountId = scope.kind === 'item' ? scope.itemId : null;
+    const accountId = scope.kind === 'item' ? Number(scope.itemId) : null;
     const version = useResourceVersion('mail.accountList');
     const [account, setAccount] = useState<MailAccount | null>(null);
     const [draft, setDraft] = useState<MailAccountDraft | null>(null);

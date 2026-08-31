@@ -207,12 +207,13 @@ function spyCipherFor(ctx: TestContext<NotesRepo>): number[] {
     const asked: number[] = [];
     const scope = ctx.sharing.scope;
     ctx.sharing = {
+        ...ctx.sharing,
         scope: async () => {
             const real = await scope();
             return {
                 ...real,
                 cipherFor: (itemId) => {
-                    asked.push(itemId);
+                    asked.push(Number(itemId));
                     return real.cipherFor(itemId);
                 }
             };
@@ -678,7 +679,7 @@ describe('le partage inter-espaces', () => {
         // Chez elle : la ligne part, et avec elle projections et restrictions.
         assert.deepEqual(await handlerFor(notesDelete)(home, { noteId: 1 }), { noteId: 1 });
         assert.equal(repo.notes.length, 1);
-        assert.deepEqual(home.forgotten, [1]);
+        assert.deepEqual(home.forgotten, ['1']);
     });
 
     it('oublie les projections et les restrictions d’une note qui devient privée chez elle', async () => {
@@ -696,11 +697,11 @@ describe('le partage inter-espaces', () => {
         // La bascule : le ménage est demandé à l'app, une seule fois, et
         // seulement pour une note qui n'était pas privée.
         await handlerFor(notesEdit)(home, { noteId: 1, note: { ...DRAFT, private: true } });
-        assert.deepEqual(home.forgotten, [1]);
+        assert.deepEqual(home.forgotten, ['1']);
         assert.equal(repo.notes[0].is_private, 1);
         await handlerFor(notesEdit)(home, { noteId: 1, note: { ...DRAFT, title: 'Toujours privée', private: true } });
         await handlerFor(notesEdit)(home, { noteId: 1, note: { ...DRAFT, private: false } });
-        assert.deepEqual(home.forgotten, [1]);
+        assert.deepEqual(home.forgotten, ['1']);
 
         // Ce que l'app a fait de l'oubli : la projection n'existe plus, et la
         // fenêtre ne voit plus rien, ni en liste, ni au compte, ni par l'id.
@@ -722,19 +723,19 @@ describe("l'entrée items", () => {
         const items = serverEntry.items!;
 
         // Chez elle, par sa fenêtre, et depuis un espace qui ne la voit pas.
-        assert.equal(await items.homeOf(repo, 1, 1), 1);
-        assert.equal(await items.homeOf(repo, 1, 7), 1);
-        assert.equal(await items.homeOf(repo, 1, 9), null);
-        assert.equal(await items.homeOf(repo, 99, 1), null);
+        assert.equal(await items.homeOf(repo, '1', 1), 1);
+        assert.equal(await items.homeOf(repo, '1', 7), 1);
+        assert.equal(await items.homeOf(repo, '1', 9), null);
+        assert.equal(await items.homeOf(repo, '99', 1), null);
 
         const open = home.cipher();
-        assert.equal(await items.labelOf(repo, open, 1, 1), 'Courses');
-        assert.equal(await items.labelOf(repo, open, 2, 1), 'Sans titre');
-        assert.equal(await items.labelOf(repo, open, 3, 1), null);
-        assert.equal(await items.labelOf(repo, open, 99, 1), null);
+        assert.equal(await items.labelOf(repo, open, '1', 1), 'Courses');
+        assert.equal(await items.labelOf(repo, open, '2', 1), 'Sans titre');
+        assert.equal(await items.labelOf(repo, open, '3', 1), null);
+        assert.equal(await items.labelOf(repo, open, '99', 1), null);
 
-        assert.equal(await items.shareable!(repo, 1, 1), true);
-        assert.equal(await items.shareable!(repo, 3, 1), false);
-        assert.equal(await items.shareable!(repo, 99, 1), false);
+        assert.equal(await items.shareable!(repo, '1', 1), true);
+        assert.equal(await items.shareable!(repo, '3', 1), false);
+        assert.equal(await items.shareable!(repo, '99', 1), false);
     });
 });

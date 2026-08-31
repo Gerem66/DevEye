@@ -147,14 +147,11 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
                 gate('devices.read');
                 return toSdkDevice(await authorizeDevice(deps, deviceId));
             },
-            // Même règle que `devices.list` : l'administrateur dans son espace
-            // personnel voit la flotte entière ; partout ailleurs, le partage explicite.
+            // Une seule règle : les appareils de l'espace actif, les siens et
+            // ceux qui y sont projetés.
             async list() {
                 gate('devices.read');
-                const rows =
-                    deps.isAdmin && deps.workspaceKind === 'personal'
-                        ? await deps.db.devices.listAll()
-                        : await deps.db.devices.listByWorkspace(deps.workspaceId);
+                const rows = await deps.db.devices.listByWorkspace(deps.workspaceId);
                 return rows.map(toSdkDevice);
             },
             isOnline(deviceId) {
@@ -175,7 +172,7 @@ export function toSdkDevice(row: DeviceRow): SdkDevice {
         online: sdkHub().isOnline(row.id),
         status: row.status,
         ownerUserId: row.owner_id,
-        workspaceId: row.workspace_id ?? null,
+        workspaceId: row.workspace_id,
         metricIntervalSeconds: row.metric_interval_seconds === null ? null : Number(row.metric_interval_seconds),
         report: parseDeviceReport(row.report_json)
     };

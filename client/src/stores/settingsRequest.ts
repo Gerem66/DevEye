@@ -13,7 +13,7 @@ const SETTINGS_INTENT_TTL_MS = 15_000;
 interface SettingsIntent {
     workspaceId: number;
     feature: FeatureId;
-    itemId: number;
+    itemId: string;
     /** L'onglet demandé (`SettingsSectionId`) ; en `string` pour ne pas faire
      *  dépendre un store d'un composant. */
     section: string;
@@ -35,7 +35,7 @@ export function requestItemSettings(next: SettingsIntent): void {
  * Consomme l'intention si elle vise exactement cet élément dans cet espace.
  * Rend l'onglet demandé, ou `null`. Une intention consommée ne rejoue pas.
  */
-export function consumeItemSettings(workspaceId: number | null, feature: FeatureId, itemId: number): string | null {
+export function consumeItemSettings(workspaceId: number | null, feature: FeatureId, itemId: string): string | null {
     if (!intent || workspaceId === null) return null;
     if (intent.workspaceId !== workspaceId || intent.feature !== feature || intent.itemId !== itemId) return null;
     const section = intent.section;

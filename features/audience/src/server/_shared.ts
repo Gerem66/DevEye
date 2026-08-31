@@ -107,7 +107,7 @@ export async function loadSite(ctx: Ctx, siteId: number, level: 'read' | 'write'
     const row = await ctx.repo.findVisible(siteId, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Site introuvable');
     // Refuse en plus les sites qu'une restriction de rôle masque ou passe en lecture seule.
-    await ctx.items.assert(siteId, level);
+    await ctx.items.assert(String(siteId), level);
     return row;
 }
 
@@ -129,7 +129,7 @@ export async function loadHomeSite(ctx: Ctx, siteId: number): Promise<AudienceSi
 
 /** Le codec du domicile d'un site visible, celui d'ici pour un site local. */
 export async function siteCipher(ctx: Ctx, siteId: number): Promise<SdkCipher> {
-    return (await ctx.sharing.scope()).cipherFor(siteId);
+    return (await ctx.sharing.scope()).cipherFor(String(siteId));
 }
 
 export async function toSite(

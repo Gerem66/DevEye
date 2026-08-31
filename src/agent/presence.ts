@@ -54,12 +54,10 @@ export async function recordAgentOffline(db: Database, deviceId: string): Promis
 }
 
 /**
- * Avertit tous les espaces qui voient cet appareil (table de jonction, seule
- * autorité) : ne prévenir que l'espace d'appairage laisserait les autres sur
- * une présence figée.
+ * Avertit l'espace de l'appareil. Les espaces où il est projeté suivent : la
+ * diffusion traverse les projections d'elle-même (`LiveHub.setShareLinks`).
  */
 export async function notifyDeviceWorkspaces(db: Database, live: LiveHub, deviceId: string): Promise<void> {
-    for (const workspaceId of await db.devices.workspaceIdsOf(deviceId)) {
-        live.changed(workspaceId, ['devices'], null);
-    }
+    const row = await db.devices.findById(deviceId);
+    if (row) live.changed(row.workspace_id, ['devices'], null);
 }

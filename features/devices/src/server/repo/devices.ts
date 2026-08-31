@@ -10,16 +10,21 @@ export interface DeviceConfigPatch {
 }
 
 /**
- * La table `devices` et sa jonction `device_workspaces`, vues de la flotte.
- * L'enrôlement et ce que l'agent rapporte (`last_seen`, version, rapport)
- * restent au socle, qui les écrit sans session.
+ * La table `devices`, vue de la feature. L'enrôlement et ce que l'agent
+ * rapporte (`last_seen`, version, rapport) restent au socle, qui les écrit sans
+ * session.
  */
 export interface DeviceRepo {
     findById(id: string): Promise<DeviceRow | null>;
     /** Les lignes des identifiants donnés, dans l'ordre demandé ; un inconnu est absent. */
     findByIds(ids: string[]): Promise<DeviceRow[]>;
-    /** La flotte entière, du plus récent au plus ancien : la page Appareils. */
-    listAll(): Promise<DeviceRow[]>;
+    /**
+     * Les appareils que cet espace voit : les siens et ceux qui y sont projetés,
+     * rangés selon le rang propre à cet espace.
+     */
+    listVisible(workspaceId: number): Promise<DeviceRow[]>;
+    /** Un appareil visible depuis cet espace : chez lui, ou par projection. */
+    findVisible(id: string, workspaceId: number): Promise<DeviceRow | null>;
     setStatus(id: string, status: DeviceStatus): Promise<void>;
     rename(id: string, name: string): Promise<void>;
     setConfig(id: string, patch: DeviceConfigPatch): Promise<void>;
@@ -31,18 +36,12 @@ export interface DeviceRepo {
     archive(id: string): Promise<void>;
     /** Hard purge: the row and, by FK cascade, all its history. */
     delete(id: string): Promise<boolean>;
-    /** Range les appareils d'un espace : `ids` est la liste complète, rang = indice. */
-    reorder(workspaceId: number, ids: string[]): Promise<void>;
-
-    /** Les espaces ayant accès à cet appareil. */
-    workspaceIdsOf(deviceId: string): Promise<number[]>;
-    /** Idem pour plusieurs appareils d'un coup : une requête par carte serait un N+1. */
-    workspaceIdsFor(deviceIds: string[]): Promise<Map<string, number[]>>;
     /**
-     * Fixe l'ensemble des espaces ayant accès. La liste est complète : un espace
-     * absent perd l'accès. Les rangs des espaces conservés ne bougent pas.
+     * Range les appareils chez eux : `ids` sont ceux dont cet espace est le
+     * domicile, rang = indice. Le rang d'un appareil projeté appartient à
+     * l'espace qui le reçoit (`ctx.sharing.setOrder`).
      */
-    setWorkspaces(deviceId: string, workspaceIds: number[]): Promise<void>;
+    reorder(workspaceId: number, ids: string[]): Promise<void>;
 }
 
 export function deviceRepo(q: SdkQueryable): DeviceRepo {
@@ -61,8 +60,32 @@ export function deviceRepo(q: SdkQueryable): DeviceRepo {
             const byId = new Map(rows.map((r) => [r.id, r]));
             return ids.flatMap((id) => byId.get(id) ?? []);
         },
-        async listAll() {
-            return q.query<DeviceRow>('SELECT * FROM devices ORDER BY created DESC');
+        async listVisible(workspaceId) {
+            // Le rang est celui de l'espace qui regarde : le sien sur la ligne
+            // quand l'appareil est chez lui, celui de la projection sinon.
+            const rows = await q.query<DeviceRow & { rank_in_ws: number }>(
+                `SELECT d.*, d.sort_order AS rank_in_ws FROM devices d WHERE d.workspace_id = ?
+                 UNION ALL
+                 SELECT d.*, sh.sort_order AS rank_in_ws FROM devices d
+                   JOIN item_shares sh
+                     ON sh.feature = 'devices' AND sh.item_id = d.id AND sh.home_workspace_id = d.workspace_id
+                  WHERE sh.workspace_id = ?
+                 ORDER BY rank_in_ws ASC, created DESC`,
+                [workspaceId, workspaceId]
+            );
+            return rows;
+        },
+        async findVisible(id, workspaceId) {
+            const rows = await q.query<DeviceRow>(
+                `SELECT d.* FROM devices d
+                  WHERE d.id = ?
+                    AND (d.workspace_id = ?
+                         OR EXISTS (SELECT 1 FROM item_shares sh
+                                     WHERE sh.feature = 'devices' AND sh.item_id = d.id
+                                       AND sh.home_workspace_id = d.workspace_id AND sh.workspace_id = ?))`,
+                [id, workspaceId, workspaceId]
+            );
+            return rows[0] ?? null;
         },
         async setStatus(id, status) {
             await q.execute('UPDATE devices SET status = ? WHERE id = ?', [status, id]);
@@ -122,61 +145,18 @@ export function deviceRepo(q: SdkQueryable): DeviceRepo {
         async reorder(workspaceId, ids) {
             // Un seul UPDATE : une boucle laisserait un rangement à moitié
             // appliqué si une requête échouait, et deux rangements simultanés
-            // s'entrelaceraient. Un appareil que cet espace ne voit pas est
+            // s'entrelaceraient. Un appareil qui n'habite pas cet espace est
             // ignoré par la clause `workspace_id`.
             if (ids.length === 0) return;
             const cases = ids.map(() => 'WHEN ? THEN ?').join(' ');
             const params: (string | number)[] = [];
             for (let i = 0; i < ids.length; i++) params.push(ids[i], i);
             await q.execute(
-                `UPDATE device_workspaces
-                    SET sort_order = CASE device_id ${cases} ELSE sort_order END
-                  WHERE workspace_id = ? AND device_id IN (${ids.map(() => '?').join(',')})`,
+                `UPDATE devices
+                    SET sort_order = CASE id ${cases} ELSE sort_order END
+                  WHERE workspace_id = ? AND id IN (${ids.map(() => '?').join(',')})`,
                 [...params, workspaceId, ...ids]
             );
-        },
-
-        async workspaceIdsOf(deviceId) {
-            const rows = await q.query<{ workspace_id: number }>(
-                'SELECT workspace_id FROM device_workspaces WHERE device_id = ?',
-                [deviceId]
-            );
-            return rows.map((row) => Number(row.workspace_id));
-        },
-        async workspaceIdsFor(deviceIds) {
-            const out = new Map<string, number[]>();
-            if (deviceIds.length === 0) return out;
-            const rows = await q.query<{ device_id: string; workspace_id: number }>(
-                `SELECT device_id, workspace_id FROM device_workspaces
-                 WHERE device_id IN (${deviceIds.map(() => '?').join(',')})`,
-                deviceIds
-            );
-            for (const row of rows) {
-                const list = out.get(row.device_id);
-                if (list) list.push(Number(row.workspace_id));
-                else out.set(row.device_id, [Number(row.workspace_id)]);
-            }
-            return out;
-        },
-        async setWorkspaces(deviceId, workspaceIds) {
-            // Les espaces conservés ne sont pas touchés : leur rang survit.
-            if (workspaceIds.length === 0) {
-                await q.execute('DELETE FROM device_workspaces WHERE device_id = ?', [deviceId]);
-                return;
-            }
-            await q.execute(
-                `DELETE FROM device_workspaces
-                  WHERE device_id = ? AND workspace_id NOT IN (${workspaceIds.map(() => '?').join(',')})`,
-                [deviceId, ...workspaceIds]
-            );
-            // Un espace qui gagne l'accès reçoit le dernier rang de *sa* liste.
-            for (const workspaceId of workspaceIds) {
-                await q.execute(
-                    `INSERT IGNORE INTO device_workspaces (device_id, workspace_id, sort_order)
-                     SELECT ?, ?, COALESCE(MAX(sort_order) + 1, 0) FROM device_workspaces WHERE workspace_id = ?`,
-                    [deviceId, workspaceId, workspaceId]
-                );
-            }
         }
     };
 }

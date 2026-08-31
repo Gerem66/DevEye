@@ -13,9 +13,7 @@ import {
     devicesReorderFeature,
     devicesRequestDeleteFeature,
     devicesRevokeFeature,
-    devicesSetConfigFeature,
-    devicesSetWorkspacesFeature,
-    devicesWorkspaceListFeature
+    devicesSetConfigFeature
 } from './fleet';
 import {
     devicesAvailabilityFeature,
@@ -44,8 +42,6 @@ export const devicesHandlers: readonly SdkFeatureDefinition<DevicesRepo, string,
     devicesRenameFeature,
     devicesReorderFeature,
     devicesSetConfigFeature,
-    devicesWorkspaceListFeature,
-    devicesSetWorkspacesFeature,
     devicesRequestDeleteFeature,
     devicesCancelDeleteFeature,
     devicesForceDeleteFeature,

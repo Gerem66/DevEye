@@ -27,21 +27,16 @@ export const manifest = {
     /**
      * `agents` : les ordres de cycle de vie et la configuration poussée ;
      * `devices.read` : la garde unique d'accès à un appareil
-     * (`ctx.deveye.devices.authorize`) ; `workspaces.read` : rattacher un
-     * appareil aux espaces.
+     * (`ctx.deveye.devices.authorize`).
      */
-    nativeCapabilities: ['agents', 'devices.read', 'workspaces.read'],
+    nativeCapabilities: ['agents', 'devices.read'],
     /** Le compteur d'appareils en ligne de la barre du haut. */
     topbarWidget: { description: "Nombre d'appareils en ligne" },
     /**
-     * Général à l'échelle de la feature (les réglages du terminal, propres au
-     * navigateur) et d'un appareil (cadence de collecte, capture des processus,
-     * rétention).
-     */
-    /**
-     * Rien de commun entre les deux échelles : la feature règle le terminal, un
-     * appareil règle ce que son agent collecte. Un « Général » unique pour les
-     * deux ne disait ni l'un ni l'autre.
+     * Rien de commun entre les deux échelles : la feature règle le terminal
+     * (propre au navigateur), un appareil règle ce que son agent collecte. Le
+     * partage et les permissions d'un appareil viennent de la coquille, sans
+     * être déclarés ici.
      */
     settings: {
         feature: [{ id: 'terminal', label: 'Terminal', icon: 'terminal' }],

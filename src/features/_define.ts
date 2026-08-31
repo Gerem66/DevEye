@@ -77,13 +77,13 @@ export interface FeatureContext {
      * carte ne peut qu'abaisser ce que `canFeature` accorde. Les listages s'en
      * servent pour filtrer ; les commandes visant un élément passent par `assertItem`.
      */
-    itemRestrictions: (feature: FeatureId) => Promise<ReadonlyMap<number, ItemAccess>>;
+    itemRestrictions: (feature: FeatureId) => Promise<ReadonlyMap<string, ItemAccess>>;
     /**
      * Lève `forbidden` si cet élément précis n'est pas accessible au niveau
      * demandé, restriction de rôle comprise. Vérifie d'abord la feature : une
      * restriction d'élément n'ouvre jamais ce qu'un droit de feature ferme.
      */
-    assertItem: (feature: FeatureId, itemId: number, level?: FeatureAccess) => Promise<void>;
+    assertItem: (feature: FeatureId, itemId: string, level?: FeatureAccess) => Promise<void>;
     /**
      * Les permissions déclarées d'une feature (`extras` du grant), brutes.
      * Vide pour le propriétaire : c'est le lecteur (l'adaptateur SDK) qui
