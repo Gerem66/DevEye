@@ -21,6 +21,9 @@ const COLLAPSE = { duration: 0.28, ease: [0.22, 1, 0.36, 1] } as const;
 const COLLAPSE_EXIT = { duration: 0.22, ease: [0.55, 0, 1, 0.45] } as const;
 const FADE = { duration: 0.22, ease: [0.22, 1, 0.36, 1] } as const;
 const BACK_BTN_SIZE = 34;
+/** Le menu s'attarde après une bascule : le temps de couvrir le début du
+ *  chargement, et de voir « Gérer cet espace » rejoindre l'espace choisi. */
+const MENU_LINGER_MS = 150;
 
 export interface TopNavbarProps {
     /** Optional: current view title (shown when in a feature popup). */
@@ -84,7 +87,33 @@ export default function TopNavbar({
     const { user, logout } = useAuth();
     const workspace = useActiveWorkspace();
     const [menuOpen, setMenuOpen] = useState(false);
+    const [lingering, setLingering] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
+
+    // Fermeture différée après une bascule. Le minuteur vit dans un effet pour
+    // qu'un démontage ou une fermeture par ailleurs l'annule au lieu de venir
+    // refermer un menu que l'on vient de rouvrir.
+    useEffect(() => {
+        if (!lingering) return;
+        const timer = setTimeout(() => {
+            setMenuOpen(false);
+            setLingering(false);
+        }, MENU_LINGER_MS);
+        return () => clearTimeout(timer);
+    }, [lingering]);
+
+    useEffect(() => {
+        if (!menuOpen) setLingering(false);
+    }, [menuOpen]);
+
+    // Une bascule remet les droits à zéro le temps que le serveur réponde, et
+    // inconnu n'est pas refusé : lues telles quelles, ces trois entrées
+    // disparaîtraient sous les yeux de qui vient de cliquer. Le menu garde donc
+    // celles qu'il montrait au clic jusqu'à sa fermeture.
+    const live = { onOpenSettings, onOrganize, onOpenDevices };
+    const shownRef = useRef(live);
+    if (!lingering) shownRef.current = live;
+    const shown = shownRef.current;
 
     // Close menu on outside click
     useEffect(() => {
@@ -246,7 +275,7 @@ export default function TopNavbar({
                 <AnimatePresence>
                     {menuOpen && (
                         <motion.div
-                            className={styles.menu}
+                            className={`${styles.menu} ${lingering ? styles.menuClosing : ''}`}
                             initial={{ opacity: 0, y: 0 }}
                             animate={{ opacity: 1, y: 8 }}
                             exit={{ opacity: 0, y: 0 }}
@@ -258,7 +287,7 @@ export default function TopNavbar({
                                 <WorkspaceSwitcher
                                     onSelect={(id) => {
                                         onSelectWorkspace(id);
-                                        setMenuOpen(false);
+                                        setLingering(true);
                                     }}
                                     onCreate={() => {
                                         onCreateWorkspace();
@@ -292,22 +321,22 @@ export default function TopNavbar({
                                 l'espace : sans le droit, l'entrée disparaît. La
                                 popup ouverte est refermée par l'accueil quand le
                                 droit tombe. */}
-                            {onOpenSettings && (
+                            {shown.onOpenSettings && (
                                 <button
                                     className={styles.menuItem}
                                     onClick={() => {
-                                        onOpenSettings();
+                                        shown.onOpenSettings?.();
                                         setMenuOpen(false);
                                     }}
                                 >
                                     <span className='icon icon-appearance' /> Apparence
                                 </button>
                             )}
-                            {onOrganize && (
+                            {shown.onOrganize && (
                                 <button
                                     className={styles.menuItem}
                                     onClick={() => {
-                                        onOrganize();
+                                        shown.onOrganize?.();
                                         setMenuOpen(false);
                                     }}
                                 >
@@ -316,12 +345,12 @@ export default function TopNavbar({
                             )}
                             {/* Second separator: groups "fleet" entries (Appareils,
                                 Logs) apart from the personal settings above. */}
-                            {(onOpenDevices || onOpenLogs || onOpenUsers) && <hr className={styles.divider} />}
-                            {onOpenDevices && (
+                            {(shown.onOpenDevices || onOpenLogs || onOpenUsers) && <hr className={styles.divider} />}
+                            {shown.onOpenDevices && (
                                 <button
                                     className={styles.menuItem}
                                     onClick={(e) => {
-                                        onOpenDevices(e);
+                                        shown.onOpenDevices?.(e);
                                         setMenuOpen(false);
                                     }}
                                 >

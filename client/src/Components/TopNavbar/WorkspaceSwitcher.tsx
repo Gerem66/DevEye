@@ -1,6 +1,11 @@
+import { Fragment } from 'react';
 import type React from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useWorkspaceState } from '@/stores/workspace';
 import styles from './TopNavbar.module.css';
+
+/** Le dépli de « Gérer cet espace » quand la bascule change d'espace courant. */
+const REVEAL = { duration: 0.2, ease: [0.22, 1, 0.36, 1] } as const;
 
 export interface WorkspaceSwitcherProps {
     /** Bascule vers un autre espace (recharge la session). */
@@ -13,14 +18,14 @@ export interface WorkspaceSwitcherProps {
 
 /**
  * Section « Espaces » du menu de la topbar : liste plate, visible d'un coup,
- * pour basculer en un clic. L'espace personnel arrive en tête (tri serveur).
+ * pour basculer en un clic. L'espace personnel arrive en tête (tri serveur), et
+ * la gestion se range sous celui où l'on se trouve.
  */
 export function WorkspaceSwitcher({ onSelect, onCreate, onManage }: WorkspaceSwitcherProps) {
     const { workspaces, activeId } = useWorkspaceState();
-    const active = workspaces.find((w) => w.id === activeId) ?? null;
 
-    // Un seul espace : proposer d'en créer un suffit, lister l'unique entrée
-    // n'apporterait rien.
+    // Un seul espace : c'est le personnel, qui n'a rien à gérer. Proposer d'en
+    // créer un suffit, lister l'unique entrée n'apporterait rien.
     const showList = workspaces.length > 1;
 
     return (
@@ -44,27 +49,53 @@ export function WorkspaceSwitcher({ onSelect, onCreate, onManage }: WorkspaceSwi
                 workspaces.map((w) => {
                     const current = w.id === activeId;
                     return (
-                        <button
-                            key={w.id}
-                            className={`${styles.menuItem} ${styles.workspaceItem} ${current ? styles.current : ''}`}
-                            onClick={() => onSelect(w.id)}
-                            aria-current={current ? 'true' : undefined}
-                            title={w.name}
-                        >
-                            <span className={`icon ${w.kind === 'personal' ? 'icon-user-outline' : 'icon-users'}`} />
-                            <span className={styles.workspaceName}>{w.name}</span>
-                            {current && <span className={`icon icon-v ${styles.workspaceCheck}`} />}
-                        </button>
+                        <Fragment key={w.id}>
+                            <button
+                                className={`${styles.menuItem} ${styles.workspaceItem} ${current ? styles.current : ''}`}
+                                onClick={() => onSelect(w.id)}
+                                aria-current={current ? 'true' : undefined}
+                                title={w.name}
+                            >
+                                <span
+                                    className={`icon ${w.kind === 'personal' ? 'icon-user-outline' : 'icon-users'}`}
+                                />
+                                <span className={styles.workspaceText}>
+                                    <span className={styles.workspaceName}>{w.name}</span>
+                                    {w.kind === 'shared' && (
+                                        <span className={styles.workspaceMeta}>
+                                            Partagé · {w.users.length} membre{w.users.length > 1 ? 's' : ''}
+                                        </span>
+                                    )}
+                                </span>
+                                {current && <span className={`icon icon-v ${styles.workspaceCheck}`} />}
+                            </button>
+
+                            {/* En retrait sous l'espace courant : le décalage dit sur
+                                quoi elle agit. `initial={false}` la pose sans
+                                animation à l'ouverture du menu, elle ne se déplie
+                                qu'en changeant d'espace. Le personnel, lui, n'a
+                                ni membres, ni rôles, et ne se quitte pas. */}
+                            <AnimatePresence initial={false}>
+                                {current && w.kind === 'shared' && (
+                                    <motion.div
+                                        className={styles.manageReveal}
+                                        initial={{ height: 0, opacity: 0 }}
+                                        animate={{ height: 'auto', opacity: 1 }}
+                                        exit={{ height: 0, opacity: 0 }}
+                                        transition={REVEAL}
+                                    >
+                                        <button
+                                            className={`${styles.menuItem} ${styles.manageItem}`}
+                                            onClick={onManage}
+                                        >
+                                            <span className='icon icon-settings' /> Gérer cet espace
+                                        </button>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </Fragment>
                     );
                 })}
-
-            {/* La gestion n'a de sens que sur un espace partagé : le personnel
-                n'a ni membres, ni rôles, et ne se quitte pas. */}
-            {active?.kind === 'shared' && (
-                <button className={styles.menuItem} onClick={onManage}>
-                    <span className='icon icon-settings' /> Gérer l’espace
-                </button>
-            )}
 
             {/* Le trait ferme la section au lieu de l'ouvrir : elle est en tête de
                 menu, un filet au-dessus n'y séparerait rien. */}

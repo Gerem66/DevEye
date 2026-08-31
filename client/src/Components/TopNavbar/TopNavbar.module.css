@@ -324,6 +324,9 @@
     top: calc(100% + var(--space-sm));
     right: 0;
     min-width: 190px;
+    /* Sans plafond, un nom d'espace à rallonge étire le menu sous toute la
+       barre ; il s'ellipse à la place. */
+    max-width: 300px;
     background: var(--surface-popup);
     backdrop-filter: blur(var(--glass-blur));
     -webkit-backdrop-filter: blur(var(--glass-blur));
@@ -333,6 +336,12 @@
     padding: var(--space-xs);
     overflow: hidden;
     z-index: var(--z-modal);
+}
+
+/* Le sursis avant fermeture n'est pas un temps où l'on clique : les entrées
+   gelées y montrent l'espace que l'on vient de quitter. */
+.menuClosing {
+    pointer-events: none;
 }
 
 .menuItem {
@@ -439,6 +448,37 @@
 
 .workspaceItem.current {
     background: var(--accent-bg);
+}
+
+/* Un partagé porte son compte de membres sous son nom, l'espace personnel n'a
+   qu'une ligne : les hauteurs diffèrent d'une entrée à l'autre, à dessein. */
+.workspaceText {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+
+.workspaceMeta {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Le conteneur du dépli : sa hauteur est animée, le débord doit donc être coupé
+   pendant la course, sinon le libellé dépasse avant que la place existe. */
+.manageReveal {
+    overflow: hidden;
+}
+
+/* La moitié de la colonne d'icône en retrait, et un ton en retrait : assez pour
+   rattacher l'action à la ligne du dessus, pas assez pour la décrocher de la
+   liste. */
+.manageItem {
+    padding-left: calc(var(--space-md) + (16px + var(--space-sm)) / 2);
+    color: var(--text-secondary);
 }
 
 .workspaceName {

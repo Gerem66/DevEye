@@ -114,7 +114,7 @@ export default function FeatureWorkspace() {
 
             <div className={styles.sections}>
                 {active === 'general' && (
-                    <section className={styles.section}>
+                    <section className={`${styles.section} ${styles.narrow}`}>
                         <span className={styles.sectionLabel}>Nom</span>
                         <div className={styles.card}>
                             <div className={styles.nameRow}>
@@ -311,7 +311,7 @@ export default function FeatureWorkspace() {
                     à part la rendrait plus difficile à trouver que ce qu'elle mérite,
                     et un onglet entier pour un bouton serait disproportionné. */}
                 {active === 'general' && isShared && (
-                    <section className={styles.section}>
+                    <section className={`${styles.section} ${styles.narrow}`}>
                         <span className={styles.sectionLabel}>Zone sensible</span>
                         <div className={styles.card}>
                             <div className={styles.dangerZone}>

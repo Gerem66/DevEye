@@ -60,6 +60,14 @@
     gap: var(--space-sm);
 }
 
+/* « Général » n'aligne que des champs et un bouton : étirés sur toute la page,
+   ils laissent un champ démesuré et une action perdue au loin. Les listes de
+   Membres et de Rôles, elles, gagnent à prendre la largeur. Même plafond que la
+   page Profil, mais calé à gauche sur l'en-tête et les onglets. */
+.narrow {
+    max-width: 560px;
+}
+
 .sectionHeader {
     display: flex;
     align-items: center;
