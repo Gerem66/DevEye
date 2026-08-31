@@ -2,7 +2,7 @@ import { defineSdkFeature, FeatureError, type SdkFeatureContext } from '@deveye/
 
 import { cveFavorites, cveGet, cveKeyList, cveNews, cveSearch, cveSetFavorite, cveSetKey } from '../contracts/commands';
 import { cveProviderSchema, type CveEntry, type CveSeverityFilter } from '../contracts/domain';
-import { NVD_KEY_STORE_KEY, searchTerms, toEntry, upsertToEntry } from './_shared';
+import { cveIdCandidate, NVD_KEY_STORE_KEY, searchTerms, toEntry, upsertToEntry } from './_shared';
 import { nvdClient, type NvdClient } from './nvd';
 import type { CveRepo, CveUpsert } from './repo';
 
@@ -61,29 +61,43 @@ export const cveHandlers = [
             const entries: CveEntry[] = local.slice(0, input.limit).map(toEntry);
 
             // Le catalogue local ne tient que ce qui est passe par ici : des qu'il
-            // ne suffit pas, le NVD tranche, avec son corpus entier.
-            if (truncated || entries.length >= input.limit) {
+            // ne suffit pas, le NVD tranche, avec son corpus entier. Une requete
+            // qui DESIGNE une CVE se regle sur elle et non sur le remplissage de
+            // la page : tant qu'on ne la tient pas, le NVD reste a interroger,
+            // meme si le local a de quoi remplir.
+            const candidate = cveIdCandidate(input.query);
+            const exactHeld = candidate !== null && entries.some((e) => e.id === candidate);
+            if (candidate !== null ? exactHeld : truncated || entries.length >= input.limit) {
                 return { entries, truncated, remote: false, remoteError: null };
             }
 
             const known = new Set(entries.map((e) => e.id));
             const favorites = new Set((await ctx.repo.listFavorites(ctx.workspaceId)).map((r) => r.cve_id));
             const apiKey = await apiKeyOf(ctx);
-            const single = terms.length === 1 ? terms[0].toUpperCase() : null;
 
             try {
-                const found = single?.startsWith('CVE-')
-                    ? [await client.byId(single, apiKey)].filter((e): e is CveUpsert => e !== null)
-                    : await client.keyword(input.query.trim(), apiKey, input.limit);
+                const found =
+                    candidate !== null
+                        ? [await client.byId(candidate, apiKey)].filter((e): e is CveUpsert => e !== null)
+                        : await client.keyword(input.query.trim(), apiKey, input.limit);
                 await cache(ctx, found);
                 for (const entry of found) {
-                    if (entries.length >= input.limit) break;
                     if (known.has(entry.id) || !matchesSeverity(entry, input.severity)) continue;
+                    // La CVE demandee entre meme si la page est pleine : la
+                    // recaler serait rendre tout sauf ce qu'on a demande.
+                    if (entries.length >= input.limit && entry.id !== candidate) continue;
                     known.add(entry.id);
                     entries.push(upsertToEntry(entry, favorites.has(entry.id)));
                 }
-                entries.sort((a, b) => b.published - a.published || (a.id < b.id ? 1 : -1));
-                return { entries, truncated, remote: true, remoteError: null };
+                // La CVE demandee en tete : le reste n'est que ce qui lui ressemble.
+                const asked = (e: CveEntry): number => (e.id === candidate ? 1 : 0);
+                entries.sort((a, b) => asked(b) - asked(a) || b.published - a.published || (a.id < b.id ? 1 : -1));
+                return {
+                    entries: entries.slice(0, input.limit),
+                    truncated: truncated || entries.length > input.limit,
+                    remote: true,
+                    remoteError: null
+                };
             } catch (e) {
                 // Le local a peut-etre deja de quoi repondre : le rendre, en disant
                 // que la moitie distante a manque.

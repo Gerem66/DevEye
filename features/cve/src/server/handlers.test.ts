@@ -178,6 +178,43 @@ describe('cve.search', () => {
         assert.equal(repo.entries.length, 1);
     });
 
+    it('reconnaît un numéro tapé sans son préfixe et le demande par identifiant', async () => {
+        // Le `keywordSearch` du NVD ignore les identifiants : sans passer par
+        // `cveId`, « 2026-6785 » ne rendrait que ce que le local a déjà vu.
+        const repo = fakeRepo([entry('CVE-2026-67854'), entry('CVE-2026-67858')]);
+        const calls = fakeNvd([entry('CVE-2026-6785')]);
+        const ctx = createTestContext({ repo });
+
+        const out = await handlerFor(cveSearch)(ctx, { query: '2026-6785', severity: 'all', limit: 60 });
+        assert.equal(calls.byId, 1);
+        assert.equal(calls.keyword, 0);
+        // Et elle vient en tête : c'est celle qu'on a demandée.
+        assert.equal(out.entries[0].id, 'CVE-2026-6785');
+        assert.equal(out.entries.length, 3);
+    });
+
+    it('interroge le NVD pour une CVE précise même quand le local remplit la page', async () => {
+        const repo = fakeRepo([entry('CVE-2026-67854'), entry('CVE-2026-67858')]);
+        const calls = fakeNvd([entry('CVE-2026-6785')]);
+        const ctx = createTestContext({ repo });
+
+        // limit 2 : le local suffirait à remplir, mais la CVE désignée manque.
+        const out = await handlerFor(cveSearch)(ctx, { query: 'CVE-2026-6785', severity: 'all', limit: 2 });
+        assert.equal(calls.byId, 1);
+        assert.equal(out.entries[0].id, 'CVE-2026-6785');
+    });
+
+    it('se passe du NVD quand le local tient déjà la CVE désignée', async () => {
+        const repo = fakeRepo([entry('CVE-2026-6785')]);
+        const calls = fakeNvd([entry('CVE-2026-6785')]);
+        const ctx = createTestContext({ repo });
+
+        const out = await handlerFor(cveSearch)(ctx, { query: '2026-6785', severity: 'all', limit: 60 });
+        assert.equal(calls.byId, 0);
+        assert.equal(out.remote, false);
+        assert.equal(out.entries[0].id, 'CVE-2026-6785');
+    });
+
     it('reconnaît un identifiant et rend ce que le local a quand le NVD manque', async () => {
         const repo = fakeRepo();
         setNvdClient({

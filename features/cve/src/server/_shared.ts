@@ -40,6 +40,26 @@ export function upsertToEntry(entry: CveUpsert, isFavorite: boolean): CveEntry {
 }
 
 /**
+ * La forme d'un identifiant CVE tel qu'on le tape : le préfixe est facultatif,
+ * le séparateur peut être une espace. « 2026-6785 » et « cve 2026 6785 » disent
+ * la même chose que « CVE-2026-6785 ».
+ */
+const ID_SHAPE = /^(?:cve[\s-]?)?(\d{4})[\s-](\d{4,10})$/i;
+
+/**
+ * L'identifiant que cette requête désigne, s'il y en a un.
+ *
+ * Ce n'est pas un raffinement : le `keywordSearch` du NVD ne regarde QUE les
+ * descriptions, jamais les identifiants. Une recherche par numéro qui ne passe
+ * pas par `cveId` ne peut donc rien trouver chez lui, et se limite à ce que le
+ * catalogue local a déjà vu.
+ */
+export function cveIdCandidate(query: string): string | null {
+    const found = ID_SHAPE.exec(query.trim());
+    return found === null ? null : `CVE-${found[1]}-${found[2]}`;
+}
+
+/**
  * Les termes d'une recherche : espaces comme séparateurs, tous exigés. Bornés
  * en nombre, une requête ne devant pas se transformer en jointure de vingt LIKE.
  */
