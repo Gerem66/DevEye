@@ -1,6 +1,7 @@
 import type { FeatureServer } from '@deveye/types/sdk/server';
 
 import { devicesHandlers } from './handlers';
+import { devicesMove } from './move';
 import { createRepo, type DevicesRepo } from './repo';
 import { RetentionSweep } from './service';
 
@@ -33,6 +34,7 @@ export const serverEntry: FeatureServer<DevicesRepo> = {
             (await repo.devices.findVisible(itemId, workspaceId))?.workspace_id ?? null,
         // Le nom d'un appareil est en clair : le codec ne sert pas ici.
         labelOf: async (repo, _cipher, itemId, workspaceId) =>
-            (await repo.devices.findVisible(itemId, workspaceId))?.name ?? null
+            (await repo.devices.findVisible(itemId, workspaceId))?.name ?? null,
+        move: devicesMove
     }
 };

@@ -336,11 +336,37 @@ rescelle tout **avant la moindre écriture**, sur le modèle de
 `reencryptProjectTree`.
 
 Les **liaisons ne traversent pas** : une liaison vers un élément qui part est
-retirée (`PROJECTS_USAGE_PROVIDER.detach`), et l'écran la nomme avant de
-confirmer. Uptime est branché ; les autres suivront quand leur conversion sera
-écrite. Un élément dont la fonctionnalité tient une source d'espace (un jeton de
-déploiement, une destination de sauvegarde) n'a pas vocation à bouger : la source
-ne suivrait pas.
+retirée, et l'écran la nomme avant de confirmer. Dans un sens comme dans l'autre :
+`PROJECTS_USAGE_PROVIDER.detach` retire celles qui visaient l'élément parti,
+et le `move` de Projets retire celles qu'un projet emporterait.
+
+### Qui sait se déplacer, et pourquoi
+
+|                  | Ce que le déplacement emporte                       | Ce qu'il laisse                               |
+| ---------------- | --------------------------------------------------- | --------------------------------------------- |
+| Uptime           | le service, ses relevés, ses incidents              | rien                                          |
+| Notes            | la note                                             | son dossier, qui appartient à l'espace quitté |
+| Bases de données | la fiche, ses secrets, ses alertes                  | rien                                          |
+| Déploiement      | la cible et son historique                          | son jeton : elle arrive indéployable          |
+| Git              | le dépôt et tout son cache                          | son jeton : la synchronisation s'arrête       |
+| Audience         | le site, ses entonnoirs, ses libellés, son audience | rien (la clé publique ne bouge pas)           |
+| Appareils        | la ligne ; relevés et constats la suivent           | les exemptions Sentinelle, réglées par espace |
+| Mail             | le compte, ses dossiers, ses enveloppes             | un canal d'alerte d'ici qui expédiait par lui |
+| Projets          | tout l'arbre                                        | ses liaisons, dont les cibles restent         |
+
+Un jeton mis à `NULL` n'est pas une avarie : les deux features savaient déjà dire
+« sans jeton », et en rattacher un est un geste du propriétaire, pas un effet de
+bord d'un déplacement.
+
+**Sauvegardes n'a pas d'entrée `move`, et ce n'est pas un oubli** : un travail ne
+peut pas exister sans destination (`destination_id` NOT NULL), et destination
+comme source sont des objets de l'espace qu'il quitterait. On ne peut même pas le
+laisser sans destination le temps d'en choisir une. Mots de passe, CloudSync,
+Finances et les features sans éléments ne sont pas concernées.
+
+Le refus par élément vit dans `plan` : un nom déjà pris là-bas (Bases, Audience),
+un dépôt déjà suivi, une empreinte déjà appairée. Il s'affiche au lieu de tomber
+en erreur SQL au milieu du geste.
 
 ## 10. Reste à faire
 

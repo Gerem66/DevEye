@@ -176,7 +176,16 @@ export function moduleItems(
         shareable: (itemId, workspaceId) =>
             items.shareable ? items.shareable(mod.repoFor(db), itemId, workspaceId) : Promise.resolve(true),
         move: move && {
-            plan: (itemId, from, to) => move.plan(mod.repoFor(db), itemId, from, to),
+            plan: (itemId, from, to) =>
+                move.plan({
+                    // Le pool : planifier n'écrit rien, et le geste n'a pas
+                    // encore ouvert de transaction.
+                    q: sdkQueryable(db.queryable),
+                    repo: mod.repoFor(db),
+                    itemId,
+                    fromWorkspaceId: from,
+                    toWorkspaceId: to
+                }),
             apply: (q, itemId, from, to, ciphers) =>
                 move.apply({
                     // La transaction, et non `db.queryable` : le repo du module

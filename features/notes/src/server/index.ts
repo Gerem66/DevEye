@@ -2,6 +2,7 @@ import type { FeatureServer } from '@deveye/types/sdk/server';
 
 import { notesHandlers } from './handlers';
 import { createRepo, type NotesRepo } from './repo';
+import { notesMove } from './move';
 import { tryDecryptPayload } from './_shared';
 
 /**
@@ -33,6 +34,7 @@ export const serverEntry: FeatureServer<NotesRepo> = {
         shareable: async (repo, itemId, workspaceId) => {
             const row = await repo.findNote(Number(itemId), workspaceId);
             return row !== null && row.is_private === 0;
-        }
+        },
+        move: notesMove
     }
 };

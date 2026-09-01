@@ -2,6 +2,7 @@ import { GIT_ITEMS_PROVIDER, type GitItemsProvider } from '@deveye/types/sdk';
 import type { FeatureServer, SdkCipher } from '@deveye/types/sdk/server';
 
 import { gitHandlers } from './handlers';
+import { gitMove } from './move';
 import { createRepo, type GitRepo } from './repo';
 import { GitSync } from './service';
 import { readJson, setSync, type StoredRepo } from './_shared';
@@ -55,6 +56,7 @@ export const serverEntry: FeatureServer<GitRepo> = {
     items: {
         homeOf: async (repo, itemId, workspaceId) =>
             (await repo.findVisibleRepo(Number(itemId), workspaceId))?.workspace_id ?? null,
-        labelOf: (repo, cipher, itemId, workspaceId) => labelOf(repo, cipher, Number(itemId), workspaceId)
+        labelOf: (repo, cipher, itemId, workspaceId) => labelOf(repo, cipher, Number(itemId), workspaceId),
+        move: gitMove
     }
 };

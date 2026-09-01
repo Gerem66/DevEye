@@ -85,7 +85,6 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         services: {
             listByWorkspace: async (workspaceId) => rows.filter((r) => r.workspace_id === workspaceId),
             listVisible: async (workspaceId) => rows.filter((r) => visible(r, workspaceId)),
-            countEncryptedCells: async () => 0,
             findById: async (id, workspaceId) =>
                 rows.find((r) => r.id === id && r.workspace_id === workspaceId) ?? null,
             findVisible: async (id, workspaceId) => rows.find((r) => r.id === id && visible(r, workspaceId)) ?? null,

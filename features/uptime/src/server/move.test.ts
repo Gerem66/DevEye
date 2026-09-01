@@ -50,8 +50,8 @@ function cipherOf(tag: string): SdkCipher {
 
 const ciphers = { from: cipherOf('A'), to: cipherOf('B') };
 
-/** Le dépôt ne sert qu'à `plan` : `apply` lit et écrit par la transaction. */
-const repo = { services: { countEncryptedCells: async () => 3 } } as unknown as UptimeRepo;
+/** Le dépôt ne sert à rien ici : tout passe par le queryable. */
+const repo = {} as UptimeRepo;
 
 describe('uptime : changement d’espace', () => {
     it('rescelle chaque cellule sous la clé de l’espace cible, puis re-domicilie la ligne', async () => {
@@ -112,7 +112,17 @@ describe('uptime : changement d’espace', () => {
     });
 
     it('annonce le nombre de cellules à convertir, et aucun refus', async () => {
-        const plan = await uptimeMove.plan(repo, '7', 1, 2);
-        assert.deepEqual(plan, { blockers: [], drops: [], rows: 3 });
+        // Le compte vient d'un `SELECT COUNT(*)` par cellule : le faux dépôt
+        // rend une ligne à chaque fois, soit une par colonne déclarée.
+        const { q } = fakeQueryable({});
+        const counting: SdkQueryable = { ...q, query: async <T extends object>() => [{ n: 2 }] as T[] };
+        const plan = await uptimeMove.plan({
+            q: counting,
+            repo,
+            itemId: '7',
+            fromWorkspaceId: 1,
+            toWorkspaceId: 2
+        });
+        assert.deepEqual(plan, { blockers: [], drops: [], rows: 8 });
     });
 });

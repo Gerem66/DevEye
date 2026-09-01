@@ -9,6 +9,7 @@ import {
 import type { FeatureServer, FeatureServiceDeps, SdkCipher } from '@deveye/types/sdk/server';
 
 import { databaseHandlers } from './handlers';
+import { databaseMove } from './move';
 import { createRepo, type DatabaseRepo } from './repo';
 import { DatabaseMonitor } from './service';
 import { openTunnel } from './tunnel';
@@ -119,6 +120,7 @@ export const serverEntry: FeatureServer<DatabaseRepo> = {
     items: {
         homeOf: async (repo, itemId, workspaceId) =>
             (await repo.findVisible(Number(itemId), workspaceId))?.workspace_id ?? null,
-        labelOf: (repo, cipher, itemId, workspaceId) => labelOf(repo, cipher, Number(itemId), workspaceId)
+        labelOf: (repo, cipher, itemId, workspaceId) => labelOf(repo, cipher, Number(itemId), workspaceId),
+        move: databaseMove
     }
 };

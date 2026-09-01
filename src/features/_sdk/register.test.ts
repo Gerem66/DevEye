@@ -180,8 +180,8 @@ const movable: FeatureServer<{ tag: string }> = {
         homeOf: async () => 3,
         labelOf: async () => 'Élément',
         move: {
-            plan: async (repo, itemId, from, to) => {
-                moveCalls.push(['plan', repo, itemId, from, to]);
+            plan: async (mctx) => {
+                moveCalls.push(['plan', mctx.repo, mctx.itemId, mctx.fromWorkspaceId, mctx.toWorkspaceId]);
                 return { blockers: [], drops: ['son historique'], rows: 12 };
             },
             apply: async (mctx) => {

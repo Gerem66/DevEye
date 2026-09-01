@@ -31,6 +31,11 @@ export const serverEntry: FeatureServer<BackupRepo> = {
             }
         };
     },
+    // Pas d'entrée `move`, et ce n'est pas un oubli : un travail ne peut pas
+    // exister sans destination (`destination_id` NOT NULL), et sa destination
+    // comme sa source sont des objets de l'espace qu'il quitterait. Déplacé, il
+    // écrirait vers un magasin que son nouvel espace ne voit pas, sans qu'on
+    // puisse même le laisser sans destination le temps d'en choisir une.
     items: {
         homeOf: async (repo, itemId, workspaceId) =>
             (await repo.findVisibleJob(Number(itemId), workspaceId))?.workspace_id ?? null,

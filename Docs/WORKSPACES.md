@@ -490,7 +490,8 @@ dans ses `items`, une feature ne déplace rien, et l'écran ne le propose pas. L
 conversion lit et rescelle tout avant la première écriture, dans une
 transaction, sur le modèle de `reencryptProjectTree`. Uptime est branché.
 
-Ce qui reste ouvert : les features à historique lourd (Git, Audience, Mail,
-Appareils) dont la conversion pèserait des centaines de milliers de lignes, et
-celles dont l'élément dépend d'une source d'espace (un jeton de déploiement, une
-destination de sauvegarde) qui ne le suivrait pas. Voir `SHARING.md` §9.
+Neuf features sur dix le savent : Uptime, Notes, Bases de données, Déploiement,
+Git, Audience, Appareils, Mail, Projets. La dixième, Sauvegardes, ne le peut pas :
+un travail ne peut pas exister sans destination, et sa destination appartient à
+l'espace qu'il quitterait. Voir le tableau de `SHARING.md` §9, qui dit pour
+chacune ce que le déplacement emporte et ce qu'il laisse.

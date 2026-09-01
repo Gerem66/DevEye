@@ -1,64 +1,42 @@
-import { FeatureError, type FeatureItemsMove, type SdkCipher, type SdkQueryable } from '@deveye/types/sdk/server';
+import {
+    countMovableCells,
+    FeatureError,
+    resealCells,
+    type FeatureItemsMove,
+    type MovableCell
+} from '@deveye/types/sdk/server';
 
-import { MOVE_CELLS, type UptimeEncryptedCell, type UptimeRepo } from './repo';
+import type { UptimeRepo } from './repo';
 
 /**
  * Le changement d'espace d'un service : sa ligne change de domicile, et tout ce
- * qui pend à lui (`MOVE_CELLS`) est relu sous la clé de l'espace quitté puis
- * rescellé sous celle du nouveau.
+ * qui pend à lui est relu sous la clé de l'espace quitté puis rescellé sous
+ * celle du nouveau.
+ *
+ * ⚠️ Liste à tenir à jour : toute nouvelle colonne chiffrée suspendue à un
+ * service doit y figurer, sinon son contenu reste sous l'ancienne clé et devient
+ * illisible. Rien ne peut le détecter, un blob chiffré est indistinguable d'un
+ * autre. `uptime_daily` n'y est pas : elle n'agrège que des nombres.
  */
-interface StoredCell {
-    cell: UptimeEncryptedCell;
-    id: number;
-    value: string;
-}
-
-/**
- * Les valeurs à convertir. Une cellule vide n'a rien à faire ici : un service
- * qui n'a jamais échoué n'a aucun message d'erreur, et c'est le cas courant.
- */
-async function readCells(q: SdkQueryable, serviceId: number): Promise<StoredCell[]> {
-    const out: StoredCell[] = [];
-    for (const cell of MOVE_CELLS) {
-        const rows = await q.query<{ row_id: number; value: string }>(
-            `SELECT ${cell.idColumn} AS row_id, ${cell.column} AS value FROM ${cell.table}
-              WHERE ${cell.ownerColumn} = ? AND ${cell.column} IS NOT NULL AND ${cell.column} <> ''`,
-            [serviceId]
-        );
-        for (const row of rows) out.push({ cell, id: Number(row.row_id), value: String(row.value) });
-    }
-    return out;
-}
+const CELLS: readonly MovableCell[] = [
+    { table: 'uptime_services', idColumn: 'id', ownerColumn: 'id', column: 'content' },
+    { table: 'uptime_services', idColumn: 'id', ownerColumn: 'id', column: 'last_error' },
+    { table: 'uptime_checks', idColumn: 'id', ownerColumn: 'service_id', column: 'error' },
+    { table: 'uptime_incidents', idColumn: 'id', ownerColumn: 'service_id', column: 'error' }
+];
 
 export const uptimeMove: FeatureItemsMove<UptimeRepo> = {
-    async plan(repo, itemId, fromWorkspaceId) {
-        const serviceId = Number(itemId);
+    async plan({ q, itemId }) {
         // Aucun refus à déclarer : un service est autonome. Ni source d'espace
         // (il porte son URL), ni nom unique par espace, ni palier gardé.
-        return {
-            blockers: [],
-            drops: [],
-            rows: await repo.services.countEncryptedCells(serviceId, fromWorkspaceId)
-        };
+        return { blockers: [], drops: [], rows: await countMovableCells(q, CELLS, Number(itemId)) };
     },
 
     async apply({ q, itemId, fromWorkspaceId, toWorkspaceId, ciphers }) {
         const serviceId = Number(itemId);
-        // Tout lu et converti avant la moindre écriture : si une ligne résiste,
-        // on abandonne sans rien avoir touché plutôt que de laisser un service à
-        // moitié converti, dont la seconde moitié serait définitivement illisible.
-        const cells = await readCells(q, serviceId);
-        const converted = await Promise.all(
-            cells.map(async (stored) => ({ ...stored, value: await reseal(stored, ciphers) }))
-        );
-
-        for (const { cell, id, value } of converted) {
-            await q.execute(
-                `UPDATE ${cell.table} SET ${cell.column} = ? WHERE ${cell.idColumn} = ? AND ${cell.ownerColumn} = ?`,
-                [value, id, serviceId]
-            );
-        }
-
+        await resealCells(q, CELLS, serviceId, ciphers);
+        // Le domicile en dernier : un échec de conversion laisse le service
+        // entier dans son espace, sous sa clé.
         const res = await q.execute('UPDATE uptime_services SET workspace_id = ? WHERE id = ? AND workspace_id = ?', [
             toWorkspaceId,
             serviceId,
@@ -69,14 +47,3 @@ export const uptimeMove: FeatureItemsMove<UptimeRepo> = {
         }
     }
 };
-
-async function reseal(stored: StoredCell, ciphers: { from: SdkCipher; to: SdkCipher }): Promise<string> {
-    const plain = await ciphers.from.tryDecrypt(stored.value);
-    if (plain === null) {
-        throw new FeatureError(
-            'internal',
-            `Une ligne de ${stored.cell.table} est illisible : déplacement annulé, rien n’a été modifié.`
-        );
-    }
-    return ciphers.to.encrypt(plain);
-}
