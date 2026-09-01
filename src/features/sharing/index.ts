@@ -367,9 +367,18 @@ const grantSetFeature = defineFeature({
             extraOverrides: input.extraOverrides
         });
         // Les droits de tous ceux qui portent ce rôle viennent de changer, et le
-        // scope les mémoïse sous l'époque : sans ce bump, la restriction ne
+        // scope les mémoïse sous l'époque : sans ce bump, la surcharge ne
         // mordrait qu'à la reconnexion suivante.
         invalidateAccess();
+        // Et le `resync` juste derrière, comme partout où l'époque bouge : les
+        // instantanés de droits que le hub garde par socket sont désormais
+        // périmés, et une époque périmée vaut AUCUN droit. Sans lui, la trame
+        // qui dit « les appareils ont changé » serait abandonnée pour tout le
+        // monde, et le réglage n'aurait l'air de prendre qu'au rechargement.
+        await ctx.live?.resync(ctx.db, target.workspaceId);
+        // L'époque est globale : la salle depuis laquelle on règle est périmée
+        // elle aussi, même quand la surcharge vise un autre espace.
+        if (target.workspaceId !== ctx.workspaceId) await ctx.live?.resync(ctx.db, ctx.workspaceId);
 
         ctx.audit({
             action: 'share.grantSet',

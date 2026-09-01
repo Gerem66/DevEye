@@ -560,7 +560,11 @@
    son contenu. */
 .configRow {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+    /* Colonne de champ à largeur FIXE, et non `auto` : sinon chaque champ se
+       dimensionne sur son intitulé d'option le plus long, et « Top 20 (CPU +
+       mémoire) » élargit sa ligne seule. Les trois doivent s'aligner.
+       `minmax(0, …)` pour que la colonne cède quand la popup rétrécit. */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 210px);
     align-items: center;
     gap: var(--space-xs) var(--space-md);
 }
@@ -583,7 +587,8 @@
 }
 
 .configField > select {
-    min-width: 150px;
+    width: 100%;
+    min-width: 0;
 }
 
 .configCustom {

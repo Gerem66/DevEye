@@ -414,67 +414,49 @@
     background: var(--surface-subtle);
 }
 
-/* Les permissions propres de la fonctionnalité, sous le nom du rôle : une puce
-   par permission, sur une ou deux lignes plutôt qu'un formulaire par rôle. Le
-   panneau doit rester lisible avec dix rôles. */
-.grantExtras {
+/* Un bloc par rôle, sur le patron de l'éditeur de rôle : l'identité au-dessus,
+   les droits dans une carte. C'est le même geste à une autre échelle, ce doit
+   être la même forme. */
+.grantRole {
     display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-xs);
-    margin-top: var(--space-xs);
+    flex-direction: column;
+    gap: var(--space-sm);
 }
 
-.grantChip {
-    display: inline-flex;
+.grantRoleHead {
+    display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 2px var(--space-xs);
-    background: transparent;
-    /* Pointillé tant que la puce hérite : le trait plein est réservé à ce qui
-       est posé sur l'élément lui-même. */
-    border: 1px dashed var(--glass-border);
-    border-radius: var(--radius-sm);
-    color: var(--text-muted);
-    font-size: 0.7rem;
-    line-height: 1.5;
-    cursor: pointer;
-    transition:
-        border-color var(--transition-fast),
-        color var(--transition-fast),
-        background var(--transition-fast);
+    gap: var(--space-sm);
 }
 
-.grantChipOn {
-    background: var(--accent-bg);
-    border-color: var(--accent);
-    color: var(--accent);
+/* Les rangées portent leur propre respiration et se séparent entre elles : la
+   carte ne garde que le liseré, sinon la première et la dernière flottent. */
+.grantRoleCard {
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
 }
 
-/* Une surcharge, par opposition à l'héritage : le trait plein dit que cette
-   valeur est posée ICI et ne suivra plus la fonctionnalité. */
-.grantChipForced {
-    border-style: solid;
-    border-color: var(--text-secondary);
-    font-weight: 600;
+.grantRoleRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-sm) var(--space-md);
+    padding: var(--space-sm) 0;
 }
 
-.grantChipOn.grantChipForced {
-    border-color: var(--accent);
+.grantRoleRow + .grantRoleRow {
+    border-top: 1px solid var(--glass-border);
 }
 
-.grantChip:hover:not([aria-disabled='true']):not(:disabled) {
-    border-color: var(--accent);
-}
-
-/* Une permission que le rôle n'a pas sur la fonctionnalité : montrée, pour dire
-   ce qui existe, mais elle ne se règle pas ici. */
-.grantChip[aria-disabled='true'] {
-    cursor: not-allowed;
-    filter: opacity(0.5);
-}
-
-.grantChipIcon {
-    width: 11px;
+.grantRoleLabel {
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    min-width: 0;
 }
 
 .foreignMark {
@@ -486,12 +468,13 @@
     color: var(--text-muted);
 }
 
-/* Le panneau de restrictions d'un élément, seul (réutilisé par l'onglet
-   Permissions et par le dialogue « Permissions » de l'onglet Partage). */
+/* Le panneau de droits d'un élément, seul (réutilisé par l'onglet Permissions
+   et par le dialogue « Permissions » de l'onglet Partage). Un bloc par rôle,
+   d'où l'écart généreux : deux cartes collées se liraient comme une seule. */
 .grantPanel {
     display: flex;
     flex-direction: column;
-    gap: var(--space-sm);
+    gap: var(--space-lg);
     min-width: 0;
     /* Plancher : le passage « Chargement… » → liste des rôles ne doit pas
        faire sauter le dialogue qui le porte. */

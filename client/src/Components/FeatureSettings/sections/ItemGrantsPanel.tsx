@@ -16,8 +16,12 @@ import styles from '../FeatureSettings.module.css';
 /**
  * Ce que chaque rôle d'un espace peut faire de cet élément. Réutilisé par
  * l'onglet Permissions d'un élément (espace actif) et par l'onglet Partage du
- * domicile (`workspaceId` visé). Chaque ligne dit ce que le rôle obtient
- * effectivement, surcharge ou héritage.
+ * domicile (`workspaceId` visé).
+ *
+ * La forme est celle de l'éditeur de rôle, à dessein : on y règle les mêmes
+ * droits, à une autre échelle. Un bloc par rôle, le niveau d'abord, puis les
+ * permissions de la fonctionnalité — chacune sur le même sélecteur à segments,
+ * où « Hérité » est une valeur comme les autres et non un état à deviner.
  *
  * La surcharge va dans les deux sens : ce que la fonctionnalité donne n'est
  * qu'un défaut. Un plancher demeure, le rôle doit avoir au moins la lecture sur
@@ -29,6 +33,9 @@ const FEATURE_ACCESS_LABEL: Record<'none' | 'read' | 'write', string> = {
     read: 'lecture',
     write: 'lecture et écriture'
 };
+
+/** La valeur d'un segment de permission : hériter, ou forcer dans un sens. */
+type ExtraChoice = 'deny' | 'inherit' | 'allow';
 
 interface Props {
     feature: FeatureId;
@@ -62,138 +69,139 @@ export default function ItemGrantsPanel({ feature, itemId, workspaceId }: Props)
         void ws
             .send('share.grantSet', { feature, itemId, workspaceId, roleId, ...patch })
             .then(setState)
-            .catch(() => setError('Modification impossible. Gérer les rôles de cet espace vous est peut-être fermé.'))
+            .catch(() =>
+                setError('Modification impossible. Régler les permissions de cet espace vous est peut-être fermé.')
+            )
             .finally(() => setBusy(false));
     };
 
-    // `null` **retire** l'exception : c'est l'absence qui exprime « rien de
-    // particulier », pas une valeur neutre.
-    const set = (roleId: number, value: ItemAccess | 'inherit'): void =>
+    // `null` **retire** la surcharge : c'est l'absence qui exprime « comme la
+    // fonctionnalité », pas une valeur neutre.
+    const setAccess = (roleId: number, value: ItemAccess | 'inherit'): void =>
         send(roleId, { access: value === 'inherit' ? null : value });
 
-    /**
-     * Un clic pose la surcharge inverse de l'héritage, le suivant la retire. Deux
-     * états au clic pour trois états possibles : « hérité » est celui qu'on
-     * retrouve, jamais celui qu'on vise.
-     */
-    const cycleExtra = (role: ItemGrantState['roles'][number], key: string, inherited: boolean): void => {
+    const setExtra = (role: ItemGrantState['roles'][number], key: string, choice: ExtraChoice): void => {
         const next = { ...role.extraOverrides };
-        if (key in next) delete next[key];
-        else next[key] = !inherited;
+        if (choice === 'inherit') delete next[key];
+        else next[key] = choice === 'allow';
         send(role.roleId, { extraOverrides: next });
     };
 
     if (error && !state) return <p className={styles.notice}>{error}</p>;
     if (!state) return <p className={styles.sectionHint}>Chargement…</p>;
 
+    const label = featureDescriptor(feature).label;
     const noun = featureDescriptor(feature).itemNoun ?? 'élément';
 
     if (state.roles.length === 0) {
         return (
             <p className={styles.empty}>
-                « {state.workspaceName} » n’a aucun rôle : il n’y a personne à qui restreindre l’accès de ce {noun}.
+                « {state.workspaceName} » n’a aucun rôle : il n’y a personne à qui régler l’accès de ce {noun}.
             </p>
         );
     }
 
-    /** La phrase qui dit ce que le rôle voit, exception et héritage confondus. */
+    /** Ce que le rôle obtient au bout du compte, surcharge et héritage confondus. */
     const effectiveOf = (role: ItemGrantState['roles'][number]): string => {
-        if (role.featureAccess === 'none') {
-            return `Sans accès à ${featureDescriptor(feature).label} : ne le voit pas, quoi qu’on règle ici.`;
-        }
-        if (role.access === 'none') return `Masqué — surcharge posée sur ce ${noun}.`;
-        if (role.access === 'read') return `Lecture seule — surcharge posée sur ce ${noun}.`;
-        if (role.access === 'write') return `Lecture et écriture — surcharge posée sur ce ${noun}.`;
-        return `Comme la fonctionnalité : ${FEATURE_ACCESS_LABEL[role.featureAccess]}.`;
-    };
-
-    /**
-     * Les permissions propres de la fonctionnalité, rôle par rôle : toutes, et
-     * dans les deux sens. Le rôle donne la valeur héritée, l'élément la
-     * surcharge — on peut confier le terminal sur CETTE machine à un rôle qui ne
-     * l'a nulle part ailleurs, ou le lui retirer ici seulement.
-     */
-    const extraChips = (role: ItemGrantState['roles'][number]) => {
-        if (state.extras.length === 0 || role.featureAccess === 'none') return null;
-        const hiddenHere = role.access === 'none';
-        return (
-            <div className={styles.grantExtras}>
-                {state.extras.map((spec) => {
-                    const inherited = role.featureExtras.includes(spec.key);
-                    const forced = role.extraOverrides[spec.key];
-                    const on = (forced ?? inherited) && !hiddenHere;
-                    const overridden = forced !== undefined;
-                    const title = hiddenHere
-                        ? `Ce ${noun} est masqué pour « ${role.name} » : rien ne s’ouvre.`
-                        : overridden
-                          ? `${on ? 'Accordée' : 'Retirée'} sur ce ${noun} seulement. Cliquer pour revenir à ${featureDescriptor(feature).label}.`
-                          : `Suit ${featureDescriptor(feature).label} (${inherited ? 'accordée' : 'refusée'}). Cliquer pour ${inherited ? 'la retirer' : 'l’accorder'} sur ce ${noun}.`;
-                    return (
-                        <button
-                            key={spec.key}
-                            type='button'
-                            className={`${styles.grantChip} ${on ? styles.grantChipOn : ''} ${
-                                overridden ? styles.grantChipForced : ''
-                            }`}
-                            aria-pressed={on}
-                            aria-disabled={hiddenHere}
-                            disabled={busy}
-                            title={title}
-                            onClick={() => {
-                                if (hiddenHere) return;
-                                cycleExtra(role, spec.key, inherited);
-                            }}
-                        >
-                            <span className={`icon ${on ? 'icon-v' : 'icon-x'} ${styles.grantChipIcon}`} />
-                            {spec.label}
-                        </button>
-                    );
-                })}
-            </div>
-        );
+        if (role.featureAccess === 'none') return `Sans accès à ${label} : cela se règle sur le rôle.`;
+        if (role.access === null) return `Comme ${label} : ${FEATURE_ACCESS_LABEL[role.featureAccess]}.`;
+        return `Sur ce ${noun} : ${FEATURE_ACCESS_LABEL[role.access]}.`;
     };
 
     return (
         <div className={styles.grantPanel}>
-            <div className={styles.channelList}>
-                {state.roles.map((role) => (
-                    <div key={role.roleId} className={styles.channelRow}>
-                        <span className={styles.roleDot} style={{ background: role.color }} aria-hidden='true' />
-                        <span className={styles.channelText}>
-                            <span className={styles.channelLabel}>{role.name}</span>
-                            <span className={styles.channelMeta}>{effectiveOf(role)}</span>
-                            {extraChips(role)}
-                        </span>
-                        {/* Trois choix fixes : des boutons collés plutôt qu'un
-                            déroulant. Ce que « Hérité » vaut pour ce rôle est dans
-                            l'infobulle et la phrase sous son nom. */}
-                        <SegmentedControl
-                            value={role.access ?? 'inherit'}
-                            disabled={busy || role.featureAccess === 'none'}
-                            aria-label={`Accès de ${role.name} à ce ${noun}`}
-                            onChange={(v) => set(role.roleId, v)}
-                            options={[
-                                {
-                                    value: 'inherit',
-                                    label: 'Hérité',
-                                    title: `Comme la fonctionnalité : ${FEATURE_ACCESS_LABEL[role.featureAccess]}`
-                                },
-                                { value: 'none', label: 'Masqué', title: `Ce ${noun} n’apparaît pas pour ce rôle` },
-                                {
-                                    value: 'read',
-                                    label: 'Lecture',
-                                    title: `Consulter ce ${noun}, sans le modifier`
-                                },
-                                {
-                                    value: 'write',
-                                    label: 'Écriture',
-                                    title: `Modifier ce ${noun}, même si le rôle n’a que la lecture ailleurs`
-                                }
-                            ]}
-                        />
-                    </div>
-                ))}
-            </div>
+            {state.roles.map((role) => {
+                // Le plancher : un rôle sans accès à la fonctionnalité ne peut
+                // rien recevoir ici, et sa carte le dit plutôt que de disparaître.
+                const floored = role.featureAccess === 'none';
+                const hiddenHere = role.access === 'none';
+                return (
+                    <section key={role.roleId} className={styles.grantRole}>
+                        <div className={styles.grantRoleHead}>
+                            <span className={styles.roleDot} style={{ background: role.color }} aria-hidden='true' />
+                            <span className={styles.channelText}>
+                                <span className={styles.channelLabel}>{role.name}</span>
+                                <span className={styles.channelMeta}>{effectiveOf(role)}</span>
+                            </span>
+                        </div>
+
+                        <div className={styles.grantRoleCard}>
+                            <div className={styles.grantRoleRow}>
+                                <span className={styles.grantRoleLabel}>Accès</span>
+                                <SegmentedControl
+                                    value={role.access ?? 'inherit'}
+                                    disabled={busy || floored}
+                                    aria-label={`Accès de ${role.name} à ce ${noun}`}
+                                    onChange={(v) => setAccess(role.roleId, v)}
+                                    options={[
+                                        {
+                                            value: 'none',
+                                            label: 'Masqué',
+                                            title: `Ce ${noun} n’apparaît pas pour ce rôle`
+                                        },
+                                        {
+                                            value: 'inherit',
+                                            label: 'Hérité',
+                                            title: `Comme ${label} : ${FEATURE_ACCESS_LABEL[role.featureAccess]}`
+                                        },
+                                        {
+                                            value: 'read',
+                                            label: 'Lecture',
+                                            title: `Consulter ce ${noun}, sans le modifier`
+                                        },
+                                        {
+                                            value: 'write',
+                                            label: 'Écriture',
+                                            title: `Modifier ce ${noun}, même si le rôle n’a que la lecture ailleurs`
+                                        }
+                                    ]}
+                                />
+                            </div>
+
+                            {state.extras.map((spec) => {
+                                const inherited = role.featureExtras.includes(spec.key);
+                                const forced = role.extraOverrides[spec.key];
+                                const value: ExtraChoice = forced === undefined ? 'inherit' : forced ? 'allow' : 'deny';
+                                return (
+                                    <div key={spec.key} className={styles.grantRoleRow}>
+                                        <span className={styles.grantRoleLabel}>{spec.label}</span>
+                                        <SegmentedControl
+                                            value={value}
+                                            disabled={busy || floored || hiddenHere}
+                                            aria-label={`${spec.label} de ${role.name} sur ce ${noun}`}
+                                            onChange={(v) => setExtra(role, spec.key, v)}
+                                            options={[
+                                                {
+                                                    value: 'deny',
+                                                    label: 'Refusée',
+                                                    title: `Retirée sur ce ${noun}, même si ${label} l’accorde`
+                                                },
+                                                {
+                                                    value: 'inherit',
+                                                    label: 'Hérité',
+                                                    title: `Comme ${label} : ${inherited ? 'accordée' : 'refusée'}`
+                                                },
+                                                {
+                                                    value: 'allow',
+                                                    label: 'Accordée',
+                                                    title: `Accordée sur ce ${noun}, même si ${label} la refuse`
+                                                }
+                                            ]}
+                                        />
+                                    </div>
+                                );
+                            })}
+
+                            {hiddenHere && state.extras.length > 0 && (
+                                <p className={styles.fieldHint}>
+                                    Ce {noun} est masqué pour ce rôle : ses permissions ne s’appliquent pas tant que
+                                    l’accès reste fermé.
+                                </p>
+                            )}
+                        </div>
+                    </section>
+                );
+            })}
 
             {error && <p className={styles.notice}>{error}</p>}
         </div>

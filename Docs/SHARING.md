@@ -225,12 +225,13 @@ obligerait à deviner le reste. Le serveur rend tout en une commande
 (`share.grantList` : rôles de l'espace visé, hérité, exception), pour que
 l'écran n'ait aucun recoupement à faire.
 
-Les permissions propres suivent la même règle, en puces sous le nom du rôle :
-**toutes** celles que la fonctionnalité déclare, dans les deux sens. Une puce
-pointillée hérite, une puce pleine porte une surcharge posée ici ; un clic pose
-l'inverse de l'héritage, le suivant la retire — deux gestes pour trois états,
-« hérité » étant celui qu'on retrouve et jamais celui qu'on vise. Des puces et
-non un formulaire par rôle : le panneau doit rester lisible avec dix rôles.
+La forme est celle de **l'éditeur de rôle** : un bloc par rôle, son identité
+au-dessus, ses droits dans une carte. On y règle les mêmes droits à une autre
+échelle, ce doit être la même forme. Le niveau d'abord, puis une rangée par
+permission de la fonctionnalité — chacune sur le même sélecteur à segments, où
+« Hérité » est une valeur parmi les autres. Un premier essai en puces à trois
+états, distinguées par leur bordure, a été retiré : la valeur courante et la
+valeur héritée s'y devinaient au trait, ce qui ne se lit pas.
 
 ### Se règle d'où l'on est
 

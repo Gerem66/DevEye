@@ -163,7 +163,10 @@ L'appartenance reste la frontière, et la présence ne la contourne pas.
   relu par la _commande suivante_ ; une socket assise dans une salle n'en émet pas
   forcément. D'où `evict` / `evictRoom` / `evictEverywhere` posés à côté de chaque
   `invalidateAccess()` qui **retire** un accès, et `resync` pour un rôle
-  simplement rétréci. `userChanged`, lui, vise un compte **hors de sa salle** :
+  simplement rétréci — `share.grantSet` compris, qui l'avait oublié : sans lui,
+  l'époque périmée faisait tomber la trame « les appareils ont changé » pour
+  TOUT le monde, et une permission réglée n'avait l'air de prendre qu'au
+  rechargement. `userChanged`, lui, vise un compte **hors de sa salle** :
   gagner ou perdre un espace se décide depuis cet espace pendant que
   l'intéressé est assis ailleurs, et sans cette voie sa liste d'espaces
   resterait figée jusqu'au rechargement.
