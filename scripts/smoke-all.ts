@@ -46,11 +46,34 @@ function run(cmd: string, args: string[], opts: { cwd?: string; env?: NodeJS.Pro
     return res.status === 0;
 }
 
+/**
+ * Ce que le serveur a journalisé, depuis l'octet `fromByte` : le tour d'un
+ * module n'imprime alors que SES lignes. C'est le seul endroit où figure la
+ * raison d'un refus, qu'un magasin client avale en silence, et le fichier part
+ * avec le runner.
+ */
+function tailServerLog(logFile: string, fromByte = 0): void {
+    let lines: string[] = [];
+    try {
+        lines = fs
+            .readFileSync(logFile)
+            .subarray(fromByte)
+            .toString('utf8')
+            .split('\n')
+            .filter((l) => l.trim() !== '');
+    } catch {
+        return;
+    }
+    if (lines.length === 0) return;
+    console.error('  journal du serveur:');
+    for (const line of lines.slice(-30)) console.error(`    ${line}`);
+}
+
 async function waitForServer(server: ChildProcess, logFile: string): Promise<void> {
     const deadline = Date.now() + 90_000;
     while (Date.now() < deadline) {
         if (server.exitCode !== null) {
-            console.error(fs.readFileSync(logFile, 'utf8').split('\n').slice(-40).join('\n'));
+            tailServerLog(logFile);
             fail(
                 `le serveur s'est arrêté avant d'être prêt (code ${server.exitCode}) — base joignable ? variables DB_* ?`
             );
@@ -122,8 +145,12 @@ async function main(): Promise<void> {
 
     const failed: string[] = [];
     for (const m of modules) {
+        const from = fs.statSync(logFile).size;
         const ok = run(TSX, [path.join(ROOT, 'scripts', 'smoke-feature.ts'), m.id, m.label, `--url=${BASE_URL}`]);
-        if (!ok) failed.push(m.id);
+        if (!ok) {
+            failed.push(m.id);
+            tailServerLog(logFile, from);
+        }
     }
 
     stopServer();

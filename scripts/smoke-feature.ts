@@ -141,21 +141,29 @@ let currentWatch: Watch | null = null;
 function consoleTail(): string {
     if (!currentWatch) return '';
     const lines = [
+        ...currentWatch.refusedRemotely.slice(-3).map((e) => `refus du serveur: ${e}`),
         ...currentWatch.exceptions.slice(-3).map((e) => `exception: ${e}`),
         ...currentWatch.consoleErrors.slice(-3).map((e) => `console.error: ${e}`)
     ];
     return lines.length > 0 ? `\n  ${lines.join('\n  ').replace(/\s+/g, ' ').slice(0, 1200)}` : '';
 }
 
-/** Attend qu'un prédicat (évalué en boucle) devienne vrai, sinon échoue en nommant l'étape. */
-async function waitFor(step: string, timeoutMs: number, check: () => Promise<boolean>): Promise<void> {
+/**
+ * Attend qu'un prédicat (évalué en boucle) devienne vrai, sinon échoue en
+ * nommant l'étape. Une fonction plutôt qu'une chaîne quand l'intitulé dépend de
+ * ce que la veille aura relevé d'ici l'échéance.
+ */
+async function waitFor(step: string | (() => string), timeoutMs: number, check: () => Promise<boolean>): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
         if (await check()) return;
         await sleep(200);
     }
     const shown = (await dumpPageText().catch(() => '')).replace(/\s+/g, ' ').slice(0, 400);
-    fail(step, `délai de ${timeoutMs} ms dépassé\n  écran: ${shown}${consoleTail()}`);
+    fail(
+        typeof step === 'function' ? step() : step,
+        `délai de ${timeoutMs} ms dépassé\n  écran: ${shown}${consoleTail()}`
+    );
 }
 
 // ------------------------------------------------------------------ la page pilotée
@@ -183,6 +191,12 @@ interface Watch {
     roundTrips: string[];
     /** Refus locaux « Unknown command », que seule la console trahit. */
     refusedLocally: number;
+    /**
+     * Commandes parties et refusées par le serveur. Un magasin qui avale son
+     * rejet rend ce cas indiscernable d'une commande jamais envoyée : sans cette
+     * liste, l'échec accuse le registre client alors que le serveur a répondu.
+     */
+    refusedRemotely: string[];
 }
 
 /** Lance Chromium sur un profil temporaire ; rend l'URL DevTools et de quoi tout nettoyer. */
@@ -212,7 +226,10 @@ async function launchBrowser(): Promise<{ wsUrl: string; cleanup: () => void }> 
     // « DevTools listening on ws://... » arrive sur stderr au démarrage.
     const wsUrl = await new Promise<string>((resolve, reject) => {
         let buf = '';
-        const timer = setTimeout(() => reject(new Error('Chromium n’a pas annoncé son port DevTools')), 15_000);
+        // Large à dessein : le tout premier lancement d'un Chrome froid, sur un
+        // runner qui vient de démarrer, dépasse allègrement quinze secondes,
+        // quand les suivants tiennent en une.
+        const timer = setTimeout(() => reject(new Error('Chromium n’a pas annoncé son port DevTools')), 45_000);
         browser.stderr?.on('data', (chunk: Buffer) => {
             buf += chunk.toString();
             const m = /DevTools listening on (ws:\/\/\S+)/.exec(buf);
@@ -279,7 +296,13 @@ async function openPage(wsUrl: string): Promise<Page> {
 
 /** Collecte exceptions, console.error et trames WS de l'app, pour le verdict. */
 function watchPage(page: Page): Watch {
-    const watch: Watch = { exceptions: [], consoleErrors: [], roundTrips: [], refusedLocally: 0 };
+    const watch: Watch = {
+        exceptions: [],
+        consoleErrors: [],
+        roundTrips: [],
+        refusedLocally: 0,
+        refusedRemotely: []
+    };
     currentWatch = watch;
     /** requestId -> commande, pour les trames sorties portant le préfixe du module. */
     const sentByRequest = new Map<string, string>();
@@ -317,10 +340,16 @@ function watchPage(page: Page): Watch {
             try {
                 const frame = JSON.parse(d.response?.payloadData ?? '') as {
                     requestId?: string;
-                    payload?: { ok?: boolean };
+                    payload?: { ok?: boolean; error?: { code?: string; message?: string } };
                 };
                 const command = frame.requestId ? sentByRequest.get(frame.requestId) : undefined;
-                if (command && frame.payload?.ok === true) watch.roundTrips.push(command);
+                if (command) {
+                    if (frame.payload?.ok === true) watch.roundTrips.push(command);
+                    else {
+                        const e = frame.payload?.error;
+                        watch.refusedRemotely.push(`${command}: ${e?.code ?? 'erreur'}, ${e?.message ?? ''}`);
+                    }
+                }
             } catch {
                 /* idem */
             }
@@ -422,7 +451,10 @@ async function placeTile(page: Page): Promise<void> {
 /** 3. Une commande du module part sur le fil ET reçoit une réponse ok. */
 async function awaitFirstRoundTrip(watch: Watch): Promise<void> {
     await waitFor(
-        `un aller-retour « ${PREFIX}* » sur le fil — les commandes du module sont-elles enregistrées côté client ?`,
+        () =>
+            watch.refusedRemotely.length > 0
+                ? `un aller-retour « ${PREFIX}* » sur le fil : le serveur a refusé ${watch.refusedRemotely.length} commande(s)`
+                : `un aller-retour « ${PREFIX}* » sur le fil (les commandes du module sont-elles enregistrées côté client ?)`,
         20_000,
         async () => watch.roundTrips.length > 0
     );
@@ -462,6 +494,12 @@ function verdict(watch: Watch): void {
     }
     if (watch.exceptions.length > 0) {
         fail('exceptions JS', watch.exceptions.slice(0, 5).join('\n  '));
+    }
+    // Non bloquant : un refus attendu existe (une boîte mail à connecter, un
+    // conflit), et le scénario a par ailleurs obtenu ses allers-retours.
+    if (watch.refusedRemotely.length > 0) {
+        console.warn(`  ⚠ ${watch.refusedRemotely.length} commande(s) refusée(s) par le serveur (non bloquant):`);
+        for (const line of watch.refusedRemotely.slice(0, 5)) console.warn(`    ${line.slice(0, 160)}`);
     }
     if (watch.consoleErrors.length > 0) {
         console.warn(`  ⚠ ${watch.consoleErrors.length} console.error (non bloquant):`);
