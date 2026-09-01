@@ -430,7 +430,9 @@
     gap: 4px;
     padding: 2px var(--space-xs);
     background: transparent;
-    border: 1px solid var(--glass-border);
+    /* Pointillé tant que la puce hérite : le trait plein est réservé à ce qui
+       est posé sur l'élément lui-même. */
+    border: 1px dashed var(--glass-border);
     border-radius: var(--radius-sm);
     color: var(--text-muted);
     font-size: 0.7rem;
@@ -446,6 +448,18 @@
     background: var(--accent-bg);
     border-color: var(--accent);
     color: var(--accent);
+}
+
+/* Une surcharge, par opposition à l'héritage : le trait plein dit que cette
+   valeur est posée ICI et ne suivra plus la fonctionnalité. */
+.grantChipForced {
+    border-style: solid;
+    border-color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.grantChipOn.grantChipForced {
+    border-color: var(--accent);
 }
 
 .grantChip:hover:not([aria-disabled='true']):not(:disabled) {

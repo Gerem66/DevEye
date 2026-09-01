@@ -43,7 +43,7 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
     const permissions = useWorkspacePermissions();
     const active = useActiveWorkspace();
     const canRead = permissions.canFeature(scope.feature, 'read');
-    const canRestrict = permissions.can('workspace.roles');
+    const canRestrict = permissions.canManageItemGrants(scope.feature);
     const isShared = active?.kind === 'shared';
 
     return useMemo(() => {
@@ -54,10 +54,11 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
         // Partage et Permissions : à l'échelle d'un élément seulement. Le
         // branchement (`isShareWired`) et non `shareTier` : le premier dit ce
         // que le code fait, le second ce que le chiffrement autoriserait, et le
-        // serveur refuse ce qui n'est pas branché. Permissions derrière
-        // `workspace.roles` : restreindre un élément, c'est régler ce qu'un rôle
-        // voit, et un espace personnel n'a pas de rôles. « Qui a accès à la
-        // fonctionnalité » se règle sur le rôle, dans Gérer l'espace.
+        // serveur refuse ce qui n'est pas branché. Permissions derrière le droit
+        // de régler les permissions par élément de CETTE fonctionnalité (ou la
+        // capacité `workspace.roles`, qui l'englobe), et un espace personnel n'a
+        // pas de rôles. « Qui a accès à la fonctionnalité » se règle sur le rôle,
+        // dans Gérer l'espace.
         const pushSharingSections = (into: SectionDef[]): void => {
             if (scope.kind !== 'item' || !isShareWired(scope.feature)) return;
             if (permissions.canFeature(scope.feature, 'write') && scope.shareable !== false) {

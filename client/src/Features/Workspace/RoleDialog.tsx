@@ -77,6 +77,8 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
     const [features, setFeatures] = useState<Record<string, FeatureAccess | 'none'>>({});
     /** Gestion des canaux d'alerte, par fonctionnalité émettrice. */
     const [channels, setChannels] = useState<Record<string, boolean>>({});
+    /** Réglage des permissions par élément, par fonctionnalité à éléments. */
+    const [itemPerms, setItemPerms] = useState<Record<string, boolean>>({});
     /** Permissions déclarées par les features (manifest `extraPermissions`), par feature puis par clé. */
     const [extras, setExtras] = useState<Record<string, Record<string, boolean | string>>>({});
     const [section, setSection] = useState<RoleSection>('space');
@@ -119,6 +121,11 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
                 registry.map((f) => [f.id, role?.features.find((g) => g.feature === f.id)?.channels ?? false])
             )
         );
+        setItemPerms(
+            Object.fromEntries(
+                registry.map((f) => [f.id, role?.features.find((g) => g.feature === f.id)?.itemPermissions ?? false])
+            )
+        );
         setExtras(
             Object.fromEntries(
                 registry.map((f) => [f.id, role?.features.find((g) => g.feature === f.id)?.extras ?? {}])
@@ -158,6 +165,9 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
                         feature: f.id,
                         access: a,
                         channels: f.notifies && (channels[f.id] ?? false),
+                        // Même règle : sans éléments, le champ est rangé à false
+                        // plutôt qu'à un état sans objet.
+                        itemPermissions: f.hasItems && (itemPerms[f.id] ?? false),
                         extras: grantExtras(f.id)
                     }
                 ];
@@ -335,10 +345,31 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
                                 La description vit DANS la case, alignée sous son
                                 libellé — en frère du label elle repartait de la
                                 marge, sous la boîte. */}
-                            {(active.notifies || extraSpecs.length > 0) && (
+                            {(active.notifies || active.hasItems || extraSpecs.length > 0) && (
                                 <div className={styles.grantExtras}>
                                     <span className={styles.grantExtrasLabel}>Permissions supplémentaires</span>
                                     <div className={`${styles.card} ${styles.rowList}`}>
+                                        {active.hasItems && (
+                                            <Checkbox
+                                                className={styles.checkRow}
+                                                checked={!noAccess && (itemPerms[active.id] ?? false)}
+                                                disabled={noAccess}
+                                                onChange={() =>
+                                                    setItemPerms((prev) => ({
+                                                        ...prev,
+                                                        [active.id]: !(prev[active.id] ?? false)
+                                                    }))
+                                                }
+                                            >
+                                                Gérer les permissions par {active.itemNoun ?? 'élément'}
+                                                <span className={shell.fieldHint}>
+                                                    Régler ce que chaque rôle peut faire d’un{' '}
+                                                    {active.itemNoun ?? 'élément'} pris séparément, sans ouvrir l’écran
+                                                    des rôles. Ce réglage-là ne se surcharge jamais par{' '}
+                                                    {active.itemNoun ?? 'élément'}.
+                                                </span>
+                                            </Checkbox>
+                                        )}
                                         {active.notifies && (
                                             <Checkbox
                                                 className={styles.checkRow}

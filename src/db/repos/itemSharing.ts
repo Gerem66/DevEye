@@ -1,4 +1,4 @@
-import type { ItemAccess, ItemRoleGrantRow, ItemShareRow } from '@deveye/types';
+import type { ItemAccess, ItemExtraOverrides, ItemRoleGrantRow, ItemShareRow } from '@deveye/types';
 
 import type { Queryable } from '../pool';
 
@@ -34,28 +34,34 @@ export interface ItemSharingRepo {
     /** Les restrictions qui touchent un rôle, pour toute une feature (résolution d'accès). */
     grantsForRole(workspaceId: number, feature: string, roleId: number): Promise<ItemRoleGrantRow[]>;
     /**
-     * Pose ce qu'un rôle voit de cet élément. Les deux volets se règlent seuls :
-     * `undefined` laisse le volet en place. Une ligne dont les deux volets sont
-     * vides est retirée — l'absence est ce qui exprime « rien de particulier ».
+     * Pose ce qu'un rôle peut faire de cet élément, en surcharge du grant de la
+     * fonctionnalité. Les deux volets se règlent seuls : `undefined` laisse le
+     * volet en place. Une ligne dont les deux volets sont vides est retirée —
+     * l'absence est ce qui exprime « comme la fonctionnalité ».
      */
     setGrant(
         workspaceId: number,
         feature: string,
         itemId: string,
         roleId: number,
-        patch: { access?: ItemAccess | null; deniedExtras?: readonly string[] }
+        patch: { access?: ItemAccess | null; extraOverrides?: ItemExtraOverrides }
     ): Promise<void>;
 }
 
-/** Les clés refusées d'une ligne, quel que soit ce que le pilote rend pour un JSON. */
-export function deniedExtrasOf(row: Pick<ItemRoleGrantRow, 'denied_extras'>): string[] {
-    const raw = row.denied_extras;
-    if (!raw) return [];
+/** Les permissions surchargées d'une ligne, quoi que le pilote rende pour un JSON. */
+export function extraOverridesOf(row: Pick<ItemRoleGrantRow, 'extra_overrides'>): ItemExtraOverrides {
+    const raw = row.extra_overrides;
+    if (!raw) return {};
     try {
         const parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        return Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === 'string') : [];
+        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+        const out: ItemExtraOverrides = {};
+        for (const [key, value] of Object.entries(parsed)) {
+            if (typeof value === 'boolean') out[key] = value;
+        }
+        return out;
     } catch {
-        return [];
+        return {};
     }
 }
 
@@ -163,12 +169,12 @@ export function itemSharingRepo(pool: Q): ItemSharingRepo {
             );
             const row = current.rows[0] ?? null;
             const access = patch.access !== undefined ? patch.access : (row?.access ?? null);
-            const denied =
-                patch.deniedExtras !== undefined
-                    ? [...patch.deniedExtras]
-                    : deniedExtrasOf(row ?? { denied_extras: null });
+            const overrides =
+                patch.extraOverrides !== undefined
+                    ? patch.extraOverrides
+                    : extraOverridesOf(row ?? { extra_overrides: null });
 
-            if (access === null && denied.length === 0) {
+            if (access === null && Object.keys(overrides).length === 0) {
                 // L'absence de ligne est « rien de particulier » : pas de valeur
                 // neutre écrite.
                 await pool.query(
@@ -179,10 +185,10 @@ export function itemSharingRepo(pool: Q): ItemSharingRepo {
                 return;
             }
             await pool.query(
-                `INSERT INTO item_role_grants (workspace_id, feature, item_id, role_id, access, denied_extras)
+                `INSERT INTO item_role_grants (workspace_id, feature, item_id, role_id, access, extra_overrides)
                  VALUES (?, ?, ?, ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE access = VALUES(access), denied_extras = VALUES(denied_extras)`,
-                [...key, access, JSON.stringify([...new Set(denied)].sort())]
+                 ON DUPLICATE KEY UPDATE access = VALUES(access), extra_overrides = VALUES(extra_overrides)`,
+                [...key, access, JSON.stringify(overrides)]
             );
         }
     };

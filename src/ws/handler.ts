@@ -12,6 +12,8 @@ import {
     type ServerMessage,
     type WorkspaceCapability,
     type FeatureId,
+    type ItemAccess,
+    type ItemExtraOverrides,
     liveTopicSchema
 } from '@deveye/types';
 import type { FastifyInstance } from 'fastify';
@@ -217,6 +219,10 @@ export async function registerWS(
                 // La lecture de la feature est incluse : gérer les destinations
                 // d'une fonctionnalité qu'on ne voit pas n'a pas de sens.
                 const canChannels = (f: FeatureId): boolean => canFeature(f) && scope.channels.has(f);
+                // Gouverner les rôles englobe le réglage par élément : qui écrit
+                // les grants n'a pas besoin d'un second titre pour les nuancer.
+                const canManageItemGrants = (f: FeatureId): boolean =>
+                    canFeature(f) && (can('workspace.roles') || scope.itemPermissions.has(f));
                 const assertChannels = (f: FeatureId): void => {
                     if (!canChannels(f)) {
                         throw new FeatureError(
@@ -230,14 +236,18 @@ export async function registerWS(
                     itemId: string,
                     level: FeatureAccess = 'read'
                 ): Promise<void> => {
-                    // La feature d'abord : une restriction d'élément ne peut
-                    // qu'abaisser, jamais ouvrir ce que la feature ferme.
-                    assertFeature(f, level);
-                    const restriction = (await scope.itemRestrictions(f)).get(itemId);
-                    if (restriction === 'none') {
+                    // Le plancher : sans lecture sur la fonctionnalité, aucun
+                    // élément n'existe pour ce rôle et rien ne se surcharge.
+                    assertFeature(f, 'read');
+                    // Au-dessus, la surcharge REMPLACE ce que la feature donne,
+                    // dans les deux sens : elle peut ouvrir l'écriture à un rôle
+                    // qui n'a que la lecture ailleurs.
+                    const override = (await scope.itemRestrictions(f)).get(itemId);
+                    const effective = override ?? scope.features.get(f) ?? 'none';
+                    if (effective === 'none') {
                         throw new FeatureError('forbidden', 'Cet élément ne vous est pas accessible');
                     }
-                    if (restriction === 'read' && level === 'write') {
+                    if (level === 'write' && effective !== 'write') {
                         throw new FeatureError('forbidden', 'Cet élément est en lecture seule pour votre rôle');
                     }
                     await assertItemExtras(f, itemId);
@@ -245,19 +255,22 @@ export async function registerWS(
 
                 /**
                  * Les permissions propres que CETTE commande déclare, éprouvées
-                 * contre l'élément qu'elle vise. Le dispatcheur les a déjà
-                 * appliquées à l'échelle de la fonctionnalité ; le refus posé
-                 * sur un élément précis ne peut mordre qu'ici, la cible n'étant
+                 * contre l'élément qu'elle vise. Le dispatcheur n'a pu vérifier
+                 * qu'une chose en amont : qu'un élément AU MOINS les accorde. La
+                 * surcharge de celui-ci ne peut mordre qu'ici, la cible n'étant
                  * nommée que dans l'entrée du handler.
                  */
                 const assertItemExtras = async (f: FeatureId, itemId: string): Promise<void> => {
                     const required = def.access?.extras ?? [];
                     if (required.length === 0 || def.access?.feature !== f) return;
-                    const denied = (await scope.itemExtraDenials(f)).get(itemId);
-                    if (!denied) return;
+                    const overrides = (await scope.itemExtraOverrides(f)).get(itemId) ?? {};
                     for (const key of required) {
-                        if (denied.has(key)) {
-                            throw new FeatureError('forbidden', 'Cette permission vous est retirée sur cet élément');
+                        const granted = overrides[key] ?? holdsExtra(f, key);
+                        if (!granted) {
+                            throw new FeatureError(
+                                'forbidden',
+                                'Cette permission ne vous est pas accordée sur cet élément'
+                            );
                         }
                     }
                 };
@@ -267,27 +280,62 @@ export async function registerWS(
                  * manifest), résolue contre les specs déclarées : une clé que le
                  * manifest ne connaît pas ne peut donc jamais valoir « accordée ».
                  */
-                const assertExtra = (f: FeatureId, key: string): void => {
-                    const { canExtra } = resolveExtras(
+                const holdsExtra = (f: FeatureId, key: string): boolean =>
+                    resolveExtras(
                         moduleManifest(f)?.extraPermissions,
                         scope.isOwner,
                         scope.extras.get(f) ?? {}
-                    );
-                    if (!canExtra(key)) {
-                        throw new FeatureError('forbidden', 'Cette permission ne vous est pas accordée');
+                    ).canExtra(key);
+
+                /**
+                 * Les gardes déclarées ne connaissent pas la cible : une commande
+                 * ne nomme son élément que dans son entrée. Elles ne peuvent donc
+                 * demander qu'une chose ici : que le droit soit tenu sur la
+                 * fonctionnalité, OU qu'un élément au moins le surcharge en ce
+                 * sens. `assertItem` tranche ensuite pour l'élément visé — sans
+                 * cette souplesse, une surcharge ne serait jamais atteinte, le
+                 * refus tombant avant le handler.
+                 */
+                const someItemGrants = async (
+                    f: FeatureId,
+                    holds: (o: { access?: ItemAccess; extras: ItemExtraOverrides }) => boolean
+                ): Promise<boolean> => {
+                    const [access, extras] = await Promise.all([
+                        scope.itemRestrictions(f),
+                        scope.itemExtraOverrides(f)
+                    ]);
+                    const ids = new Set([...access.keys(), ...extras.keys()]);
+                    for (const id of ids) {
+                        if (holds({ access: access.get(id), extras: extras.get(id) ?? {} })) return true;
                     }
+                    return false;
+                };
+
+                const assertDeclaredFeature = async (f: FeatureId, level: FeatureAccess = 'read'): Promise<void> => {
+                    if (canFeature(f, level)) return;
+                    // Le plancher de visibilité reste le rôle : sans lecture sur
+                    // la fonctionnalité, aucun élément n'existe pour lui.
+                    assertFeature(f, 'read');
+                    if (await someItemGrants(f, (o) => o.access === level)) return;
+                    throw new FeatureError('forbidden', 'Cette fonctionnalité ne vous est pas ouverte ici');
+                };
+
+                const assertDeclaredExtra = async (f: FeatureId, key: string): Promise<void> => {
+                    if (holdsExtra(f, key)) return;
+                    if (await someItemGrants(f, (o) => o.extras[key] === true)) return;
+                    throw new FeatureError('forbidden', 'Cette permission ne vous est pas accordée');
                 };
 
                 // Declared authorization (see `FeatureAccessSpec`), enforced here
                 // so a command can never ship without its guard.
                 if (def.access?.admin) assertAdmin();
-                if (def.access?.feature) assertFeature(def.access.feature, def.access.level);
+                if (def.access?.feature) await assertDeclaredFeature(def.access.feature, def.access.level);
                 for (const c of def.access?.capabilities ?? []) assertCan(c);
                 // Les extras derrière le niveau : ils affinent un accès, ils ne
                 // le remplacent pas. Le contrôle de démarrage garantit qu'ils
                 // ne vont jamais sans la feature qui les déclare.
                 const gated = def.access?.feature;
-                if (gated) for (const key of def.access?.extras ?? []) assertExtra(gated, key);
+                if (gated) for (const key of def.access?.extras ?? []) await assertDeclaredExtra(gated, key);
 
                 const result = await def.handler(
                     {
@@ -307,9 +355,10 @@ export async function registerWS(
                         canFeature,
                         assertFeature,
                         canChannels,
+                        canManageItemGrants,
                         assertChannels,
                         itemRestrictions: scope.itemRestrictions,
-                        itemExtraDenials: scope.itemExtraDenials,
+                        itemExtraOverrides: scope.itemExtraOverrides,
                         assertItemExtras,
                         assertItem,
                         extrasFor: (f) => scope.extras.get(f) ?? {},

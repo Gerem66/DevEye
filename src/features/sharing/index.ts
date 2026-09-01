@@ -6,6 +6,7 @@ import {
     shareSet,
     type FeatureId,
     type ItemAccess,
+    type ItemExtraOverrides,
     type ItemGrantState,
     type ItemShareState,
     type ShareBlocker,
@@ -16,7 +17,7 @@ import { grantsFor, invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { moduleItems, moduleManifest } from '../_sdk/register';
 import { isShareWired, shareBlockerFor } from '../_sharing';
-import { deniedExtrasOf } from '@/db/repos/itemSharing';
+import { extraOverridesOf } from '@/db/repos/itemSharing';
 import { parseJsonArray } from '@/Utils/json';
 
 /**
@@ -27,16 +28,18 @@ import { parseJsonArray } from '@/Utils/json';
  */
 
 /**
- * L'appelant peut-il régler ce que les rôles d'un espace voient ? La réponse de
- * `workspace.roles` dans cet espace-là, résolue à la demande parce que l'espace
- * visé n'est pas forcément l'actif. Un espace personnel n'a pas de rôles.
+ * L'appelant peut-il régler les permissions par élément de CETTE fonctionnalité,
+ * dans cet espace ? Deux titres y mènent : gouverner les rôles de l'espace, ou
+ * tenir le champ `itemPermissions` du grant de la fonctionnalité — confier le
+ * réglage par appareil sans ouvrir l'écran des rôles.
  */
-async function canManageRolesIn(ctx: FeatureContext, workspaceId: number): Promise<boolean> {
+async function canManageItemGrantsIn(ctx: FeatureContext, workspaceId: number, feature: FeatureId): Promise<boolean> {
     const workspace = await ctx.db.workspaces.findById(workspaceId);
     if (!workspace || workspace.kind !== 'shared') return false;
     if (workspace.owner_user_id === ctx.userId) return true;
     const role = await ctx.db.workspaceRoles.findForMember(ctx.userId, workspaceId);
-    return grantsFor(false, role).capabilities.has('workspace.roles');
+    const grants = grantsFor(false, role);
+    return grants.capabilities.has('workspace.roles') || grants.itemPermissions.has(feature);
 }
 
 /**
@@ -123,7 +126,7 @@ async function shareState(
                     workspaceName: w.name,
                     isHome: w.id === homeWorkspaceId,
                     shared,
-                    grantsManageable: shared && !blocker && (await canManageRolesIn(ctx, w.id))
+                    grantsManageable: shared && !blocker && (await canManageItemGrantsIn(ctx, w.id, feature))
                 };
             })
         ),
@@ -278,15 +281,16 @@ async function resolveGrantTarget(
  * L'état complet des restrictions d'un élément dans un espace : chaque rôle,
  * ce que la fonctionnalité lui donne, et l'exception posée.
  */
-/** Ce que le journal retient d'une restriction posée : les deux volets, ou celui touché. */
-function grantAudit(input: { access?: ItemAccess | null; deniedExtras?: readonly string[] }): string {
+/** Ce que le journal retient d'une surcharge posée : les deux volets, ou celui touché. */
+function grantAudit(input: { access?: ItemAccess | null; extraOverrides?: ItemExtraOverrides }): string {
     const parts: string[] = [];
     if (input.access !== undefined) parts.push(input.access ?? 'comme la fonctionnalité');
-    if (input.deniedExtras !== undefined) {
+    if (input.extraOverrides !== undefined) {
+        const entries = Object.entries(input.extraOverrides);
         parts.push(
-            input.deniedExtras.length === 0
-                ? 'aucune permission retirée'
-                : `permissions retirées : ${input.deniedExtras.join(', ')}`
+            entries.length === 0
+                ? 'aucune permission surchargée'
+                : entries.map(([key, on]) => `${on ? '+' : '-'}${key}`).join(' ')
         );
     }
     return parts.join(' ; ');
@@ -322,10 +326,14 @@ async function grantState(
                 featureAccess: grant?.access ?? 'none',
                 access: row?.access ?? null,
                 featureExtras: held,
-                // Ce que le rôle ne tient pas sur la fonctionnalité n'a rien à
-                // faire ici : la ligne pourrait garder une clé d'un droit retiré
-                // depuis, et l'écran laisserait croire à une exception vivante.
-                deniedExtras: deniedExtrasOf(row ?? { denied_extras: null }).filter((k) => held.includes(k))
+                // Une clé que le manifest ne déclare plus n'a rien à faire ici :
+                // la ligne peut en garder une d'une permission retirée depuis, et
+                // l'écran laisserait croire à une surcharge vivante.
+                extraOverrides: Object.fromEntries(
+                    Object.entries(extraOverridesOf(row ?? { extra_overrides: null })).filter(([key]) =>
+                        specs.some((spec) => spec.key === key)
+                    )
+                )
             };
         })
     };
@@ -346,17 +354,17 @@ const grantSetFeature = defineFeature({
     mutates: true,
     handler: async (ctx, input) => {
         const target = await resolveGrantTarget(ctx, input, 'write');
-        // Poser une restriction, c'est régler ce qu'un rôle voit : la capacité
-        // de l'écran des rôles, dans l'espace visé et non dans l'actif.
-        if (!(await canManageRolesIn(ctx, target.workspaceId))) {
-            throw new FeatureError('forbidden', 'Vous ne gérez pas les rôles de cet espace.');
+        // Poser une surcharge, c'est régler ce qu'un rôle fait de cet élément :
+        // dans l'espace visé et non dans l'actif.
+        if (!(await canManageItemGrantsIn(ctx, target.workspaceId, input.feature))) {
+            throw new FeatureError('forbidden', 'Vous ne réglez pas les permissions de cette fonctionnalité.');
         }
         const role = await ctx.db.workspaceRoles.findById(input.roleId, target.workspaceId);
         if (!role) throw new FeatureError('not_found', 'Rôle introuvable');
 
         await ctx.db.itemSharing.setGrant(target.workspaceId, input.feature, input.itemId, input.roleId, {
             access: input.access,
-            deniedExtras: input.deniedExtras
+            extraOverrides: input.extraOverrides
         });
         // Les droits de tous ceux qui portent ce rôle viennent de changer, et le
         // scope les mémoïse sous l'époque : sans ce bump, la restriction ne

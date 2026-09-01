@@ -21,8 +21,9 @@ export default function ItemPermissionsSection({ scope }: Props) {
     return (
         <div className={styles.section}>
             <p className={styles.sectionHint}>
-                Ce que chaque rôle voit de ce {noun}, ici. On ne peut qu’abaisser : un rôle sans accès à{' '}
-                {featureDescriptor(scope.feature).label} ne peut pas le recevoir par ce biais.
+                Ce que chaque rôle peut faire de ce {noun}, ici. Ce que {featureDescriptor(scope.feature).label} accorde
+                n’est qu’un défaut : ce {noun} le surcharge dans les deux sens. Un rôle sans aucun accès à{' '}
+                {featureDescriptor(scope.feature).label} reste hors de portée, cela se règle sur le rôle.
             </p>
             <ItemGrantsPanel feature={feature} itemId={itemId} />
         </div>

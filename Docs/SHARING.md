@@ -195,18 +195,25 @@ cocher produirait un réglage muet.
 
 ## 6. Les droits par élément
 
-`item_role_grants` — **restrictif seulement**. `none` masque, `read` passe en
-lecture seule ; rien n'élève. Le droit de feature reste le plafond.
+`item_role_grants` — une **surcharge**. `none` masque, `read` passe en lecture
+seule, `write` ouvre l'écriture à un rôle qui ne l'a qu'en lecture ailleurs. Ce
+que le droit de feature accorde n'est plus un plafond mais un défaut, hérité par
+tous les éléments jusqu'à ce que l'un d'eux le remplace.
+
+Il reste un **plancher** : sans au moins la lecture sur la fonctionnalité,
+aucun élément n'existe pour le rôle. C'est ce qui laisse à l'écran des rôles la
+réponse à « qui a accès à Uptime ? » ; sans lui, il faudrait parcourir chaque
+élément de l'espace pour la trouver.
 
 La ligne porte **deux volets**. Le niveau, et les permissions propres de la
 fonctionnalité (`extraPermissions`, cf. [PERMISSIONS.md](./PERMISSIONS.md) §2)
-que cet élément-ci retire au rôle : donner le terminal à un rôle sans le lui
-donner sur CETTE machine. `access` est donc nullable — une ligne peut n'exister
-que pour des permissions retirées — et une ligne dont les deux volets sont vides
-est supprimée. Les deux se règlent séparément (`share.grantSet` laisse en place
-le volet qu'on ne lui passe pas) et se lisent d'une seule requête, vivant sur la
-même ligne. Seuls les booléens : un choix borné n'a pas d'ordre que le socle
-sache poser, il reste réglé sur le rôle.
+que cet élément-ci accorde ou retire au rôle : donner le terminal à un rôle sur
+CETTE machine seulement, ou le lui retirer ici seulement. `access` est nullable
+— une ligne peut n'exister que pour des permissions surchargées — et une ligne
+dont les deux volets sont vides est supprimée. Les deux se règlent séparément
+(`share.grantSet` laisse en place le volet qu'on ne lui passe pas) et se lisent
+d'une seule requête, vivant sur la même ligne. Seuls les booléens : un choix
+borné n'a pas d'ordre que le socle sache poser, il reste réglé sur le rôle.
 
 ### Une vue d'ensemble, pas une liste d'exceptions
 
@@ -219,10 +226,11 @@ obligerait à deviner le reste. Le serveur rend tout en une commande
 l'écran n'ait aucun recoupement à faire.
 
 Les permissions propres suivent la même règle, en puces sous le nom du rôle :
-**toutes** celles que la fonctionnalité déclare, y compris celles que ce rôle
-n'a pas — l'infobulle dit alors que cela se règle sur le rôle, pas ici. Des
-puces et non un formulaire par rôle : le panneau doit rester lisible avec dix
-rôles, et le geste utile est d'en ôter une, pas de remplir un tableau.
+**toutes** celles que la fonctionnalité déclare, dans les deux sens. Une puce
+pointillée hérite, une puce pleine porte une surcharge posée ici ; un clic pose
+l'inverse de l'héritage, le suivant la retire — deux gestes pour trois états,
+« hérité » étant celui qu'on retrouve et jamais celui qu'on vise. Des puces et
+non un formulaire par rôle : le panneau doit rester lisible avec dix rôles.
 
 ### Se règle d'où l'on est
 
@@ -231,24 +239,30 @@ qui n'est pas forcément l'actif. Depuis l'onglet Partage du domicile, chaque
 espace coché porte un bouton **Permissions** qui ouvre le même panneau pour ce
 côté-là — on règle toutes les fenêtres sans changer d'espace. Trois gardes :
 membre de l'espace visé, l'élément y est réellement visible, et — pour écrire —
-y tenir `workspace.roles` (`grantsManageable` dans `share.get` dit au client
-quand montrer le bouton).
+y tenir le champ `itemPermissions` du grant de cette fonctionnalité, ou la
+capacité `workspace.roles` qui l'englobe (`grantsManageable` dans `share.get`
+dit au client quand montrer le bouton).
 
 ### Partager exige l'accès à l'élément
 
-`share.get` et `share.set` passent par `assertItem` : un rôle **restreint sur
-la ligne** (masquée, ou en lecture seule) ne peut ni voir où elle est projetée
-ni la projeter. Sans cette garde, la restriction se contournait en projetant
+`share.get` et `share.set` passent par `assertItem` : un rôle **abaissé sur la
+ligne** (masquée, ou en lecture seule) ne peut ni voir où elle est projetée ni
+la projeter. Sans cette garde, la surcharge se contournait en projetant
 l'élément vers son espace personnel et en lisant par la fenêtre.
 
-L'alternative — permettre d'élever — a été écartée : l'accès effectif à une
-fonctionnalité deviendrait « le maximum entre le rôle et le meilleur droit
-d'élément », donc une requête de plus dans la résolution d'accès, et surtout un
-écran des rôles qui ne dirait plus à lui seul qui voit quoi. Il faudrait
-parcourir chaque élément de l'espace pour répondre à « qui a accès à Uptime ? ».
+L'élévation avait d'abord été écartée, pour une raison qui mérite d'être gardée
+puisqu'elle a fini par céder : l'accès effectif deviendrait « le maximum entre
+le rôle et le meilleur droit d'élément », donc une requête de plus dans la
+résolution d'accès, et un écran des rôles qui ne dirait plus à lui seul qui voit
+quoi. Ce qui l'a emporté, c'est le cas courant qu'elle interdisait — confier UNE
+machine sans confier la flotte — et le **plancher de visibilité** qui sauve
+l'essentiel : la question « qui a accès à Uptime ? » garde sa réponse sur
+l'écran des rôles, seul « qu'en fait-il, élément par élément ? » descend voir
+les lignes. La requête de plus, elle, est celle qui charge déjà les surcharges,
+indexée et mémoïsée par feature.
 
-**L'absence de ligne vaut « rien de particulier ».** C'est ce qui rend la table
-petite : seules les exceptions y figurent.
+**L'absence de ligne vaut « comme la fonctionnalité ».** C'est ce qui rend la
+table petite : seules les surcharges y figurent.
 
 La restriction porte l'espace **depuis lequel** elle s'applique : un élément
 projeté dans deux espaces peut y être restreint différemment, les rôles n'étant

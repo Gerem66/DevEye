@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { featureDescriptor, type FeatureId, type ItemAccess, type ItemGrantState } from '@deveye/types';
+import {
+    featureDescriptor,
+    type FeatureId,
+    type ItemAccess,
+    type ItemExtraOverrides,
+    type ItemGrantState
+} from '@deveye/types';
 
 import { ws } from '@/api/ws';
 import SegmentedControl from '@/Components/SegmentedControl';
@@ -8,12 +14,14 @@ import { useResourceVersion } from '@/stores/invalidation';
 import styles from '../FeatureSettings.module.css';
 
 /**
- * Ce que chaque rôle d'un espace voit de cet élément. Réutilisé par l'onglet
- * Permissions d'un élément (espace actif) et par l'onglet Partage du domicile
- * (`workspaceId` visé). Chaque ligne dit ce que le rôle voit effectivement,
- * exception ou héritage. On restreint, jamais on n'accorde : le droit du rôle
- * sur la fonctionnalité reste le plafond, l'écran des rôles reste la seule
- * réponse à « qui a accès à quoi ».
+ * Ce que chaque rôle d'un espace peut faire de cet élément. Réutilisé par
+ * l'onglet Permissions d'un élément (espace actif) et par l'onglet Partage du
+ * domicile (`workspaceId` visé). Chaque ligne dit ce que le rôle obtient
+ * effectivement, surcharge ou héritage.
+ *
+ * La surcharge va dans les deux sens : ce que la fonctionnalité donne n'est
+ * qu'un défaut. Un plancher demeure, le rôle doit avoir au moins la lecture sur
+ * la fonctionnalité, sans quoi l'élément n'existe pas pour lui.
  */
 
 const FEATURE_ACCESS_LABEL: Record<'none' | 'read' | 'write', string> = {
@@ -48,7 +56,7 @@ export default function ItemGrantsPanel({ feature, itemId, workspaceId }: Props)
     }, [reload, version]);
 
     /** Un volet à la fois : l'autre reste tel quel côté serveur. */
-    const send = (roleId: number, patch: { access?: ItemAccess | null; deniedExtras?: string[] }): void => {
+    const send = (roleId: number, patch: { access?: ItemAccess | null; extraOverrides?: ItemExtraOverrides }): void => {
         setBusy(true);
         setError(null);
         void ws
@@ -63,11 +71,16 @@ export default function ItemGrantsPanel({ feature, itemId, workspaceId }: Props)
     const set = (roleId: number, value: ItemAccess | 'inherit'): void =>
         send(roleId, { access: value === 'inherit' ? null : value });
 
-    const toggleExtra = (role: ItemGrantState['roles'][number], key: string): void => {
-        const denied = role.deniedExtras.includes(key)
-            ? role.deniedExtras.filter((k) => k !== key)
-            : [...role.deniedExtras, key];
-        send(role.roleId, { deniedExtras: denied });
+    /**
+     * Un clic pose la surcharge inverse de l'héritage, le suivant la retire. Deux
+     * états au clic pour trois états possibles : « hérité » est celui qu'on
+     * retrouve, jamais celui qu'on vise.
+     */
+    const cycleExtra = (role: ItemGrantState['roles'][number], key: string, inherited: boolean): void => {
+        const next = { ...role.extraOverrides };
+        if (key in next) delete next[key];
+        else next[key] = !inherited;
+        send(role.roleId, { extraOverrides: next });
     };
 
     if (error && !state) return <p className={styles.notice}>{error}</p>;
@@ -88,16 +101,17 @@ export default function ItemGrantsPanel({ feature, itemId, workspaceId }: Props)
         if (role.featureAccess === 'none') {
             return `Sans accès à ${featureDescriptor(feature).label} : ne le voit pas, quoi qu’on règle ici.`;
         }
-        if (role.access === 'none') return 'Masqué — exception posée sur ce ' + noun + '.';
-        if (role.access === 'read') return `Lecture seule — exception posée sur ce ${noun}.`;
+        if (role.access === 'none') return `Masqué — surcharge posée sur ce ${noun}.`;
+        if (role.access === 'read') return `Lecture seule — surcharge posée sur ce ${noun}.`;
+        if (role.access === 'write') return `Lecture et écriture — surcharge posée sur ce ${noun}.`;
         return `Comme la fonctionnalité : ${FEATURE_ACCESS_LABEL[role.featureAccess]}.`;
     };
 
     /**
-     * Les permissions propres de la fonctionnalité, rôle par rôle. Toutes sont
-     * montrées, y compris celles que le rôle n'a pas : la liste dit ce que la
-     * fonctionnalité sait confier, et l'infobulle dit où se règle ce qui manque.
-     * On ne fait qu'ôter — cocher ici n'accorde rien que le rôle n'ait déjà.
+     * Les permissions propres de la fonctionnalité, rôle par rôle : toutes, et
+     * dans les deux sens. Le rôle donne la valeur héritée, l'élément la
+     * surcharge — on peut confier le terminal sur CETTE machine à un rôle qui ne
+     * l'a nulle part ailleurs, ou le lui retirer ici seulement.
      */
     const extraChips = (role: ItemGrantState['roles'][number]) => {
         if (state.extras.length === 0 || role.featureAccess === 'none') return null;
@@ -105,28 +119,29 @@ export default function ItemGrantsPanel({ feature, itemId, workspaceId }: Props)
         return (
             <div className={styles.grantExtras}>
                 {state.extras.map((spec) => {
-                    const held = role.featureExtras.includes(spec.key);
-                    const denied = role.deniedExtras.includes(spec.key);
-                    const on = held && !denied && !hiddenHere;
-                    const title = !held
-                        ? `Non accordée à « ${role.name} » sur ${featureDescriptor(feature).label} : cela se règle sur le rôle.`
-                        : hiddenHere
-                          ? `Ce ${noun} est masqué pour « ${role.name} » : rien ne s’ouvre.`
-                          : denied
-                            ? `Retirée sur ce ${noun}. Cliquer pour la rendre.`
-                            : `Accordée sur ce ${noun}. Cliquer pour la retirer.`;
+                    const inherited = role.featureExtras.includes(spec.key);
+                    const forced = role.extraOverrides[spec.key];
+                    const on = (forced ?? inherited) && !hiddenHere;
+                    const overridden = forced !== undefined;
+                    const title = hiddenHere
+                        ? `Ce ${noun} est masqué pour « ${role.name} » : rien ne s’ouvre.`
+                        : overridden
+                          ? `${on ? 'Accordée' : 'Retirée'} sur ce ${noun} seulement. Cliquer pour revenir à ${featureDescriptor(feature).label}.`
+                          : `Suit ${featureDescriptor(feature).label} (${inherited ? 'accordée' : 'refusée'}). Cliquer pour ${inherited ? 'la retirer' : 'l’accorder'} sur ce ${noun}.`;
                     return (
                         <button
                             key={spec.key}
                             type='button'
-                            className={`${styles.grantChip} ${on ? styles.grantChipOn : ''}`}
+                            className={`${styles.grantChip} ${on ? styles.grantChipOn : ''} ${
+                                overridden ? styles.grantChipForced : ''
+                            }`}
                             aria-pressed={on}
-                            aria-disabled={!held || hiddenHere}
+                            aria-disabled={hiddenHere}
                             disabled={busy}
                             title={title}
                             onClick={() => {
-                                if (!held || hiddenHere) return;
-                                toggleExtra(role, spec.key);
+                                if (hiddenHere) return;
+                                cycleExtra(role, spec.key, inherited);
                             }}
                         >
                             <span className={`icon ${on ? 'icon-v' : 'icon-x'} ${styles.grantChipIcon}`} />
@@ -163,12 +178,17 @@ export default function ItemGrantsPanel({ feature, itemId, workspaceId }: Props)
                                     label: 'Hérité',
                                     title: `Comme la fonctionnalité : ${FEATURE_ACCESS_LABEL[role.featureAccess]}`
                                 },
+                                { value: 'none', label: 'Masqué', title: `Ce ${noun} n’apparaît pas pour ce rôle` },
                                 {
                                     value: 'read',
-                                    label: 'Lecture seule',
-                                    title: 'Consulter ce ' + noun + ', sans le modifier'
+                                    label: 'Lecture',
+                                    title: `Consulter ce ${noun}, sans le modifier`
                                 },
-                                { value: 'none', label: 'Masqué', title: 'Ce ' + noun + ' n’apparaît pas pour ce rôle' }
+                                {
+                                    value: 'write',
+                                    label: 'Écriture',
+                                    title: `Modifier ce ${noun}, même si le rôle n’a que la lecture ailleurs`
+                                }
                             ]}
                         />
                     </div>

@@ -55,13 +55,16 @@ export const workspaceRoleListFeature: FeatureDefinition<
                 isOwner: ctx.isOwner,
                 capabilities: WORKSPACE_CAPABILITIES.filter((c) => ctx.can(c)),
                 features: WORKSPACE_FEATURE_IDS.flatMap<WorkspaceFeatureGrant>((f) => {
-                    if (ctx.canFeature(f, 'write')) {
-                        return [{ feature: f, access: 'write', channels: ctx.canChannels(f), extras: {} }];
-                    }
-                    if (ctx.canFeature(f)) {
-                        return [{ feature: f, access: 'read', channels: ctx.canChannels(f), extras: {} }];
-                    }
-                    return [];
+                    if (!ctx.canFeature(f)) return [];
+                    return [
+                        {
+                            feature: f,
+                            access: ctx.canFeature(f, 'write') ? 'write' : 'read',
+                            channels: ctx.canChannels(f),
+                            itemPermissions: ctx.canManageItemGrants(f),
+                            extras: {}
+                        }
+                    ];
                 })
             }
         };

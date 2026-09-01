@@ -1,6 +1,7 @@
 import type {
     FeatureAccess,
     ItemAccess,
+    ItemExtraOverrides,
     WorkspaceCapability,
     WorkspaceFeatureGrant,
     FeatureId,
@@ -17,7 +18,7 @@ import { WORKSPACE_CAPABILITIES, WORKSPACE_FEATURE_IDS } from '@deveye/types';
 import { FeatureError } from './_define';
 import { moduleManifests } from './_sdk/register';
 import { parseJsonArray } from '@/Utils/json';
-import { deniedExtrasOf } from '@/db/repos/itemSharing';
+import { extraOverridesOf } from '@/db/repos/itemSharing';
 
 /**
  * Résolution d'autorisation des commandes de feature : le seul endroit qui
@@ -105,24 +106,31 @@ export interface ResolvedScope {
      */
     channels: ReadonlySet<FeatureId>;
     /**
+     * Fonctionnalités dont le rôle règle les permissions par élément (champ
+     * `itemPermissions` des grants). Distinct de la capacité `workspace.roles` :
+     * surcharger un appareil n'est pas gouverner les rôles de l'espace.
+     */
+    itemPermissions: ReadonlySet<FeatureId>;
+    /**
      * Les permissions déclarées par les features elles-mêmes (`extras` des
      * grants), brutes : défauts et propriétaire se résolvent à la lecture,
      * contre les specs du manifest.
      */
     extras: ReadonlyMap<FeatureId, Record<string, boolean | string>>;
     /**
-     * Les restrictions posées sur des éléments précis, pour le rôle de
-     * l'appelant. Chargées paresseusement, par feature. Vide pour le
-     * propriétaire, qui passe outre.
+     * Les surcharges posées sur des éléments précis, pour le rôle de l'appelant.
+     * Chargées paresseusement, par feature. Vide pour le propriétaire, qui passe
+     * outre. La valeur remplace ce que la fonctionnalité donne, dans les deux
+     * sens ; le plancher de visibilité reste le grant de la feature.
      */
     itemRestrictions: (feature: FeatureId) => Promise<ReadonlyMap<string, ItemAccess>>;
     /**
-     * Les permissions propres qu'un élément précis refuse au rôle de l'appelant.
-     * Second volet des mêmes lignes qu'`itemRestrictions`, lu au même moment :
-     * un rôle peut tenir le terminal sur la fonctionnalité et se le voir refuser
-     * sur une machine.
+     * Les permissions propres qu'un élément précis accorde ou retire au rôle de
+     * l'appelant. Second volet des mêmes lignes qu'`itemRestrictions`, lu au même
+     * moment : un rôle peut tenir le terminal sur la fonctionnalité et se le voir
+     * retirer sur une machine, ou l'inverse.
      */
-    itemExtraDenials: (feature: FeatureId) => Promise<ReadonlyMap<string, ReadonlySet<string>>>;
+    itemExtraOverrides: (feature: FeatureId) => Promise<ReadonlyMap<string, ItemExtraOverrides>>;
     /** Coffre chiffré de cet espace, lié à cette session. */
     secure: SecureStore;
     secretKeys: SecretKeyService;
@@ -144,6 +152,7 @@ export function grantsFor(
     capabilities: Set<WorkspaceCapability>;
     features: Map<FeatureId, FeatureAccess>;
     channels: Set<FeatureId>;
+    itemPermissions: Set<FeatureId>;
     extras: Map<FeatureId, Record<string, boolean | string>>;
 } {
     if (isOwner) {
@@ -156,23 +165,35 @@ export function grantsFor(
             capabilities: new Set(WORKSPACE_CAPABILITIES),
             features: new Map(all.map((f) => [f, 'write'])),
             channels: new Set(all),
+            itemPermissions: new Set(all),
             extras: new Map()
         };
     }
-    if (!role) return { capabilities: new Set(), features: new Map(), channels: new Set(), extras: new Map() };
+    if (!role) {
+        return {
+            capabilities: new Set(),
+            features: new Map(),
+            channels: new Set(),
+            itemPermissions: new Set(),
+            extras: new Map()
+        };
+    }
 
     const features = new Map<FeatureId, FeatureAccess>();
     const channels = new Set<FeatureId>();
+    const itemPermissions = new Set<FeatureId>();
     const extras = new Map<FeatureId, Record<string, boolean | string>>();
     for (const g of parseJsonArray<WorkspaceFeatureGrant>(role.features)) {
         features.set(g.feature, g.access);
         if (g.channels) channels.add(g.feature);
+        if (g.itemPermissions) itemPermissions.add(g.feature);
         if (g.extras && Object.keys(g.extras).length > 0) extras.set(g.feature, g.extras);
     }
     return {
         capabilities: new Set(parseJsonArray<WorkspaceCapability>(role.capabilities)),
         features,
         channels,
+        itemPermissions,
         extras
     };
 }
@@ -242,7 +263,7 @@ export function createAccessResolver(
         // Le propriétaire n'a pas de rôle : il passe outre, et lui en donner un
         // laisserait croire qu'on peut le lui retirer.
         const role = isOwner ? null : await db.workspaceRoles.findForMember(userId, row.id);
-        const { capabilities, features, channels, extras } = grantsFor(isOwner, role);
+        const { capabilities, features, channels, itemPermissions, extras } = grantsFor(isOwner, role);
 
         // Les clés de l'espace : la sienne s'il est partagé, celles de son
         // propriétaire (l'appelant, seul membre) s'il est personnel.
@@ -253,34 +274,34 @@ export function createAccessResolver(
         // appelle `invalidateAccess()`).
         interface ItemGrants {
             access: ReadonlyMap<string, ItemAccess>;
-            denials: ReadonlyMap<string, ReadonlySet<string>>;
+            extras: ReadonlyMap<string, ItemExtraOverrides>;
         }
         const restrictionCache = new Map<string, Promise<ItemGrants>>();
         // Une seule lecture par feature pour les deux volets : ils vivent sur la
         // même ligne, les séparer doublerait la requête sans rien gagner.
         const itemGrants = (feature: FeatureId): Promise<ItemGrants> => {
-            if (isOwner || !role) return Promise.resolve({ access: new Map(), denials: new Map() });
+            if (isOwner || !role) return Promise.resolve({ access: new Map(), extras: new Map() });
             const hit = restrictionCache.get(feature);
             if (hit) return hit;
             const loaded = db.itemSharing.grantsForRole(row.id, feature, role.id).then((rows) => {
                 const access = new Map<string, ItemAccess>();
-                const denials = new Map<string, ReadonlySet<string>>();
+                const extras = new Map<string, ItemExtraOverrides>();
                 for (const g of rows) {
                     // `access` est nullable : une ligne peut n'exister que pour
-                    // des permissions refusées, sans exception de niveau.
+                    // des permissions surchargées, sans surcharge de niveau.
                     if (g.access !== null) access.set(g.item_id, g.access);
-                    const denied = deniedExtrasOf(g);
-                    if (denied.length > 0) denials.set(g.item_id, new Set(denied));
+                    const overrides = extraOverridesOf(g);
+                    if (Object.keys(overrides).length > 0) extras.set(g.item_id, overrides);
                 }
-                return { access, denials };
+                return { access, extras };
             });
             restrictionCache.set(feature, loaded);
             return loaded;
         };
         const itemRestrictions = (feature: FeatureId): Promise<ReadonlyMap<string, ItemAccess>> =>
             itemGrants(feature).then((g) => g.access);
-        const itemExtraDenials = (feature: FeatureId): Promise<ReadonlyMap<string, ReadonlySet<string>>> =>
-            itemGrants(feature).then((g) => g.denials);
+        const itemExtraOverrides = (feature: FeatureId): Promise<ReadonlyMap<string, ItemExtraOverrides>> =>
+            itemGrants(feature).then((g) => g.extras);
 
         return {
             workspace: toContext(row),
@@ -289,9 +310,10 @@ export function createAccessResolver(
             capabilities,
             features,
             channels,
+            itemPermissions,
             extras,
             itemRestrictions,
-            itemExtraDenials,
+            itemExtraOverrides,
             secure: store,
             secretKeys: keys
         };
@@ -330,7 +352,7 @@ export async function permissionsFor(
 ): Promise<WorkspacePermissions> {
     const isOwner = workspace.owner_user_id === userId;
     const role = isOwner ? null : await db.workspaceRoles.findForMember(userId, workspace.id);
-    const { capabilities, features, channels, extras } = grantsFor(isOwner, role);
+    const { capabilities, features, channels, itemPermissions, extras } = grantsFor(isOwner, role);
     return {
         isOwner,
         capabilities: [...capabilities],
@@ -338,6 +360,7 @@ export async function permissionsFor(
             feature,
             access,
             channels: channels.has(feature),
+            itemPermissions: itemPermissions.has(feature),
             extras: extras.get(feature) ?? {}
         }))
     };

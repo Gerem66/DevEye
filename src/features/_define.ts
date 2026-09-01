@@ -6,7 +6,7 @@ import type { MonitorTransport } from '@/agent/hub';
 import type { LiveTransport } from '@/live/hub';
 import type { LiveTopic, LogLevelName } from '@deveye/types';
 import type { Logger } from 'pino';
-import type { FeatureAccess, FeatureId, ItemAccess, WorkspaceCapability } from '@deveye/types';
+import type { FeatureAccess, FeatureId, ItemAccess, ItemExtraOverrides, WorkspaceCapability } from '@deveye/types';
 import type { WorkspaceContext } from './_access';
 import type { z } from 'zod';
 
@@ -72,6 +72,12 @@ export interface FeatureContext {
     /** Lève `forbidden` si l'appelant ne gère pas les canaux de cette feature. */
     assertChannels: (feature: FeatureId) => void;
     /**
+     * L'appelant règle-t-il les permissions par élément de cette feature ? Le
+     * champ `itemPermissions` de son grant, ou la capacité `workspace.roles` qui
+     * l'englobe. Exige la lecture de la feature, comme les canaux.
+     */
+    canManageItemGrants: (feature: FeatureId) => boolean;
+    /**
      * Les éléments d'une feature que le rôle de l'appelant voit autrement :
      * `'none'` masqué, `'read'` en lecture seule. Restrictif seulement : la
      * carte ne peut qu'abaisser ce que `canFeature` accorde. Les listages s'en
@@ -79,12 +85,12 @@ export interface FeatureContext {
      */
     itemRestrictions: (feature: FeatureId) => Promise<ReadonlyMap<string, ItemAccess>>;
     /**
-     * Les permissions propres que cet élément-ci refuse au rôle de l'appelant.
-     * `assertItem` s'en sert déjà pour les permissions que LA COMMANDE déclare ;
-     * une garde écrite à la main n'a besoin d'y descendre que si elle vise une
-     * autre clé que la sienne.
+     * Les permissions propres que cet élément-ci accorde ou retire au rôle de
+     * l'appelant. `assertItem` s'en sert déjà pour les permissions que LA
+     * COMMANDE déclare ; une garde écrite à la main n'a besoin d'y descendre que
+     * si elle vise une autre clé que la sienne.
      */
-    itemExtraDenials: (feature: FeatureId) => Promise<ReadonlyMap<string, ReadonlySet<string>>>;
+    itemExtraOverrides: (feature: FeatureId) => Promise<ReadonlyMap<string, ItemExtraOverrides>>;
     /**
      * Lève `forbidden` si cet élément retire au rôle une des permissions que la
      * commande en cours déclare (`access.extras`). Compris dans `assertItem` ;

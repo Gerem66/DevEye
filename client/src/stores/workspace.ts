@@ -152,6 +152,11 @@ export function useWorkspacePermissions(): {
     canFeature: (f: FeatureId, level?: FeatureAccess) => boolean;
     /** Gérer les canaux d'alerte de cette feature (grant `channels`). */
     canChannels: (f: FeatureId) => boolean;
+    /**
+     * Régler les permissions par élément de cette feature (grant
+     * `itemPermissions`), ou gouverner les rôles, qui l'englobe.
+     */
+    canManageItemGrants: (f: FeatureId) => boolean;
     /** Permission déclarée de type `toggle` : absente = refusée, propriétaire = accordée. */
     canExtra: (f: FeatureId, key: string) => boolean;
     /**
@@ -171,6 +176,10 @@ export function useWorkspacePermissions(): {
             return level === 'read' || granted.access === 'write';
         },
         canChannels: (f) => permissions.features.find((g) => g.feature === f)?.channels === true,
+        canManageItemGrants: (f) =>
+            permissions.isOwner ||
+            permissions.capabilities.includes('workspace.roles') ||
+            permissions.features.find((g) => g.feature === f)?.itemPermissions === true,
         canExtra: (f, key) =>
             permissions.isOwner || permissions.features.find((g) => g.feature === f)?.extras[key] === true,
         extraValue: (f, key, spec) => {

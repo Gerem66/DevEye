@@ -94,13 +94,15 @@ export function useWorkspaceAdmin() {
          */
         createPresetRoles: () =>
             run(async () => {
-                // Les canaux d'alerte suivent la ligne du preset : l'Admin les gère,
-                // le Membre s'en sert sans pouvoir les modifier.
+                // Les canaux d'alerte et les permissions par élément suivent la
+                // ligne du preset : l'Admin les gère, le Membre s'en sert sans
+                // pouvoir les modifier.
                 const grants = (channels: boolean) =>
                     FEATURE_REGISTRY.map<WorkspaceFeatureGrant>((f) => ({
                         feature: f.id,
                         access: 'write',
                         channels,
+                        itemPermissions: channels,
                         extras: {}
                     }));
                 await ws.send('workspace.roleCreate', {

@@ -47,17 +47,18 @@ export async function toDevice(ctx: FeatureContext, row: DeviceRow): Promise<Dev
  * masqué ou passé en lecture seule pour le rôle de l'appelant ne prend pas
  * d'ordre.
  *
- * La restriction est lue directement, et non par `ctx.assertItem(…, 'write')` :
- * celui-ci réclamerait aussi l'écriture sur la FONCTIONNALITÉ, alors que le
- * droit d'agir sur la machine vient de la permission que la commande déclare
- * (`access.extras`). Gérer la flotte et piloter une machine ne sont pas le
- * même droit.
+ * La surcharge est lue directement, et non par `ctx.assertItem(…, 'write')` :
+ * celui-ci réclamerait l'écriture, alors que le droit d'agir sur la machine
+ * vient de la permission que la commande déclare (`access.extras`). Gérer la
+ * flotte et piloter une machine ne sont pas le même droit. Seule une surcharge
+ * QUI ABAISSE ferme la porte ici : un appareil passé en lecture seule pour un
+ * rôle ne prend pas d'ordre, quelles que soient ses permissions.
  */
 export async function authorizeReachableDevice(ctx: FeatureContext, deviceId: string): Promise<DeviceRow> {
     const row = await authorizeDevice(ctx, deviceId);
-    const restriction = (await ctx.itemRestrictions('devices')).get(row.id);
-    if (restriction === 'none') throw new FeatureError('forbidden', 'Cet appareil ne vous est pas accessible');
-    if (restriction === 'read') {
+    const override = (await ctx.itemRestrictions('devices')).get(row.id);
+    if (override === 'none') throw new FeatureError('forbidden', 'Cet appareil ne vous est pas accessible');
+    if (override === 'read') {
         throw new FeatureError('forbidden', 'Cet appareil est en lecture seule pour votre rôle');
     }
     // La permission que la commande déclare, éprouvée contre CET appareil : le
