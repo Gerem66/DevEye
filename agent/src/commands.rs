@@ -13,6 +13,7 @@ use tracing::{info, warn};
 use base64::Engine as _;
 
 use crate::config::Config;
+use crate::docker::DockerEvent;
 use crate::files::FilesEvent;
 use crate::logs::LogEvent;
 use crate::packages::PkgEvent;
@@ -434,6 +435,44 @@ where
             manager,
             ok,
             reboot_required: Some(reboot_required),
+            error,
+        },
+    };
+    if let Ok(text) = serde_json::to_string(&msg) {
+        let _ = sink.send(Message::Text(text)).await;
+    }
+}
+
+/// Forward one docker event to the server, stamping it with the device id.
+pub(crate) async fn send_docker_event<S>(sink: &mut S, device_id: &str, ev: DockerEvent)
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    let msg = match ev {
+        DockerEvent::Inventory(inventory) => ClientMessage::DockerInventoryResult {
+            device_id: device_id.to_string(),
+            inventory,
+        },
+        DockerEvent::Stats(stats) => ClientMessage::DockerStatsResult {
+            device_id: device_id.to_string(),
+            stats,
+        },
+        DockerEvent::Progress { op_id, line } => ClientMessage::DockerProgress {
+            device_id: device_id.to_string(),
+            op_id,
+            line,
+        },
+        DockerEvent::Done {
+            op_id,
+            action,
+            ok,
+            error,
+        } => ClientMessage::DockerDone {
+            device_id: device_id.to_string(),
+            op_id,
+            action,
+            ok,
             error,
         },
     };

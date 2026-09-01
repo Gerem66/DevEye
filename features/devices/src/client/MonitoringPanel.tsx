@@ -22,6 +22,7 @@ import {
     type PresenceEvent,
     type ProcessSample
 } from '@deveye/types';
+import type { DaySummary } from '../contracts/commands';
 import { HardwareInfo } from './HardwareInfo';
 import { Connections } from './Connections';
 import { DeviceActionsMenu, type DeviceAction } from './DeviceActionsMenu';
@@ -43,6 +44,7 @@ import { useDeviceActions } from './manage/useDeviceActions';
 // xterm.js and the file explorer are heavy and rarely opened: loaded on demand.
 const TerminalPanel = lazy(() => import('./TerminalPanel').then((m) => ({ default: m.TerminalPanel })));
 const FilesPanel = lazy(() => import('./FilesPanel').then((m) => ({ default: m.FilesPanel })));
+const DockerPanel = lazy(() => import('./DockerPanel').then((m) => ({ default: m.DockerPanel })));
 import { agentUpdatable } from './agentVersion';
 import { agent, api } from './api';
 import { useDevices } from './store';
@@ -241,6 +243,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const [packagesOpen, setPackagesOpen] = useState(false);
     const [powerOpen, setPowerOpen] = useState(false);
     const [logsOpen, setLogsOpen] = useState(false);
+    const [dockerOpen, setDockerOpen] = useState(false);
     const [terminalOpen, setTerminalOpen] = useState(false);
     const [filesOpen, setFilesOpen] = useState(false);
     const updater = useAgentUpdate();
@@ -277,7 +280,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const [report, setReport] = useState<DeviceReport | null>(null);
     const [liveSnapshot, setLiveSnapshot] = useState<MetricSeriesPoint | null>(null);
     const [refreshing, setRefreshing] = useState(false);
-    const [dataDays, setDataDays] = useState<string[]>([]);
+    const [dataDays, setDataDays] = useState<DaySummary[]>([]);
     const [graphsExpanded, setGraphsExpanded] = useState(false);
     // False until the first metrics query resolves: the graphs and activity
     // hero come only from that query, everything else is seeded by the push.
@@ -334,15 +337,24 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         setPresence({ onlineAtStart: false, events: [] });
     }, [deviceId]);
 
-    // Which days have data (for the calendar + day arrows).
-    useEffect(() => {
-        const id = deviceId;
+    /**
+     * Épingler ou supprimer change ce que les jours contiennent, et peut vider
+     * un jour entier : sans ce rappel, le calendrier et sa liste restent sur
+     * l'état du montage.
+     */
+    const refreshAvailability = useCallback(() => {
+        const id = idRef.current;
         api.send('devices.availability', { deviceId: id, tzOffsetMinutes: new Date().getTimezoneOffset() })
             .then((res) => {
                 if (idRef.current === id) setDataDays(res.days);
             })
             .catch(() => setReadError(true));
-    }, [deviceId]);
+    }, []);
+
+    // Which days have data (for the calendar + day arrows).
+    useEffect(() => {
+        refreshAvailability();
+    }, [deviceId, refreshAvailability]);
 
     useEffect(() => {
         const id = deviceId;
@@ -568,12 +580,13 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             setFocus({ kind: 'live' });
             refreshSnapshotMarks();
             refreshStorage();
+            refreshAvailability();
         } catch {
             // Keep the dialog open: retryable.
         } finally {
             setDeleting(false);
         }
-    }, [deleteTarget, refreshSnapshotMarks, refreshStorage]);
+    }, [deleteTarget, refreshSnapshotMarks, refreshStorage, refreshAvailability]);
 
     // Unpinning may delete instants already past their deadline: drop to live.
     const setPinned = useCallback(
@@ -591,13 +604,14 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 if (res.deletedSnapshots > 0) setFocus({ kind: 'live' });
                 refreshSnapshotMarks();
                 refreshStorage();
+                refreshAvailability();
             } catch {
                 // Retryable; leave the UI as-is.
             } finally {
                 setPinning(false);
             }
         },
-        [pinTarget, pinning, refreshSnapshotMarks, refreshStorage]
+        [pinTarget, pinning, refreshSnapshotMarks, refreshStorage, refreshAvailability]
     );
 
     const refreshNow = useCallback(() => {
@@ -977,6 +991,11 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
      * `availability.ts`) — un appareil rallumé ne rendra pas une permission.
      */
     const reach = agentReach(selected);
+    /**
+     * L'agent annonce ce qu'il sait relever : sans la sonde, il est trop ancien
+     * pour l'inventaire des conteneurs, et l'entrée n'a rien à proposer.
+     */
+    const hasDockerProbe = report?.agent?.probes?.includes('docker') ?? false;
     const remote = (key: string, label: string, onClick: () => void, icon: string): DeviceAction => ({
         icon,
         label,
@@ -993,6 +1012,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         remote('files', 'Explorateur de fichiers', () => setFilesOpen(true), 'icon-folder'),
         remote('terminal', 'Terminal distant', () => setTerminalOpen(true), 'icon-terminal'),
         remote('logs', 'Logs de l’appareil', () => setLogsOpen(true), 'icon-logs'),
+        ...(hasDockerProbe ? [remote('docker', 'Conteneurs Docker', () => setDockerOpen(true), 'icon-server')] : []),
         remote('system', 'Commandes système', () => setPowerOpen(true), 'icon-power'),
         remote('system', 'Mises à jour système', () => setPackagesOpen(true), 'icon-database'),
         // Le cycle de vie de l'appareil ferme la liste : approuver, renommer,
@@ -1109,7 +1129,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 }}
                 dayStart={dayStart}
                 onDayChange={setDayStart}
-                dataDays={dataDays}
+                days={dataDays}
                 spanMs={spanMs}
                 zoomPresets={ZOOM_PRESETS}
                 onSpanChange={setSpanMs}
@@ -1482,6 +1502,20 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 width={860}
             >
                 {logsOpen && <LogsPanel deviceId={selected.id} />}
+            </Dialog>
+
+            <Dialog
+                open={dockerOpen}
+                onClose={() => setDockerOpen(false)}
+                title={`Conteneurs — « ${selected.name} »`}
+                description='Conteneurs, images, volumes et réseaux de l’appareil : état, ressources et gestion.'
+                width={920}
+            >
+                {dockerOpen && (
+                    <Suspense fallback={<p className={styles.waitingMsg}>Chargement des conteneurs…</p>}>
+                        <DockerPanel deviceId={selected.id} />
+                    </Suspense>
+                )}
             </Dialog>
 
             <Dialog

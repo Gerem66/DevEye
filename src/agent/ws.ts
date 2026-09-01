@@ -11,6 +11,10 @@ import {
     AGENT_FILES_USAGE,
     AGENT_HELLO,
     AGENT_LOG_LINES,
+    AGENT_DOCKER_DONE,
+    AGENT_DOCKER_INVENTORY_RESULT,
+    AGENT_DOCKER_PROGRESS,
+    AGENT_DOCKER_STATS_RESULT,
     AGENT_LOG_SOURCES_RESULT,
     AGENT_AUTH_EVENTS,
     AGENT_INTEGRITY,
@@ -49,6 +53,10 @@ import {
     handleFilesOpResult,
     handleFilesUsage,
     handleLogLines,
+    handleDockerDone,
+    handleDockerInventoryResult,
+    handleDockerProgress,
+    handleDockerStatsResult,
     handleLogSourcesResult,
     handleMetricsBatch,
     handlePkgDone,
@@ -112,6 +120,14 @@ function dispatch(session: AgentSession, msg: AgentClientMessage): void | Promis
             return handleServiceResult(session, msg.payload);
         case AGENT_POWER_RESULT:
             return handlePowerResult(session, msg.payload);
+        case AGENT_DOCKER_INVENTORY_RESULT:
+            return handleDockerInventoryResult(session, msg.payload);
+        case AGENT_DOCKER_STATS_RESULT:
+            return handleDockerStatsResult(session, msg.payload);
+        case AGENT_DOCKER_PROGRESS:
+            return handleDockerProgress(session, msg.payload);
+        case AGENT_DOCKER_DONE:
+            return handleDockerDone(session, msg.payload);
         case AGENT_LOG_SOURCES_RESULT:
             return handleLogSourcesResult(session, msg.payload);
         case AGENT_LOG_LINES:
@@ -301,6 +317,7 @@ export async function registerAgentWS(
                 // Plus personne pour envoyer le `pkg.done` attendu : sans ça le
                 // verrou survivrait à l'appareil.
                 hub.failRunningUpgrades(deviceId, 'Agent déconnecté pendant la mise à jour');
+                hub.failRunningDockerOp(deviceId, 'Agent déconnecté pendant l’action');
                 if (device.status !== 'pending_deletion') {
                     void recordAgentOffline(db, deviceId).catch(() => {});
                 }

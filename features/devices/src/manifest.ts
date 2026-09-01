@@ -74,6 +74,13 @@ export const manifest = {
             type: 'toggle'
         },
         {
+            key: 'docker',
+            label: 'Conteneurs Docker',
+            description:
+                'Voir et piloter les conteneurs, images, volumes et réseaux des appareils de l’espace : démarrer, arrêter, redémarrer, mettre à jour, mais aussi supprimer et nettoyer.',
+            type: 'toggle'
+        },
+        {
             key: 'system',
             label: 'Commandes et mises à jour système',
             description:

@@ -80,7 +80,7 @@ export const devicesAvailabilityFeature = defineSdkFeature<
     ...devicesAvailability,
     handler: async (ctx, input) => {
         await assertDevice(ctx, input.deviceId);
-        const days = await ctx.repo.metrics.availableDays(input.deviceId, input.tzOffsetMinutes);
+        const days = await ctx.repo.metrics.availableDaySummaries(input.deviceId, input.tzOffsetMinutes);
         return { deviceId: input.deviceId, days };
     }
 });

@@ -170,6 +170,102 @@ pub struct PackageManagerInfo {
     pub reboot_required: bool,
 }
 
+/// Container inventory and management (mirrors @deveye/types `domain/deviceDocker.ts`).
+/// `engine` is `docker` or `podman`: a host can run both, so every object says
+/// which one it came from.
+#[derive(Debug, Clone, Serialize)]
+pub struct DockerEngineStatus {
+    pub engine: String,
+    /// False when the binary exists but its daemon refused: the UI must say so
+    /// rather than show an empty host.
+    pub reachable: bool,
+    pub version: Option<String>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DockerContainer {
+    pub engine: String,
+    pub id: String,
+    pub name: String,
+    pub image: String,
+    pub state: String,
+    pub status: String,
+    pub ports: String,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    /// Compose labels, when compose created the container. `recreate` needs
+    /// them: nothing else rebuilds a run configuration faithfully.
+    #[serde(rename = "composeProject")]
+    pub compose_project: Option<String>,
+    #[serde(rename = "composeService")]
+    pub compose_service: Option<String>,
+    #[serde(rename = "composeWorkingDir")]
+    pub compose_working_dir: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DockerImage {
+    pub engine: String,
+    pub id: String,
+    pub reference: String,
+    pub size: String,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    pub dangling: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DockerVolume {
+    pub engine: String,
+    pub name: String,
+    pub driver: String,
+    pub mountpoint: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DockerNetwork {
+    pub engine: String,
+    pub id: String,
+    pub name: String,
+    pub driver: String,
+    pub scope: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DockerInventory {
+    pub engines: Vec<DockerEngineStatus>,
+    pub containers: Vec<DockerContainer>,
+    pub images: Vec<DockerImage>,
+    pub volumes: Vec<DockerVolume>,
+    pub networks: Vec<DockerNetwork>,
+}
+
+/// Live resource use of one running container. Every field is nullable: the
+/// engines print `--` for what they cannot measure.
+#[derive(Debug, Clone, Serialize)]
+pub struct DockerStat {
+    pub engine: String,
+    pub id: String,
+    #[serde(rename = "cpuPercent")]
+    pub cpu_percent: Option<f64>,
+    #[serde(rename = "memUsedBytes")]
+    pub mem_used_bytes: Option<u64>,
+    #[serde(rename = "memLimitBytes")]
+    pub mem_limit_bytes: Option<u64>,
+    #[serde(rename = "memPercent")]
+    pub mem_percent: Option<f64>,
+    #[serde(rename = "netRxBytes")]
+    pub net_rx_bytes: Option<u64>,
+    #[serde(rename = "netTxBytes")]
+    pub net_tx_bytes: Option<u64>,
+    #[serde(rename = "blockReadBytes")]
+    pub block_read_bytes: Option<u64>,
+    #[serde(rename = "blockWriteBytes")]
+    pub block_write_bytes: Option<u64>,
+    pub pids: Option<u64>,
+}
+
 /// One listening socket. `address` is the bind address (e.g. `0.0.0.0`, `::`,
 /// `127.0.0.1`) so the UI can tell world-exposed ports from loopback-only ones
 /// and group them per interface. One entry per bind address: a dual-stack
@@ -748,6 +844,41 @@ pub enum ClientMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
+    /// Reply to `docker.inventory`: the host's containers, images, volumes and networks.
+    #[serde(rename = "docker.inventoryResult")]
+    DockerInventoryResult {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        inventory: DockerInventory,
+    },
+    /// Reply to `docker.stats`: one resource sample per running container.
+    #[serde(rename = "docker.statsResult")]
+    DockerStatsResult {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        stats: Vec<DockerStat>,
+    },
+    /// One live output line of a long `docker.action`.
+    #[serde(rename = "docker.progress")]
+    DockerProgress {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "opId")]
+        op_id: String,
+        line: String,
+    },
+    /// Final outcome of a `docker.action`.
+    #[serde(rename = "docker.done")]
+    DockerDone {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "opId")]
+        op_id: String,
+        action: String,
+        ok: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
 }
 
 /// Messages the server sends back to the agent.
@@ -1034,6 +1165,23 @@ pub enum ServerMessage {
     /// Apply all updates of one manager, streaming `pkg.progress` then `pkg.done`.
     #[serde(rename = "pkg.upgrade")]
     PkgUpgrade { manager: String },
+    /// Enumerate the host's containers, images, volumes and networks.
+    #[serde(rename = "docker.inventory")]
+    DockerInventory {},
+    /// One-shot resource sample of the running containers.
+    #[serde(rename = "docker.stats")]
+    DockerStats {},
+    /// Act on a container, image, volume or network. `target` is the object's
+    /// own identifier, and the only server-supplied value that reaches a
+    /// command line; the prunes carry none.
+    #[serde(rename = "docker.action")]
+    DockerAction {
+        #[serde(rename = "opId")]
+        op_id: String,
+        engine: String,
+        action: String,
+        target: Option<String>,
+    },
     /// Stop (`stop`) or cleanly restart (`restart`) this agent *process* — not
     /// the machine. No reply frame: the process exits (and possibly comes back).
     #[serde(rename = "agent.lifecycle")]

@@ -9,6 +9,7 @@ import {
 } from './files';
 import { agentLifecycleFeature } from './lifecycle';
 import { agentLogQueryFeature, agentLogSourcesFeature } from './logs';
+import { agentDockerActionFeature, agentDockerInventoryFeature, agentDockerStatsFeature } from './docker';
 import { agentListPackagesFeature, agentUpgradePackagesFeature } from './packages';
 import { agentPowerFeature } from './power';
 import { agentDropPrivilegesFeature, agentElevateFeature, agentSetAutostartFeature } from './service';
@@ -32,6 +33,9 @@ export const agentFeatures: FeatureDefinition<string, any, any>[] = [
     agentElevateFeature,
     agentDropPrivilegesFeature,
     agentUpdateFeature,
+    agentDockerInventoryFeature,
+    agentDockerStatsFeature,
+    agentDockerActionFeature,
     agentListPackagesFeature,
     agentUpgradePackagesFeature,
     agentLogSourcesFeature,

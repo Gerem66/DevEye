@@ -90,8 +90,8 @@ ConfigPanel.tsx             l'onglet collect d'un appareil : cadence, capture, r
 TerminalSettings.tsx        l'onglet terminal d'un appareil : compte d'ouverture, fin de session
 SettingsPanel.tsx           les deux panneaux SettingsPanelProps de l'appareil
 TopbarWidget.tsx            le compteur d'appareils en ligne
-TerminalPanel.tsx, FilesPanel.tsx, LogsPanel.tsx, PackagesPanel.tsx, PowerMenu.tsx
-                            le transport agent.* et onServerEvent
+TerminalPanel.tsx, FilesPanel.tsx, LogsPanel.tsx, PackagesPanel.tsx, PowerMenu.tsx,
+DockerPanel.tsx             le transport agent.* et onServerEvent
 DeviceWidget.tsx            la tuile d'un appareil (DeviceWidget du provider), avec
                             DeviceWidget.module.css
 deviceUsage.ts, agentUpdates.ts, agentVersion.ts, useAgentUpdate.tsx,
@@ -207,10 +207,20 @@ maintenable**.
    colonne, dans le dépôt du module (`repo/metrics.ts`) comme dans celui du
    socle.
 
-4. **Bucketisation par jour locale en math entière.** `availableDays` calcule le
+4. **Bucketisation par jour locale en math entière.** `availableDaySummaries` calcule le
    jour local via `FLOOR((ts - tzOffsetMs)/86400000)` (offset = client
    `getTimezoneOffset()`), **indépendamment du fuseau MySQL/Node**. Le calendrier
    désactive les jours futurs. → Pas de dépendance au `time_zone` de session SQL.
+
+    Corollaire : le résumé se lit en **deux requêtes** (tous les instants, puis
+    les seuls épinglés) fusionnées en mémoire, et non en un `SUM(pinned)`. Chacune
+    est alors couverte par un index — `uq_metrics_device_ts` et
+    `idx_metrics_device_pinned_ts` — donc `Using index` sans lecture de ligne ;
+    l'agrégat, lui, force un accès par instant. Mesuré sur 500 k instants : 2,5 ms
+    contre 15 ms pour les épingles, et le compte ne coûte rien de plus que
+    l'ancien `DISTINCT`. Et **aucune borne temporelle** : un plancher à la
+    rétention effacerait du calendrier les journées ne contenant plus que des
+    épingles, précisément celles qu'on cherche sur la durée.
 
 5. **Dédup multi-disque par `(total, available)`.** APFS/LVM exposent plusieurs
    volumes d'un même conteneur (mêmes tailles) ; on les compte une fois, en

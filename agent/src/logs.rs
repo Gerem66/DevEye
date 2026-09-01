@@ -139,7 +139,7 @@ fn truncate_msg(s: String) -> String {
 const READ_TIMEOUT: Duration = Duration::from_secs(45);
 /// Same, for the inventory: detection has to feel immediate, and a wedged engine
 /// daemon must cost a listing, not the whole panel.
-const DETECT_TIMEOUT: Duration = Duration::from_secs(10);
+pub(crate) const DETECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// How often the deadline is checked while the child runs.
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
 
@@ -194,7 +194,7 @@ fn drain_pipe(
 /// has no `--tail` to bound it, so the cap is what keeps a multi-GB journal from
 /// being swallowed whole. Reaching it kills the child, which is a success here, not
 /// the failure a non-zero status usually means.
-fn run_bounded_capped<S: AsRef<std::ffi::OsStr>>(
+pub(crate) fn run_bounded_capped<S: AsRef<std::ffi::OsStr>>(
     label: &str,
     program: &str,
     args: &[S],
@@ -262,7 +262,7 @@ fn run_bounded_capped<S: AsRef<std::ffi::OsStr>>(
 /// Run a command and return its stdout when it succeeds, else `None` (missing
 /// binary, non-zero exit, or a daemon that didn't answer in time). Used for
 /// best-effort detection.
-fn run_capture(program: &str, args: &[&str]) -> Option<String> {
+pub(crate) fn run_capture(program: &str, args: &[&str]) -> Option<String> {
     let (stdout, _) = run_bounded(program, program, args, DETECT_TIMEOUT).ok()?;
     Some(String::from_utf8_lossy(&stdout).into_owned())
 }
@@ -286,11 +286,6 @@ fn file_label(path: &str) -> String {
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| path.to_string())
 }
-
-/// Container engines whose logs we can list and read. Both expose the same `ps`
-/// and `logs` surface, so one reader serves them; the source id carries which one
-/// (`docker:<id>` / `podman:<id>`) because a host can perfectly well run both.
-const CONTAINER_RUNTIMES: [&str; 2] = ["docker", "podman"];
 
 /// Enumerate the host's log sources. Synchronous (shells out); callers run it off
 /// the runtime via `spawn_blocking`.
@@ -328,7 +323,7 @@ pub fn detect_sources() -> Vec<LogSource> {
 
     // Conteneurs, quel que soit l'OS. Un `ps` qui échoue (binaire absent, démon
     // arrêté, socket interdite) ne donne simplement aucune source.
-    for bin in CONTAINER_RUNTIMES {
+    for bin in crate::docker::CONTAINER_RUNTIMES {
         let Some(list) = run_capture(
             bin,
             &[
@@ -396,7 +391,7 @@ pub fn run_query(source_id: &str, filter: &LogFilter, window: LogWindow) -> Resu
 
     let container = source_id
         .split_once(':')
-        .filter(|(bin, _)| CONTAINER_RUNTIMES.contains(bin));
+        .filter(|(bin, _)| crate::docker::CONTAINER_RUNTIMES.contains(bin));
 
     // Le plafond de balayage dépend de la source : une ligne de conteneur coûte
     // bien plus cher qu'une ligne de journal (sortie applicative brute, rendue

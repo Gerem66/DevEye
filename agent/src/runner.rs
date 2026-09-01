@@ -466,6 +466,14 @@ async fn stream_session(
     let (pkg_tx, mut pkg_rx) = tokio::sync::mpsc::channel::<crate::packages::PkgEvent>(256);
     // Gestionnaires dont une mise à jour tourne, pour ne jamais en lancer deux.
     let mut pkg_running: HashSet<String> = HashSet::new();
+    // Container inventory/stats/actions run off the loop (a pull or a prune takes
+    // minutes) and stream back here, same as packages.
+    let (docker_tx, mut docker_rx) = tokio::sync::mpsc::channel::<crate::docker::DockerEvent>(256);
+    // L'action longue en cours, s'il y en a une : le serveur tient déjà un
+    // verrou, celui-ci lui survit s'il redémarre. On retient l'`opId` et non un
+    // booléen, sans quoi la fin d'une action brève relâcherait le verrou d'une
+    // longue toujours en cours.
+    let mut docker_long: Option<String> = None;
     // Log source/query tasks (a query shells out to journalctl/docker and can return
     // many lines) stream their results back through this channel, same as packages.
     let (log_tx, mut log_rx) = tokio::sync::mpsc::channel::<crate::logs::LogEvent>(256);
@@ -502,6 +510,14 @@ async fn stream_session(
                     pkg_running.remove(manager);
                 }
                 commands::send_pkg_event(&mut sink, device_id, ev).await;
+            }
+            Some(ev) = docker_rx.recv() => {
+                if let crate::docker::DockerEvent::Done { op_id, .. } = &ev {
+                    if docker_long.as_deref() == Some(op_id.as_str()) {
+                        docker_long = None;
+                    }
+                }
+                commands::send_docker_event(&mut sink, device_id, ev).await;
             }
             Some(ev) = log_rx.recv() => {
                 commands::send_log_event(&mut sink, device_id, ev).await;
@@ -893,6 +909,46 @@ async fn stream_session(
                                     ));
                                 } else {
                                     warn!(%manager, "upgrade already running — request ignored");
+                                }
+                            }
+                            // Container inventory (off-loop; replies via docker_rx).
+                            Ok(ServerMessage::DockerInventory {}) => {
+                                let tx = docker_tx.clone();
+                                tokio::spawn(async move {
+                                    let inv = tokio::task::spawn_blocking(crate::docker::inventory)
+                                        .await
+                                        .ok();
+                                    if let Some(inv) = inv {
+                                        let _ = tx.send(crate::docker::DockerEvent::Inventory(inv)).await;
+                                    }
+                                });
+                            }
+                            // One-shot container stats sample (off-loop).
+                            Ok(ServerMessage::DockerStats {}) => {
+                                let tx = docker_tx.clone();
+                                tokio::spawn(async move {
+                                    let stats = tokio::task::spawn_blocking(crate::docker::stats)
+                                        .await
+                                        .unwrap_or_default();
+                                    let _ = tx.send(crate::docker::DockerEvent::Stats(stats)).await;
+                                });
+                            }
+                            // Act on a container/image/volume/network (off-loop; streams via docker_rx).
+                            Ok(ServerMessage::DockerAction { op_id, engine, action, target }) => {
+                                let long = crate::docker::is_long_action(&action);
+                                if long && docker_long.is_some() {
+                                    warn!(%action, "docker action already running — request ignored");
+                                } else {
+                                    if long {
+                                        docker_long = Some(op_id.clone());
+                                    }
+                                    tokio::spawn(crate::docker::run_action(
+                                        engine,
+                                        action,
+                                        target,
+                                        op_id,
+                                        docker_tx.clone(),
+                                    ));
                                 }
                             }
                             Ok(ServerMessage::Ack { received }) => debug!(received, "ack"),

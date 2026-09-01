@@ -4,6 +4,7 @@
 mod authlog;
 mod commands;
 mod config;
+mod docker;
 mod elevate;
 mod enroll;
 mod files;

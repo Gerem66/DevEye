@@ -196,7 +196,22 @@ export const devicesProcessesAt = {
     output: z.object({ deviceId, sample: processSampleSchema.nullable() })
 };
 
-/** Distinct local days (YYYY-MM-DD) that have metric data, for the calendar. */
+/**
+ * Ce qu'un jour local contient, pour le calendrier et sa liste. Le compte
+ * d'épingles est l'information qui compte sur la durée : passé la rétention,
+ * un jour ne subsiste que par eux.
+ */
+export const daySummarySchema = z.object({
+    /** Jour local, YYYY-MM-DD. */
+    day: z.string(),
+    /** Instants métriques enregistrés ce jour. */
+    instants: z.number().int().positive(),
+    /** Ceux qui sont épinglés : ce qui survivra à la rétention. */
+    pinned: z.number().int().nonnegative()
+});
+export type DaySummary = z.infer<typeof daySummarySchema>;
+
+/** Les jours locaux qui portent des données, résumés, pour le calendrier. */
 export const devicesAvailability = {
     command: 'devices.availability' as const,
     input: z.object({
@@ -204,7 +219,7 @@ export const devicesAvailability = {
         /** Client UTC offset (`Date.getTimezoneOffset()`), to bucket by local day. */
         tzOffsetMinutes: z.number().int().default(0)
     }),
-    output: z.object({ deviceId, days: z.array(z.string()) })
+    output: z.object({ deviceId, days: z.array(daySummarySchema) })
 };
 
 /**

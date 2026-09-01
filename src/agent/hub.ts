@@ -11,6 +11,9 @@ import {
     AGENT_FILES_UPLOAD,
     AGENT_LIFECYCLE,
     AGENT_LOG_QUERY,
+    AGENT_DOCKER_ACTION,
+    AGENT_DOCKER_INVENTORY,
+    AGENT_DOCKER_STATS,
     AGENT_LOG_SOURCES,
     AGENT_PKG_LIST,
     AGENT_PKG_UPGRADE,
@@ -40,6 +43,10 @@ import {
     DEVICE_FILES_OP_EVENT,
     DEVICE_FILES_USAGE_EVENT,
     DEVICE_LOG_LINES_EVENT,
+    DEVICE_DOCKER_DONE_EVENT,
+    DEVICE_DOCKER_INVENTORY_EVENT,
+    DEVICE_DOCKER_PROGRESS_EVENT,
+    DEVICE_DOCKER_STATS_EVENT,
     DEVICE_LOG_SOURCES_EVENT,
     DEVICE_POWER_EVENT,
     DEVICE_PRESENCE_EVENT,
@@ -60,6 +67,7 @@ import {
     type AgentFilesSearchPayload,
     type AgentFilesUploadPayload,
     type AgentLifecyclePayload,
+    type AgentDockerActionPayload,
     type AgentLogQueryPayload,
     type AgentPkgUpgradePayload,
     type AgentPowerPayload,
@@ -87,6 +95,11 @@ import {
     type DeviceFilesOpPush,
     type DeviceFilesUsagePush,
     type DeviceLogLinesPush,
+    type DeviceDockerDonePush,
+    type DeviceDockerInventoryPush,
+    type DeviceDockerProgressPush,
+    type DeviceDockerStatsPush,
+    type DockerAction,
     type DeviceLogSourcesPush,
     type DevicePowerPush,
     type DevicePresence,
@@ -167,6 +180,11 @@ export class MonitorHub {
      * outils refusent les exécutions concurrentes.
      */
     private readonly upgrades = new Map<string, Set<PackageManagerId>>();
+    /**
+     * L'action Docker longue en cours par appareil (`opId` + action). Une seule
+     * à la fois : deux écrans ouverts lanceraient sinon deux `prune` concurrents.
+     */
+    private readonly dockerOps = new Map<string, { opId: string; action: DockerAction }>();
     /** shareId (CloudSync) -> set of subscriber (user) sockets. */
     private readonly syncSubscribers = new Map<number, Set<WebSocket>>();
     /** subscriber socket -> set of shareIds it watches (for cleanup). */
@@ -388,6 +406,71 @@ export class MonitorHub {
             this.endUpgrade(deviceId, manager);
             this.publishPackageDone({ deviceId, manager, ok: false, error });
         }
+    }
+
+    /** Ask a connected agent for its container inventory. No-op if offline. */
+    requestDockerInventory(deviceId: string): boolean {
+        return this.sendToAgent(deviceId, AGENT_DOCKER_INVENTORY);
+    }
+
+    /** Ask a connected agent for a one-shot container stats sample. No-op if offline. */
+    requestDockerStats(deviceId: string): boolean {
+        return this.sendToAgent(deviceId, AGENT_DOCKER_STATS);
+    }
+
+    /** Ask a connected agent to act on a container/image/volume/network. No-op if offline. */
+    requestDockerAction(deviceId: string, payload: AgentDockerActionPayload): boolean {
+        return this.sendToAgent(deviceId, AGENT_DOCKER_ACTION, payload);
+    }
+
+    /** L'action Docker longue en cours sur cet appareil, s'il y en a une. */
+    runningDockerOp(deviceId: string): string | null {
+        return this.dockerOps.get(deviceId)?.opId ?? null;
+    }
+
+    /** Prend le verrou d'action longue ; `false` s'il en tourne déjà une. */
+    beginDockerOp(deviceId: string, opId: string, action: DockerAction): boolean {
+        if (this.dockerOps.has(deviceId)) return false;
+        this.dockerOps.set(deviceId, { opId, action });
+        return true;
+    }
+
+    /** Relâche le verrou (échec de l'envoi ; la fin normale passe par `docker.done`). */
+    endDockerOp(deviceId: string, opId: string): void {
+        if (this.dockerOps.get(deviceId)?.opId === opId) this.dockerOps.delete(deviceId);
+    }
+
+    /**
+     * Clôt d'autorité l'action d'un appareil devenu injoignable : aucun
+     * `docker.done` n'arrivera plus. Même raison que pour les paquets, un
+     * bouton réactivé sans un mot laisserait croire à un succès.
+     */
+    failRunningDockerOp(deviceId: string, error: string): void {
+        const op = this.dockerOps.get(deviceId);
+        if (!op) return;
+        this.dockerOps.delete(deviceId);
+        this.publishDockerDone({ deviceId, opId: op.opId, action: op.action, ok: false, error });
+    }
+
+    /** Fan out a device's container inventory to its subscribers. */
+    publishDockerInventory(payload: DeviceDockerInventoryPush): void {
+        this.publishToSubscribers(payload.deviceId, DEVICE_DOCKER_INVENTORY_EVENT, payload);
+    }
+
+    /** Fan out a container stats sample to a device's subscribers. */
+    publishDockerStats(payload: DeviceDockerStatsPush): void {
+        this.publishToSubscribers(payload.deviceId, DEVICE_DOCKER_STATS_EVENT, payload);
+    }
+
+    /** Fan out one output line of a running action to a device's subscribers. */
+    publishDockerProgress(payload: DeviceDockerProgressPush): void {
+        this.publishToSubscribers(payload.deviceId, DEVICE_DOCKER_PROGRESS_EVENT, payload);
+    }
+
+    /** Fan out an action's outcome, releasing its lock on the way. */
+    publishDockerDone(payload: DeviceDockerDonePush): void {
+        this.endDockerOp(payload.deviceId, payload.opId);
+        this.publishToSubscribers(payload.deviceId, DEVICE_DOCKER_DONE_EVENT, payload);
     }
 
     /** Ask a connected agent to run a system power action (shutdown/reboot…). No-op if offline. */
@@ -854,6 +937,18 @@ export interface MonitorTransport {
     endUpgrade(deviceId: string, manager: PackageManagerId): void;
     /** Annonce aux abonnés qu'une mise à jour vient d'être acceptée. */
     publishPackageStarted(payload: PackageStartedPush): void;
+    /** Ask the device's agent for its container inventory; false if offline. */
+    requestDockerInventory(deviceId: string): boolean;
+    /** Ask the device's agent for a container stats sample; false if offline. */
+    requestDockerStats(deviceId: string): boolean;
+    /** Ask the device's agent to act on a container/image/volume/network; false if offline. */
+    requestDockerAction(deviceId: string, payload: AgentDockerActionPayload): boolean;
+    /** L'`opId` de l'action Docker longue en cours, s'il y en a une. */
+    runningDockerOp(deviceId: string): string | null;
+    /** Prend le verrou d'action longue ; `false` s'il en tourne déjà une. */
+    beginDockerOp(deviceId: string, opId: string, action: DockerAction): boolean;
+    /** Relâche le verrou (échec de l'envoi ; la fin normale passe par `docker.done`). */
+    endDockerOp(deviceId: string, opId: string): void;
     /** Ask the device's agent to run a system power action; false if offline. */
     requestPower(deviceId: string, payload: AgentPowerPayload): boolean;
     /** Ask the device's agent to stop/restart its own process; false if offline. */
@@ -907,6 +1002,12 @@ export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): Moni
         beginUpgrade: (deviceId, manager) => hub.beginUpgrade(deviceId, manager),
         endUpgrade: (deviceId, manager) => hub.endUpgrade(deviceId, manager),
         publishPackageStarted: (payload) => hub.publishPackageStarted(payload),
+        requestDockerInventory: (deviceId) => hub.requestDockerInventory(deviceId),
+        requestDockerStats: (deviceId) => hub.requestDockerStats(deviceId),
+        requestDockerAction: (deviceId, payload) => hub.requestDockerAction(deviceId, payload),
+        runningDockerOp: (deviceId) => hub.runningDockerOp(deviceId),
+        beginDockerOp: (deviceId, opId, action) => hub.beginDockerOp(deviceId, opId, action),
+        endDockerOp: (deviceId, opId) => hub.endDockerOp(deviceId, opId),
         requestPower: (deviceId, payload) => hub.requestPower(deviceId, payload),
         requestLifecycle: (deviceId, payload) => hub.requestLifecycle(deviceId, payload),
         requestLogSources: (deviceId) => hub.requestLogSources(deviceId),

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PresenceEvent } from '@deveye/types';
+
+import type { DaySummary } from '../contracts/commands';
 import { MonthPicker } from './MonthPicker';
 import { nearestBy } from './utils';
 
@@ -29,8 +31,8 @@ interface TimelineProps {
     /** Selected day start (00:00), or null for the live rolling 24h. */
     dayStart: number | null;
     onDayChange: (day: number | null) => void;
-    /** Local day keys (YYYY-MM-DD) that have data. */
-    dataDays: string[];
+    /** Ce que chaque jour local qui porte des données contient, croissant. */
+    days: DaySummary[];
     /** Visible window span (zoom) in ms, and the presets to pick from. */
     spanMs: number;
     zoomPresets: { label: string; ms: number }[];
@@ -151,7 +153,7 @@ export function Timeline({
     onLive,
     dayStart,
     onDayChange,
-    dataDays,
+    days,
     spanMs,
     zoomPresets,
     onSpanChange
@@ -170,17 +172,13 @@ export function Timeline({
     const onlineMs = segments.reduce((acc, s) => acc + (s.online ? s.to - s.from : 0), 0);
     const uptimePct = Math.round((onlineMs / span) * 100);
 
-    const dataSet = useMemo(() => new Set(dataDays), [dataDays]);
-    const dataMs = useMemo(() => dataDays.map(parseDayKey).sort((a, b) => a - b), [dataDays]);
+    const dayMap = useMemo(() => new Map(days.map((d) => [d.day, d])), [days]);
+    const dataMs = useMemo(() => days.map((d) => parseDayKey(d.day)).sort((a, b) => a - b), [days]);
 
     const todayStart = startOfDay(Date.now());
     const refDay = dayStart ?? todayStart;
-    const prevDay = useMemo(() => {
-        let best: number | null = null;
-        for (const ms of dataMs) if (ms < refDay) best = ms;
-        return best;
-    }, [dataMs, refDay]);
-    const nextDay = useMemo(() => dataMs.find((ms) => ms > refDay) ?? null, [dataMs, refDay]);
+    const prevDay = useMemo(() => dataMs[lowerBound(dataMs, refDay) - 1] ?? null, [dataMs, refDay]);
+    const nextDay = useMemo(() => dataMs[lowerBound(dataMs, refDay + 1)] ?? null, [dataMs, refDay]);
 
     const atLatest = dayStart === null;
     const dayLabel = atLatest
@@ -303,7 +301,7 @@ export function Timeline({
                     </button>
                     {calOpen && (
                         <MonthPicker
-                            dataDays={dataSet}
+                            days={dayMap}
                             selectedDay={dayStart}
                             onPick={onDayChange}
                             onClose={() => setCalOpen(false)}

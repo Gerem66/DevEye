@@ -296,9 +296,17 @@ function fakeRepo(deviceRows: DeviceRow[], shares: Record<string, number[]> = {}
                 calls.push(`metrics.query:${deviceId}:${resolution}`);
                 return points.filter(inRange(from, to)).map((p) => point(p.ts));
             },
-            availableDays: async (_deviceId, tzOffsetMinutes) => [
-                ...new Set(points.map((p) => new Date(p.ts - tzOffsetMinutes * 60_000).toISOString().slice(0, 10)))
-            ],
+            availableDaySummaries: async (_deviceId, tzOffsetMinutes) => {
+                const byDay = new Map<string, { day: string; instants: number; pinned: number }>();
+                for (const p of points) {
+                    const day = new Date(p.ts - tzOffsetMinutes * 60_000).toISOString().slice(0, 10);
+                    const entry = byDay.get(day) ?? { day, instants: 0, pinned: 0 };
+                    entry.instants += 1;
+                    if (p.pinned) entry.pinned += 1;
+                    byDay.set(day, entry);
+                }
+                return [...byDay.values()].sort((a, b) => a.day.localeCompare(b.day));
+            },
             async instantTimes(_deviceId, from, to) {
                 const kept = points.filter(inRange(from, to));
                 return {
@@ -769,13 +777,34 @@ describe("l'historique", () => {
         const repo = fakeRepo([row({ id: DEVICE_A })]);
         repo.points.push({ ts: 1000, pinned: false }, { ts: DAY_MS + 3_600_000, pinned: false });
         const utc = await handlerFor(devicesAvailability)(contextFor(repo), { deviceId: DEVICE_A, tzOffsetMinutes: 0 });
-        assert.deepEqual(utc.days, ['1970-01-01', '1970-01-02']);
+        assert.deepEqual(
+            utc.days.map((d) => d.day),
+            ['1970-01-01', '1970-01-02']
+        );
         // Deux heures à l'ouest : le second point retombe la veille.
         const west = await handlerFor(devicesAvailability)(contextFor(repo), {
             deviceId: DEVICE_A,
             tzOffsetMinutes: 120
         });
-        assert.deepEqual(west.days, ['1969-12-31', '1970-01-01']);
+        assert.deepEqual(
+            west.days.map((d) => d.day),
+            ['1969-12-31', '1970-01-01']
+        );
+    });
+
+    it('un jour resté entièrement épinglé se compte comme tel : c\u2019est ce qui subsiste à la rétention', async () => {
+        const repo = fakeRepo([row({ id: DEVICE_A })]);
+        repo.points.push(
+            { ts: 1000, pinned: true },
+            { ts: 2000, pinned: true },
+            { ts: DAY_MS + 3_600_000, pinned: false }
+        );
+        const out = await handlerFor(devicesAvailability)(contextFor(repo), { deviceId: DEVICE_A, tzOffsetMinutes: 0 });
+        devicesAvailability.output.parse(out);
+        assert.deepEqual(out.days, [
+            { day: '1970-01-01', instants: 2, pinned: 2 },
+            { day: '1970-01-02', instants: 1, pinned: 0 }
+        ]);
     });
 
     it('les instants sont ceux des métriques ; les processus ne font que dire lesquels portent une liste', async () => {

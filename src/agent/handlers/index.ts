@@ -7,6 +7,7 @@ export {
     handleFilesOpResult,
     handleFilesUsage
 } from './files';
+export { handleDockerDone, handleDockerInventoryResult, handleDockerProgress, handleDockerStatsResult } from './docker';
 export { handleLogLines, handleLogSourcesResult } from './logs';
 export { handleSyncAck, handleSyncChanged, handleSyncChunk, handleSyncIndex, handleSyncOpResult } from './sync';
 export { handlePkgDone, handlePkgListResult, handlePkgProgress } from './packages';

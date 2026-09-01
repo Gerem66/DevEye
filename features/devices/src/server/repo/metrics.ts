@@ -1,6 +1,8 @@
 import type { MetricRow, MetricSeriesPoint, MetricsResolution } from '@deveye/types';
 import type { SdkQueryable } from '@deveye/types/sdk/server';
 
+import type { DaySummary } from '../../contracts/commands';
+
 /**
  * La table `device_metrics`, en lecture et en entretien : les fenêtres des
  * graphes, les instants de la frise, l'épinglage et les purges. L'insertion est
@@ -14,10 +16,11 @@ export interface MetricRepo {
         resolution: MetricsResolution;
     }): Promise<MetricSeriesPoint[]>;
     /**
-     * Distinct local days (YYYY-MM-DD) that have samples, ascending, bucketed in
-     * the client's timezone (`tzOffsetMinutes` = `Date.getTimezoneOffset()`).
+     * Les jours locaux qui portent des instants, croissants, avec leur compte
+     * total et leur compte d'épingles. Bucketisés dans le fuseau du client
+     * (`tzOffsetMinutes` = `Date.getTimezoneOffset()`).
      */
-    availableDays(deviceId: string, tzOffsetMinutes: number): Promise<string[]>;
+    availableDaySummaries(deviceId: string, tzOffsetMinutes: number): Promise<DaySummary[]>;
     /**
      * Timestamps of the stored instants within [from, to], ascending, plus the
      * pinned subset: the timeline's marks. Keyed on the metric rows, not the
@@ -145,23 +148,43 @@ export function metricRepo(q: SdkQueryable): MetricRepo {
             );
             return rows.reverse().map(rowToPoint);
         },
-        async availableDays(deviceId, tzOffsetMinutes) {
+        async availableDaySummaries(deviceId, tzOffsetMinutes) {
             // Bucket by local day in pure integer math, independent of the
             // session timezone: local-ms = ts - offset*60000.
             const offsetMs = tzOffsetMinutes * 60000;
             const dayMs = 86400000;
             // Sans borne temporelle : un plancher à la rétention ferait
             // disparaître du calendrier les journées ne contenant plus que des
-            // instants épinglés. Parcours d'index seul, borné à un appareil.
-            const rows = await q.query<{ d: number }>(
-                `SELECT DISTINCT FLOOR((ts - ?) / ?) AS d
-                 FROM device_metrics WHERE device_id = ?
-                 ORDER BY d ASC`,
-                [offsetMs, dayMs, deviceId]
-            );
+            // instants épinglés. Deux requêtes plutôt qu'un SUM(pinned) : chacune
+            // est couverte par un index (`uq_metrics_device_ts` puis
+            // `idx_metrics_device_pinned_ts`), là où l'agrégat forcerait une
+            // lecture de ligne par instant.
+            const [totals, pins] = await Promise.all([
+                q.query<{ d: number; n: number }>(
+                    `SELECT FLOOR((ts - ?) / ?) AS d, COUNT(*) AS n
+                     FROM device_metrics WHERE device_id = ?
+                     GROUP BY d ORDER BY d ASC`,
+                    [offsetMs, dayMs, deviceId]
+                ),
+                q.query<{ d: number; n: number }>(
+                    `SELECT FLOOR((ts - ?) / ?) AS d, COUNT(*) AS n
+                     FROM device_metrics WHERE device_id = ? AND pinned = 1
+                     GROUP BY d ORDER BY d ASC`,
+                    [offsetMs, dayMs, deviceId]
+                )
+            ]);
+            const pinnedByDay = new Map<number, number>();
+            for (const row of pins) pinnedByDay.set(Number(row.d), Number(row.n));
             // index*dayMs is local midnight as a UTC instant: formatting it as
             // UTC yields the local calendar day.
-            return rows.map((row) => new Date(Number(row.d) * dayMs).toISOString().slice(0, 10));
+            return totals.map((row) => {
+                const d = Number(row.d);
+                return {
+                    day: new Date(d * dayMs).toISOString().slice(0, 10),
+                    instants: Number(row.n),
+                    pinned: pinnedByDay.get(d) ?? 0
+                };
+            });
         },
         async instantTimes(deviceId, from, to) {
             // Same shape and bound as `processSamples.snapshotTimes`.
