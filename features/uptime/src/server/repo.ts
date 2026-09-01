@@ -61,6 +61,11 @@ export interface UptimeServicesRepo {
      */
     listVisible(workspaceId: number): Promise<UptimeServiceRow[]>;
     findById(id: number, workspaceId: number): Promise<UptimeServiceRow | null>;
+    /**
+     * Combien de cellules chiffrées pendent à ce service : ce qu'un changement
+     * d'espace aurait à convertir, annoncé avant qu'il commence.
+     */
+    countEncryptedCells(id: number, workspaceId: number): Promise<number>;
     /** Comme `findById`, mais accepte aussi un service projeté vers cet espace. */
     findVisible(id: number, workspaceId: number): Promise<UptimeServiceRow | null>;
     create(input: { userId: number; workspaceId: number } & UptimeServiceConfig): Promise<UptimeServiceRow>;
@@ -144,6 +149,31 @@ export interface UptimeHistoryRepo {
      */
     pruneByRetention(now: number): Promise<number>;
 }
+
+/**
+ * Les cellules chiffrées suspendues à un service, pour un changement d'espace :
+ * relues sous la clé de l'espace quitté, rescellées sous celle du nouveau.
+ *
+ * ⚠️ Liste à tenir à jour : toute nouvelle colonne chiffrée suspendue à un
+ * service doit y figurer, sinon son contenu reste sous l'ancienne clé et devient
+ * illisible. Rien ne peut le détecter, un blob chiffré est indistinguable d'un
+ * autre. `uptime_daily` n'y est pas : elle n'agrège que des nombres.
+ */
+export interface UptimeEncryptedCell {
+    table: string;
+    /** Colonne identifiante, pour réécrire une ligne et une seule. */
+    idColumn: string;
+    /** Colonne qui rattache la ligne au service. */
+    ownerColumn: string;
+    column: string;
+}
+
+export const MOVE_CELLS: readonly UptimeEncryptedCell[] = [
+    { table: 'uptime_services', idColumn: 'id', ownerColumn: 'id', column: 'content' },
+    { table: 'uptime_services', idColumn: 'id', ownerColumn: 'id', column: 'last_error' },
+    { table: 'uptime_checks', idColumn: 'id', ownerColumn: 'service_id', column: 'error' },
+    { table: 'uptime_incidents', idColumn: 'id', ownerColumn: 'service_id', column: 'error' }
+];
 
 export interface UptimeRepo {
     services: UptimeServicesRepo;
@@ -273,6 +303,23 @@ function servicesRepo(q: SdkQueryable): UptimeServicesRepo {
             );
         },
         findById: reload,
+        async countEncryptedCells(id, workspaceId) {
+            const owned = await q.query<{ n: number }>(
+                'SELECT COUNT(*) AS n FROM uptime_services WHERE id = ? AND workspace_id = ?',
+                [id, workspaceId]
+            );
+            if (Number(owned[0]?.n ?? 0) === 0) return 0;
+            let total = 0;
+            for (const cell of MOVE_CELLS) {
+                const rows = await q.query<{ n: number }>(
+                    `SELECT COUNT(*) AS n FROM ${cell.table}
+                      WHERE ${cell.ownerColumn} = ? AND ${cell.column} IS NOT NULL AND ${cell.column} <> ''`,
+                    [id]
+                );
+                total += Number(rows[0]?.n ?? 0);
+            }
+            return total;
+        },
         async create({ userId, workspaceId, ...config }) {
             // New services land at the end of the list, never in the middle.
             const posRows = await q.query<{ next: number }>(

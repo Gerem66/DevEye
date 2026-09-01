@@ -98,7 +98,14 @@ function fakeRepo(): FakeRepo {
         unlinkSite: unused,
         unlinkAllSites: unused,
         listSiteUsage: unused,
-        countSiteLinks: unused
+        countSiteLinks: unused,
+        listServiceUsage: unused,
+        countServiceLinks: unused,
+        detachService: unused,
+        detachDatabase: unused,
+        detachDeployTarget: unused,
+        detachRepo: unused,
+        detachSite: unused
     } satisfies ProjectsRepo['links'];
     return {
         projectRows,
@@ -177,8 +184,9 @@ describe('PROJECTS_USAGE_PROVIDER : usageOf / countByItem', () => {
 
     it('une feature qui ne relie rien vaut vide, jamais une erreur', async () => {
         const { provider } = providerOn(fakeRepo());
-        assert.deepEqual(await provider.usageOf('uptime', 1, 1), []);
+        assert.deepEqual(await provider.usageOf('weather', 1, 1), []);
         assert.deepEqual([...(await provider.countByItem('weather', 1))], []);
+        assert.equal(await provider.detach('weather', 1, 1), 0);
     });
 });
 

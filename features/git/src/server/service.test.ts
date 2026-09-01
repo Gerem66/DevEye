@@ -308,6 +308,7 @@ function syncWith(store: FakeRepo, remote: Remote) {
     const projects: ProjectsUsageProvider = {
         usageOf: async () => [],
         countByItem: async () => new Map(),
+        detach: async () => 0,
         recordEvent: async () => undefined,
         applyVersion: async (feature, itemId, workspaceId, version) => {
             versions.push([feature, itemId, workspaceId, version]);

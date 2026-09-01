@@ -274,6 +274,11 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         rows.links[kind] = rows.links[kind].filter((l) => !(l.project_id === projectId && l.workspace_id === ws));
         return before - rows.links[kind].length;
     };
+    const detach = (kind: keyof FakeRepo['rows']['links']) => async (itemId: number, ws: number) => {
+        const before = rows.links[kind].length;
+        rows.links[kind] = rows.links[kind].filter((l) => !(l.item_id === itemId && l.workspace_id === ws));
+        return before - rows.links[kind].length;
+    };
     const usage = (kind: keyof FakeRepo['rows']['links'], archivedToo: boolean) => async (itemId: number, ws: number) =>
         rows.links[kind]
             .filter((l) => l.item_id === itemId && l.workspace_id === ws)
@@ -639,6 +644,9 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                         workspace_id: l.workspace_id,
                         created: 1
                     })),
+            listServiceUsage: usage('uptime', true),
+            countServiceLinks: counts('uptime'),
+            detachService: detach('uptime'),
             listDatabaseIds: ids('database'),
             linkDatabase: link('database'),
             unlinkDatabase: unlink('database'),
@@ -647,18 +655,21 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             },
             listDatabaseUsage: usage('database', true),
             countDatabaseLinks: counts('database'),
+            detachDatabase: detach('database'),
             listDeployTargetIds: ids('deploy'),
             linkDeployTarget: link('deploy'),
             unlinkDeployTarget: unlink('deploy'),
             unlinkAllDeployTargets: unlinkAll('deploy'),
             listDeployUsage: usage('deploy', true),
             countDeployLinks: counts('deploy'),
+            detachDeployTarget: detach('deploy'),
             listRepoIds: ids('repo'),
             linkRepo: link('repo'),
             unlinkRepo: unlink('repo'),
             unlinkAllRepos: unlinkAll('repo'),
             listRepoUsage: usage('repo', true),
             countRepoLinks: counts('repo'),
+            detachRepo: detach('repo'),
             listSiteIds: ids('site'),
             linkSite: link('site'),
             unlinkSite: unlink('site'),
@@ -666,7 +677,8 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                 await unlinkAll('site')(projectId, ws);
             },
             listSiteUsage: usage('site', false),
-            countSiteLinks: counts('site')
+            countSiteLinks: counts('site'),
+            detachSite: detach('site')
         },
         rekey: {
             readTree: async (projectId, ws) =>

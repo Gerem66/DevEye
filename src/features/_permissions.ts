@@ -38,7 +38,11 @@ const ACCESS_EXEMPT = new Set([
     'share.get',
     'share.set',
     'share.grantList',
-    'share.grantSet'
+    'share.grantSet',
+    // Le déplacement ouvre de même : écriture sur la feature et sur l'élément
+    // chez lui, puis le droit d'écrire dans l'espace visé.
+    'share.movePreview',
+    'share.move'
 ]);
 
 /**

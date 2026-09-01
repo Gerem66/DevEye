@@ -1,4 +1,4 @@
-import type { Queryable } from './pool';
+import { getQueryable, withTransaction, type DbPool, type Queryable } from './pool';
 import { devicesRepo, linkCodesRepo, type DevicesRepo, type LinkCodesRepo } from './repos/devices';
 import { logsRepo, type LogsRepo } from './repos/logs';
 import { metricsRepo, type MetricsRepo } from './repos/metrics';
@@ -24,6 +24,13 @@ import { userInvitesRepo, type UserInvitesRepo } from './repos/userInvites';
 export interface Database {
     /** Le Queryable brut, pour les fabriques de repos des modules uniquement. */
     queryable: Queryable;
+    /**
+     * Les mêmes repos sur une connexion en transaction : tout ce que `fn` écrit
+     * est validé ensemble, ou rien. Réservé aux gestes qui touchent plusieurs
+     * tables sans pouvoir laisser un état intermédiaire, le déplacement d'un
+     * élément d'un espace à un autre étant le premier.
+     */
+    transaction<T>(fn: (db: Database) => Promise<T>): Promise<T>;
     users: UsersRepo;
     workspaces: WorkspacesRepo;
     workspaceMembers: WorkspaceMembersRepo;
@@ -46,9 +53,24 @@ export interface Database {
     notificationChannels: NotificationChannelsRepo;
 }
 
-export function createDatabase(q: Queryable): Database {
+/**
+ * Le pool plutôt qu'un `Queryable` : c'est lui, et lui seul, qui sait ouvrir une
+ * transaction sur une connexion à part (cf. `Database.transaction`).
+ */
+export function createDatabase(pool: DbPool): Database {
+    return buildDatabase(pool, getQueryable(pool), false);
+}
+
+function buildDatabase(pool: DbPool, q: Queryable, inTransaction: boolean): Database {
     return {
         queryable: q,
+        // Déjà dans une transaction, on y reste : MySQL n'en imbrique pas, et
+        // en ouvrir une seconde prendrait une autre connexion, qui ne verrait
+        // pas les écritures en cours et attendrait leurs verrous.
+        transaction: (fn) =>
+            inTransaction
+                ? fn(buildDatabase(pool, q, true))
+                : withTransaction(pool, (txQ) => fn(buildDatabase(pool, txQ, true))),
         users: usersRepo(q),
         workspaces: workspacesRepo(q),
         workspaceMembers: workspaceMembersRepo(q),

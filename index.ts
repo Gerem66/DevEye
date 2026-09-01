@@ -8,7 +8,7 @@ import Encryption from '@/Services/Encryption';
 import { createAuditLog } from '@/Services/AuditLog';
 import { createDatabase } from '@/db';
 import { runMigrations } from '@/db/migrate';
-import { createDbPool, getQueryable, testConnection } from '@/db/pool';
+import { createDbPool, testConnection } from '@/db/pool';
 import { seedDevAccount } from '@/db/seedDev';
 import { moduleMigrationDirs } from '@/features/_sdk/register';
 // L'import du registre déclenche l'enregistrement des modules installés :
@@ -29,7 +29,7 @@ async function main() {
         await seedDevAccount(pool);
     }
 
-    const db = createDatabase(getQueryable(pool));
+    const db = createDatabase(pool);
     const crypt = new Encryption(env.CRYPT_KEY_A, env.CRYPT_KEY_B);
 
     const { app, moduleServices } = await buildApp({

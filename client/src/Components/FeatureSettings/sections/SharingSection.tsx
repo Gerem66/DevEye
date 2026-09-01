@@ -3,7 +3,9 @@ import { featureDescriptor, type ItemShareState, type ShareBlocker } from '@deve
 
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';
+import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import { Dialog } from '@/Components/Dialog';
+import SelectInput from '@/Components/SelectInput';
 import Switch from '@/Components/Switch';
 import { moduleManifest } from '@/sdk/registry';
 import { invalidate, type ResourceKey } from '@/stores/invalidation';
@@ -14,10 +16,14 @@ import { goToItemSettings } from '../goToHome';
 import ItemGrantsPanel from './ItemGrantsPanel';
 
 /**
- * Où cet élément est visible : ses espaces, et seulement les siens. La case
- * projette, elle ne déplace pas : l'élément garde un domicile et reste chiffré
- * sous la clé de son origine. Proposer les espaces d'autrui contournerait
- * l'appartenance ; le serveur le refuse aussi.
+ * Où cet élément est visible : ses espaces, et seulement les siens. Proposer les
+ * espaces d'autrui contournerait l'appartenance ; le serveur le refuse aussi.
+ *
+ * Deux gestes, à ne pas confondre. La case **projette** : l'élément garde son
+ * domicile et reste chiffré sous la clé de son origine. Le sélecteur du bas le
+ * **déplace** : il change de domicile, sa donnée est re-chiffrée et ses
+ * projections ne le suivent pas. Le second n'apparaît que quand le serveur le
+ * dit (`movable`), et ne s'exécute qu'après un aperçu de ce qu'il détruit.
  */
 
 const BLOCKER_TEXT: Record<ShareBlocker, string> = {
@@ -40,8 +46,14 @@ export default function SharingSection({ scope }: Props) {
     const [error, setError] = useState<string | null>(null);
     /** L'espace dont on règle les permissions ; `null` = aucun dialogue ouvert. */
     const [grantsFor, setGrantsFor] = useState<{ workspaceId: number; workspaceName: string } | null>(null);
+    /** L'espace visé par un déplacement, tant qu'il n'est pas confirmé. */
+    const [moveTo, setMoveTo] = useState('');
+    const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
+    /** Où l'élément est parti : la section ne le voit plus, elle propose d'y aller. */
+    const [moved, setMoved] = useState<{ workspaceId: number; workspaceName: string } | null>(null);
 
     const itemId = scope.kind === 'item' ? scope.itemId : '';
+    const noun = featureDescriptor(feature).itemNoun ?? 'élément';
 
     const reload = useCallback(async () => {
         const res = await ws.send('share.get', { feature, itemId });
@@ -68,9 +80,63 @@ export default function SharingSection({ scope }: Props) {
             .finally(() => setBusy(false));
     };
 
-    if (!state) return <p className={styles.sectionHint}>Chargement…</p>;
+    /** Ce que le déplacement ferait, demandé au serveur : l'écran n'en devine rien. */
+    const askMove = (): void => {
+        const workspaceId = Number(moveTo);
+        if (!Number.isInteger(workspaceId) || workspaceId <= 0) return;
+        setBusy(true);
+        setError(null);
+        void ws
+            .send('share.movePreview', { feature, itemId, workspaceId })
+            .then((preview) => {
+                if (preview.blockers.length > 0) {
+                    setError(preview.blockers[0]);
+                    return;
+                }
+                const lost = [...preview.drops, ...preview.dependencies.map((d) => `${d.label} : ${d.reason}`)];
+                setConfirm({
+                    title: `Déplacer vers « ${preview.workspaceName} » ?`,
+                    confirmLabel: 'Déplacer',
+                    description: (
+                        <>
+                            <p>
+                                Ce {noun} quittera « {preview.homeWorkspaceName} ». Sa donnée est déchiffrée puis
+                                rescellée sous la clé de « {preview.workspaceName} »
+                                {preview.rows > 0 ? ` (${preview.rows} valeurs à convertir).` : '.'}
+                            </p>
+                            {preview.losesSharedAccess && (
+                                <p>Les membres de « {preview.homeWorkspaceName} » n’y auront plus accès.</p>
+                            )}
+                            {lost.length > 0 && (
+                                <ul className={styles.usageList}>
+                                    {lost.map((line) => (
+                                        <li key={line}>{line}</li>
+                                    ))}
+                                </ul>
+                            )}
+                        </>
+                    ),
+                    onConfirm: () => doMove(workspaceId, preview.workspaceName)
+                });
+            })
+            .catch(() => setError('Déplacement impossible à préparer.'))
+            .finally(() => setBusy(false));
+    };
 
-    const noun = featureDescriptor(scope.feature).itemNoun ?? 'élément';
+    const doMove = (workspaceId: number, workspaceName: string): void => {
+        setBusy(true);
+        setError(null);
+        void ws
+            .send('share.move', { feature, itemId, workspaceId })
+            .then(() => {
+                setMoved({ workspaceId, workspaceName });
+                for (const key of moduleManifest(feature)?.resources ?? []) invalidate(key as ResourceKey);
+            })
+            .catch(() => setError('Déplacement impossible.'))
+            .finally(() => setBusy(false));
+    };
+
+    if (!state) return <p className={styles.sectionHint}>Chargement…</p>;
 
     // Sans le droit de régler le partage, on dit seulement où l'élément est
     // visible et pourquoi ça ne se règle pas d'ici.
@@ -160,9 +226,56 @@ export default function SharingSection({ scope }: Props) {
             </div>
 
             <p className={styles.sectionHint}>
-                Un membre d’un autre espace verra ce {noun}, mais pas ce à quoi il est relié ici — un compte mail, un
+                Un membre d’un autre espace verra ce {noun}, mais pas ce à quoi il est relié ici, un compte mail ou un
                 canal d’alerte. Ces liens lui apparaissent comme « d’un autre espace », sans leur contenu.
             </p>
+
+            {/* Déplacer n'est pas partager : l'élément change de domicile, sa
+                donnée est re-chiffrée et ses projections ne le suivent pas. Le
+                serveur ne le propose (`movable`) que depuis le domicile, et pour
+                une fonctionnalité qui sait convertir son arbre. */}
+            {moved !== null ? (
+                <p className={styles.sectionHint}>
+                    Ce {noun} est maintenant dans « {moved.workspaceName} ».{' '}
+                    <button
+                        type='button'
+                        className={styles.jumpBtn}
+                        onClick={() => goToItemSettings(moved.workspaceId, feature, itemId, 'sharing')}
+                    >
+                        L’y ouvrir
+                    </button>
+                </p>
+            ) : (
+                state.movable && (
+                    <div className={styles.field}>
+                        <span className={styles.fieldLabel}>Changer d’espace</span>
+                        <div className={styles.fieldWithAction}>
+                            <SelectInput
+                                value={moveTo}
+                                disabled={busy}
+                                aria-label={`Déplacer ce ${noun} vers`}
+                                onChange={(e) => setMoveTo(e.target.value)}
+                            >
+                                <option value=''>Choisir un espace…</option>
+                                {state.workspaces
+                                    .filter((w) => !w.isHome)
+                                    .map((w) => (
+                                        <option key={w.workspaceId} value={w.workspaceId}>
+                                            {w.workspaceName}
+                                        </option>
+                                    ))}
+                            </SelectInput>
+                            <Button variant='secondary' disabled={busy || moveTo === ''} onClick={askMove}>
+                                Déplacer…
+                            </Button>
+                        </div>
+                        <span className={styles.fieldHint}>
+                            Le {noun} quitte cet espace pour de bon : sa donnée y est déchiffrée puis rescellée sous la
+                            clé du nouveau. Ce qu’il perd est nommé avant confirmation.
+                        </span>
+                    </div>
+                )
+            )}
 
             {error && <p className={styles.notice}>{error}</p>}
 
@@ -178,6 +291,8 @@ export default function SharingSection({ scope }: Props) {
             >
                 {grantsFor && <ItemGrantsPanel feature={feature} itemId={itemId} workspaceId={grantsFor.workspaceId} />}
             </Dialog>
+
+            <ConfirmDialog request={confirm} busy={busy} onClose={() => setConfirm(null)} />
         </div>
     );
 }

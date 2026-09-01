@@ -10,18 +10,19 @@
 
 ## 1. Partager n'est pas déplacer
 
-`WORKSPACES.md` §10 range **déplacer** un élément d'un espace à un autre hors
-périmètre, et la raison est juste : ce serait la seule opération du système à
-exiger un déchiffrement clé A puis un re-chiffrement clé B sous session vivante.
-Tout le reste est sans re-chiffrement — c'est le levier L3, et le principal
-réducteur de risque du chantier des espaces.
-
-Ce chantier ne le contredit pas. Un élément partagé garde **un seul domicile** :
-il reste chiffré sous la clé de son espace d'origine, et se lit ailleurs avec le
-codec ouvert de cet espace-là. C'est une **projection**, pas un transfert. Rien
-n'est re-chiffré, donc rien n'est mis en jeu.
+Un élément partagé garde **un seul domicile** : il reste chiffré sous la clé de
+son espace d'origine, et se lit ailleurs avec le codec ouvert de cet espace-là.
+C'est une **projection**, pas un transfert. Rien n'est re-chiffré, donc rien
+n'est mis en jeu.
 
 L'élément a une seule maison et des fenêtres ailleurs.
+
+**Déplacer existe désormais, et c'est autre chose** : `share.move` change le
+domicile, et c'est la seule opération du système qui déchiffre sous une clé pour
+rechiffrer sous une autre. Elle ne dément pas le levier L3, elle en est
+l'exception déclarée : sans entrée `move` dans les `items` de sa
+fonctionnalité, un élément ne bouge pas, et l'écran ne le propose même pas. Voir
+§9.
 
 ---
 
@@ -309,7 +310,39 @@ l'accueil comptent les éléments visibles — projetés compris, restrictions
 déduites. Une carte qui compte autre chose que la liste qu'elle ouvre se lit
 comme un bug.
 
-## 9. Reste à faire
+## 9. Déplacer, l'exception à L3
+
+`share.movePreview` dit ce qu'un déplacement ferait, `share.move` le fait. Aucun
+droit nouveau : qui peut supprimer l'élément peut le déplacer, dans les deux cas
+la donnée quitte l'espace, et supprimer n'a jamais demandé plus que l'écriture.
+
+Deux moitiés, et la frontière est le tout :
+
+- **la fonctionnalité convertit son arbre** (`items.move`, facultatif). Elle
+  seule sait quelles cellules sont chiffrées. Sans cette entrée, l'élément ne
+  bouge pas : `movable` est faux, l'écran ne propose rien, le serveur refuse.
+  C'est le même contrat que `shareTier` et `SHARE_WIRED` : le registre dit ce que
+  le chiffrement autorise, le module dit ce que le code fait.
+- **l'app fait le ménage de ce qui nomme l'espace quitté** : projections,
+  surcharges de rôle, route de notification. L'élément arrive **nu**. Les
+  projections avaient été accordées par des membres de l'espace d'origine sur
+  une donnée qui n'y est plus ; les re-domicilier livrerait une donnée du nouvel
+  espace à une audience qu'il n'a pas choisie.
+
+Les deux dans **une transaction** (`Database.transaction`), sans quoi un arbre à
+moitié converti serait définitivement illisible, et rien ne pourrait le
+détecter : un blob chiffré est indistinguable d'un autre. La conversion lit et
+rescelle tout **avant la moindre écriture**, sur le modèle de
+`reencryptProjectTree`.
+
+Les **liaisons ne traversent pas** : une liaison vers un élément qui part est
+retirée (`PROJECTS_USAGE_PROVIDER.detach`), et l'écran la nomme avant de
+confirmer. Uptime est branché ; les autres suivront quand leur conversion sera
+écrite. Un élément dont la fonctionnalité tient une source d'espace (un jeton de
+déploiement, une destination de sauvegarde) n'a pas vocation à bouger : la source
+ne suivrait pas.
+
+## 10. Reste à faire
 
 - L'ordonnanceur de fond n'a pas changé : il sonde les éléments **d'un espace**,
   pas ce qu'on y voit. C'est voulu — sonder deux fois le même service parce

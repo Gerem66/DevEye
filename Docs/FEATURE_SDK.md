@@ -675,8 +675,12 @@ Par entrée serveur (`FeatureServer`) : `items` (`homeOf`, `labelOf`,
 les commandes transversales de partage et de routage savent des éléments d'un
 module (`moduleItems` dans `register.ts`, consulté avant les switchs natifs),
 obligatoire dès que le manifest déclare un `shareTier` autre que `'never'`
-(`isModuleShareWired`). Par entrée client (`FeatureClient`) : `providers`, le
-jumeau client des providers de service, que les écrans de l'app lisent par
+(`isModuleShareWired`). Son entrée `move`, elle, reste facultative en toute
+circonstance : c'est elle qui autorise un élément à changer d'espace
+(`isModuleMovable`), et son absence est la réponse sûre, pas un oubli.
+
+Par entrée client (`FeatureClient`) : `providers`, le jumeau client des
+providers de service, que les écrans de l'app lisent par
 `moduleClientProvider` (Projets compose ainsi les composants d'Uptime).
 
 Pairs admis d'un module : `@deveye/types`, `react`, `zod`, `framer-motion`

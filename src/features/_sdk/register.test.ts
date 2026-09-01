@@ -14,8 +14,10 @@ import {
 import type { FeatureContext } from '@/features/_define';
 import {
     createModuleServices,
+    isModuleMovable,
     moduleAgentHooks,
     moduleFeatureHandlers,
+    moduleItems,
     moduleManifest,
     moduleManifests,
     moduleProvider,
@@ -34,7 +36,7 @@ import type { ModuleServiceHost } from './service';
  * natifs : les modules à hooks empruntent des ids de l'enum.
  */
 
-type Extra = Partial<Pick<FeatureManifest, 'nativeCapabilities' | 'extraPermissions'>>;
+type Extra = Partial<Pick<FeatureManifest, 'nativeCapabilities' | 'extraPermissions' | 'shareTier'>>;
 
 function manifest(id: FeatureId, extra: Extra = {}): FeatureManifest {
     return {
@@ -166,6 +168,30 @@ const external: FeatureServer = {
     }
 };
 
+/**
+ * Le module qui sait déplacer ses éléments : `items.move` est facultatif, et
+ * c'est lui seul qui décide qu'un élément peut changer d'espace.
+ */
+const moveCalls: unknown[] = [];
+const movable: FeatureServer<{ tag: string }> = {
+    features: [],
+    createRepo: () => ({ tag: 'repo' }),
+    items: {
+        homeOf: async () => 3,
+        labelOf: async () => 'Élément',
+        move: {
+            plan: async (repo, itemId, from, to) => {
+                moveCalls.push(['plan', repo, itemId, from, to]);
+                return { blockers: [], drops: ['son historique'], rows: 12 };
+            },
+            apply: async (mctx) => {
+                moveCalls.push(['apply', mctx.repo, mctx.itemId, mctx.fromWorkspaceId, mctx.toWorkspaceId]);
+                await mctx.q.execute('UPDATE ft_x SET workspace_id = ?', [mctx.toWorkspaceId]);
+            }
+        }
+    }
+};
+
 registerModules([
     { manifest: manifest('weather', { nativeCapabilities: ['agents'] }), server: weather },
     { manifest: manifest('osint', { nativeCapabilities: ['agents'] }), server: osint },
@@ -175,7 +201,8 @@ registerModules([
         }),
         server: external
     },
-    { manifest: manifest('x-sdkbare'), server: { features: [] } }
+    { manifest: manifest('x-sdkbare'), server: { features: [] } },
+    { manifest: manifest('backup', { shareTier: 'open' }), server: movable as FeatureServer }
 ]);
 const services = createModuleServices(host);
 
@@ -356,5 +383,47 @@ describe('moduleProvider', () => {
 
     it("rend undefined quand aucun module ne l'offre", () => {
         assert.equal(moduleProvider('nope'), undefined);
+    });
+});
+
+describe('moduleItems : le déplacement d’un élément', () => {
+    it('n’est offert que par un module qui déclare `items.move`', () => {
+        assert.equal(isModuleMovable('backup'), true);
+        // Sans entrée `items` du tout, et sans module : jamais déplaçable.
+        assert.equal(isModuleMovable('x-sdkbare'), false);
+        assert.equal(isModuleMovable('inconnu'), false);
+        assert.equal(moduleItems('x-sdkbare', host.db)?.move, undefined);
+    });
+
+    it('passe au module son dépôt et les deux espaces, et rend son plan', async () => {
+        const items = moduleItems('backup', host.db);
+        assert.deepEqual(await items?.move?.plan('7', 3, 9), {
+            blockers: [],
+            drops: ['son historique'],
+            rows: 12
+        });
+        assert.deepEqual(moveCalls.at(-1), ['plan', { tag: 'repo' }, '7', 3, 9]);
+    });
+
+    it('écrit par la transaction qu’on lui passe, pas par le pool de son dépôt', async () => {
+        const written: [string, unknown[]][] = [];
+        // Le `Queryable` de l'app : c'est lui que l'hôte convertit en
+        // `SdkQueryable` avant de le tendre au module.
+        const tx = {
+            query: async (sql: string, params?: unknown[]) => {
+                written.push([sql, params ?? []]);
+                return { rows: [], rowCount: 1, insertId: 0 };
+            }
+        };
+        const cipher = {
+            encrypt: async (v: string) => v,
+            decrypt: async (v: string) => v,
+            tryDecrypt: async () => null
+        };
+
+        await moduleItems('backup', host.db)?.move?.apply(tx, '7', 3, 9, { from: cipher, to: cipher });
+
+        assert.deepEqual(moveCalls.at(-1), ['apply', { tag: 'repo' }, '7', 3, 9]);
+        assert.deepEqual(written, [['UPDATE ft_x SET workspace_id = ?', [9]]]);
     });
 });

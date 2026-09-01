@@ -253,6 +253,7 @@ function projectsProvider(recorded: { projectId: number; kind: string; label: st
                 : [],
         countByItem: async (feature, workspaceId) =>
             feature === 'deploy' && workspaceId === 1 ? new Map([[1, 2]]) : new Map(),
+        detach: async () => 0,
         recordEvent: async (projectId, _workspaceId, event) => {
             recorded.push({ projectId, kind: event.kind, label: event.label });
         },

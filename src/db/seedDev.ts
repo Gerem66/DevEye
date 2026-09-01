@@ -2,7 +2,7 @@ import { hashPassword } from '@/auth/argon';
 import { logger } from '@/logger';
 
 import { createDatabase, type Database } from './index';
-import { getQueryable, type DbPool } from './pool';
+import type { DbPool } from './pool';
 
 const DEV_USERNAME = process.env.SEED_DEV_USERNAME ?? 'dev';
 const DEV_EMAIL = process.env.SEED_DEV_EMAIL ?? 'dev@deveye.local';
@@ -20,7 +20,7 @@ const DEV_FEATURES = ['devices', 'weather', 'password'];
  * l'inscription (compte + espace personnel).
  */
 export async function seedDevAccount(pool: DbPool): Promise<void> {
-    const db: Database = createDatabase(getQueryable(pool));
+    const db: Database = createDatabase(pool);
 
     if (await db.users.findByUsername(DEV_USERNAME)) {
         logger.info({ username: DEV_USERNAME }, 'Dev seed: account already present');

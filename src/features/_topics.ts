@@ -102,6 +102,8 @@ const NON_MUTATING = new Set([
     'mail.attachmentScan',
     'mail.attachmentDownload',
     'workspace.activate',
+    // Calcule ce qu'un déplacement ferait, sans rien écrire.
+    'share.movePreview',
     'agent.update',
     'agent.upgradePackages',
     'agent.listPackages',

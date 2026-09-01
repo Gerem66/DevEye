@@ -3,6 +3,7 @@ import type { FeatureServer, SdkCipher } from '@deveye/types/sdk/server';
 
 import { uptimeHandlers } from './handlers';
 import { setMonitor } from './_shared';
+import { uptimeMove } from './move';
 import { createRepo, type UptimeRepo } from './repo';
 import { UptimeMonitor } from './service';
 
@@ -30,8 +31,11 @@ async function labelOf(
 }
 
 /**
- * `items` : ce que le partage et les routes de notification savent des services
- * sans ouvrir la feature (domicile et nom). `shareTier: 'open'` l'exige.
+ * `items` : ce que le partage, les routes de notification et le déplacement
+ * savent des services sans ouvrir la feature (domicile, nom, conversion).
+ * `shareTier: 'open'` exige les deux premiers ; `move` est offert parce qu'un
+ * service est autonome : il porte son URL, ne dépend d'aucune source d'espace
+ * et n'a pas de nom unique par espace à heurter.
  *
  * Pas de `migrationsDir` : les tables d'Uptime sont dans le socle ; une nouvelle
  * table irait dans `src/server/migrations/` avec le préfixe `ft_uptime_`.
@@ -64,6 +68,7 @@ export const serverEntry: FeatureServer<UptimeRepo> = {
     items: {
         homeOf: async (repo, itemId, workspaceId) =>
             (await repo.services.findVisible(Number(itemId), workspaceId))?.workspace_id ?? null,
-        labelOf: (repo, cipher, itemId, workspaceId) => labelOf(repo, cipher, Number(itemId), workspaceId)
+        labelOf: (repo, cipher, itemId, workspaceId) => labelOf(repo, cipher, Number(itemId), workspaceId),
+        move: uptimeMove
     }
 };

@@ -249,6 +249,7 @@ function projectsProvider(): ProjectsUsageProvider {
                 : [],
         countByItem: async (feature, workspaceId) =>
             feature === 'audience' && workspaceId === 1 ? new Map([[1, 2]]) : new Map(),
+        detach: async () => 0,
         recordEvent: async () => undefined,
         applyVersion: async () => undefined
     };

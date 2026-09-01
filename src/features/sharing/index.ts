@@ -15,8 +15,10 @@ import {
 
 import { grantsFor, invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
-import { moduleItems, moduleManifest } from '../_sdk/register';
+import { isModuleMovable, moduleItems, moduleManifest } from '../_sdk/register';
 import { isShareWired, shareBlockerFor } from '../_sharing';
+import { canWriteItemIn, itemHomeWorkspace, loadHome } from './_shared';
+import { moveFeatures } from './move';
 import { extraOverridesOf } from '@/db/repos/itemSharing';
 import { parseJsonArray } from '@/Utils/json';
 
@@ -40,57 +42,6 @@ async function canManageItemGrantsIn(ctx: FeatureContext, workspaceId: number, f
     const role = await ctx.db.workspaceRoles.findForMember(ctx.userId, workspaceId);
     const grants = grantsFor(false, role);
     return grants.capabilities.has('workspace.roles') || grants.itemPermissions.has(feature);
-}
-
-/**
- * L'appelant peut-il écrire cet élément dans un espace donné, pas forcément
- * l'actif ? La réponse est celle qu'il aurait là-bas : membre, écriture sur la
- * fonctionnalité, et aucune restriction sur cette ligne pour son rôle.
- */
-async function canWriteItemIn(
-    ctx: FeatureContext,
-    workspaceId: number,
-    feature: FeatureId,
-    itemId: string
-): Promise<boolean> {
-    const workspace = await ctx.db.workspaces.findById(workspaceId);
-    if (!workspace) return false;
-    if (workspace.owner_user_id === ctx.userId) return true;
-    if (!(await ctx.db.workspaceMembers.isMember(ctx.userId, workspaceId))) return false;
-    const role = await ctx.db.workspaceRoles.findForMember(ctx.userId, workspaceId);
-    if (grantsFor(false, role).features.get(feature) !== 'write') return false;
-    if (!role) return false;
-    // La restriction d'élément posée là-bas s'applique là-bas : masqué ou en
-    // lecture seule chez lui, on ne gère pas son partage depuis ailleurs.
-    const restrictions = await ctx.db.itemSharing.grantsForRole(workspaceId, feature, role.id);
-    return !restrictions.some((g) => g.item_id === itemId);
-}
-
-/** Où vit cet élément, et l'appelant peut-il en disposer ? */
-async function loadHome(ctx: FeatureContext, feature: FeatureId, itemId: string): Promise<number> {
-    // L'élément doit être chez l'appelant : on ne re-projette pas depuis un
-    // espace où l'on ne fait que le voir, l'espace d'origine perdrait la
-    // maîtrise de sa donnée.
-    const homeId = await itemHomeWorkspace(ctx, feature, itemId);
-    if (homeId === null) throw new FeatureError('not_found', 'Élément introuvable');
-    if (homeId !== ctx.workspaceId) {
-        throw new FeatureError(
-            'forbidden',
-            'Cet élément appartient à un autre espace : son partage se règle depuis là-bas.'
-        );
-    }
-    return homeId;
-}
-
-/**
- * L'espace d'origine d'un élément, par l'entrée `items` du module. `null` sans
- * module : `shareBlockerFor` a déjà refusé sur `shareTier`, et mieux vaut
- * « introuvable » qu'une projection vers rien.
- */
-async function itemHomeWorkspace(ctx: FeatureContext, feature: FeatureId, itemId: string): Promise<number | null> {
-    const items = moduleItems(feature, ctx.db);
-    if (items) return items.homeOf(itemId, ctx.workspaceId);
-    return null;
 }
 
 /** L'état complet, relu après chaque écriture plutôt que reconstruit. */
@@ -130,7 +81,11 @@ async function shareState(
                 };
             })
         ),
-        blocker
+        blocker,
+        // Déplacer ne se propose que depuis le domicile, et seulement si la
+        // fonctionnalité sait re-chiffrer ses éléments. Les motifs d'un refus
+        // sont l'affaire de `share.movePreview`, une fois la cible connue.
+        movable: blocker === null && homeWorkspaceId === ctx.workspaceId && isModuleMovable(feature)
     };
 }
 
@@ -410,5 +365,6 @@ export const sharingFeatures: FeatureDefinition<string, any, any>[] = [
     getFeature,
     setFeature,
     grantListFeature,
-    grantSetFeature
+    grantSetFeature,
+    ...moveFeatures
 ];

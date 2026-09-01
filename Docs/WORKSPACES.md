@@ -80,16 +80,18 @@ mot de passe, le dispatcheur **force** `ctx.workspace` à l'espace personnel de
 l'appelant quelle que soit l'enveloppe. Sans lui, une enveloppe pointant un
 espace partagé pourrait détourner `secrecy.enable`.
 
-### L3 — Chaque espace a sa clé, et un blob n'en change jamais
+### L3 — Chaque espace a sa clé, et un blob n'en change presque jamais
 
 Un espace partagé a sa propre clé de données (WDK), posée à sa création ; un
 espace personnel utilise les DEK de son propriétaire, qui en est le seul membre
-(cf. §5). Un contenu est chiffré sous la clé de son espace et n'en change
-jamais : déplacer un élément d'un espace à un autre est hors périmètre (§10), et
-partager le projette sans le re-chiffrer (`SHARING.md`). Seul le passage d'un
-étage à l'autre, à l'intérieur d'un espace personnel, re-chiffre (projets,
-comptes mail, notes privées). C'est le principal réducteur de risque du
-chantier. Ne pas le brader.
+(cf. §5). Un contenu est chiffré sous la clé de son espace et n'en change pas :
+partager le projette sans le re-chiffrer (`SHARING.md`). Deux exceptions, et
+elles se comptent : le passage d'un étage à l'autre à l'intérieur d'un espace
+personnel (projets, comptes mail, notes privées), et **déplacer** un élément
+d'un espace à un autre (`SHARING.md` §9), qui n'existe que pour les
+fonctionnalités ayant écrit leur conversion. C'est le principal réducteur de
+risque du chantier : toute nouvelle exception se paie d'un arbre qu'on peut
+rendre illisible sans s'en apercevoir. Ne pas le brader.
 
 ---
 
@@ -467,17 +469,28 @@ DB_DATABASE=DevEye_migtest LISTEN_PORT=3099 npx tsx index.ts   # ×2
 
 ### Hors périmètre, décidé
 
-**Déplacer un élément d'un espace à un autre.** C'est la seule opération qui
-exigerait un déchiffrement clé A + re-chiffrement clé B sous session vivante —
-tout le reste du système est sans re-chiffrement (L3). Mérite son propre design.
-
-> **Le partage, lui, a été fait** (chantier 089) — et il ne contredit pas ce qui
-> précède. Un élément projeté vers un autre espace garde **un seul domicile** :
-> il y reste chiffré, et se lit ailleurs avec le codec ouvert de cet espace-là.
-> Projection, pas transfert ; rien n'est re-chiffré. Le prix est que seul
-> l'étage ouvert peut voyager. Voir `SHARING.md`.
-
 **Verrouiller un espace partagé derrière une phrase de passe partagée.** Évoqué,
 non implémenté. Ce n'est pas un réglage à retourner : il faudrait décider qui
 détient le secret, comment on l'ajoute à un nouveau membre, ce qu'il advient
 quand on l'exclut.
+
+**La liaison inter-espaces.** Une liaison ne pointe qu'un élément domicilié dans
+le même espace, jamais un élément seulement projeté. La lever demanderait de
+changer le `exists()` des cinq contrats d'éléments, les compteurs d'usage qui
+filtrent par espace, un signal « projection retirée, délie » qui n'existe pas, et
+surtout des services de fond qui jongleraient avec deux codecs sans session. Un
+élément qui part emporte donc ses liaisons dans la corbeille, pas ailleurs.
+
+### Déplacer un élément : fait, sous condition
+
+Longtemps hors périmètre, et pour la bonne raison : c'est la seule opération qui
+déchiffre sous une clé pour rechiffrer sous une autre. Elle existe désormais
+(`share.move`), mais **fonctionnalité par fonctionnalité** : sans entrée `move`
+dans ses `items`, une feature ne déplace rien, et l'écran ne le propose pas. La
+conversion lit et rescelle tout avant la première écriture, dans une
+transaction, sur le modèle de `reencryptProjectTree`. Uptime est branché.
+
+Ce qui reste ouvert : les features à historique lourd (Git, Audience, Mail,
+Appareils) dont la conversion pèserait des centaines de milliers de lignes, et
+celles dont l'élément dépend d'une source d'espace (un jeton de déploiement, une
+destination de sauvegarde) qui ne le suivrait pas. Voir `SHARING.md` §9.

@@ -5,6 +5,7 @@ import type {
     FeatureServer,
     FeatureService,
     SdkCipher,
+    SdkMovePlan,
     SdkQueryable
 } from '@deveye/types/sdk/server';
 import { FeatureError } from '@deveye/types/sdk/server';
@@ -151,17 +152,49 @@ export function moduleItems(
           labelOf(cipher: SdkCipher, itemId: string, workspaceId: number): Promise<string | null>;
           /** Vrai par défaut : seule une feature à palier par élément répond parfois non. */
           shareable(itemId: string, workspaceId: number): Promise<boolean>;
+          /** `undefined` quand la fonctionnalité ne sait pas déplacer ses éléments. */
+          move?: {
+              plan(itemId: string, from: number, to: number): Promise<SdkMovePlan>;
+              /** `q` est transactionnel : le module y écrit, l'app y fait son ménage. */
+              apply(
+                  q: Queryable,
+                  itemId: string,
+                  from: number,
+                  to: number,
+                  ciphers: { from: SdkCipher; to: SdkCipher }
+              ): Promise<void>;
+          };
       }
     | undefined {
     const mod = BY_ID.get(featureId);
     const items = mod?.server.items;
     if (!mod || !items) return undefined;
+    const move = items.move;
     return {
         homeOf: (itemId, workspaceId) => items.homeOf(mod.repoFor(db), itemId, workspaceId),
         labelOf: (cipher, itemId, workspaceId) => items.labelOf(mod.repoFor(db), cipher, itemId, workspaceId),
         shareable: (itemId, workspaceId) =>
-            items.shareable ? items.shareable(mod.repoFor(db), itemId, workspaceId) : Promise.resolve(true)
+            items.shareable ? items.shareable(mod.repoFor(db), itemId, workspaceId) : Promise.resolve(true),
+        move: move && {
+            plan: (itemId, from, to) => move.plan(mod.repoFor(db), itemId, from, to),
+            apply: (q, itemId, from, to, ciphers) =>
+                move.apply({
+                    // La transaction, et non `db.queryable` : le repo du module
+                    // reste sur le pool, il ne sert qu'à lire.
+                    q: sdkQueryable(q),
+                    repo: mod.repoFor(db),
+                    itemId,
+                    fromWorkspaceId: from,
+                    toWorkspaceId: to,
+                    ciphers
+                })
+        }
     };
+}
+
+/** Un module dont les éléments changent d'espace : l'entrée `move` de ses `items`. */
+export function isModuleMovable(featureId: string): boolean {
+    return BY_ID.get(featureId)?.server.items?.move !== undefined;
 }
 
 /**

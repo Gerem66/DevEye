@@ -34,23 +34,33 @@ const LINKS: Record<
     {
         usage(repo: ProjectsRepo, itemId: number, workspaceId: number): Promise<ProjectUsageRow[]>;
         counts(repo: ProjectsRepo, workspaceId: number): Promise<Map<number, number>>;
+        detach(repo: ProjectsRepo, itemId: number, workspaceId: number): Promise<number>;
     }
 > = {
+    audience: {
+        usage: (repo, itemId, workspaceId) => repo.links.listSiteUsage(itemId, workspaceId),
+        counts: (repo, workspaceId) => repo.links.countSiteLinks(workspaceId),
+        detach: (repo, itemId, workspaceId) => repo.links.detachSite(itemId, workspaceId)
+    },
     database: {
         usage: (repo, itemId, workspaceId) => repo.links.listDatabaseUsage(itemId, workspaceId),
-        counts: (repo, workspaceId) => repo.links.countDatabaseLinks(workspaceId)
+        counts: (repo, workspaceId) => repo.links.countDatabaseLinks(workspaceId),
+        detach: (repo, itemId, workspaceId) => repo.links.detachDatabase(itemId, workspaceId)
     },
     deploy: {
         usage: (repo, itemId, workspaceId) => repo.links.listDeployUsage(itemId, workspaceId),
-        counts: (repo, workspaceId) => repo.links.countDeployLinks(workspaceId)
+        counts: (repo, workspaceId) => repo.links.countDeployLinks(workspaceId),
+        detach: (repo, itemId, workspaceId) => repo.links.detachDeployTarget(itemId, workspaceId)
     },
     git: {
         usage: (repo, itemId, workspaceId) => repo.links.listRepoUsage(itemId, workspaceId),
-        counts: (repo, workspaceId) => repo.links.countRepoLinks(workspaceId)
+        counts: (repo, workspaceId) => repo.links.countRepoLinks(workspaceId),
+        detach: (repo, itemId, workspaceId) => repo.links.detachRepo(itemId, workspaceId)
     },
-    audience: {
-        usage: (repo, itemId, workspaceId) => repo.links.listSiteUsage(itemId, workspaceId),
-        counts: (repo, workspaceId) => repo.links.countSiteLinks(workspaceId)
+    uptime: {
+        usage: (repo, itemId, workspaceId) => repo.links.listServiceUsage(itemId, workspaceId),
+        counts: (repo, workspaceId) => repo.links.countServiceLinks(workspaceId),
+        detach: (repo, itemId, workspaceId) => repo.links.detachService(itemId, workspaceId)
     }
 };
 
@@ -84,6 +94,15 @@ export function createProjectsUsageProvider(deps: Deps): ProjectsUsageProvider {
             const link = LINKS[feature];
             if (!link) return new Map<number, number>();
             return link.counts(deps.repo, workspaceId);
+        },
+        async detach(feature, itemId, workspaceId) {
+            const link = LINKS[feature];
+            if (!link) return 0;
+            const removed = await link.detach(deps.repo, itemId, workspaceId);
+            // Les onglets d'un projet se ferment sur le compte de ses liaisons :
+            // sans ce battement ils resteraient ouverts sur une liste vide.
+            if (removed > 0) deps.live.changed(workspaceId);
+            return removed;
         },
         async recordEvent(projectId, workspaceId, event) {
             const project = await deps.repo.projects.findById(projectId, workspaceId);

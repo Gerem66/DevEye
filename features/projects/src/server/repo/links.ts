@@ -30,8 +30,9 @@ export interface ProjectUsageRow {
  * Une même forme pour les cinq familles : `list*Ids` rend les identifiants dans
  * l'ordre d'affichage de la feature visée, `list*Usage` les projets qui relient un
  * élément (titre encore chiffré), `count*Links` une entrée par élément relié de
- * l'espace, un élément absent valant zéro, et `unlinkAll*` sert la conversion d'un
- * projet en confidentiel.
+ * l'espace, un élément absent valant zéro, `unlinkAll*` sert la conversion d'un
+ * projet en confidentiel, et `detach*` le départ d'un élément vers un autre espace :
+ * une liaison ne traverse pas une frontière d'espace, elle est retirée.
  */
 export interface ProjectLinksRepo {
     listServiceIds(projectId: number, workspaceId: number): Promise<number[]>;
@@ -39,12 +40,16 @@ export interface ProjectLinksRepo {
     unlink(projectId: number, workspaceId: number, serviceId: number): Promise<boolean>;
     /** Les lignes brutes, pour les rares appelants qui les veulent. */
     listByProject(projectId: number, workspaceId: number): Promise<ProjectUptimeLinkRow[]>;
+    listServiceUsage(serviceId: number, workspaceId: number): Promise<ProjectUsageRow[]>;
+    countServiceLinks(workspaceId: number): Promise<Map<number, number>>;
+    detachService(serviceId: number, workspaceId: number): Promise<number>;
 
     // -- liaison projet → base --------------------------------------------
     listDatabaseIds(projectId: number, workspaceId: number): Promise<number[]>;
     linkDatabase(projectId: number, workspaceId: number, databaseId: number): Promise<void>;
     unlinkDatabase(projectId: number, workspaceId: number, databaseId: number): Promise<boolean>;
     unlinkAllDatabases(projectId: number, workspaceId: number): Promise<void>;
+    detachDatabase(databaseId: number, workspaceId: number): Promise<number>;
     listDatabaseUsage(databaseId: number, workspaceId: number): Promise<ProjectUsageRow[]>;
     countDatabaseLinks(workspaceId: number): Promise<Map<number, number>>;
 
@@ -53,6 +58,7 @@ export interface ProjectLinksRepo {
     linkDeployTarget(projectId: number, workspaceId: number, targetId: number): Promise<void>;
     unlinkDeployTarget(projectId: number, workspaceId: number, targetId: number): Promise<boolean>;
     unlinkAllDeployTargets(projectId: number, workspaceId: number): Promise<number>;
+    detachDeployTarget(targetId: number, workspaceId: number): Promise<number>;
     listDeployUsage(targetId: number, workspaceId: number): Promise<ProjectUsageRow[]>;
     countDeployLinks(workspaceId: number): Promise<Map<number, number>>;
 
@@ -61,6 +67,7 @@ export interface ProjectLinksRepo {
     linkRepo(projectId: number, workspaceId: number, repoId: number): Promise<void>;
     unlinkRepo(projectId: number, workspaceId: number, repoId: number): Promise<boolean>;
     unlinkAllRepos(projectId: number, workspaceId: number): Promise<number>;
+    detachRepo(repoId: number, workspaceId: number): Promise<number>;
     listRepoUsage(repoId: number, workspaceId: number): Promise<ProjectUsageRow[]>;
     countRepoLinks(workspaceId: number): Promise<Map<number, number>>;
 
@@ -69,6 +76,7 @@ export interface ProjectLinksRepo {
     linkSite(projectId: number, workspaceId: number, siteId: number): Promise<void>;
     unlinkSite(projectId: number, workspaceId: number, siteId: number): Promise<boolean>;
     unlinkAllSites(projectId: number, workspaceId: number): Promise<void>;
+    detachSite(siteId: number, workspaceId: number): Promise<number>;
     listSiteUsage(siteId: number, workspaceId: number): Promise<ProjectUsageRow[]>;
     countSiteLinks(workspaceId: number): Promise<Map<number, number>>;
 }
@@ -92,6 +100,34 @@ export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
                 'SELECT * FROM project_uptime_links WHERE project_id = ? AND workspace_id = ?',
                 [projectId, workspaceId]
             );
+        },
+        async listServiceUsage(serviceId, workspaceId) {
+            // L'étage ouvert seul, comme les quatre autres familles.
+            return q.query<ProjectUsageRow>(
+                `SELECT p.id AS project_id, p.status, p.content
+                   FROM project_uptime_links l
+                   JOIN projects p ON p.id = l.project_id
+                  WHERE l.service_id = ? AND l.workspace_id = ? AND p.security_tier = 'open'
+                  ORDER BY p.sort_order ASC, p.id ASC`,
+                [serviceId, workspaceId]
+            );
+        },
+        async countServiceLinks(workspaceId) {
+            const rows = await q.query<Pick<ProjectUptimeLinkRow, 'service_id'> & { n: number }>(
+                `SELECT l.service_id, COUNT(*) AS n
+                   FROM project_uptime_links l
+                  WHERE l.workspace_id = ?
+                  GROUP BY l.service_id`,
+                [workspaceId]
+            );
+            return new Map(rows.map((row) => [Number(row.service_id), Number(row.n)]));
+        },
+        async detachService(serviceId, workspaceId) {
+            const res = await q.execute('DELETE FROM project_uptime_links WHERE service_id = ? AND workspace_id = ?', [
+                serviceId,
+                workspaceId
+            ]);
+            return res.affectedRows;
         },
         async link(projectId, workspaceId, serviceId) {
             // La paire est la clé primaire : reposer la même liaison n'est pas une
@@ -152,6 +188,13 @@ export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
                 [databaseId, workspaceId]
             );
         },
+        async detachDatabase(itemId, workspaceId) {
+            const res = await q.execute(
+                'DELETE FROM project_database_links WHERE database_id = ? AND workspace_id = ?',
+                [itemId, workspaceId]
+            );
+            return res.affectedRows;
+        },
         async countDatabaseLinks(workspaceId) {
             // L'index de la table de liaison suffit : une requête pour tout l'espace,
             // ce que la liste des bases demande en une fois.
@@ -210,6 +253,13 @@ export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
                 [targetId, workspaceId]
             );
         },
+        async detachDeployTarget(itemId, workspaceId) {
+            const res = await q.execute('DELETE FROM project_deploy_links WHERE target_id = ? AND workspace_id = ?', [
+                itemId,
+                workspaceId
+            ]);
+            return res.affectedRows;
+        },
         async countDeployLinks(workspaceId) {
             // L'index de la table de liaison suffit, une requête pour tout l'espace.
             const rows = await q.query<Pick<ProjectDeployLinkRow, 'target_id'> & { n: number }>(
@@ -267,6 +317,13 @@ export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
                   ORDER BY p.sort_order ASC, p.id ASC`,
                 [repoId, workspaceId]
             );
+        },
+        async detachRepo(itemId, workspaceId) {
+            const res = await q.execute('DELETE FROM project_repo_links WHERE repo_id = ? AND workspace_id = ?', [
+                itemId,
+                workspaceId
+            ]);
+            return res.affectedRows;
         },
         async countRepoLinks(workspaceId) {
             // L'index de la table de liaison suffit, une requête pour tout l'espace.
@@ -327,6 +384,13 @@ export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
                   ORDER BY p.sort_order ASC, p.id ASC`,
                 [siteId, workspaceId]
             );
+        },
+        async detachSite(itemId, workspaceId) {
+            const res = await q.execute('DELETE FROM project_audience_links WHERE site_id = ? AND workspace_id = ?', [
+                itemId,
+                workspaceId
+            ]);
+            return res.affectedRows;
         },
         async countSiteLinks(workspaceId) {
             // L'index de la table de liaison suffit, une requête pour tout l'espace.
