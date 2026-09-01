@@ -64,8 +64,14 @@
    ils laissent un champ démesuré et une action perdue au loin. Les listes de
    Membres et de Rôles, elles, gagnent à prendre la largeur. Même plafond que la
    page Profil, et centré : calé à gauche sous un en-tête pleine largeur, le
-   bloc a l'air d'avoir été coupé plutôt que dimensionné. */
+   bloc a l'air d'avoir été coupé plutôt que dimensionné.
+
+   `width: 100%` est indispensable : une marge horizontale `auto` sur un enfant
+   flex neutralise l'étirement du conteneur, et chaque section se dimensionne
+   alors sur SON contenu — « Nom » et « Zone sensible » n'ont alors pas la même
+   largeur, ce qui ne fait plus une colonne. */
 .narrow {
+    width: 100%;
     max-width: 560px;
     margin-inline: auto;
 }
