@@ -282,7 +282,6 @@ function iconsCss(mods: ResolvedModule[], local: boolean): string {
  * GÉNÉRÉ par \`npm run gen:features\` : les icônes des modules installés,
  * copiées dans public/icons/ sous leur nom préfixé. Ne pas éditer.
  */
-@import url(./icons.local.css);
 `;
     const rules = mods
         .filter((m) => m.iconSource !== null)

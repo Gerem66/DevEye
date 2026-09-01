@@ -11,6 +11,11 @@ import './Styles/theme.css';
 import './Styles/fonts.css';
 import './Styles/icons.css';
 import './Styles/icons.generated.css';
+// La feuille des modules privés est importée ici, pas par un `@import` depuis la
+// précédente : postcss fusionne un `@import` hors du pipeline des plugins, et
+// l'inlining des icônes ne la verrait jamais. Elle est toujours écrite par
+// `gen:features`, vide s'il n'y a aucun module privé.
+import './Styles/icons.local.css';
 import './Styles/live.css';
 import './Styles/input.css';
 

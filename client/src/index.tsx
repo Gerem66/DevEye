@@ -6,7 +6,6 @@ import { createRoot } from 'react-dom/client';
 
 import App from './App.js';
 import { suppressNativeDrags } from './nativeDrag';
-import { preloadIcons } from './Styles/preloadIcons';
 
 // Before anything renders: a stray drag on a link, an image or a text selection
 // can freeze the whole page.
@@ -15,7 +14,3 @@ suppressNativeDrags();
 const container = document.getElementById('root');
 const root = createRoot(container ?? document.body);
 root.render(<App />);
-
-// Warm the icon cache up front so no icon has to be fetched the moment it is
-// first shown.
-preloadIcons();
