@@ -1,10 +1,12 @@
-import { isIP } from 'net';
-
 /**
  * Primitives d'accès au réseau public, partagées par tout ce qui va chercher
  * quelque chose dehors : un garde SSRF écrit deux fois est un garde qu'on
  * corrigera une fois.
+ *
+ * Le garde lui-même vit dans `@deveye/types/sdk/server`, d'où un module
+ * externe peut l'atteindre : l'app ne l'importe pas deux fois.
  */
+export { isPublicIp, isSafePublicUrl } from '@deveye/types/sdk/server';
 
 export const FETCH_TIMEOUT_MS = 4500;
 
@@ -49,51 +51,6 @@ export function isValidHttpUrl(s: string): boolean {
  * RFC 1918, lien-local, CGNAT, en v4 comme en v6, y compris la forme
  * IPv4-mappée (`::ffff:10.0.0.1`) par laquelle un filtre naïf se contourne.
  */
-export function isPublicIp(raw: string): boolean {
-    const ip = raw.replace(/^\[|\]$/g, '').toLowerCase();
-    const v = isIP(ip);
-    if (v === 0) return false;
-
-    if (v === 4) return isPublicIpv4(ip);
-
-    // IPv4-mappée / compatible : juger sur la partie v4 réelle.
-    const mapped = ip.match(/^::(?:ffff:)?(\d+\.\d+\.\d+\.\d+)$/);
-    if (mapped) return isPublicIpv4(mapped[1]);
-
-    if (ip === '::' || ip === '::1') return false;
-    // fc00::/7 (unique-local), fe80::/10 (lien-local), ff00::/8 (multicast).
-    if (/^f[cd]/.test(ip)) return false;
-    if (/^fe[89ab]/.test(ip)) return false;
-    if (/^ff/.test(ip)) return false;
-    return true;
-}
-
-function isPublicIpv4(ip: string): boolean {
-    const o = ip.split('.').map(Number);
-    if (o.length !== 4 || o.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return false;
-    if (o[0] === 0 || o[0] === 10 || o[0] === 127) return false;
-    if (o[0] === 169 && o[1] === 254) return false; // lien-local
-    if (o[0] === 172 && o[1] >= 16 && o[1] <= 31) return false;
-    if (o[0] === 192 && o[1] === 168) return false;
-    if (o[0] === 100 && o[1] >= 64 && o[1] <= 127) return false; // CGNAT
-    if (o[0] >= 224) return false; // multicast + réservé
-    return true;
-}
-
-/**
- * SSRF guard: only fetch public http(s) hosts, so a pasted URL can't probe the
- * server's internal network. Un nom d'hôte qui n'est pas une IP littérale
- * passe : la résolution DNS n'est pas faite ici (TOCTOU de toute façon).
- */
-export function isSafePublicUrl(u: URL): boolean {
-    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
-    const h = u.hostname.toLowerCase();
-    if (h === 'localhost' || h.endsWith('.local') || h.endsWith('.internal') || h.endsWith('.localhost')) return false;
-    const bare = h.replace(/^\[|\]$/g, '');
-    if (isIP(bare) !== 0) return isPublicIp(bare);
-    return true;
-}
-
 const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", '#39': "'" };
 
 export function decodeEntities(s: string): string {
