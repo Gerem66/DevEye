@@ -34,6 +34,12 @@ export interface ItemSharingRepo {
     /** Les restrictions qui touchent un rôle, pour toute une feature (résolution d'accès). */
     grantsForRole(workspaceId: number, feature: string, roleId: number): Promise<ItemRoleGrantRow[]>;
     /**
+     * Toutes celles d'un rôle dans un espace, features confondues : ce que
+     * l'interface reçoit avec ses droits, pour savoir élément par élément sans
+     * une requête par écran.
+     */
+    allGrantsForRole(workspaceId: number, roleId: number): Promise<ItemRoleGrantRow[]>;
+    /**
      * Pose ce qu'un rôle peut faire de cet élément, en surcharge du grant de la
      * fonctionnalité. Les deux volets se règlent seuls : `undefined` laisse le
      * volet en place. Une ligne dont les deux volets sont vides est retirée —
@@ -146,6 +152,14 @@ export function itemSharingRepo(pool: Q): ItemSharingRepo {
             const r = await pool.query<ItemRoleGrantRow>(
                 'SELECT * FROM item_role_grants WHERE workspace_id = ? AND feature = ? AND item_id = ?',
                 [workspaceId, feature, itemId]
+            );
+            return r.rows;
+        },
+
+        async allGrantsForRole(workspaceId, roleId) {
+            const r = await pool.query<ItemRoleGrantRow>(
+                'SELECT * FROM item_role_grants WHERE workspace_id = ? AND role_id = ?',
+                [workspaceId, roleId]
             );
             return r.rows;
         },

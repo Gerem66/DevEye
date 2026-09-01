@@ -362,6 +362,20 @@ const grantSetFeature = defineFeature({
         const role = await ctx.db.workspaceRoles.findById(input.roleId, target.workspaceId);
         if (!role) throw new FeatureError('not_found', 'Rôle introuvable');
 
+        // Une clé que le manifest ne déclare pas ne doit pas se ranger en base :
+        // inerte aujourd'hui, elle ressusciterait le jour où une permission
+        // reprendrait son nom. Les booléens seulement, comme à la lecture.
+        const toggles = new Set(
+            (moduleManifest(input.feature)?.extraPermissions ?? [])
+                .filter((spec) => spec.type === 'toggle')
+                .map((spec) => spec.key)
+        );
+        for (const key of Object.keys(input.extraOverrides ?? {})) {
+            if (!toggles.has(key)) {
+                throw new FeatureError('validation', `Permission inconnue « ${key} » pour « ${input.feature} »`);
+            }
+        }
+
         await ctx.db.itemSharing.setGrant(target.workspaceId, input.feature, input.itemId, input.roleId, {
             access: input.access,
             extraOverrides: input.extraOverrides

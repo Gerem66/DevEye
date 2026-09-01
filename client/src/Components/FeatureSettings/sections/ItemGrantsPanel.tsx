@@ -127,7 +127,14 @@ export default function ItemGrantsPanel({ feature, itemId, workspaceId }: Props)
 
                         <div className={styles.grantRoleCard}>
                             <div className={styles.grantRoleRow}>
-                                <span className={styles.grantRoleLabel}>Accès</span>
+                                <span className={styles.grantRoleLabel}>
+                                    Accès
+                                    {/* Ce que « Hérité » vaut ici, toujours affiché : sans
+                                        lui, le segment choisi ne dit pas où il mène. */}
+                                    <span className={styles.grantRoleDefault}>
+                                        Défaut : {FEATURE_ACCESS_LABEL[role.featureAccess]}
+                                    </span>
+                                </span>
                                 <SegmentedControl
                                     value={role.access ?? 'inherit'}
                                     disabled={busy || floored}
@@ -164,7 +171,12 @@ export default function ItemGrantsPanel({ feature, itemId, workspaceId }: Props)
                                 const value: ExtraChoice = forced === undefined ? 'inherit' : forced ? 'allow' : 'deny';
                                 return (
                                     <div key={spec.key} className={styles.grantRoleRow}>
-                                        <span className={styles.grantRoleLabel}>{spec.label}</span>
+                                        <span className={styles.grantRoleLabel}>
+                                            {spec.label}
+                                            <span className={styles.grantRoleDefault}>
+                                                Défaut : {inherited ? 'accordée' : 'refusée'}
+                                            </span>
+                                        </span>
                                         <SegmentedControl
                                             value={value}
                                             disabled={busy || floored || hiddenHere}

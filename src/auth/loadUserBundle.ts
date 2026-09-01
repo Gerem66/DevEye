@@ -98,7 +98,7 @@ export async function loadUserBundle(
         homeLayout: parseHomeLayout(activeRow?.home_layout),
         permissions: activeRow
             ? await permissionsFor(db, userId, activeRow)
-            : { isOwner: false, capabilities: [], features: [] }
+            : { isOwner: false, capabilities: [], features: [], itemOverrides: [] }
     };
 }
 

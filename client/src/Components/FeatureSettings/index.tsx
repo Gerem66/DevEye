@@ -61,7 +61,9 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
         // dans Gérer l'espace.
         const pushSharingSections = (into: SectionDef[]): void => {
             if (scope.kind !== 'item' || !isShareWired(scope.feature)) return;
-            if (permissions.canFeature(scope.feature, 'write') && scope.shareable !== false) {
+            // Sur l'élément : un élément dont l'écriture est ouverte par
+            // surcharge se projette, comme le serveur l'accepte.
+            if (permissions.canFeature(scope.feature, 'write', scope.itemId) && scope.shareable !== false) {
                 into.push({ id: 'sharing', label: 'Partage', icon: 'users' });
             }
             if (canRestrict && isShared) {
@@ -306,7 +308,13 @@ function ModulePanel({
                         ? { kind: 'feature' }
                         : { kind: 'item', itemId: scope.itemId, itemLabel: scope.itemLabel }
                 }
-                canWrite={permissions.canFeature(scope.feature, 'write')}
+                // Sur l'élément quand il y en a un : ses droits peuvent différer
+                // de ceux de la fonctionnalité, dans les deux sens.
+                canWrite={permissions.canFeature(
+                    scope.feature,
+                    'write',
+                    scope.kind === 'item' ? scope.itemId : undefined
+                )}
                 // Pour le panneau qui supprime l'élément qu'il règle : la portée
                 // sur laquelle le dialogue s'est ouvert n'existe plus, et la
                 // coquille retomberait sinon sur les onglets de la

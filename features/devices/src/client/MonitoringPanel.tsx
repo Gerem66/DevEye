@@ -232,7 +232,9 @@ export interface MonitoringPanelProps {
 export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const { devices: baseDevices, loading, refresh } = useDevices();
     const permissions = useWorkspacePermissions();
-    const canWrite = permissions.canFeature('devices', 'write');
+    // Sur CET appareil, et non sur la fonctionnalité : une surcharge peut ouvrir
+    // l'écriture ici à un rôle qui ne l'a que sur d'autres machines.
+    const canWrite = permissions.canFeature('devices', 'write', deviceId);
     // Les gestes de cycle de vie et leurs dialogues, montés avec la fiche.
     const actions = useDeviceActions(refresh);
     const [override, setOverride] = useState<{ online?: boolean; report?: DeviceReport | null }>({});
@@ -979,7 +981,10 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         icon,
         label,
         onClick,
-        unavailable: firstReason(permissions.canExtra('devices', key) ? undefined : missingPermission(key), reach)
+        unavailable: firstReason(
+            permissions.canExtra('devices', key, selected.id) ? undefined : missingPermission(key),
+            reach
+        )
     });
 
     const deviceActions: DeviceAction[] = [

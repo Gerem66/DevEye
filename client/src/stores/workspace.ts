@@ -25,7 +25,7 @@ interface State {
 }
 
 /** Aucun droit : ce que voit une session pas encore chargée. */
-const NO_PERMISSIONS: WorkspacePermissions = { isOwner: false, capabilities: [], features: [] };
+const NO_PERMISSIONS: WorkspacePermissions = { isOwner: false, capabilities: [], features: [], itemOverrides: [] };
 
 function readActiveId(): number | null {
     try {
@@ -142,6 +142,15 @@ export function setPermissions(permissions: WorkspacePermissions): void {
     emit();
 }
 
+/** La surcharge posée sur cet élément pour le rôle de l'appelant, s'il y en a une. */
+function overrideOf(
+    permissions: WorkspacePermissions,
+    feature: FeatureId,
+    itemId: string
+): WorkspacePermissions['itemOverrides'][number] | undefined {
+    return permissions.itemOverrides.find((o) => o.feature === feature && o.itemId === itemId);
+}
+
 /**
  * Droits de l'appelant dans l'espace actif. Sert à masquer ce qui n'est pas
  * accordé ; le serveur vérifie de toute façon chaque commande.
@@ -149,7 +158,12 @@ export function setPermissions(permissions: WorkspacePermissions): void {
 export function useWorkspacePermissions(): {
     isOwner: boolean;
     can: (c: WorkspaceCapability) => boolean;
-    canFeature: (f: FeatureId, level?: FeatureAccess) => boolean;
+    /**
+     * `itemId` répond pour CET élément, surcharge comprise : la fonctionnalité
+     * ne donne qu'un défaut, et une ligne peut l'ouvrir comme le fermer. Sans
+     * lui, la réponse est celle de la fonctionnalité.
+     */
+    canFeature: (f: FeatureId, level?: FeatureAccess, itemId?: string) => boolean;
     /** Gérer les canaux d'alerte de cette feature (grant `channels`). */
     canChannels: (f: FeatureId) => boolean;
     /**
@@ -157,8 +171,11 @@ export function useWorkspacePermissions(): {
      * `itemPermissions`), ou gouverner les rôles, qui l'englobe.
      */
     canManageItemGrants: (f: FeatureId) => boolean;
-    /** Permission déclarée de type `toggle` : absente = refusée, propriétaire = accordée. */
-    canExtra: (f: FeatureId, key: string) => boolean;
+    /**
+     * Permission déclarée de type `toggle` : absente = refusée, propriétaire =
+     * accordée. `itemId` répond pour CET élément, surcharge comprise.
+     */
+    canExtra: (f: FeatureId, key: string, itemId?: string) => boolean;
     /**
      * Permission déclarée de type `choice`. Le défaut, le moins privilégié, et la
      * valeur du propriétaire viennent des specs que l'appelant fournit : ce magasin
@@ -170,18 +187,27 @@ export function useWorkspacePermissions(): {
     return {
         isOwner: permissions.isOwner,
         can: (c) => permissions.capabilities.includes(c),
-        canFeature: (f, level = 'read') => {
+        // La surcharge de cet élément, s'il y en a une pour le rôle de l'appelant.
+        canFeature: (f, level = 'read', itemId) => {
             const granted = permissions.features.find((g) => g.feature === f);
+            // Le plancher : sans accès à la fonctionnalité, aucun élément
+            // n'existe, et rien ne se surcharge.
             if (!granted) return false;
-            return level === 'read' || granted.access === 'write';
+            const override = itemId === undefined ? undefined : overrideOf(permissions, f, itemId)?.access;
+            const effective = override ?? granted.access;
+            if (effective === 'none') return false;
+            return level === 'read' || effective === 'write';
         },
         canChannels: (f) => permissions.features.find((g) => g.feature === f)?.channels === true,
         canManageItemGrants: (f) =>
             permissions.isOwner ||
             permissions.capabilities.includes('workspace.roles') ||
             permissions.features.find((g) => g.feature === f)?.itemPermissions === true,
-        canExtra: (f, key) =>
-            permissions.isOwner || permissions.features.find((g) => g.feature === f)?.extras[key] === true,
+        canExtra: (f, key, itemId) => {
+            if (permissions.isOwner) return true;
+            const forced = itemId === undefined ? undefined : overrideOf(permissions, f, itemId)?.extras[key];
+            return forced ?? permissions.features.find((g) => g.feature === f)?.extras[key] === true;
+        },
         extraValue: (f, key, spec) => {
             if (permissions.isOwner) return spec.ownerValue;
             const value = permissions.features.find((g) => g.feature === f)?.extras[key];

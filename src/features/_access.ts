@@ -353,6 +353,9 @@ export async function permissionsFor(
     const isOwner = workspace.owner_user_id === userId;
     const role = isOwner ? null : await db.workspaceRoles.findForMember(userId, workspace.id);
     const { capabilities, features, channels, itemPermissions, extras } = grantsFor(isOwner, role);
+    // Le propriétaire passe outre les surcharges, comme il passe outre tout le
+    // reste : lui en envoyer laisserait croire qu'une ligne peut le brider.
+    const overrides = role ? await db.itemSharing.allGrantsForRole(workspace.id, role.id) : [];
     return {
         isOwner,
         capabilities: [...capabilities],
@@ -362,6 +365,12 @@ export async function permissionsFor(
             channels: channels.has(feature),
             itemPermissions: itemPermissions.has(feature),
             extras: extras.get(feature) ?? {}
+        })),
+        itemOverrides: overrides.map((g) => ({
+            feature: g.feature as FeatureId,
+            itemId: g.item_id,
+            access: g.access,
+            extras: extraOverridesOf(g)
         }))
     };
 }

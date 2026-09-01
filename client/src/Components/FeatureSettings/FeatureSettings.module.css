@@ -454,9 +454,20 @@
 }
 
 .grantRoleLabel {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
     color: var(--text-primary);
     font-size: 0.85rem;
     min-width: 0;
+}
+
+/* Ce que vaut « Hérité » pour ce rôle, sous le libellé : un segment nommé
+   « Hérité » ne dit pas où il mène, et l'infobulle ne se lit qu'au survol. */
+.grantRoleDefault {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    line-height: 1.4;
 }
 
 .foreignMark {

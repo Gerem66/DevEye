@@ -65,7 +65,11 @@ export const workspaceRoleListFeature: FeatureDefinition<
                             extras: {}
                         }
                     ];
-                })
+                }),
+                // L'écran des rôles règle la fonctionnalité, pas ses éléments :
+                // les surcharges ne lui servent pas, et les envoyer deux fois
+                // dans la même session serait du poids pour rien.
+                itemOverrides: []
             }
         };
     }

@@ -208,7 +208,13 @@ qu'il faut en retenir ici :
 - `ctx.itemRestrictions(feature)` et `ctx.itemExtraOverrides(feature)` côté
   lecture, `ctx.assertItem(feature, id, level)` côté commande — une seule
   requête pour les deux volets, chargée paresseusement, mémoïsée sous
-  `accessEpoch`, invalidée par `share.grantSet`.
+  `accessEpoch`, invalidée par `share.grantSet` ;
+- **l'interface reçoit les surcharges avec ses droits**
+  (`WorkspacePermissions.itemOverrides`), et `canFeature` / `canExtra` prennent
+  un `itemId` optionnel pour répondre élément par élément. Sans cela, une
+  permission ouverte sur UNE machine restait grisée dans l'écran : la garde
+  serveur l'acceptait, l'interface la refusait. Seules les exceptions voyagent,
+  et le propriétaire n'en reçoit aucune, lui qui passe outre.
 
 ## 6. Reste à faire
 
