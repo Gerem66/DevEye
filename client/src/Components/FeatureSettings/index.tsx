@@ -3,6 +3,7 @@ import { SHARE_WIRED_FEATURES, featureDescriptor, type FeatureId } from '@deveye
 
 import Button from '@/Components/Button';
 import { Dialog } from '@/Components/Dialog';
+import { useLiveOutline } from '@/live/useLiveOutline';
 import { pushLiveSettings } from '@/stores/live';
 import { consumeItemSettings } from '@/stores/settingsRequest';
 import { getActiveWorkspaceId, useActiveWorkspace, useWorkspacePermissions } from '@/stores/workspace';
@@ -12,7 +13,7 @@ import ItemPermissionsSection from './sections/ItemPermissionsSection';
 import SharingSection from './sections/SharingSection';
 import SideNav, { type SideNavItem } from './SideNav';
 import { isModuleShareWired, moduleClient, moduleManifest } from '@/sdk/registry';
-import { scopeDescription, scopeTitle, type SettingsScope, type SettingsSectionId } from './scope';
+import { liveSettingsValue, scopeDescription, scopeTitle, type SettingsScope, type SettingsSectionId } from './scope';
 import styles from './FeatureSettings.module.css';
 
 /**
@@ -151,10 +152,13 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection }: 
      * il change trop souvent pour valoir une republication à chaque clic.
      */
     const shown = open && sections.length > 0;
+    // La chaîne, jamais l'objet : les appelants passent un littéral, et dépendre
+    // de lui reposerait la marque à chaque rendu.
+    const settingsValue = liveSettingsValue(scope);
     useEffect(() => {
         if (!shown) return;
-        return pushLiveSettings(scope.kind === 'item' ? `item:${scope.feature}` : `feature:${scope.feature}`);
-    }, [shown, scope.kind, scope.feature]);
+        return pushLiveSettings(settingsValue);
+    }, [shown, settingsValue]);
 
     const items: SideNavItem<SettingsSectionId>[] = sections.map((s) => ({
         id: s.id,
@@ -269,6 +273,10 @@ export function FeatureSettingsButton({
         }
     }, [scope.feature, itemId]);
 
+    // Qui règle est un cran plus loin que qui regarde l'écran : son halo se pose
+    // donc sur le bouton, et non sur ce que la coquille recouvre.
+    const outline = useLiveOutline('settings', liveSettingsValue(scope));
+
     if (sections.length === 0) return null;
 
     return (
@@ -276,6 +284,7 @@ export function FeatureSettingsButton({
             <Button
                 variant={variant}
                 icon='settings'
+                {...outline}
                 onClick={() => {
                     // Une ouverture manuelle repart de la section du bouton :
                     // l'onglet d'une intention passée n'a plus rien de demandé.

@@ -2,7 +2,7 @@ import type { UserColor } from '@deveye/types';
 import { useEffect, useMemo, useReducer, type CSSProperties } from 'react';
 
 import { userColorVar } from '@/Features/Profile/userColors';
-import { useLivePresence, type LiveSegmentKind } from '@/stores/live';
+import { useLivePresence, type LiveOutlineKind } from '@/stores/live';
 import { divergingSegment } from './paths';
 
 /**
@@ -51,7 +51,7 @@ export interface LiveOutlineProps {
  * à appeler dans un `map`. Le travail est fait une fois pour tous les pairs, quel
  * que soit le nombre de lignes.
  */
-export function useLiveOutlines(kind: LiveSegmentKind): (value: string | null) => LiveOutlineProps {
+export function useLiveOutlines(kind: LiveOutlineKind): (value: string | null) => LiveOutlineProps {
     // Vue étroite : les contours ne dépendent pas des curseurs, et ne doivent pas
     // se redessiner vingt fois par seconde parce qu'un pair bouge.
     const { peers, path } = useLivePresence();
@@ -95,6 +95,6 @@ export function useLiveOutlines(kind: LiveSegmentKind): (value: string | null) =
 }
 
 /** Forme unitaire, pour un composant qui ne représente qu'un seul nœud. */
-export function useLiveOutline(kind: LiveSegmentKind, value: string | null): LiveOutlineProps {
+export function useLiveOutline(kind: LiveOutlineKind, value: string | null): LiveOutlineProps {
     return useLiveOutlines(kind)(value);
 }

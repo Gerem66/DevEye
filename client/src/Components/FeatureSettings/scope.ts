@@ -56,6 +56,19 @@ export function scopeDescription(scope: SettingsScope): string {
 }
 
 /**
+ * Ce que la coquille ouverte pose dans le chemin live, et ce que le bouton
+ * consulte pour s'entourer. Une seule fonction pour les deux : deux chaînes
+ * écrites séparément se sépareraient un jour, et le halo cesserait sans bruit.
+ *
+ * L'élément n'entre pas dans la valeur : le niveau qui le porte est déjà dans
+ * le chemin, et deux personnes sur deux éléments différents divergent avant
+ * d'arriver ici.
+ */
+export function liveSettingsValue(scope: SettingsScope): string {
+    return `${scope.kind}:${scope.feature}`;
+}
+
+/**
  * L'id d'un élément pour les routes de notification, seules à garder une clé
  * numérique. `null` pour une portée de feature, comme pour une feature dont les
  * éléments ont un identifiant texte : elle n'a pas de route.

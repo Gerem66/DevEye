@@ -34,6 +34,13 @@ import { getActiveWorkspaceId } from './workspace';
 export const LIVE_SEGMENT_ORDER = ['view', 'l1', 'l2', 'l3', 'l4'] as const;
 export type LiveSegmentKind = (typeof LIVE_SEGMENT_ORDER)[number];
 
+/**
+ * Ce qui peut porter un halo : les niveaux, plus la coquille de réglages, qui
+ * ferme le chemin sans être un niveau (voir `pushLiveSettings`). Un bouton de
+ * réglages s'entoure comme n'importe quel autre nœud du chemin.
+ */
+export type LiveOutlineKind = LiveSegmentKind | 'settings';
+
 export interface LiveCursorEntry {
     connId: string;
     userId: number;

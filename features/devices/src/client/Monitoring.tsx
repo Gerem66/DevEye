@@ -117,7 +117,10 @@ export default function Monitoring({ onPair, pairing }: MonitoringProps) {
     const { devices: stored, loading } = useDevices();
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const updater = useAgentUpdate();
-    const canWrite = useWorkspacePermissions().canFeature('devices', 'write');
+    const permissions = useWorkspacePermissions();
+    const canWrite = permissions.canFeature('devices', 'write');
+    /** L'écriture sur CET appareil : une surcharge par élément peut l'abaisser. */
+    const canWriteOn = (id: string) => permissions.canFeature('devices', 'write', id);
 
     /**
      * L'ordre posé à la main, en attendant que le serveur le confirme : le
@@ -158,7 +161,7 @@ export default function Monitoring({ onPair, pairing }: MonitoringProps) {
         }
     });
 
-    const updatableIds = devices.filter((d) => d.online && agentUpdatable(d)).map((d) => d.id);
+    const updatableIds = devices.filter((d) => d.online && agentUpdatable(d) && canWriteOn(d.id)).map((d) => d.id);
 
     // Auto-select the first device, and drop a selection that points at a
     // device which no longer exists.
@@ -212,7 +215,7 @@ export default function Monitoring({ onPair, pairing }: MonitoringProps) {
                             la barre d'insertion et suit le défilement. */}
                         <div ref={drag.listRef} className={styles.deviceCards}>
                             {devices.map((d) => {
-                                const canUpdate = d.online && agentUpdatable(d);
+                                const canUpdate = d.online && agentUpdatable(d) && canWriteOn(d.id);
                                 return (
                                     <div
                                         key={d.id}
