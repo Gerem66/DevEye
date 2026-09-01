@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import type { HomeFeatureId } from '@deveye/types';
 
 import styles from './FeatureArt.module.css';
@@ -381,18 +381,41 @@ const ART: Record<ArtId, ReactNode> = {
     )
 };
 
+/**
+ * Ce que voit une fonctionnalité qui n'a pas de dessin ici : les modules, dont
+ * l'id n'est pas dans `ArtId`. Un cadre vide au milieu de cartes illustrées se
+ * lit comme une carte cassée, alors qu'il ne manque qu'un dessin.
+ */
+const FALLBACK = (
+    <>
+        <Card x={30} y={22} w={44} h={46} />
+        <Card x={86} y={22} w={44} h={46} />
+        <Line x={38} y={32} w={28} c={A} o={0.8} />
+        <Line x={38} y={42} w={20} o={0.4} h={4} />
+        <Line x={38} y={52} w={24} o={0.4} h={4} />
+        <Line x={94} y={32} w={28} o={0.4} h={4} />
+        <Line x={94} y={42} w={20} o={0.4} h={4} />
+        <path d='M80 34v22M69 45h22' stroke={M} opacity='0.5' {...stroke} />
+    </>
+);
+
 export interface FeatureArtProps {
     id: ArtId;
+    /**
+     * Le dessin qu'un module fournit lui-même (`FeatureClient.Art`), rendu dans
+     * le même cadre que les natives pour garder l'air de famille.
+     */
+    Art?: ComponentType;
     className?: string;
 }
 
 /** La vignette d'une fonctionnalité. Purement décorative, donc hors de l'arbre
  *  d'accessibilité : le titre et la description juste à côté disent déjà tout. */
-export function FeatureArt({ id, className }: FeatureArtProps) {
+export function FeatureArt({ id, Art, className }: FeatureArtProps) {
     return (
         <span className={`${styles.art} ${className ?? ''}`} aria-hidden='true'>
             <svg viewBox='0 0 160 90' className={styles.svg} role='presentation' focusable='false'>
-                {ART[id]}
+                {Art ? <Art /> : (ART[id] ?? FALLBACK)}
             </svg>
         </span>
     );

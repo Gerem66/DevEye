@@ -57,7 +57,7 @@ function FeatureRow({ entry }: { entry: FeatureCatalogEntry }) {
         <li className={styles.feature}>
             {/* La vignette à côté du texte, pas au-dessus : empilées, elles
                 feraient de cette fiche un dépliant. */}
-            <FeatureArt id={entry.id} className={styles.featureArt} />
+            <FeatureArt id={entry.id} Art={entry.Art} className={styles.featureArt} />
             <div className={styles.featureText}>
                 <span className={styles.featureHead}>
                     <span className={`icon icon-${entry.icon} ${styles.featureIcon}`} aria-hidden='true' />

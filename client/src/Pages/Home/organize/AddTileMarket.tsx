@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ComponentType, type ReactNode } from 'react';
 import type { HomeSection, ShortcutItem } from '@deveye/types';
 
 import { Dialog } from '@/Components/Dialog';
@@ -67,6 +67,8 @@ interface MarketItem {
     icon: string;
     /** La vignette en tête de carte : ce à quoi ressemble l'écran qu'on ajoute. */
     art: ArtId;
+    /** Celle qu'un module dessine lui-même, quand il en fournit une. */
+    Art?: ComponentType;
     title: string;
     description: string;
     /** Mots supplémentaires que la recherche doit trouver (plateforme d'un appareil…). */
@@ -178,6 +180,7 @@ export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketP
                 rayon: feature.category,
                 icon: feature.icon,
                 art: feature.id,
+                Art: feature.Art,
                 title: feature.title,
                 description: feature.description,
                 placed: placedFeatures.has(feature.id),
@@ -312,7 +315,11 @@ export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketP
                                                 title={item.placed ? 'Déjà sur l’accueil' : undefined}
                                                 onClick={item.onPick}
                                             >
-                                                <FeatureArt id={item.art} className={styles.marketCardArt} />
+                                                <FeatureArt
+                                                    id={item.art}
+                                                    Art={item.Art}
+                                                    className={styles.marketCardArt}
+                                                />
                                                 <span className={styles.marketCardBody}>
                                                     <span className={styles.marketCardHead}>
                                                         <span

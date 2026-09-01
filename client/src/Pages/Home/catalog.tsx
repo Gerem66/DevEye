@@ -71,6 +71,11 @@ export interface FeatureCatalogEntry {
     holdSecrecy?: boolean;
     /** Carte basse (demi-hauteur), comme les tuiles d'appareil. Déclarée par les modules. */
     compact?: boolean;
+    /**
+     * La vignette qu'un module dessine lui-même : `FeatureArt` ne connaît que
+     * les ids natifs, et un id externe n'y trouverait qu'un cadre vide.
+     */
+    Art?: ComponentType;
 }
 
 /** L'adaptateur de vue d'un module : sa `Full` ne reçoit que `closeFeature`,
@@ -108,7 +113,8 @@ export function featureCatalog(): readonly FeatureCatalogEntry[] {
                 cacheDurationMinutes: client.cacheDurationMinutes,
                 preload: client.preload,
                 holdSecrecy: client.holdSecrecy,
-                compact: manifest.tile?.compact
+                compact: manifest.tile?.compact,
+                Art: client.Art
             }))
         ];
     }
