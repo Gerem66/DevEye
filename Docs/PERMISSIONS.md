@@ -64,6 +64,58 @@ un **verbe** d'une fonctionnalité (`deploy.trigger`) reste couvert par
 `read`/`write` ; une **ressource** de la fonctionnalité (ses canaux) peut
 recevoir son propre champ.
 
+Les `extraPermissions` du manifest sont la forme générale de ce champ, ouverte
+aux modules : quatre au plus par fonctionnalité (`MAX_EXTRA_PERMISSIONS`, pour
+que l'éditeur de rôles reste lisible), en booléen ou en choix borné, absentes =
+refusées. Elles obéissent à la même règle de tri, et ne rouvrent pas l'étage
+retiré : Météo et Veille CVE y mettent « gérer les clés d'API », une ressource
+d'espace qu'on ne veut pas livrer avec l'écriture.
+
+Appareils en est le cas le plus large : le terminal, l'explorateur de fichiers,
+les journaux et les commandes système sont quatre **surfaces de la machine**,
+et non quatre verbes de la fonctionnalité. Elles sont **orthogonales** à
+`read`/`write`, qui gouverne la flotte (voir, appairer, approuver, renommer,
+révoquer, régler) : un gestionnaire de parc n'a pas besoin d'un shell root, un
+support a besoin du shell sans pouvoir révoquer. Chacune exige la lecture, et
+la restriction par élément (§5) s'applique par-dessus — un appareil masqué ou
+en lecture seule pour le rôle ne prend aucun ordre, quelle que soit la
+permission. C'est aussi ce qui a sorti les mises à jour de paquets de l'étage 1
+(elles étaient `admin: true`, ce que §1 dit pourtant que les appareils ne font
+plus).
+
+Côté serveur, `access.extras` se déclare à côté de `access.feature` et le
+dispatcheur l'applique après le niveau, en le résolvant contre les specs du
+manifest : une clé que le manifest ne déclare pas ne peut jamais valoir
+« accordée ». Le contrôle de démarrage refuse un `extras` sans `feature`, faute
+de quoi le dispatcheur ne saurait pas où chercher la spec et laisserait passer.
+
+Côté interface, le menu « Fonctions » d'un appareil **ne varie jamais** : rien
+n'y est masqué, et ce qui empêche un geste se lit sur lui, par un glyphe à
+droite et une phrase en infobulle. C'est l'exception assumée à la règle de §5
+(« un élément masqué disparaît des listes ») — il ne s'agit pas d'un élément,
+mais de ce qu'on peut en faire, et cacher laisse croire que la machine ne sait
+pas le faire.
+
+Les motifs vivent dans `client/availability.ts`, et **leur ordre est la règle** :
+
+| Ordre | Motif                           | Glyphe     |
+| ----- | ------------------------------- | ---------- |
+| 1     | Permission propre manquante     | `lock`     |
+| 2     | Droit d'écriture manquant       | `lock`     |
+| 3     | Appareil venu d'un autre espace | `users`    |
+| 4     | Appareil archivé                | `archive`  |
+| 5     | Appareil hors ligne             | `x-circle` |
+
+Le droit prime sur l'état de la machine : rallumer un appareil ne rendra pas
+une permission, et afficher « hors ligne » sur un geste que le rôle interdit de
+toute façon enverrait corriger la mauvaise chose. Le motif suit ce que le
+serveur ferait réellement, geste par geste, et non un blocage en bloc : un
+appareil archivé refuse tout **sauf** la purge de son historique
+(`devices.delete` l'accepte, et c'est le seul moyen de s'en défaire), et seule
+l'interruption de l'agent exige qu'il soit en ligne. L'infobulle d'une
+permission manquante nomme l'intitulé **du manifest**, celui-là même que
+l'éditeur de rôles affiche : elle désigne la case à cocher.
+
 ## 3. Le rôle s'édite entier, dans sa popup
 
 Un détour a existé : l'identité du rôle dans sa popup, ses droits dans une
@@ -84,6 +136,7 @@ illisibles sur un même formulaire.
 export interface FeatureAccessSpec {
     feature?: WorkspaceFeatureId;
     level?: FeatureAccess; // défaut 'read'
+    extras?: readonly string[]; // permissions propres à `feature` (§2)
     capabilities?: WorkspaceCapability[];
     admin?: true;
     scope?: 'account';

@@ -13,13 +13,20 @@ import {
 } from '@deveye/types';
 
 import { agent } from './api';
-import { getTerminalPrefs } from './terminalPrefs';
+import { currentDevices, useDevices } from './store';
 import styles from './style.module.css';
 
-/** The validated default user to open a session under, or undefined for the agent's. */
-function sessionUser(): string | undefined {
-    const u = getTerminalPrefs().defaultUser.trim();
-    return u && terminalUser.safeParse(u).success ? u : undefined;
+/**
+ * Les réglages du terminal portés par l'appareil, lus à l'instant où on en a
+ * besoin : ils vivent dans la liste de l'espace, qui se rafraîchit en direct.
+ */
+function terminalPrefs(deviceId: string): { user: string | undefined; closeOnExit: boolean } {
+    const device = currentDevices().find((d) => d.id === deviceId);
+    const u = device?.terminalDefaultUser ?? '';
+    return {
+        user: u && terminalUser.safeParse(u).success ? u : undefined,
+        closeOnExit: device?.terminalCloseOnExit ?? true
+    };
 }
 
 /** base64 → bytes, for PTY output coming off the wire. */
@@ -56,6 +63,7 @@ function themeColors() {
  */
 export function TerminalPanel({ deviceId, onClose }: { deviceId: string; onClose?: () => void }) {
     const containerRef = useRef<HTMLDivElement>(null);
+    const deviceName = useDevices().devices.find((d) => d.id === deviceId)?.name ?? 'Appareil';
     const [exited, setExited] = useState<{ code: number | null; error?: string } | null>(null);
     // Bumped to force a full remount of the effect (a fresh session) on "restart".
     const [generation, setGeneration] = useState(0);
@@ -114,7 +122,7 @@ export function TerminalPanel({ deviceId, onClose }: { deviceId: string; onClose
                     sessionId,
                     cols: term.cols,
                     rows: term.rows,
-                    user: sessionUser()
+                    user: terminalPrefs(deviceId).user
                 })
                 .catch((e) => setExited({ code: null, error: e instanceof Error ? e.message : 'Échec' }));
         });
@@ -145,7 +153,7 @@ export function TerminalPanel({ deviceId, onClose }: { deviceId: string; onClose
         const offExit = onServerEvent(DEVICE_TERM_EXIT_EVENT, deviceTermExitPushSchema, (d) => {
             if (d.deviceId !== deviceId || d.sessionId !== sessionId) return;
             // End of shell closes the popup, or keeps it open with the banner.
-            if (getTerminalPrefs().closeOnExit) onCloseRef.current?.();
+            if (terminalPrefs(deviceId).closeOnExit) onCloseRef.current?.();
             else setExited({ code: d.code ?? null, error: d.error });
         });
 
@@ -163,13 +171,16 @@ export function TerminalPanel({ deviceId, onClose }: { deviceId: string; onClose
 
     return (
         <div className={styles.terminalWrap}>
-            {/* Les préférences vivent dans la coquille de réglages, à l'échelle
-                de la feature ; relancer applique un nouveau compte. */}
+            {/* Les réglages vivent dans la coquille, à l'échelle de CET
+                appareil ; relancer applique un nouveau compte. */}
             <div className={styles.terminalBar}>
                 <Button variant='ghost' icon='refresh' onClick={relaunch} title='Relancer la session'>
                     Relancer la session
                 </Button>
-                <FeatureSettingsButton scope={{ kind: 'feature', feature: 'devices' }} variant='ghost' />
+                <FeatureSettingsButton
+                    scope={{ kind: 'item', feature: 'devices', itemId: deviceId, itemLabel: deviceName }}
+                    variant='ghost'
+                />
             </div>
             <div className={styles.terminalHost} ref={containerRef} />
             {exited && (

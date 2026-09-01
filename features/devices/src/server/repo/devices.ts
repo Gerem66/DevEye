@@ -1,12 +1,15 @@
 import type { DeviceRow, DeviceStatus, ProcessCapture } from '@deveye/types';
 import type { SdkQueryable } from '@deveye/types/sdk/server';
 
-/** Partial collection config; only provided fields are updated (`null` resets). */
+/** Partial device config; only provided fields are updated (`null` resets). */
 export interface DeviceConfigPatch {
     metricIntervalSeconds?: number | null;
     processCapture?: ProcessCapture | null;
     /** Conservation de l'historique entier : métriques, présence et processus. */
     retentionDays?: number | null;
+    /** Compte d'ouverture des sessions du terminal ; `null` : celui de l'agent. */
+    terminalDefaultUser?: string | null;
+    terminalCloseOnExit?: boolean;
 }
 
 /**
@@ -98,15 +101,18 @@ export function deviceRepo(q: SdkQueryable): DeviceRepo {
             const columns: Record<keyof DeviceConfigPatch, string> = {
                 metricIntervalSeconds: 'metric_interval_seconds',
                 processCapture: 'process_capture',
-                retentionDays: 'retention_days'
+                retentionDays: 'retention_days',
+                terminalDefaultUser: 'terminal_default_user',
+                terminalCloseOnExit: 'terminal_close_on_exit'
             };
             const sets: string[] = [];
             const params: unknown[] = [];
             for (const key of Object.keys(columns) as (keyof DeviceConfigPatch)[]) {
-                if (patch[key] !== undefined) {
-                    sets.push(`${columns[key]} = ?`);
-                    params.push(patch[key]);
-                }
+                const value = patch[key];
+                if (value === undefined) continue;
+                sets.push(`${columns[key]} = ?`);
+                // La colonne du drapeau est un TINYINT : le booléen s'écrit en 0/1.
+                params.push(typeof value === 'boolean' ? Number(value) : value);
             }
             if (sets.length === 0) return;
             params.push(id);

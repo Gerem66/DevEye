@@ -14,7 +14,8 @@ const POWER_LABELS: Record<AgentPowerAction, string> = {
 
 /**
  * Run a system power action on a device (shutdown / reboot / suspend / hibernate
- * / lock). Owner-or-admin + agent online. The command only pushes the order; the
+ * / lock). Needs the `system` permission on Appareils + agent online. The command
+ * only pushes the order; the
  * agent applies it best-effort and the outcome streams back as a
  * `device.powerResult` push event (the caller must be subscribed to the device).
  */
@@ -24,7 +25,7 @@ export const agentPowerFeature: FeatureDefinition<
     typeof agentPower.output
 > = defineFeature({
     ...agentPower,
-    access: { feature: 'devices', level: 'write' },
+    access: { feature: 'devices', extras: ['system'] },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestPower(row.id, { action: input.action }) ?? false;

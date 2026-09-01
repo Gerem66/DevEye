@@ -20,6 +20,8 @@ import { ACCESS_COOKIE } from '@/auth/cookies';
 import { verifyAccessToken } from '@/auth/jwt';
 import { createMonitorTransport, type MonitorHub } from '@/agent/hub';
 import { accessEpochNow, createAccessResolver } from '@/features/_access';
+import { moduleManifest } from '@/features/_sdk/register';
+import { resolveExtras } from '@deveye/types/sdk';
 import type { LiveHub } from '@/live/hub';
 import { FeatureError } from '@/features/_define';
 import { featureHandlerMap } from '@/features/registry';
@@ -240,11 +242,32 @@ export async function registerWS(
                     }
                 };
 
+                /**
+                 * Une permission propre à la feature (`extraPermissions` de son
+                 * manifest), résolue contre les specs déclarées : une clé que le
+                 * manifest ne connaît pas ne peut donc jamais valoir « accordée ».
+                 */
+                const assertExtra = (f: FeatureId, key: string): void => {
+                    const { canExtra } = resolveExtras(
+                        moduleManifest(f)?.extraPermissions,
+                        scope.isOwner,
+                        scope.extras.get(f) ?? {}
+                    );
+                    if (!canExtra(key)) {
+                        throw new FeatureError('forbidden', 'Cette permission ne vous est pas accordée');
+                    }
+                };
+
                 // Declared authorization (see `FeatureAccessSpec`), enforced here
                 // so a command can never ship without its guard.
                 if (def.access?.admin) assertAdmin();
                 if (def.access?.feature) assertFeature(def.access.feature, def.access.level);
                 for (const c of def.access?.capabilities ?? []) assertCan(c);
+                // Les extras derrière le niveau : ils affinent un accès, ils ne
+                // le remplacent pas. Le contrôle de démarrage garantit qu'ils
+                // ne vont jamais sans la feature qui les déclare.
+                const gated = def.access?.feature;
+                if (gated) for (const key of def.access?.extras ?? []) assertExtra(gated, key);
 
                 const result = await def.handler(
                     {

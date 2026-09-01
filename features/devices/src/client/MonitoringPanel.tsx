@@ -6,7 +6,6 @@ import {
     FeatureSettingsButton,
     onServerEvent,
     openInfo,
-    useCurrentUser,
     useWorkspacePermissions
 } from 'deveye-sdk-client';
 import {
@@ -26,6 +25,7 @@ import {
 import { HardwareInfo } from './HardwareInfo';
 import { Connections } from './Connections';
 import { DeviceActionsMenu, type DeviceAction } from './DeviceActionsMenu';
+import { agentReach, firstReason, missingPermission } from './availability';
 import { PrivilegeInfo } from './PrivilegeInfo';
 import { OpenPorts } from './OpenPorts';
 import { groupPorts } from './ports';
@@ -230,9 +230,9 @@ export interface MonitoringPanelProps {
  * metric pushes) and its metric subscription.
  */
 export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
-    const user = useCurrentUser();
     const { devices: baseDevices, loading, refresh } = useDevices();
-    const canWrite = useWorkspacePermissions().canFeature('devices', 'write');
+    const permissions = useWorkspacePermissions();
+    const canWrite = permissions.canFeature('devices', 'write');
     // Les gestes de cycle de vie et leurs dialogues, montés avec la fiche.
     const actions = useDeviceActions(refresh);
     const [override, setOverride] = useState<{ online?: boolean; report?: DeviceReport | null }>({});
@@ -969,24 +969,27 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         );
     }
 
-    // Online-only features don't appear when the agent is offline; the
-    // collection config is the device's General settings panel.
+    /**
+     * La liste ne varie jamais : chaque fonction y figure, et ce qui l'empêche
+     * se lit sur elle. Le rôle d'abord, l'état de la machine ensuite (voir
+     * `availability.ts`) — un appareil rallumé ne rendra pas une permission.
+     */
+    const reach = agentReach(selected);
+    const remote = (key: string, label: string, onClick: () => void, icon: string): DeviceAction => ({
+        icon,
+        label,
+        onClick,
+        unavailable: firstReason(permissions.canExtra('devices', key) ? undefined : missingPermission(key), reach)
+    });
+
     const deviceActions: DeviceAction[] = [
+        // Le seul geste qui ne dépend de rien : il relit le dernier rapport reçu.
         { icon: 'icon-cpu', label: 'Matériel & agent', onClick: showHardwareInfo },
-        // Les mises à jour système sont réservées à l'administrateur
-        // (`agent.listPackages` / `upgradePackages`) : sans cette garde, on
-        // l'ouvrirait pour se heurter à un refus du serveur.
-        ...(online && !archived && user?.role === 'admin'
-            ? [{ icon: 'icon-database', label: 'Mises à jour système', onClick: () => setPackagesOpen(true) }]
-            : []),
-        ...(online && !archived
-            ? [
-                  { icon: 'icon-folder', label: 'Explorateur de fichiers', onClick: () => setFilesOpen(true) },
-                  { icon: 'icon-terminal', label: 'Terminal distant', onClick: () => setTerminalOpen(true) },
-                  { icon: 'icon-logs', label: 'Logs de l’appareil', onClick: () => setLogsOpen(true) },
-                  { icon: 'icon-power', label: 'Commandes système', onClick: () => setPowerOpen(true) }
-              ]
-            : []),
+        remote('files', 'Explorateur de fichiers', () => setFilesOpen(true), 'icon-folder'),
+        remote('terminal', 'Terminal distant', () => setTerminalOpen(true), 'icon-terminal'),
+        remote('logs', 'Logs de l’appareil', () => setLogsOpen(true), 'icon-logs'),
+        remote('system', 'Commandes système', () => setPowerOpen(true), 'icon-power'),
+        remote('system', 'Mises à jour système', () => setPackagesOpen(true), 'icon-database'),
         // Le cycle de vie de l'appareil ferme la liste : approuver, renommer,
         // révoquer, supprimer, sous le droit d'écriture de l'espace.
         ...deviceLifecycleActions(selected, actions, canWrite)
@@ -997,6 +1000,15 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             <div className={styles.metricsPanelHeader}>
                 <h3>{selected.name}</h3>
                 <div className={styles.headerRight}>
+                    {/* L'état de l'appareil ouvre la rangée : on le lit avant
+                        de choisir quoi faire de la machine. */}
+                    {archived ? (
+                        <span className={`${styles.onlineBadge} ${styles.archived}`}>Archivé</span>
+                    ) : (
+                        <span className={`${styles.onlineBadge} ${online ? styles.online : styles.offline}`}>
+                            {online ? 'En ligne' : 'Hors ligne'}
+                        </span>
+                    )}
                     {online && !archived && agentUpdatable(selected) && (
                         <button
                             className={`${styles.iconHeaderBtn} ${styles.iconHeaderUpdate}`}
@@ -1013,7 +1025,6 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                             />
                         </button>
                     )}
-                    <DeviceActionsMenu actions={deviceActions} />
                     {online && !archived && (
                         <button
                             className={styles.iconHeaderBtn}
@@ -1024,13 +1035,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                             <span className={`icon icon-refresh ${refreshing ? styles.spinning : ''}`} />
                         </button>
                     )}
-                    {archived ? (
-                        <span className={`${styles.onlineBadge} ${styles.archived}`}>Archivé</span>
-                    ) : (
-                        <span className={`${styles.onlineBadge} ${online ? styles.online : styles.offline}`}>
-                            {online ? 'En ligne' : 'Hors ligne'}
-                        </span>
-                    )}
+                    <DeviceActionsMenu actions={deviceActions} />
                     {/* En dernier, comme partout : les réglages de CET appareil. */}
                     <FeatureSettingsButton
                         scope={{ kind: 'item', feature: 'devices', itemId: selected.id, itemLabel: selected.name }}

@@ -24,12 +24,8 @@ const clientProvider: DevicesClientProvider = {
 export const clientEntry: FeatureClient = {
     Widget: MonitoringWidget,
     Full: Devices,
-    /**
-     * Un seul panneau pour l'onglet Général des deux échelles : les réglages
-     * du terminal (feature) et la configuration de collecte d'un appareil
-     * (élément, un id texte).
-     */
-    settingsPanels: { terminal: DevicesTerminalPanel, collect: DevicesCollectPanel },
+    /** Les deux onglets d'un appareil : sa collecte et son terminal. */
+    settingsPanels: { collect: DevicesCollectPanel, terminal: DevicesTerminalPanel },
     TopbarWidget: DevicesTopbarWidget,
     cacheDurationMinutes: 5,
     preload: true,

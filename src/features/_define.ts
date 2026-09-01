@@ -140,6 +140,14 @@ export interface FeatureAccessSpec {
      */
     feature?: FeatureId;
     level?: FeatureAccess;
+    /**
+     * Permissions propres à `feature` (ses `extraPermissions`), toutes exigées
+     * en plus du niveau. Ce que le SDK offre déjà à un module pour ses propres
+     * commandes : les commandes de transport de l'app, qui vivent ici, en ont
+     * besoin aussi pour se ranger derrière les droits de la feature qu'elles
+     * servent (`agent.*` derrière ceux d'Appareils).
+     */
+    extras?: readonly string[];
     /** Capacités de gouvernance exigées, toutes nécessaires. */
     capabilities?: WorkspaceCapability[];
     /** Global account admin: the device fleet and the system pages. */

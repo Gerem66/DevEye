@@ -26,7 +26,7 @@ export const agentSetAutostartFeature: FeatureDefinition<
     typeof agentSetAutostart.output
 > = defineFeature({
     ...agentSetAutostart,
-    access: { admin: true },
+    access: { feature: 'devices', level: 'write', admin: true },
     mutates: true,
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
@@ -49,7 +49,7 @@ export const agentElevateFeature: FeatureDefinition<
     typeof agentElevate.output
 > = defineFeature({
     ...agentElevate,
-    access: { admin: true },
+    access: { feature: 'devices', level: 'write', admin: true },
     mutates: true,
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
@@ -71,7 +71,7 @@ export const agentDropPrivilegesFeature: FeatureDefinition<
     typeof agentDropPrivileges.output
 > = defineFeature({
     ...agentDropPrivileges,
-    access: { admin: true },
+    access: { feature: 'devices', level: 'write', admin: true },
     mutates: true,
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);

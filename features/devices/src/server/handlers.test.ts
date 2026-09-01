@@ -94,6 +94,8 @@ function row(over: Partial<DeviceRow> & { id: string }): DeviceRow {
         metric_interval_seconds: null,
         process_capture: null,
         retention_days: null,
+        terminal_default_user: null,
+        terminal_close_on_exit: 1,
         status_before_delete: null,
         delete_error: null,
         sort_order: 0,

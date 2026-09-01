@@ -43,13 +43,23 @@ export async function toDevice(ctx: FeatureContext, row: DeviceRow): Promise<Dev
 
 /**
  * Comme {@link authorizeDevice}, mais exige en plus que l'agent soit joignable :
- * pour les commandes qui ne font que relayer un ordre à la machine. La
- * restriction de rôle sur cette ligne s'y ajoute : un appareil masqué ou en
- * lecture seule ne prend pas d'ordre.
+ * pour les commandes qui ne font que relayer un ordre à la machine. Un appareil
+ * masqué ou passé en lecture seule pour le rôle de l'appelant ne prend pas
+ * d'ordre.
+ *
+ * La restriction est lue directement, et non par `ctx.assertItem(…, 'write')` :
+ * celui-ci réclamerait aussi l'écriture sur la FONCTIONNALITÉ, alors que le
+ * droit d'agir sur la machine vient de la permission que la commande déclare
+ * (`access.extras`). Gérer la flotte et piloter une machine ne sont pas le
+ * même droit.
  */
 export async function authorizeReachableDevice(ctx: FeatureContext, deviceId: string): Promise<DeviceRow> {
     const row = await authorizeDevice(ctx, deviceId);
-    await ctx.assertItem('devices', row.id, 'write');
+    const restriction = (await ctx.itemRestrictions('devices')).get(row.id);
+    if (restriction === 'none') throw new FeatureError('forbidden', 'Cet appareil ne vous est pas accessible');
+    if (restriction === 'read') {
+        throw new FeatureError('forbidden', 'Cet appareil est en lecture seule pour votre rôle');
+    }
     if (!(online(ctx, [row.id])[row.id] ?? false)) {
         throw new FeatureError('conflict', 'Agent hors ligne');
     }

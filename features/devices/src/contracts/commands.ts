@@ -5,6 +5,7 @@ import {
     metricsResolutionSchema,
     processCaptureSchema,
     processSampleSchema,
+    terminalUser,
     linkCodeRequestSchema,
     linkCodeResponseSchema,
     linkCodesListResponseSchema,
@@ -60,9 +61,10 @@ export const devicesRename = {
 };
 
 /**
- * Update a device's collection config. Every field is optional; only the
- * provided ones change. `null` resets a field to the server default. Interval
- * or capture changes are pushed live to a connected agent.
+ * Update a device's config: what its agent collects, and how its remote
+ * terminal opens. Every field is optional; only the provided ones change.
+ * `null` resets a field to the server default. Interval or capture changes are
+ * pushed live to a connected agent.
  */
 export const devicesSetConfig = {
     command: 'devices.setConfig' as const,
@@ -73,13 +75,18 @@ export const devicesSetConfig = {
             metricIntervalSeconds: z.number().int().min(5).max(3600).nullable().optional(),
             processCapture: processCaptureSchema.nullable().optional(),
             /** Conservation de l'historique — métriques, présence et processus. */
-            retentionDays: z.number().int().positive().max(3650).nullable().optional()
+            retentionDays: z.number().int().positive().max(3650).nullable().optional(),
+            /** Compte d'ouverture des sessions ; `null` : celui de l'agent. */
+            terminalDefaultUser: terminalUser.nullable().optional(),
+            terminalCloseOnExit: z.boolean().optional()
         })
         .refine(
             (v) =>
                 v.metricIntervalSeconds !== undefined ||
                 v.processCapture !== undefined ||
-                v.retentionDays !== undefined,
+                v.retentionDays !== undefined ||
+                v.terminalDefaultUser !== undefined ||
+                v.terminalCloseOnExit !== undefined,
             { message: 'No config field provided' }
         ),
     output: z.object({ device: deviceSchema })

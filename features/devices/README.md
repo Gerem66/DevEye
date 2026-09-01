@@ -83,20 +83,20 @@ index.tsx                   clientEntry : Widget, Full, settingsPanels.general, 
 api.ts                      featureApi(manifest) pour devices.*, commandsApi(agentCommands)
                             pour agent.*
 store.ts                    la liste des appareils de l'espace, ravivée par le sujet devices
-Devices.tsx                 la vue : la barre (aide, réglages, appairage) au-dessus de la liste
+Devices.tsx                 la vue : la barre (aide, appairage) au-dessus de la liste
 Monitoring.tsx              la tuile, la liste des appareils et la sélection
 MonitoringPanel.tsx         le panneau d'un appareil (DevicePanel du provider)
-ConfigPanel.tsx             le panneau general d'un appareil : cadence, capture, rétention
-                            (l'ancien ConfigDialog)
-TerminalSettings.tsx        le panneau general de la feature (réglages du terminal)
-SettingsPanel.tsx           l'aiguillage SettingsPanelProps selon scope.kind
+ConfigPanel.tsx             l'onglet collect d'un appareil : cadence, capture, rétention
+TerminalSettings.tsx        l'onglet terminal d'un appareil : compte d'ouverture, fin de session
+SettingsPanel.tsx           les deux panneaux SettingsPanelProps de l'appareil
 TopbarWidget.tsx            le compteur d'appareils en ligne
 TerminalPanel.tsx, FilesPanel.tsx, LogsPanel.tsx, PackagesPanel.tsx, PowerMenu.tsx
                             le transport agent.* et onServerEvent
 DeviceWidget.tsx            la tuile d'un appareil (DeviceWidget du provider), avec
                             DeviceWidget.module.css
-deviceUsage.ts, agentUpdates.ts, agentVersion.ts, terminalPrefs.ts, useAgentUpdate.tsx,
+deviceUsage.ts, agentUpdates.ts, agentVersion.ts, useAgentUpdate.tsx,
 utils.ts                    les stores et utilitaires du client
+availability.ts             pourquoi une entrée du menu est inerte, et dans quel ordre
 Connections.tsx, DeviceActionsMenu.tsx, GraphDetail.tsx, HardwareInfo.tsx, MiniGraph.tsx,
 MonitoringInfo.tsx, MonthPicker.tsx, OpenPorts.tsx, PrivilegeInfo.tsx, Timeline.tsx, ports.ts
                             les composants du panneau
@@ -113,10 +113,10 @@ manage/format.ts, manage/style.module.css
 
 Le client offre à l'app `DEVICES_CLIENT_PROVIDER` (`useDevices`, `DevicePanel`,
 `DeviceWidget`), que l'accueil compose pour ses tuiles et ses vues par
-appareil ; l'app ne connaît plus aucun écran d'appareil en propre. La
-configuration de collecte est le panneau `general` d'un appareil dans la
-coquille de réglages, les réglages du terminal le panneau `general` de la
-feature.
+appareil ; l'app ne connaît plus aucun écran d'appareil en propre. Tout se
+règle à l'échelle d'un appareil, dans la coquille commune : `collect` (cadence,
+capture, rétention) et `terminal` (compte d'ouverture, sort de la session). La
+fonctionnalité elle-même n'a aucun réglage, donc aucun bouton.
 
 ## Modèle à cadence unique (+ report + presence)
 

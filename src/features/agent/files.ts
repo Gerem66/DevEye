@@ -11,7 +11,8 @@ import { authorizeReachableDevice } from '@/agent/authorize';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 
 /**
- * File explorer commands for a device. Owner-or-admin + agent online. Read ops
+ * File explorer commands for a device. Needs the `files` permission on Appareils
+ * + agent online. Read ops
  * (list/analyze/search) only acknowledge; results stream back as `device.files*`
  * push events keyed by `opId` (the caller must be subscribed). Mutations are
  * audited (cleanup is destructive).
@@ -23,7 +24,7 @@ export const agentFilesListFeature: FeatureDefinition<
     typeof agentFilesList.output
 > = defineFeature({
     ...agentFilesList,
-    access: { feature: 'devices', level: 'write' },
+    access: { feature: 'devices', extras: ['files'] },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestFilesList(row.id, { opId: input.opId, path: input.path });
@@ -38,7 +39,7 @@ export const agentFilesAnalyzeFeature: FeatureDefinition<
     typeof agentFilesAnalyze.output
 > = defineFeature({
     ...agentFilesAnalyze,
-    access: { feature: 'devices', level: 'write' },
+    access: { feature: 'devices', extras: ['files'] },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestFilesAnalyze(row.id, { opId: input.opId, path: input.path });
@@ -53,7 +54,7 @@ export const agentFilesSearchFeature: FeatureDefinition<
     typeof agentFilesSearch.output
 > = defineFeature({
     ...agentFilesSearch,
-    access: { feature: 'devices', level: 'write' },
+    access: { feature: 'devices', extras: ['files'] },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestFilesSearch(row.id, {
@@ -79,7 +80,7 @@ export const agentFilesMutateFeature: FeatureDefinition<
     typeof agentFilesMutate.output
 > = defineFeature({
     ...agentFilesMutate,
-    access: { feature: 'devices', level: 'write' },
+    access: { feature: 'devices', extras: ['files'] },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestFilesMutate(row.id, {
@@ -112,7 +113,7 @@ export const agentFilesDownloadFeature: FeatureDefinition<
     typeof agentFilesDownload.output
 > = defineFeature({
     ...agentFilesDownload,
-    access: { feature: 'devices', level: 'write' },
+    access: { feature: 'devices', extras: ['files'] },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestFilesDownload(row.id, { opId: input.opId, path: input.path });
@@ -131,7 +132,7 @@ export const agentFilesUploadFeature: FeatureDefinition<
     typeof agentFilesUpload.output
 > = defineFeature({
     ...agentFilesUpload,
-    access: { feature: 'devices', level: 'write' },
+    access: { feature: 'devices', extras: ['files'] },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestFilesUpload(row.id, {

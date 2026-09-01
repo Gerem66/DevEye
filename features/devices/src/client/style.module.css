@@ -92,22 +92,7 @@
     min-height: 0;
 }
 
-.viewBar {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-    flex: none;
-}
-
-/* Poussées à droite, et seules sur la ligne quand la flotte n'est pas offerte. */
-.viewBarActions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    margin-left: auto;
-}
-
-/* Le contenu du segment prend le reste de la hauteur et défile sous la barre. */
+/* Le contenu du segment prend toute la hauteur et défile seul. */
 .viewBody {
     flex: 1;
     min-height: 0;
@@ -213,6 +198,18 @@
     opacity: 0.7;
 }
 
+/* L'état vide est inerte (`pointer-events: none`) et gonfle ses glyphes
+   décoratifs : le seul geste qu'il propose reprend le clic et sa taille. */
+.empty .pairCard {
+    max-width: 260px;
+    pointer-events: auto;
+}
+
+.empty .pairCard span {
+    font-size: inherit;
+    opacity: 1;
+}
+
 .grid {
     display: grid;
     grid-template-columns: 260px 1fr;
@@ -262,6 +259,45 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);
+}
+
+/* L'appairage à la suite des cartes, et non dans une barre au-dessus des
+   volets : le geste « ajouter » se lit au bout de la liste qu'il allonge.
+   Discret par défaut, il ne prend la couleur de l'accent qu'au survol. */
+.pairCard {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    padding: var(--space-sm);
+    background: transparent;
+    border: 1px dashed var(--glass-border);
+    /* Le rayon des cartes qu'il prolonge, pas celui d'un bloc à part. */
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition:
+        border-color var(--transition-fast),
+        color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+/* La croix pleine des 18 px par défaut pèse trop à côté d'un texte de 0.85rem. */
+.pairCardIcon {
+    width: 14px;
+}
+
+.pairCard:hover:not(:disabled) {
+    background: var(--accent-bg);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.pairCard:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 /* Où atterrirait la carte glissée, dans l'interstice lui-même. Pilotée par le
@@ -1557,9 +1593,24 @@
         color var(--transition-fast);
 }
 
-.actionsMenuItem:hover {
+.actionsMenuItem:hover:not([aria-disabled='true']) {
     background: var(--accent-bg);
     color: var(--accent);
+}
+
+/* Une fonction qui ne s'ouvre pas : montrée pour dire ce que la machine sait
+   faire, inerte, et le glyphe de droite dit pourquoi (droit, archive, hors
+   ligne — voir `availability.ts`). */
+.actionsMenuItemLocked {
+    color: var(--text-muted);
+    cursor: not-allowed;
+}
+
+.actionsMenuItemLock {
+    flex-shrink: 0;
+    margin-left: auto;
+    color: var(--text-muted);
+    font-size: 0.8rem;
 }
 
 .actionsMenuItemIcon {
@@ -1567,8 +1618,12 @@
     color: var(--text-secondary);
 }
 
-.actionsMenuItem:hover .actionsMenuItemIcon {
+.actionsMenuItem:hover:not([aria-disabled='true']) .actionsMenuItemIcon {
     color: var(--accent);
+}
+
+.actionsMenuItemLocked .actionsMenuItemIcon {
+    color: var(--text-muted);
 }
 
 /* Update-available button: accent, to stand out among the header icons. */

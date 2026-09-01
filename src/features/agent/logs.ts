@@ -5,7 +5,8 @@ import { defineFeature, FeatureError, type FeatureDefinition } from '../_define'
 
 /**
  * Ask the agent to enumerate its log sources (system journal, Docker containers,
- * log files…). Owner-or-admin + agent online. The list streams back as a
+ * log files…). Needs the `logs` permission on Appareils + agent online. The list
+ * streams back as a
  * `device.logSources` push event (caller must be subscribed to the device).
  */
 export const agentLogSourcesFeature: FeatureDefinition<
@@ -14,7 +15,7 @@ export const agentLogSourcesFeature: FeatureDefinition<
     typeof agentLogSources.output
 > = defineFeature({
     ...agentLogSources,
-    access: { feature: 'devices', level: 'write' },
+    access: { feature: 'devices', extras: ['logs'] },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestLogSources(row.id) ?? false;
@@ -34,7 +35,7 @@ export const agentLogQueryFeature: FeatureDefinition<
     typeof agentLogQuery.output
 > = defineFeature({
     ...agentLogQuery,
-    access: { feature: 'devices', level: 'write' },
+    access: { feature: 'devices', extras: ['logs'] },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok =

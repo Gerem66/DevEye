@@ -13,7 +13,7 @@ export const agentListPackagesFeature: FeatureDefinition<
     typeof agentListPackages.output
 > = defineFeature({
     ...agentListPackages,
-    access: { admin: true },
+    access: { feature: 'devices', extras: ['system'] },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestPkgList(row.id) ?? false;
@@ -32,7 +32,7 @@ export const agentUpgradePackagesFeature: FeatureDefinition<
     typeof agentUpgradePackages.output
 > = defineFeature({
     ...agentUpgradePackages,
-    access: { admin: true },
+    access: { feature: 'devices', extras: ['system'] },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const monitor = ctx.monitor;

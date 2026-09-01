@@ -182,8 +182,9 @@ export const devicesReorderFeature = defineSdkFeature<
 });
 
 /**
- * Change la cadence de collecte et la conservation d'un appareil. Sous
- * `devices: write` : c'est décider ce que le serveur enregistre et garde.
+ * Change la cadence de collecte, la conservation et les réglages du terminal
+ * d'un appareil. Sous `devices: write` : c'est décider ce que le serveur
+ * enregistre et garde, et sous quel compte une session s'ouvre.
  */
 export const devicesSetConfigFeature = defineSdkFeature<
     DevicesRepo,

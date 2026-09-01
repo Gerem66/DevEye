@@ -76,6 +76,8 @@ export function deviceRowToDevice(
         metricIntervalSeconds: row.metric_interval_seconds === null ? null : Number(row.metric_interval_seconds),
         processCapture: (row.process_capture as ProcessCapture | null) ?? null,
         retentionDays: row.retention_days === null ? null : Number(row.retention_days),
+        terminalDefaultUser: row.terminal_default_user ?? null,
+        terminalCloseOnExit: row.terminal_close_on_exit !== 0,
         foreign,
         deleteError: row.delete_error ?? null
     };

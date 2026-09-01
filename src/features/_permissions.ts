@@ -46,13 +46,25 @@ const ACCESS_EXEMPT = new Set([
  * qu'avertir : un avertissement se range dans le bruit des journaux, et la
  * commande reste ouverte pendant ce temps.
  */
-export function assertAccessDeclared(defs: readonly { command: string; access?: unknown }[]): void {
+export function assertAccessDeclared(
+    defs: readonly { command: string; access?: { feature?: string; extras?: readonly string[] } }[]
+): void {
     const naked = defs.filter((d) => !d.access && !ACCESS_EXEMPT.has(d.command)).map((d) => d.command);
     if (naked.length > 0) {
         throw new Error(
             `Commandes sans autorisation déclarée : ${naked.join(', ')}. ` +
                 'Ajoutez un `access` à leur `defineFeature`, ou une entrée dans ACCESS_EXEMPT ' +
                 'de src/features/_permissions.ts si l’absence est délibérée.'
+        );
+    }
+    // Une permission propre se résout contre le manifest de SA feature : sans
+    // `feature`, le dispatcheur ne saurait pas où la chercher et laisserait
+    // passer. L'omission doit coûter le démarrage, pas une garde muette.
+    const orphans = defs.filter((d) => (d.access?.extras?.length ?? 0) > 0 && !d.access?.feature).map((d) => d.command);
+    if (orphans.length > 0) {
+        throw new Error(
+            `Commandes dont les permissions propres ne visent aucune fonctionnalité : ${orphans.join(', ')}. ` +
+                'Un `access.extras` exige un `access.feature`.'
         );
     }
 }

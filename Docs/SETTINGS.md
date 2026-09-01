@@ -81,17 +81,17 @@ Trois mécanismes font qu'aucun réglage n'est un mur :
 Plus aucune feature ne règle quoi que ce soit hors de la coquille.
 
 Appareils, le dernier candidat, l'a quittée à son rapatriement en module
-(`features/devices`) : la configuration de collecte d'un appareil (cadence,
-capture des processus, conservation, estimation du coût en base), autrefois
-un dialogue maison enfoui dans le menu « Fonctions » du panneau
-(`ConfigDialog`), est le panneau `general` d'un **appareil** (`ConfigPanel`,
-typé `SettingsPanelProps<string>`), ouvert par le bouton commun en dernière
-position de l'en-tête de la fiche ; les préférences du terminal distant
-(`TerminalSettings`, locales au navigateur), autrefois derrière l'engrenage
-du terminal, sont le panneau `general` de la **feature**. Un seul composant
-(`SettingsPanel.tsx`) rend l'un ou l'autre selon `scope.kind`. Le terminal
-garde un bouton « Relancer la session » à côté du bouton commun, pour
-appliquer un nouveau compte sans fermer le dialogue.
+(`features/devices`). Tout s'y règle à l'échelle d'un **appareil**, sous deux
+onglets déclarés dans `settings.item` et rendus par `SettingsPanel.tsx` :
+`collect` (cadence, capture des processus, conservation, estimation du coût en
+base ; `ConfigPanel`) et `terminal` (compte d'ouverture des sessions, sort du
+terminal à la fin du shell ; `TerminalSettings`). Les deux sont portés par la
+ligne de l'appareil, donc partagés avec les espaces qui le voient. La
+fonctionnalité n'a plus aucun réglage commun : `settings.feature` est absent du
+manifest, et le bouton d'engrenage à l'échelle de la feature disparaît de
+lui-même (`FeatureSettingsButton` rend `null` sans section). Le terminal garde
+un bouton « Relancer la session » à côté du bouton commun, pour appliquer un
+nouveau compte sans fermer le dialogue.
 
 Audience l'avait quittée avant : la mesure, la reconnaissance des visiteurs
 et la conservation d'un site vivent dans son panneau Général

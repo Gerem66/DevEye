@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDismissLayer } from 'deveye-sdk-client';
+
+import type { Unavailable } from './availability';
 import styles from './style.module.css';
 
 export interface DeviceAction {
@@ -7,6 +9,13 @@ export interface DeviceAction {
     icon: string;
     label: string;
     onClick: () => void;
+    /**
+     * Ce qui empêche ce geste, s'il y a. L'entrée reste dans la liste, inerte,
+     * marquée du glyphe du motif et sa phrase en infobulle : montrer ce qu'on ne
+     * peut pas faire dit à quoi la machine sert, le cacher laisse croire qu'elle
+     * ne le sait pas. Les motifs et leur ordre sont dans `availability.ts`.
+     */
+    unavailable?: Unavailable;
 }
 
 /**
@@ -52,14 +61,23 @@ export function DeviceActionsMenu({ actions }: { actions: DeviceAction[] }) {
                             key={a.label}
                             type='button'
                             role='menuitem'
-                            className={styles.actionsMenuItem}
+                            className={`${styles.actionsMenuItem} ${a.unavailable ? styles.actionsMenuItemLocked : ''}`}
+                            // `aria-disabled` et non `disabled` : l'entrée doit
+                            // rester atteignable au clavier et son infobulle
+                            // lisible, puisque c'est elle qui dit pourquoi.
+                            aria-disabled={a.unavailable !== undefined}
+                            title={a.unavailable?.reason}
                             onClick={() => {
+                                if (a.unavailable) return;
                                 setOpen(false);
                                 a.onClick();
                             }}
                         >
                             <span className={`icon ${a.icon} ${styles.actionsMenuItemIcon}`} />
                             {a.label}
+                            {a.unavailable && (
+                                <span className={`icon ${a.unavailable.icon} ${styles.actionsMenuItemLock}`} />
+                            )}
                         </button>
                     ))}
                 </div>

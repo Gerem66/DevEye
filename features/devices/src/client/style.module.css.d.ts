@@ -8,6 +8,8 @@ declare const styles: {
     readonly actionsMenuChevron: string;
     readonly actionsMenuItem: string;
     readonly actionsMenuItemIcon: string;
+    readonly actionsMenuItemLock: string;
+    readonly actionsMenuItemLocked: string;
     readonly actionsMenuWrap: string;
     readonly activityDot: string;
     readonly activityHero: string;
@@ -183,6 +185,8 @@ declare const styles: {
     readonly offlineMsg: string;
     readonly online: string;
     readonly onlineBadge: string;
+    readonly pairCard: string;
+    readonly pairCardIcon: string;
     readonly panelScroll: string;
     readonly pkgBar: string;
     readonly pkgBarErr: string;
@@ -295,8 +299,6 @@ declare const styles: {
     readonly titleSidebar: string;
     readonly uptimeBadge: string;
     readonly view: string;
-    readonly viewBar: string;
-    readonly viewBarActions: string;
     readonly viewBody: string;
     readonly waitingMsg: string;
     readonly widgetContent: string;

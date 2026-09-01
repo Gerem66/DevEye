@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Device } from '@deveye/types';
-import { useDragReorder, useLiveOutlines, useLiveSegment, useWorkspacePermissions } from 'deveye-sdk-client';
+import { openInfo, useDragReorder, useLiveOutlines, useLiveSegment, useWorkspacePermissions } from 'deveye-sdk-client';
 
 import { agentUpdatable } from './agentVersion';
 import { api } from './api';
+import { MonitoringInfo } from './MonitoringInfo';
 import MonitoringPanel from './MonitoringPanel';
 import { useDevices } from './store';
 import { useAgentUpdate } from './useAgentUpdate';
@@ -43,9 +44,9 @@ export function MonitoringWidget() {
 }
 
 /**
- * L'en-tête de la colonne des appareils : le titre et la mise à jour de tous les
- * agents, qui n'a de sens qu'en face de cette liste. L'aide et le bouton commun
- * sont dans la barre du haut, avec ceux de la flotte (`Devices`).
+ * L'en-tête de la colonne des appareils : le titre, l'aide et la mise à jour de
+ * tous les agents. Tout tient contre la liste qu'il coiffe : la vue n'a plus de
+ * barre au-dessus des volets.
  */
 function MonitoringTitle({
     sidebar,
@@ -64,6 +65,20 @@ function MonitoringTitle({
             <div className={styles.titleHead}>
                 <h2 className={styles.title}>Monitoring</h2>
                 <div className={styles.titleActions}>
+                    <button
+                        type='button'
+                        className={styles.iconHeaderBtn}
+                        onClick={() =>
+                            void openInfo({
+                                title: 'Monitoring — comment ça marche',
+                                body: <MonitoringInfo />,
+                                width: 560
+                            })
+                        }
+                        title='Comment ça marche ?'
+                    >
+                        <span className='icon icon-info' />
+                    </button>
                     {count > 0 && onUpdateAll && (
                         <button
                             className={`${styles.iconHeaderBtn} ${styles.iconHeaderUpdate}`}
@@ -81,7 +96,24 @@ function MonitoringTitle({
     );
 }
 
-export default function Monitoring() {
+interface MonitoringProps {
+    /** Ouvre le dialogue des codes de liaison ; absent quand le rôle n'appaire pas. */
+    onPair?: () => void;
+    /** Un code est en cours de génération : le bouton attend. */
+    pairing?: boolean;
+}
+
+/** Le geste d'appairage, au bout de la liste qu'il allonge. */
+function PairCard({ onPair, pairing }: { onPair: () => void; pairing?: boolean }) {
+    return (
+        <button type='button' className={styles.pairCard} onClick={onPair} disabled={pairing}>
+            <span className={`icon icon-plus ${styles.pairCardIcon}`} />
+            {pairing ? 'Génération du code…' : 'Appairer un appareil'}
+        </button>
+    );
+}
+
+export default function Monitoring({ onPair, pairing }: MonitoringProps) {
     const { devices: stored, loading } = useDevices();
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const updater = useAgentUpdate();
@@ -161,9 +193,9 @@ export default function Monitoring() {
                         <span className={`icon icon-server ${styles.emptyIcon}`} />
                         <p>Aucun appareil dans cet espace</p>
                         <p className={styles.hint}>
-                            Appairez une machine depuis la barre du haut, ou partagez un appareil d’un autre espace
-                            depuis ses réglages.
+                            Appairez une machine, ou partagez un appareil d’un autre espace depuis ses réglages.
                         </p>
+                        {onPair && <PairCard onPair={onPair} pairing={pairing} />}
                     </div>
                 </>
             ) : (
@@ -245,6 +277,7 @@ export default function Monitoring() {
                             })}
                             <span ref={drag.barRef} className={styles.dropBar} aria-hidden='true' />
                         </div>
+                        {onPair && <PairCard onPair={onPair} pairing={pairing} />}
                     </div>
 
                     {/* Right: per-device panel, scrolling independently of the list. */}
