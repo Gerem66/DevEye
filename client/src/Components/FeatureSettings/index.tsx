@@ -3,6 +3,7 @@ import { SHARE_WIRED_FEATURES, featureDescriptor, type FeatureId } from '@deveye
 
 import Button from '@/Components/Button';
 import { Dialog } from '@/Components/Dialog';
+import { pushLiveSettings } from '@/stores/live';
 import { consumeItemSettings } from '@/stores/settingsRequest';
 import { getActiveWorkspaceId, useActiveWorkspace, useWorkspacePermissions } from '@/stores/workspace';
 
@@ -142,6 +143,18 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection }: 
     useEffect(() => {
         if (open && initialSection) setActive(initialSection);
     }, [open, initialSection]);
+
+    /**
+     * Régler n'est pas naviguer : tant que la coquille est ouverte, le chemin
+     * diffusé porte un cran de plus, et le curseur sort du groupe de l'écran
+     * qu'elle recouvre. La portée suffit à la marque ; l'onglet n'y entre pas,
+     * il change trop souvent pour valoir une republication à chaque clic.
+     */
+    const shown = open && sections.length > 0;
+    useEffect(() => {
+        if (!shown) return;
+        return pushLiveSettings(scope.kind === 'item' ? `item:${scope.feature}` : `feature:${scope.feature}`);
+    }, [shown, scope.kind, scope.feature]);
 
     const items: SideNavItem<SettingsSectionId>[] = sections.map((s) => ({
         id: s.id,

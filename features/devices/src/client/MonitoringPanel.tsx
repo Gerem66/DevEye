@@ -26,7 +26,7 @@ import type { DaySummary } from '../contracts/commands';
 import { HardwareInfo } from './HardwareInfo';
 import { Connections } from './Connections';
 import { DeviceActionsMenu, type DeviceAction } from './DeviceActionsMenu';
-import { agentReach, firstReason, missingPermission } from './availability';
+import { agentReach, firstReason, missingPermission, OLD_AGENT } from './availability';
 import { PrivilegeInfo } from './PrivilegeInfo';
 import { OpenPorts } from './OpenPorts';
 import { groupPorts } from './ports';
@@ -992,10 +992,12 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
      */
     const reach = agentReach(selected);
     /**
-     * L'agent annonce ce qu'il sait relever : sans la sonde, il est trop ancien
-     * pour l'inventaire des conteneurs, et l'entrée n'a rien à proposer.
+     * L'agent annonce ce qu'il sait relever. Un agent en ligne dont le rapport
+     * ne cite pas la sonde est trop ancien pour l'inventaire des conteneurs ;
+     * hors ligne, il n'y a pas de rapport, et c'est `reach` qui parle en premier.
      */
-    const hasDockerProbe = report?.agent?.probes?.includes('docker') ?? false;
+    const noDockerProbe =
+        online && report !== null && !(report.agent?.probes?.includes('docker') ?? false) ? OLD_AGENT : undefined;
     const remote = (key: string, label: string, onClick: () => void, icon: string): DeviceAction => ({
         icon,
         label,
@@ -1012,7 +1014,16 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         remote('files', 'Explorateur de fichiers', () => setFilesOpen(true), 'icon-folder'),
         remote('terminal', 'Terminal distant', () => setTerminalOpen(true), 'icon-terminal'),
         remote('logs', 'Logs de l’appareil', () => setLogsOpen(true), 'icon-logs'),
-        ...(hasDockerProbe ? [remote('docker', 'Conteneurs Docker', () => setDockerOpen(true), 'icon-server')] : []),
+        {
+            icon: 'icon-server',
+            label: 'Conteneurs Docker',
+            onClick: () => setDockerOpen(true),
+            unavailable: firstReason(
+                permissions.canExtra('devices', 'docker', selected.id) ? undefined : missingPermission('docker'),
+                reach,
+                noDockerProbe
+            )
+        },
         remote('system', 'Commandes système', () => setPowerOpen(true), 'icon-power'),
         remote('system', 'Mises à jour système', () => setPackagesOpen(true), 'icon-database'),
         // Le cycle de vie de l'appareil ferme la liste : approuver, renommer,
@@ -1034,7 +1045,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                             {online ? 'En ligne' : 'Hors ligne'}
                         </span>
                     )}
-                    {online && !archived && agentUpdatable(selected) && (
+                    {online && !archived && canWrite && agentUpdatable(selected) && (
                         <button
                             className={`${styles.iconHeaderBtn} ${styles.iconHeaderUpdate}`}
                             onClick={() => void updater.update(selected.id)}

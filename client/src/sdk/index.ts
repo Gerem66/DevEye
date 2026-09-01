@@ -67,6 +67,7 @@ export const APP_VERSION: string = __APP_VERSION__;
  */
 export { ensureFreshAccess, get as httpGet } from '@/api/http';
 /** Les classes de rangées canoniques des écrans de réglages (channelRow, etc.). */
+export { default as SaveButton } from '@/Components/FeatureSettings/SaveButton';
 export { default as settingsStyles } from '@/Components/FeatureSettings/FeatureSettings.module.css';
 /** La carte de comptage de l'accueil, et le compte qui la nourrit. */
 export { CountWidget, useWorkspaceCount, type CountState } from '@/Components/CountWidget';

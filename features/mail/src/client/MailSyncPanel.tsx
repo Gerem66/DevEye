@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button, invalidate, settingsStyles as shell, Switch, TextInput, useResourceVersion } from 'deveye-sdk-client';
+import {
+    invalidate,
+    SaveButton,
+    settingsStyles as shell,
+    Switch,
+    TextInput,
+    useResourceVersion
+} from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
 import { api, humanizeError } from './api';
@@ -64,9 +71,11 @@ export default function MailSyncPanel({ scope, canWrite }: SettingsPanelProps) {
             });
             setIntervalMinutes(String(minutes));
             invalidate('mail.accountList');
-            setStatus('Cadence enregistrée.');
+            setStatus(null);
         } catch (e) {
             setStatus(humanizeError(e, 'Enregistrement impossible.'));
+            // Relancé : le bouton n'annonce « Enregistré » que sur un succès.
+            throw e;
         } finally {
             setBusy(false);
         }
@@ -113,11 +122,7 @@ export default function MailSyncPanel({ scope, canWrite }: SettingsPanelProps) {
                         onChange={(e) => setIntervalMinutes(e.target.value)}
                         aria-label='Cadence de relève, en minutes'
                     />
-                    {canWrite && (
-                        <Button onClick={() => void saveInterval()} disabled={guarded || busy}>
-                            Enregistrer
-                        </Button>
-                    )}
+                    {canWrite && <SaveButton onSave={saveInterval} disabled={guarded || busy} />}
                 </div>
                 <span className={shell.fieldHint}>
                     {guarded

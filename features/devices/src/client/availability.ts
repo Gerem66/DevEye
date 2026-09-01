@@ -33,6 +33,12 @@ export const ARCHIVED: Unavailable = {
     reason: 'Appareil archivé : son agent n’existe plus'
 };
 
+/** L'agent répond, mais cette version-là ne sait pas encore faire la chose. */
+export const OLD_AGENT: Unavailable = {
+    icon: 'icon-cloud',
+    reason: 'Agent trop ancien pour cette fonction : mettez-le à jour'
+};
+
 export const OFFLINE: Unavailable = {
     icon: 'icon-x-circle',
     reason: 'Appareil hors ligne : la machine ne répond pas'

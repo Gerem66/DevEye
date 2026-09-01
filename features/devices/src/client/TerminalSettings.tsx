@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { terminalUser } from '@deveye/types';
-import { Button, humanizeError, SelectInput, settingsStyles as shell, TextInput } from 'deveye-sdk-client';
+import { humanizeError, SaveButton, SelectInput, settingsStyles as shell, TextInput } from 'deveye-sdk-client';
 
 import { api } from './api';
 import { refreshDevices, useDevices } from './store';
@@ -18,8 +18,6 @@ export function TerminalSettings({ deviceId, canWrite }: { deviceId: string; can
     const [defaultUser, setDefaultUser] = useState('');
     const [closeOnExit, setCloseOnExit] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [saving, setSaving] = useState(false);
-    const [saved, setSaved] = useState(false);
 
     // Ne (ré)initialise qu'au changement d'appareil : un rafraîchissement de la
     // liste remplace la référence et effacerait une saisie en cours.
@@ -29,15 +27,12 @@ export function TerminalSettings({ deviceId, canWrite }: { deviceId: string; can
         setDefaultUser(device.terminalDefaultUser ?? '');
         setCloseOnExit(device.terminalCloseOnExit);
         setError(null);
-        setSaved(false);
     }, [deviceId, known]);
 
     const userValid = defaultUser === '' || terminalUser.safeParse(defaultUser).success;
 
     const save = async () => {
-        setSaving(true);
         setError(null);
-        setSaved(false);
         try {
             await api.send('devices.setConfig', {
                 deviceId,
@@ -45,11 +40,10 @@ export function TerminalSettings({ deviceId, canWrite }: { deviceId: string; can
                 terminalCloseOnExit: closeOnExit
             });
             await refreshDevices();
-            setSaved(true);
         } catch (e) {
             setError(humanizeError(e, 'Enregistrement impossible.'));
-        } finally {
-            setSaving(false);
+            // Relancé : le bouton n'annonce « Enregistré » que sur un succès.
+            throw e;
         }
     };
 
@@ -101,10 +95,7 @@ export function TerminalSettings({ deviceId, canWrite }: { deviceId: string; can
             {error && <p className={shell.errorText}>{error}</p>}
             {editable && (
                 <div className={shell.sectionActions}>
-                    {saved && <span className={shell.fieldHint}>Enregistré.</span>}
-                    <Button onClick={() => void save()} disabled={saving || !userValid}>
-                        {saving ? 'Enregistrement…' : 'Enregistrer'}
-                    </Button>
+                    <SaveButton onSave={save} disabled={!userValid} />
                 </div>
             )}
         </div>

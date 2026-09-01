@@ -106,7 +106,13 @@ export function MonthPicker({ days, selectedDay, onPick, onClose }: MonthPickerP
 
     return (
         <div className={styles.calendar} ref={ref}>
-            <SegmentedControl options={VIEW_OPTIONS} value={mode} onChange={setMode} className={styles.calModes} />
+            <SegmentedControl
+                options={VIEW_OPTIONS}
+                value={mode}
+                onChange={setMode}
+                fullWidth
+                className={styles.calModes}
+            />
 
             {mode === 'month' ? (
                 <>

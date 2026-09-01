@@ -1,7 +1,7 @@
 import { agentUpdate, isNewerVersion } from '@deveye/types';
 
 import { agentDistDir, readServedManifestCached } from '@/agent/sync';
-import { authorizeDevice, online, toDevice } from '@/agent/authorize';
+import { authorizeReachableDevice, toDevice } from '@/agent/authorize';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 
 /**
@@ -17,13 +17,14 @@ export const agentUpdateFeature: FeatureDefinition<
     ...agentUpdate,
     access: { admin: true },
     handler: async (ctx, input) => {
-        const row = await authorizeDevice(ctx, input.deviceId);
-        // Pre-flight: the agent must be reachable, must have told us its build
-        // target, and we must hold a NEWER, SIGNED binary for it. Each gate maps
-        // to a clear French error so the UI can explain why the button did nothing.
-        if (!(online(ctx, [row.id])[row.id] ?? false)) {
-            throw new FeatureError('conflict', 'Agent hors ligne');
-        }
+        // Comme tout ordre poussé à la machine : la garde joignable, qui refuse
+        // aussi un appareil passé en lecture seule pour le rôle de l'appelant.
+        // Pousser un binaire n'est pas de la lecture, et `admin: true` ne
+        // déroge pas à une surcharge par élément qui abaisse.
+        const row = await authorizeReachableDevice(ctx, input.deviceId);
+        // Pre-flight: the agent must have told us its build target, and we must
+        // hold a NEWER, SIGNED binary for it. Each gate maps to a clear French
+        // error so the UI can explain why the button did nothing.
         if (!row.agent_target) {
             throw new FeatureError('conflict', "L'agent ne supporte pas encore la mise à jour automatique");
         }

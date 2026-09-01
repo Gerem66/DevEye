@@ -12,6 +12,12 @@ export interface SegmentedControlProps<T extends string> {
     value: T;
     onChange: (value: T) => void;
     disabled?: boolean;
+    /**
+     * Étire le groupe sur toute la ligne, chaque choix en prenant une part
+     * égale. Pour un contrôle seul sur sa rangée ; dans un formulaire, la
+     * largeur naturelle reste la bonne.
+     */
+    fullWidth?: boolean;
     className?: string;
     'aria-label'?: string;
 }
@@ -26,11 +32,16 @@ export default function SegmentedControl<T extends string>({
     value,
     onChange,
     disabled,
+    fullWidth,
     className,
     'aria-label': ariaLabel
 }: SegmentedControlProps<T>) {
     return (
-        <div className={`${styles.group} ${className ?? ''}`} role='group' aria-label={ariaLabel}>
+        <div
+            className={`${styles.group} ${fullWidth ? styles.fullWidth : ''} ${className ?? ''}`}
+            role='group'
+            aria-label={ariaLabel}
+        >
             {options.map((o) => (
                 <button
                     key={o.value}
@@ -39,7 +50,10 @@ export default function SegmentedControl<T extends string>({
                     aria-pressed={o.value === value}
                     title={o.title}
                     disabled={disabled}
-                    onClick={() => onChange(o.value)}
+                    // Recliquer le choix courant ne change rien : le taire évite
+                    // à l'appelant un aller-retour (et, sur les permissions, une
+                    // écriture et une ligne d'audit) pour un état identique.
+                    onClick={() => o.value !== value && onChange(o.value)}
                 >
                     {o.label}
                 </button>

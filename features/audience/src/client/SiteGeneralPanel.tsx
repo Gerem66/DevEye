@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-    Button,
+    SaveButton,
     humanizeError,
     invalidate,
     SegmentedControl,
@@ -106,6 +106,8 @@ export default function SiteGeneralPanel({ scope, canWrite }: SettingsPanelProps
             invalidate('audience.detail', 'audience.list');
         } catch (e) {
             setError(humanizeError(e, 'Enregistrement impossible.'));
+            // Relancé : le bouton n'annonce « Enregistré » que sur un succès.
+            throw e;
         } finally {
             setBusy(false);
         }
@@ -171,9 +173,7 @@ export default function SiteGeneralPanel({ scope, canWrite }: SettingsPanelProps
 
             {canWrite ? (
                 <div className={shell.sectionActions}>
-                    <Button onClick={() => void submit()} disabled={busy}>
-                        {busy ? 'Enregistrement…' : 'Enregistrer'}
-                    </Button>
+                    <SaveButton onSave={submit} disabled={busy} />
                 </div>
             ) : (
                 <p className={shell.sectionHint}>

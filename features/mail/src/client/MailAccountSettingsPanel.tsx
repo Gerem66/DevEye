@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
     Button,
+    SaveButton,
     Checkbox,
     ConfirmDialog,
     invalidate,
@@ -134,9 +135,12 @@ export default function MailAccountSettingsPanel({ scope, canWrite, close }: Set
                 await api.send('mail.accountUpdate', { id: account.id, draft: edit });
             }
             invalidate('mail.accountList');
-            setStatus('Enregistré.');
+            // Le bouton le dit ; ce canal reste aux erreurs et au test de connexion.
+            setStatus(null);
         } catch (e) {
             setStatus(humanizeError(e, 'Enregistrement impossible.'));
+            // Relancé : le bouton n'annonce « Enregistré » que sur un succès.
+            throw e;
         } finally {
             setBusy(false);
         }
@@ -379,9 +383,7 @@ export default function MailAccountSettingsPanel({ scope, canWrite, close }: Set
 
             {!readOnly && (
                 <div className={shell.sectionActions}>
-                    <Button onClick={() => void save()} disabled={busy}>
-                        Enregistrer
-                    </Button>
+                    <SaveButton onSave={save} disabled={busy} />
                     {!providerManaged && (
                         <Button variant='secondary' disabled={testing || busy} onClick={() => void testConnection()}>
                             {testing ? 'Test…' : 'Tester la connexion'}

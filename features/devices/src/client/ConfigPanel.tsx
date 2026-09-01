@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Button, humanizeError, SelectInput, settingsStyles as shell, TextInput } from 'deveye-sdk-client';
+import { humanizeError, SaveButton, SelectInput, settingsStyles as shell, TextInput } from 'deveye-sdk-client';
 import {
     DEFAULT_METRIC_INTERVAL_SECONDS,
     DEFAULT_PROCESS_CAPTURE,
@@ -56,8 +56,6 @@ export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite
     const [retSel, setRetSel] = useState(String(DEFAULT_RETENTION_DAYS));
     const [retCustom, setRetCustom] = useState(String(DEFAULT_RETENTION_DAYS));
     const [error, setError] = useState<string | null>(null);
-    const [saving, setSaving] = useState(false);
-    const [saved, setSaved] = useState(false);
 
     // (Re)initialise only when the selected device changes: a list refresh
     // replaces the object reference and would wipe an in-progress entry.
@@ -77,7 +75,6 @@ export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite
         init(RET_PRESETS, device.retentionDays ?? DEFAULT_RETENTION_DAYS, setRetSel, setRetCustom);
         setCapture(device.processCapture ?? DEFAULT_PROCESS_CAPTURE);
         setError(null);
-        setSaved(false);
     }, [deviceId, known]);
 
     const resolve = (sel: string, custom: string): number | null => {
@@ -95,11 +92,9 @@ export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite
         const retentionDays = resolve(retSel, retCustom);
         if (metricSec === null || retentionDays === null) {
             setError('Une valeur personnalisée est invalide.');
-            return;
+            throw new Error('valeur invalide');
         }
-        setSaving(true);
         setError(null);
-        setSaved(false);
         try {
             await api.send('devices.setConfig', {
                 deviceId: target.id,
@@ -108,11 +103,10 @@ export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite
                 retentionDays: clamp(Math.round(retentionDays), 1, 3650)
             });
             await refreshDevices();
-            setSaved(true);
         } catch (e) {
             setError(humanizeError(e, 'Enregistrement impossible.'));
-        } finally {
-            setSaving(false);
+            // Relancé : le bouton n'annonce « Enregistré » que sur un succès.
+            throw e;
         }
     };
 
@@ -180,10 +174,7 @@ export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite
             {error && <p className={styles.configError}>{error}</p>}
             {editable && (
                 <div className={shell.sectionActions}>
-                    {saved && <span className={shell.fieldHint}>Enregistré.</span>}
-                    <Button onClick={() => void save(device)} disabled={saving}>
-                        {saving ? 'Enregistrement…' : 'Enregistrer'}
-                    </Button>
+                    <SaveButton onSave={() => save(device)} />
                 </div>
             )}
         </div>

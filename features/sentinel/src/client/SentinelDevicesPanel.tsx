@@ -4,6 +4,7 @@ import {
     Checkbox,
     humanizeError,
     SelectInput,
+    SaveButton,
     settingsStyles as shell,
     StatusBadge,
     Switch,
@@ -110,13 +111,15 @@ function DeviceRow({ device, canWrite }: { device: DeviceSentinelState; canWrite
             void refreshSentinel();
             setNotice(
                 enabled === device.enabled
-                    ? 'Réglages appliqués.'
+                    ? null
                     : enabled
                       ? 'Surveillance activée : l’apprentissage commence.'
                       : 'Surveillance désactivée.'
             );
         } catch (e) {
             setError(humanizeError(e, "Le réglage n'a pas pu être appliqué."));
+            // Relancé : le bouton n'annonce « Enregistré » que sur un succès.
+            throw e;
         } finally {
             setBusy(false);
         }
@@ -155,7 +158,9 @@ function DeviceRow({ device, canWrite }: { device: DeviceSentinelState; canWrite
                     disabled={!canWrite || busy}
                     aria-label={`Surveiller « ${device.deviceName} »`}
                     className={styles.panelDeviceSwitch}
-                    onChange={(next) => void apply(next)}
+                    // L'erreur est déjà posée dans `error` ; le relancement ne
+                    // sert qu'au bouton d'enregistrement, pas à l'interrupteur.
+                    onChange={(next) => void apply(next).catch(() => {})}
                 />
             </div>
 
@@ -228,9 +233,7 @@ function DeviceRow({ device, canWrite }: { device: DeviceSentinelState; canWrite
 
             {canWrite ? (
                 <div className={shell.sectionActions}>
-                    <Button onClick={() => void apply(device.enabled)} disabled={busy}>
-                        {busy ? 'Enregistrement…' : 'Enregistrer'}
-                    </Button>
+                    <SaveButton onSave={() => apply(device.enabled)} disabled={busy} />
                 </div>
             ) : (
                 <p className={shell.sectionHint}>

@@ -17,6 +17,16 @@
     flex-shrink: 0;
 }
 
+/* Seul sur sa rangée : le groupe prend la ligne, les choix la partagent. */
+.fullWidth {
+    width: 100%;
+}
+
+.fullWidth .segment {
+    flex: 1;
+    text-align: center;
+}
+
 .segment {
     padding: 0.4rem 0.75rem;
     background: transparent;

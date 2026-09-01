@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { featureDescriptor, type ItemShareState, type ShareBlocker } from '@deveye/types';
+import { itemNounForms, type ItemShareState, type ShareBlocker } from '@deveye/types';
 
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';
@@ -53,7 +53,7 @@ export default function SharingSection({ scope }: Props) {
     const [moved, setMoved] = useState<{ workspaceId: number; workspaceName: string } | null>(null);
 
     const itemId = scope.kind === 'item' ? scope.itemId : '';
-    const noun = featureDescriptor(feature).itemNoun ?? 'élément';
+    const { dem, Dem, Def } = itemNounForms(feature);
 
     const reload = useCallback(async () => {
         const res = await ws.send('share.get', { feature, itemId });
@@ -100,8 +100,8 @@ export default function SharingSection({ scope }: Props) {
                     description: (
                         <>
                             <p>
-                                Ce {noun} quittera « {preview.homeWorkspaceName} ». Sa donnée est déchiffrée puis
-                                rescellée sous la clé de « {preview.workspaceName} »
+                                {Dem} quittera « {preview.homeWorkspaceName} ». Sa donnée est déchiffrée puis rescellée
+                                sous la clé de « {preview.workspaceName} »
                                 {preview.rows > 0 ? ` (${preview.rows} valeurs à convertir).` : '.'}
                             </p>
                             {preview.losesSharedAccess && (
@@ -149,8 +149,8 @@ export default function SharingSection({ scope }: Props) {
             <div className={styles.section}>
                 <p className={styles.sectionHint}>
                     {visible.length > 1
-                        ? `Ce ${noun} est visible dans : ${visible.join(', ')}.`
-                        : `Ce ${noun} n’est visible que dans ${visible[0] ?? 'cet espace'}.`}
+                        ? `${Dem} est visible dans : ${visible.join(', ')}.`
+                        : `${Dem} n’est visible que dans ${visible[0] ?? 'cet espace'}.`}
                 </p>
                 <p className={styles.sectionHint}>
                     {BLOCKER_TEXT[state.blocker]}
@@ -174,8 +174,8 @@ export default function SharingSection({ scope }: Props) {
     return (
         <div className={styles.section}>
             <p className={styles.sectionHint}>
-                Les espaces où ce {noun} est visible. Il n’y est pas copié : il reste chez lui et s’affiche ailleurs,
-                donc le modifier d’un côté le modifie partout.
+                Les espaces où {dem} est visible. Il n’y est pas copié : il reste chez lui et s’affiche ailleurs, donc
+                le modifier d’un côté le modifie partout.
             </p>
 
             {state.blocker && <p className={styles.warning}>{BLOCKER_TEXT[state.blocker]}</p>}
@@ -226,8 +226,8 @@ export default function SharingSection({ scope }: Props) {
             </div>
 
             <p className={styles.sectionHint}>
-                Un membre d’un autre espace verra ce {noun}, mais pas ce à quoi il est relié ici, un compte mail ou un
-                canal d’alerte. Ces liens lui apparaissent comme « d’un autre espace », sans leur contenu.
+                Un membre d’un autre espace verra {dem}, mais pas ce à quoi il est relié ici, un compte mail ou un canal
+                d’alerte. Ces liens lui apparaissent comme « d’un autre espace », sans leur contenu.
             </p>
 
             {/* Déplacer n'est pas partager : l'élément change de domicile, sa
@@ -236,7 +236,7 @@ export default function SharingSection({ scope }: Props) {
                 une fonctionnalité qui sait convertir son arbre. */}
             {moved !== null ? (
                 <p className={styles.sectionHint}>
-                    Ce {noun} est maintenant dans « {moved.workspaceName} ».{' '}
+                    {Dem} est maintenant dans « {moved.workspaceName} ».{' '}
                     <button
                         type='button'
                         className={styles.jumpBtn}
@@ -253,7 +253,7 @@ export default function SharingSection({ scope }: Props) {
                             <SelectInput
                                 value={moveTo}
                                 disabled={busy}
-                                aria-label={`Déplacer ce ${noun} vers`}
+                                aria-label={`Déplacer ${dem} vers`}
                                 onChange={(e) => setMoveTo(e.target.value)}
                             >
                                 <option value=''>Choisir un espace…</option>
@@ -270,8 +270,8 @@ export default function SharingSection({ scope }: Props) {
                             </Button>
                         </div>
                         <span className={styles.fieldHint}>
-                            Le {noun} quitte cet espace pour de bon : sa donnée y est déchiffrée puis rescellée sous la
-                            clé du nouveau. Ce qu’il perd est nommé avant confirmation.
+                            {Def} quitte cet espace pour de bon : sa donnée y est déchiffrée puis rescellée sous la clé
+                            du nouveau. Ce qu’il perd est nommé avant confirmation.
                         </span>
                     </div>
                 )
@@ -286,7 +286,7 @@ export default function SharingSection({ scope }: Props) {
                 open={grantsFor !== null}
                 onClose={() => setGrantsFor(null)}
                 title={grantsFor ? `Permissions — ${grantsFor.workspaceName}` : ''}
-                description={`Ce que chaque rôle de cet espace voit de ce ${noun}. On ne peut qu’abaisser ce que son rôle y donne.`}
+                description={`Ce que chaque rôle de cet espace voit de ${dem}. On ne peut qu’abaisser ce que son rôle y donne.`}
                 width={560}
             >
                 {grantsFor && <ItemGrantsPanel feature={feature} itemId={itemId} workspaceId={grantsFor.workspaceId} />}

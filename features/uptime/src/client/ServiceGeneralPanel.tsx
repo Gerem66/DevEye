@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button, humanizeError, invalidate, SelectInput, settingsStyles as shell, TextInput } from 'deveye-sdk-client';
+import {
+    SaveButton,
+    humanizeError,
+    invalidate,
+    SelectInput,
+    settingsStyles as shell,
+    TextInput
+} from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import { UPTIME_THRESHOLD_MAX, UPTIME_TIMEOUT_MAX, UPTIME_TIMEOUT_MIN, type UptimeService } from '../contracts/domain';
 
@@ -94,6 +101,8 @@ export default function ServiceGeneralPanel({ scope, canWrite }: SettingsPanelPr
             invalidate('uptime.list');
         } catch (e) {
             setError(humanizeError(e, 'Enregistrement impossible.'));
+            // Relancé : le bouton n'annonce « Enregistré » que sur un succès.
+            throw e;
         } finally {
             setBusy(false);
         }
@@ -173,9 +182,7 @@ export default function ServiceGeneralPanel({ scope, canWrite }: SettingsPanelPr
 
             {canWrite ? (
                 <div className={shell.sectionActions}>
-                    <Button onClick={() => void submit()} disabled={busy}>
-                        {busy ? 'Enregistrement…' : 'Enregistrer'}
-                    </Button>
+                    <SaveButton onSave={submit} disabled={busy} />
                 </div>
             ) : (
                 <p className={shell.sectionHint}>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
     featureDescriptor,
+    itemNounForms,
     type FeatureId,
     type ItemAccess,
     type ItemExtraOverrides,
@@ -91,12 +92,14 @@ export default function ItemGrantsPanel({ feature, itemId, workspaceId }: Props)
     if (!state) return <p className={styles.sectionHint}>Chargement…</p>;
 
     const label = featureDescriptor(feature).label;
-    const noun = featureDescriptor(feature).itemNoun ?? 'élément';
+    // Décliné : « cet appareil », « cette note ». Une phrase figée lirait faux
+    // dès que le nom change de genre ou commence par une voyelle.
+    const { dem, Dem } = itemNounForms(feature);
 
     if (state.roles.length === 0) {
         return (
             <p className={styles.empty}>
-                « {state.workspaceName} » n’a aucun rôle : il n’y a personne à qui régler l’accès de ce {noun}.
+                « {state.workspaceName} » n’a aucun rôle : il n’y a personne à qui régler l’accès à {dem}.
             </p>
         );
     }
@@ -105,7 +108,7 @@ export default function ItemGrantsPanel({ feature, itemId, workspaceId }: Props)
     const effectiveOf = (role: ItemGrantState['roles'][number]): string => {
         if (role.featureAccess === 'none') return `Sans accès à ${label} : cela se règle sur le rôle.`;
         if (role.access === null) return `Comme ${label} : ${FEATURE_ACCESS_LABEL[role.featureAccess]}.`;
-        return `Sur ce ${noun} : ${FEATURE_ACCESS_LABEL[role.access]}.`;
+        return `Sur ${dem} : ${FEATURE_ACCESS_LABEL[role.access]}.`;
     };
 
     return (
@@ -138,13 +141,13 @@ export default function ItemGrantsPanel({ feature, itemId, workspaceId }: Props)
                                 <SegmentedControl
                                     value={role.access ?? 'inherit'}
                                     disabled={busy || floored}
-                                    aria-label={`Accès de ${role.name} à ce ${noun}`}
+                                    aria-label={`Accès de ${role.name} à ${dem}`}
                                     onChange={(v) => setAccess(role.roleId, v)}
                                     options={[
                                         {
                                             value: 'none',
                                             label: 'Masqué',
-                                            title: `Ce ${noun} n’apparaît pas pour ce rôle`
+                                            title: `${Dem} n’apparaît pas pour ce rôle`
                                         },
                                         {
                                             value: 'inherit',
@@ -154,12 +157,12 @@ export default function ItemGrantsPanel({ feature, itemId, workspaceId }: Props)
                                         {
                                             value: 'read',
                                             label: 'Lecture',
-                                            title: `Consulter ce ${noun}, sans le modifier`
+                                            title: `Consulter ${dem}, sans le modifier`
                                         },
                                         {
                                             value: 'write',
                                             label: 'Écriture',
-                                            title: `Modifier ce ${noun}, même si le rôle n’a que la lecture ailleurs`
+                                            title: `Modifier ${dem}, même si le rôle n’a que la lecture ailleurs`
                                         }
                                     ]}
                                 />
@@ -180,13 +183,13 @@ export default function ItemGrantsPanel({ feature, itemId, workspaceId }: Props)
                                         <SegmentedControl
                                             value={value}
                                             disabled={busy || floored || hiddenHere}
-                                            aria-label={`${spec.label} de ${role.name} sur ce ${noun}`}
+                                            aria-label={`${spec.label} de ${role.name} sur ${dem}`}
                                             onChange={(v) => setExtra(role, spec.key, v)}
                                             options={[
                                                 {
                                                     value: 'deny',
                                                     label: 'Refusée',
-                                                    title: `Retirée sur ce ${noun}, même si ${label} l’accorde`
+                                                    title: `Retirée sur ${dem}, même si ${label} l’accorde`
                                                 },
                                                 {
                                                     value: 'inherit',
@@ -196,7 +199,7 @@ export default function ItemGrantsPanel({ feature, itemId, workspaceId }: Props)
                                                 {
                                                     value: 'allow',
                                                     label: 'Accordée',
-                                                    title: `Accordée sur ce ${noun}, même si ${label} la refuse`
+                                                    title: `Accordée sur ${dem}, même si ${label} la refuse`
                                                 }
                                             ]}
                                         />
@@ -206,8 +209,8 @@ export default function ItemGrantsPanel({ feature, itemId, workspaceId }: Props)
 
                             {hiddenHere && state.extras.length > 0 && (
                                 <p className={styles.fieldHint}>
-                                    Ce {noun} est masqué pour ce rôle : ses permissions ne s’appliquent pas tant que
-                                    l’accès reste fermé.
+                                    {Dem} est masqué pour ce rôle : ses permissions ne s’appliquent pas tant que l’accès
+                                    reste fermé.
                                 </p>
                             )}
                         </div>

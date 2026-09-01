@@ -3,7 +3,7 @@ import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import type { BackupEncryption } from '../contracts/domain';
 
 import {
-    Button,
+    SaveButton,
     humanizeError,
     invalidate,
     SegmentedControl,
@@ -57,9 +57,13 @@ export default function JobEncryptionPanel({ scope, canWrite }: SettingsPanelPro
                 encryption: mode
             });
             invalidate('backup.detail', 'backup.jobList');
-            setStatus('Forme enregistrée : elle vaut pour les prochaines archives.');
+            // Rien à annoncer : le bouton le dit, et la note au-dessus explique
+            // déjà que le choix ne vaut que pour les archives à venir.
+            setStatus(null);
         } catch (e) {
             setStatus(humanizeError(e, 'Enregistrement impossible.'));
+            // Relancé : le bouton n'annonce « Enregistré » que sur un succès.
+            throw e;
         } finally {
             setBusy(false);
         }
@@ -112,9 +116,7 @@ export default function JobEncryptionPanel({ scope, canWrite }: SettingsPanelPro
 
             {canWrite ? (
                 <div className={shell.sectionActions}>
-                    <Button onClick={() => void save()} disabled={busy || mode === job.encryption}>
-                        {busy ? 'Enregistrement…' : 'Enregistrer'}
-                    </Button>
+                    <SaveButton onSave={save} disabled={busy || mode === job.encryption} />
                 </div>
             ) : (
                 <p className={shell.sectionHint}>

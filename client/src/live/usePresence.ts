@@ -49,8 +49,11 @@ export function livePathLabel(path: readonly string[]): string {
     if (path.length === 0) return 'Accueil';
     const root = path[0];
     const viewId = root.slice(root.indexOf(':') + 1);
-    if (viewId.startsWith('device:')) return 'Appareils';
-    return viewTitles()[viewId] ?? 'Ailleurs';
+    const view = viewId.startsWith('device:') ? 'Appareils' : (viewTitles()[viewId] ?? 'Ailleurs');
+    // La coquille de réglages ferme le chemin quand elle est ouverte : le dire,
+    // sinon deux personnes au même endroit s'affichent pareil alors que l'une
+    // règle et l'autre lit.
+    return path[path.length - 1]?.startsWith('settings:') ? `${view} · Réglages` : view;
 }
 
 /**

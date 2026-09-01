@@ -126,8 +126,19 @@ let publishTimer: ReturnType<typeof setTimeout> | null = null;
 let lastSentKey = '';
 
 /**
+ * Les coquilles de réglages ouvertes, la dernière au sommet. Une marque de
+ * queue plutôt qu'un niveau : la coquille s'ouvre par-dessus n'importe quelle
+ * profondeur, et un niveau fixe serait tantôt libre, tantôt déjà pris. En pile
+ * parce qu'une coquille d'élément peut s'ouvrir depuis celle de sa
+ * fonctionnalité, et que la fermeture de l'une ne doit pas effacer l'autre.
+ */
+const settingsStack: { token: number; value: string }[] = [];
+let settingsToken = 0;
+
+/**
  * Le chemin courant : les niveaux déclarés, dans l'ordre, jusqu'au premier absent
- * (on ne peut pas être dans un dossier sans être dans le compte).
+ * (on ne peut pas être dans un dossier sans être dans le compte), puis la
+ * coquille de réglages ouverte s'il y en a une.
  */
 function buildPath(): string[] {
     const path: string[] = [];
@@ -136,7 +147,26 @@ function buildPath(): string[] {
         if (value === undefined) break;
         path.push(`${kind}:${value}`);
     }
+    const top = settingsStack[settingsStack.length - 1];
+    if (top) path.push(`settings:${top.value}`);
     return path;
+}
+
+/**
+ * Ouvre une coquille de réglages dans le chemin diffusé, et rend de quoi la
+ * refermer. Régler n'est pas naviguer : sans cette marque, le curseur de qui
+ * ouvre les réglages reste groupé avec ceux qui lisent l'écran en dessous.
+ */
+export function pushLiveSettings(value: string): () => void {
+    const token = ++settingsToken;
+    settingsStack.push({ token, value });
+    schedulePublish();
+    return () => {
+        const at = settingsStack.findIndex((e) => e.token === token);
+        if (at === -1) return;
+        settingsStack.splice(at, 1);
+        schedulePublish();
+    };
 }
 
 /** Déclare un niveau, ou le retire avec `null`. */

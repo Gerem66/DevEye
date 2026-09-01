@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button, humanizeError, SelectInput, settingsStyles as shell, Switch } from 'deveye-sdk-client';
+import { SaveButton, humanizeError, SelectInput, settingsStyles as shell, Switch } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import type { FinanceConfig } from '../contracts/domain';
 
@@ -50,6 +50,8 @@ export default function FinanceGeneralPanel({ canWrite }: SettingsPanelProps) {
             refreshFinance();
         } catch (e) {
             setError(humanizeError(e, 'Enregistrement impossible.'));
+            // Relancé : le bouton n'annonce « Enregistré » que sur un succès.
+            throw e;
         } finally {
             setBusy(false);
         }
@@ -90,9 +92,7 @@ export default function FinanceGeneralPanel({ canWrite }: SettingsPanelProps) {
 
             {canWrite ? (
                 <div className={shell.sectionActions}>
-                    <Button onClick={() => void submit()} disabled={busy}>
-                        {busy ? 'Enregistrement…' : 'Enregistrer'}
-                    </Button>
+                    <SaveButton onSave={submit} disabled={busy} />
                 </div>
             ) : (
                 <p className={shell.sectionHint}>

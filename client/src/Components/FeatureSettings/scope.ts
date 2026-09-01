@@ -1,4 +1,4 @@
-import { featureDescriptor, type FeatureId } from '@deveye/types';
+import { featureDescriptor, itemNounForms, type FeatureId } from '@deveye/types';
 
 /**
  * Ce que règle une coquille de réglages : une fonctionnalité, ou un de ses
@@ -52,8 +52,7 @@ export function scopeDescription(scope: SettingsScope): string {
         // minuscules ils se lisent comme une faute.
         return `Réglages communs à ${feature.label} — ils s’appliquent à tout ce que la fonctionnalité contient.`;
     }
-    const noun = feature.itemNoun ?? 'élément';
-    return `Réglages propres à ce ${noun}. Ce qui n’est pas réglé ici suit ${feature.label}.`;
+    return `Réglages propres à ${itemNounForms(scope.feature).dem}. Ce qui n’est pas réglé ici suit ${feature.label}.`;
 }
 
 /**
