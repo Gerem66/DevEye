@@ -44,7 +44,7 @@ const CARD_PHASE_CLASS: Record<CardPhase, string> = {
 };
 
 function LoginPage() {
-    const { status, login, refresh } = useAuth();
+    const { status, unreachable, login, refresh } = useAuth();
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -348,6 +348,8 @@ function LoginPage() {
                         )}
                     </div>
                 </div>
+
+                {unreachable && <p className='unreachable'>Serveur injoignable, reprise automatique…</p>}
             </div>
         </div>
     );

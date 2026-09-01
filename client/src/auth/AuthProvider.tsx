@@ -21,6 +21,8 @@ export interface LoginResult {
 }
 
 interface AuthContextValue extends AuthState {
+    /** Le serveur ne répond plus depuis plusieurs tentatives : l'écran d'attente le dit. */
+    unreachable: boolean;
     login: (username: string, password: string) => Promise<LoginResult>;
     logout: () => Promise<void>;
     refresh: () => Promise<void>;
@@ -28,6 +30,22 @@ interface AuthContextValue extends AuthState {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+/** Le premier délai de reprise, puis doublement jusqu'au plafond. */
+const RETRY_BASE_MS = 300;
+const RETRY_MAX_MS = 10000;
+/** Passé ce temps d'attente, l'écran de démarrage le dit : un redémarrage de serveur tient dessous. */
+const UNREACHABLE_AFTER_MS = 8000;
+
+/**
+ * Vrai quand l'échec dit « le serveur est injoignable », pas « tu n'es pas
+ * connecté » : coupure réseau, 5xx, ou réponse illisible (le proxy de dev répond
+ * un 500 au corps vide pendant que le serveur redémarre). Les cookies de session
+ * restent valides : déconnecter serait un contresens, il faut réessayer.
+ */
+function isTransportFailure(e: unknown): boolean {
+    return e instanceof ApiError && (e.code === 'network' || e.code === 'unknown' || (e.status ?? 0) >= 500);
+}
 
 /**
  * Applique un bundle de session. L'ordre compte : l'espace actif est publie avant
@@ -43,6 +61,7 @@ function applyBundle(bundle: SessionBundle): AuthState {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [state, setState] = useState<AuthState>({ status: 'unknown', user: null });
+    const [unreachable, setUnreachable] = useState(false);
     // Le magasin `currentUser` suit l'état : c'est par lui que le barrel des modules
     // connaît l'utilisateur sans importer ce fournisseur.
     useEffect(() => {
@@ -50,8 +69,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, [state.user]);
     const refreshing = useRef<Promise<void> | null>(null);
     const reauthLock = useRef(false);
+    // La reprise après indisponibilité : un seul essai en vol, le délai doublant
+    // jusqu'au plafond. `refreshRef` évite la boucle de dépendances entre la
+    // planification et la tentative qu'elle relance.
+    const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const retryAttempt = useRef(0);
+    const unreachableTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const refreshRef = useRef<() => Promise<void>>(() => Promise.resolve());
+
+    const cancelRetry = useCallback(() => {
+        if (retryTimer.current !== null) clearTimeout(retryTimer.current);
+        if (unreachableTimer.current !== null) clearTimeout(unreachableTimer.current);
+        retryTimer.current = null;
+        unreachableTimer.current = null;
+        retryAttempt.current = 0;
+        setUnreachable(false);
+    }, []);
+
+    const scheduleRetry = useCallback(() => {
+        if (retryTimer.current !== null) return;
+        const delay = Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** retryAttempt.current);
+        retryAttempt.current += 1;
+        unreachableTimer.current ??= setTimeout(() => setUnreachable(true), UNREACHABLE_AFTER_MS);
+        retryTimer.current = setTimeout(() => {
+            retryTimer.current = null;
+            void refreshRef.current();
+        }, delay);
+    }, []);
 
     const setAnonymous = useCallback(() => {
+        cancelRetry();
         setUnlocked(false);
         // The next sign-in must wait for the home's first data again rather than
         // inherit this session's "ready" flag.
@@ -68,34 +115,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // roster et le lieu declare de la precedente.
         resetLive();
         setState({ status: 'anonymous', user: null });
-    }, []);
+    }, [cancelRetry]);
+
+    /** La session est ouverte : publier le bundle, rouvrir la socket, relire le secret. */
+    const startSession = useCallback(
+        async (bundle: SessionBundle) => {
+            cancelRetry();
+            setState(applyBundle(bundle));
+            await ws.connect().catch(() => {});
+            // Fire-and-forget: the secrecy state updates its store reactively and
+            // nothing on the reveal path waits on it, so awaiting here would only
+            // serialise an extra round-trip onto the critical load.
+            void refreshSecrecyStatus();
+        },
+        [cancelRetry]
+    );
 
     const refresh = useCallback(async () => {
         if (refreshing.current) return refreshing.current;
         const task = (async () => {
             try {
-                const bundle = await apiMe();
-                setState(applyBundle(bundle));
-                await ws.connect().catch(() => {});
-                // Fire-and-forget: the secrecy state updates its store reactively and
-                // nothing on the reveal path waits on it, so awaiting here would only
-                // serialise an extra round-trip onto the critical load.
-                void refreshSecrecyStatus();
+                await startSession(await apiMe());
             } catch (e) {
                 if (e instanceof ApiError && (e.code === 'auth_required' || e.code === 'auth_expired')) {
                     try {
                         await apiRefresh();
-                        const bundle = await apiMe();
-                        setState(applyBundle(bundle));
-                        await ws.connect().catch(() => {});
-                        void refreshSecrecyStatus();
-                        return;
-                    } catch {
-                        setAnonymous();
-                        return;
+                        await startSession(await apiMe());
+                    } catch (renewal) {
+                        if (isTransportFailure(renewal)) scheduleRetry();
+                        else setAnonymous();
                     }
+                    return;
                 }
-                setAnonymous();
+                if (isTransportFailure(e)) scheduleRetry();
+                else setAnonymous();
             }
         })();
         refreshing.current = task;
@@ -104,18 +157,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } finally {
             refreshing.current = null;
         }
-    }, [setAnonymous]);
+    }, [setAnonymous, scheduleRetry, startSession]);
 
-    const login = useCallback(async (username: string, password: string): Promise<LoginResult> => {
-        const bundle = await apiLogin({ username, password });
-        if (bundle.twoFactorRequired) {
-            return { twoFactorRequired: true };
-        }
-        setState(applyBundle(bundle));
-        await ws.connect().catch(() => {});
-        void refreshSecrecyStatus();
-        return { twoFactorRequired: false };
-    }, []);
+    const login = useCallback(
+        async (username: string, password: string): Promise<LoginResult> => {
+            const bundle = await apiLogin({ username, password });
+            if (bundle.twoFactorRequired) {
+                return { twoFactorRequired: true };
+            }
+            await startSession(bundle);
+            return { twoFactorRequired: false };
+        },
+        [startSession]
+    );
 
     const logout = useCallback(async () => {
         try {
@@ -140,29 +194,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         reauthLock.current = true;
         try {
             await apiRefresh();
-            setState(applyBundle(await apiMe()));
-            await ws.connect().catch(() => {});
-            void refreshSecrecyStatus();
-        } catch {
-            setAnonymous();
+            await startSession(await apiMe());
+        } catch (e) {
+            if (isTransportFailure(e)) scheduleRetry();
+            else setAnonymous();
         } finally {
             setTimeout(() => {
                 reauthLock.current = false;
             }, 3000);
         }
-    }, [setAnonymous]);
+    }, [setAnonymous, scheduleRetry, startSession]);
+
+    useEffect(() => {
+        refreshRef.current = refresh;
+    }, [refresh]);
 
     useEffect(() => {
         void refresh();
-    }, [refresh]);
+        return cancelRetry;
+    }, [refresh, cancelRetry]);
 
     useEffect(() => {
         return ws.onUnauthorized(() => void reauthenticate());
     }, [reauthenticate]);
 
     const value = useMemo<AuthContextValue>(
-        () => ({ ...state, login, logout, refresh, updateUser }),
-        [state, login, logout, refresh, updateUser]
+        () => ({ ...state, unreachable, login, logout, refresh, updateUser }),
+        [state, unreachable, login, logout, refresh, updateUser]
     );
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

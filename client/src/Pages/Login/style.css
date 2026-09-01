@@ -163,6 +163,15 @@
     }
 }
 
+/* Attente de démarrage : le serveur ne répond pas encore et l'app réessaie. */
+.login .unreachable {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    text-align: center;
+    margin: 1rem 0 0;
+    animation: loadAnim 1s;
+}
+
 /* 2FA styles */
 .login .twofa-prompt {
     font-size: 0.85rem;
