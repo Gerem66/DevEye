@@ -310,12 +310,23 @@ async function resolveAll(entries: FeatureConfigEntry[], forceLocal: boolean): P
     return mods;
 }
 
+/**
+ * Écrit ce qui a changé, et rien d'autre.
+ *
+ * Réécrire un fichier identique suffit à faire bouger sa mtime : `tsx watch`
+ * redémarrerait le serveur et Vite rechargerait la page à chaque `npm run ci`,
+ * alors que la génération n'a rien produit de nouveau.
+ */
 function writeOutputs(outputs: Output[], icons: { from: string; to: string }[]): void {
     for (const out of outputs) {
+        if (fs.existsSync(out.file) && fs.readFileSync(out.file, 'utf8') === out.content) continue;
         fs.mkdirSync(path.dirname(out.file), { recursive: true });
         fs.writeFileSync(out.file, out.content);
     }
-    for (const icon of icons) fs.copyFileSync(icon.from, icon.to);
+    for (const icon of icons) {
+        if (fs.existsSync(icon.to) && fs.readFileSync(icon.to).equals(fs.readFileSync(icon.from))) continue;
+        fs.copyFileSync(icon.from, icon.to);
+    }
 }
 
 function iconCopies(mods: ResolvedModule[]): { from: string; to: string }[] {
