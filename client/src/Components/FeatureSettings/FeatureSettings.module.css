@@ -414,6 +414,55 @@
     background: var(--surface-subtle);
 }
 
+/* Les permissions propres de la fonctionnalité, sous le nom du rôle : une puce
+   par permission, sur une ou deux lignes plutôt qu'un formulaire par rôle. Le
+   panneau doit rester lisible avec dix rôles. */
+.grantExtras {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    margin-top: var(--space-xs);
+}
+
+.grantChip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px var(--space-xs);
+    background: transparent;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    line-height: 1.5;
+    cursor: pointer;
+    transition:
+        border-color var(--transition-fast),
+        color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.grantChipOn {
+    background: var(--accent-bg);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.grantChip:hover:not([aria-disabled='true']):not(:disabled) {
+    border-color: var(--accent);
+}
+
+/* Une permission que le rôle n'a pas sur la fonctionnalité : montrée, pour dire
+   ce qui existe, mais elle ne se règle pas ici. */
+.grantChip[aria-disabled='true'] {
+    cursor: not-allowed;
+    filter: opacity(0.5);
+}
+
+.grantChipIcon {
+    width: 11px;
+}
+
 .foreignMark {
     display: inline-flex;
     flex: none;

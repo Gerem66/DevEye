@@ -240,6 +240,26 @@ export async function registerWS(
                     if (restriction === 'read' && level === 'write') {
                         throw new FeatureError('forbidden', 'Cet élément est en lecture seule pour votre rôle');
                     }
+                    await assertItemExtras(f, itemId);
+                };
+
+                /**
+                 * Les permissions propres que CETTE commande déclare, éprouvées
+                 * contre l'élément qu'elle vise. Le dispatcheur les a déjà
+                 * appliquées à l'échelle de la fonctionnalité ; le refus posé
+                 * sur un élément précis ne peut mordre qu'ici, la cible n'étant
+                 * nommée que dans l'entrée du handler.
+                 */
+                const assertItemExtras = async (f: FeatureId, itemId: string): Promise<void> => {
+                    const required = def.access?.extras ?? [];
+                    if (required.length === 0 || def.access?.feature !== f) return;
+                    const denied = (await scope.itemExtraDenials(f)).get(itemId);
+                    if (!denied) return;
+                    for (const key of required) {
+                        if (denied.has(key)) {
+                            throw new FeatureError('forbidden', 'Cette permission vous est retirée sur cet élément');
+                        }
+                    }
                 };
 
                 /**
@@ -289,6 +309,8 @@ export async function registerWS(
                         canChannels,
                         assertChannels,
                         itemRestrictions: scope.itemRestrictions,
+                        itemExtraDenials: scope.itemExtraDenials,
+                        assertItemExtras,
                         assertItem,
                         extrasFor: (f) => scope.extras.get(f) ?? {},
                         ip,

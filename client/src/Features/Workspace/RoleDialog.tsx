@@ -166,6 +166,10 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
     };
 
     const active = registry.find((f) => f.id === section) ?? null;
+    // Sans accès à la fonctionnalité, rien de ce qu'elle confie en plus n'a de
+    // sens : les cases restent visibles, pour dire ce qu'un accès ouvrirait.
+    const noAccess = active !== null && (features[active.id] ?? 'none') === 'none';
+    const extraSpecs = active ? (moduleManifest(active.id)?.extraPermissions ?? []) : [];
 
     return (
         <Dialog
@@ -322,78 +326,85 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
                                 />
                             </div>
 
-                            {active.notifies && (
-                                <div className={styles.grantExtra}>
-                                    <Checkbox
-                                        className={styles.checkRow}
-                                        checked={
-                                            (features[active.id] ?? 'none') !== 'none' && (channels[active.id] ?? false)
-                                        }
-                                        disabled={(features[active.id] ?? 'none') === 'none'}
-                                        onChange={() =>
-                                            setChannels((prev) => ({
-                                                ...prev,
-                                                [active.id]: !(prev[active.id] ?? false)
-                                            }))
-                                        }
-                                    >
-                                        Gérer ses canaux d’alerte
-                                    </Checkbox>
-                                    <p className={shell.fieldHint}>
-                                        Déclarer, corriger et supprimer les canaux de {active.label}, et lire leurs
-                                        destinations. Sans ce droit, le rôle peut router vers les canaux existants sans
-                                        voir leurs adresses. Demande au moins la lecture de la fonctionnalité.
-                                    </p>
-                                </div>
-                            )}
-
-                            {/* Les permissions que la feature déclare elle-même
-                                (manifest `extraPermissions`) : rendues
-                                génériquement, mêmes règles que les canaux
-                                (désactivées sans accès, fermées par défaut). */}
-                            {(moduleManifest(active.id)?.extraPermissions ?? []).map((spec) => {
-                                const none = (features[active.id] ?? 'none') === 'none';
-                                const chosen = extras[active.id] ?? {};
-                                const setExtra = (value: boolean | string) =>
-                                    setExtras((prev) => ({
-                                        ...prev,
-                                        [active.id]: { ...(prev[active.id] ?? {}), [spec.key]: value }
-                                    }));
-                                return (
-                                    <div key={spec.key} className={styles.grantExtra}>
-                                        {spec.type === 'toggle' ? (
+                            {/* Ce que la fonctionnalité confie en plus de son niveau
+                                d'accès : ses canaux d'alerte, et les permissions
+                                qu'elle déclare (manifest `extraPermissions`). Une
+                                seule carte pour les deux : ce sont les mêmes règles
+                                (fermées par défaut, inertes sans accès), et un
+                                séparateur par case découpait le panneau en tranches.
+                                La description vit DANS la case, alignée sous son
+                                libellé — en frère du label elle repartait de la
+                                marge, sous la boîte. */}
+                            {(active.notifies || extraSpecs.length > 0) && (
+                                <div className={styles.grantExtras}>
+                                    <span className={styles.grantExtrasLabel}>Permissions supplémentaires</span>
+                                    <div className={`${styles.card} ${styles.rowList}`}>
+                                        {active.notifies && (
                                             <Checkbox
                                                 className={styles.checkRow}
-                                                checked={!none && chosen[spec.key] === true}
-                                                disabled={none}
-                                                onChange={() => setExtra(!(chosen[spec.key] === true))}
+                                                checked={!noAccess && (channels[active.id] ?? false)}
+                                                disabled={noAccess}
+                                                onChange={() =>
+                                                    setChannels((prev) => ({
+                                                        ...prev,
+                                                        [active.id]: !(prev[active.id] ?? false)
+                                                    }))
+                                                }
                                             >
-                                                {spec.label}
+                                                Gérer ses canaux d’alerte
+                                                <span className={shell.fieldHint}>
+                                                    Déclarer, corriger et supprimer les canaux de {active.label}, et
+                                                    lire leurs destinations. Sans ce droit, le rôle peut router vers les
+                                                    canaux existants sans voir leurs adresses.
+                                                </span>
                                             </Checkbox>
-                                        ) : (
-                                            <div className={styles.grantField}>
-                                                <span className={styles.grantFieldLabel}>{spec.label}</span>
-                                                <SelectInput
-                                                    value={
-                                                        typeof chosen[spec.key] === 'string'
-                                                            ? (chosen[spec.key] as string)
-                                                            : spec.default
-                                                    }
-                                                    disabled={none}
-                                                    onChange={(e) => setExtra(e.target.value)}
-                                                >
-                                                    {spec.options.map((o) => (
-                                                        <option key={o.value} value={o.value}>
-                                                            {o.label}
-                                                        </option>
-                                                    ))}
-                                                </SelectInput>
-                                            </div>
                                         )}
-                                        <p className={shell.fieldHint}>{spec.description}</p>
+                                        {extraSpecs.map((spec) => {
+                                            const chosen = extras[active.id] ?? {};
+                                            const setExtra = (value: boolean | string) =>
+                                                setExtras((prev) => ({
+                                                    ...prev,
+                                                    [active.id]: { ...(prev[active.id] ?? {}), [spec.key]: value }
+                                                }));
+                                            if (spec.type === 'toggle') {
+                                                return (
+                                                    <Checkbox
+                                                        key={spec.key}
+                                                        className={styles.checkRow}
+                                                        checked={!noAccess && chosen[spec.key] === true}
+                                                        disabled={noAccess}
+                                                        onChange={() => setExtra(!(chosen[spec.key] === true))}
+                                                    >
+                                                        {spec.label}
+                                                        <span className={shell.fieldHint}>{spec.description}</span>
+                                                    </Checkbox>
+                                                );
+                                            }
+                                            return (
+                                                <div key={spec.key} className={styles.choiceRow}>
+                                                    <span className={styles.grantFieldLabel}>{spec.label}</span>
+                                                    <SelectInput
+                                                        value={
+                                                            typeof chosen[spec.key] === 'string'
+                                                                ? (chosen[spec.key] as string)
+                                                                : spec.default
+                                                        }
+                                                        disabled={noAccess}
+                                                        onChange={(e) => setExtra(e.target.value)}
+                                                    >
+                                                        {spec.options.map((o) => (
+                                                            <option key={o.value} value={o.value}>
+                                                                {o.label}
+                                                            </option>
+                                                        ))}
+                                                    </SelectInput>
+                                                    <span className={shell.fieldHint}>{spec.description}</span>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                );
-                            })}
+                                </div>
+                            )}
                         </section>
                     )}
                 </div>

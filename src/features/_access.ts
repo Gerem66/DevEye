@@ -17,6 +17,7 @@ import { WORKSPACE_CAPABILITIES, WORKSPACE_FEATURE_IDS } from '@deveye/types';
 import { FeatureError } from './_define';
 import { moduleManifests } from './_sdk/register';
 import { parseJsonArray } from '@/Utils/json';
+import { deniedExtrasOf } from '@/db/repos/itemSharing';
 
 /**
  * Résolution d'autorisation des commandes de feature : le seul endroit qui
@@ -115,6 +116,13 @@ export interface ResolvedScope {
      * propriétaire, qui passe outre.
      */
     itemRestrictions: (feature: FeatureId) => Promise<ReadonlyMap<string, ItemAccess>>;
+    /**
+     * Les permissions propres qu'un élément précis refuse au rôle de l'appelant.
+     * Second volet des mêmes lignes qu'`itemRestrictions`, lu au même moment :
+     * un rôle peut tenir le terminal sur la fonctionnalité et se le voir refuser
+     * sur une machine.
+     */
+    itemExtraDenials: (feature: FeatureId) => Promise<ReadonlyMap<string, ReadonlySet<string>>>;
     /** Coffre chiffré de cet espace, lié à cette session. */
     secure: SecureStore;
     secretKeys: SecretKeyService;
@@ -243,17 +251,36 @@ export function createAccessResolver(
         // Mémoïsées dans le scope, lui-même mémoïsé sous `accessEpoch` : une
         // restriction modifiée doit donc bumper l'époque (`share.grantSet`
         // appelle `invalidateAccess()`).
-        const restrictionCache = new Map<string, Promise<ReadonlyMap<string, ItemAccess>>>();
-        const itemRestrictions = (feature: FeatureId): Promise<ReadonlyMap<string, ItemAccess>> => {
-            if (isOwner || !role) return Promise.resolve(new Map());
+        interface ItemGrants {
+            access: ReadonlyMap<string, ItemAccess>;
+            denials: ReadonlyMap<string, ReadonlySet<string>>;
+        }
+        const restrictionCache = new Map<string, Promise<ItemGrants>>();
+        // Une seule lecture par feature pour les deux volets : ils vivent sur la
+        // même ligne, les séparer doublerait la requête sans rien gagner.
+        const itemGrants = (feature: FeatureId): Promise<ItemGrants> => {
+            if (isOwner || !role) return Promise.resolve({ access: new Map(), denials: new Map() });
             const hit = restrictionCache.get(feature);
             if (hit) return hit;
-            const loaded = db.itemSharing
-                .grantsForRole(row.id, feature, role.id)
-                .then((rows) => new Map(rows.map((g) => [g.item_id, g.access])) as ReadonlyMap<string, ItemAccess>);
+            const loaded = db.itemSharing.grantsForRole(row.id, feature, role.id).then((rows) => {
+                const access = new Map<string, ItemAccess>();
+                const denials = new Map<string, ReadonlySet<string>>();
+                for (const g of rows) {
+                    // `access` est nullable : une ligne peut n'exister que pour
+                    // des permissions refusées, sans exception de niveau.
+                    if (g.access !== null) access.set(g.item_id, g.access);
+                    const denied = deniedExtrasOf(g);
+                    if (denied.length > 0) denials.set(g.item_id, new Set(denied));
+                }
+                return { access, denials };
+            });
             restrictionCache.set(feature, loaded);
             return loaded;
         };
+        const itemRestrictions = (feature: FeatureId): Promise<ReadonlyMap<string, ItemAccess>> =>
+            itemGrants(feature).then((g) => g.access);
+        const itemExtraDenials = (feature: FeatureId): Promise<ReadonlyMap<string, ReadonlySet<string>>> =>
+            itemGrants(feature).then((g) => g.denials);
 
         return {
             workspace: toContext(row),
@@ -264,6 +291,7 @@ export function createAccessResolver(
             channels,
             extras,
             itemRestrictions,
+            itemExtraDenials,
             secure: store,
             secretKeys: keys
         };

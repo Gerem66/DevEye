@@ -60,6 +60,9 @@ export async function authorizeReachableDevice(ctx: FeatureContext, deviceId: st
     if (restriction === 'read') {
         throw new FeatureError('forbidden', 'Cet appareil est en lecture seule pour votre rôle');
     }
+    // La permission que la commande déclare, éprouvée contre CET appareil : le
+    // dispatcheur ne l'a vue qu'à l'échelle de la fonctionnalité.
+    await ctx.assertItemExtras('devices', row.id);
     if (!(online(ctx, [row.id])[row.id] ?? false)) {
         throw new FeatureError('conflict', 'Agent hors ligne');
     }

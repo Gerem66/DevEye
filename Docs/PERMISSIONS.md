@@ -169,6 +169,18 @@ qu'il faut en retenir ici :
 - **restrictif seulement** — `none` masque, `read` passe en lecture seule ;
   rien n'élève. L'écran des rôles reste la seule réponse à « qui a accès à
   Uptime ? » ;
+- **deux volets sur la même ligne** — le niveau, et les permissions propres de
+  la fonctionnalité (§2) que CET élément retire au rôle : donner le terminal à
+  un rôle sans le lui donner sur cette machine-là. `access` est donc nullable,
+  une ligne pouvant n'exister que pour des permissions retirées ; une ligne dont
+  les deux volets sont vides est supprimée, l'absence restant ce qui exprime
+  « rien de particulier ». Les booléens seulement : un choix borné n'a pas
+  d'ordre que le socle sache poser, il reste réglé sur le rôle ;
+- le dispatcheur applique `access.extras` sans connaître la cible ; le refus
+  posé sur un élément mord dans `ctx.assertItem`, où l'élément est enfin nommé.
+  Une garde qui vérifie le niveau autrement appelle `ctx.assertItemExtras` seule
+  (l'accès aux agents : piloter une machine ne suppose pas l'écriture sur la
+  flotte) ;
 - se règle **sur l'élément** : ses réglages → Permissions. C'est le bon endroit
   parce que la question qu'on se pose est « qui voit cette base ? », posée
   devant la base ;

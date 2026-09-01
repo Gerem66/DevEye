@@ -198,6 +198,16 @@ cocher produirait un réglage muet.
 `item_role_grants` — **restrictif seulement**. `none` masque, `read` passe en
 lecture seule ; rien n'élève. Le droit de feature reste le plafond.
 
+La ligne porte **deux volets**. Le niveau, et les permissions propres de la
+fonctionnalité (`extraPermissions`, cf. [PERMISSIONS.md](./PERMISSIONS.md) §2)
+que cet élément-ci retire au rôle : donner le terminal à un rôle sans le lui
+donner sur CETTE machine. `access` est donc nullable — une ligne peut n'exister
+que pour des permissions retirées — et une ligne dont les deux volets sont vides
+est supprimée. Les deux se règlent séparément (`share.grantSet` laisse en place
+le volet qu'on ne lui passe pas) et se lisent d'une seule requête, vivant sur la
+même ligne. Seuls les booléens : un choix borné n'a pas d'ordre que le socle
+sache poser, il reste réglé sur le rôle.
+
 ### Une vue d'ensemble, pas une liste d'exceptions
 
 L'écran (`ItemGrantsPanel`, un seul composant pour ses deux points de montage)
@@ -207,6 +217,12 @@ défaut, ce que la fonctionnalité lui donne — « Comme la fonctionnalité
 obligerait à deviner le reste. Le serveur rend tout en une commande
 (`share.grantList` : rôles de l'espace visé, hérité, exception), pour que
 l'écran n'ait aucun recoupement à faire.
+
+Les permissions propres suivent la même règle, en puces sous le nom du rôle :
+**toutes** celles que la fonctionnalité déclare, y compris celles que ce rôle
+n'a pas — l'infobulle dit alors que cela se règle sur le rôle, pas ici. Des
+puces et non un formulaire par rôle : le panneau doit rester lisible avec dix
+rôles, et le geste utile est d'en ôter une, pas de remplir un tableau.
 
 ### Se règle d'où l'on est
 

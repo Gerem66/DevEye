@@ -47,22 +47,27 @@ export default function ItemGrantsPanel({ feature, itemId, workspaceId }: Props)
         void reload().catch(() => setError('Chargement impossible.'));
     }, [reload, version]);
 
-    const set = (roleId: number, value: ItemAccess | 'inherit'): void => {
+    /** Un volet à la fois : l'autre reste tel quel côté serveur. */
+    const send = (roleId: number, patch: { access?: ItemAccess | null; deniedExtras?: string[] }): void => {
         setBusy(true);
         setError(null);
         void ws
-            .send('share.grantSet', {
-                feature,
-                itemId,
-                workspaceId,
-                roleId,
-                // `null` **retire** la ligne : c'est l'absence qui exprime
-                // « rien de particulier », pas une valeur neutre.
-                access: value === 'inherit' ? null : value
-            })
+            .send('share.grantSet', { feature, itemId, workspaceId, roleId, ...patch })
             .then(setState)
             .catch(() => setError('Modification impossible. Gérer les rôles de cet espace vous est peut-être fermé.'))
             .finally(() => setBusy(false));
+    };
+
+    // `null` **retire** l'exception : c'est l'absence qui exprime « rien de
+    // particulier », pas une valeur neutre.
+    const set = (roleId: number, value: ItemAccess | 'inherit'): void =>
+        send(roleId, { access: value === 'inherit' ? null : value });
+
+    const toggleExtra = (role: ItemGrantState['roles'][number], key: string): void => {
+        const denied = role.deniedExtras.includes(key)
+            ? role.deniedExtras.filter((k) => k !== key)
+            : [...role.deniedExtras, key];
+        send(role.roleId, { deniedExtras: denied });
     };
 
     if (error && !state) return <p className={styles.notice}>{error}</p>;
@@ -88,6 +93,51 @@ export default function ItemGrantsPanel({ feature, itemId, workspaceId }: Props)
         return `Comme la fonctionnalité : ${FEATURE_ACCESS_LABEL[role.featureAccess]}.`;
     };
 
+    /**
+     * Les permissions propres de la fonctionnalité, rôle par rôle. Toutes sont
+     * montrées, y compris celles que le rôle n'a pas : la liste dit ce que la
+     * fonctionnalité sait confier, et l'infobulle dit où se règle ce qui manque.
+     * On ne fait qu'ôter — cocher ici n'accorde rien que le rôle n'ait déjà.
+     */
+    const extraChips = (role: ItemGrantState['roles'][number]) => {
+        if (state.extras.length === 0 || role.featureAccess === 'none') return null;
+        const hiddenHere = role.access === 'none';
+        return (
+            <div className={styles.grantExtras}>
+                {state.extras.map((spec) => {
+                    const held = role.featureExtras.includes(spec.key);
+                    const denied = role.deniedExtras.includes(spec.key);
+                    const on = held && !denied && !hiddenHere;
+                    const title = !held
+                        ? `Non accordée à « ${role.name} » sur ${featureDescriptor(feature).label} : cela se règle sur le rôle.`
+                        : hiddenHere
+                          ? `Ce ${noun} est masqué pour « ${role.name} » : rien ne s’ouvre.`
+                          : denied
+                            ? `Retirée sur ce ${noun}. Cliquer pour la rendre.`
+                            : `Accordée sur ce ${noun}. Cliquer pour la retirer.`;
+                    return (
+                        <button
+                            key={spec.key}
+                            type='button'
+                            className={`${styles.grantChip} ${on ? styles.grantChipOn : ''}`}
+                            aria-pressed={on}
+                            aria-disabled={!held || hiddenHere}
+                            disabled={busy}
+                            title={title}
+                            onClick={() => {
+                                if (!held || hiddenHere) return;
+                                toggleExtra(role, spec.key);
+                            }}
+                        >
+                            <span className={`icon ${on ? 'icon-v' : 'icon-x'} ${styles.grantChipIcon}`} />
+                            {spec.label}
+                        </button>
+                    );
+                })}
+            </div>
+        );
+    };
+
     return (
         <div className={styles.grantPanel}>
             <div className={styles.channelList}>
@@ -97,6 +147,7 @@ export default function ItemGrantsPanel({ feature, itemId, workspaceId }: Props)
                         <span className={styles.channelText}>
                             <span className={styles.channelLabel}>{role.name}</span>
                             <span className={styles.channelMeta}>{effectiveOf(role)}</span>
+                            {extraChips(role)}
                         </span>
                         {/* Trois choix fixes : des boutons collés plutôt qu'un
                             déroulant. Ce que « Hérité » vaut pour ce rôle est dans

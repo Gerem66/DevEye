@@ -79,9 +79,29 @@ export interface FeatureContext {
      */
     itemRestrictions: (feature: FeatureId) => Promise<ReadonlyMap<string, ItemAccess>>;
     /**
+     * Les permissions propres que cet élément-ci refuse au rôle de l'appelant.
+     * `assertItem` s'en sert déjà pour les permissions que LA COMMANDE déclare ;
+     * une garde écrite à la main n'a besoin d'y descendre que si elle vise une
+     * autre clé que la sienne.
+     */
+    itemExtraDenials: (feature: FeatureId) => Promise<ReadonlyMap<string, ReadonlySet<string>>>;
+    /**
+     * Lève `forbidden` si cet élément retire au rôle une des permissions que la
+     * commande en cours déclare (`access.extras`). Compris dans `assertItem` ;
+     * à appeler seul par une garde qui vérifie le niveau autrement, comme
+     * l'accès aux agents, où piloter une machine ne suppose pas l'écriture sur
+     * la flotte.
+     */
+    assertItemExtras: (feature: FeatureId, itemId: string) => Promise<void>;
+    /**
      * Lève `forbidden` si cet élément précis n'est pas accessible au niveau
      * demandé, restriction de rôle comprise. Vérifie d'abord la feature : une
      * restriction d'élément n'ouvre jamais ce qu'un droit de feature ferme.
+     *
+     * Vérifie aussi les permissions propres que la commande en cours déclare
+     * (`access.extras`) contre cet élément : le dispatcheur les a appliquées à
+     * l'échelle de la fonctionnalité, sans connaître la cible. C'est ici, où
+     * l'élément est enfin nommé, que le refus posé sur lui mord.
      */
     assertItem: (feature: FeatureId, itemId: string, level?: FeatureAccess) => Promise<void>;
     /**

@@ -5,6 +5,7 @@ import {
     shareGet,
     shareSet,
     type FeatureId,
+    type ItemAccess,
     type ItemGrantState,
     type ItemShareState,
     type ShareBlocker,
@@ -13,8 +14,9 @@ import {
 
 import { grantsFor, invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
-import { moduleItems } from '../_sdk/register';
+import { moduleItems, moduleManifest } from '../_sdk/register';
 import { isShareWired, shareBlockerFor } from '../_sharing';
+import { deniedExtrasOf } from '@/db/repos/itemSharing';
 import { parseJsonArray } from '@/Utils/json';
 
 /**
@@ -276,6 +278,20 @@ async function resolveGrantTarget(
  * L'état complet des restrictions d'un élément dans un espace : chaque rôle,
  * ce que la fonctionnalité lui donne, et l'exception posée.
  */
+/** Ce que le journal retient d'une restriction posée : les deux volets, ou celui touché. */
+function grantAudit(input: { access?: ItemAccess | null; deniedExtras?: readonly string[] }): string {
+    const parts: string[] = [];
+    if (input.access !== undefined) parts.push(input.access ?? 'comme la fonctionnalité');
+    if (input.deniedExtras !== undefined) {
+        parts.push(
+            input.deniedExtras.length === 0
+                ? 'aucune permission retirée'
+                : `permissions retirées : ${input.deniedExtras.join(', ')}`
+        );
+    }
+    return parts.join(' ; ');
+}
+
 async function grantState(
     ctx: FeatureContext,
     feature: FeatureId,
@@ -286,18 +302,30 @@ async function grantState(
         ctx.db.workspaceRoles.listByWorkspace(target.workspaceId),
         ctx.db.itemSharing.grantsOf(target.workspaceId, feature, itemId)
     ]);
-    const byRole = new Map(grants.map((g) => [g.role_id, g.access]));
+    const byRole = new Map(grants.map((g) => [g.role_id, g]));
+    // Les booléens seulement : un choix borné n'a pas de « moins que » que le
+    // socle sache poser, il reste réglé à l'échelle de la fonctionnalité.
+    const specs = (moduleManifest(feature)?.extraPermissions ?? []).filter((spec) => spec.type === 'toggle');
     return {
         workspaceId: target.workspaceId,
         workspaceName: target.workspaceName,
+        extras: specs.map((spec) => ({ key: spec.key, label: spec.label })),
         roles: roles.map((role) => {
             const featureGrants = parseJsonArray<WorkspaceFeatureGrant>(role.features);
+            const grant = featureGrants.find((g) => g.feature === feature);
+            const row = byRole.get(role.id) ?? null;
+            const held = specs.filter((spec) => grant?.extras?.[spec.key] === true).map((spec) => spec.key);
             return {
                 roleId: role.id,
                 name: role.name,
                 color: role.color,
-                featureAccess: featureGrants.find((g) => g.feature === feature)?.access ?? 'none',
-                access: byRole.get(role.id) ?? null
+                featureAccess: grant?.access ?? 'none',
+                access: row?.access ?? null,
+                featureExtras: held,
+                // Ce que le rôle ne tient pas sur la fonctionnalité n'a rien à
+                // faire ici : la ligne pourrait garder une clé d'un droit retiré
+                // depuis, et l'écran laisserait croire à une exception vivante.
+                deniedExtras: deniedExtrasOf(row ?? { denied_extras: null }).filter((k) => held.includes(k))
             };
         })
     };
@@ -326,7 +354,10 @@ const grantSetFeature = defineFeature({
         const role = await ctx.db.workspaceRoles.findById(input.roleId, target.workspaceId);
         if (!role) throw new FeatureError('not_found', 'Rôle introuvable');
 
-        await ctx.db.itemSharing.setGrant(target.workspaceId, input.feature, input.itemId, input.roleId, input.access);
+        await ctx.db.itemSharing.setGrant(target.workspaceId, input.feature, input.itemId, input.roleId, {
+            access: input.access,
+            deniedExtras: input.deniedExtras
+        });
         // Les droits de tous ceux qui portent ce rôle viennent de changer, et le
         // scope les mémoïse sous l'époque : sans ce bump, la restriction ne
         // mordrait qu'à la reconnexion suivante.
@@ -335,9 +366,9 @@ const grantSetFeature = defineFeature({
         ctx.audit({
             action: 'share.grantSet',
             level: 'warning',
-            description: `« ${role.name} » sur ${featureDescriptor(input.feature).label} #${input.itemId} (espace « ${target.workspaceName} ») : ${
-                input.access ?? 'comme la fonctionnalité'
-            }`
+            description:
+                `« ${role.name} » sur ${featureDescriptor(input.feature).label} #${input.itemId} ` +
+                `(espace « ${target.workspaceName} ») : ${grantAudit(input)}`
         });
         return grantState(ctx, input.feature, input.itemId, target);
     }

@@ -33,13 +33,30 @@ export interface ItemSharingRepo {
     grantsOf(workspaceId: number, feature: string, itemId: string): Promise<ItemRoleGrantRow[]>;
     /** Les restrictions qui touchent un rôle, pour toute une feature (résolution d'accès). */
     grantsForRole(workspaceId: number, feature: string, roleId: number): Promise<ItemRoleGrantRow[]>;
+    /**
+     * Pose ce qu'un rôle voit de cet élément. Les deux volets se règlent seuls :
+     * `undefined` laisse le volet en place. Une ligne dont les deux volets sont
+     * vides est retirée — l'absence est ce qui exprime « rien de particulier ».
+     */
     setGrant(
         workspaceId: number,
         feature: string,
         itemId: string,
         roleId: number,
-        access: ItemAccess | null
+        patch: { access?: ItemAccess | null; deniedExtras?: readonly string[] }
     ): Promise<void>;
+}
+
+/** Les clés refusées d'une ligne, quel que soit ce que le pilote rend pour un JSON. */
+export function deniedExtrasOf(row: Pick<ItemRoleGrantRow, 'denied_extras'>): string[] {
+    const raw = row.denied_extras;
+    if (!raw) return [];
+    try {
+        const parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        return Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === 'string') : [];
+    } catch {
+        return [];
+    }
 }
 
 export function itemSharingRepo(pool: Q): ItemSharingRepo {
@@ -135,22 +152,37 @@ export function itemSharingRepo(pool: Q): ItemSharingRepo {
             return r.rows;
         },
 
-        async setGrant(workspaceId, feature, itemId, roleId, access) {
-            if (access === null) {
+        async setGrant(workspaceId, feature, itemId, roleId, patch) {
+            const key = [workspaceId, feature, itemId, roleId];
+            // Le volet qu'on ne touche pas doit survivre : la ligne se relit
+            // avant d'écrire, la clé primaire rendant la lecture ponctuelle.
+            const current = await pool.query<ItemRoleGrantRow>(
+                `SELECT * FROM item_role_grants
+                  WHERE workspace_id = ? AND feature = ? AND item_id = ? AND role_id = ?`,
+                key
+            );
+            const row = current.rows[0] ?? null;
+            const access = patch.access !== undefined ? patch.access : (row?.access ?? null);
+            const denied =
+                patch.deniedExtras !== undefined
+                    ? [...patch.deniedExtras]
+                    : deniedExtrasOf(row ?? { denied_extras: null });
+
+            if (access === null && denied.length === 0) {
                 // L'absence de ligne est « rien de particulier » : pas de valeur
                 // neutre écrite.
                 await pool.query(
                     `DELETE FROM item_role_grants
                       WHERE workspace_id = ? AND feature = ? AND item_id = ? AND role_id = ?`,
-                    [workspaceId, feature, itemId, roleId]
+                    key
                 );
                 return;
             }
             await pool.query(
-                `INSERT INTO item_role_grants (workspace_id, feature, item_id, role_id, access)
-                 VALUES (?, ?, ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE access = VALUES(access)`,
-                [workspaceId, feature, itemId, roleId, access]
+                `INSERT INTO item_role_grants (workspace_id, feature, item_id, role_id, access, denied_extras)
+                 VALUES (?, ?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE access = VALUES(access), denied_extras = VALUES(denied_extras)`,
+                [...key, access, JSON.stringify([...new Set(denied)].sort())]
             );
         }
     };

@@ -63,9 +63,11 @@
 /* « Général » n'aligne que des champs et un bouton : étirés sur toute la page,
    ils laissent un champ démesuré et une action perdue au loin. Les listes de
    Membres et de Rôles, elles, gagnent à prendre la largeur. Même plafond que la
-   page Profil, mais calé à gauche sur l'en-tête et les onglets. */
+   page Profil, et centré : calé à gauche sous un en-tête pleine largeur, le
+   bloc a l'air d'avoir été coupé plutôt que dimensionné. */
 .narrow {
     max-width: 560px;
+    margin-inline: auto;
 }
 
 .sectionHeader {
@@ -333,13 +335,42 @@
     font-size: 0.875rem;
 }
 
-/* Les réglages propres à la fonctionnalité, sous le niveau d'accès. */
-.grantExtra {
+/* Ce que la fonctionnalité confie en plus de son niveau d'accès, en un bloc :
+   son intitulé, puis une carte dont les rangées se séparent entre elles
+   (`.checkRow + .checkRow`). Les descriptions vivent dans les cases, alignées
+   sous leur libellé. */
+.grantExtras {
     display: flex;
     flex-direction: column;
-    gap: var(--space-xs);
-    padding-top: var(--space-sm);
+    gap: var(--space-sm);
+}
+
+.grantExtrasLabel {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+/* Un choix borné dans la même carte : libellé et champ sur une ligne, la
+   description en dessous sur toute la largeur, comme sous une case. */
+.choiceRow {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: var(--space-xs) var(--space-md);
+    padding: var(--space-xs) 0;
+}
+
+.choiceRow + .checkRow,
+.checkRow + .choiceRow,
+.choiceRow + .choiceRow {
     border-top: 1px solid var(--glass-border);
+}
+
+.choiceRow > :last-child {
+    grid-column: 1 / -1;
 }
 
 /* Le bouton-texte qui déplie le reste du registre des fonctionnalités :
