@@ -35,7 +35,7 @@ export const ARCHIVED: Unavailable = {
 
 export const OFFLINE: Unavailable = {
     icon: 'icon-x-circle',
-    reason: 'Appareil hors ligne : sa machine ne répond pas'
+    reason: 'Appareil hors ligne : la machine ne répond pas'
 };
 
 /**
