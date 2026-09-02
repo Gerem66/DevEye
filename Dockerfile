@@ -34,6 +34,19 @@ FROM deps AS build
 WORKDIR /app
 COPY ./ ./DevEye/
 
+# Les dépendances propres à un module privé n'arrivent par aucun autre chemin :
+# le `npm ci` de l'étage deps ne connaît que le lockfile de l'app, et un
+# node_modules déjà installé ne peut pas venir du contexte (.dockerignore
+# l'exclut à toute profondeur). Sans cette boucle, un module qui dépend d'un
+# paquet démarre en prod et échoue à son premier import. L'image publique
+# n'embarque aucun module privé : le motif ne s'étend pas, la boucle ne fait
+# rien.
+RUN --mount=type=cache,target=/root/.npm \
+    for module in DevEye/private-modules/*/; do \
+        [ -f "$module/package.json" ] || continue; \
+        (cd "$module" && npm ci --omit=dev --no-audit --no-fund); \
+    done
+
 # La glue des modules privés doit exister avant le build client (imports
 # statiques) : stubs vides ici, l'image publique n'embarque aucun module privé.
 # Un build privé écrit features.local.json et relance gen:features avant.
