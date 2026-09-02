@@ -1,5 +1,6 @@
 import { getQueryable, withTransaction, type DbPool, type Queryable } from './pool';
 import { devicesRepo, linkCodesRepo, type DevicesRepo, type LinkCodesRepo } from './repos/devices';
+import { feedbackRepo, type FeedbackRepo } from './repos/feedback';
 import { logsRepo, type LogsRepo } from './repos/logs';
 import { metricsRepo, type MetricsRepo } from './repos/metrics';
 import { featureKvRepo, type FeatureKvRepo } from './repos/featureKv';
@@ -39,6 +40,8 @@ export interface Database {
     userInvites: UserInvitesRepo;
     refreshTokens: RefreshTokensRepo;
     logs: LogsRepo;
+    /** Les signalements des utilisateurs, relus par l'administration. */
+    feedback: FeedbackRepo;
     devices: DevicesRepo;
     linkCodes: LinkCodesRepo;
     metrics: MetricsRepo;
@@ -79,6 +82,7 @@ function buildDatabase(pool: DbPool, q: Queryable, inTransaction: boolean): Data
         userInvites: userInvitesRepo(q),
         refreshTokens: refreshTokensRepo(q),
         logs: logsRepo(q),
+        feedback: feedbackRepo(q),
         devices: devicesRepo(q),
         linkCodes: linkCodesRepo(q),
         metrics: metricsRepo(q),

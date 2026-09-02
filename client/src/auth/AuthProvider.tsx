@@ -9,6 +9,7 @@ import { resetHomeLayout, syncHomeLayoutFromServer } from '../stores/homeLayout'
 import { resetWorkspace, syncWorkspacesFromServer } from '../stores/workspace';
 import { resetLive } from '../stores/live';
 import { setCurrentUser } from '../stores/currentUser';
+import { setFeedbackEnabled } from '../stores/feedbackEnabled';
 import { devicesProvider } from '../devicesProvider';
 
 interface AuthState {
@@ -56,6 +57,7 @@ function applyBundle(bundle: SessionBundle): AuthState {
     syncWorkspacesFromServer(bundle.workspaces, bundle.activeWorkspaceId, bundle.permissions);
     syncThemeFromServer(bundle.theme);
     syncHomeLayoutFromServer(bundle.homeLayout);
+    setFeedbackEnabled(bundle.feedbackEnabled);
     return { status: 'authenticated', user: bundle.user };
 }
 

@@ -16,6 +16,7 @@ import {
 } from '@deveye/types';
 import { z } from 'zod';
 import { getActiveWorkspaceId } from '@/stores/workspace';
+import { traceCall } from '@/diagnostics/trace';
 
 const BASE_URL: string = (import.meta.env.VITE_SERVER_URL as string | undefined) ?? '';
 
@@ -63,7 +64,17 @@ export function ensureFreshAccess(): Promise<void> {
     return refreshing;
 }
 
-async function request<TOut>(
+/**
+ * Consigne l'appel pour un éventuel signalement de bug, puis le laisse suivre
+ * son cours. Le rejeu d'un jeton périmé n'y figure pas deux fois : il repasse
+ * par `runRequest`, et le rafraîchissement qui l'a provoqué a sa propre ligne.
+ */
+function request<TOut>(path: string, init: RequestInit, outputSchema: z.ZodType<TOut>): Promise<TOut> {
+    const target = `${init.method ?? 'GET'} ${path.split('?')[0]}`;
+    return traceCall('http', target, Date.now(), runRequest(path, init, outputSchema));
+}
+
+async function runRequest<TOut>(
     path: string,
     init: RequestInit,
     outputSchema: z.ZodType<TOut>,
@@ -97,7 +108,7 @@ async function request<TOut>(
             } catch {
                 throw new ApiError(code, message, res.status, details);
             }
-            return request(path, init, outputSchema, true);
+            return runRequest(path, init, outputSchema, true);
         }
         throw new ApiError(code, message, res.status, details);
     }

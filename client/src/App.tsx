@@ -5,6 +5,7 @@ import HomePage from './Pages/Home/index.js';
 import LoginPage from './Pages/Login/index.js';
 import RegisterPage, { readRegisterToken } from './Pages/Login/Register';
 import { SecrecyGate } from './Components/SecrecyGate';
+import { ReportButton } from './Components/ReportButton';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 
 import './Styles/theme.css';
@@ -29,6 +30,9 @@ function AppRoot() {
         <>
             {status === 'authenticated' && <HomePage />}
             {status === 'authenticated' && <SecrecyGate />}
+            {/* Monté ici et non dans l'accueil : le bouton doit survivre à
+                n'importe quelle vue, et se poser au-dessus d'elles toutes. */}
+            {status === 'authenticated' && <ReportButton />}
 
             {/* Un lien d'inscription prend l'écran, celui qui le suit n'ayant pas
                 encore de compte. Il reste monté après l'ouverture de la session et

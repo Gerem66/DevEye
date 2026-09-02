@@ -1,5 +1,6 @@
 import type { FeatureDefinition } from './_define';
 import { agentFeatures } from './agent';
+import { feedbackFeatures } from './feedback';
 import { homeFeatures } from './home';
 import { adminFeatures } from './admin';
 import { liveHereFeature } from './live/here';
@@ -61,6 +62,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     ...twoFactorFeatures,
     ...secrecyFeatures,
     ...logsFeatures,
+    ...feedbackFeatures,
     ...adminFeatures,
     ...homeFeatures,
     ...notifyFeatures,

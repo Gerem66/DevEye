@@ -32,6 +32,9 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     database: 'database',
     deploy: 'deploy',
     devices: 'devices',
+    // Les signalements ne se lisent que dans l'administration, relus à
+    // l'ouverture de la vue : rien ne les observe en direct, comme les logs.
+    feedback: null,
     finance: 'finance',
     git: 'git',
     home: 'home',
@@ -78,9 +81,10 @@ function knownTopic(topic: string, modules: ReadonlySet<string>): boolean {
 }
 
 /**
- * Commandes dont le nom porte un verbe mutant sans en être une. Maintenue à la
- * main : à zéro avertissement, toute nouvelle commande mutante non déclarée
- * saute aux yeux au démarrage.
+ * Commandes dont le nom porte un verbe mutant sans en être une, et celles dont
+ * l'écriture n'a aucun observateur en direct (leur préfixe ne porte pas de
+ * sujet). Maintenue à la main : à zéro avertissement, toute nouvelle commande
+ * mutante non déclarée saute aux yeux au démarrage.
  */
 const NON_MUTATING = new Set([
     'secrecy.unlock',
@@ -120,7 +124,10 @@ const NON_MUTATING = new Set([
     'agent.filesAnalyze',
     'agent.logQuery',
     'admin.inviteCreate',
-    'admin.inviteRevoke'
+    'admin.inviteRevoke',
+    // Écrivent, mais la vue d'administration relit à l'ouverture.
+    'feedback.setStatus',
+    'feedback.delete'
 ]);
 
 /** Verbes qui trahissent une écriture, pour le contrôle de démarrage. */

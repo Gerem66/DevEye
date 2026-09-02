@@ -2,6 +2,7 @@ import type { Database } from '@/db';
 import type { HomeLayout, MinimalUser, SessionBundle, ThemeStateDTO, UserRole, Workspace } from '@deveye/types';
 import { homeLayoutSchema, themeStateSchema } from '@deveye/types';
 import { permissionsFor } from '@/features/_access';
+import { env } from '@/Utils/Env';
 
 /**
  * Charge tout ce qu'une session a besoin de connaître : le compte, ses espaces,
@@ -98,7 +99,8 @@ export async function loadUserBundle(
         homeLayout: parseHomeLayout(activeRow?.home_layout),
         permissions: activeRow
             ? await permissionsFor(db, userId, activeRow)
-            : { isOwner: false, capabilities: [], features: [], itemOverrides: [] }
+            : { isOwner: false, capabilities: [], features: [], itemOverrides: [] },
+        feedbackEnabled: env.FEEDBACK_ENABLED
     };
 }
 

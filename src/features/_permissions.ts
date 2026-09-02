@@ -15,6 +15,10 @@
  * Toute autre commande doit déclarer son `access`.
  */
 const ACCESS_EXEMPT = new Set([
+    // Signaler un bug ou faire un retour n'est le privilège de personne : tout
+    // compte connecté le peut. Relire les signalements, en revanche, est
+    // `admin: true` (`features/feedback/index.ts`).
+    'feedback.submit',
     'workspace.activate',
     'workspace.add',
     'workspace.leave',

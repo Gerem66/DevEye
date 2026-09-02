@@ -114,6 +114,9 @@
     --z-popup: 1000;
     --z-navbar: 1200;
     --z-modal: 1400;
+    /* Le bouton de signalement, au-dessus des dialogues : il doit rester
+       cliquable depuis n'importe quel écran, y compris par-dessus l'un d'eux. */
+    --z-report: 1500;
     --z-toast: 1600;
 
     --transition-fast: 150ms ease;

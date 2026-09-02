@@ -49,6 +49,8 @@ export interface TopNavbarProps {
     onSelectWorkspace?: (workspaceId: number) => void;
     /** Ouvrir la création d'un espace. */
     onCreateWorkspace?: () => void;
+    /** Ouvrir la page des retours des utilisateurs (admin). */
+    onOpenFeedback?: (e: ReactMouseEvent) => void;
     /** Ouvrir la page d'administration des comptes (admin). */
     onOpenUsers?: (e: ReactMouseEvent) => void;
     /** Ouvrir la page de gestion de l'espace courant. */
@@ -78,6 +80,7 @@ export default function TopNavbar({
     onSelectWorkspace,
     onCreateWorkspace,
     onManageWorkspace,
+    onOpenFeedback,
     onOpenUsers,
     aboutBody
 }: TopNavbarProps) {
@@ -341,8 +344,9 @@ export default function TopNavbar({
                                 </button>
                             )}
                             {/* Second separator: groups the system pages (Logs,
-                                Utilisateurs) apart from the personal settings above. */}
-                            {(onOpenLogs || onOpenUsers) && <hr className={styles.divider} />}
+                                Retours, Utilisateurs) apart from the personal
+                                settings above. */}
+                            {(onOpenLogs || onOpenFeedback || onOpenUsers) && <hr className={styles.divider} />}
                             {onOpenLogs && (
                                 <button
                                     className={styles.menuItem}
@@ -352,6 +356,22 @@ export default function TopNavbar({
                                     }}
                                 >
                                     <span className='icon icon-activity' /> Logs
+                                    <span
+                                        className={`icon icon-shield ${styles.adminBadge}`}
+                                        title='Réservé aux administrateurs'
+                                        aria-label='Réservé aux administrateurs'
+                                    />
+                                </button>
+                            )}
+                            {onOpenFeedback && (
+                                <button
+                                    className={styles.menuItem}
+                                    onClick={(e) => {
+                                        onOpenFeedback(e);
+                                        setMenuOpen(false);
+                                    }}
+                                >
+                                    <span className='icon icon-bug' /> Retours
                                     <span
                                         className={`icon icon-shield ${styles.adminBadge}`}
                                         title='Réservé aux administrateurs'

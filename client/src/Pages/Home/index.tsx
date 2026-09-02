@@ -26,6 +26,8 @@ import {
     pruneMissingDevices
 } from '@/stores/homeLayout';
 import { onOpenViewRequest, onSelectWorkspaceRequest } from '@/stores/viewRequest';
+import { useFeedbackEnabled } from '@/stores/feedbackEnabled';
+import { noteView } from '@/diagnostics/trace';
 import { LiveProvider } from '@/live/LiveProvider';
 import { LiveCursors } from '@/live/LiveCursors';
 import { useLiveSegment } from '@/live/useLiveSegment';
@@ -41,6 +43,7 @@ import CreateWorkspacePopup, { CREATE_WORKSPACE_POPUP } from './popup-create-wor
 // Structural feature views (no grid card)
 import Security from '@/Features/Security';
 import FeatureProfile from '@/Features/Profile';
+import FeatureFeedback from '@/Features/Feedback';
 import FeatureLogs from '@/Features/Logs';
 import FeatureWorkspace from '@/Features/Workspace';
 import FeatureUsers from '@/Features/Users';
@@ -126,6 +129,14 @@ const buildStaticViews = (): ViewConfig[] => [
         cacheDurationMinutes: 5,
         hasCard: false,
         FullComponent: FeatureLogs
+    },
+    {
+        id: 'feedback',
+        title: 'Retours',
+        icon: 'bug',
+        cacheDurationMinutes: 0,
+        hasCard: false,
+        FullComponent: FeatureFeedback
     },
     {
         id: 'users',
@@ -306,6 +317,7 @@ export default function HomePage() {
     // l'initialiseur avant le premier rendu. `undefined` sans le module.
     const devicesModule = devicesProvider();
     const { canFeature, can } = useWorkspacePermissions();
+    const feedbackEnabled = useFeedbackEnabled();
     // Deux réglages de l'espace, deux capacités. Lues en booléens (et non via
     // `can`, recréé à chaque rendu) pour servir de dépendances stables.
     const canAppearance = can('workspace.appearance');
@@ -456,6 +468,13 @@ export default function HomePage() {
     const handleClose = useCallback(() => {
         closingFeatureRef.current = expandedWidget;
         setExpandedWidget(null);
+    }, [expandedWidget]);
+
+    // Le fil des vues ouvertes, que joindra un signalement de bug. Posé sur
+    // l'état et non sur `handleExpand`, qui peut refuser l'ouverture : on note
+    // ce qui s'est affiché, pas ce qui a été demandé.
+    useEffect(() => {
+        noteView(expandedWidget ?? 'home');
     }, [expandedWidget]);
 
     // Mirror of expandedWidget for stable callbacks that must read it at call time.
@@ -912,6 +931,11 @@ export default function HomePage() {
                     onOpenProfile={(e) => handleExpand('profile', isForceReload(e))}
                     onOpenSecurity={(e) => handleExpand('security', isForceReload(e))}
                     onOpenLogs={user.role === 'admin' ? (e) => handleExpand('logs', isForceReload(e)) : undefined}
+                    onOpenFeedback={
+                        user.role === 'admin' && feedbackEnabled
+                            ? (e) => handleExpand('feedback', isForceReload(e))
+                            : undefined
+                    }
                     onOpenUsers={user.role === 'admin' ? (e) => handleExpand('users', isForceReload(e)) : undefined}
                     onOpenSettings={canAppearance ? () => setSettingsOpen(true) : undefined}
                     onOrganize={canLayout ? () => startOrganizing() : undefined}

@@ -1,0 +1,152 @@
+/*
+ * Le déclencheur : une pastille de verre posée dans le coin bas-gauche, assez
+ * discrète pour se faire oublier et assez présente pour se retrouver. Au repos
+ * elle s'efface à moitié, et reprend sa couleur dès qu'on l'approche.
+ */
+.trigger {
+    position: fixed;
+    bottom: var(--space-lg);
+    left: var(--space-lg);
+    z-index: var(--z-report);
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-pill);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-backdrop);
+    box-shadow: var(--shadow-sm);
+    color: var(--text-secondary);
+
+    cursor: pointer;
+    /* `filter` et non `opacity` : la propriété reste libre pour une animation. */
+    filter: opacity(0.45);
+    transition:
+        filter var(--transition-fast),
+        color var(--transition-fast),
+        border-color var(--transition-fast),
+        transform var(--transition-fast);
+}
+
+.trigger:hover,
+.trigger:focus-visible {
+    filter: opacity(1);
+    color: var(--accent);
+    border-color: var(--glass-border-strong);
+    transform: translateY(-1px);
+}
+
+.trigger .icon,
+.trigger > span {
+    width: 18px;
+    height: 18px;
+}
+
+/*
+ * Le champ de saisie : quatre lignes au repos, qui grandit avec le texte, sans
+ * JavaScript. La grille superpose deux boîtes dans la même cellule, la zone de
+ * saisie et un `::after` qui rejoue le même texte, invisible ; c'est la copie
+ * qui donne sa hauteur à la rangée, au pixel exact puisque le navigateur mesure
+ * du vrai texte au lieu qu'on lui pose un nombre.
+ *
+ * C'est le conteneur qui porte l'apparence du champ, et non la zone de saisie :
+ * sinon le liseré défile avec le texte.
+ */
+.grow {
+    display: grid;
+    margin-top: var(--space-md);
+    /* Douze lignes, marges et bordures comprises, puis le champ défile : la
+       fenêtre ne doit pas grandir jusqu'à sortir de l'écran. */
+    max-height: calc(12 * 1.5em + 2 * var(--space-sm) + 2px);
+    overflow-y: auto;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-md);
+    background: var(--input-bg);
+    transition:
+        border-color var(--transition-fast),
+        background-color var(--transition-fast);
+}
+
+.grow:focus-within {
+    border-color: var(--input-focus);
+    background: var(--glass-bg-light);
+}
+
+/*
+ * Les deux boîtes superposées : le cadre étant porté par le conteneur, il ne
+ * leur reste que ce qui doit être rigoureusement identique des deux côtés, la
+ * police et l'interligne.
+ */
+.grow > .textarea,
+.grow > .textarea:focus,
+.grow::after {
+    grid-area: 1 / 1;
+    min-height: calc(4 * 1.5em);
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: none;
+    color: var(--text-primary);
+    font: inherit;
+    line-height: 1.5;
+}
+
+.grow::after {
+    content: attr(data-value) ' ';
+    visibility: hidden;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+/* `resize: none` : la hauteur appartient au contenu, et une poignée donnerait
+   deux autorités concurrentes sur la même valeur. Le défilement appartient au
+   conteneur. */
+.textarea {
+    resize: none;
+    overflow: hidden;
+    outline: none;
+}
+
+.textarea::placeholder {
+    color: var(--input-placeholder);
+}
+
+/* Ce qui part avec le message, dit avant de cliquer. Discret, mais lisible :
+   une mention qu'on ne lit pas ne prévient personne. */
+.notice {
+    margin: var(--space-sm) 0 0;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+
+.detailToggle {
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.detail {
+    max-height: 220px;
+    margin: var(--space-sm) 0 0;
+    padding: var(--space-sm);
+    overflow: auto;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    line-height: 1.45;
+    white-space: pre;
+}

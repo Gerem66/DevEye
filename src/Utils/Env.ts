@@ -73,6 +73,11 @@ export const env = {
     // Les variables propres à un module (SENTINEL_*, MAIL_SYNC_*, OAUTH_*,
     // MONITORING_RETENTION_DAYS, LINK_CODE_TTL_SECONDS) sont lues par le module.
 
+    // Le serveur accepte-t-il les signalements ? Éteint, le bouton disparaît du
+    // client, `feedback.submit` refuse et l'administration n'a pas d'entrée.
+    // Ce qui est déjà en base y reste, et redevient lisible en rallumant.
+    FEEDBACK_ENABLED: getEnvVar('FEEDBACK_ENABLED', 'boolean', false) ?? false,
+
     COOKIE_DOMAIN: getEnvVar('COOKIE_DOMAIN', 'string', false),
 
     RATE_LIMIT_MAX: getEnvVar('RATE_LIMIT_MAX', 'number', false) || 200,

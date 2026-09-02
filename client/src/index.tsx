@@ -5,11 +5,17 @@ import '@/sdk/modules';
 import { createRoot } from 'react-dom/client';
 
 import App from './App.js';
+import { installErrorTrace } from './diagnostics/trace';
 import { suppressNativeDrags } from './nativeDrag';
 
 // Before anything renders: a stray drag on a link, an image or a text selection
 // can freeze the whole page.
 suppressNativeDrags();
+
+// Avant le premier rendu aussi : une erreur qui survient au montage doit se
+// retrouver dans un signalement, pas seulement dans la console de celui qui
+// pense à l'ouvrir.
+installErrorTrace();
 
 const container = document.getElementById('root');
 const root = createRoot(container ?? document.body);

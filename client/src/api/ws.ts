@@ -11,6 +11,7 @@ import {
     type ServerMessage
 } from '@deveye/types';
 import { getActiveWorkspaceId } from '../stores/workspace';
+import { traceCall } from '../diagnostics/trace';
 
 const BASE_URL: string = (import.meta.env.VITE_SERVER_URL as string | undefined) ?? '';
 
@@ -283,7 +284,8 @@ export class DevEyeWs {
             return Promise.reject(new WsError('protocol', 'Invalid input', parsedInput.error.flatten()));
         }
         const requestId = this.nextRequestId();
-        return new Promise<CommandOutput<N>>((resolve, reject) => {
+        const startedAt = Date.now();
+        const call = new Promise<CommandOutput<N>>((resolve, reject) => {
             const timer = setTimeout(() => {
                 this.pending.delete(requestId);
                 reject(new WsError('timeout', `Request ${command} timed out`));
@@ -328,6 +330,11 @@ export class DevEyeWs {
             if (this._state === 'open') post();
             else this.outbox.push(post);
         });
+
+        // Toutes les commandes passent ici : c'est le seul endroit où un
+        // signalement de bug peut apprendre ce qui a précédé. Le nom de la
+        // commande et son issue, jamais l'entrée ni la réponse.
+        return traceCall('ws', command, startedAt, call);
     }
 }
 
