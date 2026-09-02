@@ -81,6 +81,11 @@ export interface DialogProps {
      * restarts when it closes. No-op when the feature is off / locked.
      */
     holdSecrecy?: boolean;
+    /**
+     * Sans le bouton de fermeture : un dialogue de progression, que rien ne
+     * ferme tant que l'opération dure. Défaut `true`.
+     */
+    closeButton?: boolean;
 }
 
 /** Fields the open-focus should land on (skips checkboxes/radios and selects). */
@@ -115,7 +120,8 @@ export default function Dialog({
     onSave,
     tall = false,
     fill = false,
-    holdSecrecy = false
+    holdSecrecy = false,
+    closeButton = true
 }: DialogProps) {
     const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -224,9 +230,11 @@ export default function Dialog({
                     >
                         <div className={styles.corner}>
                             {headerAction}
-                            <button className={styles.close} onClick={attemptClose} aria-label='Fermer'>
-                                <span className='icon icon-x' />
-                            </button>
+                            {closeButton && (
+                                <button className={styles.close} onClick={attemptClose} aria-label='Fermer'>
+                                    <span className='icon icon-x' />
+                                </button>
+                            )}
                         </div>
                         {title && <h3 className={styles.title}>{title}</h3>}
                         {description && <p className={styles.description}>{description}</p>}

@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { Button, invalidate, openFeature, useResource, useWorkspaceMembers } from 'deveye-sdk-client';
+import { Button, openFeature, useResource, useWorkspaceMembers } from 'deveye-sdk-client';
 import type { DeployClientProvider } from '@deveye/types/sdk/client';
 
 import { api } from './api';
@@ -23,7 +22,11 @@ interface LinkedTargetProps {
     onUnlink: () => void;
 }
 
-/** Une cible du projet : son identité, son dernier déploiement, ses actions. */
+/**
+ * Une cible du projet : son identité, son dernier déploiement, ses actions.
+ * Ses réglages (accès, identifiant, suppression) passent par le bouton commun
+ * de `TargetView`, les mêmes que sur sa fiche.
+ */
 function LinkedTarget({ targetId, projectId, canWrite, onUnlink }: LinkedTargetProps) {
     const members = useWorkspaceMembers();
     const { data, error } = useResource(
@@ -32,57 +35,37 @@ function LinkedTarget({ targetId, projectId, canWrite, onUnlink }: LinkedTargetP
         'Impossible de charger cette cible.',
         [targetId]
     );
-    const [editing, setEditing] = useState(false);
 
     if (!data) return <p className={error ? styles.error : styles.hint}>{error ?? 'Chargement…'}</p>;
     const { target, deployments } = data;
 
     return (
-        <>
-            <TargetView
-                target={target}
-                deployments={deployments}
-                members={members}
-                canWrite={canWrite}
-                projectId={projectId}
-                onEdit={canWrite ? () => setEditing(true) : undefined}
-                // L'historique complet est un panneau de la feature, pas de cet
-                // onglet : le dernier déploiement de l'en-tête suffit.
-                showHistory={false}
-                after={
-                    <>
-                        {/* L'onglet d'un projet doit mener à la cible, par la
-                            téléportation (garde d'accès comprise) : `openFeature`
-                            écrit le chemin, jamais le module. */}
-                        <Button
-                            variant='secondary'
-                            icon='chevrons-right'
-                            onClick={() => openFeature('deploy', target.id)}
-                        >
-                            Ouvrir le Déploiement
+        <TargetView
+            target={target}
+            deployments={deployments}
+            members={members}
+            canWrite={canWrite}
+            projectId={projectId}
+            // L'historique complet est un panneau de la feature, pas de cet
+            // onglet : le dernier déploiement de l'en-tête suffit.
+            showHistory={false}
+            after={
+                <>
+                    {/* L'onglet d'un projet doit mener à la cible, par la
+                        téléportation (garde d'accès comprise) : `openFeature`
+                        écrit le chemin, jamais le module. */}
+                    <Button variant='secondary' icon='chevrons-right' onClick={() => openFeature('deploy', target.id)}>
+                        Ouvrir le Déploiement
+                    </Button>
+                    {/* Le déliement est à l'hôte, qui seul tient le pointeur. */}
+                    {canWrite && (
+                        <Button variant='ghost' onClick={onUnlink}>
+                            Délier
                         </Button>
-                        {/* Le déliement est à l'hôte, qui seul tient le pointeur. */}
-                        {canWrite && (
-                            <Button variant='ghost' onClick={onUnlink}>
-                                Délier
-                            </Button>
-                        )}
-                    </>
-                }
-            />
-
-            {/* Le vrai dialogue de la feature : régler une cible depuis un projet
-                ou depuis sa feature est le même geste. */}
-            <TargetDialog
-                open={editing}
-                target={target}
-                onClose={() => setEditing(false)}
-                onSaved={() => {
-                    setEditing(false);
-                    invalidate('projects.board', 'deploy.list', 'deploy.detail');
-                }}
-            />
-        </>
+                    )}
+                </>
+            }
+        />
     );
 }
 
@@ -93,11 +76,12 @@ interface LinkedTargetDialogProps {
 }
 
 /**
- * Le dialogue de la feature en mode déclaration seulement : Projets relie ce qui
- * vient d'être déclaré ; la modification passe par `LinkedTarget`.
+ * Le dialogue de déclaration de la feature, pas une copie : Projets relie ce
+ * qui vient d'être déclaré. Une cible reliée se règle par le bouton commun de
+ * `LinkedTarget`.
  */
 function LinkedTargetDialog({ open, onClose, onSaved }: LinkedTargetDialogProps) {
-    return <TargetDialog open={open} target={null} onClose={onClose} onSaved={(target) => onSaved(target.id)} />;
+    return <TargetDialog open={open} onClose={onClose} onSaved={(target) => onSaved(target.id)} />;
 }
 
 export const clientProvider: DeployClientProvider = {

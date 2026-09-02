@@ -368,6 +368,12 @@ Le refus par élément vit dans `plan` : un nom déjà pris là-bas (Bases, Audi
 un dépôt déjà suivi, une empreinte déjà appairée. Il s'affiche au lieu de tomber
 en erreur SQL au milieu du geste.
 
+À l'écran, le geste dure : tout l'arbre est relu et rescellé, et la commande
+part avec un délai de deux minutes au lieu des quinze secondes ordinaires. Un
+dialogue de progression que rien ne ferme le dit (`ProgressDialog`), puis la
+coquille de réglages se referme et la fiche s'en va (`onGone`, voir
+`SETTINGS.md`) : l'élément n'est plus ici, il n'y a plus rien à en montrer.
+
 ## 10. Reste à faire
 
 - L'ordonnanceur de fond n'a pas changé : il sonde les éléments **d'un espace**,

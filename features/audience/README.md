@@ -458,8 +458,8 @@ api.ts              featureApi(manifest)
 SiteList.tsx        les cartes + le glisser-déposer (useDragReorder)
 SiteDetail.tsx      en-tête, SiteView, projets liés
 SiteView.tsx        ⟵ le cœur partagé avec l'onglet d'un projet
-SiteDialog.tsx      déclarer / régler l'identité du site (nom, description, plateforme, origines)
-SiteGeneralPanel.tsx  le panneau Général d'un site (rétention, visiteurs, état) : settings.item
+SiteDialog.tsx      déclarer un site (nom, description, plateforme, origines) ; création seulement
+SiteGeneralPanel.tsx  le panneau Général d'un site (identité, état, visiteurs, rétention, suppression) : settings.item
 InstallDialog.tsx   la balise, l'état « première mesure », la rotation de clé
 FunnelDialog.tsx    définir un parcours à partir du déjà-observé
 FunnelDetailDialog.tsx

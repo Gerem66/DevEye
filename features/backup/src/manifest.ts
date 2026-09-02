@@ -13,8 +13,12 @@ export const manifest = {
     ...descriptor,
     category: 'dev',
     resources: ['backup.count', 'backup.destinationList', 'backup.jobList', 'backup.detail', 'backup.runs'],
-    /** Les destinations se gèrent à l'échelle de la feature, la forme des archives par travail. */
-    settings: { feature: ['sources'], item: ['encryption'] },
+    /**
+     * Les destinations à l'échelle de la feature (onglet Sources) ; le travail
+     * lui-même (source, destination, cadence, copies, suppression) dans
+     * l'onglet Général de sa fiche, la forme de ses archives dans Chiffrement.
+     */
+    settings: { feature: ['sources'], item: ['general', 'encryption'] },
     /**
      * `agents` pour écrire par l'agent d'une machine (`DeviceSink`),
      * `devices.read` pour n'accepter comme destination qu'une machine de l'espace.

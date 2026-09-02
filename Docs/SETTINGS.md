@@ -21,15 +21,15 @@ close (voir en fin de fichier).
 `useSettingsSections` (le seul juge) compose les onglets d'une cible, dans cet
 ordre :
 
-| Onglet          | Échelle                                                                                  | Qui l'a                                                                      | Contenu                                                           |
-| --------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Général         | feature (et élément pour Mail, Uptime, CloudSync, Bases de données, Audience, Appareils) | `settings` du manifest d'un module (plus aucune native n'en déclare)         | les réglages qui ne sont ni sources ni notifications              |
-| Sources         | feature                                                                                  | `settings.feature` du manifest d'un module (plus aucune native n'en déclare) | jetons, destinations, clés d'API (voir `SOURCES.md`)              |
-| Notifications   | feature + élément                                                                        | registre `notifies`                                                          | canaux et sélection (voir `NOTIFICATIONS.md`)                     |
-| Synchronisation | élément                                                                                  | `settings.item` du manifest d'un module (Mail)                               | cadence de relève, maintenance                                    |
-| Chiffrement     | élément                                                                                  | `settings.item` du manifest d'un module                                      | sous quelle clé (ou sous quelle forme) la donnée de l'élément vit |
-| Partage         | élément                                                                                  | `SHARE_WIRED_FEATURES` + écriture                                            | où l'élément est visible (voir `SHARING.md`)                      |
-| Permissions     | élément                                                                                  | `SHARE_WIRED_FEATURES` + `workspace.roles`                                   | ce que chaque rôle voit de la ligne                               |
+| Onglet          | Échelle                                         | Qui l'a                                                                      | Contenu                                                           |
+| --------------- | ----------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Général         | feature, et élément pour toute feature à fiches | `settings` du manifest d'un module (plus aucune native n'en déclare)         | l'élément lui-même (ce que « Modifier » portait) et ses réglages  |
+| Sources         | feature                                         | `settings.feature` du manifest d'un module (plus aucune native n'en déclare) | jetons, destinations, clés d'API (voir `SOURCES.md`)              |
+| Notifications   | feature + élément                               | registre `notifies`                                                          | canaux et sélection (voir `NOTIFICATIONS.md`)                     |
+| Synchronisation | élément                                         | `settings.item` du manifest d'un module (Mail)                               | cadence de relève, maintenance                                    |
+| Chiffrement     | élément                                         | `settings.item` du manifest d'un module                                      | sous quelle clé (ou sous quelle forme) la donnée de l'élément vit |
+| Partage         | élément                                         | `SHARE_WIRED_FEATURES` + écriture                                            | où l'élément est visible (voir `SHARING.md`)                      |
+| Permissions     | élément                                         | `SHARE_WIRED_FEATURES` + `workspace.roles`                                   | ce que chaque rôle voit de la ligne                               |
 
 Général, Sources, Synchronisation et Chiffrement viennent tous du manifest
 d'un module : l'onglet est déclaré dans `settings.feature` ou `settings.item`,
@@ -44,6 +44,32 @@ Les tables de câblage natif (`GENERAL_WIRED`, `SYNC_WIRED`, `ENCRYPTION_WIRED`)
 et leurs dispatcheurs ont disparu avec le rapatriement de Mail, leur dernier
 occupant : une native n'a plus que les sections génériques (Notifications,
 Partage, Permissions).
+
+## Modifier un élément, c'est son onglet Général
+
+Une fiche d'élément n'a pas de bouton « Modifier » à côté du bouton de
+réglages : ce que le dialogue de création demande vit, une fois l'élément né,
+dans l'onglet **Général** de ses réglages, en tête de la nav. Les mêmes
+champs, un `SaveButton`, et en bas la suppression derrière un `ConfirmDialog`.
+Le dialogue de création ne fait plus que créer. Une identité qui ne change
+pas après coup (le `owner/repo` d'un dépôt) s'y montre sans se modifier, avec
+la phrase qui dit pourquoi. Une porte pour changer une chose, et la même dans
+toutes les features.
+
+Deux sorties, dans le contrat des panneaux (`SettingsPanelProps`) :
+
+- `close()` referme la coquille et rien d'autre, pour un geste qui se suit
+  mieux sur l'écran du dessous (une resynchronisation dont la fiche dessine
+  l'avancement) ;
+- `gone()` dit que l'élément réglé **n'est plus ici** : supprimé, ou déplacé
+  vers un autre espace. La coquille se referme, puis la fiche qui l'a ouverte
+  s'en va, par le `onGone` que la fiche passe au bouton commun (le même geste
+  que son bouton de retour). À appeler dès que la commande a réussi, et
+  **avant** de raviver les ressources : une fiche relue avant de partir
+  chercherait un élément disparu. L'onglet Partage l'appelle de lui-même après
+  un déplacement, que suit un dialogue de progression que rien ne ferme
+  (`ProgressDialog`) : tout l'arbre est relu et rescellé, et un écran figé ne
+  dit pas si le clic a pris.
 
 ## Sans l'écriture
 
@@ -83,13 +109,17 @@ Trois mécanismes font qu'aucun réglage n'est un mur :
 ## Brancher une feature de plus
 
 1. L'en-tête de la feature (et de ses fiches d'élément) monte
-   `FeatureSettingsButton`, sans condition.
+   `FeatureSettingsButton`, sans condition. Une fiche lui passe `onGone`, son
+   bouton de retour : l'élément supprimé ou déplacé depuis la coquille, la
+   fiche s'en va.
 2. Général / Sources / Synchronisation / Chiffrement → l'onglet dans le
    manifest du module (`settings.feature` ou `settings.item` ; `sync` et
    `encryption` à l'échelle d'un élément seulement) + un panneau autonome dans
    `settingsPanels`, sous le même id. Une native n'a plus d'onglet propre.
    Un onglet qui ne porte que des gestes ajoute `requiresWrite: true` ; sinon,
-   le panneau rend `ReadOnlyNotice` quand `canWrite` est faux.
+   le panneau rend `ReadOnlyNotice` quand `canWrite` est faux. Le Général
+   d'un élément porte sa modification et sa suppression (`gone()`) ; le
+   dialogue de création ne fait que créer.
 3. Si la feature a des fiches d'élément rejoignables, elle déclare son segment
    de présence `l1` avec l'identifiant nu de l'élément
    (`useLiveSegment('l1', String(id))`) : c'est ce que `goToHome.ts` écrit
@@ -114,6 +144,6 @@ nouveau compte sans fermer le dialogue.
 
 Audience l'avait quittée avant : la mesure, la reconnaissance des visiteurs
 et la conservation d'un site vivent dans son panneau Général
-(`SiteGeneralPanel`), le dialogue « Modifier » ne garde que l'identité (nom,
-description, plateforme, origines), et la clé publique reste dans le dialogue
-d'installation, qui n'est pas un réglage mais un geste.
+(`SiteGeneralPanel`), avec l'identité (nom, description, plateforme, origines)
+depuis que le dialogue « Modifier » a disparu ; la clé publique reste dans le
+dialogue d'installation, qui n'est pas un réglage mais un geste.

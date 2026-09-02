@@ -35,7 +35,8 @@ function byHome(a: ProjectSummary, b: ProjectSummary): number {
  * Le portefeuille de l'espace actif. Pas de routeur ici : la navigation interne
  * est une machine à états locale, le détail se greffe par un identifiant
  * sélectionné. Ne demande jamais de mot de passe, `projects.list` ne lit que
- * l'étage ouvert ; seules l'ouverture et l'édition passent par `withSecrecy`.
+ * l'étage ouvert ; seules l'ouverture et la création passent par `withSecrecy`.
+ * Le profil d'un projet se règle dans l'onglet Général de sa fiche.
  */
 export function FeatureProjects(_props: FeatureViewProps) {
     const permissions = useWorkspacePermissions();
@@ -54,7 +55,6 @@ export function FeatureProjects(_props: FeatureViewProps) {
     const [showMine, setShowMine] = useState(false);
 
     const [dialogOpen, setDialogOpen] = useState(false);
-    const [editing, setEditing] = useState<Project | null>(null);
     /** Le projet ouvert en vue détail ; `null` = on est sur le portefeuille. */
     const [opened, setOpened] = useState<Project | null>(null);
     const [busy, setBusy] = useState(false);
@@ -109,6 +109,22 @@ export function FeatureProjects(_props: FeatureViewProps) {
         void reload();
     }, [reload, workspaceId, version]);
 
+    /**
+     * La fiche affiche le titre, le statut et la version : elle suit une édition
+     * faite dans ses réglages (onglet Général) ou ailleurs, qui ravive
+     * `projects.list`. Sur `updated` et non à chaque relecture : le fil de
+     * discussion ravive la liste à chaque message pour ses non-lus. Un projet
+     * masqué n'a rien à donner.
+     */
+    useEffect(() => {
+        if (!summaries) return;
+        setOpened((prev) => {
+            if (!prev) return prev;
+            const fresh = summaries.find((s) => !s.masked && s.project.id === prev.id);
+            return fresh && fresh.project.updated !== prev.updated ? fresh.project : prev;
+        });
+    }, [summaries]);
+
     const onDragStateChange = useCallback(
         (active: boolean) => {
             dragging.current = active;
@@ -142,7 +158,6 @@ export function FeatureProjects(_props: FeatureViewProps) {
     );
 
     const openCreate = () => {
-        setEditing(null);
         setDialogError(null);
         setDialogOpen(true);
     };
@@ -172,26 +187,12 @@ export function FeatureProjects(_props: FeatureViewProps) {
         [fetchProject]
     );
 
-    const openEdit = async (projectId: number) => {
-        const project = await fetchProject(projectId);
-        if (!project) return;
-        setEditing(project);
-        setDialogError(null);
-        setDialogOpen(true);
-    };
-
-    const submit = async ({ draft, securityTier }: ProjectDialogResult) => {
+    const create = async ({ draft, securityTier }: ProjectDialogResult) => {
         setBusy(true);
         setDialogError(null);
         try {
-            const res = await withSecrecy(() =>
-                editing
-                    ? api.send('projects.update', { projectId: editing.id, project: draft })
-                    : api.send('projects.add', { project: draft, securityTier })
-            );
+            await withSecrecy(() => api.send('projects.add', { project: draft, securityTier }));
             invalidate('projects.list', 'projects.count');
-            // Le détail affiche le titre et le statut : il doit suivre l'édition.
-            if (opened && opened.id === res.project.id) setOpened(res.project);
             setDialogOpen(false);
         } catch (e) {
             setDialogError(humanizeError(e, 'L’enregistrement a échoué.'));
@@ -210,28 +211,6 @@ export function FeatureProjects(_props: FeatureViewProps) {
             invalidate('projects.list', 'projects.count');
         } catch (e) {
             setError(humanizeError(e, archived ? 'L’archivage a échoué.' : 'La restauration a échoué.'));
-        }
-    };
-
-    /**
-     * Si le projet archivé était ouvert, on referme sa vue : il vient de quitter
-     * le portefeuille.
-     */
-    const archiveFromDialog = async (project: Project) => {
-        setBusy(true);
-        setDialogError(null);
-        try {
-            await withSecrecy(() => api.send('projects.archive', { projectId: project.id }));
-            invalidate('projects.list', 'projects.count');
-            setDialogOpen(false);
-            if (opened?.id === project.id) {
-                setOpened(null);
-                setSelectedId(null);
-            }
-        } catch (e) {
-            setDialogError(humanizeError(e, 'L’archivage a échoué.'));
-        } finally {
-            setBusy(false);
         }
     };
 
@@ -304,29 +283,16 @@ export function FeatureProjects(_props: FeatureViewProps) {
     // le retour est instantané et sans re-sollicitation.
     if (opened) {
         return (
-            <>
-                <ProjectDetail
-                    project={opened}
-                    members={members}
-                    meUserId={me.id}
-                    canWrite={canWrite}
-                    onBack={() => {
-                        setOpened(null);
-                        setSelectedId(null);
-                    }}
-                    onEditProfile={() => void openEdit(opened.id)}
-                />
-                <ProjectDialog
-                    open={dialogOpen}
-                    project={editing}
-                    allowGuarded={allowGuarded}
-                    busy={busy}
-                    error={dialogError}
-                    onClose={() => setDialogOpen(false)}
-                    onSubmit={(result) => void submit(result)}
-                    onArchive={canWrite && editing ? () => void archiveFromDialog(editing) : undefined}
-                />
-            </>
+            <ProjectDetail
+                project={opened}
+                members={members}
+                meUserId={me.id}
+                canWrite={canWrite}
+                onBack={() => {
+                    setOpened(null);
+                    setSelectedId(null);
+                }}
+            />
         );
     }
 
@@ -432,13 +398,11 @@ export function FeatureProjects(_props: FeatureViewProps) {
 
             <ProjectDialog
                 open={dialogOpen}
-                project={editing}
                 allowGuarded={allowGuarded}
                 busy={busy}
                 error={dialogError}
                 onClose={() => setDialogOpen(false)}
-                onSubmit={(result) => void submit(result)}
-                onArchive={canWrite && editing ? () => void archiveFromDialog(editing) : undefined}
+                onSubmit={(result) => void create(result)}
             />
         </div>
     );

@@ -10,13 +10,13 @@ import UptimeWidget from './UptimeWidget';
 export const clientEntry: FeatureClient = {
     Widget: UptimeWidget,
     Full: Uptime,
-    /** Le panneau Général d'un service (cadence, délai, seuil, rétention). */
+    /** Le service lui-même (Général de sa fiche) : identité, réglages fins, suppression. */
     settingsPanels: { general: ServiceGeneralPanel },
     TopbarWidget: UptimeTopbarWidget,
     // Unmounted as soon as it closes: the panel re-queries while it lives, and a
     // cached (or preloaded) instance would keep querying unseen. The home
     // card and the topbar widget stay live through the shared count store.
     cacheDurationMinutes: 0,
-    /** Ce que Projets compose : bande d'état, taux, historique, dialogue. */
+    /** Ce que Projets compose : bande d'état, taux, historique, dialogue d'ajout. */
     providers: { [UPTIME_CLIENT_PROVIDER]: clientProvider }
 };

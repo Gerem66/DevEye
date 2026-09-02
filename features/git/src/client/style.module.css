@@ -904,29 +904,6 @@
     color: var(--text-muted);
 }
 
-/* Zone rouge du dialogue de dépôt. */
-.dangerZone {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-md);
-    flex-wrap: wrap;
-    padding: var(--space-md);
-    border-radius: var(--radius-md);
-    border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
-    background: var(--danger-bg);
-}
-
-/* Une classe nommée et non `.dangerZone > div`, qui frapperait aussi le groupe
-   de boutons de confirmation. */
-.dangerText {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-    flex: 1;
-}
-
 /* ------------------------------------------------- feature Git : les dépôts */
 
 /* Une ligne par dépôt : `owner/repo` est du texte long, qui se tronque mal
@@ -1267,20 +1244,6 @@
 .copyFailed {
     font-size: 0.72rem;
     color: var(--warning);
-}
-
-/* Même géométrie que `.dangerZone`, ton neutre : resynchroniser coûte du temps,
-   pas des données. */
-.actionZone {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-md);
-    flex-wrap: wrap;
-    padding: var(--space-md);
-    border-radius: var(--radius-md);
-    border: 1px solid var(--glass-border);
-    background: var(--surface-subtle);
 }
 
 /* ------------------------------------------- avancement dans la liste */

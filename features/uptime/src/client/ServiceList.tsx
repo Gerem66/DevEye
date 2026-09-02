@@ -10,7 +10,6 @@ interface ServiceListProps {
     /** The workspace's services, already in the user's order. */
     services: UptimeService[];
     onOpen: (service: UptimeService) => void;
-    onEdit: (service: UptimeService) => void;
     /** The complete new order after a drop. */
     onReorder: (ids: number[]) => void;
     /** A drag started or ended: the host pauses its polling meanwhile. */
@@ -21,7 +20,7 @@ interface ServiceListProps {
  * The service list, with drag & drop ordering. The gesture lives in the app
  * (`useDragReorder`); what stays here is the card, its grip and the insertion bar.
  */
-export function ServiceList({ services, onOpen, onEdit, onReorder, onDragStateChange }: ServiceListProps) {
+export function ServiceList({ services, onOpen, onReorder, onDragStateChange }: ServiceListProps) {
     /** A real drag just ended: the click the browser still fires afterwards
      *  must not also open the detail view. Unlike the other lists, the grip
      *  sits *inside* the clickable card, so the click does reach it. */
@@ -53,7 +52,6 @@ export function ServiceList({ services, onOpen, onEdit, onReorder, onDragStateCh
                         }
                         onOpen(service);
                     }}
-                    onEdit={() => onEdit(service)}
                     onDragPointerDown={(e) => drag.onGripPointerDown(e, service.id)}
                 />
             ))}

@@ -10,9 +10,9 @@ export const clientEntry: FeatureClient = {
     Widget: AudienceWidget,
     Full: Audience,
     /**
-     * Le panneau Général d'un site : la mesure, la reconnaissance des visiteurs
-     * et la conservation des événements bruts. Partage et Permissions viennent
-     * du descripteur.
+     * Le panneau Général d'un site : son identité, sa mesure, la reconnaissance
+     * des visiteurs, la conservation des événements bruts et sa suppression.
+     * Partage et Permissions viennent du descripteur.
      */
     settingsPanels: { general: SiteGeneralPanel },
     // Démonté dès la fermeture : la fiche tient des agrégats bornés par une fenêtre de

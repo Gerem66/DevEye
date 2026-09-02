@@ -25,7 +25,6 @@ const INCIDENTS_MAX = 20;
 interface ServiceDetailProps {
     service: UptimeService;
     onBack: () => void;
-    onEdit: () => void;
     onCheckNow: () => void;
 }
 
@@ -36,7 +35,7 @@ interface ServiceDetailProps {
  * The three panels load independently (a slow journal never holds the chart
  * back), and only the chart re-queries when the range changes.
  */
-export function ServiceDetail({ service, onBack, onEdit, onCheckNow }: ServiceDetailProps) {
+export function ServiceDetail({ service, onBack, onCheckNow }: ServiceDetailProps) {
     const [range, setRange] = useState<UptimeRange>('24h');
     const [points, setPoints] = useState<UptimePoint[]>([]);
     const [resolution, setResolution] = useState<UptimeResolution>('raw');
@@ -147,9 +146,10 @@ export function ServiceDetail({ service, onBack, onEdit, onCheckNow }: ServiceDe
                     <Button variant='secondary' icon='refresh' onClick={onCheckNow}>
                         Tester
                     </Button>
-                    <Button variant='secondary' icon='edit' onClick={onEdit}>
-                        Modifier
-                    </Button>
+                    {/* Les réglages de ce service, son identité et sa suppression
+                        comprises (onglet Général). Supprimé ou déplacé depuis la
+                        coquille, le service n'est plus ici : la fiche revient à
+                        la liste. */}
                     <FeatureSettingsButton
                         scope={{
                             kind: 'item',
@@ -157,6 +157,7 @@ export function ServiceDetail({ service, onBack, onEdit, onCheckNow }: ServiceDe
                             itemId: String(service.id),
                             itemLabel: service.name
                         }}
+                        onGone={onBack}
                     />
                 </div>
             </div>

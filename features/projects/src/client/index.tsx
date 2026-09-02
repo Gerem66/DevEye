@@ -1,15 +1,18 @@
 import type { FeatureClient } from '@deveye/types/sdk/client';
 
+import ProjectGeneralPanel from './ProjectGeneralPanel';
 import Projects from './Projects';
 import ProjectsWidget from './ProjectsWidget';
 
 /**
- * Ni `settingsPanels` (un projet se règle dans son dialogue de profil) ni
- * `providers` : ce que Projets offre aux autres modules est un contrat serveur.
+ * Pas de `providers` : ce que Projets offre aux autres modules est un contrat
+ * serveur.
  */
 export const clientEntry: FeatureClient = {
     Widget: ProjectsWidget,
     Full: Projects,
+    /** Le projet lui-même (Général de sa fiche). */
+    settingsPanels: { general: ProjectGeneralPanel },
     // Démonté à la fermeture : portefeuille, fils et présence vivent en
     // direct, une instance en cache continuerait de travailler sans être vue.
     cacheDurationMinutes: 0,

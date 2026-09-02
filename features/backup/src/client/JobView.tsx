@@ -19,13 +19,12 @@ interface JobViewProps {
     job: BackupJob;
     canWrite: boolean;
     onBack: () => void;
-    onEdit: () => void;
     onRun: () => void;
     running: boolean;
 }
 
 /** La fiche d'un travail : ses réglages en tête, son historique en dessous. */
-export default function JobView({ job, canWrite, onBack, onEdit, onRun, running }: JobViewProps) {
+export default function JobView({ job, canWrite, onBack, onRun, running }: JobViewProps) {
     const { data: runs, error } = useResource(
         'backup.detail',
         () => api.send('backup.jobGet', { jobId: job.id, limit: 50 }).then((res) => res.runs),
@@ -59,15 +58,14 @@ export default function JobView({ job, canWrite, onBack, onEdit, onRun, running 
                             {running ? 'En cours…' : 'Sauvegarder'}
                         </Button>
                     )}
-                    {/* Un travail projeté se modifie chez lui (le serveur le
-                        refuse d'ici) ; le sauvegarder reste permis. */}
-                    {canWrite && !job.foreign && (
-                        <Button variant='secondary' icon='edit' onClick={onEdit}>
-                            Modifier
-                        </Button>
-                    )}
+                    {/* Les réglages de ce travail, sa suppression comprise
+                        (onglet Général) ; un travail projeté se modifie chez
+                        lui, le sauvegarder d'ici reste permis. Supprimé ou
+                        déplacé depuis la coquille, le travail n'est plus ici :
+                        la fiche revient à la liste. */}
                     <FeatureSettingsButton
                         scope={{ kind: 'item', feature: 'backup', itemId: String(job.id), itemLabel: job.name }}
+                        onGone={onBack}
                     />
                 </div>
             </div>

@@ -1,0 +1,44 @@
+.text {
+    margin: 0 0 var(--space-md);
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.track {
+    position: relative;
+    height: 4px;
+    overflow: hidden;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+}
+
+/* Indéterminée : on ne sait pas combien il reste, seulement que ça avance. */
+.fill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 40%;
+    border-radius: inherit;
+    background: var(--accent);
+    animation: sweep 1.2s ease-in-out infinite;
+}
+
+@keyframes sweep {
+    from {
+        left: -40%;
+    }
+    to {
+        left: 100%;
+    }
+}
+
+/* Sans mouvement, la barre pleine dit encore « en cours » : le balayage
+   figé par la règle globale la laisserait hors champ. */
+@media (prefers-reduced-motion: reduce) {
+    .fill {
+        left: 0;
+        width: 100%;
+        animation: none;
+    }
+}

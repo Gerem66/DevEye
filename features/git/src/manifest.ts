@@ -23,7 +23,11 @@ export const manifest = {
      * `git.commitGraph` colore un auteur rattaché de la couleur de son compte.
      */
     nativeCapabilities: ['members.read'],
-    /** Les jetons GitHub, dans l'onglet Sources ; Partage et Permissions viennent du descripteur. */
-    settings: { feature: ['sources'] },
+    /**
+     * Les jetons GitHub dans l'onglet Sources de la feature ; le dépôt lui-même
+     * (jeton, synchronisation, suppression) dans l'onglet Général de sa fiche.
+     * Partage et Permissions viennent du descripteur.
+     */
+    settings: { feature: ['sources'], item: ['general'] },
     commands: gitCommands
 } satisfies FeatureManifest;

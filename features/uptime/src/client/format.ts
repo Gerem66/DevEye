@@ -90,7 +90,7 @@ export function formatBucket(epochSeconds: number, daily: boolean): string {
         : date.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
-/** Les quatre réglages fins d'un service, tels que le dialogue et le panneau les éditent. */
+/** Les quatre réglages fins d'un service : le panneau Général les édite, un service neuf reçoit leurs défauts. */
 export interface ServiceTuning {
     intervalSeconds: number;
     timeoutSeconds: number;

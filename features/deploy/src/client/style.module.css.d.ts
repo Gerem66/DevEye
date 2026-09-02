@@ -13,8 +13,6 @@ declare const styles: {
     readonly cardMain: string;
     readonly cardMeta: string;
     readonly cardName: string;
-    readonly dangerText: string;
-    readonly dangerZone: string;
     readonly dropBar: string;
     readonly empty: string;
     readonly error: string;

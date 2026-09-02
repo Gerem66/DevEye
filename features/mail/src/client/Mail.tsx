@@ -908,6 +908,9 @@ export default function Mail(_props: FeatureViewProps) {
                                   }
                                 : { kind: 'feature', feature: 'mail' }
                         }
+                        // Supprimée ou déplacée depuis ses réglages, la boîte
+                        // n'est plus ici : la sélection retombe sur la liste.
+                        onGone={() => setSelectedAccountId(null)}
                     />
                     <Button
                         variant='ghost'

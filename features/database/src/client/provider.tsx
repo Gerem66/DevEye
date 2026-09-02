@@ -34,7 +34,6 @@ function LinkedDatabase({ databaseId, canWrite, onUnlink }: LinkedDatabaseProps)
     const [testing, setTesting] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [dialogOpen, setDialogOpen] = useState(false);
     /** L'explorateur occupe tout : l'en-tête et les voisins s'effacent. */
     const [expanded, setExpanded] = useState(false);
 
@@ -82,7 +81,6 @@ function LinkedDatabase({ databaseId, canWrite, onUnlink }: LinkedDatabaseProps)
                     busy={busy}
                     onTest={() => void test()}
                     onInspect={() => void inspect()}
-                    onEdit={() => setDialogOpen(true)}
                     onOpenInFeature={() => openFeature('database', database.id)}
                     after={
                         // La confirmation et le déliement sont à l'hôte, qui
@@ -104,16 +102,6 @@ function LinkedDatabase({ databaseId, canWrite, onUnlink }: LinkedDatabaseProps)
                 probe={probe}
                 onExpandChange={setExpanded}
             />
-
-            <DatabaseDialog
-                open={dialogOpen}
-                database={database}
-                onClose={() => setDialogOpen(false)}
-                onSaved={() => {
-                    setDialogOpen(false);
-                    invalidate('database.list', 'database.detail', 'database.count');
-                }}
-            />
         </section>
     );
 }
@@ -124,9 +112,12 @@ interface LinkedDatabaseDialogProps {
     onSaved: (databaseId: number) => void;
 }
 
-/** Le dialogue en mode création seulement ; la modification passe par `LinkedDatabase`. */
+/**
+ * Le dialogue d'ajout de la feature, pas une copie : Projets relie ce qui vient
+ * d'être ajouté. Une base reliée se règle par le bouton commun de `LinkedDatabase`.
+ */
 function LinkedDatabaseDialog({ open, onClose, onSaved }: LinkedDatabaseDialogProps) {
-    return <DatabaseDialog open={open} database={null} onClose={onClose} onSaved={onSaved} />;
+    return <DatabaseDialog open={open} onClose={onClose} onSaved={onSaved} />;
 }
 
 export const clientProvider: DatabaseClientProvider = {

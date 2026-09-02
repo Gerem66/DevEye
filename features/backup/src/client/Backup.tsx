@@ -51,7 +51,7 @@ export default function Backup(_props: FeatureViewProps) {
     const [error, setError] = useState<string | null>(null);
 
     const [openedId, setOpenedId] = useState<number | null>(null);
-    const [jobDialog, setJobDialog] = useState<{ job: BackupJob | null } | null>(null);
+    const [addOpen, setAddOpen] = useState(false);
 
     const refresh = useCallback(() => invalidate('backup.jobList', 'backup.destinationList', 'backup.count'), []);
 
@@ -99,7 +99,7 @@ export default function Backup(_props: FeatureViewProps) {
                         <div className={styles.toolbarActions}>
                             <FeatureSettingsButton scope={{ kind: 'feature', feature: 'backup' }} />
                             {canWrite && (
-                                <Button icon='plus' onClick={() => setJobDialog({ job: null })}>
+                                <Button icon='plus' onClick={() => setAddOpen(true)}>
                                     Nouveau travail
                                 </Button>
                             )}
@@ -179,22 +179,15 @@ export default function Backup(_props: FeatureViewProps) {
                     canWrite={canWrite}
                     running={opened.lastStatus === 'running'}
                     onBack={() => setOpenedId(null)}
-                    onEdit={() => setJobDialog({ job: opened })}
                     onRun={() => void runNow(opened)}
                 />
             )}
 
             <JobDialog
-                open={jobDialog !== null}
-                job={jobDialog?.job ?? null}
+                open={addOpen}
                 destinations={destinations ?? []}
-                onClose={() => setJobDialog(null)}
+                onClose={() => setAddOpen(false)}
                 onSaved={refresh}
-                onRemoved={() => {
-                    setJobDialog(null);
-                    setOpenedId(null);
-                    refresh();
-                }}
             />
         </div>
     );

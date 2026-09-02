@@ -18,14 +18,13 @@ interface TargetViewProps {
     deployments: Deployment[];
     /** Pour mettre un visage sur qui a déclenché quoi. */
     members: readonly MinimalUser[];
-    /** Droit `deploy: write` — c'est lui qui autorise à mettre en production. */
+    /** Droit `deploy: write` : c'est lui qui autorise à mettre en production. */
     canWrite: boolean;
     /**
      * Le projet d'où part le geste, pour inscrire le déclenchement dans sa
      * frise. Absent depuis la feature : le déploiement n'appartient à aucun projet.
      */
     projectId?: number;
-    onEdit?: () => void;
     /** Actions propres à l'appelant : « Délier », « Ouvrir le Déploiement ». */
     after?: ReactNode;
     /**
@@ -57,17 +56,22 @@ interface TargetActionsProps {
     canWrite: boolean;
     /** Le projet d'où part le geste, quand il en part d'un (voir TargetView). */
     projectId?: number;
-    onEdit?: () => void;
+    /**
+     * La cible a été supprimée ou déplacée depuis ses réglages : la fiche s'en
+     * va (le geste de son bouton de retour). Absent dans l'onglet d'un projet,
+     * où la cible reste, ou s'en délie par invalidation.
+     */
+    onGone?: () => void;
     /** Actions propres à l'appelant : « Délier », « Ouvrir le Déploiement ». */
     after?: ReactNode;
 }
 
 /**
- * Les actions d'une cible : déclencher, modifier, régler. À part de
- * {@link TargetView} pour vivre à deux endroits : la rangée d'en-tête de la
- * page dédiée et le bloc d'identité d'un onglet de projet.
+ * Les actions d'une cible : déclencher, régler. À part de {@link TargetView}
+ * pour vivre à deux endroits : la rangée d'en-tête de la page dédiée et le
+ * bloc d'identité d'un onglet de projet.
  */
-export function TargetActions({ target, canWrite, projectId, onEdit, after }: TargetActionsProps) {
+export function TargetActions({ target, canWrite, projectId, onGone, after }: TargetActionsProps) {
     const [triggerOpen, setTriggerOpen] = useState(false);
     const [busy, setBusy] = useState(false);
     const orphan = target.credentialId === null;
@@ -79,16 +83,9 @@ export function TargetActions({ target, canWrite, projectId, onEdit, after }: Ta
                     Déployer
                 </Button>
             )}
-            {/* `!target.foreign` : modifier une cible exige les clés de SON
-                espace, le serveur le refuse. Déployer reste permis. */}
-            {canWrite && onEdit && !target.foreign && (
-                <Button variant='secondary' icon='edit' onClick={onEdit}>
-                    Modifier
-                </Button>
-            )}
-            {/* Les réglages de cette cible (ses propres canaux). Hors du
-                `canWrite && onEdit` : la fiche est aussi rendue dans l'onglet
-                d'un projet, où `onEdit` est absent. Le bouton se garde lui-même. */}
+            {/* Les réglages de cette cible : son accès Dokploy, ce qu'elle vise
+                et sa suppression (onglet Général), ses canaux. Le bouton se
+                garde de lui-même, sans section accessible il ne s'affiche pas. */}
             <FeatureSettingsButton
                 scope={{
                     kind: 'item',
@@ -96,6 +93,7 @@ export function TargetActions({ target, canWrite, projectId, onEdit, after }: Ta
                     itemId: String(target.id),
                     itemLabel: target.name
                 }}
+                onGone={onGone}
             />
             {after}
 
@@ -140,7 +138,6 @@ export function TargetView({
     members,
     canWrite,
     projectId,
-    onEdit,
     after,
     fullHistory,
     fullHistoryError,
@@ -230,13 +227,7 @@ export function TargetView({
                     </div>
                     {showActions && (
                         <div className={styles.actions}>
-                            <TargetActions
-                                target={target}
-                                canWrite={canWrite}
-                                projectId={projectId}
-                                onEdit={onEdit}
-                                after={after}
-                            />
+                            <TargetActions target={target} canWrite={canWrite} projectId={projectId} after={after} />
                         </div>
                     )}
                 </header>

@@ -35,10 +35,11 @@ export const manifest = {
      */
     nativeCapabilities: ['routes.public'],
     /**
-     * Un panneau Général à l'échelle d'un site : rétention des événements bruts,
-     * reconnaissance des visiteurs, état de la mesure. Le dialogue ne garde que
-     * l'identité du site ; sa clé publique et son installation ont le leur.
-     * Partage et Permissions viennent du descripteur.
+     * Un panneau Général à l'échelle d'un site : son identité, l'état de la
+     * mesure, la reconnaissance des visiteurs, la rétention des événements bruts
+     * et sa suppression. Le dialogue ne sert qu'à déclarer un site ; sa clé
+     * publique et son installation ont le leur. Partage et Permissions viennent
+     * du descripteur.
      */
     settings: { item: ['general'] },
     commands: audienceCommands

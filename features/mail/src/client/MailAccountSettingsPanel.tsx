@@ -34,7 +34,7 @@ import type { MailAccount, MailAccountDraft, MailAccountEdit, MailProxy } from '
  * lui appartiennent, et `mail.accountUpdate` la refuse. Restent le nom et le
  * proxy, par `mail.accountSetProfile`.
  */
-export default function MailAccountSettingsPanel({ scope, canWrite, close }: SettingsPanelProps) {
+export default function MailAccountSettingsPanel({ scope, canWrite, gone }: SettingsPanelProps) {
     const accountId = scope.kind === 'item' ? Number(scope.itemId) : null;
     const version = useResourceVersion('mail.accountList');
     const [account, setAccount] = useState<MailAccount | null>(null);
@@ -206,11 +206,11 @@ export default function MailAccountSettingsPanel({ scope, canWrite, close }: Set
                 void api
                     .send('mail.accountDelete', { id: account.id })
                     .then(() => {
+                        // La boîte qu'on réglait n'existe plus : la coquille se
+                        // referme et la vue la quitte, avant que la liste ne se
+                        // relise sans elle.
+                        gone();
                         invalidate('mail.accountCount', 'mail.accountList');
-                        // La boîte qu'on réglait n'existe plus : rester
-                        // afficherait les réglages de la fonctionnalité sous son
-                        // nom, le temps que la vue se ravise.
-                        close();
                     })
                     .catch((e) => setStatus(humanizeError(e, 'Suppression impossible.')))
                     .finally(() => setBusy(false));

@@ -16,7 +16,6 @@ interface DatabaseDetailProps {
     testing: boolean;
     probe: DatabaseProbe | null;
     onBack: () => void;
-    onEdit: () => void;
     onTest: () => void;
     onInspect: () => void;
     onOpenProject: (projectId: number) => void;
@@ -35,7 +34,6 @@ export function DatabaseDetail({
     testing,
     probe,
     onBack,
-    onEdit,
     onTest,
     onInspect,
     onOpenProject
@@ -51,7 +49,7 @@ export function DatabaseDetail({
                     busy={busy}
                     onTest={onTest}
                     onInspect={onInspect}
-                    onEdit={onEdit}
+                    onGone={onBack}
                     before={
                         <Button variant='ghost' icon='arrow-left' onClick={onBack}>
                             Bases
@@ -67,6 +65,7 @@ export function DatabaseDetail({
                 testing={testing}
                 probe={probe}
                 onExpandChange={setExpanded}
+                onGone={onBack}
             >
                 {usage.length > 0 && (
                     <section className={styles.panel}>

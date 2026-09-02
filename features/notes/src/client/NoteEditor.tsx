@@ -204,6 +204,9 @@ export default function NoteEditor() {
                                 itemLabel: title.trim() || 'Sans titre',
                                 shareable: !stored.private
                             }}
+                            // Déplacée dans un autre espace depuis ses réglages, la
+                            // note n'est plus ici : l'éditeur se referme sur rien.
+                            onGone={() => close(null)}
                         />
                     )}
                     <button

@@ -37,5 +37,10 @@ export const manifest = {
     topics: [{ id: 'projectsChat', keys: ['projects.messages', 'projects.list'] }],
     /** Les assignés d'une carte et les auteurs d'un message sont des membres. */
     nativeCapabilities: ['members.read'],
+    /**
+     * Le projet lui-même (profil, archivage) dans l'onglet Général de sa fiche.
+     * Partage et Permissions viennent du descripteur.
+     */
+    settings: { item: ['general'] },
     commands: projectCommands
 } satisfies FeatureManifest;

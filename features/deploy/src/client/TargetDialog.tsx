@@ -18,36 +18,25 @@ import {
 } from '../contracts/domain';
 
 import { api } from './api';
-import { DOKPLOY_TIMEOUT_MS } from './format';
+import { DOKPLOY_TIMEOUT_MS, KIND_OPTIONS } from './format';
 import styles from './style.module.css';
 
 interface TargetDialogProps {
     open: boolean;
-    /** La cible modifiée, ou `null` pour une déclaration. */
-    target: DeployTarget | null;
     onClose: () => void;
     onSaved: (target: DeployTarget) => void;
-    /** Absent = pas de suppression proposée (on modifie depuis un projet). */
-    onRemoved?: () => void;
 }
 
 /**
- * Les deux genres de cible, tous deux visibles : deux choix fixes, un
- * segment chacun plutôt qu'un déroulant qui les cacherait derrière un clic.
+ * Déclarer une cible de déploiement. Rien d'autre : une fois déclarée, une
+ * cible se règle dans l'onglet Général de sa fiche, comme tout élément.
+ *
+ * Rien ne se crée chez le fournisseur : le dialogue interroge l'instance pour
+ * proposer ce qu'elle déclare, avec un repli manuel. Il charge lui-même les
+ * accès de l'espace ; ils se gèrent dans Réglages → Sources, et l'accès créé
+ * pendant ce temps est adopté à la fermeture.
  */
-const KIND_OPTIONS: readonly { value: DeployTargetKind; label: string; title: string }[] = [
-    { value: 'application', label: 'Application', title: 'Une application Dokploy (application.deploy)' },
-    { value: 'compose', label: 'Pile compose', title: 'Une pile Docker Compose (compose.deploy)' }
-];
-
-/**
- * Déclarer une cible de déploiement, ou la régler. Rien ne se crée chez le
- * fournisseur : le dialogue interroge l'instance pour proposer ce qu'elle
- * déclare, avec un repli manuel. Il charge lui-même les accès de l'espace ; ils
- * se gèrent dans Réglages → Sources, et l'accès créé pendant ce temps est
- * adopté à la fermeture.
- */
-export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: TargetDialogProps) {
+export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
     const [credentials, setCredentials] = useState<DeployCredential[] | null>(null);
     const [credentialId, setCredentialId] = useState('');
     const [candidates, setCandidates] = useState<DeployCandidate[]>([]);
@@ -57,7 +46,6 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
     const [busy, setBusy] = useState(false);
     const [loadingCandidates, setLoadingCandidates] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [confirmRemove, setConfirmRemove] = useState(false);
     /**
      * Les accès connus au moment d'ouvrir les réglages : celui qui apparaît
      * ensuite vient d'y être créé, et c'est pour cette cible-ci ; il se
@@ -79,16 +67,15 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
 
     useEffect(() => {
         if (!open) return;
-        setExternalId(target?.externalId ?? '');
-        setName(target?.name ?? '');
-        setKind(target?.kind ?? 'application');
-        setConfirmRemove(false);
+        setExternalId('');
+        setName('');
+        setKind('application');
         knownIds.current = null;
         setError(null);
         void reloadCredentials().then((list) => {
-            setCredentialId(target?.credentialId ? String(target.credentialId) : String(list[0]?.id ?? ''));
+            setCredentialId(String(list[0]?.id ?? ''));
         });
-    }, [open, target, reloadCredentials]);
+    }, [open, reloadCredentials]);
 
     /**
      * La coquille s'ouvre : on photographie les accès connus. Elle se ferme :
@@ -162,38 +149,20 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
         setBusy(true);
         setError(null);
         try {
-            const payload = {
+            const res = await api.send('deploy.add', {
+                credentialId: Number(credentialId),
                 kind,
                 externalId: externalId.trim(),
                 // Un nom laissé vide retombe sur l'identifiant : une cible sans
                 // intitulé resterait désignable, mais illisible dans une liste.
                 name: name.trim() || externalId.trim()
-            };
-            const res = target
-                ? await api.send('deploy.update', {
-                      targetId: target.id,
-                      credentialId: Number(credentialId),
-                      ...payload
-                  })
-                : await api.send('deploy.add', { credentialId: Number(credentialId), ...payload });
+            });
+            // `deploy.detail` aussi : déclarer une cible déjà connue (idempotence)
+            // met à jour son intitulé, que sa fiche peut montrer.
             invalidate('deploy.list', 'deploy.count', 'deploy.detail');
             onSaved(res.target);
         } catch (e) {
             setError(humanizeError(e, 'L’enregistrement a échoué.'));
-        } finally {
-            setBusy(false);
-        }
-    };
-
-    const remove = async () => {
-        if (!target || busy) return;
-        setBusy(true);
-        try {
-            await api.send('deploy.remove', { targetId: target.id });
-            invalidate('deploy.list', 'deploy.count', 'projects.board');
-            onRemoved?.();
-        } catch (e) {
-            setError(humanizeError(e, 'La suppression a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -206,7 +175,7 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
         <Dialog
             open={open}
             onClose={onClose}
-            title={target ? 'Régler la cible' : 'Déclarer une cible de déploiement'}
+            title='Déclarer une cible de déploiement'
             width={560}
             onSubmit={submit}
             footer={
@@ -215,7 +184,7 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
                         Annuler
                     </Button>
                     <Button onClick={submit} disabled={busy || nothingToUse || !externalId.trim()}>
-                        {busy ? 'Enregistrement…' : target ? 'Enregistrer' : 'Déclarer'}
+                        {busy ? 'Enregistrement…' : 'Déclarer'}
                     </Button>
                 </>
             }
@@ -246,7 +215,7 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
                                 <SelectInput value={credentialId} onChange={(e) => setCredentialId(e.target.value)}>
                                     {(credentials ?? []).map((c) => (
                                         <option key={c.id} value={c.id}>
-                                            {c.label} — {c.baseUrl}
+                                            {c.label} · {c.baseUrl}
                                         </option>
                                     ))}
                                 </SelectInput>
@@ -279,11 +248,11 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
                                           ? 'Cette instance ne déclare aucune application'
                                           : 'Choisir…'}
                                 </option>
-                                {/* La cible réglée mais absente de la liste (retirée
-                                    chez le fournisseur, ou saisie à la main) : sans
-                                    cette entrée, le sélecteur afficherait « Choisir… ». */}
+                                {/* Un identifiant saisi à la main, absent de la
+                                    liste : sans cette entrée, le sélecteur
+                                    afficherait « Choisir… ». */}
                                 {externalId !== '' && !candidates.some((c) => c.externalId === externalId) && (
-                                    <option value={externalId}>{externalId} — hors liste</option>
+                                    <option value={externalId}>{externalId} (hors liste)</option>
                                 )}
                                 {candidates.map((c) => (
                                     <option key={`${c.kind}:${c.externalId}`} value={c.externalId}>
@@ -333,37 +302,6 @@ export function TargetDialog({ open, target, onClose, onSaved, onRemoved }: Targ
                 )}
 
                 {error && <p className={styles.error}>{error}</p>}
-
-                {target && onRemoved && (
-                    <div className={styles.dangerZone}>
-                        <div className={styles.dangerText}>
-                            <strong>Supprimer cette cible</strong>
-                            <span className={styles.hint}>
-                                Son historique part avec elle, et les projets qui la déployaient perdent leur liaison.
-                                L’application, elle, continue de tourner chez Dokploy.
-                            </span>
-                        </div>
-                        {confirmRemove ? (
-                            <div className={styles.actions}>
-                                <Button variant='secondary' onClick={() => setConfirmRemove(false)} disabled={busy}>
-                                    Annuler
-                                </Button>
-                                <Button variant='danger' onClick={() => void remove()} disabled={busy}>
-                                    Confirmer
-                                </Button>
-                            </div>
-                        ) : (
-                            <Button
-                                variant='danger'
-                                icon='trash'
-                                onClick={() => setConfirmRemove(true)}
-                                disabled={busy}
-                            >
-                                Supprimer
-                            </Button>
-                        )}
-                    </div>
-                )}
             </div>
         </Dialog>
     );

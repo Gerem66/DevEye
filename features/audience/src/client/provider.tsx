@@ -58,9 +58,10 @@ function LinkedSite({ siteId, canWrite, onUnlink }: LinkedSiteProps) {
                         >
                             Installer
                         </Button>
-                        {/* Les réglages de ce site, hors du bloc d'écriture : un lecteur
-                            y a droit. Le bouton se supprime seul quand aucune section
-                            n'est lisible. */}
+                        {/* Les réglages du site, les mêmes que sur sa fiche : son
+                            identité et sa suppression y vivent (onglet Général). Hors
+                            du bloc d'écriture, un lecteur y a droit ; le bouton se
+                            supprime seul quand aucune section n'est lisible. */}
                         <FeatureSettingsButton
                             scope={{ kind: 'item', feature: 'audience', itemId: String(site.id), itemLabel: site.name }}
                         />
@@ -107,12 +108,11 @@ interface LinkedSiteDialogProps {
 }
 
 /**
- * Le dialogue de la feature, en mode création seulement : c'est le seul cas
- * de Projets, qui relie ce qui vient d'être créé. La modification passe par
- * la fiche du site, dans la feature.
+ * Le dialogue de création de la feature, pas une copie : Projets relie ce qui
+ * vient d'être créé. Un site relié se règle par le bouton commun de `LinkedSite`.
  */
 function LinkedSiteDialog({ open, onClose, onSaved }: LinkedSiteDialogProps) {
-    return <SiteDialog open={open} site={null} onClose={onClose} onSaved={(site) => onSaved(site.id)} />;
+    return <SiteDialog open={open} onClose={onClose} onSaved={(site) => onSaved(site.id)} />;
 }
 
 export const clientProvider: AudienceClientProvider = {

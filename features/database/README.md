@@ -107,9 +107,10 @@ Deux secrets par base, chacun dans sa colonne et jamais dans `content` : le mot
 de passe de la base, et celui du tunnel (mot de passe SSH ou clé privée). Les
 DTO n'en portent qu'un booléen (`hasPassword`, `access.hasSecret`).
 
-Corollaire sur les formulaires : un champ laissé intact **conserve** le secret en
-place ; une chaîne vide l'efface. Le client ne peut pas renvoyer un secret
-inchangé, puisqu'il ne l'a jamais reçu.
+Corollaire sur les formulaires : un champ laissé vide **conserve** le secret en
+place, le panneau Général ne l'envoie pas. Le client ne peut pas renvoyer un
+secret inchangé, puisqu'il ne l'a jamais reçu ; la commande, elle, admet une
+chaîne vide pour l'effacer.
 
 ### 2.3 Ce qui doit être unique ne peut pas être chiffré
 
@@ -391,8 +392,12 @@ DatabaseHeader.tsx       l'en-tête d'une base (retour ou « Délier », titre, 
                          le bouton commun des réglages), partagé avec l'onglet d'un projet
 DatabaseDetail.tsx       état, alertes (leur état seulement), explorateur, projets liés
 DatabaseView.tsx         le contenu partagé avec l'onglet d'un projet
-DatabaseDialog.tsx       connexion et tunnel : l'identité d'une base, rien de plus
-DatabaseGeneralPanel.tsx Réglages → Général d'une base : relevé, cadence, tables à l'ouverture
+DatabaseDialog.tsx       ajouter une base : moteur, connexion et tunnel ; une base ajoutée se
+                         règle dans sa fiche
+DatabaseGeneralPanel.tsx Réglages → Général d'une base : connexion, accès, relevé, cadence, tables
+                         à l'ouverture, suppression
+ConnectionFields.tsx     les champs de connexion et d'accès, et leur modèle, partagés entre le
+                         dialogue d'ajout et le panneau Général
 DatabaseAlertsPanel.tsx  Réglages → Alertes d'une base : la liste des règles, qui ouvre AlertDialog
 AlertDialog.tsx          conditions, opérateur, message, essai à blanc ; zone danger pour supprimer
 ProbeLine.tsx            « en cours », puis le résultat d'un essai, effacé après 10 s
@@ -408,11 +413,14 @@ DatabaseWidget.tsx       la carte d'accueil
 rowKey.ts format.ts style.module.css
 ```
 
-Deux composants de cette liste servent **deux écrans chacun**, et c'est
-volontaire : `ProbeLine` porte le retour d'un essai dans la fiche comme dans le
-pied du dialogue de connexion (les deux doivent dire la même chose et s'effacer
-pareil), et `ResultTable` rend l'aperçu du terminal comme sa vue en grand — une
-ligne vue en petit est ainsi forcément la même que celle vue en grand.
+Trois composants de cette liste servent **plusieurs écrans chacun**, et c'est
+volontaire : `ProbeLine` porte le retour d'un essai dans la fiche, dans le pied
+du dialogue d'ajout et dans le panneau Général (tous doivent dire la même chose
+et s'effacer pareil), `ConnectionFields` est le formulaire de connexion et
+d'accès du dialogue d'ajout comme du panneau Général (un seul formulaire, jamais
+une copie réduite), et `ResultTable` rend l'aperçu du terminal comme sa vue en
+grand : une ligne vue en petit est ainsi forcément la même que celle vue en
+grand.
 `DatabaseHeader` et `DatabaseView` le sont aussi, entre la feature et l'onglet
 d'un projet : ce qui diffère d'un contexte à l'autre entre par leurs props, le
 reste est identique et doit le rester.

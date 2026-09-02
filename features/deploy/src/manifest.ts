@@ -28,10 +28,10 @@ export const manifest = {
     /** Ce que la fiche « À propos » relie : les avis partent par un compte Mail. */
     links: [{ to: 'mail', what: 'envoie ses alertes par un compte Mail' }],
     /**
-     * Les accès Dokploy se gèrent dans l'onglet Sources ; le dialogue d'une
-     * cible n'en fait que choisir un. Notifications, Partage et Permissions
-     * viennent du descripteur.
+     * Les accès Dokploy dans l'onglet Sources de la feature ; la cible elle-même
+     * (accès, identifiant, type, intitulé, suppression) dans l'onglet Général de
+     * sa fiche. Notifications, Partage et Permissions viennent du descripteur.
      */
-    settings: { feature: ['sources'] },
+    settings: { feature: ['sources'], item: ['general'] },
     commands: deployCommands
 } satisfies FeatureManifest;

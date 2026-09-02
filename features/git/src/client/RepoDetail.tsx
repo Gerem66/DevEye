@@ -14,7 +14,6 @@ interface RepoDetailProps {
     canWrite: boolean;
     busy: boolean;
     onBack: () => void;
-    onEdit: () => void;
     onSyncNow: () => void;
     /** Ouvre un projet qui utilise ce dépôt, dans la feature Projets. */
     onOpenProject: (projectId: number) => void;
@@ -32,7 +31,6 @@ export function RepoDetail({
     canWrite,
     busy,
     onBack,
-    onEdit,
     onSyncNow,
     onOpenProject
 }: RepoDetailProps) {
@@ -89,15 +87,11 @@ export function RepoDetail({
                             {syncing ? 'Synchronisation…' : 'Synchroniser'}
                         </Button>
                     )}
-                    {/* Le jeton d'un dépôt se choisit parmi les clés de son espace :
-                        le serveur refuse la modification d'un dépôt étranger. */}
-                    {canWrite && !repo.foreign && (
-                        <Button variant='secondary' icon='edit' onClick={onEdit} disabled={busy || syncing}>
-                            Modifier
-                        </Button>
-                    )}
-                    {/* Les réglages de ce dépôt ; le bouton se garde de lui-même,
-                        sans section accessible il ne s'affiche pas. */}
+                    {/* Les réglages de ce dépôt, son jeton et sa suppression
+                        compris (onglet Général). Le bouton se garde de lui-même,
+                        sans section accessible il ne s'affiche pas. Supprimé ou
+                        déplacé depuis la coquille, le dépôt n'est plus ici : la
+                        fiche revient à la liste. */}
                     <FeatureSettingsButton
                         scope={{
                             kind: 'item',
@@ -105,6 +99,7 @@ export function RepoDetail({
                             itemId: String(repo.id),
                             itemLabel: `${repo.owner}/${repo.repo}`
                         }}
+                        onGone={onBack}
                     />
                 </div>
             </header>

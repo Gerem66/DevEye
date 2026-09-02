@@ -1,4 +1,4 @@
-import type { DeployStatus } from '../contracts/domain';
+import type { DeployStatus, DeployTargetKind } from '../contracts/domain';
 
 /** Le vocabulaire d'état, un seul jeu pour toute la feature. */
 export const STATUS_LABELS: Record<DeployStatus, string> = {
@@ -53,6 +53,15 @@ export const DOKPLOY_TIMEOUT_MS = 35_000;
  * ({@link DOKPLOY_TIMEOUT_MS}) puis l'attente du flux de journaux (30 s de plus).
  */
 export const DOKPLOY_LOG_TIMEOUT_MS = 65_000;
+
+/**
+ * Les deux genres de cible, tous deux visibles : deux choix fixes, un segment
+ * chacun plutôt qu'un déroulant qui les cacherait derrière un clic.
+ */
+export const KIND_OPTIONS: readonly { value: DeployTargetKind; label: string; title: string }[] = [
+    { value: 'application', label: 'Application', title: 'Une application Dokploy (application.deploy)' },
+    { value: 'compose', label: 'Pile compose', title: 'Une pile Docker Compose (compose.deploy)' }
+];
 
 /** L'hôte seul : une liste n'a pas besoin du schéma ni du chemin. */
 export function hostOf(baseUrl: string | null): string {

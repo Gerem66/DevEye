@@ -22,7 +22,8 @@ features (`features/uptime/`, voir [Docs/FEATURE_SDK.md](../../Docs/FEATURE_SDK.
 - `src/client/` : la vue (`Uptime.tsx`), la carte, le widget de topbar
   (`TopbarWidget.tsx`, rendu sans prop dans le cadre de l'hôte), le magasin du
   compte (`store.ts`, ex `stores/uptime.ts`), le panneau Général d'un service
-  (`ServiceGeneralPanel.tsx`) et le contrat client offert à Projets
+  (`ServiceGeneralPanel.tsx` : identité, réglages fins, suppression), le
+  dialogue d'ajout (`ServiceDialog.tsx`) et le contrat client offert à Projets
   (`provider.tsx`, `UPTIME_CLIENT_PROVIDER`) ;
 - `deveye-feature.json` : l'allowlist des cinq tables historiques, jamais
   déplacées.
@@ -170,20 +171,21 @@ remplaçant le précédent avec un bouton retour (le même schéma que la liste 
 le détail).
 
 **La liste se lit, elle ne pilote pas.** Chaque ligne porte le nom, l'état, la
-bande des dernières 24 h, les trois pourcentages et « Modifier ». Rien d'autre :
-« tester maintenant » et « mettre en pause » y étaient deux boutons par ligne pour
-des gestes rares, et vivent là où l'on se rend pour les faire — la fiche du
-service porte « Tester », son formulaire porte la pause. Toute la ligne mène à la
-fiche, barres comprises : repérer un creux rouge et vouloir l'ouvrir est le même
-geste.
+bande des dernières 24 h et les trois pourcentages. Rien d'autre : « tester
+maintenant » et « mettre en pause » y étaient deux boutons par ligne pour des
+gestes rares, et vivent là où l'on se rend pour les faire : la fiche du service
+porte « Tester », ses réglages portent la pause. Toute la ligne mène à la fiche,
+barres comprises : repérer un creux rouge et vouloir l'ouvrir est le même geste.
 
-« Modifier » ne règle que l'**identité** du service (nom, URL, méthode, statut
-attendu, mot-clé, surveillance active). Sa cadence de relève, son délai, son
-seuil de défaillance et sa rétention vivent dans ses **réglages** (le bouton
-commun de sa fiche, onglet Général : `ServiceGeneralPanel`, déclaré par
-`settings.item` du manifest), à côté de ses canaux, de son partage et de ses
-permissions. Le dialogue conserve ces quatre réglages tels quels quand il
-enregistre : le contrat d'`uptime.update` prend le service entier.
+Tout ce qui se règle sur un service vit dans ses **réglages** (le bouton commun
+de sa fiche, onglet Général : `ServiceGeneralPanel`, déclaré par `settings.item`
+du manifest) : son identité (nom, URL, méthode, statut attendu, mot-clé,
+surveillance active), sa cadence de relève, son délai, son seuil de défaillance,
+sa rétention et sa suppression, à côté de ses canaux, de son partage et de ses
+permissions. Le panneau envoie le service entier à `uptime.update`, dont le
+contrat prend tout. Le dialogue (`ServiceDialog`) ne sert qu'à **ajouter** un
+service : il demande l'identité et pose les réglages fins par défaut ; c'est
+aussi lui que l'onglet Déploiement d'un projet ouvre, par le contrat client.
 
 Le journal complet a son propre étage parce qu'un an de sondes fait des dizaines
 de milliers de lignes : en ligne dans le détail, il enterrait les graphiques.

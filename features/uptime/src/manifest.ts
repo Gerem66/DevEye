@@ -26,9 +26,10 @@ export const manifest = {
     topbarWidget: { description: 'Services en ligne sur les services surveillés' },
     links: [{ to: 'mail', what: 'envoie ses alertes par un compte Mail' }],
     /**
-     * Un panneau Général à l'échelle d'un service (cadence, délai, seuil,
-     * rétention). Notifications, Partage et Permissions s'ajoutent tout seuls :
-     * `notifies` et le branchement au partage suffisent.
+     * Un panneau Général à l'échelle d'un service : son identité, ses réglages
+     * fins (cadence, délai, seuil, rétention) et sa suppression. Notifications,
+     * Partage et Permissions s'ajoutent tout seuls : `notifies` et le
+     * branchement au partage suffisent.
      */
     settings: { item: ['general'] },
     commands: uptimeCommands

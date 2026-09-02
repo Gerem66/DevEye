@@ -193,10 +193,13 @@ où dorment des projets confidentiels se range **sans rien déverrouiller**. Les
 archives, elles, ne se rangent pas : elles suivent `archived_at DESC`, et
 restaurer un projet le renvoie en fin de liste.
 
-**Archiver** vit dans « Modifier le projet » : on le fait une fois dans la vie
-d'un projet, ce n'est pas un geste qui mérite d'être le plus accessible de
-l'écran. **Restaurer**, en revanche, reste sur la carte archivée — c'est le seul
-geste de cet écran-là.
+**Archiver** vit dans l'onglet Général des réglages du projet
+(`ProjectGeneralPanel`), sous son profil : on le fait une fois dans la vie d'un
+projet, ce n'est pas un geste qui mérite d'être le plus accessible de l'écran.
+Il n'y a pas de bouton « Modifier » sur la fiche : le dialogue ne fait que
+créer, et c'est aussi le seul endroit où le niveau de confidentialité se
+choisit (voir [Docs/SETTINGS.md](../../Docs/SETTINGS.md)). **Restaurer**, en
+revanche, reste sur la carte archivée : c'est le seul geste de cet écran-là.
 
 **Tableau et Frise réclament la largeur de leur contenu** (`useRequestPopupWidth`
 du barrel client), entre le plancher commun de 1240 px et la fenêtre : un kanban
@@ -345,7 +348,8 @@ Projects.tsx       portefeuille en cartes rangeables, archives, « mes tâches �
 ProjectsWidget.tsx la tuile d'accueil
 api.ts             les appels typés du module (featureApi)
 ProjectDetail.tsx  en-tête + onglets ; possède le niveau live `l2`
-ProjectDialog.tsx  créer et modifier un projet (archiver vit ici)
+ProjectDialog.tsx  créer un projet (le niveau de confidentialité s'y choisit)
+ProjectGeneralPanel.tsx  onglet Général de la fiche : le profil du projet, et son archivage
 MyTasks.tsx        mes cartes, tous projets confondus
 tabs.ts            les onglets, leur ordre, et la règle qui les fait paraître
 useProjectTabs.ts  les compteurs (`projects.linkCounts`) qui alimentent la barre

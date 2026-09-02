@@ -1,23 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { ACCEPTED_TYPES, Button, Dialog, fileToSquareDataUrl, SelectInput, TextInput } from 'deveye-sdk-client';
 import type { ProjectStatus } from '@deveye/types';
-import { dateInputToSeconds, dateInputValue, STATUS_LABELS, TAG_KIND_LABELS } from './api';
+import { dateInputToSeconds, dateInputValue, PROJECT_ICON_SIZE, STATUS_LABELS, STATUSES, TAG_KIND_LABELS } from './api';
 import {
     PROJECT_ICON_MAX_LENGTH,
     PROJECT_MAX_TAGS,
     PROJECT_TAG_LABEL_MAX_LENGTH,
     PROJECT_TITLE_MAX_LENGTH,
-    type Project,
     type ProjectDraft,
     type ProjectSecurityTier,
     type ProjectTag
 } from '../contracts/domain';
 import styles from './style.module.css';
-
-const STATUSES: ProjectStatus[] = ['draft', 'active', 'paused', 'done'];
-
-/** Côté de la vignette enregistrée, en pixels. La carte l'affiche à 36 px. */
-const PROJECT_ICON_SIZE = 128;
 
 export interface ProjectDialogResult {
     draft: ProjectDraft;
@@ -26,16 +20,12 @@ export interface ProjectDialogResult {
 
 interface ProjectDialogProps {
     open: boolean;
-    /** `null` = création. */
-    project: Project | null;
     /** Un espace partagé n'accepte pas le tier confidentiel (voir `_shared.ts`). */
     allowGuarded: boolean;
     busy: boolean;
     error: string | null;
     onClose: () => void;
     onSubmit: (result: ProjectDialogResult) => void;
-    /** Archiver. Absent à la création, sur un projet déjà archivé, ou en lecture seule. */
-    onArchive?: () => void;
 }
 
 const EMPTY: ProjectDraft = {
@@ -49,51 +39,31 @@ const EMPTY: ProjectDraft = {
 };
 
 /**
- * Le profil d'un projet ; le niveau de confidentialité ne s'y règle qu'à la
- * création. `holdSecrecy` parce que le formulaire écrit de la donnée chiffrée :
- * une saisie longue ne doit pas tomber sur la re-validation.
+ * Créer un projet. Rien d'autre : une fois né, un projet se règle dans l'onglet
+ * Général de sa fiche, comme tout élément. Le niveau de confidentialité ne se
+ * choisit qu'ici : le basculer ensuite re-chiffre tout l'arbre, c'est une
+ * action à part entière.
+ *
+ * `holdSecrecy` parce que le formulaire écrit de la donnée chiffrée : une
+ * saisie longue ne doit pas tomber sur la re-validation.
  */
-export function ProjectDialog({
-    open,
-    project,
-    allowGuarded,
-    busy,
-    error,
-    onClose,
-    onSubmit,
-    onArchive
-}: ProjectDialogProps) {
+export function ProjectDialog({ open, allowGuarded, busy, error, onClose, onSubmit }: ProjectDialogProps) {
     const [draft, setDraft] = useState<ProjectDraft>(EMPTY);
     const [tier, setTier] = useState<ProjectSecurityTier>('open');
     const [tagKind, setTagKind] = useState<ProjectTag['kind']>('tech');
     const [tagLabel, setTagLabel] = useState('');
-    /** L'archivage sort le projet de l'espace de travail : il se confirme. */
-    const [confirmArchive, setConfirmArchive] = useState(false);
     const [iconError, setIconError] = useState<string | null>(null);
     const fileRef = useRef<HTMLInputElement>(null);
 
-    // Recharge le formulaire à chaque ouverture : une popup réutilisée ne doit
-    // jamais rouvrir sur les valeurs de la fois d'avant.
+    // Repart de zéro à chaque ouverture : une popup réutilisée ne doit jamais
+    // rouvrir sur la saisie de la fois d'avant.
     useEffect(() => {
         if (!open) return;
-        setDraft(
-            project
-                ? {
-                      title: project.title,
-                      icon: project.icon,
-                      description: project.description,
-                      tags: project.tags,
-                      status: project.status,
-                      startDate: project.startDate,
-                      dueDate: project.dueDate
-                  }
-                : EMPTY
-        );
-        setTier(project?.securityTier ?? 'open');
+        setDraft(EMPTY);
+        setTier('open');
         setTagLabel('');
-        setConfirmArchive(false);
         setIconError(null);
-    }, [open, project]);
+    }, [open]);
 
     const addTag = () => {
         const label = tagLabel.trim();
@@ -133,7 +103,7 @@ export function ProjectDialog({
         <Dialog
             open={open}
             onClose={onClose}
-            title={project ? 'Modifier le projet' : 'Nouveau projet'}
+            title='Nouveau projet'
             width={620}
             onSubmit={submit}
             holdSecrecy
@@ -143,7 +113,7 @@ export function ProjectDialog({
                         Annuler
                     </Button>
                     <Button onClick={submit} disabled={busy || !draft.title.trim()}>
-                        {busy ? 'Enregistrement…' : project ? 'Enregistrer' : 'Créer'}
+                        {busy ? 'Enregistrement…' : 'Créer'}
                     </Button>
                 </>
             }
@@ -276,51 +246,18 @@ export function ProjectDialog({
                     )}
                 </div>
 
-                {/* Le tier ne se change qu'ici, à la création : le basculer ensuite
-                    re-chiffre tout l'arbre, c'est une action à part entière. */}
-                {!project && allowGuarded && (
+                {allowGuarded && (
                     <label className={styles.field}>
                         <span className={styles.label}>Confidentialité</span>
                         <SelectInput value={tier} onChange={(e) => setTier(e.target.value as ProjectSecurityTier)}>
-                            <option value='open'>Standard — chiffré, ouvert sans mot de passe</option>
-                            <option value='guarded'>Confidentiel — demande votre mot de passe</option>
+                            <option value='open'>Standard : chiffré, ouvert sans mot de passe</option>
+                            <option value='guarded'>Confidentiel : demande votre mot de passe</option>
                         </SelectInput>
                         <span className={styles.hint}>
                             Un projet confidentiel ne peut pas être synchronisé avec un dépôt git ni déclencher un
                             déploiement : ces tâches tournent sans session.
                         </span>
                     </label>
-                )}
-
-                {onArchive && project && !project.archived && (
-                    <div className={styles.dangerZone}>
-                        <div className={styles.dangerText}>
-                            <span className={styles.label}>Archiver ce projet</span>
-                            <span className={styles.hint}>
-                                Il quitte le portefeuille et rejoint les archives, d’où il se restaure d’un clic. Rien
-                                n’est supprimé — dans ce module, rien ne l’est jamais.
-                            </span>
-                        </div>
-                        {confirmArchive ? (
-                            <div className={styles.actions}>
-                                <Button variant='secondary' onClick={() => setConfirmArchive(false)} disabled={busy}>
-                                    Annuler
-                                </Button>
-                                <Button variant='danger' onClick={onArchive} disabled={busy}>
-                                    Confirmer
-                                </Button>
-                            </div>
-                        ) : (
-                            <Button
-                                variant='danger'
-                                icon='archive'
-                                onClick={() => setConfirmArchive(true)}
-                                disabled={busy}
-                            >
-                                Archiver
-                            </Button>
-                        )}
-                    </div>
                 )}
 
                 {error && <p className={styles.error}>{error}</p>}

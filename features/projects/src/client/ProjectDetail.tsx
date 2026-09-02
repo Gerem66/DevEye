@@ -46,7 +46,6 @@ interface ProjectDetailProps {
     meUserId: number;
     canWrite: boolean;
     onBack: () => void;
-    onEditProfile: () => void;
 }
 
 /**
@@ -54,7 +53,7 @@ interface ProjectDetailProps {
  * Possède les niveaux `l2` (l'onglet) et `l3` (la carte ouverte) de la présence ;
  * `l1` est au parent, et un niveau n'admet qu'un déclarant.
  */
-export function ProjectDetail({ project, members, meUserId, canWrite, onBack, onEditProfile }: ProjectDetailProps) {
+export function ProjectDetail({ project, members, meUserId, canWrite, onBack }: ProjectDetailProps) {
     const [tab, setTab] = useState<ProjectTabId>('board');
 
     const tabs = useProjectTabs(project, canWrite);
@@ -444,8 +443,12 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
                         </div>
                     </div>
                     <div className={styles.actions}>
-                        {/* Partage n'est pas proposé pour un projet confidentiel,
-                            que le serveur refuserait de projeter. */}
+                        {/* Les réglages de ce projet, son profil et son archivage
+                            compris (onglet Général). Partage n'est pas proposé
+                            pour un projet confidentiel, que le serveur refuserait
+                            de projeter. Archivé ou déplacé depuis la coquille, le
+                            projet n'est plus ici : la fiche revient au
+                            portefeuille. */}
                         <FeatureSettingsButton
                             scope={{
                                 kind: 'item',
@@ -454,12 +457,8 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack, on
                                 itemLabel: project.title || 'Sans titre',
                                 shareable: project.securityTier === 'open'
                             }}
+                            onGone={onBack}
                         />
-                        {canWrite && (
-                            <Button variant='secondary' icon='edit' onClick={onEditProfile}>
-                                Modifier le projet
-                            </Button>
-                        )}
                     </div>
                 </header>
 

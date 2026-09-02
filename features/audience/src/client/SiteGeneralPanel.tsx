@@ -1,31 +1,44 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-    ReadOnlyNotice,
-    SaveButton,
+    Button,
+    ConfirmDialog,
     humanizeError,
     invalidate,
+    ReadOnlyNotice,
+    SaveButton,
     SegmentedControl,
     settingsStyles as shell,
     Switch,
-    TextInput
+    TextInput,
+    type ConfirmRequest
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import {
     AUDIENCE_RETENTION_MAX_DAYS,
     AUDIENCE_RETENTION_MIN_DAYS,
+    AUDIENCE_SITE_NAME_MAX_LENGTH,
+    audiencePlatformSchema,
     audienceVisitorModeSchema,
+    type AudiencePlatform,
     type AudienceSite,
     type AudienceVisitorMode
 } from '../contracts/domain';
 
 import { api } from './api';
-import { VISITOR_HINTS, VISITOR_LABELS } from './format';
+import { PLATFORM_HINTS, PLATFORM_LABELS, VISITOR_HINTS, VISITOR_LABELS } from './format';
+import styles from './style.module.css';
 
-/** Les deux modes, dans l'ordre du contrat : un choix fixe, tous deux visibles. */
+/** Les choix fixes, dans l'ordre du contrat : tous visibles, jamais derrière un déroulant. */
+const PLATFORM_OPTIONS = audiencePlatformSchema.options.map((value) => ({ value, label: PLATFORM_LABELS[value] }));
 const VISITOR_OPTIONS = audienceVisitorModeSchema.options.map((value) => ({ value, label: VISITOR_LABELS[value] }));
 
-/** Les trois réglages du panneau, découpés du site chargé. */
-interface Tuning {
+/** Le site tel qu'on le saisit, découpé du site chargé. */
+interface Draft {
+    name: string;
+    description: string;
+    platform: AudiencePlatform;
+    /** Une origine par ligne, telle que saisie : le serveur normalise et dédoublonne. */
+    origins: string;
     active: boolean;
     visitorMode: AudienceVisitorMode;
     /**
@@ -36,37 +49,50 @@ interface Tuning {
     retentionDays: string;
 }
 
-function tuningOf(site: AudienceSite): Tuning {
-    return { active: site.active, visitorMode: site.visitorMode, retentionDays: String(site.retentionDays) };
+function draftOf(site: AudienceSite): Draft {
+    return {
+        name: site.name,
+        description: site.description,
+        platform: site.platform,
+        origins: site.origins.join('\n'),
+        active: site.active,
+        visitorMode: site.visitorMode,
+        retentionDays: String(site.retentionDays)
+    };
 }
 
 /**
- * Les réglages d'un site : la mesure, la reconnaissance des visiteurs et la
- * conservation des événements bruts. Le panneau Général de la coquille de
- * réglages, à l'échelle d'un site, à côté de son partage et de ses permissions.
+ * Le site lui-même : son identité (nom, description, plateforme, origines
+ * autorisées), sa mesure, la reconnaissance de ses visiteurs, la conservation
+ * des événements bruts, et sa suppression. L'onglet Général de ses réglages,
+ * là où le bouton commun mène.
+ *
+ * L'identité et la suppression vivaient dans un dialogue « Modifier », à côté
+ * du bouton de réglages : deux portes pour régler une même chose. Le dialogue
+ * ne sert plus qu'à DÉCLARER un site, geste qui n'a pas d'élément à viser.
  *
  * Autonome comme tous les panneaux de la coquille : il charge le site et se
- * sauvegarde par `audience.siteUpdate`, dont le contrat prend le site entier,
- * d'où un brouillon recomposé à partir du site chargé, identité conservée telle
- * quelle. Sans le droit d'écriture, les champs restent lisibles mais figés : un
+ * sauvegarde par `audience.siteUpdate`, dont le contrat prend le site entier.
+ * Sans le droit d'écriture, les champs restent lisibles mais figés : un
  * formulaire que le serveur refuserait est un écran qui ment.
  *
  * Un site projeté d'un autre espace se lit ici mais se règle chez lui : la
  * ligne se réécrit sous la clé de son espace, et le serveur refuserait.
  */
-export default function SiteGeneralPanel({ scope, canWrite }: SettingsPanelProps) {
+export default function SiteGeneralPanel({ scope, canWrite, gone }: SettingsPanelProps) {
     const itemId = scope.kind === 'item' ? Number(scope.itemId) : null;
     const [site, setSite] = useState<AudienceSite | null>(null);
-    const [draft, setDraft] = useState<Tuning | null>(null);
+    const [draft, setDraft] = useState<Draft | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
     const load = useCallback(async () => {
         if (itemId === null) return;
         try {
             const res = await api.send('audience.get', { siteId: itemId });
             setSite(res.site);
-            setDraft(tuningOf(res.site));
+            setDraft(draftOf(res.site));
         } catch (e) {
             setError(humanizeError(e, 'Les réglages n’ont pas pu être lus.'));
         }
@@ -76,39 +102,63 @@ export default function SiteGeneralPanel({ scope, canWrite }: SettingsPanelProps
         void load();
     }, [load]);
 
-    const submit = async () => {
+    const save = async () => {
         if (busy || !site || !draft) return;
+        const name = draft.name.trim();
         const retentionDays = Number(draft.retentionDays);
-        if (
-            !Number.isInteger(retentionDays) ||
-            retentionDays < AUDIENCE_RETENTION_MIN_DAYS ||
-            retentionDays > AUDIENCE_RETENTION_MAX_DAYS
-        ) {
-            setError(`La conservation va de ${AUDIENCE_RETENTION_MIN_DAYS} à ${AUDIENCE_RETENTION_MAX_DAYS} jours.`);
-            return;
+        const problem =
+            name.length === 0
+                ? 'Donnez un nom à ce site.'
+                : !Number.isInteger(retentionDays) ||
+                    retentionDays < AUDIENCE_RETENTION_MIN_DAYS ||
+                    retentionDays > AUDIENCE_RETENTION_MAX_DAYS
+                  ? `La conservation va de ${AUDIENCE_RETENTION_MIN_DAYS} à ${AUDIENCE_RETENTION_MAX_DAYS} jours.`
+                  : null;
+        if (problem) {
+            setError(problem);
+            // Rejeté : le bouton n'annonce « Enregistré » que sur un succès.
+            throw new Error(problem);
         }
         setBusy(true);
         setError(null);
         try {
             const res = await api.send('audience.siteUpdate', {
                 siteId: site.id,
-                // L'identité, renvoyée telle quelle : elle se change dans le
-                // dialogue du site, pas ici.
-                name: site.name,
-                description: site.description,
-                platform: site.platform,
-                origins: site.origins,
+                name,
+                description: draft.description.trim(),
+                platform: draft.platform,
+                origins: draft.origins
+                    .split('\n')
+                    .map((line) => line.trim())
+                    .filter((line) => line.length > 0),
                 active: draft.active,
                 visitorMode: draft.visitorMode,
                 retentionDays
             });
             setSite(res.site);
-            setDraft(tuningOf(res.site));
+            setDraft(draftOf(res.site));
             invalidate('audience.detail', 'audience.list');
         } catch (e) {
             setError(humanizeError(e, 'Enregistrement impossible.'));
             // Relancé : le bouton n'annonce « Enregistré » que sur un succès.
             throw e;
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const remove = async () => {
+        if (!site) return;
+        setBusy(true);
+        setError(null);
+        try {
+            await api.send('audience.siteRemove', { siteId: site.id });
+            // La fiche s'en va AVANT que la liste ne se relise : relue après
+            // coup, elle chercherait un site qui n'existe plus.
+            gone();
+            invalidate('audience.count', 'audience.list');
+        } catch (e) {
+            setError(humanizeError(e, 'Suppression impossible.'));
         } finally {
             setBusy(false);
         }
@@ -121,17 +171,71 @@ export default function SiteGeneralPanel({ scope, canWrite }: SettingsPanelProps
     if (site.foreign) {
         return (
             <p className={shell.sectionHint}>
-                Ce site vient d’un autre espace : sa mesure, la reconnaissance de ses visiteurs et sa conservation se
-                règlent depuis là-bas.
+                Ce site vient d’un autre espace : son identité, sa mesure et sa suppression se règlent depuis là-bas.
             </p>
         );
     }
 
-    const set = <K extends keyof Tuning>(key: K, value: Tuning[K]) => setDraft((d) => (d ? { ...d, [key]: value } : d));
+    const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((d) => (d ? { ...d, [key]: value } : d));
     const editable = canWrite && !busy;
+    const projects =
+        site.projectCount > 0
+            ? `les ${site.projectCount} projet${site.projectCount > 1 ? 's' : ''} qui le suivent perdent seulement leur lien`
+            : 'les projets qui le suivraient perdraient seulement leur lien';
 
     return (
         <div className={shell.section}>
+            <label className={shell.field}>
+                <span className={shell.sectionLabel}>Nom</span>
+                <TextInput
+                    value={draft.name}
+                    maxLength={AUDIENCE_SITE_NAME_MAX_LENGTH}
+                    disabled={!editable}
+                    placeholder='Vitrine, Application, Blog…'
+                    onChange={(e) => set('name', e.target.value)}
+                />
+            </label>
+
+            <label className={shell.field}>
+                <span className={shell.sectionLabel}>Description</span>
+                <TextInput
+                    value={draft.description}
+                    disabled={!editable}
+                    placeholder='Facultatif'
+                    onChange={(e) => set('description', e.target.value)}
+                />
+            </label>
+
+            {/* La plateforme décide si les origines autorisées sont appliquées :
+                la seule décision qui change ce que le serveur accepte. */}
+            <div className={shell.field}>
+                <span className={shell.sectionLabel}>Plateforme</span>
+                <SegmentedControl
+                    value={draft.platform}
+                    options={PLATFORM_OPTIONS}
+                    disabled={!editable}
+                    onChange={(v) => set('platform', v)}
+                    aria-label='Plateforme'
+                />
+                <span className={shell.fieldHint}>{PLATFORM_HINTS[draft.platform]}</span>
+            </div>
+
+            <label className={shell.field}>
+                <span className={shell.sectionLabel}>Origines autorisées</span>
+                <textarea
+                    className={styles.textarea}
+                    value={draft.origins}
+                    rows={3}
+                    disabled={!editable}
+                    onChange={(e) => set('origins', e.target.value)}
+                    placeholder={'exemple.fr\nwww.exemple.fr'}
+                />
+                <span className={shell.fieldHint}>
+                    Un hôte par ligne ; le port et le protocole sont ignorés.
+                    {draft.origins.trim().length === 0 && ' Vide, toute origine est acceptée.'}
+                </span>
+            </label>
+
             <Switch
                 checked={draft.active}
                 disabled={!editable}
@@ -174,15 +278,42 @@ export default function SiteGeneralPanel({ scope, canWrite }: SettingsPanelProps
 
             {canWrite ? (
                 <div className={shell.sectionActions}>
-                    <SaveButton onSave={submit} disabled={busy} />
+                    <SaveButton onSave={save} disabled={busy} />
                 </div>
             ) : (
                 <ReadOnlyNotice>
-                    Votre rôle ne permet pas de modifier ces réglages : ils relèvent de l’écriture sur Audience.
+                    Votre rôle ne permet pas de modifier un site : cela relève de l’écriture sur Audience.
                 </ReadOnlyNotice>
             )}
 
             {error && <p className={shell.notice}>{error}</p>}
+
+            {canWrite && (
+                <div className={shell.field}>
+                    <span className={shell.sectionLabel}>Supprimer ce site</span>
+                    <span className={shell.fieldHint}>
+                        Tout son historique de mesures est effacé, et {projects}. Cette action est définitive.
+                    </span>
+                    <div className={shell.sectionActions}>
+                        <Button
+                            variant='danger'
+                            disabled={busy}
+                            onClick={() =>
+                                setConfirm({
+                                    title: `Supprimer « ${site.name} » ?`,
+                                    description: `Tout son historique de mesures est effacé, et ${projects}. Cette action est définitive.`,
+                                    confirmLabel: 'Supprimer le site',
+                                    onConfirm: () => void remove()
+                                })
+                            }
+                        >
+                            Supprimer le site
+                        </Button>
+                    </div>
+                </div>
+            )}
+
+            <ConfirmDialog request={confirm} busy={busy} onClose={() => setConfirm(null)} />
         </div>
     );
 }

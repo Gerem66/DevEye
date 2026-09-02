@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Button, invalidate, openFeature, useResource, useWorkspaceMembers } from 'deveye-sdk-client';
+import { Button, FeatureSettingsButton, openFeature, useResource, useWorkspaceMembers } from 'deveye-sdk-client';
 import type { GitClientProvider } from '@deveye/types/sdk/client';
 
 import { api } from './api';
@@ -36,7 +36,6 @@ function LinkedRepo({ repoId, canWrite, onUnlink }: LinkedRepoProps) {
     const [syncing, setSyncing] = useState(false);
     const onSyncingChange = useCallback((v: boolean) => setSyncing(v), []);
     const [syncRequest, setSyncRequest] = useState(0);
-    const [dialogOpen, setDialogOpen] = useState(false);
 
     if (!data) return <p className={error ? styles.error : styles.hint}>{error ?? 'Chargement…'}</p>;
     const { repo } = data;
@@ -84,13 +83,16 @@ function LinkedRepo({ repoId, canWrite, onUnlink }: LinkedRepoProps) {
                             {syncing ? 'Synchronisation…' : 'Synchroniser'}
                         </Button>
                     )}
-                    {/* Le jeton d'un dépôt se choisit parmi les clés de son espace :
-                        le serveur refuse la modification d'un dépôt étranger. */}
-                    {canWrite && !repo.foreign && (
-                        <Button variant='secondary' icon='edit' onClick={() => setDialogOpen(true)} disabled={syncing}>
-                            Modifier
-                        </Button>
-                    )}
+                    {/* Les réglages du dépôt, les mêmes que sur sa fiche : son
+                        jeton et sa suppression y vivent (onglet Général). */}
+                    <FeatureSettingsButton
+                        scope={{
+                            kind: 'item',
+                            feature: 'git',
+                            itemId: String(repo.id),
+                            itemLabel: `${repo.owner}/${repo.repo}`
+                        }}
+                    />
 
                     {/* Par la téléportation, garde d'accès comprise, et offert même
                         sans droit d'écriture : c'est une navigation. `openFeature`
@@ -117,18 +119,6 @@ function LinkedRepo({ repoId, canWrite, onUnlink }: LinkedRepoProps) {
                 onSyncingChange={onSyncingChange}
                 syncRequest={syncRequest}
             />
-
-            {/* Le dialogue de la feature Git, pas une copie : régler un dépôt
-                depuis un projet ou depuis sa feature est le même geste. */}
-            <RepoDialog
-                open={dialogOpen}
-                repo={repo}
-                onClose={() => setDialogOpen(false)}
-                onSaved={() => {
-                    setDialogOpen(false);
-                    invalidate('git.list', 'git.repo', 'git.count');
-                }}
-            />
         </section>
     );
 }
@@ -140,12 +130,11 @@ interface LinkedRepoDialogProps {
 }
 
 /**
- * Le dialogue de la feature, en mode ajout seulement : c'est le seul cas de
- * Projets, qui relie ce qui vient d'être ajouté. La modification passe par
- * `LinkedRepo`, qui tient le dépôt chargé.
+ * Le dialogue d'ajout de la feature, pas une copie : Projets relie ce qui vient
+ * d'être ajouté. Un dépôt relié se règle par le bouton commun de `LinkedRepo`.
  */
 function LinkedRepoDialog({ open, onClose, onSaved }: LinkedRepoDialogProps) {
-    return <RepoDialog open={open} repo={null} onClose={onClose} onSaved={onSaved} />;
+    return <RepoDialog open={open} onClose={onClose} onSaved={onSaved} />;
 }
 
 export const clientProvider: GitClientProvider = {

@@ -4,9 +4,6 @@ declare const styles: {
     readonly cardFoot: string;
     readonly cardMeta: string;
     readonly cardName: string;
-    readonly dangerActions: string;
-    readonly dangerText: string;
-    readonly dangerZone: string;
     readonly detail: string;
     readonly detailActions: string;
     readonly detailHead: string;

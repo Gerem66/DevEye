@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SHARE_WIRED_FEATURES, featureDescriptor, type FeatureId } from '@deveye/types';
 
 import Button from '@/Components/Button';
@@ -135,10 +135,22 @@ export interface FeatureSettingsDialogProps {
     /** La section à montrer à l'ouverture : le « + » d'un sélecteur de source
      *  ouvre directement l'onglet Sources. */
     initialSection?: SettingsSectionId;
+    /**
+     * L'élément réglé n'est plus ici (supprimé, déplacé vers un autre espace) :
+     * la coquille s'est refermée, la fiche qui l'a ouverte doit s'en aller.
+     */
+    onGone?: () => void;
 }
 
-export function FeatureSettingsDialog({ open, onClose, scope, initialSection }: FeatureSettingsDialogProps) {
+export function FeatureSettingsDialog({ open, onClose, scope, initialSection, onGone }: FeatureSettingsDialogProps) {
     const sections = useSettingsSections(scope);
+    // Une seule sortie pour « l'élément n'est plus là », dans cet ordre : la
+    // coquille d'abord, la fiche ensuite. Le contraire laisserait un dialogue
+    // ouvert au nom d'un élément qui n'existe plus.
+    const gone = useCallback(() => {
+        onClose();
+        onGone?.();
+    }, [onClose, onGone]);
     /** `undefined` = personne n'a choisi, et c'est la première section qui
      *  s'ouvre. Nommer ici une section en dur la ferait gagner partout où elle
      *  existe, quelle que soit sa place dans la nav. */
@@ -205,9 +217,9 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection }: 
                             />
                         )}
                         {current === 'permissions' && scope.kind === 'item' && <ItemPermissionsSection scope={scope} />}
-                        {current === 'sharing' && <SharingSection scope={scope} />}
+                        {current === 'sharing' && <SharingSection scope={scope} onGone={gone} />}
                         {current && !GENERIC_SECTIONS.has(current) && (
-                            <ModulePanel scope={scope} section={current} onClose={onClose} />
+                            <ModulePanel scope={scope} section={current} close={onClose} gone={gone} />
                         )}
                     </div>
                 </div>
@@ -240,6 +252,12 @@ export interface FeatureSettingsButtonProps {
      * le niveau elle-même, le registre n'admet qu'un déclarant par niveau.
      */
     onOpenChange?: (open: boolean) => void;
+    /**
+     * L'élément a été supprimé ou déplacé depuis la coquille, qui s'est
+     * refermée : la fiche qui monte le bouton s'en va (le même geste que son
+     * bouton de retour).
+     */
+    onGone?: () => void;
 }
 
 /** Le bouton qui ouvre les réglages, ou rien : « pas de section, pas de
@@ -249,7 +267,8 @@ export function FeatureSettingsButton({
     variant = 'secondary',
     label = 'Réglages',
     initialSection,
-    onOpenChange
+    onOpenChange,
+    onGone
 }: FeatureSettingsButtonProps) {
     const sections = useSettingsSections(scope);
     const [open, setOpen] = useState(false);
@@ -303,7 +322,13 @@ export function FeatureSettingsButton({
             >
                 {label}
             </Button>
-            <FeatureSettingsDialog open={open} onClose={() => setOpen(false)} scope={scope} initialSection={section} />
+            <FeatureSettingsDialog
+                open={open}
+                onClose={() => setOpen(false)}
+                scope={scope}
+                initialSection={section}
+                onGone={onGone}
+            />
         </>
     );
 }
@@ -318,11 +343,13 @@ export type { SettingsScope, SettingsSectionId } from './scope';
 function ModulePanel({
     scope,
     section,
-    onClose
+    close,
+    gone
 }: {
     scope: SettingsScope;
     section: SettingsSectionId;
-    onClose: () => void;
+    close: () => void;
+    gone: () => void;
 }) {
     const permissions = useWorkspacePermissions();
     const client = moduleClient(scope.feature);
@@ -346,11 +373,12 @@ function ModulePanel({
                     'write',
                     scope.kind === 'item' ? scope.itemId : undefined
                 )}
+                close={close}
                 // Pour le panneau qui supprime l'élément qu'il règle : la portée
                 // sur laquelle le dialogue s'est ouvert n'existe plus, et la
                 // coquille retomberait sinon sur les onglets de la
                 // fonctionnalité, sous le nom de l'élément disparu.
-                close={onClose}
+                gone={gone}
             />
         </>
     );

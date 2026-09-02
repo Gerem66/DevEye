@@ -4,6 +4,7 @@ import Backup from './Backup';
 import BackupWidget from './BackupWidget';
 import DestinationsPanel from './DestinationsPanel';
 import JobEncryptionPanel from './JobEncryptionPanel';
+import JobGeneralPanel from './JobGeneralPanel';
 
 /**
  * Démonté dès la fermeture : la fiche d'un travail suit une exécution en vol.
@@ -12,6 +13,6 @@ import JobEncryptionPanel from './JobEncryptionPanel';
 export const clientEntry: FeatureClient = {
     Widget: BackupWidget,
     Full: Backup,
-    settingsPanels: { sources: DestinationsPanel, encryption: JobEncryptionPanel },
+    settingsPanels: { general: JobGeneralPanel, sources: DestinationsPanel, encryption: JobEncryptionPanel },
     cacheDurationMinutes: 0
 };

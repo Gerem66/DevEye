@@ -14,7 +14,6 @@ declare const styles: {
     readonly barsTrailing: string;
     readonly browser: string;
     readonly card: string;
-    readonly cardActions: string;
     readonly cardDragging: string;
     readonly cardGraph: string;
     readonly cardHead: string;
@@ -60,7 +59,6 @@ declare const styles: {
     readonly formRow: string;
     readonly grip: string;
     readonly headline: string;
-    readonly iconBtn: string;
     readonly incident: string;
     readonly incidentError: string;
     readonly incidentWhen: string;
@@ -73,7 +71,6 @@ declare const styles: {
     readonly paneDim: string;
     readonly paneSpinner: string;
     readonly popupActions: string;
-    readonly popupActionsLeft: string;
     readonly rangeActive: string;
     readonly rangeBtn: string;
     readonly ranges: string;

@@ -20,7 +20,6 @@ interface SiteDetailProps {
     ingestOrigin: string;
     canWrite: boolean;
     onBack: () => void;
-    onEdit: () => void;
     onSiteChanged: (site: AudienceSite) => void;
 }
 
@@ -30,7 +29,7 @@ interface SiteDetailProps {
  * ce composant n'ajoute que ce qui n'a de sens que dans la feature (retour à la
  * liste, réglages, installation, interconnexion vers les projets).
  */
-export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onEdit, onSiteChanged }: SiteDetailProps) {
+export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onSiteChanged }: SiteDetailProps) {
     const [installOpen, setInstallOpen] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
 
@@ -103,19 +102,14 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onEdit
                     >
                         Installer
                     </Button>
-                    {/* `!site.foreign` : l'identité d'un site (nom, plateforme,
-                        origines) appartient à son espace, le serveur le refuse et
-                        l'écran ne le propose donc pas ; les chiffres, eux, sont tout
-                        l'objet de la projection. */}
-                    {canWrite && !site.foreign && (
-                        <Button variant='secondary' icon='edit' onClick={onEdit}>
-                            Modifier
-                        </Button>
-                    )}
-                    {/* Les réglages de ce site : mesure, visiteurs et conservation,
-                        partage, restrictions par rôle. Le bouton se garde lui-même. */}
+                    {/* Les réglages de ce site, son identité et sa suppression
+                        comprises (onglet Général), avec le partage et les
+                        restrictions par rôle. Le bouton se garde lui-même. Supprimé
+                        ou déplacé depuis la coquille, le site n'est plus ici : la
+                        fiche revient à la liste. */}
                     <FeatureSettingsButton
                         scope={{ kind: 'item', feature: 'audience', itemId: String(site.id), itemLabel: site.name }}
+                        onGone={onBack}
                     />
                 </div>
             </header>

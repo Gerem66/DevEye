@@ -351,29 +351,3 @@
     flex: 1;
     min-width: 0;
 }
-
-/* Zone destructrice au pied du dialogue, à l'écart des boutons ordinaires. */
-.dangerZone {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-md);
-    flex-wrap: wrap;
-    padding: var(--space-md);
-    border-radius: var(--radius-md);
-    border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
-    background: var(--danger-bg);
-}
-
-.dangerText {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-}
-
-.dangerActions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-}

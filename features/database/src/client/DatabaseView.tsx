@@ -17,6 +17,8 @@ interface DatabaseViewProps {
     probe: DatabaseProbe | null;
     /** L'explorateur passe ou sort du plein écran ; l'appelant possède l'en-tête à effacer. */
     onExpandChange?: (expanded: boolean) => void;
+    /** Supprimée depuis ses réglages (ouverts ici sur Alertes), la base n'est plus là : l'appelant quitte la fiche. */
+    onGone?: () => void;
     /** Rendu après l'explorateur (les projets liés, par exemple). */
     children?: ReactNode;
 }
@@ -34,6 +36,7 @@ export function DatabaseView({
     testing,
     probe,
     onExpandChange,
+    onGone,
     children
 }: DatabaseViewProps) {
     const [expanded, setExpanded] = useState(false);
@@ -102,6 +105,7 @@ export function DatabaseView({
                             }}
                             initialSection='alerts'
                             label='Gérer les alertes'
+                            onGone={onGone}
                         />
                     </header>
 

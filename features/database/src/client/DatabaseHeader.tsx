@@ -55,9 +55,13 @@ interface DatabaseHeaderProps {
     busy: boolean;
     onTest: () => void;
     onInspect: () => void;
-    onEdit: () => void;
     /** Ouvrir cette base dans sa feature ; absent quand on y est déjà. */
     onOpenInFeature?: () => void;
+    /**
+     * Supprimée depuis ses réglages, la base n'est plus ici : quitter la fiche.
+     * L'onglet d'un projet ne passe rien, sa liste suit d'elle-même.
+     */
+    onGone?: () => void;
     /** Posé avant l'identité (un retour à la liste, par exemple). */
     before?: ReactNode;
     /** Posé après les boutons (un « Délier », par exemple). */
@@ -74,8 +78,8 @@ export function DatabaseHeader({
     busy,
     onTest,
     onInspect,
-    onEdit,
     onOpenInFeature,
+    onGone,
     before,
     after
 }: DatabaseHeaderProps) {
@@ -128,15 +132,11 @@ export function DatabaseHeader({
                         >
                             <span className='icon icon-info' />
                         </button>
-                        {/* `!database.foreign` : une base projetée se modifie chez
-                            elle, le serveur le refuse ici. */}
-                        {!database.foreign && (
-                            <Button variant='secondary' icon='edit' onClick={onEdit} disabled={busy}>
-                                Modifier
-                            </Button>
-                        )}
                     </>
                 )}
+                {/* Les réglages de cette base, sa connexion et sa suppression
+                    comprises (onglet Général). Le bouton se garde de lui-même,
+                    sans section accessible il ne s'affiche pas. */}
                 <FeatureSettingsButton
                     scope={{
                         kind: 'item',
@@ -144,6 +144,7 @@ export function DatabaseHeader({
                         itemId: String(database.id),
                         itemLabel: database.name
                     }}
+                    onGone={onGone}
                 />
                 {/* Avant-dernier, avant `after` : le même ordre dans les trois
                     onglets d'un projet. */}

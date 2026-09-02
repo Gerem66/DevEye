@@ -10,7 +10,6 @@ import styles from './style.module.css';
 interface ServiceCardProps {
     service: UptimeService;
     onOpen: () => void;
-    onEdit: () => void;
     /** Card being dragged right now: dimmed, never restyled otherwise. */
     dragging: boolean;
     onDragPointerDown: (e: React.PointerEvent) => void;
@@ -29,23 +28,19 @@ function statusBadge(service: UptimeService): { tone: 'online' | 'danger' | 'neu
 }
 
 /**
- * One service in the list. Clicking anywhere opens the detail view; the corner
- * action stops the click. Read-only on purpose: "test now" and "pause" live on
- * the detail view and the form, not on every row.
+ * Un service dans la liste. Cliquer n'importe où ouvre sa fiche, et rien
+ * d'autre : « tester » vit sur la fiche, la pause et le reste dans l'onglet
+ * Général de ses réglages, pas sur chaque ligne.
  *
- * Reordering hangs off the leading grip alone: only the grip opts out of touch
- * scrolling (`touch-action: none`), so a drag started anywhere else still
- * scrolls the list.
+ * Le réordonnancement ne tient qu'à la poignée : elle seule refuse le
+ * défilement tactile (`touch-action: none`), un glissement commencé ailleurs
+ * fait toujours défiler la liste.
  */
-export function ServiceCard({ service, onOpen, onEdit, dragging, onDragPointerDown }: ServiceCardProps) {
+export function ServiceCard({ service, onOpen, dragging, onDragPointerDown }: ServiceCardProps) {
     const badge = statusBadge(service);
     // Quelqu'un consulte ce service, plus bas que moi : sa couleur ici.
     const outline = useLiveOutline('l1', String(service.id));
     const { points, resolution, axis } = useServiceHistory(service.id, service.lastCheckedAt);
-    const action = (run: () => void) => (e: React.MouseEvent) => {
-        e.stopPropagation();
-        run();
-    };
 
     return (
         <div
@@ -102,18 +97,6 @@ export function ServiceCard({ service, onOpen, onEdit, dragging, onDragPointerDo
             </div>
 
             <Ratios service={service} />
-
-            <div className={styles.cardActions}>
-                <button
-                    type='button'
-                    className={styles.iconBtn}
-                    title='Modifier'
-                    aria-label='Modifier'
-                    onClick={action(onEdit)}
-                >
-                    <span className='icon icon-edit' />
-                </button>
-            </div>
         </div>
     );
 }

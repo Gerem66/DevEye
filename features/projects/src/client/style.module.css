@@ -1528,33 +1528,6 @@
     white-space: nowrap;
 }
 
-/* Bloc d'action destructrice au pied d'un dialogue : il se signale de lui-même
-   plutôt que de côtoyer les boutons ordinaires. */
-.dangerZone {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-md);
-    flex-wrap: wrap;
-    padding: var(--space-md);
-    border-radius: var(--radius-md);
-    border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
-    background: var(--danger-bg);
-}
-
-/*
- * Le texte de la zone, et lui seul : une classe nommée plutôt qu'un sélecteur
- * d'enfant, qui frapperait aussi le groupe de boutons de confirmation et
- * l'empilerait au lieu de le laisser en ligne.
- */
-.dangerText {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-    flex: 1;
-}
-
 /* ------------------------------------------------------------- historique */
 
 .history {
@@ -2080,10 +2053,11 @@
     color: var(--text-muted);
 }
 
-/* --------------------------------------------- vignette du projet (dialogue) */
+/* -------------------------------------------------------- vignette du projet */
 
-/* Le choix de l'image et le titre sur une même ligne : les deux nomment le
-   projet, et on les choisit d'un même geste. */
+/* Le choix de l'image et le titre sur une même ligne, à la création comme dans
+   l'onglet Général : les deux nomment le projet, et on les choisit d'un même
+   geste. */
 .iconRow {
     display: flex;
     align-items: flex-start;
@@ -2109,9 +2083,15 @@
         color var(--transition-fast);
 }
 
-.iconPicker:hover {
+.iconPicker:hover:not(:disabled) {
     border-color: var(--accent);
     color: var(--accent);
+}
+
+/* Sans le droit d'écriture, la vignette se voit mais ne se choisit pas. */
+.iconPicker:disabled {
+    cursor: default;
+    filter: opacity(0.6);
 }
 
 .iconPicker img {

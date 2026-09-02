@@ -1,11 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type {
-    BackupDestination,
-    BackupJob,
-    BackupScheduleKind,
-    BackupSourceCandidate,
-    BackupSourceKind
-} from '../contracts/domain';
+import type { BackupDestination, BackupScheduleKind, BackupSourceCandidate } from '../contracts/domain';
 
 import {
     Button,
@@ -17,31 +11,27 @@ import {
     TextInput
 } from 'deveye-sdk-client';
 import { api } from './api';
-import { DESTINATION_LABELS, SCHEDULE_LABELS, WEEKDAYS } from './format';
+import { DESTINATION_LABELS, SCHEDULE_LABELS, sourceKey, WEEKDAYS } from './format';
 import styles from './style.module.css';
 
 interface JobDialogProps {
     open: boolean;
-    /** `null` = création. */
-    job: BackupJob | null;
     destinations: BackupDestination[];
     onClose: () => void;
     onSaved: () => void;
-    /** Absent = suppression non proposée. */
-    onRemoved?: () => void;
 }
 
-/** La clé d'un candidat, pour qu'un `<select>` porte à la fois le genre et l'id. */
-const keyOf = (kind: BackupSourceKind, id: number | null): string => `${kind}:${id ?? ''}`;
-
 /**
+ * Créer un travail. Rien d'autre : une fois créé, un travail se règle dans
+ * l'onglet Général de sa fiche, comme tout élément.
+ *
  * Les sources viennent du serveur (`backup.sources`) : elles vivent dans trois
  * features, chacune derrière son droit.
  */
-export default function JobDialog({ open, job, destinations, onClose, onSaved, onRemoved }: JobDialogProps) {
+export default function JobDialog({ open, destinations, onClose, onSaved }: JobDialogProps) {
     const [candidates, setCandidates] = useState<BackupSourceCandidate[]>([]);
     const [name, setName] = useState('');
-    const [sourceKey, setSourceKey] = useState('');
+    const [source, setSource] = useState('');
     const [destinationId, setDestinationId] = useState(0);
     const [enabled, setEnabled] = useState(true);
     const [schedule, setSchedule] = useState<BackupScheduleKind>('daily');
@@ -51,8 +41,6 @@ export default function JobDialog({ open, job, destinations, onClose, onSaved, o
     const [keepLast, setKeepLast] = useState(7);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    /** La suppression emporte l'historique : elle se confirme sur place. */
-    const [confirmRemove, setConfirmRemove] = useState(false);
     /**
      * Les destinations connues à l'ouverture des réglages : celle qui apparaît
      * ensuite vient d'y être créée pour ce travail.
@@ -65,27 +53,13 @@ export default function JobDialog({ open, job, destinations, onClose, onSaved, o
     useEffect(() => {
         if (!open) return;
         setError(null);
-        setConfirmRemove(false);
         knownIds.current = null;
         void api
             .send('backup.sources', {})
             .then((res) => setCandidates(res.candidates))
             .catch(() => setCandidates([]));
-
-        if (job) {
-            setName(job.name);
-            setSourceKey(keyOf(job.source, job.sourceId));
-            setDestinationId(job.destinationId);
-            setEnabled(job.enabled);
-            setSchedule(job.schedule);
-            setHour(job.scheduleHour);
-            setWeekday(job.scheduleWeekday);
-            setDay(job.scheduleDay);
-            setKeepLast(job.keepLast);
-            return;
-        }
         setName('');
-        setSourceKey('');
+        setSource('');
         setDestinationId(0);
         setEnabled(true);
         setSchedule('daily');
@@ -93,7 +67,7 @@ export default function JobDialog({ open, job, destinations, onClose, onSaved, o
         setWeekday(0);
         setDay(1);
         setKeepLast(7);
-    }, [open, job]);
+    }, [open]);
 
     // Sans destination choisie, la première de la liste.
     useEffect(() => {
@@ -112,23 +86,23 @@ export default function JobDialog({ open, job, destinations, onClose, onSaved, o
     }, [destinations]);
 
     const selected = useMemo(
-        () => candidates.find((c) => keyOf(c.kind, c.id) === sourceKey) ?? null,
-        [candidates, sourceKey]
+        () => candidates.find((c) => sourceKey(c.kind, c.id) === source) ?? null,
+        [candidates, source]
     );
 
     // Le nom suit la source tant qu'on ne l'a pas écrit soi-même : personne n'a
     // envie de retaper « Base de production » juste après l'avoir choisie.
     useEffect(() => {
-        if (job || !selected || name.trim() !== '') return;
+        if (!selected || name.trim() !== '') return;
         setName(selected.name);
-    }, [selected, job, name]);
+    }, [selected, name]);
 
     const submit = async () => {
         if (busy || !selected) return;
         setBusy(true);
         setError(null);
         try {
-            const body = {
+            await api.send('backup.jobAdd', {
                 name: name.trim(),
                 destinationId,
                 source: selected.kind,
@@ -140,28 +114,12 @@ export default function JobDialog({ open, job, destinations, onClose, onSaved, o
                 scheduleDay: day,
                 keepLast,
                 // La forme se règle dans l'onglet Chiffrement ; un travail naît scellé.
-                encryption: job?.encryption ?? ('server' as const)
-            };
-            if (job) await api.send('backup.jobUpdate', { jobId: job.id, ...body });
-            else await api.send('backup.jobAdd', body);
+                encryption: 'server'
+            });
             onSaved();
             onClose();
         } catch (e) {
-            setError(humanizeError(e, 'Impossible d’enregistrer ce travail.'));
-        } finally {
-            setBusy(false);
-        }
-    };
-
-    const remove = async () => {
-        if (!job || busy) return;
-        setBusy(true);
-        setError(null);
-        try {
-            await api.send('backup.jobRemove', { jobId: job.id });
-            onRemoved?.();
-        } catch (e) {
-            setError(humanizeError(e, 'Impossible de supprimer ce travail.'));
+            setError(humanizeError(e, 'Impossible de créer ce travail.'));
         } finally {
             setBusy(false);
         }
@@ -174,7 +132,7 @@ export default function JobDialog({ open, job, destinations, onClose, onSaved, o
             open={open}
             onClose={onClose}
             onSubmit={() => void submit()}
-            title={job ? 'Modifier le travail' : 'Nouveau travail de sauvegarde'}
+            title='Nouveau travail de sauvegarde'
             description='Ce qui part, où ça atterrit, à quelle cadence, et combien de copies on garde.'
             width={640}
             footer={
@@ -183,7 +141,7 @@ export default function JobDialog({ open, job, destinations, onClose, onSaved, o
                         Annuler
                     </Button>
                     <Button onClick={() => void submit()} disabled={busy || !ready}>
-                        {busy ? 'Enregistrement…' : 'Enregistrer'}
+                        {busy ? 'Création…' : 'Créer'}
                     </Button>
                 </>
             }
@@ -191,10 +149,14 @@ export default function JobDialog({ open, job, destinations, onClose, onSaved, o
             <div className={styles.form}>
                 <label className={styles.field}>
                     <span className={styles.fieldLabel}>Quoi sauvegarder</span>
-                    <SelectInput value={sourceKey} onChange={(e) => setSourceKey(e.target.value)}>
+                    <SelectInput value={source} onChange={(e) => setSource(e.target.value)}>
                         <option value=''>Choisir une source…</option>
                         {candidates.map((c) => (
-                            <option key={keyOf(c.kind, c.id)} value={keyOf(c.kind, c.id)} disabled={!c.available}>
+                            <option
+                                key={sourceKey(c.kind, c.id)}
+                                value={sourceKey(c.kind, c.id)}
+                                disabled={!c.available}
+                            >
                                 {c.name}
                                 {c.available ? '' : ` (${c.reason ?? 'indisponible'})`}
                             </option>
@@ -321,37 +283,6 @@ export default function JobDialog({ open, job, destinations, onClose, onSaved, o
                     label='Travail actif'
                     hint='Désactivé, il ne part plus tout seul mais reste déclenchable à la main.'
                 />
-
-                {job && onRemoved && (
-                    <div className={styles.dangerZone}>
-                        <div className={styles.dangerText}>
-                            <strong>Supprimer ce travail</strong>
-                            <span className={styles.fieldHint}>
-                                Son historique part avec lui. Les archives déjà écrites, elles, restent où elles sont :
-                                à vous de les effacer si vous le souhaitez.
-                            </span>
-                        </div>
-                        {confirmRemove ? (
-                            <div className={styles.dangerActions}>
-                                <Button variant='secondary' onClick={() => setConfirmRemove(false)} disabled={busy}>
-                                    Annuler
-                                </Button>
-                                <Button variant='danger' onClick={() => void remove()} disabled={busy}>
-                                    Confirmer
-                                </Button>
-                            </div>
-                        ) : (
-                            <Button
-                                variant='danger'
-                                icon='trash'
-                                onClick={() => setConfirmRemove(true)}
-                                disabled={busy}
-                            >
-                                Supprimer
-                            </Button>
-                        )}
-                    </div>
-                )}
 
                 {error && <p className={styles.error}>{error}</p>}
             </div>

@@ -5,6 +5,7 @@ import { ws } from '@/api/ws';
 import Button from '@/Components/Button';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import { Dialog } from '@/Components/Dialog';
+import { ProgressDialog } from '@/Components/ProgressDialog';
 import SelectInput from '@/Components/SelectInput';
 import Switch from '@/Components/Switch';
 import { moduleManifest } from '@/sdk/registry';
@@ -35,11 +36,19 @@ const BLOCKER_TEXT: Record<ShareBlocker, string> = {
         'Cet élément vient d’un autre espace, où vous n’avez pas le droit de le modifier : son partage se règle par ceux qui l’ont. Qui tient l’écriture de l’élément chez lui peut, en revanche, régler son partage d’ici.'
 };
 
+/**
+ * Un déplacement relit et rescelle tout l'arbre de l'élément dans une
+ * transaction : bien au-delà du délai ordinaire d'une commande.
+ */
+const MOVE_TIMEOUT_MS = 120_000;
+
 interface Props {
     scope: SettingsScope;
+    /** L'élément est parti dans un autre espace : la coquille se referme, la fiche s'en va. */
+    onGone: () => void;
 }
 
-export default function SharingSection({ scope }: Props) {
+export default function SharingSection({ scope, onGone }: Props) {
     const feature = scope.feature;
     const [state, setState] = useState<ItemShareState | null>(null);
     const [busy, setBusy] = useState(false);
@@ -49,8 +58,8 @@ export default function SharingSection({ scope }: Props) {
     /** L'espace visé par un déplacement, tant qu'il n'est pas confirmé. */
     const [moveTo, setMoveTo] = useState('');
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
-    /** Où l'élément est parti : la section ne le voit plus, elle propose d'y aller. */
-    const [moved, setMoved] = useState<{ workspaceId: number; workspaceName: string } | null>(null);
+    /** Le déplacement est en vol : un dialogue de progression tient l'écran. */
+    const [moving, setMoving] = useState(false);
 
     const itemId = scope.kind === 'item' ? scope.itemId : '';
     const { dem, Dem, Def } = itemNounForms(feature);
@@ -125,15 +134,21 @@ export default function SharingSection({ scope }: Props) {
 
     const doMove = (workspaceId: number, workspaceName: string): void => {
         setBusy(true);
+        setMoving(true);
         setError(null);
         void ws
-            .send('share.move', { feature, itemId, workspaceId })
+            .send('share.move', { feature, itemId, workspaceId }, { timeoutMs: MOVE_TIMEOUT_MS })
             .then(() => {
-                setMoved({ workspaceId, workspaceName });
+                // La fiche s'en va AVANT que les ressources ne soient ravivées :
+                // relue après coup, elle chercherait un élément qui n'est plus là.
+                onGone();
                 for (const key of moduleManifest(feature)?.resources ?? []) invalidate(key as ResourceKey);
             })
-            .catch(() => setError('Déplacement impossible.'))
-            .finally(() => setBusy(false));
+            .catch(() => setError(`Déplacement vers « ${workspaceName} » impossible.`))
+            .finally(() => {
+                setMoving(false);
+                setBusy(false);
+            });
     };
 
     if (!state) return <p className={styles.sectionHint}>Chargement…</p>;
@@ -233,48 +248,36 @@ export default function SharingSection({ scope }: Props) {
             {/* Déplacer n'est pas partager : l'élément change de domicile, sa
                 donnée est re-chiffrée et ses projections ne le suivent pas. Le
                 serveur ne le propose (`movable`) que depuis le domicile, et pour
-                une fonctionnalité qui sait convertir son arbre. */}
-            {moved !== null ? (
-                <p className={styles.sectionHint}>
-                    {Dem} est maintenant dans « {moved.workspaceName} ».{' '}
-                    <button
-                        type='button'
-                        className={styles.jumpBtn}
-                        onClick={() => goToItemSettings(moved.workspaceId, feature, itemId, 'sharing')}
-                    >
-                        L’y ouvrir
-                    </button>
-                </p>
-            ) : (
-                state.movable && (
-                    <div className={styles.field}>
-                        <span className={styles.fieldLabel}>Changer d’espace</span>
-                        <div className={styles.fieldWithAction}>
-                            <SelectInput
-                                value={moveTo}
-                                disabled={busy}
-                                aria-label={`Déplacer ${dem} vers`}
-                                onChange={(e) => setMoveTo(e.target.value)}
-                            >
-                                <option value=''>Choisir un espace…</option>
-                                {state.workspaces
-                                    .filter((w) => !w.isHome)
-                                    .map((w) => (
-                                        <option key={w.workspaceId} value={w.workspaceId}>
-                                            {w.workspaceName}
-                                        </option>
-                                    ))}
-                            </SelectInput>
-                            <Button variant='secondary' disabled={busy || moveTo === ''} onClick={askMove}>
-                                Déplacer…
-                            </Button>
-                        </div>
-                        <span className={styles.fieldHint}>
-                            {Def} quitte cet espace pour de bon : sa donnée y est déchiffrée puis rescellée sous la clé
-                            du nouveau. Ce qu’il perd est nommé avant confirmation.
-                        </span>
+                une fonctionnalité qui sait convertir son arbre. Une fois parti,
+                il n'y a plus rien à montrer ici : la fiche se referme. */}
+            {state.movable && (
+                <div className={styles.field}>
+                    <span className={styles.fieldLabel}>Changer d’espace</span>
+                    <div className={styles.fieldWithAction}>
+                        <SelectInput
+                            value={moveTo}
+                            disabled={busy}
+                            aria-label={`Déplacer ${dem} vers`}
+                            onChange={(e) => setMoveTo(e.target.value)}
+                        >
+                            <option value=''>Choisir un espace…</option>
+                            {state.workspaces
+                                .filter((w) => !w.isHome)
+                                .map((w) => (
+                                    <option key={w.workspaceId} value={w.workspaceId}>
+                                        {w.workspaceName}
+                                    </option>
+                                ))}
+                        </SelectInput>
+                        <Button variant='secondary' disabled={busy || moveTo === ''} onClick={askMove}>
+                            Déplacer…
+                        </Button>
                     </div>
-                )
+                    <span className={styles.fieldHint}>
+                        {Def} quitte cet espace pour de bon : sa donnée y est déchiffrée puis rescellée sous la clé du
+                        nouveau. Ce qu’il perd est nommé avant confirmation, et sa fiche se referme une fois parti.
+                    </span>
+                </div>
             )}
 
             {error && <p className={styles.notice}>{error}</p>}
@@ -293,6 +296,15 @@ export default function SharingSection({ scope }: Props) {
             </Dialog>
 
             <ConfirmDialog request={confirm} busy={busy} onClose={() => setConfirm(null)} />
+
+            {/* Le déplacement peut prendre plusieurs secondes (tout l'arbre est
+                relu et rescellé) : un dialogue que rien ne ferme le dit, plutôt
+                qu'un écran figé où l'on ne sait pas si le clic a pris. */}
+            <ProgressDialog
+                open={moving}
+                title='Déplacement en cours'
+                description={`${Dem} change d’espace : sa donnée est déchiffrée puis rescellée sous la clé du nouveau. Sa fiche se refermera une fois parti.`}
+            />
         </div>
     );
 }

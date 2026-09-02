@@ -41,6 +41,9 @@ export const RUN_LABELS: Record<BackupRunStatus, string> = {
 
 export const WEEKDAYS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
 
+/** La clé d'une source, pour qu'un `<select>` porte à la fois le genre et l'id. */
+export const sourceKey = (kind: BackupSourceKind, id: number | null): string => `${kind}:${id ?? ''}`;
+
 /** « En cours » reste neutre : peindre un travail qui vient de partir le ferait passer pour un incident. */
 export function runTone(status: BackupRunStatus | null): 'neutral' | 'online' | 'danger' {
     if (status === 'success') return 'online';

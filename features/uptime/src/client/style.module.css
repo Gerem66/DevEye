@@ -278,38 +278,6 @@
     color: var(--text-muted);
 }
 
-.cardActions {
-    display: flex;
-    gap: var(--space-xs);
-    flex-shrink: 0;
-}
-
-.iconBtn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    border: 1px solid transparent;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition:
-        color var(--transition-fast),
-        background var(--transition-fast);
-}
-
-.iconBtn:hover:not(:disabled) {
-    color: var(--text-primary);
-    background: var(--surface-subtle);
-}
-
-.iconBtn:disabled {
-    opacity: 0.4;
-    cursor: default;
-}
-
 /* Small state dot, shared by the ping journal. */
 .dot {
     width: 8px;
@@ -808,15 +776,9 @@
     border-top: 1px solid var(--glass-border);
 }
 
-.popupActionsLeft {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-}
-
 /* ------------------------------------------------------------------ *
- * Phones. The service row's ratios and actions refuse to shrink, which
- * collapsed `.cardMain` to zero width: its lines get a full row of their own.
+ * Téléphones. Les pourcentages d'une ligne refusent de rétrécir, ce qui
+ * écrasait `.cardMain` à zéro : ses lignes ont une rangée à elles.
  * ------------------------------------------------------------------ */
 
 @media (max-width: 640px) {
@@ -826,8 +788,8 @@
         padding: var(--space-sm);
     }
 
-    /* Claims the whole of row 1 beside the grip, which pushes the ratios and
-       the actions onto row 2 instead of squeezing this block out of existence. */
+    /* Toute la rangée 1 à côté de la poignée, ce qui pousse les pourcentages
+       en rangée 2 au lieu d'écraser ce bloc. */
     .cardMain {
         flex: 1 1 calc(100% - 18px - var(--space-sm));
     }
@@ -847,10 +809,6 @@
     .ratio {
         min-width: 0;
         align-items: flex-start;
-    }
-
-    .cardActions {
-        margin-left: auto;
     }
 
     /* 89 gaps at 2px ate half the width; at 1px the 90 slots fit comfortably. */

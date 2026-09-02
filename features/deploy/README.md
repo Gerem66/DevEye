@@ -121,7 +121,7 @@ visible. Il portait sur les **lignes encore en vol** ; il porte désormais sur l
 | **Fiche**                    | l'en-tête de la cible (retour, titre, actions, dont le bouton de réglages commun), « Déployer », et l'historique de ce qui est parti                                        |
 | **Réglages → Sources**       | les clés d'API Dokploy de l'espace, avec ce que chacune dessert : l'ancien bouton « Accès Dokploy », absorbé par la coquille commune (voir `Docs/SOURCES.md`)               |
 | **Réglages → Notifications** | les canaux de la feature (ses sources d'avis) ; chaque **cible** coche les siens dans ses propres réglages (092). Sur Discord, un message qui suit le déploiement en direct |
-| **Réglages d'une cible**     | notifications, partage entre espaces et permissions par rôle (`Docs/SETTINGS.md`, `Docs/SHARING.md`)                                                                        |
+| **Réglages d'une cible**     | général (accès Dokploy, cible visée, type, intitulé, suppression), notifications, partage entre espaces et permissions par rôle (`Docs/SETTINGS.md`, `Docs/SHARING.md`)     |
 | **Onglet d'un projet**       | les cibles reliées — une vue sur cette feature, voir [Projets](../projects/README.md)                                                                                       |
 
 Une cible se **déclare** (elle existe déjà chez Dokploy), elle ne se crée pas :
@@ -171,11 +171,12 @@ src/server/dokploy.ts               l'adaptateur tRPC + le WebSocket du journal
 src/server/uninstall.sql            DROP de ft_deploy_credentials (les tables historiques restent)
 src/server/*.test.ts                handlers (harnais SDK), service (Dokploy factice), notice (les calculs), dokploy (vraie WebSocket)
 
-src/client/index.tsx                clientEntry : widget, vue complète, panneau Sources, provider client
+src/client/index.tsx                clientEntry : widget, vue complète, panneaux Général et Sources, provider client
 src/client/Deploy.tsx               liste + fiche ; possède le niveau live `l1` (l'identifiant nu de la cible)
 src/client/TargetList.tsx           les cartes + le glisser-déposer
 src/client/TargetView.tsx           ⟵ le cœur partagé avec l'onglet d'un projet
-src/client/TargetDialog.tsx         déclarer / régler / supprimer ; le « + » du sélecteur de clé ouvre Réglages → Sources
+src/client/TargetDialog.tsx         déclarer seulement ; le « + » du sélecteur de clé ouvre Réglages → Sources
+src/client/TargetGeneralPanel.tsx   régler et supprimer : l'onglet Général des réglages d'une cible, où le bouton commun mène
 src/client/CredentialsPanel.tsx     les clés Dokploy (panneau Sources du manifest, le sien : Git garde le sien)
 src/client/LogsDialog.tsx           le journal complet d'un déploiement
 src/client/DeployWidget.tsx         la tuile d'accueil

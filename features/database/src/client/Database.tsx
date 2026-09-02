@@ -45,7 +45,7 @@ export function FeatureDatabase(_props: FeatureViewProps) {
     /** Un essai de connexion est en cours ; distinct de `busy`, qui grise tout. */
     const [testing, setTesting] = useState(false);
 
-    const [dialog, setDialog] = useState<{ database: Database | null } | null>(null);
+    const [addOpen, setAddOpen] = useState(false);
     const [busy, setBusy] = useState(false);
 
     const listVersion = useResourceVersion('database.list');
@@ -167,52 +167,25 @@ export function FeatureDatabase(_props: FeatureViewProps) {
         }
     };
 
-    const remove = async (databaseId: number) => {
-        setBusy(true);
-        try {
-            await api.send('database.remove', { databaseId });
-            setDialog(null);
-            setOpenedId(null);
-            invalidate('database.list', 'database.count', 'projects.board');
-        } catch (e) {
-            setError(humanizeError(e, 'La suppression a échoué.'));
-        } finally {
-            setBusy(false);
-        }
-    };
-
     const openProject = (projectId: number) => {
         openFeature('projects', projectId);
     };
 
     if (opened) {
         return (
-            <>
-                <DatabaseDetail
-                    database={opened.database}
-                    usage={opened.usage}
-                    alerts={opened.alerts}
-                    canWrite={canWrite}
-                    busy={busy}
-                    testing={testing}
-                    probe={probe}
-                    onBack={() => setOpenedId(null)}
-                    onEdit={() => setDialog({ database: opened.database })}
-                    onTest={() => void test(opened.database.id)}
-                    onInspect={() => void inspect(opened.database.id)}
-                    onOpenProject={openProject}
-                />
-                <DatabaseDialog
-                    open={dialog !== null}
-                    database={dialog?.database ?? null}
-                    onClose={() => setDialog(null)}
-                    onSaved={() => {
-                        setDialog(null);
-                        invalidate('database.list', 'database.detail', 'database.count');
-                    }}
-                    onRemove={canWrite ? () => void remove(opened.database.id) : undefined}
-                />
-            </>
+            <DatabaseDetail
+                database={opened.database}
+                usage={opened.usage}
+                alerts={opened.alerts}
+                canWrite={canWrite}
+                busy={busy}
+                testing={testing}
+                probe={probe}
+                onBack={() => setOpenedId(null)}
+                onTest={() => void test(opened.database.id)}
+                onInspect={() => void inspect(opened.database.id)}
+                onOpenProject={openProject}
+            />
         );
     }
 
@@ -234,7 +207,7 @@ export function FeatureDatabase(_props: FeatureViewProps) {
                         lecteur a le droit de voir où partent les alertes. */}
                     <FeatureSettingsButton scope={{ kind: 'feature', feature: 'database' }} />
                     {canWrite && (
-                        <Button icon='add' onClick={() => setDialog({ database: null })}>
+                        <Button icon='add' onClick={() => setAddOpen(true)}>
                             Ajouter une base
                         </Button>
                     )}
@@ -265,16 +238,14 @@ export function FeatureDatabase(_props: FeatureViewProps) {
             )}
 
             <DatabaseDialog
-                open={dialog !== null}
-                database={dialog?.database ?? null}
-                onClose={() => setDialog(null)}
+                open={addOpen}
+                onClose={() => setAddOpen(false)}
                 onSaved={(databaseId) => {
-                    setDialog(null);
+                    setAddOpen(false);
                     invalidate('database.list', 'database.count');
                     // Une base qu'on vient d'ajouter s'ouvre.
                     setOpenedId(databaseId);
                 }}
-                onRemove={canWrite && dialog?.database ? () => void remove(dialog.database!.id) : undefined}
             />
         </div>
     );

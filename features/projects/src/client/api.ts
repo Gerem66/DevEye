@@ -19,6 +19,12 @@ export const STATUS_LABELS: Record<ProjectStatus, string> = {
     done: 'Terminé'
 };
 
+/** Les statuts, dans l'ordre où un projet les traverse. */
+export const STATUSES: ProjectStatus[] = ['draft', 'active', 'paused', 'done'];
+
+/** Côté de la vignette enregistrée, en pixels. La carte l'affiche à 36 px. */
+export const PROJECT_ICON_SIZE = 128;
+
 export const TAG_KIND_LABELS: Record<ProjectTagKind, string> = {
     type: 'Type',
     tech: 'Techno'

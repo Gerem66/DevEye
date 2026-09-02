@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, Checkbox, Dialog, DialogCancelButton, SegmentedControl, TextInput } from 'deveye-sdk-client';
 import type { UptimeMethod, UptimeService } from '../contracts/domain';
 
@@ -7,11 +7,11 @@ import styles from './style.module.css';
 import { clamp, type ServiceTuning } from './format';
 
 /**
- * Ce que le dialogue règle : l'identité du service. Cadence, délai, seuil et
- * rétention se règlent dans le panneau Général ; le dialogue les conserve tels
- * quels quand il enregistre (`uptime.update` prend le service entier).
+ * Ce que le dialogue demande : l'identité du service. Ses réglages fins
+ * (cadence, délai, seuil, rétention) partent avec les défauts et se changent
+ * ensuite dans l'onglet Général de sa fiche.
  */
-interface ServiceDraft {
+interface ServiceIdentity {
     name: string;
     url: string;
     method: UptimeMethod;
@@ -20,19 +20,13 @@ interface ServiceDraft {
     enabled: boolean;
 }
 
-/** Réglages que le dialogue ne montre pas, mais réécrit tels quels. */
 interface ServiceDialogProps {
     open: boolean;
-    /** Le service modifié, ou `null` pour un ajout. */
-    service: UptimeService | null;
     onClose: () => void;
     onSaved: (service: UptimeService) => void;
-    /** Absent = pas de suppression proposée (on ajoute depuis un projet). */
-    onRemoved?: () => void;
 }
 
-/** Keep a typed number inside its contract bounds (empty / NaN → `min`). */
-const DEFAULTS: ServiceDraft = {
+const DEFAULTS: ServiceIdentity = {
     name: '',
     url: '',
     method: 'GET',
@@ -41,8 +35,8 @@ const DEFAULTS: ServiceDraft = {
     enabled: true
 };
 
-/** Les réglages d'un service neuf, avant qu'on ne les touche dans ses réglages. */
-export const TUNING_DEFAULTS: ServiceTuning = {
+/** Les réglages fins d'un service neuf, avant qu'on ne les touche dans ses réglages. */
+const TUNING_DEFAULTS: ServiceTuning = {
     intervalSeconds: 60,
     timeoutSeconds: 10,
     failureThreshold: 2,
@@ -50,90 +44,53 @@ export const TUNING_DEFAULTS: ServiceTuning = {
 };
 
 /**
- * Ajouter / régler un service surveillé. Contrôlé (`open`/`service`/`onSaved`)
- * plutôt qu'impératif : l'onglet Déploiement d'un projet l'ouvre aussi, par le
- * contrat client du module.
+ * Ajouter un service surveillé. Rien d'autre : une fois ajouté, un service se
+ * règle dans l'onglet Général de sa fiche, comme tout élément.
+ *
+ * Contrôlé (`open`/`onSaved`) plutôt qu'impératif : l'onglet Déploiement d'un
+ * projet l'ouvre aussi, par le contrat client du module.
  */
-export function ServiceDialog({ open, service, onClose, onSaved, onRemoved }: ServiceDialogProps) {
-    const [draft, setDraft] = useState<ServiceDraft>(DEFAULTS);
+export function ServiceDialog({ open, onClose, onSaved }: ServiceDialogProps) {
+    const [draft, setDraft] = useState<ServiceIdentity>(DEFAULTS);
     const [errorName, setErrorName] = useState('');
     const [errorUrl, setErrorUrl] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
-    // Snapshot of the values the dialog opened with, to detect unsaved edits.
-    const initial = useRef<ServiceDraft>(DEFAULTS);
 
     useEffect(() => {
         if (!open) return;
-        const next: ServiceDraft = service
-            ? {
-                  name: service.name,
-                  url: service.url,
-                  method: service.method,
-                  expectedStatus: service.expectedStatus,
-                  keyword: service.keyword,
-                  enabled: service.enabled
-              }
-            : DEFAULTS;
-        setDraft(next);
-        initial.current = next;
+        setDraft(DEFAULTS);
         setErrorName('');
         setErrorUrl('');
         setError(null);
-    }, [open, service]);
+    }, [open]);
 
-    function set<K extends keyof ServiceDraft>(key: K, value: ServiceDraft[K]): void {
+    function set<K extends keyof ServiceIdentity>(key: K, value: ServiceIdentity[K]): void {
         setDraft((prev) => ({ ...prev, [key]: value }));
     }
 
-    const dirty = (Object.keys(draft) as (keyof ServiceDraft)[]).some((k) => draft[k] !== initial.current[k]);
+    const dirty = (Object.keys(draft) as (keyof ServiceIdentity)[]).some((k) => draft[k] !== DEFAULTS[k]);
 
     const submit = async () => {
         if (busy) return;
         const name = draft.name.trim();
         const url = draft.url.trim();
-        // Mirrors the server contract (`z.string().url()`): reject here so the
-        // user gets the message on the field rather than a generic WS error.
+        // Le contrat du serveur (`z.string().url()`), vérifié ici pour que le
+        // message tombe sur le champ et non en erreur générique.
         const validUrl = /^https?:\/\/\S+$/i.test(url);
         if (!name || !validUrl) {
             setErrorName(name ? '' : 'Ce champ est obligatoire');
             setErrorUrl(validUrl ? '' : 'URL invalide (http:// ou https://)');
             return;
         }
-        // Les réglages du service, conservés tels quels : ils se changent dans
-        // ses réglages, pas ici. Un service neuf part avec les défauts.
-        const tuning: ServiceTuning = service
-            ? {
-                  intervalSeconds: service.intervalSeconds,
-                  timeoutSeconds: service.timeoutSeconds,
-                  failureThreshold: service.failureThreshold,
-                  retentionDays: service.retentionDays
-              }
-            : TUNING_DEFAULTS;
-        const payload = { ...draft, ...tuning, name, url, keyword: draft.keyword?.trim() || null };
+        const payload = { ...draft, ...TUNING_DEFAULTS, name, url, keyword: draft.keyword?.trim() || null };
         setBusy(true);
         setError(null);
         try {
-            const res = service
-                ? await api.send('uptime.update', { id: service.id, service: payload })
-                : await api.send('uptime.add', { service: payload });
+            const res = await api.send('uptime.add', { service: payload });
             onSaved(res.service);
         } catch {
             setError('Enregistrement impossible.');
-        } finally {
-            setBusy(false);
-        }
-    };
-
-    const remove = async () => {
-        if (!service || busy) return;
-        setBusy(true);
-        setError(null);
-        try {
-            await api.send('uptime.remove', { id: service.id });
-            onRemoved?.();
-        } catch {
-            setError('Suppression impossible.');
         } finally {
             setBusy(false);
         }
@@ -143,7 +100,7 @@ export function ServiceDialog({ open, service, onClose, onSaved, onRemoved }: Se
         <Dialog
             open={open}
             onClose={onClose}
-            title={service ? 'Modifier le service' : 'Ajouter un service'}
+            title='Ajouter un service'
             width={560}
             onSubmit={() => void submit()}
             dirty={dirty}
@@ -211,16 +168,9 @@ export function ServiceDialog({ open, service, onClose, onSaved, onRemoved }: Se
             </div>
 
             <div className={styles.popupActions}>
-                <div className={styles.popupActionsLeft}>
-                    <DialogCancelButton>Fermer</DialogCancelButton>
-                    {service && onRemoved && (
-                        <Button variant='danger' onClick={() => void remove()} disabled={busy}>
-                            Supprimer
-                        </Button>
-                    )}
-                </div>
+                <DialogCancelButton>Fermer</DialogCancelButton>
                 <Button onClick={() => void submit()} disabled={busy}>
-                    {busy ? 'Enregistrement…' : service ? 'Enregistrer' : 'Ajouter'}
+                    {busy ? 'Enregistrement…' : 'Ajouter'}
                 </Button>
             </div>
         </Dialog>

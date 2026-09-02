@@ -47,7 +47,7 @@ export function FeatureDeploy(_props: FeatureViewProps) {
     const [history, setHistory] = useState<DeployHistoryEntry[] | null>(null);
     const [historyError, setHistoryError] = useState<string | null>(null);
 
-    const [dialog, setDialog] = useState<{ target: DeployTarget | null } | null>(null);
+    const [addOpen, setAddOpen] = useState(false);
     /** L'identifiant Dokploy dont on regarde le journal ; `null` = popup fermée. */
     const [logsFor, setLogsFor] = useState<string | null>(null);
 
@@ -178,7 +178,7 @@ export function FeatureDeploy(_props: FeatureViewProps) {
                                 à côté des canaux d'alerte. */}
                             <FeatureSettingsButton scope={{ kind: 'feature', feature: 'deploy' }} />
                             {canWrite && (
-                                <Button icon='add' onClick={() => setDialog({ target: null })}>
+                                <Button icon='add' onClick={() => setAddOpen(true)}>
                                     Déclarer une cible
                                 </Button>
                             )}
@@ -218,10 +218,12 @@ export function FeatureDeploy(_props: FeatureViewProps) {
                             Déploiements
                         </Button>
                         <div className={styles.actions}>
+                            {/* Supprimée ou déplacée depuis ses réglages, la cible
+                                n'est plus ici : la fiche revient à la liste. */}
                             <TargetActions
                                 target={opened.target}
                                 canWrite={canWrite}
-                                onEdit={() => setDialog({ target: opened.target })}
+                                onGone={() => setOpenedId(null)}
                             />
                         </div>
                     </header>
@@ -239,27 +241,8 @@ export function FeatureDeploy(_props: FeatureViewProps) {
                 </>
             )}
 
-            <TargetDialog
-                open={dialog !== null}
-                target={dialog?.target ?? null}
-                onClose={() => setDialog(null)}
-                onSaved={(target) => {
-                    setDialog(null);
-                    // La fiche ouverte reflète le réglage tout de suite ; la liste
-                    // se relit par l'invalidation posée dans le dialogue.
-                    setOpened((prev) => (prev && prev.target.id === target.id ? { ...prev, target } : prev));
-                    void reload();
-                }}
-                onRemoved={
-                    dialog?.target
-                        ? () => {
-                              setDialog(null);
-                              setOpenedId(null);
-                              void reload();
-                          }
-                        : undefined
-                }
-            />
+            {/* La liste se relit par l'invalidation posée dans le dialogue. */}
+            <TargetDialog open={addOpen} onClose={() => setAddOpen(false)} onSaved={() => setAddOpen(false)} />
 
             <LogsDialog
                 open={logsFor !== null}

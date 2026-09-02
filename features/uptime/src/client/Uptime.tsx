@@ -87,8 +87,7 @@ export default function Uptime(_props: FeatureViewProps) {
         [reload]
     );
 
-    /** Le service réglé dans `ServiceDialog` ; `service: null` = un ajout. `null` = fermé. */
-    const [dialog, setDialog] = useState<{ service: UptimeService | null } | null>(null);
+    const [addOpen, setAddOpen] = useState(false);
 
     const selected = selectedId === null ? null : (services.find((s) => s.id === selectedId) ?? null);
     const downCount = services.filter((s) => s.enabled && s.status === 'down').length;
@@ -118,7 +117,6 @@ export default function Uptime(_props: FeatureViewProps) {
                 <ServiceDetail
                     service={selected}
                     onBack={() => setSelectedId(null)}
-                    onEdit={() => setDialog({ service: selected })}
                     onCheckNow={() =>
                         void runAction(async () => {
                             await api.send('uptime.checkNow', { id: selected.id });
@@ -139,7 +137,7 @@ export default function Uptime(_props: FeatureViewProps) {
                         </p>
                         <div className={styles.toolbarActions}>
                             <FeatureSettingsButton scope={{ kind: 'feature', feature: 'uptime' }} />
-                            <Button icon='plus' onClick={() => setDialog({ service: null })}>
+                            <Button icon='plus' onClick={() => setAddOpen(true)}>
                                 Ajouter un service
                             </Button>
                         </div>
@@ -156,7 +154,6 @@ export default function Uptime(_props: FeatureViewProps) {
                         <ServiceList
                             services={services}
                             onOpen={(service) => setSelectedId(service.id)}
-                            onEdit={(service) => setDialog({ service })}
                             onReorder={handleReorder}
                             onDragStateChange={(active) => {
                                 dragging.current = active;
@@ -167,24 +164,13 @@ export default function Uptime(_props: FeatureViewProps) {
             )}
 
             <ServiceDialog
-                open={dialog !== null}
-                service={dialog?.service ?? null}
-                onClose={() => setDialog(null)}
+                open={addOpen}
+                onClose={() => setAddOpen(false)}
                 onSaved={() => {
-                    setDialog(null);
+                    setAddOpen(false);
                     void reload();
                     void refreshUptime();
                 }}
-                onRemoved={
-                    dialog?.service
-                        ? () => {
-                              setDialog(null);
-                              setSelectedId(null);
-                              void reload();
-                              void refreshUptime();
-                          }
-                        : undefined
-                }
             />
         </div>
     );

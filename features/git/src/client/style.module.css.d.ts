@@ -1,5 +1,4 @@
 declare const styles: {
-    readonly actionZone: string;
     readonly actions: string;
     readonly authorList: string;
     readonly authorName: string;
@@ -9,8 +8,6 @@ declare const styles: {
     readonly copiedTag: string;
     readonly copyFailed: string;
     readonly copySha: string;
-    readonly dangerText: string;
-    readonly dangerZone: string;
     readonly defaultTag: string;
     readonly detailHead: string;
     readonly diffAdd: string;

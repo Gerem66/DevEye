@@ -52,7 +52,7 @@ export function FeatureGit(_props: FeatureViewProps) {
     const [openedId, setOpenedId] = useState<number | null>(null);
     const [opened, setOpened] = useState<{ repo: GitRepo; usage: GitRepoUsage[] } | null>(null);
 
-    const [repoDialog, setRepoDialog] = useState<{ repo: GitRepo | null } | null>(null);
+    const [addOpen, setAddOpen] = useState(false);
     const [busy, setBusy] = useState(false);
 
     /**
@@ -221,20 +221,6 @@ export function FeatureGit(_props: FeatureViewProps) {
         }
     };
 
-    const removeRepo = async (repoId: number) => {
-        setBusy(true);
-        try {
-            await api.send('git.repoRemove', { repoId });
-            setRepoDialog(null);
-            setOpenedId(null);
-            invalidate('git.list', 'git.count', 'projects.board');
-        } catch (e) {
-            setError(humanizeError(e, 'La suppression a échoué.'));
-        } finally {
-            setBusy(false);
-        }
-    };
-
     /**
      * Ouvre un projet qui utilise ce dépôt, par la téléportation plutôt que par un
      * canal de navigation dédié : l'accueil sait déjà appliquer un chemin, garde
@@ -246,29 +232,16 @@ export function FeatureGit(_props: FeatureViewProps) {
 
     if (opened) {
         return (
-            <>
-                <RepoDetail
-                    repo={opened.repo}
-                    usage={opened.usage}
-                    members={members}
-                    canWrite={canWrite}
-                    busy={busy}
-                    onBack={() => setOpenedId(null)}
-                    onEdit={() => setRepoDialog({ repo: opened.repo })}
-                    onSyncNow={() => void syncNow(opened.repo.id)}
-                    onOpenProject={openProject}
-                />
-                <RepoDialog
-                    open={repoDialog !== null}
-                    repo={repoDialog?.repo ?? null}
-                    onClose={() => setRepoDialog(null)}
-                    onSaved={() => {
-                        setRepoDialog(null);
-                        invalidate('git.list', 'git.repo', 'git.count');
-                    }}
-                    onRemove={canWrite ? () => void removeRepo(opened.repo.id) : undefined}
-                />
-            </>
+            <RepoDetail
+                repo={opened.repo}
+                usage={opened.usage}
+                members={members}
+                canWrite={canWrite}
+                busy={busy}
+                onBack={() => setOpenedId(null)}
+                onSyncNow={() => void syncNow(opened.repo.id)}
+                onOpenProject={openProject}
+            />
         );
     }
 
@@ -290,7 +263,7 @@ export function FeatureGit(_props: FeatureViewProps) {
                         toute feature. */}
                     <FeatureSettingsButton scope={{ kind: 'feature', feature: 'git' }} />
                     {canWrite && (
-                        <Button icon='add' onClick={() => setRepoDialog({ repo: null })}>
+                        <Button icon='add' onClick={() => setAddOpen(true)}>
                             Ajouter un dépôt
                         </Button>
                     )}
@@ -321,17 +294,15 @@ export function FeatureGit(_props: FeatureViewProps) {
             )}
 
             <RepoDialog
-                open={repoDialog !== null}
-                repo={repoDialog?.repo ?? null}
-                onClose={() => setRepoDialog(null)}
+                open={addOpen}
+                onClose={() => setAddOpen(false)}
                 onSaved={(repoId) => {
-                    setRepoDialog(null);
+                    setAddOpen(false);
                     invalidate('git.list', 'git.count');
                     // Un dépôt qu'on vient d'ajouter s'ouvre : c'est ce qu'on
                     // voulait faire, et sa synchronisation démarre sous les yeux.
                     setOpenedId(repoId);
                 }}
-                onRemove={canWrite && repoDialog?.repo ? () => void removeRepo(repoDialog.repo!.id) : undefined}
             />
         </div>
     );

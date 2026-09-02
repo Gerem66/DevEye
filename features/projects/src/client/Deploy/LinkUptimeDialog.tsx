@@ -117,7 +117,6 @@ export function LinkUptimeDialog({ open, projectId, linkedIds, onClose, onSaved 
             {uptime && (
                 <uptime.ServiceDialog
                     open={createOpen}
-                    service={null}
                     onClose={() => setCreateOpen(false)}
                     onSaved={(service) => {
                         setCreateOpen(false);

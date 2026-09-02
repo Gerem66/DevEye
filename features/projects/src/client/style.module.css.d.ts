@@ -54,8 +54,6 @@ declare const styles: {
     readonly columnName: string;
     readonly columnOver: string;
     readonly composer: string;
-    readonly dangerText: string;
-    readonly dangerZone: string;
     readonly dep: string;
     readonly depHead: string;
     readonly depHeadLate: string;

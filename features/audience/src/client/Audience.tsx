@@ -3,7 +3,6 @@ import {
     Button,
     FeatureSettingsButton,
     humanizeError,
-    invalidate,
     useActiveWorkspace,
     useLiveItemTarget,
     useLiveOutlines,
@@ -45,7 +44,7 @@ export function FeatureAudience(_props: FeatureViewProps) {
         ingestOrigin: string;
     } | null>(null);
 
-    const [dialog, setDialog] = useState<{ site: AudienceSite | null } | null>(null);
+    const [addOpen, setAddOpen] = useState(false);
 
     const listVersion = useResourceVersion('audience.list');
     const detailVersion = useResourceVersion('audience.detail');
@@ -154,7 +153,7 @@ export function FeatureAudience(_props: FeatureViewProps) {
                             lui-même tant qu'aucune section n'existe à cette échelle. */}
                         <FeatureSettingsButton scope={{ kind: 'feature', feature: 'audience' }} />
                         {canWrite && (
-                            <Button icon='add' onClick={() => setDialog({ site: null })}>
+                            <Button icon='add' onClick={() => setAddOpen(true)}>
                                 Suivre un site
                             </Button>
                         )}
@@ -191,34 +190,13 @@ export function FeatureAudience(_props: FeatureViewProps) {
                     ingestOrigin={opened.ingestOrigin}
                     canWrite={canWrite}
                     onBack={() => setOpenedId(null)}
-                    onEdit={() => setDialog({ site: opened.site })}
                     onSiteChanged={(site) => setOpened((prev) => (prev ? { ...prev, site } : prev))}
                 />
             )}
 
-            <SiteDialog
-                open={dialog !== null}
-                site={dialog?.site ?? null}
-                onClose={() => setDialog(null)}
-                onSaved={(site) => {
-                    setDialog(null);
-                    // La fiche ouverte doit refléter le réglage tout de suite ; la liste
-                    // se relit par l'invalidation posée dans le dialogue, à la source de
-                    // la mutation.
-                    setOpened((prev) => (prev && prev.site.id === site.id ? { ...prev, site } : prev));
-                    void reload();
-                }}
-                onRemoved={
-                    dialog?.site
-                        ? () => {
-                              setDialog(null);
-                              setOpenedId(null);
-                              invalidate('audience.list');
-                              void reload();
-                          }
-                        : undefined
-                }
-            />
+            {/* La liste se relit par l'invalidation posée dans le dialogue, à la
+                source de la mutation. */}
+            <SiteDialog open={addOpen} onClose={() => setAddOpen(false)} onSaved={() => setAddOpen(false)} />
         </div>
     );
 }

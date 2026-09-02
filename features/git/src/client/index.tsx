@@ -5,12 +5,13 @@ import CredentialsPanel from './CredentialsPanel';
 import Git from './Git';
 import GitWidget from './GitWidget';
 import { clientProvider } from './provider';
+import RepoGeneralPanel from './RepoGeneralPanel';
 
 export const clientEntry: FeatureClient = {
     Widget: GitWidget,
     Full: Git,
-    /** Les jetons GitHub de l'espace, que le dialogue d'un dépôt ne fait que choisir. */
-    settingsPanels: { sources: CredentialsPanel },
+    /** Le dépôt lui-même (Général de sa fiche) ; les jetons GitHub de l'espace (Sources de la feature). */
+    settingsPanels: { general: RepoGeneralPanel, sources: CredentialsPanel },
     // Démonté dès la fermeture : la vue d'un dépôt sonde l'avancement d'une
     // synchronisation, et une instance en cache continuerait de sonder sans être vue.
     cacheDurationMinutes: 0,
