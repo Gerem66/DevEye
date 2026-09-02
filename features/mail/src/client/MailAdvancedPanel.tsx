@@ -27,8 +27,11 @@ import type { MailAccount, MailFolder } from '../contracts/domain';
  *
  * Une boîte protégée n'y a pas droit : lister ses dossiers demanderait un
  * déverrouillage rien que pour afficher l'onglet.
+ *
+ * L'onglet ne porte que ce geste, donc le manifest le donne en `requiresWrite` :
+ * sans l'écriture il n'existe pas, et ce panneau n'a pas de cas en lecture seule.
  */
-export default function MailAdvancedPanel({ scope, canWrite }: SettingsPanelProps) {
+export default function MailAdvancedPanel({ scope }: SettingsPanelProps) {
     const accountId = scope.kind === 'item' ? Number(scope.itemId) : null;
     const version = useResourceVersion('mail.accountList');
     const [account, setAccount] = useState<MailAccount | null>(null);
@@ -49,7 +52,7 @@ export default function MailAdvancedPanel({ scope, canWrite }: SettingsPanelProp
     const guarded = account?.securityTier === 'guarded';
 
     useEffect(() => {
-        if (!account || guarded || accountId === null || !canWrite) return;
+        if (!account || guarded || accountId === null) return;
         void withSecrecy(() => api.send('mail.folderList', { accountId }))
             .then((res) => {
                 setFolders(res.folders);
@@ -57,7 +60,7 @@ export default function MailAdvancedPanel({ scope, canWrite }: SettingsPanelProp
                 setFolderId(inbox?.id ?? null);
             })
             .catch(() => undefined);
-    }, [account, guarded, accountId, canWrite]);
+    }, [account, guarded, accountId]);
 
     const requestReset = () => {
         const folder = folders.find((f) => f.id === folderId);
@@ -89,11 +92,7 @@ export default function MailAdvancedPanel({ scope, canWrite }: SettingsPanelProp
         <div className={shell.section}>
             <div className={shell.field}>
                 <span className={shell.sectionLabel}>Reconstruire le cache d’un dossier</span>
-                {!canWrite ? (
-                    <p className={shell.fieldHint}>
-                        Votre rôle ne permet pas la maintenance d’une boîte : elle relève de l’écriture sur Mail.
-                    </p>
-                ) : guarded ? (
+                {guarded ? (
                     <p className={shell.fieldHint}>
                         Cette boîte est protégée : ses dossiers ne se listent qu’une fois la session déverrouillée, et
                         la reconstruction n’est pas proposée ici.

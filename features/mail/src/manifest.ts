@@ -46,7 +46,7 @@ export const manifest = {
             'general',
             { id: 'content', label: 'Contenu', icon: 'eye-open' },
             'sync',
-            { id: 'advanced', label: 'Avancé', icon: 'details' },
+            { id: 'advanced', label: 'Avancé', icon: 'details', requiresWrite: true },
             'encryption'
         ]
     },

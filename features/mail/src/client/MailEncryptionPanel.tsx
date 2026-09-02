@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
     Button,
     invalidate,
+    ReadOnlyNotice,
     SegmentedControl,
     settingsStyles as shell,
     useActiveWorkspace,
@@ -119,9 +120,9 @@ export default function MailEncryptionPanel({ scope, canWrite }: SettingsPanelPr
                     </Button>
                 </div>
             ) : (
-                <p className={shell.sectionHint}>
+                <ReadOnlyNotice>
                     Votre rôle ne permet pas de changer le palier d’une boîte : il relève de l’écriture sur Mail.
-                </p>
+                </ReadOnlyNotice>
             )}
 
             {status && <p className={shell.notice}>{status}</p>}

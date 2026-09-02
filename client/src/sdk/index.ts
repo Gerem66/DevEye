@@ -66,6 +66,9 @@ export const APP_VERSION: string = __APP_VERSION__;
  * explicite du cookie d'accès avant un `fetch` brut qui échappe au client.
  */
 export { ensureFreshAccess, get as httpGet } from '@/api/http';
+/** Le refus d'un droit dans un panneau : une seule silhouette pour toutes les
+ *  fonctionnalités, cadenas compris. */
+export { default as ReadOnlyNotice } from '@/Components/FeatureSettings/ReadOnlyNotice';
 /** Les classes de rangées canoniques des écrans de réglages (channelRow, etc.). */
 export { default as SaveButton } from '@/Components/FeatureSettings/SaveButton';
 export { default as settingsStyles } from '@/Components/FeatureSettings/FeatureSettings.module.css';

@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import { SaveButton, humanizeError, invalidate, SelectInput, settingsStyles as shell, Switch } from 'deveye-sdk-client';
+import {
+    ReadOnlyNotice,
+    SaveButton,
+    humanizeError,
+    invalidate,
+    SelectInput,
+    settingsStyles as shell,
+    Switch
+} from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import type { Database } from '../contracts/domain';
 
@@ -161,9 +169,9 @@ export default function DatabaseGeneralPanel({ scope, canWrite }: SettingsPanelP
                     <SaveButton onSave={submit} disabled={busy} />
                 </div>
             ) : (
-                <p className={shell.sectionHint}>
+                <ReadOnlyNotice>
                     Votre rôle ne permet pas de modifier ces réglages : ils relèvent de l’écriture sur Bases de données.
-                </p>
+                </ReadOnlyNotice>
             )}
 
             {error && <p className={shell.notice}>{error}</p>}

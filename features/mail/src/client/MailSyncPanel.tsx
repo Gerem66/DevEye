@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
     invalidate,
+    ReadOnlyNotice,
     SaveButton,
     settingsStyles as shell,
     Switch,
@@ -132,9 +133,9 @@ export default function MailSyncPanel({ scope, canWrite }: SettingsPanelProps) {
             </div>
 
             {!canWrite && (
-                <p className={shell.sectionHint}>
+                <ReadOnlyNotice>
                     Votre rôle ne permet pas de régler la relève d’une boîte : elle relève de l’écriture sur Mail.
-                </p>
+                </ReadOnlyNotice>
             )}
 
             {status && <p className={shell.notice}>{status}</p>}

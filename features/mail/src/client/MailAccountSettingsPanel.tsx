@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
     Button,
+    ReadOnlyNotice,
     SaveButton,
     Checkbox,
     ConfirmDialog,
@@ -399,9 +400,9 @@ export default function MailAccountSettingsPanel({ scope, canWrite, close }: Set
                 </p>
             )}
             {!canWrite && (
-                <p className={shell.sectionHint}>
+                <ReadOnlyNotice>
                     Votre rôle ne permet pas de modifier une boîte : cela relève de l’écriture sur Mail.
-                </p>
+                </ReadOnlyNotice>
             )}
 
             {status && <p className={shell.notice}>{status}</p>}

@@ -45,6 +45,23 @@ et leurs dispatcheurs ont disparu avec le rapatriement de Mail, leur dernier
 occupant : une native n'a plus que les sections génériques (Notifications,
 Partage, Permissions).
 
+## Sans l'écriture
+
+Un panneau reste **lisible** : les valeurs se voient, les champs sont grisés,
+et le refus se dit d'une seule voix, `ReadOnlyNotice` (exporté par
+`deveye-sdk-client`), à la place du bouton d'enregistrement. Un composant
+plutôt qu'une classe parce que chaque panneau réinventait sa taille et sa
+couleur, et que deux onglets voisins ne se ressemblaient plus. Le cadenas est
+celui des motifs de droit de `PERMISSIONS.md` ; ce qui bloque pour une autre
+raison (un appareil archivé, un élément qu'on ne peut pas projeter) garde sa
+propre phrase, et son propre motif.
+
+L'exception est l'onglet qui ne porte **que des gestes** : sans l'écriture il
+n'a rien à montrer, et il disparaît au lieu de s'excuser dans le vide. Il se
+déclare `requiresWrite: true` au manifest, la coquille le retire, et son
+panneau n'a alors pas de cas en lecture seule à écrire. Un seul le fait
+aujourd'hui : « Avancé » de Mail, qui reconstruit le cache d'un dossier.
+
 ## La navigation traverse les échelles et les espaces
 
 Trois mécanismes font qu'aucun réglage n'est un mur :
@@ -71,6 +88,8 @@ Trois mécanismes font qu'aucun réglage n'est un mur :
    manifest du module (`settings.feature` ou `settings.item` ; `sync` et
    `encryption` à l'échelle d'un élément seulement) + un panneau autonome dans
    `settingsPanels`, sous le même id. Une native n'a plus d'onglet propre.
+   Un onglet qui ne porte que des gestes ajoute `requiresWrite: true` ; sinon,
+   le panneau rend `ReadOnlyNotice` quand `canWrite` est faux.
 3. Si la feature a des fiches d'élément rejoignables, elle déclare son segment
    de présence `l1` avec l'identifiant nu de l'élément
    (`useLiveSegment('l1', String(id))`) : c'est ce que `goToHome.ts` écrit

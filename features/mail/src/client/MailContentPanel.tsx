@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
     Button,
     invalidate,
+    ReadOnlyNotice,
     SegmentedControl,
     settingsStyles as shell,
     TextInput,
@@ -164,9 +165,9 @@ export default function MailContentPanel({ canWrite }: SettingsPanelProps) {
             </div>
 
             {!canWrite && (
-                <p className={shell.sectionHint}>
+                <ReadOnlyNotice>
                     Votre rôle ne permet pas de modifier ces réglages : ils relèvent de l’écriture sur Mail.
-                </p>
+                </ReadOnlyNotice>
             )}
 
             {status && <p className={shell.notice}>{status}</p>}

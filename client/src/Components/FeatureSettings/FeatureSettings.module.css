@@ -106,6 +106,25 @@
     line-height: 1.5;
 }
 
+/* Le refus d'un droit, de la meme silhouette partout : memes valeurs de texte
+   que `.sectionHint`, plus le cadenas des motifs de droit. */
+.readOnlyNotice {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-xs);
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+/* Cale sur la premiere ligne, et non centre : la phrase court parfois sur
+   trois lignes et le cadenas s'en irait au milieu. */
+.readOnlyNoticeIcon {
+    width: 14px;
+    margin-top: 0.2em;
+}
+
 /* La phrase de tete d'une section, posee juste au-dessus du panneau : sans ce
    souffle, le tableau lui colle et le bloc entier se lit comme un pave. */
 .panelLead {

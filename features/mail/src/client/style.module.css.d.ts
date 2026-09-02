@@ -72,12 +72,17 @@ declare const styles: {
     readonly infoValue: string;
     readonly linkWarning: string;
     readonly linkWarnings: string;
+    readonly listVeil: string;
+    readonly listVeilSpinner: string;
     readonly mailIconSpin: string;
+    readonly mailListSpin: string;
     readonly mailSyncIndeterminate: string;
+    readonly messageArea: string;
     readonly messageBody: string;
     readonly messageBodyFrame: string;
     readonly messageBodyText: string;
     readonly messageColumn: string;
+    readonly messageColumnBusy: string;
     readonly messageColumnEmpty: string;
     readonly messageColumnWrap: string;
     readonly messageDate: string;

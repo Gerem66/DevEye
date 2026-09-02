@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import {
     Button,
     humanizeError,
+    ReadOnlyNotice,
     SegmentedControl,
     settingsStyles as shell,
     TextInput,
@@ -250,9 +251,9 @@ export default function FinanceCategoriesPanel({ canWrite }: SettingsPanelProps)
                     </div>
                 </div>
             ) : (
-                <p className={shell.sectionHint}>
+                <ReadOnlyNotice>
                     Votre rôle ne permet pas de modifier les catégories : elles relèvent de l’écriture sur Finances.
-                </p>
+                </ReadOnlyNotice>
             )}
 
             {(error ?? loadError) && <p className={shell.notice}>{error ?? loadError}</p>}

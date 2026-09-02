@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+    ReadOnlyNotice,
     SaveButton,
     humanizeError,
     invalidate,
@@ -176,9 +177,9 @@ export default function SiteGeneralPanel({ scope, canWrite }: SettingsPanelProps
                     <SaveButton onSave={submit} disabled={busy} />
                 </div>
             ) : (
-                <p className={shell.sectionHint}>
+                <ReadOnlyNotice>
                     Votre rôle ne permet pas de modifier ces réglages : ils relèvent de l’écriture sur Audience.
-                </p>
+                </ReadOnlyNotice>
             )}
 
             {error && <p className={shell.notice}>{error}</p>}

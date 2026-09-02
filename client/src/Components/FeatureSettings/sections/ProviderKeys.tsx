@@ -4,6 +4,7 @@ import Button from '@/Components/Button';
 import { Dialog, DialogCancelButton } from '@/Components/Dialog';
 import TextInput from '@/Components/TextInput';
 
+import ReadOnlyNotice from '../ReadOnlyNotice';
 import styles from '../FeatureSettings.module.css';
 
 /**
@@ -106,7 +107,7 @@ export function ProviderKeys({ rows, canWrite, onSave, onRemove, readOnlyHint }:
                 ))}
             </div>
 
-            {!canWrite && <p className={styles.sectionHint}>{readOnlyHint}</p>}
+            {!canWrite && <ReadOnlyNotice>{readOnlyHint}</ReadOnlyNotice>}
 
             <Dialog
                 open={editing !== null}

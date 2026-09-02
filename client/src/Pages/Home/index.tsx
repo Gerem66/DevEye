@@ -62,8 +62,15 @@ import { AboutContent } from './about';
 import { EditableHome } from './organize/EditableHome';
 import { FolderOverlay, folderTitle } from './folders';
 
-import type { HomeFeatureId, HomeLayout, HomeSection, WorkspaceFeatureId, WorkspacePermissions } from '@deveye/types';
-import { isFeatureTile, isHomeFolder, isShortcutTile, WORKSPACE_FEATURE_IDS } from '@deveye/types';
+import type {
+    FeatureId,
+    HomeFeatureId,
+    HomeLayout,
+    HomeSection,
+    WorkspaceFeatureId,
+    WorkspacePermissions
+} from '@deveye/types';
+import { isExternalFeatureId, isFeatureTile, isHomeFolder, isShortcutTile, WORKSPACE_FEATURE_IDS } from '@deveye/types';
 import type { FeatureProps } from '@/Features/types';
 import styles from './Dashboard.module.css';
 import type { Workspace } from '@deveye/types';
@@ -160,8 +167,13 @@ const buildStaticViews = (): ViewConfig[] => [
  * La feature dont une vue dépend, ou `null` : les vues de compte et
  * d'administration ont leurs propres gardes, un rôle d'espace n'en décide pas.
  */
-function featureBehind(viewId: string): WorkspaceFeatureId | null {
+function featureBehind(viewId: string): FeatureId | null {
     if (WORKSPACE_FEATURE_IDS.includes(viewId as WorkspaceFeatureId)) return viewId as WorkspaceFeatureId;
+    // Un module externe : son id EST son identifiant de vue, comme pour une
+    // native. Sans ce cas, aucune tuile de module ne se verrouillait : elle
+    // montait son contenu, qui interrogeait un serveur qui refuse, et l'écran
+    // affichait l'erreur d'une commande là où l'accueil dit « Accès restreint ».
+    if (isExternalFeatureId(viewId)) return viewId;
     // Chaque vue d'appareil relève du droit de la feature Appareils.
     if (viewId.startsWith(DEVICE_VIEW_PREFIX)) return 'devices';
     return null;

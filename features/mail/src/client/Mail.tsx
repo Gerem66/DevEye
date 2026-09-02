@@ -119,6 +119,13 @@ export default function Mail(_props: FeatureViewProps) {
     /** The folder has no older mail left on the server — the scroll can stop. */
     const [reachedFolderStart, setReachedFolderStart] = useState(false);
     const [messagesLoading, setMessagesLoading] = useState(false);
+    /**
+     * Une page 0 est en vol : ce qui est à l'écran appartient encore au dossier
+     * qu'on vient de quitter, puisque la liste n'est pas vidée pour éviter qu'elle
+     * ne saute. Distinct de `messagesLoading`, qui couvre aussi la pagination, où
+     * le contenu affiché reste juste.
+     */
+    const [firstPageLoading, setFirstPageLoading] = useState(false);
     // Lus par le rafraîchissement de fond, qui ne doit dépendre d'aucune closure :
     // il est appelé par un abonnement, longtemps après le rendu qui l'a créé.
     const messagesRef = useRef<MailMessageSummary[]>([]);
@@ -139,11 +146,29 @@ export default function Mail(_props: FeatureViewProps) {
     const [searchRemote, setSearchRemote] = useState(false);
 
     const [messagePopupOpen, setMessagePopupOpen] = useState(false);
+    /**
+     * Le message ouvert, posé dès le clic et non déduit de `selectedMessage` :
+     * changer de mail vide celui-ci le temps de la requête, et le chemin de
+     * présence clignoterait alors, ce qu'un déplacement de salle remet à zéro
+     * (curseur perdu, frappe périmée).
+     */
+    const [openMessageId, setOpenMessageId] = useState<number | null>(null);
     const [selectedMessage, setSelectedMessage] = useState<MailMessage | null>(null);
     const [messageLoading, setMessageLoading] = useState(false);
     const [renderMode, setRenderMode] = useState<MailBodyRenderMode>('embedded');
 
     const [error, setError] = useState<string | null>(null);
+
+    /**
+     * Referme la fiche, d'un seul geste : le chemin de présence se lit sur
+     * `openMessageId`, et un popup laissé ouvert sans lui dirait aux autres qu'on
+     * est revenu au dossier tout en montrant une fiche vide.
+     */
+    const closeMessage = useCallback(() => {
+        setMessagePopupOpen(false);
+        setOpenMessageId(null);
+        setSelectedMessage(null);
+    }, []);
 
     const reloadAccounts = useCallback(async () => {
         try {
@@ -205,10 +230,10 @@ export default function Mail(_props: FeatureViewProps) {
         setShowAccountList(selectedAccountId === null);
     }, [selectedAccountId]);
 
-    // Les deux niveaux profonds de Mail, déclarés au moteur de présence : le
-    // composant annonce ses deux niveaux (compte, puis dossier), la racine
-    // `view:mail` venant de l'accueil. Le compte visé est son identifiant nu,
-    // appliqué dès que la liste est chargée ; un compte absent s'ignore.
+    // Les trois niveaux profonds de Mail, déclarés au moteur de présence : compte,
+    // dossier, message ouvert ; la racine `view:mail` vient de l'accueil. Le
+    // compte visé est son identifiant nu, appliqué dès que la liste est chargée ;
+    // un compte absent s'ignore.
     useLiveItemTarget(
         'l1',
         selectedAccountId === null ? null : String(selectedAccountId),
@@ -225,6 +250,11 @@ export default function Mail(_props: FeatureViewProps) {
         }
     );
     const folderTarget = useLiveSegment('l2', selectedFolderId === null ? null : String(selectedFolderId));
+    // Le mail ouvert est un lieu à part entière : sans ce niveau, deux personnes
+    // qui lisent deux messages du même dossier ont le même chemin, et le serveur
+    // leur envoie mutuellement leurs curseurs par-dessus des popups qui ne
+    // montrent pas la même chose.
+    const messageTarget = useLiveSegment('l3', openMessageId === null ? null : String(openMessageId));
 
     // Le dossier visé attend l'arborescence de son compte. La cible est redonnée
     // à chaque rendu tant qu'elle n'est pas atteinte : cette garde attend que les
@@ -280,7 +310,7 @@ export default function Mail(_props: FeatureViewProps) {
 
     useEffect(() => {
         setMessages([]);
-        setSelectedMessage(null);
+        closeMessage();
         setSelectedFolderId(null);
         if (selectedAccountId !== null) void loadFolders(selectedAccountId);
         else setFolders([]);
@@ -319,6 +349,7 @@ export default function Mail(_props: FeatureViewProps) {
         const run = folderRunRef.current;
         const stale = () => folderRunRef.current !== run;
         setMessagesLoading(true);
+        if (cursor === null) setFirstPageLoading(true);
         try {
             const page = await withSecrecy(() =>
                 api.send('mail.messageList', { folderId, cursor, limit: MESSAGE_PAGE_SIZE })
@@ -359,7 +390,10 @@ export default function Mail(_props: FeatureViewProps) {
             setError(humanizeError(e, 'Chargement des messages impossible.'));
             invalidate('mail.accountList');
         } finally {
-            if (!stale()) setMessagesLoading(false);
+            if (!stale()) {
+                setMessagesLoading(false);
+                if (cursor === null) setFirstPageLoading(false);
+            }
         }
     }, []);
 
@@ -531,7 +565,7 @@ export default function Mail(_props: FeatureViewProps) {
         // Tout ce qui est encore en vol appartient au dossier qu'on quitte : ce
         // jeton le périme d'un coup, y compris les étapes pas encore parties.
         folderRunRef.current += 1;
-        setSelectedMessage(null);
+        closeMessage();
         setReachedFolderStart(false);
         // A query only ever means something for the folder it was typed in.
         setSearch('');
@@ -559,21 +593,25 @@ export default function Mail(_props: FeatureViewProps) {
         setSearchResults((prev) => (prev ? apply(prev) : prev));
     }, []);
 
+    /**
+     * Ouvre un message par son identifiant, et non par sa ligne : la
+     * téléportation en vise un sans forcément tenir la ligne qui le porte, et
+     * `mail.messageGet` n'a jamais eu besoin de plus.
+     */
     const openMessage = useCallback(
-        async (message: MailMessageSummary, allowRemoteImages = false) => {
+        async (messageId: number, allowRemoteImages = false) => {
             setMessagePopupOpen(true);
+            setOpenMessageId(messageId);
             setMessageLoading(true);
             // Keep showing the current content only while re-fetching the SAME
             // message (to unblock its images): opening a different one must never
             // flash the previous message's content, so clear it up front.
-            setSelectedMessage((prev) => (prev && prev.id === message.id ? prev : null));
+            setSelectedMessage((prev) => (prev && prev.id === messageId ? prev : null));
             try {
-                const res = await withSecrecy(() =>
-                    api.send('mail.messageGet', { messageId: message.id, allowRemoteImages })
-                );
+                const res = await withSecrecy(() => api.send('mail.messageGet', { messageId, allowRemoteImages }));
                 setSelectedMessage(res.message);
                 // Reflect the read state in the list without a full reload.
-                patchMessage(message.id, { seen: true });
+                patchMessage(messageId, { seen: true });
             } catch (e) {
                 setError(humanizeError(e, 'Ouverture du message impossible.'));
                 invalidate('mail.accountList');
@@ -583,6 +621,21 @@ export default function Mail(_props: FeatureViewProps) {
         },
         [patchMessage]
     );
+
+    /**
+     * Le message visé attend que son dossier soit posé (`folderTarget` éteint) et
+     * que sa page soit lue : l'ouvrir plus tôt le ferait refermer aussitôt par
+     * l'effet de changement de dossier. La cible est redonnée à chaque rendu tant
+     * qu'elle n'est pas atteinte, comme celle du dossier.
+     */
+    useEffect(() => {
+        if (!messageTarget || folderTarget || messagesLoading) return;
+        if (messageTarget.value === null) {
+            closeMessage();
+            return;
+        }
+        void openMessage(Number(messageTarget.value));
+    }, [messageTarget, folderTarget, messagesLoading, openMessage]);
 
     const selectedAccount = accounts.find((a) => a.id === selectedAccountId) ?? null;
     const accountStatus = selectedAccount ? describeAccountStatus(selectedAccount) : null;
@@ -686,8 +739,6 @@ export default function Mail(_props: FeatureViewProps) {
         [setMessageFlag]
     );
 
-    const openMessageId = selectedMessage?.id ?? null;
-
     // Read through refs, never through the closure: depending on the open message
     // or the page cursor would re-create these on every selection and every page,
     // and a changed callback prop invalidates *every* memoized row at once.
@@ -707,10 +758,7 @@ export default function Mail(_props: FeatureViewProps) {
             try {
                 await withSecrecy(() => api.send('mail.messageDelete', { messageId: message.id }));
                 dropMessage(message.id);
-                if (openMessageIdRef.current === message.id) {
-                    setMessagePopupOpen(false);
-                    setSelectedMessage(null);
-                }
+                if (openMessageIdRef.current === message.id) closeMessage();
             } catch (e) {
                 setError(humanizeError(e, 'Suppression impossible.'));
             }
@@ -718,7 +766,10 @@ export default function Mail(_props: FeatureViewProps) {
         [dropMessage]
     );
 
-    const handleSelectMessage = useCallback((message: MailMessageSummary) => void openMessage(message), [openMessage]);
+    const handleSelectMessage = useCallback(
+        (message: MailMessageSummary) => void openMessage(message.id),
+        [openMessage]
+    );
 
     const handleLoadMore = useCallback(() => {
         const folderId = selectedFolderIdRef.current;
@@ -749,7 +800,7 @@ export default function Mail(_props: FeatureViewProps) {
             const current = withSettingsDefaults((await api.send('mail.getSettings', {})).settings);
             const merged = Array.from(new Set([...current.trustedImageDomains, ...domains]));
             await api.send('mail.setSettings', { ...current, trustedImageDomains: merged });
-            if (selectedMessage) void openMessage(selectedMessage);
+            if (selectedMessage) void openMessage(selectedMessage.id);
         } catch (e) {
             setError(humanizeError(e, 'Action impossible.'));
         }
@@ -966,32 +1017,44 @@ export default function Mail(_props: FeatureViewProps) {
 
                     {searchStatus && <p className={styles.searchStatus}>{searchStatus}</p>}
 
-                    <div className={styles.messageColumn} ref={messageColumnRef}>
-                        {selectedFolderId !== null ? (
-                            <MessageList
-                                // While a new query is in flight the previous
-                                // results stay up, so the list doesn't blink
-                                // empty on every keystroke.
-                                messages={searchMode ? (searchResults ?? []) : messages}
-                                selectedId={openMessageId}
-                                onSelect={handleSelectMessage}
-                                onToggleSeen={toggleSeen}
-                                onToggleFlagged={toggleFlagged}
-                                onDelete={deleteMessage}
-                                onLoadMore={handleLoadMore}
-                                // Search returns its whole (capped) result set at
-                                // once, so there is nothing left to page through.
-                                hasMore={!searchMode && (nextCursor !== null || !reachedFolderStart)}
-                                loading={searchMode ? searching : messagesLoading}
-                                // The status line above already reports an empty
-                                // search, and "aucun message dans ce dossier"
-                                // would be plainly false while a query is on.
-                                emptyLabel={searchMode ? null : 'Aucun message dans ce dossier.'}
-                                scrollRootRef={messageColumnRef}
-                            />
-                        ) : (
-                            <div className={styles.messageColumnEmpty}>
-                                <EmptyState state={viewState} busy={refreshing} onAction={() => void syncNow()} />
+                    {/* Repère de la voile : `.messageColumn` défile, une voile
+                        posée dedans partirait avec le contenu. */}
+                    <div className={styles.messageArea}>
+                        <div
+                            className={`${styles.messageColumn} ${firstPageLoading ? styles.messageColumnBusy : ''}`}
+                            ref={messageColumnRef}
+                        >
+                            {selectedFolderId !== null ? (
+                                <MessageList
+                                    // While a new query is in flight the previous
+                                    // results stay up, so the list doesn't blink
+                                    // empty on every keystroke.
+                                    messages={searchMode ? (searchResults ?? []) : messages}
+                                    selectedId={openMessageId}
+                                    onSelect={handleSelectMessage}
+                                    onToggleSeen={toggleSeen}
+                                    onToggleFlagged={toggleFlagged}
+                                    onDelete={deleteMessage}
+                                    onLoadMore={handleLoadMore}
+                                    // Search returns its whole (capped) result set at
+                                    // once, so there is nothing left to page through.
+                                    hasMore={!searchMode && (nextCursor !== null || !reachedFolderStart)}
+                                    loading={searchMode ? searching : messagesLoading}
+                                    // The status line above already reports an empty
+                                    // search, and "aucun message dans ce dossier"
+                                    // would be plainly false while a query is on.
+                                    emptyLabel={searchMode ? null : 'Aucun message dans ce dossier.'}
+                                    scrollRootRef={messageColumnRef}
+                                />
+                            ) : (
+                                <div className={styles.messageColumnEmpty}>
+                                    <EmptyState state={viewState} busy={refreshing} onAction={() => void syncNow()} />
+                                </div>
+                            )}
+                        </div>
+                        {firstPageLoading && (
+                            <div className={styles.listVeil} role='status' aria-label='Chargement du dossier'>
+                                <span className={`icon icon-spinner ${styles.listVeilSpinner}`} aria-hidden='true' />
                             </div>
                         )}
                     </div>
@@ -1007,8 +1070,8 @@ export default function Mail(_props: FeatureViewProps) {
                 message={selectedMessage}
                 loading={messageLoading}
                 renderMode={renderMode}
-                onClose={() => setMessagePopupOpen(false)}
-                onLoadImages={() => selectedMessage && void openMessage(selectedMessage, true)}
+                onClose={closeMessage}
+                onLoadImages={() => selectedMessage && void openMessage(selectedMessage.id, true)}
                 onTrustImageSources={(domains) => void trustImageSources(domains)}
                 onToggleSeen={() => selectedMessage && toggleSeen(selectedMessage)}
                 onToggleFlagged={() => selectedMessage && toggleFlagged(selectedMessage)}

@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef } from 'react';
+import { useLiveOutlines, type LiveOutlineProps } from 'deveye-sdk-client';
 
 import styles from './style.module.css';
 
@@ -32,6 +33,9 @@ function formatDate(epochSeconds: number): string {
 interface MessageRowProps {
     message: MailMessageSummary;
     selected: boolean;
+    /** Quelqu'un lit ce message : sa couleur autour de la ligne. Mémorisé par
+     *  `useLiveOutlines`, donc stable tant que personne ne bouge. */
+    outline: LiveOutlineProps;
     onSelect: (message: MailMessageSummary) => void;
     onToggleSeen: (message: MailMessageSummary) => void;
     onToggleFlagged: (message: MailMessageSummary) => void;
@@ -47,6 +51,7 @@ interface MessageRowProps {
 const MessageRow = memo(function MessageRow({
     message,
     selected,
+    outline,
     onSelect,
     onToggleSeen,
     onToggleFlagged,
@@ -71,6 +76,7 @@ const MessageRow = memo(function MessageRow({
                     onSelect(message);
                 }
             }}
+            {...outline}
         >
             <div className={styles.messageRowMain}>
                 <div className={styles.messageRowHead}>
@@ -137,6 +143,9 @@ function MessageListImpl({
     scrollRootRef
 }: MessageListProps) {
     const sentinelRef = useRef<HTMLDivElement>(null);
+    // Quelqu'un lit l'un de ces messages : sa couleur sur la ligne. Un pair resté
+    // sur la liste n'a pas ce niveau, et n'entoure donc rien.
+    const outlineOf = useLiveOutlines('l3');
 
     // Auto-loads the next page as the sentinel (end of the list) nears the
     // viewport, instead of requiring a manual "load more" click. `onLoadMore`
@@ -167,6 +176,7 @@ function MessageListImpl({
                     key={message.id}
                     message={message}
                     selected={selectedId === message.id}
+                    outline={outlineOf(String(message.id))}
                     onSelect={onSelect}
                     onToggleSeen={onToggleSeen}
                     onToggleFlagged={onToggleFlagged}

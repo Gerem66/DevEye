@@ -35,6 +35,7 @@ Un utilisateur est un **chemin de segments**, chacun `kind:value` :
 ['view:mail']                     la feature Mail
 ['view:mail','l1:12']             la Boîte1
 ['view:mail','l1:12','l2:34']     le dossier INBOX
+['view:mail','l1:12','l2:34','l3:56']  le message 56, ouvert
 ```
 
 Trois règles, et elles suffisent à tout :
@@ -110,7 +111,7 @@ l'envers.
 
 | Feature                            | Niveaux                                               | Valeur `l1`     |
 | ---------------------------------- | ----------------------------------------------------- | --------------- |
-| Mail                               | boîte puis `l2` dossier                               | l'id            |
+| Mail                               | boîte, `l2` dossier, `l3` message ouvert              | l'id            |
 | Projets                            | projet, `l2` onglet, `l3` carte, `l4` onglet de carte | l'id            |
 | Uptime                             | le service ouvert                                     | l'id            |
 | Git                                | le dépôt ouvert                                       | l'id            |
@@ -132,6 +133,24 @@ features ont longtemps eu chacune leur préfixe (`repo:12`, `db:12`, `target:`,
 modules à connaître le format de chacune pour téléporter vers la fiche d'un
 élément projeté (voir `SETTINGS.md`). Le 27 août 2026, toutes sont passées à
 l'id nu, et `goToHome.ts` écrit `l1:<id>` lui-même.
+
+**Descendre d'un cran coûte un consommateur.** Mail s'arrêtait au dossier, si
+bien que deux lecteurs de deux messages différents avaient le même chemin et
+échangeaient leurs curseurs par-dessus des popups qui ne montraient pas la même
+chose. Le message ouvert est donc un `l3`. Mais un niveau que personne n'entoure
+rend le pair invisible, puisque son segment divergent ne désigne plus rien à
+l'écran : la liste des messages consulte `useLiveOutlines('l3')`, comme
+l'arborescence le fait pour `l2`. Ajouter un niveau sans son halo est une perte
+nette.
+
+Et un niveau qui en attend un autre s'applique **par l'effet**, jamais par
+`useLiveItemTarget` : celui-ci consomme sa cible dès que `ready` passe à vrai,
+donc une seule fois. Ouvrir le message avant que son dossier ne soit posé le
+ferait refermer par l'effet de changement de dossier, et la cible perdue ne
+reviendrait pas. Mail attend donc l'extinction de la cible `l2`, puis rejoue la
+sienne à chaque rendu, comme le dossier attend son arborescence. Il ouvre par
+identifiant et non par la ligne de la liste : celle-ci peut être sur une page
+qu'on n'a pas déroulée.
 
 ---
 

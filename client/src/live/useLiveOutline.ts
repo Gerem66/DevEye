@@ -1,5 +1,5 @@
 import type { UserColor } from '@deveye/types';
-import { useEffect, useMemo, useReducer, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, type CSSProperties } from 'react';
 
 import { userColorVar } from '@/Features/Profile/userColors';
 import { useLivePresence, type LiveOutlineKind } from '@/stores/live';
@@ -46,6 +46,10 @@ export interface LiveOutlineProps {
     style?: CSSProperties;
 }
 
+/** Partagée, et non recréée : une liste dont les lignes sont mémoïsées compare
+ *  ses propriétés par identité, et un objet vide neuf les repeindrait toutes. */
+const NO_OUTLINE: LiveOutlineProps = {};
+
 /**
  * Forme liste : rend une fonction qui donne les propriétés d'un nœud de ce niveau,
  * à appeler dans un `map`. Le travail est fait une fois pour tous les pairs, quel
@@ -55,7 +59,10 @@ export function useLiveOutlines(kind: LiveOutlineKind): (value: string | null) =
     // Vue étroite : les contours ne dépendent pas des curseurs, et ne doivent pas
     // se redessiner vingt fois par seconde parce qu'un pair bouge.
     const { peers, path } = useLivePresence();
-    const [, bump] = useReducer((n: number) => n + 1, 0);
+    // Le compteur partagé lu comme un état : deux nœuds montés à des instants
+    // différents alternent ensemble, et un tic qui ne change rien ne redessine
+    // personne (React abandonne sur une valeur identique).
+    const [rotation, bump] = useReducer((): number => tick, tick);
 
     const byValue = useMemo(() => {
         const prefix = `${kind}:`;
@@ -83,15 +90,21 @@ export function useLiveOutlines(kind: LiveOutlineKind): (value: string | null) =
         return subscribeTick(bump);
     }, [rotating]);
 
-    return (value) => {
-        if (value === null) return {};
-        const colors = byValue.get(value);
-        if (!colors || colors.length === 0) return {};
-        return {
-            'data-live-peer': true,
-            style: { '--live-peer': userColorVar(colors[tick % colors.length]) } as CSSProperties
-        };
-    };
+    // Les propriétés sont mémorisées par valeur, et non fabriquées à chaque
+    // appel : une liste qui mémoïse ses lignes les compare par identité, et un
+    // objet neuf à chaque rendu les repeindrait toutes.
+    const props = useMemo(() => {
+        const map = new Map<string, LiveOutlineProps>();
+        for (const [value, colors] of byValue) {
+            map.set(value, {
+                'data-live-peer': true,
+                style: { '--live-peer': userColorVar(colors[rotation % colors.length]) } as CSSProperties
+            });
+        }
+        return map;
+    }, [byValue, rotation]);
+
+    return useCallback((value) => (value === null ? NO_OUTLINE : (props.get(value) ?? NO_OUTLINE)), [props]);
 }
 
 /** Forme unitaire, pour un composant qui ne représente qu'un seul nœud. */

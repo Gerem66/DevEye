@@ -1,5 +1,12 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { humanizeError, SaveButton, SelectInput, settingsStyles as shell, TextInput } from 'deveye-sdk-client';
+import {
+    humanizeError,
+    ReadOnlyNotice,
+    SaveButton,
+    SelectInput,
+    settingsStyles as shell,
+    TextInput
+} from 'deveye-sdk-client';
 import {
     DEFAULT_METRIC_INTERVAL_SECONDS,
     DEFAULT_PROCESS_CAPTURE,
@@ -176,6 +183,14 @@ export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite
                 <div className={shell.sectionActions}>
                     <SaveButton onSave={() => save(device)} />
                 </div>
+            )}
+            {/* Le droit, jamais l'état : l'appareil archivé dit déjà pourquoi il
+                est inerte, et le motif de rôle passe avant lui. */}
+            {!canWrite && (
+                <ReadOnlyNotice>
+                    Votre rôle ne permet pas de régler la collecte d’un appareil : elle relève de l’écriture sur
+                    Appareils.
+                </ReadOnlyNotice>
             )}
         </div>
     );

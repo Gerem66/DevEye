@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { SaveButton, humanizeError, SelectInput, settingsStyles as shell, Switch } from 'deveye-sdk-client';
+import {
+    ReadOnlyNotice,
+    SaveButton,
+    humanizeError,
+    SelectInput,
+    settingsStyles as shell,
+    Switch
+} from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import type { FinanceConfig } from '../contracts/domain';
 
@@ -95,9 +102,9 @@ export default function FinanceGeneralPanel({ canWrite }: SettingsPanelProps) {
                     <SaveButton onSave={submit} disabled={busy} />
                 </div>
             ) : (
-                <p className={shell.sectionHint}>
+                <ReadOnlyNotice>
                     Votre rôle ne permet pas de modifier ces réglages : ils relèvent de l’écriture sur Finances.
-                </p>
+                </ReadOnlyNotice>
             )}
 
             {error && <p className={shell.notice}>{error}</p>}

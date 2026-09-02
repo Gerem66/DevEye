@@ -3,6 +3,7 @@ import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import type { BackupEncryption } from '../contracts/domain';
 
 import {
+    ReadOnlyNotice,
     SaveButton,
     humanizeError,
     invalidate,
@@ -119,10 +120,10 @@ export default function JobEncryptionPanel({ scope, canWrite }: SettingsPanelPro
                     <SaveButton onSave={save} disabled={busy || mode === job.encryption} />
                 </div>
             ) : (
-                <p className={shell.sectionHint}>
+                <ReadOnlyNotice>
                     Votre rôle ne permet pas de modifier la forme des archives : elle relève de l’écriture sur les
                     Sauvegardes.
-                </p>
+                </ReadOnlyNotice>
             )}
 
             {status && <p className={shell.notice}>{status}</p>}

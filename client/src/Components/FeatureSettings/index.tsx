@@ -45,6 +45,10 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
     const permissions = useWorkspacePermissions();
     const active = useActiveWorkspace();
     const canRead = permissions.canFeature(scope.feature, 'read');
+    // Sur l'élément quand il y en a un : ses droits peuvent différer de ceux de
+    // la fonctionnalité, dans les deux sens. C'est aussi ce que `ModulePanel`
+    // passe ensuite en `canWrite`, donc un onglet gardé n'est jamais monté sans.
+    const canWrite = permissions.canFeature(scope.feature, 'write', scope.kind === 'item' ? scope.itemId : undefined);
     const canRestrict = permissions.canManageItemGrants(scope.feature);
     const isShared = active?.kind === 'shared';
 
@@ -65,7 +69,7 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
             if (scope.kind !== 'item' || !isShareWired(scope.feature)) return;
             // Sur l'élément : un élément dont l'écriture est ouverte par
             // surcharge se projette, comme le serveur l'accepte.
-            if (permissions.canFeature(scope.feature, 'write', scope.itemId) && scope.shareable !== false) {
+            if (canWrite && scope.shareable !== false) {
                 into.push({ id: 'sharing', label: 'Partage', icon: 'users' });
             }
             if (canRestrict && isShared) {
@@ -94,6 +98,11 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
                     // Chiffrement : sous quelle clé la donnée de l'élément vit.
                     sections.push({ id: 'encryption', label: 'Chiffrement', icon: 'lock' });
                 } else if (typeof tab === 'object') {
+                    // Un onglet qui ne porte que des gestes disparaît sans
+                    // l'écriture, au lieu de s'excuser dans le vide. Celui qui
+                    // montre des valeurs reste, en lecture seule : elles valent
+                    // d'être lues.
+                    if (tab.requiresWrite && !canWrite) continue;
                     sections.push({ id: tab.id, label: tab.label, icon: tab.icon ?? 'settings' });
                 }
             }
@@ -113,7 +122,7 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
 
         pushSharingSections(sections);
         return sections;
-    }, [scope.feature, scope.kind, canRead, canRestrict, isShared, permissions]);
+    }, [scope.feature, scope.kind, canRead, canWrite, canRestrict, isShared, permissions]);
 }
 
 /** Les sections que la coquille rend elle-même, native ou module. */

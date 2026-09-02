@@ -147,6 +147,16 @@
     color: var(--text-muted);
 }
 
+/* La zone de liste, reperage de la voile de chargement : `.messageColumn` est
+   la boite qui defile, une voile posee dedans partirait avec le contenu. */
+.messageArea {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
 .messageColumn {
     display: flex;
     flex-direction: column;
@@ -156,6 +166,44 @@
     overflow-y: auto;
     /* Not redundant: one axis set to `auto` computes the other to `auto` too. */
     overflow-x: hidden;
+}
+
+/* Le dossier qu'on quitte reste en place le temps de lire le suivant : l'estomper
+   dit qu'il est perime sans vider la colonne, ce qui la ferait sauter. En
+   `filter` et non en `opacity`, la regle du depot pour attenuer un etat. */
+.messageColumnBusy {
+    filter: opacity(0.3);
+    pointer-events: none;
+    transition: filter var(--transition-normal);
+}
+
+.listVeil {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* La voile ne prend rien : ce qu'elle recouvre est deja inerte, et le
+       defilement doit rester possible pendant la lecture. */
+    pointer-events: none;
+    color: var(--accent);
+}
+
+.listVeilSpinner {
+    width: 28px;
+    animation: mailListSpin 0.9s linear infinite;
+}
+
+@keyframes mailListSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .listVeilSpinner {
+        animation: none;
+    }
 }
 
 .messageColumnEmpty {

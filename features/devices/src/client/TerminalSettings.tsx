@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react';
 import { terminalUser } from '@deveye/types';
-import { humanizeError, SaveButton, SelectInput, settingsStyles as shell, TextInput } from 'deveye-sdk-client';
+import {
+    humanizeError,
+    ReadOnlyNotice,
+    SaveButton,
+    SelectInput,
+    settingsStyles as shell,
+    TextInput
+} from 'deveye-sdk-client';
 
 import { api } from './api';
 import { refreshDevices, useDevices } from './store';
@@ -97,6 +104,14 @@ export function TerminalSettings({ deviceId, canWrite }: { deviceId: string; can
                 <div className={shell.sectionActions}>
                     <SaveButton onSave={save} disabled={!userValid} />
                 </div>
+            )}
+            {/* Le droit, jamais l'état : l'appareil archivé dit déjà pourquoi il
+                est inerte, et le motif de rôle passe avant lui. */}
+            {!canWrite && (
+                <ReadOnlyNotice>
+                    Votre rôle ne permet pas de régler le terminal d’un appareil : il relève de l’écriture sur
+                    Appareils.
+                </ReadOnlyNotice>
             )}
         </div>
     );
