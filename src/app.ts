@@ -148,7 +148,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // Les services des modules démarrent ici, awaités, avant l'enregistrement
     // des sockets : un module d'infrastructure (bail, clés) doit être prêt
     // avant la première trame d'agent.
-    setSdkHost(hub, deps.db);
+    setSdkHost(hub, deps.db, live);
     const moduleServices = createModuleServices({ db: deps.db, crypt: deps.crypt, audit, logger, live });
     for (const svc of moduleServices) await svc.start();
 

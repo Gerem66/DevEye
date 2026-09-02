@@ -5,7 +5,11 @@ import type { FeatureId } from '@deveye/types';
 import type { FeatureManifest, NativeCapability } from '@deveye/types/sdk';
 
 import type { FeatureAuditEntry, FeatureContext } from '@/features/_define';
+import { setSdkHost } from './host';
 import { createSdkContext } from './context';
+import type { LiveHub } from '@/live/hub';
+import type { MonitorHub } from '@/agent/hub';
+import type { Database } from '@/db';
 import type { SdkProviders } from '@deveye/types/sdk/server';
 
 /** Aucun contrat offert : ce que ces tests n'exercent pas. */
@@ -242,5 +246,40 @@ describe('createSdkContext : transport', () => {
         assert.deepEqual(m.subs, [[1, 2]]);
         assert.deepEqual(m.unsubs, [[2]]);
         assert.deepEqual(m.chunks, [chunk]);
+    });
+});
+
+describe('createSdkContext : la voie de poussée', () => {
+    const published: { workspaceId: number; feature: string; event: string; payload: unknown }[] = [];
+    setSdkHost(
+        {} as unknown as MonitorHub,
+        {} as Database,
+        {
+            publishFeature: (workspaceId: number, feature: string, event: string, payload: unknown) => {
+                published.push({ workspaceId, feature, event, payload });
+            }
+        } as unknown as LiveHub
+    );
+
+    it("sans la capacité 'live.publish' : forbidden, et rien ne part", () => {
+        const sdk = createSdkContext(fakeCtx().ctx, manifest(), null, NO_PROVIDERS);
+        assert.throws(() => sdk.live.publish('x-contexttest.frame', { a: 1 }), forbidden);
+        assert.deepEqual(published, []);
+    });
+
+    it('un événement hors du préfixe du module : validation', () => {
+        const m = manifest({ caps: ['live.publish'] });
+        const sdk = createSdkContext(fakeCtx().ctx, m, null, NO_PROVIDERS);
+        assert.throws(() => sdk.live.publish('other.frame', {}), { name: 'FeatureError', code: 'validation' });
+        assert.deepEqual(published, []);
+    });
+
+    it("avec la capacité : la trame part dans l'espace de l'appel, sous la feature du module", () => {
+        const m = manifest({ caps: ['live.publish'] });
+        const sdk = createSdkContext(fakeCtx().ctx, m, null, NO_PROVIDERS);
+        sdk.live.publish('x-contexttest.frame', { cells: [1, 2] });
+        assert.deepEqual(published, [
+            { workspaceId: 3, feature: 'x-contexttest', event: 'x-contexttest.frame', payload: { cells: [1, 2] } }
+        ]);
     });
 });

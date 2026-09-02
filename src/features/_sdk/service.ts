@@ -12,7 +12,7 @@ import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
 import { FeatureError } from '@deveye/types/sdk/server';
 import { serverKeysOf } from './host';
-import { ORIGINS } from './context';
+import { ORIGINS, publishFrame } from './context';
 import { createOpenCipher, createSecureStore } from '@/Services/SecureStore';
 import { verifyModuleTicket } from '@/auth/jwt';
 import type { Logger } from 'pino';
@@ -145,7 +145,8 @@ export function createServiceDeps(
             // règle que `mutates`, sans le filet du boot (un sujet inconnu n'a
             // simplement aucun abonné).
             changed: (workspaceId, topics) =>
-                host.live.changed(workspaceId, (topics ?? [manifest.id]) as LiveTopic[], null)
+                host.live.changed(workspaceId, (topics ?? [manifest.id]) as LiveTopic[], null),
+            publish: (workspaceId, event, payload) => publishFrame(manifest, workspaceId, event, payload)
         },
         audit: (entry) => {
             host.audit.record({

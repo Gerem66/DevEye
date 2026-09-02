@@ -6,6 +6,7 @@ import type { FeatureManifest, NativeCapability } from '@deveye/types/sdk';
 
 import type { MonitorHub } from '@/agent/hub';
 import type { Database } from '@/db';
+import type { LiveHub } from '@/live/hub';
 import type { AuditEvent } from '@/Services/AuditLog';
 import { setSdkHost } from './host';
 import { createServiceDeps, type ModuleServiceHost } from './service';
@@ -89,7 +90,11 @@ function fakeHost() {
     return { host, errors, records, listByWorkspaceCalls };
 }
 
-setSdkHost({ isOnline: (deviceId: string) => deviceId === 'dev-1' } as unknown as MonitorHub, {} as Database);
+setSdkHost(
+    { isOnline: (deviceId: string) => deviceId === 'dev-1' } as unknown as MonitorHub,
+    {} as Database,
+    { publishFeature: () => undefined } as unknown as LiveHub
+);
 
 const forbidden = { name: 'FeatureError', code: 'forbidden' };
 const flush = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));

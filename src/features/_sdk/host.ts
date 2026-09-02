@@ -4,18 +4,27 @@ import type { SdkServerKeys } from '@deveye/types/sdk/server';
 import type { MonitorHub } from '@/agent/hub';
 import { agentConfigFor } from '@/agent/config';
 import type { Database } from '@/db';
+import type { LiveHub } from '@/live/hub';
 
 /**
  * Le point d'attache de l'hôte pour l'assemblage SDK : le hub agents (portée
- * flotte, que le `FeatureContext` natif ne transporte pas) et la base, déposés
- * une fois au boot, avant l'enregistrement des WS.
+ * flotte, que le `FeatureContext` natif ne transporte pas), le hub de présence
+ * (portée salle, qu'un handler n'atteint pas non plus) et la base, déposés une
+ * fois au boot, avant l'enregistrement des WS.
  */
 let HUB: MonitorHub | null = null;
 let DB: Database | null = null;
+let LIVE: LiveHub | null = null;
 
-export function setSdkHost(hub: MonitorHub, db: Database): void {
+export function setSdkHost(hub: MonitorHub, db: Database, live: LiveHub): void {
     HUB = hub;
     DB = db;
+    LIVE = live;
+}
+
+export function sdkLive(): LiveHub {
+    if (!LIVE) throw new Error('SDK: hub de présence non attaché (setSdkHost manquant au boot)');
+    return LIVE;
 }
 
 export function sdkHub(): MonitorHub {

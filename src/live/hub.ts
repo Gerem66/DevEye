@@ -462,6 +462,23 @@ export class LiveHub {
         }
     }
 
+    /**
+     * Voie de poussée d'un module (capacité `live.publish`) : une trame de SA
+     * feature, aux connexions de la salle qui la lisent. Le nom de l'événement
+     * est à lui, la charge n'est pas relue, et rien n'attend de réponse.
+     *
+     * Sans plancher de débit, contrairement à `changed` : une trame porte le
+     * changement lui-même, l'étouffer le perdrait au lieu de le retarder. Ce
+     * qui borne le débit est la cadence de la commande qui l'émet.
+     */
+    publishFeature(workspaceId: number, feature: FeatureId, event: string, payload: unknown): void {
+        const room = this.byWorkspace.get(workspaceId);
+        if (!room) return;
+        for (const conn of room) {
+            if (this.canRead(conn, workspaceId, feature)) this.send(conn, event, payload);
+        }
+    }
+
     private canSeeTopic(conn: LiveConn, workspaceId: number, topic: LiveTopic): boolean {
         const feature = topicFeatureOf(topic);
         // `null` = aucun droit de feature à vérifier, l'appartenance suffit.

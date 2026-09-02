@@ -258,6 +258,33 @@ Plancher serveur **200 ms** (`src/live/hub.ts`) < anti-rebond client **250 ms**
 reste visible par la re-sollicitation que la trame précédente a déjà programmée.
 **Inverser cet ordre ouvrirait une fenêtre d'écritures jamais vues.**
 
+### La voie de poussée d'un module
+
+`live.changed` dit « quelque chose a bougé » ; certains états doivent se voir
+**pendant** qu'ils bougent, et une re-sollicitation de tout l'état pour montrer
+une cellule dessinée est le mauvais outil. D'où `publishFeature` sur le hub,
+offerte aux modules par la capacité `live.publish` (`ctx.live.publish` en
+requête, `deps.live.publish` dans un service) : une trame nommée sous le
+préfixe du module, aux connexions de la salle qui ont `read` sur SA feature.
+
+Trois différences avec `changed`, et elles sont voulues :
+
+- **Aucun plancher de débit.** Une trame porte le changement lui-même :
+  l'étouffer le perdrait au lieu de le retarder. Ce qui borne la cadence est
+  celle de la commande qui l'émet.
+- **Aucune projection.** Le partage inter-espaces ne s'applique pas : la trame
+  reste dans l'espace nommé.
+- **Aucune garantie.** Une socket en retard (`BACKPRESSURE_BYTES`) la perd en
+  silence, exactement comme un curseur. Un module qui s'en sert doit savoir se
+  remettre d'aplomb seul, et le Jeu de la vie en est l'exemple : ses clients
+  redemandent le plateau à la réouverture de la socket, au retour de l'onglet
+  et toutes les 25 s.
+
+Le premier client est le module Jeu de la vie, dont c'est toute l'architecture :
+le serveur fait autorité sur l'état et sur l'instant, chaque navigateur
+recalcule les générations avec le même moteur, et il ne circule que les gestes
+des joueurs, estampillés du tour auquel les appliquer.
+
 ---
 
 ## 5. Les curseurs

@@ -1,7 +1,7 @@
 import type { SdkFeatureContext, SdkProviders, SdkSocketTransport } from '@deveye/types/sdk/server';
 import { env } from '@/Utils/Env';
 import { signModuleTicket } from '@/auth/jwt';
-import { serverKeysOf } from './host';
+import { sdkLive, serverKeysOf } from './host';
 import { FeatureError } from '@deveye/types/sdk/server';
 import { resolveExtras, type FeatureManifest } from '@deveye/types/sdk';
 import type { NotificationFeature } from '@deveye/types';
@@ -71,6 +71,7 @@ export function createSdkContext(
                 )
         },
         keys: serverKeysOf(ctx.crypt),
+        live: { publish: (event, payload) => publishFrame(manifest, ctx.workspaceId, event, payload) },
         items: {
             // Liées à la feature du module : un module ne peut pas interroger
             // les restrictions d'une autre.
@@ -122,6 +123,22 @@ export function createSdkContext(
         requestId: ctx.requestId,
         origins: ORIGINS
     };
+}
+
+/**
+ * La voie de poussée d'un module. Deux gardes, et rien d'autre : la capacité
+ * déclarée, et le nom de l'événement sous le préfixe du module, la même règle
+ * structurelle que ses commandes et ses sujets. La charge n'est pas relue :
+ * elle traverse telle quelle, comme celle d'une réponse de commande.
+ */
+export function publishFrame(manifest: FeatureManifest, workspaceId: number, event: string, payload: unknown): void {
+    if (!(manifest.nativeCapabilities ?? []).includes('live.publish')) {
+        throw new FeatureError('forbidden', `Module « ${manifest.id} » : declare 'live.publish' in nativeCapabilities`);
+    }
+    if (!event.startsWith(`${manifest.id}.`)) {
+        throw new FeatureError('validation', `Event « ${event} » must start with « ${manifest.id}. »`);
+    }
+    sdkLive().publishFeature(workspaceId, manifest.id, event, payload);
 }
 
 /**

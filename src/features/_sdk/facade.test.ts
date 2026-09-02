@@ -7,6 +7,7 @@ import type { SdkCipher } from '@deveye/types/sdk/server';
 
 import type { MonitorHub } from '@/agent/hub';
 import type { Database } from '@/db';
+import type { LiveHub } from '@/live/hub';
 import { createFacade } from './facade';
 import { setSdkHost } from './host';
 
@@ -73,7 +74,8 @@ setSdkHost(
         publishSyncProgress: fanout('publishSyncProgress'),
         publishSyncState: fanout('publishSyncState')
     } as unknown as MonitorHub,
-    {} as Database
+    {} as Database,
+    { publishFeature: () => undefined } as unknown as LiveHub
 );
 
 const OUTBOUND = [

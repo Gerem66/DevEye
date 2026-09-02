@@ -636,7 +636,10 @@ espaces, administrateur seulement), `telemetry.read` (`snapshot`,
 `pinInstant`, réservée aux ids natifs) et `agents` (`requestScan`,
 `pushConfig`, les trois ordres du cycle de vie `resetAgentSession` /
 `disconnectAgent` / `requestDestroy`, `servedManifest`, les requêtes sync)),
-`transport` (socket appelant, `agents`), `secrecy.isUnlocked()` (le verrou de la session) et
+`transport` (socket appelant, `agents`), `live.publish(event, payload)` (la voie
+de poussée, capacité `live.publish` : une trame nommée sous le préfixe du module,
+aux connexions de la salle qui ont `read` sur sa feature ; voir LIVE.md §4),
+`secrecy.isUnlocked()` (le verrou de la session) et
 `secrecy.ticket(payload, { ttlSeconds })` (le ticket de session qu'une route
 publique du service rend contre les codecs de l'appelant), `keys` (les mêmes
 dérivations qu'un service),
@@ -655,7 +658,8 @@ gardée par `devices.read`, avec l'état en ligne du hub), `devices` (la flotte
 par identifiant, même garde), `telemetry`, `live.changed(workspaceId, topics?)`
 (le sujet du module, ou ceux que le service nomme : les siens, un secondaire du
 manifest, celui d'une autre feature ; diffusé par le hub, projections
-comprises), `audit` (source
+comprises) et `live.publish(workspaceId, event, payload)` (la même voie de
+poussée qu'en requête, l'espace étant nommé faute d'appelant), `audit` (source
 système), `agents`, `keys` (`sealBytes`/`openBytes` sous la clé serveur,
 `derive(salt, info, length)` : HKDF sur la même clé, jamais stockée),
 `secrecy.redeem(ticket)` (le ticket d'un module rendu en `{ userId,
