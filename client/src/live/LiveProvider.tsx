@@ -3,9 +3,10 @@ import { createContext, useContext, useEffect, useRef, type ReactNode } from 're
 
 import { ws } from '@/api/ws';
 import { refreshLive } from '@/stores/live';
+import { closeCursorChat, openCursorChat, rememberPointer } from './cursorChat';
 import { cursorKindAt } from './cursorKind';
 import { useHideLiveCursors } from './hideCursors';
-import { useWorkspaceState } from '@/stores/workspace';
+import { useActiveWorkspace, useWorkspaceState } from '@/stores/workspace';
 
 /**
  * Le cycle de vie de la présence, et la surface à laquelle les coordonnées d'un
@@ -32,9 +33,13 @@ export function useLiveSurface(): HTMLElement | null {
 /** Plancher d'émission. Au-delà de ~20 Hz, l'œil ne gagne plus rien. */
 const EMIT_FLOOR_MS = 50;
 
+/** La touche qui ouvre la bulle, hors de tout champ de saisie. */
+const OPEN_KEY = '/';
+
 export function LiveProvider({ surface, children }: { surface: HTMLElement | null; children: ReactNode }) {
     const { epoch } = useWorkspaceState();
     const hidden = useHideLiveCursors();
+    const workspace = useActiveWorkspace();
 
     useEffect(() => {
         // Le store prend en charge la reconnexion ; ce qu'il ne peut pas voir sans
@@ -92,6 +97,7 @@ export function LiveProvider({ surface, children }: { surface: HTMLElement | nul
             // figé là où quelqu'un a tapé se lit comme une présence qui n'existe plus.
             if (e.pointerType !== 'mouse') return;
             lastPoint.current = { x: e.clientX, y: e.clientY, buttons: e.buttons };
+            rememberPointer(e.clientX, e.clientY);
             schedule();
         };
 
@@ -118,6 +124,32 @@ export function LiveProvider({ surface, children }: { surface: HTMLElement | nul
             hadCursor.current = false;
         };
     }, [surface, hidden]);
+
+    // Un espace personnel est une salle d'une personne : personne à qui parler.
+    const alone = !workspace || workspace.kind === 'personal';
+
+    // La touche qui ouvre la bulle. Premier raccourci à une touche du client :
+    // il vit ici, seul endroit qui a déjà les écouteurs de fenêtre, la surface et
+    // le drapeau de coupure. Échap, lui, passe par la pile de `dismissLayer`.
+    useEffect(() => {
+        if (hidden || alone) {
+            closeCursorChat();
+            return;
+        }
+        const onKey = (e: KeyboardEvent): void => {
+            // `shiftKey` reste admis : sur un clavier français, « / » est une
+            // majuscule.
+            if (e.key !== OPEN_KEY || e.ctrlKey || e.metaKey || e.altKey) return;
+            const target = e.target as HTMLElement | null;
+            if (target?.isContentEditable) return;
+            const tag = target?.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+            e.preventDefault();
+            openCursorChat();
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [hidden, alone]);
 
     return <SurfaceContext.Provider value={surface}>{children}</SurfaceContext.Provider>;
 }

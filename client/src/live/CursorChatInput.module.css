@@ -1,0 +1,53 @@
+/* Ma propre saisie, suspendue à mon curseur. Même couche que les curseurs des
+   pairs : en portail sur <body>, en position fixe, au-dessus des dialogues. */
+
+.layer {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-toast);
+    /* La couche laisse tout passer ; seul le champ prend le pointeur, pour que
+       l'application reste utilisable pendant qu'on écrit. */
+    pointer-events: none;
+}
+
+.anchor {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: flex;
+    align-items: flex-start;
+    transform-origin: top left;
+    will-change: transform;
+}
+
+/* Le jumeau de `.bubble` dans LiveCursors : mêmes mesures, prises au même
+   endroit, pour qu'un texte se replie ici exactement comme en face. La hauteur
+   est posée au rendu, à la taille du contenu, faute de quoi une saisie longue
+   défilerait dans une ligne unique et masquerait son propre début. */
+.field {
+    pointer-events: auto;
+    box-sizing: border-box;
+    width: var(--live-bubble-width);
+    padding: var(--live-bubble-padding);
+    border: 1px solid var(--mine);
+    border-radius: var(--radius-md);
+    background: var(--surface-popup-solid);
+    color: var(--text-primary);
+    /* Un contrôle de formulaire n'hérite pas de la famille du document : elle se
+       pose ici, comme dans TextInput et les autres champs du dépôt. */
+    font-family: var(--font-sans);
+    font-size: var(--live-bubble-font-size);
+    line-height: var(--live-bubble-line-height);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    box-shadow: var(--shadow-sm);
+    /* La zone grandit d'elle-même : ni poignée de redimensionnement, ni barre de
+       défilement à faire apparaître. */
+    resize: none;
+    overflow: hidden;
+    outline: none;
+}
+
+.field::placeholder {
+    color: var(--text-secondary);
+}

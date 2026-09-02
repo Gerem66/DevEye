@@ -4,6 +4,7 @@ import {
     LIVE_CHANGED_EVENT,
     LIVE_CURSORS_EVENT,
     LIVE_PEERS_EVENT,
+    LIVE_SAYS_EVENT,
     LIVE_TYPERS_EVENT,
     livePathGate,
     ok,
@@ -62,6 +63,15 @@ const TYPING_SWEEP_MS = 1_000;
 /** Débit maximal accepté sur la voie rapide de la frappe. */
 const TYPING_FLOOR_MS = 250;
 
+/**
+ * Débit maximal accepté sur la voie rapide de la bulle. Doit rester
+ * strictement inférieur à la cadence d'émission du client (150 ms,
+ * `client/src/live/cursorChat.ts`) : une trame de texte porte un état, et
+ * l'étouffer ici la perd au lieu de la retarder, laissant la bulle des pairs
+ * figée sur une frappe périmée jusqu'à la suivante.
+ */
+const SAY_FLOOR_MS = 100;
+
 /** Au-delà, la socket est en retard : on laisse tomber la trame de curseur. */
 const BACKPRESSURE_BYTES = 64 * 1024;
 
@@ -98,6 +108,12 @@ export interface LiveConn {
     cursorStrikes: number;
     /** A reçu des curseurs au dernier envoi : sert à lui livrer la liste vide. */
     hasCursorPeers: boolean;
+
+    /** Le texte affiché au curseur ; `null` = pas de bulle. */
+    say: string | null;
+    sayAt: number;
+    /** A reçu des bulles au dernier envoi : sert à lui livrer la liste vide. */
+    hasSayPeers: boolean;
 
     /**
      * Droits résolus par le dispatcheur, par espace : une même connexion en
@@ -150,6 +166,7 @@ export class LiveHub {
     private readonly dirtyRoster = new Set<number>();
     private readonly dirtyCursors = new Set<number>();
     private readonly dirtyTyping = new Set<number>();
+    private readonly dirtySays = new Set<number>();
     private typingSweepTimer: ReturnType<typeof setInterval> | null = null;
     private flushTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -194,6 +211,9 @@ export class LiveHub {
             cursorAt: 0,
             cursorStrikes: 0,
             hasCursorPeers: false,
+            say: null,
+            sayAt: 0,
+            hasSayPeers: false,
             grants: new Map(),
             alive: true
         };
@@ -277,6 +297,7 @@ export class LiveHub {
         if (relocated) {
             conn.cursor = null;
             conn.typingUntil = 0;
+            conn.say = null;
         }
 
         let room = this.byWorkspace.get(workspaceId);
@@ -285,6 +306,11 @@ export class LiveHub {
 
         this.markRoster(workspaceId);
         this.markCursors(workspaceId);
+        // Sans quoi un arrivant ne verrait les bulles et les frappes déjà en
+        // cours qu'au prochain changement d'état de leurs auteurs, que le rappel
+        // périodique de la frappe n'émet même pas.
+        this.markSays(workspaceId);
+        this.markTyping(workspaceId);
         return this.projectRoster(room, conn);
     }
 
@@ -297,9 +323,11 @@ export class LiveHub {
         conn.workspaceId = null;
         conn.cursor = null;
         conn.typingUntil = 0;
+        conn.say = null;
         this.markRoster(wsId);
         this.markCursors(wsId);
         this.markTyping(wsId);
+        this.markSays(wsId);
     }
 
     /**
@@ -556,6 +584,28 @@ export class LiveHub {
         this.markTyping(conn.workspaceId);
     }
 
+    /**
+     * Voie rapide : le texte affiché au curseur. Mêmes précautions que
+     * {@link cursor}. Pas de péremption : la bulle n'est dessinée que là où un
+     * curseur l'est, elle hérite donc de sa durée de vie.
+     */
+    say(socket: WebSocket, message: string | null): void {
+        const conn = this.bySocket.get(socket);
+        if (!conn || conn.workspaceId === null) return;
+
+        const now = Date.now();
+        // Étouffement simple, comme la frappe : la cadence est celle d'un humain
+        // qui tape, et le client tient déjà son propre plancher. Le retrait, lui,
+        // passe toujours : une fermeture qui suit de près une frappe laisserait
+        // sinon la bulle affichée chez les pairs pour de bon.
+        if (message !== null && now - conn.sayAt < SAY_FLOOR_MS) return;
+        conn.sayAt = now;
+
+        if (conn.say === message) return;
+        conn.say = message;
+        this.markSays(conn.workspaceId);
+    }
+
     // ---------------------------------------------------------------- diffusion
 
     private markTyping(workspaceId: number): void {
@@ -604,6 +654,11 @@ export class LiveHub {
         this.scheduleFlush();
     }
 
+    private markSays(workspaceId: number): void {
+        this.dirtySays.add(workspaceId);
+        this.scheduleFlush();
+    }
+
     private scheduleFlush(): void {
         if (this.flushTimer) return;
         this.flushTimer = setTimeout(() => {
@@ -617,12 +672,15 @@ export class LiveHub {
         const rosterRooms = [...this.dirtyRoster];
         const cursorRooms = [...this.dirtyCursors];
         const typingRooms = [...this.dirtyTyping];
+        const sayRooms = [...this.dirtySays];
         this.dirtyRoster.clear();
         this.dirtyCursors.clear();
         this.dirtyTyping.clear();
+        this.dirtySays.clear();
         for (const wsId of rosterRooms) this.flushRoster(wsId);
         for (const wsId of cursorRooms) this.flushCursors(wsId);
         for (const wsId of typingRooms) this.flushTyping(wsId);
+        for (const wsId of sayRooms) this.flushSays(wsId);
     }
 
     /**
@@ -734,6 +792,36 @@ export class LiveHub {
                 if (typers.length === 0 && !recipient.hasTypingPeers) continue;
                 recipient.hasTypingPeers = typers.length > 0;
                 this.send(recipient, LIVE_TYPERS_EVENT, { workspaceId, typers });
+            }
+        }
+    }
+
+    /**
+     * Les bulles, entre pairs situés au **même chemin exactement** : même
+     * projection que les curseurs, sous lesquels elles se dessinent.
+     */
+    private flushSays(workspaceId: number): void {
+        const room = this.byWorkspace.get(workspaceId);
+        if (!room || room.size === 0) return;
+
+        const byPath = new Map<string, LiveConn[]>();
+        for (const conn of room) {
+            const key = conn.path.join('\0');
+            const group = byPath.get(key);
+            if (group) group.push(conn);
+            else byPath.set(key, [conn]);
+        }
+
+        for (const group of byPath.values()) {
+            for (const recipient of group) {
+                const says = group
+                    .filter((peer) => peer !== recipient && peer.say !== null)
+                    .map((peer) => ({ connId: peer.connId, userId: peer.userId, text: peer.say! }));
+                // Même règle que les curseurs : une liste vide seulement à qui en
+                // avait une.
+                if (says.length === 0 && !recipient.hasSayPeers) continue;
+                recipient.hasSayPeers = says.length > 0;
+                this.send(recipient, LIVE_SAYS_EVENT, { workspaceId, says });
             }
         }
     }

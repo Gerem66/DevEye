@@ -4,8 +4,10 @@ import {
     clientMessageSchema,
     err,
     LIVE_CURSOR_COMMAND,
+    LIVE_SAY_COMMAND,
     LIVE_TYPING_COMMAND,
     liveCursorFrameSchema,
+    liveSayFrameSchema,
     liveTypingFrameSchema,
     ok,
     type FeatureAccess,
@@ -135,6 +137,14 @@ export async function registerWS(
             if (command === LIVE_TYPING_COMMAND) {
                 const frame = liveTypingFrameSchema.safeParse(payload);
                 if (frame.success) liveHub.typing(socket, frame.data.typing);
+                return;
+            }
+
+            // Et pour la bulle. Le `safeParse` est le seul rempart de cette voie :
+            // il borne la longueur du texte diffusé aux pairs.
+            if (command === LIVE_SAY_COMMAND) {
+                const frame = liveSayFrameSchema.safeParse(payload);
+                if (frame.success) liveHub.say(socket, frame.data.message);
                 return;
             }
 

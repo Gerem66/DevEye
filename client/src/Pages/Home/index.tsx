@@ -30,6 +30,7 @@ import { useFeedbackEnabled } from '@/stores/feedbackEnabled';
 import { noteView } from '@/diagnostics/trace';
 import { LiveProvider } from '@/live/LiveProvider';
 import { LiveCursors } from '@/live/LiveCursors';
+import { CursorChatInput } from '@/live/CursorChatInput';
 import { useLiveSegment } from '@/live/useLiveSegment';
 import { TopNavbar } from '@/Components/TopNavbar';
 import { Widget } from '@/Components/Widget';
@@ -1079,8 +1080,12 @@ export default function HomePage() {
                 opens it via openInfo(). */}
                 <InfoPopup />
 
-                {/* Curseurs des pairs situés exactement là où nous sommes. */}
+                {/* Curseurs des pairs situés exactement là où nous sommes, et ma
+                    propre bulle. Séparée : elle doit survivre au départ du dernier
+                    pair, alors que `LiveCursors` sort quand il n'y a plus rien à
+                    dessiner. */}
                 <LiveCursors />
+                <CursorChatInput />
             </div>
         </LiveProvider>
     );

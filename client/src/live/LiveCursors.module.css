@@ -32,10 +32,19 @@
     filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
 }
 
+/* `margin-top` est posé par le composant : chaque forme a sa hauteur, et
+   l'étiquette doit rester juste dessous sans jamais la chevaucher. La colonne
+   porte ce décalage pour les deux, sans quoi la bulle s'aligne sur la pointe. */
+.stack {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+}
+
 .label {
-    /* `margin-top` est posé par le composant : chaque forme a sa hauteur, et
-       l'étiquette doit rester juste dessous sans jamais la chevaucher. */
     padding: 2px 7px;
+    font-family: var(--font-sans);
     border-radius: var(--radius-pill);
     background: var(--peer);
     color: #06121a;
@@ -43,5 +52,26 @@
     font-weight: 700;
     line-height: 1.35;
     white-space: nowrap;
+    box-shadow: var(--shadow-sm);
+}
+
+/* La parole du pair. Fond neutre plutôt que sa couleur : un texte de deux lignes
+   sur une teinte saturée se lit mal, et le liseré suffit à dire de qui il vient.
+   Les mesures viennent de `Styles/live.css`, partagées avec la saisie. */
+.bubble {
+    box-sizing: border-box;
+    max-width: var(--live-bubble-width);
+    padding: var(--live-bubble-padding);
+    border: 1px solid var(--peer);
+    border-radius: var(--radius-md);
+    background: var(--surface-popup-solid);
+    color: var(--text-primary);
+    /* Posée et non héritée : la couche est en portail sur <body>, et la famille
+       s'écrit partout ailleurs dans le dépôt plutôt que de se supposer. */
+    font-family: var(--font-sans);
+    font-size: var(--live-bubble-font-size);
+    line-height: var(--live-bubble-line-height);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
     box-shadow: var(--shadow-sm);
 }

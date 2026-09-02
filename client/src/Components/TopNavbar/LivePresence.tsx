@@ -2,6 +2,8 @@ import type { CSSProperties } from 'react';
 
 import { avatarSrc } from '@/Features/Profile/avatar';
 import { userColorVar } from '@/Features/Profile/userColors';
+import { openCursorChat } from '@/live/cursorChat';
+import { useHideLiveCursors } from '@/live/hideCursors';
 import { usePresentUsers, type PresentUser } from '@/live/usePresence';
 import { startTeleport } from '@/stores/live';
 import { requestSelectWorkspace } from '@/stores/viewRequest';
@@ -27,6 +29,7 @@ function joinPeer(peer: PresentUser): void {
 export function LivePresence() {
     const workspace = useActiveWorkspace();
     const peers = usePresentUsers();
+    const hidden = useHideLiveCursors();
 
     if (!workspace || workspace.kind === 'personal') return null;
 
@@ -60,6 +63,20 @@ export function LivePresence() {
                     </button>
                 ))}
             </span>
+            {/* La bulle s'ouvre surtout à la touche « / » ; ce bouton est là pour
+                la faire découvrir. Masqué quand les curseurs le sont : la bulle
+                les suit. */}
+            {!hidden && (
+                <button
+                    type='button'
+                    className={styles.say}
+                    title='Écrire au curseur (/)'
+                    aria-label='Écrire au curseur'
+                    onClick={() => openCursorChat()}
+                >
+                    <span className={`icon icon-chat ${styles.icon}`} />
+                </button>
+            )}
         </span>
     );
 }

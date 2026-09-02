@@ -7,6 +7,7 @@ import { userColorVar } from '@/Features/Profile/userColors';
 import { useLive } from '@/stores/live';
 import { useActiveWorkspace } from '@/stores/workspace';
 import { CURSOR_GLYPHS } from './cursorGlyphs';
+import { useSays } from './cursorChat';
 import { useHideLiveCursors } from './hideCursors';
 import { useLiveSurface } from './LiveProvider';
 import styles from './LiveCursors.module.css';
@@ -58,6 +59,7 @@ function useSurfaceGeometry(surface: HTMLElement | null): { rect: DOMRect; scrol
 
 export function LiveCursors() {
     const { cursors, peers } = useLive();
+    const says = useSays();
     const { user } = useAuth();
     const workspace = useActiveWorkspace();
     const surface = useLiveSurface();
@@ -72,6 +74,9 @@ export function LiveCursors() {
     // La couleur n'est pas répétée dans la trame de curseur : elle est déjà dans
     // le roster, qui arrive avant et se met à jour tout seul quand elle change.
     const colors = new Map(peers.map((p) => [p.connId, p.color]));
+    // La bulle est jointe au curseur par la connexion : elle n'existe donc que là
+    // où un curseur est dessiné, et disparaît avec lui.
+    const texts = new Map(says.map((s) => [s.connId, s.text]));
     const { rect, scrollTop } = geometry;
 
     // Le cadre est la fenêtre, jamais la surface.
@@ -88,7 +93,17 @@ export function LiveCursors() {
         const top = rect.top + entry.cursor.y - scrollTop;
         if (top < 0 || top > viewHeight || left < 0 || left > viewWidth) return [];
         const glyph = CURSOR_GLYPHS[entry.cursor.kind];
-        return [{ ...entry, color, left, top, glyph, username: member?.username ?? 'Membre' }];
+        return [
+            {
+                ...entry,
+                color,
+                left,
+                top,
+                glyph,
+                username: member?.username ?? 'Membre',
+                text: texts.get(entry.connId) ?? null
+            }
+        ];
     });
 
     if (visible.length === 0) return null;
@@ -118,9 +133,10 @@ export function LiveCursors() {
                     >
                         {c.glyph.shape}
                     </svg>
-                    <span className={styles.label} style={{ marginTop: c.glyph.labelOffset }}>
-                        {c.username}
-                    </span>
+                    <div className={styles.stack} style={{ marginTop: c.glyph.labelOffset }}>
+                        <span className={styles.label}>{c.username}</span>
+                        {c.text !== null && <span className={styles.bubble}>{c.text}</span>}
+                    </div>
                 </motion.div>
             ))}
         </div>,

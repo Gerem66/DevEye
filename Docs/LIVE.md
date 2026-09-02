@@ -383,10 +383,11 @@ l'exécution précédente — dont le nettoyage envoie déjà `cursor: null`. Le
 nous perdent dans le même tic de 50 ms, sans un chemin de code de plus. Le hub
 n'a rien appris : pour lui, c'est une absence ordinaire.
 
-Le réglage ne porte que sur les **curseurs**. Le roster de la barre du haut, les
-contours de pair (`useLiveOutline`) et « en train d'écrire » restent actifs : ils
-disent où l'on est, pas où l'on pointe, et c'est la seconde information qui pèse
-sur l'attention.
+Le réglage porte sur les **curseurs et la bulle qu'ils portent**. Le roster de la
+barre du haut, les contours de pair (`useLiveOutline`) et « en train d'écrire »
+restent actifs : ils disent où l'on est, pas où l'on pointe, et c'est la seconde
+information qui pèse sur l'attention. La bulle, elle, est dessinée _dans_ le
+curseur : la couper avec lui n'est pas un choix, c'est la même chose.
 
 ### Les tranches du magasin, et pourquoi elles existent
 
@@ -462,6 +463,114 @@ pour un cas rare.
 
 > ⚠️ L'anti-rebond du client (2,5 s) doit rester **nettement sous** la péremption
 > du serveur (6 s), sinon l'indicateur clignoterait entre deux rappels.
+
+---
+
+## 5 ter. La bulle
+
+Le texte libre qu'on écrit à son propre curseur, à la Figma. Une troisième voie
+rapide, `live.say`, et le vocabulaire de l'interface est « bulle ».
+
+De la présence, pas de la messagerie : rien n'est envoyé, rien n'est validé,
+rien n'est stocké ni journalisé. Le texte vit tant que la saisie est ouverte, et
+il meurt avec elle.
+
+| Élément                                                              | Où                                           |
+| -------------------------------------------------------------------- | -------------------------------------------- |
+| `LIVE_SAY_COMMAND` = `live.say`, trame `{ message: string \| null }` | `DevEye-Types/src/features/live.ts`          |
+| `LIVE_SAYS_EVENT` = `live.says`, poussée `{ workspaceId, says[] }`   | idem                                         |
+| Voie rapide, à côté du curseur et de la frappe                       | `DevEye/src/ws/handler.ts`                   |
+| `say()` sur le hub, diffusion par chemin                             | `DevEye/src/live/hub.ts`                     |
+| Magasin et anti-rebond d'émission                                    | `DevEye/client/src/live/cursorChat.ts`       |
+| Ma saisie, suspendue à mon curseur                                   | `DevEye/client/src/live/CursorChatInput.tsx` |
+| La bulle du pair, sous son pseudo                                    | `DevEye/client/src/live/LiveCursors.tsx`     |
+
+### Pourquoi un canal à part, et pas un champ du curseur
+
+Le mettre dans `liveCursorSchema` était tentant : un champ, aucune plomberie.
+C'est faux deux fois.
+
+- **Ça fuirait par le roster.** `livePeerSchema` porte `cursor`, et le roster
+  part à **tout l'espace** ; seul son `path` est tronqué par droits, parce que
+  des coordonnées ne disent rien. Du texte, si. Un mot écrit dans le Coffre
+  arriverait à qui n'a pas `read` dessus.
+- **Ce n'est pas la bonne cadence.** La voie du curseur tourne à 20 Hz avec un
+  plancher de 25 ms et un compteur de fautes qui **ferme la socket** au-delà de
+  200 trames trop rapides.
+
+### Pas de péremption, et c'est voulu
+
+Contrairement à « en train d'écrire », rien n'expire côté serveur. La bulle
+n'est dessinée qu'**à l'intérieur** du bloc de curseur d'un pair : pas de
+curseur, pas de bulle. Elle hérite donc exactement de la durée de vie du
+curseur, y compris quand un onglet meurt sans se fermer, où les deux restent
+figés le même temps, jusqu'à la fermeture de socket. Un TTL n'aurait rien à
+raccourcir.
+
+### L'invariant des deux planchers, une troisième fois
+
+Plancher serveur **100 ms** (`SAY_FLOOR_MS`) < cadence d'émission client
+**150 ms** (`EMIT_FLOOR_MS` dans `cursorChat.ts`). Le sens est **l'inverse** de
+celui de `live.changed` : là-bas la trame annonce un changement qu'une
+re-sollicitation déjà programmée rattrapera, ici la trame **porte** l'état.
+L'étouffer le perd au lieu de le retarder, et la dernière frappe resterait
+invisible chez les pairs jusqu'à la suivante. D'où un anti-rebond client à front
+arrière, copié de celui des positions de curseur, qui garantit que le dernier
+état part toujours.
+
+### La même boîte des deux côtés
+
+Ce qu'on écrit doit avoir exactement la forme de ce que les autres lisent : même
+largeur, même rembourrage, même corps, même interligne. Les mesures vivent donc
+dans `client/src/Styles/live.css` (`--live-bubble-*`) plutôt que dans chacun des
+deux modules CSS, où elles auraient dérivé, et un texte qui tient sur deux lignes
+chez soi en tient deux en face.
+
+La saisie est une zone de texte qui **grandit avec son contenu**, et non un champ
+d'une ligne : sur une seule ligne, un texte un peu long fait défiler son propre
+début hors de vue, et l'on écrit sans voir ce qu'on a écrit. Un retour à la ligne
+est admis et se lit tel quel en face, la bulle étant en `pre-wrap`.
+
+Deux détails qui ne s'héritent pas et s'écrivent donc à la main, comme partout
+ailleurs dans le dépôt : la famille de caractères, qu'un contrôle de formulaire ne
+prend pas du document, et la hauteur, que `scrollHeight` rend sans les bordures
+que `border-box` compte.
+
+**Grandir demande une borne.** `SAY_MAX_LENGTH` n'en est pas une : cent retours à
+la ligne tiennent dans cent caractères, et la boîte descendait sous le bas de
+l'écran. D'où `SAY_MAX_LINES`, appliqué à trois endroits qui se couvrent
+mutuellement :
+
+- le schéma, seul rempart d'une voie rapide qui court-circuite scope et audit ;
+- le magasin, qui ramène le texte à ce plafond, collage compris ;
+- la frappe, qui refuse la ligne de trop plutôt que de la retirer après coup. Sans
+  elle, le magasin ne verrait aucun changement à annoncer, et le retour resterait
+  dans le DOM d'un champ pourtant contrôlé.
+
+### La position se lit, elle ne se recopie pas
+
+La saisie suit le pointeur, mais sa position n'est mise en mémoire qu'**à partir
+du premier mouvement** : tant qu'il n'a pas bougé, elle est lue au rendu.
+
+Un état initialisé une fois pour toutes semblait plus simple, avec un effet pour
+le rafraîchir à l'ouverture. Il est faux : un effet ne s'exécute qu'après la
+première image, laquelle porte alors la position de la **fermeture précédente** et
+saute à la bonne juste après. Mesuré à l'endroit où l'élément entre dans le DOM :
+`translate(314px, 272px)` sur la première image contre `translate(914px, 622px)`
+une fois stabilisée. C'est la même leçon que la géométrie de la surface au §5, et
+elle se redéfait aussi facilement.
+
+### L'ouverture, et la fermeture
+
+La touche `/` hors de tout champ de saisie (premier raccourci à une touche du
+client, posé dans `LiveProvider` faute de registre), plus un bouton dans le
+widget « Présence » pour le faire découvrir. Échap passe par la pile de
+`dismissLayer`, donc la bulle se ferme avant un dialogue ouvert dessous.
+
+La saisie se ferme aussi **en perdant le focus** : cliquer ailleurs prend le
+clavier, et une bulle qu'on ne peut plus modifier mais que les pairs voient
+encore serait un piège. Elle se ferme enfin **au changement de lieu**, où le
+serveur a de toute façon déjà effacé la bulle (`relocated`).
 
 ---
 

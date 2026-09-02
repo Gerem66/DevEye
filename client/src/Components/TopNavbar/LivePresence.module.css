@@ -107,3 +107,25 @@
     width: 14px;
     height: 14px;
 }
+
+/* Ouvrir la bulle. Même gabarit qu'une bulle d'avatar, mais carré et sans
+   couleur de compte : c'est une action, pas quelqu'un. */
+.say {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    margin-left: 2px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color var(--transition-fast);
+}
+
+.say:hover {
+    color: var(--text-primary);
+}
