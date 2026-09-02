@@ -127,12 +127,12 @@ export const projectUptimeLinkFeature = defineSdkFeature({
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'relier un service surveillé');
-        // Le service existe-t-il, et dans cet espace ? Sans cette garde on
-        // rattacherait n'importe quel identifiant, dont celui d'un service d'un autre
-        // espace, dont l'existence n'a pas à fuiter. Seule l'existence est vérifiée,
-        // le droit de l'ouvrir reste celui d'Uptime. La question passe par le contrat
-        // qu'offre le module : Projets ne lit pas sa table, et dégrade proprement
-        // quand il est absent.
+        // Le service est-il visible de cet espace, chez lui ou projeté ? Sans cette
+        // garde on rattacherait n'importe quel identifiant, dont celui d'un service
+        // d'un espace qui ne partage rien ici, dont l'existence n'a pas à fuiter.
+        // Seule la visibilité est vérifiée, le droit de l'ouvrir reste celui
+        // d'Uptime. La question passe par le contrat qu'offre le module : Projets
+        // ne lit pas sa table, et dégrade proprement quand il est absent.
         const uptime = ctx.providers.get<UptimeItemsProvider>(UPTIME_ITEMS_PROVIDER);
         if (!uptime) throw new FeatureError('validation', 'Le module Uptime n’est pas installé.');
         if (!(await uptime.exists(input.serviceId, project.workspace_id))) {

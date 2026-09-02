@@ -100,6 +100,7 @@ export function LinkSiteDialog({ open, projectId, linkedIds, onClose, onSaved }:
                                     {free.map((site) => (
                                         <option key={site.id} value={site.id}>
                                             {site.name}
+                                            {site.foreign && ' (partagé)'}
                                         </option>
                                     ))}
                                 </SelectInput>

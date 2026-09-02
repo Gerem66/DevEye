@@ -335,10 +335,14 @@ détecter : un blob chiffré est indistinguable d'un autre. La conversion lit et
 rescelle tout **avant la moindre écriture**, sur le modèle de
 `reencryptProjectTree`.
 
-Les **liaisons ne traversent pas** : une liaison vers un élément qui part est
-retirée, et l'écran la nomme avant de confirmer. Dans un sens comme dans l'autre :
-`PROJECTS_USAGE_PROVIDER.detach` retire celles qui visaient l'élément parti,
-et le `move` de Projets retire celles qu'un projet emporterait.
+Les **liaisons ne suivent pas** : un projet relie ce que son espace voit, chez
+lui ou projeté, et une liaison vers un élément qui n'y est plus visible est
+retirée, l'écran la nommant avant de confirmer. Dans un sens comme dans
+l'autre : `PROJECTS_USAGE_PROVIDER.detach` retire celles qui visaient
+l'élément parti, chez lui et dans chaque espace qui le recevait, et le `move`
+de Projets retire celles qu'un projet emporterait. La même règle vaut hors
+déplacement : retirer une projection (`share.set`) ou supprimer l'élément
+(`ctx.items.forget`) lâche les liaisons des espaces qui cessent de le voir.
 
 ### Qui sait se déplacer, et pourquoi
 

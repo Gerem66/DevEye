@@ -86,7 +86,8 @@ function fakeRepo(
         listVisibleTargets: unused,
         findTarget: async (id, workspaceId) =>
             targets.find((t) => t.id === id && t.workspace_id === workspaceId) ?? null,
-        findVisibleTarget: unused,
+        findVisibleTarget: async (id, workspaceId) =>
+            targets.find((t) => t.id === id && t.workspace_id === workspaceId) ?? null,
         findTargetWithUsage: unused,
         findVisibleTargetWithUsage: unused,
         findTargetByExternal: unused,

@@ -16,9 +16,10 @@ import { encryptProject, tryDecryptProject, type StoredEvent } from './_shared';
  * Tout ici travaille sans session, à l'étage ouvert (`deps.cipherFor`) : un projet
  * gardé ne se relie pas, il n'a donc rien à rendre ni à recevoir par ce contrat.
  *
- * Rien à savoir des projections : une liaison ne se pose qu'au domicile du projet,
- * vers un élément du même espace, et c'est cet espace que les modules passent ici.
- * `findById`, le domicile seul et jamais une fenêtre, suffit donc.
+ * Une liaison se pose au domicile du projet, vers un élément que cet espace voit,
+ * chez lui ou projeté : c'est l'espace du projet que les modules et l'app passent
+ * ici, et `findById`, le domicile du projet et jamais une fenêtre, suffit donc.
+ * L'app appelle `detach` dès que l'élément cesse d'y être visible.
  */
 
 /** Ce que le contrat lit du dépôt et de l'hôte : pas le service entier. */

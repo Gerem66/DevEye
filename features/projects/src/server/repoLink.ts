@@ -44,11 +44,11 @@ export const projectRepoLinkFeature = defineSdkFeature({
             throw new FeatureError('validation', 'Un projet confidentiel ne peut pas être relié à un dépôt.');
         }
 
-        // Le dépôt existe-t-il, et dans cet espace ? Sans cette garde on lierait
-        // n'importe quel identifiant, dont celui d'un dépôt d'un autre espace, dont
-        // l'existence n'a pas à fuiter. La question passe par le contrat qu'offre le
-        // module Git : Projets ne lit pas sa table, et dégrade proprement quand il
-        // est absent.
+        // Le dépôt est-il visible de cet espace, chez lui ou projeté ? Sans cette
+        // garde on lierait n'importe quel identifiant, dont celui d'un dépôt d'un
+        // espace qui ne partage rien ici, dont l'existence n'a pas à fuiter. La
+        // question passe par le contrat qu'offre le module Git : Projets ne lit pas
+        // sa table, et dégrade proprement quand il est absent.
         const repos = ctx.providers.get<GitItemsProvider>(GIT_ITEMS_PROVIDER);
         if (!repos) throw new FeatureError('validation', 'Le module Git n’est pas installé.');
         if (!(await repos.exists(input.repoId, project.workspace_id))) {

@@ -40,8 +40,9 @@ export const projectDeployLinkFeature = defineSdkFeature({
             );
         }
 
-        // Seule l'existence est vérifiée, et par le contrat qu'offre le module : le
-        // droit de déclencher reste celui de Déploiement, vérifié au déclenchement.
+        // Seule la visibilité d'ici (chez elle ou projetée) est vérifiée, et par le
+        // contrat qu'offre le module : le droit de déclencher reste celui de
+        // Déploiement, vérifié au déclenchement.
         const targets = ctx.providers.get<DeployItemsProvider>(DEPLOY_ITEMS_PROVIDER);
         if (!targets) throw new FeatureError('validation', 'Le module Déploiements n’est pas installé.');
         if (!(await targets.exists(input.targetId, project.workspace_id))) {

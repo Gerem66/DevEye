@@ -34,12 +34,14 @@ export const serverEntry: FeatureServer<GitRepo> = {
     features: gitHandlers,
     createService(deps) {
         const sync = new GitSync(deps);
-        // Le domicile seulement, jamais une projection : un projet relie ce que
-        // son espace possède, et un identifiant étranger ne doit pas trahir son
-        // existence en se laissant relier.
+        // Visible d'ici, chez lui ou projeté : un projet relie ce que son espace
+        // voit. Le nom se lit sous le codec du domicile, seul à savoir l'ouvrir.
         const items: GitItemsProvider = {
-            exists: async (repoId, workspaceId) => (await deps.repo.findRepo(repoId, workspaceId)) !== null,
-            labelOf: (repoId, workspaceId) => labelOf(deps.repo, deps.cipherFor(workspaceId), repoId, workspaceId)
+            exists: async (repoId, workspaceId) => (await deps.repo.findVisibleRepo(repoId, workspaceId)) !== null,
+            labelOf: async (repoId, workspaceId) => {
+                const row = await deps.repo.findVisibleRepo(repoId, workspaceId);
+                return row ? labelOf(deps.repo, deps.cipherFor(row.workspace_id), repoId, row.workspace_id) : null;
+            }
         };
         return {
             start() {

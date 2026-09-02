@@ -126,7 +126,8 @@ export const clientProvider: DatabaseClientProvider = {
             id: d.id,
             name: d.name,
             engineLabel: ENGINE_LABELS[d.engine],
-            projectCount: d.projectCount
+            projectCount: d.projectCount,
+            foreign: d.foreign
         })),
     LinkedDatabase,
     DatabaseDialog: LinkedDatabaseDialog

@@ -17,7 +17,7 @@ import { grantsFor, invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { isModuleMovable, moduleItems, moduleManifest } from '../_sdk/register';
 import { isShareWired, shareBlockerFor } from '../_sharing';
-import { canWriteItemIn, itemHomeWorkspace, loadHome } from './_shared';
+import { canWriteItemIn, detachLinks, itemHomeWorkspace, loadHome } from './_shared';
 import { moveFeatures } from './move';
 import { extraOverridesOf } from '@/db/repos/itemSharing';
 import { parseJsonArray } from '@/Utils/json';
@@ -176,6 +176,8 @@ const setFeature = defineFeature({
             });
         } else {
             await ctx.db.itemSharing.unshare(input.workspaceId, input.feature, input.itemId);
+            // Les projets de là-bas qui le reliaient ne le voient plus.
+            await detachLinks(input.feature, input.itemId, [input.workspaceId]);
         }
 
         ctx.audit({

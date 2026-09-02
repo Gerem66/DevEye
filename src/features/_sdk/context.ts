@@ -3,7 +3,12 @@ import { env } from '@/Utils/Env';
 import { signModuleTicket } from '@/auth/jwt';
 import { sdkLive, serverKeysOf } from './host';
 import { FeatureError } from '@deveye/types/sdk/server';
-import { resolveExtras, type FeatureManifest } from '@deveye/types/sdk';
+import {
+    PROJECTS_USAGE_PROVIDER,
+    resolveExtras,
+    type FeatureManifest,
+    type ProjectsUsageProvider
+} from '@deveye/types/sdk';
 import type { NotificationFeature } from '@deveye/types';
 
 import type { FeatureContext } from '@/features/_define';
@@ -77,10 +82,20 @@ export function createSdkContext(
             // les restrictions d'une autre.
             restrictions: () => ctx.itemRestrictions(manifest.id),
             assert: (itemId, level) => ctx.assertItem(manifest.id, itemId, level),
-            // Le ménage d'un élément supprimé : projections, restrictions et
-            // route de notification, qu'aucune clé étrangère ne rattache à sa table.
+            // Le ménage d'un élément supprimé : projections, restrictions, route
+            // de notification et liaisons de projets, qu'aucune clé étrangère ne
+            // rattache à sa table. Les liaisons tombent chez lui et dans chaque
+            // espace qui le recevait : plus personne n'y voit l'élément.
             forget: async (itemId) => {
+                const shares = await ctx.db.itemSharing.sharesOf(manifest.id, itemId, ctx.workspaceId);
                 await ctx.db.itemSharing.forgetItem(manifest.id, itemId, ctx.workspaceId);
+                const numericItem = Number(itemId);
+                const projects = providers.get<ProjectsUsageProvider>(PROJECTS_USAGE_PROVIDER);
+                if (projects && Number.isInteger(numericItem)) {
+                    for (const workspaceId of new Set([ctx.workspaceId, ...shares.map((s) => s.workspace_id)])) {
+                        await projects.detach(manifest.id, numericItem, workspaceId);
+                    }
+                }
                 // Les routes de notification sont à clé numérique : une feature
                 // dont les éléments ont un identifiant texte n'en a aucune.
                 const routeItemId = Number(itemId);

@@ -97,7 +97,8 @@ export function LinkTargetDialog({ open, projectId, linkedIds, onClose, onSaved 
                                         <option value=''>Choisir…</option>
                                         {free.map((target) => (
                                             <option key={target.id} value={target.id}>
-                                                {target.name} — {target.host}
+                                                {target.name}
+                                                {target.foreign && ' (partagée)'} — {target.host}
                                             </option>
                                         ))}
                                     </SelectInput>

@@ -67,7 +67,8 @@ function fakeRepo(over: Partial<UptimeServiceRow> = {}): FakeRepo {
             listVisible: unused,
             findById: async (id, workspaceId) =>
                 rows.find((r) => r.id === id && r.workspace_id === workspaceId) ?? null,
-            findVisible: unused,
+            findVisible: async (id, workspaceId) =>
+                rows.find((r) => r.id === id && r.workspace_id === workspaceId) ?? null,
             create: unused,
             update: unused,
             setEnabled: unused,

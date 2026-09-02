@@ -116,7 +116,8 @@ function LinkedSiteDialog({ open, onClose, onSaved }: LinkedSiteDialogProps) {
 }
 
 export const clientProvider: AudienceClientProvider = {
-    listSites: async () => (await api.send('audience.list', {})).sites.map((s) => ({ id: s.id, name: s.name })),
+    listSites: async () =>
+        (await api.send('audience.list', {})).sites.map((s) => ({ id: s.id, name: s.name, foreign: s.foreign })),
     LinkedSite,
     SiteDialog: LinkedSiteDialog
 };

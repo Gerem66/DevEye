@@ -139,7 +139,12 @@ function LinkedRepoDialog({ open, onClose, onSaved }: LinkedRepoDialogProps) {
 
 export const clientProvider: GitClientProvider = {
     listRepos: async () =>
-        (await api.send('git.repoList', {})).repos.map((r) => ({ id: r.id, owner: r.owner, repo: r.repo })),
+        (await api.send('git.repoList', {})).repos.map((r) => ({
+            id: r.id,
+            owner: r.owner,
+            repo: r.repo,
+            foreign: r.foreign
+        })),
     LinkedRepo,
     RepoDialog: LinkedRepoDialog
 };

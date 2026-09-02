@@ -46,12 +46,16 @@ export const serverEntry: FeatureServer<UptimeRepo> = {
     createService(deps) {
         const monitor = new UptimeMonitor(deps);
         // Projets ne stocke que des identifiants : `exists` refuse de relier un
-        // identifiant étranger (sans trahir son existence), `labelOf` donne un
-        // nom à une liaison qu'une fenêtre projetée ne peut pas ouvrir.
+        // identifiant invisible d'ici (sans trahir son existence), un service
+        // projeté se reliant comme un service d'ici ; `labelOf` donne un nom sous
+        // le codec du domicile, seul à savoir l'ouvrir.
         const items: UptimeItemsProvider = {
             exists: async (serviceId, workspaceId) =>
-                (await deps.repo.services.findById(serviceId, workspaceId)) !== null,
-            labelOf: (serviceId, workspaceId) => labelOf(deps.repo, deps.cipherFor(workspaceId), serviceId, workspaceId)
+                (await deps.repo.services.findVisible(serviceId, workspaceId)) !== null,
+            labelOf: async (serviceId, workspaceId) => {
+                const row = await deps.repo.services.findVisible(serviceId, workspaceId);
+                return row ? labelOf(deps.repo, deps.cipherFor(row.workspace_id), serviceId, row.workspace_id) : null;
+            }
         };
         return {
             start() {

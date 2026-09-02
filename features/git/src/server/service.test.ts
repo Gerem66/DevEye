@@ -123,7 +123,9 @@ function fakeRepo(repos: GitRepoRow[], credentials: GitCredentialRow[]): FakeRep
         listRepos: unused,
         listVisibleRepos: unused,
         findRepo: async (id, workspaceId) => repos.find((r) => r.id === id && r.workspace_id === workspaceId) ?? null,
-        findVisibleRepo: unused,
+        // Sans projection dans ce faux : visible = chez lui.
+        findVisibleRepo: async (id, workspaceId) =>
+            repos.find((r) => r.id === id && r.workspace_id === workspaceId) ?? null,
         findRepoBySlug: unused,
         countRepos: unused,
         createRepo: unused,
@@ -634,11 +636,25 @@ function itemsProviderOn(store: FakeRepo): GitItemsProvider {
     return provider;
 }
 
-describe('GIT_ITEMS_PROVIDER : labelOf', () => {
-    it("rend le nom déchiffré d'un dépôt vivant, null pour un identifiant inconnu ou un autre espace", async () => {
+describe('GIT_ITEMS_PROVIDER : exists et labelOf', () => {
+    it("rend le nom déchiffré d'un dépôt vivant, null pour un identifiant inconnu ou un espace qui ne le voit pas", async () => {
         const provider = itemsProviderOn(fakeRepo([repo()], [credential()]));
+        assert.equal(await provider.exists(1, 1), true);
+        assert.equal(await provider.exists(1, 2), false);
         assert.equal(await provider.labelOf(1, 1), 'gerem66/DevEye');
         assert.equal(await provider.labelOf(42, 1), null);
         assert.equal(await provider.labelOf(1, 2), null);
+    });
+
+    it('un dépôt projeté vers un espace y existe, et se nomme sous le codec de son domicile', async () => {
+        const store = fakeRepo([repo()], [credential()]);
+        // La projection du dépôt 1 (chez 1) vers l'espace 2, telle que
+        // `findVisibleRepo` la rend : la ligne du domicile, inchangée.
+        store.findVisibleRepo = async (id, workspaceId) =>
+            store.repos.find((r) => r.id === id && (r.workspace_id === workspaceId || workspaceId === 2)) ?? null;
+        const provider = itemsProviderOn(store);
+        assert.equal(await provider.exists(1, 2), true);
+        assert.equal(await provider.labelOf(1, 2), 'gerem66/DevEye');
+        assert.equal(await provider.exists(1, 3), false);
     });
 });

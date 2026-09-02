@@ -99,6 +99,7 @@ export function LinkRepoDialog({ open, projectId, linkedRepoIds, onClose, onSave
                                     {free.map((r) => (
                                         <option key={r.id} value={r.id}>
                                             {r.owner}/{r.repo}
+                                            {r.foreign && ' (partagé)'}
                                         </option>
                                     ))}
                                 </SelectInput>

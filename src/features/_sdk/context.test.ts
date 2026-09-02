@@ -134,6 +134,54 @@ describe('createSdkContext : la projection', () => {
     });
 });
 
+describe('createSdkContext : items.forget', () => {
+    it('lâche les liaisons de projets chez lui et dans chaque espace qui recevait la projection', async () => {
+        const f = fakeCtx();
+        const forgotten: unknown[][] = [];
+        const detached: unknown[][] = [];
+        (f.ctx as unknown as { db: unknown }).db = {
+            itemSharing: {
+                sharesOf: async () => [{ workspace_id: 8 }, { workspace_id: 9 }, { workspace_id: 8 }],
+                forgetItem: async (...args: unknown[]) => {
+                    forgotten.push(args);
+                }
+            },
+            notificationChannels: {
+                clearRoute: async () => {}
+            }
+        };
+        const providers: SdkProviders = {
+            get: <T>(key: string) =>
+                (key === 'projects.usage'
+                    ? { detach: async (...args: unknown[]) => (detached.push(args), 1) }
+                    : undefined) as T | undefined
+        };
+        const sdk = createSdkContext(f.ctx, manifest({ id: 'git' }), null, providers);
+        await sdk.items.forget('5');
+        assert.deepEqual(forgotten, [['git', '5', 3]]);
+        // Le domicile d'abord, puis chaque espace projeté, une fois chacun.
+        assert.deepEqual(detached, [
+            ['git', 5, 3],
+            ['git', 5, 8],
+            ['git', 5, 9]
+        ]);
+    });
+
+    it('ne cherche aucune liaison pour un élément à identifiant texte', async () => {
+        const f = fakeCtx();
+        const detached: unknown[][] = [];
+        (f.ctx as unknown as { db: unknown }).db = {
+            itemSharing: { sharesOf: async () => [], forgetItem: async () => {} },
+            notificationChannels: { clearRoute: async () => {} }
+        };
+        const providers: SdkProviders = {
+            get: <T>() => ({ detach: async (...args: unknown[]) => (detached.push(args), 1) }) as T
+        };
+        await createSdkContext(f.ctx, manifest({ id: 'devices' }), null, providers).items.forget('uuid-1');
+        assert.deepEqual(detached, []);
+    });
+});
+
 describe('createSdkContext : canExtra (toggle)', () => {
     const can = (over: Fake, key: string): boolean =>
         createSdkContext(fakeCtx(over).ctx, manifest(), null, NO_PROVIDERS).canExtra(key);

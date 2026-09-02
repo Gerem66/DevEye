@@ -38,10 +38,10 @@ export const projectDatabaseLinkFeature = defineSdkFeature({
             );
         }
 
-        // Seule l'existence est vérifiée, et par le contrat qu'offre le module : le
-        // droit d'ouvrir la base reste celui de Bases de données. Sans cette garde on
-        // lierait l'identifiant d'une base d'un autre espace, dont l'existence n'a
-        // pas à fuiter.
+        // Seule la visibilité d'ici (chez elle ou projetée) est vérifiée, et par le
+        // contrat qu'offre le module : le droit d'ouvrir la base reste celui de Bases
+        // de données. Sans cette garde on lierait l'identifiant d'une base d'un
+        // espace qui ne partage rien ici, dont l'existence n'a pas à fuiter.
         const databases = ctx.providers.get<DatabaseItemsProvider>(DATABASE_ITEMS_PROVIDER);
         if (!databases) throw new FeatureError('validation', 'Le module Bases de données n’est pas installé.');
         if (!(await databases.exists(input.databaseId, project.workspace_id))) {

@@ -86,7 +86,10 @@ function fakeRepo(rows: DatabaseRow[], alerts: DatabaseAlertRow[] = []): FakeRep
             const r = rows.find((x) => x.id === id && x.workspace_id === workspaceId);
             return r ? { ...r } : null;
         },
-        findVisible: unused,
+        findVisible: async (id, workspaceId) => {
+            const r = rows.find((x) => x.id === id && x.workspace_id === workspaceId);
+            return r ? { ...r } : null;
+        },
         findWithStats: unused,
         findVisibleWithStats: unused,
         findByName: unused,

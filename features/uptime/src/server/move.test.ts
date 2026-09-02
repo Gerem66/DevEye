@@ -64,9 +64,11 @@ describe('uptime : changement d’espace', () => {
 
         await uptimeMove.apply({ q, repo, itemId: '7', fromWorkspaceId: 1, toWorkspaceId: 2, ciphers });
 
+        // Chaque colonne s'écrit en un paquet `CASE id WHEN ? THEN ?` : la
+        // valeur rescellée suit l'identifiant.
         assert.deepEqual(
-            writes.map((w) => w.params[0]),
-            ['B:{"name":"api"}', 'B:timeout', 'B:502', 2]
+            writes.slice(0, 3).map((w) => w.params[1]),
+            ['B:{"name":"api"}', 'B:timeout', 'B:502']
         );
         // Le domicile change en dernier, une fois tout le reste converti.
         assert.match(writes[3]!.sql, /UPDATE uptime_services SET workspace_id/);

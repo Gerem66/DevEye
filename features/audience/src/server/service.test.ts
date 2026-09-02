@@ -65,7 +65,8 @@ function fakeRepo(sites: AudienceSiteRow[]): FakeRepo {
         list: unused,
         listVisible: unused,
         find: async (id, workspaceId) => sites.find((s) => s.id === id && s.workspace_id === workspaceId) ?? null,
-        findVisible: unused,
+        findVisible: async (id, workspaceId) =>
+            sites.find((s) => s.id === id && s.workspace_id === workspaceId) ?? null,
         findWithStats: unused,
         findByName: unused,
         count: unused,

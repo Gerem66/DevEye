@@ -94,7 +94,8 @@ export function LinkDatabaseDialog({ open, projectId, linkedIds, onClose, onSave
                                     </option>
                                     {free.map((d) => (
                                         <option key={d.id} value={d.id}>
-                                            {d.name} — {d.engineLabel}
+                                            {d.name}
+                                            {d.foreign && ' (partagée)'} — {d.engineLabel}
                                             {d.projectCount > 0 &&
                                                 ` — ${d.projectCount} projet${d.projectCount > 1 ? 's' : ''}`}
                                         </option>

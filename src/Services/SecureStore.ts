@@ -519,9 +519,20 @@ export function createSecureStore(
  */
 export function createOpenCipher(db: Database, crypt: Encryption, workspaceId: number): Cipher {
     const keys = new SecretKeyService(db, crypt);
-    return new DekCipher(async () => {
-        const workspace = await db.workspaces.findById(workspaceId);
-        if (!workspace) throw new Error(`Unknown workspace ${workspaceId}`);
-        return openDekOf(keys, workspace);
+    // Résolue une fois, comme `SecureStore.resolveOpenDek` : la clé ne change
+    // pas pendant la vie du codec, et la relire à chaque cellule coûtait deux
+    // requêtes par chiffrement, des minutes sur un déplacement de dépôt. Un
+    // échec n'est pas retenu.
+    let dek: Promise<Buffer> | null = null;
+    return new DekCipher(() => {
+        dek ??= (async () => {
+            const workspace = await db.workspaces.findById(workspaceId);
+            if (!workspace) throw new Error(`Unknown workspace ${workspaceId}`);
+            return openDekOf(keys, workspace);
+        })().catch((e: unknown) => {
+            dek = null;
+            throw e;
+        });
+        return dek;
     });
 }

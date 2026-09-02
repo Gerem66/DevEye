@@ -40,13 +40,17 @@ export const serverEntry: FeatureServer<DeployRepo> = {
     features: deployHandlers,
     createService(deps) {
         const sync = new DeploySync(deps);
-        // Projets ne stocke que des identifiants : il demande si la cible existe
-        // dans SON espace (le domicile seulement, jamais une projection), pour
-        // qu'un identifiant étranger ne se relie pas ; et son nom, sous le codec
-        // ouvert du domicile.
+        // Projets ne stocke que des identifiants : il demande si la cible est
+        // visible de son espace, chez elle ou projetée, pour qu'un identifiant
+        // étranger ne se relie pas ; et son nom, sous le codec ouvert du
+        // domicile, seul à savoir l'ouvrir.
         const items: DeployItemsProvider = {
-            exists: async (targetId, workspaceId) => (await deps.repo.findTarget(targetId, workspaceId)) !== null,
-            labelOf: (targetId, workspaceId) => labelOf(deps.repo, deps.cipherFor(workspaceId), targetId, workspaceId)
+            exists: async (targetId, workspaceId) =>
+                (await deps.repo.findVisibleTarget(targetId, workspaceId)) !== null,
+            labelOf: async (targetId, workspaceId) => {
+                const row = await deps.repo.findVisibleTarget(targetId, workspaceId);
+                return row ? labelOf(deps.repo, deps.cipherFor(row.workspace_id), targetId, row.workspace_id) : null;
+            }
         };
         return {
             start() {

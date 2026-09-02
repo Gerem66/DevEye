@@ -1,8 +1,9 @@
 import type { FeatureId } from '@deveye/types';
+import { PROJECTS_USAGE_PROVIDER, type ProjectsUsageProvider } from '@deveye/types/sdk';
 
 import { grantsFor } from '../_access';
 import { FeatureError, type FeatureContext } from '../_define';
-import { moduleItems } from '../_sdk/register';
+import { moduleItems, moduleProvider } from '../_sdk/register';
 
 /**
  * Les gardes que le partage et le déplacement se partagent : « où vit cet
@@ -61,4 +62,22 @@ export async function itemHomeWorkspace(
     const items = moduleItems(feature, ctx.db);
     if (items) return items.homeOf(itemId, ctx.workspaceId);
     return null;
+}
+
+/** Le contrat qu'offre Projets, seul détenteur des tables de liaison. */
+export function usageProvider(): ProjectsUsageProvider | undefined {
+    return moduleProvider<ProjectsUsageProvider>(PROJECTS_USAGE_PROVIDER);
+}
+
+/**
+ * L'élément n'est plus visible de ces espaces (supprimé, déplacé, projection
+ * retirée) : les projets qui l'y reliaient le lâchent. Un projet relie ce que
+ * son espace voit, chez lui ou projeté, et une liaison vers ce qui n'y est
+ * plus resterait une ligne morte, nommant un élément absent.
+ */
+export async function detachLinks(feature: FeatureId, itemId: string, workspaceIds: Iterable<number>): Promise<void> {
+    const numeric = Number(itemId);
+    const projects = usageProvider();
+    if (!Number.isInteger(numeric) || !projects) return;
+    for (const workspaceId of new Set(workspaceIds)) await projects.detach(feature, numeric, workspaceId);
 }

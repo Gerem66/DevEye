@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { itemNounForms, type ItemShareState, type ShareBlocker } from '@deveye/types';
 
-import { ws } from '@/api/ws';
+import { humanizeError } from '@/api/useResource';
+import { ws, WsError } from '@/api/ws';
 import Button from '@/Components/Button';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import { Dialog } from '@/Components/Dialog';
@@ -41,6 +42,23 @@ const BLOCKER_TEXT: Record<ShareBlocker, string> = {
  * transaction : bien au-delà du délai ordinaire d'une commande.
  */
 const MOVE_TIMEOUT_MS = 120_000;
+
+/**
+ * Le refus du serveur, tel quel : ses phrases (« déjà suivi dans cet espace »,
+ * « une ligne illisible ») disent la cause, qu'un libellé générique cacherait.
+ * Une panne sans phrase renvoie au journal du serveur, seul à la connaître ; un
+ * délai dépassé prévient que le geste se poursuit peut-être là-bas.
+ */
+function explain(e: unknown, fallback: string): string {
+    if (!(e instanceof WsError)) return fallback;
+    if (e.code === 'timeout') {
+        return `${fallback} Le serveur n’a pas répondu à temps : le geste se poursuit peut-être, vérifiez avant de réessayer.`;
+    }
+    if (e.code === 'internal') {
+        return e.message === 'Internal server error' ? `${fallback} Le journal du serveur dit pourquoi.` : e.message;
+    }
+    return humanizeError(e, fallback);
+}
 
 interface Props {
     scope: SettingsScope;
@@ -85,7 +103,7 @@ export default function SharingSection({ scope, onGone }: Props) {
                 // même geste que son sujet live.
                 for (const key of moduleManifest(feature)?.resources ?? []) invalidate(key as ResourceKey);
             })
-            .catch(() => setError('Modification impossible.'))
+            .catch((e: unknown) => setError(explain(e, 'Modification impossible.')))
             .finally(() => setBusy(false));
     };
 
@@ -128,7 +146,7 @@ export default function SharingSection({ scope, onGone }: Props) {
                     onConfirm: () => doMove(workspaceId, preview.workspaceName)
                 });
             })
-            .catch(() => setError('Déplacement impossible à préparer.'))
+            .catch((e: unknown) => setError(explain(e, 'Déplacement impossible à préparer.')))
             .finally(() => setBusy(false));
     };
 
@@ -144,7 +162,7 @@ export default function SharingSection({ scope, onGone }: Props) {
                 onGone();
                 for (const key of moduleManifest(feature)?.resources ?? []) invalidate(key as ResourceKey);
             })
-            .catch(() => setError(`Déplacement vers « ${workspaceName} » impossible.`))
+            .catch((e: unknown) => setError(explain(e, `Déplacement vers « ${workspaceName} » impossible.`)))
             .finally(() => {
                 setMoving(false);
                 setBusy(false);

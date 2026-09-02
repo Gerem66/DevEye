@@ -7,14 +7,13 @@ import {
     type ItemMovePreview,
     type NotificationFeature
 } from '@deveye/types';
-import { PROJECTS_USAGE_PROVIDER, type ProjectsUsageProvider } from '@deveye/types/sdk';
 
 import type { Database } from '@/db';
 import { createOpenCipher } from '@/Services/SecureStore';
 
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
-import { moduleItems, moduleProvider } from '../_sdk/register';
-import { canWriteItemIn, loadHome } from './_shared';
+import { moduleItems } from '../_sdk/register';
+import { canWriteItemIn, detachLinks, loadHome, usageProvider } from './_shared';
 
 /**
  * Changer un élément d'espace. La seule opération du système qui re-chiffre :
@@ -39,33 +38,50 @@ interface MoveContext {
     targetWorkspaceId: number;
 }
 
-/** Le contrat qu'offre Projets, seul détenteur des tables de liaison. */
-function usageProvider(): ProjectsUsageProvider | undefined {
-    return moduleProvider<ProjectsUsageProvider>(PROJECTS_USAGE_PROVIDER);
-}
-
 /**
- * Les liaisons qui visent cet élément : elles appartiennent à Projets, et une
- * liaison ne traverse pas une frontière d'espace. Toutes tombent donc, et
- * l'écran les nomme avant de confirmer.
+ * Les liaisons qui visent cet élément, chez lui et dans chaque espace qui le
+ * recevait : elles appartiennent à Projets, et une liaison ne suit pas un
+ * élément qui quitte l'espace du projet. Toutes tombent donc, et l'écran les
+ * nomme avant de confirmer.
  */
 async function dependenciesOf(
+    db: Database,
     feature: FeatureId,
     itemId: string,
     homeWorkspaceId: number,
-    homeName: string
+    homeName: string,
+    targetWorkspaceId: number
 ): Promise<ItemMoveDependency[]> {
     const numeric = Number(itemId);
     if (!Number.isInteger(numeric)) return [];
     const projects = usageProvider();
     if (!projects) return [];
-    const usage = await projects.usageOf(feature, numeric, homeWorkspaceId);
-    return usage.map((u) => ({
-        feature: 'projects' as FeatureId,
-        itemId: String(u.projectId),
-        label: u.title,
-        reason: `Ce projet reste dans « ${homeName} ».`
-    }));
+    // La cible est exclue : l'élément y arrive chez lui, ses projets d'ici le
+    // gardent.
+    const shares = (await db.itemSharing.sharesOf(feature, itemId, homeWorkspaceId)).filter(
+        (s) => s.workspace_id !== targetWorkspaceId
+    );
+    const places = [
+        { workspaceId: homeWorkspaceId, name: homeName },
+        ...(await Promise.all(
+            shares.map(async (s) => ({
+                workspaceId: s.workspace_id,
+                name: (await db.workspaces.findById(s.workspace_id))?.name ?? `espace #${s.workspace_id}`
+            }))
+        ))
+    ];
+    const deps: ItemMoveDependency[] = [];
+    for (const place of places) {
+        for (const u of await projects.usageOf(feature, numeric, place.workspaceId)) {
+            deps.push({
+                feature: 'projects' as FeatureId,
+                itemId: String(u.projectId),
+                label: u.title,
+                reason: `Ce projet reste dans « ${place.name} ».`
+            });
+        }
+    }
+    return deps;
 }
 
 /** Ce que le déplacement détruira, nommé pour que le popup le dise. */
@@ -158,7 +174,9 @@ async function buildContext(
             drops,
             rows,
             dependencies:
-                blockers.length === 0 ? await dependenciesOf(feature, itemId, homeWorkspaceId, ctx.workspace.name) : []
+                blockers.length === 0
+                    ? await dependenciesOf(ctx.db, feature, itemId, homeWorkspaceId, ctx.workspace.name, targetId)
+                    : []
         }
     };
 }
@@ -191,6 +209,10 @@ const moveFeature = defineFeature({
             to: createOpenCipher(ctx.db, ctx.crypt, targetWorkspaceId)
         };
 
+        // Relevées AVANT le ménage : les projections disent où l'élément était
+        // visible, donc quels projets le reliaient.
+        const shares = await ctx.db.itemSharing.sharesOf(input.feature, input.itemId, homeWorkspaceId);
+
         await ctx.db.transaction(async (db) => {
             await move.apply(db.queryable, input.itemId, homeWorkspaceId, targetWorkspaceId, ciphers);
             // Le ménage de ce qui nomme l'espace quitté, le pendant de
@@ -209,19 +231,19 @@ const moveFeature = defineFeature({
         });
 
         // Après le commit : les liaisons appartiennent à Projets, qui écrit sur
-        // le pool. Un échec ici laisse une liaison vers un élément parti, que
-        // l'écran de Projets montre déjà comme « Élément disparu ».
-        const numeric = Number(input.itemId);
-        if (Number.isInteger(numeric)) {
-            await usageProvider()
-                ?.detach(input.feature, numeric, homeWorkspaceId)
-                .catch((err: unknown) => {
-                    ctx.logger.warn(
-                        { err, feature: input.feature, itemId: input.itemId },
-                        'move: liaisons de Projets non retirées'
-                    );
-                });
-        }
+        // le pool. Chez lui et dans chaque espace qui le recevait, sauf la
+        // cible, où l'élément arrive chez lui : ailleurs il n'est plus visible.
+        // Un échec ici laisse une liaison vers un élément parti, que l'écran de
+        // Projets montre déjà comme « Élément disparu ».
+        const leaving = [homeWorkspaceId, ...shares.map((s) => s.workspace_id)].filter(
+            (ws) => ws !== targetWorkspaceId
+        );
+        await detachLinks(input.feature, input.itemId, leaving).catch((err: unknown) => {
+            ctx.logger.warn(
+                { err, feature: input.feature, itemId: input.itemId },
+                'move: liaisons de Projets non retirées'
+            );
+        });
 
         ctx.audit({
             action: 'share.move',

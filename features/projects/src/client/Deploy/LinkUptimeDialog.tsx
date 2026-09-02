@@ -94,6 +94,7 @@ export function LinkUptimeDialog({ open, projectId, linkedIds, onClose, onSaved 
                                 {free.map((service) => (
                                     <option key={service.id} value={service.id}>
                                         {service.name || `Service #${service.id}`}
+                                        {service.foreign && ' (partagé)'}
                                     </option>
                                 ))}
                             </SelectInput>

@@ -89,7 +89,8 @@ export const clientProvider: DeployClientProvider = {
         (await api.send('deploy.list', {})).targets.map((t) => ({
             id: t.id,
             name: t.name,
-            host: hostOf(t.baseUrl)
+            host: hostOf(t.baseUrl),
+            foreign: t.foreign
         })),
     LinkedTarget,
     TargetDialog: LinkedTargetDialog

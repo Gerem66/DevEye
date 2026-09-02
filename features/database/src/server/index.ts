@@ -94,13 +94,15 @@ export const serverEntry: FeatureServer<DatabaseRepo> = {
     features: databaseHandlers,
     createService(deps) {
         const monitor = new DatabaseMonitor(deps);
-        // Projets ne relie que ce que son espace possède (le domicile, jamais
-        // une projection), pour qu'un identifiant étranger ne trahisse pas son
-        // existence ; `labelOf` nomme une liaison qu'une fenêtre ne peut ouvrir.
+        // Projets ne relie que ce que son espace voit, chez lui ou projeté, pour
+        // qu'un identifiant invisible d'ici ne trahisse pas son existence ;
+        // `labelOf` nomme sous le codec du domicile, seul à savoir l'ouvrir.
         const items: DatabaseItemsProvider = {
-            exists: async (databaseId, workspaceId) => (await deps.repo.find(databaseId, workspaceId)) !== null,
-            labelOf: (databaseId, workspaceId) =>
-                labelOf(deps.repo, deps.cipherFor(workspaceId), databaseId, workspaceId)
+            exists: async (databaseId, workspaceId) => (await deps.repo.findVisible(databaseId, workspaceId)) !== null,
+            labelOf: async (databaseId, workspaceId) => {
+                const row = await deps.repo.findVisible(databaseId, workspaceId);
+                return row ? labelOf(deps.repo, deps.cipherFor(row.workspace_id), databaseId, row.workspace_id) : null;
+            }
         };
         return {
             start() {

@@ -35,9 +35,10 @@ export const projectAudienceLinkFeature = defineSdkFeature({
             throw new FeatureError('validation', 'Un projet confidentiel ne peut pas être relié à un site suivi.');
         }
 
-        // Seule l'existence est vérifiée, et par le contrat qu'offre le module :
-        // sans cette garde on lierait l'identifiant d'un site d'un autre espace,
-        // dont l'existence n'a pas à fuiter.
+        // Seule la visibilité d'ici (chez lui ou projeté) est vérifiée, et par le
+        // contrat qu'offre le module : sans cette garde on lierait l'identifiant
+        // d'un site d'un espace qui ne partage rien ici, dont l'existence n'a pas
+        // à fuiter.
         const audience = ctx.providers.get<AudienceItemsProvider>(AUDIENCE_ITEMS_PROVIDER);
         if (!audience) throw new FeatureError('validation', 'Le module Audience n’est pas installé.');
         if (!(await audience.exists(input.siteId, project.workspace_id))) {

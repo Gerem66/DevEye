@@ -48,12 +48,15 @@ export const serverEntry: FeatureServer<AudienceRepo> = {
     createService(deps) {
         const ingest = new AudienceIngest(deps);
         // Projets ne stocke que des identifiants : avant d'en relier un, il demande si
-        // le site existe dans l'espace, pour qu'un identifiant étranger ne se relie pas
-        // et ne trahisse pas son existence. Le domicile seulement, jamais une
-        // projection : un projet relie ce que son espace possède.
+        // le site est visible de l'espace, chez lui ou projeté, pour qu'un identifiant
+        // étranger ne se relie pas et ne trahisse pas son existence. Le nom se lit
+        // sous le codec du domicile, seul à savoir l'ouvrir.
         const items: AudienceItemsProvider = {
-            exists: async (siteId, workspaceId) => (await deps.repo.find(siteId, workspaceId)) !== null,
-            labelOf: (siteId, workspaceId) => labelOf(deps.repo, deps.cipherFor(workspaceId), siteId, workspaceId)
+            exists: async (siteId, workspaceId) => (await deps.repo.findVisible(siteId, workspaceId)) !== null,
+            labelOf: async (siteId, workspaceId) => {
+                const row = await deps.repo.findVisible(siteId, workspaceId);
+                return row ? labelOf(deps.repo, deps.cipherFor(row.workspace_id), siteId, row.workspace_id) : null;
+            }
         };
         return {
             start() {
