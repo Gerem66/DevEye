@@ -7,13 +7,12 @@
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-md);
-    padding: var(--space-lg);
+    padding: var(--tile-padding);
     cursor: pointer;
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    /* 206px = 158px of content + 2 × 24px padding (border-box). */
-    min-height: 206px;
+    min-height: var(--tile-min-height);
     position: relative;
     /* Le verre part sur-le-champ, mais ne revient qu'après le délai que lui
        dicte son ancêtre : tant qu'un `filter` transitionne au-dessus, cette
@@ -27,11 +26,11 @@
     color: inherit;
 }
 
-/* Cartes courtes : appareils et raccourcis, une seule hauteur (104px, de quoi
-   loger un raccourci riche) : deux hauteurs presque égales côte à côte se
-   liraient comme un défaut d'alignement. */
+/* Cartes courtes : appareils et raccourcis, une seule hauteur (de quoi loger un
+   raccourci riche) : deux hauteurs presque égales côte à côte se liraient comme
+   un défaut d'alignement. */
 .widget.compact {
-    min-height: 104px;
+    min-height: var(--tile-min-height-compact);
     padding: var(--space-md);
     align-self: start;
 }
@@ -135,4 +134,31 @@
     color: var(--text-secondary);
     font-size: 0.875rem;
     line-height: 1.5;
+}
+
+/* Téléphone : deux cartes par rangée ne laissent qu'une centaine de pixels à
+   l'en-tête, d'où un chrome resserré. La flèche disparaît : elle ne se montre
+   qu'au survol, qui n'existe pas là, et elle coûtait 20px au titre. */
+@media (max-width: 640px) {
+    .header {
+        gap: var(--space-xs);
+        margin-bottom: var(--space-sm);
+    }
+
+    .iconWrap {
+        width: 26px;
+        height: 26px;
+    }
+
+    .icon {
+        width: 15px;
+    }
+
+    .title {
+        font-size: 0.9rem;
+    }
+
+    .headerMark {
+        display: none;
+    }
 }

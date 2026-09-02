@@ -99,6 +99,15 @@
      donc du navigateur, et deux pastilles voisines ne s'aligneraient plus. */
     --topbar-pill-height: 28px;
 
+    /* La géométrie d'une tuile de l'accueil. En jetons parce que le mode
+       Organiser et la vue Dossier posent la même grille : édition == rendu
+       final. */
+    --tile-columns: repeat(auto-fill, minmax(260px, 1fr));
+    --tile-gap: var(--space-lg);
+    --tile-padding: var(--space-lg);
+    --tile-min-height: 206px;
+    --tile-min-height-compact: 104px;
+
     --z-wallpaper: -1;
     --z-base: 1;
     --z-popup-overlay: 900;
@@ -117,6 +126,18 @@
    */
     --transition-slow-ms: 400ms;
     --transition-slow: var(--transition-slow-ms) ease;
+}
+
+/* Téléphone : deux tuiles par rangée, plus courtes, plutôt qu'une pile de
+   grandes cartes. `minmax(0, 1fr)` et non `1fr` : un corps de tuile non
+   tronquable déborderait de sa colonne. */
+@media (max-width: 640px) {
+    :root {
+        --tile-columns: repeat(2, minmax(0, 1fr));
+        --tile-gap: var(--space-sm);
+        --tile-padding: var(--space-md);
+        --tile-min-height: 152px;
+    }
 }
 
 /* Monitoring's activity tint (idle grey to normal green to intensive orange),

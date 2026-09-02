@@ -118,18 +118,12 @@
     color: var(--text-muted);
 }
 
-/* Mirrors the real WidgetGrid so edit == final layout. */
+/* Les jetons de la vraie WidgetGrid, donc edit == final layout. */
 .tileGrid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: var(--space-lg);
+    grid-template-columns: var(--tile-columns);
+    gap: var(--tile-gap);
     width: 100%;
-}
-
-@media (max-width: 640px) {
-    .tileGrid {
-        grid-template-columns: 1fr;
-    }
 }
 
 .sortTile {
@@ -224,16 +218,16 @@
 }
 
 .missingCompact {
-    min-height: 104px;
+    min-height: var(--tile-min-height-compact);
 }
 
-/* Les deux boutons d'ajout occupent l'emprise d'une carte de fonctionnalité
-   (206 px) : au bout d'une rangée, le bloc se pose comme une carte de plus. */
+/* Les deux boutons d'ajout occupent l'emprise d'une carte de fonctionnalité :
+   au bout d'une rangée, le bloc se pose comme une carte de plus. */
 .addStack {
     display: grid;
     grid-template-rows: 1fr 1fr;
     gap: var(--space-sm);
-    min-height: 206px;
+    min-height: var(--tile-min-height);
     align-self: start;
     min-width: 0;
 }
@@ -338,12 +332,23 @@
     padding-right: var(--space-xs);
 }
 
+/* Téléphone : une seule ligne qui défile. Repliés, dix rayons font trois
+   rangées et repoussent l'étal hors de l'écran. `overscroll-behavior-x` pour
+   que le balayage n'enchaîne pas sur le geste de retour du navigateur. */
 @media (max-width: 640px) {
     .marketRails {
         flex-direction: row;
-        flex-wrap: wrap;
         height: auto;
-        overflow: visible;
+        gap: var(--space-xs);
+        overflow-x: auto;
+        overflow-y: hidden;
+        overscroll-behavior-x: contain;
+        padding: 0 0 var(--space-sm);
+        scrollbar-width: none;
+    }
+
+    .marketRails::-webkit-scrollbar {
+        display: none;
     }
 }
 
@@ -374,6 +379,15 @@
     background: var(--accent-bg);
     border-color: var(--accent);
     color: var(--text-primary);
+}
+
+/* Une cible au doigt, et jamais comprimée par le défilement du rail. */
+@media (max-width: 640px) {
+    .marketRail {
+        flex: none;
+        padding: 11px var(--space-md);
+        font-size: 0.9rem;
+    }
 }
 
 .marketRailIcon {
@@ -427,12 +441,19 @@
     }
 }
 
-/* Deux colonnes tant que la place le permet : une carte de marché tient sur
-   deux lignes de texte, une seule colonne aurait donné une liste très haute. */
+/* Deux colonnes : une carte de marché tient sur deux lignes de texte, une seule
+   colonne aurait donné une liste très haute. Forcées sur un téléphone, où la
+   largeur minimale retomberait sinon à une. */
 .marketGrid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
     gap: var(--space-sm);
+}
+
+@media (max-width: 640px) {
+    .marketGrid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 .marketCard {
@@ -468,6 +489,13 @@
     gap: 4px;
     padding: var(--space-sm) var(--space-md);
     min-width: 0;
+}
+
+/* Deux cartes par rangée : les 16px des flancs valent plus au titre. */
+@media (max-width: 640px) {
+    .marketCardBody {
+        padding: var(--space-sm);
+    }
 }
 
 .marketCard:hover:not(:disabled) {
@@ -891,18 +919,12 @@
    première carte. */
 .folderGrid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: var(--space-lg);
+    grid-template-columns: var(--tile-columns);
+    gap: var(--tile-gap);
     width: 100%;
     min-height: 120px;
     border-radius: var(--radius-lg);
     transition: background var(--transition-fast);
-}
-
-@media (max-width: 640px) {
-    .folderGrid {
-        grid-template-columns: 1fr;
-    }
 }
 
 .folderGridOver {
