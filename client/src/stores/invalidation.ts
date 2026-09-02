@@ -46,6 +46,9 @@ export type ResourceKey =
     | 'workspace.activate'
     /** Ce qui ne vit que dans le bundle de session (nom, logo, membres) : déclenche un `/me`, plus lourd. */
     | 'workspace.session'
+    /** La page Utilisateurs : les comptes du site et leurs invitations. */
+    | 'admin.userList'
+    | 'admin.inviteList'
     | 'projects.count'
     | 'projects.list'
     | 'projects.board'
@@ -101,7 +104,9 @@ const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
     /* L'accueil ou l'apparence de l'espace : `workspace.activate` seule, sans recharger la session. */
     home: ['workspace.activate'],
     /* Réglages de compte, diffusés dans l'espace personnel de leur auteur : rien de partagé à re-solliciter. */
-    account: []
+    account: [],
+    /* Un compte ou une invitation a changé : reçu par compte, jamais en salle. */
+    admin: ['admin.userList', 'admin.inviteList']
 };
 
 /**

@@ -26,3 +26,23 @@ export function onHomeReady(fn: () => void): () => void {
     listeners.add(fn);
     return () => listeners.delete(fn);
 }
+
+/**
+ * Se résout dès que l'accueil a ses premières données, ou au plus tard après
+ * `maxMs` : un premier chargement en panne ne doit pas retenir l'appelant.
+ */
+export function whenHomeReady(maxMs: number): Promise<void> {
+    if (ready) return Promise.resolve();
+    return new Promise((resolve) => {
+        let off = (): void => {};
+        const timer = setTimeout(() => {
+            off();
+            resolve();
+        }, maxMs);
+        off = onHomeReady(() => {
+            clearTimeout(timer);
+            off();
+            resolve();
+        });
+    });
+}

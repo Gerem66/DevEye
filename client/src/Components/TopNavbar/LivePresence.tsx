@@ -55,11 +55,7 @@ export function LivePresence() {
                         aria-label={`Rejoindre ${peer.username}, ${peer.label}`}
                         onClick={() => joinPeer(peer)}
                     >
-                        {peer.avatar ? (
-                            <img src={avatarSrc(peer.avatar)} alt='' />
-                        ) : (
-                            <span className={styles.initial}>{peer.username.charAt(0)}</span>
-                        )}
+                        <img src={avatarSrc(peer.avatar)} alt='' />
                     </button>
                 ))}
             </span>

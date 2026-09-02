@@ -152,7 +152,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     const moduleServices = createModuleServices({ db: deps.db, crypt: deps.crypt, audit, logger, live });
     for (const svc of moduleServices) await svc.start();
 
-    await authRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
+    await authRoutes(app, { db: deps.db, crypt: deps.crypt, audit, live });
     await agentRoutes(app, { db: deps.db, hub, live, audit });
     // Routes publiques des modules (capacité `routes.public`), aussi montées
     // sur la surface publique quand elle existe (`publicApp.ts`). Après la

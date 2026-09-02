@@ -4,6 +4,7 @@ import { loginResponseSchema, registerRequestSchema } from '@deveye/types';
 import { ApiError, post } from '@/api/http';
 import TextInput from '@/Components/TextInput';
 import { useAuth } from '@/auth/AuthProvider';
+import { whenHomeReady } from '@/stores/homeReady';
 import './style.css';
 
 /** Jeton d'inscription présent dans l'URL, ou `null` : lu une fois au
@@ -16,6 +17,11 @@ export function readRegisterToken(): string | null {
 /** Effondrement de la carte puis remplissage : doit rester égal à la somme des
  *  timings de `style.css` (0,3 s de délai + 1 s de balayage). */
 const PROGRESS_MS = 1300;
+/** Le fondu de la scène entière, celui de `.login.hide` dans `style.css`. */
+const FADE_MS = 500;
+/** Plafond d'attente de l'accueil au-delà de la barre : un premier chargement
+ *  en panne ne doit pas coincer l'inscrit sur cet écran. */
+const HOME_READY_MAX_MS = 4000;
 
 const MIN_PASSWORD = 8;
 
@@ -48,6 +54,7 @@ export default function RegisterPage({ token, onDone }: { token: string; onDone:
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [collapsing, setCollapsing] = useState(false);
+    const [hidden, setHidden] = useState(false);
 
     const cardRef = useRef<HTMLDivElement | null>(null);
     const contentRef = useRef<HTMLDivElement | null>(null);
@@ -84,13 +91,20 @@ export default function RegisterPage({ token, onDone }: { token: string; onDone:
 
         setError('');
         setCollapsing(true);
+        const startedAt = Date.now();
         void (async () => {
             try {
                 await post('/api/auth/register', parsed.data, loginResponseSchema);
-                // La session est ouverte ; on laisse la barre finir sa course
-                // avant de basculer.
+                // La session s'ouvre et l'accueil se monte dessous. La barre finit
+                // sa course, l'accueil reçoit ses données, puis la scène s'efface
+                // en fondu : à aucun moment un autre écran ne doit se voir entre
+                // les deux.
                 await refresh();
-                setTimeout(onDone, PROGRESS_MS);
+                const remaining = PROGRESS_MS - (Date.now() - startedAt);
+                if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
+                await whenHomeReady(HOME_READY_MAX_MS);
+                setHidden(true);
+                setTimeout(onDone, FADE_MS);
             } catch (err) {
                 setError(humanize(err));
                 setCollapsing(false);
@@ -103,7 +117,7 @@ export default function RegisterPage({ token, onDone }: { token: string; onDone:
     };
 
     return (
-        <div className='login'>
+        <div className={'login' + (hidden ? ' hide' : '')}>
             <form className='form' onSubmit={submit}>
                 <span className='title'>
                     <b>Dev</b> <p>Eye</p>

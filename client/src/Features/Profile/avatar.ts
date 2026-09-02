@@ -15,12 +15,16 @@ export function fileToAvatarDataUrl(file: File): Promise<string> {
     return fileToSquareDataUrl(file, { size: TARGET_SIZE, maxLength: AVATAR_MAX_LENGTH });
 }
 
+/** L'image d'un compte qui n'en a pas posé : celle que la base lui donne à la création. */
+const DEFAULT_AVATAR = 'default-user.png';
+
 /**
- * Resolve an avatar value to an <img> src. Uploaded avatars are data URLs used
- * as-is; legacy filename values resolve against the static images directory.
+ * Ce qu'un `<img>` doit charger pour cet avatar : une URL de données telle
+ * quelle, sinon un nom de fichier du dossier statique des images. Chemin absolu
+ * exprès : la première session d'un compte neuf se dessine alors que l'adresse
+ * est encore `/register/<jeton>`.
  */
 export function avatarSrc(avatar: string): string {
-    if (!avatar) return './images/default-user.png';
     if (avatar.startsWith('data:') || avatar.startsWith('http')) return avatar;
-    return `./images/${avatar}`;
+    return `/images/${avatar || DEFAULT_AVATAR}`;
 }

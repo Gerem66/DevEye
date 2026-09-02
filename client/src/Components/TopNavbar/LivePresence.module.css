@@ -79,13 +79,6 @@
     object-fit: cover;
 }
 
-/* Initiale de repli quand le compte n'a pas d'avatar : la couleur porte déjà
-   l'identité, la lettre lève l'ambiguïté entre deux personnes de même teinte. */
-.initial {
-    line-height: 1;
-    text-transform: uppercase;
-}
-
 .count {
     font-size: 0.82rem;
     font-weight: 600;

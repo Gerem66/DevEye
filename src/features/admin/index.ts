@@ -13,6 +13,7 @@ import type { UserInviteRow } from '@/db/repos/userInvites';
 import { env } from '@/Utils/Env';
 import { invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
+import { notifyAdmins } from './notify';
 
 /**
  * Administration des comptes, à l'échelle du site : `admin: true`, et
@@ -66,6 +67,12 @@ export const adminSetUserRoleFeature: FeatureDefinition<
         assertNotSelf(ctx, input.userId, 'changer le rôle de');
         await ctx.db.users.setRole(input.userId, input.role);
         invalidateAccess();
+        if (ctx.live) {
+            // L'intéressé relit sa session : la page Utilisateurs entre dans
+            // son menu ou en sort à l'instant.
+            ctx.live.userChanged(input.userId, ctx.workspaceId, ['workspace'], ctx.userId);
+            await notifyAdmins(ctx.db, ctx.live, ctx.workspaceId, ctx.userId);
+        }
         ctx.audit({
             action: 'user.setRole',
             level: 'warning',
@@ -97,8 +104,12 @@ export const adminSetUserStatusFeature: FeatureDefinition<
             // Et la présence : sinon le suspendu resterait dans le roster des
             // autres jusqu'à sa prochaine commande.
             ctx.live?.evictEverywhere(input.userId);
+            // Sa session se relit, échoue, et le renvoie à l'écran de connexion
+            // sans attendre qu'il agisse.
+            ctx.live?.userChanged(input.userId, ctx.workspaceId, ['workspace'], ctx.userId);
         }
         invalidateAccess();
+        if (ctx.live) await notifyAdmins(ctx.db, ctx.live, ctx.workspaceId, ctx.userId);
 
         ctx.audit({
             action: 'user.setStatus',
@@ -124,11 +135,31 @@ export const adminDeleteUserFeature: FeatureDefinition<
         const target = await ctx.db.users.findById(input.userId);
         if (!target) throw new FeatureError('not_found', 'Compte introuvable');
 
+        // Relevés AVANT la suppression : la cascade emporte les rattachements,
+        // et il n'y aurait plus personne à prévenir après coup.
+        const shared = (await ctx.db.workspaces.findAccessibleByUser(input.userId)).filter((w) => w.kind === 'shared');
+        const members = await ctx.db.workspaceMembers.listByWorkspaceIds(shared.map((w) => w.id));
+
         // Les FK ON DELETE CASCADE emportent l'espace personnel, les espaces
         // partagés dont il est propriétaire, et tout leur contenu.
         await ctx.db.users.delete(input.userId);
         invalidateAccess();
-        ctx.live?.evictEverywhere(input.userId);
+        if (ctx.live) {
+            ctx.live.evictEverywhere(input.userId);
+            // Les espaces qu'il possédait ont disparu avec lui : leurs salles se vident.
+            for (const w of shared) {
+                if (w.owner_user_id === input.userId) ctx.live.evictRoom(w.id);
+            }
+            // Chaque membre de ses espaces relit sa session : le supprimé sort
+            // des listes de membres, et un espace qu'il possédait sort des menus.
+            // Par compte : assis ailleurs, un membre ne recevrait rien de la salle.
+            for (const m of members) {
+                if (m.user_id !== input.userId) {
+                    ctx.live.userChanged(m.user_id, m.workspace_id, ['workspace'], ctx.userId);
+                }
+            }
+            await notifyAdmins(ctx.db, ctx.live, ctx.workspaceId, ctx.userId);
+        }
 
         ctx.audit({
             action: 'user.delete',
@@ -168,6 +199,7 @@ export const adminInviteCreateFeature: FeatureDefinition<
     typeof adminInviteCreate.output
 > = defineFeature({
     ...adminInviteCreate,
+    mutates: true,
     access: ADMIN,
     handler: async (ctx, input) => {
         const email = input.email.trim().toLowerCase();
@@ -193,6 +225,7 @@ export const adminInviteCreateFeature: FeatureDefinition<
             description: email === '' ? 'Invitation ouverte créée' : `Invitation créée pour ${email}`,
             metadata: { workspaceId: input.workspaceId, maxUses: input.maxUses }
         });
+        if (ctx.live) await notifyAdmins(ctx.db, ctx.live, ctx.workspaceId, ctx.userId);
         const author = await ctx.db.users.findById(ctx.userId);
         return { invite: toInvite(row, author?.username ?? '', workspace?.name ?? null) };
     }
@@ -204,11 +237,13 @@ export const adminInviteRevokeFeature: FeatureDefinition<
     typeof adminInviteRevoke.output
 > = defineFeature({
     ...adminInviteRevoke,
+    mutates: true,
     access: ADMIN,
     handler: async (ctx, input) => {
         if (!(await ctx.db.userInvites.revoke(input.token))) {
             throw new FeatureError('not_found', 'Invitation introuvable');
         }
+        if (ctx.live) await notifyAdmins(ctx.db, ctx.live, ctx.workspaceId, ctx.userId);
         ctx.audit({
             action: 'user.invite.revoke',
             level: 'warning',

@@ -9,6 +9,7 @@ import { StatusBadge } from '@/Components/StatusBadge';
 import TextInput from '@/Components/TextInput';
 import { useAuth } from '@/auth/AuthProvider';
 import { avatarSrc } from '@/Features/Profile/avatar';
+import { useResourceVersion } from '@/stores/invalidation';
 import { useWorkspaceState } from '@/stores/workspace';
 import styles from './Users.module.css';
 
@@ -66,9 +67,13 @@ export default function FeatureUsers() {
         }
     }, []);
 
+    // La page se relit aussi quand le changement vient d'ailleurs : un compte
+    // né d'une invitation, ou un autre administrateur à l'œuvre.
+    const usersVersion = useResourceVersion('admin.userList');
+    const invitesVersion = useResourceVersion('admin.inviteList');
     useEffect(() => {
         void load();
-    }, [load]);
+    }, [load, usersVersion, invitesVersion]);
 
     const run = async (fn: () => Promise<void>, fallback: string): Promise<void> => {
         setError(null);

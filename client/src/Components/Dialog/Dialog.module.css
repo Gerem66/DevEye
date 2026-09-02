@@ -61,6 +61,12 @@
        propre scroll interne ne débordera simplement pas). */
     overflow-y: auto;
     overflow-x: hidden;
+    /* Sa barre de défilement colle au bord du dialogue, comme dans WidgetPopup :
+       le retrait droit du dialogue passe ici, et le corps le rend au contenu. Un
+       panneau qui défile pour lui-même (la coquille de réglages) vient se loger
+       dans ce retrait de la même manière, sans que `overflow-x` le coupe. */
+    margin-right: calc(-1 * var(--space-lg));
+    padding-right: var(--space-lg);
 }
 
 /* The panel is focusable (tabIndex -1) so fieldless dialogs still catch Enter;

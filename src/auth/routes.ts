@@ -9,6 +9,7 @@ import {
 } from '@deveye/types';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
+import { notifyAdmins } from '@/features/admin/notify';
 import { env } from '@/Utils/Env';
 import { sha256hex } from '@/Utils/hash';
 import { normalizeBackupCode, verifyTotp } from '@/Services/Totp';
@@ -43,11 +44,13 @@ import { loadUserBundle } from './loadUserBundle';
 
 import type { AuditLog } from '@/Services/AuditLog';
 import type { Database } from '@/db';
+import type { LiveHub } from '@/live/hub';
 
 interface AuthDeps {
     db: Database;
     crypt: Encryption;
     audit: AuditLog;
+    live: LiveHub;
 }
 
 /**
@@ -110,7 +113,7 @@ async function unwrapDekForLogin(
     }
 }
 
-export async function authRoutes(app: FastifyInstance, { db, crypt, audit }: AuthDeps): Promise<void> {
+export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live }: AuthDeps): Promise<void> {
     app.post('/api/auth/register', async (req, reply) => {
         const parsed = registerRequestSchema.safeParse(req.body);
         if (!parsed.success) {
@@ -166,6 +169,16 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit }: Aut
             description: `Nouveau compte créé : ${username}`,
             metadata: { email }
         });
+
+        // Né hors de toute commande WS, le compte n'annoncerait rien sans ces
+        // deux signaux : la page Utilisateurs des administrateurs, et la liste
+        // des membres de l'espace rejoint, chacun visé par compte.
+        await notifyAdmins(db, live, personal.id, row.id);
+        if (invite.workspace_id !== null) {
+            for (const m of await db.workspaceMembers.listByWorkspaceIds([invite.workspace_id])) {
+                if (m.user_id !== row.id) live.userChanged(m.user_id, invite.workspace_id, ['workspace'], row.id);
+            }
+        }
         return reply.send(ok(loginResponseSchema.parse({ twoFactorRequired: false, ...bundle })));
     });
 

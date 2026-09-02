@@ -17,7 +17,9 @@ import { featureHandlers } from './registry';
  * `MUTATION_VERB` : leurs `mutates` se relisent à la main.
  */
 const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
-    admin: 'workspace',
+    // La diffusion en salle n'atteint que les autres onglets de l'auteur : les
+    // autres administrateurs sont visés par compte (`notifyAdmins`).
+    admin: 'admin',
     // Le transport des agents : des relais sans état côté serveur, sauf trois
     // `mutates` (autostart, élévation, rétrogradation) qui changent la liste.
     agent: 'devices',
@@ -123,8 +125,6 @@ const NON_MUTATING = new Set([
     'agent.filesSearch',
     'agent.filesAnalyze',
     'agent.logQuery',
-    'admin.inviteCreate',
-    'admin.inviteRevoke',
     // Écrivent, mais la vue d'administration relit à l'ouverture.
     'feedback.setStatus',
     'feedback.delete'

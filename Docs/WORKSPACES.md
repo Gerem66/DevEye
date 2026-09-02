@@ -196,7 +196,9 @@ adresse — `workspace.addMember`. Immédiat, sans acceptation, avec le rôle pa
 défaut de l'espace — et immédiat aussi **chez l'intéressé** s'il est connecté :
 le hub le vise par compte (`userChanged`, voir `LIVE.md`), puisqu'assis dans un
 autre espace il ne recevrait pas la diffusion de celui-ci. Même voie au retrait
-et à la suppression d'un espace.
+et à la suppression d'un espace, et pour les membres en place quand une
+invitation de compte installe un nouvel inscrit chez eux ou qu'un
+administrateur supprime l'un d'eux.
 
 Il y a eu un système de liens d'invitation (`workspace_invites`, cinq commandes,
 un écran `/invite/<token>`). **Il a été entièrement supprimé** (migration 058).

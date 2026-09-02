@@ -1,17 +1,16 @@
-/* La pastille d'identité d'un membre : avatar, ou initiale sur sa couleur de
-   compte. */
+/* La pastille d'identité d'un membre : son avatar, ou « ? » pour un compte
+   supprimé. */
 .avatar {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     border-radius: var(--radius-pill);
     object-fit: cover;
-    color: var(--on-accent);
-    font-weight: 700;
     flex: 0 0 auto;
 }
 
 .avatarGhost {
     background: var(--surface-subtle);
     color: var(--text-muted);
+    font-weight: 700;
 }

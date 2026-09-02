@@ -250,6 +250,10 @@ Elles écrivent sans commande, donc sans socket : elles appellent
   pas par une commande WS : sans ce signal, rien n'en avertirait personne.
   L'émission des codes de liaison, elle, est une commande du module Appareils
   (`devices.linkCode*`, `mutates: true`) depuis son rapatriement.
+- `auth/routes.ts` : l'inscription (`POST /api/auth/register`) passe par HTTP
+  elle aussi. Le compte né prévient les administrateurs (sujet `admin`, leur
+  page Utilisateurs) et, s'il rejoint un espace, les membres de celui-ci (sujet
+  `workspace`), chacun visé par compte (`userChanged`).
 - et tout service arrivé depuis suit la même règle — sauvegardes, Sentinelle,
   ingestion d'audience (`features/audience/src/server/service.ts`, coalescée
   à une fois par minute et par espace), relevés de bases : qui écrit sans
@@ -590,6 +594,13 @@ serveur a de toute façon déjà effacé la bulle (`relocated`).
 - **La couleur passe par `colorChanged`, pas par `mutates`.** `user.setColor` est
   en `scope: 'account'` : sa diffusion `mutates` viserait l'espace personnel, où
   l'on est seul.
+- **Le sujet `admin` ne passe jamais par une salle.** La page Utilisateurs se
+  regarde depuis n'importe quel espace : chaque administrateur est visé par
+  compte (`notifyAdmins`, `features/admin/notify.ts`). La diffusion `mutates`
+  des commandes `admin.*`, en `scope: 'account'` elle aussi, ne touche que les
+  autres onglets de l'auteur. Un compte supprimé prévient de plus les membres
+  de ses espaces (sujet `workspace`) : il sort des listes de membres, et un
+  espace qu'il possédait sort des menus.
 - **Le battement de cœur inscrit toute connexion `/ws`**, dès la poignée de main
   et avant tout `live.here` — sinon il ne couvrirait que les utilisateurs ayant
   ouvert une vue instrumentée.

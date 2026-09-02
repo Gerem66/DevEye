@@ -65,7 +65,10 @@ function LoginPage() {
     const inputTwoFa = useRef<HTMLInputElement | null>(null);
     const animStartRef = useRef<number>(Date.now());
 
-    const [hide, setHide] = useState(false);
+    // Montée alors que la session est déjà ouverte (au sortir de l'inscription),
+    // la page naît effacée : rien à montrer, et son formulaire ne doit pas
+    // paraître le temps de sa propre transition.
+    const [hide, setHide] = useState(status === 'authenticated');
 
     // The fill is a CSS transition on `transform: scaleX` (see style.css), which
     // runs on the compositor: it keeps animating while a successful login mounts

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Button from '@/Components/Button';
 import { openInfo } from '@/Components/InfoPopup';
 import { useAuth } from '@/auth/AuthProvider';
+import { avatarSrc } from '@/Features/Profile/avatar';
 import { useActiveWorkspace } from '@/stores/workspace';
 import { DeploymentStatus } from './DeploymentStatus';
 import { ConnectionStatus } from './ConnectionStatus';
@@ -253,11 +254,7 @@ export default function TopNavbar({
 
                 {user && (
                     <button className={styles.profileBtn} onClick={() => setMenuOpen((v) => !v)}>
-                        {user.avatar ? (
-                            <img src={user.avatar} alt='' className={styles.avatar} />
-                        ) : (
-                            <span className={`icon icon-user ${styles.avatarPlaceholder}`} />
-                        )}
+                        <img src={avatarSrc(user.avatar)} alt='' className={styles.avatar} />
                         <span className={styles.identity}>
                             <span className={styles.username}>{user.username}</span>
                             {/* Seuls les espaces partagés se nomment ici : c'est l'ailleurs

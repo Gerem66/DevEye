@@ -26,6 +26,8 @@ export interface UsersRepo {
     delete(id: number): Promise<void>;
     /** Vue de la page Utilisateurs : le compte, plus son nombre d'espaces. */
     listForAdmin(): Promise<AdminUser[]>;
+    /** Les administrateurs en activité, à prévenir quand un compte change. */
+    listAdminIds(): Promise<number[]>;
     /** Password re-validation window in seconds; `null` resets to the default. */
     setReAuthInterval(id: number, seconds: number | null): Promise<void>;
 }
@@ -124,6 +126,12 @@ export function usersRepo(pool: Q): UsersRepo {
                 lastLogin: Number(x.last_login),
                 created: Number(x.created)
             }));
+        },
+        async listAdminIds() {
+            const r = await pool.query<{ id: number }>(
+                "SELECT id FROM users WHERE role = 'admin' AND status = 'active'"
+            );
+            return r.rows.map((x) => x.id);
         },
         async setReAuthInterval(id, seconds) {
             await pool.query('UPDATE users SET re_auth_interval = ? WHERE id = ?', [seconds, id]);

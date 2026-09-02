@@ -78,6 +78,11 @@
 .panel {
     min-width: 0;
     overflow-y: auto;
+    /* La barre de défilement au bord du dialogue, et de l'air entre elle et le
+       contenu : le panneau s'étend dans le retrait que le corps du dialogue lui
+       laisse (`.bodyFill`, mode `fill`) et rend cette place à son contenu. */
+    margin-right: calc(-1 * var(--space-lg));
+    padding-right: var(--space-lg);
 }
 
 /* L'écart entre deux blocs de réglage. Nettement plus large que celui d'un

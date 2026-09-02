@@ -1,5 +1,5 @@
 import type { MinimalUser } from '@deveye/types';
-import { userColorVar } from '@/Features/Profile/userColors';
+import { avatarSrc } from '@/Features/Profile/avatar';
 import styles from './Avatar.module.css';
 
 interface AvatarProps {
@@ -10,9 +10,9 @@ interface AvatarProps {
 }
 
 /**
- * Pastille d'identité d'un membre : son avatar, sinon son initiale sur sa
- * couleur de compte (la même que la présence en direct). `user` peut être
- * absent : un compte supprimé ne doit pas casser le rendu.
+ * Pastille d'identité d'un membre : son avatar, ou l'image de repli tant qu'il
+ * n'en a pas posé. `user` peut être absent : un compte supprimé ne doit pas
+ * casser le rendu.
  */
 export function Avatar({ user, size = 22, title }: AvatarProps) {
     const label = title ?? user?.username ?? 'Compte supprimé';
@@ -25,19 +25,7 @@ export function Avatar({ user, size = 22, title }: AvatarProps) {
             </span>
         );
     }
-    if (user.avatar) {
-        return <img className={styles.avatar} style={style} src={user.avatar} alt={label} title={label} />;
-    }
-    return (
-        <span
-            className={styles.avatar}
-            style={{ ...style, background: userColorVar(user.color) }}
-            title={label}
-            aria-label={label}
-        >
-            {user.username.slice(0, 1).toUpperCase()}
-        </span>
-    );
+    return <img className={styles.avatar} style={style} src={avatarSrc(user.avatar)} alt={label} title={label} />;
 }
 
 export default Avatar;

@@ -259,18 +259,6 @@
     object-fit: cover;
 }
 
-.avatarPlaceholder {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    background: var(--accent-bg);
-    color: var(--accent);
-    font-size: 0.9rem;
-}
-
 /* Pseudo, puis espace courant. `min-width: 0` pour que la troncature du nom
    d'espace ait lieu ici plutôt que de pousser le chevron hors de la barre. */
 .identity {
