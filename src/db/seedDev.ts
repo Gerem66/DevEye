@@ -22,8 +22,11 @@ const DEV_FEATURES = ['devices', 'weather', 'password'];
 export async function seedDevAccount(pool: DbPool): Promise<void> {
     const db: Database = createDatabase(pool);
 
-    if (await db.users.findByUsername(DEV_USERNAME)) {
-        logger.info({ username: DEV_USERNAME }, 'Dev seed: account already present');
+    // La garde tient sur l'adresse et non sur le pseudo : celui-ci se change
+    // depuis le Profil, et un compte renommé ferait recréer un doublon que
+    // l'unicité de `users.email` refuserait, au boot.
+    if (await db.users.findByEmail(DEV_EMAIL)) {
+        logger.info({ email: DEV_EMAIL }, 'Dev seed: account already present');
         return;
     }
 

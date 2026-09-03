@@ -17,14 +17,7 @@ import { setPermissions, useWorkspacePermissions } from '@/stores/workspace';
 import { useResourceVersion } from '@/stores/invalidation';
 import { syncThemeFromServer } from '@/stores/theme';
 import { syncHomeLayoutFromServer } from '@/stores/homeLayout';
-import {
-    useHomeLayout,
-    findFolder,
-    getHomeLayout,
-    placedDeviceIds,
-    placedFeatureIds,
-    pruneMissingDevices
-} from '@/stores/homeLayout';
+import { useHomeLayout, findFolder, getHomeLayout, placedFeatureIds, pruneMissingDevices } from '@/stores/homeLayout';
 import { onOpenViewRequest, onSelectWorkspaceRequest } from '@/stores/viewRequest';
 import { useFeedbackEnabled } from '@/stores/feedbackEnabled';
 import { noteView } from '@/diagnostics/trace';
@@ -32,6 +25,7 @@ import { LiveProvider } from '@/live/LiveProvider';
 import { LiveCursors } from '@/live/LiveCursors';
 import { CursorChatInput } from '@/live/CursorChatInput';
 import { useLiveSegment } from '@/live/useLiveSegment';
+import { startTeleport } from '@/stores/live';
 import { TopNavbar } from '@/Components/TopNavbar';
 import { Widget } from '@/Components/Widget';
 import { WidgetGrid } from '@/Components/WidgetGrid';
@@ -52,13 +46,7 @@ import FeatureUsers from '@/Features/Users';
 import { catalogEntries, featureCatalog } from './catalog';
 import { EmptyHome } from './EmptyHome';
 import { isForceReload } from './forceReload';
-import {
-    DEVICE_VIEW_PREFIX,
-    deviceTileVisual,
-    deviceViewId,
-    featureTileVisual,
-    shortcutTileVisual
-} from './tiles/tileVisual';
+import { deviceTileVisual, featureTileVisual, shortcutTileVisual } from './tiles/tileVisual';
 import { AboutContent } from './about';
 import { EditableHome } from './organize/EditableHome';
 import { FolderOverlay, folderTitle } from './folders';
@@ -76,7 +64,7 @@ import type { FeatureProps } from '@/Features/types';
 import styles from './Dashboard.module.css';
 import type { Workspace } from '@deveye/types';
 
-/** A view openable full-screen in the popup (feature, structural page or device). */
+/** A view openable full-screen in the popup (feature or structural page). */
 interface ViewConfig {
     id: string;
     title: string;
@@ -85,14 +73,12 @@ interface ViewConfig {
     cacheDurationMinutes?: number;
     /** Warm eagerly at idle after load (only honoured for grid features). */
     preload?: boolean;
-    /** Has a grid card to morph from (feature/device) vs. fades in (page). */
+    /** Has a grid card to morph from (feature) vs. fades in (page). */
     hasCard: boolean;
     /** Hold the encrypted DEK alive while open (see WidgetPopup's `holdSecrecy`). */
     holdSecrecy?: boolean;
     /** Static feature/page view component (typed to accept FeatureProps). */
-    FullComponent?: ComponentType<FeatureProps>;
-    /** Custom render for a device view, bound to its deviceId (the module's panel). */
-    renderDevice?: () => ReactNode;
+    FullComponent: ComponentType<FeatureProps>;
 }
 
 // Static views: the feature catalog (grid cards) + structural pages (reached
@@ -175,8 +161,6 @@ function featureBehind(viewId: string): FeatureId | null {
     // montait son contenu, qui interrogeait un serveur qui refuse, et l'écran
     // affichait l'erreur d'une commande là où l'accueil dit « Accès restreint ».
     if (isExternalFeatureId(viewId)) return viewId;
-    // Chaque vue d'appareil relève du droit de la feature Appareils.
-    if (viewId.startsWith(DEVICE_VIEW_PREFIX)) return 'devices';
     return null;
 }
 
@@ -198,11 +182,6 @@ function survivesWorkspaceSwitch(
     const config = views.find((v) => v.id === viewId);
     if (config && !config.hasCard) return true;
 
-    if (viewId.startsWith(DEVICE_VIEW_PREFIX)) {
-        // Un appareil appartient à un espace : son id n'existe pas ailleurs, la
-        // vue ne survit donc jamais.
-        return placedDeviceIds(layout).includes(viewId.slice(DEVICE_VIEW_PREFIX.length));
-    }
     return placedFeatureIds(layout).includes(viewId as HomeFeatureId);
 }
 
@@ -376,7 +355,7 @@ export default function HomePage() {
     // asked to close itself with nothing to show — see requestCloseFeature).
     const forceUnmountRef = useRef<Set<string>>(new Set());
     // Expand requested while another popup is still open / animating out.
-    const pendingExpandRef = useRef<{ widgetId: string; forceReset: boolean } | null>(null);
+    const pendingExpandRef = useRef<{ widgetId: string; forceReset: boolean; morphFrom?: string } | null>(null);
     /**
      * L'époque d'espace à l'ouverture de la popup, qui identifie sa paire de
      * morphe. Sans elle, une bascule remonte les tuiles avec le même `layoutId`
@@ -384,6 +363,12 @@ export default function HomePage() {
      * projette la popup dans la tuile, à la taille d'une carte.
      */
     const morphEpochRef = useRef(0);
+    /**
+     * La tuile d'où la popup sort et où elle retourne. C'est la carte cliquée et
+     * non la vue ouverte : plusieurs tuiles d'appareil mènent à la même vue
+     * Appareils, et chacune doit rendre la sienne au retour.
+     */
+    const morphSourceRef = useRef<string | null>(null);
 
     const unmountFeature = useCallback((featureId: string) => {
         clearTimeout(ttlTimers.current.get(featureId));
@@ -411,13 +396,14 @@ export default function HomePage() {
         setMountedFeatures((prev) => new Set(prev).add(featureId));
     }, []);
 
-    const doExpand = useCallback((widgetId: string, forceReset: boolean) => {
+    const doExpand = useCallback((widgetId: string, forceReset: boolean, morphFrom?: string) => {
         clearTimeout(ttlTimers.current.get(widgetId));
         ttlTimers.current.delete(widgetId);
         if (closingFeatureRef.current === widgetId) closingFeatureRef.current = null;
         // Une ouverture, et elle seule, fixe l'identité de morphe : la relecture
         // d'une vue déjà ouverte passe par `remountFeature`, qui n'y touche pas.
         morphEpochRef.current = getWorkspaceState().epoch;
+        morphSourceRef.current = morphFrom ?? widgetId;
 
         if (forceReset) {
             setFeatureGen((prev) => {
@@ -441,17 +427,16 @@ export default function HomePage() {
     );
 
     const viewTitleOf = useCallback(
-        (viewId: string): string =>
-            staticViews().find((v) => v.id === viewId)?.title ??
-            (viewId.startsWith(DEVICE_VIEW_PREFIX) ? 'Appareils' : viewId),
+        (viewId: string): string => staticViews().find((v) => v.id === viewId)?.title ?? viewId,
         []
     );
 
+    /** Ouvre la vue et dit si elle s'ouvre : une bascule ou un droit manquant refuse. */
     const handleExpand = useCallback(
-        (widgetId: string, forceReset = false) => {
+        (widgetId: string, forceReset = false, morphFrom?: string): boolean => {
             // Pendant une bascule, les droits affichés sont vides : ni ouvrir ni
             // refuser, le clic ne fait rien.
-            if (switching) return;
+            if (switching) return false;
             // Garde unique : tuile, navigation inter-features et menu de la
             // topbar aboutissent tous ici.
             if (!allowedToOpen(widgetId)) {
@@ -465,17 +450,35 @@ export default function HomePage() {
                     ),
                     width: 400
                 });
-                return;
+                return false;
             }
             if (expandedWidget && expandedWidget !== widgetId) {
-                pendingExpandRef.current = { widgetId, forceReset };
+                pendingExpandRef.current = { widgetId, forceReset, morphFrom };
                 closingFeatureRef.current = expandedWidget;
                 setExpandedWidget(null);
-                return;
+                return true;
             }
-            doExpand(widgetId, forceReset);
+            doExpand(widgetId, forceReset, morphFrom);
+            return true;
         },
         [switching, expandedWidget, doExpand, allowedToOpen, viewTitleOf]
+    );
+
+    /**
+     * La tuile d'un appareil ouvre la feature Appareils, posée sur lui : de là on
+     * passe à ses voisins sans repasser par l'accueil. La téléportation est le
+     * chemin déjà emprunté pour rejoindre quelqu'un, que la vue sait consommer
+     * (segment `l1`) dès que sa liste a chargé. Le morphe part de la tuile
+     * cliquée, la carte Appareils n'étant pas forcément sur l'accueil.
+     */
+    const openDevice = useCallback(
+        (deviceId: string, tileKey: string, forceReset: boolean) => {
+            if (!handleExpand('devices', forceReset, tileKey)) return;
+            const workspaceId = getWorkspaceState().activeId;
+            if (workspaceId === null) return;
+            startTeleport(workspaceId, ['view:devices', `l1:${deviceId}`]);
+        },
+        [handleExpand]
     );
 
     const handleClose = useCallback(() => {
@@ -586,31 +589,7 @@ export default function HomePage() {
         setExpandedWidget(null);
     }, []);
 
-    // Device views: one per device tile whose device still exists. The panel is
-    // the module's; without the module there is none.
-    const deviceViews = useMemo<ViewConfig[]>(() => {
-        const out: ViewConfig[] = [];
-        const DevicePanel = devicesModule?.DevicePanel;
-        if (!DevicePanel) return out;
-        const seen = new Set<string>();
-        for (const id of placedDeviceIds(layout)) {
-            if (seen.has(id)) continue;
-            const device = devices.find((d) => d.id === id);
-            if (!device) continue;
-            seen.add(id);
-            out.push({
-                id: deviceViewId(device.id),
-                title: device.name,
-                icon: 'server',
-                cacheDurationMinutes: 5,
-                hasCard: true,
-                renderDevice: () => <DevicePanel deviceId={device.id} />
-            });
-        }
-        return out;
-    }, [layout, devices, devicesModule]);
-
-    const views = useMemo(() => [...staticViews(), ...deviceViews], [deviceViews]);
+    const views = staticViews();
     const viewsRef = useRef(views);
     viewsRef.current = views;
 
@@ -650,7 +629,7 @@ export default function HomePage() {
         const pending = pendingExpandRef.current;
         if (pending) {
             pendingExpandRef.current = null;
-            doExpand(pending.widgetId, pending.forceReset);
+            doExpand(pending.widgetId, pending.forceReset, pending.morphFrom);
         }
     }, [unmountFeature, doExpand]);
 
@@ -886,7 +865,11 @@ export default function HomePage() {
                         className={locked ? styles.lockedTile : undefined}
                         // Hidden while its popup is open so frequent re-renders can't
                         // make the source card flash behind the morphed popup.
-                        style={expandedWidget === v.widgetId ? { opacity: 0 } : undefined}
+                        style={
+                            expandedWidget !== null && morphSourceRef.current === v.widgetId
+                                ? { opacity: 0 }
+                                : undefined
+                        }
                         onExpand={(e) => handleExpand(v.widgetId, isForceReload(e))}
                     >
                         {/* Le contenu vivant est remplacé, pas seulement grisé : il
@@ -914,8 +897,10 @@ export default function HomePage() {
                     // Hidden while its popup is open (the device tile re-renders
                     // on usage/device polls, which would otherwise flash it back
                     // behind the morphed popup).
-                    style={expandedWidget === v.widgetId ? { opacity: 0 } : undefined}
-                    onExpand={(e) => handleExpand(v.widgetId, isForceReload(e))}
+                    style={
+                        expandedWidget !== null && morphSourceRef.current === v.widgetId ? { opacity: 0 } : undefined
+                    }
+                    onExpand={(e) => openDevice(device.id, v.widgetId, isForceReload(e))}
                 >
                     {v.body}
                 </Widget>
@@ -1029,7 +1014,7 @@ export default function HomePage() {
                         // un simple fondu.
                         layoutId={
                             popupConfig.hasCard && morphEpochRef.current === workspaceEpoch
-                                ? `${morphEpochRef.current}:${popupConfig.id}`
+                                ? `${morphEpochRef.current}:${morphSourceRef.current}`
                                 : undefined
                         }
                         open={!!expandedWidget}
@@ -1058,15 +1043,10 @@ export default function HomePage() {
 
                     const gen = featureGen.get(id) ?? 0;
                     const target = popupConfig?.id === id ? popupBodyEl : null;
-                    const body = config.FullComponent ? (
-                        <config.FullComponent {...featureProps} />
-                    ) : (
-                        (config.renderDevice?.() ?? null)
-                    );
 
                     return (
                         <FeatureKeepAlive key={`${workspaceEpoch}-${id}-${gen}`} target={target}>
-                            {body}
+                            <config.FullComponent {...featureProps} />
                         </FeatureKeepAlive>
                     );
                 })}

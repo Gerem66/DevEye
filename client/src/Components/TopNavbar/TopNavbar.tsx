@@ -23,7 +23,7 @@ const COLLAPSE_EXIT = { duration: 0.22, ease: [0.55, 0, 1, 0.45] } as const;
 const FADE = { duration: 0.22, ease: [0.22, 1, 0.36, 1] } as const;
 const BACK_BTN_SIZE = 34;
 /** Le menu s'attarde après une bascule : le temps de couvrir le début du
- *  chargement, et de voir « Gérer cet espace » rejoindre l'espace choisi. */
+ *  chargement, et de voir les actions d'espace rejoindre l'espace choisi. */
 const MENU_LINGER_MS = 150;
 
 export interface TopNavbarProps {
@@ -290,6 +290,20 @@ export default function TopNavbar({
                                         onCreateWorkspace();
                                         setMenuOpen(false);
                                     }}
+                                    onAppearance={
+                                        shown.onOpenSettings &&
+                                        (() => {
+                                            shown.onOpenSettings?.();
+                                            setMenuOpen(false);
+                                        })
+                                    }
+                                    onOrganize={
+                                        shown.onOrganize &&
+                                        (() => {
+                                            shown.onOrganize?.();
+                                            setMenuOpen(false);
+                                        })
+                                    }
                                     onManage={(e) => {
                                         onManageWorkspace(e);
                                         setMenuOpen(false);
@@ -314,35 +328,9 @@ export default function TopNavbar({
                             >
                                 <span className='icon icon-shield' /> Sécurité
                             </button>
-                            {/* Apparence et disposition sont des réglages de
-                                l'espace : sans le droit, l'entrée disparaît. La
-                                popup ouverte est refermée par l'accueil quand le
-                                droit tombe. */}
-                            {shown.onOpenSettings && (
-                                <button
-                                    className={styles.menuItem}
-                                    onClick={() => {
-                                        shown.onOpenSettings?.();
-                                        setMenuOpen(false);
-                                    }}
-                                >
-                                    <span className='icon icon-appearance' /> Apparence
-                                </button>
-                            )}
-                            {shown.onOrganize && (
-                                <button
-                                    className={styles.menuItem}
-                                    onClick={() => {
-                                        shown.onOrganize?.();
-                                        setMenuOpen(false);
-                                    }}
-                                >
-                                    <span className='icon icon-edit' /> Organiser l’accueil
-                                </button>
-                            )}
                             {/* Second separator: groups the system pages (Logs,
-                                Retours, Utilisateurs) apart from the personal
-                                settings above. */}
+                                Retours, Utilisateurs) apart from the account
+                                pages above. */}
                             {(onOpenLogs || onOpenFeedback || onOpenUsers) && <hr className={styles.divider} />}
                             {onOpenLogs && (
                                 <button

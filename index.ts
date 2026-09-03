@@ -15,6 +15,15 @@ import { moduleMigrationDirs } from '@/features/_sdk/register';
 // leurs migrations et services deviennent visibles ci-dessous.
 import '@/features/registry';
 
+/**
+ * Au-delà, l'arrêt propre a échoué et on sort quand même : garder le port pris
+ * est pire que perdre la dernière écriture. Une base derrière un tunnel coupé
+ * ne répond jamais, et le service d'un module non plus. Sous le SIGKILL de
+ * `tsx watch` (5 s) et sous la grâce de `docker stop` (10 s), pour qu'on lise
+ * cette ligne de journal plutôt qu'un signal muet.
+ */
+const SHUTDOWN_TIMEOUT_MS = 3000;
+
 async function main() {
     const pool = createDbPool();
     const dbReady = await testConnection(pool);
@@ -43,8 +52,23 @@ async function main() {
     // Après `buildApp`, qui crée les services que ces routes prolongent.
     const publicApp = env.PUBLIC_LISTEN_PORT ? await buildPublicApp() : null;
 
+    let stopping = false;
     const shutdown = async (signal: string) => {
+        // Le même Ctrl-C arrive deux fois (délivrance au groupe de premier
+        // plan, puis relais de `tsx watch`) : le doublon ne rejoue rien.
+        if (stopping) return;
+        stopping = true;
         logger.info({ signal }, 'Shutting down');
+        // L'étape en cours : une attente qui ne revient pas ne lève rien, le
+        // journal ne dirait sinon que « ça n'a pas fini », pas quoi.
+        let step = 'module services';
+        const deadline = setTimeout(() => {
+            logger.error({ signal, step }, 'Graceful shutdown timed out; exiting');
+            process.exit(1);
+        }, SHUTDOWN_TIMEOUT_MS);
+        // Le chien de garde ne doit pas retenir à lui seul la boucle
+        // d'événements : sans lui, l'arrêt est déjà fini.
+        deadline.unref();
         try {
             // Attendus, et avant la fermeture du pool : un module peut rendre son
             // état par une écriture en base (CloudSync libère son bail d'instance).
@@ -55,8 +79,11 @@ async function main() {
                     logger.warn({ err: (stop.reason as Error).message }, 'Module service failed to stop');
                 }
             }
+            step = 'public surface';
             if (publicApp) await publicApp.close();
+            step = 'http server';
             await app.close();
+            step = 'database pool';
             await pool.end();
             process.exit(0);
         } catch (e) {

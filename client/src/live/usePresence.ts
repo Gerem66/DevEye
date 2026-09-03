@@ -32,7 +32,6 @@ let VIEW_TITLES_MEMO: Record<string, string> | null = null;
 function viewTitles(): Record<string, string> {
     VIEW_TITLES_MEMO ??= {
         ...Object.fromEntries(featureCatalog().map((entry) => [entry.id, entry.title])),
-        clients: 'Appareils',
         profile: 'Profil',
         security: 'Sécurité',
         logs: 'Journaux',
@@ -49,7 +48,7 @@ export function livePathLabel(path: readonly string[]): string {
     if (path.length === 0) return 'Accueil';
     const root = path[0];
     const viewId = root.slice(root.indexOf(':') + 1);
-    const view = viewId.startsWith('device:') ? 'Appareils' : (viewTitles()[viewId] ?? 'Ailleurs');
+    const view = viewTitles()[viewId] ?? 'Ailleurs';
     // La coquille de réglages ferme le chemin quand elle est ouverte : le dire,
     // sinon deux personnes au même endroit s'affichent pareil alors que l'une
     // règle et l'autre lit.

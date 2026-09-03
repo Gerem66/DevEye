@@ -16,6 +16,8 @@ export interface UsersRepo {
     setDefaultWorkspace(id: number, workspaceId: number | null): Promise<void>;
     updatePasswordHash(id: number, passwordHash: string): Promise<void>;
     updateAvatar(id: number, avatar: string): Promise<void>;
+    /** Pseudo du compte : ce avec quoi il se connecte, unique sur tout le site. */
+    updateUsername(id: number, username: string): Promise<void>;
     /** Couleur d'identité du compte, montrée aux autres membres en direct. */
     updateColor(id: number, color: UserColor): Promise<void>;
     /** Remplace le sac de drapeaux du compte (`userSettingFlagSchema`). */
@@ -82,6 +84,9 @@ export function usersRepo(pool: Q): UsersRepo {
         },
         async updateAvatar(id, avatar) {
             await pool.query('UPDATE users SET avatar = ? WHERE id = ?', [avatar, id]);
+        },
+        async updateUsername(id, username) {
+            await pool.query('UPDATE users SET username = ? WHERE id = ?', [username, id]);
         },
         async updateColor(id, color) {
             await pool.query('UPDATE users SET color = ? WHERE id = ?', [color, id]);

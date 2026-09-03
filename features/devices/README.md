@@ -85,7 +85,7 @@ api.ts                      featureApi(manifest) pour devices.*, commandsApi(age
 store.ts                    la liste des appareils de l'espace, ravivée par le sujet devices
 Devices.tsx                 la vue : la barre (aide, appairage) au-dessus de la liste
 Monitoring.tsx              la tuile, la liste des appareils et la sélection
-MonitoringPanel.tsx         le panneau d'un appareil (DevicePanel du provider)
+MonitoringPanel.tsx         le panneau de l'appareil consulté, à droite de la liste
 ConfigPanel.tsx             l'onglet collect d'un appareil : cadence, capture, rétention
 TerminalSettings.tsx        l'onglet terminal d'un appareil : compte d'ouverture, fin de session
 SettingsPanel.tsx           les deux panneaux SettingsPanelProps de l'appareil
@@ -111,9 +111,10 @@ manage/DownloadAgent.tsx    la distribution des binaires, sur /api/agent/* en HT
 manage/format.ts, manage/style.module.css
 ```
 
-Le client offre à l'app `DEVICES_CLIENT_PROVIDER` (`useDevices`, `DevicePanel`,
-`DeviceWidget`), que l'accueil compose pour ses tuiles et ses vues par
-appareil ; l'app ne connaît plus aucun écran d'appareil en propre. Tout se
+Le client offre à l'app `DEVICES_CLIENT_PROVIDER` (`useDevices`,
+`DeviceWidget`), que l'accueil compose pour ses tuiles ; une tuile d'appareil
+ouvre cette vue posée sur lui (segment de présence `l1`), et l'app ne connaît
+aucun écran d'appareil en propre. Tout se
 règle à l'échelle d'un appareil, dans la coquille commune : `collect` (cadence,
 capture, rétention) et `terminal` (compte d'ouverture, sort de la session). La
 fonctionnalité elle-même n'a aucun réglage, donc aucun bouton.

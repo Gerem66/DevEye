@@ -9,6 +9,7 @@ import Switch from '@/Components/Switch';
 import type { FeatureProps } from '@/Features/types';
 import { ACCEPTED_TYPES, avatarSrc, fileToAvatarDataUrl } from './avatar';
 import { PasswordDialog } from './PasswordDialog';
+import { UsernameDialog } from './UsernameDialog';
 import { USER_COLOR_OPTIONS, userColorVar } from './userColors';
 import styles from './style.module.css';
 import { HIDE_LIVE_CURSORS } from '@/live/hideCursors';
@@ -32,10 +33,11 @@ function formatDate(time: number): string {
     return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-export default function FeatureProfile({ user, workspace }: FeatureProps) {
+export default function FeatureProfile({ user }: FeatureProps) {
     const { logout, updateUser } = useAuth();
     const { workspaces } = useWorkspaceState();
     const [passwordOpen, setPasswordOpen] = useState(false);
+    const [usernameOpen, setUsernameOpen] = useState(false);
 
     const securityScore =
         (user.security.twoFactor ? 1 : 0) +
@@ -96,7 +98,8 @@ export default function FeatureProfile({ user, workspace }: FeatureProps) {
 
     const onAvatarSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        e.target.value = ''; // allow re-selecting the same file later
+        // Le même fichier doit rester re-sélectionnable après un échec.
+        e.target.value = '';
         if (!file) return;
 
         setUploading(true);
@@ -118,112 +121,149 @@ export default function FeatureProfile({ user, workspace }: FeatureProps) {
                 <p className={styles.subtitle}>Vos informations personnelles</p>
             </header>
 
-            <div className={styles.card}>
-                <div className={styles.identity}>
-                    <button
-                        className={styles.avatar}
-                        onClick={onPickAvatar}
-                        disabled={uploading}
-                        aria-label="Modifier l'image de profil"
-                    >
-                        <img src={avatarSrc(user.avatar)} alt={user.username} />
-                        <span className={styles.avatarHint}>{uploading ? 'Envoi…' : 'Modifier'}</span>
-                    </button>
-                    <input
-                        ref={fileInputRef}
-                        type='file'
-                        accept={ACCEPTED_TYPES.join(',')}
-                        hidden
-                        onChange={(e) => void onAvatarSelected(e)}
-                    />
-                    <span className={styles.name}>{workspace.name}</span>
-                </div>
-
-                <dl className={styles.info}>
-                    <div className={styles.row}>
-                        <dt>Adresse e-mail</dt>
-                        <dd>{user.email}</dd>
-                    </div>
-                    <div className={styles.row}>
-                        <dt>Espaces de travail</dt>
-                        <dd>{Math.max(workspaces.length - 1, 0)}</dd>
-                    </div>
-                    <div className={styles.row}>
-                        <dt>Couleur de présence</dt>
-                        <dd className={styles.swatches}>
-                            {USER_COLOR_OPTIONS.map((option) => (
-                                <button
-                                    key={option.value}
-                                    type='button'
-                                    className={`${styles.swatch} ${
-                                        user.color === option.value ? styles.swatchActive : ''
-                                    }`}
-                                    style={{ '--swatch': userColorVar(option.value) } as CSSProperties}
-                                    disabled={savingColor}
-                                    aria-label={option.label}
-                                    aria-pressed={user.color === option.value}
-                                    title={option.label}
-                                    onClick={() => void onPickColor(option.value)}
-                                />
-                            ))}
-                        </dd>
-                    </div>
-                    <div className={`${styles.row} ${styles.rowAction}`}>
-                        <dt>
-                            Curseurs des autres
-                            <span className={styles.rowHint}>Masqués, votre curseur disparaît aussi</span>
-                        </dt>
-                        <dd>
-                            <Switch
-                                checked={showCursors}
-                                onChange={(visible) => void onToggleCursors(visible)}
-                                disabled={savingCursors}
-                                aria-label='Afficher les curseurs des autres membres'
-                            />
-                        </dd>
-                    </div>
-                    <div className={styles.row}>
-                        <dt>Sécurité</dt>
-                        <dd>
-                            {/* Un score incomplet sans porte de sortie est un
-                                cul-de-sac : le compteur ouvre la feature qui le
-                                fait bouger. */}
+            {/* Deux colonnes : qui vous êtes à gauche, ce qui se règle à droite.
+                La popup est large, une carte centrée y flotterait. */}
+            <div className={styles.layout}>
+                <section className={styles.section}>
+                    <span className={styles.sectionLabel}>Identité</span>
+                    <div className={`${styles.card} ${styles.rowList} ${styles.identityCard}`}>
+                        <div className={styles.identity}>
                             <button
-                                type='button'
-                                className={`${styles.securityScore} ${styles.securityScoreBtn} ${
-                                    securityFull ? styles.full : styles.partial
-                                }`}
-                                onClick={() => requestOpenView('security')}
-                                title='Ouvrir la sécurité'
-                                aria-label={`Sécurité ${securityScore} sur ${SECURITY_MAX} — ouvrir la sécurité`}
+                                className={styles.avatar}
+                                onClick={onPickAvatar}
+                                disabled={uploading}
+                                aria-label="Modifier l'image de profil"
                             >
-                                {securityScore} / {SECURITY_MAX}
+                                <img src={avatarSrc(user.avatar)} alt={user.username} />
+                                <span className={styles.avatarHint}>{uploading ? 'Envoi…' : 'Modifier'}</span>
                             </button>
-                        </dd>
-                    </div>
-                    <div className={`${styles.row} ${styles.rowAction}`}>
-                        <dt>Mot de passe</dt>
-                        <dd>
-                            <Button variant='secondary' onClick={() => setPasswordOpen(true)}>
-                                Modifier
-                            </Button>
-                        </dd>
-                    </div>
-                    <div className={styles.row}>
-                        <dt>Dernière connexion</dt>
-                        <dd>{user.lastLogin ? formatDate(user.lastLogin) : 'Première connexion'}</dd>
-                    </div>
-                    <div className={styles.row}>
-                        <dt>Créé le</dt>
-                        <dd>{formatDate(user.created)}</dd>
-                    </div>
-                </dl>
+                            <input
+                                ref={fileInputRef}
+                                type='file'
+                                accept={ACCEPTED_TYPES.join(',')}
+                                hidden
+                                onChange={(e) => void onAvatarSelected(e)}
+                            />
+                            <span className={styles.identityName}>{user.username}</span>
+                            <span className={styles.identityMail}>{user.email}</span>
+                        </div>
 
-                <Button variant='danger' icon='logout' className={styles.logout} onClick={() => void logout()}>
-                    Se déconnecter
-                </Button>
+                        <div className={styles.row}>
+                            <span className={styles.rowLabel}>Espaces partagés</span>
+                            <span className={styles.rowValue}>{Math.max(workspaces.length - 1, 0)}</span>
+                        </div>
+                        <div className={styles.row}>
+                            <span className={styles.rowLabel}>Dernière connexion</span>
+                            <span className={styles.rowValue}>
+                                {user.lastLogin ? formatDate(user.lastLogin) : 'Première connexion'}
+                            </span>
+                        </div>
+                        <div className={styles.row}>
+                            <span className={styles.rowLabel}>Créé le</span>
+                            <span className={styles.rowValue}>{formatDate(user.created)}</span>
+                        </div>
+                    </div>
+                </section>
+
+                <div className={styles.column}>
+                    <section className={styles.section}>
+                        <span className={styles.sectionLabel}>Compte</span>
+                        <div className={`${styles.card} ${styles.rowList}`}>
+                            <div className={styles.row}>
+                                <span className={styles.rowLabel}>Pseudo</span>
+                                <span className={styles.rowValue}>
+                                    <Button variant='secondary' onClick={() => setUsernameOpen(true)}>
+                                        Modifier
+                                    </Button>
+                                </span>
+                            </div>
+                            <div className={styles.row}>
+                                <span className={styles.rowLabel}>Mot de passe</span>
+                                <span className={styles.rowValue}>
+                                    <Button variant='secondary' onClick={() => setPasswordOpen(true)}>
+                                        Modifier
+                                    </Button>
+                                </span>
+                            </div>
+                            <div className={styles.row}>
+                                <span className={styles.rowLabel}>Sécurité</span>
+                                <span className={styles.rowValue}>
+                                    {/* Un score incomplet sans porte de sortie est un
+                                        cul-de-sac : le compteur ouvre la feature qui le
+                                        fait bouger. */}
+                                    <button
+                                        type='button'
+                                        className={`${styles.securityScore} ${
+                                            securityFull ? styles.full : styles.partial
+                                        }`}
+                                        onClick={() => requestOpenView('security')}
+                                        title='Ouvrir la sécurité'
+                                        aria-label={`Sécurité ${securityScore} sur ${SECURITY_MAX}, ouvrir la sécurité`}
+                                    >
+                                        {securityScore} / {SECURITY_MAX}
+                                    </button>
+                                </span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section className={styles.section}>
+                        <span className={styles.sectionLabel}>Présence</span>
+                        <div className={`${styles.card} ${styles.rowList}`}>
+                            <div className={styles.row}>
+                                <span className={styles.rowLabel}>Couleur de présence</span>
+                                <span className={`${styles.rowValue} ${styles.swatches}`}>
+                                    {USER_COLOR_OPTIONS.map((option) => (
+                                        <button
+                                            key={option.value}
+                                            type='button'
+                                            className={`${styles.swatch} ${
+                                                user.color === option.value ? styles.swatchActive : ''
+                                            }`}
+                                            style={{ '--swatch': userColorVar(option.value) } as CSSProperties}
+                                            disabled={savingColor}
+                                            aria-label={option.label}
+                                            aria-pressed={user.color === option.value}
+                                            title={option.label}
+                                            onClick={() => void onPickColor(option.value)}
+                                        />
+                                    ))}
+                                </span>
+                            </div>
+                            <div className={styles.row}>
+                                <span className={styles.rowLabel}>
+                                    Curseurs des autres
+                                    <span className={styles.rowHint}>Masqués, votre curseur disparaît aussi</span>
+                                </span>
+                                <span className={styles.rowValue}>
+                                    <Switch
+                                        checked={showCursors}
+                                        onChange={(visible) => void onToggleCursors(visible)}
+                                        disabled={savingCursors}
+                                        aria-label='Afficher les curseurs des autres membres'
+                                    />
+                                </span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section className={styles.section}>
+                        <span className={styles.sectionLabel}>Session</span>
+                        <div className={styles.card}>
+                            <div className={styles.sessionZone}>
+                                <p className={styles.hint}>
+                                    Ferme cette session sur cet appareil. Les autres restent ouvertes.
+                                </p>
+                                <Button variant='danger' icon='logout' onClick={() => void logout()}>
+                                    Se déconnecter
+                                </Button>
+                            </div>
+                        </div>
+                    </section>
+                </div>
             </div>
 
+            <UsernameDialog open={usernameOpen} onClose={() => setUsernameOpen(false)} />
             <PasswordDialog open={passwordOpen} onClose={() => setPasswordOpen(false)} />
 
             <Dialog

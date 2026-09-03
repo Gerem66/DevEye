@@ -62,9 +62,9 @@
 
 /* « Général » n'aligne que des champs et un bouton : étirés sur toute la page,
    ils laissent un champ démesuré et une action perdue au loin. Les listes de
-   Membres et de Rôles, elles, gagnent à prendre la largeur. Même plafond que la
-   page Profil, et centré : calé à gauche sous un en-tête pleine largeur, le
-   bloc a l'air d'avoir été coupé plutôt que dimensionné.
+   Membres et de Rôles, elles, gagnent à prendre la largeur. Plafonné et centré :
+   calé à gauche sous un en-tête pleine largeur, le bloc a l'air d'avoir été
+   coupé plutôt que dimensionné.
 
    `width: 100%` est indispensable : une marge horizontale `auto` sur un enfant
    flex neutralise l'étirement du conteneur, et chaque section se dimensionne

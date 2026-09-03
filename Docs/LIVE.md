@@ -61,8 +61,9 @@ Aucun cas particulier nulle part.
 > le premier appareil. Le niveau de divergence, lui, couvre aussi les nœuds
 > **frères**, qui sont le cas courant.
 
-**La valeur d'un segment peut contenir des deux-points** (`view:device:<uuid>`) :
-on découpe au **premier**, jamais avec un `split` complet.
+**La valeur d'un segment peut contenir des deux-points**
+(`settings:item:devices`) : on découpe au **premier**, jamais avec un `split`
+complet.
 
 ### Ce qu'une feature a à faire
 

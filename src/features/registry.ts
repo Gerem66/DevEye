@@ -12,6 +12,7 @@ import { twoFactorFeatures } from './twofa';
 import { userSetAvatarFeature } from './user/setAvatar';
 import { userSetColorFeature } from './user/setColor';
 import { userSetSettingFeature } from './user/setSetting';
+import { userSetUsernameFeature } from './user/setUsername';
 import { userSetThemeFeature } from './user/setTheme';
 import { workspaceActivateFeature, workspaceSetFavoriteFeature } from './workspace/activate';
 import {
@@ -58,6 +59,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     userSetThemeFeature,
     userSetColorFeature,
     userSetSettingFeature,
+    userSetUsernameFeature,
     ...agentFeatures,
     ...twoFactorFeatures,
     ...secrecyFeatures,

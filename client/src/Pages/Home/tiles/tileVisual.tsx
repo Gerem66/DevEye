@@ -13,7 +13,7 @@ import { featureCatalogEntry } from '../catalog';
  * card chrome + content. The wrapper (morph vs. drag) differs; the inside does not.
  */
 export interface TileVisual {
-    /** Stable id used for the morph layoutId / popup view id. */
+    /** Stable id used for the morph layoutId and the presence outline. */
     widgetId: string;
     title?: string;
     icon?: string;
@@ -28,8 +28,8 @@ export interface TileVisual {
     body: ReactNode;
 }
 
-export const DEVICE_VIEW_PREFIX = 'device:';
-export const deviceViewId = (deviceId: string) => `${DEVICE_VIEW_PREFIX}${deviceId}`;
+/** Un appareil n'est pas une vue : sa clé ne sert qu'au morphe et à la présence. */
+export const deviceKey = (deviceId: string) => `device:${deviceId}`;
 export const shortcutKey = (id: string) => `shortcut:${id}`;
 
 /** La carte d'un widget de fonctionnalité, ou celle d'un dossier. */
@@ -61,7 +61,7 @@ export function deviceTileVisual(device: SdkDeviceSummary, opts?: { editing?: bo
     // No Widget header — DeviceWidget owns the whole card (name + status + the
     // full-bleed activity background).
     return {
-        widgetId: deviceViewId(device.id),
+        widgetId: deviceKey(device.id),
         compact: true,
         body: <DeviceWidget deviceId={device.id} hideStatus={opts?.editing} />
     };

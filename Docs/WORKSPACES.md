@@ -296,7 +296,12 @@ rien re-chiffrer : sous la WDK, les deux paliers lisent le même octet).
     > l'ancien. Les vues sans tuile (profil, sécurité, journaux, gestion de l'espace)
     > échappent à la règle : elles ne sont pas composées dans l'accueil.
 - **Menu de la topbar** — section « Espaces » **en tête** (elle dit où l'on est,
-  et tout ce qui suit en dépend), création via un « + » sur l'intitulé.
+  et tout ce qui suit en dépend), création via un « + » sur l'intitulé. Ce qui
+  agit sur un espace se range **en retrait sous celui où l'on se trouve**, dans
+  l'ordre Apparence, Organiser l'accueil, Gérer cet espace ; chacune n'apparaît
+  qu'avec son droit, et la gestion seulement sur un espace partagé. La liste est
+  donc rendue même quand elle n'a qu'une ligne : c'est elle qui porte ces
+  actions.
 - **Bouton de profil** — `pseudo · Nom de l'espace`, uniquement pour les espaces
   partagés : répéter « Espace personnel » à qui y est déjà n'apprend rien.
 - **En-tête de l'accueil** :

@@ -565,9 +565,9 @@ plutôt qu'en enveloppant le hub :
   `devices.linkCode*`, l'enrôlement public restant en HTTP), la rétention
   (le balayage horaire d'`index.ts` devenu `RetentionSweep` sur
   `deps.createTicker`, `MONITORING_RETENTION_DAYS` lue par le module), et
-  tout le client : Monitoring, la page Appareils, la tuile et les vues par
-  appareil de l'accueil, offertes par `DEVICES_CLIENT_PROVIDER`
-  (`useDevices`, `DevicePanel`, `DeviceWidget`). Le dialogue de configuration
+  tout le client : Monitoring, la page Appareils et la tuile d'appareil de
+  l'accueil, offerte par `DEVICES_CLIENT_PROVIDER` (`useDevices`,
+  `DeviceWidget`). Le dialogue de configuration
   de collecte et les réglages du terminal sont devenus les deux onglets d'un
   appareil dans la coquille de réglages : la dernière dette de `SETTINGS.md`
   tombe avec eux.

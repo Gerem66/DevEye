@@ -457,14 +457,14 @@
 
 /* Le conteneur du dépli : sa hauteur est animée, le débord doit donc être coupé
    pendant la course, sinon le libellé dépasse avant que la place existe. */
-.manageReveal {
+.workspaceActions {
     overflow: hidden;
 }
 
 /* La moitié de la colonne d'icône en retrait, et un ton en retrait : assez pour
    rattacher l'action à la ligne du dessus, pas assez pour la décrocher de la
    liste. */
-.manageItem {
+.workspaceAction {
     padding-left: calc(var(--space-md) + (16px + var(--space-sm)) / 2);
     color: var(--text-secondary);
 }
