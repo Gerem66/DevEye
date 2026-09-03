@@ -25,13 +25,9 @@ const SECURITY_MAX = 3;
 
 const RENDER_MODES: readonly { value: RenderMode; label: string; title: string }[] = [
     { value: 'auto', label: 'Auto', title: "Mesure la fluidité réelle et allège si l'appareil ne suit pas" },
-    { value: 'full', label: 'Complet', title: "Verre, flous et animations, quoi qu'il en coûte" },
-    { value: 'lite', label: 'Léger', title: 'Surfaces opaques, sans flou ni transition' }
+    { value: 'full', label: 'Complet', title: "Verre et flous, quoi qu'il en coûte" },
+    { value: 'lite', label: 'Léger', title: 'Surfaces opaques, sans verre ni flou. Les animations restent' }
 ];
-
-const RENDER_HINT =
-    'Propre à cet appareil. Le rendu léger remplace le verre par des surfaces opaques et coupe les flous : ' +
-    "sur un téléphone ou sans accélération matérielle, c'est ce qui rend l'interface fluide.";
 
 function formatDate(time: number): string {
     const str = new Date(time * 1000).toLocaleDateString('fr-FR', {
@@ -270,8 +266,9 @@ export default function FeatureProfile({ user }: FeatureProps) {
                                 <span className={styles.rowLabel}>
                                     Rendu
                                     <span className={styles.rowHint}>
-                                        {RENDER_HINT}
-                                        {renderMode === 'auto' && ` Pour l'instant : ${lite ? 'léger' : 'complet'}.`}
+                                        {renderMode === 'auto'
+                                            ? `Propre à cet appareil, pour l'instant ${lite ? 'léger' : 'complet'}`
+                                            : 'Propre à cet appareil'}
                                     </span>
                                 </span>
                                 <span className={styles.rowValue}>
