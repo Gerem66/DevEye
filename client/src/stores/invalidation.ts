@@ -79,6 +79,8 @@ export type ResourceKey =
     | 'audience.detail'
     /** Les chiffres, séparés de la fiche : ils bougent à chaque minute d'ingestion. */
     | 'audience.stats'
+    /** Les retours reçus : un formulaire, son tableau et ses résultats. */
+    | 'audience.forms'
     /** Les clés d'un module externe (`<id>.<nom>`), déclarées par son manifest. */
     | ExternalResourceKey;
 

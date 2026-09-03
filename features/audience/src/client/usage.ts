@@ -1,3 +1,5 @@
+import { formSnippetFor, submitSnippetFor } from './format';
+
 /**
  * Les exemples d'intégration montrés dans la fenêtre d'installation, bâtis
  * depuis la vraie clé du site et la vraie adresse d'ingestion : un exemple
@@ -262,6 +264,48 @@ curl_close($ch);`
 }
 
 /**
+ * Les trois façons d'envoyer un retour, dans l'ordre où on les essaie : un
+ * `<form>` qui ne demande aucun JavaScript, le même envoi depuis la balise
+ * quand la page en a déjà, et un appel direct pour vérifier ou poster depuis
+ * un serveur.
+ *
+ * La première existe parce que le cas visé est un site vraiment statique : lui
+ * imposer un bundle pour recueillir un message serait rater la cible.
+ */
+export function submitExamples(publicKey: string, origin: string): UsageExample[] {
+    return [
+        {
+            id: 'html',
+            label: 'Formulaire HTML',
+            note: 'Aucun JavaScript. Le visiteur est renvoyé sur _next, qui doit être une page de votre propre site : le serveur refuse toute autre destination, sans quoi cette route serait un redirecteur ouvert.',
+            code: formSnippetFor(publicKey, origin, 'contact')
+        },
+        {
+            id: 'js',
+            label: 'Depuis la balise',
+            note: 'Le visiteur ne quitte pas la page. `submit` rend une promesse (`true` si c’est parti), et n’est jamais groupé avec les mesures : un message ne se perd pas au changement de page.',
+            code: submitSnippetFor('contact')
+        },
+        {
+            id: 'curl',
+            label: 'Appel direct',
+            note: 'Pour vérifier un branchement, ou poster depuis un serveur. Le nom du formulaire est libre : il est créé à la première réception, dans la limite de vingt par site.',
+            code: `curl -X POST ${origin}/api/t/s \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+    "key": "${publicKey}",
+    "form": "contact",
+    "fields": { "email": "moi@exemple.fr", "message": "Bonjour" }
+  }'
+
+# Réponse : {"ok":true}. Un 400 signale un corps mal formé, et lui seul :
+# une clé inconnue ou une origine refusée rendent le même {"ok":true},
+# pour ne pas dire à qui sonde quelles clés existent.`
+        }
+    ];
+}
+
+/**
  * Le mémo destiné à un agent de code, écrit pour être collé tel quel dans une
  * conversation. Les trois pièges qui coûtent une session de débogage sont en
  * tête, un agent lisant le début d'un contexte avec plus d'attention que la fin.
@@ -290,6 +334,29 @@ window.deveye?.identify(id: string|null) // l'utilisateur connecté
 3. Les noms d'événements sont comparés À L'IDENTIQUE (accents, espaces,
    majuscules). Choisissez-les stables et lisibles : ils s'affichent tels
    quels et servent à composer les entonnoirs.
+
+## Recevoir des retours (formulaires, sondages, signalements)
+Un « formulaire » est un canal nommé, créé À SA PREMIÈRE RÉCEPTION : il n'y a
+rien à déclarer avant, et vingt par site au maximum. La charge utile est un
+objet plat de champs libres (40 au plus), que DevEye range et compte.
+
+Depuis la balise, sans quitter la page :
+  await window.deveye?.submit('contact', { email, message })  // rend true si envoyé
+
+Sans une ligne de JavaScript :
+${formSnippetFor(publicKey, origin, 'contact')}
+_next doit désigner une page de VOTRE site : le serveur compare son hôte à
+l'en-tête Origin de l'envoi et refuse tout le reste. _hp est un pot de miel,
+laissez-le caché et vide.
+
+Depuis un serveur :
+POST ${origin}/api/t/s
+{"key":"${publicKey}","form":"contact","fields":{"email":"...","message":"..."}}
+
+Réponses : {"ok":true} en cas de succès ET en cas de refus d'identité (clé
+inconnue, origine non autorisée, formulaire fermé ou plein) ; 400 uniquement
+quand le corps est mal formé. Vérifiez le branchement dans DevEye, pas au code
+de retour.
 
 ## Entonnoirs
 Le site n'émet que des signaux nommés ; les entonnoirs se composent ensuite
@@ -327,5 +394,9 @@ ${
 - Sur localhost et file://, la mesure est coupée. Ajoutez data-local="true"
   pour l'activer en développement.
 - Les envois sont groupés (~500 ms) et vidés par sendBeacon au départ de
-  l'onglet. Une mesure ne doit jamais faire échouer la page qui la produit.`;
+  l'onglet. Une mesure ne doit jamais faire échouer la page qui la produit.
+- submit() fait exception : il part seul et tout de suite, parce qu'un message
+  perdu au changement de page ne se rattrape pas.
+- Les retours ne sont soumis à aucune rétention : ils restent jusqu'à ce qu'on
+  les efface, dans la limite de 50 000 par formulaire.`;
 }

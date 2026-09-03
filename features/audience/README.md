@@ -373,6 +373,101 @@ mesure avant la mise en ligne.
 
 ---
 
+## 5 ter. Les retours
+
+Beaucoup de petits sites n'ont besoin d'un serveur que pour une chose :
+recueillir un message, un sondage, un signalement. Audience savait **mesurer**
+et ne savait rien **recevoir** ; il fallait donc un service tiers pour ce que
+la feature avait déjà sous la main, une porte publique, une clé par site, une
+liste d'origines et un chiffrement au repos.
+
+Un **formulaire** est le canal nommé qui reçoit (`contact`, `sondage-2026`), et
+un **retour** est un objet plat de champs libres. Trois arbitrages ne se
+devinent pas depuis le code.
+
+### La réception est synchrone, la mesure ne l'est pas
+
+`accept()` range en mémoire et rend la main ; `submit()` écrit avant de
+répondre. C'est la seule divergence entre les deux portes, et elle est
+délibérée : une vue perdue au redémarrage n'est rien, un message que personne
+ne lira l'est. Le débit s'y prête, un retour n'arrivant pas à la cadence des
+pages vues.
+
+### Les compteurs sont tenus à la réception, pas calculés à la lecture
+
+Même impasse qu'au §2.2 : la charge utile est chiffrée, un `GROUP BY` dessus
+est impossible par construction. La sortie est la même que pour les libellés,
+poussée d'un cran :
+
+```
+ft_audience_form_labels   form_id, kind('field'|'value'), label_ref, content
+ft_audience_answers       form_id, field_id, value_id, hits
+```
+
+Chaque couple (question, réponse) est haché à l'arrivée et incrémente un
+compteur ; lire la vue Résultats ne déchiffre alors que les quelques dizaines
+de libellés affichés, que le formulaire porte cent retours ou cinq cent mille.
+Le prix est celui de tout agrégat pré-calculé : **le regroupement est figé à la
+réception**, et renommer une question ne recompte pas le passé.
+
+Deux bornes évitent qu'un champ de texte libre ne fasse une ligne de dimension
+par visiteur : au-delà de 60 caractères, ou au-delà de 50 valeurs distinctes
+pour la même question, la réponse tombe dans le **seau** `value_id = 0`, qui ne
+garde qu'un nombre. L'écran l'annonce (« N réponses en texte libre ») plutôt que
+de faire croire qu'elles n'existent pas.
+
+La suppression d'un retour rejoue les mêmes règles sur sa charge utile
+déchiffrée pour décrémenter exactement ce qu'il avait compté. D'où
+`answers.ts`, qui porte les règles pures **et** l'écriture qui les applique
+(`countAnswers`) : la réception et la suppression passent par la même fonction,
+et les séparer serait la meilleure façon de les faire diverger, ce que rien ne
+signalerait, les compteurs se contentant de dériver. Cette fonction ne dépend
+pas du service d'ingestion, pour qu'un service absent ne laisse jamais passer
+une ligne effacée sans la décompter.
+
+Vider ou supprimer un formulaire, en revanche, efface les compteurs en bloc, ce
+qui est exact et sans arithmétique.
+
+### Aucune rétention sur les retours
+
+`retention_days` purge les événements bruts. Il ne touche pas aux retours, et
+c'est voulu : un événement de mesure est jetable, un message est du contenu que
+l'utilisateur a demandé à collecter, et l'effacer en silence au bout de N jours
+serait une perte de données. Le garde est un **plafond** (50 000 par
+formulaire) qui cesse d'accepter au lieu d'effacer, plus le drapeau `is_open` du
+formulaire et la liste d'origines du site.
+
+### Les deux portes d'envoi, et la redirection
+
+`POST /api/t/s` accepte deux formes de corps : le JSON de `deveye.submit` (ou
+d'un `curl`, ou d'un serveur), et l'`application/x-www-form-urlencoded` d'un
+`<form method="post">` sans une ligne de JavaScript. La seconde existe parce
+que le cas visé est un site vraiment statique : lui imposer un bundle pour
+recueillir un message serait rater la cible. Elle a demandé un analyseur de
+corps de plus dans `src/app.ts` **et** `src/publicApp.ts`, un module ne pouvant
+pas en enregistrer.
+
+La règle du `204` du §3.2 tient, à deux exceptions près, et les deux sont des
+choses que le site doit savoir :
+
+- un **corps mal formé** rend `400`. Ce n'est pas un renseignement sur les clés
+  qui existent, c'est une propriété de la requête envoyée, et sans lui une
+  intégration fautive n'aurait aucun moyen de se voir ;
+- une **panne d'écriture** rend `503`. Répondre « reçu » quand l'écriture a
+  échoué ferait annoncer au visiteur un message perdu, ce que l'écriture
+  synchrone cherchait précisément à éviter. Le mince renseignement que cela
+  donne à qui sonde ne vaut que le temps de la panne, moment où il n'y a de
+  toute façon pas grand-chose d'autre qui tienne debout.
+
+Tout le reste (clé inconnue, origine refusée, formulaire fermé ou plein) rend le
+même succès.
+
+`_next` est confronté à l'en-tête `Origin` de l'envoi, **et à rien d'autre**.
+S'appuyer sur les origines autorisées du site aurait deux défauts : faire de
+cette route un redirecteur ouvert pour un site dont la liste est vide, et
+distinguer les refus, un `_next` honoré disant que la clé est bonne. Sans
+`Origin` (un `curl`, un appel serveur), aucune redirection.
+
 ## 6. Carte du code
 
 Depuis le 28 août 2026, tout ce qui est propre à la feature vit dans le module
@@ -385,8 +480,8 @@ Depuis le 28 août 2026, tout ce qui est propre à la feature vit dans le module
 package.json, deveye-feature.json    deveye-feature-audience ; allowlist des 7 tables historiques
 src/index.ts                         manifest + contrats (l'entrée isomorphe)
 src/manifest.ts                      featureDescriptor('audience') étalé ; resources, routes.public, settings.item
-src/contracts/domain.ts              site, plateforme, dimensions, mesures, charge d'ingestion, lignes SQL
-src/contracts/commands.ts            16 commandes, préfixe unique `audience.`
+src/contracts/domain.ts              site, plateforme, dimensions, mesures, charge d'ingestion, retours, lignes SQL
+src/contracts/commands.ts            24 commandes, préfixe unique `audience.`
 ```
 
 @deveye/types ne garde que l'**identité** (l'id dans les schémas d'espace, de
@@ -399,22 +494,29 @@ de liaison (`ProjectAudienceLinkRow`) vit chez Projets
 ### Serveur — `features/audience/src/server/`
 
 ```
-index.ts        serverEntry : createRepo, features, createService (ingestion + provider + publicRoutes), items
+index.ts        serverEntry : createRepo, features, migrationsDir, createService (ingestion + provider
+                + publicRoutes), items
 repo.ts         AudienceRepo sur SdkQueryable : les trois dépôts natifs en un contrat, sections gardées
                 (sites et lectures agrégées : le chemin froid ; entonnoirs ; ingestion : le chemin chaud)
+repoForms.ts    la section « retours » du même contrat, détachée : formulaires, soumissions, compteurs
+migrations/     001_forms.sql — les 4 tables ft_audience_* des retours (les 7 autres datent du socle)
 _shared.ts      Ctx, StoredSite, nameRef, generatePublicKey, packOrigins/parseOrigins, loadSite,
                 loadHomeSite, siteCipher, toSite(…, projectCount), rangeWindow, toMetrics,
                 setIngest/ingestOf (le singleton), projectsProvider/projectCountsOf/projectUsageOf
 crud.ts         count, list, get, siteAdd, siteUpdate, siteRotateKey, siteRemove, reorder
 stats.ts        overview, breakdown, activity, live
 funnels.ts      funnelList, funnelAdd, funnelUpdate, funnelRemove
-handlers.ts     l'agrégat des seize commandes
-service.ts      AudienceIngest sur FeatureServiceDeps : caches, file, lot, coalescence, ménage, sel dérivé
-routes.ts       publicRoutes sur SdkPublicApp : GET /t.js · POST /api/t/b · POST /api/t/e
+forms.ts        formList, formUpdate, formClear, formRemove, submissionList, submissionRemove, results
+stats.ts        (aussi) summary : les trois cartes du sommaire, en un aller-retour
+handlers.ts     l'agrégat des vingt-quatre commandes
+service.ts      AudienceIngest sur FeatureServiceDeps : caches, file, lot, coalescence, ménage, sel dérivé ;
+                submit() — la réception des retours, synchrone (§5 ter)
+answers.ts      ce qu'on compte dans un retour (pur), et countAnswers qui l'applique
+routes.ts       publicRoutes sur SdkPublicApp : GET /t.js · POST /api/t/b · POST /api/t/e · POST /api/t/s
 script.ts       le script servi aux pages suivies, et son ETag
 normalize.ts    chemins, hôtes, référents, condensés (pur)
 userAgent.ts    navigateur / système / appareil (pur)
-*.test.ts       handlers, service, routes, normalize (harnais @deveye/types/sdk/testing)
+*.test.ts       handlers, forms, service, routes, answers, normalize (harnais @deveye/types/sdk/testing)
 ```
 
 Ce qui a changé de main au rapatriement, et pourquoi :
@@ -438,14 +540,16 @@ Ce qui a changé de main au rapatriement, et pourquoi :
 db/migrations/076_audience.sql             5 tables (historiques, allowlist du module)
 db/migrations/077_project_audience_links.sql  la liaison (table de Projets)
 db/migrations/078_audience_funnels.sql     entonnoirs et marches
+db/migrations/079_audience_visitor_mode.sql   le mode de reconnaissance du visiteur
 features/projects/src/server/repo/links.ts listSiteIds, linkSite, unlinkSite, unlinkAllSites,
                                            listSiteUsage, countSiteLinks (chez Projets)
 features/projects/src/server/usageProvider.ts   l'entrée `audience` de PROJECTS_USAGE_PROVIDER
 features/projects/src/server/audienceLink.ts    le pointeur d'un projet (existence par AUDIENCE_ITEMS_PROVIDER)
 features/_sdk/register.ts                  modulePublicRoutes(app), isModulePublicPath(url)
 features/_sdk/context.ts                   ctx.origins { app, public } (AUDIENCE_ORIGIN || PUBLIC_ORIGIN)
-app.ts                                     le délégateur CORS (isModulePublicPath), modulePublicRoutes(app)
-publicApp.ts                               le second écouteur : modulePublicRoutes(app), rien d'autre
+app.ts                                     le délégateur CORS (isModulePublicPath), modulePublicRoutes(app),
+                                           les analyseurs text/plain et x-www-form-urlencoded
+publicApp.ts                               le second écouteur : mêmes analyseurs, modulePublicRoutes(app)
 Utils/Env.ts                               AUDIENCE_ORIGIN, PUBLIC_LISTEN_PORT (infrastructure)
 ```
 
@@ -456,11 +560,21 @@ index.tsx           clientEntry : Widget, Full, settingsPanels, providers
 Audience.tsx        liste + fiche ; possède le niveau live `l1` (l'id du site)
 api.ts              featureApi(manifest)
 SiteList.tsx        les cartes + le glisser-déposer (useDragReorder)
-SiteDetail.tsx      en-tête, SiteView, projets liés
-SiteView.tsx        ⟵ le cœur partagé avec l'onglet d'un projet
+SiteDetail.tsx      en-tête + sommaire + la section ouverte ; possède le niveau live `l2` (la section)
+SiteHub.tsx         les trois cartes du sommaire (audience.summary)
+SectionCard.tsx     la forme commune d'une carte du sommaire
+SiteView.tsx        la fréquentation ⟵ partagée avec l'onglet d'un projet
+Funnels.tsx         les entonnoirs ⟵ partagés avec l'onglet d'un projet
+RangeBar.tsx        les cinq fenêtres, partagées par les blocs qui mesurent
+Forms/Forms.tsx     les retours : sélecteur de formulaire, onglets Tableau / Résultats, export
+Forms/SubmissionTable.tsx   le tableau (colonnes déduites, tri et recherche côté client)
+Forms/SubmissionDialog.tsx  un retour brut, avec le contexte de sa visite
+Forms/Results.tsx   la répartition des réponses, question par question
+Forms/FormDialog.tsx  renommer, fermer, vider, supprimer un formulaire
+Forms/export.ts     le CSV des retours chargés
 SiteDialog.tsx      déclarer un site (nom, description, plateforme, origines) ; création seulement
 SiteGeneralPanel.tsx  le panneau Général d'un site (identité, état, visiteurs, rétention, suppression) : settings.item
-InstallDialog.tsx   la balise, l'état « première mesure », la rotation de clé
+InstallDialog.tsx   la balise, l'envoi de retours, l'état « première mesure », la rotation de clé
 FunnelDialog.tsx    définir un parcours à partir du déjà-observé
 FunnelDetailDialog.tsx
 Stats/{StatBand,TrendChart,Heatmap,TopList,FunnelBar,FunnelSteps}.tsx
@@ -588,21 +702,35 @@ npx eslint features/audience/src/server features/audience/src/contracts features
   agrège hier et aujourd'hui puis élague à la rétention et balaie les
   libellés orphelins, et le sel est demandé une fois à `deps.keys.derive`
   (un visiteur persistant est reconnu à l'identique par une seconde instance) ;
-- `routes.test.ts` : les trois routes déclarées, les deux POST avec leur
+- `routes.test.ts` : les quatre routes déclarées, les trois POST avec leur
   plafond ; `/t.js` servi avec son type, son cache, son ETag et CORP, `304`
   sur ETag connu ; un lot valide atteint l'ingestion avec l'origine, le
   user-agent et l'adresse ; quatre corps invalides rendent le même `204` sans
-  l'atteindre ; l'événement isolé passe, `Origin` absent compris ;
+  l'atteindre ; l'événement isolé passe, `Origin` absent compris ; et pour
+  `/api/t/s`, les deux formes de corps, le pot de miel qui accepte sans rien
+  écrire, le `400` du seul corps mal formé, le succès identique sur clé
+  inconnue, et **le refus de rediriger vers un hôte autre que l'origine de
+  l'envoi** (§5 ter) ;
+- `forms.test.ts` : la frontière d'espace des retours (un formulaire projeté se
+  lit mais ne se règle pas), la pagination par curseur `(ts, id)` qui ne boucle
+  pas, le contexte de visite rendu quand la session existe et jamais inventé,
+  le regroupement d'une répartition avec son seau de texte libre, le cache de
+  l'ingestion vidé par chaque mutation, la **décrémentation exacte** à la
+  suppression d'un retour, et le vidage en bloc qui laisse le canal ouvert ;
+- `answers.test.ts` : les règles d'indexation d'un retour, celles-là mêmes que
+  la suppression rejoue (choix multiple éclaté, nombre et booléen canoniques,
+  seau au-delà de la longueur limite, question sans nom ignorée) ;
 - `normalize.test.ts` : chemins, hôtes, référents, les trois règles
   d'`originAllowed`, la stabilité et la sensibilité des condensés, les jours
   UTC, l'ordre de détection des user-agents.
 
 Ce que ces tests ne couvrent pas, et qui se vérifie sur un serveur monté :
 le montage réel des routes par l'hôte (helmet compris : CORP `same-origin`
-préservé ailleurs), les analyseurs `text/plain` et `application/json`, le
-plafond de débit appliqué par Fastify, et le délégateur CORS. C'est le banc
-d'essai de la première version (ci-dessous), à rejouer à chaque changement
-d'`app.ts` ou de `publicApp.ts`.
+préservé ailleurs), les analyseurs `text/plain`, `application/json` et
+`application/x-www-form-urlencoded`, le plafond de débit appliqué par Fastify,
+le délégateur CORS, et la redirection `303` telle que le navigateur la suit
+après un `<form>`. C'est le banc d'essai de la première version (ci-dessous),
+à rejouer à chaque changement d'`app.ts` ou de `publicApp.ts`.
 
 ### Vérifié le 26 août 2026, sur une base
 
@@ -665,6 +793,16 @@ dev qui porte déjà des données réelles.
   combien de temps ils mettent.
 - **Pas de pays** — il faudrait embarquer une base GeoIP et la tenir à jour. Les
   fuseaux répondent à la même question à moindres frais.
+- **Aucune notification à l'arrivée d'un retour.** C'est le manque qui se fera
+  sentir en premier sur un formulaire de contact. Il fait basculer le module en
+  `notifies: true`, ce qui touche le registre publié, demande la capacité
+  `notify`, un onglet Notifications et le câblage des canaux : un chantier à
+  part, pas une ligne à ajouter.
+- **Aucune validation des retours.** DevEye range ce qu'on lui envoie ; le site
+  seul connaît son formulaire, et un schéma imposé ici se serait trompé.
+- **Le tri et la recherche du tableau portent sur les lignes chargées**, jamais
+  sur tout le formulaire : la charge utile est chiffrée, la base n'a rien à quoi
+  appliquer un `ORDER BY` ni un `LIKE`. L'écran le dit sous le tableau.
 - **Pas de package npm ni de module React Native** — la balise couvre les pages
   web et les projets React ; le contrat d'ingestion est déjà neutre (§3.5).
 - **Pas de visiteurs récurrents** — conséquence directe du sel tournant (§2.4).

@@ -1,14 +1,21 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { AudienceSiteRow } from '../contracts/domain';
+import {
+    AUDIENCE_MAX_FORMS,
+    type AudienceFormLabelRow,
+    type AudienceFormRow,
+    type AudienceSiteRow,
+    type AudienceSubmissionRow
+} from '../contracts/domain';
 import { AUDIENCE_ITEMS_PROVIDER, type AudienceItemsProvider } from '@deveye/types/sdk';
 import { createTestServiceDeps } from '@deveye/types/sdk/testing';
 
+import { countAnswers } from './answers';
 import { dayKey } from './normalize';
 import { serverEntry } from './index';
 import type { AudienceRepo, NewSessionInput, PendingEventRow } from './repo';
-import { AudienceIngest, type IngestRequest } from './service';
+import { AudienceIngest, type IngestRequest, type SubmitRequest } from './service';
 
 /**
  * L'ingestion du module, sur le harnais de service du SDK. Aucune horloge ni
@@ -17,6 +24,10 @@ import { AudienceIngest, type IngestRequest } from './service';
  * à la vidange, le refus qui n'écrit rien, le direct coalescé, `invalidate` qui
  * fait relire un site, le ménage qui agrège puis élague, et le sel des
  * visiteurs stable d'une instance à l'autre.
+ *
+ * Les retours empruntent la même porte mais pas la file : on tient qu'ils sont
+ * écrits avant que `submit` ne rende la main, que le formulaire naît de sa
+ * première réception, et que les compteurs de répartition suivent.
  */
 
 interface FakeRepo extends AudienceRepo {
@@ -27,6 +38,11 @@ interface FakeRepo extends AudienceRepo {
     touchedSites: [number, number][];
     rollups: [number, number, number, number][];
     pruned: { events: [number, number][]; sessions: [number, number][]; labels: number[] };
+    forms: AudienceFormRow[];
+    submissions: AudienceSubmissionRow[];
+    formLabels: AudienceFormLabelRow[];
+    /** `formId:fieldId:valueId` → compte. */
+    answers: Map<string, number>;
 }
 
 const KEY = 'pk_000000000000000000000001';
@@ -62,6 +78,10 @@ function fakeRepo(sites: AudienceSiteRow[]): FakeRepo {
         touchedSites: [],
         rollups: [],
         pruned: { events: [], sessions: [], labels: [] },
+        forms: [],
+        submissions: [],
+        formLabels: [],
+        answers: new Map(),
         list: unused,
         listVisible: unused,
         find: async (id, workspaceId) => sites.find((s) => s.id === id && s.workspace_id === workspaceId) ?? null,
@@ -140,6 +160,93 @@ function fakeRepo(sites: AudienceSiteRow[]): FakeRepo {
             repo.pruned.sessions.push([siteId, before]);
             return 0;
         },
+        listForms: async (siteId) => repo.forms.filter((f) => f.site_id === siteId),
+        findForm: async (formId) => repo.forms.find((f) => f.id === formId) ?? null,
+        findFormByName: async (siteId, nameRef) =>
+            repo.forms.find((f) => f.site_id === siteId && f.name_ref === nameRef) ?? null,
+        countForms: async (siteId) => repo.forms.filter((f) => f.site_id === siteId).length,
+        async updateForm(formId, nameRef, content, open) {
+            const f = repo.forms.find((x) => x.id === formId);
+            if (f) Object.assign(f, { name_ref: nameRef, content, is_open: open ? 1 : 0 });
+        },
+        async removeForm(formId) {
+            const i = repo.forms.findIndex((f) => f.id === formId);
+            if (i === -1) return false;
+            repo.forms.splice(i, 1);
+            return true;
+        },
+        async clearForm(formId) {
+            const before = repo.submissions.length;
+            repo.submissions = repo.submissions.filter((b) => b.form_id !== formId);
+            repo.formLabels = repo.formLabels.filter((l) => l.form_id !== formId);
+            for (const key of [...repo.answers.keys()]) {
+                if (key.startsWith(`${formId}:`)) repo.answers.delete(key);
+            }
+            const f = repo.forms.find((x) => x.id === formId);
+            if (f) Object.assign(f, { submissions: 0, last_at: null });
+            return before - repo.submissions.length;
+        },
+        async resolveForm(siteId, nameRef, content, sortOrder) {
+            const hit = repo.forms.find((f) => f.site_id === siteId && f.name_ref === nameRef);
+            if (hit) return hit.id;
+            const id = ++seq;
+            repo.forms.push({
+                id,
+                site_id: siteId,
+                name_ref: nameRef,
+                is_open: 1,
+                submissions: 0,
+                last_at: null,
+                sort_order: sortOrder,
+                content,
+                created: 1
+            });
+            return id;
+        },
+        async insertSubmission(input) {
+            const id = ++seq;
+            repo.submissions.push({
+                id,
+                form_id: input.formId,
+                site_id: input.siteId,
+                ts: input.ts,
+                session_id: input.sessionId,
+                content: input.content
+            });
+            return id;
+        },
+        async touchForm(formId, at) {
+            const f = repo.forms.find((x) => x.id === formId);
+            if (f) Object.assign(f, { submissions: f.submissions + 1, last_at: Math.max(f.last_at ?? 0, at) });
+        },
+        async bumpFormSubmissions(formId, delta) {
+            const f = repo.forms.find((x) => x.id === formId);
+            if (f) f.submissions = Math.max(0, f.submissions + delta);
+        },
+        async resolveFormLabel(formId, kind, labelRef, content) {
+            const hit = repo.formLabels.find(
+                (l) => l.form_id === formId && l.kind === kind && l.label_ref === labelRef
+            );
+            if (hit) return hit.id;
+            const id = ++seq;
+            repo.formLabels.push({ id, form_id: formId, kind, label_ref: labelRef, content });
+            return id;
+        },
+        findFormLabel: async (formId, kind, labelRef) =>
+            repo.formLabels.find((l) => l.form_id === formId && l.kind === kind && l.label_ref === labelRef)?.id ??
+            null,
+        countAnswerValues: async (formId, fieldId) =>
+            [...repo.answers.keys()].filter((k) => k.startsWith(`${formId}:${fieldId}:`)).length,
+        async bumpAnswer(formId, fieldId, valueId, delta) {
+            const key = `${formId}:${fieldId}:${valueId}`;
+            repo.answers.set(key, Math.max(0, (repo.answers.get(key) ?? 0) + delta));
+        },
+        listSubmissions: unused,
+        findSubmission: async (id) => repo.submissions.find((b) => b.id === id) ?? null,
+        removeSubmission: unused,
+        readAnswers: unused,
+        feedbackStats: unused,
+        dailyPoints: unused,
         async pruneOrphanLabels(siteId) {
             repo.pruned.labels.push(siteId);
             return 1;
@@ -159,6 +266,26 @@ function request(over: Partial<IngestRequest> = {}): IngestRequest {
         ip: '203.0.113.7',
         userAgent: UA,
         events: [{ type: 'view', path: '/tarifs/' }],
+        ...over
+    };
+}
+
+/** L'identifiant du libellé d'une question, tel que le dépôt l'a rendu. */
+function fieldIdOf(repo: FakeRepo, name: string): number {
+    const label = repo.formLabels.find((l) => l.kind === 'field' && l.content === name);
+    assert.ok(label, `question « ${name} » absente`);
+    return label.id;
+}
+
+function submission(over: Partial<SubmitRequest> = {}): SubmitRequest {
+    return {
+        key: KEY,
+        form: 'contact',
+        fields: { satisfaction: 4, canaux: ['mail', 'sms'], message: 'x'.repeat(200) },
+        path: '/contact',
+        origin: 'https://exemple.fr',
+        ip: '203.0.113.7',
+        userAgent: UA,
         ...over
     };
 }
@@ -352,6 +479,106 @@ describe('le sel des visiteurs', () => {
         assert.equal(repo.sessions.length, 1);
         assert.equal(repo.sessions[0].touched, 2);
         assert.equal(asked.length, 2);
+    });
+});
+
+describe('AudienceIngest : les retours', () => {
+    it('crée le formulaire à la première réception, écrit le retour et compte les réponses', async () => {
+        const repo = fakeRepo([site()]);
+        const { ingest } = ingestWith(repo);
+
+        // Rien à vidanger : `submit` écrit avant de rendre la main, contrairement
+        // à la mesure. C'est ce que ce test tient.
+        await ingest.submit(submission());
+
+        assert.equal(repo.forms.length, 1);
+        assert.equal(repo.forms[0].submissions, 1);
+        assert.equal(repo.submissions.length, 1);
+        assert.deepEqual(JSON.parse(repo.submissions[0].content), {
+            fields: { satisfaction: 4, canaux: ['mail', 'sms'], message: 'x'.repeat(200) },
+            path: '/contact'
+        });
+
+        // Trois questions, dont une à choix multiples qui compte ses deux valeurs.
+        const fields = repo.formLabels.filter((l) => l.kind === 'field').map((l) => l.content);
+        assert.deepEqual(fields.sort(), ['canaux', 'message', 'satisfaction']);
+        // Un message est un texte, pas un choix : aucun libellé de valeur, il tombe
+        // au seau. « 4 » (un nombre rendu canoniquement) et les deux canaux, si.
+        const values = repo.formLabels.filter((l) => l.kind === 'value').map((l) => l.content);
+        assert.deepEqual(values.sort(), ['4', 'mail', 'sms']);
+        assert.equal(repo.answers.get(`1:${fieldIdOf(repo, 'message')}:0`), 1, 'le seau « texte libre »');
+        assert.equal(
+            [...repo.answers.values()].reduce((a, b) => a + b, 0),
+            4
+        );
+    });
+
+    it('relie le retour à la visite ouverte du même visiteur, sans en ouvrir une', async () => {
+        const repo = fakeRepo([site()]);
+        const { ingest, flush } = ingestWith(repo);
+        await ingest.accept(request());
+        await flush();
+
+        await ingest.submit(submission());
+
+        assert.equal(repo.sessions.length, 1, 'aucune visite ouverte par un retour');
+        assert.equal(repo.submissions[0].session_id, repo.sessions[0].id);
+    });
+
+    it("n'écrit rien sur une clé inconnue, une origine refusée ou un site éteint", async () => {
+        const repo = fakeRepo([site()]);
+        const { ingest } = ingestWith(repo);
+
+        await ingest.submit(submission({ key: 'pk_000000000000000000000009' }));
+        await ingest.submit(submission({ origin: 'https://ailleurs.fr' }));
+        assert.equal(repo.submissions.length, 0);
+
+        repo.sites[0].active = 0;
+        ingest.invalidate();
+        await ingest.submit(submission());
+        assert.equal(repo.submissions.length, 0);
+    });
+
+    it('refuse un formulaire fermé, et le rouvre dès que le cache est vidé', async () => {
+        const repo = fakeRepo([site()]);
+        const { ingest } = ingestWith(repo);
+        await ingest.submit(submission());
+
+        repo.forms[0].is_open = 0;
+        // Sans l'invalidation, la fermeture ne prendrait effet qu'au redémarrage :
+        // c'est exactement ce que les handlers appellent après une mutation.
+        ingest.invalidate();
+        await ingest.submit(submission());
+        assert.equal(repo.submissions.length, 1);
+
+        repo.forms[0].is_open = 1;
+        ingest.invalidate();
+        await ingest.submit(submission());
+        assert.equal(repo.submissions.length, 2);
+    });
+
+    it('cesse de créer des formulaires au-delà du plafond du site', async () => {
+        const repo = fakeRepo([site()]);
+        const { ingest } = ingestWith(repo);
+        for (let i = 0; i < AUDIENCE_MAX_FORMS + 5; i++) {
+            await ingest.submit(submission({ form: `canal-${i}`, fields: { a: '1' } }));
+        }
+        assert.equal(repo.forms.length, AUDIENCE_MAX_FORMS);
+        assert.equal(repo.submissions.length, AUDIENCE_MAX_FORMS);
+    });
+
+    it("décompte exactement ce qu'un retour avait compté", async () => {
+        const repo = fakeRepo([site()]);
+        const { ingest, deps } = ingestWith(repo);
+        await ingest.submit(submission({ fields: { recommande: 'oui' } }));
+        await ingest.submit(submission({ fields: { recommande: 'non' } }));
+
+        const key = [...repo.answers.entries()].find(([, n]) => n === 1);
+        assert.ok(key);
+        await countAnswers(repo, deps.cipherFor(1), repo.forms[0].id, { recommande: 'oui' }, -1);
+
+        // Un seul des deux comptes bouge, et aucun ne passe sous zéro.
+        assert.deepEqual([...repo.answers.values()].sort(), [0, 1]);
     });
 });
 

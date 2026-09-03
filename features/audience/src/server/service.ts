@@ -1,6 +1,9 @@
 import {
+    AUDIENCE_FORM_SUBMISSIONS_MAX,
+    AUDIENCE_MAX_FORMS,
     AUDIENCE_SESSION_GAP_SECONDS,
     type AudienceEventInput,
+    type AudienceFieldValue,
     type AudiencePlatform,
     type AudienceSiteRow,
     type AudienceVisitorMode
@@ -17,8 +20,9 @@ import {
     persistentVisitorRef,
     visitorRef
 } from './normalize';
+import { countAnswers } from './answers';
 import type { AudienceRepo, PendingEventRow } from './repo';
-import { parseOrigins } from './_shared';
+import { nameRef, parseOrigins } from './_shared';
 import { looksLikeBot, parseUserAgent } from './userAgent';
 
 /**
@@ -34,6 +38,10 @@ import { looksLikeBot, parseUserAgent } from './userAgent';
  * Le direct est coalescé à une diffusion par minute et par espace ; en émettre
  * une par événement ferait re-solliciter l'écran de tous les membres à chaque
  * visite. Cette coalescence vit ici, jamais dans le hub.
+ *
+ * Les **retours** entrent par la même porte et le même service, mais pas par la
+ * file : `submit()` écrit avant de rendre la main. Une vue perdue au
+ * redémarrage n'est rien, un message que personne ne lira l'est.
  */
 
 /** Une requête d'ingestion, une fois l'enveloppe HTTP ôtée. */
@@ -50,6 +58,29 @@ export interface IngestRequest {
     ip: string;
     userAgent: string;
     events: AudienceEventInput[];
+}
+
+/**
+ * Un retour, une fois l'enveloppe HTTP ôtée. Les deux formes d'envoi (JSON et
+ * formulaire HTML) se ramènent à celle-ci avant d'arriver ici : le service ne
+ * sait pas par quelle porte on est entré.
+ */
+export interface SubmitRequest {
+    key: string;
+    form: string;
+    fields: Record<string, AudienceFieldValue>;
+    /** La page d'où part le retour, telle que le client la donne. */
+    path: string | null;
+    visitorId?: string | null;
+    origin: string | null;
+    ip: string;
+    userAgent: string;
+}
+
+interface CachedForm {
+    id: number;
+    open: boolean;
+    submissions: number;
 }
 
 interface CachedSite {
@@ -140,6 +171,8 @@ export class AudienceIngest {
 
     /** `siteId:kind:ref` → id du libellé. */
     private readonly labels = new Map<string, number>();
+    /** `siteId:nameRef` → formulaire de retours. Vidé avec les sites. */
+    private readonly forms = new Map<string, CachedForm>();
     /** `siteId:visitorRef` → session ouverte. */
     private readonly sessions = new Map<string, CachedSession>();
 
@@ -178,6 +211,7 @@ export class AudienceIngest {
     invalidate(): void {
         this.sites.clear();
         this.unknownKeys.clear();
+        this.forms.clear();
     }
 
     /**
@@ -233,6 +267,107 @@ export class AudienceIngest {
                 screenWidth: event.screenWidth ?? null
             });
         }
+    }
+
+    /**
+     * Reçoit un retour, ou l'ignore en silence. Ne lève jamais et ne dit jamais
+     * non, pour la même raison qu'`accept` : la route répond pareil quoi qu'il
+     * arrive.
+     *
+     * **Écrit avant de rendre la main**, contrairement à la mesure, et c'est la
+     * seule divergence assumée entre les deux portes : une vue perdue au
+     * redémarrage n'est rien, un message que personne ne lira l'est. Le débit
+     * s'y prête, un retour n'arrivant pas à la cadence des pages vues.
+     *
+     * `looksLikeBot` ne s'applique pas non plus : un envoi depuis un serveur
+     * porte le user-agent qu'il veut, et refuser sur cette heuristique
+     * avalerait des messages réels. Le pot de miel et le plafond de débit sont
+     * les gardes, en amont.
+     *
+     * Rend `'failed'` sur une panne, et c'est la seule chose qu'elle avoue :
+     * répondre « reçu » quand l'écriture a échoué ferait dire au site
+     * « message envoyé » sur un message perdu, ce qui est précisément ce que
+     * l'écriture synchrone cherchait à éviter. Un refus, lui, reste muet.
+     */
+    async submit(req: SubmitRequest): Promise<'stored' | 'ignored' | 'failed'> {
+        let site: CachedSite | null;
+        let form: CachedForm | null;
+        let cipher: SdkCipher;
+        try {
+            site = await this.resolveSite(req.key);
+            if (!site || !site.active) return 'ignored';
+            if (!originAllowed(site.origins, req.origin, site.platform)) return 'ignored';
+
+            cipher = this.deps.cipherFor(site.workspaceId);
+            form = await this.resolveForm(site.id, req.form, cipher);
+        } catch (e) {
+            this.deps.logger.error({ err: e }, 'Audience submit: form lookup failed');
+            return 'failed';
+        }
+        if (!form || !form.open) return 'ignored';
+        // Plein, on cesse d'accepter au lieu d'effacer le plus ancien : ce que le
+        // site a demandé à collecter ne disparaît pas pour faire de la place.
+        if (form.submissions >= AUDIENCE_FORM_SUBMISSIONS_MAX) return 'ignored';
+
+        const now = Math.floor(Date.now() / 1000);
+        try {
+            const persistent = site.visitorMode === 'persistent' && !!req.visitorId;
+            const visitor = persistent
+                ? persistentVisitorRef(this.visitorSalt, site.publicKey, req.visitorId as string)
+                : visitorRef(this.dailySalt(), site.publicKey, req.ip, req.userAgent);
+            // La visite d'où vient le retour, si elle est encore ouverte. Jamais
+            // créée : un retour n'est pas une visite, et en ouvrir une ici gonflerait
+            // les chiffres de fréquentation d'un site qui ne pose pas la balise.
+            const session = await this.deps.repo.findOpenSession(site.id, visitor, now - AUDIENCE_SESSION_GAP_SECONDS);
+
+            const path = req.path ? normalizePath(req.path) : '';
+            await this.deps.repo.insertSubmission({
+                formId: form.id,
+                siteId: site.id,
+                ts: now,
+                sessionId: session?.id ?? null,
+                content: await cipher.encrypt(JSON.stringify({ fields: req.fields, path }))
+            });
+            await countAnswers(this.deps.repo, cipher, form.id, req.fields, 1);
+            await this.deps.repo.touchForm(form.id, now);
+            form.submissions++;
+            this.maybeBroadcast(site.workspaceId);
+            return 'stored';
+        } catch (e) {
+            this.deps.logger.error({ err: e, siteId: site.id }, 'Audience submit failed');
+            return 'failed';
+        }
+    }
+
+    /**
+     * Le formulaire de ce nom, créé à sa première réception. `null` quand le
+     * site en porte déjà le maximum : sans ce plafond, une clé publique connue
+     * suffirait à remplir la table de canaux tirés au sort.
+     */
+    private async resolveForm(siteId: number, name: string, cipher: SdkCipher): Promise<CachedForm | null> {
+        const trimmed = name.trim();
+        const ref = nameRef(trimmed);
+        const cacheKey = `${siteId}:${ref}`;
+        const cached = this.forms.get(cacheKey);
+        if (cached) return cached;
+
+        const existing = await this.deps.repo.findFormByName(siteId, ref);
+        if (existing) {
+            const form: CachedForm = {
+                id: Number(existing.id),
+                open: Number(existing.is_open) === 1,
+                submissions: Number(existing.submissions)
+            };
+            this.forms.set(cacheKey, form);
+            return form;
+        }
+
+        const count = await this.deps.repo.countForms(siteId);
+        if (count >= AUDIENCE_MAX_FORMS) return null;
+        const id = await this.deps.repo.resolveForm(siteId, ref, await cipher.encrypt(trimmed), count);
+        const form: CachedForm = { id, open: true, submissions: 0 };
+        this.forms.set(cacheKey, form);
+        return form;
     }
 
     /**

@@ -1,20 +1,17 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Button, humanizeError, useResourceVersion } from 'deveye-sdk-client';
+import { humanizeError, useResourceVersion } from 'deveye-sdk-client';
 import type {
     AudienceActivity,
     AudienceBreakdownItem,
     AudienceDimension,
-    AudienceFunnel,
     AudienceOverview,
     AudienceRange,
     AudienceSite
 } from '../contracts/domain';
 
 import { api } from './api';
-import { DIMENSION_LABELS, RANGE_LABELS, RANGES, formatCount } from './format';
-import FunnelDetailDialog from './FunnelDetailDialog';
-import FunnelDialog from './FunnelDialog';
-import FunnelBar from './Stats/FunnelBar';
+import { DIMENSION_LABELS, formatCount } from './format';
+import RangeBar from './RangeBar';
 import Heatmap from './Stats/Heatmap';
 import StatBand from './Stats/StatBand';
 import TopList from './Stats/TopList';
@@ -39,8 +36,6 @@ const TECHNICAL: AudienceDimension[] = ['browser', 'os', 'device'];
 
 interface SiteViewProps {
     site: AudienceSite;
-    /** Définir un entonnoir est une écriture ; le lire n'en est pas une. */
-    canWrite: boolean;
     /**
      * De quoi garnir la barre collante : à gauche l'intitulé du bloc, à droite
      * ses actions. Vides dans la feature Audience, où la fiche porte déjà son
@@ -54,27 +49,24 @@ interface SiteViewProps {
 type Breakdowns = Partial<Record<AudienceDimension, AudienceBreakdownItem[]>>;
 
 /**
- * Tout ce qu'on lit d'un site, rendu à l'identique dans la feature Audience et
+ * La fréquentation d'un site, rendue à l'identique dans la feature Audience et
  * dans l'onglet d'un projet : un site n'a pas à se présenter autrement selon la
- * porte par laquelle on entre.
+ * porte par laquelle on entre. Les entonnoirs sont à côté (`Funnels`), les
+ * retours ailleurs encore : trois lectures qui ne répondent pas à la même
+ * question.
  *
  * Toutes les lectures sont bornées par la fenêtre choisie et repartent ensemble
  * quand elle change. Elles se relisent aussi sur `audience.stats`, que
  * l'ingestion invalide au plus une fois par minute et par espace : les chiffres
  * de tout le monde bougent alors sans que personne ne recharge.
  */
-export function SiteView({ site, canWrite, heading, actions }: SiteViewProps) {
+export function SiteView({ site, heading, actions }: SiteViewProps) {
     const [range, setRange] = useState<AudienceRange>('7d');
     const [overview, setOverview] = useState<AudienceOverview | null>(null);
     const [breakdowns, setBreakdowns] = useState<Breakdowns>({});
     const [activity, setActivity] = useState<AudienceActivity | null>(null);
     const [live, setLive] = useState<number | null>(null);
     const [technical, setTechnical] = useState<AudienceDimension>('browser');
-    const [funnels, setFunnels] = useState<AudienceFunnel[]>([]);
-    /** `undefined` = fermé ; `null` = création ; un entonnoir = modification. */
-    const [funnelEdit, setFunnelEdit] = useState<AudienceFunnel | null | undefined>(undefined);
-    /** L'entonnoir dont on regarde le détail ; `null` = aucun. */
-    const [funnelOpen, setFunnelOpen] = useState<AudienceFunnel | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
 
@@ -90,11 +82,10 @@ export function SiteView({ site, canWrite, heading, actions }: SiteViewProps) {
 
     const load = useCallback(async () => {
         try {
-            const [nextOverview, nextActivity, nextLive, nextFunnels, ...items] = await Promise.all([
+            const [nextOverview, nextActivity, nextLive, ...items] = await Promise.all([
                 api.send('audience.overview', { siteId: site.id, range }),
                 api.send('audience.activity', { siteId: site.id, range }),
                 api.send('audience.live', { siteId: site.id }),
-                api.send('audience.funnelList', { siteId: site.id, range }),
                 ...[...ALWAYS, ...TECHNICAL].map((dimension) =>
                     api.send('audience.breakdown', { siteId: site.id, range, dimension })
                 )
@@ -102,7 +93,6 @@ export function SiteView({ site, canWrite, heading, actions }: SiteViewProps) {
             setOverview(nextOverview);
             setActivity(nextActivity);
             setLive(nextLive.visitors);
-            setFunnels(nextFunnels.funnels);
             setBreakdowns(
                 Object.fromEntries([...ALWAYS, ...TECHNICAL].map((d, i) => [d, items[i].items])) as Breakdowns
             );
@@ -194,19 +184,7 @@ export function SiteView({ site, canWrite, heading, actions }: SiteViewProps) {
 
             <div className={styles.viewHead}>
                 {heading}
-                <div className={styles.ranges} role='group' aria-label='Période'>
-                    {RANGES.map((value) => (
-                        <button
-                            key={value}
-                            type='button'
-                            className={value === range ? styles.rangeActive : styles.range}
-                            aria-pressed={value === range}
-                            onClick={() => setRange(value)}
-                        >
-                            {RANGE_LABELS[value]}
-                        </button>
-                    ))}
-                </div>
+                <RangeBar value={range} onChange={setRange} />
                 {live !== null && live > 0 && (
                     <p className={styles.liveTag}>
                         <span className={styles.livePulse} aria-hidden='true' />
@@ -240,33 +218,6 @@ export function SiteView({ site, canWrite, heading, actions }: SiteViewProps) {
                 <TopList dimension='path' items={breakdowns.path ?? []} loading={loading} />
                 <TopList dimension='referrer' items={breakdowns.referrer ?? []} loading={loading} />
             </div>
-
-            {/* Les entonnoirs juste après les pages et les provenances : ils répondent
-                au « pourquoi » de ce qu'on vient de lire, avant les axes techniques qui
-                ne décrivent que le matériel. */}
-            <section className={styles.panel}>
-                <div className={styles.panelHead}>
-                    <h3 className={styles.panelTitle}>Entonnoirs</h3>
-                    {canWrite && (
-                        <Button variant='ghost' icon='add' onClick={() => setFunnelEdit(null)}>
-                            Nouvel entonnoir
-                        </Button>
-                    )}
-                </div>
-
-                {funnels.length === 0 ? (
-                    <p className={styles.empty}>
-                        Aucun entonnoir. Composez-en un à partir des pages et des événements déjà mesurés pour voir où
-                        les visiteurs décrochent.
-                    </p>
-                ) : (
-                    <div className={styles.funnelCards}>
-                        {funnels.map((funnel) => (
-                            <FunnelBar key={funnel.id} funnel={funnel} onOpen={() => setFunnelOpen(funnel)} />
-                        ))}
-                    </div>
-                )}
-            </section>
 
             <div className={styles.panels}>
                 <section className={styles.panel}>
@@ -310,29 +261,6 @@ export function SiteView({ site, canWrite, heading, actions }: SiteViewProps) {
                 <TopList dimension='event' items={breakdowns.event ?? []} loading={loading} />
                 <TopList dimension='identity' items={breakdowns.identity ?? []} loading={loading} />
             </div>
-
-            <FunnelDetailDialog
-                funnel={funnelOpen}
-                canWrite={canWrite}
-                onClose={() => setFunnelOpen(null)}
-                onEdit={() => {
-                    // Du détail à l'édition sans repasser par la liste :
-                    // « modifier » depuis un détail veut dire « celui-ci ».
-                    setFunnelEdit(funnelOpen);
-                    setFunnelOpen(null);
-                }}
-            />
-
-            <FunnelDialog
-                open={funnelEdit !== undefined}
-                siteId={site.id}
-                funnel={funnelEdit ?? null}
-                onClose={() => setFunnelEdit(undefined)}
-                onSaved={() => {
-                    setFunnelEdit(undefined);
-                    void load();
-                }}
-            />
         </div>
     );
 }

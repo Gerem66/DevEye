@@ -228,7 +228,30 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         rollupDay: unused,
         pruneEvents: unused,
         pruneSessions: unused,
-        pruneOrphanLabels: unused
+        pruneOrphanLabels: unused,
+        // Les retours ont leur propre fichier (`forms.test.ts`) et leur propre
+        // dépôt en mémoire : rien ici ne les appelle.
+        listForms: unused,
+        findForm: unused,
+        findFormByName: unused,
+        countForms: unused,
+        updateForm: unused,
+        removeForm: unused,
+        clearForm: unused,
+        resolveForm: unused,
+        insertSubmission: unused,
+        touchForm: unused,
+        bumpFormSubmissions: unused,
+        resolveFormLabel: unused,
+        findFormLabel: unused,
+        countAnswerValues: unused,
+        bumpAnswer: unused,
+        listSubmissions: unused,
+        findSubmission: unused,
+        removeSubmission: unused,
+        readAnswers: unused,
+        feedbackStats: unused,
+        dailyPoints: unused
     };
 }
 

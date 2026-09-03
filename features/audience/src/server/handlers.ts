@@ -9,6 +9,15 @@ import {
     audienceSiteUpdateFeature
 } from './crud';
 import {
+    audienceFormClearFeature,
+    audienceFormListFeature,
+    audienceFormRemoveFeature,
+    audienceFormUpdateFeature,
+    audienceResultsFeature,
+    audienceSubmissionListFeature,
+    audienceSubmissionRemoveFeature
+} from './forms';
+import {
     audienceFunnelAddFeature,
     audienceFunnelListFeature,
     audienceFunnelRemoveFeature,
@@ -18,14 +27,16 @@ import {
     audienceActivityFeature,
     audienceBreakdownFeature,
     audienceLiveFeature,
-    audienceOverviewFeature
+    audienceOverviewFeature,
+    audienceSummaryFeature
 } from './stats';
 
 /**
  * L'audience de l'espace : `crud.ts` déclare des sites, `stats.ts` lit des
- * nombres, `funnels.ts` compose des parcours. L'ingestion n'est pas ici : elle
- * entre par HTTP sans session (`routes.ts`), depuis des machines qui ne
- * connaissent pas DevEye.
+ * nombres, `funnels.ts` compose des parcours, `forms.ts` règle les canaux de
+ * retours et relit ce qu'ils ont reçu. Ni la mesure ni les retours n'entrent
+ * ici : ils passent par HTTP sans session (`routes.ts`), depuis des machines
+ * qui ne connaissent pas DevEye.
  */
 export const audienceHandlers = [
     audienceCountFeature,
@@ -43,5 +54,13 @@ export const audienceHandlers = [
     audienceFunnelListFeature,
     audienceFunnelAddFeature,
     audienceFunnelUpdateFeature,
-    audienceFunnelRemoveFeature
+    audienceFunnelRemoveFeature,
+    audienceSummaryFeature,
+    audienceFormListFeature,
+    audienceFormUpdateFeature,
+    audienceFormClearFeature,
+    audienceFormRemoveFeature,
+    audienceSubmissionListFeature,
+    audienceSubmissionRemoveFeature,
+    audienceResultsFeature
 ];

@@ -5,15 +5,19 @@ import type { SdkPublicApp, SdkPublicHandler, SdkPublicReply, SdkPublicRouteOpti
 
 import { audienceRoutes } from './routes';
 import { TRACKER_SCRIPT, TRACKER_SCRIPT_ETAG } from './script';
-import type { AudienceIngest, IngestRequest } from './service';
+import type { AudienceIngest, IngestRequest, SubmitRequest } from './service';
 
 /**
  * Les routes publiques du module, sur une surface `SdkPublicApp` factice. On
  * tient ce que l'hôte ne vérifie pas pour nous : le script servi avec son type,
  * son cache et son ETag (un ETag connu rend `304`), un lot valide qui atteint
  * l'ingestion avec l'origine, le user-agent et l'adresse, un corps invalide qui
- * rend le même `204` sans l'atteindre, le plafond de débit des deux POST, et
- * les trois réponses chargeables depuis une autre origine (CORP).
+ * rend le même `204` sans l'atteindre, le plafond de débit de chaque POST, et
+ * les réponses chargeables depuis une autre origine (CORP).
+ *
+ * Les retours ajoutent leurs propres pièges : deux formes de corps pour une
+ * seule route, un pot de miel qui accepte sans écrire, et surtout une
+ * redirection qui ne doit jamais mener ailleurs que sur le site d'où l'on vient.
  */
 
 const KEY = 'pk_000000000000000000000001';
@@ -55,11 +59,16 @@ function fakeReply() {
     return { reply, state };
 }
 
-function mount() {
+function mount(outcome: 'stored' | 'ignored' | 'failed' = 'stored') {
     const accepted: IngestRequest[] = [];
+    const submitted: SubmitRequest[] = [];
     const ingest = {
         accept: async (req: IngestRequest) => {
             accepted.push(req);
+        },
+        submit: async (req: SubmitRequest) => {
+            submitted.push(req);
+            return outcome;
         }
     } as unknown as AudienceIngest;
     const { app, routes } = fakeApp();
@@ -69,7 +78,7 @@ function mount() {
         assert.ok(route, `route ${method} ${path} manquante`);
         return route;
     };
-    return { routes, accepted, routeOf };
+    return { routes, accepted, submitted, routeOf };
 }
 
 const headers = {
@@ -78,14 +87,17 @@ const headers = {
 };
 
 describe('la déclaration', () => {
-    it('déclare le script et les deux points d’entrée, les POST avec leur plafond', () => {
+    it('déclare le script et les trois points d’entrée, les POST avec leur plafond', () => {
         const { routes } = mount();
         assert.deepEqual(
             routes.map((r) => [r.method, r.path, r.opts.rateLimit ?? null]),
             [
                 ['get', '/t.js', null],
                 ['post', '/api/t/b', { max: 600, timeWindow: '1 minute' }],
-                ['post', '/api/t/e', { max: 600, timeWindow: '1 minute' }]
+                ['post', '/api/t/e', { max: 600, timeWindow: '1 minute' }],
+                // Bien plus serré que la mesure : une requête de retour écrit une
+                // ligne et chiffre, là où une mesure range un entier dans une file.
+                ['post', '/api/t/s', { max: 30, timeWindow: '1 minute' }]
             ]
         );
     });
@@ -188,5 +200,120 @@ describe('POST /api/t/e', () => {
         );
         assert.equal(state.status, 204);
         assert.deepEqual(accepted, []);
+    });
+});
+
+describe('POST /api/t/s', () => {
+    const submit = async (
+        body: unknown,
+        extra: Record<string, string> = {},
+        outcome: 'stored' | 'ignored' | 'failed' = 'stored'
+    ) => {
+        const { routeOf, submitted } = mount(outcome);
+        const { reply, state } = fakeReply();
+        await routeOf('post', '/api/t/s').handler(
+            { headers: { ...headers, ...extra }, body, ip: '203.0.113.7' },
+            reply
+        );
+        return { submitted, state };
+    };
+
+    const jsonBody = { key: KEY, form: 'contact', fields: { email: 'a@exemple.fr' } };
+
+    it('accepte un corps JSON et le passe à l’ingestion, chargeable d’ailleurs', async () => {
+        const { submitted, state } = await submit(jsonBody);
+        assert.equal(state.status, 200);
+        assert.deepEqual(state.payload, { ok: true });
+        assert.equal(state.headers['Cross-Origin-Resource-Policy'], 'cross-origin');
+        assert.equal(submitted.length, 1);
+        assert.equal(submitted[0].form, 'contact');
+        assert.equal(submitted[0].origin, 'https://exemple.fr');
+        assert.equal(submitted[0].ip, '203.0.113.7');
+    });
+
+    it('nomme le seul refus qui ne dit rien des clés : la forme du corps', async () => {
+        // Un `400` ici est une propriété de la requête envoyée. Sans lui, une
+        // intégration fautive n'aurait aucun moyen de se voir.
+        const { submitted, state } = await submit({ key: KEY, fields: {} });
+        assert.equal(state.status, 400);
+        assert.equal(submitted.length, 0);
+    });
+
+    it('rend le même 200 sur une clé inconnue : c’est à l’ingestion de refuser', async () => {
+        const { state } = await submit({ ...jsonBody, key: 'pk_000000000000000000000009' });
+        assert.equal(state.status, 200);
+        assert.deepEqual(state.payload, { ok: true });
+    });
+
+    it('aplatit un envoi de formulaire HTML, réservés ôtés, et redirige sur place', async () => {
+        const { submitted, state } = await submit({
+            _key: KEY,
+            _form: 'sondage',
+            _next: '/merci.html',
+            email: 'a@exemple.fr',
+            canaux: ['mail', 'sms']
+        });
+        assert.equal(submitted.length, 1);
+        assert.deepEqual(submitted[0].fields, { email: 'a@exemple.fr', canaux: ['mail', 'sms'] });
+        assert.equal(state.status, 303);
+        assert.equal(state.headers.Location, 'https://exemple.fr/merci.html');
+    });
+
+    it('refuse de renvoyer ailleurs que sur l’origine de l’envoi', async () => {
+        // Sans cette garde, la route serait un redirecteur ouvert : n'importe qui
+        // pourrait faire pointer un lien « vers DevEye » sur son propre site.
+        for (const next of ['https://pirate.fr/merci', 'javascript:alert(1)', '//pirate.fr']) {
+            const { state } = await submit({ _key: KEY, _form: 'contact', _next: next, message: 'bonjour' });
+            assert.equal(state.status, 200, next);
+            assert.equal(state.headers.Location, undefined, next);
+            assert.equal(state.headers['Content-Type'], 'text/html; charset=utf-8', next);
+        }
+    });
+
+    it('sert la page de remerciement quand le site n’a pas dit où renvoyer', async () => {
+        const { submitted, state } = await submit({ _key: KEY, _form: 'contact', message: 'bonjour' });
+        assert.equal(submitted.length, 1);
+        assert.equal(state.status, 200);
+        assert.equal(state.headers['Content-Type'], 'text/html; charset=utf-8');
+        assert.match(String(state.payload), /Merci/);
+    });
+
+    it('accepte sans rien écrire quand le pot de miel est rempli', async () => {
+        const { submitted, state } = await submit({ _key: KEY, _form: 'contact', _hp: 'robot', message: 'bonjour' });
+        assert.equal(submitted.length, 0, 'rien ne descend jusqu’à l’ingestion');
+        // La réponse est celle d'un envoi réussi : un robot qui se sait vu essaie
+        // autre chose.
+        assert.equal(state.status, 200);
+        assert.match(String(state.payload), /Merci/);
+    });
+
+    it('ignore `_next` quand la requête n’a pas d’origine (curl, appel serveur)', async () => {
+        const { routeOf, submitted } = mount();
+        const { reply, state } = fakeReply();
+        await routeOf('post', '/api/t/s').handler(
+            {
+                headers: {},
+                body: { _key: KEY, _form: 'contact', _next: '/merci', message: 'bonjour' },
+                ip: '203.0.113.7'
+            },
+            reply
+        );
+        assert.equal(submitted.length, 1);
+        assert.equal(state.headers.Location, undefined);
+    });
+
+    it('avoue une panne d’écriture plutôt que d’annoncer un message reçu', async () => {
+        // Le seul autre refus qu'on nomme. Répondre « reçu » sur une écriture qui a
+        // échoué ferait dire au site « message envoyé » sur un message perdu, ce
+        // que l'écriture synchrone cherchait précisément à éviter.
+        const json = await submit(jsonBody, {}, 'failed');
+        assert.equal(json.state.status, 503);
+        assert.deepEqual(json.state.payload, { ok: false });
+
+        // Et le visiteur d'un `<form>` n'est pas envoyé sur la page de remerciement.
+        const form = await submit({ _key: KEY, _form: 'contact', _next: '/merci', message: 'a' }, {}, 'failed');
+        assert.equal(form.state.status, 503);
+        assert.equal(form.state.headers.Location, undefined);
+        assert.match(String(form.state.payload), /réessayer/);
     });
 });

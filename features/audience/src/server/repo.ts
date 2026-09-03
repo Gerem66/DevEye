@@ -2,6 +2,8 @@ import type { AudienceDimension, AudienceFunnelRow, AudienceFunnelStepRow, Audie
 import { AUDIENCE_FUNNEL_MAX_STEPS } from '../contracts/domain';
 import type { SdkQueryable } from '@deveye/types/sdk/server';
 
+import { createFormsRepo, type AudienceFormsRepo } from './repoForms';
+
 /** Un site, plus ce que ses tables voisines en disent. */
 export interface AudienceSiteWithStatsRow extends AudienceSiteRow {
     views_24h: number;
@@ -113,10 +115,14 @@ const DIMENSION_SOURCE: Record<AudienceDimension, { table: 'session' | 'event'; 
  * HTTP anonyme : rien n'y déchiffre, le service qui l'appelle tient les caches
  * et ces méthodes ne manipulent que des entiers et des condensés.
  *
+ * Les retours (formulaires, soumissions, compteurs de répartition) vivent dans
+ * `repoForms.ts` : la même interface, découpée parce que ce fichier porte déjà
+ * cinq sections.
+ *
  * Tout est à l'étage ouvert. Les liaisons vers les projets appartiennent à
  * Projets : le module ne lit aucune de ses tables, il passe par son contrat.
  */
-export interface AudienceRepo {
+export interface AudienceRepo extends AudienceFormsRepo {
     // -- sites --------------------------------------------------------------
     list(workspaceId: number): Promise<AudienceSiteWithStatsRow[]>;
     /** Comme `list`, plus les sites projetés vers cet espace. */
@@ -281,6 +287,8 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
     }
 
     return {
+        ...createFormsRepo(q),
+
         // -- sites ----------------------------------------------------------
         async list(workspaceId) {
             const rows = await q.query<AudienceSiteWithStatsRow>(

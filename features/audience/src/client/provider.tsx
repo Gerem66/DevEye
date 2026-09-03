@@ -3,6 +3,7 @@ import { Button, FeatureSettingsButton, openFeature, useResource } from 'deveye-
 import type { AudienceClientProvider } from '@deveye/types/sdk/client';
 
 import { api } from './api';
+import Funnels from './Funnels';
 import InstallDialog from './InstallDialog';
 import SiteDialog from './SiteDialog';
 import SiteView from './SiteView';
@@ -25,7 +26,15 @@ interface LinkedSiteProps {
     onUnlink: () => void;
 }
 
-/** Un site du projet : sa barre collante, et le contenu partagé avec la feature. */
+/**
+ * Un site du projet : sa barre collante, et les blocs partagés avec la feature.
+ *
+ * Fréquentation et entonnoirs sont empilés ici, là où la fiche du site les
+ * range en sections d'un sommaire : un projet peut relier plusieurs sites, et
+ * un sommaire par site ferait un écran de sommaires. Les retours n'y sont pas :
+ * un tableau triable et son export n'ont pas leur place dans un onglet qui
+ * empile des sites, et « Ouvrir l'Audience » y mène en un clic.
+ */
 function LinkedSite({ siteId, canWrite, onUnlink }: LinkedSiteProps) {
     const { data, error } = useResource(
         'audience.detail',
@@ -45,7 +54,6 @@ function LinkedSite({ siteId, canWrite, onUnlink }: LinkedSiteProps) {
                 empilé sous le premier. */}
             <SiteView
                 site={site}
-                canWrite={canWrite}
                 heading={<h3 className={styles.blockTitle}>{site.name}</h3>}
                 actions={
                     <div className={styles.detailActions}>
@@ -86,6 +94,8 @@ function LinkedSite({ siteId, canWrite, onUnlink }: LinkedSiteProps) {
                     </div>
                 }
             />
+
+            <Funnels site={site} canWrite={canWrite} />
 
             {/* Le vrai dialogue de la feature, pas une copie : installer un site depuis
                 un projet ou depuis sa fiche doit être le même geste. Pas d'`onRotated`,

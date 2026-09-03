@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
     AUDIENCE_BREAKDOWN_MAX,
+    AUDIENCE_FORM_NAME_MAX_LENGTH,
     AUDIENCE_FUNNEL_MAX_STEPS,
     AUDIENCE_FUNNEL_NAME_MAX_LENGTH,
     AUDIENCE_MAX_ORIGINS,
@@ -9,15 +10,20 @@ import {
     AUDIENCE_RETENTION_MIN_DAYS,
     AUDIENCE_SITE_DESCRIPTION_MAX_LENGTH,
     AUDIENCE_SITE_NAME_MAX_LENGTH,
+    AUDIENCE_SUBMISSION_PAGE,
     audienceActivitySchema,
     audienceBreakdownItemSchema,
     audienceDimensionSchema,
+    audienceFormSchema,
     audienceFunnelSchema,
     audienceFunnelStepDraftSchema,
     audienceLiveSchema,
     audienceOverviewSchema,
     audiencePlatformSchema,
     audienceRangeSchema,
+    audienceResultsSchema,
+    audienceSubmissionSchema,
+    audienceSummarySchema,
     audienceVisitorModeSchema,
     audienceSiteSchema,
     audienceUsageSchema
@@ -29,8 +35,9 @@ import {
  * (`MUTATION_VERB`) cherche un verbe juste après le point et ne reconnaît aucune
  * de ces commandes, donc un `mutates` oublié ne produit aucun avertissement.
  *
- * L'ingestion n'est pas une commande : elle entre par HTTP sans session, et ces
- * commandes ne font que lire ce qu'elle a écrit et déclarer les sites.
+ * Rien de ce qu'un site envoie n'entre par une commande, ni la mesure ni les
+ * retours : tout passe par HTTP sans session (`routes.ts`), et ces commandes ne
+ * font que lire ce qui a été écrit, déclarer les sites et régler les canaux.
  *
  * L'espace visé n'apparaît dans aucune entrée : il voyage sur l'enveloppe WS et
  * le dispatcheur le résout, appartenance vérifiée, avant le handler.
@@ -224,6 +231,111 @@ export const audienceFunnelRemove = {
     output: z.object({ ok: z.literal(true) })
 };
 
+// ------------------------------------------------------------- sommaire
+
+/**
+ * Les trois cartes de la fiche d'un site, en un aller-retour. Le sommaire ne
+ * montre jamais l'une sans les autres, et trois commandes auraient fait trois
+ * attentes pour un seul écran.
+ */
+export const audienceSummary = {
+    command: 'audience.summary' as const,
+    input: z.object({ siteId }),
+    output: audienceSummarySchema
+};
+
+// -------------------------------------------------------------- retours
+
+const formId = z.number().int().positive();
+
+/** Les formulaires d'un site, avec ce qu'ils ont reçu. */
+export const audienceFormList = {
+    command: 'audience.formList' as const,
+    input: z.object({ siteId }),
+    output: z.object({ forms: z.array(audienceFormSchema) })
+};
+
+/**
+ * Renomme un formulaire ou ferme sa porte. Rien ne le crée ici : un formulaire
+ * naît de sa première réception, et un formulaire vide déclaré à la main
+ * n'apprendrait rien de plus qu'un exemple de code.
+ *
+ * Comme les autres écritures du module, celle-ci et ses voisines battent le
+ * sujet `audience` (`mutates: true`), qui ravive les cinq clés de cache. Les
+ * écrans ravivent en plus `audience.forms` sur place, sans attendre l'aller-retour.
+ */
+export const audienceFormUpdate = {
+    command: 'audience.formUpdate' as const,
+    input: z.object({
+        formId,
+        name: z.string().min(1).max(AUDIENCE_FORM_NAME_MAX_LENGTH),
+        open: z.boolean()
+    }),
+    output: z.object({ form: audienceFormSchema })
+};
+
+/**
+ * Vide un formulaire de ses retours, en gardant le canal ouvert. Les compteurs
+ * de répartition tombent avec eux : ils ne décrivent que ce qui est là.
+ */
+export const audienceFormClear = {
+    command: 'audience.formClear' as const,
+    input: z.object({ formId }),
+    output: z.object({ removed: z.number().int().nonnegative() })
+};
+
+/**
+ * Supprime le formulaire et tout ce qu'il a reçu. Le même nom réapparaîtra au
+ * prochain envoi du site : fermer est ce qui empêche d'entrer, supprimer ne
+ * fait qu'effacer.
+ */
+export const audienceFormRemove = {
+    command: 'audience.formRemove' as const,
+    input: z.object({ formId }),
+    output: z.object({ ok: z.literal(true) })
+};
+
+/**
+ * Une page de retours, du plus récent au plus ancien ou l'inverse. Le curseur
+ * porte `(ts, id)` : un `OFFSET` sauterait ou répéterait une ligne dès qu'un
+ * retour arrive pendant la lecture.
+ *
+ * Ni recherche ni tri par colonne ici : la charge utile est chiffrée, SQL n'a
+ * rien à quoi les appliquer. Le tableau les fait sur ce qu'il a chargé, et le
+ * dit.
+ */
+export const audienceSubmissionList = {
+    command: 'audience.submissionList' as const,
+    input: z.object({
+        formId,
+        order: z.enum(['recent', 'oldest']).default('recent'),
+        cursor: z.string().max(64).nullable().optional(),
+        limit: z.number().int().min(1).max(AUDIENCE_SUBMISSION_PAGE).optional()
+    }),
+    output: z.object({
+        submissions: z.array(audienceSubmissionSchema),
+        /** `null` = il n'y a plus rien après. */
+        nextCursor: z.string().nullable()
+    })
+};
+
+export const audienceSubmissionRemove = {
+    command: 'audience.submissionRemove' as const,
+    input: z.object({ submissionId: z.number().int().positive() }),
+    output: z.object({ ok: z.literal(true) })
+};
+
+/**
+ * La répartition des réponses, champ par champ. Lue dans les compteurs tenus à
+ * la réception, donc sans déchiffrer un seul retour : seuls les quelques
+ * dizaines de libellés affichés sont ouverts.
+ */
+export const audienceResults = {
+    command: 'audience.results' as const,
+    input: z.object({ formId }),
+    output: audienceResultsSchema
+};
+
 export const audienceCommands = [
     audienceCount,
     audienceList,
@@ -240,5 +352,13 @@ export const audienceCommands = [
     audienceFunnelList,
     audienceFunnelAdd,
     audienceFunnelUpdate,
-    audienceFunnelRemove
+    audienceFunnelRemove,
+    audienceSummary,
+    audienceFormList,
+    audienceFormUpdate,
+    audienceFormClear,
+    audienceFormRemove,
+    audienceSubmissionList,
+    audienceSubmissionRemove,
+    audienceResults
 ] as const;

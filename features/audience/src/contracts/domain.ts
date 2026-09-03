@@ -300,6 +300,188 @@ export const audienceFunnelSchema = z.object({
 });
 export type AudienceFunnel = z.infer<typeof audienceFunnelSchema>;
 
+// --------------------------------------------------------------- retours
+
+/**
+ * Les retours : la seconde façon dont un site entre ici. La mesure regarde ce
+ * que les visiteurs font ; un retour est ce qu'ils écrivent, et c'est le site
+ * qui décide de sa forme. D'où une charge utile libre, un objet plat de champs
+ * nommés, plutôt qu'un schéma que DevEye imposerait à des formulaires qu'il ne
+ * connaît pas.
+ *
+ * Un **formulaire** est le canal nommé qui les reçoit (`contact`,
+ * `sondage-2026`). Il naît de sa première réception : exiger de le déclarer
+ * d'abord obligerait à revenir ici avant de pouvoir tester une intégration, et
+ * une faute de frappe y produirait un silence total au lieu d'une ligne visible.
+ *
+ * Le chiffrement pose le même problème qu'aux statistiques, et reçoit la même
+ * réponse : la charge utile est chiffrée **en bloc** (personne n'agrège dessus),
+ * et ce sur quoi on compte est **haché** dans `ft_audience_form_labels`, les
+ * compteurs de `ft_audience_answers` ne portant que des identifiants entiers.
+ * Une répartition se lit donc sans ouvrir une seule clé.
+ */
+
+export const AUDIENCE_FORM_NAME_MAX_LENGTH = 64;
+
+/**
+ * Formulaires par site. C'est le plafond de l'auto-création : au-delà, un nom
+ * inconnu est ignoré, sans quoi une clé publique connue suffirait à remplir la
+ * table de canaux tirés au sort.
+ */
+export const AUDIENCE_MAX_FORMS = 20;
+
+export const AUDIENCE_SUBMISSION_FIELDS_MAX = 40;
+export const AUDIENCE_FIELD_NAME_MAX_LENGTH = 64;
+
+/** Ce qu'on conserve d'une réponse. Généreux : un message en est une. */
+export const AUDIENCE_FIELD_VALUE_MAX_LENGTH = 4096;
+
+/** Éléments d'une réponse à choix multiples. */
+export const AUDIENCE_FIELD_VALUES_MAX = 20;
+
+/**
+ * Au-delà, une réponse n'est plus un choix mais un texte : elle rejoint le seau
+ * « texte libre » du champ, qui n'en garde que le nombre. Compter les
+ * occurrences d'un message de contact ne dirait rien et ferait une ligne de
+ * dimension par visiteur.
+ */
+export const AUDIENCE_ANSWER_VALUE_MAX_LENGTH = 60;
+
+/**
+ * Valeurs distinctes indexées par champ. Le dépassement est le signe qu'on
+ * n'avait pas affaire à une question fermée : le champ bascule alors
+ * définitivement au seau, ce qui borne la cardinalité sans rien demander à
+ * personne.
+ */
+export const AUDIENCE_ANSWER_VALUES_MAX = 50;
+
+/**
+ * Retours conservés par formulaire. Un plafond, jamais une rétention : une
+ * visite est jetable, un message ne l'est pas, et l'effacer en silence au bout
+ * de N jours perdrait ce que l'utilisateur avait demandé à collecter. Atteint,
+ * le formulaire cesse d'accepter et l'écran le dit.
+ */
+export const AUDIENCE_FORM_SUBMISSIONS_MAX = 50_000;
+
+/** Lignes rendues par page de tableau. */
+export const AUDIENCE_SUBMISSION_PAGE = 100;
+
+/**
+ * Ce qu'une réponse peut valoir. Fermé volontairement : un objet imbriqué se
+ * range sans problème mais ne se met pas dans une colonne de tableau, et
+ * l'accepter promettrait un affichage qu'on ne saurait pas tenir.
+ */
+export const audienceFieldValueSchema = z.union([
+    z.string().max(AUDIENCE_FIELD_VALUE_MAX_LENGTH),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(z.string().max(AUDIENCE_FIELD_VALUE_MAX_LENGTH)).max(AUDIENCE_FIELD_VALUES_MAX)
+]);
+export type AudienceFieldValue = z.infer<typeof audienceFieldValueSchema>;
+
+export const audienceFieldsSchema = z
+    .record(z.string().min(1).max(AUDIENCE_FIELD_NAME_MAX_LENGTH), audienceFieldValueSchema)
+    .refine((fields) => Object.keys(fields).length <= AUDIENCE_SUBMISSION_FIELDS_MAX, {
+        message: `Un retour ne peut pas porter plus de ${AUDIENCE_SUBMISSION_FIELDS_MAX} champs.`
+    });
+
+/** Un retour tel qu'un site l'envoie, quelle que soit la forme de la requête. */
+export const audienceSubmitSchema = z.object({
+    key: z.string().length(AUDIENCE_PUBLIC_KEY_LENGTH),
+    form: z.string().min(1).max(AUDIENCE_FORM_NAME_MAX_LENGTH),
+    fields: audienceFieldsSchema,
+    /** La page d'où part le retour, pour le retrouver dans son contexte. */
+    path: z.string().max(AUDIENCE_LABEL_MAX_LENGTH).optional(),
+    /** Comme pour la mesure : relie le retour à la visite, en mode persistant. */
+    visitorId: z.string().max(AUDIENCE_VISITOR_ID_MAX_LENGTH).optional()
+});
+export type AudienceSubmitBody = z.infer<typeof audienceSubmitSchema>;
+
+export const audienceFormSchema = z.object({
+    id: z.number().int().positive(),
+    name: z.string().max(AUDIENCE_FORM_NAME_MAX_LENGTH),
+    /** Fermé, plus rien n'entre ; ce qui est déjà là ne bouge pas. */
+    open: z.boolean(),
+    submissions: z.number().int().nonnegative(),
+    lastAt: z.number().int().nullable(),
+    created: z.number().int()
+});
+export type AudienceForm = z.infer<typeof audienceFormSchema>;
+
+/**
+ * La visite d'où vient un retour, quand on a su la retrouver. `null` pour un
+ * envoi serveur, un visiteur inactif depuis longtemps, ou une session déjà
+ * expirée : c'est un bonus de contexte, jamais une donnée du retour lui-même.
+ */
+export const audienceSubmissionContextSchema = z.object({
+    entryPath: z.string(),
+    referrer: z.string(),
+    browser: z.string(),
+    device: z.string()
+});
+export type AudienceSubmissionContext = z.infer<typeof audienceSubmissionContextSchema>;
+
+export const audienceSubmissionSchema = z.object({
+    id: z.number().int().positive(),
+    at: z.number().int(),
+    fields: audienceFieldsSchema,
+    /** La page d'envoi, vide si le client ne l'a pas donnée. */
+    path: z.string(),
+    context: audienceSubmissionContextSchema.nullable()
+});
+export type AudienceSubmission = z.infer<typeof audienceSubmissionSchema>;
+
+/**
+ * La répartition d'un champ. `free` est le seau « texte libre » : des réponses
+ * bien reçues, comptées, mais dont la valeur n'a pas été indexée. L'écran le
+ * dit plutôt que de faire croire qu'elles n'existent pas.
+ */
+export const audienceResultFieldSchema = z.object({
+    name: z.string(),
+    answered: z.number().int().nonnegative(),
+    free: z.number().int().nonnegative(),
+    values: z.array(z.object({ label: z.string(), count: z.number().int().nonnegative() }))
+});
+export type AudienceResultField = z.infer<typeof audienceResultFieldSchema>;
+
+export const audienceResultsSchema = z.object({
+    total: z.number().int().nonnegative(),
+    fields: z.array(audienceResultFieldSchema)
+});
+export type AudienceResults = z.infer<typeof audienceResultsSchema>;
+
+// ------------------------------------------------------------- le sommaire
+
+/**
+ * Ce que la fiche d'un site montre avant qu'on choisisse quoi regarder : trois
+ * cartes, trois lectures indépendantes. Une seule commande pour les trois, le
+ * sommaire n'ayant jamais de raison d'en afficher deux sur trois.
+ */
+export const audienceSummarySchema = z.object({
+    traffic: z.object({
+        views24h: z.number().int().nonnegative(),
+        visitors24h: z.number().int().nonnegative(),
+        /** Sept points venus de l'agrégat journalier, qui survit à la rétention. */
+        days: z.array(z.object({ day: z.number().int(), views: z.number().int().nonnegative() }))
+    }),
+    funnels: z.object({
+        count: z.number().int().nonnegative(),
+        /**
+         * Le premier entonnoir seulement. Les mesurer tous coûterait une requête
+         * de rétention par entonnoir pour une carte qu'on ne fait que survoler.
+         */
+        first: z.object({ name: z.string(), rate: z.number().min(0).max(1) }).nullable()
+    }),
+    feedback: z.object({
+        forms: z.number().int().nonnegative(),
+        submissions: z.number().int().nonnegative(),
+        last7d: z.number().int().nonnegative(),
+        lastAt: z.number().int().nullable()
+    })
+});
+export type AudienceSummary = z.infer<typeof audienceSummarySchema>;
+
 // --------------------------------------------------------- l'ingestion
 
 /**
@@ -467,4 +649,63 @@ export interface AudienceFunnelStepRow {
     label_ref: string;
     /** La valeur lisible, chiffrée : la marche se décrit toute seule. */
     content: string;
+}
+
+/**
+ * Un formulaire : le canal nommé qui reçoit les retours d'un site. `submissions`
+ * et `last_at` sont dénormalisés parce que le sommaire et la liste les lisent
+ * sans jamais ouvrir la table des retours, qui est la grosse.
+ */
+export interface AudienceFormRow {
+    id: number;
+    site_id: number;
+    /** Condensé du nom en minuscules : porte l'unicité dans le site. */
+    name_ref: string;
+    /** Fermé, plus rien n'entre. */
+    is_open: number;
+    submissions: number;
+    last_at: number | null;
+    sort_order: number;
+    /** { name } chiffré, étage ouvert. */
+    content: string;
+    created: number;
+}
+
+export interface AudienceSubmissionRow {
+    id: number;
+    form_id: number;
+    /** Dénormalisé : compter les retours d'un site ne demande pas de jointure. */
+    site_id: number;
+    ts: number;
+    /** La visite d'où il vient, `NULL` dès que la rétention l'a purgée. */
+    session_id: number | null;
+    /** { fields, path } chiffré, en bloc : rien ne s'agrège dessus. */
+    content: string;
+}
+
+/**
+ * Un nom de champ ou une valeur de réponse, chiffré et dédoublonné par son
+ * condensé. Même rôle qu'`audience_labels` pour la mesure, mais rattaché au
+ * formulaire : deux formulaires d'un même site posent rarement les mêmes
+ * questions, et les mélanger ferait des compteurs partagés à tort.
+ */
+export interface AudienceFormLabelRow {
+    id: number;
+    form_id: number;
+    /** 'field' | 'value'. */
+    kind: string;
+    label_ref: string;
+    content: string;
+}
+
+/**
+ * Combien de fois cette réponse a été donnée à cette question. Incrémenté à la
+ * réception : une répartition se lit alors sans déchiffrer quoi que ce soit.
+ * `value_id = 0` est le seau « texte libre », qui ne pointe aucun libellé.
+ */
+export interface AudienceAnswerRow {
+    form_id: number;
+    field_id: number;
+    value_id: number;
+    hits: number;
 }

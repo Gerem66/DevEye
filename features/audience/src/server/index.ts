@@ -1,3 +1,6 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { AUDIENCE_ITEMS_PROVIDER, type AudienceItemsProvider } from '@deveye/types/sdk';
 import type { FeatureServer, SdkCipher } from '@deveye/types/sdk/server';
 
@@ -38,13 +41,14 @@ async function labelOf(
  * appelant. `shareTier: 'open'` l'exige, et le boot refuse un module qui
  * déclare sans l'offrir.
  *
- * Pas de `migrationsDir` : les tables du module datent du socle (allowlist dans
- * `deveye-feature.json`) ; une nouvelle table inaugurera `src/server/migrations/`
- * avec le préfixe `ft_audience_`.
+ * Les sept tables de la mesure datent du socle (allowlist dans
+ * `deveye-feature.json`) ; celles des retours appartiennent au module et
+ * portent le préfixe `ft_audience_`, dans `src/server/migrations/`.
  */
 export const serverEntry: FeatureServer<AudienceRepo> = {
     createRepo,
     features: audienceHandlers,
+    migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
     createService(deps) {
         const ingest = new AudienceIngest(deps);
         // Projets ne stocke que des identifiants : avant d'en relier un, il demande si
@@ -68,7 +72,7 @@ export const serverEntry: FeatureServer<AudienceRepo> = {
                 setIngest(null);
             },
             providers: { [AUDIENCE_ITEMS_PROVIDER]: items },
-            // Les mêmes trois routes à chaque appel ; c'est l'écouteur qui change.
+            // Les mêmes quatre routes à chaque appel ; c'est l'écouteur qui change.
             publicRoutes: (app) => audienceRoutes(app, ingest)
         };
     },

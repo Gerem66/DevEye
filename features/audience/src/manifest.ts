@@ -22,12 +22,13 @@ export const manifest = {
     ...descriptor,
     category: 'analysis',
     /**
-     * Quatre clés de cache, telles que les écrans les invalident : le compte de
+     * Cinq clés de cache, telles que les écrans les invalident : le compte de
      * la carte d'accueil, la liste, la fiche d'un site (que l'onglet d'un projet
-     * suit aussi) et les statistiques, ravivées à part par le battement de
-     * l'ingestion. Le sujet `audience` les ravive toutes.
+     * suit aussi), les statistiques, ravivées à part par le battement de
+     * l'ingestion, et les retours, que le tableau et les résultats suivent. Le
+     * sujet `audience` les ravive toutes.
      */
-    resources: ['audience.count', 'audience.list', 'audience.detail', 'audience.stats'],
+    resources: ['audience.count', 'audience.list', 'audience.detail', 'audience.stats', 'audience.forms'],
     /**
      * L'ingestion est appelée par des navigateurs qui ne savent rien de DevEye,
      * depuis des sites qui ne lui appartiennent pas : le module déclare ces

@@ -1380,3 +1380,254 @@
     color: var(--warning);
     font-size: 0.82rem;
 }
+
+/* --------------------------------------------------------- le sommaire */
+
+.hub {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--space-md);
+}
+
+/*
+ * Une carte du sommaire. Un `<button>` et non un bloc cliquable : c'est ce qui
+ * la rend atteignable au clavier sans réécrire un rôle et des touches, d'où la
+ * remise à plat de l'apparence de bouton.
+ */
+.sectionCard {
+    composes: panel;
+    align-items: stretch;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+    transition:
+        border-color var(--transition-fast),
+        transform var(--transition-fast);
+}
+
+.sectionCard:hover {
+    border-color: var(--accent);
+    transform: translateY(-1px);
+}
+
+.sectionHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+
+.sectionTitle {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.sectionChevron {
+    color: var(--text-muted);
+}
+
+.sectionFigures {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+}
+
+.sectionFigure {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.sectionValue {
+    font-size: 1.35rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+}
+
+.sectionLabel {
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sectionEmpty {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+.sectionFoot {
+    font-size: 0.74rem;
+    color: var(--text-muted);
+}
+
+/* Sept jours de vues, sans axe ni échelle : la carte ne promet qu'une
+   silhouette, et des graduations à cette taille seraient illisibles. */
+.spark {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 28px;
+}
+
+.sparkBar {
+    flex: 1;
+    min-height: 2px;
+    border-radius: 2px;
+    background: var(--accent);
+    opacity: 0.55;
+}
+
+/* ----------------------------------------------------------- les retours */
+
+.formMeta {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.tableBar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.tableCount {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+/* Un formulaire large déborde : c'est ce conteneur qui défile, jamais la page,
+   sans quoi tout l'écran glisserait sous le pointeur. */
+.tableScroll {
+    overflow-x: auto;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+
+.table th,
+.table td {
+    padding: var(--space-sm);
+    text-align: left;
+    border-bottom: 1px solid var(--glass-border);
+    max-width: 22rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.table tbody tr:last-child th,
+.table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.table tbody tr:hover {
+    background: var(--surface-subtle);
+}
+
+.tableSort {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.tableSort:hover {
+    color: var(--accent);
+}
+
+.tableArrow {
+    color: var(--accent);
+}
+
+.tableRawHead {
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.tableWhen {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.tableFoot {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.tableNote {
+    flex: 1;
+    min-width: 14rem;
+    font-size: 0.74rem;
+    color: var(--text-muted);
+}
+
+.resultCount {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+/* Le retour tel qu'il est arrivé. Il défile dans sa boîte : un message long ne
+   doit pas pousser les boutons du dialogue hors de l'écran. */
+.raw {
+    margin: 0;
+    max-height: 22rem;
+    overflow: auto;
+    padding: var(--space-sm);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.rawMeta {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.contextTags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    margin: 0;
+}
+
+.contextTag {
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    color: var(--text-muted);
+    font-size: 0.74rem;
+}
+
+.fieldHint {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.dialogActions {
+    display: flex;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}

@@ -10,10 +10,11 @@ import {
 import type { AudienceRepo } from './repo';
 
 /**
- * Le changement d'espace d'un site : sa fiche, ses entonnoirs et ses libellés.
- * L'audience elle-même (événements, sessions, agrégats quotidiens) suit sans
- * rien à resceller, aucune de ses colonnes n'étant chiffrée, et sans changement
- * d'espace, ces tables ne pendant qu'au site.
+ * Le changement d'espace d'un site : sa fiche, ses entonnoirs, ses libellés et
+ * tout ce que ses formulaires ont reçu. L'audience elle-même (événements,
+ * sessions, agrégats quotidiens) suit sans rien à resceller, aucune de ses
+ * colonnes n'étant chiffrée, et sans changement d'espace, ces tables ne pendant
+ * qu'au site.
  *
  * La clé publique du site ne bouge pas : elle est unique pour tout DevEye, donc
  * les balises déjà posées sur les pages continuent d'écrire au bon endroit.
@@ -27,7 +28,18 @@ const CELLS: readonly MovableCell[] = [
     { table: 'audience_sites', idColumn: 'id', ownerColumn: 'id', column: 'content' },
     { table: 'audience_funnels', idColumn: 'id', ownerColumn: 'site_id', column: 'content' },
     { table: 'audience_funnel_steps', idColumn: 'id', ownerColumn: 'site_id', column: 'content' },
-    { table: 'audience_labels', idColumn: 'id', ownerColumn: 'site_id', column: 'content' }
+    { table: 'audience_labels', idColumn: 'id', ownerColumn: 'site_id', column: 'content' },
+    { table: 'ft_audience_forms', idColumn: 'id', ownerColumn: 'site_id', column: 'content' },
+    { table: 'ft_audience_submissions', idColumn: 'id', ownerColumn: 'site_id', column: 'content' },
+    // Les libellés d'un formulaire pendent au formulaire et non au site : c'est le
+    // seul niveau où le propriétaire n'est pas la colonne `site_id`.
+    {
+        table: 'ft_audience_form_labels',
+        idColumn: 'id',
+        ownerColumn: 'form_id',
+        column: 'content',
+        ownerScope: 'SELECT id FROM ft_audience_forms WHERE site_id = ?'
+    }
 ];
 
 /** Le nom est unique par espace (`uniq_audience_site_name`), par condensé. */

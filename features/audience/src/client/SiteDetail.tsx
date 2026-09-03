@@ -5,11 +5,15 @@ import {
     invalidate,
     openFeature,
     StatusBadge,
+    useLiveSegment,
     useStickyOffset
 } from 'deveye-sdk-client';
 import type { AudienceSite, AudienceUsage } from '../contracts/domain';
 
+import Forms from './Forms/Forms';
+import Funnels from './Funnels';
 import InstallDialog from './InstallDialog';
+import SiteHub, { type SiteSection } from './SiteHub';
 import SiteView from './SiteView';
 import styles from './style.module.css';
 
@@ -23,17 +27,35 @@ interface SiteDetailProps {
     onSiteChanged: (site: AudienceSite) => void;
 }
 
+/** `null` = le sommaire. */
+type Section = SiteSection | null;
+
+const SECTION_LABELS: Record<SiteSection, string> = {
+    traffic: 'Fréquentation',
+    funnels: 'Entonnoirs',
+    forms: 'Retours'
+};
+
 /**
- * La fiche d'un site : son en-tête, ses statistiques, et les projets qui le
- * suivent. Le corps est `SiteView`, exactement celui de l'onglet d'un projet ;
- * ce composant n'ajoute que ce qui n'a de sens que dans la feature (retour à la
- * liste, réglages, installation, interconnexion vers les projets).
+ * La fiche d'un site : son en-tête, un sommaire à trois cartes, et la section
+ * qu'on en ouvre. Le corps de chaque section est le même que celui de l'onglet
+ * d'un projet ; ce composant n'ajoute que ce qui n'a de sens que dans la
+ * feature (retour à la liste, réglages, installation, interconnexion).
+ *
+ * Trois cartes plutôt qu'une page : la fréquentation, les parcours et les
+ * retours ne répondent pas à la même question, et les empiler rendait la fiche
+ * trop longue pour qu'on y trouve quoi que ce soit.
  */
 export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onSiteChanged }: SiteDetailProps) {
     const [installOpen, setInstallOpen] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+    const [section, setSection] = useState<Section>(null);
 
-    // La barre de période de `SiteView` colle juste sous cet en-tête. Sa hauteur est
+    // Présence : « qui regarde quoi dans ce site ». `Audience` possède `l1` (le
+    // site), cette fiche possède `l2` (la section) : un seul déclarant par niveau.
+    useLiveSegment('l2', section);
+
+    // La barre de période des sections colle juste sous cet en-tête. Sa hauteur est
     // mesurée et non écrite en dur : elle change dès que le nom du site passe à la ligne
     // ou que les boutons se replient.
     const sticky = useStickyOffset<HTMLElement>();
@@ -47,7 +69,7 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onSite
      * quasi instantanée, et la chronométrer inventerait un délai.
      */
     const refresh = () => {
-        invalidate('audience.detail', 'audience.stats');
+        invalidate('audience.detail', 'audience.stats', 'audience.forms');
         setRefreshing(true);
         window.setTimeout(() => setRefreshing(false), 600);
     };
@@ -56,14 +78,15 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onSite
         <div className={styles.detail} style={sticky.style}>
             <header ref={sticky.ref} className={styles.detailHead}>
                 {/* Le bouton de retour des autres fiches, à l'identique : `Button`
-                    fantôme, flèche à gauche, le nom pluriel de la liste. */}
-                <Button variant='ghost' icon='arrow-left' onClick={onBack}>
-                    Sites
+                    fantôme, flèche à gauche. Depuis une section il ramène au sommaire,
+                    qui est le niveau juste au-dessus. */}
+                <Button variant='ghost' icon='arrow-left' onClick={section === null ? onBack : () => setSection(null)}>
+                    {section === null ? 'Sites' : site.name}
                 </Button>
 
                 <div className={styles.detailTitle}>
                     <h2 className={styles.detailName}>
-                        {site.name}
+                        {section === null ? site.name : SECTION_LABELS[section]}
                         {/* Sans cette pastille, rien ne distingue un site local d'une
                             fenêtre sur l'espace voisin. */}
                         {site.foreign && (
@@ -73,28 +96,16 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onSite
                             </span>
                         )}
                     </h2>
-                    {site.description && <p className={styles.detailDesc}>{site.description}</p>}
+                    {section === null && site.description && <p className={styles.detailDesc}>{site.description}</p>}
                 </div>
 
                 <div className={styles.detailActions}>
-                    {/* Rien à rafraîchir tant que rien n'est entré : sinon le bouton
-                        proposerait de relire un écran vide. */}
-                    {site.lastEventAt !== null && (
-                        <Button
-                            variant='secondary'
-                            onClick={refresh}
-                            aria-label='Rafraîchir les statistiques'
-                            title='Rafraîchir les statistiques'
-                        >
-                            <span
-                                className={`icon icon-refresh ${refreshing ? styles.spinning : ''}`}
-                                aria-hidden='true'
-                            />
-                        </Button>
-                    )}
+                    <Button variant='secondary' onClick={refresh} aria-label='Rafraîchir' title='Rafraîchir'>
+                        <span className={`icon icon-refresh ${refreshing ? styles.spinning : ''}`} aria-hidden='true' />
+                    </Button>
 
-                    {/* L'installation est mise en avant tant qu'aucune mesure n'est
-                        arrivée : c'est la seule chose à faire à ce moment-là. */}
+                    {/* L'installation est mise en avant tant que rien n'est arrivé,
+                        mesure ou retour : c'est la seule chose à faire à ce moment-là. */}
                     <Button
                         variant={site.lastEventAt === null ? 'primary' : 'secondary'}
                         icon='terminal'
@@ -116,13 +127,16 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onSite
 
             {!site.active && (
                 <p className={styles.notice}>
-                    La mesure est éteinte : plus rien n’entre. L’historique ci-dessous ne bouge plus.
+                    La mesure est éteinte : plus rien n’entre, retours compris. L’historique ne bouge plus.
                 </p>
             )}
 
-            <SiteView site={site} canWrite={canWrite} />
+            {section === null && <SiteHub site={site} onOpen={setSection} />}
+            {section === 'traffic' && <SiteView site={site} />}
+            {section === 'funnels' && <Funnels site={site} canWrite={canWrite} />}
+            {section === 'forms' && <Forms site={site} ingestOrigin={ingestOrigin} canWrite={canWrite} />}
 
-            {usage.length > 0 && (
+            {section === null && usage.length > 0 && (
                 <section className={styles.panel}>
                     <h3 className={styles.panelTitle}>Projets qui suivent ce site</h3>
                     <ul className={styles.usageList}>

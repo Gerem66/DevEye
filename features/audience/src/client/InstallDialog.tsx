@@ -1,11 +1,11 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Button, Dialog, humanizeError, invalidate } from 'deveye-sdk-client';
-import type { AudienceSite } from '../contracts/domain';
+import { Button, Dialog, humanizeError, invalidate, useResourceVersion } from 'deveye-sdk-client';
+import type { AudienceForm, AudienceSite } from '../contracts/domain';
 
 import { api } from './api';
 import { formatAgo, snippetFor } from './format';
-import { agentBrief, usageExamples } from './usage';
+import { agentBrief, submitExamples, usageExamples } from './usage';
 import styles from './style.module.css';
 
 /**
@@ -72,10 +72,14 @@ interface InstallDialogProps {
 }
 
 /**
- * Comment brancher un site, et tout ce qu'on peut en faire ensuite. Trois
- * dépliants, du plus courant au plus spécialisé ; les deux derniers sont
- * repliés pour ne pas noyer l'étape qui compte, coller la balise et voir la
- * première mesure arriver.
+ * Comment brancher un site, et tout ce qu'on peut en faire ensuite. Quatre
+ * dépliants, du plus courant au plus spécialisé ; tous repliés pour ne pas
+ * noyer l'étape qui compte, coller la balise et voir la première mesure
+ * arriver.
+ *
+ * Les retours ont leur dépliant plutôt qu'une fenêtre à part : c'est la même
+ * clé, la même porte publique et les mêmes origines autorisées, et un site
+ * statique peut n'utiliser qu'eux sans jamais poser la balise.
  *
  * Tous les blocs sont bâtis depuis la vraie clé et la vraie adresse
  * d'ingestion : un exemple qu'il faut adapter est un exemple qu'on adapte mal.
@@ -87,6 +91,9 @@ export function InstallDialog({ open, site, ingestOrigin, canWrite, onClose, onR
     const [error, setError] = useState<string | null>(null);
     const [confirmRotate, setConfirmRotate] = useState(false);
     const [lang, setLang] = useState('js');
+    const [submitLang, setSubmitLang] = useState('html');
+    /** Les formulaires du site, chargés seulement quand on ouvre leur dépliant. */
+    const [forms, setForms] = useState<AudienceForm[] | null>(null);
     /** Un seul dépliant ouvert à la fois ; `null` = tous repliés. */
     const [section, setSection] = useState<string | null>(null);
     const toggle = (id: string) => setSection((current) => (current === id ? null : id));
@@ -107,6 +114,35 @@ export function InstallDialog({ open, site, ingestOrigin, canWrite, onClose, onR
         [site.publicKey, ingestOrigin, persistent]
     );
     const example = examples.find((e) => e.id === lang) ?? examples[0];
+    const submits = useMemo(() => submitExamples(site.publicKey, ingestOrigin), [site.publicKey, ingestOrigin]);
+    const submitExample = submits.find((e) => e.id === submitLang) ?? submits[0];
+
+    const formsVersion = useResourceVersion('audience.forms');
+
+    // Le pendant de « première mesure reçue », pour les retours. Chargé à
+    // l'ouverture du dépliant seulement : la fiche n'en a pas besoin, et un envoi
+    // par site à chaque ouverture de cette fenêtre coûterait pour rien.
+    useEffect(() => {
+        if (section !== 'submit') return;
+        let cancelled = false;
+        api.send('audience.formList', { siteId: site.id })
+            .then((res) => {
+                if (!cancelled) setForms(res.forms);
+            })
+            .catch(() => {
+                // Lecture d'appoint : l'installation se lit sans elle.
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [section, site.id, formsVersion]);
+
+    /** Le retour le plus récent, tous formulaires confondus ; `null` = aucun. */
+    const lastSubmission =
+        forms?.reduce<number | null>(
+            (best, form) => (form.lastAt !== null && (best === null || form.lastAt > best) ? form.lastAt : best),
+            null
+        ) ?? null;
 
     const copy = async (text: string, id: string) => {
         try {
@@ -138,7 +174,7 @@ export function InstallDialog({ open, site, ingestOrigin, canWrite, onClose, onR
         <Dialog
             open={open}
             onClose={onClose}
-            title='Installer la mesure'
+            title='Installer'
             width={720}
             onSubmit={onClose}
             footer={
@@ -255,6 +291,60 @@ window.deveye?.identify(user.id);`}</pre>
                         </div>
                     </Disclosure>
 
+                    <Disclosure
+                        title='Recevoir des retours : formulaire, sondage, signalement'
+                        open={section === 'submit'}
+                        onToggle={() => toggle('submit')}
+                    >
+                        <p className={styles.hint}>
+                            Un site statique n’a souvent besoin d’un serveur que pour ça. Le formulaire se crée{' '}
+                            <strong>à sa première réception</strong> : il n’y a rien à déclarer ici avant, et le nom que
+                            vous envoyez est celui qui apparaîtra dans « Retours ».
+                        </p>
+
+                        <div className={styles.segmented} role='group' aria-label='Façon d’envoyer'>
+                            {submits.map((item) => (
+                                <button
+                                    key={item.id}
+                                    type='button'
+                                    className={item.id === submitLang ? styles.segmentActive : styles.segment}
+                                    aria-pressed={item.id === submitLang}
+                                    onClick={() => setSubmitLang(item.id)}
+                                >
+                                    {item.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        <p className={styles.hint}>{submitExample.note}</p>
+                        <pre className={styles.snippetTall}>{submitExample.code}</pre>
+                        <div className={styles.installActions}>
+                            <Button
+                                variant='secondary'
+                                icon='copy'
+                                onClick={() => void copy(submitExample.code, `submit-${submitExample.id}`)}
+                            >
+                                {copied === `submit-${submitExample.id}` ? 'Copié' : 'Copier'}
+                            </Button>
+                        </div>
+
+                        {/* Le même repère que pour la balise : une intégration se vérifie
+                            en voyant arriver le premier envoi, jamais au code de retour,
+                            que la porte publique rend identique en cas de refus. */}
+                        <p className={lastSubmission === null ? styles.waiting : styles.received}>
+                            {forms === null
+                                ? 'Lecture des formulaires…'
+                                : lastSubmission === null
+                                  ? 'En attente du premier retour…'
+                                  : `${forms.length} formulaire${forms.length > 1 ? 's' : ''} — dernier retour ${formatAgo(lastSubmission)}.`}
+                        </p>
+
+                        <p className={styles.hint}>
+                            Les origines autorisées du site s’appliquent aux retours comme aux mesures, et le plafond
+                            est de vingt formulaires par site et 50 000 retours par formulaire. Un formulaire se ferme,
+                            se vide et se renomme depuis « Retours ».
+                        </p>
+                    </Disclosure>
                     <Disclosure
                         title='Mémo pour un agent de code'
                         open={section === 'agent'}

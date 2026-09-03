@@ -1,6 +1,7 @@
-import { audienceEventInputSchema, audienceIngestSchema } from '../contracts/domain';
+import { audienceEventInputSchema, audienceIngestSchema, audienceSubmitSchema } from '../contracts/domain';
 import type { SdkPublicApp, SdkPublicReply, SdkPublicRequest } from '@deveye/types/sdk/server';
 
+import { normalizeHost } from './normalize';
 import { TRACKER_SCRIPT, TRACKER_SCRIPT_ETAG } from './script';
 import type { AudienceIngest, IngestRequest } from './service';
 
@@ -23,6 +24,11 @@ import type { AudienceIngest, IngestRequest } from './service';
  *
  * Le corps arrive déjà décodé par les analyseurs de l'hôte, un corps illisible
  * valant `undefined`, que la validation zod écarte comme le reste.
+ *
+ * `/api/t/s` s'écarte un peu de la règle 1 : un corps qui ne ressemble à rien
+ * rend `400`. Ce n'est pas un renseignement sur les clés qui existent, c'est
+ * une propriété de la requête envoyée, et sans cela une intégration mal écrite
+ * n'aurait aucun moyen de se voir.
  */
 
 /**
@@ -31,6 +37,38 @@ import type { AudienceIngest, IngestRequest } from './service';
  * corps, donc elle n'est pas encore connue.
  */
 const INGEST_RATE_LIMIT = { max: 600, timeWindow: '1 minute' };
+
+/**
+ * Le plafond des retours, bien plus serré : une requête de mesure range un
+ * entier dans une file, une requête de retour écrit une ligne et chiffre. Trente
+ * par minute laisse largement passer un humain qui se reprend, et ferme la porte
+ * à un robot qui insiste.
+ */
+const SUBMIT_RATE_LIMIT = { max: 30, timeWindow: '1 minute' };
+
+/**
+ * Les champs réservés d'un envoi de formulaire HTML. Le tiret bas les distingue
+ * des réponses, qu'un site nomme comme il veut : sans préfixe, un formulaire
+ * dont une question s'appellerait « form » perdrait sa réponse.
+ */
+const RESERVED_FIELDS = new Set(['_key', '_form', '_next', '_hp', '_path']);
+
+/**
+ * La page de remerciement de dernier recours : celle qu'on sert quand le site
+ * n'a pas dit où renvoyer, ou l'a dit vers un ailleurs. Volontairement nue et
+ * sans marque : c'est le visiteur d'un autre site qui la voit.
+ */
+const RETRY_PAGE = `<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Envoi impossible</title>
+<style>body{font:16px/1.6 system-ui,sans-serif;margin:0;display:grid;place-items:center;min-height:100vh}
+p{max-width:32rem;padding:2rem;text-align:center}</style></head>
+<body><p>Votre message n'a pas pu être enregistré. Merci de réessayer dans un instant.</p></body></html>`;
+
+const THANK_YOU_PAGE = `<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Merci</title>
+<style>body{font:16px/1.6 system-ui,sans-serif;margin:0;display:grid;place-items:center;min-height:100vh}
+p{max-width:32rem;padding:2rem;text-align:center}</style></head>
+<body><p>Merci, votre message a bien été envoyé. Vous pouvez fermer cette page.</p></body></html>`;
 
 /**
  * Rendre une réponse chargeable depuis une autre origine : helmet pose
@@ -70,7 +108,7 @@ export function audienceRoutes(app: SdkPublicApp, ingest: AudienceIngest): void 
         allowCrossOrigin(reply);
         const parsed = audienceIngestSchema.safeParse(req.body);
         if (parsed.success) {
-            await submit(req, ingest, parsed.data.key, parsed.data.events, parsed.data.visitorId ?? null);
+            await acceptEvents(req, ingest, parsed.data.key, parsed.data.events, parsed.data.visitorId ?? null);
         }
         return reply.code(204).send();
     });
@@ -86,13 +124,73 @@ export function audienceRoutes(app: SdkPublicApp, ingest: AudienceIngest): void 
         const key = typeof body?.key === 'string' ? body.key : '';
         const parsed = audienceEventInputSchema.safeParse(req.body);
         if (key && parsed.success) {
-            await submit(req, ingest, key, [parsed.data], parsed.data.visitorId ?? null);
+            await acceptEvents(req, ingest, key, [parsed.data], parsed.data.visitorId ?? null);
         }
         return reply.code(204).send();
     });
+
+    /**
+     * Un retour. Deux formes de corps, parce qu'un site statique doit pouvoir
+     * s'en servir des deux façons : le JSON qu'envoie `deveye.submit` (ou un
+     * `curl`, ou un serveur), et le `application/x-www-form-urlencoded` d'un
+     * `<form method="post">` sans une ligne de JavaScript. La seconde se
+     * reconnaît à son `_key`, et l'analyseur de l'hôte a déjà fait le décodage.
+     */
+    app.post('/api/t/s', { rateLimit: SUBMIT_RATE_LIMIT }, async (req, reply) => {
+        allowCrossOrigin(reply);
+        // Un `_key` à la racine signe un envoi de formulaire HTML : ses champs
+        // arrivent à plat, là où le JSON les range sous `fields`.
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const html = typeof body._key === 'string';
+        const parsed = audienceSubmitSchema.safeParse(html ? fromHtmlForm(body) : req.body);
+
+        // Un pot de miel rempli est un robot : on accepte sans rien écrire, pour
+        // qu'il ne sache pas qu'il a été vu et n'essaie pas autre chose.
+        const trapped = html && typeof body._hp === 'string' && body._hp.trim().length > 0;
+        let outcome: 'stored' | 'ignored' | 'failed' = 'ignored';
+        if (parsed.success && !trapped) {
+            const origin = typeof req.headers.origin === 'string' ? req.headers.origin : null;
+            const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : '';
+            outcome = await ingest.submit({
+                key: parsed.data.key,
+                form: parsed.data.form,
+                fields: parsed.data.fields,
+                path: parsed.data.path ?? null,
+                visitorId: parsed.data.visitorId ?? null,
+                origin,
+                ip: req.ip,
+                userAgent
+            });
+        }
+
+        if (!html) {
+            // Le seul refus qu'on nomme : la forme du corps, qui ne dit rien des
+            // clés qui existent et sans quoi une intégration fautive resterait muette.
+            if (!parsed.success) return reply.code(400).send({ ok: false });
+            // Une panne s'avoue, elle aussi : répondre « reçu » sur une écriture
+            // qui a échoué ferait annoncer au visiteur un message perdu. Le mince
+            // renseignement que cela donne à qui sonde ne vaut que le temps de la
+            // panne, et il n'y a alors pas grand-chose d'autre qui tienne debout.
+            if (outcome === 'failed') return reply.code(503).send({ ok: false });
+            return reply.send({ ok: true });
+        }
+
+        if (outcome === 'failed') {
+            reply.header('Content-Type', 'text/html; charset=utf-8');
+            return reply.code(503).send(RETRY_PAGE);
+        }
+
+        // Le visiteur d'un `<form>` doit atterrir quelque part, refus compris :
+        // lui montrer une réponse différente selon l'issue dirait à qui sonde
+        // quelles clés existent.
+        const next = redirectTarget(req, typeof body._next === 'string' ? body._next : null);
+        if (next) return reply.code(303).header('Location', next).send();
+        reply.header('Content-Type', 'text/html; charset=utf-8');
+        return reply.send(THANK_YOU_PAGE);
+    });
 }
 
-async function submit(
+async function acceptEvents(
     req: SdkPublicRequest,
     ingest: AudienceIngest,
     key: string,
@@ -102,4 +200,50 @@ async function submit(
     const origin = typeof req.headers.origin === 'string' ? req.headers.origin : null;
     const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : '';
     await ingest.accept({ key, visitorId, origin, ip: req.ip, userAgent, events });
+}
+
+/**
+ * Les réponses d'un envoi de formulaire HTML, réservés ôtés. Un nom répété
+ * devient un tableau : c'est ainsi qu'un groupe de cases à cocher s'envoie, et
+ * n'en garder qu'une perdrait les autres sans rien dire.
+ */
+function fromHtmlForm(body: Record<string, unknown>): Record<string, unknown> {
+    const fields: Record<string, unknown> = {};
+    for (const [name, value] of Object.entries(body)) {
+        if (RESERVED_FIELDS.has(name)) continue;
+        fields[name] = value;
+    }
+    return {
+        key: body._key,
+        form: typeof body._form === 'string' && body._form.trim() ? body._form : 'contact',
+        fields,
+        path: typeof body._path === 'string' ? body._path : undefined
+    };
+}
+
+/**
+ * Où renvoyer le visiteur après un envoi de formulaire, ou `null`.
+ *
+ * La cible est confrontée à l'en-tête `Origin` de la requête, et à rien
+ * d'autre : on ne renvoie que vers le site d'où l'on vient. Se fier au réglage
+ * du site aurait deux défauts, faire de cette route un redirecteur ouvert pour
+ * un site aux origines vides, et distinguer les refus (un `_next` honoré
+ * dirait que la clé est bonne).
+ *
+ * Un chemin relatif est résolu sur cette même origine, ce qui est la forme
+ * qu'on écrit dans une page (`/merci.html`).
+ */
+function redirectTarget(req: SdkPublicRequest, next: string | null): string | null {
+    if (!next) return null;
+    const origin = typeof req.headers.origin === 'string' ? req.headers.origin : null;
+    if (!origin) return null;
+    try {
+        const base = new URL(origin);
+        const target = new URL(next, base);
+        if (target.protocol !== 'http:' && target.protocol !== 'https:') return null;
+        if (normalizeHost(target.host) !== normalizeHost(base.host)) return null;
+        return target.toString();
+    } catch {
+        return null;
+    }
 }

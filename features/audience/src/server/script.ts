@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 
 /**
  * Le script que les pages suivies embarquent : une vue à l'ouverture puis une
- * par changement de route, `window.deveye.event` / `identify`, et un
+ * par changement de route, `window.deveye.event` / `identify` / `submit`, et un
  * regroupement des envois vidé par `sendBeacon` quand l'onglet part.
  *
  * Servi tel quel, sans minification et avec ses commentaires : c'est le seul
@@ -11,6 +11,11 @@ import { createHash } from 'crypto';
  * pas. Une chaîne dans un fichier TypeScript, et non un `.js` à côté : rien à
  * copier au build, rien à retrouver selon le répertoire de travail, et l'ETag
  * se calcule sur ce qui sera réellement servi.
+ *
+ * `submit` fait exception à tout le reste du script : il n'est jamais
+ * automatique, il ne groupe rien, et il rend une promesse. Une mesure est un
+ * effet de bord discret, un retour est un geste dont l'auteur attend une
+ * réponse.
  *
  * Aucune empreinte de navigateur, jamais, et par défaut rien n'est écrit chez
  * le visiteur : il est reconstitué côté serveur par un condensé tournant.
@@ -32,7 +37,9 @@ export const TRACKER_SCRIPT = `(function () {
 
     // L'adresse d'envoi est celle d'où vient ce script. Rien à configurer : si
     // la balise pointe t.exemple.fr, les mesures y retournent.
-    var endpoint = new URL(script.src, location.href).origin + '/api/t/b';
+    var origin = new URL(script.src, location.href).origin;
+    var endpoint = origin + '/api/t/b';
+    var submitEndpoint = origin + '/api/t/s';
 
     // En développement on ne mesure rien, sauf demande explicite : sans cette
     // règle, chaque rechargement local gonflerait les chiffres de production.
@@ -166,7 +173,26 @@ export const TRACKER_SCRIPT = `(function () {
         identity = value ? String(value) : null;
     }
 
-    window.deveye = { view: view, event: event, identify: identify, flush: flush };
+    // Un retour part seul et tout de suite, sans passer par la file : celui qui
+    // l'envoie attend de savoir s'il est parti pour afficher « envoyé », et un
+    // message perdu au changement de page ne se rattrape pas.
+    function submit(form, fields) {
+        var payload = { key: key, form: String(form || 'contact'), fields: fields || {}, path: location.pathname };
+        if (visitorId) payload.visitorId = visitorId;
+        return fetch(submitEndpoint, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+            // text/plain pour la même raison qu'au-dessus : requête « simple » au
+            // sens CORS, donc sans requête préalable OPTIONS.
+            headers: { 'Content-Type': 'text/plain' },
+            credentials: 'omit',
+            mode: 'cors'
+        }).then(function (res) {
+            return res.ok;
+        });
+    }
+
+    window.deveye = { view: view, event: event, identify: identify, submit: submit, flush: flush };
 
     if (auto) {
         // Les SPA changent de route sans recharger : on écoute les deux verbes

@@ -1,5 +1,6 @@
 import type {
     AudienceDimension,
+    AudienceFieldValue,
     AudiencePlatform,
     AudienceRange,
     AudienceResolution,
@@ -246,4 +247,62 @@ export const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 export function snippetFor(publicKey: string, origin: string, persistent = false): string {
     const visitor = persistent ? ' data-visitor="persistent"' : '';
     return `<script defer data-key="${publicKey}"${visitor} src="${origin}/t.js"></script>`;
+}
+
+/**
+ * Une réponse rendue lisible dans une cellule de tableau. Un choix multiple se
+ * joint par des virgules plutôt que de garder ses crochets : c'est une liste de
+ * cases cochées, pas un tableau JSON, et le brut reste consultable à côté.
+ */
+export function formatFieldValue(value: AudienceFieldValue): string {
+    if (value === null) return '';
+    if (Array.isArray(value)) return value.join(', ');
+    if (typeof value === 'boolean') return value ? 'oui' : 'non';
+    return String(value);
+}
+
+/** « 12 mars 2026, 14:32 » — la date exacte d'un retour, pas sa fraîcheur. */
+export function formatDateTime(epochSeconds: number): string {
+    return new Date(epochSeconds * 1000).toLocaleString('fr-FR', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+/**
+ * Le `<form>` à coller dans une page, sans une ligne de JavaScript. `_next` est
+ * relatif : le serveur ne renvoie que sur l'origine d'où vient l'envoi, une
+ * adresse complète vers ailleurs serait refusée.
+ *
+ * Le champ `_hp` est un pot de miel : caché aux yeux, rempli par les robots,
+ * et un envoi qui le porte est accepté puis jeté.
+ */
+export function formSnippetFor(publicKey: string, origin: string, form: string): string {
+    return [
+        `<form method="post" action="${origin}/api/t/s">`,
+        `    <input type="hidden" name="_key" value="${publicKey}">`,
+        `    <input type="hidden" name="_form" value="${form}">`,
+        '    <input type="hidden" name="_next" value="/merci.html">',
+        '    <input type="text" name="_hp" tabindex="-1" autocomplete="off" hidden>',
+        '',
+        '    <input type="email" name="email" placeholder="Votre adresse" required>',
+        '    <textarea name="message" placeholder="Votre message" required></textarea>',
+        '    <button type="submit">Envoyer</button>',
+        '</form>'
+    ].join('\n');
+}
+
+/** Le même envoi depuis la balise, quand la page a déjà du JavaScript. */
+export function submitSnippetFor(form: string): string {
+    return [
+        "document.querySelector('form').addEventListener('submit', async (e) => {",
+        '    e.preventDefault();',
+        '    const data = Object.fromEntries(new FormData(e.target));',
+        `    const sent = await window.deveye?.submit('${form}', data);`,
+        '    if (sent) e.target.reset();',
+        '});'
+    ].join('\n');
 }
