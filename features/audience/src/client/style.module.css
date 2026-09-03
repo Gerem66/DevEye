@@ -353,7 +353,7 @@
     justify-content: center;
     border-radius: var(--radius-lg);
     background: var(--glass-bg);
-    backdrop-filter: blur(1px);
+    backdrop-filter: var(--glass-backdrop-scrim);
     pointer-events: none;
     color: var(--accent);
 }

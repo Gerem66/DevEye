@@ -14,6 +14,11 @@
     flex-direction: column;
     min-height: var(--tile-min-height);
     position: relative;
+    /* Le contenu vivant d'une tuile se remet à jour tout seul (métriques,
+       présence) : sans confinement, chacune de ces mises à jour fait remonter le
+       calcul de disposition à la grille entière. Pas `paint`, qui rognerait
+       l'ombre de survol portée par `::before`. */
+    contain: layout;
     /* Le verre part sur-le-champ, mais ne revient qu'après le délai que lui
        dicte son ancêtre : tant qu'un `filter` transitionne au-dessus, cette
        carte est encore sous un backdrop root vide (voir `--glass-backdrop`). */

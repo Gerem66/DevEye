@@ -1577,7 +1577,7 @@
     border: 1px solid var(--glass-border-strong);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-md);
-    backdrop-filter: blur(12px);
+    backdrop-filter: var(--glass-backdrop-soft);
 }
 
 .actionsMenuItem {
@@ -1909,7 +1909,7 @@
     border: 1px solid var(--glass-border-strong);
     border-radius: var(--radius-md);
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-    backdrop-filter: blur(12px);
+    backdrop-filter: var(--glass-backdrop-soft);
 }
 
 .calHead {

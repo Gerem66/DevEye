@@ -347,7 +347,7 @@
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.25));
-    backdrop-filter: blur(12px);
+    backdrop-filter: var(--glass-backdrop-soft);
     text-align: left;
 }
 

@@ -607,7 +607,7 @@
     border: 1px solid var(--glass-border-strong);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-md);
-    backdrop-filter: blur(12px);
+    backdrop-filter: var(--glass-backdrop-soft);
 }
 
 .tabMenuItem {

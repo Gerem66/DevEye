@@ -43,6 +43,13 @@
     pointer-events: none;
 }
 
+/* Le retrait doit rester lisible, mais un flou plein écran est hors de portée
+   d'un rendu logiciel : un assombrissement plat dit la même chose pour un seul
+   repaint uni. */
+html[data-render='lite'] .recessed {
+    filter: brightness(0.55);
+}
+
 /* Mouvement réduit : le plan recule quand même (c'est une information), mais
    sans le glissement. Le retrait est déjà désarmé côté `index.tsx`. */
 @media (prefers-reduced-motion: reduce) {

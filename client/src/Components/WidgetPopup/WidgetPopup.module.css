@@ -2,8 +2,8 @@
     position: fixed;
     inset: 0;
     background: rgba(4, 7, 12, 0.6);
-    backdrop-filter: blur(2px);
-    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: var(--glass-backdrop-scrim);
+    -webkit-backdrop-filter: var(--glass-backdrop-scrim);
     z-index: var(--z-popup-overlay);
 }
 
@@ -18,8 +18,8 @@
     margin-inline: auto;
     z-index: var(--z-popup);
     background: var(--surface-popup);
-    backdrop-filter: blur(calc(var(--glass-blur) + 4px));
-    -webkit-backdrop-filter: blur(calc(var(--glass-blur) + 4px));
+    backdrop-filter: var(--glass-backdrop-strong);
+    -webkit-backdrop-filter: var(--glass-backdrop-strong);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-xl);
     box-shadow: var(--shadow-lg);

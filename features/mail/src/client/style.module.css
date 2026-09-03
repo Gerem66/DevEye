@@ -1027,7 +1027,7 @@
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
     background: var(--glass-bg);
-    backdrop-filter: blur(12px);
+    backdrop-filter: var(--glass-backdrop-soft);
     box-shadow: var(--shadow-lg);
 }
 

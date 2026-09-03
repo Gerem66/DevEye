@@ -1,4 +1,13 @@
-import { useState, useCallback, useMemo, useEffect, useRef, type ComponentType, type ReactNode } from 'react';
+import {
+    useState,
+    useCallback,
+    useMemo,
+    useEffect,
+    useRef,
+    type ComponentType,
+    type MouseEvent,
+    type ReactNode
+} from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 
 import { useAuth } from '@/auth/AuthProvider';
@@ -20,6 +29,7 @@ import { syncHomeLayoutFromServer } from '@/stores/homeLayout';
 import { useHomeLayout, findFolder, getHomeLayout, placedFeatureIds, pruneMissingDevices } from '@/stores/homeLayout';
 import { onOpenViewRequest, onSelectWorkspaceRequest } from '@/stores/viewRequest';
 import { useFeedbackEnabled } from '@/stores/feedbackEnabled';
+import { armFrameProbe } from '@/perf/frameBudget';
 import { noteView } from '@/diagnostics/trace';
 import { LiveProvider } from '@/live/LiveProvider';
 import { LiveCursors } from '@/live/LiveCursors';
@@ -27,7 +37,6 @@ import { CursorChatInput } from '@/live/CursorChatInput';
 import { useLiveSegment } from '@/live/useLiveSegment';
 import { startTeleport } from '@/stores/live';
 import { TopNavbar } from '@/Components/TopNavbar';
-import { Widget } from '@/Components/Widget';
 import { WidgetGrid } from '@/Components/WidgetGrid';
 import { WidgetPopup, FeatureKeepAlive } from '@/Components/WidgetPopup';
 import { Wallpaper } from '@/Components/Wallpaper';
@@ -43,10 +52,11 @@ import FeatureLogs from '@/Features/Logs';
 import FeatureWorkspace from '@/Features/Workspace';
 import FeatureUsers from '@/Features/Users';
 
-import { catalogEntries, featureCatalog } from './catalog';
+import { catalogEntries, featureCatalog, featureCatalogEntry } from './catalog';
 import { EmptyHome } from './EmptyHome';
 import { isForceReload } from './forceReload';
-import { deviceTileVisual, featureTileVisual, shortcutTileVisual } from './tiles/tileVisual';
+import { deviceKey } from './tiles/tileVisual';
+import { DeviceTileCard, FeatureTileCard, FolderTileCard, ShortcutTileCard } from './tiles/HomeTileCard';
 import { AboutContent } from './about';
 import { EditableHome } from './organize/EditableHome';
 import { FolderOverlay, folderTitle } from './folders';
@@ -481,6 +491,32 @@ export default function HomePage() {
         [handleExpand]
     );
 
+    /**
+     * Les cartes de la grille sont mémoïsées : leurs gestionnaires doivent l'être
+     * aussi, or `handleExpand` change dès qu'une vue s'ouvre. Ils passent donc
+     * par une référence, sur le modèle de `expandedWidgetRef`, et toute la grille
+     * cesse de se rendre à l'ouverture d'une vue.
+     */
+    const expandRef = useRef(handleExpand);
+    expandRef.current = handleExpand;
+    const expandTile = useCallback((widgetId: string, e: MouseEvent<HTMLDivElement>) => {
+        expandRef.current(widgetId, isForceReload(e));
+    }, []);
+
+    const openDeviceRef = useRef(openDevice);
+    openDeviceRef.current = openDevice;
+    const openDeviceTile = useCallback((deviceId: string, tileKey: string, forceReset: boolean) => {
+        openDeviceRef.current(deviceId, tileKey, forceReset);
+    }, []);
+
+    const openFolderTile = useCallback((folderId: string, e: MouseEvent<HTMLDivElement>) => {
+        setOpenFolder({
+            id: folderId,
+            source: e.currentTarget.getBoundingClientRect(),
+            offset: greetingRef.current?.offsetHeight ?? 0
+        });
+    }, []);
+
     const handleClose = useCallback(() => {
         closingFeatureRef.current = expandedWidget;
         setExpandedWidget(null);
@@ -492,6 +528,19 @@ export default function HomePage() {
     useEffect(() => {
         noteView(expandedWidget ?? 'home');
     }, [expandedWidget]);
+
+    /**
+     * Les trois scènes qui coûtent : le montage de l'accueil, l'ouverture d'une
+     * vue, le déploiement d'un dossier. La sonde ne mesure que là, une interface
+     * au repos tenant ses 60 fps même sur un appareil qui décroche (voir
+     * `perf/frameBudget`).
+     */
+    useEffect(() => {
+        armFrameProbe(2000);
+    }, []);
+    useEffect(() => {
+        if (expandedWidget !== null || openFolder !== null) armFrameProbe(1500);
+    }, [expandedWidget, openFolder]);
 
     // Mirror of expandedWidget for stable callbacks that must read it at call time.
     const expandedWidgetRef = useRef(expandedWidget);
@@ -603,6 +652,10 @@ export default function HomePage() {
         [openFolder, layout]
     );
     const folderEntries = useMemo(() => (folderView ? catalogEntries(folderView.items) : []), [folderView]);
+
+    /** L'appartenance d'un appareil, en une lecture : la boucle des tuiles en
+     *  faisait une par carte, sur une liste relue à chaque relevé. */
+    const deviceIds = useMemo(() => new Set(devices.map((d) => d.id)), [devices]);
     useEffect(() => {
         if (openFolder !== null && folderEntries.length === 0) setOpenFolder(null);
     }, [openFolder, folderEntries.length]);
@@ -808,102 +861,47 @@ export default function HomePage() {
         const tiles: ReactNode[] = [];
         for (const tile of section.items) {
             if (isHomeFolder(tile)) {
-                const v = featureTileVisual(tile);
-                if (!v) continue;
                 // Un dossier rempli dont plus rien n'est connu (modules retirés)
                 // s'efface ; un dossier vraiment vide reste, inerte : on vient
                 // de le créer.
-                const visible = catalogEntries(tile.items);
-                if (visible.length === 0 && tile.items.length > 0) continue;
-                const folderId = tile.id;
-                tiles.push(
-                    <Widget
-                        key={folderId}
-                        widgetId={v.widgetId}
-                        title={v.title}
-                        icon={v.icon}
-                        interactive={visible.length > 0}
-                        // La tuile reste visible pendant le déploiement : elle
-                        // part avec le fond qui recule et dit d'où viennent les cartes.
-                        onExpand={(e) => {
-                            setOpenFolder({
-                                id: folderId,
-                                source: e.currentTarget.getBoundingClientRect(),
-                                offset: greetingRef.current?.offsetHeight ?? 0
-                            });
-                        }}
-                    >
-                        {v.body}
-                    </Widget>
-                );
+                if (tile.items.length > 0 && catalogEntries(tile.items).length === 0) continue;
+                tiles.push(<FolderTileCard key={tile.id} folder={tile} onOpen={openFolderTile} />);
                 continue;
             }
 
             if (isShortcutTile(tile)) {
-                const v = shortcutTileVisual(tile);
-                tiles.push(
-                    <Widget key={tile.id} widgetId={v.widgetId} compact={v.compact} href={v.href}>
-                        {v.body}
-                    </Widget>
-                );
+                tiles.push(<ShortcutTileCard key={tile.id} item={tile} />);
                 continue;
             }
 
             if (isFeatureTile(tile)) {
-                const v = featureTileVisual(tile);
-                if (!v) continue;
+                const widgetId = featureCatalogEntry(tile)?.id;
+                if (widgetId === undefined) continue;
                 // La tuile reste posée, en retrait : la retirer déplacerait les
                 // voisines. Pendant une bascule, les droits vides ne sont ceux
                 // de personne : pas de grisage.
-                const locked = !switching && !allowedToOpen(v.widgetId);
                 tiles.push(
-                    <Widget
+                    <FeatureTileCard
                         key={tile}
-                        widgetId={v.widgetId}
-                        title={v.title}
-                        icon={v.icon}
-                        className={locked ? styles.lockedTile : undefined}
-                        // Hidden while its popup is open so frequent re-renders can't
-                        // make the source card flash behind the morphed popup.
-                        style={
-                            expandedWidget !== null && morphSourceRef.current === v.widgetId
-                                ? { opacity: 0 }
-                                : undefined
-                        }
-                        onExpand={(e) => handleExpand(v.widgetId, isForceReload(e))}
-                    >
-                        {/* Le contenu vivant est remplacé, pas seulement grisé : il
-                            interrogerait un serveur qui refuse, et afficherait des
-                            zéros qui se lisent comme des données réelles. */}
-                        {locked ? <span className={styles.lockedBody}>Accès restreint</span> : v.body}
-                    </Widget>
+                        tile={tile}
+                        locked={!switching && !allowedToOpen(widgetId)}
+                        hidden={expandedWidget !== null && morphSourceRef.current === widgetId}
+                        onExpand={expandTile}
+                    />
                 );
                 continue;
             }
 
             // Un appareil. Escamoté quand il n'existe plus (l'effet d'élagage
             // s'en charge), plutôt que de poser une carte creuse.
-            const device = devices.find((d) => d.id === tile);
-            if (!device) continue;
-            const v = deviceTileVisual(device);
-            if (!v) continue;
+            if (!deviceIds.has(tile)) continue;
             tiles.push(
-                <Widget
+                <DeviceTileCard
                     key={tile}
-                    widgetId={v.widgetId}
-                    title={v.title}
-                    icon={v.icon}
-                    compact={v.compact}
-                    // Hidden while its popup is open (the device tile re-renders
-                    // on usage/device polls, which would otherwise flash it back
-                    // behind the morphed popup).
-                    style={
-                        expandedWidget !== null && morphSourceRef.current === v.widgetId ? { opacity: 0 } : undefined
-                    }
-                    onExpand={(e) => openDevice(device.id, v.widgetId, isForceReload(e))}
-                >
-                    {v.body}
-                </Widget>
+                    deviceId={tile}
+                    hidden={expandedWidget !== null && morphSourceRef.current === deviceKey(tile)}
+                    onOpen={openDeviceTile}
+                />
             );
         }
         if (tiles.length === 0) return null;

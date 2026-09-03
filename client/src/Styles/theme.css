@@ -12,6 +12,11 @@
    * échantillonne un fond vide, jusqu'à disparaître dans Gecko.
    */
     --glass-backdrop: blur(var(--glass-blur));
+    /* Les deux autres épaisseurs de verre du produit, en jetons pour la même
+       raison, et pour qu'une seule bascule les atteigne toutes. */
+    --glass-backdrop-strong: blur(calc(var(--glass-blur) + 4px));
+    --glass-backdrop-soft: blur(12px);
+    --glass-backdrop-scrim: blur(2px);
 
     --surface-widget: var(--glass-bg);
     --surface-popup: rgba(14, 21, 32, 0.92);
@@ -191,8 +196,8 @@ body {
 
 .glass {
     background: var(--glass-bg);
-    backdrop-filter: blur(var(--glass-blur));
-    -webkit-backdrop-filter: blur(var(--glass-blur));
+    backdrop-filter: var(--glass-backdrop);
+    -webkit-backdrop-filter: var(--glass-backdrop);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
 }
@@ -223,4 +228,40 @@ body {
         transition-duration: 0.01ms !important;
         scroll-behavior: auto !important;
     }
+}
+
+/*
+ * Mode de rendu léger (`stores/render.ts`), armé à la main ou par la sonde de
+ * budget de frame. Sans compositing matériel, ce qui fait décrocher n'est pas le
+ * mouvement mais la surface repeinte à chaque frame : le verre, qui
+ * ré-échantillonne le fond sous chaque tuile, les flous plein écran et les
+ * ombres à grand rayon.
+ *
+ * Le mouvement, lui, ne bouge pas : ce mode ne touche à aucune animation ni à
+ * aucune durée. Les mêmes animations, une fois libérées de ce qu'elles faisaient
+ * repeindre, sont justement ce qui redevient fluide. Réduire le mouvement est un
+ * autre besoin, que `prefers-reduced-motion` couvre déjà.
+ *
+ * Presque tout tient en redéfinitions de jetons, pour que le mode complet reste
+ * exactement ce qu'il est ; les quelques règles qui ne s'expriment pas en jeton
+ * vivent auprès de ce qu'elles corrigent, sous le même sélecteur.
+ */
+html[data-render='lite'] {
+    --glass-backdrop: none;
+    --glass-backdrop-strong: none;
+    --glass-backdrop-soft: none;
+    --glass-backdrop-scrim: none;
+
+    /* Sans le flou derrière elles, les surfaces translucides laissent passer le
+       fond d'écran et cessent d'être lisibles : elles deviennent opaques, sur
+       les teintes qu'elles composaient jusqu'ici au-dessus du fond sombre. */
+    --glass-bg: rgb(16, 23, 34);
+    --glass-bg-light: rgb(34, 47, 62);
+    --surface-popup: var(--surface-popup-solid);
+    --surface-navbar: rgb(9, 14, 22);
+
+    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.35);
+    --shadow-lg: 0 6px 20px rgba(0, 0, 0, 0.5);
+    /* L'anneau porte l'information, le halo de 32px n'était que du décor. */
+    --shadow-glow: 0 0 0 1px var(--accent-bg);
 }

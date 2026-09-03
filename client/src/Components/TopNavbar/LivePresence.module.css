@@ -56,9 +56,7 @@
     font-weight: 700;
     cursor: pointer;
     overflow: hidden;
-    transition:
-        transform var(--transition-fast),
-        z-index var(--transition-fast);
+    transition: transform var(--transition-fast);
 }
 
 .bubble:first-child {

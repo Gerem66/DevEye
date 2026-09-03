@@ -28,6 +28,17 @@
     will-change: transform;
 }
 
+/* Un `filter` permanent sur toute la surface est le plus cher de la page, et le
+   curseur du panneau Apparence n'y peut rien : il est coupé ici, pas remis à
+   zéro, pour que le réglage retrouve sa valeur en repassant en mode complet.
+   Sans lui, la couche n'a plus de raison d'être promue : le bitmap plein écran
+   qu'elle retenait coûte de la mémoire pour rien. */
+html[data-render='lite'] .image {
+    filter: none;
+    transform: none;
+    will-change: auto;
+}
+
 /* Scrim over the photo for card/text legibility. Base gradient keeps a touch
    of top→bottom darkening; the slider adds a flat layer on top. */
 .image::after {

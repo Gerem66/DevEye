@@ -608,8 +608,8 @@
     justify-content: center;
     border-radius: var(--radius-md);
     background: var(--surface-popup);
-    backdrop-filter: blur(1px);
-    -webkit-backdrop-filter: blur(1px);
+    backdrop-filter: var(--glass-backdrop-scrim);
+    -webkit-backdrop-filter: var(--glass-backdrop-scrim);
     color: var(--accent);
     cursor: progress;
     /* 420 ms au total, dont les deux premiers tiers invisibles : voir `veilIn`. */

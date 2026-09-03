@@ -5,6 +5,7 @@ import { ws } from '@/api/ws';
 import { Dialog } from '@/Components/Dialog';
 import Button from '@/Components/Button';
 import Switch from '@/Components/Switch';
+import SegmentedControl from '@/Components/SegmentedControl';
 
 import type { FeatureProps } from '@/Features/types';
 import { ACCEPTED_TYPES, avatarSrc, fileToAvatarDataUrl } from './avatar';
@@ -15,11 +16,22 @@ import styles from './style.module.css';
 import { HIDE_LIVE_CURSORS } from '@/live/hideCursors';
 import { requestOpenView } from '@/stores/viewRequest';
 import { useWorkspaceState } from '@/stores/workspace';
+import { useLiteRender, useRenderState, setRenderMode, type RenderMode } from '@/stores/render';
 
 import type { CSSProperties } from 'react';
 import type { UserColor } from '@deveye/types';
 
 const SECURITY_MAX = 3;
+
+const RENDER_MODES: readonly { value: RenderMode; label: string; title: string }[] = [
+    { value: 'auto', label: 'Auto', title: "Mesure la fluidité réelle et allège si l'appareil ne suit pas" },
+    { value: 'full', label: 'Complet', title: "Verre, flous et animations, quoi qu'il en coûte" },
+    { value: 'lite', label: 'Léger', title: 'Surfaces opaques, sans flou ni transition' }
+];
+
+const RENDER_HINT =
+    'Propre à cet appareil. Le rendu léger remplace le verre par des surfaces opaques et coupe les flous : ' +
+    "sur un téléphone ou sans accélération matérielle, c'est ce qui rend l'interface fluide.";
 
 function formatDate(time: number): string {
     const str = new Date(time * 1000).toLocaleDateString('fr-FR', {
@@ -51,6 +63,10 @@ export default function FeatureProfile({ user }: FeatureProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const showCursors = !user.settings.includes(HIDE_LIVE_CURSORS);
+    // Réglage de l'appareil, pas du compte : un même utilisateur a de bonnes
+    // raisons d'être en complet sur son poste et en léger sur son téléphone.
+    const { mode: renderMode } = useRenderState();
+    const lite = useLiteRender();
 
     // La couleur est appliquée localement d'abord : c'est un réglage cosmétique
     // dont l'effet doit se voir à l'instant du clic. En cas d'échec on la remet
@@ -241,6 +257,29 @@ export default function FeatureProfile({ user }: FeatureProps) {
                                         onChange={(visible) => void onToggleCursors(visible)}
                                         disabled={savingCursors}
                                         aria-label='Afficher les curseurs des autres membres'
+                                    />
+                                </span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section className={styles.section}>
+                        <span className={styles.sectionLabel}>Affichage</span>
+                        <div className={`${styles.card} ${styles.rowList}`}>
+                            <div className={styles.row}>
+                                <span className={styles.rowLabel}>
+                                    Rendu
+                                    <span className={styles.rowHint}>
+                                        {RENDER_HINT}
+                                        {renderMode === 'auto' && ` Pour l'instant : ${lite ? 'léger' : 'complet'}.`}
+                                    </span>
+                                </span>
+                                <span className={styles.rowValue}>
+                                    <SegmentedControl
+                                        options={RENDER_MODES}
+                                        value={renderMode}
+                                        onChange={setRenderMode}
+                                        aria-label="Mode de rendu de l'interface"
                                     />
                                 </span>
                             </div>

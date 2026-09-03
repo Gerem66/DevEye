@@ -54,16 +54,17 @@ export function featureTileVisual(tile: HomeTile): TileVisual | null {
 }
 
 /** La carte d'un appareil, fournie par le provider du module Appareils. `null`
- *  sans le module (la liste est alors vide de toute façon). */
-export function deviceTileVisual(device: SdkDeviceSummary, opts?: { editing?: boolean }): TileVisual | null {
+ *  sans le module (la liste est alors vide de toute façon). L'identifiant seul :
+ *  le résumé est remplacé à chaque relevé, la carte n'en lirait que la clé. */
+export function deviceTileVisual(deviceId: string, opts?: { editing?: boolean }): TileVisual | null {
     const DeviceWidget = devicesProvider()?.DeviceWidget;
     if (!DeviceWidget) return null;
     // No Widget header — DeviceWidget owns the whole card (name + status + the
     // full-bleed activity background).
     return {
-        widgetId: deviceKey(device.id),
+        widgetId: deviceKey(deviceId),
         compact: true,
-        body: <DeviceWidget deviceId={device.id} hideStatus={opts?.editing} />
+        body: <DeviceWidget deviceId={deviceId} hideStatus={opts?.editing} />
     };
 }
 
@@ -89,7 +90,7 @@ export function homeTileVisual(
 ): TileVisual | null {
     if (homeTileKind(tile) === 'device') {
         const device = devices.find((d) => d.id === tile);
-        return device ? deviceTileVisual(device, opts) : null;
+        return device ? deviceTileVisual(device.id, opts) : null;
     }
     if (isShortcutTile(tile)) return shortcutTileVisual(tile, opts);
     return featureTileVisual(tile);
