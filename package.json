@@ -1,6 +1,6 @@
 {
   "name": "deveye",
-  "version": "0.18.0",
+  "version": "0.18.1",
   "description": "DevEye — Fastify API + React web client (single product repo)",
   "main": "dist/index.js",
   "type": "module",
@@ -45,7 +45,7 @@
   "author": "Gerem",
   "license": "ISC",
   "dependencies": {
-    "@deveye/types": "^0.18.0",
+    "@deveye/types": "^0.18.1",
     "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^11.2.0",
     "@fastify/helmet": "^13.0.2",
