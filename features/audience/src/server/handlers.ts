@@ -9,6 +9,7 @@ import {
     audienceSiteUpdateFeature
 } from './crud';
 import {
+    audienceFormAddFeature,
     audienceFormClearFeature,
     audienceFormListFeature,
     audienceFormRemoveFeature,
@@ -56,6 +57,7 @@ export const audienceHandlers = [
     audienceFunnelUpdateFeature,
     audienceFunnelRemoveFeature,
     audienceSummaryFeature,
+    audienceFormAddFeature,
     audienceFormListFeature,
     audienceFormUpdateFeature,
     audienceFormClearFeature,

@@ -5,7 +5,7 @@ import type { AudienceForm, AudienceSite } from '../contracts/domain';
 
 import { api } from './api';
 import { formatAgo, snippetFor } from './format';
-import { agentBrief, submitExamples, usageExamples } from './usage';
+import { agentBrief, submitBrief, submitExamples, usageExamples } from './usage';
 import styles from './style.module.css';
 
 /**
@@ -51,8 +51,19 @@ function Disclosure({
     );
 }
 
+/**
+ * Ce que la fenêtre a le droit de montrer, selon l'écran d'où on l'ouvre : le
+ * sommaire donne la balise et la clé, chaque section ne montre que ce qui la
+ * concerne. Une fenêtre unique obligeait à dérouler quatre dépliants pour
+ * trouver le sien.
+ */
+export type InstallScope = 'site' | 'traffic' | 'funnels' | 'forms';
+
 interface InstallDialogProps {
     open: boolean;
+    scope?: InstallScope;
+    /** Le formulaire ouvert, quand on vient des retours : le `<form>` en découle. */
+    form?: AudienceForm | null;
     site: AudienceSite;
     /**
      * L'adresse par laquelle les pages suivies atteignent l'ingestion, telle que
@@ -84,7 +95,16 @@ interface InstallDialogProps {
  * Tous les blocs sont bâtis depuis la vraie clé et la vraie adresse
  * d'ingestion : un exemple qu'il faut adapter est un exemple qu'on adapte mal.
  */
-export function InstallDialog({ open, site, ingestOrigin, canWrite, onClose, onRotated }: InstallDialogProps) {
+export function InstallDialog({
+    open,
+    scope = 'site',
+    form = null,
+    site,
+    ingestOrigin,
+    canWrite,
+    onClose,
+    onRotated
+}: InstallDialogProps) {
     /** Le bloc dont la copie vient d'aboutir, pour le retour visuel. */
     const [copied, setCopied] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
@@ -109,12 +129,20 @@ export function InstallDialog({ open, site, ingestOrigin, canWrite, onClose, onR
         () => usageExamples(site.publicKey, ingestOrigin, persistent),
         [site.publicKey, ingestOrigin, persistent]
     );
+    // Deux mémos, jamais les deux à la fois : ce sont deux intégrations, et un
+    // agent à qui on donne les deux d'un coup mélange les deux API.
     const brief = useMemo(
-        () => agentBrief(site.publicKey, ingestOrigin, persistent),
-        [site.publicKey, ingestOrigin, persistent]
+        () =>
+            scope === 'forms'
+                ? submitBrief(site.publicKey, ingestOrigin, form?.name ?? 'contact', form?.fields ?? [])
+                : agentBrief(site.publicKey, ingestOrigin, persistent),
+        [scope, site.publicKey, ingestOrigin, persistent, form?.name, form?.fields]
     );
     const example = examples.find((e) => e.id === lang) ?? examples[0];
-    const submits = useMemo(() => submitExamples(site.publicKey, ingestOrigin), [site.publicKey, ingestOrigin]);
+    const submits = useMemo(
+        () => submitExamples(site.publicKey, ingestOrigin, form?.name ?? 'contact', form?.fields ?? []),
+        [site.publicKey, ingestOrigin, form?.name, form?.fields]
+    );
     const submitExample = submits.find((e) => e.id === submitLang) ?? submits[0];
 
     const formsVersion = useResourceVersion('audience.forms');
@@ -174,7 +202,9 @@ export function InstallDialog({ open, site, ingestOrigin, canWrite, onClose, onR
         <Dialog
             open={open}
             onClose={onClose}
-            title='Installer'
+            title={
+                scope === 'forms' ? 'Recevoir des retours' : scope === 'traffic' ? 'Installer la mesure' : 'Installer'
+            }
             width={720}
             onSubmit={onClose}
             footer={
@@ -208,143 +238,162 @@ export function InstallDialog({ open, site, ingestOrigin, canWrite, onClose, onR
             }
         >
             <div className={styles.install}>
-                <p className={styles.installStep}>
-                    <span className={styles.stepNumber}>1</span>
-                    Collez cette balise dans le <code>&lt;head&gt;</code>, avant le bundle de votre application.
-                </p>
-                <pre className={styles.snippet}>{snippet}</pre>
-                <div className={styles.installActions}>
-                    <Button variant='secondary' icon='copy' onClick={() => void copy(snippet, 'tag')}>
-                        {copied === 'tag' ? 'Copié' : 'Copier la balise'}
-                    </Button>
-                </div>
+                {scope !== 'forms' && (
+                    <>
+                        <p className={styles.installStep}>
+                            <span className={styles.stepNumber}>1</span>
+                            Collez cette balise dans le <code>&lt;head&gt;</code>, avant le bundle de votre application.
+                        </p>
+                        <pre className={styles.snippet}>{snippet}</pre>
+                        <div className={styles.installActions}>
+                            <Button variant='secondary' icon='copy' onClick={() => void copy(snippet, 'tag')}>
+                                {copied === 'tag' ? 'Copié' : 'Copier la balise'}
+                            </Button>
+                        </div>
 
-                <p className={styles.installStep}>
-                    <span className={styles.stepNumber}>2</span>
-                    Ouvrez une page du site. La première mesure arrive en quelques secondes.
-                </p>
-                <p className={site.lastEventAt === null ? styles.waiting : styles.received}>
-                    {site.lastEventAt === null
-                        ? 'En attente de la première mesure…'
-                        : `Première mesure reçue — dernière ${formatAgo(site.lastEventAt)}.`}
-                </p>
+                        <p className={styles.installStep}>
+                            <span className={styles.stepNumber}>2</span>
+                            Ouvrez une page du site. La première mesure arrive en quelques secondes.
+                        </p>
+                        <p className={site.lastEventAt === null ? styles.waiting : styles.received}>
+                            {site.lastEventAt === null
+                                ? 'En attente de la première mesure…'
+                                : `Première mesure reçue — dernière ${formatAgo(site.lastEventAt)}.`}
+                        </p>
+                    </>
+                )}
 
                 {/* Les trois dépliants dans un groupe sans gouttière : le `gap` de
                     `.install` s'ajouterait au-dessus de chaque filet, si bien qu'un titre
                     serait plus loin de sa propre ligne que du bloc précédent. */}
                 <div className={styles.disclosures}>
-                    <Disclosure
-                        title='Utilisation de base : marquer des étapes, nommer un utilisateur'
-                        open={section === 'base'}
-                        onToggle={() => toggle('base')}
-                    >
-                        <p className={styles.hint}>
-                            Les pages sont suivies toutes seules, changements de route d’une SPA compris. Le reste se
-                            pose à la main, là où l’étape est réellement franchie :
-                        </p>
-                        <pre className={styles.snippet}>{`window.deveye?.event('Votre projet');
+                    {scope !== 'forms' && (
+                        <Disclosure
+                            title='Utilisation de base : marquer des étapes, nommer un utilisateur'
+                            open={section === 'base'}
+                            onToggle={() => toggle('base')}
+                        >
+                            <p className={styles.hint}>
+                                Les pages sont suivies toutes seules, changements de route d’une SPA compris. Le reste
+                                se pose à la main, là où l’étape est réellement franchie :
+                            </p>
+                            <pre className={styles.snippet}>{`window.deveye?.event('Votre projet');
 window.deveye?.identify(user.id);`}</pre>
 
-                        <p className={styles.hint}>
-                            <strong>Ne gardez jamais la référence dans une variable.</strong> La balise porte{' '}
-                            <code>defer</code> : elle s’exécute après les scripts en ligne de la page, donc{' '}
-                            <code>window.deveye</code> peut ne pas exister encore au moment où votre code se charge. Le
-                            relire à chaque appel supprime le problème. La page marcherait sans, mais aucune mesure ne
-                            partirait.
-                        </p>
-                        <p className={styles.hint}>
-                            Les noms sont <strong>comparés à l’identique</strong> : accents, espaces et majuscules
-                            comptent. Composez vos entonnoirs depuis les suggestions plutôt qu’en les retapant.
-                        </p>
-                        <p className={styles.hint}>
-                            Sur <code>localhost</code>, la mesure est désactivée pour qu’un rechargement de
-                            développement ne gonfle pas vos chiffres : ajoutez <code>data-local=&quot;true&quot;</code>{' '}
-                            à la balise pour l’essayer quand même.
-                        </p>
-                    </Disclosure>
+                            <p className={styles.hint}>
+                                <strong>Ne gardez jamais la référence dans une variable.</strong> La balise porte{' '}
+                                <code>defer</code> : elle s’exécute après les scripts en ligne de la page, donc{' '}
+                                <code>window.deveye</code> peut ne pas exister encore au moment où votre code se charge.
+                                Le relire à chaque appel supprime le problème. La page marcherait sans, mais aucune
+                                mesure ne partirait.
+                            </p>
+                            <p className={styles.hint}>
+                                Les noms sont <strong>comparés à l’identique</strong> : accents, espaces et majuscules
+                                comptent. Composez vos entonnoirs depuis les suggestions plutôt qu’en les retapant.
+                            </p>
+                            <p className={styles.hint}>
+                                Sur <code>localhost</code>, la mesure est désactivée pour qu’un rechargement de
+                                développement ne gonfle pas vos chiffres : ajoutez{' '}
+                                <code>data-local=&quot;true&quot;</code> à la balise pour l’essayer quand même.
+                            </p>
+                        </Disclosure>
+                    )}
 
-                    <Disclosure
-                        title='Exemples de code : navigateur, Node.js, PHP'
-                        open={section === 'code'}
-                        onToggle={() => toggle('code')}
-                    >
-                        <div className={styles.segmented} role='group' aria-label='Langage'>
-                            {examples.map((item) => (
-                                <button
-                                    key={item.id}
-                                    type='button'
-                                    className={item.id === lang ? styles.segmentActive : styles.segment}
-                                    aria-pressed={item.id === lang}
-                                    onClick={() => setLang(item.id)}
+                    {scope !== 'forms' && scope !== 'funnels' && (
+                        <Disclosure
+                            title='Exemples de code : navigateur, Node.js, PHP'
+                            open={section === 'code'}
+                            onToggle={() => toggle('code')}
+                        >
+                            <div className={styles.segmented} role='group' aria-label='Langage'>
+                                {examples.map((item) => (
+                                    <button
+                                        key={item.id}
+                                        type='button'
+                                        className={item.id === lang ? styles.segmentActive : styles.segment}
+                                        aria-pressed={item.id === lang}
+                                        onClick={() => setLang(item.id)}
+                                    >
+                                        {item.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <p className={styles.hint}>{example.note}</p>
+                            <pre className={styles.snippetTall}>{example.code}</pre>
+                            <div className={styles.installActions}>
+                                <Button
+                                    variant='secondary'
+                                    icon='copy'
+                                    onClick={() => void copy(example.code, example.id)}
                                 >
-                                    {item.label}
-                                </button>
-                            ))}
-                        </div>
+                                    {copied === example.id ? 'Copié' : `Copier l’exemple ${example.label}`}
+                                </Button>
+                            </div>
+                        </Disclosure>
+                    )}
 
-                        <p className={styles.hint}>{example.note}</p>
-                        <pre className={styles.snippetTall}>{example.code}</pre>
-                        <div className={styles.installActions}>
-                            <Button variant='secondary' icon='copy' onClick={() => void copy(example.code, example.id)}>
-                                {copied === example.id ? 'Copié' : `Copier l’exemple ${example.label}`}
-                            </Button>
-                        </div>
-                    </Disclosure>
+                    {scope !== 'traffic' && (
+                        <Disclosure
+                            title={
+                                form
+                                    ? `Brancher « ${form.name} » : formulaire, appel, curl`
+                                    : 'Recevoir des retours : formulaire, sondage, signalement'
+                            }
+                            open={section === 'submit'}
+                            onToggle={() => toggle('submit')}
+                        >
+                            <p className={styles.hint}>
+                                Un site statique n’a souvent besoin d’un serveur que pour ça. Le formulaire se crée{' '}
+                                <strong>à sa première réception</strong> : il n’y a rien à déclarer ici avant, et le nom
+                                que vous envoyez est celui qui apparaîtra dans « Retours ».
+                            </p>
 
-                    <Disclosure
-                        title='Recevoir des retours : formulaire, sondage, signalement'
-                        open={section === 'submit'}
-                        onToggle={() => toggle('submit')}
-                    >
-                        <p className={styles.hint}>
-                            Un site statique n’a souvent besoin d’un serveur que pour ça. Le formulaire se crée{' '}
-                            <strong>à sa première réception</strong> : il n’y a rien à déclarer ici avant, et le nom que
-                            vous envoyez est celui qui apparaîtra dans « Retours ».
-                        </p>
+                            <div className={styles.segmented} role='group' aria-label='Façon d’envoyer'>
+                                {submits.map((item) => (
+                                    <button
+                                        key={item.id}
+                                        type='button'
+                                        className={item.id === submitLang ? styles.segmentActive : styles.segment}
+                                        aria-pressed={item.id === submitLang}
+                                        onClick={() => setSubmitLang(item.id)}
+                                    >
+                                        {item.label}
+                                    </button>
+                                ))}
+                            </div>
 
-                        <div className={styles.segmented} role='group' aria-label='Façon d’envoyer'>
-                            {submits.map((item) => (
-                                <button
-                                    key={item.id}
-                                    type='button'
-                                    className={item.id === submitLang ? styles.segmentActive : styles.segment}
-                                    aria-pressed={item.id === submitLang}
-                                    onClick={() => setSubmitLang(item.id)}
+                            <p className={styles.hint}>{submitExample.note}</p>
+                            <pre className={styles.snippetTall}>{submitExample.code}</pre>
+                            <div className={styles.installActions}>
+                                <Button
+                                    variant='secondary'
+                                    icon='copy'
+                                    onClick={() => void copy(submitExample.code, `submit-${submitExample.id}`)}
                                 >
-                                    {item.label}
-                                </button>
-                            ))}
-                        </div>
+                                    {copied === `submit-${submitExample.id}` ? 'Copié' : 'Copier'}
+                                </Button>
+                            </div>
 
-                        <p className={styles.hint}>{submitExample.note}</p>
-                        <pre className={styles.snippetTall}>{submitExample.code}</pre>
-                        <div className={styles.installActions}>
-                            <Button
-                                variant='secondary'
-                                icon='copy'
-                                onClick={() => void copy(submitExample.code, `submit-${submitExample.id}`)}
-                            >
-                                {copied === `submit-${submitExample.id}` ? 'Copié' : 'Copier'}
-                            </Button>
-                        </div>
-
-                        {/* Le même repère que pour la balise : une intégration se vérifie
+                            {/* Le même repère que pour la balise : une intégration se vérifie
                             en voyant arriver le premier envoi, jamais au code de retour,
                             que la porte publique rend identique en cas de refus. */}
-                        <p className={lastSubmission === null ? styles.waiting : styles.received}>
-                            {forms === null
-                                ? 'Lecture des formulaires…'
-                                : lastSubmission === null
-                                  ? 'En attente du premier retour…'
-                                  : `${forms.length} formulaire${forms.length > 1 ? 's' : ''} — dernier retour ${formatAgo(lastSubmission)}.`}
-                        </p>
+                            <p className={lastSubmission === null ? styles.waiting : styles.received}>
+                                {forms === null
+                                    ? 'Lecture des formulaires…'
+                                    : lastSubmission === null
+                                      ? 'En attente du premier retour…'
+                                      : `${forms.length} formulaire${forms.length > 1 ? 's' : ''} — dernier retour ${formatAgo(lastSubmission)}.`}
+                            </p>
 
-                        <p className={styles.hint}>
-                            Les origines autorisées du site s’appliquent aux retours comme aux mesures, et le plafond
-                            est de vingt formulaires par site et 50 000 retours par formulaire. Un formulaire se ferme,
-                            se vide et se renomme depuis « Retours ».
-                        </p>
-                    </Disclosure>
+                            <p className={styles.hint}>
+                                Les origines autorisées du site s’appliquent aux retours comme aux mesures, et le
+                                plafond est de vingt formulaires par site et 50 000 retours par formulaire. Un
+                                formulaire se ferme, se vide et se renomme depuis « Retours ».
+                            </p>
+                        </Disclosure>
+                    )}
+
                     <Disclosure
                         title='Mémo pour un agent de code'
                         open={section === 'agent'}

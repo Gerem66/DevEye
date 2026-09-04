@@ -5,7 +5,7 @@ import type { SdkPublicApp, SdkPublicHandler, SdkPublicReply, SdkPublicRouteOpti
 
 import { audienceRoutes } from './routes';
 import { TRACKER_SCRIPT, TRACKER_SCRIPT_ETAG } from './script';
-import type { AudienceIngest, IngestRequest, SubmitRequest } from './service';
+import type { AudienceIngest, IngestRequest, SubmitOutcome, SubmitRequest } from './service';
 
 /**
  * Les routes publiques du module, sur une surface `SdkPublicApp` factice. On
@@ -59,7 +59,7 @@ function fakeReply() {
     return { reply, state };
 }
 
-function mount(outcome: 'stored' | 'ignored' | 'failed' = 'stored') {
+function mount(outcome: SubmitOutcome = { status: 'stored' }) {
     const accepted: IngestRequest[] = [];
     const submitted: SubmitRequest[] = [];
     const ingest = {
@@ -207,7 +207,7 @@ describe('POST /api/t/s', () => {
     const submit = async (
         body: unknown,
         extra: Record<string, string> = {},
-        outcome: 'stored' | 'ignored' | 'failed' = 'stored'
+        outcome: SubmitOutcome = { status: 'stored' }
     ) => {
         const { routeOf, submitted } = mount(outcome);
         const { reply, state } = fakeReply();
@@ -306,12 +306,16 @@ describe('POST /api/t/s', () => {
         // Le seul autre refus qu'on nomme. Répondre « reçu » sur une écriture qui a
         // échoué ferait dire au site « message envoyé » sur un message perdu, ce
         // que l'écriture synchrone cherchait précisément à éviter.
-        const json = await submit(jsonBody, {}, 'failed');
+        const json = await submit(jsonBody, {}, { status: 'failed' });
         assert.equal(json.state.status, 503);
         assert.deepEqual(json.state.payload, { ok: false });
 
         // Et le visiteur d'un `<form>` n'est pas envoyé sur la page de remerciement.
-        const form = await submit({ _key: KEY, _form: 'contact', _next: '/merci', message: 'a' }, {}, 'failed');
+        const form = await submit(
+            { _key: KEY, _form: 'contact', _next: '/merci', message: 'a' },
+            {},
+            { status: 'failed' }
+        );
         assert.equal(form.state.status, 503);
         assert.equal(form.state.headers.Location, undefined);
         assert.match(String(form.state.payload), /réessayer/);

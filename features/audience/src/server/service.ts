@@ -4,6 +4,8 @@ import {
     AUDIENCE_SESSION_GAP_SECONDS,
     type AudienceEventInput,
     type AudienceFieldValue,
+    type AudienceFormField,
+    type AudienceFormMode,
     type AudiencePlatform,
     type AudienceSiteRow,
     type AudienceVisitorMode
@@ -22,7 +24,8 @@ import {
 } from './normalize';
 import { countAnswers } from './answers';
 import type { AudienceRepo, PendingEventRow } from './repo';
-import { nameRef, parseOrigins } from './_shared';
+import { validateSubmission, type ValidationReason } from './validate';
+import { nameRef, parseOrigins, readJson } from './_shared';
 import { looksLikeBot, parseUserAgent } from './userAgent';
 
 /**
@@ -77,8 +80,29 @@ export interface SubmitRequest {
     userAgent: string;
 }
 
+/**
+ * Ce que la réception rend, et que la route traduit en réponse.
+ *
+ * `ignored` couvre tous les refus d'identité (clé inconnue, origine refusée,
+ * site éteint, formulaire fermé, quota atteint) : ils se ressemblent tous
+ * dehors, sans quoi l'endpoint dirait à qui le sonde quelles clés existent.
+ *
+ * `invalid` est la seule exception, et elle est délibérée : un envoi qui ne
+ * colle pas au schéma est une propriété de la requête, pas un renseignement.
+ * Il faut avoir une clé valide pour l'obtenir, et cette clé est publique, dans
+ * la page. Sans ce retour, un site qui vient de renommer un champ n'aurait
+ * aucun moyen de s'en apercevoir.
+ */
+export type SubmitOutcome =
+    | { status: 'stored' }
+    | { status: 'ignored' }
+    | { status: 'failed' }
+    | { status: 'invalid'; field: string; reason: ValidationReason };
+
 interface CachedForm {
     id: number;
+    mode: AudienceFormMode;
+    fields: AudienceFormField[];
     open: boolean;
     submissions: number;
 }
@@ -91,6 +115,10 @@ interface CachedSite {
     visitorMode: AudienceVisitorMode;
     origins: string[];
     active: boolean;
+    formsAuto: boolean;
+    submissionIpQuota: number;
+    formHourlyQuota: number;
+    eventIpQuota: number;
 }
 
 interface QueuedEvent {
@@ -140,6 +168,7 @@ const QUEUE_MAX = 20_000;
 const LABEL_CACHE_MAX = 20_000;
 const SESSION_CACHE_MAX = 20_000;
 const UNKNOWN_KEY_CACHE_MAX = 1_000;
+const EVENT_COUNT_CACHE_MAX = 50_000;
 
 /**
  * Les deux paramètres de la dérivation du sel des visiteurs, fixes : le sel
@@ -173,6 +202,13 @@ export class AudienceIngest {
     private readonly labels = new Map<string, number>();
     /** `siteId:nameRef` → formulaire de retours. Vidé avec les sites. */
     private readonly forms = new Map<string, CachedForm>();
+    /**
+     * Le quota d'événements par adresse, compté **en mémoire**. Le chemin chaud
+     * ne fait aucune requête, et lui en donner une par visite reviendrait à
+     * défaire tout ce qui fait tenir l'ingestion. Une fenêtre approximative et
+     * gratuite vaut mieux ici qu'une fenêtre exacte et coûteuse.
+     */
+    private readonly eventCounts = new Map<string, { from: number; count: number }>();
     /** `siteId:visitorRef` → session ouverte. */
     private readonly sessions = new Map<string, CachedSession>();
 
@@ -224,6 +260,7 @@ export class AudienceIngest {
         if (!site || !site.active) return;
         if (!originAllowed(site.origins, req.origin, site.platform)) return;
         if (looksLikeBot(req.userAgent)) return;
+        if (this.overEventQuota(site, req.ip)) return;
 
         const ua = parseUserAgent(req.userAgent);
 
@@ -270,9 +307,7 @@ export class AudienceIngest {
     }
 
     /**
-     * Reçoit un retour, ou l'ignore en silence. Ne lève jamais et ne dit jamais
-     * non, pour la même raison qu'`accept` : la route répond pareil quoi qu'il
-     * arrive.
+     * Reçoit un retour.
      *
      * **Écrit avant de rendre la main**, contrairement à la mesure, et c'est la
      * seule divergence assumée entre les deux portes : une vue perdue au
@@ -281,36 +316,57 @@ export class AudienceIngest {
      *
      * `looksLikeBot` ne s'applique pas non plus : un envoi depuis un serveur
      * porte le user-agent qu'il veut, et refuser sur cette heuristique
-     * avalerait des messages réels. Le pot de miel et le plafond de débit sont
-     * les gardes, en amont.
+     * avalerait des messages réels. Le pot de miel, les origines et les quotas
+     * sont les gardes.
      *
-     * Rend `'failed'` sur une panne, et c'est la seule chose qu'elle avoue :
-     * répondre « reçu » quand l'écriture a échoué ferait dire au site
-     * « message envoyé » sur un message perdu, ce qui est précisément ce que
-     * l'écriture synchrone cherchait à éviter. Un refus, lui, reste muet.
+     * Trois refus, et un seul parle. `ignored` couvre tout ce qui touche à
+     * l'identité (clé, origine, site éteint, formulaire fermé, quota) et se
+     * ressemble vu de dehors, sans quoi l'endpoint dirait à qui le sonde
+     * quelles clés existent. `invalid` nomme le champ fautif, parce qu'il faut
+     * déjà une clé valide pour l'obtenir, que cette clé est publique dans la
+     * page, et qu'un site qui vient de renommer un champ doit pouvoir s'en
+     * apercevoir. `failed` avoue la panne, sans quoi le site annoncerait
+     * « message envoyé » sur un message perdu.
      */
-    async submit(req: SubmitRequest): Promise<'stored' | 'ignored' | 'failed'> {
+    async submit(req: SubmitRequest): Promise<SubmitOutcome> {
         let site: CachedSite | null;
         let form: CachedForm | null;
         let cipher: SdkCipher;
         try {
             site = await this.resolveSite(req.key);
-            if (!site || !site.active) return 'ignored';
-            if (!originAllowed(site.origins, req.origin, site.platform)) return 'ignored';
+            if (!site || !site.active) return { status: 'ignored' };
+            if (!originAllowed(site.origins, req.origin, site.platform)) return { status: 'ignored' };
 
             cipher = this.deps.cipherFor(site.workspaceId);
-            form = await this.resolveForm(site.id, req.form, cipher);
+            form = await this.resolveForm(site, req.form, cipher);
         } catch (e) {
             this.deps.logger.error({ err: e }, 'Audience submit: form lookup failed');
-            return 'failed';
+            return { status: 'failed' };
         }
-        if (!form || !form.open) return 'ignored';
+        if (!form || !form.open) return { status: 'ignored' };
         // Plein, on cesse d'accepter au lieu d'effacer le plus ancien : ce que le
         // site a demandé à collecter ne disparaît pas pour faire de la place.
-        if (form.submissions >= AUDIENCE_FORM_SUBMISSIONS_MAX) return 'ignored';
+        if (form.submissions >= AUDIENCE_FORM_SUBMISSIONS_MAX) {
+            await this.closeForm(form, 'full');
+            return { status: 'ignored' };
+        }
+
+        // La validation avant tout le reste : refuser coûte moins qu'un chiffrement
+        // et une écriture, et le verdict ne dépend de rien d'autre que du schéma.
+        let fields = req.fields;
+        if (form.mode === 'strict') {
+            const checked = validateSubmission(form.fields, req.fields);
+            if (!checked.ok) return { status: 'invalid', field: checked.field, reason: checked.reason };
+            fields = checked.fields;
+        }
 
         const now = Math.floor(Date.now() / 1000);
         try {
+            // L'adresse ne sert qu'à compter et n'est jamais conservée : le même
+            // condensé salé au jour que pour un visiteur, sans le user-agent.
+            const ip = visitorRef(this.dailySalt(), site.publicKey, req.ip, '');
+            if (await this.overQuota(site, form, ip, now)) return { status: 'ignored' };
+
             const persistent = site.visitorMode === 'persistent' && !!req.visitorId;
             const visitor = persistent
                 ? persistentVisitorRef(this.visitorSalt, site.publicKey, req.visitorId as string)
@@ -325,36 +381,82 @@ export class AudienceIngest {
                 formId: form.id,
                 siteId: site.id,
                 ts: now,
+                ipRef: ip,
                 sessionId: session?.id ?? null,
-                content: await cipher.encrypt(JSON.stringify({ fields: req.fields, path }))
+                content: await cipher.encrypt(JSON.stringify({ fields, path }))
             });
-            await countAnswers(this.deps.repo, cipher, form.id, req.fields, 1);
+            await countAnswers(this.deps.repo, cipher, form.id, fields, 1);
             await this.deps.repo.touchForm(form.id, now);
             form.submissions++;
             this.maybeBroadcast(site.workspaceId);
-            return 'stored';
+            return { status: 'stored' };
         } catch (e) {
             this.deps.logger.error({ err: e, siteId: site.id }, 'Audience submit failed');
-            return 'failed';
+            return { status: 'failed' };
         }
     }
 
     /**
-     * Le formulaire de ce nom, créé à sa première réception. `null` quand le
-     * site en porte déjà le maximum : sans ce plafond, une clé publique connue
-     * suffirait à remplir la table de canaux tirés au sort.
+     * Les deux quotas de la dernière heure, en fenêtre glissante : celui d'une
+     * provenance sur ce formulaire, puis celui du formulaire toutes provenances
+     * confondues. Le motif du plafond horaire des signalements du socle, un
+     * `COUNT(*)` servi par un index composite, sans table de compteurs ni
+     * fenêtre à purger.
+     *
+     * Le second **ferme** le formulaire : un flot distribué ne s'essouffle pas
+     * tout seul, et une porte close et datée vaut mieux qu'un canal rempli
+     * jusqu'au plafond de stockage, qu'il faudrait alors vider à la main.
+     *
+     * Deux requêtes par retour : abordable ici, impensable sur le chemin de la
+     * mesure, d'où le compteur en mémoire de celle-ci.
      */
-    private async resolveForm(siteId: number, name: string, cipher: SdkCipher): Promise<CachedForm | null> {
+    private async overQuota(site: CachedSite, form: CachedForm, ip: string, now: number): Promise<boolean> {
+        const since = now - 3600;
+        if (site.submissionIpQuota > 0) {
+            const fromIp = await this.deps.repo.countSubmissionsSince(form.id, ip, since);
+            if (fromIp >= site.submissionIpQuota) return true;
+        }
+        if (site.formHourlyQuota > 0) {
+            const total = await this.deps.repo.countSubmissionsSince(form.id, null, since);
+            if (total >= site.formHourlyQuota) {
+                await this.closeForm(form, 'quota');
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Ferme un formulaire de son propre chef, en base et dans le cache. */
+    private async closeForm(form: CachedForm, reason: 'quota' | 'full'): Promise<void> {
+        if (!form.open) return;
+        form.open = false;
+        await this.deps.repo.closeForm(form.id, Math.floor(Date.now() / 1000), reason);
+        this.deps.logger.warn({ formId: form.id, reason }, 'Audience form closed automatically');
+    }
+
+    /**
+     * Le formulaire de ce nom. Créé à la volée **seulement si le site
+     * l'autorise** : c'est ce réglage qui prête l'interface à qui lit la clé
+     * publique dans la page, et il est éteint par défaut. Le plafond borne ce
+     * qu'il peut faire apparaître même allumé.
+     */
+    private async resolveForm(site: CachedSite, name: string, cipher: SdkCipher): Promise<CachedForm | null> {
         const trimmed = name.trim();
         const ref = nameRef(trimmed);
-        const cacheKey = `${siteId}:${ref}`;
+        const cacheKey = `${site.id}:${ref}`;
         const cached = this.forms.get(cacheKey);
         if (cached) return cached;
 
-        const existing = await this.deps.repo.findFormByName(siteId, ref);
+        const existing = await this.deps.repo.findFormByName(site.id, ref);
         if (existing) {
+            const stored = await readJson<{ fields?: AudienceFormField[] }>(cipher, existing.form_schema);
             const form: CachedForm = {
                 id: Number(existing.id),
+                mode: existing.mode === 'strict' ? 'strict' : 'auto',
+                // Un schéma illisible ne fait pas passer un formulaire strict pour
+                // permissif : sans champs déclarés, la validation refuse tout, ce qui
+                // est le bon sens du doute.
+                fields: stored?.fields ?? [],
                 open: Number(existing.is_open) === 1,
                 submissions: Number(existing.submissions)
             };
@@ -362,12 +464,49 @@ export class AudienceIngest {
             return form;
         }
 
-        const count = await this.deps.repo.countForms(siteId);
+        if (!site.formsAuto) return null;
+        const count = await this.deps.repo.countForms(site.id);
         if (count >= AUDIENCE_MAX_FORMS) return null;
-        const id = await this.deps.repo.resolveForm(siteId, ref, await cipher.encrypt(trimmed), count);
-        const form: CachedForm = { id, open: true, submissions: 0 };
+        const id = await this.deps.repo.createForm({
+            siteId: site.id,
+            nameRef: ref,
+            content: await cipher.encrypt(trimmed),
+            mode: 'auto',
+            formSchema: null,
+            sortOrder: count
+        });
+        const form: CachedForm = { id, mode: 'auto', fields: [], open: true, submissions: 0 };
         this.forms.set(cacheKey, form);
         return form;
+    }
+
+    /**
+     * Le plafond d'événements d'une adresse sur ce site, **en mémoire**.
+     *
+     * Le chemin chaud ne fait aucune requête, et c'est ce qui lui permet de
+     * tenir la cadence des visites de tous les sites : lui en donner une par
+     * événement défairait tout le reste. Le prix est assumé et dit à l'écran,
+     * la fenêtre étant approximative (elle repart d'un bloc, elle ne glisse
+     * pas) et remise à zéro au redémarrage.
+     *
+     * Éteint par défaut (`0`), pour qu'aucun site déjà branché ne se mette à
+     * perdre des vues sans qu'on l'ait demandé.
+     */
+    private overEventQuota(site: CachedSite, ip: string): boolean {
+        if (site.eventIpQuota <= 0) return false;
+
+        const now = Date.now();
+        const key = `${site.id}:${ip}`;
+        const seen = this.eventCounts.get(key);
+        if (!seen || now - seen.from >= 3600_000) {
+            // Bornée par une entrée publique, donc vidée sans finesse : on
+            // recommence à compter plutôt que de laisser la carte enfler.
+            if (this.eventCounts.size >= EVENT_COUNT_CACHE_MAX) this.eventCounts.clear();
+            this.eventCounts.set(key, { from: now, count: 1 });
+            return false;
+        }
+        seen.count++;
+        return seen.count > site.eventIpQuota;
     }
 
     /**
@@ -417,7 +556,11 @@ export class AudienceIngest {
             platform: (row.platform as AudiencePlatform) ?? 'web',
             visitorMode: row.visitor_mode === 'persistent' ? 'persistent' : 'anonymous',
             origins: parseOrigins(row.origins),
-            active: Number(row.active) === 1
+            active: Number(row.active) === 1,
+            formsAuto: Number(row.forms_auto) === 1,
+            submissionIpQuota: Number(row.submission_ip_quota),
+            formHourlyQuota: Number(row.form_hourly_quota),
+            eventIpQuota: Number(row.event_ip_quota)
         };
         this.sites.set(key, site);
         return site;

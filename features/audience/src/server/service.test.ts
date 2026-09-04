@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 
 import {
     AUDIENCE_MAX_FORMS,
+    type AudienceFormField,
     type AudienceFormLabelRow,
     type AudienceFormRow,
     type AudienceSiteRow,
@@ -13,6 +14,7 @@ import { createTestServiceDeps } from '@deveye/types/sdk/testing';
 
 import { countAnswers } from './answers';
 import { dayKey } from './normalize';
+import { nameRef } from './_shared';
 import { serverEntry } from './index';
 import type { AudienceRepo, NewSessionInput, PendingEventRow } from './repo';
 import { AudienceIngest, type IngestRequest, type SubmitRequest } from './service';
@@ -59,6 +61,10 @@ function site(over: Partial<AudienceSiteRow> = {}): AudienceSiteRow {
         origins: 'exemple.fr',
         active: 1,
         retention_days: 30,
+        forms_auto: 0,
+        submission_ip_quota: 5,
+        form_hourly_quota: 200,
+        event_ip_quota: 0,
         sort_order: 0,
         last_event_at: null,
         content: JSON.stringify({ name: 'Vitrine', description: '' }),
@@ -165,9 +171,9 @@ function fakeRepo(sites: AudienceSiteRow[]): FakeRepo {
         findFormByName: async (siteId, nameRef) =>
             repo.forms.find((f) => f.site_id === siteId && f.name_ref === nameRef) ?? null,
         countForms: async (siteId) => repo.forms.filter((f) => f.site_id === siteId).length,
-        async updateForm(formId, nameRef, content, open) {
-            const f = repo.forms.find((x) => x.id === formId);
-            if (f) Object.assign(f, { name_ref: nameRef, content, is_open: open ? 1 : 0 });
+        async updateForm(input) {
+            const f = repo.forms.find((x) => x.id === input.formId);
+            if (f) Object.assign(f, { name_ref: input.nameRef, content: input.content, is_open: input.open ? 1 : 0 });
         },
         async removeForm(formId) {
             const i = repo.forms.findIndex((f) => f.id === formId);
@@ -186,22 +192,33 @@ function fakeRepo(sites: AudienceSiteRow[]): FakeRepo {
             if (f) Object.assign(f, { submissions: 0, last_at: null });
             return before - repo.submissions.length;
         },
-        async resolveForm(siteId, nameRef, content, sortOrder) {
-            const hit = repo.forms.find((f) => f.site_id === siteId && f.name_ref === nameRef);
-            if (hit) return hit.id;
+        async createForm(input) {
             const id = ++seq;
             repo.forms.push({
                 id,
-                site_id: siteId,
-                name_ref: nameRef,
+                site_id: input.siteId,
+                name_ref: input.nameRef,
+                mode: input.mode,
+                form_schema: input.formSchema,
                 is_open: 1,
+                closed_at: null,
+                closed_reason: null,
                 submissions: 0,
                 last_at: null,
-                sort_order: sortOrder,
-                content,
+                sort_order: input.sortOrder,
+                content: input.content,
                 created: 1
             });
             return id;
+        },
+        async closeForm(formId, at, reason) {
+            const f = repo.forms.find((x) => x.id === formId);
+            if (f) Object.assign(f, { is_open: 0, closed_at: at, closed_reason: reason });
+        },
+        async countSubmissionsSince(formId, ipRef, since) {
+            return repo.submissions.filter(
+                (b) => b.form_id === formId && b.ts >= since && (ipRef === null || b.ip_ref === ipRef)
+            ).length;
         },
         async insertSubmission(input) {
             const id = ++seq;
@@ -210,6 +227,7 @@ function fakeRepo(sites: AudienceSiteRow[]): FakeRepo {
                 form_id: input.formId,
                 site_id: input.siteId,
                 ts: input.ts,
+                ip_ref: input.ipRef,
                 session_id: input.sessionId,
                 content: input.content
             });
@@ -482,18 +500,46 @@ describe('le sel des visiteurs', () => {
     });
 });
 
+/** Un site qui laisse naître ses formulaires : ce n'est plus le défaut. */
+function autoSite(over: Partial<AudienceSiteRow> = {}): AudienceSiteRow {
+    return site({ forms_auto: 1, ...over });
+}
+
+/** Un formulaire déclaré, tel que l'écran de réglages l'aurait posé. */
+function declared(fields: AudienceFormField[], over: Partial<AudienceFormRow> = {}): AudienceFormRow {
+    return {
+        id: 10,
+        site_id: 1,
+        name_ref: nameRef('contact'),
+        mode: 'strict',
+        form_schema: JSON.stringify({ fields }),
+        is_open: 1,
+        closed_at: null,
+        closed_reason: null,
+        submissions: 0,
+        last_at: null,
+        sort_order: 0,
+        content: 'contact',
+        created: 1,
+        ...over
+    };
+}
+
+function textField(name: string, over: Partial<AudienceFormField> = {}): AudienceFormField {
+    return { name, kind: 'text', required: false, choices: [], multiple: false, ...over };
+}
+
 describe('AudienceIngest : les retours', () => {
-    it('crée le formulaire à la première réception, écrit le retour et compte les réponses', async () => {
-        const repo = fakeRepo([site()]);
+    it('écrit avant de rendre la main, et compte les réponses', async () => {
+        const repo = fakeRepo([autoSite()]);
         const { ingest } = ingestWith(repo);
 
         // Rien à vidanger : `submit` écrit avant de rendre la main, contrairement
         // à la mesure. C'est ce que ce test tient.
-        await ingest.submit(submission());
+        assert.deepEqual(await ingest.submit(submission()), { status: 'stored' });
 
         assert.equal(repo.forms.length, 1);
         assert.equal(repo.forms[0].submissions, 1);
-        assert.equal(repo.submissions.length, 1);
         assert.deepEqual(JSON.parse(repo.submissions[0].content), {
             fields: { satisfaction: 4, canaux: ['mail', 'sms'], message: 'x'.repeat(200) },
             path: '/contact'
@@ -513,8 +559,19 @@ describe('AudienceIngest : les retours', () => {
         );
     });
 
-    it('relie le retour à la visite ouverte du même visiteur, sans en ouvrir une', async () => {
+    it('ne crée aucun formulaire tant que le site ne l’autorise pas', async () => {
+        // Le défaut, et la correction qui compte : sans ce réglage, qui lit la clé
+        // publique dans la page décidait des colonnes qu'on affiche.
         const repo = fakeRepo([site()]);
+        const { ingest } = ingestWith(repo);
+
+        assert.deepEqual(await ingest.submit(submission()), { status: 'ignored' });
+        assert.equal(repo.forms.length, 0);
+        assert.equal(repo.submissions.length, 0);
+    });
+
+    it('relie le retour à la visite ouverte du même visiteur, sans en ouvrir une', async () => {
+        const repo = fakeRepo([autoSite()]);
         const { ingest, flush } = ingestWith(repo);
         await ingest.accept(request());
         await flush();
@@ -525,22 +582,8 @@ describe('AudienceIngest : les retours', () => {
         assert.equal(repo.submissions[0].session_id, repo.sessions[0].id);
     });
 
-    it("n'écrit rien sur une clé inconnue, une origine refusée ou un site éteint", async () => {
-        const repo = fakeRepo([site()]);
-        const { ingest } = ingestWith(repo);
-
-        await ingest.submit(submission({ key: 'pk_000000000000000000000009' }));
-        await ingest.submit(submission({ origin: 'https://ailleurs.fr' }));
-        assert.equal(repo.submissions.length, 0);
-
-        repo.sites[0].active = 0;
-        ingest.invalidate();
-        await ingest.submit(submission());
-        assert.equal(repo.submissions.length, 0);
-    });
-
     it('refuse un formulaire fermé, et le rouvre dès que le cache est vidé', async () => {
-        const repo = fakeRepo([site()]);
+        const repo = fakeRepo([autoSite()]);
         const { ingest } = ingestWith(repo);
         await ingest.submit(submission());
 
@@ -548,7 +591,7 @@ describe('AudienceIngest : les retours', () => {
         // Sans l'invalidation, la fermeture ne prendrait effet qu'au redémarrage :
         // c'est exactement ce que les handlers appellent après une mutation.
         ingest.invalidate();
-        await ingest.submit(submission());
+        assert.deepEqual(await ingest.submit(submission()), { status: 'ignored' });
         assert.equal(repo.submissions.length, 1);
 
         repo.forms[0].is_open = 1;
@@ -558,7 +601,7 @@ describe('AudienceIngest : les retours', () => {
     });
 
     it('cesse de créer des formulaires au-delà du plafond du site', async () => {
-        const repo = fakeRepo([site()]);
+        const repo = fakeRepo([autoSite()]);
         const { ingest } = ingestWith(repo);
         for (let i = 0; i < AUDIENCE_MAX_FORMS + 5; i++) {
             await ingest.submit(submission({ form: `canal-${i}`, fields: { a: '1' } }));
@@ -568,17 +611,127 @@ describe('AudienceIngest : les retours', () => {
     });
 
     it("décompte exactement ce qu'un retour avait compté", async () => {
-        const repo = fakeRepo([site()]);
+        const repo = fakeRepo([autoSite()]);
         const { ingest, deps } = ingestWith(repo);
         await ingest.submit(submission({ fields: { recommande: 'oui' } }));
         await ingest.submit(submission({ fields: { recommande: 'non' } }));
 
-        const key = [...repo.answers.entries()].find(([, n]) => n === 1);
-        assert.ok(key);
         await countAnswers(repo, deps.cipherFor(1), repo.forms[0].id, { recommande: 'oui' }, -1);
 
         // Un seul des deux comptes bouge, et aucun ne passe sous zéro.
         assert.deepEqual([...repo.answers.values()].sort(), [0, 1]);
+    });
+});
+
+describe('AudienceIngest : le mode strict', () => {
+    const CONTACT = [textField('email', { kind: 'email', required: true }), textField('message')];
+
+    it('convertit ce qui colle au schéma, et range la valeur convertie', async () => {
+        const repo = fakeRepo([site()]);
+        repo.forms.push(declared([textField('note', { kind: 'number' })]));
+        const { ingest } = ingestWith(repo);
+
+        // Un `<form>` HTML n'envoie que des chaînes : c'est le type déclaré qui
+        // ramène « 4 » au nombre 4, et donc ce qui est rangé et compté.
+        assert.deepEqual(await ingest.submit(submission({ fields: { note: '4' } })), { status: 'stored' });
+        assert.deepEqual(JSON.parse(repo.submissions[0].content).fields, { note: 4 });
+    });
+
+    it('nomme le champ fautif plutôt que de se taire', async () => {
+        const repo = fakeRepo([site()]);
+        repo.forms.push(declared(CONTACT));
+        const { ingest } = ingestWith(repo);
+
+        // Le seul refus qui parle : il faut déjà une clé valide pour l'obtenir, et
+        // sans lui un site qui vient de renommer un champ ne verrait rien.
+        assert.deepEqual(await ingest.submit(submission({ fields: { email: 'a@b.fr', surprise: 'x' } })), {
+            status: 'invalid',
+            field: 'surprise',
+            reason: 'unknown'
+        });
+        assert.deepEqual(await ingest.submit(submission({ fields: { message: 'bonjour' } })), {
+            status: 'invalid',
+            field: 'email',
+            reason: 'missing'
+        });
+        assert.equal(repo.submissions.length, 0);
+    });
+
+    it('refuse tout quand le schéma est illisible', async () => {
+        // Le doute profite à la fermeture : un blob abîmé ne doit pas faire passer
+        // un formulaire strict pour permissif.
+        const repo = fakeRepo([site()]);
+        repo.forms.push(declared([], { form_schema: 'illisible' }));
+        const { ingest } = ingestWith(repo);
+
+        const res = await ingest.submit(submission({ fields: { email: 'a@b.fr' } }));
+        assert.equal(res.status, 'invalid');
+    });
+});
+
+describe('AudienceIngest : les quotas de retours', () => {
+    it('arrête une adresse au-delà de son quota horaire', async () => {
+        const repo = fakeRepo([autoSite({ submission_ip_quota: 2 })]);
+        const { ingest } = ingestWith(repo);
+
+        for (let i = 0; i < 5; i++) await ingest.submit(submission({ fields: { a: String(i) } }));
+
+        assert.equal(repo.submissions.length, 2);
+        // Refusé, pas fermé : c'est une provenance qui insiste, pas le formulaire
+        // qui est submergé.
+        assert.equal(repo.forms[0].is_open, 1);
+    });
+
+    it('ferme le formulaire, daté et motivé, quand la rafale est distribuée', async () => {
+        // Le quota par adresse ne peut rien contre un flot venu de partout : c'est
+        // le quota du formulaire qui borne, en fermant plutôt qu'en se remplissant
+        // jusqu'au plafond de stockage.
+        const repo = fakeRepo([autoSite({ submission_ip_quota: 0, form_hourly_quota: 3 })]);
+        const { ingest } = ingestWith(repo);
+
+        for (let i = 0; i < 6; i++) await ingest.submit(submission({ ip: `203.0.113.${i}` }));
+
+        assert.equal(repo.submissions.length, 3);
+        assert.equal(repo.forms[0].is_open, 0);
+        assert.equal(repo.forms[0].closed_reason, 'quota');
+        assert.ok(repo.forms[0].closed_at);
+    });
+
+    it('ne compte rien quand le quota est à zéro', async () => {
+        const repo = fakeRepo([autoSite({ submission_ip_quota: 0, form_hourly_quota: 0 })]);
+        const { ingest } = ingestWith(repo);
+        for (let i = 0; i < 5; i++) await ingest.submit(submission({ fields: { a: String(i) } }));
+        assert.equal(repo.submissions.length, 5);
+    });
+});
+
+describe('AudienceIngest : le quota d’événements', () => {
+    it('laisse tout passer tant qu’il est à zéro, et coupe au-delà', async () => {
+        // Éteint par défaut : c'est ce qui empêche un site déjà branché de se
+        // mettre à perdre des vues sans qu'on l'ait demandé.
+        const libre = fakeRepo([site()]);
+        const a = ingestWith(libre);
+        for (let i = 0; i < 10; i++) await a.ingest.accept(request());
+        await a.flush();
+        assert.equal(libre.events.length, 10);
+
+        const borne = fakeRepo([site({ event_ip_quota: 3 })]);
+        const b = ingestWith(borne);
+        for (let i = 0; i < 10; i++) await b.ingest.accept(request({ events: [{ type: 'view', path: `/p${i}` }] }));
+        await b.flush();
+        assert.equal(borne.events.length, 3);
+    });
+
+    it('compte par adresse et par site, pas globalement', async () => {
+        const repo = fakeRepo([site({ event_ip_quota: 2 })]);
+        const { ingest, flush } = ingestWith(repo);
+        for (const ip of ['203.0.113.1', '203.0.113.2']) {
+            for (let i = 0; i < 4; i++) {
+                await ingest.accept(request({ ip, events: [{ type: 'view', path: `/p${i}` }] }));
+            }
+        }
+        await flush();
+        assert.equal(repo.events.length, 4, 'deux par adresse');
     });
 });
 

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
     AUDIENCE_BREAKDOWN_MAX,
     AUDIENCE_FORM_NAME_MAX_LENGTH,
+    AUDIENCE_QUOTA_MAX,
     AUDIENCE_FUNNEL_MAX_STEPS,
     AUDIENCE_FUNNEL_NAME_MAX_LENGTH,
     AUDIENCE_MAX_ORIGINS,
@@ -14,6 +15,8 @@ import {
     audienceActivitySchema,
     audienceBreakdownItemSchema,
     audienceDimensionSchema,
+    audienceFormFieldsSchema,
+    audienceFormModeSchema,
     audienceFormSchema,
     audienceFunnelSchema,
     audienceFunnelStepDraftSchema,
@@ -57,7 +60,11 @@ const siteBody = {
      */
     origins: z.array(z.string().max(AUDIENCE_ORIGIN_MAX_LENGTH)).max(AUDIENCE_MAX_ORIGINS),
     active: z.boolean(),
-    retentionDays: z.number().int().min(AUDIENCE_RETENTION_MIN_DAYS).max(AUDIENCE_RETENTION_MAX_DAYS)
+    retentionDays: z.number().int().min(AUDIENCE_RETENTION_MIN_DAYS).max(AUDIENCE_RETENTION_MAX_DAYS),
+    formsAuto: z.boolean(),
+    submissionIpQuota: z.number().int().min(0).max(AUDIENCE_QUOTA_MAX),
+    formHourlyQuota: z.number().int().min(0).max(AUDIENCE_QUOTA_MAX),
+    eventIpQuota: z.number().int().min(0).max(AUDIENCE_QUOTA_MAX)
 };
 
 // ------------------------------------------------------------------ sites
@@ -256,19 +263,43 @@ export const audienceFormList = {
 };
 
 /**
- * Renomme un formulaire ou ferme sa porte. Rien ne le crée ici : un formulaire
- * naît de sa première réception, et un formulaire vide déclaré à la main
- * n'apprendrait rien de plus qu'un exemple de code.
+ * Déclare un formulaire, ses champs et leur type. C'est la voie normale : le
+ * laisser naître d'une réception donne à qui lit la clé publique le pouvoir de
+ * décider des colonnes qu'on affiche, et il faut que le site l'ait autorisé
+ * (`formsAuto`) pour que cela reste possible.
  *
  * Comme les autres écritures du module, celle-ci et ses voisines battent le
  * sujet `audience` (`mutates: true`), qui ravive les cinq clés de cache. Les
- * écrans ravivent en plus `audience.forms` sur place, sans attendre l'aller-retour.
+ * écrans ravivent en plus `audience.forms` sur place, sans attendre
+ * l'aller-retour.
+ */
+export const audienceFormAdd = {
+    command: 'audience.formAdd' as const,
+    input: z.object({
+        siteId,
+        name: z.string().min(1).max(AUDIENCE_FORM_NAME_MAX_LENGTH),
+        mode: audienceFormModeSchema,
+        fields: audienceFormFieldsSchema
+    }),
+    output: z.object({ form: audienceFormSchema })
+};
+
+/**
+ * Renomme un formulaire, redéfinit ses champs, ferme ou rouvre sa porte.
+ *
+ * Le nom fait partie de l'adressage : le changer ici veut dire le changer dans
+ * le site, sinon l'ancien nom se présentera comme un inconnu. Les champs, eux,
+ * ne valent que pour ce qui entre **ensuite** : les retours déjà reçus ne sont
+ * pas relus à l'aune du nouveau schéma, et c'est ce qui rend une correction
+ * sans danger.
  */
 export const audienceFormUpdate = {
     command: 'audience.formUpdate' as const,
     input: z.object({
         formId,
         name: z.string().min(1).max(AUDIENCE_FORM_NAME_MAX_LENGTH),
+        mode: audienceFormModeSchema,
+        fields: audienceFormFieldsSchema,
         open: z.boolean()
     }),
     output: z.object({ form: audienceFormSchema })
@@ -355,6 +386,7 @@ export const audienceCommands = [
     audienceFunnelRemove,
     audienceSummary,
     audienceFormList,
+    audienceFormAdd,
     audienceFormUpdate,
     audienceFormClear,
     audienceFormRemove,

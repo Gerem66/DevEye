@@ -36,12 +36,23 @@ export const manifest = {
      */
     nativeCapabilities: ['routes.public'],
     /**
-     * Un panneau Général à l'échelle d'un site : son identité, l'état de la
-     * mesure, la reconnaissance des visiteurs, la rétention des événements bruts
-     * et sa suppression. Le dialogue ne sert qu'à déclarer un site ; sa clé
-     * publique et son installation ont le leur. Partage et Permissions viennent
-     * du descripteur.
+     * Trois panneaux à l'échelle d'un site, un par section de sa fiche : ce qui
+     * vaut pour le site entier (identité, origines, état, suppression), ce qui
+     * ne règle que la mesure, et ce qui ne règle que les retours.
+     *
+     * Pas d'onglet pour les entonnoirs : ils n'ont rien à régler, ils se
+     * composent depuis leur vue à partir des signaux déjà observés, et un
+     * quatrième onglet vide ferait chercher un réglage qui n'existe pas.
+     *
+     * Un seul bouton les ouvre, celui de la coquille commune, à toutes les
+     * profondeurs. Partage et Permissions viennent du descripteur.
      */
-    settings: { item: ['general'] },
+    settings: {
+        item: [
+            'general',
+            { id: 'traffic', label: 'Fréquentation', icon: 'activity' },
+            { id: 'forms', label: 'Retours', icon: 'chat' }
+        ]
+    },
     commands: audienceCommands
 } satisfies FeatureManifest;

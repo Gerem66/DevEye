@@ -4,7 +4,9 @@ import type { FeatureClient } from '@deveye/types/sdk/client';
 import Audience from './Audience';
 import AudienceWidget from './AudienceWidget';
 import { clientProvider } from './provider';
+import SiteFormsPanel from './SiteFormsPanel';
 import SiteGeneralPanel from './SiteGeneralPanel';
+import SiteTrafficPanel from './SiteTrafficPanel';
 
 export const clientEntry: FeatureClient = {
     Widget: AudienceWidget,
@@ -14,7 +16,7 @@ export const clientEntry: FeatureClient = {
      * des visiteurs, la conservation des événements bruts et sa suppression.
      * Partage et Permissions viennent du descripteur.
      */
-    settingsPanels: { general: SiteGeneralPanel },
+    settingsPanels: { general: SiteGeneralPanel, traffic: SiteTrafficPanel, forms: SiteFormsPanel },
     // Démonté dès la fermeture : la fiche tient des agrégats bornés par une fenêtre de
     // temps, qui vieilliraient en silence dans une instance mise en cache. Pas de
     // `holdSecrecy` : rien n'y est chiffré à l'étage gardé.

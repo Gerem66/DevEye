@@ -12,6 +12,7 @@ import type { AudienceSite, AudienceUsage } from '../contracts/domain';
 
 import Forms from './Forms/Forms';
 import Funnels from './Funnels';
+import HubTrend from './HubTrend';
 import InstallDialog from './InstallDialog';
 import SiteHub, { type SiteSection } from './SiteHub';
 import SiteView from './SiteView';
@@ -104,22 +105,33 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onSite
                         <span className={`icon icon-refresh ${refreshing ? styles.spinning : ''}`} aria-hidden='true' />
                     </Button>
 
-                    {/* L'installation est mise en avant tant que rien n'est arrivé,
-                        mesure ou retour : c'est la seule chose à faire à ce moment-là. */}
-                    <Button
-                        variant={site.lastEventAt === null ? 'primary' : 'secondary'}
-                        icon='terminal'
-                        onClick={() => setInstallOpen(true)}
-                    >
-                        Installer
-                    </Button>
+                    {/* Chaque section a son installation : la balise au sommaire,
+                        la mesure et ses appels sur Fréquentation, les signaux nommés
+                        sur Entonnoirs. Les Retours portent le leur, avec le
+                        formulaire ouvert — celui-ci ne saurait pas lequel montrer.
+                        Le bouton passe en avant tant que rien n'est arrivé : c'est
+                        la seule chose à faire à ce moment-là. */}
+                    {section !== 'forms' && (
+                        <Button
+                            variant={site.lastEventAt === null ? 'primary' : 'secondary'}
+                            icon='terminal'
+                            onClick={() => setInstallOpen(true)}
+                        >
+                            Installer
+                        </Button>
+                    )}
                     {/* Les réglages de ce site, son identité et sa suppression
                         comprises (onglet Général), avec le partage et les
                         restrictions par rôle. Le bouton se garde lui-même. Supprimé
                         ou déplacé depuis la coquille, le site n'est plus ici : la
                         fiche revient à la liste. */}
+                    {/* Ouvert depuis une section, il tombe sur l'onglet de cette
+                        section : chercher « Fréquentation » alors qu'on la regarde
+                        déjà est un clic qui n'apprend rien. Depuis le sommaire ou
+                        les entonnoirs, la coquille garde son choix habituel. */}
                     <FeatureSettingsButton
                         scope={{ kind: 'item', feature: 'audience', itemId: String(site.id), itemLabel: site.name }}
+                        initialSection={section === 'traffic' || section === 'forms' ? section : undefined}
                         onGone={onBack}
                     />
                 </div>
@@ -158,8 +170,13 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onSite
                 </section>
             )}
 
+            {/* Tout en bas du sommaire : sous les trois cartes et sous les projets,
+                pour que la page finisse sur ce qu'on regarde, pas sur du vide. */}
+            {section === null && <HubTrend site={site} onOpen={() => setSection('traffic')} />}
+
             <InstallDialog
                 open={installOpen}
+                scope={section === 'traffic' || section === 'funnels' ? section : 'site'}
                 site={site}
                 ingestOrigin={ingestOrigin}
                 canWrite={canWrite}

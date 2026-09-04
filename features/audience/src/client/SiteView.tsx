@@ -10,7 +10,7 @@ import type {
 } from '../contracts/domain';
 
 import { api } from './api';
-import { DIMENSION_LABELS, formatCount } from './format';
+import { bucketOf, DIMENSION_LABELS, formatCount } from './format';
 import RangeBar from './RangeBar';
 import Heatmap from './Stats/Heatmap';
 import StatBand from './Stats/StatBand';
@@ -263,16 +263,6 @@ export function SiteView({ site, heading, actions }: SiteViewProps) {
             </div>
         </div>
     );
-}
-
-/**
- * Le pas de la courbe, déduit de deux points consécutifs. Le serveur rend la
- * résolution mais pas la largeur d'un seau : la transporter deux fois ouvrirait
- * la porte à ce qu'elles se contredisent.
- */
-function bucketOf(overview: AudienceOverview): number {
-    if (overview.points.length >= 2) return overview.points[1].at - overview.points[0].at;
-    return overview.resolution === 'hour' ? 3600 : overview.resolution === 'day' ? 86400 : 7 * 86400;
 }
 
 /** Un classement sans son titre — le panneau technique porte déjà le sien. */

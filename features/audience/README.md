@@ -382,8 +382,52 @@ la feature avait déjà sous la main, une porte publique, une clé par site, une
 liste d'origines et un chiffrement au repos.
 
 Un **formulaire** est le canal nommé qui reçoit (`contact`, `sondage-2026`), et
-un **retour** est un objet plat de champs libres. Trois arbitrages ne se
-devinent pas depuis le code.
+un **retour** est un objet de champs nommés. Quatre arbitrages ne se devinent
+pas depuis le code.
+
+### Un formulaire se déclare, il ne naît pas d'une réception
+
+La première version le créait à son premier envoi : rien à déclarer avant, une
+faute de frappe visible plutôt qu'un silence. C'était un angle mort. La clé
+publique est **dans le HTML de la page** ; qui la lit pouvait donc faire
+apparaître vingt canaux aux noms de son choix, et autant de colonnes dans le
+tableau. On ne prête pas son interface à un inconnu pour une commodité de
+branchement.
+
+Un formulaire déclare donc son nom et ses **questions typées** (`text`,
+`email`, `number`, `boolean`, `choice`). Le type n'est pas une décoration : un
+`<form>` HTML n'envoie que des chaînes (`"4"`, `"on"`, et **rien du tout** pour
+une case décochée), et c'est lui qui les ramène à la bonne valeur avant qu'on
+les range et qu'on les compte. Sans lui, la même réponse compterait pour deux
+valeurs distinctes selon la porte par laquelle elle est entrée. Il permet aussi
+d'**engendrer le formulaire à coller**, et de montrer dans les résultats une
+question déclarée que personne n'a remplie, ce qu'un comptage seul ne peut pas
+savoir.
+
+Deux échappatoires, toutes deux éteintes par défaut : le mode `auto` d'un
+formulaire (tout est accepté, les colonnes se découvrent) et l'interrupteur
+`forms_auto` d'un site (un nom inconnu crée son canal). `validate.ts` est pur et
+testé à part, comme `answers.ts`, et il **normalise** en même temps qu'il
+refuse : la réception et `indexableAnswers` voient donc la même valeur.
+
+### Les origines disent trois choses, et le vide est le plus sévère
+
+Vide, plus rien n'entre. `*`, tout entre. Sinon, la liste. La première version
+acceptait **tout** sur une liste vide, ce qui faisait du réglage par défaut le
+plus permissif de tous : un site à peine créé était une boîte aux lettres
+ouverte à qui lisait sa clé. La migration `002` écrit `*` sur les sites
+existants sans origine, pour qu'aucun ne s'arrête en silence au déploiement et
+que le réglage devienne relisible.
+
+Cette garde n'arrête qu'un navigateur : l'en-tête `Origin` est posé par lui, et
+un script y met ce qu'il veut. Elle empêche un **autre site** d'abuser de la clé
+depuis le navigateur d'un visiteur, ce qui est déjà l'essentiel. Ce sont les
+quotas qui bornent un envoi forgé.
+
+Et pour lever la méprise la plus commune : **le CORS n'a jamais rien protégé
+ici**. Un POST cross-origin en `text/plain` ou `urlencoded` est une requête
+« simple » au sens CORS ; le navigateur l'envoie toujours et empêche seulement
+d'en lire la réponse.
 
 ### La réception est synchrone, la mesure ne l'est pas
 
@@ -428,14 +472,34 @@ une ligne effacée sans la décompter.
 Vider ou supprimer un formulaire, en revanche, efface les compteurs en bloc, ce
 qui est exact et sans arithmétique.
 
-### Aucune rétention sur les retours
+### Aucune rétention sur les retours, mais des quotas
 
 `retention_days` purge les événements bruts. Il ne touche pas aux retours, et
 c'est voulu : un événement de mesure est jetable, un message est du contenu que
 l'utilisateur a demandé à collecter, et l'effacer en silence au bout de N jours
-serait une perte de données. Le garde est un **plafond** (50 000 par
-formulaire) qui cesse d'accepter au lieu d'effacer, plus le drapeau `is_open` du
-formulaire et la liste d'origines du site.
+serait une perte de données.
+
+Le plafond de 50 000 par formulaire reste, mais **il ne peut pas être la seule
+borne** : à lui seul, le brûler ne remplit pas la base, ça condamne le
+formulaire jusqu'à ce qu'on le vide à la main. C'était un déni de service offert
+à qui connaît la clé. Deux quotas en fenêtre glissante s'y ajoutent, sur le
+motif du plafond horaire des signalements du socle (un `COUNT(*)` servi par un
+index composite, sans table de compteurs ni fenêtre à purger) :
+
+- **par adresse et par formulaire** (défaut 5/h) : l'envoi est ignoré, rien ne
+  se ferme. C'est une provenance qui insiste ;
+- **par formulaire, toutes adresses** (défaut 200/h) : le formulaire **se
+  ferme**, daté et motivé (`closed_at`, `closed_reason`). Un flot distribué ne
+  s'essouffle pas tout seul, et une porte close et réversible vaut mieux qu'un
+  canal rempli jusqu'au plafond.
+
+L'adresse n'est jamais conservée : `ip_ref` est le même condensé salé au jour
+que `visitor_ref`, sans le user-agent.
+
+La mesure a son équivalent (`event_ip_quota`), mais **en mémoire** : son chemin
+ne fait aucune requête, et lui en donner une par visite défairait ce qui le fait
+tenir. Il est donc approximatif, remis à zéro au redémarrage, et **illimité par
+défaut**, pour qu'aucun site en place ne se mette à perdre des vues.
 
 ### Les deux portes d'envoi, et la redirection
 
@@ -450,16 +514,20 @@ pas en enregistrer.
 La règle du `204` du §3.2 tient, à deux exceptions près, et les deux sont des
 choses que le site doit savoir :
 
-- un **corps mal formé** rend `400`. Ce n'est pas un renseignement sur les clés
-  qui existent, c'est une propriété de la requête envoyée, et sans lui une
-  intégration fautive n'aurait aucun moyen de se voir ;
+- un **corps mal formé, ou qui ne colle pas aux questions déclarées**, rend
+  `400` en nommant le champ fautif. Ce n'est pas un renseignement sur les clés
+  qui existent, c'est une propriété de la requête envoyée, et le seul aveu
+  qu'elle contient (« cette clé existe ») porte sur une clé publique, dans la
+  page. Sans lui, un site qui vient de renommer un champ n'aurait aucun moyen
+  de s'en apercevoir ;
 - une **panne d'écriture** rend `503`. Répondre « reçu » quand l'écriture a
   échoué ferait annoncer au visiteur un message perdu, ce que l'écriture
   synchrone cherchait précisément à éviter. Le mince renseignement que cela
   donne à qui sonde ne vaut que le temps de la panne, moment où il n'y a de
   toute façon pas grand-chose d'autre qui tienne debout.
 
-Tout le reste (clé inconnue, origine refusée, formulaire fermé ou plein) rend le
+Tout le reste (clé inconnue, origine refusée, formulaire fermé ou plein, quota
+atteint) rend le
 même succès.
 
 `_next` est confronté à l'en-tête `Origin` de l'envoi, **et à rien d'autre**.
@@ -481,7 +549,7 @@ package.json, deveye-feature.json    deveye-feature-audience ; allowlist des 7 t
 src/index.ts                         manifest + contrats (l'entrée isomorphe)
 src/manifest.ts                      featureDescriptor('audience') étalé ; resources, routes.public, settings.item
 src/contracts/domain.ts              site, plateforme, dimensions, mesures, charge d'ingestion, retours, lignes SQL
-src/contracts/commands.ts            24 commandes, préfixe unique `audience.`
+src/contracts/commands.ts            25 commandes, préfixe unique `audience.`
 ```
 
 @deveye/types ne garde que l'**identité** (l'id dans les schémas d'espace, de
@@ -500,13 +568,16 @@ repo.ts         AudienceRepo sur SdkQueryable : les trois dépôts natifs en un 
                 (sites et lectures agrégées : le chemin froid ; entonnoirs ; ingestion : le chemin chaud)
 repoForms.ts    la section « retours » du même contrat, détachée : formulaires, soumissions, compteurs
 migrations/     001_forms.sql — les 4 tables ft_audience_* des retours (les 7 autres datent du socle)
+                002_forms_declared.sql — schéma déclaré, quotas, et « origines vides = rien »
 _shared.ts      Ctx, StoredSite, nameRef, generatePublicKey, packOrigins/parseOrigins, loadSite,
                 loadHomeSite, siteCipher, toSite(…, projectCount), rangeWindow, toMetrics,
                 setIngest/ingestOf (le singleton), projectsProvider/projectCountsOf/projectUsageOf
 crud.ts         count, list, get, siteAdd, siteUpdate, siteRotateKey, siteRemove, reorder
 stats.ts        overview, breakdown, activity, live
 funnels.ts      funnelList, funnelAdd, funnelUpdate, funnelRemove
-forms.ts        formList, formUpdate, formClear, formRemove, submissionList, submissionRemove, results
+forms.ts        formList, formAdd, formUpdate, formClear, formRemove, submissionList,
+                submissionRemove, results
+validate.ts     un envoi confronté aux questions déclarées, et converti (pur)
 stats.ts        (aussi) summary : les trois cartes du sommaire, en un aller-retour
 handlers.ts     l'agrégat des vingt-quatre commandes
 service.ts      AudienceIngest sur FeatureServiceDeps : caches, file, lot, coalescence, ménage, sel dérivé ;
@@ -516,7 +587,8 @@ routes.ts       publicRoutes sur SdkPublicApp : GET /t.js · POST /api/t/b · PO
 script.ts       le script servi aux pages suivies, et son ETag
 normalize.ts    chemins, hôtes, référents, condensés (pur)
 userAgent.ts    navigateur / système / appareil (pur)
-*.test.ts       handlers, forms, service, routes, answers, normalize (harnais @deveye/types/sdk/testing)
+*.test.ts       handlers, forms, service, routes, answers, validate, normalize
+                (harnais @deveye/types/sdk/testing)
 ```
 
 Ce qui a changé de main au rapatriement, et pourquoi :
@@ -573,8 +645,13 @@ Forms/Results.tsx   la répartition des réponses, question par question
 Forms/FormDialog.tsx  renommer, fermer, vider, supprimer un formulaire
 Forms/export.ts     le CSV des retours chargés
 SiteDialog.tsx      déclarer un site (nom, description, plateforme, origines) ; création seulement
-SiteGeneralPanel.tsx  le panneau Général d'un site (identité, état, visiteurs, rétention, suppression) : settings.item
-InstallDialog.tsx   la balise, l'envoi de retours, l'état « première mesure », la rotation de clé
+SiteGeneralPanel.tsx  onglet Général : identité, plateforme, origines, collecte, suppression
+SiteTrafficPanel.tsx  onglet Fréquentation : visiteurs, rétention, quota d'événements
+SiteFormsPanel.tsx    onglet Retours : formulaires déclarés, création à la volée, quotas
+FormEditor.tsx        déclarer un formulaire et ses questions typées
+useSiteDraft.ts       le brouillon partagé des trois onglets (siteUpdate prend le site entier)
+InstallDialog.tsx   contextuel (`scope`) : la balise, ou le <form> engendré du formulaire ouvert,
+                    l'état « première mesure », la rotation de clé
 FunnelDialog.tsx    définir un parcours à partir du déjà-observé
 FunnelDetailDialog.tsx
 Stats/{StatBand,TrendChart,Heatmap,TopList,FunnelBar,FunnelSteps}.tsx

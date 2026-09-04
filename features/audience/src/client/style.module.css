@@ -1631,3 +1631,145 @@
     gap: var(--space-sm);
     flex-wrap: wrap;
 }
+
+/* ------------------------------------------- déclarer un formulaire */
+
+/*
+ * Une question de l'éditeur : nom, type, « requise », et la corbeille. Sur une
+ * ligne tant que ça tient, en colonne dès que le dialogue rétrécit, parce qu'un
+ * nom de question a besoin de place et qu'un `<select>` n'en cède pas.
+ */
+.fieldRow {
+    display: grid;
+    grid-template-columns: minmax(8rem, 1fr) minmax(7rem, auto) auto auto auto;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+}
+
+/*
+ * Les interrupteurs de l'éditeur, corrigés sur place plutôt que dans le
+ * composant commun, qui sert partout ailleurs : avec un libellé il prend toute
+ * la largeur et pose une marge basse, ce qui convient à une colonne de réglages
+ * empilés et pas à une cellule de grille.
+ *
+ * On vise `button[role='switch']` et non une classe : le rôle fait partie du
+ * contrat du composant (il le déclare comme étant ce que l'objet EST), là où
+ * ses classes sont hachées par le module et hors d'atteinte.
+ */
+.fieldRow > button[role='switch'],
+.fieldChoices > button[role='switch'] {
+    width: auto;
+    margin-bottom: 0;
+    align-items: center;
+}
+
+/* Le libellé avant l'interrupteur : dans une ligne qui se lit de gauche à
+   droite, « Requise » nomme la question avant d'offrir de la basculer. */
+.fieldRow > button[role='switch'] {
+    flex-direction: row-reverse;
+}
+
+/*
+ * Les réponses possibles, une par ligne, entre une ligne et dix.
+ *
+ * `field-sizing: content` fait suivre la hauteur à la saisie : une question à
+ * deux réponses ne réserve pas la place de dix, et une longue liste défile au
+ * lieu de pousser le dialogue hors de l'écran. Les deux bornes tiennent quand
+ * même sans lui, sur le redimensionnement manuel (`resize: vertical`) et sur
+ * l'attribut `rows`, tenu à la même valeur que la borne basse.
+ *
+ * Deux lignes au minimum, et non une : un champ qui s'annonce d'une seule ligne
+ * ne dit pas qu'on en attend plusieurs, alors que c'est toute sa règle.
+ *
+ * `border-box` étant global, la hauteur se complète des marges intérieures et
+ * des deux bordures, sans quoi la borne basse rognerait le texte.
+ */
+.choices {
+    composes: textarea;
+    field-sizing: content;
+    min-height: calc(2lh + 2 * var(--space-sm) + 2px);
+    max-height: calc(10lh + 2 * var(--space-sm) + 2px);
+}
+
+/* Le format attendu, dans la fenêtre d'explication commune. */
+.formatHelp {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+/* Les réponses possibles passent sous la ligne : elles n'existent que pour un
+   champ à choix, et les loger dedans écraserait les trois autres colonnes. */
+.fieldChoices {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    /* Assez pour que l'interrupteur ne colle pas au champ des réponses : ce
+       sont deux réglages distincts, pas deux morceaux du même. */
+    align-items: flex-start;
+    gap: var(--space-sm);
+}
+
+.formList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+/* Un bouton et non une ligne cliquable : atteignable au clavier sans réécrire
+   un rôle ni des touches, d'où la remise à plat de l'apparence de bouton. */
+.formRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+    width: 100%;
+    padding: var(--space-sm);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color var(--transition-fast);
+}
+
+.formRow:hover:not(:disabled) {
+    border-color: var(--accent);
+}
+
+.formRow:disabled {
+    cursor: default;
+}
+
+.formName {
+    color: var(--text-primary);
+}
+
+.formTags {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.formRowMeta {
+    margin-left: auto;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+/* Le geste d'ajout, sous ce qui est déjà là : la même place que dans un projet
+   qui relie ses bases et ses dépôts, pour qu'on le cherche au même endroit. */
+.addRow {
+    display: flex;
+    justify-content: center;
+    padding-top: var(--space-sm);
+}

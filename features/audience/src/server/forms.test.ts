@@ -70,6 +70,10 @@ function site(id: number, workspaceId: number): AudienceSiteRow {
         origins: 'exemple.fr',
         active: 1,
         retention_days: 180,
+        forms_auto: 0,
+        submission_ip_quota: 5,
+        form_hourly_quota: 200,
+        event_ip_quota: 0,
         sort_order: id,
         last_event_at: null,
         content: JSON.stringify({ name: `Site ${id}`, description: '' }),
@@ -145,9 +149,17 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         findFormByName: async (siteId, nameRef) =>
             repo.forms.find((f) => f.site_id === siteId && f.name_ref === nameRef) ?? null,
         countForms: async (siteId) => repo.forms.filter((f) => f.site_id === siteId).length,
-        async updateForm(formId, nameRef, content, open) {
-            const f = repo.forms.find((x) => x.id === formId);
-            if (f) Object.assign(f, { name_ref: nameRef, content, is_open: open ? 1 : 0 });
+        async updateForm(input) {
+            const f = repo.forms.find((x) => x.id === input.formId);
+            if (!f) return;
+            Object.assign(f, {
+                name_ref: input.nameRef,
+                content: input.content,
+                mode: input.mode,
+                form_schema: input.formSchema,
+                is_open: input.open ? 1 : 0
+            });
+            if (input.open) Object.assign(f, { closed_at: null, closed_reason: null });
         },
         async removeForm(formId) {
             const i = repo.forms.findIndex((f) => f.id === formId);
@@ -164,8 +176,31 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             if (f) Object.assign(f, { submissions: 0, last_at: null });
             return before - repo.submissions.length;
         },
-        resolveForm: unused,
+        async createForm(input) {
+            const id = ++seq;
+            repo.forms.push({
+                id,
+                site_id: input.siteId,
+                name_ref: input.nameRef,
+                mode: input.mode,
+                form_schema: input.formSchema,
+                is_open: 1,
+                closed_at: null,
+                closed_reason: null,
+                submissions: 0,
+                last_at: null,
+                sort_order: input.sortOrder,
+                content: input.content,
+                created: 1
+            });
+            return id;
+        },
+        async closeForm(formId, at, reason) {
+            const f = repo.forms.find((x) => x.id === formId);
+            if (f) Object.assign(f, { is_open: 0, closed_at: at, closed_reason: reason });
+        },
         insertSubmission: unused,
+        countSubmissionsSince: unused,
         touchForm: unused,
         async bumpFormSubmissions(formId, delta) {
             const f = repo.forms.find((x) => x.id === formId);
@@ -259,7 +294,11 @@ async function seeded(projections: Record<number, number[]> = {}): Promise<FakeR
         id: 10,
         site_id: 1,
         name_ref: 'ref-contact',
+        mode: 'auto',
+        form_schema: null,
         is_open: 1,
+        closed_at: null,
+        closed_reason: null,
         submissions: 2,
         last_at: 2000,
         sort_order: 0,
@@ -267,8 +306,24 @@ async function seeded(projections: Record<number, number[]> = {}): Promise<FakeR
         created: 1
     });
     repo.submissions.push(
-        { id: 1, form_id: 10, site_id: 1, ts: 1000, session_id: null, content: seal({ recommande: 'oui' }, '/a') },
-        { id: 2, form_id: 10, site_id: 1, ts: 2000, session_id: 5, content: seal({ recommande: 'non' }, '/b') }
+        {
+            id: 1,
+            form_id: 10,
+            site_id: 1,
+            ts: 1000,
+            ip_ref: '',
+            session_id: null,
+            content: seal({ recommande: 'oui' }, '/a')
+        },
+        {
+            id: 2,
+            form_id: 10,
+            site_id: 1,
+            ts: 2000,
+            ip_ref: '',
+            session_id: 5,
+            content: seal({ recommande: 'non' }, '/b')
+        }
     );
     const field = await repo.resolveFormLabel(10, 'field', labelRef('recommande'), 'recommande');
     const oui = await repo.resolveFormLabel(10, 'value', labelRef('oui'), 'oui');
@@ -307,7 +362,13 @@ describe('audience.formUpdate', () => {
         const ingest = mountIngest();
         const ctx = createTestContext({ repo, workspaceId: 1 });
 
-        const { form } = await handlerFor(audienceFormUpdate)(ctx, { formId: 10, name: 'Sondage', open: false });
+        const { form } = await handlerFor(audienceFormUpdate)(ctx, {
+            formId: 10,
+            name: 'Sondage',
+            mode: 'auto',
+            fields: [],
+            open: false
+        });
         assert.equal(form.name, 'Sondage');
         assert.equal(form.open, false);
         // Sans cet oubli, la fermeture ne prendrait effet qu'au redémarrage.
@@ -318,7 +379,14 @@ describe('audience.formUpdate', () => {
         const repo = await seeded({ 1: [2] });
         const ctx = createTestContext({ repo, workspaceId: 2, shares: { 1: 1 } });
         await assert.rejects(
-            () => handlerFor(audienceFormUpdate)(ctx, { formId: 10, name: 'Sondage', open: true }),
+            () =>
+                handlerFor(audienceFormUpdate)(ctx, {
+                    formId: 10,
+                    name: 'Sondage',
+                    mode: 'auto',
+                    fields: [],
+                    open: true
+                }),
             failsWith('forbidden')
         );
     });
@@ -372,6 +440,9 @@ describe('audience.results', () => {
         assert.deepEqual(results.fields, [
             {
                 name: 'recommande',
+                // `null` : ce formulaire est en mode auto, la question a été
+                // découverte et non déclarée.
+                kind: null,
                 answered: 2,
                 free: 0,
                 values: [
@@ -379,7 +450,7 @@ describe('audience.results', () => {
                     { label: 'non', count: 1 }
                 ]
             },
-            { name: 'message', answered: 2, free: 2, values: [] }
+            { name: 'message', kind: null, answered: 2, free: 2, values: [] }
         ]);
     });
 });

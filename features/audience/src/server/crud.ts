@@ -136,6 +136,10 @@ export const audienceSiteAddFeature = defineSdkFeature({
             origins: packOrigins(input.origins),
             active: input.active,
             retentionDays: input.retentionDays,
+            formsAuto: input.formsAuto,
+            submissionIpQuota: input.submissionIpQuota,
+            formHourlyQuota: input.formHourlyQuota,
+            eventIpQuota: input.eventIpQuota,
             content: await cipher.encrypt(JSON.stringify(body))
         });
         ingestOf()?.invalidate();
@@ -168,6 +172,10 @@ export const audienceSiteUpdateFeature = defineSdkFeature({
             origins: packOrigins(input.origins),
             active: input.active,
             retentionDays: input.retentionDays,
+            formsAuto: input.formsAuto,
+            submissionIpQuota: input.submissionIpQuota,
+            formHourlyQuota: input.formHourlyQuota,
+            eventIpQuota: input.eventIpQuota,
             content: await cipher.encrypt(JSON.stringify(body))
         });
         if (!updated) throw new FeatureError('not_found', 'Site introuvable');

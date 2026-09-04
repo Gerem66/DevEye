@@ -1,4 +1,29 @@
+import type { AudienceFormField } from '../contracts/domain';
+
 import { formSnippetFor, submitSnippetFor } from './format';
+
+/**
+ * Un corps d'exemple bâti sur les questions déclarées : une valeur plausible
+ * par type, pour que l'appel se copie et parte sans qu'on ait à deviner ce que
+ * le formulaire attend.
+ */
+function exampleFields(fields: readonly AudienceFormField[]): string {
+    if (fields.length === 0) return '{ "email": "moi@exemple.fr", "message": "Bonjour" }';
+    const pairs = fields.map((field) => {
+        const value =
+            field.kind === 'email'
+                ? '"moi@exemple.fr"'
+                : field.kind === 'number'
+                  ? '4'
+                  : field.kind === 'boolean'
+                    ? 'true'
+                    : field.kind === 'choice'
+                      ? JSON.stringify(field.multiple ? field.choices.slice(0, 2) : (field.choices[0] ?? ''))
+                      : '"Bonjour"';
+        return `"${field.name}": ${value}`;
+    });
+    return `{ ${pairs.join(', ')} }`;
+}
 
 /**
  * Les exemples d'intégration montrés dans la fenêtre d'installation, bâtis
@@ -272,35 +297,40 @@ curl_close($ch);`
  * La première existe parce que le cas visé est un site vraiment statique : lui
  * imposer un bundle pour recueillir un message serait rater la cible.
  */
-export function submitExamples(publicKey: string, origin: string): UsageExample[] {
+export function submitExamples(
+    publicKey: string,
+    origin: string,
+    form: string,
+    fields: readonly AudienceFormField[]
+): UsageExample[] {
     return [
         {
             id: 'html',
             label: 'Formulaire HTML',
-            note: 'Aucun JavaScript. Le visiteur est renvoyé sur _next, qui doit être une page de votre propre site : le serveur refuse toute autre destination, sans quoi cette route serait un redirecteur ouvert.',
-            code: formSnippetFor(publicKey, origin, 'contact')
+            note: 'Engendré depuis les questions déclarées, donc exactement ce que le serveur acceptera. Le visiteur est renvoyé sur _next, qui doit être une page de votre propre site : toute autre destination est refusée, sans quoi cette route serait un redirecteur ouvert.',
+            code: formSnippetFor(publicKey, origin, form, fields)
         },
         {
             id: 'js',
             label: 'Depuis la balise',
             note: 'Le visiteur ne quitte pas la page. `submit` rend une promesse (`true` si c’est parti), et n’est jamais groupé avec les mesures : un message ne se perd pas au changement de page.',
-            code: submitSnippetFor('contact')
+            code: submitSnippetFor(form)
         },
         {
             id: 'curl',
             label: 'Appel direct',
-            note: 'Pour vérifier un branchement, ou poster depuis un serveur. Le nom du formulaire est libre : il est créé à la première réception, dans la limite de vingt par site.',
+            note: 'Pour vérifier un branchement, ou poster depuis un serveur. Un 400 nomme le champ qui cloche ; une clé inconnue ou une origine refusée rendent le même succès, pour ne pas dire à qui sonde quelles clés existent.',
             code: `curl -X POST ${origin}/api/t/s \\
   -H 'Content-Type: application/json' \\
   -d '{
     "key": "${publicKey}",
-    "form": "contact",
-    "fields": { "email": "moi@exemple.fr", "message": "Bonjour" }
+    "form": "${form}",
+    "fields": ${exampleFields(fields)}
   }'
 
-# Réponse : {"ok":true}. Un 400 signale un corps mal formé, et lui seul :
-# une clé inconnue ou une origine refusée rendent le même {"ok":true},
-# pour ne pas dire à qui sonde quelles clés existent.`
+# Réponse : {"ok":true}. Un 400 signale un corps mal formé OU un envoi qui ne
+# colle pas aux questions déclarées, et nomme alors le champ fautif. Une clé
+# inconnue, une origine refusée ou un quota atteint rendent le même {"ok":true}.`
         }
     ];
 }
@@ -334,29 +364,6 @@ window.deveye?.identify(id: string|null) // l'utilisateur connecté
 3. Les noms d'événements sont comparés À L'IDENTIQUE (accents, espaces,
    majuscules). Choisissez-les stables et lisibles : ils s'affichent tels
    quels et servent à composer les entonnoirs.
-
-## Recevoir des retours (formulaires, sondages, signalements)
-Un « formulaire » est un canal nommé, créé À SA PREMIÈRE RÉCEPTION : il n'y a
-rien à déclarer avant, et vingt par site au maximum. La charge utile est un
-objet plat de champs libres (40 au plus), que DevEye range et compte.
-
-Depuis la balise, sans quitter la page :
-  await window.deveye?.submit('contact', { email, message })  // rend true si envoyé
-
-Sans une ligne de JavaScript :
-${formSnippetFor(publicKey, origin, 'contact')}
-_next doit désigner une page de VOTRE site : le serveur compare son hôte à
-l'en-tête Origin de l'envoi et refuse tout le reste. _hp est un pot de miel,
-laissez-le caché et vide.
-
-Depuis un serveur :
-POST ${origin}/api/t/s
-{"key":"${publicKey}","form":"contact","fields":{"email":"...","message":"..."}}
-
-Réponses : {"ok":true} en cas de succès ET en cas de refus d'identité (clé
-inconnue, origine non autorisée, formulaire fermé ou plein) ; 400 uniquement
-quand le corps est mal formé. Vérifiez le branchement dans DevEye, pas au code
-de retour.
 
 ## Entonnoirs
 Le site n'émet que des signaux nommés ; les entonnoirs se composent ensuite
@@ -395,8 +402,68 @@ ${
   pour l'activer en développement.
 - Les envois sont groupés (~500 ms) et vidés par sendBeacon au départ de
   l'onglet. Une mesure ne doit jamais faire échouer la page qui la produit.
-- submit() fait exception : il part seul et tout de suite, parce qu'un message
-  perdu au changement de page ne se rattrape pas.
-- Les retours ne sont soumis à aucune rétention : ils restent jusqu'à ce qu'on
-  les efface, dans la limite de 50 000 par formulaire.`;
+- Les retours ont leur propre mémo (écran « Retours » du site).`;
+}
+
+/**
+ * Le mémo des retours, séparé de celui de la mesure : ce sont deux
+ * intégrations, et un agent à qui l'on donne les deux d'un coup mélange les
+ * deux API. Bâti sur les questions déclarées, pour qu'il n'ait rien à deviner.
+ */
+export function submitBrief(
+    publicKey: string,
+    origin: string,
+    form: string,
+    fields: readonly AudienceFormField[]
+): string {
+    const declared =
+        fields.length === 0
+            ? 'Ce formulaire est en CHAMPS LIBRES : nommez vos entrées comme vous voulez.'
+            : `Questions déclarées, et ELLES SEULES sont acceptées :\n${fields
+                  .map(
+                      (field) =>
+                          `  ${field.name} : ${field.kind}${field.required ? ' (requis)' : ''}` +
+                          (field.kind === 'choice' ? ` parmi ${field.choices.join(', ')}` : '')
+                  )
+                  .join('\n')}`;
+
+    return `# Retours DevEye : mémo d'intégration du formulaire « ${form} »
+
+## Ce que ce formulaire attend
+${declared}
+
+## Sans une ligne de JavaScript
+${formSnippetFor(publicKey, origin, form, fields)}
+
+_next doit désigner une page de VOTRE site : le serveur compare son hôte à
+l'en-tête Origin de l'envoi et refuse tout le reste, sans quoi cette route
+serait un redirecteur ouvert. _hp est un pot de miel, laissez-le caché et vide.
+Les valeurs partent en texte (\`"4"\`, \`"on"\`) : le serveur les ramène au type
+déclaré, il n'y a rien à convertir côté page.
+
+## Depuis la balise, sans quitter la page
+await window.deveye?.submit('${form}', { … })   // rend true si c'est parti
+submit() ne passe PAS par le regroupement des mesures : il part seul et tout de
+suite, parce qu'un message perdu au changement de page ne se rattrape pas.
+
+## Depuis un serveur
+POST ${origin}/api/t/s
+Content-Type: application/json
+{"key":"${publicKey}","form":"${form}","fields":${exampleFields(fields)}}
+
+## Les réponses, et ce qu'il faut en déduire
+- 200 {"ok":true} : reçu. C'est AUSSI ce que rendent une clé inconnue, une
+  origine non autorisée, un formulaire fermé et un quota atteint : un endpoint
+  public qui distingue ses refus dit à qui le sonde quelles clés existent.
+  Vérifiez le branchement dans DevEye, jamais au code de retour.
+- 400 : le corps est mal formé, ou il ne colle pas aux questions déclarées. La
+  réponse nomme alors le champ fautif ({"field":"…","reason":"…"}).
+- 503 : l'écriture a échoué. Le message n'est PAS enregistré, réessayez.
+
+## Bornes
+- ${fields.length > 0 ? 'Les questions ci-dessus' : 'Jusqu’à 40 champs'}, 20 formulaires par site,
+  50 000 retours par formulaire.
+- Un quota par adresse et un quota horaire par formulaire, réglés côté DevEye.
+  Le second ferme le formulaire quand il saute.
+- Aucune rétention : un retour reste jusqu'à ce qu'on l'efface.`;
 }

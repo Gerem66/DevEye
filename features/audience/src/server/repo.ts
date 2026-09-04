@@ -143,6 +143,10 @@ export interface AudienceRepo extends AudienceFormsRepo {
         origins: string | null;
         active: boolean;
         retentionDays: number;
+        formsAuto: boolean;
+        submissionIpQuota: number;
+        formHourlyQuota: number;
+        eventIpQuota: number;
         content: string;
     }): Promise<AudienceSiteRow>;
     update(
@@ -155,6 +159,10 @@ export interface AudienceRepo extends AudienceFormsRepo {
             origins: string | null;
             active: boolean;
             retentionDays: number;
+            formsAuto: boolean;
+            submissionIpQuota: number;
+            formHourlyQuota: number;
+            eventIpQuota: number;
             content: string;
         }
     ): Promise<AudienceSiteRow | null>;
@@ -355,8 +363,9 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
             const res = await q.execute(
                 `INSERT INTO audience_sites
                      (workspace_id, public_key, name_ref, platform, visitor_mode, origins, active,
-                      retention_days, sort_order, content)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                      retention_days, forms_auto, submission_ip_quota, form_hourly_quota, event_ip_quota,
+                      sort_order, content)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     input.workspaceId,
                     input.publicKey,
@@ -366,6 +375,10 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
                     input.origins,
                     input.active ? 1 : 0,
                     input.retentionDays,
+                    input.formsAuto ? 1 : 0,
+                    input.submissionIpQuota,
+                    input.formHourlyQuota,
+                    input.eventIpQuota,
                     Number(posRows[0]?.next ?? 0),
                     input.content
                 ]
@@ -377,7 +390,8 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
             const res = await q.execute(
                 `UPDATE audience_sites
                     SET name_ref = ?, platform = ?, visitor_mode = ?, origins = ?, active = ?,
-                        retention_days = ?, content = ?
+                        retention_days = ?, forms_auto = ?, submission_ip_quota = ?,
+                        form_hourly_quota = ?, event_ip_quota = ?, content = ?
                   WHERE id = ? AND workspace_id = ?`,
                 [
                     input.nameRef,
@@ -386,6 +400,10 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
                     input.origins,
                     input.active ? 1 : 0,
                     input.retentionDays,
+                    input.formsAuto ? 1 : 0,
+                    input.submissionIpQuota,
+                    input.formHourlyQuota,
+                    input.eventIpQuota,
                     input.content,
                     id,
                     workspaceId

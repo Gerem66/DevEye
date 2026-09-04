@@ -3,7 +3,7 @@ import type { SdkPublicApp, SdkPublicReply, SdkPublicRequest } from '@deveye/typ
 
 import { normalizeHost } from './normalize';
 import { TRACKER_SCRIPT, TRACKER_SCRIPT_ETAG } from './script';
-import type { AudienceIngest, IngestRequest } from './service';
+import type { AudienceIngest, IngestRequest, SubmitOutcome } from './service';
 
 /**
  * La porte publique de DevEye, la seule : tout le reste du serveur suppose une
@@ -69,6 +69,27 @@ const THANK_YOU_PAGE = `<!doctype html><html lang="fr"><head><meta charset="utf-
 <style>body{font:16px/1.6 system-ui,sans-serif;margin:0;display:grid;place-items:center;min-height:100vh}
 p{max-width:32rem;padding:2rem;text-align:center}</style></head>
 <body><p>Merci, votre message a bien été envoyé. Vous pouvez fermer cette page.</p></body></html>`;
+
+/**
+ * Ce que voit le visiteur d'un `<form>` dont l'envoi ne colle pas au formulaire
+ * déclaré. Personne n'est là pour lire un JSON d'erreur, et un renvoi silencieux
+ * vers la page de remerciement lui ferait croire que son message est parti.
+ *
+ * Le nom du champ est échappé : il vient de la requête, et le recopier tel quel
+ * dans du HTML servi à un tiers serait une injection offerte.
+ */
+function invalidPage(field: string): string {
+    return `<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Envoi refusé</title>
+<style>body{font:16px/1.6 system-ui,sans-serif;margin:0;display:grid;place-items:center;min-height:100vh}
+p{max-width:32rem;padding:2rem;text-align:center}code{font-family:ui-monospace,monospace}</style></head>
+<body><p>Votre message n'a pas été enregistré : le champ <code>${escapeHtml(field)}</code> ne correspond pas
+à ce que ce formulaire attend.</p></body></html>`;
+}
+
+function escapeHtml(value: string): string {
+    return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 
 /**
  * Rendre une réponse chargeable depuis une autre origine : helmet pose
@@ -147,7 +168,7 @@ export function audienceRoutes(app: SdkPublicApp, ingest: AudienceIngest): void 
         // Un pot de miel rempli est un robot : on accepte sans rien écrire, pour
         // qu'il ne sache pas qu'il a été vu et n'essaie pas autre chose.
         const trapped = html && typeof body._hp === 'string' && body._hp.trim().length > 0;
-        let outcome: 'stored' | 'ignored' | 'failed' = 'ignored';
+        let outcome: SubmitOutcome = { status: 'ignored' };
         if (parsed.success && !trapped) {
             const origin = typeof req.headers.origin === 'string' ? req.headers.origin : null;
             const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : '';
@@ -167,17 +188,32 @@ export function audienceRoutes(app: SdkPublicApp, ingest: AudienceIngest): void 
             // Le seul refus qu'on nomme : la forme du corps, qui ne dit rien des
             // clés qui existent et sans quoi une intégration fautive resterait muette.
             if (!parsed.success) return reply.code(400).send({ ok: false });
+            // Un envoi qui ne colle pas au schéma déclaré est du même ordre : c'est
+            // la requête qui cloche, et le seul renseignement que ce refus donne est
+            // « cette clé existe », alors qu'elle est publique dans la page. Sans
+            // lui, un site qui vient de renommer un champ n'aurait aucun moyen de
+            // s'en apercevoir.
+            if (outcome.status === 'invalid') {
+                return reply.code(400).send({ ok: false, field: outcome.field, reason: outcome.reason });
+            }
             // Une panne s'avoue, elle aussi : répondre « reçu » sur une écriture
             // qui a échoué ferait annoncer au visiteur un message perdu. Le mince
             // renseignement que cela donne à qui sonde ne vaut que le temps de la
             // panne, et il n'y a alors pas grand-chose d'autre qui tienne debout.
-            if (outcome === 'failed') return reply.code(503).send({ ok: false });
+            if (outcome.status === 'failed') return reply.code(503).send({ ok: false });
             return reply.send({ ok: true });
         }
 
-        if (outcome === 'failed') {
+        if (outcome.status === 'failed') {
             reply.header('Content-Type', 'text/html; charset=utf-8');
             return reply.code(503).send(RETRY_PAGE);
+        }
+        // Un `<form>` sans JavaScript n'a personne pour lire un JSON d'erreur : le
+        // visiteur voit une page qui nomme le champ, et c'est au site de corriger
+        // sa déclaration ou son formulaire.
+        if (outcome.status === 'invalid') {
+            reply.header('Content-Type', 'text/html; charset=utf-8');
+            return reply.code(400).send(invalidPage(outcome.field));
         }
 
         // Le visiteur d'un `<form>` doit atterrir quelque part, refus compris :

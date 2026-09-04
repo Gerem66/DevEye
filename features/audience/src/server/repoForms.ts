@@ -46,26 +46,48 @@ export interface AudienceFormsRepo {
     findForm(formId: number): Promise<AudienceFormRow | null>;
     findFormByName(siteId: number, nameRef: string): Promise<AudienceFormRow | null>;
     countForms(siteId: number): Promise<number>;
-    updateForm(formId: number, nameRef: string, content: string, open: boolean): Promise<void>;
+    createForm(input: {
+        siteId: number;
+        nameRef: string;
+        content: string;
+        mode: string;
+        formSchema: string | null;
+        sortOrder: number;
+    }): Promise<number>;
+    updateForm(input: {
+        formId: number;
+        nameRef: string;
+        content: string;
+        mode: string;
+        formSchema: string | null;
+        open: boolean;
+    }): Promise<void>;
+    /**
+     * Ferme un formulaire sans qu'on l'ait demandé, en inscrivant pourquoi. Une
+     * fermeture datée et réversible borne une rafale dans le temps, là où le
+     * plafond de stockage seul condamnerait le canal jusqu'au prochain vidage.
+     */
+    closeForm(formId: number, at: number, reason: string): Promise<void>;
     removeForm(formId: number): Promise<boolean>;
     /** Vide un formulaire sans le supprimer : le canal reste, l'historique part. */
     clearForm(formId: number): Promise<number>;
 
     // -- réception (sans session) -------------------------------------------
-    /**
-     * Le formulaire de ce nom, créé au besoin. Même construction que
-     * `resolveLabel` : `ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)` rend
-     * l'existant sans seconde requête ni course, et ne réécrit jamais `content`
-     * (le chiffrement n'est pas déterministe, et un renommage se ferait écraser).
-     */
-    resolveForm(siteId: number, nameRef: string, content: string, sortOrder: number): Promise<number>;
     insertSubmission(input: {
         formId: number;
         siteId: number;
         ts: number;
+        ipRef: string;
         sessionId: number | null;
         content: string;
     }): Promise<number>;
+    /**
+     * Envois d'une même provenance vers ce formulaire depuis `since`, et envois
+     * du formulaire toutes provenances confondues. Le motif du plafond horaire
+     * des signalements du socle : un `COUNT(*)` sur la table métier, servi par
+     * un index composite, sans table de compteurs ni fenêtre à purger.
+     */
+    countSubmissionsSince(formId: number, ipRef: string | null, since: number): Promise<number>;
     /** Le compteur dénormalisé et la date du dernier reçu, en une écriture. */
     touchForm(formId: number, at: number): Promise<void>;
     /** Corrige le compteur dénormalisé après une suppression à l'unité. */
@@ -124,11 +146,38 @@ export function createFormsRepo(q: SdkQueryable): AudienceFormsRepo {
             ]);
             return Number(rows[0]?.n ?? 0);
         },
-        async updateForm(formId, nameRef, content, open) {
-            await q.execute('UPDATE ft_audience_forms SET name_ref = ?, content = ?, is_open = ? WHERE id = ?', [
-                nameRef,
-                content,
-                open ? 1 : 0,
+        async createForm(input) {
+            const res = await q.execute(
+                `INSERT INTO ft_audience_forms (site_id, name_ref, mode, form_schema, sort_order, content)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [input.siteId, input.nameRef, input.mode, input.formSchema, input.sortOrder, input.content]
+            );
+            return Number(res.insertId);
+        },
+        async updateForm(input) {
+            // Rouvrir efface le motif de fermeture : le garder ferait raconter à
+            // l'écran une rafale à laquelle on a déjà répondu.
+            await q.execute(
+                `UPDATE ft_audience_forms
+                    SET name_ref = ?, content = ?, mode = ?, form_schema = ?, is_open = ?,
+                        closed_at = IF(?, NULL, closed_at), closed_reason = IF(?, NULL, closed_reason)
+                  WHERE id = ?`,
+                [
+                    input.nameRef,
+                    input.content,
+                    input.mode,
+                    input.formSchema,
+                    input.open ? 1 : 0,
+                    input.open ? 1 : 0,
+                    input.open ? 1 : 0,
+                    input.formId
+                ]
+            );
+        },
+        async closeForm(formId, at, reason) {
+            await q.execute('UPDATE ft_audience_forms SET is_open = 0, closed_at = ?, closed_reason = ? WHERE id = ?', [
+                at,
+                reason,
                 formId
             ]);
         },
@@ -149,22 +198,21 @@ export function createFormsRepo(q: SdkQueryable): AudienceFormsRepo {
         },
 
         // -- réception ------------------------------------------------------
-        async resolveForm(siteId, nameRef, content, sortOrder) {
+        async insertSubmission(input) {
             const res = await q.execute(
-                `INSERT INTO ft_audience_forms (site_id, name_ref, sort_order, content)
-                 VALUES (?, ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)`,
-                [siteId, nameRef, sortOrder, content]
+                `INSERT INTO ft_audience_submissions (form_id, site_id, ts, ip_ref, session_id, content)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [input.formId, input.siteId, input.ts, input.ipRef, input.sessionId, input.content]
             );
             return Number(res.insertId);
         },
-        async insertSubmission(input) {
-            const res = await q.execute(
-                `INSERT INTO ft_audience_submissions (form_id, site_id, ts, session_id, content)
-                 VALUES (?, ?, ?, ?, ?)`,
-                [input.formId, input.siteId, input.ts, input.sessionId, input.content]
+        async countSubmissionsSince(formId, ipRef, since) {
+            const rows = await q.query<{ n: number }>(
+                `SELECT COUNT(*) AS n FROM ft_audience_submissions
+                  WHERE form_id = ? AND ts >= ?${ipRef === null ? '' : ' AND ip_ref = ?'}`,
+                ipRef === null ? [formId, since] : [formId, since, ipRef]
             );
-            return Number(res.insertId);
+            return Number(rows[0]?.n ?? 0);
         },
         async touchForm(formId, at) {
             await q.execute(

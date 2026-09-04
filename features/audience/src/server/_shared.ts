@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'crypto';
 
 import {
+    AUDIENCE_ORIGIN_ANY,
     audienceSiteSchema,
     type AudienceMetrics,
     type AudienceRange,
@@ -72,8 +73,13 @@ export function generatePublicKey(): string {
  * Un hôte par ligne, normalisé et dédoublonné. La normalisation est faite à
  * l'écriture et non à la comparaison : une opération par réglage plutôt qu'une
  * par visite, et l'utilisateur relit ce à quoi son origine sera confrontée.
+ *
+ * `*` échappe à la normalisation et **absorbe la liste** : « tout le monde,
+ * sauf ceux-ci » n'a aucun sens, et le laisser cohabiter avec des hôtes ferait
+ * lire une restriction là où il n'y en a aucune.
  */
 export function packOrigins(origins: string[]): string | null {
+    if (origins.some((origin) => origin.trim() === AUDIENCE_ORIGIN_ANY)) return AUDIENCE_ORIGIN_ANY;
     const hosts = [...new Set(origins.map(normalizeHost).filter((h) => h.length > 0))];
     return hosts.length > 0 ? hosts.join('\n') : null;
 }
@@ -151,6 +157,10 @@ export async function toSite(
         origins: parseOrigins(row.origins),
         active: Number(row.active) === 1,
         retentionDays: Number(row.retention_days),
+        formsAuto: Number(row.forms_auto) === 1,
+        submissionIpQuota: Number(row.submission_ip_quota),
+        formHourlyQuota: Number(row.form_hourly_quota),
+        eventIpQuota: Number(row.event_ip_quota),
         lastEventAt: row.last_event_at === null ? null : Number(row.last_event_at),
         views24h: row.views_24h,
         visitors24h: row.visitors_24h,

@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Button, Dialog, humanizeError, invalidate, SegmentedControl, TextInput } from 'deveye-sdk-client';
 import {
+    AUDIENCE_EVENT_IP_QUOTA_DEFAULT,
+    AUDIENCE_FORM_HOURLY_QUOTA_DEFAULT,
     AUDIENCE_RETENTION_DEFAULT_DAYS,
     AUDIENCE_SITE_NAME_MAX_LENGTH,
+    AUDIENCE_SUBMISSION_IP_QUOTA_DEFAULT,
     audiencePlatformSchema,
     type AudiencePlatform,
     type AudienceSite
@@ -69,6 +72,13 @@ export function SiteDialog({ open, onClose, onSaved }: SiteDialogProps) {
                     .filter((line) => line.length > 0),
                 visitorMode: 'anonymous',
                 active: true,
+                // Les défauts prudents : aucun formulaire ne naît d'une réception,
+                // et les quotas bornent d'emblée. Tout se règle ensuite, onglet par
+                // onglet, sur un site qui existe.
+                formsAuto: false,
+                submissionIpQuota: AUDIENCE_SUBMISSION_IP_QUOTA_DEFAULT,
+                formHourlyQuota: AUDIENCE_FORM_HOURLY_QUOTA_DEFAULT,
+                eventIpQuota: AUDIENCE_EVENT_IP_QUOTA_DEFAULT,
                 retentionDays: AUDIENCE_RETENTION_DEFAULT_DAYS
             });
             invalidate('audience.count');

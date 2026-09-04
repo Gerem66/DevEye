@@ -3,10 +3,11 @@ import { Button, humanizeError, SegmentedControl, SelectInput, useResourceVersio
 import type { AudienceForm, AudienceResults, AudienceSite, AudienceSubmission } from '../../contracts/domain';
 
 import { api } from '../api';
-import { formatAgo, formatCount, formSnippetFor } from '../format';
+import { formatAgo, formatCount } from '../format';
 import styles from '../style.module.css';
+import FormEditor from '../FormEditor';
+import InstallDialog from '../InstallDialog';
 import { downloadCsv, toCsv } from './export';
-import FormDialog from './FormDialog';
 import Results from './Results';
 import SubmissionDialog from './SubmissionDialog';
 import SubmissionTable from './SubmissionTable';
@@ -39,7 +40,9 @@ export function Forms({ site, ingestOrigin, canWrite }: FormsProps) {
     const [cursor, setCursor] = useState<string | null>(null);
     const [results, setResults] = useState<AudienceResults | null>(null);
     const [opened, setOpened] = useState<AudienceSubmission | null>(null);
-    const [settingsOpen, setSettingsOpen] = useState(false);
+    const [installOpen, setInstallOpen] = useState(false);
+    /** `undefined` = fermé ; `null` = déclaration ; un formulaire = modification. */
+    const [edit, setEdit] = useState<AudienceForm | null | undefined>(undefined);
 
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -108,22 +111,70 @@ export function Forms({ site, ingestOrigin, canWrite }: FormsProps) {
         }
     };
 
+    /* Monté par les deux branches : l'écran vide fait un retour anticipé, et
+       « Installer » y est encore plus utile qu'ailleurs — c'est le moment où
+       l'on cherche quoi coller. `current` n'existe pas encore là, d'où le
+       `?? null` : le dialogue retombe sur un exemple générique. */
+    const installer = (
+        <InstallDialog
+            open={installOpen}
+            scope='forms'
+            form={forms?.find((f) => f.id === formId) ?? forms?.[0] ?? null}
+            site={site}
+            ingestOrigin={ingestOrigin}
+            canWrite={canWrite}
+            onClose={() => setInstallOpen(false)}
+        />
+    );
+
+    const editor = (
+        <FormEditor
+            open={edit !== undefined}
+            form={edit ?? null}
+            siteId={site.id}
+            canWrite={canWrite}
+            onClose={() => setEdit(undefined)}
+            onSaved={() => {
+                // Le formulaire courant a pu être supprimé ou renommé : la liste se
+                // relit par l'invalidation et retombe sur le premier restant.
+                setFormId(null);
+            }}
+        />
+    );
+
     if (forms === null) return <p className={error ? styles.error : styles.empty}>{error ?? 'Chargement…'}</p>;
 
     if (forms.length === 0) {
         return (
-            <section className={styles.panel}>
-                <h3 className={styles.panelTitle}>Aucun retour pour l’instant</h3>
-                <p className={styles.empty}>
-                    Un formulaire apparaît ici dès son premier envoi : il n’y a rien à déclarer avant. Collez ceci dans
-                    une page servie par une origine autorisée, et le formulaire « contact » se créera tout seul.
-                </p>
-                <pre className={styles.raw}>{formSnippetFor(site.publicKey, ingestOrigin, 'contact')}</pre>
-                <p className={styles.fieldHint}>
-                    Avec du JavaScript, <code>window.deveye.submit(&apos;contact&apos;, champs)</code> fait la même
-                    chose sans quitter la page. Les deux voies sont détaillées dans « Installer ».
-                </p>
-            </section>
+            <>
+                <section className={styles.panel}>
+                    <h3 className={styles.panelTitle}>Aucun formulaire déclaré</h3>
+                    <p className={styles.empty}>
+                        Un formulaire dit à DevEye ce que votre site enverra : son nom, ses questions et leur type. Sans
+                        déclaration, rien n’est accepté — c’est ce qui empêche qui lit la clé publique dans votre page
+                        de décider des colonnes affichées ici.
+                    </p>
+                    <div className={styles.addRow}>
+                        {canWrite && (
+                            <Button icon='add' onClick={() => setEdit(null)}>
+                                Déclarer un formulaire
+                            </Button>
+                        )}
+                        {/* Ici plus qu'ailleurs : c'est le moment où l'on cherche
+                            quoi coller, et l'écran d'installation montre les deux
+                            voies d'envoi avant même qu'un formulaire existe. */}
+                        <Button variant='secondary' icon='terminal' onClick={() => setInstallOpen(true)}>
+                            Installer
+                        </Button>
+                    </div>
+                    <p className={styles.fieldHint}>
+                        Une fois déclaré, « Installer » engendre le <code>&lt;form&gt;</code> exact à coller, et l’appel{' '}
+                        <code>window.deveye.submit()</code> pour les pages qui ont du JavaScript.
+                    </p>
+                </section>
+                {editor}
+                {installer}
+            </>
         );
     }
 
@@ -173,6 +224,14 @@ export function Forms({ site, ingestOrigin, canWrite }: FormsProps) {
                 </p>
 
                 <div className={styles.detailActions}>
+                    <Button variant='secondary' icon='terminal' onClick={() => setInstallOpen(true)}>
+                        Installer
+                    </Button>
+                    {canWrite && (
+                        <Button variant='secondary' icon='edit' onClick={() => setEdit(current)}>
+                            Modifier
+                        </Button>
+                    )}
                     <Button
                         variant='secondary'
                         icon='download'
@@ -181,16 +240,17 @@ export function Forms({ site, ingestOrigin, canWrite }: FormsProps) {
                     >
                         Exporter
                     </Button>
-                    <Button variant='secondary' icon='settings' onClick={() => setSettingsOpen(true)}>
-                        Réglages
-                    </Button>
                 </div>
             </div>
 
             {error && <p className={styles.error}>{error}</p>}
             {!current.open && (
                 <p className={styles.notice}>
-                    Ce formulaire est fermé : plus rien n’entre. Les retours ci-dessous ne bougent plus.
+                    {current.closedReason === 'quota'
+                        ? 'Fermé automatiquement : une rafale a dépassé le quota horaire. Les retours ci-dessous ne bougent plus, et vous pouvez le rouvrir depuis les réglages du site.'
+                        : current.closedReason === 'full'
+                          ? 'Fermé automatiquement : le plafond de stockage est atteint. Videz-le avant de le rouvrir.'
+                          : 'Ce formulaire est fermé : plus rien n’entre. Les retours ci-dessous ne bougent plus.'}
                 </p>
             )}
 
@@ -210,22 +270,25 @@ export function Forms({ site, ingestOrigin, canWrite }: FormsProps) {
                 />
             )}
 
+            {/* Toujours en bas, même quand un formulaire existe déjà : on en
+                déclare autant qu'on veut, et le geste reste au même endroit. */}
+            {canWrite && (
+                <div className={styles.addRow}>
+                    <Button icon='add' onClick={() => setEdit(null)}>
+                        Déclarer un formulaire
+                    </Button>
+                </div>
+            )}
+
+            {editor}
+
+            {installer}
+
             <SubmissionDialog
                 submission={opened}
                 canWrite={canWrite}
                 onClose={() => setOpened(null)}
                 onRemoved={(id) => setSubmissions((prev) => prev.filter((s) => s.id !== id))}
-            />
-
-            <FormDialog
-                form={settingsOpen ? current : null}
-                canWrite={canWrite}
-                onClose={() => setSettingsOpen(false)}
-                onChanged={(removed) => {
-                    // Supprimé, l'identifiant courant ne désigne plus rien : la liste
-                    // se relit par l'invalidation et retombe sur le premier restant.
-                    if (removed) setFormId(null);
-                }}
             />
         </div>
     );

@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 
-import { AUDIENCE_LABEL_MAX_LENGTH, type AudiencePlatform } from '../contracts/domain';
+import { AUDIENCE_LABEL_MAX_LENGTH, AUDIENCE_ORIGIN_ANY, type AudiencePlatform } from '../contracts/domain';
 
 /**
  * Ce qui transforme une saisie du monde extérieur en valeur rangeable.
@@ -85,22 +85,33 @@ export function normalizeReferrer(raw: string | undefined, ownHosts: readonly st
 }
 
 /**
- * L'origine a-t-elle le droit d'écrire sur ce site ? Trois règles, dans l'ordre :
+ * L'origine a-t-elle le droit d'écrire sur ce site ? Quatre règles, dans
+ * l'ordre :
  *
- * 1. aucune origine déclarée : on accepte tout, l'état d'un site qu'on vient de
- *    créer, le temps de brancher la balise (l'écran le signale).
- * 2. plateforme `app` : rien à confronter, un binaire natif n'envoie pas
+ * 1. **aucune origine déclarée : rien n'entre.** La première version acceptait
+ *    tout dans ce cas, ce qui faisait du réglage par défaut le plus permissif
+ *    de tous : un site à peine créé était une boîte aux lettres ouverte à qui
+ *    lisait sa clé. Refuser oblige à dire ce qu'on attend, et l'écran le dit.
+ * 2. `*` : on accepte tout, mais parce qu'on l'a écrit. Même effet qu'avant,
+ *    désormais relisible dans les réglages.
+ * 3. plateforme `app` : rien à confronter, un binaire natif n'envoie pas
  *    d'`Origin`, et refuser son absence lui fermerait la porte.
- * 3. `web` ou `both` : l'`Origin` présent doit figurer dans la liste. Son
+ * 4. `web` ou `both` : l'`Origin` présent doit figurer dans la liste. Son
  *    absence est refusée en `web` (une page en envoie toujours un) et tolérée
  *    en `both`, qui dit qu'on attend les deux mondes.
+ *
+ * Cette garde n'arrête qu'un navigateur : l'en-tête `Origin` est posé par lui,
+ * et un script en met ce qu'il veut. Elle empêche un autre site d'abuser de la
+ * clé depuis le navigateur d'un visiteur, ce qui est déjà l'essentiel, mais
+ * ce sont les quotas qui bornent un envoi forgé.
  */
 export function originAllowed(
     origins: readonly string[],
     originHeader: string | null,
     platform: AudiencePlatform
 ): boolean {
-    if (origins.length === 0) return true;
+    if (origins.length === 0) return false;
+    if (origins.includes(AUDIENCE_ORIGIN_ANY)) return true;
     if (platform === 'app') return true;
 
     const host = originHeader ? normalizeHost(originHeader) : '';

@@ -1,4 +1,5 @@
 import {
+    audienceFormAdd,
     audienceFormClear,
     audienceFormList,
     audienceFormRemove,
@@ -8,9 +9,12 @@ import {
     audienceSubmissionRemove
 } from '../contracts/commands';
 import {
+    AUDIENCE_MAX_FORMS,
     AUDIENCE_SUBMISSION_PAGE,
     type AudienceFieldValue,
     type AudienceForm,
+    type AudienceFormClosure,
+    type AudienceFormField,
     type AudienceFormRow,
     type AudienceResultField,
     type AudienceSubmission
@@ -25,9 +29,11 @@ import type { AudienceSubmissionWithContextRow } from './repoForms';
  * Les retours d'un site : les canaux qui les reçoivent, ce qu'ils ont reçu, et
  * la répartition des réponses.
  *
- * Rien ici ne crée de formulaire : un canal naît de sa première réception, par
- * la porte publique. Ces commandes ne font que le renommer, le fermer, le vider
- * et le lire.
+ * Un formulaire se **déclare** ici, avec ses champs et leur type : le laisser
+ * naître d'une réception, comme la première version le faisait, donnait à qui
+ * lit la clé publique dans la page le pouvoir de décider des colonnes qu'on
+ * affiche. Le mode `auto` d'un formulaire et l'interrupteur `formsAuto` du site
+ * rouvrent cette porte, pour qui la veut, tous deux éteints par défaut.
  *
  * Toute écriture appelle `ingestOf()?.invalidate()` : le service tient un cache
  * `site:nom → formulaire`, et sans cet appel un formulaire fermé continuerait
@@ -40,15 +46,39 @@ interface StoredSubmission {
     path?: string;
 }
 
+/** Ce que porte `ft_audience_forms.form_schema`, chiffré. */
+interface StoredSchema {
+    fields: readonly AudienceFormField[];
+}
+
 async function toForm(cipher: SdkCipher, row: AudienceFormRow): Promise<AudienceForm> {
+    const stored = await readJson<Partial<StoredSchema>>(cipher, row.form_schema);
     return {
         id: Number(row.id),
         name: (await readLabel(cipher, row.content)) || 'Sans nom',
+        mode: row.mode === 'strict' ? 'strict' : 'auto',
+        fields: [...(stored?.fields ?? [])],
         open: Number(row.is_open) === 1,
+        closedAt: row.closed_at === null ? null : Number(row.closed_at),
+        closedReason: (row.closed_reason as AudienceFormClosure | null) ?? null,
         submissions: Number(row.submissions),
         lastAt: row.last_at === null ? null : Number(row.last_at),
         created: Number(row.created)
     };
+}
+
+/**
+ * Le schéma scellé, ou `null` en mode auto. Un formulaire auto qui garderait
+ * ses champs les rejouerait en repassant en strict, ce qui ferait ressusciter
+ * une déclaration qu'on croyait avoir retirée.
+ */
+async function sealSchema(
+    cipher: SdkCipher,
+    mode: string,
+    fields: readonly AudienceFormField[]
+): Promise<string | null> {
+    if (mode !== 'strict') return null;
+    return cipher.encrypt(JSON.stringify({ fields } satisfies StoredSchema));
 }
 
 /**
@@ -80,6 +110,57 @@ export const audienceFormListFeature = defineSdkFeature({
     }
 });
 
+export const audienceFormAddFeature = defineSdkFeature({
+    ...audienceFormAdd,
+    mutates: true,
+    access: { level: 'write' },
+    handler: async (ctx: Ctx, input) => {
+        const site = await loadHomeSite(ctx, input.siteId);
+        const count = await ctx.repo.countForms(input.siteId);
+        if (count >= AUDIENCE_MAX_FORMS) {
+            throw new FeatureError(
+                'validation',
+                `Un site ne peut pas porter plus de ${AUDIENCE_MAX_FORMS} formulaires.`
+            );
+        }
+        const ref = nameRef(input.name);
+        if (await ctx.repo.findFormByName(input.siteId, ref)) {
+            throw new FeatureError('validation', 'Un formulaire porte déjà ce nom sur ce site.');
+        }
+        // Deux questions du même nom rendraient la seconde inatteignable : le
+        // schéma est un objet, pas une liste, du côté de l'envoi.
+        const names = new Set(input.fields.map((field) => field.name.trim()));
+        if (names.size !== input.fields.length) {
+            throw new FeatureError('validation', 'Deux champs portent le même nom.');
+        }
+        if (input.mode === 'strict' && input.fields.length === 0) {
+            throw new FeatureError('validation', 'Un formulaire strict sans champ déclaré n’accepterait rien.');
+        }
+
+        const cipher = ctx.cipher();
+        const id = await ctx.repo.createForm({
+            siteId: input.siteId,
+            nameRef: ref,
+            content: await cipher.encrypt(input.name.trim()),
+            mode: input.mode,
+            formSchema: await sealSchema(cipher, input.mode, input.fields),
+            sortOrder: count
+        });
+        // Le nom déclaré est celui que l'ingestion cherchera : sans cet oubli, un
+        // envoi arrivé avant serait encore refusé pour la vie du processus.
+        ingestOf()?.invalidate();
+        ctx.audit({
+            action: 'audience.formAdd',
+            description: `Formulaire de retours « ${input.name.trim()} » déclaré`,
+            metadata: { siteId: input.siteId, workspaceId: site.workspace_id }
+        });
+
+        const created = await ctx.repo.findForm(id);
+        if (!created) throw new FeatureError('not_found', 'Formulaire introuvable');
+        return { form: await toForm(cipher, created) };
+    }
+});
+
 export const audienceFormUpdateFeature = defineSdkFeature({
     ...audienceFormUpdate,
     mutates: true,
@@ -93,7 +174,14 @@ export const audienceFormUpdateFeature = defineSdkFeature({
         }
 
         const cipher = ctx.cipher();
-        await ctx.repo.updateForm(Number(form.id), ref, await cipher.encrypt(input.name.trim()), input.open);
+        await ctx.repo.updateForm({
+            formId: Number(form.id),
+            nameRef: ref,
+            content: await cipher.encrypt(input.name.trim()),
+            mode: input.mode,
+            formSchema: await sealSchema(cipher, input.mode, input.fields),
+            open: input.open
+        });
         // Le nom fait partie de l'adressage : renommé, c'est ce nouveau nom que le
         // site doit envoyer, et l'ancien créera un canal neuf au prochain envoi.
         ingestOf()?.invalidate();
@@ -199,24 +287,38 @@ export const audienceResultsFeature = defineSdkFeature({
     handler: async (ctx: Ctx, input) => {
         const form = await loadForm(ctx, input.formId);
         const cipher = await siteCipher(ctx, Number(form.site_id));
-        const rows = await ctx.repo.readAnswers(Number(form.id));
+        const [rows, stored] = await Promise.all([
+            ctx.repo.readAnswers(Number(form.id)),
+            readJson<Partial<StoredSchema>>(cipher, form.form_schema)
+        ]);
+        const declared = new Map((stored?.fields ?? []).map((field) => [field.name, field]));
 
-        // Les lignes arrivent groupées par question (ordre d'apparition) puis par
-        // fréquence : le regroupement suit la lecture, sans tri supplémentaire.
-        const fields: AudienceResultField[] = [];
+        // Les questions déclarées d'abord, dans l'ordre où on les a écrites, et à
+        // zéro tant que personne n'a répondu : « personne n'a répondu » et « cette
+        // question n'existe pas » sont deux choses différentes, qu'un comptage seul
+        // confond. Les questions découvertes (mode auto) suivent.
+        const fields: AudienceResultField[] = [...declared.values()].map((field) => ({
+            name: field.name,
+            kind: field.kind,
+            answered: 0,
+            free: 0,
+            values: []
+        }));
+        const byName = new Map(fields.map((field) => [field.name, field]));
         const byField = new Map<number, AudienceResultField>();
+
         for (const row of rows) {
             const fieldId = Number(row.field_id);
             let field = byField.get(fieldId);
             if (!field) {
-                field = {
-                    name: (await readLabel(cipher, row.field_content)) || 'Sans nom',
-                    answered: 0,
-                    free: 0,
-                    values: []
-                };
+                const name = (await readLabel(cipher, row.field_content)) || 'Sans nom';
+                field = byName.get(name);
+                if (!field) {
+                    field = { name, kind: declared.get(name)?.kind ?? null, answered: 0, free: 0, values: [] };
+                    byName.set(name, field);
+                    fields.push(field);
+                }
                 byField.set(fieldId, field);
-                fields.push(field);
             }
             const count = Number(row.hits);
             field.answered += count;

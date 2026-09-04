@@ -65,6 +65,10 @@ function site(over: Partial<AudienceSiteRow> & { id: number; workspace_id: numbe
         origins: 'exemple.fr',
         active: 1,
         retention_days: 180,
+        forms_auto: 0,
+        submission_ip_quota: 5,
+        form_hourly_quota: 200,
+        event_ip_quota: 0,
         sort_order: over.id,
         last_event_at: null,
         content: JSON.stringify({ name: `Site ${over.id}`, description: '' }),
@@ -238,7 +242,9 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         updateForm: unused,
         removeForm: unused,
         clearForm: unused,
-        resolveForm: unused,
+        createForm: unused,
+        closeForm: unused,
+        countSubmissionsSince: unused,
         insertSubmission: unused,
         touchForm: unused,
         bumpFormSubmissions: unused,
@@ -299,7 +305,11 @@ const body = {
     visitorMode: 'anonymous' as const,
     origins: ['https://Exemple.fr/', 'www.exemple.fr:443', ''],
     active: true,
-    retentionDays: 90
+    retentionDays: 90,
+    formsAuto: false,
+    submissionIpQuota: 5,
+    formHourlyQuota: 200,
+    eventIpQuota: 0
 };
 
 describe('audience.count et audience.list', () => {

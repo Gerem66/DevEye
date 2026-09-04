@@ -36,6 +36,16 @@ export const AUDIENCE_LABEL_MAX_LENGTH = 512;
 /** `pk_` + 24 caractères. Publique par nature : elle est dans la page suivie. */
 export const AUDIENCE_PUBLIC_KEY_LENGTH = 27;
 
+/** Défauts des quotas d'un site, tous réglables dans l'onglet de leur section. */
+export const AUDIENCE_SUBMISSION_IP_QUOTA_DEFAULT = 5;
+export const AUDIENCE_FORM_HOURLY_QUOTA_DEFAULT = 200;
+/** `0` = illimité : aucun site en place ne doit se mettre à perdre des vues. */
+export const AUDIENCE_EVENT_IP_QUOTA_DEFAULT = 0;
+export const AUDIENCE_QUOTA_MAX = 100_000;
+
+/** L'origine qui accepte tout, par opposition à la liste vide qui n'accepte rien. */
+export const AUDIENCE_ORIGIN_ANY = '*';
+
 export const AUDIENCE_RETENTION_MIN_DAYS = 7;
 export const AUDIENCE_RETENTION_MAX_DAYS = 730;
 export const AUDIENCE_RETENTION_DEFAULT_DAYS = 180;
@@ -150,15 +160,28 @@ export const audienceSiteSchema = z.object({
     platform: audiencePlatformSchema,
     visitorMode: audienceVisitorModeSchema,
     /**
-     * Les hôtes autorisés à écrire (`exemple.fr`, `www.exemple.fr`). Vide = on
-     * accepte n'importe quelle origine, ce que l'écran signale comme un état
-     * transitoire — le temps de brancher, pas un réglage à laisser en place.
+     * Les hôtes autorisés à écrire, et trois états plutôt que deux : **vide, rien
+     * n'entre** ; `['*']`, tout entre ; sinon la liste (`exemple.fr`,
+     * `www.exemple.fr`). Le vide refusait de refuser dans la première version,
+     * ce qui faisait du défaut le réglage le plus permissif.
      */
     origins: z.array(z.string().max(AUDIENCE_ORIGIN_MAX_LENGTH)).max(AUDIENCE_MAX_ORIGINS),
     /** Éteint, plus rien n'entre ; l'historique déjà là ne bouge pas. */
     active: z.boolean(),
     /** Conservation des événements bruts. L'agrégat journalier, lui, survit. */
     retentionDays: z.number().int().min(AUDIENCE_RETENTION_MIN_DAYS).max(AUDIENCE_RETENTION_MAX_DAYS),
+    /**
+     * Accepter un nom de formulaire jamais déclaré, et le créer. Éteint par
+     * défaut : allumé, quiconque lit la clé publique dans la page décide de ce
+     * que l'écran affiche.
+     */
+    formsAuto: z.boolean(),
+    /** Retours acceptés d'une même adresse vers un même formulaire, par heure. */
+    submissionIpQuota: z.number().int().min(0).max(AUDIENCE_QUOTA_MAX),
+    /** Retours par heure et par formulaire ; dépassé, le formulaire se ferme. */
+    formHourlyQuota: z.number().int().min(0).max(AUDIENCE_QUOTA_MAX),
+    /** Événements de mesure par adresse et par heure. `0` = illimité. */
+    eventIpQuota: z.number().int().min(0).max(AUDIENCE_QUOTA_MAX),
     /**
      * Quand le dernier événement est entré. `null` = jamais rien reçu, ce qui
      * est l'état normal d'un site qu'on vient de déclarer et non une panne :
@@ -304,15 +327,22 @@ export type AudienceFunnel = z.infer<typeof audienceFunnelSchema>;
 
 /**
  * Les retours : la seconde façon dont un site entre ici. La mesure regarde ce
- * que les visiteurs font ; un retour est ce qu'ils écrivent, et c'est le site
- * qui décide de sa forme. D'où une charge utile libre, un objet plat de champs
- * nommés, plutôt qu'un schéma que DevEye imposerait à des formulaires qu'il ne
- * connaît pas.
+ * que les visiteurs font ; un retour est ce qu'ils écrivent.
  *
  * Un **formulaire** est le canal nommé qui les reçoit (`contact`,
- * `sondage-2026`). Il naît de sa première réception : exiger de le déclarer
- * d'abord obligerait à revenir ici avant de pouvoir tester une intégration, et
- * une faute de frappe y produirait un silence total au lieu d'une ligne visible.
+ * `sondage-2026`), et il se **déclare**, avec ses champs et leur type. Le
+ * laisser naître de sa première réception, comme la première version le
+ * faisait, donnait à qui lit la clé publique dans la page le pouvoir de faire
+ * apparaître vingt canaux et autant de colonnes dans le tableau : ce n'est pas
+ * une commodité, c'est une interface qu'on prête à un inconnu. Le mode `auto`
+ * reste offert par formulaire, et un interrupteur de site rouvre la création à
+ * la volée, tous deux éteints par défaut.
+ *
+ * Le type déclaré ne sert pas qu'à refuser : un `<form>` HTML n'envoie que des
+ * chaînes (`"4"`, `"on"`), et c'est lui qui les ramène à la bonne valeur avant
+ * qu'on les range et qu'on les compte. C'est aussi lui qui laisse engendrer le
+ * formulaire à coller, et montrer une question déclarée que personne n'a
+ * remplie, ce qu'un comptage seul ne peut pas savoir.
  *
  * Le chiffrement pose le même problème qu'aux statistiques, et reçoit la même
  * réponse : la charge utile est chiffrée **en bloc** (personne n'agrège dessus),
@@ -324,11 +354,17 @@ export type AudienceFunnel = z.infer<typeof audienceFunnelSchema>;
 export const AUDIENCE_FORM_NAME_MAX_LENGTH = 64;
 
 /**
- * Formulaires par site. C'est le plafond de l'auto-création : au-delà, un nom
- * inconnu est ignoré, sans quoi une clé publique connue suffirait à remplir la
- * table de canaux tirés au sort.
+ * Formulaires par site, déclarés comme créés à la volée. Borne aussi ce qu'un
+ * site en mode `auto` peut faire apparaître : sans elle, une clé publique
+ * connue suffirait à remplir la table de canaux tirés au sort.
  */
 export const AUDIENCE_MAX_FORMS = 20;
+
+/** Champs déclarables sur un formulaire. */
+export const AUDIENCE_FORM_FIELDS_MAX = 40;
+
+/** Choix possibles d'un champ fermé. Au-delà, ce n'est plus une question fermée. */
+export const AUDIENCE_FIELD_CHOICES_MAX = 30;
 
 export const AUDIENCE_SUBMISSION_FIELDS_MAX = 40;
 export const AUDIENCE_FIELD_NAME_MAX_LENGTH = 64;
@@ -358,8 +394,12 @@ export const AUDIENCE_ANSWER_VALUES_MAX = 50;
 /**
  * Retours conservés par formulaire. Un plafond, jamais une rétention : une
  * visite est jetable, un message ne l'est pas, et l'effacer en silence au bout
- * de N jours perdrait ce que l'utilisateur avait demandé à collecter. Atteint,
- * le formulaire cesse d'accepter et l'écran le dit.
+ * de N jours perdrait ce que l'utilisateur avait demandé à collecter.
+ *
+ * Garde de stockage seulement, et surtout pas la seule borne : atteint, il
+ * condamnerait le formulaire jusqu'à ce qu'on le vide, ce qui offrirait un déni
+ * de service à qui connaît la clé. C'est le quota horaire ci-dessous qui arrête
+ * une rafale, en fermant le formulaire de façon datée et réversible.
  */
 export const AUDIENCE_FORM_SUBMISSIONS_MAX = 50_000;
 
@@ -398,11 +438,71 @@ export const audienceSubmitSchema = z.object({
 });
 export type AudienceSubmitBody = z.infer<typeof audienceSubmitSchema>;
 
+/**
+ * Le type d'un champ déclaré. Fermé, et court : chaque entrée doit répondre à
+ * « comment ramener une chaîne de formulaire HTML à une valeur », et un type de
+ * plus qu'on ne saurait pas convertir ne servirait qu'à décorer l'écran.
+ */
+export const audienceFieldKindSchema = z.enum(['text', 'email', 'number', 'boolean', 'choice']);
+export type AudienceFieldKind = z.infer<typeof audienceFieldKindSchema>;
+
+export const audienceFormFieldSchema = z
+    .object({
+        name: z.string().min(1).max(AUDIENCE_FIELD_NAME_MAX_LENGTH),
+        kind: audienceFieldKindSchema,
+        /** Absent d'un envoi, il le fait refuser en entier. */
+        required: z.boolean(),
+        /** `choice` seulement : les réponses admises, et rien d'autre. */
+        choices: z.array(z.string().min(1).max(AUDIENCE_ANSWER_VALUE_MAX_LENGTH)).max(AUDIENCE_FIELD_CHOICES_MAX),
+        /** `choice` seulement : plusieurs cases cochables. */
+        multiple: z.boolean()
+    })
+    .refine((field) => field.kind !== 'choice' || field.choices.length > 0, {
+        message: 'Un champ à choix doit proposer au moins une réponse.'
+    })
+    .refine((field) => field.kind === 'choice' || (field.choices.length === 0 && !field.multiple), {
+        message: 'Seul un champ à choix porte des réponses possibles.'
+    });
+export type AudienceFormField = z.infer<typeof audienceFormFieldSchema>;
+
+/**
+ * Comment un formulaire traite ce qu'il reçoit.
+ *
+ * `strict` : l'envoi est confronté aux champs déclarés, et refusé en entier
+ * s'il n'y colle pas. C'est le défaut d'un formulaire créé à l'écran.
+ *
+ * `auto` : tout est accepté et les colonnes se découvrent. Utile quand le site
+ * évolue plus vite que ses réglages, au prix de laisser un inconnu qui a la clé
+ * publique décider de ce qu'on affiche.
+ */
+export const audienceFormModeSchema = z.enum(['strict', 'auto']);
+export type AudienceFormMode = z.infer<typeof audienceFormModeSchema>;
+
+/** Les champs déclarés d'un formulaire, ou aucun en mode `auto`. */
+export const audienceFormFieldsSchema = z.array(audienceFormFieldSchema).max(AUDIENCE_FORM_FIELDS_MAX);
+
+/**
+ * Pourquoi un formulaire s'est fermé tout seul. `quota` = une rafale a dépassé
+ * le quota horaire du site ; `full` = le plafond de stockage est atteint. La
+ * réouverture est un geste manuel, pour qu'on regarde ce qui est entré avant.
+ */
+export const audienceFormClosureSchema = z.enum(['quota', 'full']);
+export type AudienceFormClosure = z.infer<typeof audienceFormClosureSchema>;
+
 export const audienceFormSchema = z.object({
     id: z.number().int().positive(),
     name: z.string().max(AUDIENCE_FORM_NAME_MAX_LENGTH),
+    mode: audienceFormModeSchema,
+    fields: audienceFormFieldsSchema,
     /** Fermé, plus rien n'entre ; ce qui est déjà là ne bouge pas. */
     open: z.boolean(),
+    /**
+     * Quand et pourquoi il s'est fermé tout seul. `null` sur un formulaire
+     * ouvert, ou fermé à la main : l'écran ne raconte une rafale que s'il y en a
+     * eu une.
+     */
+    closedAt: z.number().int().nullable(),
+    closedReason: audienceFormClosureSchema.nullable(),
     submissions: z.number().int().nonnegative(),
     lastAt: z.number().int().nullable(),
     created: z.number().int()
@@ -439,6 +539,12 @@ export type AudienceSubmission = z.infer<typeof audienceSubmissionSchema>;
  */
 export const audienceResultFieldSchema = z.object({
     name: z.string(),
+    /**
+     * Le type déclaré, ou `null` sur un champ découvert en mode `auto`. C'est
+     * lui qui distingue « personne n'a répondu à cette question » de « cette
+     * question n'existe pas », qu'un comptage seul confond.
+     */
+    kind: audienceFieldKindSchema.nullable(),
     answered: z.number().int().nonnegative(),
     free: z.number().int().nonnegative(),
     values: z.array(z.object({ label: z.string(), count: z.number().int().nonnegative() }))
@@ -548,13 +654,18 @@ export interface AudienceSiteRow {
     /** 'anonymous' | 'persistent'. En clair : l'ingestion s'en sert sans clé. */
     visitor_mode: string;
     /**
-     * Hôtes autorisés, séparés par des sauts de ligne. En clair pour la même
-     * raison que la clé, et publics de toute façon puisqu'ils nomment les pages
-     * où la balise est posée.
+     * Hôtes autorisés, séparés par des sauts de ligne, ou `*` pour tout
+     * accepter. `NULL` ne laisse plus rien entrer. En clair pour la même raison
+     * que la clé, et publics de toute façon puisqu'ils nomment les pages où la
+     * balise est posée.
      */
     origins: string | null;
     active: number;
     retention_days: number;
+    forms_auto: number;
+    submission_ip_quota: number;
+    form_hourly_quota: number;
+    event_ip_quota: number;
     sort_order: number;
     last_event_at: number | null;
     /** { name, description } chiffré, étage ouvert. */
@@ -661,8 +772,15 @@ export interface AudienceFormRow {
     site_id: number;
     /** Condensé du nom en minuscules : porte l'unicité dans le site. */
     name_ref: string;
+    /** 'strict' | 'auto'. */
+    mode: string;
+    /** { fields } chiffré ; `NULL` sur un formulaire en mode auto. */
+    form_schema: string | null;
     /** Fermé, plus rien n'entre. */
     is_open: number;
+    closed_at: number | null;
+    /** 'quota' | 'full', ou `NULL` quand la fermeture est un geste humain. */
+    closed_reason: string | null;
     submissions: number;
     last_at: number | null;
     sort_order: number;
@@ -677,6 +795,11 @@ export interface AudienceSubmissionRow {
     /** Dénormalisé : compter les retours d'un site ne demande pas de jointure. */
     site_id: number;
     ts: number;
+    /**
+     * Condensé de l'adresse avec le sel du jour, jamais l'adresse : de quoi
+     * compter les envois d'une même provenance sans en conserver aucune.
+     */
+    ip_ref: string;
     /** La visite d'où il vient, `NULL` dès que la rétention l'a purgée. */
     session_id: number | null;
     /** { fields, path } chiffré, en bloc : rien ne s'agrège dessus. */

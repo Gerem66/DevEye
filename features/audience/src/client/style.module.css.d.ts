@@ -1,4 +1,5 @@
 declare const styles: {
+    readonly addRow: string;
     readonly audiencePulse: string;
     readonly audienceSpin: string;
     readonly awaiting: string;
@@ -31,6 +32,7 @@ declare const styles: {
     readonly chartTick: string;
     readonly chevronDown: string;
     readonly chevronUp: string;
+    readonly choices: string;
     readonly confirm: string;
     readonly contextTag: string;
     readonly contextTags: string;
@@ -52,10 +54,18 @@ declare const styles: {
     readonly error: string;
     readonly feature: string;
     readonly field: string;
+    readonly fieldChoices: string;
     readonly fieldHint: string;
+    readonly fieldRow: string;
     readonly footerLeft: string;
     readonly form: string;
+    readonly formList: string;
     readonly formMeta: string;
+    readonly formName: string;
+    readonly formRow: string;
+    readonly formRowMeta: string;
+    readonly formTags: string;
+    readonly formatHelp: string;
     readonly funnel: string;
     readonly funnelBar: string;
     readonly funnelCard: string;
