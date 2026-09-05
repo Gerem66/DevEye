@@ -598,13 +598,13 @@ export class DeploySync {
                 ? `Le déploiement « ${label} » de ${targetName} a échoué.`
                 : `Le déploiement « ${label} » de ${targetName} est passé.`,
             '',
-            `Cible       : ${targetName}`,
-            `État        : ${failed ? 'Échec' : 'Succès'}`,
-            `Démarré le  : ${formatMoment(item.startedAt)}`
+            `Cible : ${targetName}`,
+            `État : ${failed ? 'Échec' : 'Succès'}`,
+            `Démarré le : ${formatMoment(item.startedAt)}`
         ];
         if (item.finishedAt !== null) {
-            lines.push(`Terminé le  : ${formatMoment(item.finishedAt)}`);
-            lines.push(`Durée       : ${formatDuration(Math.max(0, item.finishedAt - item.startedAt))}`);
+            lines.push(`Terminé le : ${formatMoment(item.finishedAt)}`);
+            lines.push(`Durée : ${formatDuration(Math.max(0, item.finishedAt - item.startedAt))}`);
         }
         // La description porte le message d'erreur du fournisseur (voir
         // `readDeployments`) : la seule ligne qui dise pourquoi.

@@ -290,9 +290,9 @@ export class UptimeMonitor {
                 body: [
                     `Le service « ${target.name} » ne répond plus.`,
                     '',
-                    `URL         : ${target.url}`,
-                    `Depuis      : ${formatMoment(probe.at)}`,
-                    `Erreur      : ${probe.error ?? 'inconnue'}`,
+                    `URL : ${target.url}`,
+                    `Depuis : ${formatMoment(probe.at)}`,
+                    `Erreur : ${probe.error ?? 'inconnue'}`,
                     probe.httpStatus === null ? null : `Statut HTTP : ${probe.httpStatus}`
                 ]
                     .filter((line) => line !== null)
@@ -329,11 +329,11 @@ export class UptimeMonitor {
                     body: [
                         `Le service « ${target.name} » répond de nouveau.`,
                         '',
-                        `URL             : ${target.url}`,
-                        `Panne du        : ${formatMoment(open.started_at)}`,
-                        `Rétabli le      : ${formatMoment(probe.at)}`,
-                        `Durée           : ${formatDuration(duration)}`,
-                        `Cause initiale  : ${cause ?? 'inconnue'}`
+                        `URL : ${target.url}`,
+                        `Panne du : ${formatMoment(open.started_at)}`,
+                        `Rétabli le : ${formatMoment(probe.at)}`,
+                        `Durée : ${formatDuration(duration)}`,
+                        `Cause initiale : ${cause ?? 'inconnue'}`
                     ].join('\n'),
                     notice: {
                         event: 'recovered',
