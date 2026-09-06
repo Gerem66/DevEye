@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { humanizeError, useResourceVersion } from 'deveye-sdk-client';
+import { humanizeError, SegmentedControl, useResourceVersion } from 'deveye-sdk-client';
 import type {
     AudienceActivity,
     AudienceBreakdownItem,
@@ -223,19 +223,15 @@ export function SiteView({ site, heading, actions }: SiteViewProps) {
                 <section className={styles.panel}>
                     <div className={styles.panelHead}>
                         <h3 className={styles.panelTitle}>{DIMENSION_LABELS[technical]}</h3>
-                        <div className={styles.segmented} role='group' aria-label='Axe technique'>
-                            {TECHNICAL.map((dimension) => (
-                                <button
-                                    key={dimension}
-                                    type='button'
-                                    className={dimension === technical ? styles.segmentActive : styles.segment}
-                                    aria-pressed={dimension === technical}
-                                    onClick={() => setTechnical(dimension)}
-                                >
-                                    {DIMENSION_LABELS[dimension]}
-                                </button>
-                            ))}
-                        </div>
+                        <SegmentedControl
+                            value={technical}
+                            options={TECHNICAL.map((dimension) => ({
+                                value: dimension,
+                                label: DIMENSION_LABELS[dimension]
+                            }))}
+                            aria-label='Axe technique'
+                            onChange={setTechnical}
+                        />
                     </div>
                     {/* Le titre est déjà rendu ci-dessus avec son sélecteur :
                         `TopList` n'apporterait ici qu'un doublon. */}

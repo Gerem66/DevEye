@@ -8,7 +8,7 @@ import {
     useLiveSegment,
     useStickyOffset
 } from 'deveye-sdk-client';
-import type { AudienceSite, AudienceUsage } from '../contracts/domain';
+import type { AudienceForm, AudienceSite, AudienceUsage } from '../contracts/domain';
 
 import Forms from './Forms/Forms';
 import Funnels from './Funnels';
@@ -51,6 +51,12 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onSite
     const [installOpen, setInstallOpen] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [section, setSection] = useState<Section>(null);
+    /**
+     * Le formulaire que la section Retours montre. Il remonte jusqu'ici parce
+     * que le bouton « Installer » est celui de l'en-tête, comme sur les deux
+     * autres sections, et qu'il doit engendrer le `<form>` de celui-là.
+     */
+    const [currentForm, setCurrentForm] = useState<AudienceForm | null>(null);
 
     // Présence : « qui regarde quoi dans ce site ». `Audience` possède `l1` (le
     // site), cette fiche possède `l2` (la section) : un seul déclarant par niveau.
@@ -62,6 +68,13 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onSite
     const sticky = useStickyOffset<HTMLElement>();
 
     /**
+     * Rien n'est encore arrivé sur cette section : le bouton d'installation y
+     * passe en avant. Sur les Retours c'est l'absence de formulaire qui le dit,
+     * un site peut n'en poser aucun et mesurer très bien.
+     */
+    const awaiting = section === 'forms' ? currentForm === null : site.lastEventAt === null;
+
+    /**
      * Les chiffres se rafraîchissent seuls, mais au plus une fois par minute et
      * par espace : ce bouton sert au moment où l'on vient de faire quelque chose
      * sur le site et où l'on veut voir l'effet tout de suite.
@@ -70,7 +83,9 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onSite
      * quasi instantanée, et la chronométrer inventerait un délai.
      */
     const refresh = () => {
-        invalidate('audience.detail', 'audience.stats', 'audience.forms');
+        // La liste et la carte d'accueil avec le reste : elles portent les mêmes
+        // compteurs, et les laisser derrière ferait mentir le retour à la liste.
+        invalidate('audience.count', 'audience.list', 'audience.detail', 'audience.stats', 'audience.forms');
         setRefreshing(true);
         window.setTimeout(() => setRefreshing(false), 600);
     };
@@ -105,21 +120,19 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onSite
                         <span className={`icon icon-refresh ${refreshing ? styles.spinning : ''}`} aria-hidden='true' />
                     </Button>
 
-                    {/* Chaque section a son installation : la balise au sommaire,
-                        la mesure et ses appels sur Fréquentation, les signaux nommés
-                        sur Entonnoirs. Les Retours portent le leur, avec le
-                        formulaire ouvert — celui-ci ne saurait pas lequel montrer.
-                        Le bouton passe en avant tant que rien n'est arrivé : c'est
-                        la seule chose à faire à ce moment-là. */}
-                    {section !== 'forms' && (
-                        <Button
-                            variant={site.lastEventAt === null ? 'primary' : 'secondary'}
-                            icon='terminal'
-                            onClick={() => setInstallOpen(true)}
-                        >
-                            Installer
-                        </Button>
-                    )}
+                    {/* Un seul bouton « Installer », à la même place quelle que soit
+                        la section : ce qu'il ouvre change, pas où on le cherche. La
+                        balise au sommaire, la mesure sur Fréquentation, les signaux
+                        nommés sur Entonnoirs, le formulaire ouvert sur Retours. Il
+                        passe en avant tant que rien n'est arrivé : c'est la seule
+                        chose à faire à ce moment-là. */}
+                    <Button
+                        variant={awaiting ? 'primary' : 'secondary'}
+                        icon='terminal'
+                        onClick={() => setInstallOpen(true)}
+                    >
+                        Installer
+                    </Button>
                     {/* Les réglages de ce site, son identité et sa suppression
                         comprises (onglet Général), avec le partage et les
                         restrictions par rôle. Le bouton se garde lui-même. Supprimé
@@ -146,7 +159,7 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onSite
             {section === null && <SiteHub site={site} onOpen={setSection} />}
             {section === 'traffic' && <SiteView site={site} />}
             {section === 'funnels' && <Funnels site={site} canWrite={canWrite} />}
-            {section === 'forms' && <Forms site={site} ingestOrigin={ingestOrigin} canWrite={canWrite} />}
+            {section === 'forms' && <Forms site={site} canWrite={canWrite} onCurrentForm={setCurrentForm} />}
 
             {section === null && usage.length > 0 && (
                 <section className={styles.panel}>
@@ -176,7 +189,8 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onSite
 
             <InstallDialog
                 open={installOpen}
-                scope={section === 'traffic' || section === 'funnels' ? section : 'site'}
+                scope={section ?? 'site'}
+                form={currentForm}
                 site={site}
                 ingestOrigin={ingestOrigin}
                 canWrite={canWrite}

@@ -136,9 +136,6 @@ declare const styles: {
     readonly sectionLabel: string;
     readonly sectionTitle: string;
     readonly sectionValue: string;
-    readonly segment: string;
-    readonly segmentActive: string;
-    readonly segmented: string;
     readonly snippet: string;
     readonly snippetTall: string;
     readonly spark: string;

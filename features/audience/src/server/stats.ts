@@ -8,7 +8,7 @@ import {
 import { AUDIENCE_BREAKDOWN_MAX, type AudienceBreakdownItem } from '../contracts/domain';
 import { defineSdkFeature, FeatureError, type SdkCipher } from '@deveye/types/sdk/server';
 
-import { dayKey } from './normalize';
+import { dayBounds, dayKey } from './normalize';
 import type { AudienceBreakdownRow, ResolvedStep } from './repo';
 import { loadSite, rangeWindow, readLabel, siteCipher, toMetrics, type Ctx } from './_shared';
 
@@ -136,10 +136,15 @@ export const audienceSummaryFeature = defineSdkFeature({
             };
         }
 
-        const [rolled, funnels] = await Promise.all([
-            // L'agrégat journalier plutôt que les événements : il survit à la
-            // rétention, et une courbe de sommaire n'a pas besoin d'être à la minute.
+        const [rolled, recent, funnels] = await Promise.all([
+            // L'agrégat journalier pour les jours révolus : il survit à la rétention,
+            // qui peut avoir mangé une partie du plus ancien jour de la fenêtre.
             ctx.repo.dailyPoints(input.siteId, dayKey(now - (SUMMARY_DAYS - 1) * 86400)),
+            // Hier et aujourd'hui sur les événements bruts : ce sont les deux seuls
+            // jours que le ménage horaire recalcule, donc les deux seuls que
+            // l'agrégat rend en retard. La rétention minimale étant de sept jours,
+            // ils y sont toujours entiers.
+            ctx.repo.recentDailyViews(input.siteId, dayBounds(now - 86400).from),
             firstFunnel(ctx, input.siteId, now)
         ]);
 
@@ -147,9 +152,13 @@ export const audienceSummaryFeature = defineSdkFeature({
         // se tasserait sur les seuls jours mesurés et une accalmie ressemblerait à
         // une courbe pleine.
         const views = new Map(rolled.map((point) => [point.day, point.views]));
+        const live = new Map(recent.map((point) => [point.day, point.views]));
         const days = Array.from({ length: SUMMARY_DAYS }, (_, i) => {
             const day = dayKey(now - (SUMMARY_DAYS - 1 - i) * 86400);
-            return { day, views: views.get(day) ?? 0 };
+            // Les deux derniers jours se lisent sur le brut même absent : zéro y est
+            // la vérité, là où l'agrégat rendrait un chiffre d'il y a une heure.
+            const count = i >= SUMMARY_DAYS - 2 ? live.get(day) : views.get(day);
+            return { day, views: count ?? 0 };
         });
 
         return {

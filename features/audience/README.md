@@ -254,10 +254,10 @@ ce que font Plausible et PostHog ; il n'existe pas mieux sans imposer un compte
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Sites**              | tous les sites de l'espace, visiteurs et vues sur 24 h, état, nombre de projets                                                                                                                                              |
 | **Un site**            | bandeau (vues, visiteurs, visites, durée, rebond) avec **écart à la période précédente** · courbe · top pages et provenances · navigateurs / systèmes / appareils · carte jour × heure · fuseaux · événements · utilisateurs |
-| **Installer**          | la balise à copier, et l'état « première mesure reçue »                                                                                                                                                                      |
+| **Installer**          | un bouton unique dans l'en-tête de la fiche, quelle que soit la section : étape 1 le bloc à coller (la balise, ou le `<form>` du formulaire ouvert), étape 2 ce qui est arrivé depuis                                        |
 | **Onglet d'un projet** | les sites reliés, même `SiteView`                                                                                                                                                                                            |
 
-Trois décisions d'écran qui méritent d'être connues :
+Quatre décisions d'écran qui méritent d'être connues :
 
 - **L'écart est la moitié de l'information.** « 1 240 vues » ne dit pas s'il faut
   regarder de plus près ; « 1 240 vues, +18 % » le dit. La période de comparaison
@@ -270,6 +270,12 @@ Trois décisions d'écran qui méritent d'être connues :
 - **L'heure de la carte d'activité est celle du visiteur**, reconstituée depuis le
   décalage qu'il a déclaré. En heure serveur, une audience répartie sur trois
   fuseaux se moyenne en un aplat qui ne dit rien.
+- **Tout ce qu'un écran montre se lit sur les faits, jamais sur un cache.** La
+  seule exception serait la silhouette de sept jours du sommaire, qui sort de
+  l'agrégat journalier ; ses deux derniers jours, les seuls que le ménage
+  horaire recalcule, sont donc repris sur les événements bruts. Sans quoi la
+  carte afficherait « 412 vues (24 h) » au-dessus d'une barre du jour vieille
+  d'une heure.
 
 Les graphes sont du **SVG écrit à la main**, `viewBox` fixe, sans
 `ResizeObserver` — le patron d'`UptimeChart`. Aucune dépendance de graphes n'a
@@ -650,8 +656,9 @@ SiteTrafficPanel.tsx  onglet Fréquentation : visiteurs, rétention, quota d'év
 SiteFormsPanel.tsx    onglet Retours : formulaires déclarés, création à la volée, quotas
 FormEditor.tsx        déclarer un formulaire et ses questions typées
 useSiteDraft.ts       le brouillon partagé des trois onglets (siteUpdate prend le site entier)
-InstallDialog.tsx   contextuel (`scope`) : la balise, ou le <form> engendré du formulaire ouvert,
-                    l'état « première mesure », la rotation de clé
+InstallDialog.tsx   contextuel (`scope`) : même forme partout (étape 1 le bloc à coller,
+                    étape 2 ce qui est arrivé), contenu et mémo d'agent propres à la section,
+                    la rotation de clé
 FunnelDialog.tsx    définir un parcours à partir du déjà-observé
 FunnelDetailDialog.tsx
 Stats/{StatBand,TrendChart,Heatmap,TopList,FunnelBar,FunnelSteps}.tsx

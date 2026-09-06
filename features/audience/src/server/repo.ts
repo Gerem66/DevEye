@@ -2,7 +2,8 @@ import type { AudienceDimension, AudienceFunnelRow, AudienceFunnelStepRow, Audie
 import { AUDIENCE_FUNNEL_MAX_STEPS } from '../contracts/domain';
 import type { SdkQueryable } from '@deveye/types/sdk/server';
 
-import { createFormsRepo, type AudienceFormsRepo } from './repoForms';
+import { createFormsRepo, type AudienceDailyPointRow, type AudienceFormsRepo } from './repoForms';
+import { dayKey } from './normalize';
 
 /** Un site, plus ce que ses tables voisines en disent. */
 export interface AudienceSiteWithStatsRow extends AudienceSiteRow {
@@ -194,6 +195,12 @@ export interface AudienceRepo extends AudienceFormsRepo {
     activity(siteId: number, from: number, to: number): Promise<AudienceActivityRow[]>;
     liveVisitors(siteId: number, since: number): Promise<number>;
     livePages(siteId: number, since: number, limit: number): Promise<AudienceBreakdownRow[]>;
+    /**
+     * Les vues par jour, prises sur les événements bruts. Le complément de
+     * `dailyPoints` : l'agrégat journalier n'est refait qu'à l'heure, donc les
+     * deux jours qu'il recalcule (hier et aujourd'hui) s'y lisent en retard.
+     */
+    recentDailyViews(siteId: number, from: number): Promise<AudienceDailyPointRow[]>;
 
     // -- entonnoirs ---------------------------------------------------------
     listFunnels(siteId: number): Promise<AudienceFunnelRow[]>;
@@ -578,6 +585,22 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
                 content: row.content,
                 views: Number(row.views),
                 visitors: Number(row.visitors)
+            }));
+        },
+        async recentDailyViews(siteId, from) {
+            // Le seau est calculé sur l'horodatage, pas par `FROM_UNIXTIME` : la
+            // clé d'`audience_daily` est un jour UTC, là où les fonctions de date
+            // du moteur suivent le fuseau de la session.
+            const rows = await q.query<{ day_index: number; views: number }>(
+                `SELECT FLOOR(ts / 86400) AS day_index, COUNT(*) AS views
+                   FROM audience_events
+                  WHERE site_id = ? AND kind = 0 AND ts >= ?
+                  GROUP BY day_index`,
+                [siteId, from]
+            );
+            return rows.map((row) => ({
+                day: dayKey(Number(row.day_index) * 86400),
+                views: Number(row.views)
             }));
         },
 

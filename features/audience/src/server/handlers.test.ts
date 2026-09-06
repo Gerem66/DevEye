@@ -12,7 +12,8 @@ import {
     audienceSiteAdd,
     audienceSiteRemove,
     audienceSiteRotateKey,
-    audienceSiteUpdate
+    audienceSiteUpdate,
+    audienceSummary
 } from '../contracts/commands';
 import type { AudienceFunnelRow, AudienceFunnelStepRow, AudienceSiteRow } from '../contracts/domain';
 import { PROJECTS_USAGE_PROVIDER, type ProjectsUsageProvider } from '@deveye/types/sdk';
@@ -20,7 +21,7 @@ import { FeatureError, type SdkFeatureContext } from '@deveye/types/sdk/server';
 import { createTestContext } from '@deveye/types/sdk/testing';
 
 import { audienceHandlers } from './handlers';
-import { labelRef } from './normalize';
+import { dayKey, labelRef } from './normalize';
 import type { AudienceRepo, AudienceSiteWithStatsRow } from './repo';
 import type { AudienceIngest } from './service';
 import { setIngest } from './_shared';
@@ -164,6 +165,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         activity: unused,
         liveVisitors: unused,
         livePages: unused,
+        recentDailyViews: unused,
         listFunnels: async (siteId) => funnels.filter((f) => f.site_id === siteId),
         listFunnelSteps: async (siteId) => steps.filter((s) => s.site_id === siteId),
         findFunnelInWorkspace: async (funnelId, workspaceId) => {
@@ -573,5 +575,30 @@ describe('les entonnoirs', () => {
             failsWith('forbidden')
         );
         assert.deepEqual(repo.funnels, []);
+    });
+});
+
+describe('audience.summary', () => {
+    it('reprend les deux derniers jours sur les faits, l’agrégat n’étant refait qu’à l’heure', async () => {
+        const repo = seed(fakeRepo(), site({ id: 1, workspace_id: 1, last_event_at: 1_700_000_000 }));
+        const now = Math.floor(Date.now() / 1000);
+        const dayOf = (back: number) => dayKey(now - back * 86400);
+        // L'agrégat tel que le ménage l'a laissé il y a une heure : hier et
+        // aujourd'hui y sont en retard, les jours révolus sont justes.
+        repo.dailyPoints = async () => [
+            { day: dayOf(6), views: 7 },
+            { day: dayOf(1), views: 40 },
+            { day: dayOf(0), views: 99 }
+        ];
+        // Les faits, eux, sont à la seconde : aujourd'hui a bougé depuis, et hier
+        // n'a finalement rien reçu.
+        repo.recentDailyViews = async () => [{ day: dayOf(0), views: 412 }];
+        repo.feedbackStats = async () => ({ forms: 0, submissions: 0, last7d: 0, lastAt: null });
+
+        const summary = await handlerFor(audienceSummary)(createTestContext({ repo }), { siteId: 1 });
+        assert.deepEqual(
+            summary.traffic.days.map((d) => d.views),
+            [7, 0, 0, 0, 0, 0, 412]
+        );
     });
 });

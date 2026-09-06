@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Button, Dialog, humanizeError, invalidate, useResourceVersion } from 'deveye-sdk-client';
-import type { AudienceForm, AudienceSite } from '../contracts/domain';
+import { Button, Dialog, humanizeError, invalidate, SegmentedControl, useResourceVersion } from 'deveye-sdk-client';
+import type { AudienceBreakdownItem, AudienceForm, AudienceSite } from '../contracts/domain';
 
 import { api } from './api';
 import { formatAgo, snippetFor } from './format';
@@ -52,12 +52,33 @@ function Disclosure({
 }
 
 /**
- * Ce que la fenêtre a le droit de montrer, selon l'écran d'où on l'ouvre : le
- * sommaire donne la balise et la clé, chaque section ne montre que ce qui la
- * concerne. Une fenêtre unique obligeait à dérouler quatre dépliants pour
- * trouver le sien.
+ * Ce que la fenêtre a le droit de montrer, selon l'écran d'où on l'ouvre : une
+ * seule fenêtre obligeait à dérouler quatre dépliants pour trouver le sien.
+ * Chaque section de la fiche d'un site ouvre le sien, et n'y lit que la sienne.
  */
 export type InstallScope = 'site' | 'traffic' | 'funnels' | 'forms';
+
+/**
+ * Le même verbe et un objet, partout : ce qu'on installe change, le geste non.
+ * Le titre nomme la section d'où l'on vient, jamais le formulaire ouvert, qui
+ * est nommé par le bloc qui le concerne.
+ */
+const SCOPE_TITLES: Record<InstallScope, string> = {
+    site: 'Installer ce site',
+    traffic: 'Installer la mesure',
+    funnels: 'Installer les entonnoirs',
+    forms: 'Installer les retours'
+};
+
+const SCOPE_DESCRIPTIONS: Record<InstallScope, string> = {
+    site: 'La balise à coller, puis tout ce que le site peut envoyer ensuite.',
+    traffic: 'La balise à coller, et les appels qui nomment ce qui compte.',
+    funnels: 'Les signaux nommés dont se composent les marches, et rien d’autre.',
+    forms: 'Le formulaire à coller, et exactement ce que le serveur en acceptera.'
+};
+
+/** La fenêtre sur laquelle on cherche les signaux déjà reçus, assez large pour en trouver. */
+const SIGNALS_RANGE = '30d';
 
 interface InstallDialogProps {
     open: boolean;
@@ -83,13 +104,15 @@ interface InstallDialogProps {
 }
 
 /**
- * Comment brancher un site, et tout ce qu'on peut en faire ensuite. Quatre
- * dépliants, du plus courant au plus spécialisé ; tous repliés pour ne pas
- * noyer l'étape qui compte, coller la balise et voir la première mesure
- * arriver.
+ * Comment brancher un site, et tout ce qu'on peut en faire ensuite.
  *
- * Les retours ont leur dépliant plutôt qu'une fenêtre à part : c'est la même
- * clé, la même porte publique et les mêmes origines autorisées, et un site
+ * La même forme quel que soit l'écran d'où l'on vient : une étape 1 qui donne
+ * le bloc à coller, une étape 2 qui montre ce qui est arrivé depuis, puis des
+ * dépliants pour le reste, tous repliés afin de ne pas noyer les deux premières.
+ * Ce sont les blocs qui changent, jamais la disposition.
+ *
+ * Les retours ont leur propre cadrage plutôt qu'une fenêtre à part : c'est la
+ * même clé, la même porte publique et les mêmes origines autorisées, et un site
  * statique peut n'utiliser qu'eux sans jamais poser la balise.
  *
  * Tous les blocs sont bâtis depuis la vraie clé et la vraie adresse
@@ -112,11 +135,16 @@ export function InstallDialog({
     const [confirmRotate, setConfirmRotate] = useState(false);
     const [lang, setLang] = useState('js');
     const [submitLang, setSubmitLang] = useState('html');
-    /** Les formulaires du site, chargés seulement quand on ouvre leur dépliant. */
+    /** Les formulaires du site, chargés seulement quand un bloc les montre. */
     const [forms, setForms] = useState<AudienceForm[] | null>(null);
+    /** Les signaux nommés déjà reçus, ce dont se composent les marches. */
+    const [signals, setSignals] = useState<AudienceBreakdownItem[] | null>(null);
     /** Un seul dépliant ouvert à la fois ; `null` = tous repliés. */
     const [section, setSection] = useState<string | null>(null);
     const toggle = (id: string) => setSection((current) => (current === id ? null : id));
+
+    /** Les retours ne posent pas de balise : leur étape 1 est le formulaire. */
+    const feedback = scope === 'forms';
 
     // Tout ce que montre cette fenêtre suit le mode réglé sur le site : une balise
     // sans `data-visitor` donnée à qui vient d'activer le mode persistant laisserait
@@ -129,14 +157,14 @@ export function InstallDialog({
         () => usageExamples(site.publicKey, ingestOrigin, persistent),
         [site.publicKey, ingestOrigin, persistent]
     );
-    // Deux mémos, jamais les deux à la fois : ce sont deux intégrations, et un
-    // agent à qui on donne les deux d'un coup mélange les deux API.
+    // Un mémo par cadrage, jamais deux à la fois : un agent à qui l'on donne les
+    // retours et la mesure d'un coup mélange les deux API.
     const brief = useMemo(
         () =>
-            scope === 'forms'
+            feedback
                 ? submitBrief(site.publicKey, ingestOrigin, form?.name ?? 'contact', form?.fields ?? [])
-                : agentBrief(site.publicKey, ingestOrigin, persistent),
-        [scope, site.publicKey, ingestOrigin, persistent, form?.name, form?.fields]
+                : agentBrief(site.publicKey, ingestOrigin, persistent, scope === 'funnels' ? 'funnels' : 'traffic'),
+        [feedback, scope, site.publicKey, ingestOrigin, persistent, form?.name, form?.fields]
     );
     const example = examples.find((e) => e.id === lang) ?? examples[0];
     const submits = useMemo(
@@ -146,12 +174,14 @@ export function InstallDialog({
     const submitExample = submits.find((e) => e.id === submitLang) ?? submits[0];
 
     const formsVersion = useResourceVersion('audience.forms');
+    const statsVersion = useResourceVersion('audience.stats');
 
-    // Le pendant de « première mesure reçue », pour les retours. Chargé à
-    // l'ouverture du dépliant seulement : la fiche n'en a pas besoin, et un envoi
-    // par site à chaque ouverture de cette fenêtre coûterait pour rien.
+    // Le pendant de « première mesure reçue », pour les retours : sur leur propre
+    // écran il est en étape 2, ailleurs il est au fond d'un dépliant, et on ne
+    // charge alors qu'à son ouverture.
     useEffect(() => {
-        if (section !== 'submit') return;
+        if (!open) return;
+        if (!feedback && section !== 'submit') return;
         let cancelled = false;
         api.send('audience.formList', { siteId: site.id })
             .then((res) => {
@@ -163,12 +193,29 @@ export function InstallDialog({
         return () => {
             cancelled = true;
         };
-    }, [section, site.id, formsVersion]);
+    }, [open, feedback, section, site.id, formsVersion]);
+
+    // Les signaux déjà reçus, sur l'écran des entonnoirs seulement : c'est là
+    // qu'ils servent, une marche se choisissant parmi eux et non en les retapant.
+    useEffect(() => {
+        if (!open || scope !== 'funnels' || site.lastEventAt === null) return;
+        let cancelled = false;
+        api.send('audience.breakdown', { siteId: site.id, range: SIGNALS_RANGE, dimension: 'event' })
+            .then((res) => {
+                if (!cancelled) setSignals(res.items);
+            })
+            .catch(() => {
+                // Lecture d'appoint : l'installation se lit sans elle.
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [open, scope, site.id, site.lastEventAt, statsVersion]);
 
     /** Le retour le plus récent, tous formulaires confondus ; `null` = aucun. */
     const lastSubmission =
         forms?.reduce<number | null>(
-            (best, form) => (form.lastAt !== null && (best === null || form.lastAt > best) ? form.lastAt : best),
+            (best, item) => (item.lastAt !== null && (best === null || item.lastAt > best) ? item.lastAt : best),
             null
         ) ?? null;
 
@@ -178,7 +225,7 @@ export function InstallDialog({
             setCopied(id);
             window.setTimeout(() => setCopied((c) => (c === id ? null : c)), 2000);
         } catch {
-            setError('Copie impossible — sélectionnez le texte à la main.');
+            setError('Copie impossible : sélectionnez le texte à la main.');
         }
     };
 
@@ -198,12 +245,66 @@ export function InstallDialog({
         }
     };
 
+    /**
+     * Le bloc d'envoi d'un retour : les trois façons, et celle qu'on regarde.
+     * Monté en étape 1 sur l'écran des retours, dans un dépliant ailleurs.
+     */
+    const submitBlock = (
+        <>
+            <SegmentedControl
+                value={submitLang}
+                options={submits.map((item) => ({ value: item.id, label: item.label }))}
+                aria-label='Façon d’envoyer'
+                onChange={setSubmitLang}
+            />
+            <p className={styles.hint}>{submitExample.note}</p>
+            <pre className={styles.snippetTall}>{submitExample.code}</pre>
+            <div className={styles.installActions}>
+                <Button
+                    variant='secondary'
+                    icon='copy'
+                    onClick={() => void copy(submitExample.code, `submit-${submitExample.id}`)}
+                >
+                    {copied === `submit-${submitExample.id}` ? 'Copié' : 'Copier'}
+                </Button>
+            </div>
+        </>
+    );
+
+    /*
+     * Le même repère que pour la balise : une intégration se vérifie en voyant
+     * arriver le premier envoi, jamais au code de retour, que la porte publique
+     * rend identique en cas de refus.
+     */
+    const submitProbe = (
+        <p className={lastSubmission === null ? styles.waiting : styles.received}>
+            {forms === null
+                ? 'Lecture des formulaires…'
+                : lastSubmission === null
+                  ? 'En attente du premier retour…'
+                  : `${forms.length} formulaire${forms.length > 1 ? 's' : ''} : dernier retour ${formatAgo(lastSubmission)}.`}
+        </p>
+    );
+
+    const submitLimits = (
+        <p className={styles.hint}>
+            Les origines autorisées du site s’appliquent aux retours comme aux mesures, et le plafond est de vingt
+            formulaires par site et 50 000 retours par formulaire. Un formulaire se ferme, se vide et se renomme depuis
+            « Retours ».
+        </p>
+    );
+
     return (
         <Dialog
             open={open}
             onClose={onClose}
-            title={
-                scope === 'forms' ? 'Recevoir des retours' : scope === 'traffic' ? 'Installer la mesure' : 'Installer'
+            title={SCOPE_TITLES[scope]}
+            // Le titre reste le même d'un écran à l'autre ; c'est la ligne du
+            // dessous qui nomme le formulaire ouvert, quand il y en a un.
+            description={
+                feedback && form
+                    ? `Le formulaire « ${form.name} » : ce qu’il faut coller, et exactement ce que le serveur en acceptera.`
+                    : SCOPE_DESCRIPTIONS[scope]
             }
             width={720}
             onSubmit={onClose}
@@ -238,7 +339,22 @@ export function InstallDialog({
             }
         >
             <div className={styles.install}>
-                {scope !== 'forms' && (
+                {feedback ? (
+                    <>
+                        <p className={styles.installStep}>
+                            <span className={styles.stepNumber}>1</span>
+                            Collez ce formulaire dans votre page, ou envoyez-le depuis votre code.
+                        </p>
+                        {submitBlock}
+
+                        <p className={styles.installStep}>
+                            <span className={styles.stepNumber}>2</span>
+                            Envoyez un premier retour. Il apparaît ici dès qu’il est reçu.
+                        </p>
+                        {submitProbe}
+                        {submitLimits}
+                    </>
+                ) : (
                     <>
                         <p className={styles.installStep}>
                             <span className={styles.stepNumber}>1</span>
@@ -253,23 +369,47 @@ export function InstallDialog({
 
                         <p className={styles.installStep}>
                             <span className={styles.stepNumber}>2</span>
-                            Ouvrez une page du site. La première mesure arrive en quelques secondes.
+                            {scope === 'funnels'
+                                ? 'Nommez chaque étape, là où elle est réellement franchie.'
+                                : 'Ouvrez une page du site. La première mesure arrive en quelques secondes.'}
                         </p>
-                        <p className={site.lastEventAt === null ? styles.waiting : styles.received}>
-                            {site.lastEventAt === null
-                                ? 'En attente de la première mesure…'
-                                : `Première mesure reçue — dernière ${formatAgo(site.lastEventAt)}.`}
-                        </p>
+                        {scope === 'funnels' ? (
+                            <>
+                                <pre className={styles.snippet}>{"window.deveye?.event('Devis envoyé');"}</pre>
+                                {/* Les signaux déjà vus, et non un simple « ça marche » :
+                                    c'est la liste dans laquelle on ira piocher les marches,
+                                    et la voir ici évite de retaper un nom de travers. */}
+                                <p className={signals && signals.length > 0 ? styles.received : styles.waiting}>
+                                    {site.lastEventAt === null
+                                        ? 'En attente de la première mesure…'
+                                        : signals === null
+                                          ? 'Lecture des signaux reçus…'
+                                          : signals.length === 0
+                                            ? 'Aucun signal nommé reçu sur les 30 derniers jours.'
+                                            : `Signaux reçus : ${signals.map((item) => item.label).join(', ')}.`}
+                                </p>
+                            </>
+                        ) : (
+                            <p className={site.lastEventAt === null ? styles.waiting : styles.received}>
+                                {site.lastEventAt === null
+                                    ? 'En attente de la première mesure…'
+                                    : `Première mesure reçue : dernière ${formatAgo(site.lastEventAt)}.`}
+                            </p>
+                        )}
                     </>
                 )}
 
-                {/* Les trois dépliants dans un groupe sans gouttière : le `gap` de
+                {/* Les dépliants dans un groupe sans gouttière : le `gap` de
                     `.install` s'ajouterait au-dessus de chaque filet, si bien qu'un titre
                     serait plus loin de sa propre ligne que du bloc précédent. */}
                 <div className={styles.disclosures}>
-                    {scope !== 'forms' && (
+                    {!feedback && (
                         <Disclosure
-                            title='Utilisation de base : marquer des étapes, nommer un utilisateur'
+                            title={
+                                scope === 'funnels'
+                                    ? 'Ce qui se mesure tout seul, et ce qui se pose à la main'
+                                    : 'Utilisation de base : marquer des étapes, nommer un utilisateur'
+                            }
                             open={section === 'base'}
                             onToggle={() => toggle('base')}
                         >
@@ -291,6 +431,13 @@ window.deveye?.identify(user.id);`}</pre>
                                 Les noms sont <strong>comparés à l’identique</strong> : accents, espaces et majuscules
                                 comptent. Composez vos entonnoirs depuis les suggestions plutôt qu’en les retapant.
                             </p>
+                            {scope === 'funnels' && (
+                                <p className={styles.hint}>
+                                    Une marche est soit un chemin de page, suivi tout seul, soit un signal nommé. Tout
+                                    se compte <strong>dans une même visite</strong> : trente minutes sans la moindre
+                                    mesure en ouvrent une nouvelle, et un parcours coupé en deux ne se recolle pas.
+                                </p>
+                            )}
                             <p className={styles.hint}>
                                 Sur <code>localhost</code>, la mesure est désactivée pour qu’un rechargement de
                                 développement ne gonfle pas vos chiffres : ajoutez{' '}
@@ -299,25 +446,18 @@ window.deveye?.identify(user.id);`}</pre>
                         </Disclosure>
                     )}
 
-                    {scope !== 'forms' && scope !== 'funnels' && (
+                    {!feedback && (
                         <Disclosure
                             title='Exemples de code : navigateur, Node.js, PHP'
                             open={section === 'code'}
                             onToggle={() => toggle('code')}
                         >
-                            <div className={styles.segmented} role='group' aria-label='Langage'>
-                                {examples.map((item) => (
-                                    <button
-                                        key={item.id}
-                                        type='button'
-                                        className={item.id === lang ? styles.segmentActive : styles.segment}
-                                        aria-pressed={item.id === lang}
-                                        onClick={() => setLang(item.id)}
-                                    >
-                                        {item.label}
-                                    </button>
-                                ))}
-                            </div>
+                            <SegmentedControl
+                                value={lang}
+                                options={examples.map((item) => ({ value: item.id, label: item.label }))}
+                                aria-label='Langage'
+                                onChange={setLang}
+                            />
 
                             <p className={styles.hint}>{example.note}</p>
                             <pre className={styles.snippetTall}>{example.code}</pre>
@@ -333,64 +473,22 @@ window.deveye?.identify(user.id);`}</pre>
                         </Disclosure>
                     )}
 
-                    {scope !== 'traffic' && (
+                    {/* Les retours sont un dépliant du sommaire seulement : les deux
+                        écrans de mesure n'en parlent pas, et le leur les a en étape 1. */}
+                    {scope === 'site' && (
                         <Disclosure
-                            title={
-                                form
-                                    ? `Brancher « ${form.name} » : formulaire, appel, curl`
-                                    : 'Recevoir des retours : formulaire, sondage, signalement'
-                            }
+                            title='Recevoir des retours : formulaire, sondage, signalement'
                             open={section === 'submit'}
                             onToggle={() => toggle('submit')}
                         >
                             <p className={styles.hint}>
-                                Un site statique n’a souvent besoin d’un serveur que pour ça. Le formulaire se crée{' '}
-                                <strong>à sa première réception</strong> : il n’y a rien à déclarer ici avant, et le nom
-                                que vous envoyez est celui qui apparaîtra dans « Retours ».
+                                Un site statique n’a souvent besoin d’un serveur que pour ça. Déclarez le formulaire
+                                dans « Retours », collez ce qu’il engendre, et le nom que vous envoyez est celui qui y
+                                apparaîtra.
                             </p>
-
-                            <div className={styles.segmented} role='group' aria-label='Façon d’envoyer'>
-                                {submits.map((item) => (
-                                    <button
-                                        key={item.id}
-                                        type='button'
-                                        className={item.id === submitLang ? styles.segmentActive : styles.segment}
-                                        aria-pressed={item.id === submitLang}
-                                        onClick={() => setSubmitLang(item.id)}
-                                    >
-                                        {item.label}
-                                    </button>
-                                ))}
-                            </div>
-
-                            <p className={styles.hint}>{submitExample.note}</p>
-                            <pre className={styles.snippetTall}>{submitExample.code}</pre>
-                            <div className={styles.installActions}>
-                                <Button
-                                    variant='secondary'
-                                    icon='copy'
-                                    onClick={() => void copy(submitExample.code, `submit-${submitExample.id}`)}
-                                >
-                                    {copied === `submit-${submitExample.id}` ? 'Copié' : 'Copier'}
-                                </Button>
-                            </div>
-
-                            {/* Le même repère que pour la balise : une intégration se vérifie
-                            en voyant arriver le premier envoi, jamais au code de retour,
-                            que la porte publique rend identique en cas de refus. */}
-                            <p className={lastSubmission === null ? styles.waiting : styles.received}>
-                                {forms === null
-                                    ? 'Lecture des formulaires…'
-                                    : lastSubmission === null
-                                      ? 'En attente du premier retour…'
-                                      : `${forms.length} formulaire${forms.length > 1 ? 's' : ''} — dernier retour ${formatAgo(lastSubmission)}.`}
-                            </p>
-
-                            <p className={styles.hint}>
-                                Les origines autorisées du site s’appliquent aux retours comme aux mesures, et le
-                                plafond est de vingt formulaires par site et 50 000 retours par formulaire. Un
-                                formulaire se ferme, se vide et se renomme depuis « Retours ».
-                            </p>
+                            {submitBlock}
+                            {submitProbe}
+                            {submitLimits}
                         </Disclosure>
                     )}
 
@@ -401,8 +499,13 @@ window.deveye?.identify(user.id);`}</pre>
                     >
                         <p className={styles.hint}>
                             À coller tel quel dans une conversation avec un assistant : tout ce qu’il lui faut pour
-                            brancher la mesure sans se tromper, y compris les trois pièges qui coûtent une session de
-                            débogage.
+                            brancher{' '}
+                            {feedback
+                                ? 'ce formulaire'
+                                : scope === 'funnels'
+                                  ? 'les signaux d’un entonnoir'
+                                  : 'la mesure'}{' '}
+                            sans se tromper, y compris les pièges qui coûtent une session de débogage.
                         </p>
                         {/* Un `textarea` en lecture seule plutôt qu'un `pre` : on
                         sélectionne tout d'un Ctrl+A sans attraper le reste de la page,

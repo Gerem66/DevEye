@@ -6,7 +6,6 @@ import { api } from '../api';
 import { formatAgo, formatCount } from '../format';
 import styles from '../style.module.css';
 import FormEditor from '../FormEditor';
-import InstallDialog from '../InstallDialog';
 import { downloadCsv, toCsv } from './export';
 import Results from './Results';
 import SubmissionDialog from './SubmissionDialog';
@@ -19,19 +18,23 @@ type Tab = 'table' | 'results';
 
 interface FormsProps {
     site: AudienceSite;
-    /** L'adresse de la porte publique, telle que le serveur la connaît. */
-    ingestOrigin: string;
     canWrite: boolean;
+    /**
+     * Le formulaire montré, remonté à la fiche : c'est son en-tête qui porte
+     * « Installer », au même endroit que sur les deux autres sections, et le
+     * dialogue engendre le `<form>` de celui-ci.
+     */
+    onCurrentForm: (form: AudienceForm | null) => void;
 }
 
 /**
  * Les retours d'un site : ce que ses formulaires ont reçu.
  *
- * Rien ici ne crée de formulaire, et c'est le point : un canal naît de sa
- * première réception. L'écran vide n'est donc pas un formulaire à remplir mais
- * la balise à coller, ce qui est la seule chose à faire à ce moment-là.
+ * Un formulaire se déclare ici, avec ses questions ; c'est ce qui empêche qui
+ * lit la clé publique dans la page de décider des colonnes affichées. Ce qu'il
+ * faut ensuite coller dans le site vient de « Installer », dans l'en-tête.
  */
-export function Forms({ site, ingestOrigin, canWrite }: FormsProps) {
+export function Forms({ site, canWrite, onCurrentForm }: FormsProps) {
     const [forms, setForms] = useState<AudienceForm[] | null>(null);
     const [formId, setFormId] = useState<number | null>(null);
     const [tab, setTab] = useState<Tab>('table');
@@ -40,7 +43,6 @@ export function Forms({ site, ingestOrigin, canWrite }: FormsProps) {
     const [cursor, setCursor] = useState<string | null>(null);
     const [results, setResults] = useState<AudienceResults | null>(null);
     const [opened, setOpened] = useState<AudienceSubmission | null>(null);
-    const [installOpen, setInstallOpen] = useState(false);
     /** `undefined` = fermé ; `null` = déclaration ; un formulaire = modification. */
     const [edit, setEdit] = useState<AudienceForm | null | undefined>(undefined);
 
@@ -111,21 +113,17 @@ export function Forms({ site, ingestOrigin, canWrite }: FormsProps) {
         }
     };
 
-    /* Monté par les deux branches : l'écran vide fait un retour anticipé, et
-       « Installer » y est encore plus utile qu'ailleurs — c'est le moment où
-       l'on cherche quoi coller. `current` n'existe pas encore là, d'où le
-       `?? null` : le dialogue retombe sur un exemple générique. */
-    const installer = (
-        <InstallDialog
-            open={installOpen}
-            scope='forms'
-            form={forms?.find((f) => f.id === formId) ?? forms?.[0] ?? null}
-            site={site}
-            ingestOrigin={ingestOrigin}
-            canWrite={canWrite}
-            onClose={() => setInstallOpen(false)}
-        />
-    );
+    /**
+     * Le formulaire montré. `null` tant que la liste n'est pas là : celui d'une
+     * visite précédente resterait sinon affiché dans l'en-tête de la fiche.
+     */
+    const shown = forms?.find((f) => f.id === formId) ?? forms?.[0] ?? null;
+    useEffect(() => {
+        onCurrentForm(shown);
+    }, [shown, onCurrentForm]);
+    // En quittant la section, la fiche n'a plus de formulaire ouvert : sans cela
+    // son bouton « Installer » engendrerait encore le `<form>` du dernier vu.
+    useEffect(() => () => onCurrentForm(null), [onCurrentForm]);
 
     const editor = (
         <FormEditor
@@ -151,34 +149,27 @@ export function Forms({ site, ingestOrigin, canWrite }: FormsProps) {
                     <h3 className={styles.panelTitle}>Aucun formulaire déclaré</h3>
                     <p className={styles.empty}>
                         Un formulaire dit à DevEye ce que votre site enverra : son nom, ses questions et leur type. Sans
-                        déclaration, rien n’est accepté — c’est ce qui empêche qui lit la clé publique dans votre page
+                        déclaration, rien n’est accepté : c’est ce qui empêche qui lit la clé publique dans votre page
                         de décider des colonnes affichées ici.
                     </p>
-                    <div className={styles.addRow}>
-                        {canWrite && (
+                    {canWrite && (
+                        <div className={styles.addRow}>
                             <Button icon='add' onClick={() => setEdit(null)}>
                                 Déclarer un formulaire
                             </Button>
-                        )}
-                        {/* Ici plus qu'ailleurs : c'est le moment où l'on cherche
-                            quoi coller, et l'écran d'installation montre les deux
-                            voies d'envoi avant même qu'un formulaire existe. */}
-                        <Button variant='secondary' icon='terminal' onClick={() => setInstallOpen(true)}>
-                            Installer
-                        </Button>
-                    </div>
+                        </div>
+                    )}
                     <p className={styles.fieldHint}>
                         Une fois déclaré, « Installer » engendre le <code>&lt;form&gt;</code> exact à coller, et l’appel{' '}
                         <code>window.deveye.submit()</code> pour les pages qui ont du JavaScript.
                     </p>
                 </section>
                 {editor}
-                {installer}
             </>
         );
     }
 
-    const current = forms.find((f) => f.id === formId) ?? forms[0];
+    const current = shown ?? forms[0];
     const columns = [...new Set(submissions.flatMap((s) => Object.keys(s.fields)))];
 
     return (
@@ -224,9 +215,6 @@ export function Forms({ site, ingestOrigin, canWrite }: FormsProps) {
                 </p>
 
                 <div className={styles.detailActions}>
-                    <Button variant='secondary' icon='terminal' onClick={() => setInstallOpen(true)}>
-                        Installer
-                    </Button>
                     {canWrite && (
                         <Button variant='secondary' icon='edit' onClick={() => setEdit(current)}>
                             Modifier
@@ -281,8 +269,6 @@ export function Forms({ site, ingestOrigin, canWrite }: FormsProps) {
             )}
 
             {editor}
-
-            {installer}
 
             <SubmissionDialog
                 submission={opened}

@@ -656,30 +656,6 @@
     composes: panel;
 }
 
-.segmented {
-    display: inline-flex;
-    padding: 2px;
-    border-radius: var(--radius-pill);
-    background: var(--surface-subtle);
-}
-
-.segment {
-    padding: 2px 10px;
-    border: none;
-    border-radius: var(--radius-pill);
-    background: transparent;
-    color: var(--text-muted);
-    font: inherit;
-    font-size: 0.74rem;
-    cursor: pointer;
-}
-
-.segmentActive {
-    composes: segment;
-    background: var(--accent-bg);
-    color: var(--accent);
-}
-
 .topList {
     display: flex;
     flex-direction: column;

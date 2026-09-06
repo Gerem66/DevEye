@@ -336,12 +336,61 @@ export function submitExamples(
 }
 
 /**
+ * De quoi parle le mémo d'un agent : la mesure en général, ou les seules
+ * marches d'un entonnoir. Deux cadrages du même branchement, pas deux API.
+ */
+export type BriefFocus = 'traffic' | 'funnels';
+
+/**
+ * La section des entonnoirs, courte quand le mémo parle de la mesure entière,
+ * dépliée quand c'est le sujet : les règles de comptage sont ce qui manque à un
+ * agent pour poser des signaux qui se laissent recomposer.
+ */
+function funnelSection(focus: BriefFocus): string {
+    const common = `## Entonnoirs
+Le site n'émet que des signaux nommés ; les entonnoirs se composent ensuite
+dans DevEye à partir de ce qui a été observé. Il n'y a donc rien à déclarer
+côté site, et mesurer un autre parcours ne demande aucun redéploiement.`;
+
+    if (focus !== 'funnels') {
+        return `${common}
+Une visite atteint une marche si la PREMIÈRE occurrence de chaque marche
+précédente s'est produite dans l'ordre.`;
+    }
+
+    return `${common}
+
+Une marche est SOIT un chemin de page, suivi tout seul, SOIT un événement
+nommé, à poser là où l'étape est réellement franchie :
+    window.deveye?.event('Devis envoyé');
+
+Les quatre règles de comptage :
+1. Une visite atteint une marche si la PREMIÈRE occurrence de chacune des
+   marches précédentes s'est produite dans l'ordre. Revenir en arrière puis
+   repartir peut donc ne pas être compté.
+2. Tout se compte dans UNE visite : trente minutes sans la moindre mesure en
+   ouvrent une nouvelle, et un parcours coupé en deux ne se recolle pas.
+3. Les noms sont comparés À L'IDENTIQUE (accents, espaces, majuscules). Posez-en
+   peu, gardez-les stables : les renommer coupe l'entonnoir en deux.
+4. Un événement envoyé depuis un serveur compte pour un visiteur distinct : ne
+   le mettez pas au milieu d'un parcours qui commence dans le navigateur.
+
+Rien ne se perd si un signal manque : une marche qu'aucune visite n'a jamais
+émise vaut zéro, elle ne fausse pas les précédentes.`;
+}
+
+/**
  * Le mémo destiné à un agent de code, écrit pour être collé tel quel dans une
  * conversation. Les trois pièges qui coûtent une session de débogage sont en
  * tête, un agent lisant le début d'un contexte avec plus d'attention que la fin.
  */
-export function agentBrief(publicKey: string, origin: string, persistent = false): string {
-    return `# Mesure d'audience DevEye : mémo d'intégration
+export function agentBrief(
+    publicKey: string,
+    origin: string,
+    persistent = false,
+    focus: BriefFocus = 'traffic'
+): string {
+    return `# ${focus === 'funnels' ? 'Entonnoirs DevEye' : "Mesure d'audience DevEye"} : mémo d'intégration
 
 ## Poser la balise
 <script defer data-key="${publicKey}"${persistent ? ' data-visitor="persistent"' : ''} src="${origin}/t.js"></script>
@@ -365,12 +414,7 @@ window.deveye?.identify(id: string|null) // l'utilisateur connecté
    majuscules). Choisissez-les stables et lisibles : ils s'affichent tels
    quels et servent à composer les entonnoirs.
 
-## Entonnoirs
-Le site n'émet que des signaux nommés ; les entonnoirs se composent ensuite
-dans DevEye à partir de ce qui a été observé. Il n'y a donc rien à déclarer
-côté site, et mesurer un autre parcours ne demande aucun redéploiement.
-Une visite atteint une marche si la PREMIÈRE occurrence de chaque marche
-précédente s'est produite dans l'ordre.
+${funnelSection(focus)}
 
 ## Côté serveur (pas de navigateur)
 POST ${origin}/api/t/e

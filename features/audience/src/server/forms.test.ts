@@ -119,6 +119,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         activity: unused,
         liveVisitors: unused,
         livePages: unused,
+        recentDailyViews: unused,
         listFunnels: unused,
         listFunnelSteps: unused,
         findFunnelInWorkspace: unused,

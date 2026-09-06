@@ -108,6 +108,7 @@ function fakeRepo(sites: AudienceSiteRow[]): FakeRepo {
         activity: unused,
         liveVisitors: unused,
         livePages: unused,
+        recentDailyViews: unused,
         listFunnels: unused,
         listFunnelSteps: unused,
         findFunnelInWorkspace: unused,
