@@ -57,6 +57,8 @@ export interface NoticeState {
     kind: 'application' | 'compose';
     /** La fiche dans le tableau de bord Dokploy ; `null` si non reconstructible. */
     url: string | null;
+    /** Le dépôt déployé, tel que le fournisseur le déclare ; `null` sinon. */
+    repoUrl: string | null;
     /** Le titre du déploiement chez le fournisseur (« Manual deployment »…). */
     title: string;
     status: 'queued' | 'running' | 'success' | 'failed';
@@ -185,9 +187,12 @@ export function buildNotice(state: NoticeState): SdkRichMessage {
     const tail = logField(state.log);
     if (tail) fields.push({ name: '📄 Journal', value: tail, inline: false });
 
-    if (state.url) {
-        fields.push({ name: '🔗 Dokploy', value: `[Ouvrir la fiche du service](${state.url})`, inline: false });
-    }
+    // Deux liens tiennent côte à côte ; seul, un lien en colonne laisserait les
+    // deux tiers de la ligne vides.
+    const links: { name: string; value: string }[] = [];
+    if (state.url) links.push({ name: '🔗 Dokploy', value: `[Ouvrir la fiche du service](${state.url})` });
+    if (state.repoUrl) links.push(repoLink(state.repoUrl));
+    for (const link of links) fields.push({ ...link, inline: links.length > 1 });
 
     // La description ne garde que ce qui doit être lu avant tout le reste : le
     // titre, l'avancement, et la raison d'un échec.
@@ -210,6 +215,23 @@ export function buildNotice(state: NoticeState): SdkRichMessage {
             }
         ]
     };
+}
+
+/**
+ * Le champ du dépôt : nommé d'après l'hôte, puisqu'une URL de clone maison peut
+ * pointer ailleurs que sur GitHub, et intitulé `propriétaire/dépôt`, la seule
+ * partie qui distingue deux dépôts d'un même hôte.
+ */
+function repoLink(url: string): { name: string; value: string } {
+    let parsed: URL | null = null;
+    try {
+        parsed = new URL(url);
+    } catch {
+        parsed = null;
+    }
+    const label = parsed ? parsed.pathname.replace(/^\//, '') : url;
+    const name = parsed?.hostname === 'github.com' ? '🐙 GitHub' : '🔗 Dépôt';
+    return { name, value: `[${trim(label || url)}](${url})` };
 }
 
 /**

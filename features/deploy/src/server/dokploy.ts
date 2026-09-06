@@ -154,6 +154,56 @@ function toSeconds(value: unknown): number | null {
 }
 
 /**
+ * Une URL de clone ramenée à une page web : `git@hote:o/r.git`,
+ * `ssh://git@hote/o/r.git` et `https://hote/o/r.git` mènent à la même. Les
+ * identifiants portés par l'URL sont retirés au passage : une URL de clone en
+ * contient parfois un, et il n'a rien à faire dans un salon. `null` pour ce qui
+ * n'a pas d'équivalent web.
+ */
+export function webGitUrl(clone: string | null): string | null {
+    const raw = (clone ?? '').trim();
+    if (!raw) return null;
+
+    // La forme SCP de SSH (`git@hote:chemin`) n'est pas une URL : `new URL` la
+    // lirait comme un protocole.
+    const scp = /^[\w.-]+@([\w.-]+):(?!\/)(.+)$/.exec(raw);
+
+    let url: URL;
+    try {
+        url = new URL(scp ? `ssh://${scp[1]}/${scp[2]}` : raw);
+    } catch {
+        return null;
+    }
+    if (!['http:', 'https:', 'ssh:'].includes(url.protocol)) return null;
+
+    const path = url.pathname.replace(/\.git\/*$/, '').replace(/\/+$/, '');
+    if (!path) return null;
+    // Le port d'un accès SSH n'est pas celui du web ; celui d'un HTTP l'est.
+    const host = url.protocol === 'ssh:' ? url.hostname : url.host;
+    return `${url.protocol === 'http:' ? 'http' : 'https'}://${host}${path}`;
+}
+
+/**
+ * Le dépôt d'une cible, lu sur sa fiche.
+ *
+ * Deux sources : `owner`/`repository`, que remplit l'intégration GitHub, et
+ * `customGitUrl`, dont l'hôte est dans l'URL. GitLab et Gitea demanderaient en
+ * plus l'hôte de leur fournisseur, imbriqué dans la fiche sous une forme qui n'a
+ * pas été relevée : un lien deviné vaudrait moins que pas de lien.
+ */
+export function readRepoUrl(row: Record<string, unknown>): string | null {
+    // Les colonnes d'une source abandonnée restent en base après un changement :
+    // on ne lit celles d'une source que si c'est bien celle qui est active.
+    const source = pick(row, ['sourceType']);
+    if (source === 'git') return webGitUrl(pick(row, ['customGitUrl']));
+    if (source !== null && source !== 'github') return null;
+
+    const owner = pick(row, ['owner']);
+    const repository = pick(row, ['repository']);
+    return owner && repository ? `https://github.com/${owner}/${repository}` : null;
+}
+
+/**
  * Aplatit `project.all` en cibles déployables.
  *
  * L'arborescence réelle est projet → environnements → { applications, compose }.
@@ -265,6 +315,28 @@ export async function listDeployments(
             ? await call<unknown>(baseUrl, 'deployment.allByCompose', apiKey, { input: { composeId: externalId } })
             : await call<unknown>(baseUrl, 'deployment.all', apiKey, { input: { applicationId: externalId } });
     return readDeployments(payload);
+}
+
+/**
+ * Le dépôt d'une cible. `project.all` ne le dit pas : relevé sur l'instance, il
+ * ne rend d'une application que son identifiant, son nom et son état. C'est la
+ * fiche qui porte la source, d'où un appel par cible.
+ *
+ * ⚠️ `application.one` rend AUSSI le fournisseur Git au complet, clé privée et
+ * secret client de l'app GitHub compris. Rien de cette réponse ne doit être
+ * gardé, journalisé ni mis en cache : seule l'adresse du dépôt en sort.
+ */
+export async function fetchRepoUrl(
+    baseUrl: string,
+    apiKey: string,
+    kind: DokployKind,
+    externalId: string
+): Promise<string | null> {
+    const row =
+        kind === 'compose'
+            ? await call<unknown>(baseUrl, 'compose.one', apiKey, { input: { composeId: externalId } })
+            : await call<unknown>(baseUrl, 'application.one', apiKey, { input: { applicationId: externalId } });
+    return row && typeof row === 'object' ? readRepoUrl(row as Record<string, unknown>) : null;
 }
 
 export async function triggerDeploy(

@@ -16,6 +16,7 @@ import { formatDuration, formatMoment } from '@/Services/notifications';
 import {
     dashboardUrl,
     fetchDeploymentLog,
+    fetchRepoUrl,
     listDeployments,
     listTargets,
     type DokployDeployment,
@@ -76,6 +77,13 @@ const DEPLOY_PLACE_TTL_SECONDS = 300;
 const DEPLOY_IMPORT_LIMIT = 20;
 
 /**
+ * Durée de vie du dépôt d'une cible. Un appel par cible, contrairement au
+ * catalogue : plus long, parce qu'un dépôt bouge encore moins qu'un nom de
+ * projet, et qu'une heure borne l'écart après un changement de source.
+ */
+const DEPLOY_REPO_TTL_SECONDS = 3600;
+
+/**
  * Écart toléré pour rattacher un déploiement local à une ligne du fournisseur
  * quand l'identifiant externe manque : Dokploy n'en rend pas toujours un au
  * déclenchement, et c'est la date qui rapproche jusqu'à ce qu'il arrive.
@@ -124,6 +132,7 @@ export interface DokployClient {
     listDeployments: typeof listDeployments;
     listTargets: typeof listTargets;
     fetchDeploymentLog: typeof fetchDeploymentLog;
+    fetchRepoUrl: typeof fetchRepoUrl;
 }
 
 /** Ce qu'un tour a résolu : la ligne locale, et ce que le fournisseur en dit. */
@@ -162,9 +171,16 @@ export class DeploySync {
     /** Le catalogue d'une instance, par jeton. Voir {@link DEPLOY_PLACE_TTL_SECONDS}. */
     private readonly deployPlaces = new Map<number, { at: number; targets: DokployTarget[] }>();
 
+    /**
+     * Le dépôt d'une cible, par jeton et identifiant externe. Seule l'adresse
+     * est retenue : la fiche qui la porte contient aussi les identifiants du
+     * fournisseur Git.
+     */
+    private readonly deployRepos = new Map<string, { at: number; url: string | null }>();
+
     constructor(
         private readonly deps: FeatureServiceDeps<DeployRepo>,
-        private readonly dokploy: DokployClient = { listDeployments, listTargets, fetchDeploymentLog }
+        private readonly dokploy: DokployClient = { listDeployments, listTargets, fetchDeploymentLog, fetchRepoUrl }
     ) {
         this.ticker = deps.createTicker({ intervalMs: DEPLOY_TICK_SECONDS * 1000, tick: () => this.tick() });
     }
@@ -492,7 +508,7 @@ export class DeploySync {
                 ? { ...(blob.noticeIds as Record<string, string>) }
                 : {};
 
-        const [log, place] = await Promise.all([
+        const [log, place, repoUrl] = await Promise.all([
             item.entry.logPath
                 ? this.dokploy
                       .fetchDeploymentLog(input.baseUrl, input.apiKey, item.entry.logPath, {
@@ -500,7 +516,8 @@ export class DeploySync {
                       })
                       .catch(() => '')
                 : Promise.resolve(''),
-            this.deployPlace(input.credentialId, input.baseUrl, input.apiKey, input.externalId)
+            this.deployPlace(input.credentialId, input.baseUrl, input.apiKey, input.externalId),
+            this.deployRepo(input.credentialId, input.baseUrl, input.apiKey, input.kind, input.externalId)
         ]);
 
         const message = buildNotice({
@@ -511,6 +528,7 @@ export class DeploySync {
             environment: place?.environmentName ?? null,
             kind: input.kind,
             url: place ? dashboardUrl(input.baseUrl, place) : null,
+            repoUrl,
             title: item.entry.title,
             status: item.entry.status,
             startedAt: item.entry.startedAt,
@@ -581,6 +599,34 @@ export class DeploySync {
             }
         }
         return cached.targets.find((t) => t.externalId === externalId) ?? null;
+    }
+
+    /**
+     * Le dépôt d'une cible, mémoïsé {@link DEPLOY_REPO_TTL_SECONDS}. Le résultat
+     * vide compte comme une réponse : une cible sur une image Docker n'a pas de
+     * dépôt, et redemander à chaque battement coûterait un appel toutes les dix
+     * secondes pour rien. Une instance qui ne répond pas ne laisse rien en
+     * cache : c'est le message qui perd son lien, pas la cible.
+     */
+    private async deployRepo(
+        credentialId: number,
+        baseUrl: string,
+        apiKey: string,
+        kind: 'application' | 'compose',
+        externalId: string
+    ): Promise<string | null> {
+        const key = `${credentialId}:${externalId}`;
+        const now = Math.floor(Date.now() / 1000);
+        const cached = this.deployRepos.get(key);
+        if (cached && now - cached.at <= DEPLOY_REPO_TTL_SECONDS) return cached.url;
+
+        try {
+            const url = await this.dokploy.fetchRepoUrl(baseUrl, apiKey, kind, externalId);
+            this.deployRepos.set(key, { at: now, url });
+            return url;
+        } catch {
+            return cached?.url ?? null;
+        }
     }
 
     /**

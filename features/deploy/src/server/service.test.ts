@@ -169,28 +169,37 @@ function fakeRepo(
     };
 }
 
-/** Ce que l'instance factice répond : l'historique de la cible, son catalogue, la queue d'un journal. */
+/** Ce que l'instance factice répond : l'historique de la cible, son catalogue, la queue d'un journal, le dépôt. */
 interface Answers {
     remote: DokployDeployment[];
     catalog?: DokployTarget[];
     log?: string;
+    repoUrl?: string | null;
 }
 
 /** Le service sur le harnais, avec une instance Dokploy pilotée par le test. */
 function syncWith(repo: FakeRepo, options: { liveChannels?: readonly number[]; notifyAccepted?: boolean } = {}) {
     const deps = createTestServiceDeps({ repo, ...options });
     let answers: Answers | null = { remote: [] };
+    /** Lectures de la fiche d'une cible : une par cible et par heure, pas une par tour. */
+    let repoReads = 0;
     const sync = new DeploySync(deps, {
         listDeployments: async () => {
             if (!answers) throw new Error('Instance Dokploy injoignable');
             return answers.remote;
         },
         listTargets: async () => answers?.catalog ?? [],
-        fetchDeploymentLog: async () => answers?.log ?? ''
+        fetchDeploymentLog: async () => answers?.log ?? '',
+        fetchRepoUrl: async () => {
+            repoReads += 1;
+            if (!answers) throw new Error('Instance Dokploy injoignable');
+            return answers.repoUrl ?? null;
+        }
     });
     return {
         deps,
         sync,
+        repoReads: () => repoReads,
         tick: () => deps.recorded.tickers[0].tick(),
         /** Ce que l'instance répond au prochain tour ; `null` = injoignable. */
         answer(next: Answers | null) {
@@ -290,6 +299,18 @@ describe('le message vivant', () => {
         await tick();
         assert.equal(deps.recorded.notifications.length, 1);
         assert.equal(deps.recorded.liveMessages.length, 3);
+    });
+
+    it('ne lit la fiche de la cible qu’une fois, quel que soit le nombre de battements', async () => {
+        // Elle porte le dépôt, mais aussi les identifiants du fournisseur Git :
+        // un appel par tour de dix secondes serait aussi coûteux qu'inutile.
+        const repo = fakeRepo([target()], [credential()]);
+        const { tick, answer, repoReads } = syncWith(repo, { liveChannels: [7] });
+        answer({ remote: [entry()], repoUrl: 'https://github.com/OxyFoo/Pierre' });
+        await tick();
+        await tick();
+        await tick();
+        assert.equal(repoReads(), 1);
     });
 
     it('un déploiement conclu entre deux battements reçoit le même message, publié une seule fois', async () => {

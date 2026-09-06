@@ -447,6 +447,31 @@ Deux conséquences techniques :
   (la redirection d'authentification, donc la route existe), là où les deux
   formes plus courtes répondent `404`. Un lien faux enverrait le lecteur sur une
   page d'erreur au moment précis où il cherche à comprendre un échec.
+- Le lien vers le **dépôt** ne peut pas venir du catalogue : relevé sur
+  l'instance, `project.all` ne rend d'une application que `applicationId`,
+  `applicationStatus` et `name` (et l'équivalent d'une pile). La source est sur
+  la fiche, d'où un `application.one` / `compose.one` par cible, mémoïsé une
+  heure : un dépôt bouge moins souvent qu'un nom de projet, et le message se
+  redessine toutes les dix secondes.
+
+⚠️ **`application.one` rend le fournisseur Git au complet**, `githubPrivateKey`
+et `githubClientSecret` compris. Seule l'adresse du dépôt sort de cette lecture :
+rien de cette réponse n'est mis en cache, journalisé, ni rangé dans le blob de la
+cible.
+
+Le dépôt lui-même se lit de deux façons, et de deux seulement : `owner` +
+`repository` quand la cible est sur l'intégration GitHub, `customGitUrl` quand
+elle est sur un git maison, dont l'hôte est dans l'URL. La lecture est guidée par
+`sourceType`, parce que les colonnes d'une source abandonnée restent en base
+après un changement. **GitLab et Gitea sont laissés de côté** : leurs colonnes ne
+portent que des noms, et l'hôte vit sur l'enregistrement du fournisseur, imbriqué
+dans la même fiche mais sous une forme qui n'a pas été relevée. Les ajouter
+demande donc de relever cette forme sur une instance qui en a une, pas de deviner
+`gitlab.com`. Enfin, une URL de clone porte parfois un identifiant : il est
+retiré avant d'écrire le lien, un salon n'a pas à le recevoir.
+
+Les deux liens sont côte à côte quand ils sont deux, pleine ligne quand il n'y
+en a qu'un : un champ `inline` seul laisserait les deux tiers de la ligne vides.
 
 L'intitulé est réduit à la **première ligne** du message de commit : Dokploy y
 range le message entier, et un commit bavard — sujet, ligne vide, quinze lignes

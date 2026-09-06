@@ -3,12 +3,15 @@ import { createServer, type Server } from 'node:http';
 import { after, before, describe, it } from 'node:test';
 import { WebSocketServer } from 'ws';
 
-import { fetchDeploymentLog } from './dokploy';
+import { fetchDeploymentLog, readRepoUrl, webGitUrl } from './dokploy';
 
 /**
  * Le rapatriement d'un journal de déploiement. `/listen-deployment` ne referme
  * jamais la connexion (un `tail -f`, pas un téléchargement) : d'où un serveur
  * réel, un faux client mentirait précisément sur ce point.
+ *
+ * Puis le décodage du dépôt d'une cible, qui n'a besoin ni de base ni de
+ * réseau : ce sont les cas où un lien pourrait être faux ou porter un secret.
  */
 
 let server: Server;
@@ -79,5 +82,71 @@ describe('fetchDeploymentLog — conclure sans fermeture', () => {
         const { log, elapsed } = await fetchLog(1_200);
         assert.ok(log.startsWith('l0 '), 'le début du flux doit être rendu');
         assert.ok(elapsed < 3_000, `rendu en ${elapsed} ms, le plafond n'a pas tranché`);
+    });
+});
+
+describe('webGitUrl — une URL de clone ramenée au web', () => {
+    it('lit les trois formes qui mènent au même dépôt', () => {
+        assert.equal(webGitUrl('git@github.com:Gerem66/DevEye.git'), 'https://github.com/Gerem66/DevEye');
+        assert.equal(webGitUrl('ssh://git@github.com:22/Gerem66/DevEye.git'), 'https://github.com/Gerem66/DevEye');
+        assert.equal(webGitUrl('https://github.com/Gerem66/DevEye.git'), 'https://github.com/Gerem66/DevEye');
+    });
+
+    it('retire les identifiants portés par l’URL', () => {
+        // Une URL de clone en contient parfois un ; il partirait dans un salon.
+        assert.equal(
+            webGitUrl('https://gerem:ghp_secret@git.exemple.fr/infra/deveye.git'),
+            'https://git.exemple.fr/infra/deveye'
+        );
+    });
+
+    it('garde le port d’un accès web, jamais celui d’un accès SSH', () => {
+        assert.equal(webGitUrl('http://git.local:3000/infra/deveye.git'), 'http://git.local:3000/infra/deveye');
+        assert.equal(webGitUrl('git@git.local:infra/deveye.git'), 'https://git.local/infra/deveye');
+    });
+
+    it('rend null pour ce qui n’a pas de page web', () => {
+        assert.equal(webGitUrl(null), null);
+        assert.equal(webGitUrl('  '), null);
+        assert.equal(webGitUrl('/srv/git/deveye.git'), null);
+        assert.equal(webGitUrl('git://git.local/deveye.git'), null);
+        assert.equal(webGitUrl('https://github.com'), null);
+    });
+});
+
+describe('readRepoUrl — le dépôt d’une cible', () => {
+    it('assemble le dépôt GitHub à partir du propriétaire et du nom', () => {
+        assert.equal(
+            readRepoUrl({ sourceType: 'github', owner: 'OxyFoo', repository: 'Pierre', branch: 'main' }),
+            'https://github.com/OxyFoo/Pierre'
+        );
+    });
+
+    it('lit l’URL de clone d’une source git maison', () => {
+        assert.equal(
+            readRepoUrl({
+                sourceType: 'git',
+                owner: 'ancien',
+                repository: 'ancien',
+                customGitUrl: 'git@git.local:infra/deveye.git'
+            }),
+            'https://git.local/infra/deveye'
+        );
+    });
+
+    it('ignore les colonnes d’une source abandonnée', () => {
+        // Dokploy garde le réglage GitHub d'avant le passage à une image Docker.
+        assert.equal(readRepoUrl({ sourceType: 'docker', owner: 'OxyFoo', repository: 'Pierre' }), null);
+    });
+
+    it('ne devine ni GitLab ni Gitea', () => {
+        // Leur hôte vit sur l'enregistrement du fournisseur, non relevé.
+        assert.equal(readRepoUrl({ sourceType: 'gitlab', gitlabOwner: 'infra', gitlabRepository: 'deveye' }), null);
+    });
+
+    it('rend null quand rien n’est déclaré', () => {
+        // Ce que rend le catalogue : l'identifiant, le nom, l'état, rien d'autre.
+        assert.equal(readRepoUrl({ applicationId: 'a1', name: 'server' }), null);
+        assert.equal(readRepoUrl({ sourceType: 'github', owner: 'OxyFoo' }), null);
     });
 });

@@ -139,6 +139,7 @@ describe('buildNotice — ce que le lecteur voit', () => {
         environment: 'production',
         kind: 'compose',
         url: null,
+        repoUrl: null,
         title: 'Manual deployment',
         startedAt: 1_000,
         error: '',
@@ -248,6 +249,40 @@ describe('buildNotice — ce que le lecteur voit', () => {
         const names = (n: DiscordNotice) => (n.embeds![0] as { fields: { name: string }[] }).fields.map((f) => f.name);
         assert.ok(!names(sans).includes('🔗 Dokploy'));
         assert.ok(names(avec).includes('🔗 Dokploy'));
+    });
+
+    it('ajoute le dépôt à côté du lien Dokploy', () => {
+        // Deux liens côte à côte : celui de la fiche, celui du dépôt déployé.
+        const embed = buildNotice({
+            ...base,
+            status: 'success',
+            finishedAt: 1_100,
+            url: 'https://dokploy/x',
+            repoUrl: 'https://github.com/Gerem66/DevEye'
+        }).embeds![0] as { fields: { name: string; value: string; inline: boolean }[] };
+
+        const github = embed.fields.find((f) => f.name === '🐙 GitHub');
+        assert.equal(github?.value, '[Gerem66/DevEye](https://github.com/Gerem66/DevEye)');
+        // Seuls, ils prendraient une ligne chacun.
+        assert.ok(
+            embed.fields.filter((f) => f.name.includes('Dokploy') || f.name === '🐙 GitHub').every((f) => f.inline)
+        );
+    });
+
+    it('nomme « Dépôt » ce qui n’est pas sur GitHub', () => {
+        // Une URL de clone maison peut pointer n'importe où : l'annoncer GitHub
+        // serait faux.
+        const embed = buildNotice({
+            ...base,
+            status: 'success',
+            finishedAt: 1_100,
+            repoUrl: 'https://git.exemple.fr/infra/deveye'
+        }).embeds![0] as { fields: { name: string; value: string; inline: boolean }[] };
+
+        const repo = embed.fields.find((f) => f.name === '🔗 Dépôt');
+        assert.equal(repo?.value, '[infra/deveye](https://git.exemple.fr/infra/deveye)');
+        // Seul, il occupe toute la ligne.
+        assert.equal(repo?.inline, false);
     });
 
     it('ne montre pas de barre une fois conclu', () => {
