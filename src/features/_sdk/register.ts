@@ -334,10 +334,18 @@ export function validateGrantExtras(
 
 /** Les chemins publics déclarés par les modules, pour le délégateur CORS de l'app. */
 const PUBLIC_PATHS = new Set<string>();
+/**
+ * Ceux qui portent un paramètre. La comparaison exacte est aveugle à
+ * `/rdv/:ref`, et le délégateur CORS retomberait alors sur l'origine de l'app
+ * avec les cookies : une panne invisible en local, et visible seulement depuis
+ * un site tiers.
+ */
+const PUBLIC_PATTERNS: RegExp[] = [];
 
 export function isModulePublicPath(url: string): boolean {
     const end = url.indexOf('?');
-    return PUBLIC_PATHS.has(end === -1 ? url : url.slice(0, end));
+    const path = end === -1 ? url : url.slice(0, end);
+    return PUBLIC_PATHS.has(path) || PUBLIC_PATTERNS.some((re) => re.test(path));
 }
 
 /**
@@ -362,7 +370,18 @@ export function modulePublicRoutes(app: FastifyInstance, listener: 'app' | 'publ
             // Une route qui n'a de sens que depuis l'origine de l'app (ticket,
             // retour OAuth) ne s'ouvre pas sur la surface publique.
             if ((opts.exposure ?? 'everywhere') === 'app' && listener === 'public') return;
-            PUBLIC_PATHS.add(path);
+            if (/[:*]/.test(path)) {
+                PUBLIC_PATTERNS.push(
+                    new RegExp(
+                        `^${path
+                            .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+                            .replace(/:[A-Za-z0-9_]+/g, '[^/]+')
+                            .replace(/\*/g, '.*')}$`
+                    )
+                );
+            } else {
+                PUBLIC_PATHS.add(path);
+            }
             const route: RouteShorthandOptions = { logLevel: 'silent' };
             if (opts.rateLimit) route.config = { rateLimit: opts.rateLimit };
             // Deux branches plutôt qu'un `app[method]` : l'union des deux

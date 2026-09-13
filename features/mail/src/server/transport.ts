@@ -66,7 +66,20 @@ export function createMailTransport(
                         from: sender.address,
                         to: [{ name: null, address: message.to }],
                         subject: message.subject,
-                        text: message.text
+                        text: message.text,
+                        // Ajoutés seulement s'ils existent : un appelant qui
+                        // n'envoie que du texte doit produire exactement le
+                        // même message qu'avant.
+                        ...(message.html === undefined ? {} : { html: message.html }),
+                        ...(message.attachments === undefined
+                            ? {}
+                            : {
+                                  attachments: message.attachments.map((a) => ({
+                                      filename: a.filename,
+                                      contentType: a.contentType,
+                                      content: Buffer.from(a.content)
+                                  }))
+                              })
                     },
                     persistRefreshedToken(deps.repo, row.id, credentials, cipher)
                 );
