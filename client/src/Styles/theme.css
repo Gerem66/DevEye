@@ -118,6 +118,9 @@
     --z-popup-overlay: 900;
     --z-popup: 1000;
     --z-navbar: 1200;
+    /* Ce qui suit le curseur pendant un glisser : au-dessus de la popup d'où il
+       vient, sous les dialogues. */
+    --z-drag: 1300;
     --z-modal: 1400;
     /* Le bouton de signalement, au-dessus des dialogues : il doit rester
        cliquable depuis n'importe quel écran, y compris par-dessus l'un d'eux. */

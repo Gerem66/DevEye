@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
     DndContext,
     DragOverlay,
@@ -206,9 +207,19 @@ export function Board({
                 )}
             </div>
 
-            {/* La copie flottante reprend la carte sans son contour de présence :
+            {/* La copie flottante est en `position: fixed`, et le `backdrop-filter`
+                de la popup fait d'elle le bloc conteneur de tout descendant fixé :
+                rendue ici, la copie serait posée par rapport au coin de la popup et
+                non de la fenêtre, soit à plusieurs dizaines de pixels du curseur.
+                Dans le corps du document, ses coordonnées redeviennent celles que
+                dnd-kit mesure. Elle reprend la carte sans son contour de présence :
                 deux cadres superposés seraient illisibles. */}
-            <DragOverlay>{activeCard && <CardBody card={activeCard} dragging />}</DragOverlay>
+            {createPortal(
+                <DragOverlay style={{ zIndex: 'var(--z-drag)' }}>
+                    {activeCard && <CardBody card={activeCard} dragging />}
+                </DragOverlay>,
+                document.body
+            )}
         </DndContext>
     );
 }

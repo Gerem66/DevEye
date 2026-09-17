@@ -12,6 +12,13 @@
     min-height: 100%;
 }
 
+/* Sur le tableau, la fiche tient exactement la boîte défilante de la popup, ni plus
+   ni moins : la hauteur des colonnes se déduit alors du flex, sans rien supposer du
+   cadre (ses bordures, son rembourrage) ni de l'arrondi du bandeau collant. */
+.rootFit {
+    height: 100%;
+}
+
 /* ----------------------------------------------------------------- en-tête */
 
 .header {
@@ -675,21 +682,10 @@
     /* Verticalement, rien ne défile ici : ce sont les colonnes qui le font. */
     overflow-y: hidden;
     padding-bottom: var(--space-sm);
-    /* Occupe la hauteur restante ; `min-height: 0` autorise les colonnes à défiler
-       au lieu de pousser la page. */
+    /* Occupe ce que `.rootFit` laisse une fois le bandeau collant posé ;
+       `min-height: 0` autorise les colonnes à défiler au lieu de pousser la fiche. */
     flex: 1;
     min-height: 0;
-    /*
-     * Le plafond est ce que la fenêtre laisse une fois retiré tout ce qui entoure
-     * le tableau : la popup (barre de navigation, décalage haut, marge basse), le
-     * rembourrage de son corps, le bandeau collant de la fiche (mesuré dans
-     * `--sticky-head`) et l'écart qui l'en sépare. Sans ce plafond, la boîte
-     * défilante de la popup grandit avec les cartes et c'est la fiche entière qui
-     * part en défilement.
-     */
-    max-height: calc(
-        100vh - var(--navbar-height) - 3 * var(--space-md) - 2 * var(--space-lg) - var(--sticky-head, 0px)
-    );
 }
 
 .column {

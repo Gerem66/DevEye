@@ -134,6 +134,7 @@ declare const styles: {
     readonly readonlyTitle: string;
     readonly restore: string;
     readonly root: string;
+    readonly rootFit: string;
     readonly row: string;
     readonly rows: string;
     readonly sectionTitle: string;
