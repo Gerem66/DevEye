@@ -1,5 +1,5 @@
 import mysql from 'mysql2/promise';
-import { Client as PgClient } from 'pg';
+import { Client as PgClient, types as pgTypes, type CustomTypesConfig } from 'pg';
 import type {
     DatabaseCell,
     DatabaseEngine,
@@ -86,10 +86,26 @@ export interface Session {
     close(): Promise<void>;
 }
 
-/** Tout en chaîne au transport, pour ne rien perdre (`BIGINT`, dates, binaires). */
+/**
+ * Les types temporels de Postgres, laissés en texte tel que le serveur les
+ * rend : voir `dateStrings` côté MySQL, même raison.
+ */
+const PG_TEMPORAL_OIDS = new Set([
+    pgTypes.builtins.DATE,
+    pgTypes.builtins.TIME,
+    pgTypes.builtins.TIMETZ,
+    pgTypes.builtins.TIMESTAMP,
+    pgTypes.builtins.TIMESTAMPTZ
+]);
+
+const pgTextDates: CustomTypesConfig = {
+    getTypeParser: (oid, format) =>
+        PG_TEMPORAL_OIDS.has(oid) && format !== 'binary' ? (value: string) => value : pgTypes.getTypeParser(oid, format)
+};
+
+/** Tout en chaîne au transport, pour ne rien perdre (`BIGINT`, binaires). */
 function toText(value: unknown): string | null {
     if (value === null || value === undefined) return null;
-    if (value instanceof Date) return value.toISOString();
     if (Buffer.isBuffer(value)) return `0x${value.subarray(0, 32).toString('hex')}${value.length > 32 ? '…' : ''}`;
     if (typeof value === 'object') return JSON.stringify(value);
     return String(value);
@@ -320,7 +336,11 @@ async function openMysql(target: EngineTarget, tunnel: { host: string; port: num
         // qu'arrondis en silence.
         supportBigNumbers: true,
         bigNumberStrings: true,
-        dateStrings: false,
+        // Les dates restent le texte que le serveur rend (`2026-09-15 18:28:17`) :
+        // en objet `Date`, le pilote les lirait dans le fuseau du processus et
+        // l'écran les montrerait décalées en UTC, sous une forme ISO que MySQL
+        // refuse à la réécriture d'une ligne.
+        dateStrings: true,
         multipleStatements: false
     });
 
@@ -519,7 +539,8 @@ async function openPostgres(target: EngineTarget, tunnel: { host: string; port: 
         database: target.database,
         connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
         query_timeout: QUERY_TIMEOUT_MS,
-        statement_timeout: QUERY_TIMEOUT_MS
+        statement_timeout: QUERY_TIMEOUT_MS,
+        types: pgTextDates
     });
     await client.connect();
 
