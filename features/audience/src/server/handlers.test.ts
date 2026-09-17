@@ -8,6 +8,7 @@ import {
     audienceFunnelList,
     audienceGet,
     audienceList,
+    audienceOverview,
     audienceReorder,
     audienceSiteAdd,
     audienceSiteRemove,
@@ -311,7 +312,8 @@ const body = {
     formsAuto: false,
     submissionIpQuota: 5,
     formHourlyQuota: 200,
-    eventIpQuota: 0
+    eventIpQuota: 0,
+    transitPaths: ['/loading/', 'loading', '', '/onboarding?step=1']
 };
 
 describe('audience.count et audience.list', () => {
@@ -439,7 +441,16 @@ describe('audience.siteAdd et audience.siteUpdate', () => {
         // La clé est choisie par le serveur, à la longueur de la colonne.
         assert.match(out.site.publicKey, /^pk_[A-Za-z0-9_-]{24}$/);
         // Le harnais chiffre à l'identité : le nom est dans le blob.
-        assert.equal(repo.sites[0].content, JSON.stringify({ name: 'Vitrine', description: 'Le site public' }));
+        // Les pages de transit sont normalisées comme un chemin reçu et dédoublonnées :
+        // c'est la condition pour qu'elles retrouvent leurs libellés au calcul du rebond.
+        assert.equal(
+            repo.sites[0].content,
+            JSON.stringify({
+                name: 'Vitrine',
+                description: 'Le site public',
+                transitPaths: ['/loading', '/onboarding']
+            })
+        );
         assert.equal(ingest.invalidated, 1);
         assert.deepEqual(
             ctx.recorded.audits.map((a) => a.action),
@@ -575,6 +586,37 @@ describe('les entonnoirs', () => {
             failsWith('forbidden')
         );
         assert.deepEqual(repo.funnels, []);
+    });
+});
+
+describe('audience.overview', () => {
+    it('écarte du rebond les pages de transit du site, par leurs libellés déjà émis', async () => {
+        const repo = seed(
+            fakeRepo(),
+            site({
+                id: 1,
+                workspace_id: 1,
+                // `/loading` n'a jamais été mesuré : sans libellé, il n'exclut rien.
+                content: JSON.stringify({ name: 'App', description: '', transitPaths: ['/tarifs', '/loading'] })
+            }),
+            site({ id: 2, workspace_id: 1 })
+        );
+        const seen: number[][] = [];
+        const zero = { views: 0, visitors: 0, sessions: 0, duration: 0, bounces: 0 };
+        repo.metrics = async (_siteId, _from, _to, transitPathIds) => {
+            seen.push([...transitPathIds]);
+            return zero;
+        };
+        repo.points = async () => [];
+
+        const ctx = createTestContext({ repo });
+        await handlerFor(audienceOverview)(ctx, { siteId: 1, range: '7d' });
+        // La fenêtre et la précédente, avec le même libellé résolu.
+        assert.deepEqual(seen, [[1], [1]]);
+
+        seen.length = 0;
+        await handlerFor(audienceOverview)(ctx, { siteId: 2, range: '7d' });
+        assert.deepEqual(seen, [[], []]);
     });
 });
 

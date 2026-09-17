@@ -71,6 +71,7 @@ export function SiteDialog({ open, onClose, onSaved }: SiteDialogProps) {
                     .map((line) => line.trim())
                     .filter((line) => line.length > 0),
                 visitorMode: 'anonymous',
+                transitPaths: [],
                 active: true,
                 // Les défauts prudents : aucun formulaire ne naît d'une réception,
                 // et les quotas bornent d'emblée. Tout se règle ensuite, onglet par

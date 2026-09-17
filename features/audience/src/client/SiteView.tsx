@@ -1,20 +1,21 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { humanizeError, SegmentedControl, useResourceVersion } from 'deveye-sdk-client';
-import type {
-    AudienceActivity,
-    AudienceBreakdownItem,
-    AudienceDimension,
-    AudienceOverview,
-    AudienceRange,
-    AudienceSite
+import {
+    AUDIENCE_BREAKDOWN_MAX,
+    type AudienceActivity,
+    type AudienceBreakdownItem,
+    type AudienceDimension,
+    type AudienceOverview,
+    type AudienceRange,
+    type AudienceSite
 } from '../contracts/domain';
 
 import { api } from './api';
-import { bucketOf, DIMENSION_LABELS, formatCount } from './format';
+import { bucketOf, DIMENSION_HINTS, DIMENSION_LABELS, formatCount } from './format';
 import RangeBar from './RangeBar';
 import Heatmap from './Stats/Heatmap';
 import StatBand from './Stats/StatBand';
-import TopList from './Stats/TopList';
+import { TopList, TopRows } from './Stats/TopList';
 import TrendChart from './Stats/TrendChart';
 import styles from './style.module.css';
 
@@ -70,6 +71,15 @@ export function SiteView({ site, heading, actions }: SiteViewProps) {
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
 
+    /**
+     * Les axes dont on a demandé le plafond. Doublé d'une référence : `load`
+     * la lit sans en dépendre, pour qu'ouvrir une liste ne relance pas les dix
+     * lectures de la page, et qu'une relecture (fenêtre, battement) garde les
+     * listes ouvertes.
+     */
+    const [expanded, setExpanded] = useState<ReadonlySet<AudienceDimension>>(new Set());
+    const expandedRef = useRef(expanded);
+
     const statsVersion = useResourceVersion('audience.stats');
 
     /**
@@ -87,7 +97,12 @@ export function SiteView({ site, heading, actions }: SiteViewProps) {
                 api.send('audience.activity', { siteId: site.id, range }),
                 api.send('audience.live', { siteId: site.id }),
                 ...[...ALWAYS, ...TECHNICAL].map((dimension) =>
-                    api.send('audience.breakdown', { siteId: site.id, range, dimension })
+                    api.send('audience.breakdown', {
+                        siteId: site.id,
+                        range,
+                        dimension,
+                        ...(expandedRef.current.has(dimension) ? { limit: AUDIENCE_BREAKDOWN_MAX } : {})
+                    })
                 )
             ]);
             setOverview(nextOverview);
@@ -103,6 +118,27 @@ export function SiteView({ site, heading, actions }: SiteViewProps) {
             setLoading(false);
         }
     }, [site.id, range]);
+
+    /** Va chercher le plafond d'un seul axe ; les autres lectures ne bougent pas. */
+    const expand = useCallback(
+        async (dimension: AudienceDimension) => {
+            const next = new Set(expandedRef.current).add(dimension);
+            expandedRef.current = next;
+            setExpanded(next);
+            try {
+                const res = await api.send('audience.breakdown', {
+                    siteId: site.id,
+                    range,
+                    dimension,
+                    limit: AUDIENCE_BREAKDOWN_MAX
+                });
+                setBreakdowns((prev) => ({ ...prev, [dimension]: res.items }));
+            } catch (e) {
+                setError(humanizeError(e, 'Impossible de charger la suite du classement.'));
+            }
+        },
+        [site.id, range]
+    );
 
     useEffect(() => {
         // Un site qui n'a jamais rien reçu n'a rien à montrer : l'écran d'attente plus
@@ -196,13 +232,7 @@ export function SiteView({ site, heading, actions }: SiteViewProps) {
 
             {error && <p className={styles.error}>{error}</p>}
 
-            {overview && (
-                <StatBand
-                    metrics={overview.metrics}
-                    previous={overview.previous}
-                    tracksReturning={site.visitorMode === 'persistent'}
-                />
-            )}
+            {overview && <StatBand metrics={overview.metrics} previous={overview.previous} site={site} />}
 
             {overview && (
                 <TrendChart
@@ -215,14 +245,24 @@ export function SiteView({ site, heading, actions }: SiteViewProps) {
             )}
 
             <div className={styles.panels}>
-                <TopList dimension='path' items={breakdowns.path ?? []} loading={loading} />
-                <TopList dimension='referrer' items={breakdowns.referrer ?? []} loading={loading} />
+                {(['path', 'referrer'] as const).map((dimension) => (
+                    <TopList
+                        key={dimension}
+                        dimension={dimension}
+                        items={breakdowns[dimension] ?? []}
+                        loading={loading}
+                        expanded={expanded.has(dimension)}
+                        onExpand={() => void expand(dimension)}
+                    />
+                ))}
             </div>
 
             <div className={styles.panels}>
                 <section className={styles.panel}>
                     <div className={styles.panelHead}>
-                        <h3 className={styles.panelTitle}>{DIMENSION_LABELS[technical]}</h3>
+                        <h3 className={styles.panelTitle} title={DIMENSION_HINTS[technical]}>
+                            {DIMENSION_LABELS[technical]}
+                        </h3>
                         <SegmentedControl
                             value={technical}
                             options={TECHNICAL.map((dimension) => ({
@@ -235,7 +275,13 @@ export function SiteView({ site, heading, actions }: SiteViewProps) {
                     </div>
                     {/* Le titre est déjà rendu ci-dessus avec son sélecteur :
                         `TopList` n'apporterait ici qu'un doublon. */}
-                    <BareTop items={breakdowns[technical] ?? []} loading={loading} />
+                    <TopRows
+                        dimension={technical}
+                        items={breakdowns[technical] ?? []}
+                        loading={loading}
+                        expanded={expanded.has(technical)}
+                        onExpand={() => void expand(technical)}
+                    />
                 </section>
 
                 <section className={styles.panel}>
@@ -254,36 +300,18 @@ export function SiteView({ site, heading, actions }: SiteViewProps) {
             </div>
 
             <div className={styles.panels}>
-                <TopList dimension='event' items={breakdowns.event ?? []} loading={loading} />
-                <TopList dimension='identity' items={breakdowns.identity ?? []} loading={loading} />
+                {(['event', 'identity'] as const).map((dimension) => (
+                    <TopList
+                        key={dimension}
+                        dimension={dimension}
+                        items={breakdowns[dimension] ?? []}
+                        loading={loading}
+                        expanded={expanded.has(dimension)}
+                        onExpand={() => void expand(dimension)}
+                    />
+                ))}
             </div>
         </div>
-    );
-}
-
-/** Un classement sans son titre — le panneau technique porte déjà le sien. */
-function BareTop({ items, loading }: { items: AudienceBreakdownItem[]; loading: boolean }) {
-    const max = Math.max(1, ...items.map((item) => item.views));
-    // Même règle que `TopList` : on ne remplace les lignes que par des lignes.
-    if (loading && items.length === 0) return <p className={styles.empty}>Chargement…</p>;
-    if (items.length === 0) return <p className={styles.empty}>Aucune visite sur cette période.</p>;
-    return (
-        <ol className={styles.topList}>
-            {items.map((item, index) => (
-                <li key={`${item.label}-${index}`} className={styles.topRow}>
-                    <span
-                        className={styles.topBar}
-                        style={{ width: `${(item.views / max) * 100}%` }}
-                        aria-hidden='true'
-                    />
-                    <span className={styles.topLabel}>{item.label || <em>illisible</em>}</span>
-                    <span className={styles.topValue}>
-                        {formatCount(item.views)}
-                        <span className={styles.topVisitors}>{formatCount(item.visitors)} vis.</span>
-                    </span>
-                </li>
-            ))}
-        </ol>
     );
 }
 

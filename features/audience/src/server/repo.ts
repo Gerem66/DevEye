@@ -173,8 +173,12 @@ export interface AudienceRepo extends AudienceFormsRepo {
     reorder(workspaceId: number, ids: number[]): Promise<void>;
 
     // -- lectures agrégées --------------------------------------------------
-    /** Le bandeau : sessions, visiteurs, durée, rebonds. Les vues à part. */
-    metrics(siteId: number, from: number, to: number): Promise<AudienceMetricsRow>;
+    /**
+     * Le bandeau : sessions, visiteurs, durée, rebonds. Les vues à part.
+     * `transitPathIds` : les libellés des pages de transit du site, que le
+     * rebond ne compte pas ; vide, une visite d'une seule vue est un rebond.
+     */
+    metrics(siteId: number, from: number, to: number, transitPathIds: readonly number[]): Promise<AudienceMetricsRow>;
     /**
      * Visiteurs de la période qui étaient déjà venus avant. N'a de sens qu'en
      * mode persistant : en anonyme, le sel de `visitor_ref` change chaque jour
@@ -446,10 +450,30 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
         },
 
         // -- lectures agrégées ----------------------------------------------
-        async metrics(siteId, from, to) {
+        async metrics(siteId, from, to, transitPathIds) {
             // Les vues se comptent sur les faits et non sur `sessions.views` : une session
             // ouverte avant la fenêtre porterait sinon toutes ses vues dedans, ou aucune,
             // selon le bord. Les autres mesures sont par nature de la session.
+            //
+            // Sans page de transit, le rebond se lit sur le compteur de la session. Avec,
+            // il faut recompter les vues de chaque visite en écartant ces pages : la
+            // table dérivée le fait une fois pour la fenêtre, par l'index des sessions
+            // puis celui des événements par session, au lieu d'une sous-requête corrélée
+            // rejouée par visite.
+            const bounces =
+                transitPathIds.length === 0
+                    ? { select: 'COALESCE(SUM(s.views <= 1), 0) AS bounces', join: '', params: [] as unknown[] }
+                    : {
+                          select: 'COALESCE(SUM(COALESCE(r.views, 0) <= 1), 0) AS bounces',
+                          join: `LEFT JOIN (SELECT e.session_id, COUNT(*) AS views
+                                              FROM audience_events e
+                                              JOIN audience_sessions x ON x.id = e.session_id
+                                             WHERE x.site_id = ? AND x.started_at >= ? AND x.started_at < ?
+                                               AND e.kind = 0
+                                               AND (e.path_id IS NULL OR e.path_id NOT IN (${transitPathIds.map(() => '?').join(', ')}))
+                                             GROUP BY e.session_id) r ON r.session_id = s.id`,
+                          params: [siteId, from, to, ...transitPathIds]
+                      };
             const [viewsRows, sessionRows] = await Promise.all([
                 q.query<{ views: number }>(
                     `SELECT COUNT(*) AS views FROM audience_events
@@ -458,12 +482,13 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
                 ),
                 q.query<{ sessions: number; visitors: number; duration: number; bounces: number }>(
                     `SELECT COUNT(*) AS sessions,
-                            COUNT(DISTINCT visitor_ref) AS visitors,
-                            COALESCE(SUM(GREATEST(last_at - started_at, 0)), 0) AS duration,
-                            COALESCE(SUM(views <= 1), 0) AS bounces
-                       FROM audience_sessions
-                      WHERE site_id = ? AND started_at >= ? AND started_at < ?`,
-                    [siteId, from, to]
+                            COUNT(DISTINCT s.visitor_ref) AS visitors,
+                            COALESCE(SUM(GREATEST(s.last_at - s.started_at, 0)), 0) AS duration,
+                            ${bounces.select}
+                       FROM audience_sessions s
+                       ${bounces.join}
+                      WHERE s.site_id = ? AND s.started_at >= ? AND s.started_at < ?`,
+                    [...bounces.params, siteId, from, to]
                 )
             ]);
             const s = sessionRows[0];

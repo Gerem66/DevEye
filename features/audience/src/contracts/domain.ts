@@ -55,6 +55,11 @@ export const AUDIENCE_BATCH_MAX = 20;
 
 /** Au-delà, une ligne du classement n'apprend plus rien et pèse un déchiffrement. */
 export const AUDIENCE_BREAKDOWN_MAX = 50;
+/** Ce qu'un classement montre d'emblée ; « Tout afficher » va jusqu'au plafond. */
+export const AUDIENCE_BREAKDOWN_DEFAULT = 8;
+
+/** Pages de transit déclarables sur un site : un écran de chargement, un accueil, une connexion. */
+export const AUDIENCE_MAX_TRANSIT_PATHS = 20;
 
 export const AUDIENCE_FUNNEL_NAME_MAX_LENGTH = 96;
 
@@ -182,6 +187,14 @@ export const audienceSiteSchema = z.object({
     formHourlyQuota: z.number().int().min(0).max(AUDIENCE_QUOTA_MAX),
     /** Événements de mesure par adresse et par heure. `0` = illimité. */
     eventIpQuota: z.number().int().min(0).max(AUDIENCE_QUOTA_MAX),
+    /**
+     * Les pages que le taux de rebond ne compte pas : un écran de chargement,
+     * un accueil ou une connexion par lesquels toute visite passe avant sa
+     * première vraie page. Une visite qui n'a vu que celles-là, ou une seule
+     * autre, est un rebond. Elles restent comptées partout ailleurs (vues,
+     * classement, durée). Normalisées comme les chemins reçus.
+     */
+    transitPaths: z.array(z.string().max(AUDIENCE_LABEL_MAX_LENGTH)).max(AUDIENCE_MAX_TRANSIT_PATHS),
     /**
      * Quand le dernier événement est entré. `null` = jamais rien reçu, ce qui
      * est l'état normal d'un site qu'on vient de déclarer et non une panne :

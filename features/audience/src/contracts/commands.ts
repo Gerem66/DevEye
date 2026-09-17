@@ -5,7 +5,9 @@ import {
     AUDIENCE_QUOTA_MAX,
     AUDIENCE_FUNNEL_MAX_STEPS,
     AUDIENCE_FUNNEL_NAME_MAX_LENGTH,
+    AUDIENCE_LABEL_MAX_LENGTH,
     AUDIENCE_MAX_ORIGINS,
+    AUDIENCE_MAX_TRANSIT_PATHS,
     AUDIENCE_ORIGIN_MAX_LENGTH,
     AUDIENCE_RETENTION_MAX_DAYS,
     AUDIENCE_RETENTION_MIN_DAYS,
@@ -64,7 +66,9 @@ const siteBody = {
     formsAuto: z.boolean(),
     submissionIpQuota: z.number().int().min(0).max(AUDIENCE_QUOTA_MAX),
     formHourlyQuota: z.number().int().min(0).max(AUDIENCE_QUOTA_MAX),
-    eventIpQuota: z.number().int().min(0).max(AUDIENCE_QUOTA_MAX)
+    eventIpQuota: z.number().int().min(0).max(AUDIENCE_QUOTA_MAX),
+    /** Un chemin par entrée, tel que saisi : le serveur normalise et dédoublonne. */
+    transitPaths: z.array(z.string().max(AUDIENCE_LABEL_MAX_LENGTH)).max(AUDIENCE_MAX_TRANSIT_PATHS)
 };
 
 // ------------------------------------------------------------------ sites

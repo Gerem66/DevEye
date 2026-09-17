@@ -89,15 +89,81 @@ export const VISITOR_LABELS: Record<AudienceVisitorMode, string> = {
  * Ce que le mode change, dit là où on le choisit : le second crée une
  * obligation légale pour le site suivi.
  */
-export const VISITOR_HINTS: Record<AudienceVisitorMode, string> = {
-    anonymous:
-        'Rien n’est écrit chez le visiteur, donc rien à faire accepter. En contrepartie, une même ' +
-        'personne revenant le lendemain compte pour une nouvelle.',
-    persistent:
-        'Ajoutez data-visitor="persistent" à la balise. Les visiteurs connus et le nombre de visites ' +
-        'par personne deviennent mesurables. ⚠️ Un identifiant durable relève du consentement, ' +
-        'localStorage comme cookie : c’est à votre site de le recueillir.'
+export function visitorHint(mode: AudienceVisitorMode, platform: AudiencePlatform): string {
+    if (mode === 'anonymous') {
+        return (
+            'Rien n’est écrit chez le visiteur, donc rien à faire accepter. En contrepartie, une même ' +
+            'personne revenant le lendemain compte pour une nouvelle.'
+        );
+    }
+    const how =
+        platform === 'web'
+            ? 'Ajoutez data-visitor="persistent" à la balise.'
+            : platform === 'app'
+              ? 'Votre application envoie un visitorId stable avec chaque lot.'
+              : 'Ajoutez data-visitor="persistent" à la balise, ou envoyez un visitorId stable depuis l’application.';
+    return (
+        `${how} Les visiteurs connus et le nombre de visites par personne deviennent mesurables. ` +
+        '⚠️ Un identifiant durable relève du consentement, localStorage comme cookie : c’est à votre ' +
+        'site de le recueillir.'
+    );
+}
+
+/**
+ * Ce qu'est un « visiteur » sur ce site, dit au survol de la tuile. La
+ * définition change avec le réglage : en anonyme, personne n'est reconnu le
+ * lendemain ; en persistant, c'est l'identifiant conservé qui fait la personne.
+ */
+export function visitorsDefinition(mode: AudienceVisitorMode, platform: AudiencePlatform): string {
+    if (mode === 'anonymous') {
+        return (
+            'Personnes distinctes, reconnues sans cookie. Un même visiteur qui revient le lendemain ' +
+            'compte pour un nouveau.'
+        );
+    }
+    const keeper =
+        platform === 'web' ? 'le navigateur' : platform === 'app' ? 'l’application' : 'le navigateur ou l’application';
+    return (
+        `Personnes distinctes, reconnues d’une visite à l’autre par l’identifiant que ${keeper} conserve. ` +
+        'Un visiteur qui revient reste le même, tant que cet identifiant n’a pas été effacé.'
+    );
+}
+
+/**
+ * Ce que compte le premier nombre d'une ligne de classement, et le second : la
+ * même colonne ne dit pas la même chose selon l'axe, et « 312 vis. » seul ne
+ * dit pas s'il s'agit de visites ou de visiteurs.
+ */
+export const DIMENSION_UNITS: Record<AudienceDimension, string> = {
+    path: 'vues de cette page',
+    referrer: 'pages vues par les visites venues de là',
+    browser: 'pages vues avec ce navigateur',
+    os: 'pages vues sous ce système',
+    device: 'pages vues sur ce type d’appareil',
+    timezone: 'pages vues depuis ce fuseau',
+    language: 'pages vues dans cette langue',
+    event: 'déclenchements de cet événement',
+    identity: 'pages vues par cet utilisateur'
 };
+
+/** Le sens des deux nombres d'un classement, porté par son titre. */
+export const DIMENSION_HINTS: Record<AudienceDimension, string> = {
+    path: 'Classées par vues. À droite, le nombre de visiteurs distincts qui l’ont vue.',
+    referrer: 'Par pages vues des visites venues de là. À droite, les visiteurs distincts.',
+    browser: 'Par pages vues. À droite, les visiteurs distincts.',
+    os: 'Par pages vues. À droite, les visiteurs distincts.',
+    device: 'Par pages vues. À droite, les visiteurs distincts.',
+    timezone: 'Par pages vues. À droite, les visiteurs distincts.',
+    language: 'Par pages vues. À droite, les visiteurs distincts.',
+    event: 'Par déclenchements. À droite, les visiteurs distincts qui l’ont déclenché.',
+    identity: 'Par pages vues. À droite, le nombre de visiteurs distincts sous cette identité.'
+};
+
+/** « 1 284 vues de cette page · 312 visiteurs distincts » : le survol d'une ligne. */
+export function rowTitle(dimension: AudienceDimension, views: number, visitors: number): string {
+    const people = visitors > 1 ? 'visiteurs distincts' : 'visiteur distinct';
+    return `${formatCount(views)} ${DIMENSION_UNITS[dimension]} · ${formatCount(visitors)} ${people}`;
+}
 
 /**
  * Ce qu'un type accepte, et ce qu'il en fait. Écrit du point de vue de celui

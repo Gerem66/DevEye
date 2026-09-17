@@ -257,7 +257,7 @@ ce que font Plausible et PostHog ; il n'existe pas mieux sans imposer un compte
 | **Installer**          | un bouton unique dans l'en-tête de la fiche, quelle que soit la section : étape 1 le bloc à coller (la balise, ou le `<form>` du formulaire ouvert), étape 2 ce qui est arrivé depuis                                        |
 | **Onglet d'un projet** | les sites reliés, même `SiteView`                                                                                                                                                                                            |
 
-Quatre décisions d'écran qui méritent d'être connues :
+Six décisions d'écran qui méritent d'être connues :
 
 - **L'écart est la moitié de l'information.** « 1 240 vues » ne dit pas s'il faut
   regarder de plus près ; « 1 240 vues, +18 % » le dit. La période de comparaison
@@ -276,6 +276,21 @@ Quatre décisions d'écran qui méritent d'être connues :
   horaire recalcule, sont donc repris sur les événements bruts. Sans quoi la
   carte afficherait « 412 vues (24 h) » au-dessus d'une barre du jour vieille
   d'une heure.
+- **Le rebond a des pages de transit.** Une application qui ouvre toujours un
+  écran de chargement puis une connexion avant sa première vraie page aurait un
+  rebond nul, ou absurde, selon le nombre d'écrans automatiques. Le site déclare
+  ces chemins (onglet Fréquentation) et le rebond ne les compte pas : une visite
+  qui n'a vu que ceux-là, ou une seule autre page, est un rebond. Ils restent
+  comptés partout ailleurs. Le calcul se fait à la lecture, sur les faits
+  (`repo.metrics` recompte les vues par visite en écartant leurs libellés,
+  retrouvés par condensé), donc changer la liste vaut pour tout l'historique.
+  La liste vit dans le contenu chiffré du site : ce sont des noms de pages.
+- **Un classement n'est jamais la liste exhaustive.** Huit lignes d'emblée,
+  « Tout afficher » va jusqu'au plafond de cinquante, et une liste au plafond
+  le dit. Chaque ligne porte au survol ce que ses deux nombres comptent, parce
+  que la première colonne ne compte pas la même chose selon l'axe (des vues
+  sur une page, des déclenchements sur un événement) et que « 312 vis. » seul
+  ne dit pas s'il s'agit de visites ou de visiteurs.
 
 Les graphes sont du **SVG écrit à la main**, `viewBox` fixe, sans
 `ResizeObserver` — le patron d'`UptimeChart`. Aucune dépendance de graphes n'a
@@ -652,7 +667,7 @@ Forms/FormDialog.tsx  renommer, fermer, vider, supprimer un formulaire
 Forms/export.ts     le CSV des retours chargés
 SiteDialog.tsx      déclarer un site (nom, description, plateforme, origines) ; création seulement
 SiteGeneralPanel.tsx  onglet Général : identité, plateforme, origines, collecte, suppression
-SiteTrafficPanel.tsx  onglet Fréquentation : visiteurs, rétention, quota d'événements
+SiteTrafficPanel.tsx  onglet Fréquentation : visiteurs, pages de transit, rétention, quota d'événements
 SiteFormsPanel.tsx    onglet Retours : formulaires déclarés, création à la volée, quotas
 FormEditor.tsx        déclarer un formulaire et ses questions typées
 useSiteDraft.ts       le brouillon partagé des trois onglets (siteUpdate prend le site entier)

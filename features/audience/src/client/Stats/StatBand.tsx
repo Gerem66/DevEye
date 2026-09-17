@@ -1,17 +1,18 @@
-import type { AudienceMetrics } from '../../contracts/domain';
+import type { AudienceMetrics, AudienceSite } from '../../contracts/domain';
 
-import { delta, formatCount, formatDelta, formatDuration, formatPercent } from '../format';
+import { delta, formatCount, formatDelta, formatDuration, formatPercent, visitorsDefinition } from '../format';
 import styles from '../style.module.css';
 
 interface StatBandProps {
     metrics: AudienceMetrics;
     previous: AudienceMetrics;
     /**
-     * Le site reconnaît-il ses visiteurs d'une visite à l'autre ? En mode
-     * anonyme la tuile « Déjà venus » vaudrait toujours zéro, et un zéro se lit
-     * comme une mesure.
+     * Ce que le site règle de la mesure, parce que les définitions en
+     * dépendent : ce qu'est un visiteur change avec la reconnaissance, et le
+     * rebond avec les pages de transit. En mode anonyme la tuile « Déjà venus »
+     * vaudrait toujours zéro, et un zéro se lit comme une mesure.
      */
-    tracksReturning: boolean;
+    site: Pick<AudienceSite, 'visitorMode' | 'platform' | 'transitPaths'>;
 }
 
 /** Une mesure, ce qu'elle vaut, et le sens dans lequel il faut lire son écart. */
@@ -27,6 +28,8 @@ interface Tile {
     hint: string;
     current: number;
     previous: number;
+    /** Une lecture de plus à côté de l'écart : la part que la valeur représente. */
+    note?: string;
     /**
      * `true` quand une hausse est une mauvaise nouvelle. Le taux de rebond est
      * le seul du lot : sans cette distinction, un rebond qui grimpe de dix
@@ -41,7 +44,8 @@ interface Tile {
  * de même longueur et immédiatement antérieure, calculée par le serveur pour
  * que les deux chiffres viennent de la même requête.
  */
-export function StatBand({ metrics, previous, tracksReturning }: StatBandProps) {
+export function StatBand({ metrics, previous, site }: StatBandProps) {
+    const transit = site.transitPaths.length;
     const tiles: Tile[] = [
         {
             label: 'Vues',
@@ -52,9 +56,7 @@ export function StatBand({ metrics, previous, tracksReturning }: StatBandProps) 
         },
         {
             label: 'Visiteurs',
-            hint:
-                'Personnes distinctes, reconnues sans cookie. Un même visiteur qui revient le lendemain ' +
-                'compte pour un nouveau.',
+            hint: visitorsDefinition(site.visitorMode, site.platform),
             value: formatCount(metrics.visitors),
             current: metrics.visitors,
             previous: previous.visitors
@@ -79,7 +81,10 @@ export function StatBand({ metrics, previous, tracksReturning }: StatBandProps) 
             label: 'Rebond',
             hint:
                 'Part des visites qui n’ont vu qu’une seule page, puis sont reparties. Plus il est bas, ' +
-                'plus les visiteurs poursuivent leur navigation.',
+                'plus les visiteurs poursuivent leur navigation.' +
+                (transit > 0
+                    ? ` ${transit === 1 ? 'La page de transit réglée' : `Les ${transit} pages de transit réglées`} pour ce site ne compte${transit === 1 ? '' : 'nt'} pas.`
+                    : ''),
             value: formatPercent(metrics.bounceRate),
             current: metrics.bounceRate,
             previous: previous.bounceRate,
@@ -87,15 +92,20 @@ export function StatBand({ metrics, previous, tracksReturning }: StatBandProps) 
         }
     ];
 
-    if (tracksReturning) {
+    if (site.visitorMode === 'persistent') {
         tiles.splice(2, 0, {
             label: 'Déjà venus',
             hint:
-                'Visiteurs qui étaient déjà passés avant cette période. Ne remonte pas au-delà de la ' +
-                'conservation du site : quelqu’un dont la dernière visite a expiré repasse pour un nouveau.',
+                'Visiteurs qui étaient déjà passés avant cette période, et leur part parmi les visiteurs de ' +
+                'la période. Ne remonte pas au-delà de la conservation du site : quelqu’un dont la dernière ' +
+                'visite a expiré repasse pour un nouveau.',
             value: formatCount(metrics.returningVisitors),
             current: metrics.returningVisitors,
-            previous: previous.returningVisitors
+            previous: previous.returningVisitors,
+            note:
+                metrics.visitors > 0
+                    ? `${formatPercent(metrics.returningVisitors / metrics.visitors)} des visiteurs`
+                    : undefined
         });
     }
 
@@ -122,6 +132,7 @@ export function StatBand({ metrics, previous, tracksReturning }: StatBandProps) 
                                 </span>
                             )}
                         </dd>
+                        {tile.note && <dd className={styles.bandNote}>{tile.note}</dd>}
                     </div>
                 );
             })}

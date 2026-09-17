@@ -1,19 +1,22 @@
 import { ReadOnlyNotice, SaveButton, SegmentedControl, settingsStyles as shell, TextInput } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import {
+    AUDIENCE_MAX_TRANSIT_PATHS,
     AUDIENCE_RETENTION_MAX_DAYS,
     AUDIENCE_RETENTION_MIN_DAYS,
     audienceVisitorModeSchema
 } from '../contracts/domain';
 
-import { VISITOR_HINTS, VISITOR_LABELS } from './format';
+import { VISITOR_LABELS, visitorHint } from './format';
+import styles from './style.module.css';
 import { useSiteDraft } from './useSiteDraft';
 
 const VISITOR_OPTIONS = audienceVisitorModeSchema.options.map((value) => ({ value, label: VISITOR_LABELS[value] }));
 
 /**
- * Ce qui ne règle que la mesure : comment un visiteur est reconnu, combien de
- * temps le détail est gardé, et le débit qu'une même adresse peut y verser.
+ * Ce qui ne règle que la mesure : comment un visiteur est reconnu, ce que le
+ * rebond ne compte pas, combien de temps le détail est gardé, et le débit
+ * qu'une même adresse peut y verser.
  *
  * Le quota d'événements est le seul des trois à ne pas être compté en base :
  * le chemin de la mesure ne fait aucune requête, et lui en donner une par
@@ -46,9 +49,27 @@ export default function SiteTrafficPanel({ scope, canWrite }: SettingsPanelProps
                 {/* Le mode persistant crée une obligation pour le site suivi : il se
                     lit dans le ton d'un avertissement, pas dans celui d'une aide. */}
                 <span className={draft.visitorMode === 'persistent' ? shell.warning : shell.fieldHint}>
-                    {VISITOR_HINTS[draft.visitorMode]}
+                    {visitorHint(draft.visitorMode, draft.platform)}
                 </span>
             </div>
+
+            <label className={shell.field}>
+                <span className={shell.sectionLabel}>Pages de transit</span>
+                <textarea
+                    className={styles.textarea}
+                    value={draft.transitPaths}
+                    rows={3}
+                    disabled={!editable}
+                    onChange={(e) => set('transitPaths', e.target.value)}
+                    placeholder={'/loading\n/onboarding\n/login'}
+                />
+                <span className={shell.fieldHint}>
+                    Un chemin par ligne, {AUDIENCE_MAX_TRANSIT_PATHS} au plus. Le taux de rebond ne les compte pas : une
+                    visite qui n’a vu que ces pages, ou une seule autre, est un rebond. Utile quand chaque lancement
+                    ouvre un écran de chargement ou de connexion avant la première vraie page. Elles restent comptées
+                    partout ailleurs, et le changement vaut pour tout l’historique.
+                </span>
+            </label>
 
             <div className={shell.field}>
                 <span className={shell.sectionLabel}>Conservation des événements (jours)</span>

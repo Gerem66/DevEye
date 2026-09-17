@@ -8,6 +8,7 @@ declare const styles: {
     readonly band: string;
     readonly bandDelta: string;
     readonly bandLabel: string;
+    readonly bandNote: string;
     readonly bandTile: string;
     readonly bandValue: string;
     readonly blockTitle: string;
@@ -168,8 +169,10 @@ declare const styles: {
     readonly timezones: string;
     readonly title: string;
     readonly topBar: string;
+    readonly topCap: string;
     readonly topLabel: string;
     readonly topList: string;
+    readonly topMore: string;
     readonly topRow: string;
     readonly topValue: string;
     readonly topVisitors: string;

@@ -521,6 +521,13 @@
     color: var(--danger);
 }
 
+.bandNote {
+    margin: 0;
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
 /* ---------------------------------------------------------- la courbe */
 
 .chart {
@@ -705,9 +712,46 @@
     flex-shrink: 0;
     color: var(--text-primary);
     font-variant-numeric: tabular-nums;
+    /* Les deux nombres portent leur sens en `title` ; comme sur le bandeau, le
+       curseur dit qu'il y a quelque chose à survoler. */
+    cursor: help;
 }
 
 .topVisitors {
+    color: var(--text-muted);
+    font-size: 0.74rem;
+}
+
+.panelTitle[title] {
+    cursor: help;
+}
+
+/* Aller chercher la suite d'un classement : un lien discret sous la liste, pas
+   un bouton, ce n'est pas un geste qui engage. */
+.topMore {
+    align-self: flex-start;
+    margin-top: var(--space-xs);
+    padding: 2px 8px;
+    border: 0;
+    background: transparent;
+    color: var(--accent);
+    font: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+}
+
+.topMore:hover:not(:disabled) {
+    text-decoration: underline;
+}
+
+.topMore:disabled {
+    color: var(--text-muted);
+    cursor: default;
+}
+
+.topCap {
+    margin: var(--space-xs) 0 0;
+    padding: 0 8px;
     color: var(--text-muted);
     font-size: 0.74rem;
 }

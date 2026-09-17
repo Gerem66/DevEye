@@ -18,6 +18,7 @@ import {
     loadSite,
     nameRef,
     packOrigins,
+    packTransitPaths,
     projectCountsOf,
     projectUsageOf,
     siteCipher,
@@ -126,7 +127,11 @@ export const audienceSiteAddFeature = defineSdkFeature({
         }
 
         const cipher = ctx.cipher();
-        const body: StoredSite = { name: input.name.trim(), description: input.description.trim() };
+        const body: StoredSite = {
+            name: input.name.trim(),
+            description: input.description.trim(),
+            transitPaths: packTransitPaths(input.transitPaths)
+        };
         const created = await ctx.repo.create({
             workspaceId: ctx.workspaceId,
             publicKey: generatePublicKey(),
@@ -164,7 +169,11 @@ export const audienceSiteUpdateFeature = defineSdkFeature({
         }
 
         const cipher = ctx.cipher();
-        const body: StoredSite = { name: input.name.trim(), description: input.description.trim() };
+        const body: StoredSite = {
+            name: input.name.trim(),
+            description: input.description.trim(),
+            transitPaths: packTransitPaths(input.transitPaths)
+        };
         const updated = await ctx.repo.update(input.siteId, ctx.workspaceId, {
             nameRef: ref,
             platform: input.platform,

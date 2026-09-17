@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { humanizeError, invalidate } from 'deveye-sdk-client';
 import type { SdkSettingsScope } from '@deveye/types/sdk/client';
 import {
+    AUDIENCE_MAX_TRANSIT_PATHS,
     AUDIENCE_QUOTA_MAX,
     AUDIENCE_RETENTION_MAX_DAYS,
     AUDIENCE_RETENTION_MIN_DAYS,
@@ -32,6 +33,8 @@ export interface Draft {
     origins: string;
     active: boolean;
     visitorMode: AudienceVisitorMode;
+    /** Un chemin par ligne, tel que saisi : le serveur normalise et dédoublonne. */
+    transitPaths: string;
     /**
      * Gardés tels que saisis : un champ numérique qu'on vide pour retaper ne
      * doit pas sauter à une valeur par défaut sous les doigts. Les bornes du
@@ -52,12 +55,21 @@ function draftOf(site: AudienceSite): Draft {
         origins: site.origins.join('\n'),
         active: site.active,
         visitorMode: site.visitorMode,
+        transitPaths: site.transitPaths.join('\n'),
         retentionDays: String(site.retentionDays),
         formsAuto: site.formsAuto,
         submissionIpQuota: String(site.submissionIpQuota),
         formHourlyQuota: String(site.formHourlyQuota),
         eventIpQuota: String(site.eventIpQuota)
     };
+}
+
+/** Une ligne par entrée, les vides ôtées : la forme commune des origines et des pages de transit. */
+function lines(raw: string): string[] {
+    return raw
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
 }
 
 /** Un nombre entier dans ses bornes, ou `null` : la saisie est du texte libre. */
@@ -112,6 +124,7 @@ export function useSiteDraft(scope: SdkSettingsScope): SitePanel {
         const submissionIpQuota = bounded(draft.submissionIpQuota, 0, AUDIENCE_QUOTA_MAX);
         const formHourlyQuota = bounded(draft.formHourlyQuota, 0, AUDIENCE_QUOTA_MAX);
         const eventIpQuota = bounded(draft.eventIpQuota, 0, AUDIENCE_QUOTA_MAX);
+        const transitPaths = lines(draft.transitPaths);
 
         const problem =
             name.length === 0
@@ -120,7 +133,9 @@ export function useSiteDraft(scope: SdkSettingsScope): SitePanel {
                   ? `La conservation va de ${AUDIENCE_RETENTION_MIN_DAYS} à ${AUDIENCE_RETENTION_MAX_DAYS} jours.`
                   : submissionIpQuota === null || formHourlyQuota === null || eventIpQuota === null
                     ? `Un quota est un entier, de 0 à ${AUDIENCE_QUOTA_MAX}.`
-                    : null;
+                    : transitPaths.length > AUDIENCE_MAX_TRANSIT_PATHS
+                      ? `Au plus ${AUDIENCE_MAX_TRANSIT_PATHS} pages de transit.`
+                      : null;
         if (problem) {
             setError(problem);
             throw new Error(problem);
@@ -134,12 +149,10 @@ export function useSiteDraft(scope: SdkSettingsScope): SitePanel {
                 name,
                 description: draft.description.trim(),
                 platform: draft.platform,
-                origins: draft.origins
-                    .split('\n')
-                    .map((line) => line.trim())
-                    .filter((line) => line.length > 0),
+                origins: lines(draft.origins),
                 active: draft.active,
                 visitorMode: draft.visitorMode,
+                transitPaths,
                 retentionDays: retentionDays as number,
                 formsAuto: draft.formsAuto,
                 submissionIpQuota: submissionIpQuota as number,

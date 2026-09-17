@@ -12,7 +12,7 @@ import {
 import { PROJECTS_USAGE_PROVIDER, type ProjectsUsageProvider, type ProjectUsage } from '@deveye/types/sdk';
 import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
 
-import { normalizeHost } from './normalize';
+import { normalizeHost, normalizePath } from './normalize';
 import type { AudienceMetricsRow, AudienceRepo, AudienceSiteWithStatsRow } from './repo';
 import type { AudienceIngest } from './service';
 
@@ -30,6 +30,8 @@ export type Ctx = SdkFeatureContext<AudienceRepo>;
 export interface StoredSite {
     name: string;
     description: string;
+    /** Normalisés et dédoublonnés à l'écriture, voir `packTransitPaths`. */
+    transitPaths: string[];
 }
 
 /** Singleton d'étendue module, posé par `createService` : une ingestion par processus. */
@@ -82,6 +84,14 @@ export function packOrigins(origins: string[]): string | null {
     if (origins.some((origin) => origin.trim() === AUDIENCE_ORIGIN_ANY)) return AUDIENCE_ORIGIN_ANY;
     const hosts = [...new Set(origins.map(normalizeHost).filter((h) => h.length > 0))];
     return hosts.length > 0 ? hosts.join('\n') : null;
+}
+
+/**
+ * Les pages de transit telles qu'on les range : normalisées comme un chemin
+ * reçu, sinon `/loading/` saisi ici ne retrouverait jamais `/loading` mesuré.
+ */
+export function packTransitPaths(paths: readonly string[]): string[] {
+    return [...new Set(paths.filter((p) => p.trim().length > 0).map(normalizePath))];
 }
 
 export function parseOrigins(raw: string | null): string[] {
@@ -151,6 +161,7 @@ export async function toSite(
         id: row.id,
         name: body?.name ?? '',
         description: body?.description ?? '',
+        transitPaths: body?.transitPaths ?? [],
         publicKey: row.public_key,
         platform: row.platform,
         visitorMode: row.visitor_mode,
