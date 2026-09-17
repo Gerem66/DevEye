@@ -170,7 +170,12 @@ export const projectBoard = {
 
 export const projectColumnAdd = {
     command: 'projects.columnAdd' as const,
-    input: z.object({ projectId, name: z.string().min(1).max(PROJECT_COLUMN_NAME_MAX_LENGTH) }),
+    input: z.object({
+        projectId,
+        name: z.string().min(1).max(PROJECT_COLUMN_NAME_MAX_LENGTH),
+        countsAsDone: z.boolean(),
+        wipLimit: z.number().int().positive().nullable()
+    }),
     output: z.object({ column: projectColumnSchema })
 };
 

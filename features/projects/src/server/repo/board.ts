@@ -23,14 +23,18 @@ export interface ProjectBoardRepo {
         workspaceId: number;
         content: string;
         countsAsDone?: boolean;
+        wipLimit?: number | null;
     }): Promise<ProjectColumnRow>;
     updateColumn(
         columnId: number,
         workspaceId: number,
         input: { content: string; countsAsDone: boolean; wipLimit: number | null }
     ): Promise<ProjectColumnRow | null>;
-    /** Nombre de cartes portées par la colonne, archivées comprises. */
-    countCardsInColumn(columnId: number, workspaceId: number): Promise<number>;
+    /**
+     * Nombre de cartes vivantes portées par la colonne. Les archivées ne comptent
+     * pas : la contrainte SQL les détache au lieu de les emporter.
+     */
+    countLiveCardsInColumn(columnId: number, workspaceId: number): Promise<number>;
     deleteColumn(columnId: number, workspaceId: number): Promise<boolean>;
     reorderColumns(projectId: number, workspaceId: number, columnIds: number[]): Promise<void>;
 
@@ -63,7 +67,8 @@ export interface ProjectBoardRepo {
     /** Verse chaque carte listée dans `columnId` et la range à son indice. */
     moveCards(workspaceId: number, columnId: number, cardIds: number[]): Promise<void>;
     archiveCard(cardId: number, workspaceId: number, at: number): Promise<boolean>;
-    restoreCard(cardId: number, workspaceId: number): Promise<boolean>;
+    /** `columnId` est la colonne de retour : celle d'origine, ou une autre si elle a disparu. */
+    restoreCard(cardId: number, workspaceId: number, columnId: number): Promise<boolean>;
 
     unreadByProject(projectId: number, workspaceId: number, userId: number): Promise<CardUnread[]>;
     /**
@@ -96,15 +101,15 @@ export function projectBoardRepo(q: SdkQueryable): ProjectBoardRepo {
             const rows = await q.query<ProjectColumnRow>('SELECT * FROM project_columns WHERE id = ?', [columnId]);
             return rows[0] ?? null;
         },
-        async createColumn({ projectId, workspaceId, content, countsAsDone = false }) {
+        async createColumn({ projectId, workspaceId, content, countsAsDone = false, wipLimit = null }) {
             const next = await q.query<{ next: number }>(
                 'SELECT COALESCE(MAX(sort_order) + 1, 0) AS next FROM project_columns WHERE project_id = ?',
                 [projectId]
             );
             const res = await q.execute(
-                `INSERT INTO project_columns (project_id, workspace_id, sort_order, counts_as_done, content)
-                 VALUES (?, ?, ?, ?, ?)`,
-                [projectId, workspaceId, Number(next[0]?.next ?? 0), countsAsDone ? 1 : 0, content]
+                `INSERT INTO project_columns (project_id, workspace_id, sort_order, counts_as_done, wip_limit, content)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [projectId, workspaceId, Number(next[0]?.next ?? 0), countsAsDone ? 1 : 0, wipLimit, content]
             );
             const rows = await q.query<ProjectColumnRow>('SELECT * FROM project_columns WHERE id = ?', [res.insertId]);
             return rows[0];
@@ -118,11 +123,10 @@ export function projectBoardRepo(q: SdkQueryable): ProjectBoardRepo {
             if (res.affectedRows === 0) return null;
             return this.findColumn(columnId);
         },
-        async countCardsInColumn(columnId, workspaceId) {
-            // Archivées comprises : la contrainte SQL les emporterait avec la
-            // colonne.
+        async countLiveCardsInColumn(columnId, workspaceId) {
             const rows = await q.query<{ count: number }>(
-                'SELECT COUNT(*) AS count FROM project_cards WHERE column_id = ? AND workspace_id = ?',
+                `SELECT COUNT(*) AS count FROM project_cards
+                 WHERE column_id = ? AND workspace_id = ? AND archived_at IS NULL`,
                 [columnId, workspaceId]
             );
             return Number(rows[0]?.count ?? 0);
@@ -216,15 +220,14 @@ export function projectBoardRepo(q: SdkQueryable): ProjectBoardRepo {
             ]);
             return res.affectedRows > 0;
         },
-        async restoreCard(cardId, workspaceId) {
-            const existing = await this.findCard(cardId);
-            if (!existing || existing.workspace_id !== workspaceId) return false;
+        async restoreCard(cardId, workspaceId, columnId) {
             // Son ancien rang appartenait à une colonne qui a bougé : elle repart de
             // la fin.
-            const sortOrder = await nextCardOrder(q, existing.column_id);
+            const sortOrder = await nextCardOrder(q, columnId);
             const res = await q.execute(
-                'UPDATE project_cards SET archived_at = NULL, sort_order = ? WHERE id = ? AND workspace_id = ?',
-                [sortOrder, cardId, workspaceId]
+                `UPDATE project_cards SET archived_at = NULL, column_id = ?, sort_order = ?
+                 WHERE id = ? AND workspace_id = ?`,
+                [columnId, sortOrder, cardId, workspaceId]
             );
             return res.affectedRows > 0;
         },

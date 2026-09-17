@@ -136,7 +136,9 @@ export const projectColumnAddFeature = defineSdkFeature({
         const row = await ctx.repo.board.createColumn({
             projectId: input.projectId,
             workspaceId: project.workspace_id,
-            content: await encryptColumn(cipher, payload)
+            content: await encryptColumn(cipher, payload),
+            countsAsDone: input.countsAsDone,
+            wipLimit: input.wipLimit
         });
         return { column: toColumn(row, payload) };
     }
@@ -170,13 +172,14 @@ export const projectColumnRemoveFeature = defineSdkFeature({
         const { project } = await loadColumn(ctx, input.columnId, 'write');
         await assertProjectUnlocked(ctx, project);
 
-        // La contrainte SQL est en CASCADE : sans cette garde, retirer une colonne
-        // détruirait des cartes, que rien d'autre ici ne permet de supprimer.
-        const held = await ctx.repo.board.countCardsInColumn(input.columnId, project.workspace_id);
+        // Sans cette garde, la contrainte SQL détruirait des cartes vivantes, que
+        // rien d'autre ici ne permet de supprimer. Les archivées, elles, sont
+        // détachées : leur colonne ne veut plus rien dire.
+        const held = await ctx.repo.board.countLiveCardsInColumn(input.columnId, project.workspace_id);
         if (held > 0) {
             throw new FeatureError(
                 'conflict',
-                `Cette colonne porte encore ${held} carte(s), archivées comprises. Déplacez-les avant de la retirer.`
+                `Cette colonne porte encore ${held} carte(s). Déplacez-les avant de la retirer.`
             );
         }
 
@@ -312,7 +315,18 @@ export const projectCardRestoreFeature = defineSdkFeature({
     handler: async (ctx: Ctx, input) => {
         const { card, project } = await loadCard(ctx, input.cardId, 'write');
         await assertProjectUnlocked(ctx, project);
-        const ok = await ctx.repo.board.restoreCard(input.cardId, project.workspace_id);
+        // Sa colonne a pu être retirée pendant qu'elle dormait à l'archive : elle
+        // revient alors dans la première du tableau.
+        let columnId = card.column_id;
+        if (columnId === null) {
+            const columns = await ctx.repo.board.listColumns(card.project_id, project.workspace_id);
+            if (columns.length === 0) {
+                throw new FeatureError('conflict', 'Ce tableau n’a plus de colonne où la remettre.');
+            }
+            columnId = columns[0].id;
+        }
+
+        const ok = await ctx.repo.board.restoreCard(input.cardId, project.workspace_id, columnId);
         if (!ok) throw new FeatureError('not_found', 'Carte introuvable');
         const title = (await decryptCard(await projectCipher(ctx, project), card.content)).title;
         await recordEvent(ctx, project, {

@@ -120,9 +120,9 @@
     -webkit-mask-image: url(/icons/menu.svg);
     mask-image: url(/icons/menu.svg);
 }
-.icon.icon-menu-left {
-    -webkit-mask-image: url(/icons/menu_left.svg);
-    mask-image: url(/icons/menu_left.svg);
+.icon.icon-move-to-left {
+    -webkit-mask-image: url(/icons/move-to-left.svg);
+    mask-image: url(/icons/move-to-left.svg);
 }
 .icon.icon-move-to-right {
     -webkit-mask-image: url(/icons/move-to-right.svg);

@@ -69,7 +69,7 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack }: 
     const [loaded, setLoaded] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const [cardDialog, setCardDialog] = useState<{ card: ProjectCard | null; columnId: number } | null>(null);
+    const [cardDialog, setCardDialog] = useState<{ card: ProjectCard | null; columnId: number | null } | null>(null);
     const [columnDialog, setColumnDialog] = useState<{ column: ProjectColumn | null } | null>(null);
     const [milestones, setMilestones] = useState<ProjectMilestone[]>([]);
     const [deps, setDeps] = useState<ProjectCardDep[]>([]);
@@ -203,18 +203,17 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack }: 
         if (!cardDialog) return;
         setBusy(true);
         setDialogError(null);
+        // Une modification porte sa carte, une création la colonne où elle naît.
+        const target = cardDialog.card ?? cardDialog.columnId;
+        if (target === null) return;
         try {
             await withSecrecy(async () => {
                 const existing = cardDialog.card;
-                const cardId = existing
-                    ? (await api.send('projects.cardUpdate', { cardId: existing.id, card: draft })).card.id
-                    : (
-                          await api.send('projects.cardAdd', {
-                              projectId: project.id,
-                              columnId: cardDialog.columnId,
-                              card: draft
-                          })
-                      ).card.id;
+                const cardId =
+                    typeof target === 'number'
+                        ? (await api.send('projects.cardAdd', { projectId: project.id, columnId: target, card: draft }))
+                              .card.id
+                        : (await api.send('projects.cardUpdate', { cardId: target.id, card: draft })).card.id;
 
                 if (links.milestoneId !== (existing?.milestoneId ?? null)) {
                     await api.send('projects.cardSetMilestone', { cardId, milestoneId: links.milestoneId });
@@ -300,7 +299,12 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack }: 
                           countsAsDone: result.countsAsDone,
                           wipLimit: result.wipLimit
                       })
-                    : api.send('projects.columnAdd', { projectId: project.id, name: result.name })
+                    : api.send('projects.columnAdd', {
+                          projectId: project.id,
+                          name: result.name,
+                          countsAsDone: result.countsAsDone,
+                          wipLimit: result.wipLimit
+                      })
             );
             invalidate('projects.board', 'projects.list');
             setColumnDialog(null);

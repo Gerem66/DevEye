@@ -81,6 +81,7 @@ export function Board({
         const map = new Map<number, ProjectCard[]>();
         for (const column of columns) map.set(column.id, []);
         for (const card of cards) {
+            if (card.columnId === null) continue;
             const list = map.get(card.columnId);
             if (list) list.push(card);
         }
@@ -111,7 +112,7 @@ export function Board({
 
     const locate = (cardId: number) => {
         const card = cards.find((c) => c.id === cardId);
-        if (!card) return null;
+        if (!card || card.columnId === null) return null;
         const list = byColumn.get(card.columnId) ?? [];
         return { columnId: card.columnId, index: list.findIndex((c) => c.id === cardId) };
     };
@@ -284,7 +285,7 @@ function Column({
                             title='Déplacer à gauche'
                             aria-label='Déplacer la colonne à gauche'
                         >
-                            <span className='icon icon-menu-left' />
+                            <span className='icon icon-move-to-left' />
                         </button>
                         <button
                             type='button'

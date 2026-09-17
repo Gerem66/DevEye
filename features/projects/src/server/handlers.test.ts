@@ -12,6 +12,7 @@ import {
     projectCardAdd,
     projectCardArchive,
     projectCardMove,
+    projectCardRestore,
     projectCardSetMilestone,
     projectColumnAdd,
     projectColumnRemove,
@@ -412,6 +413,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                     workspace_id: input.workspaceId,
                     sort_order: rows.columns.filter((c) => c.project_id === input.projectId).length,
                     counts_as_done: input.countsAsDone ? 1 : 0,
+                    wip_limit: input.wipLimit ?? null,
                     content: input.content
                 });
                 rows.columns.push(row);
@@ -427,12 +429,15 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                 });
                 return row;
             },
-            countCardsInColumn: async (id, ws) =>
-                rows.cards.filter((c) => c.column_id === id && c.workspace_id === ws).length,
+            countLiveCardsInColumn: async (id, ws) =>
+                rows.cards.filter((c) => c.column_id === id && c.workspace_id === ws && c.archived_at === null).length,
             async deleteColumn(id, ws) {
                 const before = rows.columns.length;
                 rows.columns = rows.columns.filter((c) => !(c.id === id && c.workspace_id === ws));
-                return rows.columns.length < before;
+                if (rows.columns.length === before) return false;
+                // Ce que fait la contrainte `ON DELETE SET NULL` en base.
+                for (const card of rows.cards) if (card.column_id === id) card.column_id = null;
+                return true;
             },
             async reorderColumns(projectId, ws, columnIds) {
                 columnIds.forEach((id, i) => {
@@ -491,9 +496,12 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                 if (row) row.archived_at = at;
                 return row !== null;
             },
-            async restoreCard(id, ws) {
+            async restoreCard(id, ws, columnId) {
                 const row = locate(rows.cards, id, ws);
-                if (row) row.archived_at = null;
+                if (row) {
+                    row.archived_at = null;
+                    row.column_id = columnId;
+                }
                 return row !== null;
             },
             unreadByProject: async (projectId, ws, userId) =>
@@ -1219,22 +1227,56 @@ describe('projects.board : le tableau', () => {
         repo.rows.projects.push(project({ id: 1 }));
         for (let i = 0; i < PROJECT_MAX_COLUMNS; i++) repo.rows.columns.push(column({ id: 10 + i, project_id: 1 }));
         await assert.rejects(
-            handlerFor(projectColumnAdd)(contextWith(repo), { projectId: 1, name: 'Une de trop' }),
+            handlerFor(projectColumnAdd)(contextWith(repo), {
+                projectId: 1,
+                name: 'Une de trop',
+                countsAsDone: false,
+                wipLimit: null
+            }),
             failsWith('validation')
         );
     });
 
-    it('une colonne ne se retire que vide, archivées comprises', async () => {
+    it('une colonne naît avec son drapeau « terminé » et sa limite', async () => {
+        const repo = fakeRepo();
+        repo.rows.projects.push(project({ id: 1 }));
+        const added = await handlerFor(projectColumnAdd)(contextWith(repo), {
+            projectId: 1,
+            name: 'Livré',
+            countsAsDone: true,
+            wipLimit: 3
+        });
+        assert.deepEqual([added.column.countsAsDone, added.column.wipLimit], [true, 3]);
+        const row = repo.rows.columns.find((c) => c.id === added.column.id)!;
+        assert.deepEqual([row.counts_as_done, row.wip_limit], [1, 3]);
+    });
+
+    it('une colonne ne se retire que vide de cartes vivantes ; les archivées s’en détachent', async () => {
         const repo = fakeRepo();
         seedTwoTiers(repo);
-        repo.rows.cards[0].archived_at = 9;
         await assert.rejects(
             handlerFor(projectColumnRemove)(contextWith(repo), { columnId: 10 }),
             failsWith('conflict')
         );
-        repo.rows.columns.push(column({ id: 12, project_id: 1 }));
-        assert.deepEqual(await handlerFor(projectColumnRemove)(contextWith(repo), { columnId: 12 }), { columnId: 12 });
-        assert.ok(!repo.rows.columns.some((c) => c.id === 12));
+
+        repo.rows.cards[0].archived_at = 9;
+        assert.deepEqual(await handlerFor(projectColumnRemove)(contextWith(repo), { columnId: 10 }), { columnId: 10 });
+        assert.ok(!repo.rows.columns.some((c) => c.id === 10));
+        assert.equal(repo.rows.cards.find((c) => c.id === 11)?.column_id, null);
+    });
+
+    it('restaurer une carte détachée la remet dans la première colonne, et refuse s’il n’y en a plus', async () => {
+        const repo = fakeRepo();
+        seedTwoTiers(repo);
+        repo.rows.cards[0].archived_at = 9;
+        repo.rows.cards[0].column_id = null;
+        repo.rows.columns = repo.rows.columns.filter((c) => c.project_id !== 1);
+        await assert.rejects(handlerFor(projectCardRestore)(contextWith(repo), { cardId: 11 }), failsWith('conflict'));
+
+        repo.rows.columns.push(column({ id: 13, project_id: 1 }));
+        assert.deepEqual(await handlerFor(projectCardRestore)(contextWith(repo), { cardId: 11 }), { cardId: 11 });
+        const row = repo.rows.cards.find((c) => c.id === 11);
+        assert.deepEqual([row?.archived_at, row?.column_id], [null, 13]);
     });
 });
 
@@ -1737,7 +1779,12 @@ describe('le partage inter-espaces', () => {
             failsWith('validation')
         );
 
-        const col = await handlerFor(projectColumnAdd)(window, { projectId: 1, name: 'Relecture' });
+        const col = await handlerFor(projectColumnAdd)(window, {
+            projectId: 1,
+            name: 'Relecture',
+            countsAsDone: false,
+            wipLimit: null
+        });
         const colRow = repo.rows.columns.find((c) => c.id === col.column.id)!;
         assert.deepEqual([colRow.workspace_id, colRow.content], [42, 'home:{"name":"Relecture"}']);
 

@@ -106,8 +106,14 @@ export function CardDialog({
     onArchive
 }: CardDialogProps) {
     const [draft, setDraft] = useState<ProjectCardDraft>(EMPTY);
-    /** L'onglet ouvert. Une création n'en a pas : elle est toujours sur `settings`. */
-    const [tab, setTab] = useState<CardTab>('work');
+    const [openTab, setOpenTab] = useState<CardTab>('work');
+    /**
+     * L'onglet ouvert. Une création n'en a pas : elle est toujours sur `settings`,
+     * et le tenir du rendu et non d'un effet est ce qui met le champ Titre dans le
+     * DOM avant que le Dialog ne cherche son `data-autofocus`.
+     */
+    const tab: CardTab = card ? openTab : 'settings';
+    const setTab = setOpenTab;
     const [itemLabel, setItemLabel] = useState('');
     /** Le jalon choisi, hors du brouillon (voir `onSubmit`). */
     const [milestoneId, setMilestoneId] = useState<number | null>(null);

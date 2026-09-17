@@ -47,7 +47,12 @@ export type ProjectColumn = z.infer<typeof projectColumnSchema>;
 export const projectCardSchema = z.object({
     id: z.number().int().positive(),
     projectId: z.number().int().positive(),
-    columnId: z.number().int().positive(),
+    /**
+     * `null` quand la colonne a été retirée sous une carte archivée : celle-ci ne
+     * circule plus, l'archive ne montre aucune colonne, et la restauration lui en
+     * redonne une.
+     */
+    columnId: z.number().int().positive().nullable(),
     title: z.string().max(PROJECT_CARD_TITLE_MAX_LENGTH),
     description: z.string().max(PROJECT_CARD_DESCRIPTION_MAX_LENGTH),
     checklist: z.array(projectChecklistItemSchema).max(PROJECT_MAX_CHECKLIST_ITEMS),
@@ -99,7 +104,7 @@ export interface ProjectCardRow {
     id: number;
     project_id: number;
     workspace_id: number;
-    column_id: number;
+    column_id: number | null;
     sort_order: number;
     author_user_id: number | null;
     assignee_user_id: number | null;
