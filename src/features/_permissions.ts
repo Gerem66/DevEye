@@ -9,7 +9,7 @@
  *  - le cycle de vie de l'espace, dont la garde dépend de la ligne touchée
  *    (`isOwner`) ;
  *  - ce que tout membre doit pouvoir lire (ses rôles, les canaux, sa présence) ;
- *  - ce dont la cible est un argument (`notify.*`, `share.*`) : la
+ *  - ce dont la cible est un argument (`notify.*`, `share.*`, `domain.*`) : la
  *    fonctionnalité visée arrive dans l'entrée, le contrôle est en première
  *    ligne du handler.
  * Toute autre commande doit déclarer son `access`.
@@ -46,7 +46,12 @@ const ACCESS_EXEMPT = new Set([
     // Le déplacement ouvre de même : écriture sur la feature et sur l'élément
     // chez lui, puis le droit d'écrire dans l'espace visé.
     'share.movePreview',
-    'share.move'
+    'share.move',
+    // Chaque handler ouvre sur `ctx.assertFeature(input.feature, ...)`.
+    'domain.list',
+    'domain.add',
+    'domain.verify',
+    'domain.remove'
 ]);
 
 /**

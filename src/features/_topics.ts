@@ -34,6 +34,8 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     database: 'database',
     deploy: 'deploy',
     devices: 'devices',
+    // Les domaines d'une fonctionnalité, relus depuis ses réglages.
+    domain: 'domain',
     // Les signalements ne se lisent que dans l'administration, relus à
     // l'ouverture de la vue : rien ne les observe en direct, comme les logs.
     feedback: null,

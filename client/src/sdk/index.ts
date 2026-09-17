@@ -93,6 +93,7 @@ export { useTypers, useTypingSignal } from '@/live/useTyping';
 
 // ── Les droits et l'espace ─────────────────────────────────────────────────
 export { useActiveWorkspace, useWorkspacePermissions } from '@/stores/workspace';
+export { useDomains } from './useDomains';
 export { useFeatureLifecycle } from '@/Features/useFeatureLifecycle';
 /**
  * Demander un cadre plus large à la popup de feature tant que le composant

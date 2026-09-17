@@ -3,6 +3,7 @@ import { devicesRepo, linkCodesRepo, type DevicesRepo, type LinkCodesRepo } from
 import { feedbackRepo, type FeedbackRepo } from './repos/feedback';
 import { logsRepo, type LogsRepo } from './repos/logs';
 import { metricsRepo, type MetricsRepo } from './repos/metrics';
+import { featureDomainsRepo, type FeatureDomainsRepo } from './repos/featureDomains';
 import { featureKvRepo, type FeatureKvRepo } from './repos/featureKv';
 import { itemSharingRepo, type ItemSharingRepo } from './repos/itemSharing';
 import { notificationChannelsRepo, type NotificationChannelsRepo } from './repos/notificationChannels';
@@ -50,6 +51,7 @@ export interface Database {
     twoFactor: TwoFactorRepo;
     userSecretKeys: UserSecretKeysRepo;
     /** Le magasin clé-valeur des modules de features (SDK). */
+    featureDomains: FeatureDomainsRepo;
     featureKv: FeatureKvRepo;
     itemSharing: ItemSharingRepo;
     /** Canaux d'alerte, par espace et par feature (voir `Services/notifications.ts`). */
@@ -90,6 +92,7 @@ function buildDatabase(pool: DbPool, q: Queryable, inTransaction: boolean): Data
         processSamples: processSamplesRepo(q),
         twoFactor: twoFactorRepo(q),
         userSecretKeys: userSecretKeysRepo(q),
+        featureDomains: featureDomainsRepo(q),
         featureKv: featureKvRepo(q),
         itemSharing: itemSharingRepo(q),
         notificationChannels: notificationChannelsRepo(q)

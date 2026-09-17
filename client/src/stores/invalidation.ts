@@ -18,6 +18,8 @@ export type ResourceKey =
     /** Les canaux d'alerte, une seule clé pour toutes les fonctionnalités. */
     | 'notify.channelList'
     | 'notify.routeGet'
+    /** Les domaines d'une fonctionnalité, une seule clé pour toutes. */
+    | 'domain.list'
     | 'notes.count'
     | 'notes.list'
     | 'password.count'
@@ -95,6 +97,7 @@ export type ExternalResourceKey = `x-${string}.${string}`;
  */
 const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
     notify: ['notify.channelList', 'notify.routeGet'],
+    domain: ['domain.list'],
     /*
      * Un rôle modifié ou un membre retiré change les droits de chacun, y compris
      * ceux de qui ne regardait pas la page Espace : d'où `workspace.session`, dont
@@ -193,6 +196,23 @@ export function registerFeatureResources(topic: string, invalidatedByTopic: read
     EXTERNAL_TOPIC_KEYS.set(topic, [...invalidatedByTopic]);
 }
 
+function keysOfTopic(topic: string): ResourceKey[] {
+    return [
+        ...(TOPIC_KEYS[topic as LiveTopic] ?? []),
+        ...(EXTERNAL_TOPIC_KEYS.get(topic) ?? []),
+        ...(CROSS_TOPIC_KEYS.get(topic) ?? [])
+    ];
+}
+
+/**
+ * Tout ce qu'un sujet ravive, chez l'auteur de l'écriture : le hub ne lui
+ * renvoie pas sa propre trame, et un `invalidate` de la seule clé native
+ * manquerait les clés que des modules y ont accrochées (`alsoInvalidatedBy`).
+ */
+export function invalidateTopic(topic: LiveTopic): void {
+    invalidate(...keysOfTopic(topic));
+}
+
 /** Branché à la première lecture : sans abonné, il n'y a rien à invalider. */
 export function ensureWired(): void {
     if (wired) return;
@@ -204,12 +224,7 @@ export function ensureWired(): void {
         if (!push.success) return;
 
         for (const topic of push.data.topics) {
-            const keys = [
-                ...(TOPIC_KEYS[topic] ?? []),
-                ...(EXTERNAL_TOPIC_KEYS.get(topic) ?? []),
-                ...(CROSS_TOPIC_KEYS.get(topic) ?? [])
-            ];
-            for (const key of keys) pending.add(key);
+            for (const key of keysOfTopic(topic)) pending.add(key);
         }
         if (pending.size === 0) return;
 

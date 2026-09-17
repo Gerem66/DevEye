@@ -30,6 +30,7 @@ import {
 import { setSdkHost } from '@/features/_sdk/host';
 import type { FeatureService } from '@deveye/types/sdk/server';
 import { createAuditLog } from '@/Services/AuditLog';
+import { createDomainVerifier } from '@/Services/domains/verifier';
 import { status } from '@/status';
 
 import type { Database } from '@/db';
@@ -168,7 +169,10 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // des sockets : un module d'infrastructure (bail, clés) doit être prêt
     // avant la première trame d'agent.
     setSdkHost(hub, deps.db, live);
-    const moduleServices = createModuleServices({ db: deps.db, crypt: deps.crypt, audit, logger, live });
+    const moduleServices = [
+        ...createModuleServices({ db: deps.db, crypt: deps.crypt, audit, logger, live }),
+        createDomainVerifier({ db: deps.db, crypt: deps.crypt, logger, live })
+    ];
     for (const svc of moduleServices) await svc.start();
 
     await authRoutes(app, { db: deps.db, crypt: deps.crypt, audit, live });

@@ -8,6 +8,7 @@ import { pushLiveSettings } from '@/stores/live';
 import { consumeItemSettings } from '@/stores/settingsRequest';
 import { getActiveWorkspaceId, useActiveWorkspace, useWorkspacePermissions } from '@/stores/workspace';
 
+import DomainsSection from './sections/DomainsSection';
 import NotificationsSection from './sections/NotificationsSection';
 import ItemPermissionsSection from './sections/ItemPermissionsSection';
 import SharingSection from './sections/SharingSection';
@@ -91,6 +92,8 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
                 if (tab === 'general') sections.push({ id: 'general', label: 'Général', icon: 'settings' });
                 else if (tab === 'sources' && scope.kind === 'feature') {
                     sections.push({ id: 'sources', label: 'Sources', icon: 'key' });
+                } else if (tab === 'domains' && scope.kind === 'feature' && manifest.domains) {
+                    sections.push({ id: 'domains', label: 'Domaines', icon: 'globe' });
                 } else if (tab === 'sync' && scope.kind === 'item') {
                     // Synchronisation : rythme de relève et maintenance d'un élément.
                     sections.push({ id: 'sync', label: 'Synchronisation', icon: 'refresh' });
@@ -126,7 +129,12 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
 }
 
 /** Les sections que la coquille rend elle-même, native ou module. */
-const GENERIC_SECTIONS: ReadonlySet<SettingsSectionId> = new Set(['notifications', 'sharing', 'permissions']);
+const GENERIC_SECTIONS: ReadonlySet<SettingsSectionId> = new Set([
+    'notifications',
+    'sharing',
+    'permissions',
+    'domains'
+]);
 
 export interface FeatureSettingsDialogProps {
     open: boolean;
@@ -218,6 +226,7 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection, on
                         )}
                         {current === 'permissions' && scope.kind === 'item' && <ItemPermissionsSection scope={scope} />}
                         {current === 'sharing' && <SharingSection scope={scope} onGone={gone} />}
+                        {current === 'domains' && scope.kind === 'feature' && <DomainsSection scope={scope} />}
                         {current && !GENERIC_SECTIONS.has(current) && (
                             <ModulePanel scope={scope} section={current} close={onClose} gone={gone} />
                         )}

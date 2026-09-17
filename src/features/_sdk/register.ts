@@ -5,6 +5,9 @@ import type {
     FeatureServer,
     FeatureService,
     SdkCipher,
+    SdkDnsRecord,
+    SdkDomain,
+    SdkDomainProbe,
     SdkMovePlan,
     SdkQueryable
 } from '@deveye/types/sdk/server';
@@ -16,6 +19,7 @@ import type { Queryable } from '@/db/pool';
 import { defineFeature, type FeatureDefinition } from '@/features/_define';
 import type { SdkProviders, SdkPublicApp, SdkPublicHandler, SdkPublicRouteOptions } from '@deveye/types/sdk/server';
 import { createSdkContext } from './context';
+import { createDomainsContext, type DomainsHost } from './domains';
 import { createServiceDeps, type ModuleServiceHost } from './service';
 
 /**
@@ -72,6 +76,11 @@ export function registerModules(installed: readonly InstalledFeatureModule[]): v
         // refusé au boot plutôt que découvert à l'écran.
         if (manifest.shareTier !== 'never' && !mod.server.items) {
             throw new Error(`Module « ${manifest.id} » : shareTier '${manifest.shareTier}' exige server.items`);
+        }
+        // Les deux moitiés vont ensemble : l'onglet sans la sonde ne vérifierait
+        // rien, la sonde sans l'onglet ne serait jamais appelée.
+        if (Boolean(manifest.domains) !== Boolean(mod.server.domains)) {
+            throw new Error(`Module « ${manifest.id} » : manifest.domains et server.domains vont ensemble`);
         }
         // Une native migrée a déjà son descripteur dans le registre publié :
         // seuls les ids externes s'enregistrent ici.
@@ -199,6 +208,40 @@ export function moduleItems(
                 })
         }
     };
+}
+
+/**
+ * Les crochets `domains` d'un module, liés à son repo. `undefined` pour une
+ * fonctionnalité qui ne gère pas de domaines.
+ */
+export function moduleDomains(
+    featureId: string,
+    host: DomainsHost
+):
+    | {
+          manifest: FeatureManifest;
+          records(domain: SdkDomain): Promise<readonly SdkDnsRecord[]>;
+          probe(domain: SdkDomain): Promise<SdkDomainProbe>;
+          useCount(workspaceId: number): Promise<ReadonlyMap<number, number>>;
+          onRemoved(domain: SdkDomain): Promise<void>;
+      }
+    | undefined {
+    const mod = BY_ID.get(featureId);
+    const hooks = mod?.server.domains;
+    if (!mod || !hooks || !mod.manifest.domains) return undefined;
+    const ctx = createDomainsContext(host, mod.manifest, mod.repoFor(host.db));
+    return {
+        manifest: mod.manifest,
+        records: (domain) => hooks.records(ctx, domain),
+        probe: (domain) => hooks.probe(ctx, domain),
+        useCount: (workspaceId) => hooks.useCount?.(ctx, workspaceId) ?? Promise.resolve(new Map()),
+        onRemoved: (domain) => hooks.onRemoved?.(ctx, domain) ?? Promise.resolve()
+    };
+}
+
+/** Les fonctionnalités installées qui gèrent des domaines. */
+export function moduleDomainFeatures(): string[] {
+    return MODULES.filter((mod) => mod.manifest.domains && mod.server.domains).map((mod) => mod.manifest.id);
 }
 
 /** Un module dont les éléments changent d'espace : l'entrée `move` de ses `items`. */

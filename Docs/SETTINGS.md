@@ -25,6 +25,7 @@ ordre :
 | --------------- | ----------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------- |
 | Général         | feature, et élément pour toute feature à fiches | `settings` du manifest d'un module (plus aucune native n'en déclare)         | l'élément lui-même (ce que « Modifier » portait) et ses réglages  |
 | Sources         | feature                                         | `settings.feature` du manifest d'un module (plus aucune native n'en déclare) | jetons, destinations, clés d'API (voir `SOURCES.md`)              |
+| Domaines        | feature                                         | `settings.feature` + `domains` du manifest d'un module                       | noms de domaine servis, enregistrements DNS, vérification         |
 | Notifications   | feature + élément                               | registre `notifies`                                                          | canaux et sélection (voir `NOTIFICATIONS.md`)                     |
 | Synchronisation | élément                                         | `settings.item` du manifest d'un module (Mail)                               | cadence de relève, maintenance                                    |
 | Chiffrement     | élément                                         | `settings.item` du manifest d'un module                                      | sous quelle clé (ou sous quelle forme) la donnée de l'élément vit |
@@ -40,6 +41,18 @@ un appareil, dont l'id est un UUID), et `ModulePanel` le monte. Un panneau est
 `canWrite`. Les sections que la coquille rend elle-même (partage, permissions,
 notifications) restent à clé numérique : une feature dont les éléments sont
 des textes n'y est pas branchée, et n'en déclare pas.
+
+Domaines est la quatrième section générique : le module ne fournit aucun
+panneau. Il déclare `domains` dans son manifest (la phrase de tête, la phrase
+de l'étape « relier au service », l'exemple du champ, l'avertissement du
+retrait) et l'entrée `domains` de son serveur (les enregistrements à publier,
+la sonde du service). La coquille rend la liste (`DomainsSection`), l'ajout par
+dialogue, et le dialogue des trois étapes (`DomainRecordsDialog`) : prouver la
+propriété, relier au service, vérifier, chacune avec son état vivant et ses
+enregistrements copiables. Les commandes sont transversales (`domain.*`, la
+fonctionnalité en argument), le sujet en direct est `domain`. Un formulaire de
+module qui désigne un domaine lit `useDomains(feature)` et ouvre l'onglet par
+`<FeatureSettingsButton initialSection='domains' />`.
 Les tables de câblage natif (`GENERAL_WIRED`, `SYNC_WIRED`, `ENCRYPTION_WIRED`)
 et leurs dispatcheurs ont disparu avec le rapatriement de Mail, leur dernier
 occupant : une native n'a plus que les sections génériques (Notifications,

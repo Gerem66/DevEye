@@ -36,7 +36,7 @@ import type { ModuleServiceHost } from './service';
  * natifs : les modules à hooks empruntent des ids de l'enum.
  */
 
-type Extra = Partial<Pick<FeatureManifest, 'nativeCapabilities' | 'extraPermissions' | 'shareTier'>>;
+type Extra = Partial<Pick<FeatureManifest, 'nativeCapabilities' | 'extraPermissions' | 'shareTier' | 'domains'>>;
 
 function manifest(id: FeatureId, extra: Extra = {}): FeatureManifest {
     return {
@@ -254,6 +254,31 @@ describe('registerModules : les sentinelles', () => {
             /reserved for native-id modules/
         );
         assert.equal(moduleManifest('x-sdkagents'), undefined);
+    });
+
+    it('refuse des domaines déclarés d’un seul côté, manifest ou serveur', () => {
+        const domains = { hint: 'Vos noms.', service: 'Pointez le nom ici.' };
+        assert.throws(
+            () => registerModules([{ manifest: manifest('x-sdkdomhalf', { domains }), server: { features: [] } }]),
+            /manifest.domains et server.domains vont ensemble/
+        );
+        assert.throws(
+            () =>
+                registerModules([
+                    {
+                        manifest: manifest('x-sdkdomhook'),
+                        server: {
+                            features: [],
+                            domains: {
+                                records: () => Promise.resolve([]),
+                                probe: () => Promise.resolve({ ok: true as const })
+                            }
+                        }
+                    }
+                ]),
+            /manifest.domains et server.domains vont ensemble/
+        );
+        assert.equal(moduleManifest('x-sdkdomhalf'), undefined);
     });
 
     it('moduleManifest retrouve un module enregistré par son id', () => {

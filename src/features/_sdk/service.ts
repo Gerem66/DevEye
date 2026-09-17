@@ -19,6 +19,7 @@ import type { Logger } from 'pino';
 import type { AuditLog } from '@/Services/AuditLog';
 import type { LiveHub } from '@/live/hub';
 import { agentsFacade, createFacade, createTelemetry, toSdkDevice } from './facade';
+import { sdkFleetDomains } from './domains';
 import { createFeatureStore } from './store';
 import { sdkHub } from './host';
 
@@ -124,6 +125,7 @@ export function createServiceDeps(
             }
         },
         origins: ORIGINS,
+        domains: sdkFleetDomains(host.db, manifest),
         deveyeFor: (workspaceId) => ({ notify: facadeFor(workspaceId).notify }),
         devicesFor: (workspaceId) => {
             const { list, isOnline } = facadeFor(workspaceId).devices;

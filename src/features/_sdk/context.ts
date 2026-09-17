@@ -13,6 +13,7 @@ import type { NotificationFeature } from '@deveye/types';
 
 import type { FeatureContext } from '@/features/_define';
 import { shareScope } from '@/features/_sharing';
+import { sdkDomains } from './domains';
 import { createFacade } from './facade';
 import { createFeatureStore } from './store';
 
@@ -126,6 +127,7 @@ export function createSdkContext(
             },
             setOrder: (itemId, order) => ctx.db.itemSharing.setOrder(ctx.workspaceId, manifest.id, itemId, order)
         },
+        domains: sdkDomains(ctx.db, manifest, ctx.workspaceId),
         providers,
         audit: (entry) =>
             ctx.audit({

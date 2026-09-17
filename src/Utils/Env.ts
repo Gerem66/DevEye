@@ -69,6 +69,11 @@ export const env = {
     // Interim 2FA challenge token (between password check and TOTP verify).
     TWOFA_ISSUER: getEnvVar('TWOFA_ISSUER', 'string', false) || 'DevEye',
     TWOFA_CHALLENGE_TTL_SECONDS: getEnvVar('TWOFA_CHALLENGE_TTL_SECONDS', 'number', false) || 60 * 5,
+    // La vérification des domaines des fonctionnalités : cadence de la passe,
+    // puis délai avant de revoir un domaine sain ou un domaine en attente.
+    DOMAIN_PROBE_TICK_SECONDS: getEnvVar('DOMAIN_PROBE_TICK_SECONDS', 'number', false) || 300,
+    DOMAIN_OK_SECONDS: getEnvVar('DOMAIN_OK_SECONDS', 'number', false) || 60 * 60 * 6,
+    DOMAIN_PENDING_SECONDS: getEnvVar('DOMAIN_PENDING_SECONDS', 'number', false) || 600,
 
     // Les variables propres à un module (SENTINEL_*, MAIL_SYNC_*, OAUTH_*,
     // MONITORING_RETENTION_DAYS, LINK_CODE_TTL_SECONDS) sont lues par le module.

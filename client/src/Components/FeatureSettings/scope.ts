@@ -26,6 +26,7 @@ export type SettingsScope =
 export type SettingsSectionId =
     | 'general'
     | 'sources'
+    | 'domains'
     | 'notifications'
     | 'sync'
     | 'encryption'
@@ -33,7 +34,7 @@ export type SettingsSectionId =
     | 'permissions'
     // Les onglets personnalisés d'un module (manifest.settings, CustomTabRef) :
     // la coquille ne connaît pas leurs ids à l'avance, le panneau vient du
-    // module. L'intersection garde l'autocomplétion des sept natifs.
+    // module. L'intersection garde l'autocomplétion des huit natifs.
     | (string & {});
 
 /** Le titre du dialogue : le nom de l'élément, ou celui de la fonctionnalité. */

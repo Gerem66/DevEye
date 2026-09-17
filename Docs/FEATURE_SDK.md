@@ -605,7 +605,7 @@ config — le module doit rester résoluble).
   des tables historiques d'une native rapatriée ne s'applique pas ici, ces
   tables sont des données de l'app.
 - **Côté app**, le script nettoie ce qu'aucun module ne voit : `feature_kv`,
-  les enregistrements `_migrations` (`<id>/...`), `notification_channels` et
+  `feature_domains`, les enregistrements `_migrations` (`<id>/...`), `notification_channels` et
   `notification_routes` (liaisons par cascade), `item_shares` et
   `item_role_grants`, les grants dans le JSON `workspace_roles.features`
   (droit + extras + canaux), et la feature dans chaque
@@ -647,9 +647,11 @@ dérivations qu'un service),
 restrictions du dispatcheur liées à LA feature du module, et le ménage d'un
 élément supprimé), `sharing.scope()` (les projections vers l'espace actif,
 `shareScope` de `_sharing.ts` ; refusé sous `shareTier: 'never'`), `audit`,
-`logger`, `requestId`, `origins { app, public }` (où vit DevEye, sans barre
-finale : l'origine des membres et celle de l'écouteur public). Une erreur se
-signale par `FeatureError(code, message)`.
+`domains` (`list()`, `get(id)`, `verified()` : les domaines de LA feature du
+module dans l'espace actif ; refusé sans `domains` au manifest), `logger`,
+`requestId`, `origins { app, public }` (où vit DevEye, sans barre finale :
+l'origine des membres et celle de l'écouteur public). Une erreur se signale par
+`FeatureError(code, message)`.
 
 Par service (`FeatureServiceDeps`, `_sdk/service.ts`) : `repo`,
 `listWorkspaceIds` (tous les espaces), `storeFor`/`cipherFor`/`deveyeFor`/
@@ -664,7 +666,9 @@ système), `agents`, `keys` (`sealBytes`/`openBytes` sous la clé serveur,
 `derive(salt, info, length)` : HKDF sur la même clé, jamais stockée),
 `secrecy.redeem(ticket)` (le ticket d'un module rendu en `{ userId,
 workspaceId, payload, cipher: { server, private | null } }`), `origins`,
-`createTicker` (boucle avec garde de réentrance), `logger`. Un service peut
+`domains` (`findByHost(host)` tous espaces confondus, `get(workspaceId, id)`,
+`listVerified(workspaceId)` : de quoi router une requête entrante par son nom
+d'hôte), `createTicker` (boucle avec garde de réentrance), `logger`. Un service peut
 aussi déclarer `publicRoutes(app: SdkPublicApp)` (capacité `'routes.public'`) :
 l'hôte monte ces routes sur chacun de ses écouteurs exposés, hors session
 (`exposure: 'app'` pour n'en monter une que sur l'origine de l'app ; la
@@ -682,6 +686,21 @@ obligatoire dès que le manifest déclare un `shareTier` autre que `'never'`
 (`isModuleShareWired`). Son entrée `move`, elle, reste facultative en toute
 circonstance : c'est elle qui autorise un élément à changer d'espace
 (`isModuleMovable`), et son absence est la réponse sûre, pas un oubli.
+
+Toujours par entrée serveur : `domains` (`records`, `probe`, `useCount` et
+`onRemoved` facultatifs), obligatoire quand le manifest déclare `domains` et
+refusée sinon (`registerModules`). La vérification a deux étages. La propriété
+est l'affaire du socle : un TXT `_deveye.<hôte>` portant
+`deveye-<slug>=<jeton>`, relu par `Services/domains/engine.ts`. Le service est
+celle du module : sa `probe` n'est appelée qu'une fois la propriété acquise, et
+rend une phrase plutôt que de lever. Un domaine vérifié ne retombe qu'au
+troisième échec d'affilée, à l'un ou l'autre étage. La table est
+`feature_domains` (hôte unique par fonctionnalité, tous espaces confondus), la
+passe de fond `Services/domains/verifier.ts` (env `DOMAIN_PROBE_TICK_SECONDS`,
+`DOMAIN_OK_SECONDS`, `DOMAIN_PENDING_SECONDS`), et les crochets reçoivent un
+contexte sans session (`FeatureDomainsContext` : `repo`, `origins`,
+`cipherFor`, `storeFor`, `keys`, `dns`, `logger`). `onRemoved` passe avant la
+suppression : s'il lève, le domaine reste.
 
 Par entrée client (`FeatureClient`) : `providers`, le jumeau client des
 providers de service, que les écrans de l'app lisent par

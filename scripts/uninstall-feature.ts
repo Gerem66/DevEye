@@ -1,9 +1,10 @@
 /**
  * Désinstallation propre d'un module de feature : toutes ses traces, partout.
  * Dans l'ordre : ses tables `ft_<slug>_*` (via son `src/server/uninstall.sql`,
- * borné au préfixe), son magasin clé-valeur, ses migrations enregistrées, ses
- * canaux et routes de notification, ses partages et restrictions d'éléments,
- * ses grants dans les rôles, ses tuiles dans toutes les dispositions d'accueil.
+ * borné au préfixe), son magasin clé-valeur, ses domaines, ses migrations
+ * enregistrées, ses canaux et routes de notification, ses partages et
+ * restrictions d'éléments, ses grants dans les rôles, ses tuiles dans toutes
+ * les dispositions d'accueil.
  * Le journal d'audit reste.
  *
  * Dry-run par défaut, n'écrit qu'avec `--yes`. Chaque étape est idempotente :
@@ -107,6 +108,7 @@ async function main(): Promise<void> {
     // --- 2..5 : les lignes portées par un id de feature ---------------------
     const rows: { label: string; table: string }[] = [
         { label: 'magasin clé-valeur', table: 'feature_kv' },
+        { label: 'domaines', table: 'feature_domains' },
         { label: 'canaux de notification', table: 'notification_channels' },
         { label: 'routes de notification', table: 'notification_routes' },
         { label: "partages d'éléments", table: 'item_shares' },
@@ -153,7 +155,7 @@ async function main(): Promise<void> {
     for (const r of rows) {
         await q.query(`DELETE FROM ${r.table} WHERE feature = ?`, [id]);
     }
-    console.log('✓ lignes par feature supprimées (kv, canaux, routes, partages, restrictions)');
+    console.log('✓ lignes par feature supprimées (kv, domaines, canaux, routes, partages, restrictions)');
     await q.query('DELETE FROM _migrations WHERE name LIKE ?', [`${id}/%`]);
     console.log('✓ migrations désenregistrées');
     for (const patch of rolePatches) {

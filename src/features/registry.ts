@@ -6,6 +6,7 @@ import { adminFeatures } from './admin';
 import { liveHereFeature } from './live/here';
 import { logsFeatures } from './logs';
 import { notifyFeatures } from './notify';
+import { domainFeatures } from './domain';
 import { sharingFeatures } from './sharing';
 import { secrecyFeatures } from './secrecy';
 import { twoFactorFeatures } from './twofa';
@@ -69,6 +70,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     ...homeFeatures,
     ...notifyFeatures,
     ...sharingFeatures,
+    ...domainFeatures,
     liveHereFeature
 ];
 
