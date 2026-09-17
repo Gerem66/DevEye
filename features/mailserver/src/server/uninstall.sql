@@ -1,0 +1,10 @@
+DROP TABLE IF EXISTS ft_mailserver_tls;
+DROP TABLE IF EXISTS ft_mailserver_daily;
+DROP TABLE IF EXISTS ft_mailserver_events;
+DROP TABLE IF EXISTS ft_mailserver_domain_keys;
+DROP TABLE IF EXISTS ft_mailserver_queue;
+DROP TABLE IF EXISTS ft_mailserver_messages;
+DROP TABLE IF EXISTS ft_mailserver_blobs;
+DROP TABLE IF EXISTS ft_mailserver_folders;
+DROP TABLE IF EXISTS ft_mailserver_credentials;
+DROP TABLE IF EXISTS ft_mailserver_mailboxes;

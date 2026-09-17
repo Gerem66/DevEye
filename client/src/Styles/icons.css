@@ -352,6 +352,10 @@
     -webkit-mask-image: url(/icons/bug.svg);
     mask-image: url(/icons/bug.svg);
 }
+.icon.icon-at {
+    -webkit-mask-image: url(/icons/at.svg);
+    mask-image: url(/icons/at.svg);
+}
 
 .icon.icon-chat {
     -webkit-mask-image: url(/icons/chat.svg);

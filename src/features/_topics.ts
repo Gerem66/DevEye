@@ -45,6 +45,9 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     live: null,
     logs: null,
     mail: 'mail',
+    // Le courrier qui passe bat un sujet secondaire (`mailserverFlow`), par le moteur : celui-ci ne sert
+    // qu'aux écritures d'un membre.
+    mailserver: 'mailserver',
     notes: 'notes',
     notify: 'notify',
     // Une projection change ce qui est visible dans deux espaces, une

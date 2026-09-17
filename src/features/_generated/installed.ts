@@ -37,6 +37,8 @@ import { manifest as manifest14 } from 'deveye-feature-devices';
 import { serverEntry as server14 } from 'deveye-feature-devices/server';
 import { manifest as manifest15 } from 'deveye-feature-cve';
 import { serverEntry as server15 } from 'deveye-feature-cve/server';
+import { manifest as manifest16 } from 'deveye-feature-mailserver';
+import { serverEntry as server16 } from 'deveye-feature-mailserver/server';
 
 export const INSTALLED_MODULES: readonly InstalledFeatureModule[] = [
     { manifest: { ...manifest0, icon: 'cloud' }, server: server0 },
@@ -55,5 +57,6 @@ export const INSTALLED_MODULES: readonly InstalledFeatureModule[] = [
     { manifest: { ...manifest13, icon: 'projects' }, server: server13 },
     { manifest: { ...manifest14, icon: 'server' }, server: server14 },
     { manifest: { ...manifest15, icon: 'bug' }, server: server15 },
+    { manifest: { ...manifest16, icon: 'at' }, server: server16 },
     ...LOCAL_MODULES
 ];

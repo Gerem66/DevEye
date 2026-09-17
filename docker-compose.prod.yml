@@ -53,8 +53,20 @@ services:
       # disparaîtrait au redéploiement suivant — c'est-à-dire exactement le jour
       # où on aurait pu en avoir besoin.
       - ${BACKUP_STORAGE_ROOT:-./backup-data}:/data/backups
+      # Les boîtes du serveur mail : les corps des messages, chiffrés. Hors du
+      # conteneur pour la même raison, et parce qu'un courrier perdu ne se refait pas.
+      - ${MAILSERVER_STORAGE_ROOT:-./mailserver-data}:/data/mailserver
     ports:
       - '127.0.0.1:${LISTEN_PORT:-3000}:${LISTEN_PORT:-3000}'
+      # Le serveur mail. Par défaut sur la boucle locale et des ports hauts : rien
+      # n'est exposé tant que la fonctionnalité n'est pas mise en service. Pour
+      # l'ouvrir, poser dans `.env` : MAILSERVER_BIND_SMTP=25,
+      # MAILSERVER_BIND_SUBMISSIONS=465, MAILSERVER_BIND_SUBMISSION=587,
+      # MAILSERVER_BIND_IMAPS=993. Ces ports ne passent pas par le proxy HTTP.
+      - '${MAILSERVER_BIND_SMTP:-127.0.0.1:2525}:2525'
+      - '${MAILSERVER_BIND_SUBMISSIONS:-127.0.0.1:4465}:4465'
+      - '${MAILSERVER_BIND_SUBMISSION:-127.0.0.1:5587}:5587'
+      - '${MAILSERVER_BIND_IMAPS:-127.0.0.1:9993}:9993'
     healthcheck:
       test:
         [

@@ -119,8 +119,8 @@ pas), leur **contenu** ne l'est qu'avec ce champ. Voir
 `NOTIFICATIONS.md`.
 
 **Droits par feature** — map uniforme `feature → read | write` (plus le champ
-`channels` ci-dessus), absent = aucun accès. Dix-sept entrées au 31 août 2026
-(`workspaceFeatureIdSchema`), de `devices` à `cve` ; `monitoring` n'en est
+`channels` ci-dessus), absent = aucun accès. Dix-huit entrées
+(`workspaceFeatureIdSchema`), de `devices` à `mailserver` ; `monitoring` n'en est
 pas une : la carte d'agrégat du même nom est réservée à l'administrateur
 global dans son espace personnel.
 

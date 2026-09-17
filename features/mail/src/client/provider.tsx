@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { OpenPopup } from 'deveye-sdk-client';
-import type { MailClientProvider } from '@deveye/types/sdk/client';
+import type { MailAccountPrefill, MailClientProvider } from '@deveye/types/sdk/client';
 
-import AccountPopup, { ACCOUNT_POPUP, type AccountPopupResult } from './AccountPopup';
+import AccountPopup, { ACCOUNT_POPUP, type AccountPopupInput, type AccountPopupResult } from './AccountPopup';
 import { api } from './api';
 
 /**
@@ -17,6 +17,7 @@ interface AccountDialogProps {
     open: boolean;
     onClose: () => void;
     onSaved: () => void;
+    prefill?: MailAccountPrefill;
 }
 
 /**
@@ -31,16 +32,21 @@ interface AccountDialogProps {
  * `saved` (connexion manuelle) et `oauth-connected` valent tous deux « une boîte
  * est sortie du dialogue » (`onSaved`) ; tout le reste est une fermeture.
  */
-function AccountDialog({ open, onClose, onSaved }: AccountDialogProps) {
+function AccountDialog({ open, onClose, onSaved, prefill }: AccountDialogProps) {
     const onCloseRef = useRef(onClose);
     onCloseRef.current = onClose;
     const onSavedRef = useRef(onSaved);
     onSavedRef.current = onSaved;
+    // Lu à l'ouverture seulement : un objet recréé à chaque rendu de l'appelant
+    // ne doit pas rouvrir le dialogue.
+    const prefillRef = useRef(prefill);
+    prefillRef.current = prefill;
 
     useEffect(() => {
         if (!open) return;
         let live = true;
-        void OpenPopup<AccountPopupResult>(ACCOUNT_POPUP, null).then((result) => {
+        const input: AccountPopupInput = prefillRef.current ? { prefill: prefillRef.current } : null;
+        void OpenPopup<AccountPopupResult>(ACCOUNT_POPUP, input).then((result) => {
             if (!live) return;
             if (result === 'saved' || result === 'oauth-connected') onSavedRef.current();
             else onCloseRef.current();
@@ -58,5 +64,12 @@ export const clientProvider: MailClientProvider = {
         (await api.send('mail.accountList', {})).accounts
             .filter((a) => a.securityTier === 'open' && a.enabled)
             .map((a) => ({ id: a.id, label: a.displayName, address: a.emailAddress })),
+    findByAddress: async (address) => {
+        const wanted = address.trim().toLowerCase();
+        const held = (await api.send('mail.accountList', {})).accounts.find(
+            (a) => a.emailAddress.trim().toLowerCase() === wanted
+        );
+        return held ? { id: held.id } : null;
+    },
     AccountDialog
 };

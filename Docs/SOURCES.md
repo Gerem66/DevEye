@@ -51,7 +51,7 @@ Les **domaines** suivent le même contrat (déclarés à l'échelle de la
 fonctionnalité, désignés par les éléments, « + » qui ouvre le bon onglet), mais
 n'ont ni table ni panneau par module : la coquille les rend elle-même pour
 toute fonctionnalité qui déclare `domains` (voir `SETTINGS.md` et
-`FEATURE_SDK.md`). Le module Rendez-vous s'en sert.
+`FEATURE_SDK.md`). Rendez-vous et Serveur mail s'en servent.
 
 ## La mécanique
 

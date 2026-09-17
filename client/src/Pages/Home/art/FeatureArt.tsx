@@ -350,6 +350,28 @@ const ART: Record<ArtId, ReactNode> = {
         </>
     ),
 
+    // Les adresses d'un domaine, rangées en lignes : l'arobase, le nom, et l'état de chacune.
+    mailserver: (
+        <>
+            <Line x={16} y={12} w={46} o={0.4} h={6} />
+            {[26, 46, 66].map((y, index) => (
+                <g key={y}>
+                    <rect x='16' y={y} width='128' height='14' rx='4' fill={M} opacity='0.14' />
+                    <circle cx='27' cy={y + 7} r='4' stroke={A} {...thin} />
+                    <circle cx='27' cy={y + 7} r='1.4' fill={A} />
+                    <Line
+                        x={38}
+                        y={y + 4.5}
+                        w={index === 1 ? 52 : 66}
+                        c={index === 0 ? A : M}
+                        o={index === 0 ? 0.8 : 0.45}
+                    />
+                    <circle cx='134' cy={y + 7} r='3' fill={index === 2 ? M : OK} opacity={index === 2 ? 0.5 : 1} />
+                </g>
+            ))}
+        </>
+    ),
+
     // Une machine : son nom, son état, et l'activité qui la traverse.
     device: (
         <>

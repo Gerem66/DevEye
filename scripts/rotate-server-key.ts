@@ -30,7 +30,12 @@ const TARGETS: Target[] = [
     { table: 'user_2fa', column: 'secret_enc', id: 'user_id' },
     // CloudSync : la BMK, scellée par `deps.keys.sealBytes`. Un autre module
     // qui scelle du matériel ajoute sa ligne ici.
-    { table: 'sync_meta', column: 'v', id: 'k', where: "k = 'blob_key_wrapped'" }
+    { table: 'sync_meta', column: 'v', id: 'k', where: "k = 'blob_key_wrapped'" },
+    // Serveur mail : la clé des corps de chaque boîte, les clés DKIM des domaines, et la clé du
+    // certificat des écouteurs. Oubliées ici, les boîtes deviendraient illisibles à la rotation.
+    { table: 'ft_mailserver_mailboxes', column: 'blob_key', id: 'id' },
+    { table: 'ft_mailserver_domain_keys', column: 'private_key', id: 'id' },
+    { table: 'ft_mailserver_tls', column: 'sealed', id: 'id' }
 ];
 
 const YES = process.argv.includes('--yes');

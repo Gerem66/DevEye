@@ -43,6 +43,13 @@ export type ResourceKey =
     | 'cve.news'
     | 'cve.favorites'
     | 'cve.keyList'
+    | 'mailserver.count'
+    | 'mailserver.list'
+    | 'mailserver.get'
+    | 'mailserver.appPasswordList'
+    | 'mailserver.activity'
+    | 'mailserver.queueList'
+    | 'mailserver.serverStatus'
     | 'workspace.roleList'
     /** L'état de l'espace actif tel que `workspace.activate` le rend : droits, apparence, disposition. */
     | 'workspace.activate'

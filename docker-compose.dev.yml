@@ -50,6 +50,11 @@ services:
       SEED_DEV: 'true'
     ports:
       - '${LISTEN_PORT:-3000}:${LISTEN_PORT:-3000}'
+      # Le serveur mail, sur ses ports hauts : SMTP, soumission (TLS puis STARTTLS), IMAP.
+      - '2525:2525'
+      - '4465:4465'
+      - '5587:5587'
+      - '9993:9993'
 
 volumes:
   deveye_dev_db:

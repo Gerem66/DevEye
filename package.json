@@ -87,5 +87,11 @@
     "esbuild@0.28.1": true,
     "esbuild@0.27.7": true,
     "fsevents@2.3.3": true
+  },
+  "overrides": {
+    "mailauth": {
+      "joi": "^18.2.9",
+      "nodemailer": "^10.0.10"
+    }
   }
 }

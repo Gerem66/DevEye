@@ -17,6 +17,7 @@ import { SECURITY_TIER_HINT, SECURITY_TIER_OPTIONS } from './securityTier';
 import styles from './style.module.css';
 
 import { MAIL_SYNC_INTERVAL_DEFAULT_MINUTES } from '../contracts/domain';
+import type { MailAccountPrefill } from '@deveye/types/sdk/client';
 import type {
     MailAccount,
     MailAccountDraft,
@@ -29,6 +30,9 @@ import type {
 export const ACCOUNT_POPUP = 'popup-mail-account';
 
 export type AccountPopupResult = 'delete' | 'saved' | 'oauth-connected' | null;
+
+/** What the popup opens on: an account to edit, a mailbox another feature already knows, or nothing. */
+export type AccountPopupInput = MailAccount | { prefill: MailAccountPrefill } | null;
 
 const DEFAULT_DRAFT: MailAccountDraft = {
     displayName: '',
@@ -118,7 +122,9 @@ export function AccountPopup() {
         setProxyTouched(false);
     }
 
-    function handleOpen(input: MailAccount | null): void {
+    function handleOpen(opened: AccountPopupInput): void {
+        const prefill = opened !== null && 'prefill' in opened ? opened.prefill : null;
+        const input = opened !== null && 'prefill' in opened ? null : opened;
         setTestResult(null);
         setErrorName('');
         setErrorEmail('');
@@ -130,9 +136,10 @@ export function AccountPopup() {
         setSyncIntervalMinutes(input?.syncIntervalMinutes ?? MAIL_SYNC_INTERVAL_DEFAULT_MINUTES);
         // Land straight on the tab that has something to show: the manual form
         // for a password account, the provider notice for an OAuth one.
-        setTab(input && input.authMethod === 'password' ? 'manual' : 'providers');
+        setTab(prefill || (input && input.authMethod === 'password') ? 'manual' : 'providers');
         const next: MailAccountDraft = input ? draftFromAccount(input) : DEFAULT_DRAFT;
-        setDraft(next);
+        // A prefilled form counts as unsaved from the start: it is ready to save as is.
+        setDraft(prefill ? { ...DEFAULT_DRAFT, ...prefill } : next);
         setProxyEnabled(input?.proxyConfigured ?? false);
         setProxyPreconfigured(input?.proxyConfigured ?? false);
         setProxyTouched(false);
