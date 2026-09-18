@@ -39,6 +39,16 @@ export const OLD_AGENT: Unavailable = {
     reason: 'Agent trop ancien pour cette fonction : mettez-le à jour'
 };
 
+/**
+ * L'agent refuse cet ordre chez lui (`[policy]` de son `agent.toml`), quoi que
+ * le rôle accorde : c'est le choix de qui exploite la machine, que le serveur ne
+ * peut pas lever.
+ */
+export const LOCAL_POLICY: Unavailable = {
+    icon: 'icon-lock',
+    reason: 'Refusé par la politique locale de l’agent (agent.toml, sur la machine)'
+};
+
 export const OFFLINE: Unavailable = {
     icon: 'icon-x-circle',
     reason: 'Appareil hors ligne : la machine ne répond pas'

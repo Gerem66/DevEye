@@ -130,7 +130,11 @@ const isHidden = (name: string) => name.startsWith('.');
  * usage as bars, advanced search, new folder / rename / delete. All ops stream
  * over the device push channel, correlated by an `opId`.
  */
-export function FilesPanel({ deviceId }: { deviceId: string }) {
+/** `writable` faux : l'agent refuse d'écrire chez lui (sa politique locale), seuls parcourir et télécharger restent. */
+export function FilesPanel({ deviceId, writable = true }: { deviceId: string; writable?: boolean }) {
+    const readOnlyTitle = writable
+        ? undefined
+        : 'Refusé par la politique locale de l’agent (agent.toml, sur la machine)';
     const [path, setPath] = useState('/');
     const [pathInput, setPathInput] = useState('/');
     const [listing, setListing] = useState<FileListing | null>(null);
@@ -511,6 +515,8 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
                         setNameValue('');
                         setNameDialog({ mode: 'mkdir' });
                     }}
+                    disabled={!writable}
+                    title={readOnlyTitle}
                 >
                     <span className='icon icon-folder-plus' /> Nouveau dossier
                 </button>
@@ -518,7 +524,8 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
                     type='button'
                     className={styles.logToggle}
                     onClick={() => fileInput.current?.click()}
-                    disabled={uploading !== null}
+                    disabled={uploading !== null || !writable}
+                    title={readOnlyTitle}
                 >
                     <span className='icon icon-download' /> Téléverser
                 </button>
@@ -635,7 +642,8 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
                                         </button>
                                         <button
                                             type='button'
-                                            title='Renommer'
+                                            title={readOnlyTitle ?? 'Renommer'}
+                                            disabled={!writable}
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 setNameValue(entry.name);
@@ -647,7 +655,8 @@ export function FilesPanel({ deviceId }: { deviceId: string }) {
                                         <button
                                             type='button'
                                             className={styles.filesDeleteBtn}
-                                            title='Supprimer'
+                                            title={readOnlyTitle ?? 'Supprimer'}
+                                            disabled={!writable}
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 setConfirmDelete(entry);

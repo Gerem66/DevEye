@@ -40,6 +40,12 @@ export function DeviceDialogs({ actions, device }: { actions: DeviceActions; dev
                     En cas d’échec de l’auto-destruction, la suppression est interrompue et l’erreur s’affiche sur la
                     fiche de l’appareil.
                 </p>
+                {device.report?.agent?.policy.destroy === false && (
+                    <p className={styles.deleteExplainNote}>
+                        Cet agent refuse de s’effacer à distance (politique locale, <code>allow_destroy</code>) : la
+                        suppression s’interrompra. Désinstallez-le sur la machine, ou supprimez sans attendre.
+                    </p>
+                )}
             </Dialog>
 
             <Dialog

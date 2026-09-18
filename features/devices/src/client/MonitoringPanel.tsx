@@ -15,6 +15,7 @@ import {
     deviceReportPushSchema,
     METRICS_PUSH_EVENT,
     metricsPushSchema,
+    type AgentPolicy,
     type DeviceReport,
     type MetricSeriesPoint,
     type ReportProcess,
@@ -26,7 +27,7 @@ import type { DaySummary } from '../contracts/commands';
 import { HardwareInfo } from './HardwareInfo';
 import { Connections } from './Connections';
 import { DeviceActionsMenu, type DeviceAction } from './DeviceActionsMenu';
-import { agentReach, firstReason, missingPermission, OLD_AGENT } from './availability';
+import { agentReach, firstReason, LOCAL_POLICY, missingPermission, OLD_AGENT, type Unavailable } from './availability';
 import { PrivilegeInfo } from './PrivilegeInfo';
 import { OpenPorts } from './OpenPorts';
 import { groupPorts } from './ports';
@@ -998,13 +999,25 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
      */
     const noDockerProbe =
         online && report !== null && !(report.agent?.probes?.includes('docker') ?? false) ? OLD_AGENT : undefined;
-    const remote = (key: string, label: string, onClick: () => void, icon: string): DeviceAction => ({
+    // Ce que la machine refuse chez elle. Lu dans son dernier rapport : sans
+    // rapport, rien n'est présumé fermé, et l'agent refusera de toute façon.
+    const policy = report?.agent?.policy;
+    const refusedLocally = (order: keyof AgentPolicy): Unavailable | undefined =>
+        policy && !policy[order] ? LOCAL_POLICY : undefined;
+    const remote = (
+        key: string,
+        label: string,
+        onClick: () => void,
+        icon: string,
+        order?: keyof AgentPolicy
+    ): DeviceAction => ({
         icon,
         label,
         onClick,
         unavailable: firstReason(
             permissions.canExtra('devices', key, selected.id) ? undefined : missingPermission(key),
-            reach
+            reach,
+            order && refusedLocally(order)
         )
     });
 
@@ -1012,7 +1025,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         // Le seul geste qui ne dépend de rien : il relit le dernier rapport reçu.
         { icon: 'icon-cpu', label: 'Matériel & agent', onClick: showHardwareInfo },
         remote('files', 'Explorateur de fichiers', () => setFilesOpen(true), 'icon-folder'),
-        remote('terminal', 'Terminal distant', () => setTerminalOpen(true), 'icon-terminal'),
+        remote('terminal', 'Terminal distant', () => setTerminalOpen(true), 'icon-terminal', 'terminal'),
         remote('logs', 'Logs de l’appareil', () => setLogsOpen(true), 'icon-logs'),
         {
             icon: 'icon-server',
@@ -1024,8 +1037,8 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 noDockerProbe
             )
         },
-        remote('system', 'Commandes système', () => setPowerOpen(true), 'icon-power'),
-        remote('system', 'Mises à jour système', () => setPackagesOpen(true), 'icon-database'),
+        remote('system', 'Commandes système', () => setPowerOpen(true), 'icon-power', 'power'),
+        remote('system', 'Mises à jour système', () => setPackagesOpen(true), 'icon-database', 'pkgUpgrade'),
         // Le cycle de vie de l'appareil ferme la liste : approuver, renommer,
         // révoquer, supprimer, sous le droit d'écriture de l'espace.
         ...deviceLifecycleActions(selected, actions, canWrite)
@@ -1038,6 +1051,14 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 <div className={styles.headerRight}>
                     {/* L'état de l'appareil ouvre la rangée : on le lit avant
                         de choisir quoi faire de la machine. */}
+                    {report?.agent?.insecureTransport && (
+                        <span
+                            className={`${styles.onlineBadge} ${styles.offline}`}
+                            title='Cet agent joint le serveur en http : son jeton et tout ce qu’il reçoit, terminal compris, circulent en clair'
+                        >
+                            Transport non chiffré
+                        </span>
+                    )}
                     {archived ? (
                         <span className={`${styles.onlineBadge} ${styles.archived}`}>Archivé</span>
                     ) : (
@@ -1552,7 +1573,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             >
                 {filesOpen && (
                     <Suspense fallback={<p className={styles.waitingMsg}>Chargement de l’explorateur…</p>}>
-                        <FilesPanel deviceId={selected.id} />
+                        <FilesPanel deviceId={selected.id} writable={policy?.filesWrite ?? true} />
                     </Suspense>
                 )}
             </Dialog>
