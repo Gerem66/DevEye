@@ -26,8 +26,9 @@ function showTwoFactorInfo() {
                     le secret ne transite jamais après l&apos;enrôlement.
                 </p>
                 <p>
-                    Les <strong>codes de secours</strong> sont des tokens aléatoires à usage unique, stockés en base
-                    sous forme de hash SHA-256. Chaque utilisation marque le code comme consommé de façon définitive.
+                    Les <strong>codes de secours</strong> sont des tokens aléatoires à usage unique. La base n&apos;en
+                    garde qu&apos;un condensé calculé sous une clé du serveur : une copie de la base seule ne permet pas
+                    de les retrouver. Chaque utilisation marque le code comme consommé de façon définitive.
                 </p>
             </>
         )

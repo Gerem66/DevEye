@@ -172,7 +172,8 @@ export function touchSecrecy(): void {
 
 /** Fire-and-forget hold heartbeat (only meaningful while the feature is on). */
 function sendHold(active: boolean): void {
-    if (!state.enabled) return;
+    // « Valider à chaque action » : rien ne se retient, pas même le temps d'une popup.
+    if (!state.enabled || singleUse) return;
     void ws.send('secrecy.hold', { active }).catch(() => {});
 }
 

@@ -9,17 +9,28 @@ import {
 } from '@deveye/types';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
+import { randomBytes } from 'node:crypto';
+
 import { notifyAdmins } from '@/features/admin/notify';
 import { env } from '@/Utils/Env';
 import { sha256hex } from '@/Utils/hash';
+import {
+    assertAttemptAllowed,
+    clearAttempts,
+    LockedOutError,
+    recordFailedAttempt,
+    type AttemptScope
+} from '@/Services/attempts';
 import { totpContext } from '@/Services/sealContexts';
-import { normalizeBackupCode, verifyTotp } from '@/Services/Totp';
+import { hashBackupCode, verifyTotp } from '@/Services/Totp';
 import type Encryption from '@/Services/Encryption';
 import { SecretKeyService, WrongSecretError } from '@/Services/SecretKeyService';
 import {
     claimPendingDek,
     DEFAULT_DEK_GRACE_MS,
     discardPendingDek,
+    forgetSessionDek,
+    forgetSessionsOf,
     rememberSessionDek,
     stashPendingDek
 } from '@/Services/SecureStore';
@@ -61,8 +72,42 @@ interface AuthDeps {
  */
 const ROTATION_GRACE_SECONDS = 30;
 
-async function issueSession(reply: FastifyReply, db: Database, userId: number): Promise<string> {
-    const sessionId = db.refreshTokens.newSessionId();
+/** Codes 2FA faux tolérés sur un même challenge avant de l'annuler. */
+const TWOFA_CHALLENGE_MAX_FAILURES = 5;
+
+/**
+ * Un hachage Argon2id de même profil que les vrais, vérifié quand l'identifiant
+ * n'existe pas : sans lui, un compte connu coûte une vérification Argon2 et un
+ * inconnu rien, et le temps de réponse dit qui existe.
+ */
+const dummyHash: Promise<string> = hashPassword(randomBytes(32).toString('hex'));
+
+/** Le refus d'une cible verrouillée, sous la forme HTTP. `false` = pas verrouillée. */
+function lockedOut(reply: FastifyReply, scope: AttemptScope, key: string): FastifyReply | false {
+    try {
+        assertAttemptAllowed(scope, key);
+        return false;
+    } catch (e) {
+        if (!(e instanceof LockedOutError)) throw e;
+        return reply
+            .code(429)
+            .header('retry-after', Math.ceil(e.retryAfterMs / 1000))
+            .send(err('rate_limited', e.message, { retryAfterMs: e.retryAfterMs }));
+    }
+}
+
+/**
+ * Émet les jetons d'une session. Le `sessionId` naît à la connexion et survit
+ * aux rafraîchissements : c'est ce qui fait d'une session une famille de jetons
+ * (une réutilisation détectée la révoque tout entière, descendant compris) et
+ * ce qui garde stable la clé du cache de DEK et de la socket.
+ */
+async function issueSession(
+    reply: FastifyReply,
+    db: Database,
+    userId: number,
+    sessionId: string = db.refreshTokens.newSessionId()
+): Promise<string> {
     const access = await signAccessToken(userId, sessionId);
     const refresh = await signRefreshToken(userId, sessionId);
     const expiresAt = Math.floor(Date.now() / 1000) + env.JWT_REFRESH_TTL_SECONDS;
@@ -106,6 +151,9 @@ async function unwrapDekForLogin(
         const graceMs = loginGraceMs(user?.re_auth_interval ?? null);
         if (graceMs <= 0) return null;
         const dek = await keys.unwrapWithPassword(row, password);
+        // Le mot de passe est en main : une ligne dérivée sous un ancien profil
+        // Argon2 monte au profil courant.
+        if (keys.needsKdfUpgrade(row)) await keys.wrapWithPassword(userId, dek, password, 'keep', row);
         return { dek, graceMs };
     } catch {
         // A wrong-secret or any failure here must never break login; the user
@@ -115,83 +163,106 @@ async function unwrapDekForLogin(
 }
 
 export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live }: AuthDeps): Promise<void> {
-    app.post('/api/auth/register', async (req, reply) => {
-        const parsed = registerRequestSchema.safeParse(req.body);
-        if (!parsed.success) {
-            return reply.code(400).send(err('validation', 'Invalid registration payload', parsed.error.flatten()));
-        }
-        const { username, email, password } = parsed.data;
-
-        const [existingByName, existingByEmail] = await Promise.all([
-            db.users.findByUsername(username),
-            db.users.findByEmail(email)
-        ]);
-        if (existingByName || existingByEmail) {
-            return reply.code(409).send(err('conflict', 'Username or email already in use'));
-        }
-
-        // Consommer l'invitation avant de créer le compte : un usage brûlé pour
-        // rien vaut mieux qu'un compte créé sur une invitation épuisée.
-        const invite = await db.userInvites.consume(parsed.data.inviteToken, email);
-        if (!invite) {
-            return reply
-                .code(403)
-                .send(err('forbidden', 'Invitation invalide, expirée, ou réservée à une autre adresse'));
-        }
-
-        const passwordHash = await hashPassword(password);
-        const row = await db.users.create({ email, username, passwordHash, role: 'user' });
-
-        // Tout compte possede un espace personnel, cree ici et nulle part
-        // ailleurs. Il ne peut pas exister avant le compte (sa FK proprietaire
-        // le reference), d'ou l'ordre : compte -> espace -> rattachement.
-        const personal = await db.workspaces.createPersonal(row.id, username);
-        await db.users.setPersonalWorkspace(row.id, personal.id);
-
-        // L'invitation peut installer directement le compte dans une équipe.
-        if (invite.workspace_id !== null) {
-            await db.workspaceMembers.add({ userId: row.id, workspaceId: invite.workspace_id });
-            const fallback = await db.workspaceRoles.findDefault(invite.workspace_id);
-            if (fallback) await db.workspaceRoles.assign(row.id, invite.workspace_id, fallback.id);
-        }
-
-        await issueSession(reply, db, row.id);
-        const bundle = await loadUserBundle(db, row.id);
-        if (!bundle) {
-            return reply.code(500).send(err('internal', 'Unable to load user'));
-        }
-        audit.record({
-            source: 'web',
-            category: 'auth',
-            action: 'register',
-            level: 'info',
-            uid: row.id,
-            ip: req.ip,
-            description: `Nouveau compte créé : ${username}`,
-            metadata: { email }
-        });
-
-        // Né hors de toute commande WS, le compte n'annoncerait rien sans ces
-        // deux signaux : la page Utilisateurs des administrateurs, et la liste
-        // des membres de l'espace rejoint, chacun visé par compte.
-        await notifyAdmins(db, live, personal.id, row.id);
-        if (invite.workspace_id !== null) {
-            for (const m of await db.workspaceMembers.listByWorkspaceIds([invite.workspace_id])) {
-                if (m.user_id !== row.id) live.userChanged(m.user_id, invite.workspace_id, ['workspace'], row.id);
+    app.post(
+        '/api/auth/register',
+        { config: { rateLimit: { max: 5, timeWindow: '10 minutes' } } },
+        async (req, reply) => {
+            const parsed = registerRequestSchema.safeParse(req.body);
+            if (!parsed.success) {
+                return reply.code(400).send(err('validation', 'Invalid registration payload', parsed.error.flatten()));
             }
-        }
-        return reply.send(ok(loginResponseSchema.parse({ twoFactorRequired: false, ...bundle })));
-    });
+            const { username, email, password } = parsed.data;
 
-    app.post('/api/auth/login', async (req, reply) => {
+            // L'invitation d'abord : sans elle, la réponse ne dit rien des comptes
+            // existants. Vérifier l'unicité avant ferait de cette route, ouverte à
+            // tous, un annuaire (409 = existe, 403 = libre).
+            const invite = await db.userInvites.findLive(parsed.data.inviteToken, email);
+            if (!invite) {
+                return reply
+                    .code(403)
+                    .send(err('forbidden', 'Invitation invalide, expirée, ou réservée à une autre adresse'));
+            }
+
+            const [existingByName, existingByEmail] = await Promise.all([
+                db.users.findByUsername(username),
+                db.users.findByEmail(email)
+            ]);
+            if (existingByName || existingByEmail) {
+                return reply.code(409).send(err('conflict', 'Username or email already in use'));
+            }
+
+            // Consommer l'invitation avant de créer le compte : un usage brûlé pour
+            // rien vaut mieux qu'un compte créé sur une invitation épuisée. La
+            // consommation revalide tout, d'un seul coup : deux inscriptions
+            // simultanées sur le dernier usage ne passent pas toutes les deux.
+            if (!(await db.userInvites.consume(parsed.data.inviteToken, email))) {
+                return reply
+                    .code(403)
+                    .send(err('forbidden', 'Invitation invalide, expirée, ou réservée à une autre adresse'));
+            }
+
+            const passwordHash = await hashPassword(password);
+            const row = await db.users.create({ email, username, passwordHash, role: 'user' });
+
+            // Tout compte possede un espace personnel, cree ici et nulle part
+            // ailleurs. Il ne peut pas exister avant le compte (sa FK proprietaire
+            // le reference), d'ou l'ordre : compte -> espace -> rattachement.
+            const personal = await db.workspaces.createPersonal(row.id, username);
+            await db.users.setPersonalWorkspace(row.id, personal.id);
+
+            // L'invitation peut installer directement le compte dans une équipe.
+            if (invite.workspace_id !== null) {
+                await db.workspaceMembers.add({ userId: row.id, workspaceId: invite.workspace_id });
+                const fallback = await db.workspaceRoles.findDefault(invite.workspace_id);
+                if (fallback) await db.workspaceRoles.assign(row.id, invite.workspace_id, fallback.id);
+            }
+
+            await issueSession(reply, db, row.id);
+            const bundle = await loadUserBundle(db, row.id);
+            if (!bundle) {
+                return reply.code(500).send(err('internal', 'Unable to load user'));
+            }
+            audit.record({
+                source: 'web',
+                category: 'auth',
+                action: 'register',
+                level: 'info',
+                uid: row.id,
+                ip: req.ip,
+                description: `Nouveau compte créé : ${username}`,
+                metadata: { email }
+            });
+
+            // Né hors de toute commande WS, le compte n'annoncerait rien sans ces
+            // deux signaux : la page Utilisateurs des administrateurs, et la liste
+            // des membres de l'espace rejoint, chacun visé par compte.
+            await notifyAdmins(db, live, personal.id, row.id);
+            if (invite.workspace_id !== null) {
+                for (const m of await db.workspaceMembers.listByWorkspaceIds([invite.workspace_id])) {
+                    if (m.user_id !== row.id) live.userChanged(m.user_id, invite.workspace_id, ['workspace'], row.id);
+                }
+            }
+            return reply.send(ok(loginResponseSchema.parse({ twoFactorRequired: false, ...bundle })));
+        }
+    );
+
+    app.post('/api/auth/login', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
         const parsed = loginRequestSchema.safeParse(req.body);
         if (!parsed.success) {
             return reply.code(400).send(err('validation', 'Invalid login payload', parsed.error.flatten()));
         }
         const { username, password } = parsed.data;
+        // Verrouillé par identifiant, connu ou non : la réponse reste la même.
+        const attemptKey = username.trim().toLowerCase();
+        const locked = lockedOut(reply, 'login', attemptKey);
+        if (locked) return locked;
 
         const row = await db.users.findByUsername(username);
         if (!row) {
+            await verifyPassword(await dummyHash, password);
+            recordFailedAttempt('login', attemptKey);
+            // L'identifiant saisi n'est pas gardé tel quel : on y tape souvent
+            // son mot de passe par erreur, et l'audit se lit par tout administrateur.
             audit.record({
                 source: 'web',
                 category: 'auth',
@@ -199,14 +270,19 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
                 level: 'warning',
                 uid: 0,
                 ip: req.ip,
-                description: `Échec de connexion : identifiant inconnu « ${username} »`,
-                metadata: { username, reason: 'unknown_user' }
+                description: 'Échec de connexion : identifiant inconnu',
+                metadata: {
+                    usernameRef: sha256hex(attemptKey).slice(0, 16),
+                    usernameLength: username.length,
+                    reason: 'unknown_user'
+                }
             });
             return reply.code(401).send(err('auth_invalid', 'Invalid credentials'));
         }
 
         const valid = row.password_hash ? await verifyPassword(row.password_hash, password) : false;
         if (!valid) {
+            recordFailedAttempt('login', attemptKey);
             audit.record({
                 source: 'web',
                 category: 'auth',
@@ -219,6 +295,8 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
             });
             return reply.code(401).send(err('auth_invalid', 'Invalid credentials'));
         }
+
+        clearAttempts('login', attemptKey);
 
         // Le compte est suspendu : identifiants corrects, mais pas d'accès. On le
         // vérifie APRÈS le mot de passe, pour ne pas révéler l'existence d'un
@@ -278,7 +356,7 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
         }
 
         const sessionId = await issueSession(reply, db, row.id);
-        if (pending) rememberSessionDek(sessionId, pending.dek, pending.graceMs);
+        if (pending) rememberSessionDek(sessionId, row.id, pending.dek, pending.graceMs);
         audit.record({
             source: 'web',
             category: 'auth',
@@ -291,84 +369,108 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
         return reply.send(ok(loginResponseSchema.parse({ twoFactorRequired: false, ...bundle })));
     });
 
-    app.post('/api/auth/2fa/challenge', async (req, reply) => {
-        const challengeToken = req.cookies[TWOFA_COOKIE];
-        if (!challengeToken) {
-            return reply.code(401).send(err('auth_required', 'No 2FA challenge in progress'));
-        }
-        const challenge = await verifyTwoFactorChallenge(challengeToken);
-        if (!challenge) {
-            clearTwoFactorChallengeCookie(reply);
-            return reply.code(401).send(err('auth_expired', '2FA challenge expired'));
-        }
-
-        const parsed = twoFactorChallengeRequestSchema.safeParse(req.body);
-        if (!parsed.success) {
-            return reply.code(400).send(err('validation', 'Invalid 2FA payload', parsed.error.flatten()));
-        }
-
-        const userId = Number(challenge.sub);
-        const twoFa = await db.twoFactor.get(userId);
-        if (!twoFa?.enabled) {
-            clearTwoFactorChallengeCookie(reply);
-            // Terminal: no session will be issued, so release any DEK we stashed
-            // at the password step instead of letting it linger until its TTL.
-            if (challenge.pendingDekToken) discardPendingDek(challenge.pendingDekToken);
-            return reply.code(400).send(err('conflict', '2FA is not enabled'));
-        }
-
-        const code = parsed.data.code.trim();
-        const secret = crypt.openTextFor('totp', twoFa.secret_enc, totpContext(userId));
-        let accepted = false;
-        if (secret && verifyTotp(code, secret)) {
-            accepted = true;
-        } else {
-            // Fall back to single-use recovery codes.
-            const codeHash = sha256hex(normalizeBackupCode(code));
-            const backup = await db.twoFactor.findUnusedBackupCode(userId, codeHash);
-            if (backup) {
-                await db.twoFactor.markBackupCodeUsed(backup.id);
-                accepted = true;
+    app.post(
+        '/api/auth/2fa/challenge',
+        {
+            config: {
+                rateLimit: {
+                    max: 10,
+                    timeWindow: '5 minutes',
+                    // Par challenge et non par adresse : c'est lui qu'on devine.
+                    keyGenerator: (req: FastifyRequest) => sha256hex(req.cookies[TWOFA_COOKIE] ?? req.ip)
+                }
             }
-        }
+        },
+        async (req, reply) => {
+            const challengeToken = req.cookies[TWOFA_COOKIE];
+            if (!challengeToken) {
+                return reply.code(401).send(err('auth_required', 'No 2FA challenge in progress'));
+            }
+            const challenge = await verifyTwoFactorChallenge(challengeToken);
+            if (!challenge) {
+                clearTwoFactorChallengeCookie(reply);
+                return reply.code(401).send(err('auth_expired', '2FA challenge expired'));
+            }
 
-        if (!accepted) {
+            const parsed = twoFactorChallengeRequestSchema.safeParse(req.body);
+            if (!parsed.success) {
+                return reply.code(400).send(err('validation', 'Invalid 2FA payload', parsed.error.flatten()));
+            }
+
+            const userId = Number(challenge.sub);
+            const twoFa = await db.twoFactor.get(userId);
+            if (!twoFa?.enabled) {
+                clearTwoFactorChallengeCookie(reply);
+                // Terminal: no session will be issued, so release any DEK we stashed
+                // at the password step instead of letting it linger until its TTL.
+                if (challenge.pendingDekToken) discardPendingDek(challenge.pendingDekToken);
+                return reply.code(400).send(err('conflict', '2FA is not enabled'));
+            }
+
+            const locked = lockedOut(reply, 'twofa', String(userId));
+            if (locked) return locked;
+
+            const code = parsed.data.code.trim();
+            const secret = crypt.openTextFor('totp', twoFa.secret_enc, totpContext(userId));
+            const step = secret ? verifyTotp(code, secret, twoFa.last_used_counter) : null;
+            let accepted = step !== null && (await db.twoFactor.claimTotpCounter(userId, step));
+            if (!accepted) {
+                // Fall back to single-use recovery codes.
+                const backup = await db.twoFactor.findUnusedBackupCode(userId, hashBackupCode(crypt, code));
+                accepted = backup !== null && (await db.twoFactor.markBackupCodeUsed(backup.id));
+            }
+
+            if (!accepted) {
+                const failures = recordFailedAttempt('twofa', String(userId));
+                // Un challenge ne se devine pas cinq minutes durant : passé le seuil il
+                // tombe, et la DEK mise de côté à l'étape du mot de passe avec lui.
+                const exhausted = failures >= TWOFA_CHALLENGE_MAX_FAILURES;
+                if (exhausted) {
+                    clearTwoFactorChallengeCookie(reply);
+                    if (challenge.pendingDekToken) discardPendingDek(challenge.pendingDekToken);
+                }
+                audit.record({
+                    source: 'web',
+                    category: 'auth',
+                    action: exhausted ? 'login.2fa_locked' : 'login.2fa_failed',
+                    level: 'warning',
+                    uid: userId,
+                    ip: req.ip,
+                    description: exhausted
+                        ? 'Échec de connexion : trop de codes 2FA invalides, challenge annulé'
+                        : 'Échec de connexion : code 2FA invalide'
+                });
+                return exhausted
+                    ? reply.code(401).send(err('auth_expired', '2FA challenge cancelled after too many attempts'))
+                    : reply.code(401).send(err('auth_invalid', 'Invalid 2FA code'));
+            }
+
+            clearAttempts('twofa', String(userId));
+            clearTwoFactorChallengeCookie(reply);
+            await db.users.updateLastLogin(userId, Math.floor(Date.now() / 1000));
+            const bundle = await loadUserBundle(db, userId);
+            if (!bundle) {
+                return reply.code(500).send(err('internal', 'Unable to load user'));
+            }
+            const sessionId = await issueSession(reply, db, userId);
             audit.record({
                 source: 'web',
                 category: 'auth',
-                action: 'login.2fa_failed',
-                level: 'warning',
+                action: 'login.success',
+                level: 'info',
                 uid: userId,
                 ip: req.ip,
-                description: 'Échec de connexion : code 2FA invalide'
+                description: 'Connexion réussie (2FA validée)',
+                metadata: { twoFactor: true }
             });
-            return reply.code(401).send(err('auth_invalid', 'Invalid 2FA code'));
+            // Bind the DEK unwrapped at the password step (if any) to this session.
+            if (challenge.pendingDekToken) {
+                const pending = claimPendingDek(challenge.pendingDekToken);
+                if (pending) rememberSessionDek(sessionId, userId, pending.dek, pending.graceMs);
+            }
+            return reply.send(ok(loginResponseSchema.parse({ twoFactorRequired: false, ...bundle })));
         }
-
-        clearTwoFactorChallengeCookie(reply);
-        await db.users.updateLastLogin(userId, Math.floor(Date.now() / 1000));
-        const bundle = await loadUserBundle(db, userId);
-        if (!bundle) {
-            return reply.code(500).send(err('internal', 'Unable to load user'));
-        }
-        const sessionId = await issueSession(reply, db, userId);
-        audit.record({
-            source: 'web',
-            category: 'auth',
-            action: 'login.success',
-            level: 'info',
-            uid: userId,
-            ip: req.ip,
-            description: 'Connexion réussie (2FA validée)',
-            metadata: { twoFactor: true }
-        });
-        // Bind the DEK unwrapped at the password step (if any) to this session.
-        if (challenge.pendingDekToken) {
-            const pending = claimPendingDek(challenge.pendingDekToken);
-            if (pending) rememberSessionDek(sessionId, pending.dek, pending.graceMs);
-        }
-        return reply.send(ok(loginResponseSchema.parse({ twoFactorRequired: false, ...bundle })));
-    });
+    );
 
     /**
      * Abandon an in-progress 2FA challenge: clear the cookie and release any DEK
@@ -391,7 +493,9 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
      * Un id inaccessible est simplement ignoré.
      */
     const requestedWorkspace = (req: FastifyRequest): number | undefined => {
-        const raw = (req.query as { workspace?: string } | undefined)?.workspace;
+        // Un paramètre répété arrive en tableau : seule une chaîne est lue.
+        const raw = (req.query as Record<string, unknown> | undefined)?.workspace;
+        if (typeof raw !== 'string') return undefined;
         const id = Number(raw);
         return Number.isInteger(id) && id > 0 ? id : undefined;
     };
@@ -416,6 +520,8 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
             const benign = await db.refreshTokens.wasRecentlyRotated(claims.jti, token, ROTATION_GRACE_SECONDS);
             if (!benign) {
                 await db.refreshTokens.revokeSession(claims.sid);
+                forgetSessionDek(claims.sid);
+                live.closeSession(claims.sid);
                 clearAuthCookies(reply);
                 audit.record({
                     source: 'web',
@@ -438,7 +544,7 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
             return reply.code(401).send(err('auth_invalid', 'Unknown user'));
         }
 
-        await issueSession(reply, db, userId);
+        await issueSession(reply, db, userId, claims.sid);
         return reply.send(ok(bundle));
     });
 
@@ -448,6 +554,10 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
             const claims = await verifyRefreshToken(token);
             if (claims) {
                 await db.refreshTokens.revokeSession(claims.sid);
+                // La socket s'est authentifiée une fois pour toutes : sans la
+                // fermer, elle servirait encore le coffre après la déconnexion.
+                forgetSessionDek(claims.sid);
+                live.closeSession(claims.sid);
                 audit.record({
                     source: 'web',
                     category: 'auth',
@@ -476,60 +586,90 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
         return reply.send(ok(bundle));
     });
 
-    app.post('/api/auth/change-password', async (req, reply) => {
-        const accessToken = req.cookies[ACCESS_COOKIE];
-        if (!accessToken) return reply.code(401).send(err('auth_required', 'No session'));
+    app.post(
+        '/api/auth/change-password',
+        { config: { rateLimit: { max: 5, timeWindow: '10 minutes' } } },
+        async (req, reply) => {
+            const accessToken = req.cookies[ACCESS_COOKIE];
+            if (!accessToken) return reply.code(401).send(err('auth_required', 'No session'));
 
-        const claims = await verifyAccessToken(accessToken);
-        if (!claims) return reply.code(401).send(err('auth_expired', 'Access token expired'));
+            const claims = await verifyAccessToken(accessToken);
+            if (!claims) return reply.code(401).send(err('auth_expired', 'Access token expired'));
 
-        const parsed = changePasswordRequestSchema.safeParse(req.body);
-        if (!parsed.success) {
-            return reply.code(400).send(err('validation', 'Invalid password payload', parsed.error.flatten()));
-        }
-        const { currentPassword, newPassword } = parsed.data;
-
-        const row = await db.users.findById(Number(claims.sub));
-        if (!row) return reply.code(401).send(err('auth_invalid', 'Unknown user'));
-
-        const valid = row.password_hash ? await verifyPassword(row.password_hash, currentPassword) : false;
-        if (!valid) {
-            return reply.code(401).send(err('auth_invalid', 'Current password is incorrect'));
-        }
-
-        if (currentPassword === newPassword) {
-            return reply.code(400).send(err('validation', 'New password must differ from the current one'));
-        }
-
-        // If password-based encryption is on, the DEK is wrapped by the current
-        // password. Re-wrap it with the new password before rotating the hash so
-        // the user keeps access to their encrypted data (content is untouched).
-        const secretKeys = new SecretKeyService(db, crypt);
-        const keyRow = await db.userSecretKeys.get(row.id);
-        if (keyRow && secretKeys.isPasswordWrapped(keyRow)) {
-            try {
-                const dek = await secretKeys.unwrapWithPassword(keyRow, currentPassword);
-                await secretKeys.wrapWithPassword(row.id, dek, newPassword, 'keep', keyRow);
-            } catch (e) {
-                if (e instanceof WrongSecretError) {
-                    return reply.code(401).send(err('auth_invalid', 'Current password is incorrect'));
-                }
-                throw e;
+            const parsed = changePasswordRequestSchema.safeParse(req.body);
+            if (!parsed.success) {
+                return reply.code(400).send(err('validation', 'Invalid password payload', parsed.error.flatten()));
             }
+            const { currentPassword, newPassword } = parsed.data;
+
+            const row = await db.users.findById(Number(claims.sub));
+            if (!row) return reply.code(401).send(err('auth_invalid', 'Unknown user'));
+
+            const attemptKey = String(row.id);
+            const locked = lockedOut(reply, 'password', attemptKey);
+            if (locked) return locked;
+            const refuse = (): FastifyReply => {
+                recordFailedAttempt('password', attemptKey);
+                audit.record({
+                    source: 'web',
+                    category: 'auth',
+                    action: 'password.change_failed',
+                    level: 'warning',
+                    uid: row.id,
+                    ip: req.ip,
+                    description: `Changement de mot de passe refusé pour « ${row.username} » : mot de passe actuel incorrect`
+                });
+                return reply.code(401).send(err('auth_invalid', 'Current password is incorrect'));
+            };
+
+            const valid = row.password_hash ? await verifyPassword(row.password_hash, currentPassword) : false;
+            if (!valid) return refuse();
+
+            if (currentPassword === newPassword) {
+                return reply.code(400).send(err('validation', 'New password must differ from the current one'));
+            }
+
+            // If password-based encryption is on, the DEK is wrapped by the current
+            // password: the new wrap and the new hash land in one transaction, so the
+            // vault and the login never disagree on which password is current. The
+            // Argon2 work is done before it opens (no connection held meanwhile).
+            const secretKeys = new SecretKeyService(db, crypt);
+            const keyRow = await db.userSecretKeys.get(row.id);
+            const newHash = await hashPassword(newPassword);
+            if (keyRow && secretKeys.isPasswordWrapped(keyRow)) {
+                let dek: Buffer;
+                try {
+                    dek = await secretKeys.unwrapWithPassword(keyRow, currentPassword);
+                } catch (e) {
+                    if (e instanceof WrongSecretError) return refuse();
+                    throw e;
+                }
+                const { state } = await secretKeys.prepareWrapWithPassword(dek, newPassword, 'keep', keyRow);
+                dek.fill(0);
+                await secretKeys.rewrapPasswordAndHash(row.id, state, newHash);
+            } else {
+                await db.users.updatePasswordHash(row.id, newHash);
+            }
+            clearAttempts('password', attemptKey);
+
+            // Whoever held the old password is out: every other session, its cached
+            // DEK and its socket. This one continues under fresh tokens, same `sid`.
+            await db.refreshTokens.revokeUser(row.id);
+            forgetSessionsOf(row.id, claims.sid);
+            live.closeSessionsOf(row.id, claims.sid);
+            await issueSession(reply, db, row.id, claims.sid);
+
+            audit.record({
+                source: 'web',
+                category: 'auth',
+                action: 'password.change',
+                level: 'warning',
+                uid: row.id,
+                ip: req.ip,
+                description: `Mot de passe modifié pour « ${row.username} » ; autres sessions fermées`
+            });
+
+            return reply.send(ok({ changed: true as const }));
         }
-
-        await db.users.updatePasswordHash(row.id, await hashPassword(newPassword));
-
-        audit.record({
-            source: 'web',
-            category: 'auth',
-            action: 'password.change',
-            level: 'warning',
-            uid: row.id,
-            ip: req.ip,
-            description: `Mot de passe modifié pour « ${row.username} »`
-        });
-
-        return reply.send(ok({ changed: true as const }));
-    });
+    );
 }

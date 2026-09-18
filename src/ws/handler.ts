@@ -31,6 +31,7 @@ import { FeatureError } from '@/features/_define';
 import { featureHandlerMap } from '@/features/registry';
 import { topicsOf } from '@/features/_topics';
 import { enterSessionCommand, exitSessionCommand, forgetSessionDek } from '@/Services/SecureStore';
+import { env, isDev } from '@/Utils/Env';
 import { logger } from '@/logger';
 
 import type { Database } from '@/db';
@@ -60,13 +61,27 @@ export async function registerWS(
     { db, crypt, hub, live: liveHub, audit }: WSDeps
 ): Promise<void> {
     app.get('/ws', { websocket: true }, async (socket, req) => {
+        // CORS ne couvre pas la poignée de main WebSocket : seul `sameSite` sur
+        // le cookie empêche aujourd'hui une page tierce d'ouvrir cette socket au
+        // nom de l'utilisateur. Un navigateur envoie toujours `Origin` ; un client
+        // qui n'en envoie pas n'est pas un navigateur et ne porte pas ce risque.
+        // Hors dev : là, la page vient de Vite, dont l'origine n'est pas la nôtre.
+        const origin = req.headers.origin;
+        if (!isDev && origin !== undefined && origin !== env.PUBLIC_ORIGIN) {
+            socket.close(4403, 'origin');
+            return;
+        }
+
         const accessToken = req.cookies[ACCESS_COOKIE];
         const ip = req.ip;
         let session: Session | null = null;
 
         if (accessToken) {
             const claims = await verifyAccessToken(accessToken);
-            if (claims) {
+            // Le jeton d'accès ne porte aucun état : une session révoquée
+            // (déconnexion, mot de passe changé) garderait sa socket jusqu'à
+            // l'expiration du jeton sans ce contrôle, fait une fois par connexion.
+            if (claims && (await db.refreshTokens.hasLiveSession(claims.sid))) {
                 session = { userId: Number(claims.sub), sessionId: claims.sid };
             }
         }

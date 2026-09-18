@@ -61,6 +61,22 @@ function applyBundle(bundle: SessionBundle): AuthState {
     return { status: 'authenticated', user: bundle.user };
 }
 
+/**
+ * Ce que la session a laissé dans le navigateur : l'accueil (tuiles, adresses des
+ * raccourcis, noms de dossiers) et le fond d'écran de chaque espace. Sur un poste
+ * partagé, le compte suivant ne doit pas les trouver. Le mode de rendu reste : il
+ * décrit la machine, pas le compte.
+ */
+function clearLocalTraces(): void {
+    try {
+        for (const key of Object.keys(localStorage)) {
+            if (/^deveye[:.]/.test(key) && key !== 'deveye:render') localStorage.removeItem(key);
+        }
+    } catch {
+        // Stockage indisponible (navigation privée stricte) : rien à effacer.
+    }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [state, setState] = useState<AuthState>({ status: 'unknown', user: null });
     const [unreachable, setUnreachable] = useState(false);
@@ -116,6 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Idem pour la presence, sans quoi la session suivante repartirait avec le
         // roster et le lieu declare de la precedente.
         resetLive();
+        clearLocalTraces();
         setState({ status: 'anonymous', user: null });
     }, [cancelRetry]);
 

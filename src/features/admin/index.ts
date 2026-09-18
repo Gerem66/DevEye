@@ -12,6 +12,7 @@ import type { AdminInvite } from '@deveye/types';
 import type { UserInviteRow } from '@/db/repos/userInvites';
 import { env } from '@/Utils/Env';
 import { invalidateAccess } from '../_access';
+import { forgetSessionsOf } from '@/Services/SecureStore';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { notifyAdmins } from './notify';
 
@@ -101,6 +102,9 @@ export const adminSetUserStatusFeature: FeatureDefinition<
         // déjà ouvertes dès la commande suivante.
         if (input.status === 'suspended') {
             await ctx.db.refreshTokens.revokeUser(input.userId);
+            // Ses coffres déverrouillés se referment tout de suite, sans attendre
+            // que ses sockets tombent.
+            forgetSessionsOf(input.userId);
             // Et la présence : sinon le suspendu resterait dans le roster des
             // autres jusqu'à sa prochaine commande.
             ctx.live?.evictEverywhere(input.userId);
@@ -144,8 +148,10 @@ export const adminDeleteUserFeature: FeatureDefinition<
         // partagés dont il est propriétaire, et tout leur contenu.
         await ctx.db.users.delete(input.userId);
         invalidateAccess();
+        forgetSessionsOf(input.userId);
         if (ctx.live) {
             ctx.live.evictEverywhere(input.userId);
+            ctx.live.closeSessionsOf(input.userId);
             // Les espaces qu'il possédait ont disparu avec lui : leurs salles se vident.
             for (const w of shared) {
                 if (w.owner_user_id === input.userId) ctx.live.evictRoom(w.id);

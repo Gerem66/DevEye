@@ -23,6 +23,8 @@ const SINGLE_USE_BRIDGE_MS = 30_000;
 
 interface DekEntry {
     dek: Buffer;
+    /** Owner of the DEK: what {@link forgetSessionsOf} indexes on. */
+    userId: number;
     /** Epoch ms after which the DEK is considered expired. */
     expiresAt: number;
     /**
@@ -49,6 +51,13 @@ interface DekEntry {
      * `0` means no hold.
      */
     heldUntil: number;
+    /** When the current hold started (epoch ms); `0` when not held. Bounds {@link DEK_HOLD_MAX_MS}. */
+    holdStartedAt: number;
+    /**
+     * Ceiling no sliding, hold or touch can push past: an unlock never outlives
+     * {@link DEK_ABSOLUTE_TTL_MS}, whatever the client keeps sending.
+     */
+    hardExpiresAt: number;
 }
 
 /**
@@ -57,6 +66,15 @@ interface DekEntry {
  * quickly. After the last beat the DEK lives at most `DEK_HOLD_TTL_MS + graceMs`.
  */
 export const DEK_HOLD_TTL_MS = 25_000;
+
+/** Longest a popup can pin the DEK without a fresh unlock. */
+export const DEK_HOLD_MAX_MS = 2 * 3_600_000;
+
+/** Longest an unlock lives, sliding included: the largest `re_auth_interval`. */
+export const DEK_ABSOLUTE_TTL_MS = 24 * 3_600_000;
+
+/** Cadence of the sweep that wipes expired entries no socket reads any more. */
+const DEK_SWEEP_MS = 30_000;
 
 /** Monotonic id stamped on single-use DEK entries (see {@link DekEntry.id}). */
 let dekEntrySeq = 0;
@@ -76,11 +94,26 @@ function dropDek(sessionId: string, entry: DekEntry | undefined): void {
     sessionDeks.delete(sessionId);
 }
 
+/** Past its grace and its hold, or past the absolute ceiling. */
+function isExpired(entry: DekEntry, now: number): boolean {
+    if (now >= entry.hardExpiresAt) return true;
+    return now >= entry.expiresAt && now >= entry.heldUntil;
+}
+
+/** Slide the expiry, never past the absolute ceiling. */
+function slide(entry: DekEntry, until: number): void {
+    entry.expiresAt = Math.min(until, entry.hardExpiresAt);
+}
+
 /**
  * Read the live DEK for a session, enforcing the grace window. Returns null when
  * absent or expired (expired entries are wiped). For a normal entry each read
  * slides the expiry forward; a single-use entry never slides but records that a
  * command read it, so it can be wiped the moment that command drains.
+ *
+ * The caller gets a copy: the cached buffer may be wiped by a concurrent lock
+ * or socket close while an async consumer is still about to use it, and an
+ * all-zero key would seal content nobody can open again.
  */
 function liveDek(sessionId: string): Buffer | null {
     const entry = sessionDeks.get(sessionId);
@@ -88,24 +121,23 @@ function liveDek(sessionId: string): Buffer | null {
     const now = Date.now();
     // An active popup hold pins the DEK: it stays live even past expiresAt until
     // its lease lapses (see {@link holdSessionDek}).
-    if (now >= entry.expiresAt && now >= entry.heldUntil) {
+    if (isExpired(entry, now)) {
         dropDek(sessionId, entry);
         return null;
     }
     if (entry.singleUse) {
         entry.consumed = true;
     } else {
-        entry.expiresAt = now + entry.graceMs;
+        slide(entry, now + entry.graceMs);
     }
-    return entry.dek;
+    return Buffer.from(entry.dek);
 }
 
 /** True if the DEK is currently live, without sliding the grace window. */
 function hasLiveDek(sessionId: string): boolean {
     const entry = sessionDeks.get(sessionId);
     if (!entry) return false;
-    const now = Date.now();
-    if (now >= entry.expiresAt && now >= entry.heldUntil) {
+    if (isExpired(entry, Date.now())) {
         dropDek(sessionId, entry);
         return false;
     }
@@ -128,7 +160,9 @@ export function peekDekExpiry(sessionId: string): number | null {
  * Pin or release the session DEK for an open action popup. `active` renews a
  * short lease ({@link DEK_HOLD_TTL_MS}) and slides the grace window to
  * `lease + graceMs`; `!active` clears the lease and restarts a fresh grace
- * window. A no-op when the session holds no DEK.
+ * window. A no-op when the session holds no DEK. A hold that has lasted
+ * {@link DEK_HOLD_MAX_MS} stops renewing: the popup then decays like any idle
+ * session and the next save re-prompts.
  */
 export function holdSessionDek(sessionId: string, active: boolean, graceMs: number): void {
     const entry = sessionDeks.get(sessionId);
@@ -136,7 +170,7 @@ export function holdSessionDek(sessionId: string, active: boolean, graceMs: numb
     const now = Date.now();
     // Don't resurrect an already-expired entry; if the window lapsed before the
     // first heartbeat landed, treat it as gone.
-    if (now >= entry.expiresAt && now >= entry.heldUntil) {
+    if (isExpired(entry, now)) {
         dropDek(sessionId, entry);
         return;
     }
@@ -144,13 +178,16 @@ export function holdSessionDek(sessionId: string, active: boolean, graceMs: numb
     // takes effect on release.
     entry.graceMs = graceMs;
     if (active) {
-        entry.heldUntil = now + DEK_HOLD_TTL_MS;
+        if (entry.holdStartedAt === 0) entry.holdStartedAt = now;
+        if (now - entry.holdStartedAt >= DEK_HOLD_MAX_MS) return;
+        entry.heldUntil = Math.min(now + DEK_HOLD_TTL_MS, entry.hardExpiresAt);
         // Bound the post-popup lifetime: once heartbeats stop, the DEK lives at
         // most one lease + one fresh grace window, then flushes on its own.
-        entry.expiresAt = entry.heldUntil + graceMs;
+        slide(entry, entry.heldUntil + graceMs);
     } else {
         entry.heldUntil = 0;
-        entry.expiresAt = now + graceMs;
+        entry.holdStartedAt = 0;
+        slide(entry, now + graceMs);
     }
 }
 
@@ -163,11 +200,11 @@ export function touchSessionDek(sessionId: string): void {
     const entry = sessionDeks.get(sessionId);
     if (!entry || entry.singleUse) return;
     const now = Date.now();
-    if (now >= entry.expiresAt && now >= entry.heldUntil) {
+    if (isExpired(entry, now)) {
         dropDek(sessionId, entry);
         return;
     }
-    entry.expiresAt = now + entry.graceMs;
+    slide(entry, now + entry.graceMs);
 }
 
 /**
@@ -179,39 +216,64 @@ export function touchSessionDek(sessionId: string): void {
  *   command burst drains (see {@link exitSessionCommand}) or after a short safety
  *   bridge if it's never used. Defaults to {@link DEFAULT_DEK_GRACE_MS}.
  */
-export function rememberSessionDek(sessionId: string, dek: Buffer, graceMs: number = DEFAULT_DEK_GRACE_MS): void {
+export function rememberSessionDek(
+    sessionId: string,
+    userId: number,
+    dek: Buffer,
+    graceMs: number = DEFAULT_DEK_GRACE_MS
+): void {
     const prev = sessionDeks.get(sessionId);
     if (prev && prev.dek !== dek) prev.dek.fill(0);
+    const now = Date.now();
+    const hardExpiresAt = now + DEK_ABSOLUTE_TTL_MS;
     if (graceMs <= 0) {
         // Validate on every action: don't cache across actions, but the DEK must
         // still bridge from this unlock to the action that prompted it. Hold it
         // single-use; it's wiped as soon as that action's command drains.
         sessionDeks.set(sessionId, {
             dek,
-            expiresAt: Date.now() + SINGLE_USE_BRIDGE_MS,
+            userId,
+            expiresAt: now + SINGLE_USE_BRIDGE_MS,
             graceMs: SINGLE_USE_BRIDGE_MS,
             singleUse: true,
             consumed: false,
             holders: 0,
             id: ++dekEntrySeq,
-            heldUntil: 0
+            heldUntil: 0,
+            holdStartedAt: 0,
+            hardExpiresAt
         });
         return;
     }
     sessionDeks.set(sessionId, {
         dek,
-        expiresAt: Date.now() + graceMs,
+        userId,
+        expiresAt: now + graceMs,
         graceMs,
         singleUse: false,
         consumed: false,
         holders: 0,
         id: 0,
-        heldUntil: 0
+        heldUntil: 0,
+        holdStartedAt: 0,
+        hardExpiresAt
     });
 }
 
 export function forgetSessionDek(sessionId: string): void {
     dropDek(sessionId, sessionDeks.get(sessionId));
+}
+
+/**
+ * Wipe every cached DEK of a user, stashed ones included, except the session
+ * that just proved the password (a password change, a recovery, a suspension:
+ * what was unlocked under the old secret must not stay unlocked elsewhere).
+ */
+export function forgetSessionsOf(userId: number, keepSessionId?: string): void {
+    for (const [sessionId, entry] of sessionDeks) {
+        if (entry.userId === userId && sessionId !== keepSessionId) dropDek(sessionId, entry);
+    }
+    discardPendingDeksForUser(userId);
 }
 
 /**
@@ -268,6 +330,38 @@ function sweepPendingDeks(now: number): void {
             pendingDeks.delete(token);
         }
     }
+}
+
+/**
+ * Wipe what nobody reads any more. Every read path drops an expired entry it
+ * meets, but a DEK cached at login for a WebSocket that never came, or left
+ * behind by a socket that was superseded, is met by nobody.
+ */
+function sweep(now: number): void {
+    for (const [sessionId, entry] of sessionDeks) {
+        if (isExpired(entry, now)) dropDek(sessionId, entry);
+    }
+    sweepPendingDeks(now);
+}
+
+let sweeper: ReturnType<typeof setInterval> | null = null;
+
+/** Start the periodic sweep (idempotent; the timer never keeps the process alive). */
+export function startDekSweeper(): void {
+    if (sweeper) return;
+    sweeper = setInterval(() => sweep(Date.now()), DEK_SWEEP_MS);
+    sweeper.unref();
+}
+
+export function stopDekSweeper(): void {
+    if (!sweeper) return;
+    clearInterval(sweeper);
+    sweeper = null;
+}
+
+/** Run one sweep as if it were `now`; for tests only. */
+export function sweepSessionDeksForTest(now: number): void {
+    sweep(now);
 }
 
 /**

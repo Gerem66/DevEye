@@ -9,16 +9,17 @@ import {
 
 import QRCode from 'qrcode';
 
-import { sha256hex } from '@/Utils/hash';
+import { clearAttempts, guardAttempt, recordFailedAttempt } from '@/Services/attempts';
 import { totpContext } from '@/Services/sealContexts';
-import { generateBackupCodes, generateTotpSecret, normalizeBackupCode, verifyTotp } from '@/Services/Totp';
+import { generateBackupCodes, generateTotpSecret, hashBackupCode, verifyTotp } from '@/Services/Totp';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 
 /*
  * The TOTP secret is an authentication-bound secret: it must be decryptable at
  * login (before any WS session / password unlock exists) to verify the 2FA
- * code. It is therefore sealed under the server key (`ctx.crypt.sealFor`) and does
- * NOT go through `ctx.secure` (the per-user DEK), unlike feature data at rest.
+ * code. It is therefore sealed under the server key (`ctx.crypt.sealFor`) and
+ * does NOT go through `ctx.secure` (the per-user DEK), unlike feature data at
+ * rest.
  */
 
 async function buildStatus(ctx: FeatureContext): Promise<TwoFactorStatus> {
@@ -28,17 +29,29 @@ async function buildStatus(ctx: FeatureContext): Promise<TwoFactorStatus> {
     return { enabled: true, backupCodesRemaining: remaining };
 }
 
-/** Verify a current TOTP or single-use backup code; throws on failure. */
+/**
+ * Verify a current TOTP or single-use backup code; throws on failure. Every
+ * failure counts toward the account's lockout and is audited: this is a
+ * password-equivalent check reachable from any live session.
+ */
 async function assertValidCode(ctx: FeatureContext, code: string): Promise<void> {
     const row = await ctx.db.twoFactor.get(ctx.userId);
     if (!row || !row.enabled) throw new FeatureError('conflict', '2FA is not enabled');
+    const key = String(ctx.userId);
+    guardAttempt('twofa', key);
     const secret = ctx.crypt.openTextFor('totp', row.secret_enc, totpContext(ctx.userId));
-    if (secret && verifyTotp(code.trim(), secret)) return;
-    const backup = await ctx.db.twoFactor.findUnusedBackupCode(ctx.userId, sha256hex(normalizeBackupCode(code)));
-    if (backup) {
-        await ctx.db.twoFactor.markBackupCodeUsed(backup.id);
+    const step = secret ? verifyTotp(code.trim(), secret, row.last_used_counter) : null;
+    if (step !== null && (await ctx.db.twoFactor.claimTotpCounter(ctx.userId, step))) {
+        clearAttempts('twofa', key);
         return;
     }
+    const backup = await ctx.db.twoFactor.findUnusedBackupCode(ctx.userId, hashBackupCode(ctx.crypt, code));
+    if (backup && (await ctx.db.twoFactor.markBackupCodeUsed(backup.id))) {
+        clearAttempts('twofa', key);
+        return;
+    }
+    recordFailedAttempt('twofa', key);
+    ctx.audit({ action: 'twofa.failed', level: 'warning', description: 'Code 2FA invalide' });
     throw new FeatureError('auth_invalid', 'Invalid 2FA code');
 }
 
@@ -72,7 +85,7 @@ export const twoFactorSetupFeature: FeatureDefinition<
         await ctx.db.twoFactor.upsertSecret(ctx.userId, ctx.crypt.sealFor('totp', secret, totpContext(ctx.userId)));
         await ctx.db.twoFactor.replaceBackupCodes(
             ctx.userId,
-            backupCodes.map((c) => sha256hex(normalizeBackupCode(c)))
+            backupCodes.map((c) => hashBackupCode(ctx.crypt, c))
         );
 
         ctx.audit({ action: 'twofa.setup', description: 'Configuration 2FA initiée (secret + codes générés)' });
@@ -95,10 +108,16 @@ export const twoFactorEnableFeature: FeatureDefinition<
         const row = await ctx.db.twoFactor.get(ctx.userId);
         if (!row) throw new FeatureError('conflict', 'Start 2FA setup first');
         if (row.enabled) throw new FeatureError('conflict', '2FA is already enabled');
+        const key = String(ctx.userId);
+        guardAttempt('twofa', key);
         const secret = ctx.crypt.openTextFor('totp', row.secret_enc, totpContext(ctx.userId));
-        if (!secret || !verifyTotp(input.code.trim(), secret)) {
+        const step = secret ? verifyTotp(input.code.trim(), secret, row.last_used_counter) : null;
+        if (step === null || !(await ctx.db.twoFactor.claimTotpCounter(ctx.userId, step))) {
+            recordFailedAttempt('twofa', key);
+            ctx.audit({ action: 'twofa.failed', level: 'warning', description: 'Code 2FA invalide à l’activation' });
             throw new FeatureError('auth_invalid', 'Invalid TOTP code');
         }
+        clearAttempts('twofa', key);
         await ctx.db.twoFactor.enable(ctx.userId);
         ctx.audit({ action: 'twofa.enable', level: 'warning', description: 'Double authentification activée' });
         return { status: await buildStatus(ctx) };
@@ -135,7 +154,7 @@ export const twoFactorRegenBackupFeature: FeatureDefinition<
         const backupCodes = generateBackupCodes();
         await ctx.db.twoFactor.replaceBackupCodes(
             ctx.userId,
-            backupCodes.map((c) => sha256hex(normalizeBackupCode(c)))
+            backupCodes.map((c) => hashBackupCode(ctx.crypt, c))
         );
         ctx.audit({
             action: 'twofa.regenBackup',

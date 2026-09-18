@@ -30,6 +30,8 @@ import {
 import { setSdkHost } from '@/features/_sdk/host';
 import type { FeatureService } from '@deveye/types/sdk/server';
 import { createAuditLog } from '@/Services/AuditLog';
+import { startAttemptSweeper } from '@/Services/attempts';
+import { startDekSweeper } from '@/Services/SecureStore';
 import { createDomainVerifier } from '@/Services/domains/verifier';
 import { status } from '@/status';
 
@@ -200,6 +202,8 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // écritures faites chez ceux qui partagent avec lui, dans les deux sens.
     live.setShareLinks((workspaceId, feature) => deps.db.itemSharing.linkedWorkspaces(workspaceId, feature));
     live.startHeartbeat();
+    startDekSweeper();
+    startAttemptSweeper();
     // Même battement pour les sockets agent : une machine éteinte ne referme
     // jamais la sienne, et restait « en ligne » jusqu'au keepalive TCP du noyau.
     hub.startHeartbeat();

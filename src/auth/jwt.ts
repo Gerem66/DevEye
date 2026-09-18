@@ -2,6 +2,9 @@ import { env } from '@/Utils/Env';
 import { randomUUID } from 'crypto';
 import { SignJWT, errors as joseErrors, jwtVerify } from 'jose';
 
+/** Tous nos jetons sont signés HS256 ; rien d'autre n'est accepté à la vérification. */
+const JWT_ALGORITHMS = ['HS256'];
+
 const issuer = 'deveye';
 const audience = 'deveye-client';
 
@@ -50,7 +53,7 @@ export async function signRefreshToken(
 
 export async function verifyAccessToken(token: string): Promise<AccessClaims | null> {
     try {
-        const { payload } = await jwtVerify(token, accessSecret, { issuer, audience });
+        const { payload } = await jwtVerify(token, accessSecret, { issuer, audience, algorithms: JWT_ALGORITHMS });
         if (typeof payload.sub !== 'string' || typeof payload.sid !== 'string') return null;
         return { sub: payload.sub, sid: payload.sid };
     } catch (e) {
@@ -61,7 +64,7 @@ export async function verifyAccessToken(token: string): Promise<AccessClaims | n
 
 export async function verifyRefreshToken(token: string): Promise<RefreshClaims | null> {
     try {
-        const { payload } = await jwtVerify(token, refreshSecret, { issuer, audience });
+        const { payload } = await jwtVerify(token, refreshSecret, { issuer, audience, algorithms: JWT_ALGORITHMS });
         if (typeof payload.sub !== 'string' || typeof payload.sid !== 'string' || typeof payload.jti !== 'string') {
             return null;
         }
@@ -89,7 +92,11 @@ export async function signDeviceToken(deviceId: string, ownerId: number): Promis
 
 export async function verifyDeviceToken(token: string): Promise<DeviceClaims | null> {
     try {
-        const { payload } = await jwtVerify(token, deviceSecret, { issuer, audience: 'deveye-agent' });
+        const { payload } = await jwtVerify(token, deviceSecret, {
+            issuer,
+            audience: 'deveye-agent',
+            algorithms: JWT_ALGORITHMS
+        });
         if (typeof payload.sub !== 'string' || typeof payload.oid !== 'number') return null;
         return { sub: payload.sub, oid: payload.oid };
     } catch {
@@ -118,7 +125,11 @@ export async function verifyTwoFactorChallenge(
     token: string
 ): Promise<{ sub: string; pendingDekToken?: string } | null> {
     try {
-        const { payload } = await jwtVerify(token, accessSecret, { issuer, audience: 'deveye-2fa' });
+        const { payload } = await jwtVerify(token, accessSecret, {
+            issuer,
+            audience: 'deveye-2fa',
+            algorithms: JWT_ALGORITHMS
+        });
         if (typeof payload.sub !== 'string' || payload.purpose !== '2fa') return null;
         const pdk = typeof payload.pdk === 'string' ? payload.pdk : undefined;
         return { sub: payload.sub, pendingDekToken: pdk };
@@ -157,7 +168,11 @@ export async function signModuleTicket(
 
 export async function verifyModuleTicket(featureId: string, token: string): Promise<ModuleTicketClaims | null> {
     try {
-        const { payload } = await jwtVerify(token, accessSecret, { issuer, audience: `deveye-module:${featureId}` });
+        const { payload } = await jwtVerify(token, accessSecret, {
+            issuer,
+            audience: `deveye-module:${featureId}`,
+            algorithms: JWT_ALGORITHMS
+        });
         if (typeof payload.sub !== 'string' || typeof payload.ws !== 'number' || typeof payload.sid !== 'string') {
             return null;
         }

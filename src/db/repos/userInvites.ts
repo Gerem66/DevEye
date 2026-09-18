@@ -21,13 +21,15 @@ export interface CreateUserInviteInput {
     email: string | null;
     /** Espace rejoint dès la création du compte, ou `null`. */
     workspaceId: number | null;
-    ttlSeconds: number | null;
+    ttlSeconds: number;
     maxUses: number | null;
 }
 
 export interface UserInvitesRepo {
     create(input: CreateUserInviteInput): Promise<UserInviteRow>;
     listActive(): Promise<UserInviteRow[]>;
+    /** L'invitation, si elle est encore utilisable par cette adresse. Ne la consomme pas. */
+    findLive(token: string, email: string): Promise<UserInviteRow | null>;
     consume(token: string, email: string): Promise<UserInviteRow | null>;
     revoke(token: string): Promise<boolean>;
 }
@@ -44,7 +46,7 @@ export function userInvitesRepo(pool: Q): UserInvitesRepo {
             await pool.query(
                 `INSERT INTO user_invites (token, created_by, email, workspace_id, expires_at, max_uses)
                  VALUES (?, ?, ?, ?, ?, ?)`,
-                [token, createdBy, email, workspaceId, ttlSeconds === null ? null : now() + ttlSeconds, maxUses]
+                [token, createdBy, email, workspaceId, now() + ttlSeconds, maxUses]
             );
             const r = await pool.query<UserInviteRow>('SELECT * FROM user_invites WHERE token = ?', [token]);
             return r.rows[0];
@@ -55,6 +57,13 @@ export function userInvitesRepo(pool: Q): UserInvitesRepo {
                 [now()]
             );
             return r.rows;
+        },
+        async findLive(token, email) {
+            const r = await pool.query<UserInviteRow>(
+                `SELECT * FROM user_invites WHERE token = ? AND ${LIVE} AND (email IS NULL OR email = ?)`,
+                [token, now(), email]
+            );
+            return r.rows[0] ?? null;
         },
         async consume(token, email) {
             // Incrémenter et valider d'un seul coup : deux inscriptions simultanées

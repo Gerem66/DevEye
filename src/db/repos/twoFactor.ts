@@ -11,7 +11,14 @@ export interface TwoFactorRepo {
     replaceBackupCodes(userId: number, codeHashes: string[]): Promise<void>;
     countUnusedBackupCodes(userId: number): Promise<number>;
     findUnusedBackupCode(userId: number, codeHash: string): Promise<BackupCodeRow | null>;
-    markBackupCodeUsed(id: number): Promise<void>;
+    /** Burn the code; false when it was already burnt by a concurrent use. */
+    markBackupCodeUsed(id: number): Promise<boolean>;
+    /**
+     * Record the TOTP step just accepted, only if it is later than the last one:
+     * false means the step was already claimed, by a replay or a concurrent
+     * submission of the same code.
+     */
+    claimTotpCounter(userId: number, counter: number): Promise<boolean>;
 }
 
 export function twoFactorRepo(pool: Q): TwoFactorRepo {
@@ -60,7 +67,19 @@ export function twoFactorRepo(pool: Q): TwoFactorRepo {
         },
         async markBackupCodeUsed(id) {
             const now = Math.floor(Date.now() / 1000);
-            await pool.query('UPDATE user_2fa_backup_codes SET used_at = ? WHERE id = ?', [now, id]);
+            const res = await pool.query(
+                'UPDATE user_2fa_backup_codes SET used_at = ? WHERE id = ? AND used_at IS NULL',
+                [now, id]
+            );
+            return res.rowCount === 1;
+        },
+        async claimTotpCounter(userId, counter) {
+            const res = await pool.query(
+                `UPDATE user_2fa SET last_used_counter = ?
+                 WHERE user_id = ? AND (last_used_counter IS NULL OR last_used_counter < ?)`,
+                [counter, userId, counter]
+            );
+            return res.rowCount === 1;
         }
     };
 }

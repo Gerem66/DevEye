@@ -1,11 +1,14 @@
 import crypto from 'crypto';
 
 import { env } from '@/Utils/Env';
+import type Encryption from './Encryption';
 
 /**
  * Self-contained TOTP (RFC 6238) + recovery-code helpers, implemented on Node's
  * crypto to avoid an external dependency. Secrets are base32 (RFC 4648), 20 raw
- * bytes; verification allows a +/- 1 step (30s) window for clock drift.
+ * bytes; verification allows the current step and the previous one (30s) for
+ * clock drift, never a future one, and a step once accepted is never accepted
+ * again (the caller stores it: {@link verifyTotp} returns the matched counter).
  */
 
 const STEP_SECONDS = 30;
@@ -82,36 +85,59 @@ export function generateTotpSecret(accountName: string): TotpProvisioning {
     return { secret, otpauthUrl: `otpauth://totp/${label}?${params.toString()}` };
 }
 
-export function verifyTotp(token: string, secret: string): boolean {
+/**
+ * The time step a code matches, or `null`. A step at or before `lastUsedCounter`
+ * is refused even if the code is right: a code seen over someone's shoulder is
+ * worth nothing once its owner has used it. `now` is injectable for tests.
+ */
+export function verifyTotp(
+    token: string,
+    secret: string,
+    lastUsedCounter: number | null,
+    now: number = Date.now()
+): number | null {
     const normalized = token.replace(/\s+/g, '');
-    if (!/^\d{6}$/.test(normalized)) return false;
+    if (!/^\d{6}$/.test(normalized)) return null;
     const key = base32Decode(secret);
-    if (key.length === 0) return false;
-    const counter = Math.floor(Date.now() / 1000 / STEP_SECONDS);
-    for (let drift = -1; drift <= 1; drift++) {
-        const candidate = hotp(key, counter + drift);
+    if (key.length === 0) return null;
+    const counter = Math.floor(now / 1000 / STEP_SECONDS);
+    for (const drift of [0, -1]) {
+        const step = counter + drift;
+        const candidate = hotp(key, step);
         if (crypto.timingSafeEqual(Buffer.from(candidate), Buffer.from(normalized))) {
-            return true;
+            return lastUsedCounter !== null && step <= lastUsedCounter ? null : step;
         }
     }
-    return false;
+    return null;
 }
 
-/** Generate N human-friendly recovery codes (formatted XXXX-XXXX). */
+/** Generate N recovery codes, 16 characters over a 31-symbol alphabet (~79 bits each). */
 export function generateBackupCodes(count = 10): string[] {
     const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
     const codes: string[] = [];
     for (let i = 0; i < count; i++) {
-        let raw = '';
-        for (let j = 0; j < 8; j++) {
-            raw += alphabet[crypto.randomInt(alphabet.length)];
+        const groups: string[] = [];
+        for (let g = 0; g < 4; g++) {
+            let chunk = '';
+            for (let j = 0; j < 4; j++) chunk += alphabet[crypto.randomInt(alphabet.length)];
+            groups.push(chunk);
         }
-        codes.push(`${raw.slice(0, 4)}-${raw.slice(4)}`);
+        codes.push(groups.join('-'));
     }
     return codes;
 }
 
 /** Normalize a user-entered backup code for hashing/comparison. */
 export function normalizeBackupCode(code: string): string {
-    return code.trim().toUpperCase().replace(/\s+/g, '');
+    return code.trim().toUpperCase().replace(/[\s-]/g, '');
+}
+
+/**
+ * The stored form of a backup code: an HMAC under a key derived from the server
+ * key, not a bare hash. Ten codes of ~79 bits resist guessing on their own; the
+ * key is what makes a stolen dump useless for testing candidates offline.
+ */
+export function hashBackupCode(crypt: Encryption, code: string): string {
+    const key = crypt.derive('deveye-backup-codes', 'v1', 32);
+    return crypto.createHmac('sha256', key).update(normalizeBackupCode(code)).digest('hex');
 }

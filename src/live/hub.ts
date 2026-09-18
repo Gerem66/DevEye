@@ -150,6 +150,14 @@ export interface LiveTransport {
     /** L'espace disparaît : tout le monde sort. */
     evictRoom(workspaceId: number): void;
     /**
+     * Ferme les sockets d'un compte, sauf celles de la session gardée : ce qui
+     * était ouvert sous un secret révoqué (mot de passe changé, suspension) ne
+     * continue pas sur une socket authentifiée une fois pour toutes.
+     */
+    closeSessionsOf(userId: number, keepSessionId?: string): void;
+    /** Ferme les sockets d'une seule session (déconnexion, jeton réutilisé). */
+    closeSession(sessionId: string): void;
+    /**
      * Prévenir un compte, où que ses connexions soient assises : gagner ou
      * perdre un espace se décide pendant que l'intéressé est ailleurs. Réservé
      * aux sujets sans droit de feature (comme `workspace`).
@@ -353,6 +361,19 @@ export class LiveHub {
         for (const conn of [...this.bySocket.values()]) {
             if (conn.userId !== userId || conn.workspaceId === null) continue;
             this.evict(conn.workspaceId, userId);
+        }
+    }
+
+    closeSessionsOf(userId: number, keepSessionId?: string): void {
+        for (const conn of [...this.bySocket.values()]) {
+            if (conn.userId !== userId || conn.sessionId === keepSessionId) continue;
+            conn.socket.close(4401, 'session revoked');
+        }
+    }
+
+    closeSession(sessionId: string): void {
+        for (const conn of [...this.bySocket.values()]) {
+            if (conn.sessionId === sessionId) conn.socket.close(4401, 'session revoked');
         }
     }
 
@@ -849,6 +870,8 @@ export function createLiveTransport(hub: LiveHub, socket: WebSocket): LiveTransp
         evict: (workspaceId, userId) => hub.evict(workspaceId, userId),
         evictEverywhere: (userId) => hub.evictEverywhere(userId),
         evictRoom: (workspaceId) => hub.evictRoom(workspaceId),
+        closeSessionsOf: (userId, keepSessionId) => hub.closeSessionsOf(userId, keepSessionId),
+        closeSession: (sessionId) => hub.closeSession(sessionId),
         userChanged: (userId, workspaceId, topics, byUserId) => hub.userChanged(userId, workspaceId, topics, byUserId),
         resync: (db, workspaceId) => hub.resync(db, workspaceId)
     };
