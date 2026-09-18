@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+
 import { z } from 'zod';
 
 import {
@@ -123,7 +125,7 @@ function escapeHtml(value: string): string {
  * La cible du `postMessage` est l'origine de l'app : la fenêtre qui a ouvert le
  * consentement, et aucune autre.
  */
-export function popupResponse(appOrigin: string, ok: boolean, message?: string): string {
+export function popupResponse(appOrigin: string, ok: boolean, message?: string): { html: string; csp: string } {
     const payload = JSON.stringify({ source: 'deveye-mail-oauth', ok, error: message ?? null }).replace(
         /</g,
         '\\u003c'
@@ -132,14 +134,22 @@ export function popupResponse(appOrigin: string, ok: boolean, message?: string):
     const text = ok
         ? 'Compte connecté, vous pouvez fermer cette fenêtre.'
         : `Échec de la connexion : ${escapeHtml(message ?? 'inconnu')}`;
-    return `<!doctype html><html><head><meta charset="utf-8"><title>DevEye Mail</title></head>
-<body style="font-family:sans-serif;padding:2rem;color:#333">
-<p>${text}</p>
-<script>
+    const script = `
   if (window.opener) { window.opener.postMessage(${payload}, ${originJson}); }
   window.close();
-</script>
+`;
+    // La politique de l'app interdit tout script inline. Cette page en a un, et
+    // un seul : elle porte sa propre politique, qui n'autorise que lui, par son
+    // empreinte. Tout autre script qu'un message d'erreur forgé y glisserait
+    // resterait lettre morte.
+    const hash = crypto.createHash('sha256').update(script, 'utf8').digest('base64');
+    const csp = `default-src 'none'; script-src 'sha256-${hash}'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'`;
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>DevEye Mail</title></head>
+<body style="font-family:sans-serif;padding:2rem;color:#333">
+<p>${text}</p>
+<script>${script}</script>
 </body></html>`;
+    return { html, csp };
 }
 
 export function mailRoutes(app: SdkPublicApp, deps: MailRouteDeps, seam: MailRouteSeam = {}): void {
@@ -192,7 +202,11 @@ export function mailRoutes(app: SdkPublicApp, deps: MailRouteDeps, seam: MailRou
 
     app.get('/api/mail/oauth/callback', { exposure: 'app' }, async (req, reply) => {
         reply.header('Content-Type', 'text/html; charset=utf-8');
-        const page = (ok: boolean, message?: string) => reply.send(popupResponse(deps.origins.app, ok, message));
+        const page = (ok: boolean, message?: string) => {
+            const { html, csp } = popupResponse(deps.origins.app, ok, message);
+            reply.header('Content-Security-Policy', csp);
+            return reply.send(html);
+        };
         const query = oauthQuerySchema.safeParse(req.query);
         const { code, state, error } = query.success ? query.data : {};
 

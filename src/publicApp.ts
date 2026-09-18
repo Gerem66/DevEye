@@ -6,7 +6,7 @@ import { err, type ErrorCode } from '@deveye/types';
 
 import { modulePublicRoutes } from '@/features/_sdk/register';
 import { logger } from '@/logger';
-import { env, isDev } from '@/Utils/Env';
+import { env, TRUST_PROXY } from '@/Utils/Env';
 
 /**
  * Le serveur public : un second écouteur, sur son propre port, qui ne porte que
@@ -28,10 +28,13 @@ export async function buildPublicApp(): Promise<FastifyInstance> {
         loggerInstance: logger.child({ surface: 'public' }) as FastifyBaseLogger,
         // Le plafond de débit compte par IP : sans cela il verrait celle du
         // proxy, et un seul visiteur actif fermerait la porte à tous.
-        trustProxy: !isDev
+        trustProxy: TRUST_PROXY
     });
 
-    await app.register(fastifyHelmet, { contentSecurityPolicy: false });
+    // Aucune page servie ici, seulement des routes de données : tout est fermé.
+    await app.register(fastifyHelmet, {
+        contentSecurityPolicy: { useDefaults: false, directives: { 'default-src': ["'none'"] } }
+    });
 
     // Toute origine, sans identifiants : il n'y a aucune session à transporter.
     await app.register(fastifyCors, { origin: '*', credentials: false, methods: ['GET', 'POST'] });

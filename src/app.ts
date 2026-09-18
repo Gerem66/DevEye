@@ -19,7 +19,7 @@ import { featureHandlers } from '@/features/registry';
 import { buildTopicIndex } from '@/features/_topics';
 import { authRoutes } from '@/auth/routes';
 import { logger } from '@/logger';
-import { env, isDev } from '@/Utils/Env';
+import { env, TRUST_PROXY } from '@/Utils/Env';
 import { registerWS } from '@/ws/handler';
 import {
     createModuleServices,
@@ -38,6 +38,51 @@ import type Encryption from '@/Services/Encryption';
 
 type FastifyCorsDelegateCallback = (error: Error | null, options: FastifyCorsOptions) => void;
 
+/**
+ * Le plafond d'une trame WebSocket, tous écouteurs confondus (le plugin ne
+ * s'enregistre qu'une fois). Dimensionné sur la plus grosse commande légitime
+ * du client : `user.setTheme`, un fond d'écran et cinq emplacements en data URL
+ * (`THEME_IMAGE_MAX_LENGTH` + 5 × `THEME_SLOT_IMAGE_MAX_LENGTH`, ~11,7 Mo). Le
+ * défaut de `ws` est 100 Mio, analysés en JSON avant toute validation. La
+ * socket des agents se borne plus bas (`agent/ws.ts`).
+ */
+export const WS_MAX_PAYLOAD = 12 * 1024 * 1024;
+
+/**
+ * La politique de contenu du client. `script-src 'self'` est ce qui compte :
+ * un contournement du nettoyeur HTML (corps de mail) ou un lien `javascript:`
+ * ne peut plus exécuter de code. `style-src 'unsafe-inline'` reste nécessaire
+ * au thème (styles inline, `setProperty`) ; `img-src https:` aux fonds d'écran
+ * et avatars distants, `frame-src 'self'` au corps de mail en bac à sable.
+ */
+export const CONTENT_SECURITY_POLICY = {
+    useDefaults: false,
+    directives: {
+        'default-src': ["'self'"],
+        'script-src': ["'self'"],
+        'style-src': ["'self'", "'unsafe-inline'"],
+        'img-src': ["'self'", 'data:', 'blob:', 'https:'],
+        'font-src': ["'self'", 'data:'],
+        // Hors de soi, seulement ce que le widget « IP publique » interroge : lui
+        // seul peut demander l'adresse du navigateur, le serveur verrait la sienne
+        // (ou celle du VPN).
+        'connect-src': [
+            "'self'",
+            'https://api.ipify.org',
+            'https://api6.ipify.org',
+            'https://ipv4.icanhazip.com',
+            'https://ipv6.icanhazip.com',
+            'https://ipwho.is'
+        ],
+        'frame-src': ["'self'"],
+        'worker-src': ["'self'", 'blob:'],
+        'frame-ancestors': ["'none'"],
+        'base-uri': ["'none'"],
+        'object-src': ["'none'"],
+        'form-action': ["'self'"]
+    }
+} as const;
+
 export interface AppDeps {
     db: Database;
     crypt: Encryption;
@@ -52,10 +97,10 @@ export interface BuiltApp {
 export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     const app = Fastify({
         loggerInstance: logger as FastifyBaseLogger,
-        trustProxy: !isDev
+        trustProxy: TRUST_PROXY
     });
 
-    await app.register(fastifyHelmet, { contentSecurityPolicy: false });
+    await app.register(fastifyHelmet, { contentSecurityPolicy: CONTENT_SECURITY_POLICY });
 
     // CORS délégué par requête : tout DevEye n'accepte que `PUBLIC_ORIGIN` avec
     // les cookies, sauf les routes publiques des modules (capacité
@@ -75,7 +120,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         max: env.RATE_LIMIT_MAX,
         timeWindow: env.RATE_LIMIT_WINDOW
     });
-    await app.register(fastifyWebsocket);
+    await app.register(fastifyWebsocket, { options: { maxPayload: WS_MAX_PAYLOAD } });
 
     // Tolerate empty JSON bodies: cookie-based POSTs (e.g. /api/auth/refresh,
     // /api/auth/logout) send `Content-Type: application/json` with no body, which
@@ -205,12 +250,15 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         await app.register(fastifyStatic, {
             root: clientDir,
             wildcard: false,
-            index: ['index.html']
+            index: ['index.html'],
+            allowedPath: (pathName) => !pathName.endsWith('.map')
         });
 
         // SPA fallback: any non-API/WS GET that didn't match a static asset
-        // returns index.html so client-side routing can take over.
+        // returns index.html so client-side routing can take over. Les cartes de
+        // source du build ne sortent jamais : elles portent le code commenté.
         app.setNotFoundHandler((req, reply) => {
+            if (req.url.endsWith('.map')) return reply.code(404).send({ error: 'not_found' });
             if (req.method === 'GET' && !req.url.startsWith('/api') && !req.url.startsWith('/ws')) {
                 return reply.sendFile('index.html');
             }

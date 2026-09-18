@@ -97,11 +97,11 @@ jobs:
       DB_USERNAME: deveye
       DB_PASSWORD: deveye
       # Throwaway secrets: the database is born and dies with the job.
-      CRYPT_KEY_A: ci-smoke-crypt-key-a
-      CRYPT_KEY_B: ci-smoke-crypt-key-b
-      JWT_ACCESS_SECRET: ci-smoke-jwt-access
-      JWT_REFRESH_SECRET: ci-smoke-jwt-refresh
-      DEVICE_TOKEN_SECRET: ci-smoke-device-token
+      CRYPT_KEY_A: ci-smoke-crypt-key-a-0123456789abcdef0123456789
+      CRYPT_KEY_B: ci-smoke-crypt-key-b-0123456789abcdef0123456789
+      JWT_ACCESS_SECRET: ci-smoke-jwt-access-0123456789abcdef0123456789
+      JWT_REFRESH_SECRET: ci-smoke-jwt-refresh-0123456789abcdef0123456789
+      DEVICE_TOKEN_SECRET: ci-smoke-device-token-0123456789abcdef0123456789
       SMOKE_BROWSER: google-chrome
     steps:
       - uses: actions/checkout@v6

@@ -37,7 +37,8 @@ export const env = {
     DB_PASSWORD: getEnvVar('DB_PASSWORD', 'string'),
     DB_POOL_MAX: getEnvVar('DB_POOL_MAX', 'number', false) || 10,
 
-    // Symmetric encryption used by feature payloads (passwords, etc.)
+    // Clé serveur : deux chaînes aléatoires distinctes, combinées par HKDF
+    // (`Services/Encryption.ts`). Longueur vérifiée au boot, plus bas.
     CRYPT_KEY_A: getEnvVar('CRYPT_KEY_A', 'string'),
     CRYPT_KEY_B: getEnvVar('CRYPT_KEY_B', 'string'),
 
@@ -47,7 +48,7 @@ export const env = {
     JWT_ACCESS_TTL_SECONDS: getEnvVar('JWT_ACCESS_TTL_SECONDS', 'number', false) || 60 * 15,
     JWT_REFRESH_TTL_SECONDS: getEnvVar('JWT_REFRESH_TTL_SECONDS', 'number', false) || 60 * 60 * 24 * 30,
 
-    // Device (agent) tokens — long-lived, signed with a dedicated secret.
+    // Device (agent) tokens, signed with a dedicated secret.
     DEVICE_TOKEN_SECRET: getEnvVar('DEVICE_TOKEN_SECRET', 'string'),
 
     // Directory holding the agent binaries served by the download endpoints.
@@ -86,10 +87,53 @@ export const env = {
     COOKIE_DOMAIN: getEnvVar('COOKIE_DOMAIN', 'string', false),
 
     RATE_LIMIT_MAX: getEnvVar('RATE_LIMIT_MAX', 'number', false) || 200,
-    RATE_LIMIT_WINDOW: getEnvVar('RATE_LIMIT_WINDOW', 'string', false) || '1 minute'
+    RATE_LIMIT_WINDOW: getEnvVar('RATE_LIMIT_WINDOW', 'string', false) || '1 minute',
+
+    // Ce que Fastify croit de `X-Forwarded-For` : un nombre de sauts, ou une
+    // liste d'adresses/CIDR séparées par des virgules. `true` ferait gagner
+    // l'adresse la plus à gauche, celle que le client écrit lui-même, et toute
+    // limite par IP (login, enrôlement) se contournerait par un en-tête.
+    TRUST_PROXY: getEnvVar('TRUST_PROXY', 'string', false) || '1'
 };
 
 export const isDev = env.ENVIRONMENT === 'dev';
+
+/**
+ * Traduit `TRUST_PROXY` en valeur Fastify. Un entier n est « les n premiers
+ * sauts depuis le serveur » (la forme numérique de proxy-addr, que le type de
+ * Fastify n'expose pas : d'où la fonction).
+ */
+export function trustProxyOf(raw: string): string[] | ((address: string, hop: number) => boolean) {
+    const trimmed = raw.trim();
+    if (/^\d+$/.test(trimmed)) {
+        const hops = Number(trimmed);
+        return (_address, hop) => hop < hops;
+    }
+    return trimmed
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+}
+
+export const TRUST_PROXY = trustProxyOf(env.TRUST_PROXY);
+
+// Un secret court se brute-force au rythme d'un hachage, et la clé serveur ne
+// vaut que ce que valent ses deux moitiés. Refuser au boot plutôt que tourner.
+const SECRET_MIN_LENGTH = 32;
+for (const name of [
+    'CRYPT_KEY_A',
+    'CRYPT_KEY_B',
+    'JWT_ACCESS_SECRET',
+    'JWT_REFRESH_SECRET',
+    'DEVICE_TOKEN_SECRET'
+] as const) {
+    if (env[name].length < SECRET_MIN_LENGTH) {
+        throw new Error(`${name} doit faire au moins ${SECRET_MIN_LENGTH} caractères (openssl rand -base64 48).`);
+    }
+}
+if (env.CRYPT_KEY_A === env.CRYPT_KEY_B) {
+    throw new Error('CRYPT_KEY_A et CRYPT_KEY_B doivent différer.');
+}
 
 // Deux écouteurs sur le même port : un `EADDRINUSE` brut après le démarrage du
 // serveur principal ne dirait rien de la cause. On refuse tout de suite.
