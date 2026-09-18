@@ -6,29 +6,45 @@
 
 ## Ce qu'est la clé serveur
 
-`serverKey = sha256("CRYPT_KEY_A:CRYPT_KEY_B")`, 32 octets dérivés au boot
+Sa racine est `sha256("CRYPT_KEY_A:CRYPT_KEY_B")`, 32 octets dérivés au boot
 (`src/Services/Encryption.ts`). Elle ne chiffre presque jamais de données :
 elle **emballe des clés** (chiffrement par enveloppe, voir
 [SECURITY_MODEL.md](./SECURITY_MODEL.md)). C'est ce qui rend une rotation
 faisable en quelques secondes : il n'y a que des lignes de 32 octets à
 ré-emballer, jamais des Go de contenu à re-chiffrer.
 
+La racine ne scelle rien elle-même. Chaque usage a sa **sous-clé**
+(`HKDF-SHA256(racine, sel 'deveye-seal', info = étiquette)`), et chaque blob
+porte sa ligne en **contexte** (AAD de GCM, authentifié, pas stocké) : un blob
+recopié dans une autre colonne, ou sur la ligne d'un autre compte, ne s'ouvre
+pas. Format d'un blob scellé : base64 de `0x02 | iv(12) | tag(16) | chiffré`.
+Les deux variables font au moins 32 caractères et diffèrent : le serveur
+refuse de démarrer sinon.
+
 ## Ce qu'elle emballe, exhaustivement
 
-| Où                                                             | Quoi                                                                   | Écrit par                                      |
-| -------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------- |
-| `user_secret_keys.dek_wrapped` (lignes `wrap_mode = 'server'`) | la DEK gardée d'un compte dont le chiffrement par mot de passe est OFF | `SecretKeyService.ensureRow`, `wrapWithServer` |
-| `user_secret_keys.open_dek_wrapped`                            | la DEK ouverte de chaque compte                                        | `SecretKeyService.resolveOpenDek`              |
-| `workspace_secret_keys.dek_wrapped`                            | la WDK de chaque espace partagé                                        | `SecretKeyService.createWorkspaceDek`          |
-| `user_2fa.secret_enc`                                          | le secret TOTP, scellé (pas une clé, mais lisible avant toute session) | `features/twofa`                               |
-| `sync_meta` (`k = 'blob_key_wrapped'`)                         | la BMK de CloudSync, via `deps.keys.sealBytes`                         | module CloudSync                               |
-| tout module qui appelle `deps.keys.sealBytes`                  | son matériel de clé, là où il le range                                 | le module                                      |
+La liste fait foi dans le code : `SEAL_TARGETS` (`src/Services/sealTargets.ts`),
+que lisent la rotation, le re-scellement et le contrôle au boot. Un test vérifie
+que chaque cible figure ici.
+
+| Où                                                             | Étiquette           | Contexte                         | Quoi                                                                   |
+| -------------------------------------------------------------- | ------------------- | -------------------------------- | ---------------------------------------------------------------------- |
+| `user_secret_keys.dek_wrapped` (lignes `wrap_mode = 'server'`) | `user-dek`          | `user_secret_keys:dek:<id>`      | la DEK gardée d'un compte dont le chiffrement par mot de passe est OFF |
+| `user_secret_keys.open_dek_wrapped`                            | `user-open-dek`     | `user_secret_keys:open_dek:<id>` | la DEK ouverte de chaque compte                                        |
+| `workspace_secret_keys.dek_wrapped`                            | `workspace-dek`     | `workspace_secret_keys:dek:<id>` | la WDK de chaque espace partagé                                        |
+| `user_2fa.secret_enc`                                          | `totp`              | `user_2fa:secret:<id>`           | le secret TOTP, scellé (pas une clé, mais lisible avant toute session) |
+| `sync_meta.v` (`k = 'blob_key_wrapped'`)                       | `module:cloudsync`  | vide                             | la BMK de CloudSync, via `deps.keys.sealBytes`                         |
+| `ft_mailserver_mailboxes.blob_key`                             | `module:mailserver` | vide                             | la clé des corps de chaque boîte                                       |
+| `ft_mailserver_domain_keys.private_key`                        | `module:mailserver` | vide                             | les clés DKIM des domaines                                             |
+| `ft_mailserver_tls.sealed`                                     | `module:mailserver` | vide                             | la clé du certificat des écouteurs                                     |
+| tout module qui appelle `deps.keys.sealBytes`                  | `module:<son id>`   | celui qu'il passe, vide sinon    | son matériel de clé, là où il le range                                 |
 
 Et une dérivation, sans stockage :
 
 | Quoi                                     | Comment                                                                                                                                                                                                                                                                                                                                                         |
 | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `BAK`, la clé des archives de sauvegarde | `HKDF(serverKey, 'deveye-backup')`, `src/backup/crypto.ts`                                                                                                                                                                                                                                                                                                      |
+| `BAK`, la clé des archives de sauvegarde | `HKDF(racine, 'deveye-backup')`, `features/backup/src/server/crypto.ts`, refaite sans DevEye par `scripts/restore-backup.mjs`                                                                                                                                                                                                                                   |
+| la clé des codes de secours 2FA          | `HKDF(racine, 'deveye-backup-codes')`, `src/Services/Totp.ts` : les codes sont rangés en HMAC sous cette clé. Changer la clé serveur les invalide tous : chaque compte régénère les siens (la 2FA elle-même reste active, son secret est re-scellé)                                                                                                             |
 | le sel des visiteurs d'Audience          | `HKDF(serverKey, 'audience', 'visitor-salt')`, `features/audience/src/server/service.ts` : entre dans chaque condensé de visiteur (`visitor_ref`). Changer la clé serveur change donc les condensés une fois : un visiteur persistant est compté « nouveau » une fois, les condensés anonymes tournaient déjà chaque jour. Rien à re-sceller, rien n'est stocké |
 
 **Ce qui n'en dépend pas** : tout le contenu des features (sous DEK ou WDK),
@@ -38,7 +54,7 @@ les blobs CloudSync (sous BMK), les DEK emballées par mot de passe
 
 ## Ce qui se passe si on change les variables sans rien faire
 
-Au boot suivant, chaque `openRaw` échoue : plus aucune DEK serveur ni DEK
+Au boot suivant, chaque `openFor` échoue : plus aucune DEK serveur ni DEK
 ouverte ne se déballe (tout le contenu ouvert devient illisible, le coffre des
 comptes sans mot de passe aussi), plus aucune WDK (tous les espaces partagés),
 le TOTP ne se vérifie plus, CloudSync refuse de démarrer (« impossible de
@@ -85,6 +101,30 @@ sous l'ancienne clé, et n'écrit rien.
    Les re-sceller sous la nouvelle clé (restaurer puis re-sauvegarder) est
    possible mais rarement utile : une archive vieillit, une clé se garde.
 
+## Passer une base au format 2 (une fois)
+
+Une base écrite avant les sous-clés a ses blobs scellés nus, sous la racine,
+sans contexte. Le serveur le détecte au boot (`src/Services/sealFormat.ts`) et
+**refuse de démarrer** en nommant les colonnes concernées : il ne saurait pas
+les ouvrir, et l'échec surgirait sinon au premier déverrouillage. Le passage
+est un script et non une migration de boot, parce qu'il lui faut la clé serveur
+et une transaction annulable.
+
+1. Sauvegarde de la base, serveur arrêté (il l'est déjà : il refuse de démarrer).
+2. Dry-run, avec l'environnement de prod (dans le conteneur) :
+    ```bash
+    npm run reseal:server-key
+    ```
+    Attendu : chaque ligne « à re-sceller » ou « déjà au format 2 », zéro
+    « illisible ».
+3. Exécution : `npm run reseal:server-key -- --yes`. Une seule transaction,
+   chaque blob relu avant validation. Rejouable sans risque.
+4. Redémarrer. Les codes de secours 2FA, eux, ont été effacés par la migration
+   114 (leur ancien condensé n'était pas convertible) : chaque compte en
+   régénère depuis Sécurité.
+
+Une installation neuve n'a rien à convertir.
+
 ## Quand la faire
 
 Quand les clés ont fuité, ou changent de main. Pas de rotation périodique :
@@ -105,6 +145,9 @@ l'enveloppe. La clé serveur est la seule couche prévue pour tourner.
 ## Un module et sa clé
 
 Un module qui scelle du matériel par `deps.keys.sealBytes` le range où il veut
-(CloudSync : `sync_meta`). L'outil connaît celui de CloudSync ; un nouveau
-module devra ajouter sa ligne dans `scripts/rotate-server-key.ts`, il n'y a pas
-de découverte automatique.
+(CloudSync : `sync_meta`). Il est scellé sous la sous-clé du module
+(`module:<id>`) : le blob d'un module ne s'ouvre ni chez un autre ni comme une
+clé de l'app. Un nouveau module ajoute sa ligne à `SEAL_TARGETS`
+(`src/Services/sealTargets.ts`), avec le contexte qu'il passe à `sealBytes` : il
+n'y a pas de découverte automatique, et une colonne oubliée deviendrait
+illisible à la première rotation.

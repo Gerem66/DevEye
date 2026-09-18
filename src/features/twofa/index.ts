@@ -8,13 +8,14 @@ import {
 } from '@deveye/types';
 
 import { sha256hex } from '@/Utils/hash';
+import { totpContext } from '@/Services/sealContexts';
 import { generateBackupCodes, generateTotpSecret, normalizeBackupCode, verifyTotp } from '@/Services/Totp';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 
 /*
  * The TOTP secret is an authentication-bound secret: it must be decryptable at
  * login (before any WS session / password unlock exists) to verify the 2FA
- * code. It is therefore sealed under the server key (`ctx.crypt.seal`) and does
+ * code. It is therefore sealed under the server key (`ctx.crypt.sealFor`) and does
  * NOT go through `ctx.secure` (the per-user DEK), unlike feature data at rest.
  */
 
@@ -29,7 +30,7 @@ async function buildStatus(ctx: FeatureContext): Promise<TwoFactorStatus> {
 async function assertValidCode(ctx: FeatureContext, code: string): Promise<void> {
     const row = await ctx.db.twoFactor.get(ctx.userId);
     if (!row || !row.enabled) throw new FeatureError('conflict', '2FA is not enabled');
-    const secret = ctx.crypt.open(row.secret_enc);
+    const secret = ctx.crypt.openTextFor('totp', row.secret_enc, totpContext(ctx.userId));
     if (secret && verifyTotp(code.trim(), secret)) return;
     const backup = await ctx.db.twoFactor.findUnusedBackupCode(ctx.userId, sha256hex(normalizeBackupCode(code)));
     if (backup) {
@@ -66,7 +67,7 @@ export const twoFactorSetupFeature: FeatureDefinition<
         const { secret, otpauthUrl } = generateTotpSecret(account);
         const backupCodes = generateBackupCodes();
 
-        await ctx.db.twoFactor.upsertSecret(ctx.userId, ctx.crypt.seal(secret));
+        await ctx.db.twoFactor.upsertSecret(ctx.userId, ctx.crypt.sealFor('totp', secret, totpContext(ctx.userId)));
         await ctx.db.twoFactor.replaceBackupCodes(
             ctx.userId,
             backupCodes.map((c) => sha256hex(normalizeBackupCode(c)))
@@ -89,7 +90,7 @@ export const twoFactorEnableFeature: FeatureDefinition<
         const row = await ctx.db.twoFactor.get(ctx.userId);
         if (!row) throw new FeatureError('conflict', 'Start 2FA setup first');
         if (row.enabled) throw new FeatureError('conflict', '2FA is already enabled');
-        const secret = ctx.crypt.open(row.secret_enc);
+        const secret = ctx.crypt.openTextFor('totp', row.secret_enc, totpContext(ctx.userId));
         if (!secret || !verifyTotp(input.code.trim(), secret)) {
             throw new FeatureError('auth_invalid', 'Invalid TOTP code');
         }

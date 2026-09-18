@@ -76,7 +76,7 @@ export function createSdkContext(
                     opts?.ttlSeconds ?? 120
                 )
         },
-        keys: serverKeysOf(ctx.crypt),
+        keys: serverKeysOf(ctx.crypt, manifest.id),
         live: { publish: (event, payload) => publishFrame(manifest, ctx.workspaceId, event, payload) },
         items: {
             // Liées à la feature du module : un module ne peut pas interroger

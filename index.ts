@@ -8,6 +8,7 @@ import Encryption from '@/Services/Encryption';
 import { createAuditLog } from '@/Services/AuditLog';
 import { createDatabase } from '@/db';
 import { runMigrations } from '@/db/migrate';
+import { assertSealFormat } from '@/Services/sealFormat';
 import { createDbPool, testConnection } from '@/db/pool';
 import { seedDevAccount } from '@/db/seedDev';
 import { moduleMigrationDirs } from '@/features/_sdk/register';
@@ -33,6 +34,13 @@ async function main() {
     }
 
     await runMigrations(pool, moduleMigrationDirs());
+
+    try {
+        await assertSealFormat(pool);
+    } catch (e) {
+        logger.fatal((e as Error).message);
+        process.exit(1);
+    }
 
     if (process.env.SEED_DEV === 'true') {
         await seedDevAccount(pool);

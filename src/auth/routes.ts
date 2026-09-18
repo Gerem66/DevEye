@@ -12,6 +12,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { notifyAdmins } from '@/features/admin/notify';
 import { env } from '@/Utils/Env';
 import { sha256hex } from '@/Utils/hash';
+import { totpContext } from '@/Services/sealContexts';
 import { normalizeBackupCode, verifyTotp } from '@/Services/Totp';
 import type Encryption from '@/Services/Encryption';
 import { SecretKeyService, WrongSecretError } from '@/Services/SecretKeyService';
@@ -317,7 +318,7 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
         }
 
         const code = parsed.data.code.trim();
-        const secret = crypt.open(twoFa.secret_enc);
+        const secret = crypt.openTextFor('totp', twoFa.secret_enc, totpContext(userId));
         let accepted = false;
         if (secret && verifyTotp(code, secret)) {
             accepted = true;

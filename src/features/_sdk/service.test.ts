@@ -77,8 +77,12 @@ function fakeHost() {
             }
         },
         crypt: {
-            seal: (plain: Buffer) => `sealed:${plain.toString('hex')}`,
-            openRaw: (sealed: string) => (sealed.startsWith('sealed:') ? Buffer.from(sealed.slice(7), 'hex') : null)
+            sealFor: (label: string, plain: Buffer, context: string) =>
+                `sealed:${label}:${context}:${plain.toString('hex')}`,
+            openFor: (label: string, sealed: string, context: string) => {
+                const prefix = `sealed:${label}:${context}:`;
+                return sealed.startsWith(prefix) ? Buffer.from(sealed.slice(prefix.length), 'hex') : null;
+            }
         },
         audit: {
             record: (event: AuditEvent) => {
@@ -305,12 +309,20 @@ describe('createServiceDeps : le reste, sans session', () => {
         assert.equal(deps.agents.isOnline('dev-2'), false);
     });
 
-    it('keys scelle et rouvre sous la clé serveur, null pour un blob étranger', () => {
+    it('keys scelle sous la sous-clé du module et le contexte donné, null pour un blob étranger', () => {
         const deps = createServiceDeps(fakeHost().host, manifest(ID), null, NO_PROVIDERS);
-        const sealed = deps.keys.sealBytes(new Uint8Array([1, 2, 3]));
-        assert.equal(sealed, 'sealed:010203');
-        assert.deepEqual(deps.keys.openBytes(sealed), Buffer.from([1, 2, 3]));
+        const sealed = deps.keys.sealBytes(new Uint8Array([1, 2, 3]), 'table:col:7');
+        assert.equal(sealed, `sealed:module:${ID}:table:col:7:010203`);
+        assert.deepEqual(deps.keys.openBytes(sealed, 'table:col:7'), Buffer.from([1, 2, 3]));
+        assert.equal(deps.keys.openBytes(sealed, 'table:col:8'), null);
         assert.equal(deps.keys.openBytes('autre'), null);
+    });
+
+    it("keys : le blob d'un module ne s'ouvre pas chez un autre", () => {
+        const host = fakeHost().host;
+        const mine = createServiceDeps(host, manifest(ID), null, NO_PROVIDERS);
+        const other = createServiceDeps(host, manifest('cloudsync'), null, NO_PROVIDERS);
+        assert.equal(other.keys.openBytes(mine.keys.sealBytes(new Uint8Array([9]))), null);
     });
 
     it('listWorkspaceIds lit les ids de tous les espaces', async () => {

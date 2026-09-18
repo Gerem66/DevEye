@@ -9,9 +9,13 @@ export interface WrapState {
     wrapMode: SecrecyWrapMode;
     /** Argon2id salt for the password-derived key (null in `server` mode). */
     kdfSalt: Buffer | null;
+    /** KDF profile the password wrap was derived under (`SecretKeyService.KDF_VERSIONS`). */
+    version: number;
     /** Recovery copy of the DEK (null when no recovery code is set). */
     recoveryWrapped: string | null;
     recoverySalt: Buffer | null;
+    /** KDF profile of the recovery wrap; it can lag behind `version` until the code is used. */
+    recoveryVersion: number;
 }
 
 export interface UserSecretKeysRepo {
@@ -48,15 +52,17 @@ export function userSecretKeysRepo(pool: Q): UserSecretKeysRepo {
             const now = Math.floor(Date.now() / 1000);
             await pool.query(
                 `UPDATE user_secret_keys
-                 SET dek_wrapped = ?, wrap_mode = ?, kdf_salt = ?,
-                     recovery_wrapped = ?, recovery_salt = ?, updated = ?
+                 SET dek_wrapped = ?, wrap_mode = ?, kdf_salt = ?, version = ?,
+                     recovery_wrapped = ?, recovery_salt = ?, recovery_version = ?, updated = ?
                  WHERE user_id = ?`,
                 [
                     state.dekWrapped,
                     state.wrapMode,
                     state.kdfSalt,
+                    state.version,
                     state.recoveryWrapped,
                     state.recoverySalt,
+                    state.recoveryVersion,
                     now,
                     userId
                 ]

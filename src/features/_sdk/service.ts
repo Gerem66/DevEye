@@ -90,7 +90,7 @@ export function createServiceDeps(
     };
     const gateAgents = gate('agents');
     const gateDevices = gate('devices.read');
-    const keys = serverKeysOf(host.crypt);
+    const keys = serverKeysOf(host.crypt, manifest.id);
 
     return {
         repo,

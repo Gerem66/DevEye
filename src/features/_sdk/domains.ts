@@ -105,7 +105,7 @@ export function createDomainsContext(
                 open: cipherFor(workspaceId),
                 guarded: null
             }),
-        keys: serverKeysOf(host.crypt),
+        keys: serverKeysOf(host.crypt, manifest.id),
         dns: systemDns,
         logger: host.logger
     };
