@@ -1,5 +1,5 @@
 import { MotionConfig } from 'framer-motion';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import HomePage from './Pages/Home/index.js';
 import LoginPage from './Pages/Login/index.js';
@@ -25,6 +25,11 @@ function AppRoot() {
     // Lu une seule fois : l'URL est nettoyée dès que le compte est créé, pour
     // qu'un rafraîchissement ne repropose pas un jeton déjà consommé.
     const [registerToken, setRegisterToken] = useState<string | null>(readRegisterToken);
+    // Le jeton quitte la barre d'adresse dès qu'il est lu : il ne reste ni dans
+    // l'historique ni sous les yeux pendant que le formulaire se remplit.
+    useEffect(() => {
+        if (registerToken) window.history.replaceState({}, '', '/register');
+    }, [registerToken]);
 
     return (
         <>

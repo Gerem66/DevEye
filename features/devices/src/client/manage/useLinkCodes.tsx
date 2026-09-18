@@ -18,7 +18,7 @@ export function useLinkCodes(refresh: () => Promise<void> | void) {
     const [generatingCode, setGeneratingCode] = useState(false);
     const [genError, setGenError] = useState<string | null>(null);
     const [copiedCode, setCopiedCode] = useState<string | null>(null);
-    // Validity preset for newly generated codes ('custom' / 'none' are special).
+    // Validity preset for newly generated codes ('custom' is special).
     const [ttlPreset, setTtlPreset] = useState<string>('300');
     const [customMinutes, setCustomMinutes] = useState<string>('30');
     // Whether a newly generated code auto-approves the device on enrollment.
@@ -40,8 +40,7 @@ export function useLinkCodes(refresh: () => Promise<void> | void) {
     };
 
     // `undefined` on an invalid custom value (caller shows an error).
-    const resolveTtlSeconds = (): { ttlSeconds: number | null } | undefined => {
-        if (ttlPreset === 'none') return { ttlSeconds: null };
+    const resolveTtlSeconds = (): { ttlSeconds: number } | undefined => {
         if (ttlPreset === 'custom') {
             const mins = Number(customMinutes);
             if (!Number.isFinite(mins) || mins <= 0) return undefined;

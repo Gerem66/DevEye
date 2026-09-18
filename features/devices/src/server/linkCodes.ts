@@ -33,8 +33,7 @@ export const devicesLinkCodeCreateFeature = defineSdkFeature<
     mutates: true,
     access: WRITE,
     handler: async (ctx, input) => {
-        // undefined → server default; null → never expires; number → custom.
-        const ttlSeconds = input.ttlSeconds === undefined ? env.LINK_CODE_TTL_SECONDS : input.ttlSeconds;
+        const ttlSeconds = input.ttlSeconds ?? env.LINK_CODE_TTL_SECONDS;
         // La machine se range là où on l'appaire : le code ne vise que
         // l'espace actif, celui dont l'appelant tient le droit d'écriture.
         const workspaceId = ctx.workspaceId;

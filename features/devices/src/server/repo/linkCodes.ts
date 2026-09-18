@@ -20,7 +20,7 @@ export interface LinkCodeRepo {
         /** Espace dans lequel la machine sera rangée à l'enrôlement. */
         workspaceId: number;
         /** `null` mints a code that never expires. */
-        ttlSeconds: number | null;
+        ttlSeconds: number;
         autoApprove: boolean;
     }): Promise<LinkCode>;
     /** Les codes encore valables (ni consommés ni expirés) de cet émetteur. */
@@ -60,7 +60,7 @@ export function linkCodeRepo(q: SdkQueryable): LinkCodeRepo {
     return {
         async create({ userId, workspaceId, ttlSeconds, autoApprove }) {
             const now = Math.floor(Date.now() / 1000);
-            const expiresAt = ttlSeconds === null ? null : now + ttlSeconds;
+            const expiresAt = now + ttlSeconds;
             const code = randomCode();
             await q.execute(
                 'INSERT INTO device_link_codes (code, user_id, workspace_id, expires_at, auto_approve) VALUES (?, ?, ?, ?, ?)',

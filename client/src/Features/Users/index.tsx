@@ -16,8 +16,7 @@ import styles from './Users.module.css';
 const TTL_CHOICES: { label: string; value: string }[] = [
     { label: '1 jour', value: '86400' },
     { label: '7 jours', value: '604800' },
-    { label: '30 jours', value: '2592000' },
-    { label: 'N’expire pas', value: 'null' }
+    { label: '30 jours', value: '2592000' }
 ];
 
 /** Date lisible, ou « jamais » pour un compte qui ne s'est pas encore connecté. */
@@ -292,7 +291,7 @@ export default function FeatureUsers() {
                                             .send('admin.inviteCreate', {
                                                 email,
                                                 workspaceId: wsId === 'null' ? null : Number(wsId),
-                                                ttlSeconds: ttl === 'null' ? null : Number(ttl),
+                                                ttlSeconds: Number(ttl),
                                                 maxUses: 1
                                             })
                                             .then(() => undefined),

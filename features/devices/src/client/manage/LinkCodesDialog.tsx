@@ -45,8 +45,8 @@ export function LinkCodesDialog({ links, onDownload }: { links: LinkCodes; onDow
                     <option value='900'>Valide 15 minutes</option>
                     <option value='3600'>Valide 1 heure</option>
                     <option value='86400'>Valide 24 heures</option>
+                    <option value='2592000'>Valide 30 jours</option>
                     <option value='custom'>Durée personnalisée…</option>
-                    <option value='none'>Sans expiration</option>
                 </SelectInput>
                 {links.ttlPreset === 'custom' && (
                     <TextInput

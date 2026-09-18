@@ -162,21 +162,21 @@ export interface LinkCodesRepo {
 export function linkCodesRepo(pool: Q): LinkCodesRepo {
     return {
         async consume(code) {
+            // Marquer et valider d'un seul coup : deux enrôlements simultanés avec
+            // le même code ne passent pas tous les deux.
             const now = Math.floor(Date.now() / 1000);
-            const r = await pool.query<{
-                user_id: number;
-                workspace_id: number;
-                expires_at: number | null;
-                used_at: number | null;
-                auto_approve: number;
-            }>(
-                'SELECT user_id, workspace_id, expires_at, used_at, auto_approve FROM device_link_codes WHERE code = ?',
+            const res = await pool.query(
+                `UPDATE device_link_codes SET used_at = ?
+                 WHERE code = ? AND used_at IS NULL AND (expires_at IS NULL OR expires_at >= ?)`,
+                [now, code, now]
+            );
+            if (res.rowCount !== 1) return null;
+            const r = await pool.query<{ user_id: number; workspace_id: number; auto_approve: number }>(
+                'SELECT user_id, workspace_id, auto_approve FROM device_link_codes WHERE code = ?',
                 [code]
             );
             const row = r.rows[0];
-            if (!row || row.used_at !== null) return null;
-            if (row.expires_at !== null && Number(row.expires_at) < now) return null;
-            await pool.query('UPDATE device_link_codes SET used_at = ? WHERE code = ?', [now, code]);
+            if (!row) return null;
             return {
                 userId: row.user_id,
                 workspaceId: row.workspace_id,

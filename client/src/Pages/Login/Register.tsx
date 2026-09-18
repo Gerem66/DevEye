@@ -7,10 +7,11 @@ import { useAuth } from '@/auth/AuthProvider';
 import { whenHomeReady } from '@/stores/homeReady';
 import './style.css';
 
-/** Jeton d'inscription présent dans l'URL, ou `null` : lu une fois au
- *  chargement, effacé de la barre d'adresse une fois le compte créé. */
+/** Jeton d'inscription porté par le fragment de `/register#<jeton>`, ou `null` :
+ *  lu une fois au chargement, puis effacé de la barre d'adresse (`App.tsx`). */
 export function readRegisterToken(): string | null {
-    const m = /^\/register\/([A-Za-z0-9_-]+)\/?$/.exec(window.location.pathname);
+    if (!/^\/register\/?$/.test(window.location.pathname)) return null;
+    const m = /^#([A-Za-z0-9_-]+)$/.exec(window.location.hash);
     return m ? m[1] : null;
 }
 

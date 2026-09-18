@@ -22,7 +22,7 @@ const DEFAULT_AVATAR = 'default-user.png';
  * Ce qu'un `<img>` doit charger pour cet avatar : une URL de données telle
  * quelle, sinon un nom de fichier du dossier statique des images. Chemin absolu
  * exprès : la première session d'un compte neuf se dessine alors que l'adresse
- * est encore `/register/<jeton>`.
+ * est encore `/register`.
  */
 export function avatarSrc(avatar: string): string {
     if (avatar.startsWith('data:') || avatar.startsWith('http')) return avatar;

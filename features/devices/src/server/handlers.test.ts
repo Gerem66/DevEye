@@ -84,7 +84,7 @@ function row(over: Partial<DeviceRow> & { id: string }): DeviceRow {
         fingerprint: `fp-${over.id.slice(0, 8)}`,
         platform: 'linux',
         status: 'active',
-        public_key: null,
+        token_hash_prev: null,
         token_hash: 'hash',
         last_seen: null,
         created: 1000,
@@ -670,13 +670,18 @@ describe('les codes de liaison', () => {
         assert.doesNotMatch(ctx.recorded.audits[0].description, /CODE-/);
     });
 
-    it("un code sans expiration reste valable, et range toujours dans l'espace actif", async () => {
+    it("un code sans durée prend celle du serveur, et range toujours dans l'espace actif", async () => {
         const repo = fakeRepo([]);
         const ctx = contextFor(repo, { workspaceId: 3 });
-        const out = await handlerFor(devicesLinkCodeCreate)(ctx, { autoApprove: true, ttlSeconds: null });
-        assert.equal(out.expiresAt, null);
+        const before = Math.floor(Date.now() / 1000);
+        const out = await handlerFor(devicesLinkCodeCreate)(ctx, { autoApprove: true });
+        assert.ok(out.expiresAt !== null && out.expiresAt > before, 'un code expire toujours');
         assert.equal(out.autoApprove, true);
         assert.equal(repo.codes[0].workspace_id, 3);
+    });
+
+    it('un code sans expiration est refusé dès le contrat', () => {
+        assert.equal(devicesLinkCodeCreate.input.safeParse({ autoApprove: false, ttlSeconds: null }).success, false);
     });
 
     it('la liste ne rend que les codes encore valables de leur émetteur', async () => {

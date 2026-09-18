@@ -207,7 +207,7 @@ compte candidat existe et une adresse suffit à le désigner. Le jeton n'ajoutai
 qu'un secret transmissible, à expirer et à révoquer, pour le même résultat.
 
 Ne pas confondre avec les **invitations de compte** (`user_invites`, page admin
-« Utilisateurs », URL `/register/<token>`) : celles-là existent toujours et
+« Utilisateurs », URL `/register#<token>`) : celles-là existent toujours et
 créent un compte DevEye. Deux systèmes distincts, deux URL distinctes.
 
 Une adresse sans compte est refusée explicitement (« Aucun compte DevEye avec

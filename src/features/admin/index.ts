@@ -26,7 +26,9 @@ const ADMIN = { admin: true, scope: 'account' } as const;
 function toInvite(row: UserInviteRow, authorName: string, workspaceName: string | null): AdminInvite {
     return {
         token: row.token,
-        url: `${env.PUBLIC_ORIGIN.replace(/\/+$/, '')}/register/${row.token}`,
+        // En fragment : le jeton crée un compte, et un fragment n'atteint ni le
+        // serveur ni les journaux d'un proxy.
+        url: `${env.PUBLIC_ORIGIN.replace(/\/+$/, '')}/register#${row.token}`,
         email: row.email,
         workspaceName,
         expiresAt: row.expires_at === null ? null : Number(row.expires_at),
