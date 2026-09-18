@@ -17,6 +17,16 @@ use tokio::sync::mpsc::Sender;
 
 use crate::protocol::{LogAnchor, LogFilter, LogLine, LogSource};
 
+/// The log files a query may read: exactly the ones `detect_sources` offers. The
+/// source id comes from the server, and `file:<anything>` would otherwise turn
+/// log reading into reading any file on the machine.
+pub const FILE_SOURCES: [&str; 4] = [
+    "/var/log/syslog",
+    "/var/log/messages",
+    "/var/log/auth.log",
+    "/var/log/kern.log",
+];
+
 /// Default / hard cap on the lines returned for one query.
 pub const DEFAULT_LIMIT: usize = 500;
 pub const MAX_LIMIT: usize = 1000;
@@ -303,12 +313,7 @@ pub fn detect_sources() -> Vec<LogSource> {
                 running: None,
             });
         }
-        for path in [
-            "/var/log/syslog",
-            "/var/log/messages",
-            "/var/log/auth.log",
-            "/var/log/kern.log",
-        ] {
+        for path in FILE_SOURCES {
             if std::path::Path::new(path).is_file() {
                 out.push(LogSource {
                     id: format!("file:{path}"),
@@ -413,7 +418,10 @@ pub fn run_query(source_id: &str, filter: &LogFilter, window: LogWindow) -> Resu
         read_journald(filter, raw_cap, anchor)?
     } else if let Some((bin, id)) = container {
         read_container(bin, id, filter, raw_cap, anchor)?
-    } else if let Some(path) = source_id.strip_prefix("file:") {
+    } else if let Some(path) = source_id
+        .strip_prefix("file:")
+        .filter(|p| FILE_SOURCES.contains(p))
+    {
         read_file(path, raw_cap, anchor)?
     } else if source_id == "oslog" {
         read_oslog(raw_cap, anchor)?
@@ -559,7 +567,7 @@ fn jv_str(v: &serde_json::Value) -> Option<&str> {
 }
 
 /// journald MESSAGE is a string, or an array of byte values when non-UTF8.
-fn jv_message(v: Option<&serde_json::Value>) -> String {
+pub(crate) fn jv_message(v: Option<&serde_json::Value>) -> String {
     match v {
         Some(serde_json::Value::String(s)) => s.clone(),
         Some(serde_json::Value::Array(a)) => {
@@ -870,6 +878,21 @@ async fn send_error(tx: &Sender<LogEvent>, query_id: String, error: String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_file_source_outside_the_offered_ones_is_refused() {
+        let filter = LogFilter::default();
+        for source in [
+            "file:/etc/shadow",
+            "file:/var/log/../../etc/passwd",
+            "file:/root/.ssh/id_ed25519",
+        ] {
+            let err = run_query(source, &filter, newest(10, 0))
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("inconnue"), "{source}: {err}");
+        }
+    }
 
     fn newest(limit: usize, offset: usize) -> LogWindow {
         LogWindow {

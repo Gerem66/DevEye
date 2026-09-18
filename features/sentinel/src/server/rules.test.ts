@@ -244,7 +244,22 @@ describe('Règles de ports', () => {
             evaluateReport(
                 ctx({
                     report: report({
-                        agent: { privileged: false, user: 'deploy', serviceScope: 'user', managed: true, probes: [] },
+                        agent: {
+                            privileged: false,
+                            user: 'deploy',
+                            serviceScope: 'user',
+                            managed: true,
+                            probes: [],
+                            policy: {
+                                terminal: true,
+                                filesWrite: true,
+                                power: true,
+                                pkgUpgrade: true,
+                                serviceElevate: true,
+                                destroy: true
+                            },
+                            insecureTransport: false
+                        },
                         openPorts: [
                             { proto: 'tcp', port: 31337, address: '127.0.0.1', zone: null, pid: null, process: null }
                         ]
@@ -507,7 +522,18 @@ describe('Règles d’authentification', () => {
         topSources: [],
         logins: [],
         unavailable: false,
+        truncated: false,
         ...over
+    });
+    it('un relevé saturé le dit dans la preuve, au lieu de passer pour un compte exact', () => {
+        const [finding] = authRules(
+            ctx(),
+            authWin({
+                truncated: true,
+                topSources: [{ address: '1.2.3.4', failed: 42, accepted: 0, users: ['root'] }]
+            })
+        );
+        assert.ok(finding.evidence.some((e) => e.label === 'Relevé' && String(e.value).includes('tronqué')));
     });
     it('tentatives répétées', () => {
         expectRules(

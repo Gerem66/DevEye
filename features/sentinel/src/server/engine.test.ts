@@ -303,7 +303,8 @@ describe('un tour du moteur', () => {
             rootLogins: 0,
             topSources: [{ address: '1.2.3.4', failed: 42, accepted: 0, users: ['root'] }],
             logins: [],
-            unavailable: false
+            unavailable: false,
+            truncated: false
         };
         await engine.onAuthEvents('dev-quiet', auth);
 

@@ -43,10 +43,36 @@ des **issues** (une tentative a réussi ou échoué, depuis quelle adresse, cont
 quel compte) et jamais ce que quelqu'un fait de sa session ; la sonde de
 persistance remonte des **empreintes** et jamais le contenu d'un fichier.
 
-Ce n'est pas une limitation technique — l'agent a les droits de lire bien
+Ce n'est pas une limitation technique : l'agent a les droits de lire bien
 davantage. C'est la frontière de la feature, et elle est appliquée à la source :
 `authlog.rs` compte les élévations `sudo` alors que la commande exécutée est sur
 la même ligne, et ne l'emporte pas.
+
+## Ce qu'on peut faire croire à Sentinelle, et ce qu'on ne peut pas
+
+Un détecteur d'intrusion lit des traces que l'intrus cherche à fausser. Ce qui
+suit dit où passe la limite.
+
+- **Un compte sans privilège ne fabrique pas de constat d'authentification.**
+  L'identifiant syslog (`sshd`, `useradd`) est au choix de qui écrit :
+  `logger -t sshd "Failed password for root from …"` suffit à le porter. La sonde
+  lit donc journald en JSON et ne retient une entrée `sshd` ou `useradd` que si
+  `_UID` vaut 0, champ que journald pose lui-même depuis la socket. `sudo` écrit
+  sous l'uid de qui l'invoque : on n'en garde que le fait (une élévation), jamais
+  le texte, qu'un faux pourrait habiller en échec de connexion.
+- **Un flot ne rend pas la fenêtre « calme ».** Au plafond de lignes, ce sont
+  les plus récentes qui sont comptées, et la fenêtre est marquée `truncated` :
+  les règles l'écrivent dans la preuve (« compteurs minorés ») plutôt que de
+  laisser un chiffre partiel passer pour exact.
+- **Un journal illisible n'est pas un journal vide** : `unavailable`, et aucune
+  règle ne conclut.
+- **Le repli sur `/var/log/auth.log` n'a pas cette garantie.** Sans journald, le
+  fichier ne dit pas qui a écrit une ligne ; sur une machine où un compte
+  ordinaire peut y écrire (syslog ouvert à tous), un faux passe. C'est le cas
+  rare, et il est connu.
+- **Root local peut tout.** Effacer le journal, réécrire le manifeste de
+  persistance, tuer l'agent : rien de ce qu'un agent lit sur une machine ne vaut
+  contre qui la possède déjà. Sentinelle voit l'arrivée, pas l'occupant installé.
 
 ## Trois notions, à ne pas confondre
 

@@ -787,6 +787,7 @@ function mergeAuthWindows(a: AuthWindow, b: AuthWindow): AuthWindow {
         rootLogins: a.rootLogins + b.rootLogins,
         topSources: [...sources.values()].sort((x, y) => y.failed - x.failed).slice(0, 50),
         logins: [...a.logins, ...b.logins].slice(-50),
-        unavailable: a.unavailable || b.unavailable
+        unavailable: a.unavailable || b.unavailable,
+        truncated: a.truncated || b.truncated
     };
 }

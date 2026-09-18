@@ -706,6 +706,9 @@ const SUCCESS_AFTER_FAILURES_THRESHOLD = 5;
 export function authRules(_ctx: EvalContext, auth: AuthWindow): FindingDraft[] {
     if (auth.unavailable) return [];
     const out: FindingDraft[] = [];
+    // Un relevé saturé n'a compté que ses lignes les plus récentes : les chiffres
+    // sont des minorants, et la preuve le dit plutôt que de laisser croire au compte exact.
+    const saturated = auth.truncated ? [ev('Relevé', 'tronqué : journal saturé, compteurs minorés')] : [];
 
     for (const source of auth.topSources) {
         if (source.failed >= BRUTEFORCE_THRESHOLD) {
@@ -717,7 +720,8 @@ export function authRules(_ctx: EvalContext, auth: AuthWindow): FindingDraft[] {
                         ev('Adresse', source.address),
                         ev('Échecs', source.failed),
                         ev('Comptes visés', source.users.length > 0 ? source.users.join(', ') : ','),
-                        ev('Fenêtre', `${new Date(auth.from).toISOString()} → ${new Date(auth.to).toISOString()}`)
+                        ev('Fenêtre', `${new Date(auth.from).toISOString()} → ${new Date(auth.to).toISOString()}`),
+                        ...saturated
                     ],
                     null
                 )
@@ -734,7 +738,8 @@ export function authRules(_ctx: EvalContext, auth: AuthWindow): FindingDraft[] {
                         ev('Adresse', source.address),
                         ev('Échecs avant réussite', source.failed),
                         ev('Réussites', source.accepted),
-                        ev('Comptes visés', source.users.length > 0 ? source.users.join(', ') : ',')
+                        ev('Comptes visés', source.users.length > 0 ? source.users.join(', ') : ','),
+                        ...saturated
                     ],
                     null
                 )

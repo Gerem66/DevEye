@@ -63,6 +63,9 @@ pub struct AuthWindow {
     /// n'ai pas pu regarder », sans quoi une machine aveugle passerait pour
     /// une machine tranquille.
     pub unavailable: bool,
+    /// Le plafond de lignes a été atteint : seules les plus récentes ont été
+    /// comptées. Un relevé saturé ne doit pas passer pour une fenêtre calme.
+    pub truncated: bool,
 }
 
 /// Accumule les lignes analysées avant d'en faire une fenêtre.
@@ -124,11 +127,16 @@ pub fn collect(from: i64) -> AuthWindow {
             top_sources: Vec::new(),
             logins: Vec::new(),
             unavailable: true,
+            truncated: false,
         };
     };
 
+    // Au plafond, ce sont les lignes les plus récentes qui comptent : garder les
+    // premières laisserait un flot en début de fenêtre effacer ce qui suit.
+    let truncated = lines.len() >= MAX_LINES;
+    let start = lines.len().saturating_sub(MAX_LINES);
     let mut tally = Tally::default();
-    for line in lines.iter().take(MAX_LINES) {
+    for line in &lines[start..] {
         parse_line(line, now, &mut tally);
     }
 
@@ -156,6 +164,7 @@ pub fn collect(from: i64) -> AuthWindow {
         top_sources: sources,
         logins,
         unavailable: false,
+        truncated,
     }
 }
 
@@ -262,34 +271,70 @@ fn user_and_address(line: &str) -> Option<(String, String)> {
     Some((user, addr))
 }
 
+/// Les identifiants syslog relevés. `sshd-session` est le nom sous lequel
+/// OpenSSH 9.8 et suivants journalisent les connexions.
+const JOURNAL_IDENTIFIERS: [&str; 4] = ["sshd", "sshd-session", "sudo", "useradd"];
+
+/// Les arguments de `journalctl`. En JSON et non en `cat` : le message seul ne
+/// dit pas QUI l'a écrit, or l'identifiant syslog est au choix de l'appelant
+/// (`logger -t sshd "Failed password for root from …"` suffit à un compte sans
+/// privilège pour fabriquer une attaque, ou pour noyer une vraie). `-n` garde les
+/// lignes les plus récentes quand la fenêtre déborde.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn journalctl_args(from: i64) -> Vec<String> {
+    let mut args = vec!["--since".to_string(), format!("@{}", from / 1000)];
+    for ident in JOURNAL_IDENTIFIERS {
+        args.push("-t".to_string());
+        args.push(ident.to_string());
+    }
+    args.extend(["-n", &MAX_LINES.to_string(), "-o", "json", "--no-pager"].map(str::to_string));
+    args
+}
+
+/// Les lignes à analyser, tirées de la sortie JSON de journald. Seul `_UID`, posé
+/// par journald depuis la socket et non par l'émetteur, dit qui a écrit : une
+/// entrée `sshd` ou `useradd` qui ne vient pas de root est un faux et ne compte
+/// pas. `sudo` écrit sous l'uid de qui l'invoque : on n'en garde que le fait
+/// (une élévation), jamais le texte, qu'un faux pourrait habiller en échec sshd.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn journald_auth_lines(stdout: &str) -> Vec<String> {
+    let mut lines = Vec::new();
+    for raw in stdout.lines() {
+        let Ok(entry) = serde_json::from_str::<serde_json::Value>(raw) else {
+            continue;
+        };
+        let ident = entry
+            .get("SYSLOG_IDENTIFIER")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let message = crate::logs::jv_message(entry.get("MESSAGE"));
+        if ident == "sudo" {
+            if message.contains("COMMAND=") {
+                lines.push("sudo: COMMAND=".to_string());
+            }
+            continue;
+        }
+        if entry.get("_UID").and_then(|v| v.as_str()) != Some("0") {
+            continue;
+        }
+        lines.push(format!("{ident}: {message}"));
+    }
+    lines
+}
+
 /// Lit les lignes d'authentification depuis `from` (unix ms). `None` = illisible.
 #[cfg(target_os = "linux")]
 fn read_lines(from: i64) -> Option<Vec<String>> {
     use crate::report::run_timeout;
     use std::time::Duration;
 
-    let since = format!("@{}", from / 1000);
     // journald d'abord : filtrage natif par date et par unité, donc on ne lit
     // que ce qui nous concerne au lieu de parcourir un fichier entier.
-    if let Some(out) = run_timeout(
-        "journalctl",
-        &[
-            "--since",
-            &since,
-            "-t",
-            "sshd",
-            "-t",
-            "sudo",
-            "-t",
-            "useradd",
-            "-o",
-            "cat",
-            "--no-pager",
-        ],
-        Duration::from_secs(15),
-    ) {
+    let args = journalctl_args(from);
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    if let Some(out) = run_timeout("journalctl", &args, Duration::from_secs(15)) {
         if out.success {
-            return Some(out.stdout.lines().map(str::to_string).collect());
+            return Some(journald_auth_lines(&out.stdout));
         }
     }
 
@@ -374,6 +419,64 @@ mod tests {
             parse_line(l, 1_700_000_000_000, &mut t);
         }
         t
+    }
+
+    #[test]
+    fn a_forged_journal_entry_does_not_count() {
+        // Ce que journald rend pour un vrai sshd (root), puis pour `logger -t sshd`
+        // lancé par un compte ordinaire : même identifiant, même texte, autre `_UID`.
+        let out = [
+            r#"{"SYSLOG_IDENTIFIER":"sshd","_UID":"0","MESSAGE":"Failed password for root from 203.0.113.7 port 22 ssh2"}"#,
+            r#"{"SYSLOG_IDENTIFIER":"sshd","_UID":"1000","MESSAGE":"Failed password for root from 198.51.100.9 port 22 ssh2"}"#,
+            r#"{"SYSLOG_IDENTIFIER":"useradd","_UID":"1000","MESSAGE":"new user: name=backdoor, UID=0, GID=0"}"#,
+            r#"{"SYSLOG_IDENTIFIER":"sshd-session","_UID":"0","MESSAGE":"Accepted publickey for deploy from 203.0.113.8 port 22 ssh2"}"#,
+            "pas du json",
+        ]
+        .join("\n");
+        let lines = journald_auth_lines(&out);
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let t = tally_of(&refs);
+        assert_eq!(t.failed, 1, "seule l'entrée de root compte");
+        assert!(t.sources.contains_key("203.0.113.7"));
+        assert!(
+            !t.sources.contains_key("198.51.100.9"),
+            "l'adresse du faux n'entre nulle part"
+        );
+        assert!(
+            t.new_accounts.is_empty(),
+            "un faux useradd ne crée pas de constat"
+        );
+        assert_eq!(t.accepted, 1);
+    }
+
+    #[test]
+    fn sudo_is_counted_whoever_runs_it_but_its_text_never_parsed() {
+        let out = [
+            r#"{"SYSLOG_IDENTIFIER":"sudo","_UID":"1000","MESSAGE":"   gerem : TTY=pts/0 ; PWD=/home ; USER=root ; COMMAND=/bin/ls"}"#,
+            // Un faux habillé en échec sshd sous l'identifiant de sudo.
+            r#"{"SYSLOG_IDENTIFIER":"sudo","_UID":"1000","MESSAGE":"Failed password for root from 198.51.100.9 port 22 ssh2 COMMAND="}"#,
+        ]
+        .join("\n");
+        let lines = journald_auth_lines(&out);
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let t = tally_of(&refs);
+        assert_eq!(t.sudo, 2);
+        assert_eq!(t.failed, 0);
+        assert!(t.sources.is_empty());
+    }
+
+    #[test]
+    fn journalctl_is_asked_for_json_and_the_newest_lines() {
+        let args = journalctl_args(1_700_000_000_000);
+        assert_eq!(
+            args[..2],
+            ["--since".to_string(), "@1700000000".to_string()]
+        );
+        assert!(args.windows(2).any(|w| w == ["-o", "json"]));
+        assert!(args
+            .windows(2)
+            .any(|w| w[0] == "-n" && w[1] == MAX_LINES.to_string()));
+        assert!(args.windows(2).any(|w| w == ["-t", "sshd-session"]));
     }
 
     #[test]
