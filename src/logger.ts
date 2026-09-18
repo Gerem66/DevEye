@@ -22,9 +22,12 @@ export const logger = pino({
     level: env.LOG_LEVEL,
     base: { service: 'deveye-server' },
     redact: {
-        // Le joker de pino ne descend que d'un niveau : chaque nom est donc
-        // répété à deux profondeurs, celle d'un objet journalisé et celle d'un
-        // objet imbriqué (`{ account: { password } }`).
+        // Un joker pino vaut EXACTEMENT un niveau, jamais « à n'importe quelle
+        // profondeur » : `*.password` efface `{ user: { password } }`, et laisse
+        // passer aussi bien `{ password }` que `{ req: { body: { password } } }`.
+        // D'où chaque nom décliné aux trois profondeurs où l'app journalise : la
+        // racine, un objet imbriqué, le corps d'une requête. Plus bas, rien n'est
+        // effacé ; chaque niveau de plus coûte un chemin par nom.
         paths: [
             'req.headers.authorization',
             'req.headers.cookie',
