@@ -96,7 +96,13 @@ export class LocalSink implements BackupSink {
     }
 
     async remove(artifact: string): Promise<void> {
-        await fs.rm(artifact, { force: true });
+        // Le chemin vient de la base : il n'est supprimé que s'il est bien dans
+        // ce dépôt, quoi qu'une ligne ancienne ou altérée prétende.
+        const resolved = path.resolve(artifact);
+        if (!resolved.startsWith(this.dir + path.sep)) {
+            throw new Error('Archive hors du dossier de destination : suppression refusée');
+        }
+        await fs.rm(resolved, { force: true });
     }
 
     async probe(): Promise<BackupDestinationProbe> {

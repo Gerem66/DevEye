@@ -180,6 +180,10 @@ function mysqlDumpArgs(host: string, port: number, user: string, database: strin
         // sur un compte applicatif ordinaire.
         '--no-tablespaces',
         ...(maria ? [] : ['--set-gtid-purged=OFF']),
+        // Fin des options : le nom de la base est saisi par un membre, et sans
+        // ce séparateur `--result-file=/chemin` se lirait comme une option (une
+        // écriture de fichier arbitraire sous le compte du serveur).
+        '--',
         database
     ];
 }
@@ -222,7 +226,9 @@ export async function databaseSource(access: DatabaseBackupAccess, label: string
                               // ses propriétaires et ses droits.
                               '--no-owner',
                               '--no-privileges',
-                              access.database
+                              // Par option et non en positionnel : un nom saisi
+                              // par un membre ne peut pas se lire comme `--file=…`.
+                              `--dbname=${access.database}`
                           ],
                           access.password ? { PGPASSWORD: access.password } : {},
                           `la base « ${label} »`
