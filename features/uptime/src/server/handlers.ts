@@ -15,6 +15,10 @@ import {
 import type { UptimePoint, UptimeRange, UptimeResolution, UptimeService, UptimeServiceRow } from '../contracts/domain';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
+// Le garde des appels sortants, partagé par toute l'app : refuser l'adresse à
+// l'écriture, là où le membre voit pourquoi, plutôt qu'à la première sonde.
+import { isAllowedOutboundUrl, OUTBOUND_REFUSED_MESSAGE } from '@/Services/netFetch';
+
 import {
     decryptError,
     encryptService,
@@ -169,6 +173,7 @@ export const uptimeHandlers = [
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const draft = input.service;
+            if (!isAllowedOutboundUrl(draft.url)) throw new FeatureError('validation', OUTBOUND_REFUSED_MESSAGE);
             const row = await ctx.repo.services.create({
                 userId: ctx.userId,
                 workspaceId: ctx.workspaceId,
@@ -204,6 +209,7 @@ export const uptimeHandlers = [
         handler: async (ctx: Ctx, input) => {
             const existing = await loadService(ctx, input.id, 'write');
             const draft = input.service;
+            if (!isAllowedOutboundUrl(draft.url)) throw new FeatureError('validation', OUTBOUND_REFUSED_MESSAGE);
             // Réécrit sous la clé de son espace d'origine : le chiffrer avec celle
             // d'ici le rendrait illisible chez lui, c'est-à-dire perdu pour tout le
             // monde y compris l'ordonnanceur qui le sonde.

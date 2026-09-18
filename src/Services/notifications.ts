@@ -12,6 +12,7 @@ import type { DiscordMessage } from '@/Services/discord';
 import type { Cipher } from '@/Services/SecureStore';
 import type { Database } from '@/db';
 import { moduleProvider } from '@/features/_sdk/register';
+import { safeFetch } from './netFetch';
 
 /**
  * L'acheminement des alertes : résoudre les canaux d'une cible (une liste tirée
@@ -275,7 +276,9 @@ async function deliverOne(channel: ResolvedChannel, alert: Alert, logger: Logger
 
     if (!channel.webhookUrl) return false;
     try {
-        const response = await fetch(channel.webhookUrl, {
+        // Revérifié à la livraison : un canal écrit avant le garde, ou un nom qui
+        // a depuis repointé vers l'intérieur, passe encore par ici.
+        const response = await safeFetch(channel.webhookUrl, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             signal: AbortSignal.timeout(10_000),

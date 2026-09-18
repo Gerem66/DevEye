@@ -17,6 +17,10 @@ import {
 import type { BackupSourceCandidate } from '../contracts/domain';
 
 import { defineSdkFeature, FeatureError, type SdkFeatureDefinition } from '@deveye/types/sdk/server';
+
+// Le garde des appels sortants, partagé par toute l'app : l'adresse du service S3
+// est saisie par un membre.
+import { isAllowedOutboundUrl, OUTBOUND_REFUSED_MESSAGE } from '@/Services/netFetch';
 import type { BackupRepo } from './repo';
 import { nextRunAt } from './schedule';
 import { safeRelPath } from './sinks';
@@ -95,6 +99,7 @@ function assertDestinationShape(input: {
     } catch {
         throw new FeatureError('validation', 'L’adresse du service S3 doit être une URL complète (https://…).');
     }
+    if (!isAllowedOutboundUrl(input.endpoint)) throw new FeatureError('validation', OUTBOUND_REFUSED_MESSAGE);
     if (input.path.includes('..')) {
         throw new FeatureError('validation', 'Le préfixe S3 ne peut pas contenir « .. ».');
     }

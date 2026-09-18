@@ -8,6 +8,8 @@ import type {
 import { describeChannel, resolveRoute, type ResolvedChannel } from '@/Services/notifications';
 
 import { FeatureError, type FeatureContext } from './_define';
+import { isDiscordWebhook } from '@/Services/discord';
+import { isAllowedOutboundUrl, OUTBOUND_REFUSED_MESSAGE } from '@/Services/netFetch';
 
 /**
  * Les canaux d'alerte vus depuis un handler : la mécanique vit dans
@@ -52,6 +54,16 @@ function validate(input: NotificationChannelInput): void {
     // sur le réseau contredirait le chiffrement au repos qui les protège en base.
     if (parsed.protocol !== 'https:') {
         throw new FeatureError('validation', 'L’URL doit être en HTTPS.');
+    }
+    // Un webhook est un POST que le serveur émet sur ordre d'un membre, et dont
+    // `notify.channelTest` rend l'issue : sans garde, c'est une sonde du réseau
+    // de l'hôte.
+    if (!isAllowedOutboundUrl(parsed)) throw new FeatureError('validation', OUTBOUND_REFUSED_MESSAGE);
+    if (input.kind === 'discord' && !isDiscordWebhook(url)) {
+        throw new FeatureError(
+            'validation',
+            'Cette adresse n’est pas un webhook Discord (https://discord.com/api/webhooks/…). Pour un autre service, choisissez « Webhook ».'
+        );
     }
 }
 

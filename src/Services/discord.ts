@@ -1,4 +1,5 @@
 import type { Logger } from 'pino';
+import { safeFetch } from './netFetch';
 
 /**
  * Le transport Discord : le seul canal qui sache modifier ce qu'il a déjà
@@ -38,8 +39,12 @@ const TIMEOUT_MS = 10_000;
  * l'appelant retombe alors sur le message unique de fin.
  */
 export async function postMessage(url: string, message: DiscordMessage, logger: Logger): Promise<string | null> {
+    if (!isDiscordWebhook(url)) {
+        logger.warn('Discord: adresse refusée, ce n’est pas un webhook Discord');
+        return null;
+    }
     try {
-        const response = await fetch(withWait(url), {
+        const response = await safeFetch(withWait(url), {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -68,8 +73,12 @@ export async function editMessage(
     message: DiscordMessage,
     logger: Logger
 ): Promise<boolean> {
+    if (!isDiscordWebhook(url)) {
+        logger.warn('Discord: adresse refusée, ce n’est pas un webhook Discord');
+        return false;
+    }
     try {
-        const response = await fetch(`${messageUrl(url, messageId)}`, {
+        const response = await safeFetch(`${messageUrl(url, messageId)}`, {
             method: 'PATCH',
             headers: { 'content-type': 'application/json' },
             signal: AbortSignal.timeout(TIMEOUT_MS),

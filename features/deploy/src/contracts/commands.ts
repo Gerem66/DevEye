@@ -150,12 +150,19 @@ export const deployCredentialList = {
     output: z.object({ credentials: z.array(deployCredentialSchema) })
 };
 
+/**
+ * L'origine d'une instance Dokploy : une URL http(s), sans chemin parasite. Le
+ * serveur y appelle `/api/trpc/…` avec la clé d'API ; une chaîne libre laisserait
+ * le membre choisir schéma, hôte et chemin de cet appel.
+ */
+const dokployBaseUrl = z.url({ protocol: /^https?$/ }).max(255);
+
 /** Une instance Dokploy exige son adresse : sans elle, rien n'est adressable. */
 export const deployCredentialAdd = {
     command: 'deploy.credentialAdd' as const,
     input: z.object({
         label: z.string().min(1).max(DEPLOY_CREDENTIAL_LABEL_MAX_LENGTH),
-        baseUrl: z.string().min(1).max(255),
+        baseUrl: dokployBaseUrl,
         secret: z.string().min(1).max(DEPLOY_CREDENTIAL_SECRET_MAX_LENGTH)
     }),
     output: z.object({ credential: deployCredentialSchema })
@@ -167,7 +174,7 @@ export const deployCredentialUpdate = {
     input: z.object({
         credentialId,
         label: z.string().min(1).max(DEPLOY_CREDENTIAL_LABEL_MAX_LENGTH),
-        baseUrl: z.string().min(1).max(255),
+        baseUrl: dokployBaseUrl,
         secret: z.string().min(1).max(DEPLOY_CREDENTIAL_SECRET_MAX_LENGTH).optional()
     }),
     output: z.object({ credential: deployCredentialSchema })

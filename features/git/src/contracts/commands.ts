@@ -88,6 +88,15 @@ export const gitRepoGet = {
 };
 
 /**
+ * Un propriétaire et un nom de dépôt tels que GitHub les écrit. Ils entrent tels
+ * quels dans le chemin de l'API, avec le jeton du membre : un `/`, un `?` ou un
+ * `..` y viseraient une autre route que celle voulue.
+ */
+const GIT_SLUG = /^[A-Za-z0-9._-]+$/;
+const gitOwner = z.string().min(1).max(GIT_REPO_OWNER_MAX_LENGTH).regex(GIT_SLUG);
+const gitRepoName = z.string().min(1).max(GIT_REPO_NAME_MAX_LENGTH).regex(GIT_SLUG);
+
+/**
  * Idempotente : un `owner/repo` déjà présent rend la ligne existante, jeton mis
  * à jour, au lieu d'un doublon.
  */
@@ -95,8 +104,8 @@ export const gitRepoAdd = {
     command: 'git.repoAdd' as const,
     input: z.object({
         provider: gitProviderSchema,
-        owner: z.string().min(1).max(GIT_REPO_OWNER_MAX_LENGTH),
-        repo: z.string().min(1).max(GIT_REPO_NAME_MAX_LENGTH),
+        owner: gitOwner,
+        repo: gitRepoName,
         credentialId: credentialId.nullable()
     }),
     output: z.object({ repo: gitRepoSchema })
@@ -109,7 +118,7 @@ export const gitRepoAdd = {
 export const gitRepoCandidates = {
     command: 'git.repoCandidates' as const,
     input: z.object({
-        owner: z.string().min(1).max(GIT_REPO_OWNER_MAX_LENGTH),
+        owner: gitOwner,
         credentialId: credentialId.nullable()
     }),
     output: z.object({ repos: z.array(gitRepoCandidateSchema) })

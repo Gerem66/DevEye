@@ -1,5 +1,9 @@
 import crypto from 'crypto';
 
+// Le garde des appels sortants, partagé par toute l'app : l'adresse du service est
+// saisie par un membre, et chaque requête porte une signature de ses clés.
+import { safeFetch } from '@/Services/netFetch';
+
 /**
  * Client S3 minimal (déposer, relire, lister, effacer), écrit ici plutôt que
  * d'importer `@aws-sdk/client-s3` et sa centaine de paquets pour six requêtes
@@ -75,8 +79,7 @@ interface SignedRequest {
 export class S3Error extends Error {
     constructor(
         message: string,
-        readonly status: number,
-        readonly body: string
+        readonly status: number
     ) {
         super(message);
         this.name = 'S3Error';
@@ -161,7 +164,7 @@ export class S3Client {
             `SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
         const url = `${this.origin}${canonicalUri}${canonicalQuery ? `?${canonicalQuery}` : ''}`;
-        const res = await fetch(url, {
+        const res = await safeFetch(url, {
             method: req.method,
             headers,
             body: req.method === 'GET' || req.method === 'HEAD' ? undefined : body,
@@ -170,7 +173,7 @@ export class S3Client {
 
         if (!res.ok) {
             const text = await res.text().catch(() => '');
-            throw new S3Error(explainS3(res.status, text), res.status, text);
+            throw new S3Error(explainS3(res.status, text), res.status);
         }
         return res;
     }
@@ -324,7 +327,7 @@ export class S3Client {
         // 200 ne veut pas dire réussi.
         const xml = await res.text();
         if (/<Error>/.test(xml)) {
-            throw new S3Error(explainS3(200, xml), 200, xml);
+            throw new S3Error(explainS3(200, xml), 200);
         }
     }
 
@@ -363,6 +366,7 @@ function explainS3(status: number, body: string): string {
         return 'S3 : la région déclarée ne correspond pas à celle du service.';
     }
     if (status === 404) return 'S3 : introuvable (bucket ou objet). Vérifiez le bucket et le style d’adressage.';
+    // Le mot du service, borné : il revient au membre, et l'adresse est de son choix.
     const message = /<Message>([\s\S]*?)<\/Message>/.exec(body)?.[1];
-    return `S3 : ${message ? decodeXml(message) : `erreur HTTP ${status}`}`;
+    return `S3 : ${message ? decodeXml(message).slice(0, 200) : `erreur HTTP ${status}`}`;
 }

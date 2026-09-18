@@ -24,7 +24,7 @@ const serviceId = z.number().int().positive();
 /** Everything the user may set on a service. */
 const uptimeDraftSchema = z.object({
     name: z.string().min(1).max(UPTIME_NAME_MAX_LENGTH),
-    url: z.string().url().max(UPTIME_URL_MAX_LENGTH),
+    url: z.url({ protocol: /^https?$/ }).max(UPTIME_URL_MAX_LENGTH),
     method: uptimeMethodSchema,
     expectedStatus: z.number().int().min(100).max(599).nullable(),
     keyword: z.string().max(UPTIME_KEYWORD_MAX_LENGTH).nullable(),

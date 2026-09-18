@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { createServer, type Server } from 'node:http';
-import { describe, it } from 'node:test';
+import { after, before, describe, it } from 'node:test';
 
+// Le faux service S3 écoute sur la boucle locale, que le garde des appels
+// sortants refuse par défaut.
+import { setAllowPrivateForTest } from '@/Services/netFetch';
 import { S3Client, S3_PART_BYTES } from './s3';
+
+before(() => setAllowPrivateForTest(true));
+after(() => setAllowPrivateForTest(false));
 
 /**
  * Un dépôt S3 dit 200 même quand l'objet est faux : ordre et taille des parties

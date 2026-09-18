@@ -3,6 +3,9 @@ import { createServer, type Server } from 'node:http';
 import { after, before, describe, it } from 'node:test';
 import { WebSocketServer } from 'ws';
 
+// Le serveur d'essai écoute sur la boucle locale, que le garde des appels
+// sortants refuse par défaut.
+import { setAllowPrivateForTest } from '@/Services/netFetch';
 import { fetchDeploymentLog, readRepoUrl, webGitUrl } from './dokploy';
 
 /**
@@ -22,6 +25,7 @@ let port = 0;
 let behaviour: { chunks: string[]; gapMs: number; close: boolean } = { chunks: [], gapMs: 0, close: false };
 
 before(async () => {
+    setAllowPrivateForTest(true);
     server = createServer();
     wss = new WebSocketServer({ server });
     wss.on('connection', async (socket) => {
@@ -37,6 +41,7 @@ before(async () => {
 });
 
 after(async () => {
+    setAllowPrivateForTest(false);
     wss.close();
     await new Promise<void>((resolve) => server.close(() => resolve()));
 });

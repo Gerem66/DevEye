@@ -89,6 +89,13 @@ export const env = {
     RATE_LIMIT_MAX: getEnvVar('RATE_LIMIT_MAX', 'number', false) || 200,
     RATE_LIMIT_WINDOW: getEnvVar('RATE_LIMIT_WINDOW', 'string', false) || '1 minute',
 
+    // Les appels sortants vers une adresse qu'un membre choisit (sondes Uptime,
+    // webhooks, Dokploy, S3) peuvent-ils viser le réseau privé ? Fermé par
+    // défaut : sur une instance partagée, ce serait offrir le réseau de l'hôte à
+    // tout compte. À ouvrir sur une installation personnelle qui supervise son
+    // propre réseau. Le lien-local (métadonnées cloud) reste fermé dans tous les cas.
+    OUTBOUND_ALLOW_PRIVATE: getEnvVar('OUTBOUND_ALLOW_PRIVATE', 'boolean', false) ?? false,
+
     // Ce que Fastify croit de `X-Forwarded-For` : un nombre de sauts, ou une
     // liste d'adresses/CIDR séparées par des virgules. `true` ferait gagner
     // l'adresse la plus à gauche, celle que le client écrit lui-même, et toute

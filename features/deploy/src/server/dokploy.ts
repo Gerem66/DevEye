@@ -1,5 +1,9 @@
 import WebSocket from 'ws';
 
+// Le garde des appels sortants, partagé par toute l'app : l'adresse de l'instance
+// est saisie par un membre, et ses réponses lui reviennent.
+import { isAllowedOutboundUrl, publicLookup, safeFetch, UnsafeTargetError } from '@/Services/netFetch';
+
 /**
  * Adaptateur Dokploy, calé sur une instance réelle plutôt que sur la doc :
  *  - pas de couche REST, tout passe par tRPC sous `/api/trpc/<procédure>` ;
@@ -57,7 +61,7 @@ export interface DokployDeployment {
 }
 
 function base(baseUrl: string): string {
-    return `${baseUrl.replace(/\/+$/, '')}/api/trpc`;
+    return new URL('/api/trpc', baseUrl).toString().replace(/\/+$/, '');
 }
 
 async function call<T>(
@@ -74,9 +78,9 @@ async function call<T>(
             ? `${base(baseUrl)}/${procedure}?input=${encodeURIComponent(wrapped)}`
             : `${base(baseUrl)}/${procedure}`;
 
-    let res: Response;
+    let res: Awaited<ReturnType<typeof safeFetch>>;
     try {
-        res = await fetch(url, {
+        res = await safeFetch(url, {
             method: options.mutate ? 'POST' : 'GET',
             headers: {
                 accept: 'application/json',
@@ -87,7 +91,10 @@ async function call<T>(
             signal: AbortSignal.timeout(30_000)
         });
     } catch (e) {
-        throw new DokployError(e instanceof Error ? e.message : 'Instance Dokploy injoignable', 0);
+        if (e instanceof UnsafeTargetError) throw new DokployError(e.message, 0);
+        // Le détail d'une panne réseau reste au journal : renvoyé tel quel, il
+        // dirait à l'appelant ce qui écoute ou non derrière l'adresse saisie.
+        throw new DokployError('Instance Dokploy injoignable', 0);
     }
 
     let payload: unknown;
@@ -394,7 +401,14 @@ export function fetchDeploymentLog(
     options: { timeoutMs?: number } = {}
 ): Promise<string> {
     return new Promise((resolve, reject) => {
-        const socket = new WebSocket(logSocketUrl(baseUrl, logPath), { headers: { 'x-api-key': apiKey } });
+        if (!isAllowedOutboundUrl(baseUrl)) {
+            reject(new UnsafeTargetError());
+            return;
+        }
+        const socket = new WebSocket(logSocketUrl(baseUrl, logPath), {
+            headers: { 'x-api-key': apiKey },
+            lookup: publicLookup as never
+        });
         const chunks: string[] = [];
         let settled = false;
         let idle: ReturnType<typeof setTimeout> | null = null;

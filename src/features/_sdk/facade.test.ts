@@ -10,6 +10,8 @@ import type { Database } from '@/db';
 import type { LiveHub } from '@/live/hub';
 import { createFacade } from './facade';
 import { setSdkHost } from './host';
+import { setSafeFetchTransportForTest } from '@/Services/netFetch';
+import { Response } from 'undici';
 
 /**
  * La façade des natives, gardée membre par membre par `nativeCapabilities` :
@@ -116,15 +118,14 @@ const forbidden = { name: 'FeatureError', code: 'forbidden' };
 /** Remplace `fetch` le temps d'un appel : la livraison d'un webhook ne sort jamais du test. */
 async function withFetch<T>(run: () => Promise<T>): Promise<{ result: T; calls: { url: string; body: unknown }[] }> {
     const calls: { url: string; body: unknown }[] = [];
-    const original = globalThis.fetch;
-    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
-        calls.push({ url: String(url), body: JSON.parse(String(init?.body)) });
+    setSafeFetchTransportForTest(async (url, init) => {
+        calls.push({ url, body: JSON.parse(String(init.body)) });
         return new Response(null, { status: 204 });
-    }) as typeof fetch;
+    });
     try {
         return { result: await run(), calls };
     } finally {
-        globalThis.fetch = original;
+        setSafeFetchTransportForTest(null);
     }
 }
 
@@ -438,17 +439,16 @@ describe('createFacade : notify, le message vivant', () => {
         run: () => Promise<T>
     ): Promise<{ result: T; calls: { method: string; url: string }[] }> {
         const calls: { method: string; url: string }[] = [];
-        const original = globalThis.fetch;
-        globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
-            calls.push({ method: init?.method ?? 'GET', url: String(url) });
-            return init?.method === 'POST'
+        setSafeFetchTransportForTest(async (url, init) => {
+            calls.push({ method: init.method ?? 'GET', url });
+            return init.method === 'POST'
                 ? new Response(JSON.stringify({ id: 'msg-1' }), { status: 200 })
                 : new Response(null, { status: 204 });
-        }) as typeof fetch;
+        });
         try {
             return { result: await run(), calls };
         } finally {
-            globalThis.fetch = original;
+            setSafeFetchTransportForTest(null);
         }
     }
 

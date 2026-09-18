@@ -17,6 +17,10 @@ import {
 } from '../contracts/commands';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
+// Le garde des appels sortants, partagé par toute l'app : l'adresse refusée l'est
+// à l'écriture, là où le membre voit pourquoi.
+import { isAllowedOutboundUrl, OUTBOUND_REFUSED_MESSAGE } from '@/Services/netFetch';
+
 import { fetchDeploymentLog, listDeployments, listTargets, triggerDeploy } from './dokploy';
 import {
     loadDokployCredential,
@@ -355,6 +359,7 @@ export const deployHandlers = [
         access: { level: 'write' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
+            if (!isAllowedOutboundUrl(input.baseUrl)) throw new FeatureError('validation', OUTBOUND_REFUSED_MESSAGE);
             const row = await ctx.repo.createCredential({
                 workspaceId: ctx.workspaceId,
                 label: input.label,
@@ -374,6 +379,7 @@ export const deployHandlers = [
         access: { level: 'write' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
+            if (!isAllowedOutboundUrl(input.baseUrl)) throw new FeatureError('validation', OUTBOUND_REFUSED_MESSAGE);
             const row = await ctx.repo.updateCredential(input.credentialId, ctx.workspaceId, {
                 label: input.label,
                 baseUrl: input.baseUrl,

@@ -3,6 +3,9 @@ import type { FeatureService, FeatureServiceDeps, SdkCipher } from '@deveye/type
 
 // Horodatage et durée partagés par tous les émetteurs de l'app : importés, pas recopiés.
 import { formatDuration, formatMoment } from '@/Services/notifications';
+// Le garde des appels sortants, partagé par toute l'app : la sonde suit une
+// adresse qu'un membre a saisie, et rend son statut et la présence d'un mot-clé.
+import { safeFetch, UnsafeTargetError } from '@/Services/netFetch';
 
 import { decryptError, decryptService, encryptError, type ServicePayload } from './_shared';
 import { buildNotice, type UptimeNotice } from './notice';
@@ -48,10 +51,9 @@ const KEYWORD_BODY_MAX_BYTES = 512 * 1024;
 export async function probeService(target: ServicePayload, row: UptimeServiceRow): Promise<ProbeOutcome> {
     const started = Date.now();
     try {
-        const response = await fetch(target.url, {
+        const response = await safeFetch(target.url, {
             method: row.method,
             signal: AbortSignal.timeout(row.timeout_seconds * 1000),
-            redirect: 'follow',
             headers: { 'user-agent': 'DevEye-Uptime/1.0' }
         });
         const httpStatus = response.status;
@@ -79,6 +81,7 @@ export async function probeService(target: ServicePayload, row: UptimeServiceRow
         return { up: true, httpStatus, responseMs, error: null };
     } catch (e) {
         const responseMs = Date.now() - started;
+        if (e instanceof UnsafeTargetError) return { up: false, httpStatus: null, responseMs: null, error: e.message };
         const name = e instanceof Error ? e.name : '';
         // AbortSignal.timeout rejects with a TimeoutError; everything else is a
         // connection-level failure (DNS, refused, TLS...), whose `cause` carries

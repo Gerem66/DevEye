@@ -14,7 +14,10 @@
  */
 declare module 'ws' {
     export default class WebSocket {
-        constructor(address: string, options?: { headers?: Record<string, string> });
+        constructor(
+            address: string,
+            options?: { headers?: Record<string, string>; lookup?: typeof import('node:dns').lookup }
+        );
         on(event: 'message', listener: (data: Buffer | ArrayBuffer | Buffer[]) => void): this;
         on(event: 'close', listener: () => void): this;
         on(event: 'error', listener: (err: Error) => void): this;

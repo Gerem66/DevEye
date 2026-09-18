@@ -1,5 +1,5 @@
 // Le garde SSRF est celui de l'app, partagé, pas propre au module.
-import { BROWSER_UA, isSafePublicUrl, titleTag } from '@/Services/netFetch';
+import { BROWSER_UA, isSafePublicUrl, safeFetch, titleTag } from '@/Services/netFetch';
 import { field, tag, type OsintProbeAdapter, type OsintTag } from './shared';
 
 /**
@@ -27,7 +27,7 @@ export const httpProbe: OsintProbeAdapter = {
     async run({ target }) {
         const chain: string[] = [];
         let url = `https://${target.value}/`;
-        let res: Response | null = null;
+        let res: Awaited<ReturnType<typeof safeFetch>> | null = null;
 
         for (let hop = 0; hop < MAX_HOPS; hop++) {
             const parsed = new URL(url);
@@ -39,7 +39,9 @@ export const httpProbe: OsintProbeAdapter = {
                 };
             }
 
-            res = await fetch(url, {
+            // `safeFetch` borne aussi l'adresse jointe : le nom a passé le garde,
+            // pas encore ce vers quoi il résout.
+            res = await safeFetch(url, {
                 method: 'GET',
                 redirect: 'manual',
                 signal: AbortSignal.timeout(HOP_TIMEOUT_MS),
