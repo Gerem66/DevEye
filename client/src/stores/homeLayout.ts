@@ -24,7 +24,7 @@ import { getActiveWorkspaceId } from './workspace';
  * Home grid layout: ordered sections, each holding ordered tiles of any kind. A
  * section is identified by its `id`, a tile by what it is. Persisted in
  * localStorage for an instant paint and synced to the server (debounced). Holds
- * only non-sensitive personalization metadata, never zero-knowledge payload.
+ * only non-sensitive personalization metadata, never user content.
  */
 const KEY_PREFIX = 'deveye:homeLayout';
 

@@ -171,7 +171,7 @@ holdSecrecy? }`). Cela suffit à le faire apparaître dans la grille, dans le
 
 ---
 
-## E. Sécurité / chiffrement (modèle zero-knowledge)
+## E. Sécurité / chiffrement (enveloppe, deux étages)
 
 Voir [SECURITY_MODEL.md](./SECURITY_MODEL.md). Règles clés :
 
@@ -181,7 +181,10 @@ Voir [SECURITY_MODEL.md](./SECURITY_MODEL.md). Règles clés :
 - Stocker en clair seulement les métadonnées non sensibles nécessaires au
   serveur pour lister/trier/gater sans déchiffrer (`sort_order`, `folder_id`, `level`,
   `workspace_id`…).
-- Le serveur ne doit jamais voir le contenu en clair.
+- Le contenu sensible passe par l'étage gardé (`ctx.secure`) ; l'étage ouvert
+  (`ctx.secure.open`) est un choix explicite, assumé comme lisible par un
+  serveur vivant. Le serveur ne lit l'étage gardé que tant que l'utilisateur n'a
+  pas activé le chiffrement par mot de passe.
 
 ---
 

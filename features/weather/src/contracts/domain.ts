@@ -91,7 +91,7 @@ export interface WeatherLocationRow {
     provider: WeatherProvider;
     position: number;
     is_primary: number;
-    /** Encrypted per-city API key (zero-knowledge at rest); null when unset. */
+    /** Per-city API key, encrypted at rest (open tier, readable by a live server); null when unset. */
     api_key_enc: string | null;
     created: number;
 }
@@ -99,7 +99,7 @@ export interface WeatherLocationRow {
 export interface WeatherProviderKeyRow {
     workspace_id: number;
     provider: WeatherProvider;
-    /** Encrypted API key (zero-knowledge at rest). */
+    /** API key, encrypted at rest (open tier, readable by a live server). */
     key_enc: string;
     created: number;
 }

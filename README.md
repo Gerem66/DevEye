@@ -8,7 +8,10 @@ DevEye est une stack moderne pour le monitorage décentralisé :
 - Interface web React (dossier [`client/`](./client)) les visualise
 - Contrats partagés typés dans le paquet `@deveye/types` (séparé)
 
-**Monitoring zero-knowledge**: Le serveur ne voit jamais les données en clair.
+**Chiffré au repos, avec une clé par utilisateur.** Activez le chiffrement par
+mot de passe et le serveur lui-même ne peut plus lire vos données : voir
+[Docs/SECURITY_MODEL.md](./Docs/SECURITY_MODEL.md) pour ce que chaque étage
+garantit.
 
 Pour les détails d'implémentation, voir [Docs/README.md](./Docs/README.md).
 
@@ -49,7 +52,7 @@ serveur (port 3000) : le navigateur ne parle qu'à `localhost:5173` (pas de CORS
 
 ## Docker
 
-### Dev — base vierge mais persistante + compte de dev
+### Dev : base vierge mais persistante + compte de dev
 
 ```bash
 docker compose -f docker-compose.dev.yml up --build
@@ -60,7 +63,7 @@ Au premier démarrage : migrations + création d'un compte de dev (`SEED_DEV=tru
 identifiants `dev` / `devdevdev` par défaut). L'app sert le client et l'API sur la
 même origine : http://localhost:3000
 
-### Prod — same-origin, DB externe (Dockploy)
+### Prod : same-origin, DB externe (Dockploy)
 
 ```bash
 cp .env.template .env   # renseigner les secrets
@@ -74,4 +77,4 @@ managée par Dockploy), healthcheck sur `/api/health`.
 
 ## Licence
 
-Projet privé — Tous droits réservés.
+Projet privé, tous droits réservés.

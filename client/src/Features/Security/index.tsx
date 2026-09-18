@@ -22,7 +22,7 @@ function showTwoFactorInfo() {
                 </p>
                 <p>
                     À chaque connexion, votre application calcule un code à 6 chiffres via{' '}
-                    <code>HMAC-SHA1(secret, floor(time/30))</code>. Le serveur recalcule le même code et les compare —
+                    <code>HMAC-SHA1(secret, floor(time/30))</code>. Le serveur recalcule le même code et les compare :
                     le secret ne transite jamais après l&apos;enrôlement.
                 </p>
                 <p>
@@ -46,18 +46,23 @@ function showEncryptionInfo() {
                 </p>
                 <p>
                     Sans ce mode activé, la DEK est elle-même chiffrée par une clé serveur (<strong>KEK</strong>)
-                    stockée dans les variables d&apos;environnement — le serveur peut déchiffrer sans action de votre
+                    stockée dans les variables d&apos;environnement : le serveur peut déchiffrer sans action de votre
                     part.
                 </p>
                 <p>
                     Avec ce mode activé, la DEK est chiffrée par une clé dérivée de <strong>votre mot de passe</strong>{' '}
                     via Argon2id (résistant aux GPUs). Le serveur ne stocke jamais votre mot de passe ni la DEK en clair
-                    — même un accès à la base de données ne suffit pas à lire vos données.
+                    : même un accès à la base de données ne suffit pas à lire vos données.
+                </p>
+                <p>
+                    Ce mode protège l&apos;étage gardé (notes privées, coffre, projets confidentiels). Ce qu&apos;une
+                    tâche de fond doit lire sans vous (Uptime, intégrations, CloudSync) reste chiffré au repos mais
+                    lisible par le serveur.
                 </p>
                 <p>
                     Le <strong>code de récupération</strong> chiffre une seconde copie de la DEK via une clé Argon2id
                     distincte. Si vous oubliez votre mot de passe, ce code déverrouille la DEK et permet de redéfinir un
-                    mot de passe — sans lui, les données chiffrées sont définitivement perdues.
+                    mot de passe : sans lui, les données chiffrées sont définitivement perdues.
                 </p>
             </>
         )
