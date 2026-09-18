@@ -1,0 +1,25 @@
+# A RUSTSEC advisory against a crate the agent ships does not wait for a push:
+# the agent runs as root on other people's machines.
+name: Agent audit
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agent
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Audit
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit

@@ -260,6 +260,13 @@ jobs:
             fi
           done
           jq -n --arg v "$version" --argjson t "$targets" '{version:$v, targets:$t}' > release/manifest.json
+          # With the key configured, an unsigned target is a build that went
+          # wrong in silence: the server would refuse to push it, and nobody
+          # would know why self-update stopped working.
+          if [ -n "${AGENT_UPDATE_SIGNING_KEY:-}" ]; then
+            jq -e '.targets | length > 0 and all(has("signature"))' release/manifest.json >/dev/null \
+              || { echo "signing key is set but a target is unsigned"; exit 1; }
+          fi
           # Don't print the manifest with signatures into public logs unnecessarily;
           # just confirm it parses and report which targets got signed.
           jq '.targets | map({id, signed: (has("signature"))})' release/manifest.json

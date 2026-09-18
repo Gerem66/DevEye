@@ -170,4 +170,14 @@ jobs:
         run: cargo clippy --release --all-targets -- -D warnings
 
       - name: Build
-        run: cargo build --release
+        run: cargo build --release --locked
+
+      # Clippy lints the tests, it does not run them: the path-traversal, order
+      # signature and forged-journal regressions only gate a merge from here.
+      - name: Tests
+        run: cargo test --release --all-targets --locked
+
+      - name: Audit
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit

@@ -29,7 +29,7 @@
     "ci": "npm run gen:features:local && npm run lint && npm run format:check && npm run typecheck && npm test && npm run gen:features -- --check",
     "ci:features": "npm run lint:features && npm run format:check:features && npm run typecheck:features && npm run test:features",
     "ci:smoke": "tsx scripts/smoke-all.ts",
-    "ci:agent": "cd agent; /usr/bin/cargo fmt --check && cargo clippy --all-targets -- -D warnings",
+    "ci:agent": "cd agent; /usr/bin/cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test",
     "clean": "rm -rf node_modules client/node_modules client/build package-lock.json",
     "test": "DOTENV_CONFIG_PATH=.env.test NODE_OPTIONS=--disable-warning=ExperimentalWarning tsx --test \"src/**/*.test.ts\" \"scripts/lib/*.test.ts\"",
     "test:features": "DOTENV_CONFIG_PATH=.env.test tsx --test \"features/*/src/**/*.test.ts\"",
