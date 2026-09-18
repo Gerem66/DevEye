@@ -77,9 +77,14 @@ export async function verifyRefreshToken(token: string): Promise<RefreshClaims |
 export interface DeviceClaims {
     sub: string; // device id
     oid: number; // owner user id
+    /** Expiry, unix seconds. Absent on a token minted before tokens expired: the server rotates it at the next connection. */
+    exp?: number;
 }
 
-/** Long-lived device token. Revocation is enforced via DB status + token hash. */
+/** A device token lives this long; the server replaces it at connection once it nears the end (`agent/ws.ts`). */
+export const DEVICE_TOKEN_TTL_SECONDS = 30 * 24 * 3600;
+
+/** Device token. Revocation is enforced via DB status + token hash; expiry bounds what a leaked copy is worth. */
 export async function signDeviceToken(deviceId: string, ownerId: number): Promise<string> {
     return new SignJWT({ oid: ownerId, typ: 'device' })
         .setProtectedHeader({ alg: 'HS256' })
@@ -87,6 +92,7 @@ export async function signDeviceToken(deviceId: string, ownerId: number): Promis
         .setIssuer(issuer)
         .setAudience('deveye-agent')
         .setIssuedAt()
+        .setExpirationTime(Math.floor(Date.now() / 1000) + DEVICE_TOKEN_TTL_SECONDS)
         .sign(deviceSecret);
 }
 
@@ -98,7 +104,7 @@ export async function verifyDeviceToken(token: string): Promise<DeviceClaims | n
             algorithms: JWT_ALGORITHMS
         });
         if (typeof payload.sub !== 'string' || typeof payload.oid !== 'number') return null;
-        return { sub: payload.sub, oid: payload.oid };
+        return { sub: payload.sub, oid: payload.oid, exp: payload.exp };
     } catch {
         return null;
     }

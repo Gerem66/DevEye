@@ -102,6 +102,7 @@ jobs:
       JWT_ACCESS_SECRET: ci-smoke-jwt-access-0123456789abcdef0123456789
       JWT_REFRESH_SECRET: ci-smoke-jwt-refresh-0123456789abcdef0123456789
       DEVICE_TOKEN_SECRET: ci-smoke-device-token-0123456789abcdef0123456789
+      ORDER_SIGNING_KEY: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
       SMOKE_BROWSER: google-chrome
     steps:
       - uses: actions/checkout@v6

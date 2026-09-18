@@ -17,7 +17,6 @@ export interface CreateDeviceInput {
     name: string;
     fingerprint: string;
     platform: string;
-    publicKey: string;
     tokenHash: string;
 }
 
@@ -28,7 +27,13 @@ export interface DevicesRepo {
     findVisible(id: string, workspaceId: number): Promise<DeviceRow | null>;
     listByWorkspace(workspaceId: number): Promise<DeviceRow[]>;
     create(input: CreateDeviceInput): Promise<DeviceRow>;
-    setTokenHash(id: string, tokenHash: string): Promise<void>;
+    /**
+     * Pose le condensé du jeton courant et celui du jeton qu'il remplace (`null`
+     * à l'enrôlement : l'ancien jeton d'une machine réappairée ne vaut plus rien).
+     */
+    setTokenHashes(id: string, current: string, previous: string | null): Promise<void>;
+    /** L'agent s'est authentifié avec le jeton courant : l'ancien peut tomber. */
+    clearPreviousTokenHash(id: string): Promise<void>;
     touchSeen(id: string, lastSeen: number): Promise<void>;
     /** Store the agent version reported on connect (`agent.hello`). */
     setAgentVersion(id: string, version: string): Promise<void>;
@@ -86,12 +91,12 @@ export function devicesRepo(pool: Q): DevicesRepo {
             );
             return r.rows;
         },
-        async create({ ownerId, workspaceId, name, fingerprint, platform, publicKey, tokenHash }) {
+        async create({ ownerId, workspaceId, name, fingerprint, platform, tokenHash }) {
             const id = randomUUID();
             await pool.query(
-                `INSERT INTO devices (id, owner_id, workspace_id, name, fingerprint, platform, status, public_key, token_hash)
-                 VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
-                [id, ownerId, workspaceId, name, fingerprint, platform, publicKey, tokenHash]
+                `INSERT INTO devices (id, owner_id, workspace_id, name, fingerprint, platform, status, token_hash)
+                 VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
+                [id, ownerId, workspaceId, name, fingerprint, platform, tokenHash]
             );
             // Un nouvel appareil atterrit à la fin de la liste de son espace :
             // l'ordre appartient à l'utilisateur.
@@ -107,8 +112,17 @@ export function devicesRepo(pool: Q): DevicesRepo {
             const r = await pool.query<DeviceRow>('SELECT * FROM devices WHERE id = ?', [id]);
             return r.rows[0];
         },
-        async setTokenHash(id, tokenHash) {
-            await pool.query('UPDATE devices SET token_hash = ? WHERE id = ?', [tokenHash, id]);
+        async setTokenHashes(id, current, previous) {
+            await pool.query('UPDATE devices SET token_hash = ?, token_hash_prev = ? WHERE id = ?', [
+                current,
+                previous,
+                id
+            ]);
+        },
+        async clearPreviousTokenHash(id) {
+            await pool.query('UPDATE devices SET token_hash_prev = NULL WHERE id = ? AND token_hash_prev IS NOT NULL', [
+                id
+            ]);
         },
         async touchSeen(id, lastSeen) {
             await pool.query('UPDATE devices SET last_seen = ? WHERE id = ?', [lastSeen, id]);
@@ -133,7 +147,8 @@ export function devicesRepo(pool: Q): DevicesRepo {
             // wipe the token so it can never reconnect, and clear deletion bookkeeping.
             await pool.query(
                 `UPDATE devices
-                 SET status = 'archived', token_hash = '', status_before_delete = NULL, delete_error = NULL
+                 SET status = 'archived', token_hash = '', token_hash_prev = NULL, status_before_delete = NULL,
+                     delete_error = NULL
                  WHERE id = ?`,
                 [id]
             );

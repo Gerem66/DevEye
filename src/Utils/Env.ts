@@ -50,6 +50,10 @@ export const env = {
 
     // Device (agent) tokens, signed with a dedicated secret.
     DEVICE_TOKEN_SECRET: getEnvVar('DEVICE_TOKEN_SECRET', 'string'),
+    // La graine Ed25519 (32 octets, base64) qui signe les ordres à fort impact
+    // envoyés aux agents (`agent/orders.ts`). La changer oblige à réappairer
+    // chaque machine : elles épinglent la clé publique à l'enrôlement.
+    ORDER_SIGNING_KEY: getEnvVar('ORDER_SIGNING_KEY', 'string'),
 
     // Directory holding the agent binaries served by the download endpoints.
     // On a persistent volume in prod; defaults to `agent/dist` relative to the

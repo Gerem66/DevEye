@@ -16,9 +16,11 @@ import {
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { ACCESS_COOKIE } from '@/auth/cookies';
-import { signDeviceToken, verifyAccessToken, verifyDeviceToken } from '@/auth/jwt';
+import { signDeviceToken, verifyAccessToken } from '@/auth/jwt';
 import { holdsFeatureIn } from '@/features/_access';
 import { sha256hex } from '@/Utils/hash';
+import { authenticateDevice, deviceTokenOf } from './deviceAuth';
+import { orderSigningPublicKey } from './orders';
 import type { AuditLog } from '@/Services/AuditLog';
 import { agentDistDir, readSyncedManifest } from './sync';
 import { deviceRowToDevice } from './mappers';
@@ -132,29 +134,23 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }
     });
 
     /**
-     * Authenticate the caller as an enrolled device via its device token (Bearer
-     * header or `?token=`), mirroring the `/agent` WS auth. Used by the self-update
+     * Authenticate the caller as an enrolled device via its device token, by the
+     * same rule as the `/agent` WS (`deviceAuth.ts`). Used by the self-update
      * download — the agent isn't an admin, it presents its own token. Returns the
      * device row, or `null` after already sending the 401/403.
      */
     const authDevice = async (req: FastifyRequest, reply: FastifyReply): Promise<DeviceRow | null> => {
-        const authHeader = req.headers['authorization'];
-        let token: string | null = null;
-        if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) token = authHeader.slice(7);
-        else {
-            const q = req.query as { token?: unknown } | undefined;
-            if (q && typeof q.token === 'string') token = q.token;
-        }
-        if (!token) {
+        const presented = deviceTokenOf(req);
+        if (!presented) {
             void reply.code(401).send(err('auth_required', 'No device token'));
             return null;
         }
-        const claims = await verifyDeviceToken(token);
-        const device = claims ? await db.devices.findById(claims.sub) : null;
-        if (!device || device.token_hash !== sha256hex(token)) {
+        const authenticated = await authenticateDevice(db, presented.token);
+        if (!authenticated) {
             void reply.code(401).send(err('auth_invalid', 'Invalid device token'));
             return null;
         }
+        const { device } = authenticated;
         if (device.status === 'revoked' || device.status === 'archived') {
             void reply.code(403).send(err('forbidden', 'Device not allowed'));
             return null;
@@ -190,7 +186,7 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }
             if (!parsed.success) {
                 return reply.code(400).send(err('validation', 'Invalid enrollment payload', parsed.error.flatten()));
             }
-            const { code, name, fingerprint, platform, publicKey } = parsed.data;
+            const { code, name, fingerprint, platform } = parsed.data;
 
             const consumed = await db.linkCodes.consume(code.trim().toUpperCase());
             if (!consumed) {
@@ -213,19 +209,24 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }
                     name,
                     fingerprint,
                     platform,
-                    publicKey,
                     tokenHash: ''
                 });
                 deviceId = created.id;
             }
 
             const deviceToken = await signDeviceToken(deviceId, ownerId);
-            await db.devices.setTokenHash(deviceId, sha256hex(deviceToken));
+            // L'ancien jeton d'une machine réappairée tombe avec : pas de condensé précédent.
+            await db.devices.setTokenHashes(deviceId, sha256hex(deviceToken), null);
 
             // (Re)set the device to a clean enrolled state: pending unless the code
             // auto-approves. Done on re-enrollment too, so a previously
             // archived/revoked machine is re-paired instead of staying hidden.
-            await db.devices.markEnrolled(deviceId, consumed.autoApprove ? 'active' : 'pending');
+            // L'empreinte est déclarée par l'appelant : un réappairage reprend la
+            // fiche d'une machine existante (son historique, ses partages), donc
+            // il attend toujours une approbation, même sous un code qui approuve
+            // d'office. Sans cela, un code de liaison suffirait à saisir une machine.
+            const autoApproved = consumed.autoApprove && !existing;
+            await db.devices.markEnrolled(deviceId, autoApproved ? 'active' : 'pending');
             // L'appairage passe par cette route HTTP, pas par une commande WS :
             // sans ce signal, rien n'avertirait l'espace.
             live.changed(workspaceId, ['devices'], null);
@@ -233,13 +234,15 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }
                 source: 'agent',
                 category: 'device',
                 action: 'device.enroll',
-                level: 'warning',
+                level: existing ? 'critical' : 'warning',
                 uid: ownerId,
                 ip: req.ip,
-                description: consumed.autoApprove
-                    ? `Appareil appairé et approuvé automatiquement : « ${name} »`
-                    : `Appareil appairé (en attente d'approbation) : « ${name} »`,
-                metadata: { deviceId, platform, reenrolled: Boolean(existing), autoApprove: consumed.autoApprove }
+                description: existing
+                    ? `Réappairage d'un appareil existant, son ancien jeton est révoqué (en attente d'approbation) : « ${existing.name} »`
+                    : autoApproved
+                      ? `Appareil appairé et approuvé automatiquement : « ${name} »`
+                      : `Appareil appairé (en attente d'approbation) : « ${name} »`,
+                metadata: { deviceId, platform, reenrolled: Boolean(existing), autoApprove: autoApproved }
             });
 
             const row = await db.devices.findById(deviceId);
@@ -250,6 +253,7 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }
                     enrollDeviceResponseSchema.parse({
                         deviceId,
                         deviceToken,
+                        orderSigningKey: orderSigningPublicKey,
                         device: deviceRowToDevice(row, hub.isOnline(deviceId))
                     })
                 )

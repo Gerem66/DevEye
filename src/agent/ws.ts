@@ -35,11 +35,13 @@ import {
     AGENT_UPDATED,
     agentClientMessageSchema,
     type AgentClientMessage,
-    type AgentServerMessage
+    type AgentServerMessage,
+    AGENT_TOKEN_ROTATE,
+    type DeviceRow
 } from '@deveye/types';
 import type { FastifyInstance } from 'fastify';
 
-import { verifyDeviceToken } from '@/auth/jwt';
+import { signDeviceToken, type DeviceClaims } from '@/auth/jwt';
 import { sha256hex } from '@/Utils/hash';
 import { logger } from '@/logger';
 import {
@@ -76,6 +78,8 @@ import {
     type AgentSession
 } from './handlers';
 import { agentConfigFor } from './config';
+import { authenticateDevice, deviceTokenOf } from './deviceAuth';
+import { agentFrame } from './orders';
 import { notifyDeviceWorkspaces, recordAgentOffline, recordAgentOnline } from './presence';
 import type { LiveHub } from '@/live/hub';
 import type { MonitorHub } from './hub';
@@ -95,16 +99,11 @@ interface AgentWSDeps {
 }
 
 function send(socket: WebSocket, msg: AgentServerMessage): void {
-    socket.send(JSON.stringify(msg));
+    socket.send(agentFrame(msg.command, msg.payload));
 }
 
-function extractToken(req: { headers: Record<string, unknown>; query: unknown }): string | null {
-    const auth = req.headers['authorization'];
-    if (typeof auth === 'string' && auth.startsWith('Bearer ')) return auth.slice(7);
-    const q = req.query as { token?: unknown } | undefined;
-    if (q && typeof q.token === 'string') return q.token;
-    return null;
-}
+/** En dessous de ce reste de vie, le jeton est remplacé à la connexion. */
+const TOKEN_ROTATE_BELOW_SECONDS = 7 * 24 * 3600;
 
 /** Route one validated agent frame to its handler. The big per-message logic lives
  *  in the focused `handlers/*` modules; this stays a thin, exhaustive dispatcher. */
@@ -174,11 +173,48 @@ function dispatch(session: AgentSession, msg: AgentClientMessage): void | Promis
 }
 
 /**
+ * Remplace le jeton d'un appareil à la connexion quand il approche de sa fin,
+ * n'expire pas (émis avant que les jetons n'expirent), ou quand l'agent présente
+ * encore l'ancien (la trame précédente s'est perdue, ou n'a pas pu être
+ * enregistrée). L'ancien condensé reste accepté jusqu'à ce que l'agent
+ * s'authentifie avec le nouveau : une rotation ne peut pas couper une machine.
+ * Un échec ne ferme pas la socket, la connexion suivante réessaie.
+ */
+async function rotateTokenIfDue(
+    db: Database,
+    socket: WebSocket,
+    device: DeviceRow,
+    claims: DeviceClaims,
+    presented: 'current' | 'previous',
+    log: { warn: (obj: unknown, msg: string) => void; info: (msg: string) => void }
+): Promise<void> {
+    const now = Math.floor(Date.now() / 1000);
+    const due = claims.exp === undefined || claims.exp - now < TOKEN_ROTATE_BELOW_SECONDS;
+    try {
+        if (presented === 'current' && !due) {
+            if (device.token_hash_prev) await db.devices.clearPreviousTokenHash(device.id);
+            return;
+        }
+        const token = await signDeviceToken(device.id, claims.oid);
+        // L'agent tient toujours le jeton qu'il vient de présenter : c'est lui qui
+        // doit rester valable, que ce soit le courant ou déjà le précédent.
+        const stillHeld = presented === 'current' ? device.token_hash : device.token_hash_prev;
+        await db.devices.setTokenHashes(device.id, sha256hex(token), stillHeld);
+        send(socket, { command: AGENT_TOKEN_ROTATE, payload: { token } });
+        log.info('Device token rotated');
+    } catch (err) {
+        log.warn({ err }, 'Device token rotation failed (socket kept open)');
+    }
+}
+
+/**
  * Agent <-> server WebSocket. Authenticated with a device token; streams metric
  * batches which are persisted and fanned out to subscribed user sockets. This
  * module owns the socket *lifecycle* (auth, connect, dispatch); the per-message
  * handling lives in `handlers/`.
  */
+const AGENT_FRAME_MAX_BYTES = 4 * 1024 * 1024;
+
 export async function registerAgentWS(
     app: FastifyInstance,
     { db, hub, live, hooks, audit }: AgentWSDeps
@@ -195,22 +231,31 @@ export async function registerAgentWS(
         const earlyFrames: Buffer[] = [];
         let onMessage: ((raw: Buffer) => void) | null = null;
         socket.on('message', (raw: Buffer) => {
+            // La plus grosse trame d'un agent est une sortie de terminal (2 Mo)
+            // ou un morceau de fichier (1,4 Mo) ; au-delà, l'agent n'est pas le nôtre.
+            if (raw.length > AGENT_FRAME_MAX_BYTES) {
+                socket.close(1009, 'frame too big');
+                return;
+            }
             if (onMessage) onMessage(raw);
             else earlyFrames.push(raw);
         });
 
-        const token = extractToken(req);
-        if (!token) return deny();
-        const claims = await verifyDeviceToken(token);
-        if (!claims) return deny();
-
-        const device = await db.devices.findById(claims.sub);
-        if (!device || device.token_hash !== sha256hex(token)) return deny();
+        const presentedToken = deviceTokenOf(req);
+        if (!presentedToken) return deny();
+        const authenticated = await authenticateDevice(db, presentedToken.token);
+        if (!authenticated) return deny();
+        const { device, claims, presented } = authenticated;
         // Revoked and archived devices are refused identically to unknown ones.
         if (device.status === 'revoked' || device.status === 'archived') return deny();
 
         const deviceId = device.id;
         const reqLogger = logger.child({ deviceId, ownerId: claims.oid });
+        if (presentedToken.fromQuery) {
+            reqLogger.warn(
+                'Agent authenticated with its token in the URL: it predates the header transport, update it'
+            );
+        }
 
         // A device marked for deletion is accepted just long enough to be told to
         // self-destruct; we send the destroy signal and wait for its reply
@@ -224,6 +269,7 @@ export async function registerAgentWS(
             const wasOnlineInHub = hub.isOnline(deviceId);
             hub.agentOnline(deviceId, socket);
             send(socket, { command: AGENT_CONFIG, payload: await agentConfigFor(device) });
+            await rotateTokenIfDue(db, socket, device, claims, presented, reqLogger);
             // Les modules (CloudSync) poussent leurs assignations et rattrapent
             // le retard éventuel.
             void Promise.resolve(hooks.onAgentConnect(deviceId)).catch((err: unknown) => {

@@ -139,7 +139,8 @@ export function deviceRepo(q: SdkQueryable): DeviceRepo {
             // Keep the row and its history, wipe the token so it can never reconnect.
             await q.execute(
                 `UPDATE devices
-                 SET status = 'archived', token_hash = '', status_before_delete = NULL, delete_error = NULL
+                 SET status = 'archived', token_hash = '', token_hash_prev = NULL, status_before_delete = NULL,
+                     delete_error = NULL
                  WHERE id = ?`,
                 [id]
             );

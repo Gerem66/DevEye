@@ -119,6 +119,7 @@ import {
 
 import { accessEpochNow } from '@/features/_access';
 import { logger } from '@/logger';
+import { agentFrame } from './orders';
 
 /**
  * Période du balayage de vivacité des agents. Deux tours sans `pong` ferment la
@@ -304,7 +305,7 @@ export class MonitorHub {
     private sendToAgent(deviceId: string, command: string, payload: unknown = {}): boolean {
         const socket = this.agents.get(deviceId);
         if (!socket) return false;
-        socket.send(JSON.stringify({ command, payload }));
+        socket.send(agentFrame(command, payload));
         return true;
     }
 
