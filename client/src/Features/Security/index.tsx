@@ -99,6 +99,7 @@ function showReauthInfo() {
 interface SetupData {
     secret: string;
     otpauthUrl: string;
+    qrDataUrl: string;
     backupCodes: string[];
 }
 
@@ -486,7 +487,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                         <p>Utilisez une application comme Google Authenticator, Authy ou 1Password.</p>
                                         <div className={styles.qrContainer}>
                                             <img
-                                                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(setupData.otpauthUrl)}`}
+                                                src={setupData.qrDataUrl}
                                                 alt='QR Code 2FA'
                                                 className={styles.qrCode}
                                             />

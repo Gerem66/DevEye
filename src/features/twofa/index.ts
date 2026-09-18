@@ -7,6 +7,8 @@ import {
     type TwoFactorStatus
 } from '@deveye/types';
 
+import QRCode from 'qrcode';
+
 import { sha256hex } from '@/Utils/hash';
 import { totpContext } from '@/Services/sealContexts';
 import { generateBackupCodes, generateTotpSecret, normalizeBackupCode, verifyTotp } from '@/Services/Totp';
@@ -74,7 +76,10 @@ export const twoFactorSetupFeature: FeatureDefinition<
         );
 
         ctx.audit({ action: 'twofa.setup', description: 'Configuration 2FA initiée (secret + codes générés)' });
-        return { setup: { secret, otpauthUrl, backupCodes } };
+        // Dessiné ici : l'URL otpauth porte le secret, elle ne part vers aucun
+        // service de génération de QR.
+        const qrDataUrl = await QRCode.toDataURL(otpauthUrl, { width: 360, margin: 2, errorCorrectionLevel: 'M' });
+        return { setup: { secret, otpauthUrl, qrDataUrl, backupCodes } };
     }
 });
 
