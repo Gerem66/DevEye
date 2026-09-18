@@ -319,12 +319,13 @@ function mount(accounts: MailAccountRow[] = [account({ id: 1 })], projections: R
 }
 
 describe('la déclaration', () => {
-    it('déclare les deux GET sur l’origine de l’app seulement, sans plafond propre', () => {
+    it('déclare ses GET sur l’origine de l’app seulement, sans plafond propre', () => {
         const { routes } = mount();
         assert.deepEqual(
             routes.map((r) => [r.method, r.path, r.opts]),
             [
                 ['get', '/api/mail/attachment', { exposure: 'app' }],
+                ['get', '/api/mail/oauth/close.js', { exposure: 'app' }],
                 ['get', '/api/mail/oauth/callback', { exposure: 'app' }]
             ]
         );
@@ -416,6 +417,18 @@ describe('GET /api/mail/attachment', () => {
     });
 });
 
+describe('GET /api/mail/oauth/close.js', () => {
+    it('sert le script de la popup, qui ne poste qu\u2019à l\u2019origine de la page', async () => {
+        const { call } = mount();
+        const state = await call('/api/mail/oauth/close.js', {});
+        assert.equal(state.status, 200);
+        assert.equal(state.headers['Content-Type'], 'application/javascript; charset=utf-8');
+        const script = String(state.payload);
+        assert.ok(script.includes('window.location.origin'));
+        assert.ok(script.includes('window.close()'));
+    });
+});
+
 describe('GET /api/mail/oauth/callback', () => {
     it('avec un `state` valide, crée le compte sous le codec de son palier et referme la fenêtre vers l’app', async () => {
         const { call, repo, deps, exchanged } = mount([]);
@@ -438,10 +451,12 @@ describe('GET /api/mail/oauth/callback', () => {
         assert.equal(JSON.parse(row.credentials_enc.slice('server:'.length)).refreshToken, 'refresh');
 
         const html = String(state.payload);
-        assert.ok(html.includes('window.opener.postMessage('));
-        assert.ok(html.includes('"https://app.test"'));
-        assert.ok(html.includes('"ok":true'));
-        assert.ok(html.includes('window.close()'));
+        assert.ok(html.includes('data-ok="true"'));
+        // Le verdict voyage par les attributs : la page ne porte aucun script
+        // écrit à la volée, donc aucune politique de contenu à elle.
+        assert.ok(html.includes('<script src="/api/mail/oauth/close.js"></script>'));
+        assert.doesNotMatch(html, /<script(?![^>]*\ssrc=)/);
+        assert.equal(state.headers['Content-Security-Policy'], undefined);
         assert.equal(deps.recorded.audits.at(-1)?.action, 'mail.oauthConnect');
     });
 
@@ -460,7 +475,7 @@ describe('GET /api/mail/oauth/callback', () => {
             state: ticket({ provider: 'google', securityTier: 'open', displayName: '', accountId: 7 })
         });
 
-        assert.ok(String(state.payload).includes('"ok":true'));
+        assert.ok(String(state.payload).includes('data-ok="true"'));
         assert.equal(repo.accountRows.length, 1, 'aucune boîte de plus');
         // Le nom et l'adresse survivent : seuls les jetons sont remplacés.
         assert.equal(repo.accountRows[0].display_name_enc, 'server:Perso Gmail');
@@ -478,7 +493,7 @@ describe('GET /api/mail/oauth/callback', () => {
             state: ticket({ provider: 'google', securityTier: 'open', displayName: '', accountId: 8 })
         });
 
-        assert.ok(String(state.payload).includes('"ok":false'));
+        assert.ok(String(state.payload).includes('data-ok="false"'));
         assert.ok(String(state.payload).includes('moi@gmail.com'));
         assert.equal(repo.accountRows[0].credentials_enc, other.credentials_enc, 'les jetons n’ont pas bougé');
     });
@@ -508,7 +523,7 @@ describe('GET /api/mail/oauth/callback', () => {
             code: 'code-3',
             state: ticket({ provider: 'google', securityTier: 'guarded' }, false)
         });
-        assert.ok(String(state.payload).includes('"ok":false'));
+        assert.ok(String(state.payload).includes('data-ok="false"'));
         assert.ok(String(state.payload).includes('verrouillée'));
         assert.deepEqual(locked.exchanged, []);
         assert.equal(locked.repo.accountRows.length, 0);
@@ -526,12 +541,15 @@ describe('GET /api/mail/oauth/callback', () => {
             const state = await call('/api/mail/oauth/callback', query);
             assert.equal(state.status, 200);
             const html = String(state.payload);
-            assert.ok(html.includes('"ok":false'), html);
+            assert.ok(html.includes('data-ok="false"'), html);
             assert.ok(html.includes('Échec de la connexion'));
         }
         // Le message d'erreur du fournisseur traverse échappé, jamais tel quel.
         const injected = await call('/api/mail/oauth/callback', { error: '<script>alert(1)</script>' });
-        assert.ok(!String(injected.payload).includes('<script>alert'));
+        const page = String(injected.payload);
+        assert.ok(!page.includes('<script>alert'));
+        // Y compris dans l'attribut qui le rend au client, guillemets compris.
+        assert.ok(page.includes('data-error="&lt;script&gt;alert(1)&lt;/script&gt;"'));
         assert.deepEqual(exchanged, []);
         assert.equal(repo.accountRows.length, 0);
     });

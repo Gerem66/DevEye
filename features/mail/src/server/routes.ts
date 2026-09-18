@@ -1,5 +1,3 @@
-import crypto from 'node:crypto';
-
 import { z } from 'zod';
 
 import {
@@ -110,6 +108,32 @@ function escapeHtml(value: string): string {
         .replace(/'/g, '&#39;');
 }
 
+/** L'adresse du script de la popup, servi comme fichier par la route ci-dessous. */
+const POPUP_SCRIPT_PATH = '/api/mail/oauth/close.js';
+
+/**
+ * Ce que la popup exécute : lire son verdict sur `<body>`, le poster à l'origine
+ * qui a servi la page (celle de l'app, puisque c'est là que le fournisseur
+ * redirige), puis se fermer.
+ *
+ * Servi comme fichier et non écrit dans la page : la politique de contenu de
+ * l'app (`script-src 'self'`) le couvre alors telle quelle. Un script inline
+ * aurait demandé à cette page une politique à elle, calculée sur les octets du
+ * script : une ligne changée sans toucher à l'en-tête, et la popup ne se fermait
+ * plus, en silence.
+ */
+const POPUP_SCRIPT = `(function () {
+    var verdict = document.body.dataset;
+    if (window.opener) {
+        window.opener.postMessage(
+            { source: 'deveye-mail-oauth', ok: verdict.ok === 'true', error: verdict.error || null },
+            window.location.origin
+        );
+    }
+    window.close();
+})();
+`;
+
 /**
  * The single OAuth redirect target for Gmail/Microsoft 365 mailboxes. Opened in
  * a popup by the client; it always answers with a small self-closing HTML page
@@ -118,38 +142,18 @@ function escapeHtml(value: string): string {
  *
  * `message` is never trustworthy: on the error path it is `?error=` straight off
  * the query string, so this page is reachable with arbitrary content on DevEye's
- * own origin. It goes into markup escaped, and into the script block as JSON
- * with `<` neutralised: `JSON.stringify` alone leaves `</script>` intact, which
- * is enough to break out of the block.
- *
- * La cible du `postMessage` est l'origine de l'app : la fenêtre qui a ouvert le
- * consentement, et aucune autre.
+ * own origin. Il n'y traverse qu'échappé, en texte et en attribut ; la page ne
+ * porte aucun script où il pourrait se glisser.
  */
-export function popupResponse(appOrigin: string, ok: boolean, message?: string): { html: string; csp: string } {
-    const payload = JSON.stringify({ source: 'deveye-mail-oauth', ok, error: message ?? null }).replace(
-        /</g,
-        '\\u003c'
-    );
-    const originJson = JSON.stringify(appOrigin).replace(/</g, '\\u003c');
+export function popupResponse(ok: boolean, message?: string): string {
     const text = ok
         ? 'Compte connecté, vous pouvez fermer cette fenêtre.'
         : `Échec de la connexion : ${escapeHtml(message ?? 'inconnu')}`;
-    const script = `
-  if (window.opener) { window.opener.postMessage(${payload}, ${originJson}); }
-  window.close();
-`;
-    // La politique de l'app interdit tout script inline. Cette page en a un, et
-    // un seul : elle porte sa propre politique, qui n'autorise que lui, par son
-    // empreinte. Tout autre script qu'un message d'erreur forgé y glisserait
-    // resterait lettre morte.
-    const hash = crypto.createHash('sha256').update(script, 'utf8').digest('base64');
-    const csp = `default-src 'none'; script-src 'sha256-${hash}'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'`;
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>DevEye Mail</title></head>
-<body style="font-family:sans-serif;padding:2rem;color:#333">
+    return `<!doctype html><html><head><meta charset="utf-8"><title>DevEye Mail</title></head>
+<body style="font-family:sans-serif;padding:2rem;color:#333" data-ok="${ok}" data-error="${escapeHtml(message ?? '')}">
 <p>${text}</p>
-<script>${script}</script>
+<script src="${POPUP_SCRIPT_PATH}"></script>
 </body></html>`;
-    return { html, csp };
 }
 
 export function mailRoutes(app: SdkPublicApp, deps: MailRouteDeps, seam: MailRouteSeam = {}): void {
@@ -200,13 +204,17 @@ export function mailRoutes(app: SdkPublicApp, deps: MailRouteDeps, seam: MailRou
         }
     });
 
+    // Le script de la page ci-dessous. Une route plutôt qu'un fichier statique :
+    // elle est servie par le même écouteur en développement comme en production,
+    // où le client n'est pas monté de la même façon.
+    app.get(POPUP_SCRIPT_PATH, { exposure: 'app' }, async (_req, reply) => {
+        reply.header('Content-Type', 'application/javascript; charset=utf-8');
+        return reply.send(POPUP_SCRIPT);
+    });
+
     app.get('/api/mail/oauth/callback', { exposure: 'app' }, async (req, reply) => {
         reply.header('Content-Type', 'text/html; charset=utf-8');
-        const page = (ok: boolean, message?: string) => {
-            const { html, csp } = popupResponse(deps.origins.app, ok, message);
-            reply.header('Content-Security-Policy', csp);
-            return reply.send(html);
-        };
+        const page = (ok: boolean, message?: string) => reply.send(popupResponse(ok, message));
         const query = oauthQuerySchema.safeParse(req.query);
         const { code, state, error } = query.success ? query.data : {};
 
