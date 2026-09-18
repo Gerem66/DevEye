@@ -782,7 +782,7 @@ export default function Mail(_props: FeatureViewProps) {
             const res = await withSecrecy(() =>
                 api.send('mail.attachmentDownload', { messageId: selectedMessage.id, attachmentId })
             );
-            window.open(res.downloadUrl, '_blank');
+            window.open(res.downloadUrl, '_blank', 'noopener');
         } catch (e) {
             setError(humanizeError(e, 'Téléchargement impossible.'));
         }

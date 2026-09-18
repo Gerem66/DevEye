@@ -30,7 +30,7 @@ export const cveIdSchema = z
 export const CVE_VECTOR_MAX = 320;
 
 export const cveReferenceSchema = z.object({
-    url: z.url(),
+    url: z.url({ protocol: /^https?$/ }),
     /**
      * Ce que le NVD dit de la page : « Patch », « Exploit », « Vendor Advisory ».
      * Son champ `source`, lui, ne sert à rien ici : c'est l'identifiant du CNA,

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, FeatureSettingsButton, StatusBadge } from 'deveye-sdk-client';
+import { Button, FeatureSettingsButton, safeHref, StatusBadge } from 'deveye-sdk-client';
 import type {
     UptimeCheck,
     UptimeIncident,
@@ -138,7 +138,7 @@ export function ServiceDetail({ service, onBack, onCheckNow }: ServiceDetailProp
                 </Button>
                 <div className={styles.detailTitle}>
                     <h3 className={styles.detailName}>{service.name}</h3>
-                    <a className={styles.detailUrl} href={service.url} target='_blank' rel='noreferrer'>
+                    <a className={styles.detailUrl} href={safeHref(service.url)} target='_blank' rel='noreferrer'>
                         {service.url}
                     </a>
                 </div>

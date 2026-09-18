@@ -1,6 +1,7 @@
 import { forwardRef, type CSSProperties, type ElementType, type ReactNode, type MouseEvent } from 'react';
 import { motion, type HTMLMotionProps } from 'framer-motion';
 import { useLiveOutline } from '@/live/useLiveOutline';
+import { safeHref } from '@/safeHref';
 import { useWorkspaceState } from '@/stores/workspace';
 import styles from './Widget.module.css';
 
@@ -55,14 +56,15 @@ const Widget = forwardRef<HTMLDivElement, WidgetProps>(function Widget(
 
     // Render as an anchor when `href` is set, else a div. Typed loosely so the
     // motion props + click handler aren't constrained to the div/anchor union.
-    const Tag = (href ? motion.a : motion.div) as ElementType;
-    const linkProps = href ? { href, target: '_blank', rel: 'noopener noreferrer' } : undefined;
+    const link = safeHref(href);
+    const Tag = (link ? motion.a : motion.div) as ElementType;
+    const linkProps = link ? { href: link, target: '_blank', rel: 'noopener noreferrer' } : undefined;
     return (
         <Tag
             ref={ref as never}
             layoutId={interactive ? layoutKey : undefined}
             className={`${styles.widget} ${compact ? styles.compact : ''} ${interactive ? '' : styles.static} ${className ?? ''}`}
-            onClick={interactive && !href ? (e: MouseEvent<HTMLDivElement>) => onExpand?.(e) : undefined}
+            onClick={interactive && !link ? (e: MouseEvent<HTMLDivElement>) => onExpand?.(e) : undefined}
             whileHover={interactive ? { y: -4 } : undefined}
             whileTap={interactive ? { scale: 0.985 } : undefined}
             transition={{ type: 'spring', stiffness: 300, damping: 26, mass: 0.8 }}

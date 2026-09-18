@@ -1,4 +1,4 @@
-import { Button, Dialog } from 'deveye-sdk-client';
+import { Button, Dialog, safeHref } from 'deveye-sdk-client';
 import type { GitPullRequest, GitPullState } from '../contracts/domain';
 
 import styles from './style.module.css';
@@ -38,7 +38,7 @@ export function PullRequestDialog({ open, pull, onClose }: PullRequestDialogProp
             footer={
                 <>
                     {pull?.url && (
-                        <a className={styles.externalLink} href={pull.url} target='_blank' rel='noreferrer'>
+                        <a className={styles.externalLink} href={safeHref(pull.url)} target='_blank' rel='noreferrer'>
                             <span className='icon icon-github' /> Voir sur GitHub
                         </a>
                     )}

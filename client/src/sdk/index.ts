@@ -53,6 +53,7 @@ export { useDevices } from '@/devicesProvider';
 // désabonner l'un l'autre) et les chemins d'un appareil.
 export { acquireMetrics } from '@/stores/metricsSubscription';
 export { isWinPath, joinPath } from '@/devicePath';
+export { safeHref } from '@/safeHref';
 /**
  * La version de DevEye dont cette interface est bâtie (package.json racine,
  * injectée au build) : ce à quoi un module compare la version qu'un agent

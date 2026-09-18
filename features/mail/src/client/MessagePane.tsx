@@ -44,8 +44,10 @@ function rawDocument(bodyHtml: string): string {
 
 /**
  * Reading pane. `message.bodyHtml` is already sanitized server-side (no
- * `<script>`, no event handlers), so rendering it directly is safe; blocked
- * remote images show as a banner instead of silently loading. In `raw` render
+ * `<script>`, no event handlers), and the app's Content-Security-Policy
+ * (`script-src 'self'`, app.ts) is what makes a sanitizer miss survivable: an
+ * injected handler or `javascript:` link cannot run. Blocked remote images show
+ * as a banner instead of silently loading. In `raw` render
  * mode the body instead goes into a `sandbox=""` iframe, script-disabled and
  * opaque-origin, so the message's own CSS (preserved by the server only in that
  * mode) can't reach or be reached by the rest of the app.

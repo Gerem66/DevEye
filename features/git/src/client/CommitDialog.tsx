@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Dialog, humanizeError } from 'deveye-sdk-client';
+import { Button, Dialog, humanizeError, safeHref } from 'deveye-sdk-client';
 import type { GitCommitDetail, GitDiffFile } from '../contracts/domain';
 
 import { api } from './api';
@@ -101,7 +101,7 @@ export function CommitDialog({ open, repoId, sha, onClose }: CommitDialogProps) 
             footer={
                 <>
                     {detail?.url && (
-                        <a className={styles.externalLink} href={detail.url} target='_blank' rel='noreferrer'>
+                        <a className={styles.externalLink} href={safeHref(detail.url)} target='_blank' rel='noreferrer'>
                             <span className='icon icon-github' /> Voir sur GitHub
                         </a>
                     )}

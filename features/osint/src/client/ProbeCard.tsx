@@ -1,3 +1,4 @@
+import { safeHref } from 'deveye-sdk-client';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { OSINT_PROBE_LABELS, type OsintProbeId, type OsintProbeResult, type OsintTone } from '../contracts/domain';
@@ -133,7 +134,7 @@ function ProbeBody({
                             <dt>{f.label}</dt>
                             <dd className={f.mono ? styles.mono : undefined}>
                                 {f.href ? (
-                                    <a href={f.href} target='_blank' rel='noopener noreferrer'>
+                                    <a href={safeHref(f.href)} target='_blank' rel='noopener noreferrer'>
                                         {f.value}
                                     </a>
                                 ) : (
@@ -163,7 +164,7 @@ function ProbeBody({
                             <a
                                 key={`${l.href}-${i}`}
                                 className={styles.chip}
-                                href={l.href}
+                                href={safeHref(l.href)}
                                 target='_blank'
                                 rel='noopener noreferrer'
                             >

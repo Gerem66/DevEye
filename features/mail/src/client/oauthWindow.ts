@@ -28,6 +28,9 @@ export function awaitConsentWindow(popup: Window): Promise<{ verdict: ConsentVer
             resolve(result);
         };
         function onMessage(e: MessageEvent) {
+            // La popup passe par le fournisseur, qui tient donc `window.opener` : seul
+            // un message venu de notre origine ET de cette fenêtre fait foi.
+            if (e.origin !== window.location.origin || e.source !== popup) return;
             const data = e.data as { source?: string; ok?: boolean; error?: string } | undefined;
             if (data?.source !== 'deveye-mail-oauth') return;
             finish({ verdict: { ok: data.ok === true, error: data.error ?? null } });

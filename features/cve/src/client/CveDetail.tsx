@@ -1,4 +1,4 @@
-import { StatusBadge } from 'deveye-sdk-client';
+import { safeHref, StatusBadge } from 'deveye-sdk-client';
 
 import type { CveEntry } from '../contracts/domain';
 
@@ -101,7 +101,7 @@ export default function CveDetail({ entry, canWrite, onToggleFavorite, onClose }
                             <li key={ref.url} className={styles.refRow}>
                                 <a
                                     className={styles.refLink}
-                                    href={ref.url}
+                                    href={safeHref(ref.url)}
                                     target='_blank'
                                     rel='noreferrer'
                                     title={ref.url}
