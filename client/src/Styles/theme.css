@@ -96,7 +96,7 @@
     --space-xl: 32px;
 
     --font-sans: 'Open Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+    --font-mono: 'MesloLGS', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 
     --navbar-height: 56px;
     /* Hauteur commune des pastilles de la barre du haut. Fixée, et surtout pas

@@ -33,3 +33,42 @@
     font-display: swap;
     src: url('/fonts/open-sans/OpenSans-ExtraBold.ttf');
 }
+
+/*
+ * Meslo LG S, patchée Powerline (U+E0A0 à E0D4) : la famille monospace de l'app
+ * (`--font-mono`) et celle du terminal distant, dont les séparateurs de prompt
+ * (oh-my-zsh, p10k) rendent ainsi chez tout lecteur. Un fichier n'est chargé
+ * qu'à la première utilisation de sa graisse. Meslo LG, André Berg (Apache-2.0),
+ * patch Powerline (MIT) : public/fonts/meslo/NOTICE.txt.
+ */
+@font-face {
+    font-family: 'MesloLGS';
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+    src: url('/fonts/meslo/MesloLGS-Regular.ttf') format('truetype');
+}
+
+@font-face {
+    font-family: 'MesloLGS';
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+    src: url('/fonts/meslo/MesloLGS-Bold.ttf') format('truetype');
+}
+
+@font-face {
+    font-family: 'MesloLGS';
+    font-weight: 400;
+    font-style: italic;
+    font-display: swap;
+    src: url('/fonts/meslo/MesloLGS-Italic.ttf') format('truetype');
+}
+
+@font-face {
+    font-family: 'MesloLGS';
+    font-weight: 700;
+    font-style: italic;
+    font-display: swap;
+    src: url('/fonts/meslo/MesloLGS-BoldItalic.ttf') format('truetype');
+}

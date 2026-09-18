@@ -195,7 +195,10 @@ export default defineConfig(({ command }) => {
         },
         build: {
             outDir: 'build',
-            sourcemap: true,
+            // Les cartes de source restent produites pour lire une trace, mais
+            // sans le commentaire `sourceMappingURL` : le navigateur ne les
+            // demande pas, et le serveur ne les sert pas (app.ts).
+            sourcemap: 'hidden',
             chunkSizeWarningLimit: 1024,
             rollupOptions: {
                 output: {

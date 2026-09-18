@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import './terminalFont.css';
 import { acquireMetrics, Button, FeatureSettingsButton, onServerEvent } from 'deveye-sdk-client';
 import {
     DEVICE_TERM_EXIT_EVENT,
@@ -83,7 +82,7 @@ export function TerminalPanel({ deviceId, onClose }: { deviceId: string; onClose
 
         const term = new Terminal({
             cursorBlink: true,
-            // The bundled Powerline-patched Meslo first (see terminalFont.css), so
+            // The app's bundled Powerline-patched Meslo first (Styles/fonts.css), so
             // prompt separators render for every viewer; then any local Nerd Font.
             fontFamily:
                 "'MesloLGS', 'MesloLGS NF', 'FiraCode Nerd Font', 'Hack Nerd Font', 'JetBrainsMono Nerd Font', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
