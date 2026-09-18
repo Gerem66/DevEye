@@ -171,8 +171,13 @@ export class MonitorHub {
     private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
     /** deviceId -> set of subscriber (user) sockets. */
     private readonly subscribers = new Map<string, Set<WebSocket>>();
-    /** subscriber socket -> set of deviceIds it watches (for cleanup). */
-    private readonly socketDevices = new Map<WebSocket, Set<string>>();
+    /**
+     * subscriber socket -> deviceId -> l'espace sous lequel l'abonnement a été
+     * autorisé. C'est contre les droits de CET espace que la diffusion se
+     * filtre : un abonnement pris dans un espace ne se réarme pas par une
+     * commande passée dans un autre.
+     */
+    private readonly socketDevices = new Map<WebSocket, Map<string, number>>();
     /**
      * Mises à jour de paquets en cours, par appareil : le verrou. Ici et non
      * dans l'écran, « une commande tourne déjà » est un fait de la machine, pas
@@ -185,18 +190,25 @@ export class MonitorHub {
      * à la fois : deux écrans ouverts lanceraient sinon deux `prune` concurrents.
      */
     private readonly dockerOps = new Map<string, { opId: string; action: DockerAction }>();
+    /**
+     * Sessions de terminal ouvertes, par identifiant de session : l'appareil et
+     * la socket qui l'a ouverte. Un shell distant n'appartient qu'à qui l'a
+     * ouvert : la sortie ne va qu'à lui, la saisie ne vient que de lui, et sa
+     * socket fermée le referme sur la machine.
+     */
+    private readonly termSessions = new Map<string, { deviceId: string; socket: WebSocket }>();
     /** shareId (CloudSync) -> set of subscriber (user) sockets. */
     private readonly syncSubscribers = new Map<number, Set<WebSocket>>();
     /** subscriber socket -> set of shareIds it watches (for cleanup). */
     private readonly socketShares = new Map<WebSocket, Set<number>>();
     /**
-     * Droit de voir les appareils, par socket abonnée, estampillé de l'époque
-     * d'accès : un utilisateur retiré d'un espace ne doit plus rien recevoir.
-     * Retenu ici plutôt que ré-résolu à la diffusion, qui doit rester synchrone
-     * (comme `LiveHub`) ; une époque divergente vaut « aucun droit », et toute
-     * commande de l'utilisateur répare l'instantané.
+     * Droit de voir les appareils, par socket abonnée et par espace, estampillé
+     * de l'époque d'accès : un utilisateur retiré d'un espace ne doit plus rien
+     * recevoir. Retenu ici plutôt que ré-résolu à la diffusion, qui doit rester
+     * synchrone (comme `LiveHub`) ; une époque divergente vaut « aucun droit »,
+     * et une commande de l'utilisateur dans cet espace répare l'instantané.
      */
-    private readonly grants = new Map<WebSocket, { allowed: boolean; epoch: number }>();
+    private readonly grants = new Map<WebSocket, Map<number, { allowed: boolean; epoch: number }>>();
     /** deviceId → connexions comptées sur la fenêtre courante (voir `noteReconnect`). */
     private readonly reconnects = new Map<string, { since: number; count: number }>();
 
@@ -513,9 +525,20 @@ export class MonitorHub {
         this.publishToSubscribers(payload.deviceId, DEVICE_LOG_LINES_EVENT, payload);
     }
 
-    /** Open an interactive terminal session on a connected agent. No-op if offline. */
-    requestTermOpen(deviceId: string, payload: AgentTermOpenPayload): boolean {
-        return this.sendToAgent(deviceId, AGENT_TERM_OPEN, payload);
+    /**
+     * Open an interactive terminal session on a connected agent, owned by the
+     * requesting socket. No-op if offline; refused if the session id is taken.
+     */
+    requestTermOpen(socket: WebSocket, deviceId: string, payload: AgentTermOpenPayload): boolean {
+        if (this.termSessions.has(payload.sessionId)) return false;
+        if (!this.sendToAgent(deviceId, AGENT_TERM_OPEN, payload)) return false;
+        this.termSessions.set(payload.sessionId, { deviceId, socket });
+        return true;
+    }
+
+    /** Is this terminal session one the socket opened itself? */
+    ownsTermSession(socket: WebSocket, sessionId: string): boolean {
+        return this.termSessions.get(sessionId)?.socket === socket;
     }
 
     /** Send terminal input to a connected agent. No-op if offline. */
@@ -530,17 +553,28 @@ export class MonitorHub {
 
     /** Close a terminal session on a connected agent. No-op if offline. */
     requestTermClose(deviceId: string, payload: AgentTermClosePayload): boolean {
+        this.termSessions.delete(payload.sessionId);
         return this.sendToAgent(deviceId, AGENT_TERM_CLOSE, payload);
     }
 
-    /** Fan out a chunk of terminal output to a device's subscribers. */
-    publishTermOutput(payload: DeviceTermOutputPush): void {
-        this.publishToSubscribers(payload.deviceId, DEVICE_TERM_OUTPUT_EVENT, payload);
+    /** La trame d'une session de terminal, à sa seule socket propriétaire. */
+    private sendToTermOwner(sessionId: string, command: string, data: unknown): void {
+        const owner = this.termSessions.get(sessionId);
+        if (!owner) return;
+        const epoch = accessEpochNow();
+        if (!this.mayReceive(owner.socket, owner.deviceId, epoch)) return;
+        owner.socket.send(JSON.stringify({ command, payload: { ok: true, data } }));
     }
 
-    /** Fan out a terminal session-end to a device's subscribers. */
+    /** A chunk of terminal output, to the session's owner only. */
+    publishTermOutput(payload: DeviceTermOutputPush): void {
+        this.sendToTermOwner(payload.sessionId, DEVICE_TERM_OUTPUT_EVENT, payload);
+    }
+
+    /** A terminal session-end, to the session's owner only. */
     publishTermExit(payload: DeviceTermExitPush): void {
-        this.publishToSubscribers(payload.deviceId, DEVICE_TERM_EXIT_EVENT, payload);
+        this.sendToTermOwner(payload.sessionId, DEVICE_TERM_EXIT_EVENT, payload);
+        this.termSessions.delete(payload.sessionId);
     }
 
     /** Ask a connected agent to list a directory. No-op if offline. */
@@ -759,20 +793,28 @@ export class MonitorHub {
     }
 
     /**
-     * Instantané des droits, posé par le dispatcheur à chaque commande.
-     * Voir {@link grants}.
+     * Instantané des droits dans un espace, posé par le dispatcheur à chaque
+     * commande. Voir {@link grants}.
      */
-    rememberGrants(socket: WebSocket, allowed: boolean, epoch: number): void {
-        this.grants.set(socket, { allowed, epoch });
+    rememberGrants(socket: WebSocket, workspaceId: number, allowed: boolean, epoch: number): void {
+        let byWorkspace = this.grants.get(socket);
+        if (!byWorkspace) {
+            byWorkspace = new Map();
+            this.grants.set(socket, byWorkspace);
+        }
+        byWorkspace.set(workspaceId, { allowed, epoch });
     }
 
     /**
-     * Cette socket a-t-elle *encore* le droit de recevoir ? Refuse par défaut :
-     * une socket sans instantané, ou dont l'instantané précède la dernière
-     * mutation d'accès, ne reçoit rien tant qu'elle n'a pas prouvé le contraire.
+     * Cette socket a-t-elle *encore* le droit de recevoir cet appareil ? Refuse
+     * par défaut : une socket sans instantané pour l'espace de l'abonnement, ou
+     * dont l'instantané précède la dernière mutation d'accès, ne reçoit rien
+     * tant qu'elle n'a pas prouvé le contraire.
      */
-    private mayReceive(socket: WebSocket, epoch: number): boolean {
-        const g = this.grants.get(socket);
+    private mayReceive(socket: WebSocket, deviceId: string, epoch: number): boolean {
+        const workspaceId = this.socketDevices.get(socket)?.get(deviceId);
+        if (workspaceId === undefined) return false;
+        const g = this.grants.get(socket)?.get(workspaceId);
         return g !== undefined && g.allowed && g.epoch === epoch;
     }
 
@@ -787,7 +829,7 @@ export class MonitorHub {
         const frame = buildFrame();
         const epoch = accessEpochNow();
         for (const socket of set) {
-            if (this.mayReceive(socket, epoch)) socket.send(frame);
+            if (this.mayReceive(socket, deviceId, epoch)) socket.send(frame);
         }
     }
 
@@ -801,14 +843,14 @@ export class MonitorHub {
         return out;
     }
 
-    subscribe(socket: WebSocket, deviceIds: string[]): void {
+    subscribe(socket: WebSocket, workspaceId: number, deviceIds: string[]): void {
         let watched = this.socketDevices.get(socket);
         if (!watched) {
-            watched = new Set();
+            watched = new Map();
             this.socketDevices.set(socket, watched);
         }
         for (const id of deviceIds) {
-            watched.add(id);
+            watched.set(id, workspaceId);
             let set = this.subscribers.get(id);
             if (!set) {
                 set = new Set();
@@ -829,9 +871,16 @@ export class MonitorHub {
     }
 
     dropSubscriber(socket: WebSocket): void {
+        // Un shell dont l'onglet a disparu ne doit pas rester ouvert sur la
+        // machine, à la merci d'une session qui reprendrait son identifiant.
+        for (const [sessionId, owner] of this.termSessions) {
+            if (owner.socket !== socket) continue;
+            this.termSessions.delete(sessionId);
+            this.sendToAgent(owner.deviceId, AGENT_TERM_CLOSE, { sessionId });
+        }
         const watched = this.socketDevices.get(socket);
         if (watched) {
-            for (const id of watched) {
+            for (const id of watched.keys()) {
                 const set = this.subscribers.get(id);
                 set?.delete(socket);
                 if (set && set.size === 0) this.subscribers.delete(id);
@@ -909,7 +958,8 @@ function reportFrame(deviceId: string, report: DeviceReport): string {
 
 /** Per-connection binding handed to feature handlers via FeatureContext. */
 export interface MonitorTransport {
-    subscribe(deviceIds: string[]): void;
+    /** L'abonnement retient l'espace qui l'a autorisé : la diffusion se filtre dessus. */
+    subscribe(workspaceId: number, deviceIds: string[]): void;
     unsubscribe(deviceIds: string[]): void;
     isOnline(deviceIds: string[]): Record<string, boolean>;
     /** Push the latest snapshot/report for one device straight to this socket. */
@@ -957,8 +1007,10 @@ export interface MonitorTransport {
     requestLogSources(deviceId: string): boolean;
     /** Ask the device's agent to run one log query; false if offline. */
     requestLogQuery(deviceId: string, payload: AgentLogQueryPayload): boolean;
-    /** Open a terminal session on the device's agent; false if offline. */
+    /** Open a terminal session on the device's agent; false if offline or id taken. */
     requestTermOpen(deviceId: string, payload: AgentTermOpenPayload): boolean;
+    /** Is this terminal session one this connection opened itself? */
+    ownsTermSession(sessionId: string): boolean;
     /** Send terminal input to the device's agent; false if offline. */
     requestTermInput(deviceId: string, payload: AgentTermInputPayload): boolean;
     /** Resize a terminal session on the device's agent; false if offline. */
@@ -989,7 +1041,7 @@ export interface MonitorTransport {
 
 export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): MonitorTransport {
     return {
-        subscribe: (deviceIds) => hub.subscribe(socket, deviceIds),
+        subscribe: (workspaceId, deviceIds) => hub.subscribe(socket, workspaceId, deviceIds),
         unsubscribe: (deviceIds) => hub.unsubscribe(socket, deviceIds),
         isOnline: (deviceIds) => hub.onlineDevices(deviceIds),
         sendInitial: (deviceId, point, sample, report) => hub.sendInitial(socket, deviceId, point, sample, report),
@@ -1012,7 +1064,8 @@ export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): Moni
         requestLifecycle: (deviceId, payload) => hub.requestLifecycle(deviceId, payload),
         requestLogSources: (deviceId) => hub.requestLogSources(deviceId),
         requestLogQuery: (deviceId, payload) => hub.requestLogQuery(deviceId, payload),
-        requestTermOpen: (deviceId, payload) => hub.requestTermOpen(deviceId, payload),
+        requestTermOpen: (deviceId, payload) => hub.requestTermOpen(socket, deviceId, payload),
+        ownsTermSession: (sessionId) => hub.ownsTermSession(socket, sessionId),
         requestTermInput: (deviceId, payload) => hub.requestTermInput(deviceId, payload),
         requestTermResize: (deviceId, payload) => hub.requestTermResize(deviceId, payload),
         requestTermClose: (deviceId, payload) => hub.requestTermClose(deviceId, payload),

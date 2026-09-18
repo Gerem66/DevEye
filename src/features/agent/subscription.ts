@@ -24,7 +24,7 @@ export const agentSubscribeFeature: FeatureDefinition<
             input.deviceIds.map(async (deviceId) => ({ id: deviceId, row: await authorizeDevice(ctx, deviceId) }))
         );
         const ids = allowed.map((a) => a.id);
-        ctx.monitor?.subscribe(ids);
+        ctx.monitor?.subscribe(ctx.workspaceId, ids);
 
         // Push the latest stored instant + report straight away so the UI shows
         // data immediately. The process list is seeded too, else the process

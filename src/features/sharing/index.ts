@@ -31,17 +31,27 @@ import { parseJsonArray } from '@/Utils/json';
 
 /**
  * L'appelant peut-il régler les permissions par élément de CETTE fonctionnalité,
- * dans cet espace ? Deux titres y mènent : gouverner les rôles de l'espace, ou
- * tenir le champ `itemPermissions` du grant de la fonctionnalité — confier le
- * réglage par appareil sans ouvrir l'écran des rôles.
+ * dans cet espace, et pour quels rôles ? Deux titres y mènent : gouverner les
+ * rôles de l'espace (tous les rôles), ou tenir le champ `itemPermissions` du
+ * grant de la fonctionnalité (confier le réglage par appareil sans ouvrir
+ * l'écran des rôles). Ce second titre ne vaut pas pour son propre rôle : il
+ * servirait sinon à s'accorder l'écriture, puis chaque permission propre,
+ * élément par élément. `exceptRoleId` porte ce rôle-là, `null` = tous.
  */
-async function canManageItemGrantsIn(ctx: FeatureContext, workspaceId: number, feature: FeatureId): Promise<boolean> {
+async function itemGrantsManageableIn(
+    ctx: FeatureContext,
+    workspaceId: number,
+    feature: FeatureId
+): Promise<{ allowed: boolean; exceptRoleId: number | null }> {
+    const denied = { allowed: false, exceptRoleId: null };
     const workspace = await ctx.db.workspaces.findById(workspaceId);
-    if (!workspace || workspace.kind !== 'shared') return false;
-    if (workspace.owner_user_id === ctx.userId) return true;
+    if (!workspace || workspace.kind !== 'shared') return denied;
+    if (workspace.owner_user_id === ctx.userId) return { allowed: true, exceptRoleId: null };
     const role = await ctx.db.workspaceRoles.findForMember(ctx.userId, workspaceId);
     const grants = grantsFor(false, role);
-    return grants.capabilities.has('workspace.roles') || grants.itemPermissions.has(feature);
+    if (grants.capabilities.has('workspace.roles')) return { allowed: true, exceptRoleId: null };
+    if (grants.itemPermissions.has(feature)) return { allowed: true, exceptRoleId: role?.id ?? null };
+    return denied;
 }
 
 /** L'état complet, relu après chaque écriture plutôt que reconstruit. */
@@ -77,7 +87,7 @@ async function shareState(
                     workspaceName: w.name,
                     isHome: w.id === homeWorkspaceId,
                     shared,
-                    grantsManageable: shared && !blocker && (await canManageItemGrantsIn(ctx, w.id, feature))
+                    grantsManageable: shared && !blocker && (await itemGrantsManageableIn(ctx, w.id, feature)).allowed
                 };
             })
         ),
@@ -313,8 +323,12 @@ const grantSetFeature = defineFeature({
         const target = await resolveGrantTarget(ctx, input, 'write');
         // Poser une surcharge, c'est régler ce qu'un rôle fait de cet élément :
         // dans l'espace visé et non dans l'actif.
-        if (!(await canManageItemGrantsIn(ctx, target.workspaceId, input.feature))) {
+        const manageable = await itemGrantsManageableIn(ctx, target.workspaceId, input.feature);
+        if (!manageable.allowed) {
             throw new FeatureError('forbidden', 'Vous ne réglez pas les permissions de cette fonctionnalité.');
+        }
+        if (manageable.exceptRoleId === input.roleId) {
+            throw new FeatureError('forbidden', 'Votre propre rôle ne se règle pas par élément.');
         }
         const role = await ctx.db.workspaceRoles.findById(input.roleId, target.workspaceId);
         if (!role) throw new FeatureError('not_found', 'Rôle introuvable');

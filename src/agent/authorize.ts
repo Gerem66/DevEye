@@ -6,9 +6,10 @@ import { agentDistDir, readServedManifestCached } from './sync';
 
 /**
  * Ce qu'il faut pour décider si un appareil est visible : un `FeatureContext` le
- * porte, la façade du SDK aussi, sans session ni socket.
+ * porte, la façade du SDK aussi, sans session ni socket. `assertItem` n'existe
+ * que sur le premier : un service de fond agit pour le module, pas pour un rôle.
  */
-export type DeviceScope = Pick<FeatureContext, 'db' | 'workspaceId'>;
+export type DeviceScope = Pick<FeatureContext, 'db' | 'workspaceId'> & Partial<Pick<FeatureContext, 'assertItem'>>;
 
 /**
  * Charge un appareil que l'appelant a le droit d'atteindre, sinon lève.
@@ -17,11 +18,14 @@ export type DeviceScope = Pick<FeatureContext, 'db' | 'workspaceId'>;
  * l'espace actif. Sans dérogation, l'administrateur global compris : il n'a rien
  * de particulier sur les appareils d'un espace où il n'entre pas. Le niveau de
  * droit exigé n'est pas décidé ici : chaque commande le déclare dans son
- * `access`, et la restriction par élément se pose par `ctx.assertItem`.
+ * `access`. La restriction par élément, elle, se pose ici dès que l'appelant a
+ * un rôle : un appareil masqué pour ce rôle n'est pas plus atteignable par
+ * abonnement que par la liste.
  */
 export async function authorizeDevice(scope: DeviceScope, deviceId: string): Promise<DeviceRow> {
     const row = await scope.db.devices.findVisible(deviceId, scope.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Appareil introuvable');
+    if (scope.assertItem) await scope.assertItem('devices', row.id, 'read');
     return row;
 }
 

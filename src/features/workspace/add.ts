@@ -2,6 +2,8 @@ import { workspaceAdd } from '@deveye/types';
 import { invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 
+const OWNED_WORKSPACES_MAX = 50;
+
 /**
  * Crée un espace partagé dont l'appelant devient propriétaire. Le repo l'y
  * inscrit comme membre dans la foulée — sans quoi il ne verrait pas l'espace
@@ -17,6 +19,15 @@ export const workspaceAddFeature: FeatureDefinition<
     handler: async (ctx, input) => {
         const owner = await ctx.db.users.findById(ctx.userId);
         if (!owner) throw new FeatureError('auth_invalid', 'Compte introuvable');
+        // Chaque espace naît avec une clé et des lignes ; sans plafond, un compte
+        // pourrait en semer sans fin. Assez large pour ne jamais gêner un usage
+        // réel, trop bas pour servir de boucle.
+        const owned = (await ctx.db.workspaces.findAccessibleByUser(ctx.userId)).filter(
+            (w) => w.owner_user_id === ctx.userId && w.kind === 'shared'
+        );
+        if (owned.length >= OWNED_WORKSPACES_MAX) {
+            throw new FeatureError('conflict', `Vous possédez déjà ${OWNED_WORKSPACES_MAX} espaces partagés`);
+        }
 
         const workspace = await ctx.db.workspaces.create({
             ownerUserId: ctx.userId,

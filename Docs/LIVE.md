@@ -165,7 +165,10 @@ L'appartenance reste la frontière, et la présence ne la contourne pas.
 - **Les chemins sont tronqués par destinataire.** Sans `read` sur la feature de
   la racine, le pair apparaît « ailleurs » (`path: []`). Seule la racine est
   examinée : un segment plus profond appartient par construction à la même
-  feature.
+  feature. Limite connue : la restriction **par élément** n'est pas appliquée
+  ici (elle vit en base, la diffusion est synchrone sur un instantané par
+  feature). Un rôle qui a la feature mais pas tel élément voit donc passer
+  l'identifiant de cet élément dans le chemin d'un pair, jamais son contenu.
 - **Les vues de compte et d'administration sont privées pour tout le monde.**
   Profil, Sécurité, Journaux, Utilisateurs, Gestion de l'espace → `livePathGate`
   rend `'private'`. Attention : `featureBehind` côté client rend `null` pour

@@ -10,7 +10,7 @@ import {
 } from '@deveye/types';
 import type { WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRole, WorkspaceRoleRow } from '@deveye/types';
 
-import { invalidateAccess } from '../_access';
+import { grantsFor, invalidateAccess } from '../_access';
 import { validateGrantExtras } from '../_sdk/register';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { parseJsonArray } from '@/Utils/json';
@@ -202,11 +202,26 @@ export const workspaceAssignRoleFeature: FeatureDefinition<
                 'Le propriétaire a tous les droits par construction : lui attribuer un rôle n’aurait aucun effet.'
             );
         }
+        // Gérer les membres n'est pas gouverner les rôles : sans ce second
+        // titre, se réattribuer un rôle reviendrait à choisir ses droits.
+        if (input.userId === ctx.userId && !ctx.isOwner && !ctx.can('workspace.roles')) {
+            throw new FeatureError('forbidden', 'Votre propre rôle ne se change pas sans gouverner les rôles');
+        }
         if (!(await ctx.db.workspaceMembers.isMember(input.userId, ctx.workspaceId))) {
             throw new FeatureError('not_found', 'Ce compte n’est pas membre de l’espace');
         }
-        if (input.roleId !== null && !(await ctx.db.workspaceRoles.findById(input.roleId, ctx.workspaceId))) {
-            throw new FeatureError('not_found', 'Rôle introuvable');
+        const role = input.roleId === null ? null : await ctx.db.workspaceRoles.findById(input.roleId, ctx.workspaceId);
+        if (input.roleId !== null && !role) throw new FeatureError('not_found', 'Rôle introuvable');
+        // Un rôle attribué ne doit pas dépasser ce que l'appelant tient : sinon
+        // gérer les membres permettrait d'élever un complice, puis soi-même.
+        if (role && !ctx.isOwner && !ctx.can('workspace.roles')) {
+            const granted = grantsFor(false, role);
+            const exceeds =
+                [...granted.capabilities].some((c) => !ctx.can(c)) ||
+                [...granted.features].some(([f, level]) => !ctx.canFeature(f, level));
+            if (exceeds) {
+                throw new FeatureError('forbidden', 'Ce rôle accorde plus que le vôtre : attribution refusée');
+            }
         }
 
         await ctx.db.workspaceRoles.assign(input.userId, ctx.workspaceId, input.roleId);

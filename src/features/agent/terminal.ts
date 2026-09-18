@@ -1,15 +1,21 @@
 import { agentTermClose, agentTermInput, agentTermOpen, agentTermResize } from '@deveye/types';
 
 import { authorizeReachableDevice } from '@/agent/authorize';
-import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
+import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
+
+function assertOwnsSession(ctx: FeatureContext, sessionId: string): void {
+    if (!ctx.monitor?.ownsTermSession(sessionId)) {
+        throw new FeatureError('forbidden', 'Cette session de terminal n’est pas la vôtre');
+    }
+}
 
 /**
  * Open an interactive terminal (PTY) on a device, running the agent user's shell.
  * Needs the `terminal` permission on Appareils + agent online. The command only
- * opens the session; PTY output
- * streams back as `device.termOutput` push events and the end as `device.termExit`
- * (the caller must be subscribed). A remote shell is a powerful action, so the open
- * is audited (warning).
+ * opens the session; PTY output streams back as `device.termOutput` push events
+ * and the end as `device.termExit`, to the opening connection only: a shell
+ * belongs to whoever opened it, and input is accepted from that connection
+ * alone. A remote shell is a powerful action, so the open is audited (warning).
  */
 export const agentTermOpenFeature: FeatureDefinition<
     typeof agentTermOpen.command,
@@ -26,7 +32,7 @@ export const agentTermOpenFeature: FeatureDefinition<
             rows: input.rows,
             user: input.user
         });
-        if (!ok) throw new FeatureError('conflict', 'Agent hors ligne');
+        if (!ok) throw new FeatureError('conflict', 'Agent hors ligne, ou session déjà ouverte');
         ctx.audit({
             action: 'agent.terminal',
             level: 'warning',
@@ -47,6 +53,7 @@ export const agentTermInputFeature: FeatureDefinition<
     access: { feature: 'devices', extras: ['terminal'] },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
+        assertOwnsSession(ctx, input.sessionId);
         const ok = ctx.monitor?.requestTermInput(row.id, { sessionId: input.sessionId, data: input.data });
         if (!ok) throw new FeatureError('conflict', 'Agent hors ligne');
         return { ok: true };
@@ -63,6 +70,7 @@ export const agentTermResizeFeature: FeatureDefinition<
     access: { feature: 'devices', extras: ['terminal'] },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
+        assertOwnsSession(ctx, input.sessionId);
         const ok = ctx.monitor?.requestTermResize(row.id, {
             sessionId: input.sessionId,
             cols: input.cols,
@@ -83,6 +91,7 @@ export const agentTermCloseFeature: FeatureDefinition<
     access: { feature: 'devices', extras: ['terminal'] },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
+        assertOwnsSession(ctx, input.sessionId);
         // A close is best-effort: an offline agent has already torn down its PTYs.
         ctx.monitor?.requestTermClose(row.id, { sessionId: input.sessionId });
         return { ok: true };

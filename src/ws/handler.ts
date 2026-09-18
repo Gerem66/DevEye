@@ -206,7 +206,7 @@ export async function registerWS(
                 liveHub.rememberGrants(socket, scope.workspace.id, scope.features, epoch);
                 // Un administrateur garde le droit sur la flotte entière, hors de
                 // tout rôle d'espace.
-                hub.rememberGrants(socket, scope.isAdmin || scope.features.has('devices'), epoch);
+                hub.rememberGrants(socket, scope.workspace.id, scope.isAdmin || scope.features.has('devices'), epoch);
 
                 const assertAdmin = (): void => {
                     if (!scope.isAdmin) throw new FeatureError('forbidden', 'Réservé aux administrateurs');
