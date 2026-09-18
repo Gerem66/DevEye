@@ -81,6 +81,8 @@ published whenever the agent (or the DevEye version) changes.
     ```sh
     deveye-agent link ABCD-EFGH --server https://deveye.example.com
     ```
+    A plain `http://` server is refused unless it is this machine (see
+    [the transport](#what-the-server-can-do-here-and-how-to-limit-it)).
 3. Back in **Appareils**, **approve** the device (it starts as “En attente”).
    Until approved, the server drops its metrics — this is the gate that makes a
    device trusted. You can revoke or delete it later there too.
@@ -228,6 +230,61 @@ Alongside it, when running: `agent.pid` (for `stop`/`status`), `agent.state` (th
 runtime facts `status` reports), `sync-<shareId>.index.json` (caches de scan
 CloudSync) and, when detached, `agent.log`. See `agent.example.toml` for the file
 format, et [`uninstall`](#retrait-complet-uninstall) pour tout reprendre.
+
+The directory is `0700` and every file in it `0600`: the config holds the device
+token, the log may hold server frames, the sync caches name every file of a
+share. The config is read once, at start: **edit it, then restart the agent**.
+
+## What the server can do here, and how to limit it
+
+An agent is a remote administration daemon: with the matching permission in
+DevEye, an operator gets a shell, a file explorer, package upgrades and power
+control on this machine, as the account the agent runs as (root for a system
+service). Three things bound that.
+
+**The local policy.** The `[policy]` section of `agent.toml` says what this
+machine accepts, and no server order can change it. Set a key to `false` to keep
+monitoring without that kind of remote control; the matching buttons are greyed
+out in DevEye, and `deveye-agent status` lists what is refused.
+
+| Key                     | Refuses                                                            |
+| ----------------------- | ------------------------------------------------------------------ |
+| `allow_terminal`        | opening a shell                                                    |
+| `allow_files_write`     | delete, rename, create, upload (browsing and download stay)        |
+| `allow_power`           | shut down, reboot, suspend, hibernate, lock                        |
+| `allow_pkg_upgrade`     | system package upgrades                                            |
+| `allow_service_elevate` | asking the desktop to turn the agent into a root service           |
+| `allow_destroy`         | wiping the agent when the device is deleted (uninstall it by hand) |
+
+Whatever the policy, the explorer never writes into the agent's own directory:
+that is where the policy lives. Be honest about the limit: a machine that allows
+the terminal to a root agent has allowed everything else with it.
+
+**Signed orders.** The orders above, plus `agent.service` and `agent.lifecycle`,
+must carry the server's Ed25519 signature (`ORDER_SIGNING_KEY` on the server),
+over the exact payload, a nonce and a timestamp. The agent pins the public key at
+`link` (`order_key`), refuses an unsigned or replayed order, and refuses one
+whose timestamp is more than five minutes off (keep the clock right). Holding the
+socket is therefore not enough: a TLS-terminating proxy or a stolen device token
+cannot order anything. A machine linked before this existed has no `order_key`:
+run `link` again, it keeps its device record.
+
+**The transport.** Plain `http://` is refused unless the server is this very
+machine; `link --insecure-plaintext` (kept as `allow_plaintext`) accepts it
+knowingly, and DevEye then flags the device. The device token travels in the
+`Authorization` header, never in the URL, expires after 30 days and is replaced
+by the server at connection before that.
+
+**CloudSync roots.** The server chooses the folder of a share. The agent refuses
+a system directory (`/etc`, `/usr`, `/var/lib`, `C:\Windows`, ...), the
+filesystem root and its own directory, and a path that a symlink would lead out
+of the share. `sync_roots = ["/data", "/home/lea/Sync"]` narrows it to the
+directories you name (and opens a system one if you name it).
+
+The systemd system unit carries only `RestrictRealtime` and `LockPersonality`:
+anything stricter (`ProtectSystem`, `NoNewPrivileges`, a reduced capability set)
+also confines the agent's children, which are the operator's root shell and the
+package upgrades, and breaks them. What this machine refuses is the policy's job.
 
 ## What is collected & cadence
 

@@ -41,6 +41,9 @@ pub async fn apply(
 ) -> Result<PathBuf> {
     let verifying_key =
         embedded_key().context("update refused: no signing key embedded in this agent")?;
+    // The id goes into the download URL: only this build's own target is ever
+    // fetched, whatever the order names.
+    ensure_own_target(target_id)?;
 
     let token = config
         .device_token
@@ -190,7 +193,8 @@ pub(crate) fn relaunch_detached(exe: &Path) -> Result<()> {
     // successor must not find our runtime-state file.
     crate::state::clear();
     let _ = std::fs::remove_file(Config::pid_path());
-    let log = std::fs::File::create(Config::log_path()).context("creating log file")?;
+    let log =
+        crate::config::open_private(&Config::log_path(), true).context("creating log file")?;
     let log_err = log.try_clone()?;
 
     let mut cmd = Command::new(exe);
@@ -211,8 +215,18 @@ pub(crate) fn relaunch_detached(exe: &Path) -> Result<()> {
     }
 
     let child = cmd.spawn().context("spawning standalone agent")?;
-    let _ = std::fs::write(Config::pid_path(), child.id().to_string());
+    let _ = crate::config::write_private(&Config::pid_path(), child.id().to_string().as_bytes());
     info!(pid = child.id(), "spawned standalone agent");
+    Ok(())
+}
+
+fn ensure_own_target(target_id: &str) -> Result<()> {
+    let own = env!("DEVEYE_TARGET");
+    if target_id != own {
+        return Err(anyhow!(
+            "update refused: target {target_id} is not this build's ({own})"
+        ));
+    }
     Ok(())
 }
 
@@ -220,6 +234,13 @@ pub(crate) fn relaunch_detached(exe: &Path) -> Result<()> {
 mod tests {
     use super::*;
     use ed25519_dalek::{Signer, SigningKey};
+
+    #[test]
+    fn an_update_for_another_target_is_refused() {
+        assert!(ensure_own_target(env!("DEVEYE_TARGET")).is_ok());
+        assert!(ensure_own_target("../../etc/passwd").is_err());
+        assert!(ensure_own_target("windows-x86_64-not-mine").is_err());
+    }
 
     #[test]
     fn decode_hex32_roundtrips_and_rejects_bad_input() {

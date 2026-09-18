@@ -679,3 +679,85 @@ where
         let _ = sink.send(Message::Text(text)).await;
     }
 }
+
+/// Tell the server an order was refused before execution (bad or missing
+/// signature, local policy, the agent's own directory), through the reply the
+/// server already waits for on that order: the operator sees why, a lock the
+/// server took is released, a pending deletion is aborted. `agent.lifecycle` has
+/// no reply frame: its refusal is only logged.
+pub(crate) async fn refuse_order<S>(
+    sink: &mut S,
+    device_id: &str,
+    command: &str,
+    payload: &serde_json::Value,
+    reason: &str,
+) where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    warn!(%command, %reason, "order refused");
+    let text = |name: &str| {
+        payload
+            .get(name)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string()
+    };
+    let error = Some(reason.to_string());
+    match command {
+        "term.open" => {
+            send_term_event(
+                sink,
+                device_id,
+                crate::terminal::TermEvent::Exit {
+                    session_id: text("sessionId"),
+                    code: None,
+                    error,
+                },
+            )
+            .await;
+        }
+        "files.mutate" | "files.upload" => {
+            let op = if command == "files.upload" {
+                "upload".to_string()
+            } else {
+                text("op")
+            };
+            send_files_event(
+                sink,
+                device_id,
+                crate::files::FilesEvent::Op {
+                    op_id: text("opId"),
+                    op,
+                    ok: false,
+                    error,
+                },
+            )
+            .await;
+        }
+        "agent.power" => {
+            let _ = send_power_result(sink, device_id, &text("action"), false, error).await;
+        }
+        "pkg.upgrade" => {
+            send_pkg_event(
+                sink,
+                device_id,
+                PkgEvent::Done {
+                    manager: text("manager"),
+                    ok: false,
+                    reboot_required: false,
+                    error,
+                },
+            )
+            .await;
+        }
+        "agent.service" => {
+            let _ = send_service_result(sink, device_id, &text("action"), false, None, error).await;
+        }
+        "agent.destroy" => {
+            let _ = send_destroyed(sink, device_id, false, error).await;
+        }
+        _ => {}
+    }
+    let _ = sink.flush().await;
+}

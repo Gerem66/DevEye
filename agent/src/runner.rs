@@ -170,8 +170,10 @@ pub struct RunOptions {
     pub interval: Duration,
 }
 
-pub async fn run(config: Config, opts: RunOptions) -> Result<()> {
-    let ws_url = config.ws_url()?;
+pub async fn run(mut config: Config, opts: RunOptions) -> Result<()> {
+    // Built once here to fail early on a missing token; each session rebuilds it,
+    // since the server may have rotated the token in between.
+    config.ws_request()?;
     let device_id = config
         .device_id
         .clone()
@@ -179,7 +181,15 @@ pub async fn run(config: Config, opts: RunOptions) -> Result<()> {
 
     if opts.once {
         info!(device_id = %device_id, "DevEye agent: single collection (--once)");
-        return run_once(&ws_url, &device_id).await;
+        return run_once(&config, &device_id).await;
+    }
+    // Across reconnects: an order captured on one connection must not pass on the next.
+    let mut guard = crate::orders::OrderGuard::new(config.order_key.as_deref());
+    if !guard.has_key() {
+        warn!(
+            "no usable order-signing key pinned: terminal, file writes, power, upgrades, elevation \
+             and removal orders will be refused until this machine is re-linked (`deveye-agent link`)"
+        );
     }
 
     let mut collector = Collector::new();
@@ -193,8 +203,8 @@ pub async fn run(config: Config, opts: RunOptions) -> Result<()> {
 
     loop {
         match stream_session(
-            &config,
-            &ws_url,
+            &mut config,
+            &mut guard,
             &device_id,
             opts.interval,
             &mut collector,
@@ -276,9 +286,17 @@ enum SessionOutcome {
     Restart,
 }
 
+/// This machine's clock, unix ms: what an order's `issuedAt` is compared to.
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
 /// Connect once, push one full instant + the report, then exit.
-async fn run_once(ws_url: &str, device_id: &str) -> Result<()> {
-    let (ws_stream, _) = tokio_tungstenite::connect_async(ws_url)
+async fn run_once(config: &Config, device_id: &str) -> Result<()> {
+    let (ws_stream, _) = tokio_tungstenite::connect_async(config.ws_request()?)
         .await
         .context("connecting to agent WebSocket")?;
     let (mut sink, mut stream) = ws_stream.split();
@@ -312,15 +330,15 @@ async fn run_once(ws_url: &str, device_id: &str) -> Result<()> {
 
 /// One connected session.
 async fn stream_session(
-    config: &Config,
-    ws_url: &str,
+    config: &mut Config,
+    guard: &mut crate::orders::OrderGuard,
     device_id: &str,
     initial_interval: Duration,
     collector: &mut Collector,
     queue: &mut VecDeque<MetricSnapshot>,
     marks: &mut ConnectMarks,
 ) -> Result<SessionOutcome> {
-    let (ws_stream, _) = tokio_tungstenite::connect_async(ws_url)
+    let (ws_stream, _) = tokio_tungstenite::connect_async(config.ws_request()?)
         .await
         .context("connecting to agent WebSocket")?;
     info!("connected");
@@ -352,6 +370,15 @@ async fn stream_session(
         }
         match tokio::time::timeout(remaining, stream.next()).await {
             Ok(Some(Ok(Message::Text(txt)))) => {
+                if let crate::orders::Admission::Refused {
+                    command,
+                    payload,
+                    reason,
+                } = crate::orders::admit(&txt, guard, &config.policy, now_ms())
+                {
+                    commands::refuse_order(&mut sink, device_id, &command, &payload, &reason).await;
+                    continue;
+                }
                 match serde_json::from_str::<ServerMessage>(&txt) {
                     Ok(ServerMessage::Config {
                         metric_interval_ms,
@@ -486,7 +513,7 @@ async fn stream_session(
     // CloudSync: scans, uploads and the debounced watchers stream through here;
     // the manager owns assignments + watchers and is dropped with the session.
     let (sync_tx, mut sync_rx) = tokio::sync::mpsc::channel::<crate::sync::SyncEvent>(256);
-    let mut sync_mgr = crate::sync::SyncManager::new(sync_tx);
+    let mut sync_mgr = crate::sync::SyncManager::new(sync_tx, config.sync_roots.clone());
 
     loop {
         tokio::select! {
@@ -614,6 +641,12 @@ async fn stream_session(
                 }
                 match incoming {
                     Some(Ok(Message::Text(txt))) => {
+                        if let crate::orders::Admission::Refused { command, payload, reason } =
+                            crate::orders::admit(&txt, guard, &config.policy, now_ms())
+                        {
+                            commands::refuse_order(&mut sink, device_id, &command, &payload, &reason).await;
+                            continue;
+                        }
                         match serde_json::from_str::<ServerMessage>(&txt) {
                             // "Collect now" (user refresh): one full instant + report.
                             Ok(ServerMessage::Collect {}) => {
@@ -713,6 +746,16 @@ async fn stream_session(
                                 }
                                 other => warn!(action = %other, "unknown lifecycle action ignored"),
                             },
+                            // The server replaced the token before it expires. Kept
+                            // in memory even if the save fails: the server still
+                            // accepts the old one until the new one has been used.
+                            Ok(ServerMessage::TokenRotate { token }) => {
+                                config.device_token = Some(token);
+                                match config.save() {
+                                    Ok(()) => info!("device token rotated"),
+                                    Err(e) => warn!(error = %e, "rotated token could not be saved"),
+                                }
+                            }
                             // Persistence/privilege change (install autostart, elevate…).
                             Ok(ServerMessage::Service { action }) => {
                                 commands::handle_service(&mut sink, device_id, &action).await;

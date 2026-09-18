@@ -12,6 +12,7 @@ mod identity;
 mod integrity;
 mod logs;
 mod metrics;
+mod orders;
 mod ownership;
 mod packages;
 mod power;
@@ -37,6 +38,19 @@ static MANAGED: OnceLock<bool> = OnceLock::new();
 
 pub fn managed() -> bool {
     *MANAGED.get().unwrap_or(&false)
+}
+
+/// The local policy and the transport, as loaded at start: what the device
+/// report says of this agent (`report::agent_info`).
+static POLICY: OnceLock<config::Policy> = OnceLock::new();
+static INSECURE_TRANSPORT: OnceLock<bool> = OnceLock::new();
+
+pub fn policy() -> config::Policy {
+    POLICY.get().cloned().unwrap_or_default()
+}
+
+pub fn insecure_transport() -> bool {
+    *INSECURE_TRANSPORT.get().unwrap_or(&false)
 }
 use std::process::{Command as PCommand, Stdio};
 
@@ -67,6 +81,11 @@ enum Command {
         /// Override the device name (defaults to the hostname).
         #[arg(long)]
         name: Option<String>,
+        /// Accept a plain http:// server that is not this machine. The device
+        /// token and everything the server orders (a shell included) then travel
+        /// in clear: only for a network you fully trust.
+        #[arg(long)]
+        insecure_plaintext: bool,
     },
     /// Run the monitoring loop. Foreground by default.
     Run {
@@ -155,7 +174,12 @@ async fn main() -> Result<()> {
         .init();
 
     match Cli::parse().command {
-        Command::Link { code, server, name } => link(code, server, name).await,
+        Command::Link {
+            code,
+            server,
+            name,
+            insecure_plaintext,
+        } => link(code, server, name, insecure_plaintext).await,
         Command::Run {
             once,
             interval,
@@ -225,8 +249,14 @@ fn service_cmd(action: ServiceCmd) -> Result<()> {
     }
 }
 
-async fn link(code: String, server: String, name: Option<String>) -> Result<()> {
-    // Preserve an existing identity (keypair/fingerprint) across re-links.
+async fn link(
+    code: String,
+    server: String,
+    name: Option<String>,
+    insecure_plaintext: bool,
+) -> Result<()> {
+    // A re-link keeps what belongs to the machine: its fingerprint, its policy,
+    // its accepted sync roots.
     let mut config = if Config::exists() {
         let mut c = Config::load()?;
         c.server = server;
@@ -235,17 +265,22 @@ async fn link(code: String, server: String, name: Option<String>) -> Result<()> 
         }
         c
     } else {
-        let keypair = identity::generate_keypair();
         Config {
             server,
             name: name.unwrap_or_else(identity::hostname),
             fingerprint: identity::machine_fingerprint(),
-            secret_key: keypair.secret_b64,
-            public_key: keypair.public_b64,
             device_id: None,
             device_token: None,
+            order_key: None,
+            allow_plaintext: false,
+            sync_roots: Vec::new(),
+            policy: config::Policy::default(),
         }
     };
+    config.allow_plaintext = insecure_plaintext;
+    // Before the link code leaves this machine: enrollment is the exchange that
+    // mints the token.
+    config.check_transport()?;
 
     let status = enroll::enroll(&mut config, &code).await?;
     let approved = status == "active";
@@ -284,6 +319,9 @@ async fn run(
     update::cleanup_after_update();
 
     let config = Config::load().context("loading config (run `link` first)")?;
+    let transport = config.check_transport()?;
+    let _ = POLICY.set(config.policy.clone());
+    let _ = INSECURE_TRANSPORT.set(transport == config::Transport::PlaintextRemote);
 
     // Single-instance guard: duplicate instances share one device token and each
     // streams its own snapshots, so the server sees doubled data with no error
@@ -308,7 +346,10 @@ async fn run(
 
     // PID file so `stop`/`status` find a foreground agent too, plus the runtime
     // state so `status` reports our facts even from another user's session.
-    let _ = fs::write(Config::pid_path(), std::process::id().to_string());
+    let _ = config::write_private(
+        &Config::pid_path(),
+        std::process::id().to_string().as_bytes(),
+    );
     state::write_running();
 
     let opts = RunOptions {
@@ -325,8 +366,8 @@ async fn run(
 fn spawn_detached(interval: u64) -> Result<()> {
     let exe = std::env::current_exe().context("locating agent executable")?;
     let log_path = Config::log_path();
-    let log =
-        fs::File::create(&log_path).with_context(|| format!("creating {}", log_path.display()))?;
+    let log = config::open_private(&log_path, true)
+        .with_context(|| format!("creating {}", log_path.display()))?;
     let log_err = log.try_clone()?;
 
     let mut cmd = PCommand::new(exe);
@@ -339,7 +380,8 @@ fn spawn_detached(interval: u64) -> Result<()> {
         .stderr(Stdio::from(log_err));
 
     let child = cmd.spawn().context("spawning background agent")?;
-    fs::write(Config::pid_path(), child.id().to_string()).context("writing PID file")?;
+    config::write_private(&Config::pid_path(), child.id().to_string().as_bytes())
+        .context("writing PID file")?;
     println!(
         "✓ Agent started in background (pid {}).\n  Logs: {}\n  Stop: deveye-agent stop",
         child.id(),
@@ -456,10 +498,47 @@ fn status() {
         },
     );
 
+    status_row(
+        "Transport",
+        match c.transport() {
+            Ok(config::Transport::Tls) => "https",
+            Ok(config::Transport::PlaintextLoopback) => "http (this machine only)",
+            Ok(config::Transport::PlaintextRemote) => "http, UNENCRYPTED over the network",
+            Err(_) => "invalid server URL",
+        },
+    );
+    status_row(
+        "Order key",
+        if c.order_key.is_some() {
+            "pinned"
+        } else {
+            "missing: signed orders are refused, re-link this machine"
+        },
+    );
+
     println!();
     status_section("Status");
     status_row("Running", &running_text);
     status_row("Autostart", &autostart);
+
+    // Only what this machine refuses: an all-default policy says nothing.
+    let refused: Vec<&str> = [
+        ("terminal", c.policy.allow_terminal),
+        ("file writes", c.policy.allow_files_write),
+        ("power", c.policy.allow_power),
+        ("package upgrades", c.policy.allow_pkg_upgrade),
+        ("elevation", c.policy.allow_service_elevate),
+        ("remote removal", c.policy.allow_destroy),
+    ]
+    .iter()
+    .filter(|(_, allowed)| !allowed)
+    .map(|(name, _)| *name)
+    .collect();
+    if !refused.is_empty() {
+        println!();
+        status_section("Local policy");
+        status_row("Refused", &refused.join(", "));
+    }
 }
 
 /// A `status` section header.

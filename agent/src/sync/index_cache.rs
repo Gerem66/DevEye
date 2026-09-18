@@ -58,7 +58,8 @@ impl IndexCache {
         let path = Config::sync_index_path(share_id);
         match serde_json::to_string(self) {
             Ok(raw) => {
-                if let Err(e) = std::fs::write(&path, raw) {
+                // Le cache nomme chaque fichier du partage : lisible par son seul propriétaire.
+                if let Err(e) = crate::config::write_private(&path, raw.as_bytes()) {
                     debug!(error = %e, path = %path.display(), "sync index cache save failed");
                 }
             }

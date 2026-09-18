@@ -4,8 +4,13 @@
 # Location: $DEVEYE_CONFIG, or <config-dir>/deveye/agent.toml
 #   - Linux: ~/.config/deveye/agent.toml
 #   - macOS: ~/Library/Application Support/deveye/agent.toml
+#
+# It is read once, at start: edit it, then restart the agent. The agent rewrites
+# it when the server rotates the device token, so an edit made while it runs may
+# be lost.
 
-# HTTP base URL of the DevEye server.
+# HTTP base URL of the DevEye server. Plain http:// is refused for anything but
+# this machine, unless `allow_plaintext` is set (link with --insecure-plaintext).
 server = "https://deveye.example.com"
 
 # Human-friendly device name (shown in the Appareils page).
@@ -15,10 +20,27 @@ name = "my-laptop"
 # IOPlatformUUID on macOS).
 fingerprint = "0123456789abcdef0123456789abcdef"
 
-# Base64 Ed25519 keypair (auto-generated; keep the secret private).
-secret_key = "<base64-ed25519-secret>"
-public_key = "<base64-ed25519-public>"
-
-# Set automatically after `deveye-agent link <code>`:
+# Set automatically by `deveye-agent link <code>`:
 # device_id = "..."
-# device_token = "..."
+# device_token = "..."      # replaced by the server before it expires
+# order_key = "..."         # the server's order-signing key; without it, every
+#                           # order listed under [policy] is refused
+
+# allow_plaintext = false
+
+# Where this machine accepts a CloudSync share. Empty: any directory that is not
+# a system one (/etc, /usr, /var/lib, ...). Listed: only these directories and
+# what is under them, system ones included if you name them. The server picks a
+# share's folder; this list is what it cannot pick outside of.
+sync_roots = []
+
+# What the server may order on this machine. The server cannot change this
+# section. Set a key to false for monitoring without that kind of remote control;
+# the matching buttons are greyed out in DevEye.
+[policy]
+allow_terminal = true          # an interactive shell
+allow_files_write = true       # delete, rename, create, upload (browsing and download stay)
+allow_power = true             # shut down, reboot, suspend, lock
+allow_pkg_upgrade = true       # system package upgrades
+allow_service_elevate = true   # asking the desktop to make the agent a root service
+allow_destroy = true           # wiping the agent when the device is deleted in DevEye

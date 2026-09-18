@@ -95,22 +95,52 @@ pub struct SyncManager {
     tx: Sender<SyncEvent>,
     shares: HashMap<i64, ShareState>,
     applier: Applier,
+    /// `sync_roots` de la config locale : où cette machine accepte un partage.
+    sync_roots: Vec<String>,
+    /// Les partages dont la racine a été refusée, et pourquoi : le serveur
+    /// l'apprend par la réponse à sa première opération.
+    refused: HashMap<i64, String>,
 }
 
 impl SyncManager {
-    pub fn new(tx: Sender<SyncEvent>) -> Self {
+    pub fn new(tx: Sender<SyncEvent>, sync_roots: Vec<String>) -> Self {
         Self {
             tx,
             shares: HashMap::new(),
             applier: Applier::default(),
+            sync_roots,
+            refused: HashMap::new(),
+        }
+    }
+
+    /// Ce qu'on répond d'un partage qui n'est pas servi ici : le refus de sa
+    /// racine s'il y en a un, sinon qu'il est inconnu.
+    fn unknown_reason(&self, share_id: i64) -> String {
+        match self.refused.get(&share_id) {
+            Some(reason) => format!("Partage refusé par cette machine : {reason}"),
+            None => "Partage inconnu sur cet appareil".to_string(),
         }
     }
 
     /// Applique une config complète : la liste REMPLACE l'existante.
     pub fn apply_config(&mut self, assignments: Vec<SyncShareAssignment>) {
         let mut next: HashMap<i64, ShareState> = HashMap::new();
+        self.refused.clear();
+        let own_dir = crate::config::Config::path()
+            .parent()
+            .map(|p| p.canonicalize().unwrap_or_else(|_| p.to_path_buf()));
         for assignment in assignments {
             let share_id = assignment.share_id;
+            // La racine vient du serveur, qui n'en vérifie que la forme : c'est
+            // ici qu'un dossier système, ou un dossier hors de `sync_roots`, se refuse.
+            if let Some(reason) =
+                paths::root_problem(&assignment.local_path, &self.sync_roots, own_dir.as_deref())
+            {
+                tracing::error!(share_id, path = %assignment.local_path, %reason, "sync: share root refused");
+                self.shares.remove(&share_id);
+                self.refused.insert(share_id, reason);
+                continue;
+            }
             let active = assignment.status == "active";
             let previous = self.shares.remove(&share_id);
             // Le cache de scan est indexé par partage, pas par dossier : le
@@ -250,7 +280,10 @@ impl SyncManager {
                     done: true,
                     scanned: true,
                     fingerprint: None,
-                    error: Some("Partage inconnu ou en pause sur cet appareil".to_string()),
+                    error: Some(match self.refused.get(&share_id) {
+                        Some(reason) => format!("Partage refusé par cette machine : {reason}"),
+                        None => "Partage inconnu ou en pause sur cet appareil".to_string(),
+                    }),
                 });
             }
         }
@@ -303,7 +336,7 @@ impl SyncManager {
                     hash: None,
                     size: None,
                     mtime: None,
-                    error: Some("Partage inconnu sur cet appareil".to_string()),
+                    error: Some(self.unknown_reason(share_id)),
                 });
             }
         }
@@ -332,7 +365,7 @@ impl SyncManager {
                 op: "apply",
                 ok: false,
                 resume_from: None,
-                error: Some("Partage inconnu sur cet appareil".to_string()),
+                error: Some(self.unknown_reason(share_id)),
             }];
         };
         let root = PathBuf::from(&assignment.local_path);
@@ -405,7 +438,7 @@ impl SyncManager {
         let outcome = match self.assignment(share_id) {
             Some(a) => transfer::apply_dir(&PathBuf::from(&a.local_path), rel_path, kind, mode)
                 .map_err(|e| e.to_string()),
-            None => Err("Partage inconnu sur cet appareil".to_string()),
+            None => Err(self.unknown_reason(share_id)),
         };
         SyncEvent::OpResult {
             op_id: op_id.to_string(),
@@ -442,7 +475,7 @@ impl SyncManager {
                 mode,
             )
             .map_err(|e| e.to_string()),
-            None => Err("Partage inconnu sur cet appareil".to_string()),
+            None => Err(self.unknown_reason(share_id)),
         };
         SyncEvent::OpResult {
             op_id: op_id.to_string(),
@@ -477,7 +510,7 @@ impl SyncManager {
                 mode,
             )
             .map_err(|e| e.to_string()),
-            None => Err("Partage inconnu sur cet appareil".to_string()),
+            None => Err(self.unknown_reason(share_id)),
         };
         SyncEvent::OpResult {
             op_id: op_id.to_string(),
@@ -493,7 +526,7 @@ impl SyncManager {
         let outcome = match self.assignment(share_id) {
             Some(a) => transfer::delete_to_trash(&PathBuf::from(&a.local_path), rel_path)
                 .map_err(|e| e.to_string()),
-            None => Err("Partage inconnu sur cet appareil".to_string()),
+            None => Err(self.unknown_reason(share_id)),
         };
         SyncEvent::OpResult {
             op_id: op_id.to_string(),

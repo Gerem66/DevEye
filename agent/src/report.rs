@@ -361,6 +361,8 @@ fn agent_info() -> AgentInfo {
         service_scope: crate::service::installed_scope().as_wire(),
         managed: crate::managed(),
         probes: PROBES.to_vec(),
+        policy: crate::policy().wire(),
+        insecure_transport: crate::insecure_transport(),
     }
 }
 

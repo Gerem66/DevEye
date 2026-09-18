@@ -31,7 +31,8 @@ tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+# raw_value: a signed order is verified over the exact payload bytes received.
+serde_json = { version = "1", features = ["raw_value"] }
 toml = "0.8"
 sysinfo = "0.32"
 dirs = "5"
@@ -68,6 +69,9 @@ unicode-normalization = "0.1"
 libc = "0.2"
 
 # Used by build.rs to read the version out of the root package.json.
+[dev-dependencies]
+tempfile = "3"
+
 [build-dependencies]
 serde_json = "1"
 

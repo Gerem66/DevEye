@@ -1,9 +1,4 @@
-//! Stable machine identity: fingerprint + Ed25519 signing keypair.
-
-use anyhow::{Context, Result};
-use base64::Engine;
-use ed25519_dalek::SigningKey;
-use rand::rngs::OsRng;
+//! Stable machine identity: the fingerprint, the platform and the hostname.
 
 /// The platform string sent to the server at enrollment. Must match one of the
 /// values in `@deveye/types` `devicePlatformSchema`.
@@ -112,32 +107,4 @@ fn windows_machine_guid() -> Option<String> {
 
 pub fn hostname() -> String {
     sysinfo::System::host_name().unwrap_or_else(|| "deveye-host".to_string())
-}
-
-/// A freshly generated Ed25519 keypair, encoded base64 for storage/transport.
-pub struct Keypair {
-    pub secret_b64: String,
-    pub public_b64: String,
-}
-
-pub fn generate_keypair() -> Keypair {
-    let signing = SigningKey::generate(&mut OsRng);
-    let engine = base64::engine::general_purpose::STANDARD;
-    Keypair {
-        secret_b64: engine.encode(signing.to_bytes()),
-        public_b64: engine.encode(signing.verifying_key().to_bytes()),
-    }
-}
-
-/// Reconstruct the signing key from its stored base64 seed.
-#[allow(dead_code)]
-pub fn load_signing_key(secret_b64: &str) -> Result<SigningKey> {
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(secret_b64)
-        .context("decoding secret key")?;
-    let seed: [u8; 32] = bytes
-        .as_slice()
-        .try_into()
-        .context("secret key must be 32 bytes")?;
-    Ok(SigningKey::from_bytes(&seed))
 }

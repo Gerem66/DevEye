@@ -45,7 +45,7 @@ pub fn write_running() {
         started_at: start_time(pid).unwrap_or(0),
     };
     if let Ok(json) = serde_json::to_string(&state) {
-        let _ = std::fs::write(Config::state_path(), json);
+        let _ = crate::config::write_private(&Config::state_path(), json.as_bytes());
     }
 }
 

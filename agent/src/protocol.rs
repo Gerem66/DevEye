@@ -155,6 +155,25 @@ pub struct AgentInfo {
     /// que l'interface ne doit pas afficher pareil. La version ne peut pas
     /// servir : `0.0.0` sur une construction locale.
     pub probes: Vec<&'static str>,
+    /// What this machine's operator lets the server order (`[policy]` in
+    /// `agent.toml`), so the UI greys out what would be refused here.
+    pub policy: AgentPolicy,
+    /// Plain http/ws to a remote server, opted in locally.
+    #[serde(rename = "insecureTransport")]
+    pub insecure_transport: bool,
+}
+
+/// The local policy as the device report carries it (mirrors @deveye/types
+/// `agentPolicySchema`). `false` = the agent refuses that kind of order.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentPolicy {
+    pub terminal: bool,
+    pub files_write: bool,
+    pub power: bool,
+    pub pkg_upgrade: bool,
+    pub service_elevate: bool,
+    pub destroy: bool,
 }
 
 /// One detected package manager + its pending state (mirrors @deveye/types
@@ -1205,6 +1224,44 @@ pub enum ServerMessage {
         #[serde(rename = "authEventsEnabled", default)]
         auth_events_enabled: Option<bool>,
     },
+    /// A fresh device token replacing the one about to expire. Persisted at
+    /// once: the next connection presents it.
+    #[serde(rename = "agent.tokenRotate")]
+    TokenRotate { token: String },
+}
+
+/// The orders that must carry the server's signature (mirrors
+/// `SIGNED_AGENT_COMMANDS` in @deveye/types): what runs code, writes or deletes
+/// files, changes the agent's privileges or its life.
+pub const SIGNED_COMMANDS: [&str; 8] = [
+    "term.open",
+    "files.mutate",
+    "files.upload",
+    "agent.service",
+    "agent.power",
+    "agent.destroy",
+    "pkg.upgrade",
+    "agent.lifecycle",
+];
+
+/// Signature carried next to `command` and `payload` (see `orders.rs`).
+#[derive(Debug, Deserialize)]
+pub struct OrderSig {
+    pub nonce: String,
+    #[serde(rename = "issuedAt")]
+    pub issued_at: i64,
+    pub signature: String,
+}
+
+/// A server frame before it is interpreted: the payload is kept as the exact
+/// bytes received, because that is what the signature covers.
+#[derive(Debug, Deserialize)]
+pub struct Envelope<'a> {
+    pub command: String,
+    #[serde(borrow)]
+    pub payload: &'a serde_json::value::RawValue,
+    #[serde(default)]
+    pub sig: Option<OrderSig>,
 }
 
 /// Standard server result envelope: `{ ok, data? , error? }`.
@@ -1230,8 +1287,6 @@ pub struct EnrollRequest {
     pub name: String,
     pub fingerprint: String,
     pub platform: String,
-    #[serde(rename = "publicKey")]
-    pub public_key: String,
 }
 
 /// POST /api/agent/enroll response payload.
@@ -1241,6 +1296,10 @@ pub struct EnrollData {
     pub device_id: String,
     #[serde(rename = "deviceToken")]
     pub device_token: String,
+    /// The server's order-signing public key (base64 Ed25519), pinned in the
+    /// config: high-impact orders are refused unless they carry its signature.
+    #[serde(rename = "orderSigningKey")]
+    pub order_signing_key: String,
     /// The enrolled device, so the agent can report the real status (a code with
     /// auto-approval lands the device directly as `active`, not `pending`).
     #[serde(default)]

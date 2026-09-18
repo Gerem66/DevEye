@@ -7,8 +7,8 @@ use crate::protocol::{ApiResult, EnrollData, EnrollRequest};
 
 /// Enroll this machine with the server using a short-lived link code.
 ///
-/// On success, updates and persists `config` with the returned device id and
-/// token, and returns the device's status (`active` when the code auto-approves,
+/// On success, updates and persists `config` with the returned device id, token
+/// and order-signing key, and returns the device's status (`active` when the code auto-approves,
 /// otherwise `pending`). The code is consumed server-side and cannot be reused.
 pub async fn enroll(config: &mut Config, code: &str) -> Result<String> {
     let url = format!("{}/api/agent/enroll", config.server.trim_end_matches('/'));
@@ -17,7 +17,6 @@ pub async fn enroll(config: &mut Config, code: &str) -> Result<String> {
         name: config.name.clone(),
         fingerprint: config.fingerprint.clone(),
         platform: crate::identity::current_platform().to_string(),
-        public_key: config.public_key.clone(),
     };
 
     let client = reqwest::Client::builder()
@@ -58,6 +57,7 @@ pub async fn enroll(config: &mut Config, code: &str) -> Result<String> {
         .unwrap_or_default();
     config.device_id = Some(data.device_id);
     config.device_token = Some(data.device_token);
+    config.order_key = Some(data.order_signing_key);
     config.save().context("saving enrolled config")?;
     Ok(status)
 }

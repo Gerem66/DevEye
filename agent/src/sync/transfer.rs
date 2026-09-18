@@ -23,7 +23,7 @@ use tracing::debug;
 
 use crate::ownership::adopt_owner;
 use crate::sync::index_cache::IndexCache;
-use crate::sync::paths::safe_join;
+use crate::sync::paths::confined_join;
 use crate::sync::scanner::hash_file;
 use crate::sync::SyncEvent;
 
@@ -201,7 +201,7 @@ fn push(
     rate_up_bps: Option<u64>,
     tx: &Sender<SyncEvent>,
 ) -> Result<()> {
-    let path = safe_join(root, rel_path)?;
+    let path = confined_join(root, rel_path)?;
     let mut file =
         std::fs::File::open(&path).with_context(|| format!("ouverture de {rel_path}"))?;
     let meta = file.metadata().context("métadonnées illisibles")?;
@@ -427,7 +427,7 @@ impl Applier {
             bail!("contenu reçu invalide (hash ou taille inattendus)");
         }
 
-        let dest = safe_join(&state.root, &state.rel_path)?;
+        let dest = confined_join(&state.root, &state.rel_path)?;
 
         // Garde anti-écrasement : si la cible a changé depuis le scan qui a mené
         // à ce download (taille/mtime ≠ cache d'index), une modif locale non
@@ -530,7 +530,7 @@ fn create_parents_owned(root: &Path, dest: &Path) -> Result<()> {
 /// Si le chemin existe, on ne touche QUE le mode, quelle que soit sa nature ;
 /// un fichier absent arrive toujours par `applyChunk` ou `applyLocal`.
 pub fn apply_dir(root: &Path, rel_path: &str, kind: &str, mode: Option<u32>) -> Result<()> {
-    let dest = safe_join(root, rel_path)?;
+    let dest = confined_join(root, rel_path)?;
     if std::fs::symlink_metadata(&dest).is_err() {
         // Un `chmod` sur un FICHIER momentanément absent ne doit pas faire
         // naître un dossier à sa place : le planner écarterait ensuite ce chemin
@@ -550,7 +550,7 @@ pub fn apply_dir(root: &Path, rel_path: &str, kind: &str, mode: Option<u32>) -> 
 /// écriture, sans quoi un fichier modifié entre le scan et l'ordre serait
 /// installé sous un nom qui promet autre chose.
 fn verified_source(root: &Path, rel_path: &str, hash: &str, size: u64) -> Result<PathBuf> {
-    let src = safe_join(root, rel_path)?;
+    let src = confined_join(root, rel_path)?;
     let meta = std::fs::symlink_metadata(&src).context("source introuvable")?;
     if !meta.is_file() {
         bail!("la source n'est pas un fichier régulier");
@@ -579,7 +579,7 @@ pub fn apply_local(
 ) -> Result<()> {
     let src = verified_source(root, source_rel_path, hash, size)?;
 
-    let dest = safe_join(root, rel_path)?;
+    let dest = confined_join(root, rel_path)?;
     let tmp_dir = root.join(".deveye-tmp");
     std::fs::create_dir_all(&tmp_dir).context("création du dossier temporaire")?;
     let tmp_path = tmp_dir.join(format!("copy-{}.part", uuid_like(rel_path, mtime)));
@@ -626,7 +626,7 @@ pub fn move_file(
 ) -> Result<()> {
     let src = verified_source(root, from_rel_path, hash, size)?;
 
-    let dest = safe_join(root, rel_path)?;
+    let dest = confined_join(root, rel_path)?;
     if std::fs::symlink_metadata(&dest).is_ok() {
         bail!("la cible existe déjà");
     }
@@ -645,7 +645,7 @@ pub fn move_file(
 
 /// Déplace un fichier vers `.deveye-trash/<horodatage>/<relPath>` (jamais unlink).
 pub fn delete_to_trash(root: &Path, rel_path: &str) -> Result<()> {
-    let src = safe_join(root, rel_path)?;
+    let src = confined_join(root, rel_path)?;
     if !src.exists() {
         return Ok(()); // Déjà parti localement : la suppression est idempotente.
     }
