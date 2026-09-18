@@ -454,12 +454,24 @@ mod imp {
         Ok(SYSTEM_EXE.to_string())
     }
 
+    /// Le durcissement du service système, et pourquoi il est si court. Tout ce
+    /// que systemd confine s'applique aussi aux enfants de l'agent, et ses
+    /// enfants sont le shell root de l'opérateur et les mises à jour de paquets :
+    /// `ProtectSystem`, `ProtectHome`, `NoNewPrivileges`, `PrivateTmp`,
+    /// `ProtectKernelTunables` ou un jeu de capacités réduit casseraient `apt`
+    /// (profils AppArmor, `sysctl`, fichiers setuid), `su`, `smartctl` ou
+    /// l'explorateur. Ne restent que les directives qu'aucune de ces tâches ne
+    /// rencontre. Ce qu'une machine refuse au serveur se règle dans sa
+    /// `[policy]`, pas ici.
+    const SYSTEM_HARDENING: &str = "RestrictRealtime=yes\nLockPersonality=yes\n";
+
     fn unit_text(system: bool, exe: &str, cfg: &str) -> String {
         let wanted_by = if system {
             "multi-user.target"
         } else {
             "default.target"
         };
+        let hardening = if system { SYSTEM_HARDENING } else { "" };
         format!(
             "[Unit]\n\
              Description=DevEye monitoring agent\n\
@@ -470,7 +482,8 @@ mod imp {
              ExecStart={exe} run --managed --config {cfg}\n\
              Restart=always\n\
              RestartSec=2\n\
-             KillMode=process\n\n\
+             KillMode=process\n\
+             {hardening}\n\
              [Install]\n\
              WantedBy={wanted_by}\n"
         )
@@ -677,6 +690,18 @@ mod imp {
 
             let user = unit_text(false, "/tmp/agent", "/tmp/x.toml");
             assert!(user.contains("WantedBy=default.target"));
+        }
+
+        /// Une unité utilisateur n'a aucun privilège à rendre, et plusieurs
+        /// directives y exigent des espaces de noms non privilégiés.
+        #[test]
+        fn only_the_system_unit_is_hardened() {
+            let system = unit_text(true, "/usr/local/bin/deveye-agent", "/x.toml");
+            assert!(system.contains("LockPersonality=yes\n\n[Install]"));
+            assert!(system.contains("RestrictRealtime=yes"));
+            let user = unit_text(false, "/tmp/agent", "/tmp/x.toml");
+            assert!(!user.contains("LockPersonality"));
+            assert!(user.contains("KillMode=process\n\n[Install]"));
         }
 
         /// Un service système ne doit jamais désigner un exécutable resté dans un
