@@ -1,133 +1,97 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
     Button,
     ConfirmDialog,
     invalidate,
-    SelectInput,
     settingsStyles as shell,
-    useResourceVersion,
+    UnlockCancelledError,
     withSecrecy,
     type ConfirmRequest
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
 import { api, humanizeError } from './api';
-import styles from './style.module.css';
-
-import type { MailAccount, MailFolder } from '../contracts/domain';
 
 /**
- * La maintenance d'une boîte : reconstruire le cache local d'un dossier.
+ * La maintenance d'une boîte : reconstruire son cache local, tous dossiers
+ * confondus. Choisir un dossier demanderait de savoir lequel a divergé, ce que
+ * personne ne sait devant un affichage faux ; le geste vise donc la boîte.
  *
- * À part du reste parce que rien ici ne sert au quotidien. Une reconstruction
- * vide ce qui est affiché pour tout retélécharger, ce qui est long et n'a de
- * sens qu'après une divergence durable : la relève ordinaire suffit le reste du
- * temps. Voisiner la cadence de relève dans le même onglet la faisait passer
- * pour un geste courant.
+ * À part du reste parce que rien ici ne sert au quotidien : une reconstruction
+ * vide ce qui est affiché pour tout retélécharger, ce qui est long, et la
+ * relève ordinaire suffit le reste du temps.
  *
- * Une boîte protégée n'y a pas droit : lister ses dossiers demanderait un
- * déverrouillage rien que pour afficher l'onglet.
+ * Les dossiers ne se listent qu'au geste : une boîte protégée n'exige ainsi de
+ * déverrouillage qu'au moment de reconstruire, pas pour afficher l'onglet.
  *
  * L'onglet ne porte que ce geste, donc le manifest le donne en `requiresWrite` :
  * sans l'écriture il n'existe pas, et ce panneau n'a pas de cas en lecture seule.
  */
 export default function MailAdvancedPanel({ scope }: SettingsPanelProps) {
     const accountId = scope.kind === 'item' ? Number(scope.itemId) : null;
-    const version = useResourceVersion('mail.accountList');
-    const [account, setAccount] = useState<MailAccount | null>(null);
-    const [folders, setFolders] = useState<MailFolder[]>([]);
-    const [folderId, setFolderId] = useState<number | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
-    const [busy, setBusy] = useState(false);
+    const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
     const [status, setStatus] = useState<string | null>(null);
 
-    useEffect(() => {
-        if (accountId === null) return;
-        void api
-            .send('mail.accountList', {})
-            .then((res) => setAccount(res.accounts.find((a) => a.id === accountId) ?? null))
-            .catch((e) => setStatus(humanizeError(e, 'Chargement impossible.')));
-    }, [accountId, version]);
+    if (accountId === null) return null;
 
-    const guarded = account?.securityTier === 'guarded';
+    const rebuild = async () => {
+        setStatus(null);
+        setProgress({ done: 0, total: 0 });
+        try {
+            const { folders } = await withSecrecy(() => api.send('mail.folderList', { accountId }));
+            for (const [index, folder] of folders.entries()) {
+                setProgress({ done: index, total: folders.length });
+                await withSecrecy(() => api.send('mail.folderReset', { folderId: folder.id }));
+            }
+            invalidate('mail.folderList', 'mail.messageList');
+            setStatus(folders.length === 0 ? 'Aucun dossier à reconstruire.' : 'Cache de la boîte reconstruit.');
+        } catch (e) {
+            if (!(e instanceof UnlockCancelledError)) setStatus(humanizeError(e, 'Reconstruction impossible.'));
+        } finally {
+            setProgress(null);
+        }
+    };
 
-    useEffect(() => {
-        if (!account || guarded || accountId === null) return;
-        void withSecrecy(() => api.send('mail.folderList', { accountId }))
-            .then((res) => {
-                setFolders(res.folders);
-                const inbox = res.folders.find((f) => f.specialUse === 'inbox') ?? res.folders[0] ?? null;
-                setFolderId(inbox?.id ?? null);
-            })
-            .catch(() => undefined);
-    }, [account, guarded, accountId]);
-
-    const requestReset = () => {
-        const folder = folders.find((f) => f.id === folderId);
-        if (!folder) return;
+    const requestRebuild = () =>
         setConfirm({
-            title: `Reconstruire le cache de « ${folder.name} » ?`,
+            title: 'Reconstruire le cache de la boîte ?',
             description:
-                'Le cache local du dossier sera vidé puis retéléchargé depuis le serveur. Rien n’est touché côté boîte mail, mais l’opération est plus lente qu’une relève.',
+                'La copie locale de tous les dossiers sera vidée puis retéléchargée. Aucun message n’est supprimé chez votre fournisseur, mais l’opération peut prendre plusieurs minutes.',
             confirmLabel: 'Reconstruire',
             onConfirm: () => {
                 setConfirm(null);
-                setBusy(true);
-                setStatus(null);
-                void withSecrecy(() => api.send('mail.folderReset', { folderId: folder.id }))
-                    .then(() => {
-                        invalidate('mail.folderList', 'mail.messageList');
-                        setStatus(`Cache de « ${folder.name} » reconstruit.`);
-                    })
-                    .catch((e) => setStatus(humanizeError(e, 'Reconstruction impossible.')))
-                    .finally(() => setBusy(false));
+                void rebuild();
             }
         });
-    };
-
-    if (accountId === null) return null;
-    if (!account) return <p className={shell.notice}>{status ?? 'Chargement…'}</p>;
 
     return (
         <div className={shell.section}>
             <div className={shell.field}>
-                <span className={shell.sectionLabel}>Reconstruire le cache d’un dossier</span>
-                {guarded ? (
-                    <p className={shell.fieldHint}>
-                        Cette boîte est protégée : ses dossiers ne se listent qu’une fois la session déverrouillée, et
-                        la reconstruction n’est pas proposée ici.
-                    </p>
-                ) : folders.length === 0 ? (
-                    <p className={shell.fieldHint}>Aucun dossier relevé pour l’instant.</p>
-                ) : (
-                    <>
-                        <div className={styles.formRow}>
-                            <SelectInput
-                                value={folderId === null ? '' : String(folderId)}
-                                onChange={(e) => setFolderId(e.target.value === '' ? null : Number(e.target.value))}
-                                aria-label='Dossier à reconstruire'
-                            >
-                                {folders.map((f) => (
-                                    <option key={f.id} value={f.id}>
-                                        {f.name}
-                                    </option>
-                                ))}
-                            </SelectInput>
-                            <Button variant='danger' disabled={busy || folderId === null} onClick={requestReset}>
-                                Reconstruire le cache
-                            </Button>
-                        </div>
-                        <span className={shell.fieldHint}>
-                            Vide le cache local du dossier choisi et le retélécharge en entier. Réservé aux cas où
-                            l’affichage a durablement divergé de la boîte.
-                        </span>
-                    </>
-                )}
+                <span className={shell.sectionLabel}>Cache de la boîte</span>
+                <span className={shell.fieldHint}>
+                    DevEye garde une copie locale de vos messages pour les afficher vite. Si l’affichage ne correspond
+                    plus à votre boîte (messages manquants, en double, ou déjà supprimés), reconstruisez-la : tout est
+                    retéléchargé depuis votre fournisseur.
+                </span>
+                <div className={shell.sectionActions}>
+                    <Button variant='danger' disabled={progress !== null} onClick={requestRebuild}>
+                        {progress === null
+                            ? 'Reconstruire le cache'
+                            : progress.total === 0
+                              ? 'Reconstruction…'
+                              : `Reconstruction… ${progress.done + 1}/${progress.total}`}
+                    </Button>
+                </div>
             </div>
 
-            {status && <p className={shell.notice}>{status}</p>}
+            {status && (
+                <p className={shell.notice} role='status'>
+                    {status}
+                </p>
+            )}
 
-            <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} busy={busy} />
+            <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
         </div>
     );
 }

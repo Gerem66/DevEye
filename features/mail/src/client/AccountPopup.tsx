@@ -295,234 +295,257 @@ export function AccountPopup() {
         }
     }
 
+    // Le choix de protection n'existe qu'à la création, et seulement dans l'espace
+    // personnel : un espace partagé n'a qu'une clé, lisible par tout membre.
+    const twoSteps = mode === 'add' && workspace?.kind === 'personal';
+
     return (
         <Popup
             id={ACCOUNT_POPUP}
             title={mode === 'add' ? 'Ajouter une boîte mail' : 'Modifier la boîte mail'}
-            width={560}
+            width={twoSteps ? 900 : 560}
             onInputChange={handleOpen}
             onClosePopup={() => close()}
             onSubmit={() => void submit()}
             dirty={dirty}
             onSave={() => void submit()}
         >
-            <div className={styles.form}>
-                <TextInput
-                    placeholder='Nom (ex. Perso Gmail)'
-                    value={draft.displayName}
-                    error={errorName}
-                    onChange={(e) => set('displayName', e.target.value)}
-                />
-                {/* L'adresse ne se saisit que pour une connexion manuelle : chez un
+            <div className={twoSteps ? styles.formSplit : undefined}>
+                {twoSteps && (
+                    <section className={styles.form} aria-labelledby='mail-account-step-1'>
+                        <h3 id='mail-account-step-1' className={styles.stepTitle}>
+                            <span className={styles.stepNumber} aria-hidden='true'>
+                                1
+                            </span>
+                            Protection
+                        </h3>
+                        <SecurityTierChoice value={draft.securityTier} onChange={(tier) => set('securityTier', tier)} />
+                    </section>
+                )}
+                <section className={styles.form} aria-labelledby={twoSteps ? 'mail-account-step-2' : undefined}>
+                    {twoSteps && (
+                        <h3 id='mail-account-step-2' className={styles.stepTitle}>
+                            <span className={styles.stepNumber} aria-hidden='true'>
+                                2
+                            </span>
+                            Connexion
+                        </h3>
+                    )}
+                    <TextInput
+                        placeholder='Nom (ex. Perso Gmail)'
+                        value={draft.displayName}
+                        error={errorName}
+                        onChange={(e) => set('displayName', e.target.value)}
+                    />
+                    {/* L'adresse ne se saisit que pour une connexion manuelle : chez un
                     fournisseur, c'est le consentement qui la rend, et une boîte déjà
                     connectée montre la sienne sur la carte plus bas. */}
-                {showManualFields && (
-                    <TextInput
-                        type='email'
-                        placeholder='adresse@exemple.com'
-                        value={draft.emailAddress}
-                        error={errorEmail}
-                        onChange={(e) => set('emailAddress', e.target.value)}
-                    />
-                )}
+                    {showManualFields && (
+                        <TextInput
+                            type='email'
+                            placeholder='adresse@exemple.com'
+                            value={draft.emailAddress}
+                            error={errorEmail}
+                            onChange={(e) => set('emailAddress', e.target.value)}
+                        />
+                    )}
 
-                {/* Seulement dans l'espace personnel : un espace partagé n'a qu'une
-                    clé, lisible par tout membre, donc rien à choisir. */}
-                {mode === 'add' && workspace?.kind === 'personal' && (
-                    <SecurityTierChoice value={draft.securityTier} onChange={(tier) => set('securityTier', tier)} />
-                )}
-
-                {/* An OAuth account has no second tab to offer: the manual form can't
+                    {/* An OAuth account has no second tab to offer: the manual form can't
                     describe it and can't save it either. */}
-                {!providerManaged && (
-                    <div className={styles.tabBar} role='tablist'>
-                        <button
-                            type='button'
-                            role='tab'
-                            aria-selected={tab === 'providers'}
-                            className={`${styles.tabButton} ${tab === 'providers' ? styles.tabButtonActive : ''}`}
-                            onClick={() => setTab('providers')}
-                        >
-                            Fournisseurs
-                        </button>
-                        <button
-                            type='button'
-                            role='tab'
-                            aria-selected={tab === 'manual'}
-                            className={`${styles.tabButton} ${tab === 'manual' ? styles.tabButtonActive : ''}`}
-                            onClick={() => setTab('manual')}
-                        >
-                            Connexion manuelle
-                        </button>
-                    </div>
-                )}
+                    {!providerManaged && (
+                        <div className={styles.tabBar} role='tablist'>
+                            <button
+                                type='button'
+                                role='tab'
+                                aria-selected={tab === 'providers'}
+                                className={`${styles.tabButton} ${tab === 'providers' ? styles.tabButtonActive : ''}`}
+                                onClick={() => setTab('providers')}
+                            >
+                                Fournisseurs
+                            </button>
+                            <button
+                                type='button'
+                                role='tab'
+                                aria-selected={tab === 'manual'}
+                                className={`${styles.tabButton} ${tab === 'manual' ? styles.tabButtonActive : ''}`}
+                                onClick={() => setTab('manual')}
+                            >
+                                Connexion manuelle
+                            </button>
+                        </div>
+                    )}
 
-                {/* La boîte que le consentement vient de créer : son état sort de
+                    {/* La boîte que le consentement vient de créer : son état sort de
                     la liste, seule à le connaître. La reconnexion n'est pas
                     proposée ici, elle est dans les réglages de la boîte. */}
-                {providerManaged && adopted && <ProviderCard account={adopted} />}
+                    {providerManaged && adopted && <ProviderCard account={adopted} />}
 
-                {!providerManaged && tab === 'providers' && (
-                    <div className={styles.oauthButtons}>
-                        {mode === 'add' ? (
-                            <>
-                                <Button
-                                    variant='secondary'
-                                    disabled={oauthBusy !== null}
-                                    onClick={() => void connectOAuth('google')}
-                                >
-                                    {oauthBusy === 'google' ? 'Connexion…' : 'Se connecter avec Google'}
-                                </Button>
-                                <Button
-                                    variant='secondary'
-                                    disabled={oauthBusy !== null}
-                                    onClick={() => void connectOAuth('microsoft')}
-                                >
-                                    {oauthBusy === 'microsoft' ? 'Connexion…' : 'Se connecter avec Microsoft'}
-                                </Button>
+                    {!providerManaged && tab === 'providers' && (
+                        <div className={styles.oauthButtons}>
+                            {mode === 'add' ? (
+                                <>
+                                    <Button
+                                        variant='secondary'
+                                        disabled={oauthBusy !== null}
+                                        onClick={() => void connectOAuth('google')}
+                                    >
+                                        {oauthBusy === 'google' ? 'Connexion…' : 'Se connecter avec Google'}
+                                    </Button>
+                                    <Button
+                                        variant='secondary'
+                                        disabled={oauthBusy !== null}
+                                        onClick={() => void connectOAuth('microsoft')}
+                                    >
+                                        {oauthBusy === 'microsoft' ? 'Connexion…' : 'Se connecter avec Microsoft'}
+                                    </Button>
+                                    <span className={styles.fieldHint}>
+                                        Non configuré sur ce serveur ? Passez par l’onglet « Connexion manuelle ».
+                                    </span>
+                                </>
+                            ) : (
                                 <span className={styles.fieldHint}>
-                                    Non configuré sur ce serveur ? Passez par l’onglet « Connexion manuelle ».
+                                    Ce compte utilise une connexion manuelle : on ne peut pas le convertir en compte
+                                    Google/Microsoft après coup. Ajoutez plutôt une nouvelle boîte mail depuis cet
+                                    onglet si vous voulez vous connecter avec un fournisseur.
                                 </span>
-                            </>
-                        ) : (
-                            <span className={styles.fieldHint}>
-                                Ce compte utilise une connexion manuelle — on ne peut pas le convertir en compte
-                                Google/Microsoft après coup. Ajoutez plutôt une nouvelle boîte mail depuis cet onglet si
-                                vous voulez vous connecter avec un fournisseur.
-                            </span>
-                        )}
-                    </div>
-                )}
+                            )}
+                        </div>
+                    )}
 
-                {showManualFields && (
-                    <>
-                        <p className={styles.sectionLabel}>
-                            <Term id='imap'>IMAP</Term> (réception)
-                        </p>
-                        <div className={styles.formRow}>
-                            <TextInput
-                                placeholder='imap.exemple.com'
-                                value={draft.imap.host}
-                                onChange={(e) => set('imap', { ...draft.imap, host: e.target.value })}
-                            />
-                            <TextInput
-                                type='number'
-                                placeholder='993'
-                                value={draft.imap.port}
-                                onChange={(e) => set('imap', { ...draft.imap, port: Number(e.target.value) || 993 })}
-                            />
-                        </div>
-                        <div className={styles.formRow}>
-                            <TextInput
-                                placeholder='Identifiant'
-                                value={draft.imap.username}
-                                onChange={(e) => set('imap', { ...draft.imap, username: e.target.value })}
-                            />
-                            <TextInput
-                                type='password'
-                                placeholder={mode === 'edit' ? 'Nouveau mot de passe' : 'Mot de passe'}
-                                value={draft.imap.password}
-                                onChange={(e) => set('imap', { ...draft.imap, password: e.target.value })}
-                            />
-                        </div>
-
-                        <p className={styles.sectionLabel}>
-                            <Term id='smtp'>SMTP</Term> (envoi)
-                        </p>
-                        <div className={styles.formRow}>
-                            <TextInput
-                                placeholder='smtp.exemple.com'
-                                value={draft.smtp.host}
-                                onChange={(e) => set('smtp', { ...draft.smtp, host: e.target.value })}
-                            />
-                            <TextInput
-                                type='number'
-                                placeholder='465'
-                                value={draft.smtp.port}
-                                onChange={(e) => set('smtp', { ...draft.smtp, port: Number(e.target.value) || 465 })}
-                            />
-                        </div>
-                        <div className={styles.formRow}>
-                            <TextInput
-                                placeholder='Identifiant'
-                                value={draft.smtp.username}
-                                onChange={(e) => set('smtp', { ...draft.smtp, username: e.target.value })}
-                            />
-                            <TextInput
-                                type='password'
-                                placeholder={mode === 'edit' ? 'Nouveau mot de passe' : 'Mot de passe'}
-                                value={draft.smtp.password}
-                                onChange={(e) => set('smtp', { ...draft.smtp, password: e.target.value })}
-                            />
-                        </div>
-                    </>
-                )}
-
-                {showProxyFields && (
-                    <>
-                        <Checkbox
-                            checked={proxyEnabled}
-                            onChange={(checked) => {
-                                setProxyEnabled(checked);
-                                setProxyTouched(true);
-                                if (checked && !draft.proxy) {
-                                    set('proxy', {
-                                        kind: 'socks5',
-                                        host: '',
-                                        port: 1080,
-                                        username: null,
-                                        password: null
-                                    });
-                                }
-                            }}
-                        >
-                            Passer par un proxy (SOCKS5/HTTP) — déjà géré par vous, DevEye n’en fournit pas
-                        </Checkbox>
-                        {proxyEnabled && draft.proxy && (
+                    {showManualFields && (
+                        <>
+                            <p className={styles.sectionLabel}>
+                                <Term id='imap'>IMAP</Term> (réception)
+                            </p>
                             <div className={styles.formRow}>
-                                <SegmentedControl
-                                    aria-label='Type de proxy'
-                                    value={draft.proxy.kind}
-                                    options={[
-                                        { value: 'socks5', label: 'SOCKS5' },
-                                        { value: 'http', label: 'HTTP' }
-                                    ]}
-                                    onChange={(kind) => {
-                                        setProxyTouched(true);
-                                        set('proxy', { ...draft.proxy!, kind });
-                                    }}
-                                />
                                 <TextInput
-                                    placeholder='proxy.exemple.com'
-                                    value={draft.proxy.host}
-                                    onChange={(e) => {
-                                        setProxyTouched(true);
-                                        set('proxy', { ...draft.proxy!, host: e.target.value });
-                                    }}
+                                    placeholder='imap.exemple.com'
+                                    value={draft.imap.host}
+                                    onChange={(e) => set('imap', { ...draft.imap, host: e.target.value })}
                                 />
                                 <TextInput
                                     type='number'
-                                    placeholder='1080'
-                                    value={draft.proxy.port}
-                                    onChange={(e) => {
-                                        setProxyTouched(true);
-                                        set('proxy', { ...draft.proxy!, port: Number(e.target.value) || 1080 });
-                                    }}
+                                    placeholder='993'
+                                    value={draft.imap.port}
+                                    onChange={(e) =>
+                                        set('imap', { ...draft.imap, port: Number(e.target.value) || 993 })
+                                    }
                                 />
                             </div>
-                        )}
-                        {/* The DTO never echoes proxy credentials back, so there is
-                            nothing to prefill; saying so beats silently dropping them. */}
-                        {proxyPreconfigured && !proxyTouched && (
-                            <span className={styles.fieldHint}>
-                                Un proxy est déjà configuré sur ce compte. Il est conservé tel quel tant que vous ne
-                                touchez pas à cette case ; le modifier impose de ressaisir ses paramètres.
-                            </span>
-                        )}
-                    </>
-                )}
+                            <div className={styles.formRow}>
+                                <TextInput
+                                    placeholder='Identifiant'
+                                    value={draft.imap.username}
+                                    onChange={(e) => set('imap', { ...draft.imap, username: e.target.value })}
+                                />
+                                <TextInput
+                                    type='password'
+                                    placeholder={mode === 'edit' ? 'Nouveau mot de passe' : 'Mot de passe'}
+                                    value={draft.imap.password}
+                                    onChange={(e) => set('imap', { ...draft.imap, password: e.target.value })}
+                                />
+                            </div>
 
-                {testResult && <p className={styles.status}>{testResult}</p>}
+                            <p className={styles.sectionLabel}>
+                                <Term id='smtp'>SMTP</Term> (envoi)
+                            </p>
+                            <div className={styles.formRow}>
+                                <TextInput
+                                    placeholder='smtp.exemple.com'
+                                    value={draft.smtp.host}
+                                    onChange={(e) => set('smtp', { ...draft.smtp, host: e.target.value })}
+                                />
+                                <TextInput
+                                    type='number'
+                                    placeholder='465'
+                                    value={draft.smtp.port}
+                                    onChange={(e) =>
+                                        set('smtp', { ...draft.smtp, port: Number(e.target.value) || 465 })
+                                    }
+                                />
+                            </div>
+                            <div className={styles.formRow}>
+                                <TextInput
+                                    placeholder='Identifiant'
+                                    value={draft.smtp.username}
+                                    onChange={(e) => set('smtp', { ...draft.smtp, username: e.target.value })}
+                                />
+                                <TextInput
+                                    type='password'
+                                    placeholder={mode === 'edit' ? 'Nouveau mot de passe' : 'Mot de passe'}
+                                    value={draft.smtp.password}
+                                    onChange={(e) => set('smtp', { ...draft.smtp, password: e.target.value })}
+                                />
+                            </div>
+                        </>
+                    )}
+
+                    {showProxyFields && (
+                        <>
+                            <Checkbox
+                                checked={proxyEnabled}
+                                onChange={(checked) => {
+                                    setProxyEnabled(checked);
+                                    setProxyTouched(true);
+                                    if (checked && !draft.proxy) {
+                                        set('proxy', {
+                                            kind: 'socks5',
+                                            host: '',
+                                            port: 1080,
+                                            username: null,
+                                            password: null
+                                        });
+                                    }
+                                }}
+                            >
+                                Passer par un proxy (SOCKS5/HTTP) — déjà géré par vous, DevEye n’en fournit pas
+                            </Checkbox>
+                            {proxyEnabled && draft.proxy && (
+                                <div className={styles.formRow}>
+                                    <SegmentedControl
+                                        aria-label='Type de proxy'
+                                        value={draft.proxy.kind}
+                                        options={[
+                                            { value: 'socks5', label: 'SOCKS5' },
+                                            { value: 'http', label: 'HTTP' }
+                                        ]}
+                                        onChange={(kind) => {
+                                            setProxyTouched(true);
+                                            set('proxy', { ...draft.proxy!, kind });
+                                        }}
+                                    />
+                                    <TextInput
+                                        placeholder='proxy.exemple.com'
+                                        value={draft.proxy.host}
+                                        onChange={(e) => {
+                                            setProxyTouched(true);
+                                            set('proxy', { ...draft.proxy!, host: e.target.value });
+                                        }}
+                                    />
+                                    <TextInput
+                                        type='number'
+                                        placeholder='1080'
+                                        value={draft.proxy.port}
+                                        onChange={(e) => {
+                                            setProxyTouched(true);
+                                            set('proxy', { ...draft.proxy!, port: Number(e.target.value) || 1080 });
+                                        }}
+                                    />
+                                </div>
+                            )}
+                            {/* The DTO never echoes proxy credentials back, so there is
+                            nothing to prefill; saying so beats silently dropping them. */}
+                            {proxyPreconfigured && !proxyTouched && (
+                                <span className={styles.fieldHint}>
+                                    Un proxy est déjà configuré sur ce compte. Il est conservé tel quel tant que vous ne
+                                    touchez pas à cette case ; le modifier impose de ressaisir ses paramètres.
+                                </span>
+                            )}
+                        </>
+                    )}
+
+                    {testResult && <p className={styles.status}>{testResult}</p>}
+                </section>
             </div>
 
             <div className={styles.popupActions}>

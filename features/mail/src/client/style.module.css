@@ -1228,6 +1228,49 @@
     gap: var(--space-sm);
 }
 
+/* La création en deux étapes côte à côte ; l'une sous l'autre quand la place manque. */
+.formSplit {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-lg);
+}
+
+@media (min-width: 900px) {
+    .formSplit {
+        grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+        gap: var(--space-xl);
+        align-items: start;
+    }
+
+    .formSplit > section + section {
+        padding-left: var(--space-xl);
+        border-left: 1px solid var(--glass-border);
+    }
+}
+
+.stepTitle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin: 0 0 var(--space-xs);
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.stepNumber {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 1.5rem;
+    height: 1.5rem;
+    background: var(--accent);
+    color: var(--on-accent);
+    border-radius: var(--radius-pill);
+    font-size: 0.8rem;
+}
+
 .formRow {
     display: flex;
     gap: var(--space-sm);
