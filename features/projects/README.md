@@ -210,6 +210,57 @@ géométrie qui dépend de la largeur qu'on est en train de décider.
 Le fil de discussion vit **dans la carte** : messages en direct, groupement par
 auteur, « X est en train d'écrire… », badge de non-lus sur le kanban et la frise.
 
+### La frise se pose et se dépose à la souris
+
+Une barre se déplace et s'étire par ses deux lisières ; sous elle, les cartes
+sans date sont des pastilles, dans un repli. Le geste va dans les deux sens :
+**une pastille se tire sur un jour** et y prend début et échéance le même, soit
+une barre d'un jour aussitôt étirable ; **une barre se ramène sur la zone des
+pastilles** et y perd ses dates. Rien n'attend la popup, et rien ne part avant
+le relâchement : pendant le geste, seul un aperçu local bouge.
+
+Trois détails qui ne se devinent pas, dans `Timeline/dateDrag.ts` :
+
+- Pointer Events, jamais `draggable` : `client/src/nativeDrag.ts` refuse les
+  glissers HTML5 de toute l'application, et le kanban lui-même passe par dnd-kit
+  pour la même raison.
+- Le jour visé par une pastille se lit en **absolu** (abscisse du pointeur dans
+  la boîte défilante, `scrollLeft` compris), alors qu'une barre se déplace d'un
+  **delta** en jours. Une pastille ne vient de nulle part sur l'axe : il n'y a
+  rien à décaler.
+- L'aperçu d'une pastille occupe une ligne ajoutée **en fin** de frise, pas son
+  rang par date : les lignes sont triées sur la date, et l'insérer à sa place la
+  ferait sauter d'une ligne à l'autre sous le pointeur. La même raison garde
+  l'aperçu d'une barre hors de la liste triée.
+
+La frise se dessine désormais même sans aucune carte datée, dès qu'il reste une
+pastille : sans elle, le geste n'aurait nulle part où atterrir.
+
+### Cinq droits découpent l'écriture
+
+`write` sur Projets laisse **participer au tableau** : retoucher une tâche et la
+faire changer de colonne. Le reste se confie séparément, par les
+`extraPermissions` du manifest (voir [Docs/PERMISSIONS.md](../../Docs/PERMISSIONS.md)) :
+
+| Droit            | Ce qu'il ouvre                                                                     |
+| ---------------- | ---------------------------------------------------------------------------------- |
+| `manageProjects` | ouvrir, renommer, archiver, restaurer, classer un projet, et tenir ses colonnes    |
+| `tasks`          | créer une tâche, l'archiver, la restaurer                                          |
+| `plan`           | les dates sur la frise, les jalons, les dépendances                                |
+| `links`          | rattacher le projet à un dépôt, une cible, une base, un site, un service surveillé |
+| `chat`           | écrire et modifier dans le fil                                                     |
+
+Chacun se surcharge **projet par projet**, par l'onglet Permissions de sa fiche :
+confier la planification d'un seul projet à quelqu'un est le cas courant.
+
+`plan` a une exception, et elle est dans le handler de `projects.cardUpdate` et
+non dans sa déclaration : cette commande écrit un brouillon entier, dont les
+dates ne sont qu'un champ. **Chacun date la tâche qui lui revient** (celle
+qu'il porte, ou celle qu'il a écrite et que personne n'a prise) sans tenir
+`plan`. Une carte qu'on crée se date donc librement, et cesse de se replanifier
+dès qu'elle passe à quelqu'un d'autre. Le client applique exactement le même
+prédicat (`client/rights.ts`), pour que rien ne soit proposé qui serait refusé.
+
 ---
 
 ## 3. Le direct
@@ -347,6 +398,7 @@ index.tsx          clientEntry : Widget, Full
 Projects.tsx       portefeuille en cartes rangeables, archives, « mes tâches » ; possède le niveau live `l1`
 ProjectsWidget.tsx la tuile d'accueil
 api.ts             les appels typés du module (featureApi)
+rights.ts          les cinq droits propres, lus sur CE projet, et les phrases de refus
 ProjectDetail.tsx  en-tête + onglets ; possède le niveau live `l2`
 ProjectDialog.tsx  créer un projet (le niveau de confidentialité s'y choisit)
 ProjectGeneralPanel.tsx  onglet Général de la fiche : le profil du projet, et son archivage
@@ -356,7 +408,7 @@ useProjectTabs.ts  les compteurs (`projects.linkCounts`) qui alimentent la barre
 ProjectTabs.tsx    la barre et son menu « + »
 AddFeatureDialog.tsx  les formulaires d'ajout du « + », montés hors des onglets
 Board/             kanban dnd-kit, dialogues carte et colonne, largeur naturelle
-Timeline/          frise horizontale, échelle dédiée, jalons
+Timeline/          frise horizontale, échelle dédiée, jalons, dépôt d'une carte sans date
 Chat/              fil de discussion, rendu markdown
 History/           frise verticale, carte archivée en lecture seule
 Git/               compose le contrat client du module Git (`GIT_CLIENT_PROVIDER`), dégrade sans lui

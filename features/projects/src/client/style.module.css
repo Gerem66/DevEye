@@ -1455,6 +1455,33 @@
     right: 0;
 }
 
+/* Sur le point de quitter la frise : la barre tenue survole la zone sans date. */
+.barLeaving {
+    border-style: dashed;
+    filter: opacity(0.5);
+}
+
+/*
+ * La pastille en vol, telle qu'elle se posera : large d'un jour, à sa date.
+ * En tirets, parce que rien n'est encore écrit.
+ */
+.barGhost {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    padding: 0 var(--space-sm);
+    border-radius: var(--radius-sm);
+    border: 1px dashed var(--accent);
+    background: var(--accent-bg);
+    color: var(--text-primary);
+    font-size: 0.75rem;
+    overflow: hidden;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
 .barLabel {
     flex: 1;
     overflow: hidden;
@@ -1462,9 +1489,21 @@
     white-space: nowrap;
 }
 
+/* La bordure existe au repos, transparente : le survol d'un dépôt ne doit pas
+   pousser la liste d'un pixel. */
 .undated {
     font-size: 0.8rem;
     color: var(--text-secondary);
+    padding: var(--space-xs) var(--space-sm);
+    border: 1px dashed transparent;
+    border-radius: var(--radius-md);
+}
+
+/* Une barre de la frise survole la zone : la lâcher ici lui retire ses dates. */
+.undatedOver {
+    composes: undated;
+    border-color: var(--accent);
+    background: var(--accent-bg);
 }
 
 .undated summary {
@@ -1495,6 +1534,19 @@
 .undatedList button:hover {
     border-color: var(--accent);
     color: var(--accent);
+}
+
+/* Attrapable : la pastille se dépose sur un jour de la frise. `touch-action`
+   parce qu'au doigt le geste serait sinon pris pour un défilement. */
+.tagDraggable {
+    cursor: grab;
+    touch-action: none;
+}
+
+/* La pastille qu'on tient reste en place, estompée : c'est son fantôme qui
+   voyage. `filter` et non `opacity`, que framer-motion possède ailleurs. */
+.tagDragging {
+    filter: opacity(0.35);
 }
 
 .tab {

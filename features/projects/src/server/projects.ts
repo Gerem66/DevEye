@@ -24,6 +24,7 @@ import {
     encryptProject,
     isForeign,
     loadProject,
+    MANAGE,
     projectCipher,
     recordEvent,
     reencryptProjectTree,
@@ -31,7 +32,6 @@ import {
     toProject,
     toSummary,
     tryDecryptProject,
-    WRITE,
     type Ctx,
     type StoredProject
 } from './_shared';
@@ -157,7 +157,7 @@ export const projectGetFeature = defineSdkFeature({
 export const projectAddFeature = defineSdkFeature({
     ...projectAdd,
     mutates: true,
-    access: WRITE,
+    access: MANAGE,
     handler: async (ctx: Ctx, input) => {
         assertGuardedAllowed(ctx, input.securityTier);
         const cipher = cipherFor(ctx, input.securityTier);
@@ -194,7 +194,7 @@ export const projectAddFeature = defineSdkFeature({
 export const projectUpdateFeature = defineSdkFeature({
     ...projectUpdate,
     mutates: true,
-    access: WRITE,
+    access: MANAGE,
     handler: async (ctx: Ctx, input) => {
         const existing = await loadProject(ctx, input.projectId, 'write');
         await assertProjectUnlocked(ctx, existing);
@@ -241,7 +241,7 @@ export const projectUpdateFeature = defineSdkFeature({
 export const projectSetStatusFeature = defineSdkFeature({
     ...projectSetStatus,
     mutates: true,
-    access: WRITE,
+    access: MANAGE,
     handler: async (ctx: Ctx, input) => {
         const existing = await loadProject(ctx, input.projectId, 'write');
         await assertProjectUnlocked(ctx, existing);
@@ -262,7 +262,7 @@ export const projectSetStatusFeature = defineSdkFeature({
 export const projectSetVersionFeature = defineSdkFeature({
     ...projectSetVersion,
     mutates: true,
-    access: WRITE,
+    access: MANAGE,
     handler: async (ctx: Ctx, input) => {
         const existing = await loadProject(ctx, input.projectId, 'write');
         await assertProjectUnlocked(ctx, existing);
@@ -314,7 +314,7 @@ export const projectSetVersionFeature = defineSdkFeature({
 export const projectSetSecurityTierFeature = defineSdkFeature({
     ...projectSetSecurityTier,
     mutates: true,
-    access: WRITE,
+    access: MANAGE,
     handler: async (ctx: Ctx, input) => {
         const existing = await loadProject(ctx, input.projectId, 'write');
         // Le palier relie l'arbre au mot de passe d'un membre de l'espace
@@ -418,7 +418,7 @@ export const projectSetSecurityTierFeature = defineSdkFeature({
 export const projectArchiveFeature = defineSdkFeature({
     ...projectArchive,
     mutates: true,
-    access: WRITE,
+    access: MANAGE,
     handler: async (ctx: Ctx, input) => {
         const existing = await loadProject(ctx, input.projectId, 'write');
         await assertProjectUnlocked(ctx, existing);
@@ -443,7 +443,7 @@ export const projectArchiveFeature = defineSdkFeature({
 export const projectRestoreFeature = defineSdkFeature({
     ...projectRestore,
     mutates: true,
-    access: WRITE,
+    access: MANAGE,
     handler: async (ctx: Ctx, input) => {
         const existing = await loadProject(ctx, input.projectId, 'write');
         await assertProjectUnlocked(ctx, existing);
@@ -457,7 +457,7 @@ export const projectRestoreFeature = defineSdkFeature({
 export const projectReorderFeature = defineSdkFeature({
     ...projectReorder,
     mutates: true,
-    access: WRITE,
+    access: MANAGE,
     handler: async (ctx: Ctx, input) => {
         // Un projet projeté se classe chez lui. Refus franc plutôt qu'abandon
         // silencieux : le client ne le propose pas au glisser, un appel qui l'inclut

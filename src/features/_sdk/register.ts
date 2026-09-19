@@ -111,8 +111,11 @@ export function moduleManifest(featureId: string): FeatureManifest | undefined {
 
 /**
  * Les définitions natives issues des modules, prêtes pour `featureHandlers`.
- * Chaque commande est gardée par le droit de sa feature (`read` par défaut),
- * appliqué par le dispatcheur, puis par ses extras, appliqués ici.
+ * Chaque commande est gardée par le droit de sa feature (`read` par défaut) et
+ * par ses permissions propres, toutes deux appliquées par le dispatcheur : les
+ * déclarer plutôt que les éprouver ici est ce qui permet à la surcharge d'un
+ * élément de mordre, `ctx.items.assert` tranchant pour l'élément visé. Une
+ * commande qui n'en vise aucun garde donc sa vérification dans son handler.
  */
 export function moduleFeatureHandlers(): FeatureDefinition<string, never, never>[] {
     return MODULES.flatMap((mod) =>
@@ -121,7 +124,11 @@ export function moduleFeatureHandlers(): FeatureDefinition<string, never, never>
                 command: def.command,
                 input: def.input as never,
                 output: def.output as never,
-                access: { feature: mod.manifest.id, level: def.access?.level ?? 'read' },
+                access: {
+                    feature: mod.manifest.id,
+                    level: def.access?.level ?? 'read',
+                    ...(def.access?.extras ? { extras: def.access.extras } : {})
+                },
                 // Un booléen bat le sujet du module ; une liste nomme les sujets,
                 // que `buildTopicIndex` valide au boot.
                 mutates: def.mutates === true ? true : def.mutates ? (def.mutates as readonly LiveTopic[]) : undefined,
@@ -130,11 +137,6 @@ export function moduleFeatureHandlers(): FeatureDefinition<string, never, never>
                     // les gestes de flotte (appairer, révoquer, supprimer).
                     if (def.access?.admin) ctx.assertAdmin();
                     const sdkCtx = createSdkContext(ctx, mod.manifest, mod.repoFor(ctx.db), PROVIDERS);
-                    for (const key of def.access?.extras ?? []) {
-                        if (!sdkCtx.canExtra(key)) {
-                            throw new FeatureError('forbidden', `Permission « ${key} » requise`);
-                        }
-                    }
                     return def.handler(sdkCtx, input as never) as never;
                 }
             })

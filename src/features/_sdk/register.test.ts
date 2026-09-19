@@ -207,7 +207,13 @@ registerModules([
 const services = createModuleServices(host);
 
 /** Le contexte natif d'une requête, réduit à ce que l'enveloppe et l'adaptateur lisent. */
-function fakeCtx(over: { isOwner?: boolean; extras?: Record<string, boolean | string> } = {}): FeatureContext {
+function fakeCtx(
+    over: {
+        isOwner?: boolean;
+        extras?: Record<string, boolean | string>;
+        itemExtras?: Record<string, Record<string, boolean>>;
+    } = {}
+): FeatureContext {
     return {
         db: host.db,
         secure: { open: {} },
@@ -218,6 +224,7 @@ function fakeCtx(over: { isOwner?: boolean; extras?: Record<string, boolean | st
         isAdmin: false,
         canFeature: () => true,
         extrasFor: () => over.extras ?? {},
+        itemExtraOverrides: () => Promise.resolve(new Map(Object.entries(over.itemExtras ?? {}))),
         audit() {},
         logger,
         requestId: 'req-1'
@@ -297,23 +304,20 @@ describe('moduleFeatureHandlers : la projection en définitions natives', () => 
         assert.equal(list.mutates, undefined);
         const purge = byCommand.get('x-sdkregister.purge');
         assert.ok(purge);
-        assert.deepEqual(purge.access, { feature: 'x-sdkregister', level: 'write' });
+        assert.deepEqual(purge.access, { feature: 'x-sdkregister', level: 'write', extras: ['manage'] });
         assert.equal(purge.mutates, true);
     });
 
-    it("les extras : forbidden quand l'appelant n'a pas la permission, le handler n'est pas appelé", async () => {
+    it("les extras sont DÉCLARÉS et non éprouvés ici : c'est ce qui les rend surchargeables par élément", () => {
         const purge = byCommand.get('x-sdkregister.purge');
         assert.ok(purge);
-        const seen = handled.length;
-        await assert.rejects(purge.handler(fakeCtx(), {} as never), {
-            name: 'FeatureError',
-            code: 'forbidden',
-            message: /« manage »/
-        });
-        assert.equal(handled.length, seen);
+        assert.deepEqual(purge.access?.extras, ['manage']);
+        // Une commande qui n'en demande pas n'en déclare pas : le dispatcheur
+        // n'a alors rien à éprouver.
+        assert.equal(byCommand.get('x-sdkregister.list')?.access?.extras, undefined);
     });
 
-    it('les extras : passe avec la permission accordée, et le handler voit le contexte SDK', async () => {
+    it('le handler reçoit le contexte SDK, ses permissions propres résolues', async () => {
         const purge = byCommand.get('x-sdkregister.purge');
         assert.ok(purge);
         assert.deepEqual(await purge.handler(fakeCtx({ extras: { manage: true } }), {} as never), { ok: true });
@@ -324,10 +328,23 @@ describe('moduleFeatureHandlers : la projection en définitions natives', () => 
         assert.equal(ctx.repo, REPO);
     });
 
-    it('les extras : le propriétaire passe sans grant', async () => {
+    it('items.canExtra : la surcharge de l’élément prime, le droit du rôle sinon', async () => {
+        const purge = byCommand.get('x-sdkregister.purge');
+        assert.ok(purge);
+        await purge.handler(fakeCtx({ itemExtras: { '7': { manage: true } } }), {} as never);
+        const ctx = handled.at(-1);
+        assert.ok(ctx);
+        assert.equal(await ctx.items.canExtra('7', 'manage'), true);
+        assert.equal(await ctx.items.canExtra('8', 'manage'), false);
+    });
+
+    it('le propriétaire tient toute permission propre', async () => {
         const purge = byCommand.get('x-sdkregister.purge');
         assert.ok(purge);
         assert.deepEqual(await purge.handler(fakeCtx({ isOwner: true }), {} as never), { ok: true });
+        const ctx = handled.at(-1);
+        assert.ok(ctx);
+        assert.equal(ctx.canExtra('manage'), true);
     });
 
     it('une commande sans extras ne demande rien', async () => {

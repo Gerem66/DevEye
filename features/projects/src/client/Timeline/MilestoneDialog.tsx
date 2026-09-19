@@ -12,6 +12,8 @@ interface MilestoneDialogProps {
     open: boolean;
     /** `null` = création. */
     milestone: ProjectMilestone | null;
+    /** Sans la planification, le jalon se lit sans pouvoir s'écrire. */
+    canPlan: boolean;
     busy: boolean;
     error: string | null;
     onClose: () => void;
@@ -23,6 +25,7 @@ interface MilestoneDialogProps {
 export function MilestoneDialog({
     open,
     milestone,
+    canPlan,
     busy,
     error,
     onClose,
@@ -65,7 +68,7 @@ export function MilestoneDialog({
                     <Button variant='secondary' onClick={onClose} disabled={busy}>
                         Annuler
                     </Button>
-                    <Button onClick={submit} disabled={busy || !name.trim() || !dueDate}>
+                    <Button onClick={submit} disabled={busy || !canPlan || !name.trim() || !dueDate}>
                         {busy ? 'Enregistrement…' : milestone ? 'Enregistrer' : 'Créer'}
                     </Button>
                 </>

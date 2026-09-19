@@ -60,7 +60,10 @@ interface TimelineProps {
     cards: ProjectCard[];
     milestones: ProjectMilestone[];
     deps: ProjectCardDep[];
-    canWrite: boolean;
+    /** Tenir les jalons : la planification du projet, sans exception de propriété. */
+    canPlan: boolean;
+    /** Poser ou retirer les dates de CETTE carte : le droit de planifier, ou elle est sienne. */
+    canDate: (card: ProjectCard) => boolean;
     onCardOpen: (card: ProjectCard) => void;
     /** Repose les dates d'une carte après un glissé sur la frise. */
     onCardDates: (card: ProjectCard, startDate: number | null, dueDate: number | null) => void;
@@ -73,12 +76,18 @@ interface TimelineProps {
  * cartes datées y figurent, les autres étant listées dessous plutôt que passées
  * sous silence. Deux dates font une barre, une échéance seule fait un point :
  * afficher une durée qu'on n'a pas serait une invention.
+ *
+ * La liste du bas n'est pas qu'un pense-bête : on en tire une pastille sur un
+ * jour pour la dater, et on y ramène une barre pour lui retirer ses dates. Le
+ * même geste dans les deux sens, plutôt qu'un aller par la souris et un retour
+ * par la popup.
  */
 export function Timeline({
     cards,
     milestones,
     deps,
-    canWrite,
+    canPlan,
+    canDate,
     onCardOpen,
     onCardDates,
     onMilestoneCreate,
@@ -165,15 +174,38 @@ export function Timeline({
 
     const rowOf = useMemo(() => new Map(dated.map((c, i) => [c.id, i])), [dated]);
 
-    const { preview, onBarPointerDown, consumeClick } = useDateDrag({ dayWidth, onCommit: onCardDates });
+    const dropRef = useRef<HTMLDetailsElement>(null);
+    const {
+        view: drag,
+        onBarPointerDown,
+        onTagPointerDown,
+        consumeClick
+    } = useDateDrag({
+        dayWidth,
+        days,
+        rangeMin: range.min,
+        scrollRef,
+        dropRef,
+        onCommit: onCardDates
+    });
+    /** La pastille en vol : la carte tenue, et le jour sous le pointeur s'il y en a un. */
+    const placing = drag?.placing ? drag : null;
+    const ghostAt = placing?.next?.startDate ?? null;
+    /** La barre tenue est au-dessus de la zone sans date : elle va les perdre. */
+    const unplanning = (card: ProjectCard) =>
+        drag !== null && !drag.placing && drag.card.id === card.id && drag.overDrop;
 
     /**
      * La carte telle qu'affichée : ses dates, ou l'aperçu du geste en cours.
      * L'aperçu ne remonte pas jusqu'à `dated`, sinon la barre qu'on tient
-     * changerait de ligne dès qu'elle dépasse sa voisine.
+     * changerait de ligne dès qu'elle dépasse sa voisine. Au-dessus de la zone
+     * sans date, la barre garde sa place : ce sont ses dates qu'on efface, pas
+     * une position qu'on vise.
      */
     const shown = (card: ProjectCard): ProjectCard =>
-        preview?.cardId === card.id ? { ...card, startDate: preview.startDate, dueDate: preview.dueDate } : card;
+        drag && !drag.placing && drag.card.id === card.id && drag.next && !drag.overDrop
+            ? { ...card, startDate: drag.next.startDate, dueDate: drag.next.dueDate }
+            : card;
 
     /** Le segment occupé par une carte : [début, fin] en px. */
     const spanOf = (card: ProjectCard) => {
@@ -204,14 +236,15 @@ export function Timeline({
         return nearest === Number.POSITIVE_INFINITY ? endX + DEP_GAP : endX + (nearest - endX) / 2;
     };
 
-    if (dated.length === 0 && milestones.length === 0) {
+    // La frise se dessine dès qu'il reste une pastille à y déposer : sans elle,
+    // le geste n'aurait nulle part où atterrir.
+    if (dated.length === 0 && milestones.length === 0 && undated.length === 0) {
         return (
             <div className={styles.timelineEmpty}>
                 <p className={styles.empty}>
-                    Aucune carte datée ni jalon. Posez une date de début ou une échéance sur une carte pour la voir
-                    apparaître ici.
+                    Aucune carte ni jalon. Créez une tâche dans le tableau pour la placer ici.
                 </p>
-                {canWrite && (
+                {canPlan && (
                     <Button variant='secondary' icon='add' onClick={onMilestoneCreate}>
                         Ajouter un jalon
                     </Button>
@@ -237,7 +270,7 @@ export function Timeline({
                         </button>
                     ))}
                 </div>
-                {canWrite && (
+                {canPlan && (
                     <Button variant='secondary' icon='add' onClick={onMilestoneCreate}>
                         Jalon
                     </Button>
@@ -252,7 +285,10 @@ export function Timeline({
                         exactement une par jour, sans un nœud de plus. */}
                     <div
                         className={styles.tlGrid}
-                        style={{ height: dated.length * ROW_H + HEAD_H, backgroundSize: `${dayWidth}px 100%` }}
+                        style={{
+                            height: (dated.length + (ghostAt !== null ? 1 : 0)) * ROW_H + HEAD_H,
+                            backgroundSize: `${dayWidth}px 100%`
+                        }}
                     >
                         {ticks.map((tick) => (
                             <div
@@ -373,16 +409,17 @@ export function Timeline({
 
                     <div className={styles.rows} style={{ marginTop: HEAD_H }}>
                         {dated.map((card) => {
-                            const view = shown(card);
-                            const s = spanOf(view);
-                            const overdue = view.dueDate !== null && view.dueDate * 1000 < Date.now();
+                            const at = shown(card);
+                            const s = spanOf(at);
+                            const overdue = at.dueDate !== null && at.dueDate * 1000 < Date.now();
+                            const movable = canDate(card);
                             // Étirable seulement si les deux bouts existent :
                             // un point n'a qu'une date, il se déplace en bloc.
-                            const resizable = canWrite && !s.pointOnly;
+                            const resizable = movable && !s.pointOnly;
                             // Les dates dans l'infobulle : après un glissé,
                             // c'est ce qui dit où la barre a atterri sans avoir
                             // à rouvrir la tâche.
-                            const period = [formatDate(view.startDate), formatDate(view.dueDate)]
+                            const period = [formatDate(at.startDate), formatDate(at.dueDate)]
                                 .filter(Boolean)
                                 .join(' → ');
                             return (
@@ -391,10 +428,12 @@ export function Timeline({
                                         type='button'
                                         className={`${styles.bar} ${s.pointOnly ? styles.barPoint : ''} ${
                                             overdue ? styles.barLate : ''
-                                        } ${canWrite ? styles.barDraggable : ''}`}
+                                        } ${movable ? styles.barDraggable : ''} ${
+                                            unplanning(card) ? styles.barLeaving : ''
+                                        }`}
                                         style={{ left: s.left, width: s.width, height: BAR_H }}
                                         onPointerDown={
-                                            canWrite
+                                            movable
                                                 ? (e) =>
                                                       onBarPointerDown(
                                                           e,
@@ -411,7 +450,7 @@ export function Timeline({
                                         // la carte : on vient de poser des dates,
                                         // pas de demander à les lire.
                                         onClick={() => {
-                                            if (!consumeClick()) onCardOpen(card);
+                                            if (!consumeClick(card.id)) onCardOpen(card);
                                         }}
                                         title={period ? `${card.title || 'Sans titre'} — ${period}` : card.title}
                                         {...outlineFor(`card:${card.id}`)}
@@ -434,23 +473,63 @@ export function Timeline({
                                 </div>
                             );
                         })}
+
+                        {/* La pastille en vol, dans une ligne de plus ajoutée en
+                            fin : l'insérer à son rang la ferait sauter de ligne
+                            sous le pointeur, le rang se décidant sur la date. */}
+                        {placing && ghostAt !== null && (
+                            <div className={styles.tlRow} style={{ height: ROW_H }}>
+                                <div
+                                    className={styles.barGhost}
+                                    style={{ left: x(ghostAt * 1000), width: dayWidth, height: BAR_H }}
+                                >
+                                    <span className={styles.barLabel}>{placing.card.title || 'Sans titre'}</span>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
 
-            {undated.length > 0 && (
-                <details className={styles.undated}>
+            {/* La zone reste rendue pendant qu'on tient une barre, même vide :
+                c'est la cible du geste de retour, elle doit exister avant qu'on
+                y arrive. */}
+            {(undated.length > 0 || (drag !== null && !drag.placing)) && (
+                <details
+                    ref={dropRef}
+                    className={`${styles.undated} ${drag?.overDrop ? styles.undatedOver : ''}`}
+                    open={undated.length === 0 ? true : undefined}
+                >
                     <summary>
-                        {undated.length} carte{undated.length > 1 ? 's' : ''} sans date
+                        {drag !== null && !drag.placing
+                            ? 'Déposer ici pour retirer les dates'
+                            : `${undated.length} carte${undated.length > 1 ? 's' : ''} sans date`}
                     </summary>
                     <ul className={styles.undatedList}>
-                        {undated.map((card) => (
-                            <li key={card.id}>
-                                <button type='button' onClick={() => onCardOpen(card)}>
-                                    {card.title || 'Sans titre'}
-                                </button>
-                            </li>
-                        ))}
+                        {undated.map((card) => {
+                            const movable = canDate(card);
+                            return (
+                                <li key={card.id}>
+                                    <button
+                                        type='button'
+                                        className={`${movable ? styles.tagDraggable : ''} ${
+                                            placing?.card.id === card.id ? styles.tagDragging : ''
+                                        }`}
+                                        title={
+                                            movable
+                                                ? `${card.title || 'Sans titre'} : glissez-la sur la frise pour la dater`
+                                                : card.title || 'Sans titre'
+                                        }
+                                        onPointerDown={movable ? (e) => onTagPointerDown(e, card) : undefined}
+                                        onClick={() => {
+                                            if (!consumeClick(card.id)) onCardOpen(card);
+                                        }}
+                                    >
+                                        {card.title || 'Sans titre'}
+                                    </button>
+                                </li>
+                            );
+                        })}
                     </ul>
                 </details>
             )}

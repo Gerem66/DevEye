@@ -15,9 +15,9 @@ import { defineSdkFeature, FeatureError, type SdkCipher } from '@deveye/types/sd
 import {
     assertProjectUnlocked,
     loadProject,
+    PLAN,
     projectCipher,
     recordEvent,
-    WRITE,
     type Ctx,
     type ItemLevel
 } from './_shared';
@@ -130,7 +130,7 @@ export const projectPlanFeature = defineSdkFeature({
 export const projectMilestoneAddFeature = defineSdkFeature({
     ...projectMilestoneAdd,
     mutates: true,
-    access: WRITE,
+    access: PLAN,
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         await assertProjectUnlocked(ctx, project);
@@ -150,7 +150,7 @@ export const projectMilestoneAddFeature = defineSdkFeature({
 export const projectMilestoneUpdateFeature = defineSdkFeature({
     ...projectMilestoneUpdate,
     mutates: true,
-    access: WRITE,
+    access: PLAN,
     handler: async (ctx: Ctx, input) => {
         const { project } = await loadMilestone(ctx, input.milestoneId, 'write');
         await assertProjectUnlocked(ctx, project);
@@ -169,7 +169,7 @@ export const projectMilestoneUpdateFeature = defineSdkFeature({
 export const projectMilestoneSetReachedFeature = defineSdkFeature({
     ...projectMilestoneSetReached,
     mutates: true,
-    access: WRITE,
+    access: PLAN,
     handler: async (ctx: Ctx, input) => {
         const { project } = await loadMilestone(ctx, input.milestoneId, 'write');
         const row = await ctx.repo.plan.setMilestoneReached(
@@ -197,7 +197,7 @@ export const projectMilestoneSetReachedFeature = defineSdkFeature({
 export const projectMilestoneRemoveFeature = defineSdkFeature({
     ...projectMilestoneRemove,
     mutates: true,
-    access: WRITE,
+    access: PLAN,
     handler: async (ctx: Ctx, input) => {
         const { project } = await loadMilestone(ctx, input.milestoneId, 'write');
         await assertProjectUnlocked(ctx, project);
@@ -211,7 +211,7 @@ export const projectMilestoneRemoveFeature = defineSdkFeature({
 export const projectCardSetMilestoneFeature = defineSdkFeature({
     ...projectCardSetMilestone,
     mutates: true,
-    access: WRITE,
+    access: PLAN,
     handler: async (ctx: Ctx, input) => {
         const card = await ctx.repo.board.findCard(input.cardId);
         if (!card) throw new FeatureError('not_found', 'Carte introuvable');
@@ -235,7 +235,7 @@ export const projectCardSetMilestoneFeature = defineSdkFeature({
 export const projectDepAddFeature = defineSdkFeature({
     ...projectDepAdd,
     mutates: true,
-    access: WRITE,
+    access: PLAN,
     handler: async (ctx: Ctx, input) => {
         if (input.cardId === input.blockedByCardId) {
             throw new FeatureError('validation', 'Une carte ne peut pas se bloquer elle-même.');
@@ -272,7 +272,7 @@ export const projectDepAddFeature = defineSdkFeature({
 export const projectDepRemoveFeature = defineSdkFeature({
     ...projectDepRemove,
     mutates: true,
-    access: WRITE,
+    access: PLAN,
     handler: async (ctx: Ctx, input) => {
         const card = await ctx.repo.board.findCard(input.cardId);
         if (!card) throw new FeatureError('not_found', 'Carte introuvable');

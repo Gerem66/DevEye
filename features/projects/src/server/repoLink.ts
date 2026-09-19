@@ -2,7 +2,7 @@ import { projectRepoLink, projectRepoList, projectRepoUnlink } from '../contract
 import { GIT_ITEMS_PROVIDER, type GitItemsProvider } from '@deveye/types/sdk';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
-import { assertAtHome, linkLabels, loadProject, recordEvent, WRITE, type Ctx } from './_shared';
+import { assertAtHome, linkLabels, LINKS, loadProject, recordEvent, type Ctx } from './_shared';
 
 /**
  * Le pointeur d'un projet vers des dépôts de l'espace : le dépôt n'appartient pas au
@@ -32,7 +32,7 @@ export const projectRepoListFeature = defineSdkFeature({
 export const projectRepoLinkFeature = defineSdkFeature({
     ...projectRepoLink,
     mutates: ['projects', 'git'],
-    access: WRITE,
+    access: LINKS,
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'relier un dépôt');
@@ -69,7 +69,7 @@ export const projectRepoLinkFeature = defineSdkFeature({
 export const projectRepoUnlinkFeature = defineSdkFeature({
     ...projectRepoUnlink,
     mutates: ['projects', 'git'],
-    access: WRITE,
+    access: LINKS,
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'délier un dépôt');

@@ -39,6 +39,7 @@ export function createSdkContext(
     repo: unknown,
     providers: SdkProviders
 ): SdkFeatureContext {
+    const extras = resolveExtras(manifest.extraPermissions, ctx.isOwner, ctx.extrasFor(manifest.id));
     return {
         userId: ctx.userId,
         workspaceId: ctx.workspaceId,
@@ -46,7 +47,7 @@ export function createSdkContext(
         isOwner: ctx.isOwner,
         isAdmin: ctx.isAdmin,
         canWrite: ctx.canFeature(manifest.id, 'write'),
-        ...resolveExtras(manifest.extraPermissions, ctx.isOwner, ctx.extrasFor(manifest.id)),
+        ...extras,
         repo,
         store: createFeatureStore(ctx.db.featureKv, manifest.id, ctx.workspaceId, {
             open: ctx.secure.open,
@@ -83,6 +84,13 @@ export function createSdkContext(
             // les restrictions d'une autre.
             restrictions: () => ctx.itemRestrictions(manifest.id),
             assert: (itemId, level) => ctx.assertItem(manifest.id, itemId, level),
+            // La surcharge de l'élément prime sur le droit du rôle, dans les
+            // deux sens. Pour une garde qui ne couvre qu'une partie d'une
+            // commande ; celle qui la couvre entière se déclare en `access`.
+            canExtra: async (itemId, key) => {
+                const override = (await ctx.itemExtraOverrides(manifest.id)).get(itemId)?.[key];
+                return override ?? extras.canExtra(key);
+            },
             // Le ménage d'un élément supprimé : projections, restrictions, route
             // de notification et liaisons de projets, qu'aucune clé étrangère ne
             // rattache à sa table. Les liaisons tombent chez lui et dans chaque

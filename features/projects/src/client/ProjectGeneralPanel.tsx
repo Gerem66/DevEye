@@ -11,6 +11,7 @@ import {
     SelectInput,
     settingsStyles as shell,
     TextInput,
+    useWorkspacePermissions,
     withSecrecy,
     type ConfirmRequest
 } from 'deveye-sdk-client';
@@ -70,6 +71,11 @@ function draftOf(project: Project): ProjectDraft {
  */
 export default function ProjectGeneralPanel({ scope, canWrite, gone }: SettingsPanelProps) {
     const projectId = scope.kind === 'item' ? Number(scope.itemId) : null;
+    // Le profil et l'archivage relèvent de « Gérer les projets », pas de la
+    // seule écriture : c'est l'existence du projet qu'on touche ici.
+    const permissions = useWorkspacePermissions();
+    const canManage =
+        canWrite && projectId !== null && permissions.canExtra('projects', 'manageProjects', String(projectId));
     const [project, setProject] = useState<Project | null>(null);
     const [draft, setDraft] = useState<ProjectDraft | null>(null);
     const [tagKind, setTagKind] = useState<ProjectTag['kind']>('tech');
@@ -173,7 +179,7 @@ export default function ProjectGeneralPanel({ scope, canWrite, gone }: SettingsP
         return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
     }
 
-    const editable = canWrite && !busy;
+    const editable = canManage && !busy;
     const name = project.title || 'Sans titre';
 
     return (
@@ -323,13 +329,14 @@ export default function ProjectGeneralPanel({ scope, canWrite, gone }: SettingsP
                 )}
             </div>
 
-            {canWrite ? (
+            {canManage ? (
                 <div className={shell.sectionActions}>
                     <SaveButton onSave={save} disabled={busy || !draft.title.trim()} />
                 </div>
             ) : (
                 <ReadOnlyNotice>
-                    Votre rôle ne permet pas de modifier un projet : cela relève de l’écriture sur Projets.
+                    Votre rôle ne permet pas de modifier un projet : cela relève de la permission « Gérer les projets »
+                    sur Projets.
                 </ReadOnlyNotice>
             )}
 
@@ -344,7 +351,7 @@ export default function ProjectGeneralPanel({ scope, canWrite, gone }: SettingsP
 
             {/* Réversible d'un clic depuis les archives : une confirmation au
                 ton ordinaire, pas celui d'une suppression. */}
-            {canWrite && !project.archived && (
+            {canManage && !project.archived && (
                 <div className={shell.field}>
                     <span className={shell.sectionLabel}>Archiver ce projet</span>
                     <span className={shell.fieldHint}>

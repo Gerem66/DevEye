@@ -2,7 +2,7 @@ import { projectDatabaseLink, projectDatabaseList, projectDatabaseUnlink } from 
 import { DATABASE_ITEMS_PROVIDER, type DatabaseItemsProvider } from '@deveye/types/sdk';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
-import { assertAtHome, linkLabels, loadProject, WRITE, type Ctx } from './_shared';
+import { assertAtHome, linkLabels, LINKS, loadProject, type Ctx } from './_shared';
 
 /**
  * Le pointeur d'un projet vers des bases de données, même forme que `repoLink.ts` :
@@ -24,7 +24,7 @@ export const projectDatabaseListFeature = defineSdkFeature({
 export const projectDatabaseLinkFeature = defineSdkFeature({
     ...projectDatabaseLink,
     mutates: ['projects', 'database'],
-    access: WRITE,
+    access: LINKS,
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'relier une base de données');
@@ -56,7 +56,7 @@ export const projectDatabaseLinkFeature = defineSdkFeature({
 export const projectDatabaseUnlinkFeature = defineSdkFeature({
     ...projectDatabaseUnlink,
     mutates: ['projects', 'database'],
-    access: WRITE,
+    access: LINKS,
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'délier une base de données');

@@ -22,9 +22,11 @@ import {
     encryptColumn,
     isMember,
     loadProject,
+    MANAGE,
     priorityToDb,
     projectCipher,
     recordEvent,
+    TASKS,
     toCard,
     toColumn,
     WRITE,
@@ -67,6 +69,27 @@ export async function loadCard(
     if (!card) throw new FeatureError('not_found', 'Carte introuvable');
     const project = await loadProject(ctx, card.project_id, level);
     return { card, project };
+}
+
+/**
+ * Les dates d'une carte relèvent de la planification, que `cardUpdate` ne peut
+ * pas exiger d'emblée : elle écrit un brouillon entier, dont les dates ne sont
+ * qu'un champ. La garde vit donc ici, où la carte visée est connue, et laisse
+ * chacun dater la sienne : celle qu'il porte, ou celle qu'il a écrite et que
+ * personne n'a prise. Une carte qu'on crée se date donc librement, et cesse de
+ * se replanifier dès qu'elle passe à quelqu'un d'autre.
+ */
+async function assertDatable(
+    ctx: Ctx,
+    project: ProjectRow,
+    card: { assigneeUserId: number | null; authorUserId: number | null },
+    dated: boolean
+): Promise<void> {
+    if (!dated) return;
+    const mine =
+        card.assigneeUserId === ctx.userId || (card.assigneeUserId === null && card.authorUserId === ctx.userId);
+    if (mine || (await ctx.items.canExtra(String(project.id), 'plan'))) return;
+    throw new FeatureError('forbidden', 'La planification ne vous est pas confiée sur ce projet.');
 }
 
 /**
@@ -121,7 +144,7 @@ export const projectBoardFeature = defineSdkFeature({
 export const projectColumnAddFeature = defineSdkFeature({
     ...projectColumnAdd,
     mutates: true,
-    access: WRITE,
+    access: MANAGE,
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         await assertProjectUnlocked(ctx, project);
@@ -147,7 +170,7 @@ export const projectColumnAddFeature = defineSdkFeature({
 export const projectColumnUpdateFeature = defineSdkFeature({
     ...projectColumnUpdate,
     mutates: true,
-    access: WRITE,
+    access: MANAGE,
     handler: async (ctx: Ctx, input) => {
         const { project } = await loadColumn(ctx, input.columnId, 'write');
         await assertProjectUnlocked(ctx, project);
@@ -167,7 +190,7 @@ export const projectColumnUpdateFeature = defineSdkFeature({
 export const projectColumnRemoveFeature = defineSdkFeature({
     ...projectColumnRemove,
     mutates: true,
-    access: WRITE,
+    access: MANAGE,
     handler: async (ctx: Ctx, input) => {
         const { project } = await loadColumn(ctx, input.columnId, 'write');
         await assertProjectUnlocked(ctx, project);
@@ -192,7 +215,7 @@ export const projectColumnRemoveFeature = defineSdkFeature({
 export const projectColumnReorderFeature = defineSdkFeature({
     ...projectColumnReorder,
     mutates: true,
-    access: WRITE,
+    access: MANAGE,
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         // Ne touche à aucun corps chiffré : marche session verrouillée.
@@ -204,7 +227,7 @@ export const projectColumnReorderFeature = defineSdkFeature({
 export const projectCardAddFeature = defineSdkFeature({
     ...projectCardAdd,
     mutates: true,
-    access: WRITE,
+    access: TASKS,
     handler: async (ctx: Ctx, input) => {
         const { column, project } = await loadColumn(ctx, input.columnId, 'write');
         if (column.project_id !== input.projectId) {
@@ -236,9 +259,15 @@ export const projectCardUpdateFeature = defineSdkFeature({
     mutates: true,
     access: WRITE,
     handler: async (ctx: Ctx, input) => {
-        const { project } = await loadCard(ctx, input.cardId, 'write');
+        const { card, project } = await loadCard(ctx, input.cardId, 'write');
         await assertProjectUnlocked(ctx, project);
         await assertAssignee(ctx, input.card.assigneeUserId);
+        await assertDatable(
+            ctx,
+            project,
+            { assigneeUserId: card.assignee_user_id, authorUserId: card.author_user_id },
+            input.card.startDate !== card.start_date || input.card.dueDate !== card.due_date
+        );
 
         const cipher = await projectCipher(ctx, project);
         const payload = toStoredCard(input.card);
@@ -283,7 +312,7 @@ export const projectCardMoveFeature = defineSdkFeature({
 export const projectCardArchiveFeature = defineSdkFeature({
     ...projectCardArchive,
     mutates: true,
-    access: WRITE,
+    access: TASKS,
     handler: async (ctx: Ctx, input) => {
         const { card, project } = await loadCard(ctx, input.cardId, 'write');
         await assertProjectUnlocked(ctx, project);
@@ -311,7 +340,7 @@ export const projectCardArchiveFeature = defineSdkFeature({
 export const projectCardRestoreFeature = defineSdkFeature({
     ...projectCardRestore,
     mutates: true,
-    access: WRITE,
+    access: TASKS,
     handler: async (ctx: Ctx, input) => {
         const { card, project } = await loadCard(ctx, input.cardId, 'write');
         await assertProjectUnlocked(ctx, project);

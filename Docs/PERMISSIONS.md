@@ -72,11 +72,22 @@ un **verbe** d'une fonctionnalité (`deploy.trigger`) reste couvert par
 recevoir son propre champ.
 
 Les `extraPermissions` du manifest sont la forme générale de ce champ, ouverte
-aux modules : quatre au plus par fonctionnalité (`MAX_EXTRA_PERMISSIONS`, pour
-que l'éditeur de rôles reste lisible), en booléen ou en choix borné, absentes =
+aux modules : dix au plus par fonctionnalité (`MAX_EXTRA_PERMISSIONS`, pour que
+l'éditeur de rôles reste lisible), en booléen ou en choix borné, absentes =
 refusées. Elles obéissent à la même règle de tri, et ne rouvrent pas l'étage
 retiré : Météo et Veille CVE y mettent « gérer les clés d'API », une ressource
 d'espace qu'on ne veut pas livrer avec l'écriture.
+
+Projets en porte cinq, qui découpent son écriture en surfaces du projet :
+« gérer les projets » (en ouvrir et en fermer, tenir les colonnes), « créer et
+archiver des tâches », « modifier la planification » (la frise, ses jalons, ses
+dépendances), « gérer les liaisons » (ce qui rattache le projet à un dépôt, une
+cible, une base) et « participer à la discussion ». Ce que `write` seul laisse,
+c'est participer au tableau : retoucher une tâche et la faire changer de
+colonne. La planification connaît une exception, tenue dans le handler faute de
+pouvoir se déclarer : les dates d'une carte voyagent dans un brouillon entier,
+et chacun date celle qui lui revient (assignée à lui, ou écrite par lui et
+libre) sans tenir le droit de planifier le projet.
 
 Appareils en est le cas le plus large : le terminal, l'explorateur de fichiers,
 les journaux et les commandes système sont quatre **surfaces de la machine**,
@@ -96,6 +107,14 @@ dispatcheur l'applique après le niveau, en le résolvant contre les specs du
 manifest : une clé que le manifest ne déclare pas ne peut jamais valoir
 « accordée ». Le contrôle de démarrage refuse un `extras` sans `feature`, faute
 de quoi le dispatcheur ne saurait pas où chercher la spec et laisserait passer.
+Les commandes des modules passent par la même porte : `moduleFeatureHandlers`
+reporte leur `extras` dans la garde native, et c'est ce report qui les rend
+surchargeables par élément (§5) : sans lui, la vérification se ferait à
+l'échelle de la fonctionnalité seule et la surcharge d'un élément resterait
+lettre morte. En contrepartie, la garde déclarée se contente ici aussi de
+« accordé par au moins un élément », et c'est `ctx.items.assert` qui tranche
+pour l'élément visé : une commande qui n'en vise aucun (poser une clé d'API)
+garde donc sa vérification entière dans son handler.
 
 Côté interface, le menu « Fonctions » d'un appareil **ne varie jamais** : rien
 n'y est masqué, et ce qui empêche un geste se lit sur lui, par un glyphe à

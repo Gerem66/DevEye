@@ -7,6 +7,7 @@ import { createTestContext } from '@deveye/types/sdk/testing';
 
 import { cveGet, cveNews, cveSearch, cveSetFavorite, cveSetKey } from '../contracts/commands';
 import type { CveEntryWithFavoriteRow } from '../contracts/domain';
+import { manifest } from '../manifest';
 
 import { cveHandlers, setNvdClient } from './handlers';
 import type { NvdClient } from './nvd';
@@ -278,7 +279,9 @@ describe('cve.setFavorite', () => {
 
 describe('cve.setKey', () => {
     it('pose puis efface la clé sans jamais la rendre', async () => {
-        const ctx = createTestContext({ repo: fakeRepo() });
+        // Le manifest, sans quoi aucune permission propre n'est déclarée et la
+        // garde de `manageKeys` refuse même le propriétaire.
+        const ctx = createTestContext({ repo: fakeRepo(), manifest });
 
         const set = await handlerFor(cveSetKey)(ctx, { provider: 'nvd', key: 'secret-du-nvd' });
         assert.deepEqual(set.keys, [{ provider: 'nvd', hasKey: true }]);
@@ -286,5 +289,12 @@ describe('cve.setKey', () => {
 
         const cleared = await handlerFor(cveSetKey)(ctx, { provider: 'nvd', key: '' });
         assert.deepEqual(cleared.keys, [{ provider: 'nvd', hasKey: false }]);
+    });
+
+    it('refuse sans la permission « Gérer les clés d’API », propriétaire ou non', async () => {
+        const ctx = createTestContext({ repo: fakeRepo(), manifest, isOwner: false });
+        await assert.rejects(handlerFor(cveSetKey)(ctx, { provider: 'nvd', key: 'secret-du-nvd' }), {
+            code: 'forbidden'
+        });
     });
 });

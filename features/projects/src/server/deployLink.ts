@@ -2,7 +2,7 @@ import { projectDeployLink, projectDeployList, projectDeployUnlink } from '../co
 import { DEPLOY_ITEMS_PROVIDER, type DeployItemsProvider } from '@deveye/types/sdk';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
-import { assertAtHome, linkLabels, loadProject, recordEvent, WRITE, type Ctx } from './_shared';
+import { assertAtHome, linkLabels, LINKS, loadProject, recordEvent, type Ctx } from './_shared';
 
 /**
  * Le pointeur d'un projet vers les cibles de déploiement de l'espace, même forme que
@@ -26,7 +26,7 @@ export const projectDeployListFeature = defineSdkFeature({
 export const projectDeployLinkFeature = defineSdkFeature({
     ...projectDeployLink,
     mutates: ['projects', 'deploy'],
-    access: WRITE,
+    access: LINKS,
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'relier une cible de déploiement');
@@ -63,7 +63,7 @@ export const projectDeployLinkFeature = defineSdkFeature({
 export const projectDeployUnlinkFeature = defineSdkFeature({
     ...projectDeployUnlink,
     mutates: ['projects', 'deploy'],
-    access: WRITE,
+    access: LINKS,
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'délier une cible de déploiement');

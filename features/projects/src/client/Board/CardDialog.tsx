@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Button, Dialog, SelectInput, TextInput, useLiveOutlines, useLiveSegment } from 'deveye-sdk-client';
 import type { MinimalUser } from '@deveye/types';
 import { dateInputToSeconds, dateInputValue, PRIORITY_LABELS } from '../api';
+import { missingPermission, NO_WRITE } from '../rights';
 import {
     PROJECT_CARD_TITLE_MAX_LENGTH,
     PROJECT_CHECKLIST_LABEL_MAX_LENGTH,
@@ -27,6 +28,12 @@ interface CardDialogProps {
     /** L'appelant, pour ne pas s'annoncer soi-même « en train d'écrire ». */
     meUserId: number;
     canWrite: boolean;
+    /** Poser les dates et le jalon de cette carte : le droit de planifier, ou la carte est sienne. */
+    canDate: boolean;
+    /** Tenir les jalons et les dépendances du projet. */
+    canPlan: boolean;
+    /** Écrire dans le fil de la carte. */
+    canChat: boolean;
     /** Les autres cartes vivantes du projet, candidates aux dépendances. */
     siblings: ProjectCard[];
     milestones: ProjectMilestone[];
@@ -95,6 +102,9 @@ export function CardDialog({
     members,
     meUserId,
     canWrite,
+    canDate,
+    canPlan,
+    canChat,
     siblings,
     milestones,
     deps,
@@ -270,7 +280,8 @@ export function CardDialog({
                     <span className={styles.label}>Jalon</span>
                     <SelectInput
                         value={milestoneId === null ? '' : String(milestoneId)}
-                        disabled={!canWrite}
+                        disabled={!canPlan}
+                        title={canPlan ? undefined : missingPermission('plan')}
                         onChange={(e) => setMilestoneId(e.target.value ? Number(e.target.value) : null)}
                     >
                         <option value=''>Aucun</option>
@@ -285,7 +296,7 @@ export function CardDialog({
                 {/* Ce qui doit être terminé avant que la tâche puisse démarrer. Le
                     bloc ne se rend que s'il a quelque chose à montrer ou à faire
                     faire ; le serveur refuse les cycles. */}
-                {(blockerIds.length > 0 || blocking.length > 0 || (canWrite && candidates.length > 0)) && (
+                {(blockerIds.length > 0 || blocking.length > 0 || (canPlan && candidates.length > 0)) && (
                     <div className={styles.field}>
                         <span className={styles.label}>Dépend de</span>
                         {blockerIds.length > 0 && (
@@ -293,7 +304,7 @@ export function CardDialog({
                                 {blockerIds.map((id) => (
                                     <li key={id} className={styles.tag}>
                                         {titleOf(id)}
-                                        {canWrite && (
+                                        {canPlan && (
                                             <button
                                                 type='button'
                                                 className={styles.tagRemove}
@@ -309,7 +320,7 @@ export function CardDialog({
                         )}
                         {/* Choisir une tâche l'ajoute : le choix est l'intention.
                             Le sélecteur revient aussitôt sur son intitulé. */}
-                        {canWrite && candidates.length > 0 && (
+                        {canPlan && candidates.length > 0 && (
                             <SelectInput
                                 value=''
                                 onChange={(e) =>
@@ -377,6 +388,8 @@ export function CardDialog({
                     <TextInput
                         type='date'
                         value={dateInputValue(draft.startDate)}
+                        disabled={!canDate}
+                        title={canDate ? undefined : missingPermission('plan')}
                         onChange={(e) => patch({ startDate: dateInputToSeconds(e.target.value) })}
                     />
                 </label>
@@ -385,6 +398,8 @@ export function CardDialog({
                     <TextInput
                         type='date'
                         value={dateInputValue(draft.dueDate)}
+                        disabled={!canDate}
+                        title={canDate ? undefined : missingPermission('plan')}
                         onChange={(e) => patch({ dueDate: dateInputToSeconds(e.target.value) })}
                     />
                 </label>
@@ -513,7 +528,11 @@ export function CardDialog({
                         <Button variant='secondary' onClick={onClose} disabled={busy}>
                             Annuler
                         </Button>
-                        <Button onClick={submit} disabled={busy || !draft.title.trim()}>
+                        <Button
+                            onClick={submit}
+                            disabled={busy || !canWrite || !draft.title.trim()}
+                            title={canWrite ? undefined : NO_WRITE}
+                        >
                             {busy ? 'Enregistrement…' : card ? 'Enregistrer' : 'Créer'}
                         </Button>
                     </>
@@ -587,7 +606,7 @@ export function CardDialog({
                                 className={tab === 'work' ? styles.workRow : styles.tabHidden}
                                 aria-hidden={tab === 'work' ? undefined : true}
                             >
-                                <Chat cardId={card.id} members={members} meUserId={meUserId} canWrite={canWrite} />
+                                <Chat cardId={card.id} members={members} meUserId={meUserId} canWrite={canChat} />
                                 {subtasks}
                             </div>
                         )}

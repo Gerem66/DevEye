@@ -40,7 +40,17 @@ function byHome(a: ProjectSummary, b: ProjectSummary): number {
  */
 export function FeatureProjects(_props: FeatureViewProps) {
     const permissions = useWorkspacePermissions();
-    const canWrite = permissions.canFeature('projects', 'write');
+    /**
+     * Le portefeuille est le seul écran hors d'un projet : ses gestes (créer,
+     * ranger, archiver) relèvent tous de « Gérer les projets », et se lisent à
+     * l'échelle de la fonctionnalité : une surcharge posée sur un projet ne dit
+     * rien de la création du suivant. L'archivage d'une carte, lui, vise un
+     * projet et se lit sur lui.
+     */
+    const canManage = permissions.canFeature('projects', 'write') && permissions.canExtra('projects', 'manageProjects');
+    const canManageOn = (id: number) =>
+        permissions.canFeature('projects', 'write', String(id)) &&
+        permissions.canExtra('projects', 'manageProjects', String(id));
     const workspace = useActiveWorkspace();
     const workspaceId = workspace?.id ?? null;
     /** Un espace partagé n'accepte pas le tier confidentiel (voir `ProjectDialog`). */
@@ -262,7 +272,7 @@ export function FeatureProjects(_props: FeatureViewProps) {
      * dans l'ordre d'archivage, et un ordre manuel n'y survivrait pas à la
      * restauration, qui renvoie en fin de liste.
      */
-    const canReorder = canWrite && !sideView;
+    const canReorder = canManage && !sideView;
 
     // Les projets projetés en sont exclus de bout en bout : pas de poignée,
     // absents de l'ordre envoyé (le serveur le refuse) et de `data-project-card`.
@@ -287,7 +297,6 @@ export function FeatureProjects(_props: FeatureViewProps) {
                 project={opened}
                 members={members}
                 meUserId={me.id}
-                canWrite={canWrite}
                 onBack={() => {
                     setOpened(null);
                     setSelectedId(null);
@@ -340,7 +349,7 @@ export function FeatureProjects(_props: FeatureViewProps) {
                             Archives
                         </Button>
 
-                        {canWrite && (
+                        {canManage && (
                             <Button icon='add' onClick={openCreate}>
                                 Nouveau projet
                             </Button>
@@ -367,7 +376,7 @@ export function FeatureProjects(_props: FeatureViewProps) {
                 <p className={styles.empty}>
                     {showArchived
                         ? 'Aucun projet archivé.'
-                        : `Aucun projet pour l’instant.${canWrite ? ' Créez-en un pour commencer à suivre son avancement.' : ''}`}
+                        : `Aucun projet pour l’instant.${canManage ? ' Créez-en un pour commencer à suivre son avancement.' : ''}`}
                 </p>
             )}
 
@@ -377,7 +386,7 @@ export function FeatureProjects(_props: FeatureViewProps) {
                         <ProjectCard
                             key={summary.project.id}
                             summary={summary}
-                            canWrite={canWrite}
+                            canManage={canManageOn(summary.project.id)}
                             archived={showArchived}
                             outline={outlineFor(String(summary.project.id))}
                             dragging={drag.draggingId === summary.project.id}
@@ -410,7 +419,8 @@ export function FeatureProjects(_props: FeatureViewProps) {
 
 interface ProjectCardProps {
     summary: ProjectSummary;
-    canWrite: boolean;
+    /** Archiver et restaurer ce projet-ci. */
+    canManage: boolean;
     /** La carte est rendue depuis la vue des archives : l'action est un retour. */
     archived: boolean;
     outline: ReturnType<ReturnType<typeof useLiveOutlines>>;
@@ -424,7 +434,7 @@ interface ProjectCardProps {
 
 function ProjectCard({
     summary,
-    canWrite,
+    canManage,
     archived,
     outline,
     dragging,
@@ -554,7 +564,7 @@ function ProjectCard({
 
             {/* Dans les archives, restaurer est le seul geste de l'écran : il
                 reste à découvert sur la carte. */}
-            {canWrite && archived && (
+            {canManage && archived && (
                 <button
                     type='button'
                     className={styles.restore}

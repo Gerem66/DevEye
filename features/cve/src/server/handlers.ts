@@ -180,6 +180,12 @@ export const cveHandlers = [
         access: { level: 'write', extras: ['manageKeys'] },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
+            // La clé est d'espace, aucun élément à viser : la garde déclarée se
+            // contente d'« accordé par au moins un élément », c'est donc ici que
+            // le droit se vérifie entier.
+            if (!ctx.canExtra('manageKeys')) {
+                throw new FeatureError('forbidden', 'La gestion des clés d’API ne vous est pas confiée.');
+            }
             const key = input.key.trim();
             if (key.length === 0) await ctx.store.remove(NVD_KEY_STORE_KEY);
             // Chiffrement 'server' par defaut : le ticker, qui n'a pas de session,

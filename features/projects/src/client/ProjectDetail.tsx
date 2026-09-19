@@ -37,14 +37,14 @@ import { AddFeatureDialog } from './AddFeatureDialog';
 import { ProjectTabs } from './ProjectTabs';
 import { isProjectTabId, type ProjectTabAddKey, type ProjectTabId } from './tabs';
 import { useProjectTabs } from './useProjectTabs';
+import { useProjectRights } from './rights';
 import styles from './style.module.css';
 
 interface ProjectDetailProps {
     project: Project;
     members: readonly MinimalUser[];
-    /** L'appelant : sert au fil de discussion (frappe, mentions). */
+    /** L'appelant : sert au fil de discussion (frappe, mentions) et aux droits. */
     meUserId: number;
-    canWrite: boolean;
     onBack: () => void;
 }
 
@@ -53,10 +53,16 @@ interface ProjectDetailProps {
  * Possède les niveaux `l2` (l'onglet) et `l3` (la carte ouverte) de la présence ;
  * `l1` est au parent, et un niveau n'admet qu'un déclarant.
  */
-export function ProjectDetail({ project, members, meUserId, canWrite, onBack }: ProjectDetailProps) {
+export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDetailProps) {
     const [tab, setTab] = useState<ProjectTabId>('board');
 
-    const tabs = useProjectTabs(project, canWrite);
+    // Les droits se lisent sur CE projet : une surcharge posée sur lui seul
+    // ouvre ou ferme des gestes que le portefeuille, qui ne connaît que le rôle,
+    // ne saurait pas trancher.
+    const rights = useProjectRights(project.id, meUserId);
+    const { canWrite } = rights;
+
+    const tabs = useProjectTabs(project, rights.canLinks);
     /** Le geste que le menu « + » a lancé, tant qu'il n'est pas clos. */
     const [adding, setAdding] = useState<ProjectTabAddKey | null>(null);
 
@@ -484,6 +490,8 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack }: 
                     columns={columns}
                     cards={cards}
                     canWrite={canWrite}
+                    canTasks={rights.canTasks}
+                    canManage={rights.canManage}
                     onCardsMoved={(columnId, cardIds, next) => void onCardsMoved(columnId, cardIds, next)}
                     onCardOpen={(card) => {
                         setDialogError(null);
@@ -510,7 +518,8 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack }: 
                     cards={cards}
                     milestones={milestones}
                     deps={deps}
-                    canWrite={canWrite}
+                    canPlan={rights.canPlan}
+                    canDate={rights.canDate}
                     onCardOpen={(card) => {
                         setDialogError(null);
                         setCardDialog({ card, columnId: card.columnId });
@@ -529,11 +538,11 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack }: 
                 />
             )}
 
-            {loaded && tab === 'git' && <Git project={project} canWrite={canWrite} />}
-            {loaded && tab === 'database' && <Databases project={project} canWrite={canWrite} />}
-            {loaded && tab === 'audience' && <Audience project={project} canWrite={canWrite} />}
+            {loaded && tab === 'git' && <Git project={project} canWrite={rights.canLinks} />}
+            {loaded && tab === 'database' && <Databases project={project} canWrite={rights.canLinks} />}
+            {loaded && tab === 'audience' && <Audience project={project} canWrite={rights.canLinks} />}
 
-            {loaded && tab === 'deploy' && <Deploy project={project} canWrite={canWrite} />}
+            {loaded && tab === 'deploy' && <Deploy project={project} canWrite={rights.canLinks} />}
 
             {loaded && tab === 'history' && (
                 <History
@@ -559,7 +568,7 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack }: 
             <ArchivedCardDialog
                 open={archivedView !== null}
                 card={archivedView}
-                canWrite={canWrite}
+                canWrite={rights.canTasks}
                 busy={busy}
                 onClose={() => setArchivedView(null)}
                 onRestore={() => void restoreArchivedCard()}
@@ -568,12 +577,15 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack }: 
             <MilestoneDialog
                 open={milestoneDialog !== null}
                 milestone={milestoneDialog?.milestone ?? null}
+                canPlan={rights.canPlan}
                 busy={busy}
                 error={dialogError}
                 onClose={() => setMilestoneDialog(null)}
                 onSubmit={(draft) => void submitMilestone(draft)}
-                onSetReached={milestoneDialog?.milestone && canWrite ? (r) => void setMilestoneReached(r) : undefined}
-                onRemove={milestoneDialog?.milestone && canWrite ? () => void removeMilestone() : undefined}
+                onSetReached={
+                    milestoneDialog?.milestone && rights.canPlan ? (r) => void setMilestoneReached(r) : undefined
+                }
+                onRemove={milestoneDialog?.milestone && rights.canPlan ? () => void removeMilestone() : undefined}
             />
 
             <CardDialog
@@ -582,6 +594,9 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack }: 
                 members={members}
                 meUserId={meUserId}
                 canWrite={canWrite}
+                canDate={cardDialog?.card ? rights.canDate(cardDialog.card) : rights.canWrite}
+                canPlan={rights.canPlan}
+                canChat={rights.canChat}
                 siblings={cards}
                 milestones={milestones}
                 deps={deps}
@@ -592,7 +607,7 @@ export function ProjectDetail({ project, members, meUserId, canWrite, onBack }: 
                 onChecklistChange={(checklist) => {
                     if (cardDialog?.card) void patchCard(cardDialog.card, { checklist }, 'L’enregistrement a échoué.');
                 }}
-                onArchive={cardDialog?.card ? () => void archiveCard() : undefined}
+                onArchive={cardDialog?.card && rights.canTasks ? () => void archiveCard() : undefined}
             />
 
             <ColumnDialog

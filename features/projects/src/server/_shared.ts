@@ -22,6 +22,18 @@ export type Ctx = SdkFeatureContext<ProjectsRepo>;
 /** La lecture est le défaut du SDK : seules les écritures déclarent leur niveau. */
 export const WRITE = { level: 'write' } as const;
 
+/**
+ * Les cinq surfaces que `write` ne suffit plus à ouvrir (voir le manifest).
+ * Déclarées ici et non éprouvées dans les handlers : le dispatcheur les
+ * applique, et `ctx.items.assert` les rapporte ensuite au projet visé, si bien
+ * qu'un droit peut se confier sur un seul projet.
+ */
+export const MANAGE = { level: 'write', extras: ['manageProjects'] } as const;
+export const TASKS = { level: 'write', extras: ['tasks'] } as const;
+export const PLAN = { level: 'write', extras: ['plan'] } as const;
+export const LINKS = { level: 'write', extras: ['links'] } as const;
+export const CHAT = { level: 'write', extras: ['chat'] } as const;
+
 /** Le niveau qu'une commande exige sur le projet qu'elle vise. */
 export type ItemLevel = 'read' | 'write';
 

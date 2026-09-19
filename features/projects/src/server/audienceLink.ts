@@ -2,7 +2,7 @@ import { projectAudienceLink, projectAudienceList, projectAudienceUnlink } from 
 import { AUDIENCE_ITEMS_PROVIDER, type AudienceItemsProvider } from '@deveye/types/sdk';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
-import { assertAtHome, linkLabels, loadProject, WRITE, type Ctx } from './_shared';
+import { assertAtHome, linkLabels, LINKS, loadProject, type Ctx } from './_shared';
 
 /**
  * Le pointeur d'un projet vers des sites suivis, même forme que `repoLink.ts` : le
@@ -24,7 +24,7 @@ export const projectAudienceListFeature = defineSdkFeature({
 export const projectAudienceLinkFeature = defineSdkFeature({
     ...projectAudienceLink,
     mutates: ['projects', 'audience'],
-    access: WRITE,
+    access: LINKS,
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'relier un site suivi');
@@ -53,7 +53,7 @@ export const projectAudienceLinkFeature = defineSdkFeature({
 export const projectAudienceUnlinkFeature = defineSdkFeature({
     ...projectAudienceUnlink,
     mutates: ['projects', 'audience'],
-    access: WRITE,
+    access: LINKS,
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'délier un site suivi');

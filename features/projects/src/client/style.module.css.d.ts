@@ -4,10 +4,12 @@ declare const styles: {
     readonly addRow: string;
     readonly bar: string;
     readonly barDraggable: string;
+    readonly barGhost: string;
     readonly barGripEnd: string;
     readonly barGripStart: string;
     readonly barLabel: string;
     readonly barLate: string;
+    readonly barLeaving: string;
     readonly barPoint: string;
     readonly block: string;
     readonly blockHead: string;
@@ -156,6 +158,8 @@ declare const styles: {
     readonly tabPanelInner: string;
     readonly tabs: string;
     readonly tag: string;
+    readonly tagDraggable: string;
+    readonly tagDragging: string;
     readonly tagRemove: string;
     readonly tagRow: string;
     readonly tags: string;
@@ -176,6 +180,7 @@ declare const styles: {
     readonly typing: string;
     readonly undated: string;
     readonly undatedList: string;
+    readonly undatedOver: string;
     readonly unread: string;
     readonly uptimeDot: string;
     readonly uptimeLinks: string;

@@ -1,28 +1,59 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import {
+    useCallback,
+    useEffect,
+    useRef,
+    useState,
+    type PointerEvent as ReactPointerEvent,
+    type RefObject
+} from 'react';
 import type { ProjectCard } from '../../contracts/domain';
+import { startOfDay } from './scale';
 
 /**
- * Déplacer les dates d'une carte à la souris : le bord gauche déplace le début,
- * le bord droit l'échéance, le milieu les deux.
+ * Poser les dates d'une carte à la souris. Deux gestes, un seul mécanisme :
+ * une barre déjà sur la frise se déplace ou s'étire, et se ramène dans la zone
+ * des cartes sans date pour perdre les siennes ; une pastille de cette zone se
+ * dépose sur un jour, qui devient à la fois son début et son échéance.
  *
  * Rien n'est persisté avant le relâchement, seul un aperçu local bouge : écrire
  * à chaque pixel enverrait cinquante commandes par déplacement, et la carte
  * sauterait de ligne sous le pointeur.
+ *
+ * Pointer Events et non l'API `draggable` du HTML5, que l'application refuse
+ * partout (voir `client/src/nativeDrag.ts`).
  */
 
-/** Ce qu'on tient : une extrémité, ou la barre entière. */
+/** Ce qu'on tient d'une barre : une extrémité, ou la barre entière. */
 export type DragMode = 'start' | 'due' | 'move';
 
 /** Les dates telles qu'elles seront si on relâche maintenant. */
 export interface DatePreview {
-    cardId: number;
     startDate: number | null;
     dueDate: number | null;
+}
+
+/** Le geste en cours, tel que la frise le peint. */
+export interface DragView {
+    card: ProjectCard;
+    /** Une pastille en vol, par opposition à une barre déjà posée. */
+    placing: boolean;
+    /** Ce que le relâchement écrirait ; `null` quand il n'écrirait rien. */
+    next: DatePreview | null;
+    /** Le pointeur est sur la zone des cartes sans date. */
+    overDrop: boolean;
 }
 
 interface Options {
     /** Pixels par jour : c'est ce qui convertit un déplacement en durée. */
     dayWidth: number;
+    /** Largeur de la fenêtre, en jours : elle borne le jour visé. */
+    days: number;
+    /** Minuit du premier jour de la fenêtre, en ms. */
+    rangeMin: number;
+    /** La boîte défilante de la frise : elle dit où un dépôt compte, et d'où partent les abscisses. */
+    scrollRef: RefObject<HTMLElement | null>;
+    /** La zone des cartes sans date : y lâcher une barre lui retire ses dates. */
+    dropRef: RefObject<HTMLElement | null>;
     /** Persiste le geste. Appelé une fois, au relâchement, jamais pendant. */
     onCommit: (card: ProjectCard, startDate: number | null, dueDate: number | null) => void;
 }
@@ -52,19 +83,18 @@ function applyDrag(card: ProjectCard, mode: DragMode, days: number): DatePreview
     // Une seule date connue : rien à étirer, l'unique repère se déplace.
     if (startDate === null || dueDate === null) {
         return {
-            cardId: card.id,
             startDate: startDate === null ? null : shiftDays(startDate, days),
             dueDate: dueDate === null ? null : shiftDays(dueDate, days)
         };
     }
 
     if (mode === 'move') {
-        return { cardId: card.id, startDate: shiftDays(startDate, days), dueDate: shiftDays(dueDate, days) };
+        return { startDate: shiftDays(startDate, days), dueDate: shiftDays(dueDate, days) };
     }
 
     const moved = mode === 'start' ? shiftDays(startDate, days) : shiftDays(dueDate, days);
     const anchor = mode === 'start' ? dueDate : startDate;
-    return { cardId: card.id, startDate: Math.min(moved, anchor), dueDate: Math.max(moved, anchor) };
+    return { startDate: Math.min(moved, anchor), dueDate: Math.max(moved, anchor) };
 }
 
 /**
@@ -80,22 +110,47 @@ export function modeAt(rect: DOMRect, clientX: number, resizable: boolean): Drag
     return 'move';
 }
 
-export function useDateDrag({ dayWidth, onCommit }: Options) {
-    const [preview, setPreview] = useState<DatePreview | null>(null);
+/** Deux aperçus écriraient-ils la même chose ? Ce qui évite un rendu par pixel. */
+function samePreview(a: DatePreview | null, b: DatePreview | null): boolean {
+    if (a === null || b === null) return a === b;
+    return a.startDate === b.startDate && a.dueDate === b.dueDate;
+}
+
+/** Le pointeur est-il dans cette boîte ? */
+function inside(el: HTMLElement | null, clientX: number, clientY: number): boolean {
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
+}
+
+export function useDateDrag({ dayWidth, days, rangeMin, scrollRef, dropRef, onCommit }: Options) {
+    const [view, setView] = useState<DragView | null>(null);
 
     /** Le geste en cours. Un `ref` : les écouteurs le lisent hors du rendu. */
-    const press = useRef<{ card: ProjectCard; mode: DragMode; pointerId: number; x: number } | null>(null);
+    const press = useRef<{
+        card: ProjectCard;
+        /** Absent : c'est une pastille qu'on dépose, elle n'a pas de bord à saisir. */
+        mode: DragMode | null;
+        pointerId: number;
+        x: number;
+        y: number;
+    } | null>(null);
     /** Le seuil a été franchi : le relâchement ne doit plus ouvrir la carte. */
     const moved = useRef(false);
+    /**
+     * La carte dont le prochain clic est à avaler. Nommée, et non un simple
+     * booléen : une pastille déposée quitte la liste avant que son clic
+     * n'arrive, et le drapeau resté levé aurait mangé le clic suivant, sur une
+     * tout autre carte.
+     */
+    const handled = useRef<number | null>(null);
     /** L'aperçu courant, pour que le relâchement le persiste sans re-rendu. */
-    const latest = useRef<DatePreview | null>(null);
+    const latest = useRef<DragView | null>(null);
 
     // Les valeurs changeantes passent par des `ref` : les cinq écouteurs sont
     // créés une fois pour toutes, comme dans `dragReorder`.
-    const dayWidthRef = useRef(dayWidth);
-    dayWidthRef.current = dayWidth;
-    const onCommitRef = useRef(onCommit);
-    onCommitRef.current = onCommit;
+    const opts = useRef({ dayWidth, days, rangeMin, scrollRef, dropRef, onCommit });
+    opts.current = { dayWidth, days, rangeMin, scrollRef, dropRef, onCommit };
 
     const handlers = useRef<{
         move: (e: PointerEvent) => void;
@@ -118,7 +173,7 @@ export function useDateDrag({ dayWidth, onCommit }: Options) {
         document.body.style.removeProperty('user-select');
         press.current = null;
         latest.current = null;
-        setPreview(null);
+        setView(null);
     }, []);
 
     const endRef = useRef(end);
@@ -129,28 +184,54 @@ export function useDateDrag({ dayWidth, onCommit }: Options) {
             move: (e) => {
                 const p = press.current;
                 if (!p || e.pointerId !== p.pointerId) return;
+                const { dayWidth: width, days: span, rangeMin: origin, scrollRef: box, dropRef: drop } = opts.current;
                 const dx = e.clientX - p.x;
                 if (!moved.current) {
-                    if (Math.abs(dx) < DRAG_THRESHOLD) return;
+                    // Une barre ne part qu'à l'horizontale ; une pastille vient
+                    // d'en dessous de la frise, son geste est d'abord vertical.
+                    const travel = p.mode === null ? Math.hypot(dx, e.clientY - p.y) : Math.abs(dx);
+                    if (travel < DRAG_THRESHOLD) return;
                     moved.current = true;
-                    document.body.style.cursor = p.mode === 'move' ? 'grabbing' : 'ew-resize';
+                    document.body.style.cursor = p.mode === 'move' || p.mode === null ? 'grabbing' : 'ew-resize';
                     document.body.style.userSelect = 'none';
                 }
-                const next = applyDrag(p.card, p.mode, Math.round(dx / dayWidthRef.current));
-                latest.current = next;
-                setPreview(next);
+
+                const overDrop = inside(drop.current, e.clientX, e.clientY);
+                const el = box.current;
+                let next: DatePreview | null = null;
+                if (p.mode !== null) {
+                    next = overDrop
+                        ? { startDate: null, dueDate: null }
+                        : applyDrag(p.card, p.mode, Math.round(dx / width));
+                } else if (el && inside(el, e.clientX, e.clientY)) {
+                    // Le jour visé se lit en absolu : la pastille ne vient de
+                    // nulle part sur l'axe, un delta n'aurait rien à décaler.
+                    // `clientLeft` retire la bordure, `scrollLeft` remet la
+                    // frise à son origine quand elle est plus large que sa boîte.
+                    const left = el.getBoundingClientRect().left + el.clientLeft - el.scrollLeft;
+                    const day = Math.min(Math.max(Math.floor((e.clientX - left) / width), 0), span - 1);
+                    const at = shiftDays(Math.floor(startOfDay(origin) / 1000), day);
+                    next = { startDate: at, dueDate: at };
+                }
+
+                const held = latest.current;
+                if (held && held.overDrop === overDrop && samePreview(held.next, next)) return;
+                const shown: DragView = { card: p.card, placing: p.mode === null, next, overDrop };
+                latest.current = shown;
+                setView(shown);
             },
             up: (e) => {
                 const p = press.current;
                 if (!p || e.pointerId !== p.pointerId) return;
                 const result = moved.current ? latest.current : null;
                 const card = p.card;
+                if (moved.current) handled.current = card.id;
                 endRef.current();
-                // Rien n'a bougé d'un jour entier : inutile de réécrire les
-                // mêmes dates, le serveur n'apprendrait rien.
-                if (!result) return;
-                if (result.startDate === card.startDate && result.dueDate === card.dueDate) return;
-                onCommitRef.current(card, result.startDate, result.dueDate);
+                // Rien n'a bougé d'un jour entier, ou le lâcher tombe hors de
+                // la frise : inutile de réécrire les mêmes dates.
+                if (!result?.next) return;
+                if (result.next.startDate === card.startDate && result.next.dueDate === card.dueDate) return;
+                opts.current.onCommit(card, result.next.startDate, result.next.dueDate);
             },
             cancel: (e) => {
                 if (press.current?.pointerId !== e.pointerId) return;
@@ -168,12 +249,13 @@ export function useDateDrag({ dayWidth, onCommit }: Options) {
     // d'onglet, popup refermée en plein glissé).
     useEffect(() => () => endRef.current(), []);
 
-    const onBarPointerDown = useCallback((e: ReactPointerEvent, card: ProjectCard, mode: DragMode) => {
+    const start = useCallback((e: ReactPointerEvent, card: ProjectCard, mode: DragMode | null) => {
         if (e.button !== 0) return;
         const h = handlers.current;
         if (!h) return;
         moved.current = false;
-        press.current = { card, mode, pointerId: e.pointerId, x: e.clientX };
+        handled.current = null;
+        press.current = { card, mode, pointerId: e.pointerId, x: e.clientX, y: e.clientY };
         window.addEventListener('pointermove', h.move);
         window.addEventListener('pointerup', h.up);
         window.addEventListener('pointercancel', h.cancel);
@@ -181,12 +263,18 @@ export function useDateDrag({ dayWidth, onCommit }: Options) {
         window.addEventListener('keydown', h.keydown);
     }, []);
 
+    const onBarPointerDown = useCallback(
+        (e: ReactPointerEvent, card: ProjectCard, mode: DragMode) => start(e, card, mode),
+        [start]
+    );
+    const onTagPointerDown = useCallback((e: ReactPointerEvent, card: ProjectCard) => start(e, card, null), [start]);
+
     /** Le clic qui suit un glissé n'est pas un clic : il n'ouvre pas la carte. */
-    const consumeClick = useCallback(() => {
-        if (!moved.current) return false;
-        moved.current = false;
+    const consumeClick = useCallback((cardId: number) => {
+        if (handled.current !== cardId) return false;
+        handled.current = null;
         return true;
     }, []);
 
-    return { preview, onBarPointerDown, consumeClick };
+    return { view, onBarPointerDown, onTagPointerDown, consumeClick };
 }

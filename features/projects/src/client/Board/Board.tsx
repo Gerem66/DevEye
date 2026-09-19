@@ -34,7 +34,12 @@ import styles from '../style.module.css';
 interface BoardProps {
     columns: ProjectColumn[];
     cards: ProjectCard[];
+    /** Déplacer une carte d'une colonne à l'autre, et l'ouvrir pour la retoucher. */
     canWrite: boolean;
+    /** Créer une tâche. */
+    canTasks: boolean;
+    /** Tenir les colonnes. */
+    canManage: boolean;
     /** Applique un nouvel ordre localement (optimiste) puis le persiste. */
     onCardsMoved: (columnId: number, cardIds: number[], next: ProjectCard[]) => void;
     onCardOpen: (card: ProjectCard) => void;
@@ -56,6 +61,8 @@ export function Board({
     columns,
     cards,
     canWrite,
+    canTasks,
+    canManage,
     onCardsMoved,
     onCardOpen,
     onCardCreate,
@@ -71,7 +78,7 @@ export function Board({
 
     // Le tableau réclame à la popup la largeur exacte de ses colonnes ; la
     // demande est relâchée au démontage, donc en quittant l'onglet.
-    useRequestPopupWidth(boardNaturalWidth(columns.length, canWrite));
+    useRequestPopupWidth(boardNaturalWidth(columns.length, canManage));
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -195,6 +202,8 @@ export function Board({
                         column={column}
                         cards={byColumn.get(column.id) ?? []}
                         canWrite={canWrite}
+                        canTasks={canTasks}
+                        canManage={canManage}
                         first={index === 0}
                         last={index === columns.length - 1}
                         outlineFor={outlineFor}
@@ -204,7 +213,7 @@ export function Board({
                         onMove={onColumnMove}
                     />
                 ))}
-                {canWrite && (
+                {canManage && (
                     <button type='button' className={styles.addColumn} onClick={onColumnCreate}>
                         <span className='icon icon-add' /> Colonne
                     </button>
@@ -240,6 +249,8 @@ interface ColumnProps {
     column: ProjectColumn;
     cards: ProjectCard[];
     canWrite: boolean;
+    canTasks: boolean;
+    canManage: boolean;
     first: boolean;
     last: boolean;
     outlineFor: (value: string | null) => LiveOutlineProps;
@@ -253,6 +264,8 @@ function Column({
     column,
     cards,
     canWrite,
+    canTasks,
+    canManage,
     first,
     last,
     outlineFor,
@@ -281,44 +294,50 @@ function Column({
                         <span className='icon icon-check-circle' />
                     </span>
                 )}
-                {canWrite && (
+                {(canTasks || canManage) && (
                     <span className={styles.columnActions}>
                         {/* Doublon assumé de « Tâche » plus bas : dans une colonne
                             pleine, l'autre bouton est sous la ligne de flottaison. */}
-                        <button
-                            type='button'
-                            onClick={() => onCardCreate(column.id)}
-                            title='Ajouter une tâche'
-                            aria-label='Ajouter une tâche'
-                        >
-                            <span className='icon icon-add' />
-                        </button>
-                        <button
-                            type='button'
-                            onClick={() => onMove(column.id, -1)}
-                            disabled={first}
-                            title='Déplacer à gauche'
-                            aria-label='Déplacer la colonne à gauche'
-                        >
-                            <span className='icon icon-move-to-left' />
-                        </button>
-                        <button
-                            type='button'
-                            onClick={() => onMove(column.id, 1)}
-                            disabled={last}
-                            title='Déplacer à droite'
-                            aria-label='Déplacer la colonne à droite'
-                        >
-                            <span className='icon icon-move-to-right' />
-                        </button>
-                        <button
-                            type='button'
-                            onClick={() => onEdit(column)}
-                            title='Modifier la colonne'
-                            aria-label='Modifier la colonne'
-                        >
-                            <span className='icon icon-settings' />
-                        </button>
+                        {canTasks && (
+                            <button
+                                type='button'
+                                onClick={() => onCardCreate(column.id)}
+                                title='Ajouter une tâche'
+                                aria-label='Ajouter une tâche'
+                            >
+                                <span className='icon icon-add' />
+                            </button>
+                        )}
+                        {canManage && (
+                            <>
+                                <button
+                                    type='button'
+                                    onClick={() => onMove(column.id, -1)}
+                                    disabled={first}
+                                    title='Déplacer à gauche'
+                                    aria-label='Déplacer la colonne à gauche'
+                                >
+                                    <span className='icon icon-move-to-left' />
+                                </button>
+                                <button
+                                    type='button'
+                                    onClick={() => onMove(column.id, 1)}
+                                    disabled={last}
+                                    title='Déplacer à droite'
+                                    aria-label='Déplacer la colonne à droite'
+                                >
+                                    <span className='icon icon-move-to-right' />
+                                </button>
+                                <button
+                                    type='button'
+                                    onClick={() => onEdit(column)}
+                                    title='Modifier la colonne'
+                                    aria-label='Modifier la colonne'
+                                >
+                                    <span className='icon icon-settings' />
+                                </button>
+                            </>
+                        )}
                     </span>
                 )}
             </header>
@@ -329,12 +348,13 @@ function Column({
                         <SortableCard
                             key={card.id}
                             card={card}
+                            draggable={canWrite}
                             outline={outlineFor(`card:${card.id}`)}
                             onOpen={() => onCardOpen(card)}
                         />
                     ))}
                 </SortableContext>
-                {canWrite && (
+                {canTasks && (
                     <Button variant='ghost' icon='add' onClick={() => onCardCreate(column.id)}>
                         Tâche
                     </Button>
@@ -346,12 +366,17 @@ function Column({
 
 interface SortableCardProps {
     card: ProjectCard;
+    /** Sans l'écriture, la carte s'ouvre mais ne se déplace pas. */
+    draggable: boolean;
     outline: LiveOutlineProps;
     onOpen: () => void;
 }
 
-function SortableCard({ card, outline, onOpen }: SortableCardProps) {
-    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: card.id });
+function SortableCard({ card, draggable, outline, onOpen }: SortableCardProps) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+        id: card.id,
+        disabled: !draggable
+    });
     const style = {
         transform: CSS.Translate.toString(transform),
         transition,

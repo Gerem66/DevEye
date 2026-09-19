@@ -13,11 +13,11 @@ import {
     assertAtHome,
     decryptCard,
     linkLabels,
+    LINKS,
     loadProject,
     projectCipher,
     toCard,
     tryDecryptProject,
-    WRITE,
     type Ctx
 } from './_shared';
 
@@ -123,7 +123,7 @@ export const projectUptimeListFeature = defineSdkFeature({
 export const projectUptimeLinkFeature = defineSdkFeature({
     ...projectUptimeLink,
     mutates: true,
-    access: WRITE,
+    access: LINKS,
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'relier un service surveillé');
@@ -146,7 +146,7 @@ export const projectUptimeLinkFeature = defineSdkFeature({
 export const projectUptimeUnlinkFeature = defineSdkFeature({
     ...projectUptimeUnlink,
     mutates: true,
-    access: WRITE,
+    access: LINKS,
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'délier un service surveillé');

@@ -4,7 +4,7 @@ import type { ProjectMessage, ProjectMessageRow } from '../contracts/domain';
 import { defineSdkFeature, FeatureError, type SdkCipher } from '@deveye/types/sdk/server';
 
 import { loadCard } from './board';
-import { assertProjectUnlocked, isMember, loadProject, projectCipher, WRITE, type Ctx } from './_shared';
+import { assertProjectUnlocked, CHAT, isMember, loadProject, projectCipher, type Ctx } from './_shared';
 
 /**
  * Les fils de discussion des cartes. Sujet live `projectsChat`, distinct de
@@ -93,7 +93,7 @@ export const projectMessageListFeature = defineSdkFeature({
 export const projectMessageSendFeature = defineSdkFeature({
     ...projectMessageSend,
     mutates: CHAT_TOPIC,
-    access: WRITE,
+    access: CHAT,
     handler: async (ctx: Ctx, input) => {
         const { card, project } = await loadCard(ctx, input.cardId, 'write');
         await assertProjectUnlocked(ctx, project);
@@ -119,7 +119,7 @@ export const projectMessageSendFeature = defineSdkFeature({
 export const projectMessageEditFeature = defineSdkFeature({
     ...projectMessageEdit,
     mutates: CHAT_TOPIC,
-    access: WRITE,
+    access: CHAT,
     handler: async (ctx: Ctx, input) => {
         const existing = await ctx.repo.chat.findById(input.messageId);
         if (!existing) throw new FeatureError('not_found', 'Message introuvable');

@@ -38,6 +38,52 @@ export const manifest = {
     /** Les assignés d'une carte et les auteurs d'un message sont des membres. */
     nativeCapabilities: ['members.read'],
     /**
+     * `write` seul laisse participer au tableau : retoucher une tâche et la
+     * faire passer d'une colonne à l'autre. Les cinq droits ci-dessous
+     * gouvernent des surfaces distinctes du projet, orthogonales entre elles :
+     * son existence, ses tâches, son calendrier, ses rattachements, sa
+     * conversation. Confier l'exécution sans confier la planification est le
+     * cas qui les a fait naître. Chacun se surcharge projet par projet, par
+     * l'onglet Permissions de sa fiche.
+     */
+    extraPermissions: [
+        {
+            key: 'manageProjects',
+            label: 'Gérer les projets',
+            description:
+                'Créer, renommer, archiver, restaurer et classer un projet, poser son statut, sa version et son palier de confidentialité, et tenir les colonnes de son tableau.',
+            type: 'toggle'
+        },
+        {
+            key: 'tasks',
+            label: 'Créer et archiver des tâches',
+            description:
+                'Ajouter une tâche au tableau, l’archiver, la restaurer. Sans ce droit, l’écriture permet toujours de modifier celles qui existent et de les déplacer.',
+            type: 'toggle'
+        },
+        {
+            key: 'plan',
+            label: 'Modifier la planification',
+            description:
+                'Poser et déplacer les dates sur la frise, tenir les jalons et les dépendances. Sans ce droit, chacun date toujours les tâches qui lui reviennent.',
+            type: 'toggle'
+        },
+        {
+            key: 'links',
+            label: 'Gérer les liaisons',
+            description:
+                'Rattacher le projet à un dépôt, une cible de mise en production, une base, un site, un service surveillé, et l’en détacher.',
+            type: 'toggle'
+        },
+        {
+            key: 'chat',
+            label: 'Participer à la discussion',
+            description:
+                'Écrire et modifier des messages dans le fil du projet. Sans ce droit, le fil se lit seulement.',
+            type: 'toggle'
+        }
+    ],
+    /**
      * Le projet lui-même (profil, archivage) dans l'onglet Général de sa fiche.
      * Partage et Permissions viennent du descripteur.
      */
