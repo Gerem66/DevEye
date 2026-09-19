@@ -14,7 +14,7 @@ import type { MailOAuthCredentials } from './client';
 import * as mailOAuth from './oauth';
 import { findAttachmentBytes } from './parse';
 import type { MailRepo } from './repo';
-import { decryptCredentials, encryptCredentials, persistRefreshedToken } from './_shared';
+import { decryptCredentials, encryptCredentials, persistRefreshedToken, tryDecryptCredentials } from './_shared';
 
 /**
  * Les deux portes HTTP de Mail, sur la surface publique du SDK (capacité
@@ -258,12 +258,23 @@ export function mailRoutes(app: SdkPublicApp, deps: MailRouteDeps, seam: MailRou
                 if (known !== null && known.toLowerCase() !== tokens.email.toLowerCase()) {
                     return page(false, `Ce consentement porte sur ${tokens.email}, pas sur ${known}`);
                 }
+                // Le proxy, et le jeton de rafraîchissement quand le
+                // fournisseur n'en rend pas un neuf, appartiennent à la boîte :
+                // l'écran de consentement ne les redemande pas, les écraser les
+                // perd. Lecture tolérante, un blob illisible ne devant pas faire
+                // échouer une reconnexion.
+                const previous = await tryDecryptCredentials(cipher, existing.credentials_enc);
+                const reconnected: MailOAuthCredentials = {
+                    ...credentials,
+                    refreshToken: tokens.refreshToken ?? (previous?.kind === 'oauth' ? previous.refreshToken : null),
+                    proxy: previous?.proxy ?? null
+                };
                 await deps.repo.accounts.update(existing.id, ticket.workspaceId, {
                     displayNameEnc: existing.display_name_enc,
                     emailAddressEnc: existing.email_address_enc,
                     securityTier: existing.security_tier,
                     authMethod,
-                    credentialsEnc: await encryptCredentials(cipher, credentials),
+                    credentialsEnc: await encryptCredentials(cipher, reconnected),
                     enabled: existing.enabled === 1,
                     syncIntervalSeconds: existing.sync_interval_seconds
                 });

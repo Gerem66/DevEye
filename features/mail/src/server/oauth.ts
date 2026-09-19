@@ -104,11 +104,56 @@ export interface OAuthTokens {
 interface TokenResponse {
     access_token: string;
     refresh_token?: string;
-    expires_in: number;
+    /** Unvalidated: the provider's response is parsed, never type-checked. */
+    expires_in?: unknown;
     scope?: string;
     id_token?: string;
     error?: string;
     error_description?: string;
+}
+
+/**
+ * The only refusals that are final (RFC 6749 §5.2): consent withdrawn or token
+ * revoked, client secret changed, client or scope no longer allowed. Anything
+ * else is treated as transient, a false "reconnect this mailbox" costing more
+ * than a lost sync round.
+ */
+const PERMANENT_TOKEN_ERRORS = new Set(['invalid_grant', 'invalid_client', 'unauthorized_client', 'invalid_scope']);
+
+/**
+ * A refusal from the token endpoint, carrying what it takes to decide: `code`
+ * is the response's `error` field when it had one, `status` the HTTP status,
+ * and `permanent` says only a fresh consent gets the mailbox back. The verdict
+ * reads the OAuth code and never the HTTP status: Google answers 400 for
+ * `invalid_grant` as it does for `rate_limit_exceeded`.
+ */
+export class OAuthTokenError extends Error {
+    readonly permanent: boolean;
+
+    constructor(
+        readonly provider: MailOAuthProvider,
+        readonly status: number | null,
+        readonly code: string | null,
+        message: string,
+        cause?: unknown
+    ) {
+        super(message);
+        this.name = 'OAuthTokenError';
+        this.permanent = code !== null && PERMANENT_TOKEN_ERRORS.has(code);
+        if (cause !== undefined) this.cause = cause;
+    }
+}
+
+/** What both providers return anyway; the fallback when the field is unusable. */
+const DEFAULT_EXPIRES_IN_SECONDS = 3600;
+
+/**
+ * A missing or unreadable `expires_in` would yield `NaN`, and since
+ * `Date.now() >= NaN` is always false, the token would never be refreshed again.
+ */
+function expiresAtFrom(raw: unknown): number {
+    const seconds = Number(raw);
+    return Date.now() + (Number.isFinite(seconds) && seconds > 0 ? seconds : DEFAULT_EXPIRES_IN_SECONDS) * 1000;
 }
 
 /**
@@ -129,16 +174,43 @@ function emailFromIdToken(idToken: string | undefined): string | null {
     }
 }
 
-async function postToken(tokenUrl: string, body: URLSearchParams): Promise<TokenResponse> {
-    const res = await fetch(tokenUrl, {
-        method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: body.toString(),
-        signal: AbortSignal.timeout(10_000)
-    });
-    const json = (await res.json()) as TokenResponse;
-    if (!res.ok || !json.access_token) {
-        throw new Error(json.error_description || json.error || `Token request failed (${res.status})`);
+async function postToken(provider: MailOAuthProvider, tokenUrl: string, body: URLSearchParams): Promise<TokenResponse> {
+    let res: Response;
+    let text: string;
+    try {
+        res = await fetch(tokenUrl, {
+            method: 'POST',
+            headers: { 'content-type': 'application/x-www-form-urlencoded' },
+            body: body.toString(),
+            signal: AbortSignal.timeout(10_000)
+        });
+        // Read as text first: a broken gateway answers HTML, and `res.json()`
+        // would throw a SyntaxError that loses both status and OAuth code.
+        text = await res.text();
+    } catch (e) {
+        const detail = e instanceof Error ? e.message : String(e);
+        throw new OAuthTokenError(provider, null, null, `Token endpoint unreachable (${provider}): ${detail}`, e);
+    }
+
+    let json: TokenResponse | null;
+    try {
+        json = JSON.parse(text) as TokenResponse;
+    } catch {
+        json = null;
+    }
+
+    if (!res.ok || !json?.access_token) {
+        const code = typeof json?.error === 'string' ? json.error : null;
+        // Truncated: a verbose HTML body ends up in `last_sync_error_enc`.
+        const detail = json?.error_description ?? (json === null ? text.slice(0, 200).trim() : null);
+        throw new OAuthTokenError(
+            provider,
+            res.status,
+            code,
+            `Token endpoint (${provider}) answered ${res.status}` +
+                (code ? ` (${code})` : '') +
+                (detail ? `: ${detail}` : '')
+        );
     }
     return json;
 }
@@ -152,6 +224,7 @@ export async function exchangeCodeForTokens(
     const c = providerConfig(provider);
     if (!c.clientId || !c.clientSecret) throw new Error(`OAuth ${provider} is not configured on this server`);
     const json = await postToken(
+        provider,
         c.tokenUrl,
         new URLSearchParams({
             client_id: c.clientId,
@@ -166,20 +239,43 @@ export async function exchangeCodeForTokens(
     return {
         accessToken: json.access_token,
         refreshToken: json.refresh_token ?? null,
-        expiresAt: Date.now() + json.expires_in * 1000,
+        expiresAt: expiresAtFrom(json.expires_in),
         scope: json.scope ?? c.scope,
         email
     };
 }
 
+export interface RefreshedToken {
+    accessToken: string;
+    /** Epoch ms. */
+    expiresAt: number;
+    /** Returned when the provider rotates its refresh tokens (Microsoft); `null` otherwise. */
+    refreshToken: string | null;
+}
+
+/**
+ * Refreshes in flight, keyed by provider and token: the background sync and a
+ * "Sync now" click set off with the same refresh token, and two concurrent
+ * POSTs invalidate one of them wherever tokens rotate. The key holds a secret:
+ * it never leaves this module and goes as soon as the promise settles.
+ */
+const inFlightRefresh = new Map<string, Promise<RefreshedToken>>();
+
 /** Mint a fresh access token from a stored refresh token. */
-export async function refreshAccessToken(
-    provider: MailOAuthProvider,
-    refreshToken: string
-): Promise<{ accessToken: string; expiresAt: number }> {
+export function refreshAccessToken(provider: MailOAuthProvider, refreshToken: string): Promise<RefreshedToken> {
+    const key = `${provider}:${refreshToken}`;
+    const running = inFlightRefresh.get(key);
+    if (running) return running;
+    const task = mintAccessToken(provider, refreshToken).finally(() => inFlightRefresh.delete(key));
+    inFlightRefresh.set(key, task);
+    return task;
+}
+
+async function mintAccessToken(provider: MailOAuthProvider, refreshToken: string): Promise<RefreshedToken> {
     const c = providerConfig(provider);
     if (!c.clientId || !c.clientSecret) throw new Error(`OAuth ${provider} is not configured on this server`);
     const json = await postToken(
+        provider,
         c.tokenUrl,
         new URLSearchParams({
             client_id: c.clientId,
@@ -188,5 +284,9 @@ export async function refreshAccessToken(
             grant_type: 'refresh_token'
         })
     );
-    return { accessToken: json.access_token, expiresAt: Date.now() + json.expires_in * 1000 };
+    return {
+        accessToken: json.access_token,
+        expiresAt: expiresAtFrom(json.expires_in),
+        refreshToken: json.refresh_token ?? null
+    };
 }

@@ -68,6 +68,13 @@ qui resterait sous l'ancien codec se lirait « (verrouillé) » pour toujours.
   : qu'on l'ouvre, qu'on la relève à la main ou qu'on la laisse tourner, un
   accès qui tombe se voit tout de suite, et un accès qui revient efface la
   mention. Seules les transitions écrivent et se diffusent.
+- **Un renouvellement de jeton qui échoue n'est pas une révocation.** Seul un
+  refus définitif du fournisseur (`invalid_grant`, `invalid_client`,
+  `unauthorized_client`, `invalid_scope`) passe la boîte en « reconnexion
+  requise » ; un délai dépassé, un 5xx, un plafond d'appels ou une passerelle
+  qui répond du HTML se lisent « injoignable » et se rattrapent au tour
+  suivant. C'est `OAuthTokenError.permanent` qui tranche, sur le code OAuth et
+  jamais sur le statut HTTP : Google répond 400 dans les deux cas.
 
 ## 3. Les deux routes à ticket
 
@@ -135,8 +142,9 @@ Côté serveur (`features/mail/src/server/`) :
   compte ; couture de test `{ mailClient, accountTimeoutMs }`) ;
 - `transport.ts` (le contrat des alertes), `routes.ts` (les deux routes à
   ticket, couture `{ client, oauth }`), `client.ts` (IMAP/SMTP, l'ex
-  `Services/MailAccountClient.ts`), `oauth.ts` (l'ex `Services/MailOAuth.ts`,
-  `redirect_uri` sur `origins.app`), `parse.ts`, `sanitize.ts`,
+  `Services/MailAccountClient.ts`), `oauth.ts` (`redirect_uri` sur
+  `origins.app`, `OAuthTokenError` qui sépare un refus définitif d'un incident
+  passager, renouvellements coalescés par jeton), `parse.ts`, `sanitize.ts`,
   `linkHeuristics.ts` (l'ex `src/mail/*`), `env.ts` (`MAIL_SYNC_*`,
   `OAUTH_*`, sortis de `Utils/Env`), `index.ts` (l'entrée : `createService`
   avec le service, le provider et les routes).
@@ -249,6 +257,16 @@ account.security_tier)` sur un compte projeté le lirait sous la clé d'ici,
   rend une boîte suspendue à la rotation ; sans elle, `inFlight` la retirait
   pour de bon, sans erreur ni trace. Son message est classé `unreachable`
   (apostrophe droite ou typographique, les deux formes existaient).
+- **Un écran de consentement Google en « Testing » donne des jetons de
+  rafraîchissement de 7 jours.** La boîte redemande alors une reconnexion
+  chaque semaine sans que rien soit cassé. L'écran doit passer « In
+  production », et le scope `https://mail.google.com/` étant restreint, sa
+  validation par Google conditionne la publication d'une app « External ».
+- **Les identifiants d'une passe sont un objet unique et muté.** La relève de
+  fond les déchiffre une fois puis passe la même référence à chaque dossier ;
+  `persistRefreshedToken` écrit le jeton neuf DANS cet objet, sans quoi chaque
+  dossier relirait une échéance périmée et redemanderait un jeton. Les
+  commandes, elles, en déchiffrent un frais par appel.
 - **Le `redirect_uri` doit être le même à l'autorisation et à l'échange** :
   `origins.app` des deux côtés, et celui enregistré chez le fournisseur. Une
   divergence est un refus opaque du fournisseur, pas une erreur de DevEye.

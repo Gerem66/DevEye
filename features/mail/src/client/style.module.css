@@ -254,6 +254,11 @@
     overflow-wrap: anywhere;
 }
 
+.accountAlertAction {
+    display: block;
+    margin-top: var(--space-sm);
+}
+
 .empty {
     margin: 0;
     color: var(--text-muted);

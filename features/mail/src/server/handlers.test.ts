@@ -43,6 +43,8 @@ process.env.OAUTH_GOOGLE_CLIENT_ID = 'google-client';
 process.env.OAUTH_GOOGLE_CLIENT_SECRET = 'google-secret';
 delete process.env.OAUTH_MICROSOFT_CLIENT_ID;
 const { mailHandlers } = await import('./handlers');
+const { MailReauthRequiredError } = await import('./client');
+const { imapFor } = await import('./_shared');
 const { serverEntry } = await import('./index');
 
 /** Le handler d'un contrat, typé par ce contrat (le registre est hétérogène). */
@@ -694,5 +696,41 @@ describe('mail.getSettings / mail.setSettings', () => {
         });
         assert.deepEqual(await handlerFor(mailGetSettings)(ctx, {}), written);
         assert.equal(ctx.recorded.audits.at(-1)?.action, 'mail.setSettings');
+    });
+});
+
+describe('ce qu’une commande rend quand la boîte bute', () => {
+    /** `imapFor` est le passage unique des commandes qui parlent à IMAP. */
+    async function failingWith(error: unknown): Promise<unknown> {
+        const repo = fakeRepo();
+        const account = row({ id: 7, workspace_id: 1 });
+        repo.accountRows.push(account);
+        // L'observateur d'état écrit avant que la traduction ne rende la main.
+        repo.accounts.recordStatus = async () => {};
+        return imapFor(createTestContext({ repo }), account, async () => {
+            throw error;
+        }).then(
+            () => null,
+            (e: unknown) => e
+        );
+    }
+
+    it('traduit au lieu de laisser l’hôte rendre « Internal server error »', async () => {
+        const e = await failingWith(new Error('connect ECONNREFUSED 10.0.0.1:993'));
+        assert.ok(e instanceof FeatureError);
+        assert.equal(e.code, 'validation');
+        assert.match(e.message, /ne répond pas/);
+    });
+
+    it('dit de reconnecter quand le fournisseur a définitivement refusé', async () => {
+        const e = await failingWith(new MailReauthRequiredError('google', new Error('invalid_grant')));
+        assert.ok(e instanceof FeatureError);
+        assert.match(e.message, /Reconnectez-la/);
+    });
+
+    it('laisse passer un `locked` du codec : le réécrire fermerait l’invite de déverrouillage', async () => {
+        const e = await failingWith(new FeatureError('locked', 'Ce compte est verrouillé'));
+        assert.ok(e instanceof FeatureError);
+        assert.equal(e.code, 'locked');
     });
 });

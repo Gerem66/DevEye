@@ -16,7 +16,7 @@ import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
 import { api, humanizeError } from './api';
 import { ProviderCard } from './ProviderCard';
-import { awaitConsentWindow } from './oauthWindow';
+import { reconnectAccount } from './oauthWindow';
 import styles from './style.module.css';
 
 import type { MailAccount, MailAccountDraft, MailAccountEdit, MailProxy } from '../contracts/domain';
@@ -164,26 +164,12 @@ export default function MailAccountSettingsPanel({ scope, canWrite, gone }: Sett
         }
     }
 
-    /**
-     * Repasse par le consentement du fournisseur pour CETTE boîte : ses messages
-     * et ses dossiers restent, seuls ses jetons sont remplacés. La suppression
-     * suivie d'un nouvel ajout ferait le même travail au prix du cache entier.
-     */
     async function reconnect(): Promise<void> {
         if (!account) return;
         setReconnecting(true);
         setStatus(null);
         try {
-            const res = await api.send('mail.oauthStart', {
-                provider: account.authMethod === 'oauth_google' ? 'google' : 'microsoft',
-                securityTier: account.securityTier,
-                displayName: '',
-                accountId: account.id
-            });
-            const popup = window.open(res.authUrl, 'deveye-mail-oauth', 'width=520,height=680');
-            if (!popup) throw new Error('Fenêtre bloquée par le navigateur — autorisez les popups pour DevEye.');
-            const { verdict } = await awaitConsentWindow(popup);
-            if (verdict && !verdict.ok) throw new Error(verdict.error ?? 'Échec de connexion.');
+            const verdict = await reconnectAccount(account);
             invalidate('mail.accountList');
             setStatus(verdict?.ok ? 'Boîte reconnectée.' : 'Fenêtre fermée : vérifiez l’état de la boîte.');
         } catch (e) {

@@ -1,7 +1,7 @@
 import { ImapFlow, type FetchMessageObject, type ImapFlowOptions, type ListResponse } from 'imapflow';
 import nodemailer, { type Transporter } from 'nodemailer';
 import type { MailAddress, MailFolderSpecialUse, MailOAuthProvider, MailProxy } from '../contracts/domain';
-import { oauthProviderEndpoints, refreshAccessToken } from './oauth';
+import { oauthProviderEndpoints, refreshAccessToken, OAuthTokenError, type RefreshedToken } from './oauth';
 
 /**
  * Talks IMAP/SMTP for one mail account, for either auth method: `password`
@@ -40,7 +40,7 @@ export type MailCredentials = MailPasswordCredentials | MailOAuthCredentials;
  * Called when an OAuth access token had to be minted mid-operation, so the
  * caller can persist it. `undefined` for password auth.
  */
-export type TokenRefreshCallback = (accessToken: string, expiresAt: number) => Promise<void>;
+export type TokenRefreshCallback = (tokens: RefreshedToken) => Promise<void>;
 
 /**
  * Le fournisseur refuse de renouveler l'accès : consentement retiré, jeton de
@@ -52,10 +52,11 @@ export type TokenRefreshCallback = (accessToken: string, expiresAt: number) => P
 export class MailReauthRequiredError extends Error {
     constructor(
         readonly provider: MailOAuthProvider,
-        cause: unknown
+        cause: unknown,
+        reason = 'Le fournisseur a refusé de renouveler l’accès'
     ) {
         const detail = cause instanceof Error ? cause.message : String(cause);
-        super(`Le fournisseur a refusé de renouveler l’accès : ${detail}`);
+        super(`${reason} : ${detail}`);
         this.name = 'MailReauthRequiredError';
         this.cause = cause;
     }
@@ -103,19 +104,29 @@ export async function resolveAuth(
     let accessToken = credentials.accessToken;
     if (Date.now() >= credentials.expiresAt - OAUTH_REFRESH_MARGIN_MS) {
         if (!credentials.refreshToken) {
-            throw new Error('La session Google/Microsoft a expiré : reconnectez le compte');
+            throw new MailReauthRequiredError(
+                credentials.provider,
+                'aucun jeton de rafraîchissement n’est stocké pour cette boîte',
+                'La session du fournisseur a expiré'
+            );
         }
-        // Un refus ici n'est pas un incident de relève : le compte ne repartira
-        // pas tout seul, et le dire dès la source évite d'avoir à deviner la
-        // conduite à tenir depuis le texte du fournisseur.
-        let refreshed;
+        // Un refus définitif n'est pas un incident de relève : le compte ne
+        // repartira pas tout seul, et le dire dès la source évite d'avoir à
+        // deviner la conduite à tenir depuis le texte du fournisseur. Un délai
+        // dépassé, un 5xx ou un plafond d'appels laissent le consentement
+        // intact, et les annoncer « reconnectez-le » enverrait défaire ce qui
+        // marche : ils repartent tels quels.
+        let refreshed: RefreshedToken;
         try {
             refreshed = await refreshAccessToken(credentials.provider, credentials.refreshToken);
         } catch (e) {
-            throw new MailReauthRequiredError(credentials.provider, e);
+            if (e instanceof OAuthTokenError && e.permanent) {
+                throw new MailReauthRequiredError(credentials.provider, e);
+            }
+            throw e;
         }
         accessToken = refreshed.accessToken;
-        if (onTokenRefreshed) await onTokenRefreshed(refreshed.accessToken, refreshed.expiresAt);
+        if (onTokenRefreshed) await onTokenRefreshed(refreshed);
     }
     return {
         imapHost: endpoints.imapHost,

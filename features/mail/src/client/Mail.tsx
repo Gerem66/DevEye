@@ -24,6 +24,7 @@ import MessageInfoPopup, { MESSAGE_INFO_POPUP } from './MessageInfoPopup';
 import MessageList from './MessageList';
 import MessagePopup from './MessagePopup';
 import { describeAccountStatus } from './accountStatus';
+import { canReconnect, providerLabel, reconnectAccount } from './oauthWindow';
 import { api, humanizeError, withSettingsDefaults } from './api';
 import styles from './style.module.css';
 
@@ -158,6 +159,7 @@ export default function Mail(_props: FeatureViewProps) {
     const [renderMode, setRenderMode] = useState<MailBodyRenderMode>('embedded');
 
     const [error, setError] = useState<string | null>(null);
+    const [reconnecting, setReconnecting] = useState(false);
 
     /**
      * Referme la fiche, d'un seul geste : le chemin de présence se lit sur
@@ -643,6 +645,26 @@ export default function Mail(_props: FeatureViewProps) {
     selectedAccountTierRef.current = selectedAccount?.securityTier ?? null;
     const selectedFolder = folders.find((f) => f.id === selectedFolderId) ?? null;
 
+    /**
+     * La reconnexion depuis le bandeau, là où l'on apprend qu'elle est
+     * nécessaire : les réglages restent le chemin long. Les dossiers sont
+     * relus derrière, la boîte n'ayant rien pu en rendre tant que l'accès
+     * était refusé.
+     */
+    async function reconnect(): Promise<void> {
+        if (!selectedAccount) return;
+        setReconnecting(true);
+        try {
+            await reconnectAccount(selectedAccount);
+            await reloadAccounts();
+            await loadFolders(selectedAccount.id);
+        } catch (e) {
+            setError(humanizeError(e, 'Reconnexion impossible.'));
+        } finally {
+            setReconnecting(false);
+        }
+    }
+
     // Reads the selection through the ref so the callback stays stable for the
     // whole session instead of being rebuilt on every mailbox pick.
     const openAccountForm = useCallback(
@@ -934,6 +956,13 @@ export default function Mail(_props: FeatureViewProps) {
                         {accountStatus.headline}
                         {selectedAccount?.lastSyncError && (
                             <span className={styles.accountAlertDetail}>{selectedAccount.lastSyncError}</span>
+                        )}
+                        {selectedAccount && canReconnect(selectedAccount) && (
+                            <span className={styles.accountAlertAction}>
+                                <Button variant='secondary' disabled={reconnecting} onClick={() => void reconnect()}>
+                                    {reconnecting ? 'Connexion…' : `Reconnecter à ${providerLabel(selectedAccount)}`}
+                                </Button>
+                            </span>
                         )}
                     </span>
                 </div>

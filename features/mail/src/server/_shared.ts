@@ -14,8 +14,8 @@ import type {
 import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
 
 import { MailReauthRequiredError } from './client';
-import type { MailCredentials, MailOAuthCredentials, MailPasswordCredentials, TokenRefreshCallback } from './client';
-import { oauthProviderEndpoints } from './oauth';
+import type { MailCredentials, MailPasswordCredentials, TokenRefreshCallback } from './client';
+import { oauthProviderEndpoints, OAuthTokenError } from './oauth';
 import type { MailRepo } from './repo';
 import { getAccountSyncStatus } from './syncStatus';
 
@@ -72,9 +72,11 @@ export function assertAtHome(ctx: Ctx, account: MailAccountRow, gesture: string)
  * propose, et `error` couvre tout ce qu'on ne reconnaît pas.
  */
 export function classifyMailError(error: unknown): Exclude<MailAccountStatus, 'ok'> {
-    // Le seul cas où la conduite à tenir est connue sans lire de texte : le
-    // fournisseur a refusé de renouveler l'accès, et lui seul peut le rendre.
+    // Les deux cas où la conduite à tenir est connue sans lire de texte : le
+    // fournisseur a définitivement refusé, et lui seul peut rendre l'accès, ou
+    // son point de jetons a flanché sans que rien soit révoqué.
     if (error instanceof MailReauthRequiredError) return 'auth';
+    if (error instanceof OAuthTokenError) return error.permanent ? 'auth' : 'unreachable';
     const m = (error instanceof Error ? error.message : String(error)).toLowerCase();
     if (
         /authenticationfailed|invalid credentials|invalid_grant|authentication failed|login failed/.test(m) ||
@@ -197,9 +199,18 @@ export function persistRefreshedToken(
     cipher: SdkCipher
 ): TokenRefreshCallback | undefined {
     if (credentials.kind !== 'oauth') return undefined;
-    return async (accessToken, expiresAt) => {
-        const updated: MailOAuthCredentials = { ...credentials, accessToken, expiresAt };
-        await repo.accounts.updateCredentials(accountId, await cipher.encrypt(JSON.stringify(updated)));
+    const oauth = credentials;
+    return async ({ accessToken, expiresAt, refreshToken }) => {
+        // L'objet est muté, pas recopié : la relève de fond déchiffre les
+        // identifiants une fois pour toute la passe et les repasse par
+        // référence à chaque dossier, qui relirait sinon une échéance périmée
+        // et redemanderait un jeton par dossier.
+        oauth.accessToken = accessToken;
+        oauth.expiresAt = expiresAt;
+        // Microsoft fait tourner ses jetons de rafraîchissement : garder
+        // l'ancien perd la boîte au bout de la fenêtre glissante.
+        if (refreshToken) oauth.refreshToken = refreshToken;
+        await repo.accounts.updateCredentials(accountId, await cipher.encrypt(JSON.stringify(oauth)));
     };
 }
 
@@ -473,6 +484,42 @@ export async function credentialsFor(ctx: Ctx, account: MailAccountRow): Promise
 }
 
 /**
+ * Même duck-typing que l'hôte (`src/ws/handler.ts`) : un module et l'app
+ * peuvent résoudre deux instances distinctes de `@deveye/types`, et traduire
+ * par erreur un `locked` du codec fermerait l'invite de déverrouillage.
+ */
+function isFeatureError(e: unknown): e is FeatureError {
+    return e instanceof FeatureError || (e instanceof Error && e.name === 'FeatureError' && 'code' in e);
+}
+
+/**
+ * Le mot que l'écran reçoit quand une commande bute sur le serveur de mail.
+ * `validation` et non un code d'authentification : `auth_required` et
+ * `auth_expired` sont captés par la couche de session du client, qui
+ * déconnecterait DevEye entier.
+ */
+function mailCommandFailure(error: unknown): FeatureError {
+    switch (classifyMailError(error)) {
+        case 'auth':
+            return new FeatureError(
+                'validation',
+                'Le fournisseur a refusé l’accès à cette boîte. Reconnectez-la depuis la bannière ou ses réglages.'
+            );
+        case 'unreachable':
+            return new FeatureError(
+                'validation',
+                'Le serveur de mail ne répond pas pour le moment. Réessayez dans un instant.'
+            );
+        case 'error': {
+            // Le même texte que `runWithAccountStatus` vient de persister et
+            // que la bannière montre déjà au même utilisateur.
+            const detail = (error instanceof Error ? error.message : String(error)).slice(0, 300);
+            return new FeatureError('validation', `L’opération sur cette boîte a échoué : ${detail}`);
+        }
+    }
+}
+
+/**
  * Toute opération de commande qui parle à IMAP, avec l'état du compte tenu à
  * jour au passage : un accès qui tombe se voit dès l'ouverture de la boîte,
  * sans attendre un tour de relève, et un accès qui revient efface la mention
@@ -485,9 +532,21 @@ export async function imapFor<T>(
     work: (credentials: MailCredentials) => Promise<T>
 ): Promise<T> {
     const cipher = await accountCipher(ctx, account);
-    // Rien à diffuser d'ici : les commandes qui écrivent le font par `mutates`,
-    // et celles qui lisent rendent l'échec à leur appelant, qui relit la liste.
-    return runWithAccountStatus(ctx.repo, cipher, account, async () => work(await credentialsFor(ctx, account)));
+    try {
+        // Rien à diffuser d'ici : les commandes qui écrivent le font par
+        // `mutates`, et celles qui lisent rendent l'échec à leur appelant, qui
+        // relit la liste.
+        return await runWithAccountStatus(ctx.repo, cipher, account, async () =>
+            work(await credentialsFor(ctx, account))
+        );
+    } catch (e) {
+        // L'état du compte vient d'être écrit par `runWithAccountStatus` ; il
+        // ne reste qu'à rendre à l'appelant de quoi le montrer, au lieu du
+        // « Internal server error » que l'hôte donne à toute erreur non typée.
+        if (isFeatureError(e)) throw e;
+        ctx.logger.warn({ err: e, accountId: account.id }, 'Mail command failed');
+        throw mailCommandFailure(e);
+    }
 }
 
 /**

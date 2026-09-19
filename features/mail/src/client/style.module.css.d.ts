@@ -1,6 +1,7 @@
 declare const styles: {
     readonly accountAddBtn: string;
     readonly accountAlert: string;
+    readonly accountAlertAction: string;
     readonly accountAlertDetail: string;
     readonly accountCard: string;
     readonly accountCardBadgeSlot: string;

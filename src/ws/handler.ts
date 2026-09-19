@@ -453,7 +453,9 @@ export async function registerWS(
                     });
                     return;
                 }
-                reqLogger.error({ command, err: (e as Error).message }, 'Feature handler threw');
+                // L'objet entier, pas son message : pino sérialise la pile et la
+                // chaîne des `cause` sous la clé `err`.
+                reqLogger.error({ command, err: e }, 'Feature handler threw');
                 send(socket, {
                     requestId: replyId,
                     command,

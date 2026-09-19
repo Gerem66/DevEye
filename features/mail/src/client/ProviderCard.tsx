@@ -1,6 +1,7 @@
 import { Button } from 'deveye-sdk-client';
 
 import { describeAccountStatus } from './accountStatus';
+import { canReconnect, providerLabel } from './oauthWindow';
 import styles from './style.module.css';
 
 import type { MailAccount } from '../contracts/domain';
@@ -27,11 +28,8 @@ export function ProviderCard({
     busy?: boolean;
 }) {
     const status = describeAccountStatus(account);
-    const provider = account.authMethod === 'oauth_google' ? 'Google' : 'Microsoft';
-    // Une reconnexion ne répare qu'une impasse d'autorisation : un serveur
-    // injoignable revient tout seul, et repasser par le consentement ne ferait
-    // qu'ajouter un geste inutile.
-    const offerReconnect = onReconnect && (account.needsReauth || account.status === 'auth');
+    const provider = providerLabel(account);
+    const offerReconnect = onReconnect && canReconnect(account);
 
     return (
         <div className={styles.providerCard} data-tone={status?.tone}>

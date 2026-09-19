@@ -277,7 +277,12 @@ const RAW = Buffer.from(
     ].join('\r\n')
 );
 
-function mount(accounts: MailAccountRow[] = [account({ id: 1 })], projections: Record<number, number[]> = {}) {
+function mount(
+    accounts: MailAccountRow[] = [account({ id: 1 })],
+    projections: Record<number, number[]> = {},
+    /** Ce que le fournisseur rend au consentement, pour en simuler les avarices. */
+    tokens: { refreshToken?: string | null } = {}
+) {
     const repo = fakeRepo(accounts, projections);
     const deps = tagging(
         createTestServiceDeps({ repo, origins: { app: 'https://app.test', public: 'https://p.test' } })
@@ -300,7 +305,8 @@ function mount(accounts: MailAccountRow[] = [account({ id: 1 })], projections: R
                     refreshToken: 'refresh',
                     expiresAt: Date.now() + 3_600_000,
                     scope: 'mail',
-                    email: 'moi@gmail.com'
+                    email: 'moi@gmail.com',
+                    ...tokens
                 };
             }
         }
@@ -483,6 +489,58 @@ describe('GET /api/mail/oauth/callback', () => {
         // L'accès refusé ne survit pas au renouvellement.
         assert.equal(repo.accountRows[0].last_sync_status, 'ok');
         assert.equal(repo.accountRows[0].last_sync_error_enc, null);
+    });
+
+    it('une reconnexion garde le proxy de la boîte : le consentement ne le redemande pas', async () => {
+        const proxy = { kind: 'socks5' as const, host: '10.0.0.9', port: 1080, username: null, password: null };
+        const existing = account({
+            id: 7,
+            auth_method: 'oauth_google',
+            email_address_enc: 'server:moi@gmail.com',
+            credentials_enc: `server:${JSON.stringify({
+                kind: 'oauth',
+                provider: 'google',
+                email: 'moi@gmail.com',
+                accessToken: 'vieux',
+                refreshToken: 'ancien-refresh',
+                expiresAt: 1,
+                proxy
+            })}`
+        });
+        const { call, repo } = mount([existing]);
+        await call('/api/mail/oauth/callback', {
+            code: 'code-r',
+            state: ticket({ provider: 'google', securityTier: 'open', displayName: '', accountId: 7 })
+        });
+
+        const stored = JSON.parse(repo.accountRows[0].credentials_enc.slice('server:'.length));
+        assert.deepEqual(stored.proxy, proxy);
+        assert.equal(stored.refreshToken, 'refresh');
+    });
+
+    it('un fournisseur qui ne rend pas de jeton de rafraîchissement ne fait pas perdre l’ancien', async () => {
+        const existing = account({
+            id: 7,
+            auth_method: 'oauth_google',
+            email_address_enc: 'server:moi@gmail.com',
+            credentials_enc: `server:${JSON.stringify({
+                kind: 'oauth',
+                provider: 'google',
+                email: 'moi@gmail.com',
+                accessToken: 'vieux',
+                refreshToken: 'ancien-refresh',
+                expiresAt: 1,
+                proxy: null
+            })}`
+        });
+        const { call, repo } = mount([existing], {}, { refreshToken: null });
+        await call('/api/mail/oauth/callback', {
+            code: 'code-r',
+            state: ticket({ provider: 'google', securityTier: 'open', displayName: '', accountId: 7 })
+        });
+
+        const stored = JSON.parse(repo.accountRows[0].credentials_enc.slice('server:'.length));
+        assert.equal(stored.refreshToken, 'ancien-refresh');
     });
 
     it('un consentement donné sur une autre adresse n’écrase pas la boîte visée', async () => {

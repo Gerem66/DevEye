@@ -1,3 +1,7 @@
+import { api } from './api';
+
+import type { MailAccount } from '../contracts/domain';
+
 /**
  * L'attente d'une fenêtre de consentement OAuth, partagée par l'ajout d'une
  * boîte et par la reconnexion d'une boîte existante : les deux ouvrent la même
@@ -40,4 +44,43 @@ export function awaitConsentWindow(popup: Window): Promise<{ verdict: ConsentVer
         }, 500);
         window.addEventListener('message', onMessage);
     });
+}
+
+/** Le nom du fournisseur tel qu'il s'écrit dans un bouton. */
+export function providerLabel(account: MailAccount): string {
+    return account.authMethod === 'oauth_google' ? 'Google' : 'Microsoft';
+}
+
+/**
+ * Une reconnexion ne répare qu'une impasse d'autorisation : un serveur
+ * injoignable revient tout seul, et repasser par le consentement n'ajouterait
+ * qu'un geste inutile. Une boîte projetée depuis un autre espace se reconnecte
+ * chez elle, le serveur refusant d'ici.
+ */
+export function canReconnect(account: MailAccount): boolean {
+    return account.authMethod !== 'password' && !account.foreign && (account.needsReauth || account.status === 'auth');
+}
+
+/**
+ * Repasse par le consentement du fournisseur pour CETTE boîte : ses messages et
+ * ses dossiers restent, seuls ses jetons sont remplacés. La suppression suivie
+ * d'un nouvel ajout ferait le même travail au prix du cache entier.
+ *
+ * Lève sur fenêtre bloquée et sur échec annoncé par le serveur ; l'appelant
+ * garde son propre état d'occupation et recharge ce qu'il affiche.
+ */
+export async function reconnectAccount(account: MailAccount): Promise<ConsentVerdict | null> {
+    const res = await api.send('mail.oauthStart', {
+        provider: account.authMethod === 'oauth_google' ? 'google' : 'microsoft',
+        securityTier: account.securityTier,
+        displayName: '',
+        accountId: account.id
+    });
+    const popup = window.open(res.authUrl, 'deveye-mail-oauth', 'width=520,height=680');
+    if (!popup) throw new Error('Fenêtre bloquée par le navigateur : autorisez les popups pour DevEye.');
+    const { verdict } = await awaitConsentWindow(popup);
+    // Un échec annoncé par le serveur s'affiche tel quel : lui seul sait ce qui
+    // a manqué, et le paraphraser perdrait la seule information utile.
+    if (verdict && !verdict.ok) throw new Error(verdict.error ?? 'Échec de connexion.');
+    return verdict;
 }

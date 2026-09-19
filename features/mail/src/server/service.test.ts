@@ -6,6 +6,7 @@ import { createTestServiceDeps } from '@deveye/types/sdk/testing';
 
 import { MailReauthRequiredError } from './client';
 import type { MailCredentials, OutgoingMail, RemoteEnvelope } from './client';
+import { OAuthTokenError } from './oauth';
 import { classifyMailError } from './_shared';
 import type { MailRepo } from './repo';
 import { MailSync } from './service';
@@ -388,6 +389,17 @@ describe('la lecture d’un échec', () => {
         // et n'a aucune forme garantie, « Bad Request » comprise.
         const refusal = new MailReauthRequiredError('google', new Error('Bad Request'));
         assert.equal(classifyMailError(refusal), 'auth');
+    });
+
+    it('un point de jetons qui flanche est « injoignable » : rien n’a été révoqué', () => {
+        // Le verdict se lit sur le code OAuth et jamais sur le statut : Google
+        // répond 400 pour un consentement retiré comme pour un plafond d'appels.
+        assert.equal(classifyMailError(new OAuthTokenError('google', 503, null, 'answered 503')), 'unreachable');
+        assert.equal(
+            classifyMailError(new OAuthTokenError('google', 400, 'rate_limit_exceeded', 'answered 400')),
+            'unreachable'
+        );
+        assert.equal(classifyMailError(new OAuthTokenError('google', 400, 'invalid_grant', 'answered 400')), 'auth');
     });
 
     it('ce qu’on ne reconnaît pas reste une erreur, sans conduite à tenir inventée', () => {
