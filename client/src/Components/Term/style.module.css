@@ -1,0 +1,37 @@
+/* Un bouton qui se fond dans la phrase : seul le soulignement pointillé
+   l'annonce, à la manière d'une abréviation. */
+.term {
+    display: inline;
+    padding: 0;
+    background: none;
+    border: none;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    color: inherit;
+    text-decoration: underline dotted;
+    text-decoration-color: var(--text-muted);
+    text-underline-offset: 0.2em;
+    cursor: help;
+    transition:
+        color var(--transition-fast),
+        text-decoration-color var(--transition-fast);
+}
+
+.term:hover,
+.term:focus-visible {
+    color: var(--accent);
+    text-decoration-color: var(--accent);
+}
+
+.term:focus-visible {
+    outline: 1px solid var(--input-focus);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .term {
+        transition: none;
+    }
+}

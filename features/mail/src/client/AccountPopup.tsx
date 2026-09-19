@@ -6,6 +6,7 @@ import {
     DialogCancelButton,
     Popup,
     SegmentedControl,
+    Term,
     TextInput,
     useActiveWorkspace
 } from 'deveye-sdk-client';
@@ -395,7 +396,9 @@ export function AccountPopup() {
 
                 {showManualFields && (
                     <>
-                        <p className={styles.sectionLabel}>IMAP (réception)</p>
+                        <p className={styles.sectionLabel}>
+                            <Term id='imap'>IMAP</Term> (réception)
+                        </p>
                         <div className={styles.formRow}>
                             <TextInput
                                 placeholder='imap.exemple.com'
@@ -423,7 +426,9 @@ export function AccountPopup() {
                             />
                         </div>
 
-                        <p className={styles.sectionLabel}>SMTP (envoi)</p>
+                        <p className={styles.sectionLabel}>
+                            <Term id='smtp'>SMTP</Term> (envoi)
+                        </p>
                         <div className={styles.formRow}>
                             <TextInput
                                 placeholder='smtp.exemple.com'

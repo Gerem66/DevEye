@@ -8,6 +8,7 @@ import {
     invalidate,
     SegmentedControl,
     settingsStyles as shell,
+    Term,
     TextInput,
     useResourceVersion,
     type ConfirmRequest
@@ -236,7 +237,9 @@ export default function MailAccountSettingsPanel({ scope, canWrite, gone }: Sett
             {!providerManaged && (
                 <>
                     <div className={shell.field}>
-                        <span className={shell.sectionLabel}>IMAP (réception)</span>
+                        <span className={shell.sectionLabel}>
+                            <Term id='imap'>IMAP</Term> (réception)
+                        </span>
                         <div className={styles.formRow}>
                             <TextInput
                                 placeholder='imap.exemple.com'
@@ -270,7 +273,9 @@ export default function MailAccountSettingsPanel({ scope, canWrite, gone }: Sett
                     </div>
 
                     <div className={shell.field}>
-                        <span className={shell.sectionLabel}>SMTP (envoi)</span>
+                        <span className={shell.sectionLabel}>
+                            <Term id='smtp'>SMTP</Term> (envoi)
+                        </span>
                         <div className={styles.formRow}>
                             <TextInput
                                 placeholder='smtp.exemple.com'
@@ -310,7 +315,9 @@ export default function MailAccountSettingsPanel({ scope, canWrite, gone }: Sett
             )}
 
             <div className={shell.field}>
-                <span className={shell.sectionLabel}>Proxy</span>
+                <span className={shell.sectionLabel}>
+                    <Term id='proxy'>Proxy</Term>
+                </span>
                 <Checkbox
                     checked={proxyEnabled}
                     disabled={readOnly}

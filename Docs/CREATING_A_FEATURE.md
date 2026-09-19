@@ -168,6 +168,12 @@ holdSecrecy? }`). Cela suffit à le faire apparaître dans la grille, dans le
    aussitôt. La clé est par convention la commande de comptage (`audience.count`,
    `git.count`) et doit figurer dans `ResourceKey`. Invalider **à la source
    de la mutation**, pas au cycle de vie du popup. Exemple : `features/audience/src/client/SiteDialog.tsx`.
+7. **Vocabulaire technique** : l'interface s'adresse à quelqu'un qui débute en
+   informatique. Un terme de métier indispensable dans une phrase (« zero
+   knowledge », « webhook ») s'écrit `<Term id='…'>` (barrel SDK) : il ouvre sa
+   définition du glossaire, et la phrase reste courte. Un terme nouveau s'ajoute
+   à `client/src/Components/Term/glossary.ts` (deux ou trois phrases justes,
+   sans autre jargon) et à `GlossaryTermId` du portrait typé.
 
 ---
 

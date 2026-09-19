@@ -17,6 +17,7 @@ import Checkbox from '@/Components/Checkbox';
 import { Dialog } from '@/Components/Dialog';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import SelectInput from '@/Components/SelectInput';
+import Term from '@/Components/Term';
 import TextInput from '@/Components/TextInput';
 import { moduleClientProvider } from '@/sdk/registry';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
@@ -532,8 +533,8 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                             <span className={styles.fieldHint}>{KIND_HINT[draft.kind]}</span>
                             {!mail && (
                                 <span className={styles.fieldHint}>
-                                    Sans le module Mail, aucun canal e-mail : les alertes partent par Discord ou par
-                                    webhook.
+                                    Sans le module Mail, aucun canal e-mail : les alertes partent par Discord ou par{' '}
+                                    <Term id='webhook'>webhook</Term>.
                                 </span>
                             )}
                         </label>
@@ -654,7 +655,7 @@ function looksLikeDiscord(url: string): boolean {
 }
 
 const KIND_HINT: Record<NotificationChannelKind, string> = {
-    email: 'Un compte Mail « open » de l’espace expédie le message.',
+    email: 'Une boîte Mail « ouverte » de l’espace expédie le message.',
     webhook:
         'Le message lisible est répété dans « content » (Discord) et « text » (Slack), les champs structurés suivent pour un point d’entrée maison.',
     discord:

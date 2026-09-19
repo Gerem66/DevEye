@@ -3,6 +3,7 @@ import { ws } from '@/api/ws';
 import { Dialog } from '@/Components/Dialog';
 import { openInfo } from '@/Components/InfoPopup';
 import Button from '@/Components/Button';
+import Term from '@/Components/Term';
 import { useAuth } from '@/auth/AuthProvider';
 import { refreshSecrecyStatus } from '@/stores/secrecy';
 import type { SecrecyStatus, TwoFactorStatus } from '@deveye/types';
@@ -336,9 +337,13 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                         <div className={styles.statusInfo}>
                             <h3>{status?.enabled ? '2FA Activé' : '2FA Désactivé'}</h3>
                             <p>
-                                {status?.enabled
-                                    ? `${status.backupCodesRemaining} codes de secours restants`
-                                    : 'Activez la 2FA pour sécuriser votre compte'}
+                                {status?.enabled ? (
+                                    `${status.backupCodesRemaining} codes de secours restants`
+                                ) : (
+                                    <>
+                                        Activez la <Term id='twoFactor'>2FA</Term> pour sécuriser votre compte
+                                    </>
+                                )}
                             </p>
                         </div>
                         <button className={styles.infoBtn} onClick={showTwoFactorInfo} title='Comment ça fonctionne ?'>

@@ -10,6 +10,8 @@ import {
     featuresInCategory,
     type FeatureCatalogEntry
 } from '../catalog';
+import Term from '@/Components/Term';
+
 import { FeatureArt } from '../art';
 import styles from './AboutContent.module.css';
 
@@ -152,7 +154,10 @@ export default function AboutContent() {
                     </li>
                     <li className={styles.serviceItem}>
                         <strong>Alertes par e-mail</strong>
-                        <span>Envoient leurs alertes par un compte configuré dans Mail, ou par un webhook.</span>
+                        <span>
+                            Envoient leurs alertes par un compte configuré dans Mail, ou par un{' '}
+                            <Term id='webhook'>webhook</Term>.
+                        </span>
                         <div className={styles.chips}>
                             {alerting.map((entry) => (
                                 <FeatureChip key={entry.id} entry={entry} />
