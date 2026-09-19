@@ -108,6 +108,8 @@ const NON_MUTATING = new Set([
     'cloudSync.syncNow',
     // Lecture pure (avancement des synchronisations en cours).
     'git.syncStatuses',
+    // Lecture pure : c'est « settings » qui porte le verbe `set`, pas la commande.
+    'x-rdv.settings',
     'mail.oauthStart',
     'mail.accountTestConnection',
     'mail.attachmentScan',
