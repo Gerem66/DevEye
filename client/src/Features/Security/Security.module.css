@@ -460,9 +460,12 @@
     color: var(--text-muted);
 }
 
+/* À la largeur de la clé : le bouton de copie la suit, sans étirer le cadre. */
 .manualKey {
     display: flex;
     align-items: center;
+    width: fit-content;
+    max-width: 100%;
     gap: var(--space-xs);
     padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-sm);
     background: var(--glass-bg);
@@ -470,7 +473,6 @@
 }
 
 .manualKey code {
-    flex: 1;
     min-width: 0;
     font-family: var(--font-mono);
     font-size: 0.85rem;
