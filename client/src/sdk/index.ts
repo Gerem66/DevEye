@@ -24,6 +24,7 @@ import type { z, ZodType } from 'zod';
 // la glue des modules, avant leur enregistrement.
 export { default as Button } from '@/Components/Button';
 export { default as Checkbox } from '@/Components/Checkbox';
+export { default as ChoiceCards } from '@/Components/ChoiceCards';
 export { ConfirmDialog } from '@/Components/ConfirmDialog';
 export type { ConfirmRequest } from '@/Components/ConfirmDialog';
 export { default as SegmentedControl } from '@/Components/SegmentedControl';

@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
 import {
-    Button,
     invalidate,
     ReadOnlyNotice,
-    SegmentedControl,
     settingsStyles as shell,
+    UnlockCancelledError,
     useActiveWorkspace,
     useResourceVersion,
     withSecrecy
@@ -12,22 +11,22 @@ import {
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
 import { api, humanizeError } from './api';
-import { SECURITY_TIER_HINT, SECURITY_TIER_OPTIONS } from './securityTier';
+import { SecurityTierChoice } from './SecurityTierChoice';
 
 import type { MailAccount, MailSecurityTier } from '../contracts/domain';
 
 /**
- * Le palier de chiffrement d'une boîte : l'onglet Chiffrement de ses réglages.
- * Le formulaire d'ajout garde le choix à la création (il détermine sous quelle
- * clé la boîte naît) ; ensuite, c'est ici.
+ * La protection d'une boîte : l'onglet Chiffrement de ses réglages. Le
+ * formulaire d'ajout garde le choix à la création (il détermine sous quelle clé
+ * la boîte naît) ; ensuite, c'est ici.
  *
- * Changer de palier re-chiffre toute la boîte côté serveur (compte, dossiers,
- * enveloppes) : le bouton l'annonce, et `withSecrecy` couvre le déverrouillage
- * qu'exige une boîte protégée.
+ * Choisir applique : le serveur re-chiffre toute la boîte (compte, dossiers,
+ * enveloppes), et `withSecrecy` couvre le déverrouillage qu'exige une boîte
+ * protégée. Le geste est réversible, il n'a donc pas de confirmation à lui.
  *
  * La boîte est l'élément de la portée (`scope.itemId`) ; l'onglet n'existe qu'à
- * cette échelle. Une boîte projetée d'un autre espace n'a pas de palier à régler
- * ici : il relie la boîte au mot de passe de son auteur, et le serveur refuse le
+ * cette échelle. Une boîte projetée d'un autre espace ne se règle pas ici : sa
+ * protection la relie au mot de passe de son auteur, et le serveur refuse le
  * changement depuis une fenêtre. L'onglet le dit plutôt que d'ouvrir sur un refus.
  */
 export default function MailEncryptionPanel({ scope, canWrite }: SettingsPanelProps) {
@@ -35,8 +34,7 @@ export default function MailEncryptionPanel({ scope, canWrite }: SettingsPanelPr
     const version = useResourceVersion('mail.accountList');
     const workspace = useActiveWorkspace();
     const [account, setAccount] = useState<MailAccount | null>(null);
-    const [tier, setTier] = useState<MailSecurityTier>('open');
-    const [busy, setBusy] = useState(false);
+    const [pending, setPending] = useState<MailSecurityTier | null>(null);
     const [status, setStatus] = useState<string | null>(null);
 
     useEffect(() => {
@@ -46,7 +44,6 @@ export default function MailEncryptionPanel({ scope, canWrite }: SettingsPanelPr
             .then((res) => {
                 const found = res.accounts.find((a) => a.id === accountId) ?? null;
                 setAccount(found);
-                if (found) setTier(found.securityTier);
             })
             .catch((e) => setStatus(humanizeError(e, 'Chargement impossible.')));
     }, [accountId, version]);
@@ -56,7 +53,7 @@ export default function MailEncryptionPanel({ scope, canWrite }: SettingsPanelPr
     if (account.foreign) {
         return (
             <p className={shell.sectionHint}>
-                Cette boîte appartient à un autre espace, qui la partage ici. Son palier se règle depuis son espace
+                Cette boîte appartient à un autre espace, qui la partage ici. Sa protection se règle depuis son espace
                 d’origine ; ici, elle est toujours ouverte.
             </p>
         );
@@ -64,16 +61,14 @@ export default function MailEncryptionPanel({ scope, canWrite }: SettingsPanelPr
     if (workspace?.kind !== 'personal') {
         return (
             <p className={shell.sectionHint}>
-                Dans un espace partagé, la boîte vit sous la clé de l’espace, lisible par tout membre : il n’y a qu’un
-                palier, ouvert.
+                Dans un espace partagé, la boîte vit sous la clé de l’espace, lisible par tout membre : elle y est
+                toujours ouverte.
             </p>
         );
     }
 
-    const changed = tier !== account.securityTier;
-
-    const save = async () => {
-        setBusy(true);
+    const apply = async (tier: MailSecurityTier) => {
+        setPending(tier);
         setStatus(null);
         try {
             await withSecrecy(() =>
@@ -84,48 +79,39 @@ export default function MailEncryptionPanel({ scope, canWrite }: SettingsPanelPr
                     syncIntervalMinutes: account.syncIntervalMinutes
                 })
             );
+            setAccount({ ...account, securityTier: tier });
             invalidate('mail.accountList');
-            setStatus('Palier changé : la boîte a été re-chiffrée.');
+            setStatus(tier === 'guarded' ? 'La boîte est maintenant protégée.' : 'La boîte est maintenant ouverte.');
         } catch (e) {
-            setStatus(humanizeError(e, 'Changement impossible.'));
+            if (!(e instanceof UnlockCancelledError)) setStatus(humanizeError(e, 'Changement impossible.'));
         } finally {
-            setBusy(false);
+            setPending(null);
         }
     };
 
     return (
         <div className={shell.section}>
             <div className={shell.field}>
-                <span className={shell.sectionLabel}>Palier</span>
-                <SegmentedControl
-                    aria-label='Palier de chiffrement'
-                    value={tier}
-                    disabled={busy || !canWrite}
-                    options={SECURITY_TIER_OPTIONS}
-                    onChange={setTier}
+                <span className={shell.sectionLabel}>Protection de la boîte</span>
+                <SecurityTierChoice
+                    value={account.securityTier}
+                    disabled={!canWrite}
+                    pending={pending}
+                    onChange={(tier) => void apply(tier)}
                 />
-                <span className={shell.fieldHint}>{SECURITY_TIER_HINT[tier]}</span>
             </div>
 
-            <p className={shell.fieldHint}>
-                Changer de palier re-chiffre toute la boîte (identité, dossiers, enveloppes) sous la nouvelle clé.
-                Passer en « Protégé » exige que le chiffrement par mot de passe soit activé sur le compte, et retire la
-                boîte de la relève de fond.
-            </p>
-
-            {canWrite ? (
-                <div className={shell.sectionActions}>
-                    <Button onClick={() => void save()} disabled={busy || !changed}>
-                        {busy ? 'Re-chiffrement…' : 'Changer de palier'}
-                    </Button>
-                </div>
-            ) : (
+            {!canWrite && (
                 <ReadOnlyNotice>
-                    Votre rôle ne permet pas de changer le palier d’une boîte : il relève de l’écriture sur Mail.
+                    Votre rôle ne permet pas de changer la protection d’une boîte : elle relève de l’écriture sur Mail.
                 </ReadOnlyNotice>
             )}
 
-            {status && <p className={shell.notice}>{status}</p>}
+            {status && (
+                <p className={shell.notice} role='status'>
+                    {status}
+                </p>
+            )}
         </div>
     );
 }

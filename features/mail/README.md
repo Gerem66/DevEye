@@ -160,7 +160,7 @@ prêts et le dialogue de compte que le formulaire d'un canal e-mail compose),
 `MessageInfoPopup`, `ImageSourcesPopup`, `ComposePopup`, `ConfirmPopup`), les
 panneaux `MailGeneralPanel` (l'espace : analyse externe, domaines d'images,
 mode de rendu), `MailSyncPanel` (la cadence d'une boîte, ses relèves) et
-`MailEncryptionPanel` (le palier d'une boîte, `securityTier.ts`), la feuille
+`MailEncryptionPanel` (le palier d'une boîte, par les cartes de `SecurityTierChoice`), la feuille
 `style.module.css`.
 
 Les contrats (`src/contracts/{domain,commands}.ts`) sont sortis de

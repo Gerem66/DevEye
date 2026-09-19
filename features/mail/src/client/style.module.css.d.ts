@@ -136,7 +136,6 @@ declare const styles: {
     readonly tabBar: string;
     readonly tabButton: string;
     readonly tabButtonActive: string;
-    readonly tierChoice: string;
     readonly toolbar: string;
     readonly toolbarActions: string;
 };

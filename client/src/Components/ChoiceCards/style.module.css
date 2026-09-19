@@ -1,0 +1,129 @@
+.group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding: var(--space-md);
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-md);
+    transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast);
+}
+
+.card:not(.inert):hover {
+    border-color: var(--glass-border-strong);
+}
+
+.card:focus-within {
+    border-color: var(--input-focus);
+}
+
+.active,
+.active:not(.inert):hover {
+    background: var(--accent-bg);
+    border-color: var(--accent);
+}
+
+.head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    cursor: pointer;
+}
+
+/* Toute la carte coche : le libellé s'étend sur elle, et ce que la description
+   a de cliquable repasse au-dessus. */
+.head::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+}
+
+.description :is(button, a) {
+    position: relative;
+    z-index: 1;
+}
+
+.inert .head {
+    cursor: not-allowed;
+}
+
+.radio {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.mark {
+    flex-shrink: 0;
+    width: 1rem;
+    height: 1rem;
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-pill);
+    background: var(--input-bg);
+    transition:
+        border-color var(--transition-fast),
+        box-shadow var(--transition-fast);
+}
+
+.radio:checked + .mark {
+    border-color: var(--accent);
+    box-shadow: inset 0 0 0 0.25rem var(--accent);
+}
+
+.icon {
+    color: var(--text-secondary);
+}
+
+.active .icon {
+    color: var(--accent);
+}
+
+.label {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.pending {
+    margin-left: auto;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+.description {
+    padding-left: calc(1rem + var(--space-sm));
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.description p {
+    margin: 0;
+}
+
+.description .unavailable {
+    margin-top: var(--space-xs);
+    color: var(--warning);
+}
+
+.inert:not(.active) .label,
+.inert:not(.active) .description {
+    filter: opacity(0.7);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .card,
+    .mark {
+        transition: none;
+    }
+}

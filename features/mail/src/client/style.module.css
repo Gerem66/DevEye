@@ -1248,13 +1248,6 @@
     letter-spacing: 0.04em;
 }
 
-/* Le palier à la création : le segment et la phrase du choix courant. */
-.tierChoice {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-xs);
-}
-
 .settingsResetBtn {
     align-self: flex-start;
 }

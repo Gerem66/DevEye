@@ -13,7 +13,7 @@ import {
 import { api, humanizeError } from './api';
 import { awaitConsentWindow } from './oauthWindow';
 import { ProviderCard } from './ProviderCard';
-import { SECURITY_TIER_HINT, SECURITY_TIER_OPTIONS } from './securityTier';
+import { SecurityTierChoice } from './SecurityTierChoice';
 import styles from './style.module.css';
 
 import { MAIL_SYNC_INTERVAL_DEFAULT_MINUTES } from '../contracts/domain';
@@ -325,21 +325,10 @@ export function AccountPopup() {
                     />
                 )}
 
-                {/* Le palier ne se choisit qu'à la création : il détermine sous
-                    quelle clé la boîte naît, et se change ensuite dans l'onglet
-                    Chiffrement de ses réglages. Seulement dans l'espace personnel :
-                    un espace partagé n'a qu'une clé, lisible par tout membre, donc
-                    un seul palier. */}
+                {/* Seulement dans l'espace personnel : un espace partagé n'a qu'une
+                    clé, lisible par tout membre, donc rien à choisir. */}
                 {mode === 'add' && workspace?.kind === 'personal' && (
-                    <div className={styles.tierChoice}>
-                        <SegmentedControl
-                            aria-label='Palier de chiffrement'
-                            value={draft.securityTier}
-                            options={SECURITY_TIER_OPTIONS}
-                            onChange={(tier) => set('securityTier', tier)}
-                        />
-                        <span className={styles.fieldHint}>{SECURITY_TIER_HINT[draft.securityTier]}</span>
-                    </div>
+                    <SecurityTierChoice value={draft.securityTier} onChange={(tier) => set('securityTier', tier)} />
                 )}
 
                 {/* An OAuth account has no second tab to offer: the manual form can't
