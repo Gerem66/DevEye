@@ -264,6 +264,11 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
     // The re-auth window only makes sense once password encryption is ON: it
     // governs how often that password is re-checked. Disabled otherwise.
     const encryptionEnabled = secrecy?.enabled ?? false;
+    /**
+     * Le geste secondaire d'une carte. Tant qu'aucune n'en a, l'emplacement
+     * n'existe chez personne : l'aide vient alors coller aux commandes.
+     */
+    const extraColumn = status?.enabled === true;
     // Current persisted window in minutes (null = server default of 1 min).
     const currentReAuthMinutes = Math.round((secrecy?.reAuthInterval ?? 60) / 60);
     // Strict enough to count as a protection: 5 min or less, 0 ("always
@@ -357,8 +362,8 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                     <span className='icon icon-info' />
                                 </button>
                             </div>
-                            <div className={styles.extraSlot}>
-                                {status?.enabled && (
+                            {extraColumn && (
+                                <div className={styles.extraSlot}>
                                     <button
                                         className={styles.resetBtn}
                                         onClick={() => setShowRegenConfirm(true)}
@@ -366,8 +371,8 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                     >
                                         <span className='icon icon-refresh' />
                                     </button>
-                                )}
-                            </div>
+                                </div>
+                            )}
                             <div className={styles.actionSlot}>
                                 {!status?.enabled ? (
                                     <Button onClick={startSetup}>Activer</Button>
@@ -406,7 +411,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                     <span className='icon icon-info' />
                                 </button>
                             </div>
-                            <div className={styles.extraSlot} />
+                            {extraColumn && <div className={styles.extraSlot} />}
                             <div className={styles.actionSlot}>
                                 <Button
                                     variant={secrecy?.enabled ? 'danger' : 'primary'}
@@ -442,7 +447,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                     </button>
                                 )}
                             </div>
-                            <div className={styles.extraSlot} />
+                            {extraColumn && <div className={styles.extraSlot} />}
                             <div className={styles.actionSlot}>
                                 {!encryptionEnabled ? (
                                     <span className={styles.reAuthOff}>Désactivé</span>
