@@ -1,0 +1,32 @@
+.copy {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: var(--space-xs);
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color var(--transition-fast);
+}
+
+.copy:hover {
+    color: var(--text-primary);
+}
+
+.copy:focus-visible {
+    outline: 1px solid var(--input-focus);
+}
+
+.copied,
+.copied:hover {
+    color: var(--success);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .copy {
+        transition: none;
+    }
+}

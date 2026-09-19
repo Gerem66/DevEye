@@ -3,6 +3,7 @@ import { ws } from '@/api/ws';
 import { Dialog } from '@/Components/Dialog';
 import { openInfo } from '@/Components/InfoPopup';
 import Button from '@/Components/Button';
+import CopyButton from '@/Components/CopyButton';
 import Term from '@/Components/Term';
 import { useAuth } from '@/auth/AuthProvider';
 import { refreshSecrecyStatus } from '@/stores/secrecy';
@@ -464,7 +465,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                         open={setupOpen}
                         onClose={closeSetup}
                         title='Configurer la 2FA'
-                        width={520}
+                        width={640}
                         onSubmit={() => {
                             if (setupData && verifyCode.length === 6) void verifyAndEnable();
                         }}
@@ -498,10 +499,16 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                                 className={styles.qrCode}
                                             />
                                         </div>
-                                        <div className={styles.manualEntry}>
-                                            <span>Clé manuelle :</span>
-                                            <code>{setupData.secret}</code>
-                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Entre les deux étapes dans le document (l'ordre d'un écran
+                                    étroit), sous elles et sur toute la largeur en colonnes. */}
+                                <div className={styles.manualEntry}>
+                                    <span>Scan impossible ? Saisissez cette clé dans l’application :</span>
+                                    <div className={styles.manualKey}>
+                                        <code>{setupData.secret}</code>
+                                        <CopyButton value={setupData.secret} label='Copier la clé' />
                                     </div>
                                 </div>
 
