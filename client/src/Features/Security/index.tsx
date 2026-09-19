@@ -347,25 +347,37 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                 )}
                             </p>
                         </div>
-                        <button className={styles.infoBtn} onClick={showTwoFactorInfo} title='Comment ça fonctionne ?'>
-                            <span className='icon icon-info' />
-                        </button>
-                        {!status?.enabled ? (
-                            <Button onClick={startSetup}>Activer</Button>
-                        ) : (
-                            <>
+                        <div className={styles.statusControls}>
+                            <div className={styles.infoSlot}>
                                 <button
-                                    className={styles.resetBtn}
-                                    onClick={() => setShowRegenConfirm(true)}
-                                    title='Régénérer les codes de secours'
+                                    className={styles.infoBtn}
+                                    onClick={showTwoFactorInfo}
+                                    title='Comment ça fonctionne ?'
                                 >
-                                    <span className='icon icon-refresh' />
+                                    <span className='icon icon-info' />
                                 </button>
-                                <Button variant='danger' onClick={openDisableConfirm}>
-                                    Désactiver
-                                </Button>
-                            </>
-                        )}
+                            </div>
+                            <div className={styles.extraSlot}>
+                                {status?.enabled && (
+                                    <button
+                                        className={styles.resetBtn}
+                                        onClick={() => setShowRegenConfirm(true)}
+                                        title='Régénérer les codes de secours'
+                                    >
+                                        <span className='icon icon-refresh' />
+                                    </button>
+                                )}
+                            </div>
+                            <div className={styles.actionSlot}>
+                                {!status?.enabled ? (
+                                    <Button onClick={startSetup}>Activer</Button>
+                                ) : (
+                                    <Button variant='danger' onClick={openDisableConfirm}>
+                                        Désactiver
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
                     </div>
 
                     <div className={styles.statusCard}>
@@ -384,12 +396,26 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                     : 'Verrouillez vos données chiffrées avec votre mot de passe.'}
                             </p>
                         </div>
-                        <button className={styles.infoBtn} onClick={showEncryptionInfo} title='Comment ça fonctionne ?'>
-                            <span className='icon icon-info' />
-                        </button>
-                        <Button variant={secrecy?.enabled ? 'danger' : 'primary'} onClick={() => setSecurityOpen(true)}>
-                            {secrecy?.enabled ? 'Désactiver' : 'Activer'}
-                        </Button>
+                        <div className={styles.statusControls}>
+                            <div className={styles.infoSlot}>
+                                <button
+                                    className={styles.infoBtn}
+                                    onClick={showEncryptionInfo}
+                                    title='Comment ça fonctionne ?'
+                                >
+                                    <span className='icon icon-info' />
+                                </button>
+                            </div>
+                            <div className={styles.extraSlot} />
+                            <div className={styles.actionSlot}>
+                                <Button
+                                    variant={secrecy?.enabled ? 'danger' : 'primary'}
+                                    onClick={() => setSecurityOpen(true)}
+                                >
+                                    {secrecy?.enabled ? 'Désactiver' : 'Activer'}
+                                </Button>
+                            </div>
+                        </div>
                     </div>
 
                     <div className={styles.statusCard}>
@@ -404,59 +430,66 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                             plutôt qu'un champ grisé qu'on peut croire réparable, un mot
                             qui dit l'état. Le « pourquoi » est déjà dans la description
                             juste au-dessus, l'aide contextuelle n'a plus rien à ajouter. */}
-                        {!encryptionEnabled ? (
-                            <span className={styles.reAuthOff}>Désactivé</span>
-                        ) : (
-                            <>
-                                <button
-                                    className={styles.infoBtn}
-                                    onClick={showReauthInfo}
-                                    title='Comment ça fonctionne ?'
-                                >
-                                    <span className='icon icon-info' />
-                                </button>
-                                <div className={styles.reAuthEditor}>
-                                    <input
-                                        type='number'
-                                        inputMode='numeric'
-                                        min={0}
-                                        max={1440}
-                                        step={1}
-                                        className={styles.reAuthInput}
-                                        value={reAuthInput}
-                                        onChange={(e) => setReAuthInput(e.target.value.replace(/\D/g, ''))}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && reAuthDirty) void saveReAuth();
-                                        }}
-                                        aria-label='Délai de validation en minutes'
-                                    />
-                                    <span className={styles.reAuthUnit}>min</span>
-                                    <span className={styles.reAuthStatus} aria-live='polite'>
-                                        {reAuthSaveState === 'saving' && (
-                                            <span
-                                                key='saving'
-                                                className={`icon icon-spinner ${styles.reAuthSpin}`}
-                                                title='Enregistrement…'
-                                            />
-                                        )}
-                                        {reAuthSaveState === 'saved' && (
-                                            <span
-                                                key='saved'
-                                                className={`icon icon-check-circle ${styles.reAuthOk}`}
-                                                title='Enregistré'
-                                            />
-                                        )}
-                                        {reAuthSaveState === 'error' && (
-                                            <span
-                                                key='error'
-                                                className={`icon icon-x-circle ${styles.reAuthErr}`}
-                                                title="Échec de l'enregistrement"
-                                            />
-                                        )}
-                                    </span>
-                                </div>
-                            </>
-                        )}
+                        <div className={styles.statusControls}>
+                            <div className={styles.infoSlot}>
+                                {encryptionEnabled && (
+                                    <button
+                                        className={styles.infoBtn}
+                                        onClick={showReauthInfo}
+                                        title='Comment ça fonctionne ?'
+                                    >
+                                        <span className='icon icon-info' />
+                                    </button>
+                                )}
+                            </div>
+                            <div className={styles.extraSlot} />
+                            <div className={styles.actionSlot}>
+                                {!encryptionEnabled ? (
+                                    <span className={styles.reAuthOff}>Désactivé</span>
+                                ) : (
+                                    <div className={styles.reAuthEditor}>
+                                        <input
+                                            type='number'
+                                            inputMode='numeric'
+                                            min={0}
+                                            max={1440}
+                                            step={1}
+                                            className={styles.reAuthInput}
+                                            value={reAuthInput}
+                                            onChange={(e) => setReAuthInput(e.target.value.replace(/\D/g, ''))}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' && reAuthDirty) void saveReAuth();
+                                            }}
+                                            aria-label='Délai de validation en minutes'
+                                        />
+                                        <span className={styles.reAuthUnit}>min</span>
+                                        <span className={styles.reAuthStatus} aria-live='polite'>
+                                            {reAuthSaveState === 'saving' && (
+                                                <span
+                                                    key='saving'
+                                                    className={`icon icon-spinner ${styles.reAuthSpin}`}
+                                                    title='Enregistrement…'
+                                                />
+                                            )}
+                                            {reAuthSaveState === 'saved' && (
+                                                <span
+                                                    key='saved'
+                                                    className={`icon icon-check-circle ${styles.reAuthOk}`}
+                                                    title='Enregistré'
+                                                />
+                                            )}
+                                            {reAuthSaveState === 'error' && (
+                                                <span
+                                                    key='error'
+                                                    className={`icon icon-x-circle ${styles.reAuthErr}`}
+                                                    title="Échec de l'enregistrement"
+                                                />
+                                            )}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     </div>
 
                     {error && <div className={styles.error}>{error}</div>}

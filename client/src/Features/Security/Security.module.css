@@ -174,6 +174,42 @@
     margin: 0;
 }
 
+/* La traîne d'une carte : aide, geste secondaire, commande. Chaque emplacement
+   garde sa largeur même vide, pour que les trois cartes alignent leurs colonnes. */
+.statusControls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-shrink: 0;
+}
+
+.infoSlot,
+.extraSlot,
+.actionSlot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.infoSlot {
+    width: 28px;
+}
+
+.extraSlot {
+    width: 36px;
+}
+
+/* Assez large pour « Désactiver » et pour le délai : toutes les commandes de la
+   page y tiennent à la même largeur. */
+.actionSlot {
+    width: 150px;
+}
+
+.actionSlot > * {
+    width: 100%;
+}
+
 .infoBtn {
     display: flex;
     align-items: center;
@@ -234,11 +270,11 @@
     display: flex;
     align-items: center;
     gap: var(--space-sm);
-    flex-shrink: 0;
 }
 
 .reAuthInput {
-    width: 64px;
+    flex: 1;
+    min-width: 0;
     padding: var(--space-sm);
     background: var(--glass-bg);
     border: 1px solid var(--glass-border);
@@ -279,6 +315,7 @@
 .reAuthOff {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     padding: var(--space-sm) var(--space-md);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-sm);
