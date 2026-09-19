@@ -1,4 +1,4 @@
-/** WMO weather code → emoji. Shared by the Weather feature and the topbar status. */
+/** L'emoji d'un code météo WMO, pour la fiche, la tuile et la barre du haut. */
 const WMO_ICONS: Record<number, string> = {
     0: '☀️',
     1: '🌤️',

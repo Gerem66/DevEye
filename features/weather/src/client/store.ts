@@ -2,19 +2,19 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { isSocketOpen, onResourceChange, onSocketOpen } from 'deveye-sdk-client';
 import type { WeatherLocation, WeatherReport } from '../contracts/domain';
 import { api } from './api';
+import { isKeyRefused } from './providers';
 
 /**
- * Shared weather store: resolves the primary city and keeps its live report
- * fresh so the topbar status and the home widget stay in sync from one fetch.
- * Reloads as soon as the WebSocket becomes `open`, so the widget shows the
- * temperature on connect instead of waiting for the next poll.
+ * Le magasin partagé de la tuile d'accueil et de la barre du haut : la ville
+ * principale et son relevé, tenus à jour par une seule lecture. Il relit dès que
+ * la socket s'ouvre, pour afficher la température à la connexion plutôt qu'au
+ * prochain tour d'horloge.
  */
 const REFRESH_MS = 10 * 60 * 1000;
 
 interface WeatherStoreState {
-    /** All configured locations, primary-first then by position. */
     locations: WeatherLocation[];
-    /** Live report for the primary location. */
+    /** Le relevé de la ville principale. */
     report: WeatherReport | null;
     loading: boolean;
 }
@@ -26,9 +26,9 @@ let unsubState: (() => void) | null = null;
 let unsubInvalidate: (() => void) | null = null;
 let refCount = 0;
 let inFlight = false;
-// A refresh requested while one was already running: we run exactly one more
-// pass when the current one settles, so a "socket just opened" retry arriving
-// mid-flight is never swallowed by the `inFlight` guard.
+// Une relecture demandée pendant qu'une autre tourne : on en refait exactement
+// une à la fin, pour que celle qui suit l'ouverture de la socket ne soit jamais
+// avalée par le garde `inFlight`.
 let pending = false;
 
 function emit(next: Partial<WeatherStoreState>): void {
@@ -36,38 +36,40 @@ function emit(next: Partial<WeatherStoreState>): void {
     for (const fn of listeners) fn();
 }
 
-/** The primary city: the one flagged primary, else the first by position. */
+/** La ville principale : celle qui est marquée, sinon la première. */
 export function primaryLocation(locations: WeatherLocation[]): WeatherLocation | null {
     return locations.find((l) => l.isPrimary) ?? locations[0] ?? null;
 }
 
 export async function refreshWeather(): Promise<void> {
-    // Coalesce concurrent calls: note that another refresh was asked for and run
-    // it once the in-flight one settles (see the `pending` handling below).
     if (inFlight) {
         pending = true;
         return;
     }
     inFlight = true;
+    let primaryId: string | null = null;
     try {
         const list = await api.send('weather.list', {});
-        // Surface the configured cities as soon as we have them, *before* the
-        // slower, provider-dependent report fetch. This is what stops a failed
-        // or slow report from masquerading as "Aucune météo configurée": the
-        // primary city stays known even when its report isn't here yet.
+        // Les villes d'abord, avant le relevé, plus lent et qui peut échouer :
+        // la tuile sait ainsi qu'une ville existe même quand son relevé manque.
         emit({ locations: list.locations });
         const primary = primaryLocation(list.locations);
         if (!primary) {
             emit({ report: null, loading: false });
             return;
         }
+        primaryId = primary.id;
         const res = await api.send('weather.get', { id: primary.id });
         emit({ report: res.report, loading: false });
-    } catch {
-        // Socket not open yet: stay loading, the open listener retries. Only a
-        // real, connected error drops the spinner; the locations surfaced above
-        // survive, so a failed report never reads as "Aucune météo configurée".
-        if (isSocketOpen()) emit({ loading: false });
+    } catch (e) {
+        // Une clé refusée périme le relevé : le garder afficherait une température
+        // que cette clé seule permettait d'obtenir. De même s'il est celui d'une
+        // autre ville, la principale ayant changé. Tout autre échec garde le
+        // dernier relevé, et socket fermée on reste en chargement : l'écouteur
+        // d'ouverture réessaie.
+        const foreign = primaryId !== null && state.report !== null && state.report.locationId !== primaryId;
+        if (isKeyRefused(e) || foreign) emit({ report: null, loading: false });
+        else if (isSocketOpen()) emit({ loading: false });
     } finally {
         inFlight = false;
         if (pending) {
@@ -77,10 +79,7 @@ export async function refreshWeather(): Promise<void> {
     }
 }
 
-/**
- * Push an authoritative locations list (e.g. after the full Weather view adds,
- * removes, reorders or re-primaries cities) and refresh the primary report.
- */
+/** La fiche vient d'écrire : sa liste fait foi, et le relevé principal se relit. */
 export function syncWeatherLocations(locations: WeatherLocation[]): void {
     emit({ locations });
     void refreshWeather();
@@ -91,11 +90,9 @@ function start(): void {
     if (refCount > 1) return;
     void refreshWeather();
     timer = setInterval(() => void refreshWeather(), REFRESH_MS);
-    // Reload as soon as the socket (re)connects (fires now if already open).
     unsubState = onSocketOpen(() => void refreshWeather());
-    // Une ville ajoutée, retirée ou repassée en principale par un autre membre
-    // de l'espace : le sujet `weather` l'annonce, et la barre comme la tuile
-    // suivent sans attendre le relevé des dix minutes.
+    // Une ville ou une clé changée, par un autre membre ou depuis les réglages :
+    // la barre comme la tuile suivent sans attendre le tour des dix minutes.
     unsubInvalidate = onResourceChange('weather.list', () => void refreshWeather());
 }
 

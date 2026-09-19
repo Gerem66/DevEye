@@ -39,6 +39,7 @@ export type ResourceKey =
     | 'sentinel.findings'
     | 'sentinel.baseline'
     | 'weather.list'
+    | 'weather.keyList'
     | 'osint.history'
     | 'cve.news'
     | 'cve.favorites'

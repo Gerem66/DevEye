@@ -9,16 +9,14 @@ export const weatherList = {
     output: z.object({ locations: z.array(weatherLocationSchema) })
 };
 
-/** Add a weather widget by city name; the server geocodes it to coordinates. */
+/** Ajouter une ville par son nom : le serveur la géocode. */
 export const weatherAdd = {
     command: 'weather.add' as const,
     input: z.object({
         query: z.string().min(1).max(120),
         format: weatherFormatSchema.default('current'),
         days: z.number().int().min(1).max(16).default(7),
-        provider: weatherProviderSchema.default('open-meteo'),
-        /** Optional per-city API key for the chosen provider. */
-        apiKey: z.string().max(256).optional()
+        provider: weatherProviderSchema.default('open-meteo')
     }),
     output: z.object({ location: weatherLocationSchema })
 };
@@ -30,9 +28,7 @@ export const weatherUpdate = {
         format: weatherFormatSchema.optional(),
         days: z.number().int().min(1).max(16).optional(),
         position: z.number().int().nonnegative().optional(),
-        provider: weatherProviderSchema.optional(),
-        /** Per-city API key: a non-empty string sets it, "" clears it, undefined leaves it. */
-        apiKey: z.string().max(256).optional()
+        provider: weatherProviderSchema.optional()
     }),
     output: z.object({ location: weatherLocationSchema })
 };
@@ -43,21 +39,21 @@ export const weatherRemove = {
     output: z.object({ id: locationId })
 };
 
-/** Reorder all of the user's locations; `ids` is the new full order. */
+/** Réordonner les villes de l'espace : `ids` est le nouvel ordre complet. */
 export const weatherReorder = {
     command: 'weather.reorder' as const,
     input: z.object({ ids: z.array(locationId).min(1) }),
     output: z.object({ locations: z.array(weatherLocationSchema) })
 };
 
-/** Mark one location as primary (topbar + widget); clears it on the others. */
+/** Faire d'une ville la principale, à la place de celle qui l'était. */
 export const weatherSetPrimary = {
     command: 'weather.setPrimary' as const,
     input: z.object({ id: locationId }),
     output: z.object({ locations: z.array(weatherLocationSchema) })
 };
 
-/** Fetch a live report for a configured location. */
+/** Le relevé d'une ville suivie. */
 export const weatherGet = {
     command: 'weather.get' as const,
     input: z.object({ id: locationId }),
@@ -78,7 +74,7 @@ export const weatherKeyList = {
     })
 };
 
-/** Store or clear the per-account API key for an advanced provider. */
+/** Poser la clé d'API de l'espace pour un fournisseur, ou la retirer par une chaîne vide. */
 export const weatherSetKey = {
     command: 'weather.setKey' as const,
     input: z.object({

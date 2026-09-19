@@ -1,33 +1,25 @@
 import { useCallback, useEffect, useState } from 'react';
-import { weatherProviderSchema, type WeatherProvider } from '../contracts/domain';
+import { providerNeedsKey, weatherProviderSchema, type WeatherProvider } from '../contracts/domain';
 
-import { ProviderKeys, settingsStyles as shell, useWorkspacePermissions, type ProviderKeyRow } from 'deveye-sdk-client';
+import {
+    invalidate,
+    onResourceChange,
+    ProviderKeys,
+    settingsStyles as shell,
+    useWorkspacePermissions,
+    type ProviderKeyRow
+} from 'deveye-sdk-client';
+import { PROVIDER_META } from './providers';
 import { api } from './api';
 
 /**
- * Le panneau Sources : les clés d'API des fournisseurs, à l'échelle de l'espace.
- * Un lieu peut porter la sienne, et sans elle retombe sur celle-ci
- * (`resolveLocationKey`). La clé ne revient jamais du serveur, seulement le fait
- * qu'elle existe.
+ * Le panneau Sources : les clés d'API des fournisseurs, à l'échelle de l'espace,
+ * seul endroit où elles se posent. La clé ne revient jamais du serveur, seulement
+ * le fait qu'elle existe.
  *
  * La liste et le dialogue de saisie viennent de la coquille (`ProviderKeys`) :
  * ce panneau n'apporte que le catalogue des fournisseurs et les deux commandes.
  */
-
-/** Ce que chaque fournisseur attend. Le registre est court et fermé. */
-const PROVIDER_META: Record<WeatherProvider, { label: string; needsKey: boolean; hint: string; signupUrl?: string }> = {
-    'open-meteo': {
-        label: 'Open-Meteo',
-        needsKey: false,
-        hint: 'Gratuit et sans clé : le fournisseur par défaut, rien à régler.'
-    },
-    openweathermap: {
-        label: 'OpenWeatherMap',
-        needsKey: true,
-        hint: 'Exige une clé d’API, gratuite à créer.',
-        signupUrl: 'https://openweathermap.org/api'
-    }
-};
 
 export default function WeatherKeysPanel() {
     // Poser une clé exige la permission déclarée `manageKeys`, pas seulement l'écriture.
@@ -46,12 +38,18 @@ export default function WeatherKeysPanel() {
 
     useEffect(() => {
         void load();
+        // La clé est un réglage de l'espace : qu'un autre membre la pose ou
+        // l'efface se voit ici sans rouvrir le panneau.
+        return onResourceChange('weather.keyList', () => void load());
     }, [load]);
 
     const save = useCallback(async (provider: string, key: string) => {
         setStatus(null);
-        const res = await api.send('weather.setKey', { provider: provider as WeatherProvider, key });
-        setHeld((prev) => ({ ...prev, [provider]: res.hasKey }));
+        await api.send('weather.setKey', { provider: provider as WeatherProvider, key });
+        // Le hub ne renvoie pas sa trame à l'auteur : c'est à lui de raviver ce que
+        // le sujet `weather` ravive chez les autres, soit ce panneau, le choix de
+        // source de la fiche, et les villes, qu'un retrait de clé change de source.
+        invalidate('weather.keyList', 'weather.list');
     }, []);
 
     const rows: ProviderKeyRow[] = weatherProviderSchema.options.map((provider) => ({
@@ -59,7 +57,7 @@ export default function WeatherKeysPanel() {
         label: PROVIDER_META[provider].label,
         hint: PROVIDER_META[provider].hint,
         held: held[provider] === true,
-        needsKey: PROVIDER_META[provider].needsKey,
+        needsKey: providerNeedsKey(provider),
         signupUrl: PROVIDER_META[provider].signupUrl,
         icon: 'cloud'
     }));

@@ -544,13 +544,16 @@
     color: var(--text-muted);
 }
 
-/* Discreet provider line + "Modifier" text-button, bottom-right of the card. */
+/* La source, discrète en bas de la carte. `relative` : le menu s’y ancre. */
 .providerBar {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: var(--space-sm);
+    gap: var(--space-xs);
     margin-top: var(--space-lg);
+    /* La barre d'erreur vit dans `.empty`, qui neutralise le pointeur. */
+    pointer-events: auto;
 }
 
 .providerNote {
@@ -558,7 +561,7 @@
     color: var(--text-muted);
 }
 
-.providerEdit {
+.providerPick {
     padding: 0;
     background: transparent;
     border: none;
@@ -569,77 +572,51 @@
     transition: color var(--transition-fast);
 }
 
-.providerEdit:hover {
+.providerPick:hover,
+.providerPick[aria-expanded='true'] {
     color: var(--accent);
 }
 
-/* Settings dialog body (rendered inside the shared <Dialog/>). */
-.settingsForm {
+/* Vers le haut : la barre est au bas de la carte. */
+.providerMenu {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    right: 0;
+    z-index: 20;
+    min-width: 180px;
+    padding: var(--space-xs);
     display: flex;
     flex-direction: column;
-    gap: var(--space-md);
+    gap: 2px;
+    background: var(--surface-popup);
+    border: 1px solid var(--glass-border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    backdrop-filter: var(--glass-backdrop-soft);
 }
 
-.settingsField {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-xs);
-}
-
-.settingsLabel {
-    font-size: 0.8rem;
-    font-weight: 500;
-    color: var(--text-secondary);
-}
-
-.providerOptions {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-sm);
-}
-
-.providerOption {
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    align-items: center;
-    gap: var(--space-sm);
-    padding: var(--space-sm) var(--space-md);
-    border: 1px solid var(--glass-border);
+.providerMenuItem {
+    width: 100%;
+    padding: var(--space-xs) var(--space-sm);
+    background: transparent;
+    border: none;
     border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    text-align: left;
     cursor: pointer;
     transition:
-        border-color var(--transition-fast),
-        background var(--transition-fast);
+        background var(--transition-fast),
+        color var(--transition-fast);
 }
 
-.providerOption:hover {
-    border-color: var(--text-muted);
-}
-
-.providerOptionActive {
-    border-color: var(--accent);
+.providerMenuItem:hover {
     background: var(--accent-bg);
+    color: var(--accent);
 }
 
-.providerOptionName {
-    font-size: 0.9rem;
-    color: var(--text-primary);
-}
-
-.providerOptionMeta {
-    font-size: 0.72rem;
-    color: var(--text-muted);
-}
-
-.settingsHint {
-    font-size: 0.72rem;
-    color: var(--text-muted);
-}
-
-.settingsError {
-    color: var(--danger);
-    font-size: 0.8rem;
-    margin: 0;
+.providerMenuItemActive {
+    color: var(--accent);
 }
 
 /* Le mini-widget de topbar : chiffres tabulaires, comme les statuts natifs. */

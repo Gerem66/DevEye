@@ -1,27 +1,22 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion, Reorder, useDragControls } from 'framer-motion';
-import { Button, Dialog, FeatureSettingsButton, TextInput, useLiveOutline, useLiveSegment } from 'deveye-sdk-client';
+import {
+    FeatureSettingsButton,
+    onResourceChange,
+    useDismissLayer,
+    useLiveOutline,
+    useLiveSegment
+} from 'deveye-sdk-client';
 import { useWeather, syncWeatherLocations } from './store';
 import { wmoIcon } from './wmoIcon';
-import type { WeatherLocation, WeatherProvider, WeatherReport } from '../contracts/domain';
+import { isKeyRefused, PROVIDER_META, providerFailure, selectableProviders } from './providers';
+import type { WeatherHour, WeatherLocation, WeatherProvider, WeatherReport } from '../contracts/domain';
 import styles from './Weather.module.css';
 import { api } from './api';
 
 const REFRESH_MS = 10 * 60 * 1000;
 
-/** Human label for each weather provider. */
-const PROVIDER_LABELS: Record<WeatherProvider, string> = {
-    'open-meteo': 'Open-Meteo',
-    openweathermap: 'OpenWeatherMap'
-};
-
-/** Providers offered in the settings popup: add a row here and a matching server adapter. */
-const PROVIDERS: { value: WeatherProvider; label: string; needsKey: boolean }[] = [
-    { value: 'open-meteo', label: 'Open-Meteo', needsKey: false },
-    { value: 'openweathermap', label: 'OpenWeatherMap', needsKey: true }
-];
-
-/** Local date + time in the location's timezone (e.g. "lundi 16 juin · 14:32"). */
+/** La date et l'heure du relevé dans le fuseau de la ville (« lundi 16 juin », « 14:32 »). */
 function localDateTime(report: WeatherReport): { date: string; time: string } {
     const when = new Date(report.fetchedAt * 1000);
     try {
@@ -43,35 +38,59 @@ function localDateTime(report: WeatherReport): { date: string; time: string } {
     }
 }
 
-/** Hour label (e.g. "14h") from a local ISO time like "2026-06-17T14:00". */
+/** Le libellé d'un créneau (« 14h ») depuis son heure locale ISO (« 2026-06-17T14:00 »). */
 function hourLabel(time: string): string {
     const hh = time.slice(11, 13);
     return hh ? `${Number(hh)}h` : time;
 }
 
-/** True when `time` (local ISO in `tz`) falls in the current hour of that timezone. */
-function isCurrentHour(time: string, tz: string): boolean {
-    const nowLocal = new Date().toLocaleString('sv-SE', { timeZone: tz });
-    // Compare "YYYY-MM-DDTHH" against "YYYY-MM-DD HH".
-    return time.slice(0, 13).replace('T', ' ') === nowLocal.slice(0, 13);
+/**
+ * L'indice du créneau qui vaut « maintenant » : le plus proche de l'heure locale,
+ * et non l'heure exacte. Un relevé à pas de trois heures ne porte pas toujours
+ * l'heure courante, et laisser la rangée sans repère la rend illisible.
+ */
+function currentHourIndex(hours: WeatherHour[], tz: string): number {
+    let nowLocal: string;
+    try {
+        nowLocal = new Date().toLocaleString('sv-SE', { timeZone: tz });
+    } catch {
+        return -1;
+    }
+    // Les deux côtés sont des horloges murales : les lire en UTC les compare
+    // entre eux sans jamais reconvertir de fuseau.
+    const now = Date.parse(`${nowLocal.slice(0, 10)}T${nowLocal.slice(11, 19)}Z`);
+    if (Number.isNaN(now)) return -1;
+
+    let best = -1;
+    let bestGap = Infinity;
+    hours.forEach((hour, i) => {
+        const at = Date.parse(`${hour.time}:00Z`);
+        if (Number.isNaN(at)) return;
+        const gap = Math.abs(at - now);
+        if (gap < bestGap) {
+            bestGap = gap;
+            best = i;
+        }
+    });
+    return best;
 }
 
-/** Left padding kept before the aligned "now" card so it doesn't sit flush against the edge. */
+/** La marge gardée à gauche de la carte « maintenant », pour qu'elle ne colle pas au bord. */
 const NOW_ALIGN_OFFSET = 8;
 
 /**
- * Hour-by-hour row. On first reveal the current hour is aligned near the left
- * edge; afterwards the user's scroll position is restored across popup
- * open/close (the DOM's `scrollLeft` is lost while the host is hidden).
+ * La rangée heure par heure. À la première apparition, « maintenant » s'aligne
+ * près du bord gauche ; ensuite la position de défilement est rendue à chaque
+ * réouverture de la popup, le `scrollLeft` du DOM se perdant tant que l'hôte est
+ * masqué.
  */
 function HourlyRow({ report }: { report: WeatherReport }) {
     const rowRef = useRef<HTMLDivElement>(null);
     const nowRef = useRef<HTMLDivElement>(null);
-    // The user's last scroll position, persisted across hide/show. `null` means
-    // we haven't aligned this location yet and should snap to "now" on reveal.
+    // La dernière position de défilement. `null` : cette ville n'a pas encore été
+    // alignée, la prochaine apparition se cale sur « maintenant ».
     const savedScroll = useRef<number | null>(null);
 
-    // New location → forget the remembered position so the next reveal re-centres on "now".
     useLayoutEffect(() => {
         savedScroll.current = null;
     }, [report.locationId]);
@@ -80,9 +99,8 @@ function HourlyRow({ report }: { report: WeatherReport }) {
         const row = rowRef.current;
         if (!row) return;
 
-        // Apply the right scroll position whenever the row becomes visible: restore
-        // the user's saved offset, or snap to "now" the first time. Geometry is only
-        // real once visible, so IntersectionObserver is the reliable trigger.
+        // La géométrie n'est vraie qu'une fois la rangée visible : c'est
+        // l'IntersectionObserver qui donne le bon moment pour poser le défilement.
         const applyScroll = () => {
             if (row.clientWidth === 0) return;
             if (savedScroll.current !== null) {
@@ -102,7 +120,6 @@ function HourlyRow({ report }: { report: WeatherReport }) {
         io.observe(row);
         applyScroll();
 
-        // Remember manual scrolling so it survives the next hide/show cycle.
         const onScroll = () => {
             if (row.clientWidth > 0) savedScroll.current = row.scrollLeft;
         };
@@ -114,10 +131,12 @@ function HourlyRow({ report }: { report: WeatherReport }) {
         };
     }, [report.locationId]);
 
+    const nowIndex = currentHourIndex(report.hourly, report.timezone);
+
     return (
         <div className={styles.hourlyRow} ref={rowRef}>
-            {report.hourly.map((hour) => {
-                const current = isCurrentHour(hour.time, report.timezone);
+            {report.hourly.map((hour, i) => {
+                const current = i === nowIndex;
                 return (
                     <div
                         key={hour.time}
@@ -142,107 +161,74 @@ function HourlyRow({ report }: { report: WeatherReport }) {
     );
 }
 
-/** Settings popup for one location: provider choice + API key. Uses the shared Dialog. */
-function WeatherSettingsModal({
-    loc,
-    onClose,
-    onSave
+/**
+ * La ligne de source, en bas de la fiche. Le nom du fournisseur ouvre le choix,
+ * et ne devient cliquable que si l'espace a de quoi choisir.
+ */
+function ProviderBar({
+    provider,
+    held,
+    onChange
 }: {
-    loc: WeatherLocation;
-    onClose: () => void;
-    onSave: (id: string, patch: { provider: WeatherProvider; apiKey?: string }) => Promise<void>;
+    provider: WeatherProvider;
+    held: Record<string, boolean>;
+    onChange: (provider: WeatherProvider) => void;
 }) {
-    const [provider, setProvider] = useState<WeatherProvider>(loc.provider);
-    const [apiKey, setApiKey] = useState('');
-    // Whether the key field was touched; if not, we leave the stored key as-is.
-    const [keyTouched, setKeyTouched] = useState(false);
-    const [saving, setSaving] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [open, setOpen] = useState(false);
+    const rootRef = useRef<HTMLDivElement>(null);
+    const options = selectableProviders(held);
 
-    const needsKey = provider !== 'open-meteo';
+    useDismissLayer(open, () => setOpen(false));
 
-    const submit = async () => {
-        if (saving) return;
-        setSaving(true);
-        setError(null);
-        try {
-            await onSave(loc.id, {
-                provider,
-                apiKey: keyTouched ? apiKey.trim() : undefined
-            });
-            onClose();
-        } catch {
-            setError('Échec de l’enregistrement. Vérifiez la clé API et le fournisseur.');
-        } finally {
-            setSaving(false);
-        }
-    };
+    useEffect(() => {
+        if (!open) return;
+        const onPointerDown = (e: MouseEvent) => {
+            if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+        };
+        document.addEventListener('mousedown', onPointerDown);
+        return () => document.removeEventListener('mousedown', onPointerDown);
+    }, [open]);
+
+    if (options.length < 2) {
+        return (
+            <div className={styles.providerBar}>
+                <span className={styles.providerNote}>via {PROVIDER_META[provider].label}</span>
+            </div>
+        );
+    }
 
     return (
-        <Dialog
-            open
-            onClose={onClose}
-            title={`Réglages — ${loc.label}`}
-            onSubmit={() => void submit()}
-            footer={
-                <>
-                    <Button variant='secondary' onClick={onClose} disabled={saving}>
-                        Annuler
-                    </Button>
-                    <Button onClick={() => void submit()} disabled={saving}>
-                        {saving ? 'Enregistrement…' : 'Enregistrer'}
-                    </Button>
-                </>
-            }
-        >
-            <div className={styles.settingsForm}>
-                <span className={styles.settingsLabel}>Fournisseur météo</span>
-                <div className={styles.providerOptions}>
-                    {PROVIDERS.map((p) => (
-                        <label
-                            key={p.value}
-                            className={`${styles.providerOption} ${provider === p.value ? styles.providerOptionActive : ''}`}
+        <div className={styles.providerBar} ref={rootRef}>
+            <span className={styles.providerNote}>via</span>
+            <button
+                type='button'
+                className={styles.providerPick}
+                onClick={() => setOpen((v) => !v)}
+                aria-haspopup='menu'
+                aria-expanded={open}
+            >
+                {PROVIDER_META[provider].label}
+            </button>
+            {open && (
+                <div className={styles.providerMenu} role='menu'>
+                    {options.map((p) => (
+                        <button
+                            key={p}
+                            type='button'
+                            role='menuitem'
+                            className={`${styles.providerMenuItem} ${p === provider ? styles.providerMenuItemActive : ''}`}
+                            aria-current={p === provider}
+                            onClick={() => {
+                                setOpen(false);
+                                if (p !== provider) onChange(p);
+                            }}
                         >
-                            <input
-                                type='radio'
-                                name='provider'
-                                value={p.value}
-                                checked={provider === p.value}
-                                onChange={() => setProvider(p.value)}
-                            />
-                            <span className={styles.providerOptionName}>{p.label}</span>
-                            <span className={styles.providerOptionMeta}>
-                                {p.needsKey ? 'Clé API requise' : 'Gratuit, sans clé'}
-                            </span>
-                        </label>
+                            {PROVIDER_META[p].label}
+                        </button>
                     ))}
                 </div>
-
-                {needsKey && (
-                    <label className={styles.settingsField}>
-                        <span className={styles.settingsLabel}>Clé API</span>
-                        <TextInput
-                            type='password'
-                            enableShowHideButton
-                            autoComplete='off'
-                            placeholder={
-                                loc.hasApiKey ? '•••••••• (laisser vide pour conserver)' : 'Collez votre clé API'
-                            }
-                            value={apiKey}
-                            onChange={(e) => {
-                                setApiKey(e.target.value);
-                                setKeyTouched(true);
-                            }}
-                        />
-                        {loc.hasApiKey && keyTouched && apiKey.trim() === '' && (
-                            <span className={styles.settingsHint}>La clé enregistrée sera supprimée.</span>
-                        )}
-                    </label>
-                )}
-
-                {error && <p className={styles.settingsError}>{error}</p>}
-            </div>
-        </Dialog>
+            )}
+        </div>
     );
 }
 
@@ -250,11 +236,19 @@ export function WeatherWidget() {
     const { report, loading, primary } = useWeather();
 
     if (loading && !report) return <div className={styles.widgetLoading}>Chargement…</div>;
-    if (!primary || !report?.current)
+    if (!primary)
         return (
             <div className={styles.widgetEmpty}>
                 <span className={styles.widgetEmptyIcon}>🌡️</span>
                 <span>Aucune météo configurée</span>
+            </div>
+        );
+    // Une ville est bien là : c'est le relevé qui manque, souvent faute de clé.
+    if (!report?.current)
+        return (
+            <div className={styles.widgetEmpty}>
+                <span className={styles.widgetEmptyIcon}>🌡️</span>
+                <span>Relevé indisponible</span>
             </div>
         );
 
@@ -275,7 +269,6 @@ export function WeatherWidget() {
     );
 }
 
-/** A draggable location tab: select, set-primary and remove controls. */
 function LocationTab({
     loc,
     active,
@@ -345,62 +338,112 @@ export default function Weather() {
     const [locations, setLocations] = useState<WeatherLocation[]>([]);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [report, setReport] = useState<WeatherReport | null>(null);
+    const [reportError, setReportError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [loadingReport, setLoadingReport] = useState(false);
     const [searchInput, setSearchInput] = useState('');
     const [adding, setAdding] = useState(false);
     const [addError, setAddError] = useState<string | null>(null);
-    // The location whose settings popup is open, if any.
-    const [settingsFor, setSettingsFor] = useState<WeatherLocation | null>(null);
+    // Les fournisseurs dont l'espace tient la clé : ce qui ouvre ou ferme le
+    // choix de source. Jamais la clé elle-même, seulement le fait qu'elle existe.
+    const [held, setHeld] = useState<Record<string, boolean>>({});
 
     // Le niveau profond de Météo : la ville consultée.
     const liveTarget = useLiveSegment('l1', selectedId);
 
-    // The order persisted on the server; lets us skip a redundant reorder call
-    // when a drag ends without actually changing anything.
+    // La barre de source suit la ville, pas le relevé : elle survit ainsi à un
+    // relevé en échec, seul chemin pour quitter une source devenue muette.
+    const selected = locations.find((l) => l.id === selectedId) ?? null;
+
+    // Ce que lisent les abonnements du direct, montés une fois pour toutes.
+    const selectedRef = useRef<WeatherLocation | null>(null);
+    selectedRef.current = selected;
+
+    // L'ordre connu du serveur : un glisser qui ne change rien n'écrit rien.
     const persistedOrder = useRef<string>('');
 
+    // Seule la dernière relecture demandée a le droit d'écrire : changer de ville
+    // deux fois de suite ne doit pas afficher la première sous le nom de la seconde.
+    const latestRequest = useRef(0);
+
     const loadReport = useCallback(async (id: string, opts?: { silent?: boolean }) => {
+        const request = ++latestRequest.current;
         if (!opts?.silent) setLoadingReport(true);
         try {
             const res = await api.send('weather.get', { id });
+            if (request !== latestRequest.current) return;
             setReport(res.report);
-        } catch {
-            if (!opts?.silent) setReport(null);
+            setReportError(null);
+        } catch (e) {
+            if (request !== latestRequest.current) return;
+            // Une relecture de fond qui échoue garde le relevé affiché, sauf clé
+            // refusée : celui-là n'a plus le droit d'être montré.
+            if (opts?.silent && !isKeyRefused(e)) return;
+            setReport(null);
+            setReportError(providerFailure(e)?.message ?? null);
         } finally {
-            if (!opts?.silent) setLoadingReport(false);
+            if (request === latestRequest.current) setLoadingReport(false);
         }
     }, []);
 
+    /** La fiche vient d'écrire : sa liste fait foi, ici comme dans le magasin de la tuile. */
     const applyLocations = useCallback((next: WeatherLocation[]) => {
         setLocations(next);
         persistedOrder.current = next.map((l) => l.id).join(',');
         syncWeatherLocations(next);
     }, []);
 
-    // Initial load: list locations, select the first, fetch its report.
-    useEffect(() => {
-        let cancelled = false;
-        void (async () => {
-            try {
-                const res = await api.send('weather.list', {});
-                if (cancelled) return;
-                setLocations(res.locations);
-                persistedOrder.current = res.locations.map((l) => l.id).join(',');
-                const first = res.locations[0];
-                if (first) {
-                    setSelectedId(first.id);
-                    await loadReport(first.id);
-                }
-            } catch {
-                // ignore
-            } finally {
-                if (!cancelled) setLoading(false);
+    /**
+     * Relire les villes, et le relevé seulement si la ville consultée a disparu
+     * ou changé de source : un autre membre qui réordonne ne fait rien clignoter.
+     */
+    const reloadLocations = useCallback(async () => {
+        try {
+            const res = await api.send('weather.list', {});
+            setLocations(res.locations);
+            persistedOrder.current = res.locations.map((l) => l.id).join(',');
+            const before = selectedRef.current;
+            const after = res.locations.find((l) => l.id === before?.id) ?? res.locations[0] ?? null;
+            if (!after) {
+                setSelectedId(null);
+                setReport(null);
+                return;
             }
-        })();
-        return () => {
-            cancelled = true;
+            if (after.id === before?.id && after.provider === before.provider) return;
+            setSelectedId(after.id);
+            await loadReport(after.id);
+        } catch {
+            // ignore : la prochaine trame du sujet repassera
+        }
+    }, [loadReport]);
+
+    useEffect(() => {
+        void reloadLocations().finally(() => setLoading(false));
+        return onResourceChange('weather.list', () => void reloadLocations());
+    }, [reloadLocations]);
+
+    useEffect(() => {
+        const load = async (): Promise<Record<string, boolean>> => {
+            try {
+                const res = await api.send('weather.keyList', {});
+                const next = Object.fromEntries(res.providers.map((p) => [p.provider, p.hasKey]));
+                setHeld(next);
+                return next;
+            } catch {
+                // Sans réponse, seul le fournisseur libre reste proposé.
+                return {};
+            }
         };
+        void load();
+        // Une clé posée ou changée : le choix de source s'ouvre, et le relevé de la
+        // ville consultée se refait si c'est cette clé qui le donne. Une clé
+        // retirée passe par `weather.list` : le serveur a changé ses villes de source.
+        return onResourceChange('weather.keyList', () => {
+            void load().then((next) => {
+                const current = selectedRef.current;
+                if (current && next[current.provider] === true) void loadReport(current.id);
+            });
+        });
     }, [loadReport]);
 
     // Rejoindre quelqu'un : la cible est redonnée à chaque rendu tant qu'elle
@@ -413,7 +456,6 @@ export default function Weather() {
         void loadReport(id);
     }, [liveTarget, locations, loadReport]);
 
-    // Keep the selected report fresh in the background.
     useEffect(() => {
         if (!selectedId) return;
         const t = setInterval(() => void loadReport(selectedId, { silent: true }), REFRESH_MS);
@@ -431,6 +473,8 @@ export default function Weather() {
         setAdding(true);
         setAddError(null);
         try {
+            // Une ville naît sur le fournisseur libre : sa source se change ensuite,
+            // depuis la fiche, si l'espace en a une autre.
             const res = await api.send('weather.add', {
                 query: searchInput.trim(),
                 format: 'current',
@@ -441,8 +485,8 @@ export default function Weather() {
             setSearchInput('');
             setSelectedId(res.location.id);
             await loadReport(res.location.id);
-        } catch {
-            setAddError('Ville introuvable. Vérifiez l’orthographe et réessayez.');
+        } catch (err) {
+            setAddError(providerFailure(err)?.message ?? 'La ville n’a pas pu être ajoutée.');
         } finally {
             setAdding(false);
         }
@@ -465,25 +509,26 @@ export default function Weather() {
     };
 
     const handleSetPrimary = async (id: string) => {
-        // Optimistic flag flip; the server response reconciles the full list.
+        // L'étoile bascule tout de suite, la réponse du serveur fait foi ensuite.
         setLocations((prev) => prev.map((l) => ({ ...l, isPrimary: l.id === id })));
         try {
             const res = await api.send('weather.setPrimary', { id });
             applyLocations(res.locations);
         } catch {
-            // ignore — next list refresh reconciles
+            void reloadLocations();
         }
     };
 
-    // Save provider/API-key changes from the settings popup. `apiKey` undefined
-    // leaves the key untouched; "" clears it; a string sets it.
-    const handleSaveSettings = async (id: string, patch: { provider: WeatherProvider; apiKey?: string }) => {
-        const res = await api.send('weather.update', { id, ...patch });
-        applyLocations(locations.map((l) => (l.id === res.location.id ? res.location : l)));
-        if (selectedId === id) await loadReport(id);
+    const handleProviderChange = async (id: string, provider: WeatherProvider) => {
+        try {
+            const res = await api.send('weather.update', { id, provider });
+            applyLocations(locations.map((l) => (l.id === res.location.id ? res.location : l)));
+            if (selectedId === id) await loadReport(id);
+        } catch {
+            // ignore : le choix affiché suit la ville, il revient de lui-même
+        }
     };
 
-    // Persist a drag-reorder once it settles, if the order actually changed.
     const persistOrder = async () => {
         const order = locations.map((l) => l.id);
         if (order.join(',') === persistedOrder.current) return;
@@ -492,7 +537,7 @@ export default function Weather() {
             const res = await api.send('weather.reorder', { ids: order });
             applyLocations(res.locations);
         } catch {
-            // ignore
+            void reloadLocations();
         }
     };
 
@@ -642,34 +687,28 @@ export default function Weather() {
                                 </div>
                             )}
 
-                            <div className={styles.providerBar}>
-                                <span className={styles.providerNote}>via {PROVIDER_LABELS[report.provider]}</span>
-                                <button
-                                    type='button'
-                                    className={styles.providerEdit}
-                                    onClick={() => {
-                                        const loc = locations.find((l) => l.id === report.locationId);
-                                        if (loc) setSettingsFor(loc);
-                                    }}
-                                >
-                                    Modifier
-                                </button>
-                            </div>
+                            {selected && (
+                                <ProviderBar
+                                    provider={selected.provider}
+                                    held={held}
+                                    onChange={(provider) => void handleProviderChange(selected.id, provider)}
+                                />
+                            )}
                         </motion.div>
                     ) : (
                         <div className={styles.empty}>
                             <p>Impossible de récupérer le rapport météo</p>
+                            {reportError && <p>{reportError}</p>}
+                            {selected && (
+                                <ProviderBar
+                                    provider={selected.provider}
+                                    held={held}
+                                    onChange={(provider) => void handleProviderChange(selected.id, provider)}
+                                />
+                            )}
                         </div>
                     )}
                 </div>
-            )}
-
-            {settingsFor && (
-                <WeatherSettingsModal
-                    loc={settingsFor}
-                    onClose={() => setSettingsFor(null)}
-                    onSave={handleSaveSettings}
-                />
             )}
         </div>
     );

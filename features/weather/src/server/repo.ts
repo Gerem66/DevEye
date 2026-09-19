@@ -11,8 +11,6 @@ export interface CreateWeatherLocationInput {
     format: WeatherFormat;
     days: number;
     provider: WeatherProvider;
-    /** Encrypted per-city API key, or null. */
-    apiKeyEnc?: string | null;
 }
 
 export interface WeatherRepo {
@@ -27,14 +25,14 @@ export interface WeatherRepo {
             days?: number;
             position?: number;
             provider?: WeatherProvider;
-            /** Encrypted key to store, or null to clear. Omit to leave unchanged. */
-            apiKeyEnc?: string | null;
         }
     ): Promise<WeatherLocationRow | null>;
     deleteLocation(id: string, workspaceId: number): Promise<boolean>;
-    /** Reorder by assigning `position` to each id by its index in `ids`. */
+    /** Passer d'un fournisseur à un autre toutes les villes de l'espace qui y sont ; rend leur nombre. */
+    moveLocations(workspaceId: number, from: WeatherProvider, to: WeatherProvider): Promise<number>;
+    /** Réordonner : chaque id prend pour `position` son rang dans `ids`. */
     reorderLocations(workspaceId: number, ids: string[]): Promise<WeatherLocationRow[]>;
-    /** Mark `id` as the user's primary location and clear it on the others. */
+    /** Faire de `id` la ville principale de l'espace, à la place de celle qui l'était. */
     setPrimaryLocation(workspaceId: number, id: string): Promise<WeatherLocationRow[]>;
     getKey(workspaceId: number, provider: WeatherProvider): Promise<WeatherProviderKeyRow | null>;
     /** Les fournisseurs pour lesquels l'espace détient une clé. */
@@ -58,32 +56,19 @@ export function createRepo(q: SdkQueryable): WeatherRepo {
             );
             return rows[0] ?? null;
         },
-        async createLocation({ userId, workspaceId, label, latitude, longitude, format, days, provider, apiKeyEnc }) {
+        async createLocation({ userId, workspaceId, label, latitude, longitude, format, days, provider }) {
             const id = randomUUID();
             const posRows = await q.query<{ next: number }>(
                 'SELECT COALESCE(MAX(position) + 1, 0) AS next FROM weather_locations WHERE workspace_id = ?',
                 [workspaceId]
             );
             const position = Number(posRows[0]?.next ?? 0);
-            // The first city a user adds is automatically their primary one.
+            // La première ville d'un espace est d'office sa principale.
             const isPrimary = position === 0 ? 1 : 0;
             await q.execute(
-                `INSERT INTO weather_locations (id, user_id, workspace_id, label, latitude, longitude, format, days, provider, position, is_primary, api_key_enc)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [
-                    id,
-                    userId,
-                    workspaceId,
-                    label,
-                    latitude,
-                    longitude,
-                    format,
-                    days,
-                    provider,
-                    position,
-                    isPrimary,
-                    apiKeyEnc ?? null
-                ]
+                `INSERT INTO weather_locations (id, user_id, workspace_id, label, latitude, longitude, format, days, provider, position, is_primary)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [id, userId, workspaceId, label, latitude, longitude, format, days, provider, position, isPrimary]
             );
             const rows = await q.query<WeatherLocationRow>('SELECT * FROM weather_locations WHERE id = ?', [id]);
             return rows[0];
@@ -107,10 +92,6 @@ export function createRepo(q: SdkQueryable): WeatherRepo {
                 sets.push('provider = ?');
                 params.push(patch.provider);
             }
-            if (patch.apiKeyEnc !== undefined) {
-                sets.push('api_key_enc = ?');
-                params.push(patch.apiKeyEnc);
-            }
             if (sets.length === 0) return this.findLocation(id, workspaceId);
             params.push(id, workspaceId);
             const res = await q.execute(
@@ -127,7 +108,7 @@ export function createRepo(q: SdkQueryable): WeatherRepo {
                 workspaceId
             ]);
             if (res.affectedRows === 0) return false;
-            // If the primary city was removed, promote the first remaining one.
+            // La principale vient de partir : la première qui reste la remplace.
             if (target?.is_primary === 1) {
                 const next = await this.listLocations(workspaceId);
                 if (next[0]) {
@@ -139,9 +120,15 @@ export function createRepo(q: SdkQueryable): WeatherRepo {
             }
             return true;
         },
+        async moveLocations(workspaceId, from, to) {
+            const res = await q.execute(
+                'UPDATE weather_locations SET provider = ? WHERE workspace_id = ? AND provider = ?',
+                [to, workspaceId, from]
+            );
+            return res.affectedRows;
+        },
         async reorderLocations(workspaceId, ids) {
-            // Assign each id its position by index; only rows owned by the user
-            // are touched, so stray ids are silently ignored.
+            // Seules les lignes de l'espace sont touchées : un id étranger ne fait rien.
             for (let i = 0; i < ids.length; i++) {
                 await q.execute('UPDATE weather_locations SET position = ? WHERE id = ? AND workspace_id = ?', [
                     i,

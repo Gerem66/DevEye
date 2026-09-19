@@ -10,10 +10,11 @@ export const manifest = {
     ...descriptor,
     category: 'daily',
     /**
-     * Une seule clé de cache : la liste des lieux. Les relevés (`weather.get`) se
-     * relisent à la demande, au rythme du rafraîchissement de la vue.
+     * La liste des lieux et l'état des clés de l'espace, qui ouvre le choix de
+     * source dans la fiche. Les relevés (`weather.get`) se relisent à la
+     * demande, au rythme du rafraîchissement de la vue.
      */
-    resources: ['weather.list'],
+    resources: ['weather.list', 'weather.keyList'],
     topbarWidget: { description: 'Température de la ville principale' },
     settings: { feature: ['sources'] },
     /**
