@@ -20,6 +20,12 @@ export interface ChoiceCardsProps<T extends string> {
     disabled?: boolean;
     /** Le choix en cours d'application : sa carte le signale, les autres attendent. */
     pending?: T | null;
+    /**
+     * Un clic de pointeur sur une carte, choix courant compris : pour un choix
+     * qui fait avancer une étape. Les flèches du clavier changent le choix sans
+     * le déclencher.
+     */
+    onPick?: (value: T) => void;
     'aria-label'?: string;
 }
 
@@ -37,6 +43,7 @@ export default function ChoiceCards<T extends string>({
     onChange,
     disabled,
     pending,
+    onPick,
     'aria-label': ariaLabel
 }: ChoiceCardsProps<T>) {
     const name = useId();
@@ -50,6 +57,13 @@ export default function ChoiceCards<T extends string>({
                     <div
                         key={o.value}
                         className={`${styles.card} ${o.value === value ? styles.active : ''} ${inert ? styles.inert : ''}`}
+                        // Le clic que le navigateur rejoue sur la radio (libellé, flèches)
+                        // a la radio pour cible : seul le clic d'origine compte ici.
+                        onClick={(e) => {
+                            if (inert || !onPick) return;
+                            if ((e.target as HTMLElement).closest('input, button, a')) return;
+                            onPick(o.value);
+                        }}
                     >
                         <label className={styles.head}>
                             <input

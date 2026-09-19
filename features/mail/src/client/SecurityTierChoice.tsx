@@ -7,6 +7,7 @@ interface SecurityTierChoiceProps {
     onChange: (tier: MailSecurityTier) => void;
     disabled?: boolean;
     pending?: MailSecurityTier | null;
+    onPick?: (tier: MailSecurityTier) => void;
 }
 
 /**
@@ -16,7 +17,7 @@ interface SecurityTierChoiceProps {
  * Sans chiffrement par mot de passe sur le compte, une boîte « protégée »
  * resterait lisible par le serveur : le choix s'explique au lieu de s'offrir.
  */
-export function SecurityTierChoice({ value, onChange, disabled, pending }: SecurityTierChoiceProps) {
+export function SecurityTierChoice({ value, onChange, disabled, pending, onPick }: SecurityTierChoiceProps) {
     const secrecy = useSecrecy();
 
     return (
@@ -26,6 +27,7 @@ export function SecurityTierChoice({ value, onChange, disabled, pending }: Secur
             onChange={onChange}
             disabled={disabled}
             pending={pending}
+            onPick={onPick}
             options={[
                 {
                     value: 'open',

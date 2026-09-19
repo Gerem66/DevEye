@@ -53,7 +53,6 @@ declare const styles: {
     readonly folderUnread: string;
     readonly form: string;
     readonly formRow: string;
-    readonly formSplit: string;
     readonly headline: string;
     readonly iconBtn: string;
     readonly imageBanner: string;
@@ -131,8 +130,19 @@ declare const styles: {
     readonly sidebarSubhead: string;
     readonly spinning: string;
     readonly status: string;
+    readonly step: string;
+    readonly stepBody: string;
+    readonly stepChevron: string;
+    readonly stepChevronOpen: string;
+    readonly stepHeader: string;
+    readonly stepHeading: string;
     readonly stepNumber: string;
+    readonly stepReveal: string;
+    readonly stepRevealInner: string;
+    readonly stepRevealOpen: string;
+    readonly stepSummary: string;
     readonly stepTitle: string;
+    readonly steps: string;
     readonly syncProgressFill: string;
     readonly syncProgressIndeterminate: string;
     readonly syncProgressTrack: string;

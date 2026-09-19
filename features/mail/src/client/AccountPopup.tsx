@@ -15,6 +15,7 @@ import { api, humanizeError } from './api';
 import { awaitConsentWindow } from './oauthWindow';
 import { ProviderCard } from './ProviderCard';
 import { SecurityTierChoice } from './SecurityTierChoice';
+import { StepBody, StepFrame, StepHeader } from './AccountSteps';
 import styles from './style.module.css';
 
 import { MAIL_SYNC_INTERVAL_DEFAULT_MINUTES } from '../contracts/domain';
@@ -58,6 +59,7 @@ const DEFAULT_DRAFT: MailAccountDraft = {
 export function AccountPopup() {
     const [mode, setMode] = useState<'add' | 'edit'>('add');
     const [tab, setTab] = useState<'providers' | 'manual'>('providers');
+    const [step, setStep] = useState<1 | 2>(1);
     const [authMethod, setAuthMethod] = useState<MailAuthMethod>('password');
     /** Owned by the account's options panel, not by this form — resubmitted unchanged. */
     const [syncIntervalMinutes, setSyncIntervalMinutes] = useState(MAIL_SYNC_INTERVAL_DEFAULT_MINUTES);
@@ -126,6 +128,7 @@ export function AccountPopup() {
     function handleOpen(opened: AccountPopupInput): void {
         const prefill = opened !== null && 'prefill' in opened ? opened.prefill : null;
         const input = opened !== null && 'prefill' in opened ? null : opened;
+        setStep(1);
         setTestResult(null);
         setErrorName('');
         setErrorEmail('');
@@ -298,39 +301,53 @@ export function AccountPopup() {
     // Le choix de protection n'existe qu'à la création, et seulement dans l'espace
     // personnel : un espace partagé n'a qu'une clé, lisible par tout membre.
     const twoSteps = mode === 'add' && workspace?.kind === 'personal';
+    const onFirstStep = twoSteps && step === 1;
 
     return (
         <Popup
             id={ACCOUNT_POPUP}
             title={mode === 'add' ? 'Ajouter une boîte mail' : 'Modifier la boîte mail'}
-            width={twoSteps ? 900 : 560}
+            width={560}
             onInputChange={handleOpen}
             onClosePopup={() => close()}
-            onSubmit={() => void submit()}
+            onSubmit={() => (onFirstStep ? setStep(2) : void submit())}
             dirty={dirty}
             onSave={() => void submit()}
         >
-            <div className={twoSteps ? styles.formSplit : undefined}>
+            <div className={twoSteps ? styles.steps : undefined}>
                 {twoSteps && (
-                    <section className={styles.form} aria-labelledby='mail-account-step-1'>
-                        <h3 id='mail-account-step-1' className={styles.stepTitle}>
-                            <span className={styles.stepNumber} aria-hidden='true'>
-                                1
-                            </span>
-                            Protection
-                        </h3>
-                        <SecurityTierChoice value={draft.securityTier} onChange={(tier) => set('securityTier', tier)} />
+                    <section className={styles.step}>
+                        <StepHeader
+                            number={1}
+                            title='Protection'
+                            summary={draft.securityTier === 'guarded' ? 'Protégée' : 'Ouverte'}
+                            open={step === 1}
+                            controls='mail-account-step-1'
+                            onClick={() => setStep(1)}
+                        />
+                        <StepBody id='mail-account-step-1' open={step === 1}>
+                            <SecurityTierChoice
+                                value={draft.securityTier}
+                                onChange={(tier) => set('securityTier', tier)}
+                                onPick={() => setStep(2)}
+                            />
+                        </StepBody>
                     </section>
                 )}
-                <section className={styles.form} aria-labelledby={twoSteps ? 'mail-account-step-2' : undefined}>
-                    {twoSteps && (
-                        <h3 id='mail-account-step-2' className={styles.stepTitle}>
-                            <span className={styles.stepNumber} aria-hidden='true'>
-                                2
-                            </span>
-                            Connexion
-                        </h3>
-                    )}
+                <StepFrame
+                    framed={twoSteps}
+                    header={
+                        <StepHeader
+                            number={2}
+                            title='Connexion'
+                            open={step === 2}
+                            controls='mail-account-step-2'
+                            onClick={() => setStep(2)}
+                        />
+                    }
+                    id='mail-account-step-2'
+                    open={step === 2}
+                >
                     <TextInput
                         placeholder='Nom (ex. Perso Gmail)'
                         value={draft.displayName}
@@ -545,13 +562,19 @@ export function AccountPopup() {
                     )}
 
                     {testResult && <p className={styles.status}>{testResult}</p>}
-                </section>
+                </StepFrame>
             </div>
 
             <div className={styles.popupActions}>
                 <div className={styles.popupActionsLeft}>
-                    <DialogCancelButton>Fermer</DialogCancelButton>
-                    {showManualFields && (
+                    {twoSteps && step === 2 ? (
+                        <Button variant='secondary' onClick={() => setStep(1)}>
+                            Précédent
+                        </Button>
+                    ) : (
+                        <DialogCancelButton>Fermer</DialogCancelButton>
+                    )}
+                    {showManualFields && !onFirstStep && (
                         <Button variant='secondary' disabled={testing} onClick={() => void testConnection()}>
                             {testing ? 'Test…' : 'Tester la connexion'}
                         </Button>
@@ -562,8 +585,12 @@ export function AccountPopup() {
                         </Button>
                     )}
                 </div>
-                {(showManualFields || providerManaged) && (
-                    <Button onClick={() => void submit()}>{mode === 'add' ? 'Ajouter' : 'Enregistrer'}</Button>
+                {onFirstStep ? (
+                    <Button onClick={() => setStep(2)}>Continuer</Button>
+                ) : (
+                    (showManualFields || providerManaged) && (
+                        <Button onClick={() => void submit()}>{mode === 'add' ? 'Ajouter' : 'Enregistrer'}</Button>
+                    )
                 )}
             </div>
         </Popup>
