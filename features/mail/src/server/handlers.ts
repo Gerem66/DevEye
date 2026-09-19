@@ -12,6 +12,7 @@ import {
     mailAccountSetProfileFeature,
     mailAccountTestConnectionFeature,
     mailAccountUpdateFeature,
+    mailOAuthProvidersFeature,
     mailOAuthStartFeature
 } from './accounts';
 import {
@@ -49,6 +50,7 @@ export const mailHandlers: readonly SdkFeatureDefinition<MailRepo, string, ZodTy
     mailAccountReorderFeature,
     mailAccountSetEnabledFeature,
     mailAccountTestConnectionFeature,
+    mailOAuthProvidersFeature,
     mailOAuthStartFeature,
     mailFolderListFeature,
     mailFolderReorderFeature,

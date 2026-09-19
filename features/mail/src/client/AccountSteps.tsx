@@ -27,8 +27,10 @@ export function StepHeader({ number, title, summary, open, controls, onClick }: 
                 <span className={styles.stepNumber} aria-hidden='true'>
                     {number}
                 </span>
-                <span className={styles.stepTitle}>{title}</span>
-                {summary && !open && <span className={styles.stepSummary}>{summary}</span>}
+                <span className={styles.stepLabel}>
+                    <span className={styles.stepTitle}>{title}</span>
+                    {summary && !open && <span className={styles.stepSummary}>· {summary}</span>}
+                </span>
                 <i
                     className={`icon icon-chevron ${styles.stepChevron} ${open ? styles.stepChevronOpen : ''}`}
                     aria-hidden='true'

@@ -45,6 +45,7 @@ declare const styles: {
     readonly error: string;
     readonly feature: string;
     readonly fieldHint: string;
+    readonly fillRow: string;
     readonly folderName: string;
     readonly folderRow: string;
     readonly folderRowSelected: string;
@@ -54,6 +55,7 @@ declare const styles: {
     readonly form: string;
     readonly formRow: string;
     readonly headline: string;
+    readonly hostRow: string;
     readonly iconBtn: string;
     readonly imageBanner: string;
     readonly imageBannerActions: string;
@@ -128,6 +130,7 @@ declare const styles: {
     readonly settingsResetBtn: string;
     readonly sidebar: string;
     readonly sidebarSubhead: string;
+    readonly soonTag: string;
     readonly spinning: string;
     readonly status: string;
     readonly step: string;
@@ -136,6 +139,7 @@ declare const styles: {
     readonly stepChevronOpen: string;
     readonly stepHeader: string;
     readonly stepHeading: string;
+    readonly stepLabel: string;
     readonly stepNumber: string;
     readonly stepReveal: string;
     readonly stepRevealInner: string;
@@ -146,9 +150,6 @@ declare const styles: {
     readonly syncProgressFill: string;
     readonly syncProgressIndeterminate: string;
     readonly syncProgressTrack: string;
-    readonly tabBar: string;
-    readonly tabButton: string;
-    readonly tabButtonActive: string;
     readonly toolbar: string;
     readonly toolbarActions: string;
 };

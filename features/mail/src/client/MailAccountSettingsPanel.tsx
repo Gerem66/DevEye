@@ -240,7 +240,7 @@ export default function MailAccountSettingsPanel({ scope, canWrite, gone }: Sett
                         <span className={shell.sectionLabel}>
                             <Term id='imap'>IMAP</Term> (réception)
                         </span>
-                        <div className={styles.formRow}>
+                        <div className={`${styles.fillRow} ${styles.hostRow}`}>
                             <TextInput
                                 placeholder='imap.exemple.com'
                                 value={draft.imap.host}
@@ -255,7 +255,7 @@ export default function MailAccountSettingsPanel({ scope, canWrite, gone }: Sett
                                 onChange={(e) => set('imap', { ...draft.imap, port: Number(e.target.value) || 993 })}
                             />
                         </div>
-                        <div className={styles.formRow}>
+                        <div className={styles.fillRow}>
                             <TextInput
                                 placeholder='Identifiant'
                                 value={draft.imap.username}
@@ -264,6 +264,7 @@ export default function MailAccountSettingsPanel({ scope, canWrite, gone }: Sett
                             />
                             <TextInput
                                 type='password'
+                                enableShowHideButton
                                 placeholder='Nouveau mot de passe'
                                 value={draft.imap.password}
                                 disabled={readOnly}
@@ -276,7 +277,7 @@ export default function MailAccountSettingsPanel({ scope, canWrite, gone }: Sett
                         <span className={shell.sectionLabel}>
                             <Term id='smtp'>SMTP</Term> (envoi)
                         </span>
-                        <div className={styles.formRow}>
+                        <div className={`${styles.fillRow} ${styles.hostRow}`}>
                             <TextInput
                                 placeholder='smtp.exemple.com'
                                 value={draft.smtp.host}
@@ -291,7 +292,7 @@ export default function MailAccountSettingsPanel({ scope, canWrite, gone }: Sett
                                 onChange={(e) => set('smtp', { ...draft.smtp, port: Number(e.target.value) || 465 })}
                             />
                         </div>
-                        <div className={styles.formRow}>
+                        <div className={styles.fillRow}>
                             <TextInput
                                 placeholder='Identifiant'
                                 value={draft.smtp.username}
@@ -300,6 +301,7 @@ export default function MailAccountSettingsPanel({ scope, canWrite, gone }: Sett
                             />
                             <TextInput
                                 type='password'
+                                enableShowHideButton
                                 placeholder='Nouveau mot de passe'
                                 value={draft.smtp.password}
                                 disabled={readOnly}
@@ -332,7 +334,7 @@ export default function MailAccountSettingsPanel({ scope, canWrite, gone }: Sett
                     Passer par un proxy (SOCKS5/HTTP), que vous fournissez vous-même
                 </Checkbox>
                 {proxyEnabled && draft.proxy && (
-                    <div className={styles.formRow}>
+                    <div className={`${styles.fillRow} ${styles.hostRow}`}>
                         <SegmentedControl
                             aria-label='Type de proxy'
                             value={draft.proxy.kind}

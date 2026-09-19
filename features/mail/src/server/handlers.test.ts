@@ -14,6 +14,7 @@ import {
     mailFolderList,
     mailGetSettings,
     mailMessageList,
+    mailOAuthProviders,
     mailOAuthStart,
     mailSetSettings
 } from '../contracts/commands';
@@ -392,6 +393,13 @@ describe('mail.attachmentDownload', () => {
             }),
             failsWith('not_found')
         );
+    });
+});
+
+describe('mail.oauthProviders', () => {
+    it('ne rend que les fournisseurs dont le serveur porte les identifiants', async () => {
+        const ctx = createTestContext({ repo: fakeRepo() });
+        assert.deepEqual(await handlerFor(mailOAuthProviders)(ctx, {}), { configured: ['google'] });
     });
 });
 

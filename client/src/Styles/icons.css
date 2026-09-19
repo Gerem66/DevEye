@@ -144,6 +144,18 @@
     -webkit-mask-image: url(/icons/github.svg);
     mask-image: url(/icons/github.svg);
 }
+.icon.icon-google {
+    -webkit-mask-image: url(/icons/google.svg);
+    mask-image: url(/icons/google.svg);
+}
+.icon.icon-microsoft {
+    -webkit-mask-image: url(/icons/microsoft.svg);
+    mask-image: url(/icons/microsoft.svg);
+}
+.icon.icon-apple {
+    -webkit-mask-image: url(/icons/apple.svg);
+    mask-image: url(/icons/apple.svg);
+}
 .icon.icon-projects {
     -webkit-mask-image: url(/icons/projects.svg);
     mask-image: url(/icons/projects.svg);

@@ -343,6 +343,16 @@ export const mailSetSettings = {
     output: z.object({ settings: mailSettingsSchema })
 };
 
+/**
+ * Les fournisseurs dont ce serveur porte les identifiants OAuth : ce que le
+ * formulaire d'ajout peut offrir sans envoyer l'utilisateur vers un refus.
+ */
+export const mailOAuthProviders = {
+    command: 'mail.oauthProviders' as const,
+    input: z.object({}),
+    output: z.object({ configured: z.array(mailOAuthProviderSchema) })
+};
+
 export const mailCommands = [
     mailAccountList,
     mailAccountCount,
@@ -354,6 +364,7 @@ export const mailCommands = [
     mailAccountSetEnabled,
     mailAccountTestConnection,
     mailOAuthStart,
+    mailOAuthProviders,
     mailFolderList,
     mailFolderReorder,
     mailFolderSync,

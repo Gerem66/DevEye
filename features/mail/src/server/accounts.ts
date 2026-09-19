@@ -8,9 +8,10 @@ import {
     mailAccountSetProfile,
     mailAccountTestConnection,
     mailAccountUpdate,
+    mailOAuthProviders,
     mailOAuthStart
 } from '../contracts/commands';
-import { MAIL_SYNC_INTERVAL_DEFAULT_MINUTES, type MailAccountRow } from '../contracts/domain';
+import { MAIL_SYNC_INTERVAL_DEFAULT_MINUTES, mailOAuthProviderSchema, type MailAccountRow } from '../contracts/domain';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
 import * as mailClient from './client';
@@ -347,6 +348,16 @@ export const mailAccountTestConnectionFeature = defineSdkFeature<
             mailClient.testConnection(credentials, refreshCallback(ctx, account, credentials, cipher))
         );
     }
+});
+
+export const mailOAuthProvidersFeature = defineSdkFeature<
+    MailRepo,
+    typeof mailOAuthProviders.command,
+    typeof mailOAuthProviders.input,
+    typeof mailOAuthProviders.output
+>({
+    ...mailOAuthProviders,
+    handler: async () => ({ configured: mailOAuthProviderSchema.options.filter(isOAuthConfigured) })
 });
 
 /**

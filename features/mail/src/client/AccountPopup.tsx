@@ -31,6 +31,16 @@ import type {
 
 export const ACCOUNT_POPUP = 'popup-mail-account';
 
+/**
+ * Les fournisseurs offerts, dans l'ordre d'affichage. `oauth: null` : pas encore
+ * de connexion côté serveur, le bouton s'annonce sans s'offrir.
+ */
+const PROVIDERS: readonly { label: string; icon: string; oauth: MailOAuthProvider | null }[] = [
+    { label: 'Google', icon: 'google', oauth: 'google' },
+    { label: 'Microsoft', icon: 'microsoft', oauth: 'microsoft' },
+    { label: 'Apple', icon: 'apple', oauth: null }
+];
+
 export type AccountPopupResult = 'delete' | 'saved' | 'oauth-connected' | null;
 
 /** What the popup opens on: an account to edit, a mailbox another feature already knows, or nothing. */
@@ -60,6 +70,8 @@ export function AccountPopup() {
     const [mode, setMode] = useState<'add' | 'edit'>('add');
     const [tab, setTab] = useState<'providers' | 'manual'>('providers');
     const [step, setStep] = useState<1 | 2>(1);
+    /** Les fournisseurs que ce serveur sait connecter ; `null` tant qu'il n'a pas répondu. */
+    const [configured, setConfigured] = useState<readonly MailOAuthProvider[] | null>(null);
     const [authMethod, setAuthMethod] = useState<MailAuthMethod>('password');
     /** Owned by the account's options panel, not by this form — resubmitted unchanged. */
     const [syncIntervalMinutes, setSyncIntervalMinutes] = useState(MAIL_SYNC_INTERVAL_DEFAULT_MINUTES);
@@ -129,6 +141,13 @@ export function AccountPopup() {
         const prefill = opened !== null && 'prefill' in opened ? opened.prefill : null;
         const input = opened !== null && 'prefill' in opened ? null : opened;
         setStep(1);
+        setConfigured(null);
+        if (opened === null || 'prefill' in opened) {
+            void api
+                .send('mail.oauthProviders', {})
+                .then((res) => setConfigured(res.configured))
+                .catch(() => setConfigured([]));
+        }
         setTestResult(null);
         setErrorName('');
         setErrorEmail('');
@@ -348,48 +367,31 @@ export function AccountPopup() {
                     id='mail-account-step-2'
                     open={step === 2}
                 >
+                    <p className={styles.sectionLabel}>Nom</p>
                     <TextInput
-                        placeholder='Nom (ex. Perso Gmail)'
+                        placeholder='ex. Perso Gmail'
+                        aria-label='Nom de la boîte'
                         value={draft.displayName}
                         error={errorName}
                         onChange={(e) => set('displayName', e.target.value)}
                     />
-                    {/* L'adresse ne se saisit que pour une connexion manuelle : chez un
-                    fournisseur, c'est le consentement qui la rend, et une boîte déjà
-                    connectée montre la sienne sur la carte plus bas. */}
-                    {showManualFields && (
-                        <TextInput
-                            type='email'
-                            placeholder='adresse@exemple.com'
-                            value={draft.emailAddress}
-                            error={errorEmail}
-                            onChange={(e) => set('emailAddress', e.target.value)}
-                        />
-                    )}
 
                     {/* An OAuth account has no second tab to offer: the manual form can't
                     describe it and can't save it either. */}
                     {!providerManaged && (
-                        <div className={styles.tabBar} role='tablist'>
-                            <button
-                                type='button'
-                                role='tab'
-                                aria-selected={tab === 'providers'}
-                                className={`${styles.tabButton} ${tab === 'providers' ? styles.tabButtonActive : ''}`}
-                                onClick={() => setTab('providers')}
-                            >
-                                Fournisseurs
-                            </button>
-                            <button
-                                type='button'
-                                role='tab'
-                                aria-selected={tab === 'manual'}
-                                className={`${styles.tabButton} ${tab === 'manual' ? styles.tabButtonActive : ''}`}
-                                onClick={() => setTab('manual')}
-                            >
-                                Connexion manuelle
-                            </button>
-                        </div>
+                        <>
+                            <p className={styles.sectionLabel}>Méthode de connexion</p>
+                            <SegmentedControl
+                                aria-label='Méthode de connexion'
+                                fullWidth
+                                value={tab}
+                                options={[
+                                    { value: 'providers', label: 'Fournisseurs' },
+                                    { value: 'manual', label: 'Connexion manuelle' }
+                                ]}
+                                onChange={setTab}
+                            />
+                        </>
                     )}
 
                     {/* La boîte que le consentement vient de créer : son état sort de
@@ -401,23 +403,32 @@ export function AccountPopup() {
                         <div className={styles.oauthButtons}>
                             {mode === 'add' ? (
                                 <>
-                                    <Button
-                                        variant='secondary'
-                                        disabled={oauthBusy !== null}
-                                        onClick={() => void connectOAuth('google')}
-                                    >
-                                        {oauthBusy === 'google' ? 'Connexion…' : 'Se connecter avec Google'}
-                                    </Button>
-                                    <Button
-                                        variant='secondary'
-                                        disabled={oauthBusy !== null}
-                                        onClick={() => void connectOAuth('microsoft')}
-                                    >
-                                        {oauthBusy === 'microsoft' ? 'Connexion…' : 'Se connecter avec Microsoft'}
-                                    </Button>
-                                    <span className={styles.fieldHint}>
-                                        Non configuré sur ce serveur ? Passez par l’onglet « Connexion manuelle ».
-                                    </span>
+                                    {PROVIDERS.map((p) => {
+                                        const available = p.oauth !== null && configured?.includes(p.oauth) === true;
+                                        return (
+                                            <Button
+                                                key={p.label}
+                                                variant='secondary'
+                                                icon={p.icon}
+                                                disabled={!available || oauthBusy !== null}
+                                                onClick={() => p.oauth && void connectOAuth(p.oauth)}
+                                            >
+                                                {oauthBusy !== null && oauthBusy === p.oauth
+                                                    ? 'Connexion…'
+                                                    : `Se connecter avec ${p.label}`}
+                                                {configured !== null && !available && (
+                                                    <span className={styles.soonTag}>Bientôt</span>
+                                                )}
+                                            </Button>
+                                        );
+                                    })}
+                                    {configured !== null && configured.length < PROVIDERS.length && (
+                                        <span className={styles.fieldHint}>
+                                            Les fournisseurs grisés ne sont pas encore disponibles : ils le seront
+                                            bientôt. En attendant, la connexion manuelle fonctionne avec toutes les
+                                            boîtes.
+                                        </span>
+                                    )}
                                 </>
                             ) : (
                                 <span className={styles.fieldHint}>
@@ -431,10 +442,20 @@ export function AccountPopup() {
 
                     {showManualFields && (
                         <>
+                            <p className={styles.sectionLabel}>Adresse e-mail</p>
+                            <TextInput
+                                type='email'
+                                placeholder='adresse@exemple.com'
+                                aria-label='Adresse e-mail'
+                                value={draft.emailAddress}
+                                error={errorEmail}
+                                onChange={(e) => set('emailAddress', e.target.value)}
+                            />
+
                             <p className={styles.sectionLabel}>
                                 <Term id='imap'>IMAP</Term> (réception)
                             </p>
-                            <div className={styles.formRow}>
+                            <div className={`${styles.fillRow} ${styles.hostRow}`}>
                                 <TextInput
                                     placeholder='imap.exemple.com'
                                     value={draft.imap.host}
@@ -449,7 +470,7 @@ export function AccountPopup() {
                                     }
                                 />
                             </div>
-                            <div className={styles.formRow}>
+                            <div className={styles.fillRow}>
                                 <TextInput
                                     placeholder='Identifiant'
                                     value={draft.imap.username}
@@ -457,6 +478,7 @@ export function AccountPopup() {
                                 />
                                 <TextInput
                                     type='password'
+                                    enableShowHideButton
                                     placeholder={mode === 'edit' ? 'Nouveau mot de passe' : 'Mot de passe'}
                                     value={draft.imap.password}
                                     onChange={(e) => set('imap', { ...draft.imap, password: e.target.value })}
@@ -466,7 +488,7 @@ export function AccountPopup() {
                             <p className={styles.sectionLabel}>
                                 <Term id='smtp'>SMTP</Term> (envoi)
                             </p>
-                            <div className={styles.formRow}>
+                            <div className={`${styles.fillRow} ${styles.hostRow}`}>
                                 <TextInput
                                     placeholder='smtp.exemple.com'
                                     value={draft.smtp.host}
@@ -481,7 +503,7 @@ export function AccountPopup() {
                                     }
                                 />
                             </div>
-                            <div className={styles.formRow}>
+                            <div className={styles.fillRow}>
                                 <TextInput
                                     placeholder='Identifiant'
                                     value={draft.smtp.username}
@@ -489,6 +511,7 @@ export function AccountPopup() {
                                 />
                                 <TextInput
                                     type='password'
+                                    enableShowHideButton
                                     placeholder={mode === 'edit' ? 'Nouveau mot de passe' : 'Mot de passe'}
                                     value={draft.smtp.password}
                                     onChange={(e) => set('smtp', { ...draft.smtp, password: e.target.value })}
@@ -499,6 +522,9 @@ export function AccountPopup() {
 
                     {showProxyFields && (
                         <>
+                            <p className={styles.sectionLabel}>
+                                <Term id='proxy'>Proxy</Term>
+                            </p>
                             <Checkbox
                                 checked={proxyEnabled}
                                 onChange={(checked) => {
@@ -515,10 +541,10 @@ export function AccountPopup() {
                                     }
                                 }}
                             >
-                                Passer par un proxy (SOCKS5/HTTP) — déjà géré par vous, DevEye n’en fournit pas
+                                Passer par un proxy (SOCKS5/HTTP), que vous fournissez vous-même
                             </Checkbox>
                             {proxyEnabled && draft.proxy && (
-                                <div className={styles.formRow}>
+                                <div className={`${styles.fillRow} ${styles.hostRow}`}>
                                     <SegmentedControl
                                         aria-label='Type de proxy'
                                         value={draft.proxy.kind}
