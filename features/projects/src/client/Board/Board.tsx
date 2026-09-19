@@ -151,12 +151,16 @@ export function Board({
         const cardId = Number(active.id);
         const card = cards.find((c) => c.id === cardId);
         if (!card) return;
-        const targetColumn = columnOf(String(over.id));
+        const overId = String(over.id);
+        const targetColumn = columnOf(overId);
         if (targetColumn === null) return;
 
         const list = byColumn.get(targetColumn) ?? [];
         const from = list.findIndex((c) => c.id === cardId);
-        const to = list.findIndex((c) => c.id === Number(over.id));
+        // Sous la dernière carte, le curseur n'en survole plus aucune : c'est la
+        // colonne qui répond, et « sous toutes » veut dire à la fin. Sans ce cas,
+        // la carte resterait là où son entrée dans la colonne l'avait posée.
+        const to = overId.startsWith('col:') ? list.length - 1 : list.findIndex((c) => c.id === Number(overId));
         const ids = list.map((c) => c.id);
         const nextIds = from >= 0 && to >= 0 && from !== to ? arrayMove(ids, from, to) : ids;
         onCardsMoved(targetColumn, nextIds, applyOrder(cards, targetColumn, nextIds));
