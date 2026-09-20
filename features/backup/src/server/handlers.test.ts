@@ -127,6 +127,10 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         destinations,
         jobs,
         runs,
+        storedBytesInWorkspaces: async (ids: readonly number[]) =>
+            runs
+                .filter((r) => ids.length > 0 && r.status === 'success' && r.pruned === 0)
+                .reduce((n, r) => n + Number(r.size_bytes), 0),
         listDestinations: async (workspaceId) =>
             destinations.filter((d) => d.workspace_id === workspaceId).map(withUsage),
         findDestination: async (id, workspaceId) =>

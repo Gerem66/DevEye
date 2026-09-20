@@ -15,6 +15,8 @@ type Q = SdkQueryable;
  * clair que `kind`, `source_kind`, `device_id`, le calendrier et les drapeaux.
  */
 export interface BackupRepo {
+    /** Octets occupés SUR LE SERVEUR par ces espaces : les destinations `local` seules. */
+    storedBytesInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
     listDestinations(workspaceId: number): Promise<BackupDestinationWithUsageRow[]>;
     findDestination(id: number, workspaceId: number): Promise<BackupDestinationRow | null>;
     /** La destination d'un travail, retrouvée sans repasser par l'espace. */
@@ -175,6 +177,26 @@ export function createRepo(q: Q): BackupRepo {
                 [id, workspaceId]
             );
             return rows[0] ?? null;
+        },
+
+        async storedBytesInWorkspaces(workspaceIds: readonly number[]) {
+            if (workspaceIds.length === 0) return 0;
+
+            const rows = await q.query<{ bytes: number | null }>(
+                `SELECT COALESCE(SUM(r.size_bytes), 0) AS bytes
+
+                   FROM backup_runs r
+
+                   JOIN backup_jobs j ON j.id = r.job_id
+
+                   JOIN backup_destinations d ON d.id = j.destination_id
+
+                  WHERE r.status = 'success' AND r.pruned = 0 AND d.kind = 'local' AND j.workspace_id IN (?)`,
+
+                [[...workspaceIds]]
+            );
+
+            return Number(rows[0]?.bytes ?? 0);
         },
 
         async findDestinationForJob(jobId) {

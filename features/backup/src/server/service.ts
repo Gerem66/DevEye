@@ -257,6 +257,19 @@ export class BackupEngine {
         let writing: Promise<{ artifact: string; size: number }> | null = null;
 
         try {
+            // Une destination « local » écrit sur le disque du serveur : l'offre
+            // du propriétaire de l'espace la borne, comme CloudSync. Ce qui part
+            // chez l'utilisateur (son appareil, son S3) ne lui coûte rien.
+            // La taille de l'archive n'est pas connue d'avance : on refuse la
+            // suivante une fois la limite franchie, pas celle qui la franchit.
+            if (destination.kind === 'local') {
+                await this.deps
+                    .quotaFor(job.workspace_id)
+                    // « +1 octet » : la taille de l'archive n'est pas connue
+                    // d'avance, et une offre à zéro doit refuser dès la première.
+                    .assert('storage', async (owned) => (await this.deps.repo.storedBytesInWorkspaces(owned)) + 1);
+            }
+
             const source = await this.sourceFor(job, jobName);
             const sink = await this.sinkFor(destination);
 

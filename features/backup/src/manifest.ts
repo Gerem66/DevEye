@@ -24,6 +24,7 @@ export const manifest = {
      * `devices.read` pour n'accepter comme destination qu'une machine de l'espace.
      */
     nativeCapabilities: ['agents', 'devices.read'],
+    quotas: [{ key: 'storage', label: 'de sauvegardes sur le serveur', unit: 'bytes' }],
     links: [
         { to: 'database', what: 'sauvegarde les bases supervisées' },
         { to: 'cloudsync', what: 'archive les fichiers d’un partage' },
