@@ -1951,6 +1951,22 @@ mod tests {
         assert_eq!(p.cpu_percent, 100.0, "4 s de CPU sur 4 s de vie");
     }
 
+    /// Attend que l'enfant ait vraiment remplacé son image mémoire. `spawn`
+    /// rend la main dès que le noyau réveille le parent du `vfork`, ce qui
+    /// arrive avant l'installation du nouveau `mm` : dans cette fenêtre,
+    /// `/proc/<pid>/exe` désigne encore le binaire de test.
+    #[cfg(target_os = "linux")]
+    fn wait_for_exec(pid: u32, expected: &std::path::Path) {
+        let want = expected.to_string_lossy().to_string();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while std::time::Instant::now() < deadline {
+            if proc_exe(pid).0.as_deref() == Some(want.as_str()) {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+    }
+
     /// Exécution depuis un répertoire temporaire, puis binaire effacé alors que
     /// le processus tourne. Vérifié pour de vrai : c'est le noyau qui pose le
     /// suffixe « (deleted) », une chaîne fabriquée ne prouverait rien.
@@ -1987,6 +2003,7 @@ mod tests {
             }
         };
         let pid = child.id();
+        wait_for_exec(pid, &bin);
 
         let (path, deleted) = proc_exe(pid);
         assert_eq!(
@@ -2042,6 +2059,9 @@ mod tests {
             std::fs::remove_dir_all(&dir).ok();
             return;
         };
+        // Avant de renommer par-dessus, sinon l'enfant exécuterait le nouvel
+        // inode et la substitution ne serait pas celle qu'on veut vérifier.
+        wait_for_exec(child.id(), &bin);
 
         // Le geste d'un gestionnaire de paquets : écrire à côté puis renommer
         // par-dessus. L'ancien inode est délié, le chemin reste peuplé.
