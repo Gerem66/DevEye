@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Button, Dialog, humanizeError, invalidate, SegmentedControl, useResourceVersion } from 'deveye-sdk-client';
+import {
+    Button,
+    copyText,
+    Dialog,
+    humanizeError,
+    invalidate,
+    SegmentedControl,
+    useResourceVersion
+} from 'deveye-sdk-client';
 import type { AudienceBreakdownItem, AudienceForm, AudienceSite } from '../contracts/domain';
 
 import { api } from './api';
@@ -220,13 +228,12 @@ export function InstallDialog({
         ) ?? null;
 
     const copy = async (text: string, id: string) => {
-        try {
-            await navigator.clipboard.writeText(text);
-            setCopied(id);
-            window.setTimeout(() => setCopied((c) => (c === id ? null : c)), 2000);
-        } catch {
+        if (!(await copyText(text))) {
             setError('Copie impossible : sélectionnez le texte à la main.');
+            return;
         }
+        setCopied(id);
+        window.setTimeout(() => setCopied((c) => (c === id ? null : c)), 2000);
     };
 
     const rotate = async () => {

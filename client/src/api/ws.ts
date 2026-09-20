@@ -13,6 +13,7 @@ import {
 import { getActiveInstanceId, getActiveWorkspaceId, onWorkspaceChange } from '../stores/workspace';
 import { traceCall } from '../diagnostics/trace';
 import { notifyQuotaExceeded } from '@/stores/quotaPrompt';
+import { randomUuid } from '@/randomUuid';
 
 const BASE_URL: string = (import.meta.env.VITE_SERVER_URL as string | undefined) ?? '';
 
@@ -306,7 +307,7 @@ export class DevEyeWs {
     }
 
     private nextRequestId(): string {
-        return crypto.randomUUID();
+        return randomUuid();
     }
 
     /**

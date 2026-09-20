@@ -4,6 +4,7 @@ import { ws, WsError } from '@/api/ws';
 import { Dialog } from '@/Components/Dialog';
 import { Checkbox, TextInput } from '@/Components';
 import Button from '@/Components/Button';
+import { copyText } from '@/copyText';
 import { setUnlocked } from '@/stores/secrecy';
 
 import styles from './Security.module.css';
@@ -103,10 +104,7 @@ export function SecurityDialog({ open, enabled, onClose, onChanged }: SecurityDi
                 description='⚠️ Conservez ce code en lieu sûr. Il permet de récupérer vos données si vous oubliez votre mot de passe, et ne sera plus affiché.'
                 footer={
                     <>
-                        <Button
-                            variant='secondary'
-                            onClick={() => void navigator.clipboard.writeText(recoveryCode ?? '')}
-                        >
+                        <Button variant='secondary' onClick={() => void copyText(recoveryCode ?? '')}>
                             Copier
                         </Button>
                         <Button onClick={close}>J&apos;ai sauvegardé mon code</Button>

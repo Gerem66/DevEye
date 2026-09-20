@@ -4,6 +4,7 @@ import type { DnsRecord, FeatureDomain } from '@deveye/types';
 import Button from '@/Components/Button';
 import { Dialog, DialogCancelButton } from '@/Components/Dialog';
 import { StatusBadge, type BadgeTone } from '@/Components/StatusBadge';
+import { copyText } from '@/copyText';
 import shell from '../FeatureSettings.module.css';
 import styles from './Domains.module.css';
 
@@ -47,13 +48,12 @@ function valueOf(record: DnsRecord): string {
 function CopyButton({ text, label, onFailure }: { text: string; label: string; onFailure: () => void }) {
     const [done, setDone] = useState(false);
     const copy = async () => {
-        try {
-            await navigator.clipboard.writeText(text);
-            setDone(true);
-            window.setTimeout(() => setDone(false), 2000);
-        } catch {
+        if (!(await copyText(text))) {
             onFailure();
+            return;
         }
+        setDone(true);
+        window.setTimeout(() => setDone(false), 2000);
     };
     return (
         <button

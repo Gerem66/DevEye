@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { Button, ClosePopup, DialogCancelButton, formatBytesFr, Popup } from 'deveye-sdk-client';
+import { Button, ClosePopup, copyText, DialogCancelButton, formatBytesFr, Popup } from 'deveye-sdk-client';
 
 import { formatAddress } from './api';
 import styles from './style.module.css';
@@ -59,12 +59,7 @@ export function MessageInfoPopup() {
 
     async function copyHeaders(): Promise<void> {
         if (!message) return;
-        try {
-            await navigator.clipboard.writeText(headersAsText(message));
-            setCopied(true);
-        } catch {
-            setCopied(false);
-        }
+        setCopied(await copyText(headersAsText(message)));
     }
 
     return (

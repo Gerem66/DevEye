@@ -6,6 +6,7 @@ import Button from '@/Components/Button';
 import CopyButton from '@/Components/CopyButton';
 import Term from '@/Components/Term';
 import { useAuth } from '@/auth/AuthProvider';
+import { copyText } from '@/copyText';
 import { refreshSecrecyStatus } from '@/stores/secrecy';
 import type { SecrecyStatus, TwoFactorStatus } from '@deveye/types';
 import type { FeatureProps } from '../types';
@@ -579,10 +580,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                         onSubmit={() => setShowBackupCodes(false)}
                         footer={
                             <>
-                                <Button
-                                    variant='secondary'
-                                    onClick={() => void navigator.clipboard.writeText(backupCodes.join('\n'))}
-                                >
+                                <Button variant='secondary' onClick={() => void copyText(backupCodes.join('\n'))}>
                                     Copier tous les codes
                                 </Button>
                                 <Button onClick={() => setShowBackupCodes(false)}>

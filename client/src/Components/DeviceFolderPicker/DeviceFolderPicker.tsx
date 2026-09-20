@@ -9,6 +9,7 @@ import {
 
 import { ws } from '@/api/ws';
 import { joinPath } from '@/devicePath';
+import { randomUuid } from '@/randomUuid';
 import { acquireMetrics } from '@/stores/metricsSubscription';
 import Button from '../Button';
 import { Dialog } from '../Dialog';
@@ -59,7 +60,7 @@ export function DeviceFolderPicker({
 
     const navigate = useCallback(
         (target: string) => {
-            const opId = crypto.randomUUID();
+            const opId = randomUuid();
             listOp.current = opId;
             setLoading(true);
             setError(null);
@@ -122,7 +123,7 @@ export function DeviceFolderPicker({
     const createFolder = () => {
         const name = mkdirName.trim();
         if (name === '' || !listing) return;
-        const opId = crypto.randomUUID();
+        const opId = randomUuid();
         mutateOp.current = opId;
         mkdirTarget.current = joinPath(listing.path, name);
         setMkdirOpen(false);

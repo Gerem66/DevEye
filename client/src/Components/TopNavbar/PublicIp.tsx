@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
+import { copyText } from '@/copyText';
 import styles from './PublicIp.module.css';
 
 /**
@@ -236,16 +237,13 @@ export function PublicIp({ editing = false }: { editing?: boolean }) {
 
     const copy = (): void => {
         if (reading === null) return;
-        navigator.clipboard.writeText(reading.ip).then(
-            () => {
-                setCopied(true);
-                if (timerRef.current) clearTimeout(timerRef.current);
-                timerRef.current = setTimeout(() => setCopied(false), 2000);
-            },
-            () => {
-                // Presse-papiers refusé (contexte non sécurisé, permission) : rien à dire.
-            }
-        );
+        void copyText(reading.ip).then((ok) => {
+            // Presse-papiers refusé (permission) : rien à dire.
+            if (!ok) return;
+            setCopied(true);
+            if (timerRef.current) clearTimeout(timerRef.current);
+            timerRef.current = setTimeout(() => setCopied(false), 2000);
+        });
     };
 
     const label = reading?.ip ?? (failed ? '—' : '…');

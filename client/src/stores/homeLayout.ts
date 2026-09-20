@@ -18,6 +18,7 @@ import {
     type ShortcutTemplate
 } from '@deveye/types';
 import { ws } from '@/api/ws';
+import { randomUuid } from '@/randomUuid';
 import { getActiveWorkspaceKey } from './workspace';
 
 /**
@@ -37,7 +38,7 @@ function storageKey(): string | null {
 const EMPTY_LAYOUT: HomeLayout = { topbar: [], sections: [] };
 
 function uid(): string {
-    return crypto.randomUUID();
+    return randomUuid();
 }
 
 function read(): HomeLayout {

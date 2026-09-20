@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
+    copyText,
     humanizeError,
     invalidate,
     OpenPopup,
@@ -19,6 +20,8 @@ import LoadingTable from './loadingTable';
 import PasswordRow, { type RowPassword } from './passwordRow';
 import { PasswordPopupAdd, type PopupResult } from './popups-add-password';
 import styles from './style.module.css';
+
+const COPY_FAILED = 'Impossible de copier le mot de passe.';
 
 function Password({ closeFeature }: FeatureViewProps) {
     // L'espace borne le coffre ; son changement recharge la liste.
@@ -132,12 +135,12 @@ function Password({ closeFeature }: FeatureViewProps) {
             setActionError(null);
             try {
                 const res = await withSecrecy(() => api.send('password.get', { passwordId: id }));
-                await navigator.clipboard.writeText(res.entry.password);
-                return true;
+                if (await copyText(res.entry.password)) return true;
+                setActionError(COPY_FAILED);
             } catch (e) {
-                setActionError(humanizeError(e, 'Impossible de copier le mot de passe.'));
-                return false;
+                setActionError(humanizeError(e, COPY_FAILED));
             }
+            return false;
         },
         [workspaceId]
     );

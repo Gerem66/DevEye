@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
     Button,
+    copyText,
     FeatureSettingsButton,
     SegmentedControl,
     StatusBadge,
@@ -33,7 +34,8 @@ function CopyValue({ label, value }: { label: string; value: string }) {
                 title={copied ? 'Copié' : `Copier ${label.toLowerCase()}`}
                 aria-label={`Copier ${label.toLowerCase()}`}
                 onClick={() => {
-                    void navigator.clipboard.writeText(value).then(() => {
+                    void copyText(value).then((ok) => {
+                        if (!ok) return;
                         setCopied(true);
                         window.setTimeout(() => setCopied(false), 2000);
                     });

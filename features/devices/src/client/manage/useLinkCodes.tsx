@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { onResourceChange, openInfo } from 'deveye-sdk-client';
+import { copyText, onResourceChange, openInfo } from 'deveye-sdk-client';
 import { LINK_CODE_TTL_MAX_SECONDS, type LinkCodeResponse } from '@deveye/types';
 
 import { api } from '../api';
@@ -104,13 +104,9 @@ export function useLinkCodes(refresh: () => Promise<void> | void) {
     };
 
     const copyCode = async (code: string) => {
-        try {
-            await navigator.clipboard.writeText(code);
-            setCopiedCode(code);
-            setTimeout(() => setCopiedCode((c) => (c === code ? null : c)), 1800);
-        } catch {
-            // clipboard may be unavailable
-        }
+        if (!(await copyText(code))) return;
+        setCopiedCode(code);
+        setTimeout(() => setCopiedCode((c) => (c === code ? null : c)), 1800);
     };
 
     const showLinkInfo = () => void openInfo({ title: 'Lier un appareil', body: <LinkInfo />, width: 460 });

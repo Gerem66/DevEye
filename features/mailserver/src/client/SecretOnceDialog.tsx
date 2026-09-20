@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Dialog } from 'deveye-sdk-client';
+import { Button, copyText, Dialog } from 'deveye-sdk-client';
 
 import styles from './style.module.css';
 
@@ -19,13 +19,9 @@ export default function SecretOnceDialog({
     if (secret === null) return null;
 
     const copy = async () => {
-        try {
-            await navigator.clipboard.writeText(secret);
-            setCopied(true);
-            window.setTimeout(() => setCopied(false), 2000);
-        } catch {
-            setCopied(false);
-        }
+        if (!(await copyText(secret))) return;
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 2000);
     };
 
     return (

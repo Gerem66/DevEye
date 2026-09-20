@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Dialog, humanizeError, safeHref } from 'deveye-sdk-client';
+import { Button, copyText, Dialog, humanizeError, safeHref } from 'deveye-sdk-client';
 import type { GitCommitDetail, GitDiffFile } from '../contracts/domain';
 
 import { api } from './api';
@@ -195,10 +195,8 @@ const COPIED_MS = 1600;
 
 /**
  * Le sha du commit, cliquable pour le copier. La confirmation est sur le bouton
- * lui-même, là où l'on regarde déjà, plutôt que dans un toast.
- *
- * `navigator.clipboard` n'existe qu'en contexte sécurisé (HTTPS ou localhost) :
- * ailleurs on ne prétend pas avoir copié, le bouton le dit.
+ * lui-même, là où l'on regarde déjà, plutôt que dans un toast, et un refus du
+ * presse-papiers s'y affiche aussi : on ne prétend pas avoir copié.
  */
 function CopySha({ sha }: { sha: string }) {
     const [state, setState] = useState<'idle' | 'done' | 'failed'>('idle');
@@ -210,12 +208,7 @@ function CopySha({ sha }: { sha: string }) {
     }, [state]);
 
     const copy = async () => {
-        try {
-            await navigator.clipboard.writeText(sha);
-            setState('done');
-        } catch {
-            setState('failed');
-        }
+        setState((await copyText(sha)) ? 'done' : 'failed');
     };
 
     return (

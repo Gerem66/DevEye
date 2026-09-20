@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, Dialog } from 'deveye-sdk-client';
+import { Button, copyText, Dialog } from 'deveye-sdk-client';
 import type { DatabaseStructure } from '../contracts/domain';
 import styles from './style.module.css';
 
@@ -71,12 +71,7 @@ export function StructureDialog({ open, structure, onClose, onOpenTable }: Struc
     }, [copied]);
 
     const copy = async () => {
-        try {
-            await navigator.clipboard.writeText(structureAsText(structure));
-            setCopied(true);
-        } catch {
-            /* `navigator.clipboard` n'existe qu'en contexte sécurisé */
-        }
+        if (await copyText(structureAsText(structure))) setCopied(true);
     };
 
     return (

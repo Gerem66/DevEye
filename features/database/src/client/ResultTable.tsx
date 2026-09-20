@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Dialog } from 'deveye-sdk-client';
+import { Button, copyText, Dialog } from 'deveye-sdk-client';
 import type { DatabaseRows } from '../contracts/domain';
 import { formatCount } from './format';
 import styles from './style.module.css';
@@ -121,12 +121,7 @@ export function ResultDialog({ open, sql, rows, onClose }: ResultDialogProps) {
             sorted.columns.join('\t'),
             ...sorted.rows.map((row) => row.map((cell) => cell ?? 'NULL').join('\t'))
         ].join('\n');
-        try {
-            await navigator.clipboard.writeText(text);
-            setCopied(true);
-        } catch {
-            /* `navigator.clipboard` n'existe qu'en contexte sécurisé */
-        }
+        if (await copyText(text)) setCopied(true);
     };
 
     return (

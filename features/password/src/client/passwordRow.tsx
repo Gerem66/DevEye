@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import styles from './style.module.css';
 
-import { useLiveOutline } from 'deveye-sdk-client';
+import { copyText, useLiveOutline } from 'deveye-sdk-client';
 import type { PasswordEntry, PasswordEntryMasked } from '../contracts/domain';
 
 type RowPassword = PasswordEntry | PasswordEntryMasked;
@@ -49,8 +49,9 @@ function CopyButton({
             });
             return;
         }
-        navigator.clipboard.writeText(value ?? '').then(flashCopied, () => {
-            // Clipboard refused (insecure context / denied permission): no-op.
+        void copyText(value ?? '').then((ok) => {
+            // Clipboard refused (denied permission): no-op.
+            if (ok) flashCopied();
         });
     };
 

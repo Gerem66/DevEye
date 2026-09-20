@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { copyText } from '@/copyText';
 import styles from './style.module.css';
 
 export interface CopyButtonProps {
@@ -24,15 +25,13 @@ export default function CopyButton({ value, label = 'Copier', className }: CopyB
     );
 
     const copy = () => {
-        // Un presse-papiers refusé (contexte non sécurisé, permission) reste muet.
-        navigator.clipboard.writeText(value).then(
-            () => {
-                setCopied(true);
-                if (timer.current) clearTimeout(timer.current);
-                timer.current = setTimeout(() => setCopied(false), FEEDBACK_MS);
-            },
-            () => undefined
-        );
+        // Un presse-papiers refusé (permission) reste muet.
+        void copyText(value).then((ok) => {
+            if (!ok) return;
+            setCopied(true);
+            if (timer.current) clearTimeout(timer.current);
+            timer.current = setTimeout(() => setCopied(false), FEEDBACK_MS);
+        });
     };
 
     return (

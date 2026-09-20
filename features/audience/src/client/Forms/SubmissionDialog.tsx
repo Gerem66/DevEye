@@ -1,5 +1,13 @@
 import { useState } from 'react';
-import { Button, ConfirmDialog, Dialog, DialogCancelButton, humanizeError, invalidate } from 'deveye-sdk-client';
+import {
+    Button,
+    ConfirmDialog,
+    copyText,
+    Dialog,
+    DialogCancelButton,
+    humanizeError,
+    invalidate
+} from 'deveye-sdk-client';
 import type { AudienceSubmission } from '../../contracts/domain';
 
 import { api } from '../api';
@@ -31,7 +39,8 @@ export function SubmissionDialog({ submission, canWrite, onClose, onRemoved }: S
     const raw = JSON.stringify(submission.fields, null, 2);
 
     const copy = () => {
-        void navigator.clipboard.writeText(raw).then(() => {
+        void copyText(raw).then((ok) => {
+            if (!ok) return;
             setCopied(true);
             window.setTimeout(() => setCopied(false), 1500);
         });

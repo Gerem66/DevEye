@@ -58,6 +58,12 @@ export { useDevices } from '@/devicesProvider';
 export { acquireMetrics } from '@/stores/metricsSubscription';
 export { isWinPath, joinPath } from '@/devicePath';
 export { safeHref } from '@/safeHref';
+// `crypto.randomUUID` n'existe qu'en contexte sécurisé : un module qui s'en
+// sert directement casse sur une instance servie en clair.
+export { randomUuid } from '@/randomUuid';
+// Même raison pour `navigator.clipboard`, absent hors contexte sécurisé : le
+// helper porte le repli, et dit si la copie a pris.
+export { copyText } from '@/copyText';
 /**
  * La version de DevEye dont cette interface est bâtie (package.json racine,
  * injectée au build) : ce à quoi un module compare la version qu'un agent
