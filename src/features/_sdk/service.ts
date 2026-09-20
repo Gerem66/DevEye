@@ -12,6 +12,7 @@ import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
 import { FeatureError } from '@deveye/types/sdk/server';
 import { accountChanged, toSdkAccount } from './live';
+import { createQuota } from './quota';
 import { serverKeysOf } from './host';
 import { ORIGINS, publishFrame } from './context';
 import { createOpenCipher, createSecureStore } from '@/Services/SecureStore';
@@ -154,6 +155,14 @@ export function createServiceDeps(
             publish: (workspaceId, event, payload) => publishFrame(manifest, workspaceId, event, payload),
             accountChanged: (userId) => accountChanged(host.db, manifest, userId)
         },
+        quotaFor: (workspaceId) =>
+            createQuota(
+                host.db,
+                providers,
+                manifest,
+                async () => (await host.db.workspaces.findById(workspaceId))?.owner_user_id ?? null,
+                host.logger
+            ),
         accounts: {
             find: async (userId) => {
                 gateAccounts();

@@ -30,6 +30,18 @@ absente de `limits` est illimitée.
 - La limite est souple : compter puis insérer n'est pas atomique, deux créations
   simultanées peuvent la dépasser d'une unité.
 
+## Une taille plutôt qu'un nombre
+
+Un quota peut compter des octets : `{ key: 'storage', label: 'de stockage', unit:
+'bytes' }`. La limite de l'offre est alors en octets, et le refus l'écrit comme
+une taille (« 1 Go de stockage »).
+
+Ce qui se crée hors de toute commande (les octets qu'un agent envoie) se borne
+depuis le service : `deps.quotaFor(workspaceId)` rend le même `SdkQuota`, pour le
+propriétaire de cet espace. CloudSync l'interroge une fois par session, avant la
+première montée : une session qui dépasserait l'offre s'arrête entière, avec sa
+raison, et les descentes comme les suppressions restent possibles.
+
 ## Côté client
 
 - `quota_exceeded` ouvre partout la même invite (`Components/QuotaPrompt`),
