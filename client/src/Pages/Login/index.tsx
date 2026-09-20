@@ -280,6 +280,8 @@ function LoginPage({ onSignup }: { onSignup?: () => void }) {
         void post('/api/auth/2fa/cancel', {}).catch(() => {});
     };
 
+    const signupShown = signupOpen && phase === 'form' && !twoFaRequired && !loading;
+
     const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
         if (e.key === 'Enter') {
             if (twoFaRequired) void onSubmit2FA();
@@ -294,83 +296,91 @@ function LoginPage({ onSignup }: { onSignup?: () => void }) {
                     <b>Dev</b> <p>Eye</p>
                 </span>
 
-                <div ref={cardRef} className={'login-card' + CARD_PHASE_CLASS[phase]} onKeyDown={onKeyDown}>
-                    <div className={'progress-bar' + (filling ? ' filling' : '')} />
+                <div className='card-slot'>
+                    <div ref={cardRef} className={'login-card' + CARD_PHASE_CLASS[phase]} onKeyDown={onKeyDown}>
+                        <div className={'progress-bar' + (filling ? ' filling' : '')} />
 
-                    <div ref={contentRef} className='login-card-content'>
-                        {!twoFaRequired ? (
-                            <>
-                                <div className='input-group'>
-                                    <TextInput
-                                        ref={inputUsername}
-                                        placeholder="Nom d'utilisateur"
-                                        value={username}
-                                        onChange={(e) => setUsername(e.target.value)}
-                                        autoFocus
-                                    />
-                                    <span className='icon icon-user'></span>
-                                </div>
+                        <div ref={contentRef} className='login-card-content'>
+                            {!twoFaRequired ? (
+                                <>
+                                    <div className='input-group'>
+                                        <TextInput
+                                            ref={inputUsername}
+                                            placeholder="Nom d'utilisateur"
+                                            value={username}
+                                            onChange={(e) => setUsername(e.target.value)}
+                                            autoFocus
+                                        />
+                                        <span className='icon icon-user'></span>
+                                    </div>
 
-                                <div className='input-group'>
-                                    <TextInput
-                                        ref={inputPassword}
-                                        type='password'
-                                        placeholder='Mot de passe'
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        error={error}
-                                    />
-                                    <span className='icon icon-lock' />
-                                </div>
+                                    <div className='input-group'>
+                                        <TextInput
+                                            ref={inputPassword}
+                                            type='password'
+                                            placeholder='Mot de passe'
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                            error={error}
+                                        />
+                                        <span className='icon icon-lock' />
+                                    </div>
 
-                                <button className='submit' onClick={onSubmit} disabled={loading}>
-                                    Se connecter
-                                </button>
-                            </>
-                        ) : (
-                            <>
-                                <p className='twofa-prompt'>
-                                    Entrez le code à 6 chiffres de votre application d&apos;authentification
-                                </p>
-                                <div className='input-group'>
-                                    <TextInput
-                                        ref={inputTwoFa}
-                                        placeholder='000000'
-                                        value={twoFaCode}
-                                        inputMode='numeric'
-                                        autoComplete='one-time-code'
-                                        disabled={loading}
-                                        onChange={(e) => {
-                                            const code = e.target.value.replace(/\D/g, '').slice(0, 6);
-                                            setTwoFaCode(code);
-                                            // No "Verify" button: auto-submit the instant a full
-                                            // 6-digit code is present, whether typed or pasted.
-                                            if (code.length === 6) void onSubmit2FA(code);
-                                        }}
-                                        error={error}
-                                    />
-                                    <span className='icon icon-shield' />
-                                </div>
+                                    <button className='submit' onClick={onSubmit} disabled={loading}>
+                                        Se connecter
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    <p className='twofa-prompt'>
+                                        Entrez le code à 6 chiffres de votre application d&apos;authentification
+                                    </p>
+                                    <div className='input-group'>
+                                        <TextInput
+                                            ref={inputTwoFa}
+                                            placeholder='000000'
+                                            value={twoFaCode}
+                                            inputMode='numeric'
+                                            autoComplete='one-time-code'
+                                            disabled={loading}
+                                            onChange={(e) => {
+                                                const code = e.target.value.replace(/\D/g, '').slice(0, 6);
+                                                setTwoFaCode(code);
+                                                // No "Verify" button: auto-submit the instant a full
+                                                // 6-digit code is present, whether typed or pasted.
+                                                if (code.length === 6) void onSubmit2FA(code);
+                                            }}
+                                            error={error}
+                                        />
+                                        <span className='icon icon-shield' />
+                                    </div>
 
-                                <button className='cancel' onClick={onCancel2FA} disabled={loading}>
-                                    {loading ? (
-                                        <span className='icon icon-spinner login-spin' aria-label='Vérification' />
-                                    ) : (
-                                        'Retour'
-                                    )}
-                                </button>
-                            </>
-                        )}
+                                    <button className='cancel' onClick={onCancel2FA} disabled={loading}>
+                                        {loading ? (
+                                            <span className='icon icon-spinner login-spin' aria-label='Vérification' />
+                                        ) : (
+                                            'Retour'
+                                        )}
+                                    </button>
+                                </>
+                            )}
+                        </div>
                     </div>
+                    {/* Toujours monté, pour que son arrivée se joue aussi (l'ouverture
+                        des inscriptions n'est connue qu'après coup) : seul `shown` change. */}
+                    {onSignup && (
+                        <button
+                            type='button'
+                            className={'text-link' + (signupShown ? ' shown' : '')}
+                            onClick={onSignup}
+                            tabIndex={signupShown ? 0 : -1}
+                            aria-hidden={!signupShown}
+                        >
+                            S’inscrire
+                        </button>
+                    )}
                 </div>
 
-                {/* Sous la carte, et seulement devant le formulaire : ni pendant la
-                    barre de progression, ni à l'étape du code 2FA. */}
-                {signupOpen && onSignup && phase === 'form' && !twoFaRequired && (
-                    <button type='button' className='text-link' onClick={onSignup} disabled={loading}>
-                        S’inscrire
-                    </button>
-                )}
                 {unreachable && <p className='unreachable'>Serveur injoignable, reprise automatique…</p>}
             </div>
         </div>

@@ -8,7 +8,7 @@ interface SceneProps {
     /** La scène entière s'efface en fondu. */
     hidden?: boolean;
     onSubmit?: () => void;
-    /** Sous la carte : le bouton texte qui ramène à la connexion. */
+    /** Sous la carte : le bouton texte (`.text-link`), qui suit la carte dans son effondrement. */
     footer?: ReactNode;
     children: ReactNode;
 }
@@ -44,13 +44,15 @@ export function SignupScene({ collapsing = false, hidden = false, onSubmit, foot
                     <b>Dev</b> <p>Eye</p>
                 </span>
 
-                <div ref={cardRef} className={'login-card' + (collapsing ? ' card-to-progressbar' : '')}>
-                    <div className={'progress-bar' + (collapsing ? ' filling' : '')} />
-                    <div ref={contentRef} className='login-card-content'>
-                        {children}
+                <div className='card-slot'>
+                    <div ref={cardRef} className={'login-card' + (collapsing ? ' card-to-progressbar' : '')}>
+                        <div className={'progress-bar' + (collapsing ? ' filling' : '')} />
+                        <div ref={contentRef} className='login-card-content'>
+                            {children}
+                        </div>
                     </div>
+                    {footer}
                 </div>
-                {!collapsing && footer}
             </form>
         </div>
     );

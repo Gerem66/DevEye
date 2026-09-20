@@ -123,7 +123,7 @@ export function SignupStart({ plan, onLogin }: { plan: string | null; onLogin: (
         <SignupScene
             onSubmit={submit}
             footer={
-                <button type='button' className='text-link' onClick={onLogin}>
+                <button type='button' className={'text-link' + (sending ? '' : ' shown')} onClick={onLogin}>
                     Se connecter
                 </button>
             }

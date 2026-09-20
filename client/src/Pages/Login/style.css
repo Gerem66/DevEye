@@ -235,11 +235,29 @@
     }
 }
 
-/* Le bouton texte sous la carte : passer de la connexion à l'inscription, et retour. */
+/*
+ * Le bouton texte sous la carte (connexion <-> inscription). Hors du flux : il
+ * n'ajoute aucune hauteur au bloc centré, donc ni son arrivée ni son départ ne
+ * déplacent la carte. Il loge dans les 48px qu'elle garde sous elle, suit son
+ * bord bas (l'emplacement l'englobe, marges comprises), et se range DERRIÈRE
+ * elle : même courbe et même durée que son effondrement, pour ne faire qu'un
+ * mouvement. L'opacité part plus vite que le glissement, la carte étant en
+ * verre : on ne doit pas le voir passer au travers.
+ */
+.login .card-slot {
+    position: relative;
+    display: flow-root;
+}
+
+.login .card-slot > .login-card {
+    z-index: 1;
+}
+
 .login .text-link {
-    display: block;
-    /* La carte garde 48px sous elle pour son effondrement : le lien remonte dedans. */
-    margin: calc(var(--space-md) - 48px) auto 0;
+    position: absolute;
+    z-index: 0;
+    left: 50%;
+    bottom: 10px;
     padding: var(--space-xs) var(--space-sm);
     border: none;
     background: none;
@@ -247,12 +265,34 @@
     font: inherit;
     font-size: 0.85rem;
     cursor: pointer;
-    transition: color var(--transition-fast);
-    animation: loadAnim 1s;
+    opacity: 0;
+    visibility: hidden;
+    transform: translate(-50%, -30px);
+    transition:
+        transform 0.5s cubic-bezier(0.77, 0, 0.18, 1),
+        opacity 0.25s cubic-bezier(0.77, 0, 0.18, 1),
+        visibility 0s 0.5s,
+        color var(--transition-fast);
 }
 
-.login .text-link:hover:not(:disabled) {
+.login .text-link.shown {
+    opacity: 1;
+    visibility: visible;
+    transform: translate(-50%, 0);
+    transition:
+        transform 0.5s cubic-bezier(0.77, 0, 0.18, 1),
+        opacity 0.5s 0.1s cubic-bezier(0.77, 0, 0.18, 1),
+        visibility 0s,
+        color var(--transition-fast);
+}
+
+.login .text-link:hover {
     color: var(--accent);
+}
+
+/* L'ouverture automatique n'a pas de formulaire : rien à animer. */
+.login .login-card.auto-login + .text-link {
+    transition: none;
 }
 
 /* Inscription : elle réutilise la scène du login, ci-dessous seulement ce qui
