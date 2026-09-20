@@ -3,6 +3,7 @@ import type { Workspace } from '@deveye/types';
 
 import { invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
+import { assertCoreLimit } from '../_quota';
 
 /**
  * Gestion des membres d'un espace, par les capacités `workspace.members` et
@@ -117,6 +118,15 @@ export const workspaceAddMemberFeature: FeatureDefinition<
         if (await ctx.db.workspaceMembers.isMember(target.id, ctx.workspaceId)) {
             throw new FeatureError('conflict', `« ${target.username} » est déjà membre de cet espace`);
         }
+
+        // L'offre qui compte est celle du propriétaire de l'espace : c'est lui
+        // qui héberge ses membres, quels que soient leurs propres comptes.
+        await assertCoreLimit(ctx, {
+            ownerUserId: ctx.workspace.ownerUserId,
+            fullKey: 'workspace.members',
+            label: 'membres par espace',
+            countAfter: async () => (await ctx.db.workspaceMembers.listByWorkspaceIds([ctx.workspaceId])).length + 1
+        });
 
         await ctx.db.workspaceMembers.add({ userId: target.id, workspaceId: ctx.workspaceId });
 

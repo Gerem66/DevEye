@@ -1,6 +1,7 @@
 import { workspaceAdd } from '@deveye/types';
 import { invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
+import { assertCoreLimit } from '../_quota';
 
 const OWNED_WORKSPACES_MAX = 50;
 
@@ -28,6 +29,13 @@ export const workspaceAddFeature: FeatureDefinition<
         if (owned.length >= OWNED_WORKSPACES_MAX) {
             throw new FeatureError('conflict', `Vous possédez déjà ${OWNED_WORKSPACES_MAX} espaces partagés`);
         }
+
+        await assertCoreLimit(ctx, {
+            ownerUserId: ctx.userId,
+            fullKey: 'workspace.shared',
+            label: 'espaces partagés',
+            countAfter: async () => owned.length + 1
+        });
 
         const workspace = await ctx.db.workspaces.create({
             ownerUserId: ctx.userId,

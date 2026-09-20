@@ -1,6 +1,8 @@
 import { ACCOUNT_PLAN_PROVIDER, type AccountPlan, type AccountPlanProvider } from '@deveye/types/sdk';
 import type { SdkProviders } from '@deveye/types/sdk/server';
 
+import { FeatureError } from '@deveye/types/sdk/server';
+
 import type { Database } from '@/db';
 
 interface QuotaLogger {
@@ -36,4 +38,56 @@ export function limitIn(plan: AccountPlan | null, fullKey: string): number | nul
 /** Les espaces que possède un compte : ce contre quoi ses quotas se comptent. */
 export function ownedWorkspaceIds(db: Pick<Database, 'workspaces'>, userId: number): Promise<number[]> {
     return db.workspaces.listOwnedIds(userId);
+}
+
+const SIZE_UNITS = ['o', 'Ko', 'Mo', 'Go', 'To'];
+
+/** Une limite en octets, écrite comme une taille : « 1 Go ». */
+export function sizeFr(bytes: number): string {
+    let value = bytes;
+    let unit = 0;
+    while (value >= 1024 && unit < SIZE_UNITS.length - 1) {
+        value /= 1024;
+        unit++;
+    }
+    return `${Number.isInteger(value) ? value : value.toFixed(1).replace('.', ',')} ${SIZE_UNITS[unit]}`;
+}
+
+export interface PlanLimitCheck {
+    /** Le compte dont l'offre s'applique : le propriétaire de l'espace concerné. */
+    ownerUserId: number;
+    /** `<featureId>.<quotaKey>`, ou `workspace.<clé>` pour ce que le cœur borne lui-même. */
+    fullKey: string;
+    /** Ce que la limite compte, tel que le refus le dit : « 5 services surveillés ». */
+    label: string;
+    unit?: 'bytes';
+    /** Le total APRÈS création, sur les espaces du propriétaire. Jamais appelé si illimité. */
+    countAfter(ownerWorkspaceIds: readonly number[]): Promise<number>;
+}
+
+/**
+ * La seule comparaison à une offre de toute l'app : les quotas des modules
+ * (`_sdk/quota.ts`) et ceux du cœur (espaces, membres) passent par ici.
+ */
+export async function assertPlanLimit(
+    db: Pick<Database, 'workspaces'>,
+    providers: SdkProviders,
+    logger: QuotaLogger,
+    check: PlanLimitCheck
+): Promise<void> {
+    const plan = await planOf(providers, check.ownerUserId, logger);
+    const limit = limitIn(plan, check.fullKey);
+    if (limit === null) return;
+    const count = await check.countAfter(await ownedWorkspaceIds(db, check.ownerUserId));
+    if (count <= limit) return;
+    const shown = check.unit === 'bytes' ? sizeFr(limit) : String(limit);
+    throw new FeatureError(
+        'quota_exceeded',
+        `Limite de l'offre ${plan?.label ?? ''} atteinte : ${shown} ${check.label}.`,
+        {
+            key: check.fullKey,
+            limit,
+            plan: plan?.id
+        }
+    );
 }

@@ -30,6 +30,24 @@ absente de `limits` est illimitée.
 - La limite est souple : compter puis insérer n'est pas atomique, deux créations
   simultanées peuvent la dépasser d'une unité.
 
+## Ce que le cœur borne lui-même
+
+Les espaces ne sont pas un module : le cœur applique deux limites sans manifest,
+par `assertCoreLimit` (`src/features/_quota.ts`), avec la même comparaison que les
+modules (`assertPlanLimit`, `src/Services/quota.ts`).
+
+| Clé                 | Compte                                    | Où                              |
+| ------------------- | ----------------------------------------- | ------------------------------- |
+| `workspace.shared`  | les espaces partagés qu'un compte possède | `features/workspace/add.ts`     |
+| `workspace.members` | les membres d'UN espace partagé           | `features/workspace/members.ts` |
+
+**L'offre d'un espace est celle de son propriétaire.** Tous ses espaces tirent
+sur la même réserve, et ses membres y travaillent avec leur propre compte, quel
+qu'il soit : c'est le propriétaire qui héberge. Ces deux limites sont ce qui
+empêche un seul abonnement d'héberger une équipe entière. Un membre gratuit d'un
+espace Pro n'emporte rien chez lui : dans son espace personnel, c'est son offre à
+lui qui s'applique.
+
 ## Une taille plutôt qu'un nombre
 
 Un quota peut compter des octets : `{ key: 'storage', label: 'de stockage', unit:

@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import { ACCOUNT_PLAN_PROVIDER, type AccountPlan } from '@deveye/types/sdk';
 
-import { limitIn, planOf } from './quota';
+import { assertPlanLimit, limitIn, planOf, sizeFr } from './quota';
 
 const logger = { error: () => undefined };
 const FREE: AccountPlan = { id: 'free', label: 'Gratuite', limits: { 'uptime.monitors': 5 } };
@@ -36,5 +36,57 @@ describe("l'offre d'un compte", () => {
             logger
         );
         assert.equal(plan, null);
+    });
+});
+
+describe('la comparaison à une offre', () => {
+    const db = { workspaces: { listOwnedIds: async () => [1, 2] } } as never;
+    const PLAN: AccountPlan = {
+        id: 'free',
+        label: 'Gratuite',
+        limits: { 'workspace.members': 2, 'x.storage': 1024 ** 3 }
+    };
+    const bounded = providers(() => Promise.resolve(PLAN));
+
+    it('passe à la limite, refuse au-delà, et compte sur tous les espaces du propriétaire', async () => {
+        let seen: readonly number[] = [];
+        const check = (count: number) => ({
+            ownerUserId: 7,
+            fullKey: 'workspace.members',
+            label: 'membres par espace',
+            countAfter: async (owned: readonly number[]) => ((seen = owned), count)
+        });
+        await assertPlanLimit(db, bounded, logger, check(2));
+        assert.deepEqual(seen, [1, 2]);
+        await assert.rejects(
+            assertPlanLimit(db, bounded, logger, check(3)),
+            /Gratuite atteinte : 2 membres par espace/
+        );
+    });
+
+    it('ne compte rien quand la clé est illimitée ou qu’aucune offre n’existe', async () => {
+        const never = {
+            ownerUserId: 7,
+            fullKey: 'workspace.shared',
+            label: 'x',
+            countAfter: () => assert.fail('compté')
+        };
+        await assertPlanLimit(db, bounded, logger, never);
+        await assertPlanLimit(db, providers(), logger, { ...never, fullKey: 'workspace.members' });
+    });
+
+    it('écrit une limite en octets comme une taille', async () => {
+        assert.equal(sizeFr(1024 ** 3), '1 Go');
+        assert.equal(sizeFr(1536 * 1024 ** 2), '1,5 Go');
+        await assert.rejects(
+            assertPlanLimit(db, bounded, logger, {
+                ownerUserId: 7,
+                fullKey: 'x.storage',
+                label: 'de stockage',
+                unit: 'bytes',
+                countAfter: async () => 2 * 1024 ** 3
+            }),
+            /1 Go de stockage/
+        );
     });
 });
