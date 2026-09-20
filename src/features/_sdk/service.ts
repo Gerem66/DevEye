@@ -160,6 +160,11 @@ export function createServiceDeps(
                 const row = await host.db.users.findById(userId);
                 return row ? toSdkAccount(row) : null;
             },
+            findByEmail: async (email) => {
+                gateAccounts();
+                const row = await host.db.users.findByEmail(email.trim().toLowerCase());
+                return row ? toSdkAccount(row) : null;
+            },
             list: async (userIds) => {
                 gateAccounts();
                 return (await host.db.users.findByIds([...userIds])).map(toSdkAccount);

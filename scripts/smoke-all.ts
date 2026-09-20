@@ -35,10 +35,14 @@ function fail(message: string): never {
 }
 
 /** L'identité d'un module installé (id + libellé), lue dans son manifest : même résolution que gen-features. */
-async function moduleIdentity(entry: FeatureConfigEntry): Promise<{ id: string; label: string }> {
+async function moduleIdentity(entry: FeatureConfigEntry): Promise<{ id: string; label: string; accountOnly: boolean }> {
     const manifest = await importManifest(ROOT, entry);
     if (!manifest) fail(`${entry.package}: l'entrée racine n'exporte pas « manifest »`);
-    return { id: manifest.id, label: manifest.label };
+    return {
+        id: manifest.id,
+        label: manifest.accountEntry?.label ?? manifest.label,
+        accountOnly: manifest.accountOnly === true
+    };
 }
 
 function run(cmd: string, args: string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {}): boolean {
@@ -146,7 +150,13 @@ async function main(): Promise<void> {
     const failed: string[] = [];
     for (const m of modules) {
         const from = fs.statSync(logFile).size;
-        const ok = run(TSX, [path.join(ROOT, 'scripts', 'smoke-feature.ts'), m.id, m.label, `--url=${BASE_URL}`]);
+        const ok = run(TSX, [
+            path.join(ROOT, 'scripts', 'smoke-feature.ts'),
+            m.id,
+            m.label,
+            `--url=${BASE_URL}`,
+            ...(m.accountOnly ? ['--account'] : [])
+        ]);
         if (!ok) {
             failed.push(m.id);
             tailServerLog(logFile, from);

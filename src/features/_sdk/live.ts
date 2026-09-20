@@ -22,5 +22,11 @@ export function accountChanged(db: Pick<Database, 'users'>, manifest: FeatureMan
 
 /** `users.created` est en secondes. */
 export function toSdkAccount(row: UserRow): SdkAccount {
-    return { id: row.id, email: row.email, username: row.username, created: Number(row.created) * 1000 };
+    return {
+        id: row.id,
+        email: row.email,
+        username: row.username,
+        isAdmin: row.role === 'admin',
+        created: Number(row.created) * 1000
+    };
 }

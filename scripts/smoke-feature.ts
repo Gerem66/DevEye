@@ -42,11 +42,13 @@ const flags = new Map(
 const FEATURE = positional[0];
 const LABEL = positional[1];
 if (!FEATURE || !LABEL) {
-    console.error('Usage: npm run smoke:feature -- <featureId> <label> [--url=...] [--headed]');
+    console.error('Usage: npm run smoke:feature -- <featureId> <label> [--url=...] [--headed] [--account]');
     process.exit(2);
 }
 const BASE_URL = flags.get('url') ?? 'http://localhost:3000';
 const HEADED = flags.has('headed');
+/** Un module de compte (`manifest.accountOnly`) : ni marché ni tuile, une entrée du menu du profil. */
+const ACCOUNT_ONLY = flags.has('account');
 const USERNAME = process.env.SMOKE_USERNAME ?? 'dev';
 const PASSWORD = process.env.SMOKE_PASSWORD ?? 'devdevdev';
 const BROWSER = process.env.SMOKE_BROWSER ?? 'chromium-browser';
@@ -487,6 +489,18 @@ async function openFullView(page: Page, watch: Watch): Promise<void> {
     );
 }
 
+/** Le parcours d'un module de compte : son entrée du menu du profil ouvre sa vue, qui parle au serveur. */
+async function openAccountView(page: Page, watch: Watch): Promise<void> {
+    await page.evaluate(`document.querySelector('[class*="profileBtn"]')?.click()`);
+    await waitFor(`l'entrée « ${LABEL} » du menu du profil`, 5_000, () => page.clickByText(LABEL));
+    await waitFor(
+        `un aller-retour « ${PREFIX}* » depuis la vue de compte`,
+        20_000,
+        async () => watch.roundTrips.length > 0
+    );
+    console.log(`  ✓ vue de compte: ${watch.roundTrips.join(', ')}`);
+}
+
 /** Le verdict : un refus local ou une exception JS est un échec, un console.error un avertissement. */
 function verdict(watch: Watch): void {
     if (watch.refusedLocally > 0) {
@@ -515,10 +529,14 @@ async function main(): Promise<void> {
 
     console.log(`Smoke « ${FEATURE} » (${LABEL}) sur ${BASE_URL}`);
     await login(page);
-    await checkCatalogue(page);
-    await placeTile(page);
-    await awaitFirstRoundTrip(watch);
-    await openFullView(page, watch);
+    if (ACCOUNT_ONLY) {
+        await openAccountView(page, watch);
+    } else {
+        await checkCatalogue(page);
+        await placeTile(page);
+        await awaitFirstRoundTrip(watch);
+        await openFullView(page, watch);
+    }
     verdict(watch);
 
     page.cdp.close();
