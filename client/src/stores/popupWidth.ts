@@ -45,6 +45,26 @@ function recompute(): void {
     for (const listener of listeners) listener();
 }
 
+/**
+ * Les changements d'une même frame n'en font qu'un. Changer de vue relâche une
+ * demande puis en pose une autre : notifiées une à une, la popup viserait un
+ * instant la largeur intermédiaire, et une transition `ease` re-ciblée en vol
+ * repart à vitesse nulle, ce qui se voit comme un arrêt au milieu du geste.
+ */
+let scheduled: number | null = null;
+
+function scheduleRecompute(): void {
+    if (typeof window === 'undefined') {
+        recompute();
+        return;
+    }
+    if (scheduled !== null) return;
+    scheduled = window.requestAnimationFrame(() => {
+        scheduled = null;
+        recompute();
+    });
+}
+
 function subscribe(listener: () => void): () => void {
     listeners.add(listener);
     return () => listeners.delete(listener);
@@ -60,11 +80,11 @@ if (typeof window !== 'undefined') {
 export function acquirePopupWidth(px: number): () => void {
     const key = Symbol('popupWidth');
     requests.set(key, px);
-    recompute();
+    scheduleRecompute();
     return () => {
         if (!requests.has(key)) return;
         requests.delete(key);
-        recompute();
+        scheduleRecompute();
     };
 }
 
