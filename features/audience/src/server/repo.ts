@@ -135,6 +135,9 @@ export interface AudienceRepo extends AudienceFormsRepo {
     /** L'unicité d'un site dans l'espace, ce que `content` chiffré ne peut porter. */
     findByName(workspaceId: number, nameRef: string): Promise<AudienceSiteRow | null>;
     count(workspaceId: number): Promise<number>;
+    countInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
+    /** Événements agrégés (vues et événements nommés) depuis le jour `fromDay` (AAAAMMJJ) dans ces espaces. */
+    eventsSince(workspaceIds: readonly number[], fromDay: number): Promise<number>;
     create(input: {
         workspaceId: number;
         publicKey: string;
@@ -357,6 +360,25 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
                 [workspaceId, nameRef]
             );
             return rows[0] ?? null;
+        },
+        async eventsSince(workspaceIds, fromDay) {
+            if (workspaceIds.length === 0) return 0;
+            const rows = await q.query<{ total: number | null }>(
+                `SELECT COALESCE(SUM(d.events), 0) AS total
+                   FROM audience_daily d
+                   JOIN audience_sites s ON s.id = d.site_id
+                  WHERE s.workspace_id IN (?) AND d.day >= ?`,
+                [[...workspaceIds], fromDay]
+            );
+            return Number(rows[0]?.total ?? 0);
+        },
+        async countInWorkspaces(workspaceIds) {
+            if (workspaceIds.length === 0) return 0;
+            const rows = await q.query<{ total: number }>(
+                'SELECT COUNT(*) AS total FROM audience_sites WHERE workspace_id IN (?)',
+                [[...workspaceIds]]
+            );
+            return Number(rows[0]?.total ?? 0);
         },
         async count(workspaceId) {
             const rows = await q.query<{ total: number }>(
@@ -874,8 +896,11 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
         },
         async rollupDay(siteId, day, from, to) {
             const [views, sessions] = await Promise.all([
-                q.query<{ total: number }>(
-                    'SELECT COUNT(*) AS total FROM audience_events WHERE site_id = ? AND kind = 0 AND ts >= ? AND ts < ?',
+                // `events` = tout ce qui a été écrit, vues et événements nommés :
+                // c'est lui que l'offre du compte borne (`eventsSince`).
+                q.query<{ total: number; events: number }>(
+                    `SELECT COALESCE(SUM(kind = 0), 0) AS total, COUNT(*) AS events
+                       FROM audience_events WHERE site_id = ? AND ts >= ? AND ts < ?`,
                     [siteId, from, to]
                 ),
                 q.query<{ total: number; visitors: number }>(
@@ -885,14 +910,15 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
                 )
             ]);
             await q.execute(
-                `INSERT INTO audience_daily (site_id, day, views, sessions, visitors)
-                 VALUES (?, ?, ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE views = VALUES(views), sessions = VALUES(sessions),
-                                         visitors = VALUES(visitors)`,
+                `INSERT INTO audience_daily (site_id, day, views, events, sessions, visitors)
+                 VALUES (?, ?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE views = VALUES(views), events = VALUES(events),
+                                         sessions = VALUES(sessions), visitors = VALUES(visitors)`,
                 [
                     siteId,
                     day,
                     Number(views[0]?.total ?? 0),
+                    Number(views[0]?.events ?? 0),
                     Number(sessions[0]?.total ?? 0),
                     Number(sessions[0]?.visitors ?? 0)
                 ]

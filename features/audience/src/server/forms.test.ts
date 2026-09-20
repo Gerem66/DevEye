@@ -96,6 +96,8 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         submissions: [],
         formLabels: [],
         answers: new Map(),
+        eventsSince: async (ids: readonly number[]) => ids.length - ids.length,
+        countInWorkspaces: async (ids: readonly number[]) => ids.length - ids.length,
         list: unused,
         listVisible: unused,
         find: async (id, workspaceId) => repo.sites.find((s) => s.id === id && s.workspace_id === workspaceId) ?? null,

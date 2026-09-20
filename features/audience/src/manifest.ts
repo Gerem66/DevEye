@@ -35,6 +35,10 @@ export const manifest = {
      * routes, l'hôte les monte sur chacun de ses écouteurs exposés.
      */
     nativeCapabilities: ['routes.public'],
+    quotas: [
+        { key: 'sites', label: 'sites suivis' },
+        { key: 'events', label: 'vues et événements par mois' }
+    ],
     /**
      * Trois panneaux à l'échelle d'un site, un par section de sa fiche : ce qui
      * vaut pour le site entier (identité, origines, état, suppression), ce qui

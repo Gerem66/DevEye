@@ -102,6 +102,8 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         sites,
         funnels,
         steps,
+        eventsSince: async (ids: readonly number[]) => ids.length - ids.length,
+        countInWorkspaces: async (ids: readonly number[]) => sites.filter((r) => ids.includes(r.workspace_id)).length,
         list: async (workspaceId) => sites.filter((s) => s.workspace_id === workspaceId).map(withStats),
         listVisible: async (workspaceId) => sites.filter((s) => visible(s, workspaceId)).map(withStats),
         find: async (id, workspaceId) => sites.find((s) => s.id === id && s.workspace_id === workspaceId) ?? null,

@@ -126,6 +126,8 @@ export const audienceSiteAddFeature = defineSdkFeature({
             throw new FeatureError('validation', 'Un site porte déjà ce nom dans cet espace.');
         }
 
+        await ctx.quota.assert('sites', async (owned) => (await ctx.repo.countInWorkspaces(owned)) + 1);
+
         const cipher = ctx.cipher();
         const body: StoredSite = {
             name: input.name.trim(),

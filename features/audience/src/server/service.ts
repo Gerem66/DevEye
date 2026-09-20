@@ -27,6 +27,7 @@ import type { AudienceRepo, PendingEventRow } from './repo';
 import { validateSubmission, type ValidationReason } from './validate';
 import { nameRef, parseOrigins, readJson } from './_shared';
 import { looksLikeBot, parseUserAgent } from './userAgent';
+import { FeatureError } from '@deveye/types/sdk/server';
 
 /**
  * L'ingestion de l'audience : le seul chemin de DevEye ouvert sur Internet.
@@ -163,6 +164,8 @@ const BROADCAST_FLOOR_MS = 60_000;
  * serveur tomberait pour une feature qui n'est pas critique.
  */
 const QUEUE_MAX = 20_000;
+/** Fraîcheur du verdict de quota mensuel : l'ingestion ne lit pas la base à chaque vue. */
+const PLAN_QUOTA_TTL_MS = 60_000;
 
 /** Bornes des caches. Un dépassement vide, sans finesse : on recalcule. */
 const LABEL_CACHE_MAX = 20_000;
@@ -209,6 +212,8 @@ export class AudienceIngest {
      * gratuite vaut mieux ici qu'une fenêtre exacte et coûteuse.
      */
     private readonly eventCounts = new Map<string, { from: number; count: number }>();
+    /** Verdict du quota mensuel, par espace : voir `overPlanQuota`. */
+    private readonly planQuota = new Map<number, { at: number; over: boolean }>();
     /** `siteId:visitorRef` → session ouverte. */
     private readonly sessions = new Map<string, CachedSession>();
 
@@ -261,6 +266,7 @@ export class AudienceIngest {
         if (!originAllowed(site.origins, req.origin, site.platform)) return;
         if (looksLikeBot(req.userAgent)) return;
         if (this.overEventQuota(site, req.ip)) return;
+        if (await this.overPlanQuota(site.workspaceId)) return;
 
         const ua = parseUserAgent(req.userAgent);
 
@@ -492,6 +498,37 @@ export class AudienceIngest {
      * Éteint par défaut (`0`), pour qu'aucun site déjà branché ne se mette à
      * perdre des vues sans qu'on l'ait demandé.
      */
+    /**
+     * L'offre du propriétaire de l'espace borne les vues du mois en cours. Lu
+     * dans l'agrégat journalier, jamais dans les événements bruts : une seule
+     * requête indexée, dont le retard vaut au plus un tour de ménage.
+     *
+     * Le verdict est gardé une minute : l'ingestion est la voie la plus chaude
+     * de l'app, elle ne peut pas interroger la base à chaque vue.
+     */
+    private async overPlanQuota(workspaceId: number): Promise<boolean> {
+        const cached = this.planQuota.get(workspaceId);
+        if (cached && Date.now() - cached.at < PLAN_QUOTA_TTL_MS) return cached.over;
+        const month = new Date();
+        const fromDay = month.getUTCFullYear() * 10000 + (month.getUTCMonth() + 1) * 100 + 1;
+        let over = false;
+        try {
+            await this.deps
+                .quotaFor(workspaceId)
+                .assert('events', (owned) => this.deps.repo.eventsSince(owned, fromDay));
+        } catch (e) {
+            over = e instanceof FeatureError && e.code === 'quota_exceeded';
+            if (!over) {
+                // Une offre illisible ne doit pas arrêter l'ingestion de tout le monde.
+                this.deps.logger.error({ err: (e as Error).message, workspaceId }, 'Audience: offre illisible');
+            } else if (!cached?.over) {
+                this.deps.logger.warn({ workspaceId }, 'Audience: quota mensuel atteint, ingestion suspendue');
+            }
+        }
+        this.planQuota.set(workspaceId, { at: Date.now(), over });
+        return over;
+    }
+
     private overEventQuota(site: CachedSite, ip: string): boolean {
         if (site.eventIpQuota <= 0) return false;
 

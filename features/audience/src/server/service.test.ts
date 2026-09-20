@@ -88,6 +88,8 @@ function fakeRepo(sites: AudienceSiteRow[]): FakeRepo {
         submissions: [],
         formLabels: [],
         answers: new Map(),
+        eventsSince: async (ids: readonly number[]) => ids.length - ids.length,
+        countInWorkspaces: async (ids: readonly number[]) => sites.filter((r) => ids.includes(r.workspace_id)).length,
         list: unused,
         listVisible: unused,
         find: async (id, workspaceId) => sites.find((s) => s.id === id && s.workspace_id === workspaceId) ?? null,
