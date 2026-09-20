@@ -111,7 +111,7 @@ est un script et non une migration de boot, parce qu'il lui faut la clé serveur
 et une transaction annulable.
 
 1. Sauvegarde de la base, serveur arrêté (il l'est déjà : il refuse de démarrer).
-2. Dry-run, avec l'environnement de prod (dans le conteneur) :
+2. Dry-run, avec l'environnement de prod :
     ```bash
     npm run reseal:server-key
     ```
@@ -119,6 +119,35 @@ et une transaction annulable.
     « illisible ».
 3. Exécution : `npm run reseal:server-key -- --yes`. Une seule transaction,
    chaque blob relu avant validation. Rejouable sans risque.
+
+**En production, pas « dans le conteneur »** : celui de l'app sort dès son
+démarrage, on ne peut pas y entrer, et la base n'est joignable que sur le réseau
+Docker. Le script tourne donc dans un conteneur **jetable**, de la même image,
+avec le même environnement et sur le même réseau, la commande seule changeant.
+Sur l'hôte Docker :
+
+```bash
+# Le conteneur de l'app, même arrêté : `docker inspect` lit son image et son
+# environnement sans qu'il tourne.
+APP=$(docker ps -a --format '{{.Names}}' | grep -i deveye | grep -vi database | head -1)
+reseal() {
+    docker run --rm --network dokploy-network \
+        --env-file <(docker inspect "$APP" --format '{{range .Config.Env}}{{println .}}{{end}}') \
+        "$(docker inspect "$APP" --format '{{.Config.Image}}')" \
+        npm run reseal:server-key -- "$@"
+}
+reseal          # dry-run
+reseal --yes    # exécution
+```
+
+La sauvegarde de l'étape 1 se prend de la même façon, depuis le conteneur de la
+base (ses identifiants sont dans son propre environnement) :
+
+```bash
+DB=$(docker ps --format '{{.Names}}' | grep -i deveye-database | head -1)
+docker exec "$DB" sh -c 'mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' > deveye-avant-reseal.sql
+```
+
 4. Redémarrer. Les codes de secours 2FA, eux, ont été effacés par la migration
    114 (leur ancien condensé n'était pas convertible) : chaque compte en
    régénère depuis Sécurité.
