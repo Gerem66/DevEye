@@ -12,7 +12,7 @@ import type {
     SdkQueryable
 } from '@deveye/types/sdk/server';
 import { FeatureError } from '@deveye/types/sdk/server';
-import type { FastifyInstance, RouteShorthandOptions } from 'fastify';
+import type { FastifyInstance, FastifyRequest, RouteShorthandOptions } from 'fastify';
 
 import type { Database } from '@/db';
 import type { Queryable } from '@/db/pool';
@@ -82,6 +82,22 @@ export function registerModules(installed: readonly InstalledFeatureModule[]): v
         if (Boolean(manifest.domains) !== Boolean(mod.server.domains)) {
             throw new Error(`Module « ${manifest.id} » : manifest.domains et server.domains vont ensemble`);
         }
+        if (manifest.accountOnly) {
+            const scoped = mod.server.features.find((def) => def.access?.scope !== 'account');
+            if (scoped) {
+                throw new Error(
+                    `Module « ${manifest.id} » : accountOnly exige access.scope 'account' (${scoped.command})`
+                );
+            }
+        }
+        if (manifest.accountEntry?.signupHint) {
+            const other = MODULES.find((m) => m.manifest.accountEntry?.signupHint);
+            if (other) {
+                throw new Error(
+                    `Modules « ${other.manifest.id} » et « ${manifest.id} » : un seul peut déclarer signupHint`
+                );
+            }
+        }
         // Une native migrée a déjà son descripteur dans le registre publié :
         // seuls les ids externes s'enregistrent ici.
         if (isExternalFeatureId(manifest.id)) registerExternalFeature(externalDescriptorOf(manifest));
@@ -127,7 +143,8 @@ export function moduleFeatureHandlers(): FeatureDefinition<string, never, never>
                 access: {
                     feature: mod.manifest.id,
                     level: def.access?.level ?? 'read',
-                    ...(def.access?.extras ? { extras: def.access.extras } : {})
+                    ...(def.access?.extras ? { extras: def.access.extras } : {}),
+                    ...(def.access?.scope ? { scope: def.access.scope } : {})
                 },
                 // Un booléen bat le sujet du module ; une liste nomme les sujets,
                 // que `buildTopicIndex` valide au boot.
@@ -428,7 +445,10 @@ export function modulePublicRoutes(app: FastifyInstance, listener: 'app' | 'publ
                 PUBLIC_PATHS.add(path);
             }
             const route: RouteShorthandOptions = { logLevel: 'silent' };
-            if (opts.rateLimit) route.config = { rateLimit: opts.rateLimit };
+            route.config = {
+                ...(opts.rateLimit ? { rateLimit: opts.rateLimit } : {}),
+                ...(opts.rawBody ? { rawBody: true } : {})
+            };
             // Deux branches plutôt qu'un `app[method]` : l'union des deux
             // signatures ne se résout pas (la surcharge WebSocket de `get`
             // prend le dessus).
@@ -441,6 +461,24 @@ export function modulePublicRoutes(app: FastifyInstance, listener: 'app' | 'publ
         };
         routes.call(s.service, surface);
     }
+}
+
+declare module 'fastify' {
+    interface FastifyContextConfig {
+        rawBody?: boolean;
+    }
+    interface FastifyRequest {
+        rawBody?: string;
+    }
+}
+
+/**
+ * À appeler par l'analyseur JSON de chaque écouteur : garde le corps tel que
+ * reçu sur les routes qui le demandent (`SdkPublicRouteOptions.rawBody`), ce
+ * sur quoi se calcule la signature d'un webhook.
+ */
+export function keepRawBody(req: FastifyRequest, body: string): void {
+    if (req.routeOptions.config.rawBody) req.rawBody = body;
 }
 
 /**

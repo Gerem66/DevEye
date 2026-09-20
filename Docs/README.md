@@ -24,6 +24,7 @@ Ce dossier porte le transverse ; la doc d'une feature vit dans son module,
 | [SHARING.md](./SHARING.md)               | la projection d'éléments entre espaces                                         |
 | [LIVE.md](./LIVE.md)                     | la présence en direct : roster, curseurs, invalidation poussée, téléportation  |
 | [SETTINGS.md](./SETTINGS.md)             | la coquille de réglages unique, son bouton commun, ses onglets                 |
+| [QUOTAS.md](./QUOTAS.md)                 | offres et quotas, l'entrée de compte d'un module, illimité sans fournisseur    |
 | [SOURCES.md](./SOURCES.md)               | les sources d'une feature : jetons, destinations, clés d'API                   |
 | [NOTIFICATIONS.md](./NOTIFICATIONS.md)   | les canaux par feature et la sélection par élément                             |
 

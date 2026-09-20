@@ -104,6 +104,7 @@ function facadeWith(
         db: db as Database,
         cipher,
         workspaceId: WS,
+        userId: OWNER,
         ownerUserId: OWNER,
         isAdmin,
         workspaceKind: isAdmin ? 'personal' : 'shared',

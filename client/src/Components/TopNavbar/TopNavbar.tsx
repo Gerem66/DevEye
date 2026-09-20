@@ -35,6 +35,9 @@ export interface TopNavbarProps {
     onOpenProfile?: (e: ReactMouseEvent) => void;
     /** Open the security feature. Receives the click (Ctrl/Cmd = force reload). */
     onOpenSecurity?: (e: ReactMouseEvent) => void;
+    /** Les entrées de compte des modules (`manifest.accountEntry`), rangées sous « Sécurité ». */
+    accountEntries?: readonly { id: string; label: string; icon: string }[];
+    onOpenAccountEntry?: (id: string, e: ReactMouseEvent) => void;
     /** Open the logs feature (admins only). Click carries the force-reload modifier. */
     onOpenLogs?: (e: ReactMouseEvent) => void;
     /** Open the settings panel. Absent = pas le droit de changer l'apparence. */
@@ -73,6 +76,8 @@ export default function TopNavbar({
     onBack,
     onOpenProfile,
     onOpenSecurity,
+    accountEntries,
+    onOpenAccountEntry,
     onOpenLogs,
     onOpenSettings,
     onOrganize,
@@ -328,6 +333,18 @@ export default function TopNavbar({
                             >
                                 <span className='icon icon-shield' /> Sécurité
                             </button>
+                            {accountEntries?.map((entry) => (
+                                <button
+                                    key={entry.id}
+                                    className={styles.menuItem}
+                                    onClick={(e) => {
+                                        onOpenAccountEntry?.(entry.id, e);
+                                        setMenuOpen(false);
+                                    }}
+                                >
+                                    <span className={`icon icon-${entry.icon}`} /> {entry.label}
+                                </button>
+                            ))}
                             {/* Second separator: groups the system pages (Logs,
                                 Retours, Utilisateurs) apart from the account
                                 pages above. */}

@@ -25,6 +25,7 @@ import { registerWS } from '@/ws/handler';
 import {
     createModuleServices,
     isModulePublicPath,
+    keepRawBody,
     moduleAgentHooks,
     modulePublicRoutes
 } from '@/features/_sdk/register';
@@ -130,11 +131,12 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // Tolerate empty JSON bodies: cookie-based POSTs (e.g. /api/auth/refresh,
     // /api/auth/logout) send `Content-Type: application/json` with no body, which
     // Fastify 5 rejects by default (FST_ERR_CTP_EMPTY_JSON_BODY).
-    app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
+    app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
         if (!body) {
             done(null, undefined);
             return;
         }
+        keepRawBody(req, body as string);
         try {
             done(null, JSON.parse(body as string));
         } catch {

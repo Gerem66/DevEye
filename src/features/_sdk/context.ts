@@ -15,7 +15,9 @@ import type { FeatureContext } from '@/features/_define';
 import { shareScope } from '@/features/_sharing';
 import { sdkDomains } from './domains';
 import { createFacade } from './facade';
+import { accountChanged } from './live';
 import { createFeatureStore } from './store';
+import { limitIn, ownedWorkspaceIds, planOf } from '@/Services/quota';
 
 /**
  * Adapte le contexte natif en contexte SDK, par requête : rien de ce qui n'est
@@ -40,6 +42,11 @@ export function createSdkContext(
     providers: SdkProviders
 ): SdkFeatureContext {
     const extras = resolveExtras(manifest.extraPermissions, ctx.isOwner, ctx.extrasFor(manifest.id));
+    const quotaSpec = (key: string) => {
+        const spec = manifest.quotas?.find((q) => q.key === key);
+        if (!spec) throw new FeatureError('validation', `Quota « ${key} » absent du manifest de ${manifest.id}`);
+        return spec;
+    };
     return {
         userId: ctx.userId,
         workspaceId: ctx.workspaceId,
@@ -58,6 +65,7 @@ export function createSdkContext(
             db: ctx.db,
             cipher: ctx.secure.open,
             workspaceId: ctx.workspaceId,
+            userId: ctx.userId,
             ownerUserId: ctx.workspace.ownerUserId,
             isAdmin: ctx.isAdmin,
             workspaceKind: ctx.workspace.kind,
@@ -78,7 +86,33 @@ export function createSdkContext(
                 )
         },
         keys: serverKeysOf(ctx.crypt, manifest.id),
-        live: { publish: (event, payload) => publishFrame(manifest, ctx.workspaceId, event, payload) },
+        live: {
+            publish: (event, payload) => publishFrame(manifest, ctx.workspaceId, event, payload),
+            accountChanged: (userId) => accountChanged(ctx.db, manifest, userId)
+        },
+        // Le compte visé est le propriétaire de l'espace, pas l'appelant : dans
+        // un espace partagé, ce qu'un membre crée pèse sur l'offre de son hôte.
+        quota: {
+            limit: async (key) => {
+                quotaSpec(key);
+                const plan = await planOf(providers, ctx.workspace.ownerUserId, ctx.logger);
+                return limitIn(plan, `${manifest.id}.${key}`);
+            },
+            assert: async (key, countAfter) => {
+                const spec = quotaSpec(key);
+                const plan = await planOf(providers, ctx.workspace.ownerUserId, ctx.logger);
+                const limit = limitIn(plan, `${manifest.id}.${key}`);
+                if (limit === null) return;
+                const count = await countAfter(await ownedWorkspaceIds(ctx.db, ctx.workspace.ownerUserId));
+                if (count > limit) {
+                    throw new FeatureError(
+                        'quota_exceeded',
+                        `Limite de l'offre ${plan?.label ?? ''} atteinte : ${limit} ${spec.label}.`,
+                        { feature: manifest.id, key, limit, plan: plan?.id }
+                    );
+                }
+            }
+        },
         items: {
             // Liées à la feature du module : un module ne peut pas interroger
             // les restrictions d'une autre.

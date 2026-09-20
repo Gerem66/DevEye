@@ -11,6 +11,7 @@ import { sharingFeatures } from './sharing';
 import { secrecyFeatures } from './secrecy';
 import { twoFactorFeatures } from './twofa';
 import { userSetAvatarFeature } from './user/setAvatar';
+import { userPlanFeature } from './user/plan';
 import { userSetColorFeature } from './user/setColor';
 import { userSetSettingFeature } from './user/setSetting';
 import { userSetUsernameFeature } from './user/setUsername';
@@ -58,6 +59,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     workspaceAssignRoleFeature,
     userSetAvatarFeature,
     userSetThemeFeature,
+    userPlanFeature,
     userSetColorFeature,
     userSetSettingFeature,
     userSetUsernameFeature,

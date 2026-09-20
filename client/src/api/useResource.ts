@@ -7,9 +7,14 @@ import { useResourceVersion, type ResourceKey } from '@/stores/invalidation';
 export function humanizeError(error: unknown, fallback: string): string {
     if (error instanceof WsError) {
         if (error.code === 'forbidden') return 'Accès refusé.';
-        // Le serveur renvoie déjà une phrase en français sur ces trois codes,
+        // Le serveur renvoie déjà une phrase en français sur ces codes,
         // plus précise que tout ce qu'on pourrait écrire ici.
-        if (error.code === 'validation' || error.code === 'conflict' || error.code === 'rate_limited') {
+        if (
+            error.code === 'validation' ||
+            error.code === 'conflict' ||
+            error.code === 'rate_limited' ||
+            error.code === 'quota_exceeded'
+        ) {
             return error.message;
         }
         if (error.code === 'not_found') return 'Introuvable: la donnée a peut-être été supprimée entre-temps.';

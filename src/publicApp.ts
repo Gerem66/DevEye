@@ -4,7 +4,7 @@ import fastifyRateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyBaseLogger, type FastifyError, type FastifyInstance } from 'fastify';
 import { err, type ErrorCode } from '@deveye/types';
 
-import { modulePublicRoutes } from '@/features/_sdk/register';
+import { keepRawBody, modulePublicRoutes } from '@/features/_sdk/register';
 import { logger } from '@/logger';
 import { env, TRUST_PROXY } from '@/Utils/Env';
 
@@ -59,11 +59,12 @@ export async function buildPublicApp(): Promise<FastifyInstance> {
         }
     });
 
-    app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
+    app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
         if (!body) {
             done(null, undefined);
             return;
         }
+        keepRawBody(req, body as string);
         try {
             done(null, JSON.parse(body as string));
         } catch {

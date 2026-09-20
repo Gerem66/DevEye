@@ -12,6 +12,7 @@ import {
 } from '@deveye/types';
 import { getActiveWorkspaceId } from '../stores/workspace';
 import { traceCall } from '../diagnostics/trace';
+import { notifyQuotaExceeded } from '@/stores/quotaPrompt';
 
 const BASE_URL: string = (import.meta.env.VITE_SERVER_URL as string | undefined) ?? '';
 
@@ -219,10 +220,12 @@ export class DevEyeWs {
                 clearTimeout(pending.timer);
                 this.pending.delete(msg.requestId);
                 if (msg.payload.ok) pending.resolve(msg.payload.data);
-                else
+                else {
+                    if (msg.payload.error.code === 'quota_exceeded') notifyQuotaExceeded(msg.payload.error.message);
                     pending.reject(
                         new WsError(msg.payload.error.code, msg.payload.error.message, msg.payload.error.details)
                     );
+                }
                 return;
             }
         }

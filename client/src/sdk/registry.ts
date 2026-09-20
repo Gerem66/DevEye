@@ -30,9 +30,15 @@ export function registerClientModules(installed: readonly InstalledClientFeature
         // un doublon à ignorer.
         if (BY_ID.has(mod.manifest.id)) throw new Error(`Module « ${mod.manifest.id} » : déclaré deux fois`);
         validateManifest(mod.manifest);
+        if (!mod.manifest.accountOnly && (!mod.client.Widget || !mod.client.Full)) {
+            throw new Error(`Module « ${mod.manifest.id} » : Widget et Full sont requis`);
+        }
         // Un module à id natif a déjà son descripteur dans le registre publié :
-        // seuls les ids externes s'enregistrent ici.
-        if (isExternalFeatureId(mod.manifest.id)) registerExternalFeature(externalDescriptorOf(mod.manifest));
+        // seuls les ids externes s'enregistrent ici. Un module de compte n'a ni
+        // carte ni ligne dans l'écran des rôles : pas de descripteur.
+        if (isExternalFeatureId(mod.manifest.id) && !mod.manifest.accountOnly) {
+            registerExternalFeature(externalDescriptorOf(mod.manifest));
+        }
         // Les contrats du module dans le registre que `ws.send` consulte avant
         // d'envoyer. Un module externe n'existe que par cet enregistrement : sans
         // lui, chaque commande serait refusée localement (« Unknown command »).
@@ -57,6 +63,16 @@ export function registerClientModules(installed: readonly InstalledClientFeature
 /** Les modules installés, dans l'ordre de la config. */
 export function clientModules(): readonly InstalledClientFeature[] {
     return MODULES;
+}
+
+/** Les modules qui ont une carte : tous, sauf ceux qui ne vivent que dans le menu du compte. */
+export function cardModules(): readonly InstalledClientFeature[] {
+    return MODULES.filter((m) => !m.manifest.accountOnly);
+}
+
+/** Les entrées que les modules ajoutent au menu du compte, sous « Sécurité ». */
+export function accountEntries(): readonly InstalledClientFeature[] {
+    return MODULES.filter((m) => m.manifest.accountEntry && m.client.AccountView);
 }
 
 /** Le manifest d'un module installé, ou `undefined` (id natif ou module retiré). */

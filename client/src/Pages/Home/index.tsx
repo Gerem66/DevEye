@@ -28,6 +28,10 @@ import { syncThemeFromServer } from '@/stores/theme';
 import { syncHomeLayoutFromServer } from '@/stores/homeLayout';
 import { useHomeLayout, findFolder, getHomeLayout, placedFeatureIds, pruneMissingDevices } from '@/stores/homeLayout';
 import { onOpenViewRequest, onSelectWorkspaceRequest } from '@/stores/viewRequest';
+import { accountViewId, openAccountView, takeAccountViewHint } from '@/stores/accountView';
+import { takeSignupPlan } from '@/stores/signupPlan';
+import { accountEntries } from '@/sdk/registry';
+import type { AccountViewProps } from '@deveye/types/sdk/client';
 import { useFeedbackEnabled } from '@/stores/feedbackEnabled';
 import { armFrameProbe } from '@/perf/frameBudget';
 import { noteView } from '@/diagnostics/trace';
@@ -37,6 +41,7 @@ import { CursorChatInput } from '@/live/CursorChatInput';
 import { useLiveSegment } from '@/live/useLiveSegment';
 import { startTeleport } from '@/stores/live';
 import { TopNavbar } from '@/Components/TopNavbar';
+import { QuotaPrompt } from '@/Components/QuotaPrompt';
 import { WidgetGrid } from '@/Components/WidgetGrid';
 import { WidgetPopup, FeatureKeepAlive } from '@/Components/WidgetPopup';
 import { Wallpaper } from '@/Components/Wallpaper';
@@ -95,6 +100,25 @@ interface ViewConfig {
 // from the navbar menu, no card). LAZY, comme le catalogue : figé au premier
 // rendu, jamais à l'import, sinon les modules enregistrés après coup manquent.
 let STATIC_VIEWS_MEMO: ViewConfig[] | null = null;
+/** La vue de compte d'un module, reçue comme une page de l'app. L'indice éventuel se lit une fois. */
+function accountViewHost(featureId: string, View: ComponentType<AccountViewProps>): ComponentType<FeatureProps> {
+    return function AccountViewHost({ user, closeFeature }) {
+        const [hint] = useState(() => takeAccountViewHint(featureId));
+        return <View close={closeFeature} isAdmin={user.role === 'admin'} hint={hint} />;
+    };
+}
+
+/** Lues une fois : les modules installés ne changent pas en cours de session. */
+let ACCOUNT_MENU_MEMO: { id: string; label: string; icon: string }[] | null = null;
+function accountMenu(): { id: string; label: string; icon: string }[] {
+    ACCOUNT_MENU_MEMO ??= accountEntries().map(({ manifest }) => ({
+        id: manifest.id,
+        label: manifest.accountEntry!.label,
+        icon: manifest.accountEntry!.icon
+    }));
+    return ACCOUNT_MENU_MEMO;
+}
+
 function staticViews(): ViewConfig[] {
     STATIC_VIEWS_MEMO ??= buildStaticViews();
     return STATIC_VIEWS_MEMO;
@@ -126,6 +150,14 @@ const buildStaticViews = (): ViewConfig[] => [
         hasCard: false,
         FullComponent: Security
     },
+    ...accountEntries().map(({ manifest, client }) => ({
+        id: accountViewId(manifest.id),
+        title: manifest.accountEntry!.label,
+        icon: manifest.accountEntry!.icon,
+        cacheDurationMinutes: 0,
+        hasCard: false,
+        FullComponent: accountViewHost(manifest.id, client.AccountView!)
+    })),
     {
         id: 'logs',
         title: 'Logs',
@@ -613,6 +645,26 @@ export default function HomePage() {
     // profile's link to the security page).
     useEffect(() => onOpenViewRequest((viewId) => handleExpand(viewId)), [handleExpand]);
 
+    // Deux arrivées ouvrent d'elles-mêmes une vue de compte : le retour d'un
+    // paiement (`?account=<module>`, dont le module lit le reste de l'URL) et la
+    // fin d'une inscription qui portait un indice (`/signup?plan=…`).
+    const arrivalHandled = useRef(false);
+    useEffect(() => {
+        if (arrivalHandled.current || switching) return;
+        arrivalHandled.current = true;
+        const url = new URL(window.location.href);
+        const returning = url.searchParams.get('account');
+        const plan = takeSignupPlan();
+        if (returning) {
+            url.searchParams.delete('account');
+            window.history.replaceState({}, '', url);
+            if (accountEntries().some((m) => m.manifest.id === returning)) openAccountView(returning);
+        } else if (plan) {
+            const target = accountEntries().find((m) => m.manifest.accountEntry?.signupHint);
+            if (target) openAccountView(target.manifest.id, plan);
+        }
+    }, [switching]);
+
     // Racine de l'arborescence de présence. Les niveaux plus profonds sont
     // déclarés par les features elles-mêmes, chacune ne connaissant que le sien.
     const liveViewTarget = useLiveSegment('view', expandedWidget);
@@ -926,6 +978,8 @@ export default function HomePage() {
                     onBack={expandedWidget ? handleClose : folderView ? closeFolder : undefined}
                     onOpenProfile={(e) => handleExpand('profile', isForceReload(e))}
                     onOpenSecurity={(e) => handleExpand('security', isForceReload(e))}
+                    accountEntries={accountMenu()}
+                    onOpenAccountEntry={(id, e) => handleExpand(accountViewId(id), isForceReload(e))}
                     onOpenLogs={user.role === 'admin' ? (e) => handleExpand('logs', isForceReload(e)) : undefined}
                     onOpenFeedback={
                         user.role === 'admin' && feedbackEnabled
@@ -1057,6 +1111,7 @@ export default function HomePage() {
                 {/* Shared info dialog, registered once here so any feature's "i" button
                 opens it via openInfo(). */}
                 <InfoPopup />
+                <QuotaPrompt />
 
                 {/* Curseurs des pairs situés exactement là où nous sommes, et ma
                     propre bulle. Séparée : elle doit survivre au départ du dernier

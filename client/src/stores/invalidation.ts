@@ -58,6 +58,8 @@ export type ResourceKey =
     | 'workspace.session'
     /** La page Utilisateurs : les comptes du site. */
     | 'admin.userList'
+    /** L'offre du compte, dite par le module qui en tient une. */
+    | 'user.plan'
     | 'projects.count'
     | 'projects.list'
     | 'projects.board'
@@ -115,8 +117,9 @@ const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
     workspace: ['workspace.roleList', 'workspace.session'],
     /* L'accueil ou l'apparence de l'espace : `workspace.activate` seule, sans recharger la session. */
     home: ['workspace.activate'],
-    /* Réglages de compte, diffusés dans l'espace personnel de leur auteur : rien de partagé à re-solliciter. */
-    account: [],
+    /* Réglages de compte, diffusés dans l'espace personnel de leur auteur. Seule
+       l'offre se relit : un module la change depuis un service, sans commande. */
+    account: ['user.plan'],
     /* Un compte a changé : reçu par compte, jamais en salle. */
     admin: ['admin.userList']
 };

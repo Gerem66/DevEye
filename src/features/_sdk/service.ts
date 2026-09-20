@@ -11,6 +11,7 @@ import type { LiveTopic } from '@deveye/types';
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
 import { FeatureError } from '@deveye/types/sdk/server';
+import { accountChanged, toSdkAccount } from './live';
 import { serverKeysOf } from './host';
 import { ORIGINS, publishFrame } from './context';
 import { createOpenCipher, createSecureStore } from '@/Services/SecureStore';
@@ -70,6 +71,7 @@ export function createServiceDeps(
             db: host.db,
             cipher: cipherFor(workspaceId),
             workspaceId,
+            userId: 0,
             isAdmin: false,
             ownerUserId: 0,
             workspaceKind: 'shared',
@@ -83,13 +85,14 @@ export function createServiceDeps(
 
     // La même erreur qu'en requête (`facade.ts`), nommant la capacité manquante.
     const capabilities = new Set(manifest.nativeCapabilities ?? []);
-    const gate = (cap: 'agents' | 'devices.read' | 'telemetry.read') => (): void => {
+    const gate = (cap: 'agents' | 'devices.read' | 'telemetry.read' | 'accounts.read') => (): void => {
         if (!capabilities.has(cap)) {
             throw new FeatureError('forbidden', `Module « ${manifest.id} » : declare '${cap}' in nativeCapabilities`);
         }
     };
     const gateAgents = gate('agents');
     const gateDevices = gate('devices.read');
+    const gateAccounts = gate('accounts.read');
     const keys = serverKeysOf(host.crypt, manifest.id);
 
     return {
@@ -148,7 +151,19 @@ export function createServiceDeps(
             // simplement aucun abonné).
             changed: (workspaceId, topics) =>
                 host.live.changed(workspaceId, (topics ?? [manifest.id]) as LiveTopic[], null),
-            publish: (workspaceId, event, payload) => publishFrame(manifest, workspaceId, event, payload)
+            publish: (workspaceId, event, payload) => publishFrame(manifest, workspaceId, event, payload),
+            accountChanged: (userId) => accountChanged(host.db, manifest, userId)
+        },
+        accounts: {
+            find: async (userId) => {
+                gateAccounts();
+                const row = await host.db.users.findById(userId);
+                return row ? toSdkAccount(row) : null;
+            },
+            list: async (userIds) => {
+                gateAccounts();
+                return (await host.db.users.findByIds([...userIds])).map(toSdkAccount);
+            }
         },
         audit: (entry) => {
             host.audit.record({

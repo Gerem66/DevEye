@@ -12,6 +12,8 @@ export interface WorkspacesRepo {
      * flotte, qui propose le partage vers un espace dont l'admin n'est pas membre.
      */
     listAll(): Promise<WorkspaceRow[]>;
+    /** Les espaces dont ce compte est propriétaire, personnel compris. */
+    listOwnedIds(ownerUserId: number): Promise<number[]>;
     /** Crée l'espace personnel d'un compte (un seul par compte) et y inscrit son propriétaire. */
     createPersonal(ownerUserId: number, name: string): Promise<WorkspaceRow>;
     create(input: { ownerUserId: number; name: string }): Promise<WorkspaceRow>;
@@ -46,6 +48,12 @@ export function workspacesRepo(pool: Q): WorkspacesRepo {
                 [userId]
             );
             return r.rows;
+        },
+        async listOwnedIds(ownerUserId) {
+            const r = await pool.query<{ id: number }>('SELECT id FROM workspaces WHERE owner_user_id = ?', [
+                ownerUserId
+            ]);
+            return r.rows.map((row) => Number(row.id));
         },
         async listAll() {
             const r = await pool.query<WorkspaceRow>(

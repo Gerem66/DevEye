@@ -2,7 +2,7 @@ import type { ComponentType } from 'react';
 import type { HomeFeatureId } from '@deveye/types';
 
 import type { FeatureProps } from '@/Features/types';
-import { clientModules } from '@/sdk/registry';
+import { cardModules } from '@/sdk/registry';
 
 /** Le rayon du marché, porté par l'entrée elle-même : le marché et l'« À
  *  propos » racontent la même chose sans table à côté. */
@@ -98,7 +98,7 @@ let MERGED: FeatureCatalogEntry[] | null = null;
 export function featureCatalog(): readonly FeatureCatalogEntry[] {
     if (MERGED === null) {
         MERGED = [
-            ...clientModules().map(({ manifest, client }): FeatureCatalogEntry => ({
+            ...cardModules().map(({ manifest, client }): FeatureCatalogEntry => ({
                 // Un module est externe par construction (vérifié à
                 // l'enregistrement), et un id externe est une tuile d'accueil valide.
                 id: manifest.id as HomeFeatureId,
@@ -108,8 +108,9 @@ export function featureCatalog(): readonly FeatureCatalogEntry[] {
                 category: manifest.category,
                 // Les liaisons du manifest, lues dans les deux sens par l'« À propos ».
                 links: manifest.links?.map((link) => ({ to: link.to as HomeFeatureId, what: link.what })),
-                WidgetContent: client.Widget,
-                FullComponent: moduleFull(client.Full),
+                // Garantis par l'enregistrement pour tout module à carte.
+                WidgetContent: client.Widget!,
+                FullComponent: moduleFull(client.Full!),
                 cacheDurationMinutes: client.cacheDurationMinutes,
                 preload: client.preload,
                 holdSecrecy: client.holdSecrecy,

@@ -84,6 +84,9 @@ export { useDragReorder } from '@/dragReorder';
 
 // ── Les données ────────────────────────────────────────────────────────────
 export { humanizeError, useResource } from '@/api/useResource';
+/** L'offre du compte, et l'ouverture d'une vue de compte (`manifest.accountEntry`). */
+export { useAccountPlan } from '@/stores/accountPlan';
+export { openAccountView } from '@/stores/accountView';
 /** L'erreur d'une commande refusée : son code, son message, ses détails de validation. */
 export { WsError } from '@/api/ws';
 export { isSocketOpen, onServerEvent, onSocketOpen } from './events';

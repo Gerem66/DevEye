@@ -3,7 +3,7 @@ import type { FeatureId, HomeTopbarWidgetId, WorkspaceKind } from '@deveye/types
 
 import { useHomeLayout } from '@/stores/homeLayout';
 import { useActiveWorkspace, useWorkspacePermissions } from '@/stores/workspace';
-import { clientModules, moduleClient } from '@/sdk/registry';
+import { cardModules, moduleClient } from '@/sdk/registry';
 import { SecrecyTimer } from './SecrecyTimer';
 import { LivePresence } from './LivePresence';
 import { PublicIp } from './PublicIp';
@@ -45,7 +45,7 @@ let MERGED_TOPBAR: TopbarWidgetMeta[] | null = null;
 function topbarCatalog(): TopbarWidgetMeta[] {
     MERGED_TOPBAR ??= [
         ...NATIVE_TOPBAR_WIDGETS,
-        ...clientModules().flatMap(({ manifest, client }): TopbarWidgetMeta[] => {
+        ...cardModules().flatMap(({ manifest, client }): TopbarWidgetMeta[] => {
             if (!manifest.topbarWidget || !client.TopbarWidget) return [];
             return [
                 {

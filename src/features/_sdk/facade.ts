@@ -17,6 +17,7 @@ import { authorizeDevice } from '@/agent/authorize';
 import { parseDeviceReport } from '@/agent/mappers';
 import { editMessage, postMessage } from '@/Services/discord';
 import { deliver, discordChannels, hasChannel, resolveChannelIds, resolveRoute } from '@/Services/notifications';
+import { toSdkAccount } from './live';
 import { pushAgentConfig, sdkHub } from './host';
 import { agentDistDir, readServedManifestCached } from '@/agent/sync';
 
@@ -30,6 +31,8 @@ export interface FacadeDeps {
     /** Cipher de l'étage ouvert de CET espace (résolu sans session côté services). */
     cipher: SdkCipher;
     workspaceId: number;
+    /** L'appelant, ou 0 pour un service sans session. */
+    userId: number;
     ownerUserId: number;
     /** L'appelant est administrateur global (false pour les services sessionless). */
     isAdmin: boolean;
@@ -112,6 +115,14 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
                 const transport = deps.providers.get<MailTransportProvider>(MAIL_TRANSPORT_PROVIDER);
                 if (!transport) return [];
                 return transport.listSenders(deps.workspaceId);
+            }
+        },
+        accounts: {
+            async me() {
+                gate('accounts.read');
+                const row = deps.userId ? await deps.db.users.findById(deps.userId) : null;
+                if (!row) throw new FeatureError('not_found', 'Compte introuvable');
+                return toSdkAccount(row);
             }
         },
         workspaces: {
