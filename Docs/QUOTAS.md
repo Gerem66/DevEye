@@ -42,7 +42,7 @@ absente de `limits` est illimitée.
 
 ## L'entrée de compte
 
-`manifest.accountEntry` ajoute une entrée au menu du compte, sous « Sécurité »,
+`manifest.accountEntry` ajoute une entrée au menu du compte, sous « Sécurité », à l'icône du module,
 qui ouvre `FeatureClient.AccountView` (`close`, `isAdmin`, `hint?`). Avec
 `accountOnly`, le module n'a ni carte ni ligne dans l'écran des rôles, et toutes
 ses commandes déclarent `access.scope: 'account'` : elles s'exécutent dans

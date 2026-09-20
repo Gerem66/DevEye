@@ -114,7 +114,7 @@ function accountMenu(): { id: string; label: string; icon: string }[] {
     ACCOUNT_MENU_MEMO ??= accountEntries().map(({ manifest }) => ({
         id: manifest.id,
         label: manifest.accountEntry!.label,
-        icon: manifest.accountEntry!.icon
+        icon: manifest.icon
     }));
     return ACCOUNT_MENU_MEMO;
 }
@@ -153,7 +153,7 @@ const buildStaticViews = (): ViewConfig[] => [
     ...accountEntries().map(({ manifest, client }) => ({
         id: accountViewId(manifest.id),
         title: manifest.accountEntry!.label,
-        icon: manifest.accountEntry!.icon,
+        icon: manifest.icon,
         cacheDurationMinutes: 0,
         hasCard: false,
         FullComponent: accountViewHost(manifest.id, client.AccountView!)
