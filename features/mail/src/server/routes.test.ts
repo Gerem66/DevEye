@@ -136,6 +136,7 @@ function fakeRepo(accountRows: MailAccountRow[], projections: Record<number, num
     return {
         accountRows,
         accounts: {
+            countInWorkspaces: async (ids: readonly number[]) => ids.length - ids.length,
             listByWorkspace: unused,
             listVisible: unused,
             findById: async (id, ws) => accountRows.find((a) => a.id === id && a.workspace_id === ws) ?? null,

@@ -129,6 +129,10 @@ export const gitCrudFeatures = [
                 return { repo: await reloadRepo(ctx, existing.id) };
             }
 
+            // Après l'idempotence : remettre à jour un dépôt déjà suivi n'en
+            // ajoute aucun, et ne doit donc jamais buter sur la limite.
+            await ctx.quota.assert('repos', async (owned) => (await ctx.repo.countReposInWorkspaces(owned)) + 1);
+
             const payload: StoredRepo = { owner, repo };
             const row = await ctx.repo.createRepo({
                 workspaceId: ctx.workspaceId,

@@ -93,6 +93,7 @@ function fakeRepo(rows: DatabaseRow[], alerts: DatabaseAlertRow[] = []): FakeRep
         findWithStats: unused,
         findVisibleWithStats: unused,
         findByName: unused,
+        countInWorkspaces: async (ids: readonly number[]) => ids.length - ids.length,
         count: unused,
         create: unused,
         update: unused,

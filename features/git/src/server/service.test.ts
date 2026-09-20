@@ -120,6 +120,8 @@ function fakeRepo(repos: GitRepoRow[], credentials: GitCredentialRow[]): FakeRep
         authors,
         releases,
         pulls,
+        countReposInWorkspaces: async (ids: readonly number[]) =>
+            repos.filter((r) => ids.includes(r.workspace_id)).length,
         listRepos: unused,
         listVisibleRepos: unused,
         findRepo: async (id, workspaceId) => repos.find((r) => r.id === id && r.workspace_id === workspaceId) ?? null,

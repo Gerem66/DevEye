@@ -127,6 +127,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         },
         findByName: async (workspaceId, ref) =>
             rows.find((r) => r.workspace_id === workspaceId && r.name_ref === ref) ?? null,
+        countInWorkspaces: async (ids: readonly number[]) => ids.length - ids.length,
         count: async (workspaceId) => rows.filter((r) => r.workspace_id === workspaceId).length,
         async create(input) {
             const created = row({

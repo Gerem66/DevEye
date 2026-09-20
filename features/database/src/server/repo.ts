@@ -25,6 +25,7 @@ export interface DatabaseRepo {
     /** L'unicité d'une base dans l'espace, ce que `content` chiffré ne peut porter. */
     findByName(workspaceId: number, nameRef: string): Promise<DatabaseRow | null>;
     count(workspaceId: number): Promise<number>;
+    countInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
     create(input: {
         workspaceId: number;
         engine: string;
@@ -188,6 +189,14 @@ export function createRepo(q: SdkQueryable): DatabaseRepo {
                 [workspaceId, nameRef]
             );
             return rows[0] ?? null;
+        },
+        async countInWorkspaces(workspaceIds) {
+            if (workspaceIds.length === 0) return 0;
+            const rows = await q.query<{ total: number }>(
+                'SELECT COUNT(*) AS total FROM database_connections WHERE workspace_id IN (?)',
+                [[...workspaceIds]]
+            );
+            return Number(rows[0]?.total ?? 0);
         },
         async count(workspaceId) {
             const rows = await q.query<{ total: number }>(

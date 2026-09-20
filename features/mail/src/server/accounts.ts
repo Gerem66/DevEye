@@ -106,6 +106,7 @@ export const mailAccountAddFeature = defineSdkFeature<
     mutates: true,
     handler: async (ctx, input) => {
         assertTierAllowed(ctx, input.draft.securityTier);
+        await ctx.quota.assert('accounts', async (owned) => (await ctx.repo.accounts.countInWorkspaces(owned)) + 1);
         await assertMailUnlocked(ctx, input.draft.securityTier);
         const cipher = cipherFor(ctx, input.draft.securityTier);
         const credentials: MailCredentials = {

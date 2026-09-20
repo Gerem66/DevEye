@@ -104,6 +104,8 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         repos,
         credentials,
         reset,
+        countReposInWorkspaces: async (ids: readonly number[]) =>
+            repos.filter((r) => ids.includes(r.workspace_id)).length,
         listRepos: async (workspaceId) => repos.filter((r) => r.workspace_id === workspaceId),
         listVisibleRepos: async (workspaceId) => repos.filter((r) => visible(r, workspaceId)),
         // Des copies, comme des lignes lues en base : un handler compare ce

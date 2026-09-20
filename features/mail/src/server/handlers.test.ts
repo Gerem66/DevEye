@@ -123,6 +123,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         folderRows,
         messageRows,
         accounts: {
+            countInWorkspaces: async (ids: readonly number[]) => ids.length - ids.length,
             listByWorkspace: async (ws) => accountRows.filter((a) => a.workspace_id === ws).map((a) => ({ ...a })),
             // Les locaux d'abord, les projetés ensuite : l'ordre de la requête.
             listVisible: async (ws) =>

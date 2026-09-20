@@ -84,6 +84,7 @@ function fakeRepo(accountRows: MailAccountRow[], projections: Record<number, num
         accounts: {
             // Des copies, comme une lecture SQL : la ligne que le service tient
             // est un instantané, `recordSync` n'a pas à le faire bouger.
+            countInWorkspaces: async (ids: readonly number[]) => ids.length - ids.length,
             listByWorkspace: async (ws) => accountRows.filter((a) => a.workspace_id === ws).map((a) => ({ ...a })),
             listVisible: async (ws) => accountRows.filter((a) => visible(a, ws)).map((a) => ({ ...a })),
             findById: async (id, ws) => {

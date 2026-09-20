@@ -32,6 +32,7 @@ export const manifest = {
      * l'origine de l'app seulement (`exposure: 'app'`).
      */
     nativeCapabilities: ['routes.public'],
+    quotas: [{ key: 'accounts', label: 'comptes mail' }],
     /**
      * À l'échelle d'un compte, Général est la boîte elle-même (nom, serveurs,
      * proxy, suppression) : c'est ce que le bouton commun doit ouvrir en

@@ -36,6 +36,7 @@ export interface GitRepo {
     /** L'unicité d'un dépôt dans l'espace, ce que `content` chiffré ne peut porter. */
     findRepoBySlug(workspaceId: number, slugRef: string): Promise<GitRepoRow | null>;
     countRepos(workspaceId: number): Promise<number>;
+    countReposInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
     createRepo(input: {
         workspaceId: number;
         provider: string;
@@ -235,6 +236,14 @@ export function createRepo(q: SdkQueryable): GitRepo {
                 slugRef
             ]);
             return rows[0] ?? null;
+        },
+        async countReposInWorkspaces(workspaceIds) {
+            if (workspaceIds.length === 0) return 0;
+            const rows = await q.query<{ total: number }>(
+                'SELECT COUNT(*) AS total FROM git_repos WHERE workspace_id IN (?)',
+                [[...workspaceIds]]
+            );
+            return Number(rows[0]?.total ?? 0);
         },
         async countRepos(workspaceId) {
             const rows = await q.query<{ total: number }>(

@@ -118,6 +118,7 @@ export const databaseCrudFeatures = [
             if (await ctx.repo.findByName(ctx.workspaceId, ref)) {
                 throw new FeatureError('conflict', 'Une base porte déjà ce nom dans cet espace.');
             }
+            await ctx.quota.assert('connections', async (owned) => (await ctx.repo.countInWorkspaces(owned)) + 1);
 
             const body: StoredDatabase = {
                 name: input.name.trim(),

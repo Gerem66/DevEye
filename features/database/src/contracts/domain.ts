@@ -66,7 +66,9 @@ export const databaseSchema = z.object({
     /** Le relevé périodique tourne-t-il ? Désactivé par défaut. */
     monitorEnabled: z.boolean(),
     /** Cadence du relevé, en secondes. Sans effet si le relevé est éteint. */
-    intervalSeconds: z.number().int().positive(),
+    // Le plancher de l'interface, tenu aussi par le contrat : une sonde ouvre
+    // une connexion sortante, et l'API ne doit pas permettre d'en ouvrir une par seconde.
+    intervalSeconds: z.number().int().min(60),
     /**
      * Charger l'inventaire des tables dès l'ouverture de la fiche. Éteint par
      * défaut : c'est le seul endroit où une connexion part sans clic.

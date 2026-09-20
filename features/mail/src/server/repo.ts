@@ -42,6 +42,7 @@ export interface MailAccountConfig {
 
 export interface MailAccountsRepo {
     listByWorkspace(workspaceId: number): Promise<MailAccountRow[]>;
+    countInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
     /**
      * Les comptes visibles depuis cet espace : les siens, plus ceux qu'un autre
      * espace y projette (`item_shares`), les locaux d'abord. Ne retient des
@@ -223,6 +224,14 @@ function accountsRepo(q: SdkQueryable): MailAccountsRepo {
     }
 
     return {
+        async countInWorkspaces(workspaceIds) {
+            if (workspaceIds.length === 0) return 0;
+            const rows = await q.query<{ total: number }>(
+                'SELECT COUNT(*) AS total FROM mail_accounts WHERE workspace_id IN (?)',
+                [[...workspaceIds]]
+            );
+            return Number(rows[0]?.total ?? 0);
+        },
         async listByWorkspace(workspaceId) {
             return q.query<MailAccountRow>(
                 'SELECT * FROM mail_accounts WHERE workspace_id = ? ORDER BY sort_order ASC, id ASC',
