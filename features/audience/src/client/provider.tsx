@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button, FeatureSettingsButton, openFeature, useResource } from 'deveye-sdk-client';
-import type { AudienceClientProvider } from '@deveye/types/sdk/client';
+import type { AudienceClientProvider, SdkTileSummary } from '@deveye/types/sdk/client';
 
 import { api } from './api';
 import Funnels from './Funnels';
@@ -125,7 +125,54 @@ function LinkedSiteDialog({ open, onClose, onSaved }: LinkedSiteDialogProps) {
     return <SiteDialog open={open} onClose={onClose} onSaved={(site) => onSaved(site.id)} />;
 }
 
+/**
+ * Un site résumé pour une tuile de tableau de bord : son trafic des 24 h et sa
+ * tendance sur la semaine. La seule des cinq familles qui coûte un appel par
+ * site, `audience.summary` ne prenant qu'un identifiant ; c'est pourquoi l'hôte
+ * n'en résume qu'un par défaut. Un refus ou une panne ne fait pas tomber les
+ * autres tuiles : le site revient indisponible.
+ */
+function summarize(siteIds: readonly number[]): Promise<readonly SdkTileSummary[]> {
+    return api.send('audience.list', {}).then(({ sites }) =>
+        Promise.all(
+            siteIds.map(async (id): Promise<SdkTileSummary> => {
+                const site = sites.find((s) => s.id === id);
+                if (!site) {
+                    return { itemId: id, title: `Site #${id}`, metrics: [], unavailable: 'Ce site n’est plus ici.' };
+                }
+                try {
+                    const { traffic } = await api.send('audience.summary', { siteId: id });
+                    // La semaine contre les 24 h : la tendance se lit d'un coup
+                    // d'œil sans une seconde requête.
+                    const week = traffic.days.reduce((sum, d) => sum + d.views, 0);
+                    return {
+                        itemId: id,
+                        title: site.name,
+                        metrics: [
+                            { key: 'views24h', label: 'Vues 24 h', value: traffic.views24h.toLocaleString('fr-FR') },
+                            {
+                                key: 'visitors24h',
+                                label: 'Visiteurs 24 h',
+                                value: traffic.visitors24h.toLocaleString('fr-FR')
+                            },
+                            { key: 'views7d', label: 'Vues 7 j', value: week.toLocaleString('fr-FR') }
+                        ]
+                    };
+                } catch {
+                    return {
+                        itemId: id,
+                        title: site.name,
+                        metrics: [],
+                        unavailable: 'Ses chiffres n’ont pas pu être lus.'
+                    };
+                }
+            })
+        )
+    );
+}
+
 export const clientProvider: AudienceClientProvider = {
+    summarize,
     listSites: async () =>
         (await api.send('audience.list', {})).sites.map((s) => ({ id: s.id, name: s.name, foreign: s.foreign })),
     LinkedSite,

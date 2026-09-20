@@ -8,6 +8,7 @@ import { projectChatFeatures } from './chat';
 import { projectDatabaseLinkFeatures } from './databaseLink';
 import { projectDeployLinkFeatures } from './deployLink';
 import { projectHistoryFeatures } from './history';
+import { projectDashboardFeatures } from './dashboard';
 import { projectLinkFeatures } from './links';
 import { projectPortfolioFeatures } from './projects';
 import type { ProjectsRepo } from './repo';
@@ -32,6 +33,7 @@ export const projectsHandlers: readonly SdkFeatureDefinition<ProjectsRepo, strin
     ...projectRepoLinkFeatures,
     ...projectDeployLinkFeatures,
     ...projectLinkFeatures,
+    ...projectDashboardFeatures,
     ...projectDatabaseLinkFeatures,
     ...projectAudienceLinkFeatures
 ];

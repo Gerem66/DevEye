@@ -14,7 +14,6 @@ import type { Project, ProjectLinkLabel } from '../../contracts/domain';
 import { DEPLOY_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { DeployClientProvider, DeployLinkedCandidate } from '@deveye/types/sdk/client';
 import { LinkTargetDialog } from './LinkTargetDialog';
-import { UptimeLinks } from './UptimeLinks';
 import { ForeignLinks } from '../ForeignLinks';
 import styles from '../style.module.css';
 
@@ -24,7 +23,7 @@ interface DeployProps {
 }
 
 /**
- * L'onglet Déploiement d'un projet : les cibles qu'il met en production. La
+ * L'onglet Déploiements d'un projet : les cibles qu'il met en production. La
  * cible n'appartient pas au projet, qui n'en tient qu'un pointeur, et deux
  * projets déployant la même pile compose sont le cas normal ; tout l'affichage
  * vient du bloc du module (`DEPLOY_CLIENT_PROVIDER`), sans que cet écran
@@ -118,19 +117,14 @@ export function Deploy({ project, canWrite }: DeployProps) {
 
     if (!loaded) return <p className={styles.empty}>Chargement…</p>;
 
-    // Projeté depuis un autre espace : les deux sections se nomment, sans le
-    // bloc du module ni ses gestes (voir `ForeignLinks`). Le rappel du
-    // domicile ne se dit qu'une fois, en bas de l'onglet.
+    // Projeté depuis un autre espace : les cibles se nomment, sans le bloc du
+    // module ni ses gestes (voir `ForeignLinks`).
     if (foreign) {
         return (
             <div className={styles.linkedTargets}>
                 {error && <p className={styles.error}>{error}</p>}
-                <UptimeLinks projectId={project.id} canWrite={canWrite} foreign />
-                <section className={styles.deployLinks}>
-                    <h3 className={styles.sectionTitle}>Déploiements</h3>
-                    {!provider && <p className={styles.hint}>Le module Déploiements n’est pas installé.</p>}
-                    <ForeignLinks labels={labels} empty='Aucune cible reliée à ce projet.' />
-                </section>
+                {!provider && <p className={styles.hint}>Le module Déploiements n’est pas installé.</p>}
+                <ForeignLinks labels={labels} empty='Aucune cible reliée à ce projet.' />
             </div>
         );
     }
@@ -141,16 +135,7 @@ export function Deploy({ project, canWrite }: DeployProps) {
         <div className={styles.linkedTargets}>
             {error && <p className={styles.error}>{error}</p>}
 
-            {/* Au-dessus des cibles, et non en dessous : « est-ce en ligne ? » se
-                lit avant « qu'ai-je livré ? ». Rendu même sur un projet
-                confidentiel — c'est la seule moitié de cet onglet qui ne dépende
-                d'aucun service extérieur, et la faire disparaître emprisonnerait
-                les services déjà rattachés. */}
-            <UptimeLinks projectId={project.id} canWrite={canWrite} />
-
             <section className={styles.deployLinks}>
-                <h3 className={styles.sectionTitle}>Déploiements</h3>
-
                 {!provider && <p className={styles.hint}>Le module Déploiements n’est pas installé.</p>}
 
                 {guarded && (

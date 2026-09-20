@@ -2,12 +2,16 @@ import type { DatabaseRow } from '../contracts/domain';
 import {
     DATABASE_BACKUP_PROVIDER,
     DATABASE_ITEMS_PROVIDER,
+    DATABASE_MEASURE_PROVIDER,
     type DatabaseBackupCandidate,
     type DatabaseBackupProvider,
-    type DatabaseItemsProvider
+    type DatabaseItemsProvider,
+    type DatabaseMeasureProvider,
+    type DatabaseNumberOutcome
 } from '@deveye/types/sdk';
 import type { FeatureServer, FeatureServiceDeps, SdkCipher } from '@deveye/types/sdk/server';
 
+import { assertReadOnly, explainError, openSession, singleNumber } from './engine';
 import { databaseHandlers } from './handlers';
 import { databaseMove } from './move';
 import { createRepo, type DatabaseRepo } from './repo';
@@ -65,6 +69,48 @@ function createBackupProvider(
 }
 
 /**
+ * Ce que Projets demande (`DATABASE_MEASURE_PROVIDER`) : un nombre par requête,
+ * dans une seule session. Le tunnel se paie une fois pour toutes les requêtes
+ * d'une même base, et une requête fautive rend son erreur sans interrompre les
+ * autres, comme les conditions d'une alerte.
+ */
+function createMeasureProvider(
+    deps: FeatureServiceDeps<DatabaseRepo>,
+    monitor: DatabaseMonitor
+): DatabaseMeasureProvider {
+    return {
+        async measure(databaseId, workspaceId, queries) {
+            const row = await deps.repo.findVisible(databaseId, workspaceId);
+            if (!row) return null;
+            if (queries.length === 0) return [];
+            // Le codec du DOMICILE : le secret d'une base projetée est scellé
+            // sous la clé de son espace, pas sous celle d'où on la regarde.
+            const session = await openSession(await monitor.targetOf(row, row.workspace_id));
+            try {
+                const out: DatabaseNumberOutcome[] = [];
+                for (const sql of queries) {
+                    try {
+                        // Deux fois plutôt qu'une : une chaîne stockée ne se
+                        // fait pas confiance, quoi qu'ait accepté le formulaire.
+                        assertReadOnly(sql);
+                        out.push({ value: singleNumber(await session.query(sql)), error: null });
+                    } catch (e) {
+                        out.push({ value: null, error: explainError(e) });
+                    }
+                }
+                return out;
+            } finally {
+                try {
+                    await session.close();
+                } catch {
+                    /* la fermeture d'une session déjà morte n'a rien à dire */
+                }
+            }
+        }
+    };
+}
+
+/**
  * Le nom d'une base, déchiffré par le codec ouvert de son domicile ; `null`
  * (jamais une exception) si la base a disparu ou si le blob est illisible.
  */
@@ -115,6 +161,7 @@ export const serverEntry: FeatureServer<DatabaseRepo> = {
             },
             providers: {
                 [DATABASE_BACKUP_PROVIDER]: createBackupProvider(deps, monitor),
+                [DATABASE_MEASURE_PROVIDER]: createMeasureProvider(deps, monitor),
                 [DATABASE_ITEMS_PROVIDER]: items
             }
         };

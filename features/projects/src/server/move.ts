@@ -26,11 +26,19 @@ const CELLS: readonly MovableCell[] = [
     { table: 'project_cards', idColumn: 'id', ownerColumn: 'project_id', column: 'content' },
     { table: 'project_messages', idColumn: 'id', ownerColumn: 'project_id', column: 'content' },
     { table: 'project_milestones', idColumn: 'id', ownerColumn: 'project_id', column: 'content' },
-    { table: 'project_events', idColumn: 'id', ownerColumn: 'project_id', column: 'content' }
+    { table: 'project_events', idColumn: 'id', ownerColumn: 'project_id', column: 'content' },
+    { table: 'ft_projects_dashboard_tiles', idColumn: 'id', ownerColumn: 'project_id', column: 'content' }
 ];
 
 /** Les tables de l'arbre qui portent leur propre espace, et doivent suivre. */
-const OWNED_TABLES = ['project_columns', 'project_cards', 'project_messages', 'project_milestones', 'project_events'];
+const OWNED_TABLES = [
+    'project_columns',
+    'project_cards',
+    'project_messages',
+    'project_milestones',
+    'project_events',
+    'ft_projects_dashboard_tiles'
+];
 
 /**
  * Les cinq familles de liaison, qui appartiennent à Projets. Une liaison ne
@@ -57,6 +65,21 @@ async function linkCounts(q: SdkQueryable, projectId: number, workspaceId: numbe
         if (n > 0)
             out.push(n === 1 ? `Sa liaison vers un des ${label} d’ici` : `Ses ${n} liaisons vers les ${label} d’ici`);
     }
+    // Les indicateurs sur mesure gardent leur requête mais perdent leur base,
+    // qui reste ici : le dire avant, pas après.
+    const kpis = await q.query<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM ft_projects_dashboard_tiles
+          WHERE project_id = ? AND workspace_id = ? AND database_id IS NOT NULL`,
+        [projectId, workspaceId]
+    );
+    const k = Number(kpis[0]?.n ?? 0);
+    if (k > 0) {
+        out.push(
+            k === 1
+                ? 'La base de son indicateur sur mesure, à redésigner là-bas'
+                : `Les bases de ses ${k} indicateurs sur mesure, à redésigner là-bas`
+        );
+    }
     return out;
 }
 
@@ -82,6 +105,13 @@ export const projectsMove: FeatureItemsMove<ProjectsRepo> = {
                 fromWorkspaceId
             ]);
         }
+
+        // Un indicateur perd sa base pour la même raison, mais garde sa requête :
+        // c'est du travail, et la tuile dira qu'il lui faut une base d'ici.
+        await q.execute(
+            'UPDATE ft_projects_dashboard_tiles SET database_id = NULL WHERE project_id = ? AND workspace_id = ?',
+            [projectId, fromWorkspaceId]
+        );
 
         for (const table of OWNED_TABLES) {
             await q.execute(`UPDATE ${table} SET workspace_id = ? WHERE project_id = ? AND workspace_id = ?`, [

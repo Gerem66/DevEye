@@ -3,7 +3,7 @@ import { LinkRepoDialog } from './Git/LinkRepoDialog';
 import { LinkDatabaseDialog } from './Database/LinkDatabaseDialog';
 import { LinkSiteDialog } from './Audience/LinkSiteDialog';
 import { LinkTargetDialog } from './Deploy/LinkTargetDialog';
-import { LinkUptimeDialog } from './Deploy/LinkUptimeDialog';
+import { LinkUptimeDialog } from './Uptime/LinkUptimeDialog';
 import type { ProjectFeatureTabId, ProjectTabAddKey } from './tabs';
 
 /**
@@ -80,8 +80,8 @@ export function AddFeatureDialog({ projectId, pending, onClose, onAdded }: AddFe
                 linkedIds={NOTHING_LINKED}
                 onClose={onClose}
                 onSaved={() => {
-                    invalidate('projects.board');
-                    onAdded('deploy');
+                    invalidate('projects.board', 'uptime.list', 'uptime.count');
+                    onAdded('uptime');
                 }}
             />
         </>

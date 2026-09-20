@@ -24,9 +24,9 @@ import { createProjectsUsageProvider } from './usageProvider';
  * déclare sans l'offrir.
  *
  * Les treize tables du module datent du socle et l'allowlist de
- * `deveye-feature.json` les dispense du préfixe `ft_projects_`, qu'une nouvelle
- * table prendrait. Pas d'`uninstall.sql` : le module ne possède aucune table à lui,
- * et le SQL de démontage ne peut pas toucher aux tables historiques.
+ * `deveye-feature.json` les dispense du préfixe `ft_projects_`. `uninstall.sql`
+ * ne détruit que ce que le module possède vraiment, la table de la vue
+ * d'ensemble : le SQL de démontage ne peut pas toucher aux tables historiques.
  */
 export const serverEntry: FeatureServer<ProjectsRepo> = {
     createRepo,

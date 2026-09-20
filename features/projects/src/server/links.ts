@@ -85,7 +85,7 @@ export const projectLinkCountsFeature = defineSdkFeature({
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId);
         const home = project.workspace_id;
-        // Les listes plutôt que quatre `COUNT(*)` : des poignées d'identifiants, et
+        // Les listes plutôt que cinq `COUNT(*)` : des poignées d'identifiants, et
         // les requêtes que les onglets appellent déjà. Une seconde famille pour
         // rendre le même fait ne se paierait qu'en occasions de diverger.
         const [repos, databases, sites, targets, services] = await Promise.all([
@@ -100,9 +100,8 @@ export const projectLinkCountsFeature = defineSdkFeature({
                 git: repos.length,
                 database: databases.length,
                 audience: sites.length,
-                // L'onglet Déploiement montre les cibles reliées et les services
-                // surveillés : il s'ouvre dès que l'un des deux existe.
-                deploy: targets.length + services.length
+                deploy: targets.length,
+                uptime: services.length
             }
         };
     }
@@ -122,7 +121,8 @@ export const projectUptimeListFeature = defineSdkFeature({
 
 export const projectUptimeLinkFeature = defineSdkFeature({
     ...projectUptimeLink,
-    mutates: true,
+    // Et Uptime : sa liste dit combien de projets tiennent chaque service.
+    mutates: ['projects', 'uptime'],
     access: LINKS,
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
@@ -145,7 +145,7 @@ export const projectUptimeLinkFeature = defineSdkFeature({
 
 export const projectUptimeUnlinkFeature = defineSdkFeature({
     ...projectUptimeUnlink,
-    mutates: true,
+    mutates: ['projects', 'uptime'],
     access: LINKS,
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');

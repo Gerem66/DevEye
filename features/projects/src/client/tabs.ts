@@ -2,29 +2,24 @@ import type { FeatureAccess, WorkspaceFeatureId } from '@deveye/types';
 import type { ProjectLinkCounts } from '../contracts/domain';
 
 /**
- * Les onglets d'un projet : trois permanents (tableau, frise, historique) et
- * quatre suspendus à leurs liaisons, qui paraissent au premier élément et se
- * replient dans le menu « + » de la barre avec le dernier.
+ * Les onglets d'un projet : quatre permanents (vue d'ensemble, tableau, frise,
+ * historique) et cinq suspendus à leurs liaisons, qui paraissent au premier
+ * élément et se replient dans le menu « + » de la barre avec le dernier.
  */
 
 /** Les onglets qui ne montrent que des liaisons, donc escamotables. */
-export type ProjectFeatureTabId = 'git' | 'database' | 'audience' | 'deploy';
+export type ProjectFeatureTabId = 'git' | 'database' | 'audience' | 'deploy' | 'uptime';
 
-export type ProjectTabId = 'board' | 'timeline' | ProjectFeatureTabId | 'history';
+export type ProjectTabId = 'overview' | 'board' | 'timeline' | ProjectFeatureTabId | 'history';
 
-/**
- * Une clé par geste d'ajout et non par onglet, Déploiement en portant deux.
- * C'est elle qui dit à `AddFeatureDialog` quel dialogue monter.
- */
-export type ProjectTabAddKey = 'git' | 'database' | 'audience' | 'deploy' | 'uptime';
+/** La clé du geste d'ajout, qui dit à `AddFeatureDialog` quel dialogue monter. */
+export type ProjectTabAddKey = ProjectFeatureTabId;
 
 /** Ce qu'il faut savoir pour proposer un geste d'ajout dans le menu « + ». */
 export interface ProjectTabAddAction {
     key: ProjectTabAddKey;
     /** L'intitulé du geste, repris mot pour mot du bouton qui fait la même chose dans l'onglet. */
     label: string;
-    /** L'icône de la ligne quand elle diffère de celle de l'onglet, sur un onglet à plusieurs gestes. */
-    icon?: string;
     /**
      * Le droit d'espace que ce geste réclame en plus de `projects: write` : le
      * dialogue qui s'ouvre travaille dans la feature visée, sans quoi l'entrée
@@ -41,11 +36,14 @@ export interface ProjectTab {
 
 export interface ProjectFeatureTab extends ProjectTab {
     id: ProjectFeatureTabId;
-    /** Les gestes qui peuplent cet onglet : un seul, sauf le Déploiement qui en porte deux. */
-    add: ProjectTabAddAction[];
+    /** Le geste qui peuple cet onglet. */
+    add: ProjectTabAddAction;
 }
 
 const LEADING: ProjectTab[] = [
+    // En tête et jamais escamotable : c'est l'onglet d'arrivée, et ses tuiles de
+    // tâches ne dépendent d'aucune liaison.
+    { id: 'overview', label: 'Vue d’ensemble', icon: 'activity' },
     { id: 'board', label: 'Tableau', icon: 'projects' },
     { id: 'timeline', label: 'Frise', icon: 'clock' }
 ];
@@ -53,7 +51,7 @@ const LEADING: ProjectTab[] = [
 const TRAILING: ProjectTab[] = [{ id: 'history', label: 'Historique', icon: 'archive' }];
 
 /**
- * Les quatre onglets suspendus à leur contenu. Tous exigent l'écriture sur la
+ * Les cinq onglets suspendus à leur contenu. Tous exigent l'écriture sur la
  * feature visée : leurs dialogues peuvent créer l'objet en plus de le relier.
  */
 export const PROJECT_FEATURE_TABS: ProjectFeatureTab[] = [
@@ -61,35 +59,31 @@ export const PROJECT_FEATURE_TABS: ProjectFeatureTab[] = [
         id: 'git',
         label: 'Git',
         icon: 'branch',
-        add: [{ key: 'git', label: 'Ajouter un dépôt', requires: { feature: 'git', level: 'write' } }]
+        add: { key: 'git', label: 'Ajouter un dépôt', requires: { feature: 'git', level: 'write' } }
     },
     {
         id: 'database',
         label: 'Bases de données',
         icon: 'database',
-        add: [{ key: 'database', label: 'Ajouter une base', requires: { feature: 'database', level: 'write' } }]
+        add: { key: 'database', label: 'Ajouter une base', requires: { feature: 'database', level: 'write' } }
     },
     {
         id: 'audience',
         label: 'Audience',
         icon: 'eye-open',
-        add: [{ key: 'audience', label: 'Ajouter un site', requires: { feature: 'audience', level: 'write' } }]
+        add: { key: 'audience', label: 'Ajouter un site', requires: { feature: 'audience', level: 'write' } }
     },
     {
         id: 'deploy',
-        label: 'Déploiement',
+        label: 'Déploiements',
         icon: 'rocket',
-        // Deux gestes : l'onglet montre les cibles de déploiement et les
-        // services surveillés, et paraît dès que l'un des deux existe.
-        add: [
-            { key: 'deploy', label: 'Ajouter une cible', requires: { feature: 'deploy', level: 'write' } },
-            {
-                key: 'uptime',
-                label: 'Ajouter un uptime',
-                icon: 'uptime',
-                requires: { feature: 'uptime', level: 'write' }
-            }
-        ]
+        add: { key: 'deploy', label: 'Ajouter une cible', requires: { feature: 'deploy', level: 'write' } }
+    },
+    {
+        id: 'uptime',
+        label: 'Uptime',
+        icon: 'uptime',
+        add: { key: 'uptime', label: 'Ajouter un uptime', requires: { feature: 'uptime', level: 'write' } }
     }
 ];
 

@@ -31,3 +31,14 @@ export function boardNaturalWidth(columnCount: number, canWrite: boolean): numbe
 export function timelineNaturalWidth(innerWidth: number): number {
     return innerWidth + POPUP_CHROME;
 }
+
+/**
+ * Idem pour la barre d'onglets, dont la largeur naturelle est mesurée sur sa
+ * rangée fantôme : hors flux et en `max-content`, elle ne dépend pas de la
+ * largeur qu'on est en train de décider.
+ */
+export function tabsNaturalWidth(innerWidth: number): number {
+    // Un pixel de jeu : la mesure est arrondie au-dessus, et une barre qui
+    // tombe pile resterait repliée pour une fraction de pixel.
+    return innerWidth + POPUP_CHROME + 1;
+}

@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { Button, humanizeError, invalidate, openFeature, useResource } from 'deveye-sdk-client';
-import type { DatabaseClientProvider } from '@deveye/types/sdk/client';
+import type { DatabaseClientProvider, SdkTileSummary } from '@deveye/types/sdk/client';
 import type { DatabaseProbe } from '../contracts/domain';
 
 import { api } from './api';
 import { DatabaseDialog } from './DatabaseDialog';
 import { DatabaseHeader } from './DatabaseHeader';
 import { DatabaseView } from './DatabaseView';
-import { ENGINE_LABELS } from './format';
+import { ENGINE_LABELS, formatBytes, STATUS_META } from './format';
 import styles from './style.module.css';
 
 /**
@@ -120,7 +120,52 @@ function LinkedDatabaseDialog({ open, onClose, onSaved }: LinkedDatabaseDialogPr
     return <DatabaseDialog open={open} onClose={onClose} onSaved={onSaved} />;
 }
 
+/**
+ * Une base résumée pour une tuile de tableau de bord : son état, sa taille et ce
+ * qui alerte. Tout vient de `database.list`, un aller-retour pour toutes les
+ * bases d'un projet.
+ */
+function summarize(databaseIds: readonly number[]): Promise<readonly SdkTileSummary[]> {
+    return api.send('database.list', {}).then(({ databases }) =>
+        databaseIds.map((id): SdkTileSummary => {
+            const database = databases.find((d) => d.id === id);
+            if (!database) {
+                return { itemId: id, title: `Base #${id}`, metrics: [], unavailable: 'Cette base n’est plus ici.' };
+            }
+            if (!database.monitorEnabled) {
+                return {
+                    itemId: id,
+                    title: database.name,
+                    metrics: [],
+                    unavailable: 'Son relevé périodique est éteint : rien n’est mesuré.'
+                };
+            }
+            const meta = STATUS_META[database.status];
+            return {
+                itemId: id,
+                title: database.name,
+                metrics: [
+                    {
+                        key: 'status',
+                        label: 'État',
+                        value: meta.label,
+                        tone: meta.tone === 'online' ? 'good' : meta.tone === 'danger' ? 'bad' : 'neutral'
+                    },
+                    { key: 'size', label: 'Taille', value: formatBytes(database.sizeBytes) },
+                    {
+                        key: 'alerts',
+                        label: 'Alertes',
+                        value: database.firingCount > 0 ? `${database.firingCount} franchie(s)` : 'aucune',
+                        tone: database.firingCount > 0 ? 'bad' : 'neutral'
+                    }
+                ]
+            };
+        })
+    );
+}
+
 export const clientProvider: DatabaseClientProvider = {
+    summarize,
     listDatabases: async () =>
         (await api.send('database.list', {})).databases.map((d) => ({
             id: d.id,

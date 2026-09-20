@@ -12,7 +12,7 @@ import {
 } from './tabs';
 
 /** L'état de départ, et celui d'un projet gardé. */
-const NONE: ProjectLinkCounts = { git: 0, database: 0, audience: 0, deploy: 0 };
+const NONE: ProjectLinkCounts = { git: 0, database: 0, audience: 0, deploy: 0, uptime: 0 };
 
 /** Une ligne du menu « + » : le geste, et l'onglet qu'il fait naître. */
 export interface ProjectTabAddable {
@@ -94,11 +94,10 @@ export function useProjectTabs(project: Project, canWrite: boolean): ProjectTabs
      */
     const addable: ProjectTabAddable[] =
         canWrite && !guarded && !project.foreign && counts !== null
-            ? PROJECT_FEATURE_TABS.filter((tab) => counts[tab.id] === 0).flatMap((tab) =>
-                  tab.add
-                      .filter((action) => permissions.canFeature(action.requires.feature, action.requires.level))
-                      .map((action) => ({ tab, action }))
-              )
+            ? PROJECT_FEATURE_TABS.filter(
+                  (tab) =>
+                      counts[tab.id] === 0 && permissions.canFeature(tab.add.requires.feature, tab.add.requires.level)
+              ).map((tab) => ({ tab, action: tab.add }))
             : [];
 
     return { visible, addable, ready: counts !== null, reveal };

@@ -3,32 +3,29 @@ import { UPTIME_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { UptimeClientProvider, UptimeLinkedService } from '@deveye/types/sdk/client';
 import { Button, humanizeError, moduleClientProvider, useWorkspacePermissions, WsError } from 'deveye-sdk-client';
 import { api } from '../api';
-import type { ProjectLinkLabel } from '../../contracts/domain';
+import type { Project, ProjectLinkLabel } from '../../contracts/domain';
 import { LinkUptimeDialog } from './LinkUptimeDialog';
 import { UptimeLinkRow } from './UptimeLinkRow';
 import { ForeignLinks } from '../ForeignLinks';
 import styles from '../style.module.css';
 
-interface UptimeLinksProps {
-    projectId: number;
+interface UptimeProps {
+    project: Project;
     canWrite: boolean;
-    /**
-     * Le projet est projeté depuis un autre espace : les services se nomment,
-     * sans bloc ni geste (voir `ForeignLinks`). Rattacher et délier sont des
-     * gestes du domicile, que le serveur refuse depuis une fenêtre.
-     */
-    foreign?: boolean;
 }
 
 /**
- * Les services surveillés que ce projet rattache, dans l'onglet Déploiement :
- * c'est là qu'on se demande si ce qui vient d'être livré tient debout.
+ * L'onglet Uptime d'un projet : les services surveillés qu'il rattache. Le
+ * service n'appartient pas au projet, qui n'en tient qu'un pointeur, et deux
+ * projets surveillant la même adresse sont le cas normal.
  *
  * Le serveur ne rend que des identifiants ; les noms et les états viennent de
  * la liste du module Uptime, lue au nom de l'utilisateur. Sans accès à Uptime,
  * ou sans le module, les services se listent en identifiants nus.
  */
-export function UptimeLinks({ projectId, canWrite, foreign = false }: UptimeLinksProps) {
+export function Uptime({ project, canWrite }: UptimeProps) {
+    const projectId = project.id;
+    const foreign = project.foreign;
     const permissions = useWorkspacePermissions();
     const uptime = moduleClientProvider<UptimeClientProvider>(UPTIME_CLIENT_PROVIDER);
     const canReadUptime = permissions.canFeature('uptime');
@@ -96,23 +93,18 @@ export function UptimeLinks({ projectId, canWrite, foreign = false }: UptimeLink
 
     if (foreign) {
         return (
-            <section className={styles.uptimeLinks}>
-                <h3 className={styles.sectionTitle}>Services surveillés</h3>
+            <div className={styles.uptimeLinks}>
                 {error && <p className={styles.error}>{error}</p>}
                 {!uptime && <p className={styles.hint}>Le module Uptime n’est pas installé.</p>}
-                {/* Sans le rappel du domicile : l'onglet le dit une fois, sous
-                    les déploiements. */}
-                <ForeignLinks labels={labels} empty='Aucun service rattaché à ce projet.' note={false} />
-            </section>
+                <ForeignLinks labels={labels} empty='Aucun service rattaché à ce projet.' />
+            </div>
         );
     }
 
     const byId = new Map((services ?? []).map((s) => [s.id, s]));
 
     return (
-        <section className={styles.uptimeLinks}>
-            <h3 className={styles.sectionTitle}>Services surveillés</h3>
-
+        <div className={styles.uptimeLinks}>
             {error && <p className={styles.error}>{error}</p>}
             {!uptime && <p className={styles.hint}>Le module Uptime n’est pas installé.</p>}
 
@@ -157,8 +149,7 @@ export function UptimeLinks({ projectId, canWrite, foreign = false }: UptimeLink
 
             {serviceIds.length === 0 && (
                 <p className={styles.empty}>
-                    Aucun service rattaché. Reliez ce qui surveille l’application déployée, pour lire sa disponibilité
-                    ici même.
+                    Aucun service rattaché. Reliez ce qui surveille ce projet, pour lire sa disponibilité ici même.
                 </p>
             )}
 
@@ -188,8 +179,8 @@ export function UptimeLinks({ projectId, canWrite, foreign = false }: UptimeLink
                     void load();
                 }}
             />
-        </section>
+        </div>
     );
 }
 
-export default UptimeLinks;
+export default Uptime;

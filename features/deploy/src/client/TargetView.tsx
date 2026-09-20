@@ -35,7 +35,10 @@ interface TargetViewProps {
     fullHistory?: DeployHistoryEntry[] | null;
     /** Dokploy injoignable pendant le chargement de `fullHistory` ; le reste de la fiche fonctionne. */
     fullHistoryError?: string | null;
-    /** Ouvre le journal d'une ligne ; absent dans l'onglet d'un projet, sans `fullHistory`. */
+    /**
+     * Ouvre le journal d'une ligne : celles de l'historique, et le dernier
+     * déploiement de l'en-tête. Absent, les deux restent inertes.
+     */
     onOpenLogs?: (externalId: string) => void;
     /**
      * Affiche la section de l'historique complet sous l'en-tête. `false` dans
@@ -176,6 +179,25 @@ export function TargetView({
     const rows = showHistory ? historyRows : null;
     // Les deux sources sont triées du plus récent au plus ancien (voir le serveur).
     const lastRow = historyRows?.[0] ?? null;
+    // Le journal du dernier déploiement, quand le fournisseur en tient un pour
+    // lui : une ligne que le rapprochement n'a pas encore appariée n'en a pas.
+    const lastLogId = onOpenLogs && lastRow?.externalId ? lastRow.externalId : null;
+
+    const lastDeploy = target.lastStatus !== null && (
+        <>
+            <span className={styles.statusTag} data-tone={statusTone(target.lastStatus)}>
+                {STATUS_LABELS[target.lastStatus]}
+            </span>
+            {/* Le titre de la première ligne de l'historique, tronqué
+                plutôt que de pousser la date hors du cadre. */}
+            {lastRow?.title && (
+                <span className={styles.lastDeployName} title={lastRow.title}>
+                    {lastRow.title}
+                </span>
+            )}
+            <span className={styles.hint}>Dernier déploiement {formatAgo(target.lastDeployAt)}</span>
+        </>
+    );
 
     return (
         <div className={styles.targetGroup}>
@@ -202,28 +224,24 @@ export function TargetView({
                                 </span>
                             )}
                         </p>
-                        {/* Le dernier état à même hauteur que l'identité. */}
-                        <p className={styles.blockLastDeploy}>
-                            {target.lastStatus === null ? (
+                        {/* Le dernier état à même hauteur que l'identité, et son
+                            journal au clic quand la ligne en a un. */}
+                        {target.lastStatus === null ? (
+                            <p className={styles.blockLastDeploy}>
                                 <span className={styles.hint}>Aucun déploiement pour l’instant.</span>
-                            ) : (
-                                <>
-                                    <span className={styles.statusTag} data-tone={statusTone(target.lastStatus)}>
-                                        {STATUS_LABELS[target.lastStatus]}
-                                    </span>
-                                    {/* Le titre de la première ligne de l'historique, tronqué
-                                        plutôt que de pousser la date hors du cadre. */}
-                                    {lastRow?.title && (
-                                        <span className={styles.lastDeployName} title={lastRow.title}>
-                                            {lastRow.title}
-                                        </span>
-                                    )}
-                                    <span className={styles.hint}>
-                                        Dernier déploiement {formatAgo(target.lastDeployAt)}
-                                    </span>
-                                </>
-                            )}
-                        </p>
+                            </p>
+                        ) : lastLogId !== null ? (
+                            <button
+                                type='button'
+                                className={`${styles.blockLastDeploy} ${styles.itemRowClickable}`}
+                                title='Voir le journal'
+                                onClick={() => onOpenLogs?.(lastLogId)}
+                            >
+                                {lastDeploy}
+                            </button>
+                        ) : (
+                            <p className={styles.blockLastDeploy}>{lastDeploy}</p>
+                        )}
                     </div>
                     {showActions && (
                         <div className={styles.actions}>

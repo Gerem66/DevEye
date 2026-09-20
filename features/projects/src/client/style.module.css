@@ -543,8 +543,14 @@
     background: var(--surface-popup-solid);
 }
 
+/* La barre et sa rangée fantôme, qui se superposent sans se pousser. */
+.tabsWrap {
+    position: relative;
+}
+
 .tabs {
     display: flex;
+    width: 100%;
     gap: var(--space-xs);
     border-bottom: 1px solid var(--glass-border);
 }
@@ -562,11 +568,81 @@
     cursor: pointer;
 }
 
+/*
+ * Serrée : chaque onglet prend une part égale de la rangée, donc deux icônes
+ * nues font la même largeur et la barre reste pleine. `flex-basis: auto` est ce
+ * qui rend le dépliage continu : le libellé qui s'ouvre élargit la base de son
+ * onglet, et les voisins se resserrent image par image.
+ */
+.tabs[data-compact] .tab,
+.tabs[data-compact] .tabActive {
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: center;
+    padding-inline: var(--space-sm);
+}
+
+/*
+ * Le libellé se replie sur une colonne de zéro plutôt que de disparaître :
+ * `grid-template-columns` s'interpole, `display: none` non.
+ */
+.tabLabel {
+    display: grid;
+    grid-template-columns: 1fr;
+}
+
+.tabLabel > span {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.tabs[data-compact] .tabLabel {
+    grid-template-columns: 0fr;
+    opacity: 0;
+    transition:
+        grid-template-columns var(--transition-fast),
+        opacity var(--transition-fast);
+}
+
+/* Lu avant le clic (survol, focus) et sur l'onglet ouvert. */
+.tabs[data-compact] .tab:hover .tabLabel,
+.tabs[data-compact] .tab:focus-visible .tabLabel,
+.tabs[data-compact] .tabActive .tabLabel,
+.tabs[data-compact] .tabActive:hover .tabLabel {
+    grid-template-columns: 1fr;
+    opacity: 1;
+}
+
+/*
+ * La même rangée, toujours dépliée et hors flux : c'est elle qui dit si les
+ * libellés tiennent. Mesurer la barre rendue la ferait osciller, le repli la
+ * rétrécissant sous le seuil qui l'a déclenché.
+ */
+.tabsGhost {
+    position: absolute;
+    top: 0;
+    left: 0;
+    /* Sans largeur, un bloc absolu se plafonne à son conteneur et rogne ses
+       libellés au lieu de déborder : la mesure ne dépasserait jamais. */
+    width: max-content;
+    display: flex;
+    gap: var(--space-xs);
+    visibility: hidden;
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+.tabsGhost > * {
+    flex: none;
+}
+
 /* Le « + » de bout de barre, et le menu des features qui n'y sont pas.
    `margin-left: auto` le pousse à droite sans imposer de `justify-content` à `.tabs`,
    que le dialogue de liaison des dépôts emprunte pour ses deux modes. */
 .tabAddWrap {
     position: relative;
+    flex: none;
     margin-left: auto;
     align-self: center;
 }
@@ -2021,8 +2097,6 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);
-    padding-bottom: var(--space-md);
-    border-bottom: 1px solid var(--glass-border);
 }
 
 /*
@@ -2262,4 +2336,196 @@
     font-size: 0.9rem;
     font-style: italic;
     color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------------ */
+/* La vue d'ensemble : un mur de tuiles, réordonnables et masquables.  */
+/* ------------------------------------------------------------------ */
+
+.dashboard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    min-height: 100%;
+}
+
+.dashGrid {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: var(--space-md);
+}
+
+.dashTile {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    min-width: 0;
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-subtle);
+}
+
+/* Estompée pendant son propre glissé, comme les cartes du tableau. */
+.dashTileDragging {
+    composes: dashTile;
+    opacity: 0.4;
+}
+
+.dashTileHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    min-width: 0;
+}
+
+.dashTileName {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+/* La poignée et le masquage ne paraissent qu'au survol ou au focus : une tuile
+   au repos montre ses chiffres, pas ses gestes. */
+.dashTileActions {
+    display: flex;
+    flex: none;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+}
+
+.dashTile:hover .dashTileActions,
+.dashTile:focus-within .dashTileActions {
+    opacity: 1;
+}
+
+.dashTileBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text-muted);
+    font: inherit;
+    cursor: pointer;
+}
+
+.dashTileBtn:hover {
+    background: var(--glass-bg-light);
+    color: var(--text-primary);
+}
+
+.dashGrip {
+    composes: dashTileBtn;
+    cursor: grab;
+    touch-action: none;
+}
+
+.dashMetrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+}
+
+.dashMetric {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.dashMetricValue {
+    color: var(--text-primary);
+    font-size: 1.35rem;
+    font-weight: 600;
+    line-height: 1.1;
+}
+
+.dashMetricValue[data-tone='good'] {
+    color: var(--success);
+}
+
+.dashMetricValue[data-tone='warn'] {
+    color: var(--warning);
+}
+
+.dashMetricValue[data-tone='bad'] {
+    color: var(--danger);
+}
+
+.dashMetricValue[data-tone='accent'] {
+    color: var(--accent);
+}
+
+.dashMetricLabel {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+}
+
+/* Le dernier nombre connu survit à un échec, grisé sous le message. */
+.dashStale {
+    color: var(--text-muted);
+}
+
+.dashTileNote {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    line-height: 1.45;
+}
+
+.dashTileError {
+    composes: dashTileNote;
+    color: var(--danger);
+}
+
+/* La barre d'insertion du glissé, verticale comme sur une grille. */
+.dashBar {
+    position: absolute;
+    display: none;
+    width: 2px;
+    border-radius: 1px;
+    background: var(--accent);
+    pointer-events: none;
+}
+
+.dashHidden {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-xs);
+    margin-top: var(--space-lg);
+}
+
+.dashHiddenBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: 2px 10px;
+    border: 1px dashed var(--glass-border);
+    border-radius: var(--radius-pill);
+    background: none;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
+.dashHiddenBtn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
 }

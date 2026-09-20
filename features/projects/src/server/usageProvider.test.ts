@@ -150,6 +150,7 @@ function fakeRepo(): FakeRepo {
             statsFor: unused
         },
         board: {} as ProjectsRepo['board'],
+        dashboard: {} as ProjectsRepo['dashboard'],
         chat: {} as ProjectsRepo['chat'],
         plan: {} as ProjectsRepo['plan'],
         history: {

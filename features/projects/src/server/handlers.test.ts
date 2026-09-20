@@ -18,6 +18,11 @@ import {
     projectColumnRemove,
     projectCommands,
     projectCount,
+    projectDashboard,
+    projectDashboardArrange,
+    projectDashboardKpiRemove,
+    projectDashboardKpiRun,
+    projectDashboardKpiSave,
     projectDatabaseLink,
     projectDatabaseList,
     projectDatabaseUnlink,
@@ -51,6 +56,7 @@ import {
 } from '../contracts/commands';
 import { PROJECT_MAX_COLUMNS } from '../contracts/domain';
 import type {
+    DashboardTileRow,
     ProjectCardDepRow,
     ProjectCardRow,
     ProjectColumnRow,
@@ -63,6 +69,7 @@ import type {
 import {
     AUDIENCE_ITEMS_PROVIDER,
     DATABASE_ITEMS_PROVIDER,
+    DATABASE_MEASURE_PROVIDER,
     DEPLOY_ITEMS_PROVIDER,
     GIT_ITEMS_PROVIDER,
     UPTIME_ITEMS_PROVIDER
@@ -126,6 +133,7 @@ interface FakeRepo extends ProjectsRepo {
         deps: ProjectCardDepRow[];
         events: ProjectEventRow[];
         links: Record<'uptime' | 'database' | 'deploy' | 'repo' | 'site', LinkRow[]>;
+        dashboard: DashboardTileRow[];
     };
 }
 
@@ -233,7 +241,8 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         milestones: [],
         deps: [],
         events: [],
-        links: { uptime: [], database: [], deploy: [], repo: [], site: [] }
+        links: { uptime: [], database: [], deploy: [], repo: [], site: [] },
+        dashboard: []
     };
     // `locate` rend la ligne vivante, pour les mutations ; `find` en rend une copie,
     // comme une base rend une ligne fraîche : un handler qui relit une ligne après
@@ -301,7 +310,8 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         { table: 'project_cards', list: () => rows.cards },
         { table: 'project_messages', list: () => rows.messages },
         { table: 'project_milestones', list: () => rows.milestones },
-        { table: 'project_events', list: () => rows.events }
+        { table: 'project_events', list: () => rows.events },
+        { table: 'ft_projects_dashboard_tiles', list: () => rows.dashboard }
     ];
     return {
         rows,
@@ -688,6 +698,93 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             countSiteLinks: counts('site'),
             detachSite: detach('site')
         },
+        dashboard: {
+            list: async (projectId, ws) =>
+                rows.dashboard
+                    .filter((t) => t.project_id === projectId && t.workspace_id === ws)
+                    .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
+                    .map((t) => ({ ...t })),
+            async arrange(projectId, ws, tiles) {
+                for (const [index, tile] of tiles.entries()) {
+                    const found = rows.dashboard.find(
+                        (t) => t.project_id === projectId && t.workspace_id === ws && t.tile_key === tile.key
+                    );
+                    if (found) {
+                        found.sort_order = index;
+                        found.hidden = tile.hidden ? 1 : 0;
+                        continue;
+                    }
+                    rows.dashboard.push({
+                        id: rows.dashboard.length + 1,
+                        project_id: projectId,
+                        workspace_id: ws,
+                        tile_key: tile.key,
+                        sort_order: index,
+                        hidden: tile.hidden ? 1 : 0,
+                        database_id: null,
+                        content: '',
+                        last_number: null,
+                        last_error: null,
+                        last_check_at: null,
+                        created: 1
+                    });
+                }
+                const kept = new Set(tiles.map((t) => t.key));
+                rows.dashboard = rows.dashboard.filter(
+                    (t) =>
+                        !(
+                            t.project_id === projectId &&
+                            t.workspace_id === ws &&
+                            t.content === '' &&
+                            !kept.has(t.tile_key)
+                        )
+                );
+            },
+            async upsertKpi({ projectId, workspaceId, tileKey, databaseId, content }) {
+                const found = rows.dashboard.find((t) => t.project_id === projectId && t.tile_key === tileKey);
+                if (found) {
+                    found.database_id = databaseId;
+                    found.content = content;
+                    return { ...found };
+                }
+                const row: DashboardTileRow = {
+                    id: rows.dashboard.length + 1,
+                    project_id: projectId,
+                    workspace_id: workspaceId,
+                    tile_key: tileKey,
+                    sort_order: 0,
+                    hidden: 0,
+                    database_id: databaseId,
+                    content,
+                    last_number: null,
+                    last_error: null,
+                    last_check_at: null,
+                    created: 1
+                };
+                rows.dashboard.push(row);
+                return { ...row };
+            },
+            async removeKpi(projectId, ws, tileKey) {
+                const before = rows.dashboard.length;
+                rows.dashboard = rows.dashboard.filter(
+                    (t) =>
+                        !(
+                            t.project_id === projectId &&
+                            t.workspace_id === ws &&
+                            t.tile_key === tileKey &&
+                            t.content !== ''
+                        )
+                );
+                return rows.dashboard.length < before;
+            },
+            async recordMeasure(projectId, tileKey, outcome) {
+                const found = rows.dashboard.find((t) => t.project_id === projectId && t.tile_key === tileKey);
+                if (!found) return;
+                if (outcome.value !== null) found.last_number = outcome.value;
+                found.last_error = outcome.error;
+                found.last_check_at = outcome.at;
+            }
+        },
         rekey: {
             readTree: async (projectId, ws) =>
                 cells.flatMap(({ table, list }) =>
@@ -808,12 +905,19 @@ describe('le registre des commandes', () => {
             'projects.linkCounts',
             'projects.uptimeList',
             'projects.databaseList',
-            'projects.audienceList'
+            'projects.audienceList',
+            'projects.dashboard'
         ]);
+        // Elles ne persistent rien, mais sollicitent un service extérieur au nom
+        // du projet : réservées à qui peut l'écrire, sans rien battre.
+        const gestures = new Set(['projects.dashboardKpiTest']);
         for (const h of projectsHandlers) {
             if (reads.has(h.command)) {
                 assert.equal(h.mutates, undefined, `${h.command} lit, et ne doit rien battre`);
                 assert.equal(h.access?.level, undefined, `${h.command} lit, au niveau par défaut`);
+            } else if (gestures.has(h.command)) {
+                assert.equal(h.mutates, undefined, `${h.command} ne persiste rien, et ne doit rien battre`);
+                assert.equal(h.access?.level, 'write', `${h.command} est un geste, sous le droit write`);
             } else {
                 assert.ok(h.mutates, `${h.command} écrit sans déclarer mutates`);
                 assert.equal(h.access?.level, 'write', `${h.command} écrit sous le droit write`);
@@ -830,10 +934,12 @@ describe('le registre des commandes', () => {
         assert.deepEqual(topicsOf('projects.deployLink'), ['projects', 'deploy']);
         assert.deepEqual(topicsOf('projects.databaseUnlink'), ['projects', 'database']);
         assert.deepEqual(topicsOf('projects.audienceLink'), ['projects', 'audience']);
+        assert.deepEqual(topicsOf('projects.uptimeLink'), ['projects', 'uptime']);
+        assert.deepEqual(topicsOf('projects.uptimeUnlink'), ['projects', 'uptime']);
         assert.equal(topicsOf('projects.cardAdd'), true);
         // Aucune liste ne nomme un sujet que le boot refuserait : les nôtres et ceux
-        // des quatre features reliées.
-        const known = new Set(['projects', 'projectsChat', 'git', 'deploy', 'database', 'audience']);
+        // des cinq features reliées.
+        const known = new Set(['projects', 'projectsChat', 'git', 'deploy', 'database', 'audience', 'uptime']);
         for (const h of projectsHandlers) {
             if (Array.isArray(h.mutates)) {
                 for (const topic of h.mutates)
@@ -1563,7 +1669,7 @@ describe('les liaisons par les contrats d’éléments', () => {
         assert.deepEqual((await handlerFor(projectUptimeUnlink)(ctx, { projectId: 1, serviceId: 9 })).serviceIds, []);
     });
 
-    it('les compteurs d’onglets lisent les liaisons en clair, déploiement et services confondus', async () => {
+    it('les compteurs d’onglets lisent les liaisons en clair, une clé par feature reliée', async () => {
         const repo = fakeRepo();
         seedTwoTiers(repo);
         repo.rows.links.repo.push({ project_id: 1, workspace_id: 1, item_id: 5 });
@@ -1574,7 +1680,7 @@ describe('les liaisons par les contrats d’éléments', () => {
         repo.rows.links.deploy.push({ project_id: 1, workspace_id: 1, item_id: 8 });
         repo.rows.links.uptime.push({ project_id: 1, workspace_id: 1, item_id: 9 });
         const counted = await handlerFor(projectLinkCounts)(contextWith(repo, { unlocked: false }), { projectId: 1 });
-        assert.deepEqual(counted.counts, { git: 1, database: 2, audience: 0, deploy: 2 });
+        assert.deepEqual(counted.counts, { git: 1, database: 2, audience: 0, deploy: 1, uptime: 1 });
     });
 });
 
@@ -1948,7 +2054,8 @@ describe('le partage inter-espaces', () => {
             git: 1,
             database: 1,
             audience: 1,
-            deploy: 2
+            deploy: 1,
+            uptime: 1
         });
     });
 
@@ -2074,5 +2181,195 @@ describe("l'entrée items", () => {
         assert.equal(await items.shareable!(repo, '1', 1), true);
         assert.equal(await items.shareable!(repo, '3', 1), false);
         assert.equal(await items.shareable!(repo, '99', 1), false);
+    });
+});
+
+describe('la vue d’ensemble d’un projet', () => {
+    it('rend l’agencement et les liaisons en une fois, sans déverrouiller un projet gardé', async () => {
+        const repo = fakeRepo();
+        seedTwoTiers(repo);
+        repo.rows.links.database.push({ project_id: 1, workspace_id: 1, item_id: 6 });
+        repo.rows.links.uptime.push({ project_id: 1, workspace_id: 1, item_id: 9 });
+        const ctx = contextWith(repo, { unlocked: false });
+
+        const first = await handlerFor(projectDashboard)(ctx, { projectId: 1 });
+        // Rien n'est semé : le catalogue est du code, la table ne porte que
+        // ce qui a été arrangé.
+        assert.deepEqual(first.tiles, []);
+        assert.deepEqual(first.links, { git: [], database: [6], audience: [], deploy: [], uptime: [9] });
+        assert.deepEqual(first.counts, { git: 0, database: 1, audience: 0, deploy: 0, uptime: 1 });
+
+        // Le projet gardé se lit quand même : rangs et masquages sont en clair.
+        const guarded = await handlerFor(projectDashboard)(ctx, { projectId: 2 });
+        assert.deepEqual(guarded.tiles, []);
+    });
+
+    it('range les tuiles, masque, et oublie une tuile automatique qui quitte le catalogue', async () => {
+        const repo = fakeRepo();
+        seedTwoTiers(repo);
+        const ctx = contextWith(repo);
+
+        const arranged = await handlerFor(projectDashboardArrange)(ctx, {
+            projectId: 1,
+            tiles: [
+                { key: 'tasks.due', hidden: false },
+                { key: 'tasks.counts', hidden: true }
+            ]
+        });
+        assert.deepEqual(
+            arranged.tiles.map((t) => [t.key, t.sortOrder, t.hidden]),
+            [
+                ['tasks.due', 0, false],
+                ['tasks.counts', 1, true]
+            ]
+        );
+
+        const after = await handlerFor(projectDashboardArrange)(ctx, {
+            projectId: 1,
+            tiles: [{ key: 'tasks.due', hidden: false }]
+        });
+        assert.deepEqual(
+            after.tiles.map((t) => t.key),
+            ['tasks.due']
+        );
+
+        await assert.rejects(
+            handlerFor(projectDashboardArrange)(ctx, {
+                projectId: 1,
+                tiles: [
+                    { key: 'tasks.due', hidden: false },
+                    { key: 'tasks.due', hidden: true }
+                ]
+            }),
+            failsWith('validation')
+        );
+    });
+
+    it('n’accepte un indicateur que sur une base reliée, en lecture seule, et jamais sur un projet gardé', async () => {
+        const repo = fakeRepo();
+        seedTwoTiers(repo);
+        repo.rows.links.database.push({ project_id: 1, workspace_id: 1, item_id: 6 });
+        const ctx = contextWith(repo);
+        const kpi = {
+            title: 'Commandes',
+            sql: 'SELECT COUNT(*) FROM orders',
+            unit: '',
+            comparator: null,
+            threshold: null
+        };
+
+        // Une base que le projet ne relie pas n'est pas mesurable.
+        await assert.rejects(
+            handlerFor(projectDashboardKpiSave)(ctx, { projectId: 1, databaseId: 7, kpi }),
+            failsWith('validation')
+        );
+        // Une écriture déguisée en lecture non plus.
+        await assert.rejects(
+            handlerFor(projectDashboardKpiSave)(ctx, {
+                projectId: 1,
+                databaseId: 6,
+                kpi: { ...kpi, sql: 'DELETE FROM orders' }
+            }),
+            failsWith('validation')
+        );
+        await assert.rejects(
+            handlerFor(projectDashboardKpiSave)(ctx, {
+                projectId: 1,
+                databaseId: 6,
+                kpi: { ...kpi, sql: 'SELECT 1; DROP TABLE orders' }
+            }),
+            failsWith('validation')
+        );
+        // Un projet confidentiel ne relie aucune base, donc n'en mesure aucune.
+        await assert.rejects(
+            handlerFor(projectDashboardKpiSave)(ctx, { projectId: 2, databaseId: 6, kpi }),
+            failsWith('validation')
+        );
+
+        const saved = await handlerFor(projectDashboardKpiSave)(ctx, { projectId: 1, databaseId: 6, kpi });
+        const tile = saved.tiles.find((t) => t.kpi !== null);
+        assert.ok(tile, 'l’indicateur est rendu');
+        assert.ok(tile.key.startsWith('kpi:'), 'sa clé le distingue d’une tuile automatique');
+        assert.equal(tile.kpi?.databaseId, 6);
+        assert.equal(tile.kpi?.title, 'Commandes');
+
+        // Le retrait est la seule suppression du tableau de bord.
+        const removed = await handlerFor(projectDashboardKpiRemove)(ctx, { projectId: 1, tileKey: tile.key });
+        assert.deepEqual(removed.tiles, []);
+        await assert.rejects(
+            handlerFor(projectDashboardKpiRemove)(ctx, { projectId: 1, tileKey: tile.key }),
+            failsWith('not_found')
+        );
+    });
+
+    it('mesure par le contrat du module, groupé par base, et garde le dernier nombre sur un échec', async () => {
+        const repo = fakeRepo();
+        seedTwoTiers(repo);
+        repo.rows.links.database.push({ project_id: 1, workspace_id: 1, item_id: 6 });
+        const calls: { databaseId: number; queries: readonly string[] }[] = [];
+        let answer: { value: number | null; error: string | null }[] = [{ value: 42, error: null }];
+        const ctx = contextWith(repo, {
+            providers: {
+                [DATABASE_MEASURE_PROVIDER]: {
+                    measure: async (databaseId: number, _ws: number, queries: readonly string[]) => {
+                        calls.push({ databaseId, queries });
+                        return answer;
+                    }
+                }
+            }
+        });
+        const kpi = {
+            title: 'Commandes',
+            sql: 'SELECT COUNT(*) FROM orders',
+            unit: '',
+            comparator: null,
+            threshold: null
+        };
+        const saved = await handlerFor(projectDashboardKpiSave)(ctx, { projectId: 1, databaseId: 6, kpi });
+        const key = saved.tiles.find((t) => t.kpi !== null)?.key as string;
+
+        const run = await handlerFor(projectDashboardKpiRun)(ctx, { projectId: 1 });
+        assert.deepEqual(
+            run.measures.map((m) => [m.key, m.value, m.error]),
+            [[key, 42, null]]
+        );
+        assert.deepEqual(calls, [{ databaseId: 6, queries: ['SELECT COUNT(*) FROM orders'] }]);
+
+        // Un échec renseigne l'erreur et laisse le dernier nombre connu.
+        answer = [{ value: null, error: 'Table absente.' }];
+        await handlerFor(projectDashboardKpiRun)(ctx, { projectId: 1 });
+        const after = await handlerFor(projectDashboard)(ctx, { projectId: 1 });
+        const tile = after.tiles.find((t) => t.key === key);
+        assert.equal(tile?.kpi?.lastValue, 42);
+        assert.equal(tile?.kpi?.lastError, 'Table absente.');
+    });
+
+    it('dit qu’une base déliée n’est plus mesurable, sans toucher à la requête', async () => {
+        const repo = fakeRepo();
+        seedTwoTiers(repo);
+        repo.rows.links.database.push({ project_id: 1, workspace_id: 1, item_id: 6 });
+        const ctx = contextWith(repo, {
+            providers: {
+                [DATABASE_MEASURE_PROVIDER]: { measure: async () => [{ value: 1, error: null }] }
+            }
+        });
+        const kpi = {
+            title: 'Commandes',
+            sql: 'SELECT COUNT(*) FROM orders',
+            unit: '',
+            comparator: null,
+            threshold: null
+        };
+        const saved = await handlerFor(projectDashboardKpiSave)(ctx, { projectId: 1, databaseId: 6, kpi });
+        const key = saved.tiles.find((t) => t.kpi !== null)?.key as string;
+
+        repo.rows.links.database.length = 0;
+        const run = await handlerFor(projectDashboardKpiRun)(ctx, { projectId: 1 });
+        assert.deepEqual(
+            run.measures.map((m) => [m.key, m.error]),
+            [[key, 'Cette base n’est plus reliée à ce projet.']]
+        );
+        const after = await handlerFor(projectDashboard)(ctx, { projectId: 1 });
+        assert.equal(after.tiles.find((t) => t.key === key)?.kpi?.sql, 'SELECT COUNT(*) FROM orders');
     });
 });

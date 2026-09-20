@@ -28,7 +28,10 @@ const COLUMNS: EncryptedCell[] = [
     { table: 'project_cards', idColumn: 'id', column: 'content' },
     { table: 'project_messages', idColumn: 'id', column: 'content' },
     { table: 'project_milestones', idColumn: 'id', column: 'content' },
-    { table: 'project_events', idColumn: 'id', column: 'content' }
+    { table: 'project_events', idColumn: 'id', column: 'content' },
+    // Les tuiles automatiques ont un `content` vide : la lecture les saute
+    // d'elle-même, seuls les indicateurs sur mesure ont une requête à convertir.
+    { table: 'ft_projects_dashboard_tiles', idColumn: 'id', column: 'content' }
     // ⚠️ Ni le cache git ni le déploiement n'y figurent, et ce n'est pas un oubli :
     // un dépôt comme une cible appartient à l'espace, plusieurs projets peuvent s'y
     // rattacher, et l'un et l'autre sont chiffrés à l'étage ouvert une fois pour

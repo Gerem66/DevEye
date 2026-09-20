@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { Button, FeatureSettingsButton, openFeature, useResource, useWorkspaceMembers } from 'deveye-sdk-client';
-import type { GitClientProvider } from '@deveye/types/sdk/client';
+import type { GitClientProvider, SdkTileSummary } from '@deveye/types/sdk/client';
 
 import { api } from './api';
 import { RepoDialog } from './RepoDialog';
@@ -137,7 +137,48 @@ function LinkedRepoDialog({ open, onClose, onSaved }: LinkedRepoDialogProps) {
     return <RepoDialog open={open} onClose={onClose} onSaved={onSaved} />;
 }
 
+/**
+ * Un dépôt résumé pour une tuile de tableau de bord : sa branche et sa dernière
+ * synchronisation. Tout vient de `git.repoList`, un aller-retour pour tous les
+ * dépôts d'un projet.
+ */
+function summarize(repoIds: readonly number[]): Promise<readonly SdkTileSummary[]> {
+    return api.send('git.repoList', {}).then(({ repos }) =>
+        repoIds.map((id): SdkTileSummary => {
+            const repo = repos.find((r) => r.id === id);
+            if (!repo) {
+                return { itemId: id, title: `Dépôt #${id}`, metrics: [], unavailable: 'Ce dépôt n’est plus ici.' };
+            }
+            const title = `${repo.owner}/${repo.repo}`;
+            if (repo.credentialId === null) {
+                return { itemId: id, title, metrics: [], unavailable: 'Son accès a été retiré.' };
+            }
+            if (!repo.enabled) {
+                return { itemId: id, title, metrics: [], unavailable: 'Sa synchronisation est en pause.' };
+            }
+            return {
+                itemId: id,
+                title,
+                metrics: [
+                    { key: 'branch', label: 'Branche', value: repo.defaultBranch ?? 'inconnue' },
+                    {
+                        key: 'sync',
+                        label: 'Synchronisé',
+                        value:
+                            repo.lastSyncAt === null
+                                ? 'jamais'
+                                : new Date(repo.lastSyncAt * 1000).toLocaleDateString('fr-FR'),
+                        tone: repo.lastSyncError === null ? 'neutral' : 'bad'
+                    }
+                ],
+                ...(repo.lastSyncError === null ? {} : { unavailable: repo.lastSyncError })
+            };
+        })
+    );
+}
+
 export const clientProvider: GitClientProvider = {
+    summarize,
     listRepos: async () =>
         (await api.send('git.repoList', {})).repos.map((r) => ({
             id: r.id,

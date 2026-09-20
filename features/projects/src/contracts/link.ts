@@ -44,8 +44,8 @@ export const projectLinkCountsSchema = z.object({
     git: z.number().int().nonnegative(),
     database: z.number().int().nonnegative(),
     audience: z.number().int().nonnegative(),
-    /** La cible de déploiement (0 ou 1) plus les services surveillés rattachés. */
-    deploy: z.number().int().nonnegative()
+    deploy: z.number().int().nonnegative(),
+    uptime: z.number().int().nonnegative()
 });
 export type ProjectLinkCounts = z.infer<typeof projectLinkCountsSchema>;
 

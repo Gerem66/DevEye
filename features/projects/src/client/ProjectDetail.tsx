@@ -33,6 +33,8 @@ import { Git } from './Git/Git';
 import { Databases } from './Database/Databases';
 import { Audience } from './Audience/Audience';
 import { Deploy } from './Deploy/Deploy';
+import { Uptime } from './Uptime/Uptime';
+import { Overview } from './Dashboard/Overview';
 import { AddFeatureDialog } from './AddFeatureDialog';
 import { ProjectTabs } from './ProjectTabs';
 import { isProjectTabId, type ProjectTabAddKey, type ProjectTabId } from './tabs';
@@ -54,7 +56,7 @@ interface ProjectDetailProps {
  * `l1` est au parent, et un niveau n'admet qu'un déclarant.
  */
 export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDetailProps) {
-    const [tab, setTab] = useState<ProjectTabId>('board');
+    const [tab, setTab] = useState<ProjectTabId>('overview');
 
     // Les droits se lisent sur CE projet : une surcharge posée sur lui seul
     // ouvre ou ferme des gestes que le portefeuille, qui ne connaît que le rôle,
@@ -109,13 +111,13 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
 
     /*
      * Un onglet quitte la barre avec son dernier élément, et on ne peut pas rester
-     * sur un onglet qui n'existe plus : repli sur le tableau. Attendre `ready` est
+     * sur un onglet qui n'existe plus : repli sur la vue d'ensemble. Attendre `ready` est
      * ce qui rend l'ajout depuis le « + » possible, compteurs inconnus ne renvoie
      * personne nulle part.
      */
     useEffect(() => {
         if (!tabs.ready) return;
-        if (!tabs.visible.some((t) => t.id === tab)) setTab('board');
+        if (!tabs.visible.some((t) => t.id === tab)) setTab('overview');
     }, [tabs.ready, tabs.visible, tab]);
 
     /**
@@ -485,6 +487,17 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
             {error && <p className={styles.error}>{error}</p>}
             {!loaded && <p className={styles.empty}>Chargement…</p>}
 
+            {loaded && tab === 'overview' && (
+                <Overview
+                    project={project}
+                    columns={columns}
+                    cards={cards}
+                    milestones={milestones}
+                    deps={deps}
+                    canWrite={rights.canLinks}
+                />
+            )}
+
             {loaded && tab === 'board' && (
                 <Board
                     columns={columns}
@@ -543,6 +556,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
             {loaded && tab === 'audience' && <Audience project={project} canWrite={rights.canLinks} />}
 
             {loaded && tab === 'deploy' && <Deploy project={project} canWrite={rights.canLinks} />}
+            {loaded && tab === 'uptime' && <Uptime project={project} canWrite={rights.canLinks} />}
 
             {loaded && tab === 'history' && (
                 <History

@@ -105,23 +105,26 @@ appartient à l'espace.
 
 ## 2. Ce que ça donne à l'usage
 
-| Vue                  | Contenu                                                                                                                        |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| **Portefeuille**     | tous les projets, avancement, retards, prochaine échéance, non-lus                                                             |
-| **Mes tâches**       | mes cartes assignées, tous projets visibles d'ici confondus, projetés compris                                                  |
-| **Archives**         | projets archivés, restaurables                                                                                                 |
-| **Tableau**          | kanban, glisser-déposer (dnd-kit), colonnes, limites WIP                                                                       |
-| **Frise**            | cartes datées, jalons, dépendances « bloque / bloqué par »                                                                     |
-| **Git**              | les dépôts reliés — une vue sur la feature Git, voir [Git](../git/README.md)                                                   |
-| **Bases de données** | les bases reliées — une vue sur la feature Bases, voir [Bases de données](../database/README.md)                               |
-| **Audience**         | les sites suivis reliés — une vue sur la feature Audience, voir [Audience](../audience/README.md)                              |
-| **Déploiement**      | les cibles reliées — une vue sur la feature Déploiement, voir [Déploiements](../deploy/README.md) — et les services surveillés |
-| **Historique**       | frise verticale des faits marquants, blocs archivés en lecture seule                                                           |
+| Vue                  | Contenu                                                                                              |
+| -------------------- | ---------------------------------------------------------------------------------------------------- |
+| **Portefeuille**     | tous les projets, avancement, retards, prochaine échéance, non-lus                                   |
+| **Mes tâches**       | mes cartes assignées, tous projets visibles d'ici confondus, projetés compris                        |
+| **Archives**         | projets archivés, restaurables                                                                       |
+| **Vue d'ensemble**   | les tuiles du projet : tâches, échéances, jalon, un résumé par élément relié, indicateurs sur mesure |
+| **Tableau**          | kanban, glisser-déposer (dnd-kit), colonnes, limites WIP                                             |
+| **Frise**            | cartes datées, jalons, dépendances « bloque / bloqué par »                                           |
+| **Git**              | les dépôts reliés — une vue sur la feature Git, voir [Git](../git/README.md)                         |
+| **Bases de données** | les bases reliées — une vue sur la feature Bases, voir [Bases de données](../database/README.md)     |
+| **Audience**         | les sites suivis reliés — une vue sur la feature Audience, voir [Audience](../audience/README.md)    |
+| **Déploiements**     | les cibles reliées, une vue sur la feature Déploiements, voir [Déploiements](../deploy/README.md)    |
+| **Uptime**           | les services surveillés rattachés, une vue sur la feature Uptime, voir [Uptime](../uptime/README.md) |
+| **Historique**       | frise verticale des faits marquants, blocs archivés en lecture seule                                 |
 
 ### La barre d'onglets suit le contenu du projet
 
-**Trois onglets permanents, quatre à la demande.** Tableau, Frise et Historique
-parlent du travail : ils existent dès le premier jour. Les quatre autres ne
+**Quatre onglets permanents, cinq à la demande.** Vue d'ensemble, Tableau,
+Frise et Historique parlent du travail : ils existent dès le premier jour, et
+c'est sur la Vue d'ensemble qu'on arrive en ouvrant un projet. Les cinq autres ne
 montrent que des **liaisons** vers des objets d'espace — tant qu'un projet n'en
 a aucune, ils n'affichaient qu'une phrase disant qu'il n'y a rien, quatre fois
 de suite, et il fallait les ouvrir un par un pour s'en apercevoir.
@@ -147,15 +150,15 @@ Trois conséquences à connaître :
   projet qui a des dépôts, et dedans la phrase qui explique ce qui lui manque —
   l'escamoter lui cacherait l'existence même du lien. Le « + », lui, n'offre que
   ce que l'appelant peut vraiment ajouter (voir `tabs.ts`, `add.requires`).
-- **Un projet confidentiel n'a pas de « + »** : les quatre liaisons lui sont
-  refusées (§1.4). Ses compteurs se lisent quand même — il peut porter des
-  services surveillés rattachés avant sa conversion, et l'onglet Déploiement
-  reste le seul endroit d'où les atteindre.
+- **Un projet confidentiel n'a pas de « + »** : les cinq liaisons lui sont
+  refusées (§1.4). Ses compteurs se lisent quand même : il peut porter des
+  services surveillés rattachés avant sa conversion, et l'onglet Uptime reste
+  le seul endroit d'où les atteindre.
 - **Retirer le dernier élément referme l'onglet sous soi**, et renvoie au
   tableau. C'est le prix de la règle, et le geste inverse est à un clic dans le
   « + ».
 
-### Les quatre onglets d'intégration ont la même forme
+### Les cinq onglets d'intégration ont la même forme
 
 Un ou plusieurs objets rattachés, **chacun dans son cadre** (y compris quand il
 n'y en a qu'un : le cadre dit où finit ce que l'onglet montre), un en-tête
@@ -165,10 +168,8 @@ et le geste d'ajout **au pied de la page**.
 Le Déploiement fut le dernier à s'y ranger, et il a fallu pour cela le sortir
 d'ici : il vivait **dans** le projet, avec sa clé d'API rangée dans la feature
 Git faute de mieux. Il est devenu une feature d'espace à son tour
-([Déploiements](../deploy/README.md)), et son onglet une enveloppe mince comme les trois
-autres. Il garde une particularité : les **services surveillés** du projet y
-vivent aussi, au-dessus des cibles, parce que « est-ce en ligne ? » se lit juste
-après « qu'ai-je livré ? ».
+([Déploiements](../deploy/README.md)), et son onglet une enveloppe mince comme les
+autres.
 
 Le portefeuille est une **grille de cartes** (`auto-fill`, 320 px au minimum).
 Ce furent d'abord des lignes pleine largeur, mais tout leur milieu restait vide :
@@ -325,7 +326,9 @@ droits, accueil), le descripteur du registre (`featureDescriptor('projects')`,
 statut d'un projet par le contrat d'usage), et les couplages déclarés dans
 `sdk/providers.ts` : `PROJECTS_USAGE_PROVIDER` (ce que Projets offre) et
 `UPTIME_ITEMS_PROVIDER`, `GIT_ITEMS_PROVIDER`, `DEPLOY_ITEMS_PROVIDER`,
-`DATABASE_ITEMS_PROVIDER`, `AUDIENCE_ITEMS_PROVIDER` (ce que Projets lit).
+`DATABASE_ITEMS_PROVIDER`, `AUDIENCE_ITEMS_PROVIDER`, `DATABASE_MEASURE_PROVIDER`
+(ce que Projets lit). `PROJECT_LINKED_FEATURES` y dit les cinq familles qu'un
+projet relie, que la coquille de réglages lit pour son onglet « Projets ».
 
 ### Contrats : `features/projects/src/contracts/`
 
@@ -336,8 +339,9 @@ chat.ts       messages
 plan.ts       jalons, dépendances
 history.ts    événements de la frise verticale (genres `projects.*`, `card.*`, `milestone.*`, `deploy.*`)
 link.ts       « mes tâches », compteurs d'onglets, lignes des cinq tables de liaison
-domain.ts     le barrel des six
-commands.ts   les cinquante et une commandes (préfixe unique `projects.`)
+dashboard.ts  la vue d'ensemble : agencement des tuiles, indicateurs sur mesure, ligne SQL
+domain.ts     le barrel des sept
+commands.ts   les commandes du module (préfixe unique `projects.`)
 ```
 
 `src/manifest.ts` étale le descripteur (dont `shareTier: 'perItem'`, que le
@@ -369,16 +373,19 @@ repoLink.ts         le pointeur vers les dépôts (GIT_ITEMS_PROVIDER)
 deployLink.ts       le pointeur vers les cibles (DEPLOY_ITEMS_PROVIDER)
 databaseLink.ts     le pointeur vers les bases (DATABASE_ITEMS_PROVIDER)
 audienceLink.ts     le pointeur vers les sites (AUDIENCE_ITEMS_PROVIDER)
-usageProvider.ts    PROJECTS_USAGE_PROVIDER : usageOf, countByItem, recordEvent, applyVersion
-repo/index.ts       ProjectsRepo, createRepo(SdkQueryable) : les sept dépôts natifs, un fichier par agrégat
+dashboard.ts        la vue d'ensemble : agencement, indicateurs (DATABASE_MEASURE_PROVIDER), garde « base reliée »
+usageProvider.ts    PROJECTS_USAGE_PROVIDER : usageOf, countByItem, detach, linkTargets, link, unlink, recordEvent, applyVersion
+repo/index.ts       ProjectsRepo, createRepo(SdkQueryable) : les huit dépôts natifs, un fichier par agrégat
 repo/projects.ts    la table projects (listVisible, findVisible : les siens plus les projetés) et ses compteurs en clair (statsFor)
 repo/board.ts       project_columns, project_cards, les non-lus
 repo/chat.ts        project_messages, project_card_reads
 repo/plan.ts        project_milestones, project_card_deps
 repo/history.ts     project_events
 repo/links.ts       les cinq tables de liaison, leurs lectures, leurs comptes et leurs usages
+repo/dashboard.ts   ft_projects_dashboard_tiles : l'agencement et les indicateurs
 repo/rekey.ts       la liste des cellules chiffrées suspendues à un projet (conversion d'étage)
 migrations/001_event_kinds.sql   les genres d'événements stockés passent de `project.*` à `projects.*`
+migrations/003_dashboard.sql     ft_projects_dashboard_tiles, la seule table propre au module
 handlers.test.ts    les handlers sur le harnais du SDK (dépôt en mémoire)
 usageProvider.test.ts   le contrat publié, sur le harnais sessionless
 ```
@@ -387,9 +394,9 @@ Côté app, seules les migrations du socle : `060_projects_core.sql` (9 tables),
 `061_projects_integrations.sql`, `064_git_repos.sql` (sort le git du projet),
 `067` à `069`, `077` et `080` (les tables de liaison). Les treize tables sont
 dans l'allowlist de `deveye-feature.json` : historiques, jamais déplacées,
-dispensées du préfixe `ft_projects_`. Pas d'`uninstall.sql` : le module ne
-possède aucune table à lui, et le SQL de démontage ne peut pas toucher aux
-tables historiques (comme Mail).
+dispensées du préfixe `ft_projects_`. La table de la vue d'ensemble, elle, est
+propre au module et le porte ; `uninstall.sql` ne détruit qu'elle, le SQL de
+démontage ne pouvant pas toucher aux tables historiques.
 
 ### Client : `features/projects/src/client/`
 
@@ -414,7 +421,9 @@ History/           frise verticale, carte archivée en lecture seule
 Git/               compose le contrat client du module Git (`GIT_CLIENT_PROVIDER`), dégrade sans lui
 Database/          compose le contrat client du module Bases de données (`DATABASE_CLIENT_PROVIDER`), dégrade sans lui
 Audience/          compose le contrat client du module Audience (`AUDIENCE_CLIENT_PROVIDER`), dégrade sans lui
-Deploy/            compose le contrat client du module Déploiement (`DEPLOY_CLIENT_PROVIDER`), dégrade sans lui, + services surveillés
+Dashboard/         la vue d'ensemble : catalogue de tuiles, compteurs de tâches, indicateurs sur mesure
+Deploy/            compose le contrat client du module Déploiements (`DEPLOY_CLIENT_PROVIDER`), dégrade sans lui
+Uptime/            compose le contrat client du module Uptime (`UPTIME_CLIENT_PROVIDER`), dégrade sans lui
 style.module.css   le module de style, et sa déclaration typée
 ```
 
@@ -686,9 +695,5 @@ transaction, et ne sont jamais rejouées.
 
 - **Aucun webhook** : l'état d'un déploiement est obtenu par sondage, borné aux
   seuls déploiements non terminés.
-- **Les liaisons aux services surveillés ne passent pas par le contrat
-  d'usage** : Uptime ne lit pas `PROJECTS_USAGE_PROVIDER`, seul l'onglet
-  Déploiement d'un projet montre ses services. Le jour venu, `LINKS` dans
-  `usageProvider.ts` gagne une entrée `uptime`.
 - **Le live est local au processus** : deux instances derrière un proxy = salles
   silencieusement séparées. Vrai avant ce module, ça le reste.

@@ -312,6 +312,14 @@
     flex-shrink: 0;
 }
 
+/* Rendue comme un <button> quand la ligne a un journal : la règle d'un bouton
+   remet une marge et un fond que `.blockLastDeploy` ne connaît pas. */
+button.blockLastDeploy {
+    margin-top: var(--space-xs);
+    padding: var(--space-xs) var(--space-sm);
+    margin-left: calc(-1 * var(--space-sm));
+}
+
 .history {
     display: flex;
     flex-direction: column;

@@ -18,6 +18,15 @@ import { PROJECT_MESSAGE_MAX_LENGTH, PROJECT_MESSAGE_PAGE_SIZE, projectMessageSc
 import { projectCardDepSchema, projectMilestoneDraftSchema, projectMilestoneSchema } from './plan';
 import { PROJECT_EVENT_PAGE_SIZE, projectEventSchema } from './history';
 import { myTaskSchema, projectLinkCountsSchema, projectLinkLabelSchema } from './link';
+import {
+    DASHBOARD_KPI_SQL_MAX_LENGTH,
+    DASHBOARD_MAX_KPIS,
+    DASHBOARD_TILE_KEY_MAX_LENGTH,
+    dashboardArrangementSchema,
+    dashboardKpiDraftSchema,
+    dashboardMeasureSchema,
+    dashboardTileSchema
+} from './dashboard';
 
 /**
  * Commandes des projets. L'espace visé n'apparaît dans aucune entrée : il voyage sur
@@ -603,6 +612,82 @@ export const projectMarkRead = {
     output: z.object({ cardId, lastMessageId: messageId })
 };
 
+/**
+ * La vue d'ensemble : l'agencement des tuiles et les indicateurs sur mesure, plus
+ * les liaisons du projet en une fois. Les cinq familles ici plutôt que cinq
+ * commandes : le tableau de bord n'en montre aucune sans les autres, et cinq
+ * allers-retours le feraient paraître par morceaux.
+ *
+ * Jamais verrouillée : rangs et masquages sont en clair, et un projet gardé dont
+ * le corps ne se lit pas garde ses tuiles de tâches.
+ */
+export const projectDashboard = {
+    command: 'projects.dashboard' as const,
+    input: z.object({ projectId }),
+    output: z.object({
+        tiles: z.array(dashboardTileSchema),
+        counts: projectLinkCountsSchema,
+        /** Les identifiants reliés, par famille, pour que les tuiles sachent quoi résumer. */
+        links: z.object({
+            git: z.array(z.number().int().positive()),
+            database: z.array(z.number().int().positive()),
+            audience: z.array(z.number().int().positive()),
+            deploy: z.array(z.number().int().positive()),
+            uptime: z.array(z.number().int().positive())
+        })
+    })
+};
+
+/** L'ordre complet et les masquages, dans l'ordre voulu. Ne touche à aucune requête. */
+export const projectDashboardArrange = {
+    command: 'projects.dashboardArrange' as const,
+    input: z.object({ projectId, tiles: z.array(dashboardArrangementSchema).max(64) }),
+    output: z.object({ tiles: z.array(dashboardTileSchema) })
+};
+
+/** Crée ou retouche un indicateur. `tileKey` absent = création. */
+export const projectDashboardKpiSave = {
+    command: 'projects.dashboardKpiSave' as const,
+    input: z.object({
+        projectId,
+        tileKey: z.string().min(1).max(DASHBOARD_TILE_KEY_MAX_LENGTH).optional(),
+        databaseId: z.number().int().positive(),
+        kpi: dashboardKpiDraftSchema
+    }),
+    output: z.object({ tiles: z.array(dashboardTileSchema) })
+};
+
+/** La seule suppression du tableau de bord : une tuile automatique se masque. */
+export const projectDashboardKpiRemove = {
+    command: 'projects.dashboardKpiRemove' as const,
+    input: z.object({ projectId, tileKey: z.string().min(1).max(DASHBOARD_TILE_KEY_MAX_LENGTH) }),
+    output: z.object({ tiles: z.array(dashboardTileSchema) })
+};
+
+/**
+ * Remesure les indicateurs, groupés par base : une session par base, jamais une
+ * par tuile. `tileKeys` absent = tous ceux du projet.
+ */
+export const projectDashboardKpiRun = {
+    command: 'projects.dashboardKpiRun' as const,
+    input: z.object({
+        projectId,
+        tileKeys: z.array(z.string().min(1).max(DASHBOARD_TILE_KEY_MAX_LENGTH)).max(DASHBOARD_MAX_KPIS).optional()
+    }),
+    output: z.object({ measures: z.array(dashboardMeasureSchema) })
+};
+
+/** Essaie une requête sans rien enregistrer : le « Tester » du formulaire. */
+export const projectDashboardKpiTest = {
+    command: 'projects.dashboardKpiTest' as const,
+    input: z.object({
+        projectId,
+        databaseId: z.number().int().positive(),
+        sql: z.string().min(1).max(DASHBOARD_KPI_SQL_MAX_LENGTH)
+    }),
+    output: z.object({ value: z.number().nullable(), error: z.string().nullable() })
+};
+
 export const projectCommands = [
     projectList,
     projectCount,
@@ -654,5 +739,11 @@ export const projectCommands = [
     projectDatabaseUnlink,
     projectAudienceList,
     projectAudienceLink,
-    projectAudienceUnlink
+    projectAudienceUnlink,
+    projectDashboard,
+    projectDashboardArrange,
+    projectDashboardKpiSave,
+    projectDashboardKpiRemove,
+    projectDashboardKpiRun,
+    projectDashboardKpiTest
 ] as const;

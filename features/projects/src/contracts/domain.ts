@@ -5,3 +5,4 @@ export * from './chat';
 export * from './plan';
 export * from './history';
 export * from './link';
+export * from './dashboard';
