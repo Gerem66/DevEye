@@ -17,6 +17,7 @@ import { LiveHub } from '@/live/hub';
 import { assertAccessDeclared } from '@/features/_permissions';
 import { featureHandlers } from '@/features/registry';
 import { buildTopicIndex } from '@/features/_topics';
+import { signupRoutes } from '@/auth/signupRoutes';
 import { authRoutes } from '@/auth/routes';
 import { logger } from '@/logger';
 import { env, TRUST_PROXY } from '@/Utils/Env';
@@ -33,6 +34,8 @@ import { createAuditLog } from '@/Services/AuditLog';
 import { startAttemptSweeper } from '@/Services/attempts';
 import { startDekSweeper } from '@/Services/SecureStore';
 import { createDomainVerifier } from '@/Services/domains/verifier';
+import { createMailer } from '@/Services/mailer';
+import { createSignupService } from '@/Services/signup';
 import { status } from '@/status';
 
 import type { Database } from '@/db';
@@ -218,13 +221,28 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // des sockets : un module d'infrastructure (bail, clés) doit être prêt
     // avant la première trame d'agent.
     setSdkHost(hub, deps.db, live);
+    const signup = createSignupService({
+        db: deps.db,
+        mailer: createMailer({
+            host: env.SMTP_HOST,
+            port: env.SMTP_PORT,
+            user: env.SMTP_USER,
+            password: env.SMTP_PASSWORD,
+            from: env.SMTP_FROM
+        }),
+        logger,
+        mode: env.SIGNUP_MODE,
+        origin: env.PUBLIC_ORIGIN.replace(/\/+$/, '')
+    });
     const moduleServices = [
         ...createModuleServices({ db: deps.db, crypt: deps.crypt, audit, logger, live }),
-        createDomainVerifier({ db: deps.db, crypt: deps.crypt, logger, live })
+        createDomainVerifier({ db: deps.db, crypt: deps.crypt, logger, live }),
+        signup
     ];
     for (const svc of moduleServices) await svc.start();
 
     await authRoutes(app, { db: deps.db, crypt: deps.crypt, audit, live });
+    await signupRoutes(app, { db: deps.db, audit, live, signup });
     await agentRoutes(app, { db: deps.db, hub, live, audit });
     // Routes publiques des modules (capacité `routes.public`), aussi montées
     // sur la surface publique quand elle existe (`publicApp.ts`). Après la

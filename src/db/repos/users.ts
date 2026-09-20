@@ -32,6 +32,12 @@ export interface UsersRepo {
     listAdminIds(): Promise<number[]>;
     /** Password re-validation window in seconds; `null` resets to the default. */
     setReAuthInterval(id: number, seconds: number | null): Promise<void>;
+    count(): Promise<number>;
+    /**
+     * En transaction, verrouille la lecture : deux premiers comptes simultanés
+     * ne naissent pas tous deux administrateurs.
+     */
+    countForUpdate(): Promise<number>;
 }
 
 export function usersRepo(pool: Q): UsersRepo {
@@ -140,6 +146,14 @@ export function usersRepo(pool: Q): UsersRepo {
         },
         async setReAuthInterval(id, seconds) {
             await pool.query('UPDATE users SET re_auth_interval = ? WHERE id = ?', [seconds, id]);
+        },
+        async count() {
+            const r = await pool.query<{ n: number }>('SELECT COUNT(*) AS n FROM users');
+            return Number(r.rows[0].n);
+        },
+        async countForUpdate() {
+            const r = await pool.query<{ n: number }>('SELECT COUNT(*) AS n FROM users FOR UPDATE');
+            return Number(r.rows[0].n);
         }
     };
 }

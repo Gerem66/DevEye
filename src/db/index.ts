@@ -7,6 +7,7 @@ import { featureDomainsRepo, type FeatureDomainsRepo } from './repos/featureDoma
 import { featureKvRepo, type FeatureKvRepo } from './repos/featureKv';
 import { itemSharingRepo, type ItemSharingRepo } from './repos/itemSharing';
 import { notificationChannelsRepo, type NotificationChannelsRepo } from './repos/notificationChannels';
+import { pendingSignupsRepo, type PendingSignupsRepo } from './repos/pendingSignups';
 import { presenceRepo, type PresenceRepo } from './repos/presence';
 import { processSamplesRepo, type ProcessSamplesRepo } from './repos/processSamples';
 import { refreshTokensRepo, type RefreshTokensRepo } from './repos/refreshTokens';
@@ -44,6 +45,8 @@ export interface Database {
     devices: DevicesRepo;
     linkCodes: LinkCodesRepo;
     metrics: MetricsRepo;
+    /** Les inscriptions en attente de validation par mail. */
+    pendingSignups: PendingSignupsRepo;
     presence: PresenceRepo;
     processSamples: ProcessSamplesRepo;
     twoFactor: TwoFactorRepo;
@@ -85,6 +88,7 @@ function buildDatabase(pool: DbPool, q: Queryable, inTransaction: boolean): Data
         devices: devicesRepo(q),
         linkCodes: linkCodesRepo(q),
         metrics: metricsRepo(q),
+        pendingSignups: pendingSignupsRepo(q),
         presence: presenceRepo(q),
         processSamples: processSamplesRepo(q),
         twoFactor: twoFactorRepo(q),

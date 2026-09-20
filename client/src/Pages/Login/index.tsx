@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
-import { ApiError, post } from '../../api/http';
+import { signupAvailabilitySchema } from '@deveye/types';
+
+import { ApiError, get, post } from '../../api/http';
 import { useAuth } from '../../auth/AuthProvider';
 import { isHomeReady, onHomeReady } from '../../stores/homeReady';
 import { TextInput } from '../../Components';
@@ -43,8 +45,9 @@ const CARD_PHASE_CLASS: Record<CardPhase, string> = {
     auto: ' card-to-progressbar auto-login'
 };
 
-function LoginPage() {
+function LoginPage({ onSignup }: { onSignup?: () => void }) {
     const { status, unreachable, login, refresh } = useAuth();
+    const [signupOpen, setSignupOpen] = useState(false);
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -97,6 +100,15 @@ function LoginPage() {
             setError('');
             setLoading(false);
         }
+    }, [status]);
+
+    // Relu à chaque retour du formulaire : l'inscription se referme d'elle-même
+    // une fois le premier compte créé.
+    useEffect(() => {
+        if (status !== 'anonymous') return;
+        get('/api/auth/signup', signupAvailabilitySchema)
+            .then((r) => setSignupOpen(r.open))
+            .catch(() => setSignupOpen(false));
     }, [status]);
 
     // Pin the card's height to its measured content so it can animate between the
@@ -314,6 +326,11 @@ function LoginPage() {
                                 <button className='submit' onClick={onSubmit} disabled={loading}>
                                     Se connecter
                                 </button>
+                                {signupOpen && onSignup && (
+                                    <button className='cancel' onClick={onSignup} disabled={loading}>
+                                        Créer un compte
+                                    </button>
+                                )}
                             </>
                         ) : (
                             <>

@@ -1,7 +1,10 @@
 import { MotionConfig } from 'framer-motion';
+import { useEffect, useState } from 'react';
 
 import HomePage from './Pages/Home/index.js';
 import LoginPage from './Pages/Login/index.js';
+import SignupPage from './Pages/Signup';
+import { readSignupRoute, type SignupRoute } from './Pages/Signup/route';
 import { SecrecyGate } from './Components/SecrecyGate';
 import { ReportButton } from './Components/ReportButton';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
@@ -20,6 +23,24 @@ import './Styles/input.css';
 
 function AppRoot() {
     const { status } = useAuth();
+    const [signup, setSignup] = useState<SignupRoute | null>(readSignupRoute);
+
+    // Le jeton quitte la barre d'adresse dès qu'il est lu : il ne reste ni dans
+    // l'historique ni sous les yeux pendant que le formulaire se remplit.
+    useEffect(() => {
+        if (signup?.kind === 'verify') window.history.replaceState({}, '', '/signup/verify');
+    }, [signup]);
+
+    useEffect(() => {
+        const onPop = (): void => setSignup(readSignupRoute());
+        window.addEventListener('popstate', onPop);
+        return () => window.removeEventListener('popstate', onPop);
+    }, []);
+
+    const go = (path: string): void => {
+        window.history.pushState({}, '', path);
+        setSignup(readSignupRoute());
+    };
 
     return (
         <>
@@ -29,7 +50,23 @@ function AppRoot() {
                 n'importe quelle vue, et se poser au-dessus d'elles toutes. */}
             {status === 'authenticated' && <ReportButton />}
 
-            <LoginPage />
+            {/* L'inscription prend l'écran à la place du login. Elle reste montée
+                après l'ouverture de la session et s'efface d'elle-même, à la fin de
+                son animation : la démonter sur le statut couperait sa barre de
+                progression en plein vol. */}
+            {signup && (signup.kind === 'verify' || status !== 'authenticated') ? (
+                <SignupPage
+                    route={signup}
+                    onDone={() => {
+                        window.history.replaceState({}, '', '/');
+                        setSignup(null);
+                    }}
+                    onLogin={() => go('/')}
+                    onRestart={() => go('/signup')}
+                />
+            ) : (
+                <LoginPage onSignup={() => go('/signup')} />
+            )}
         </>
     );
 }

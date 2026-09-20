@@ -254,6 +254,9 @@ Elles écrivent sans commande, donc sans socket : elles appellent
   pas par une commande WS : sans ce signal, rien n'en avertirait personne.
   L'émission des codes de liaison, elle, est une commande du module Appareils
   (`devices.linkCode*`, `mutates: true`) depuis son rapatriement.
+- `auth/signupRoutes.ts` : l'inscription (`POST /api/auth/signup/complete`)
+  passe par HTTP elle aussi. Le compte né prévient les administrateurs (sujet
+  `admin`, leur page Utilisateurs), visés par compte (`userChanged`).
 - et tout service arrivé depuis suit la même règle — sauvegardes, Sentinelle,
   ingestion d'audience (`features/audience/src/server/service.ts`, coalescée
   à une fois par minute et par espace), relevés de bases : qui écrit sans

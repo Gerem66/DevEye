@@ -159,8 +159,12 @@ export function post<T>(
     return request(path, { method: 'POST', body: JSON.stringify(body) }, outputSchema);
 }
 
-export function get<T>(path: string, outputSchema: z.ZodType<T> = z.unknown() as z.ZodType<T>): Promise<T> {
-    return request(path, { method: 'GET' }, outputSchema);
+export function get<T>(
+    path: string,
+    outputSchema: z.ZodType<T> = z.unknown() as z.ZodType<T>,
+    headers?: Record<string, string>
+): Promise<T> {
+    return request(path, { method: 'GET', headers }, outputSchema);
 }
 
 export function del<T>(path: string, outputSchema: z.ZodType<T> = z.unknown() as z.ZodType<T>): Promise<T> {

@@ -178,6 +178,24 @@ Remplace l'ancien système de verrou par note (mot de passe dédié par note,
   Compteur d'échecs par compte (par identifiant pour le login), 5 échecs → 30 s,
   10 → 5 min, 20 → 1 h ; les commandes WS y passent aussi, puisque la limite de
   débit HTTP ne voit que la poignée de main. Chaque échec est audité.
+- **Inscription** (`src/Services/signup`, `src/auth/signupRoutes.ts`) en trois
+  étapes : pseudo et adresse, lien reçu par mail, mot de passe.
+    - Aucun compte n'existe avant la dernière étape : la demande vit dans
+      `pending_signups`, une seule par adresse, et n'y garde que le condensé
+      SHA-256 de ses jetons.
+    - Le lien vaut 2 h et voyage en fragment d'URL, hors des journaux. Une demande
+      expirée est inerte par prédicat, et purgée au démarrage puis toutes les
+      10 minutes.
+    - L'onglet qui a fait la demande la suit avec un jeton de veille distinct de
+      celui du mail : il ne permet que de lire son état.
+    - La première étape répond la même chose qu'une adresse ait un compte ou non
+      (l'adresse inscrite reçoit un mail qui le lui dit). Seul le pseudo pris est
+      révélé. Chaque demande compte aussi contre l'adresse visée (portée `signup`
+      du verrouillage progressif), en plus de la limite par IP.
+    - `SIGNUP_MODE=closed` (défaut) ferme l'inscription, sauf sur une base sans
+      aucun compte : le premier inscrit naît administrateur, le compte étant
+      compté sous verrou dans la transaction qui le crée.
+    - Sans `SMTP_HOST`, le lien est écrit dans le journal du serveur.
 - **Sessions** : changer de mot de passe ou récupérer le coffre révoque toutes
   les autres sessions du compte (jetons de rafraîchissement, DEK en mémoire,
   sockets). Un `sid` révoqué ne peut plus ouvrir de WebSocket, même avec un

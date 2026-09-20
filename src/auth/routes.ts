@@ -10,7 +10,6 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { randomBytes } from 'node:crypto';
 
-import { env } from '@/Utils/Env';
 import { sha256hex } from '@/Utils/hash';
 import {
     assertAttemptAllowed,
@@ -39,18 +38,11 @@ import {
     TWOFA_COOKIE,
     clearAuthCookies,
     clearTwoFactorChallengeCookie,
-    setAuthCookies,
     setTwoFactorChallengeCookie
 } from './cookies';
-import {
-    signAccessToken,
-    signRefreshToken,
-    signTwoFactorChallenge,
-    verifyAccessToken,
-    verifyRefreshToken,
-    verifyTwoFactorChallenge
-} from './jwt';
+import { signTwoFactorChallenge, verifyAccessToken, verifyRefreshToken, verifyTwoFactorChallenge } from './jwt';
 import { loadUserBundle } from './loadUserBundle';
+import { issueSession } from './session';
 
 import type { AuditLog } from '@/Services/AuditLog';
 import type { Database } from '@/db';
@@ -92,32 +84,6 @@ function lockedOut(reply: FastifyReply, scope: AttemptScope, key: string): Fasti
             .header('retry-after', Math.ceil(e.retryAfterMs / 1000))
             .send(err('rate_limited', e.message, { retryAfterMs: e.retryAfterMs }));
     }
-}
-
-/**
- * Émet les jetons d'une session. Le `sessionId` naît à la connexion et survit
- * aux rafraîchissements : c'est ce qui fait d'une session une famille de jetons
- * (une réutilisation détectée la révoque tout entière, descendant compris) et
- * ce qui garde stable la clé du cache de DEK et de la socket.
- */
-async function issueSession(
-    reply: FastifyReply,
-    db: Database,
-    userId: number,
-    sessionId: string = db.refreshTokens.newSessionId()
-): Promise<string> {
-    const access = await signAccessToken(userId, sessionId);
-    const refresh = await signRefreshToken(userId, sessionId);
-    const expiresAt = Math.floor(Date.now() / 1000) + env.JWT_REFRESH_TTL_SECONDS;
-    await db.refreshTokens.store({
-        jti: refresh.jti,
-        userId,
-        sessionId,
-        token: refresh.token,
-        expiresAt
-    });
-    setAuthCookies(reply, access, refresh.token);
-    return sessionId;
 }
 
 /**

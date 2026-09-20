@@ -90,6 +90,18 @@ export const env = {
 
     COOKIE_DOMAIN: getEnvVar('COOKIE_DOMAIN', 'string', false),
 
+    // Qui peut se créer un compte. Fermé, personne, sauf sur une base sans aucun
+    // compte : le premier inscrit devient alors l'administrateur du site.
+    SIGNUP_MODE: getEnvVar('SIGNUP_MODE', 'enum', ['open', 'closed'], false) || 'closed',
+
+    // L'expéditeur des mails du serveur (validation d'une inscription). Sans
+    // `SMTP_HOST`, rien ne part : le lien est écrit dans le journal du serveur.
+    SMTP_HOST: getEnvVar('SMTP_HOST', 'string', false),
+    SMTP_PORT: getEnvVar('SMTP_PORT', 'number', false) || 587,
+    SMTP_USER: getEnvVar('SMTP_USER', 'string', false),
+    SMTP_PASSWORD: getEnvVar('SMTP_PASSWORD', 'string', false),
+    SMTP_FROM: getEnvVar('SMTP_FROM', 'string', false),
+
     RATE_LIMIT_MAX: getEnvVar('RATE_LIMIT_MAX', 'number', false) || 200,
     RATE_LIMIT_WINDOW: getEnvVar('RATE_LIMIT_WINDOW', 'string', false) || '1 minute',
 
@@ -141,6 +153,9 @@ for (const name of [
     if (env[name].length < SECRET_MIN_LENGTH) {
         throw new Error(`${name} doit faire au moins ${SECRET_MIN_LENGTH} caractères (openssl rand -base64 48).`);
     }
+}
+if (env.SMTP_HOST && !env.SMTP_FROM) {
+    throw new Error('SMTP_FROM est requis dès que SMTP_HOST est renseigné.');
 }
 if (env.CRYPT_KEY_A === env.CRYPT_KEY_B) {
     throw new Error('CRYPT_KEY_A et CRYPT_KEY_B doivent différer.');

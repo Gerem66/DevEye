@@ -63,6 +63,11 @@ Au premier démarrage : migrations + création d'un compte de dev (`SEED_DEV=tru
 identifiants `dev` / `devdevdev` par défaut). L'app sert le client et l'API sur la
 même origine : http://localhost:3000
 
+Sans compte de dev, le premier compte se crée par « Créer un compte » sur l'écran
+de connexion : sur une base vide l'inscription est ouverte quel que soit
+`SIGNUP_MODE`, et ce premier inscrit devient l'administrateur. Sans `SMTP_HOST`,
+le lien de validation s'affiche dans le journal du serveur.
+
 ### Prod : same-origin, DB externe (Dockploy)
 
 ```bash

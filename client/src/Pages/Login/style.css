@@ -234,3 +234,44 @@
         transform: rotate(360deg);
     }
 }
+
+/* Inscription : elle réutilise la scène du login, ci-dessous seulement ce qui
+   lui est propre. */
+.login .signup-intro {
+    margin: 0 0 20px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.45;
+}
+
+.login .signup-intro b {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* Aide et erreur partagent la même place : la carte ne change pas de hauteur
+   quand l'une remplace l'autre, donc rien ne saute sous le curseur. */
+.login .signup-hint,
+.login .signup-error {
+    margin: -4px 0 16px;
+    font-size: 0.8rem;
+    min-height: 1.1em;
+    text-align: left;
+}
+
+.login .signup-hint {
+    color: var(--text-muted);
+}
+
+.login .signup-error {
+    color: var(--danger);
+}
+
+.login .signup-status {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin: 0 0 var(--space-sm);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
