@@ -264,6 +264,8 @@
     color: var(--text-secondary);
     font: inherit;
     font-size: 0.85rem;
+    text-decoration: none;
+    white-space: nowrap;
     cursor: pointer;
     opacity: 0;
     visibility: hidden;

@@ -7,6 +7,7 @@ import { useAuth } from '../../auth/AuthProvider';
 import { isHomeReady, onHomeReady } from '../../stores/homeReady';
 import { TextInput } from '../../Components';
 import { z } from 'zod';
+import { TextLink } from './TextLink';
 import './style.css';
 
 const twoFaResponseSchema = z.object({
@@ -369,15 +370,9 @@ function LoginPage({ onSignup }: { onSignup?: () => void }) {
                     {/* Toujours monté, pour que son arrivée se joue aussi (l'ouverture
                         des inscriptions n'est connue qu'après coup) : seul `shown` change. */}
                     {onSignup && (
-                        <button
-                            type='button'
-                            className={'text-link' + (signupShown ? ' shown' : '')}
-                            onClick={onSignup}
-                            tabIndex={signupShown ? 0 : -1}
-                            aria-hidden={!signupShown}
-                        >
+                        <TextLink href='/signup' shown={signupShown} onNavigate={onSignup}>
                             S’inscrire
-                        </button>
+                        </TextLink>
                     )}
                 </div>
 

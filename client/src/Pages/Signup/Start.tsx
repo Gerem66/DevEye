@@ -9,6 +9,7 @@ import {
 import { get, post } from '@/api/http';
 import TextInput from '@/Components/TextInput';
 import { humanizeSignupError } from './errors';
+import { TextLink } from '@/Pages/Login/TextLink';
 import { SignupScene } from './Scene';
 
 const POLL_MS = 3000;
@@ -123,9 +124,9 @@ export function SignupStart({ plan, onLogin }: { plan: string | null; onLogin: (
         <SignupScene
             onSubmit={submit}
             footer={
-                <button type='button' className={'text-link' + (sending ? '' : ' shown')} onClick={onLogin}>
+                <TextLink href='/' shown={!sending} onNavigate={onLogin}>
                     Se connecter
-                </button>
+                </TextLink>
             }
         >
             <p className='signup-intro'>
