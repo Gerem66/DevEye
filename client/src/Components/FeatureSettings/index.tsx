@@ -87,6 +87,10 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
             // surcharge se projette, comme le serveur l'accepte.
             if (canWrite && scope.shareable !== false) {
                 into.push({ id: 'sharing', label: 'Partage', icon: 'users' });
+            } else if (canWrite) {
+                // Un élément gardé par mot de passe ne se projette ni ne se
+                // déplace, mais il se copie : la même section, réduite à ce geste.
+                into.push({ id: 'sharing', label: 'Copie', icon: 'copy' });
             }
             if (canRestrict && isShared) {
                 // `shield` et non `lock` : le cadenas est l'icône du

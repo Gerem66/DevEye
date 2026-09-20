@@ -90,6 +90,12 @@ export const env = {
 
     COOKIE_DOMAIN: getEnvVar('COOKIE_DOMAIN', 'string', false),
 
+    // Les origines dont la page peut ouvrir une session ici depuis un navigateur :
+    // une autre instance DevEye qui range celle-ci parmi ses instances distantes.
+    // Séparées par des virgules, `*` pour toutes ; vide, la fédération est éteinte.
+    // Une telle session ne porte jamais de cookie (`auth/federation.ts`).
+    FEDERATION_ORIGINS: getEnvVar('FEDERATION_ORIGINS', 'string', false),
+
     // Qui peut se créer un compte. Fermé, personne, sauf sur une base sans aucun
     // compte : le premier inscrit devient alors l'administrateur du site.
     SIGNUP_MODE: getEnvVar('SIGNUP_MODE', 'enum', ['open', 'closed'], false) || 'closed',

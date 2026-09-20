@@ -1,13 +1,14 @@
 import {
     countMovableCells,
     FeatureError,
+    movableCellsOf,
     resealCells,
     type FeatureItemsMove,
-    type MovableCell,
     type SdkQueryable
 } from '@deveye/types/sdk/server';
 
 import type { ProjectsRepo } from './repo';
+import { projectsTree } from './copy';
 
 /**
  * Le changement d'espace d'un projet : tout son arbre, colonnes, cartes,
@@ -15,20 +16,9 @@ import type { ProjectsRepo } from './repo';
  * `shareable` : il est chiffré par le mot de passe de son auteur, et le palier
  * gardé n'existe pas dans un espace partagé.
  *
- * ⚠️ Liste à tenir à jour, comme celle de `repo/rekey.ts` qu'elle double pour
- * un autre geste : toute nouvelle colonne chiffrée suspendue à un projet doit y
- * figurer, sinon son contenu reste sous l'ancienne clé et devient illisible.
- * Rien ne peut le détecter, un blob chiffré est indistinguable d'un autre.
+ * Les cellules à resceller viennent de l'arbre de `copy.ts`, la seule liste à tenir.
  */
-const CELLS: readonly MovableCell[] = [
-    { table: 'projects', idColumn: 'id', ownerColumn: 'id', column: 'content' },
-    { table: 'project_columns', idColumn: 'id', ownerColumn: 'project_id', column: 'content' },
-    { table: 'project_cards', idColumn: 'id', ownerColumn: 'project_id', column: 'content' },
-    { table: 'project_messages', idColumn: 'id', ownerColumn: 'project_id', column: 'content' },
-    { table: 'project_milestones', idColumn: 'id', ownerColumn: 'project_id', column: 'content' },
-    { table: 'project_events', idColumn: 'id', ownerColumn: 'project_id', column: 'content' },
-    { table: 'ft_projects_dashboard_tiles', idColumn: 'id', ownerColumn: 'project_id', column: 'content' }
-];
+const CELLS = movableCellsOf(projectsTree);
 
 /** Les tables de l'arbre qui portent leur propre espace, et doivent suivre. */
 const OWNED_TABLES = [

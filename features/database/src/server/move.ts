@@ -1,33 +1,23 @@
 import {
     countMovableCells,
     FeatureError,
+    movableCellsOf,
     resealCells,
     type FeatureItemsMove,
-    type MovableCell,
     type SdkQueryable
 } from '@deveye/types/sdk/server';
 
 import type { DatabaseRepo } from './repo';
+import { databaseTree } from './copy';
 
 /**
  * Le changement d'espace d'une base : sa fiche, ses secrets et ses alertes.
  * Tout ce dont elle a besoin lui appartient, mot de passe et accès SSH compris,
  * donc rien ne reste derrière.
  *
- * ⚠️ Liste à tenir à jour : toute nouvelle colonne chiffrée suspendue à une base
- * doit y figurer, sinon son contenu reste sous l'ancienne clé et devient
- * illisible. Rien ne peut le détecter, un blob chiffré est indistinguable d'un
- * autre.
+ * Les cellules à resceller viennent de l'arbre de `copy.ts`, la seule liste à tenir.
  */
-const CELLS: readonly MovableCell[] = [
-    { table: 'database_connections', idColumn: 'id', ownerColumn: 'id', column: 'content' },
-    { table: 'database_connections', idColumn: 'id', ownerColumn: 'id', column: 'secret_enc' },
-    { table: 'database_connections', idColumn: 'id', ownerColumn: 'id', column: 'access_content' },
-    { table: 'database_connections', idColumn: 'id', ownerColumn: 'id', column: 'access_secret_enc' },
-    { table: 'database_connections', idColumn: 'id', ownerColumn: 'id', column: 'last_error' },
-    { table: 'database_alerts', idColumn: 'id', ownerColumn: 'database_id', column: 'content' },
-    { table: 'database_alerts', idColumn: 'id', ownerColumn: 'database_id', column: 'last_error' }
-];
+const CELLS = movableCellsOf(databaseTree);
 
 /**
  * Le nom est unique par espace (`uniq_database_name`), et il l'est par un

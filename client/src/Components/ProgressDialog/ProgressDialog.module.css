@@ -24,6 +24,20 @@
     animation: sweep 1.2s ease-in-out infinite;
 }
 
+/* Mesurée : la largeur est l'avancement, posée par le composant. */
+.measured {
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent);
+    transition: width 0.2s ease-out;
+}
+
+.step {
+    margin: var(--space-sm) 0 0;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
 @keyframes sweep {
     from {
         left: -40%;

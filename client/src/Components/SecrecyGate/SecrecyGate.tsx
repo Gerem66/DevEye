@@ -4,7 +4,7 @@ import { ws, WsError } from '@/api/ws';
 import { Dialog } from '@/Components/Dialog';
 import { TextInput } from '@/Components';
 import Button from '@/Components/Button';
-import { cancelUnlock, resolveUnlock, useSecrecy } from '@/stores/secrecy';
+import { cancelUnlock, resolveUnlock, useSecrecy, useUnlockTarget } from '@/stores/secrecy';
 
 /**
  * App-level prompt for password-based encryption. Mounted once; opens whenever
@@ -13,6 +13,7 @@ import { cancelUnlock, resolveUnlock, useSecrecy } from '@/stores/secrecy';
  */
 export default function SecrecyGate() {
     const { prompting } = useSecrecy();
+    const promptFor = useUnlockTarget();
     const [password, setPassword] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
@@ -37,7 +38,11 @@ export default function SecrecyGate() {
         setLoading(true);
         setError(null);
         try {
-            await ws.send('secrecy.unlock', { password });
+            // Le coffre d'une autre instance s'ouvre sur SA socket : le mot de
+            // passe est celui du compte de là-bas, et ne passe que par elle.
+            const conn = promptFor ? ws.connectionFor(promptFor.instanceId) : ws;
+            if (!conn) throw new WsError('closed', 'Instance distante déconnectée');
+            await conn.send('secrecy.unlock', { password });
             reset();
             resolveUnlock();
         } catch (e) {
@@ -52,8 +57,12 @@ export default function SecrecyGate() {
         <Dialog
             open={prompting}
             onClose={onCancel}
-            title='Déverrouiller vos données'
-            description='Le chiffrement par mot de passe est activé. Saisissez votre mot de passe pour accéder à vos données chiffrées.'
+            title={promptFor ? `Déverrouiller ${promptFor.label}` : 'Déverrouiller vos données'}
+            description={
+                promptFor
+                    ? `Le chiffrement par mot de passe est activé sur ${promptFor.label}. Saisissez le mot de passe de votre compte là-bas.`
+                    : 'Le chiffrement par mot de passe est activé. Saisissez votre mot de passe pour accéder à vos données chiffrées.'
+            }
             onSubmit={() => void onSubmit()}
             footer={
                 <>

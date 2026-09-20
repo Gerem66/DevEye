@@ -144,6 +144,54 @@ export async function verifyTwoFactorChallenge(
     }
 }
 
+/** Durée d'un ticket de socket : le temps d'ouvrir la connexion, pas plus. */
+const WS_TICKET_TTL_SECONDS = 30;
+
+export interface WsTicketClaims extends AccessClaims {
+    jti: string;
+    /** Échéance, en secondes unix : borne la mémoire des tickets déjà servis. */
+    exp: number;
+}
+
+/**
+ * Ce qu'une page fédérée présente pour ouvrir sa socket (`/ws?ticket=`), un
+ * navigateur ne sachant poser aucun en-tête sur une WebSocket. Il finit dans
+ * une URL, donc dans des journaux : il ne vaut que quelques secondes et une
+ * seule fois (`auth/wsTicket.ts`).
+ */
+export async function signWsTicket(userId: number, sessionId: string): Promise<string> {
+    return new SignJWT({ sid: sessionId })
+        .setProtectedHeader({ alg: 'HS256' })
+        .setSubject(String(userId))
+        .setIssuer(issuer)
+        .setAudience('deveye-ws')
+        .setJti(randomUUID())
+        .setIssuedAt()
+        .setExpirationTime(`${WS_TICKET_TTL_SECONDS}s`)
+        .sign(accessSecret);
+}
+
+export async function verifyWsTicket(token: string): Promise<WsTicketClaims | null> {
+    try {
+        const { payload } = await jwtVerify(token, accessSecret, {
+            issuer,
+            audience: 'deveye-ws',
+            algorithms: JWT_ALGORITHMS
+        });
+        if (
+            typeof payload.sub !== 'string' ||
+            typeof payload.sid !== 'string' ||
+            typeof payload.jti !== 'string' ||
+            typeof payload.exp !== 'number'
+        ) {
+            return null;
+        }
+        return { sub: payload.sub, sid: payload.sid, jti: payload.jti, exp: payload.exp };
+    } catch {
+        return null;
+    }
+}
+
 /**
  * Le ticket de session d'un module : ce qu'un module tend au navigateur pour une
  * route publique de son service (URL de téléchargement, `state` OAuth). L'audience

@@ -51,6 +51,16 @@ const ACCESS_EXEMPT = new Set([
     // chez lui, puis le droit d'écrire dans l'espace visé.
     'share.movePreview',
     'share.move',
+    // La copie : lecture de l'élément chez lui pour la source, écriture de la
+    // fonctionnalité dans l'espace d'arrivée pour la destination. Les tranches
+    // se gardent par le compte qui a ouvert le transfert.
+    'share.copyPlan',
+    'share.copyExport',
+    'share.copyChunk',
+    'share.copyTarget',
+    'share.copyBegin',
+    'share.copyPut',
+    'share.copyCommit',
     // Chaque handler ouvre sur `ctx.assertFeature(input.feature, ...)`.
     'domain.list',
     'domain.add',

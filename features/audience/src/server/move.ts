@@ -1,13 +1,14 @@
 import {
     countMovableCells,
     FeatureError,
+    movableCellsOf,
     resealCells,
     type FeatureItemsMove,
-    type MovableCell,
     type SdkQueryable
 } from '@deveye/types/sdk/server';
 
 import type { AudienceRepo } from './repo';
+import { audienceTree } from './copy';
 
 /**
  * Le changement d'espace d'un site : sa fiche, ses entonnoirs, ses libellés et
@@ -19,28 +20,9 @@ import type { AudienceRepo } from './repo';
  * La clé publique du site ne bouge pas : elle est unique pour tout DevEye, donc
  * les balises déjà posées sur les pages continuent d'écrire au bon endroit.
  *
- * ⚠️ Liste à tenir à jour : toute nouvelle colonne chiffrée suspendue à un site
- * doit y figurer, sinon son contenu reste sous l'ancienne clé et devient
- * illisible. Rien ne peut le détecter, un blob chiffré est indistinguable d'un
- * autre.
+ * Les cellules à resceller viennent de l'arbre de `copy.ts`, la seule liste à tenir.
  */
-const CELLS: readonly MovableCell[] = [
-    { table: 'audience_sites', idColumn: 'id', ownerColumn: 'id', column: 'content' },
-    { table: 'audience_funnels', idColumn: 'id', ownerColumn: 'site_id', column: 'content' },
-    { table: 'audience_funnel_steps', idColumn: 'id', ownerColumn: 'site_id', column: 'content' },
-    { table: 'audience_labels', idColumn: 'id', ownerColumn: 'site_id', column: 'content' },
-    { table: 'ft_audience_forms', idColumn: 'id', ownerColumn: 'site_id', column: 'content' },
-    { table: 'ft_audience_submissions', idColumn: 'id', ownerColumn: 'site_id', column: 'content' },
-    // Les libellés d'un formulaire pendent au formulaire et non au site : c'est le
-    // seul niveau où le propriétaire n'est pas la colonne `site_id`.
-    {
-        table: 'ft_audience_form_labels',
-        idColumn: 'id',
-        ownerColumn: 'form_id',
-        column: 'content',
-        ownerScope: 'SELECT id FROM ft_audience_forms WHERE site_id = ?'
-    }
-];
+const CELLS = movableCellsOf(audienceTree);
 
 /** Le nom est unique par espace (`uniq_audience_site_name`), par condensé. */
 async function nameTaken(q: SdkQueryable, siteId: number, toWorkspaceId: number): Promise<boolean> {

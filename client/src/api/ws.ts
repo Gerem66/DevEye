@@ -10,19 +10,39 @@ import {
     type FeatureCommandName,
     type ServerMessage
 } from '@deveye/types';
-import { getActiveWorkspaceId } from '../stores/workspace';
+import { getActiveInstanceId, getActiveWorkspaceId, onWorkspaceChange } from '../stores/workspace';
 import { traceCall } from '../diagnostics/trace';
 import { notifyQuotaExceeded } from '@/stores/quotaPrompt';
 
 const BASE_URL: string = (import.meta.env.VITE_SERVER_URL as string | undefined) ?? '';
 
-function wsUrl(): string {
-    const base = BASE_URL || window.location.origin;
-    const url = new URL(base);
+/** L'adresse de la socket d'une instance, à partir de son origine HTTP. */
+export function wsUrlOf(origin: string, ticket?: string): string {
+    const url = new URL(origin);
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     url.pathname = '/ws';
+    if (ticket) url.searchParams.set('ticket', ticket);
     return url.toString();
 }
+
+/**
+ * L'instance qu'une socket vise. Celle-ci s'ouvre sur son cookie ; une instance
+ * distante sur un ticket, demandé à chaque (re)connexion.
+ */
+export interface WsTarget {
+    /** `null` : cette instance. */
+    instanceId: number | null;
+    /** Rejette {@link WsUnauthorizedError} quand la session de là-bas n'existe plus. */
+    url(): Promise<string>;
+}
+
+/** La session visée est morte : inutile de réessayer, il faut se reconnecter. */
+export class WsUnauthorizedError extends Error {}
+
+const LOCAL_TARGET: WsTarget = {
+    instanceId: null,
+    url: () => Promise.resolve(wsUrlOf(BASE_URL || window.location.origin))
+};
 
 export class WsError extends Error {
     constructor(
@@ -59,6 +79,10 @@ export class DevEyeWs {
     private intentionallyClosed = false;
     private _hasConnected = false;
     private readonly unauthorizedListeners = new Set<() => void>();
+    /** Une ouverture en cours : l'adresse d'une instance distante s'obtient avant la socket. */
+    private opening: Promise<void> | null = null;
+    /** Ce qui attend la trame `session` de la socket en cours d'ouverture. */
+    private onSession: (() => void) | null = null;
     /**
      * Commandes émises avant l'ouverture de la socket. Un composant monté au
      * premier rendu émet la sienne avant la fin de la poignée de main, et la
@@ -67,7 +91,7 @@ export class DevEyeWs {
      */
     private outbox: (() => void)[] = [];
 
-    constructor() {
+    constructor(private readonly target: WsTarget = LOCAL_TARGET) {
         // Auto-retry when the user comes back to the tab: a connection dropped
         // while it was hidden comes back on its own, with no click needed.
         if (typeof window !== 'undefined') {
@@ -114,9 +138,8 @@ export class DevEyeWs {
     }
 
     connect(): Promise<void> {
-        if (this.socket && (this._state === 'open' || this._state === 'connecting')) {
-            return Promise.resolve();
-        }
+        if (this.socket && this._state === 'open') return Promise.resolve();
+        if (this.opening) return this.opening;
         // A manual/awaited connect supersedes any pending backoff retry.
         if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer);
@@ -124,15 +147,50 @@ export class DevEyeWs {
         }
         this.intentionallyClosed = false;
         this.setState('connecting');
+        this.opening = this.target
+            .url()
+            .then(
+                (url) => this.open(url),
+                // Sans adresse, pas de socket, donc pas de `close` pour relancer.
+                (e: unknown) => {
+                    this.setState('closed');
+                    if (e instanceof WsUnauthorizedError) this.refuse();
+                    else if (!this.intentionallyClosed) this.scheduleReconnect();
+                    throw e;
+                }
+            )
+            .finally(() => {
+                this.opening = null;
+            });
+        return this.opening;
+    }
+
+    /** La session n'existe plus : on cesse de réessayer, et ceux qui savent la refaire sont prévenus. */
+    private refuse(): void {
+        this.intentionallyClosed = true;
+        this._hasConnected = false;
+        for (const fn of this.unauthorizedListeners) fn();
+    }
+
+    private open(url: string): Promise<void> {
         return new Promise((resolve, reject) => {
-            const ws = new WebSocket(wsUrl());
+            // Fermée pendant qu'on attendait son adresse (déconnexion).
+            if (this.intentionallyClosed) {
+                reject(new WsError('closed', 'WS closed before opening'));
+                return;
+            }
+            const ws = new WebSocket(url);
             this.socket = ws;
 
-            ws.addEventListener('open', () => {
+            // « Ouverte » à la trame `session`, pas à la poignée de main : le
+            // serveur n'écoute qu'après avoir vérifié la session en base, et une
+            // commande partie avant serait perdue sans réponse. L'écart se voit
+            // dès que le serveur est loin (une instance distante derrière un VPN).
+            this.onSession = () => {
                 this._hasConnected = true;
                 this.setState('open');
                 resolve();
-            });
+            };
 
             ws.addEventListener('message', (ev) => this.handleRawMessage(ev.data));
 
@@ -141,12 +199,13 @@ export class DevEyeWs {
             });
 
             ws.addEventListener('close', (ev) => {
+                this.onSession = null;
+                // Fermée avant d'avoir servi (session refusée) : `connect()` doit le savoir.
+                if (this._state === 'connecting') reject(new WsError('closed', `WS closed (${ev.code})`));
                 this.setState('closed');
                 this.failAllPending(new WsError('closed', `WS closed (${ev.code})`));
                 if (ev.code === 4401) {
-                    this.intentionallyClosed = true;
-                    this._hasConnected = false;
-                    for (const fn of this.unauthorizedListeners) fn();
+                    this.refuse();
                     return;
                 }
                 if (!this.intentionallyClosed) this.scheduleReconnect();
@@ -212,6 +271,9 @@ export class DevEyeWs {
 
         if (msg.command === 'session' && msg.payload.ok) {
             this.reconnectAttempt = 0;
+            const ready = this.onSession;
+            this.onSession = null;
+            ready?.();
         }
 
         if (msg.requestId) {
@@ -256,10 +318,19 @@ export class DevEyeWs {
      * (`metrics.push`) partagent ce tampon d'envoi, et sous rafale une trame de
      * curseur s'empilerait derrière elles pour arriver hors sujet.
      */
+    /**
+     * L'espace que l'enveloppe porte. L'espace actif ne vaut que pour la socket
+     * de SON instance : sur une autre, son id désignerait un espace sans rapport.
+     */
+    private stamp(explicit?: number): number | null {
+        if (explicit !== undefined) return explicit;
+        return getActiveInstanceId() === this.target.instanceId ? getActiveWorkspaceId() : null;
+    }
+
     post(command: string, payload: unknown): void {
         if (this._state !== 'open' || !this.socket) return;
         if (this.socket.bufferedAmount > POST_BACKPRESSURE_BYTES) return;
-        const workspaceId = getActiveWorkspaceId();
+        const workspaceId = this.stamp();
         const envelope: ClientMessage = {
             // `requestId` est obligatoire dans l'enveloppe mais n'est jamais lu
             // pour ces trames : le serveur ne répond pas.
@@ -278,7 +349,8 @@ export class DevEyeWs {
     send<N extends FeatureCommandName>(
         command: N,
         input: CommandInput<N>,
-        opts: { timeoutMs?: number } = {}
+        /** `workspaceId` : viser un espace précis de cette instance plutôt que l'actif (une copie vers ailleurs). */
+        opts: { timeoutMs?: number; workspaceId?: number } = {}
     ): Promise<CommandOutput<N>> {
         const descriptor = featureCommandRegistry[command];
         if (!descriptor) return Promise.reject(new WsError('protocol', `Unknown command: ${command}`));
@@ -313,7 +385,7 @@ export class DevEyeWs {
                 // aucun site d'appel n'a à le passer, et le serveur n'a qu'un point
                 // de résolution ; absent, il retombe sur l'espace personnel. Lu ici
                 // et non à l'appel, la session pouvant l'avoir fixé entretemps.
-                const workspaceId = getActiveWorkspaceId();
+                const workspaceId = this.stamp(opts.workspaceId);
                 const envelope: ClientMessage = {
                     requestId,
                     command,
@@ -341,4 +413,135 @@ export class DevEyeWs {
     }
 }
 
-export const ws = new DevEyeWs();
+type SendOpts = { timeoutMs?: number; workspaceId?: number };
+
+/**
+ * Ce que tout le client appelle `ws` : une socket par instance, et l'aiguillage
+ * vers celle de l'espace actif. Les sites d'appel ne savent pas qu'il y en a
+ * plusieurs.
+ *
+ * Seule la socket active se fait entendre des écouteurs : deux instances
+ * numérotent leurs espaces chacune depuis 1, et une trame de l'autre passerait
+ * pour une trame d'ici.
+ */
+class WsRouter {
+    /** La socket de cette instance : le compte, ses instances distantes, la déconnexion. */
+    readonly local = new DevEyeWs();
+    private readonly remotes = new Map<number, { conn: DevEyeWs; unwire: () => void }>();
+    private readonly listeners = new Set<EventListener>();
+    private readonly stateListeners = new Set<(s: ConnectionState) => void>();
+    private lastInstanceId: number | null = null;
+
+    constructor() {
+        this.wire(this.local);
+        // Changer d'instance, c'est changer de socket : ceux qui se rétablissent
+        // à l'ouverture (présence, abonnements) doivent le refaire sur celle-ci.
+        onWorkspaceChange(() => {
+            const instanceId = getActiveInstanceId();
+            if (instanceId === this.lastInstanceId) return;
+            this.lastInstanceId = instanceId;
+            this.emitState(this.state);
+        });
+    }
+
+    private wire(conn: DevEyeWs): () => void {
+        const offMessage = conn.onMessage((msg) => {
+            if (conn !== this.active()) return;
+            for (const fn of this.listeners) fn(msg);
+        });
+        const offState = conn.onStateChange((s) => {
+            if (conn === this.active()) this.emitState(s);
+        });
+        return () => {
+            offMessage();
+            offState();
+        };
+    }
+
+    private emitState(s: ConnectionState): void {
+        for (const fn of this.stateListeners) fn(s);
+    }
+
+    /**
+     * La socket de l'espace actif. `null` plutôt qu'un repli sur celle d'ici : une
+     * commande estampillée d'un espace distant y viserait l'espace d'ici qui porte
+     * le même numéro.
+     */
+    private active(): DevEyeWs | null {
+        const instanceId = getActiveInstanceId();
+        return instanceId === null ? this.local : (this.remotes.get(instanceId)?.conn ?? null);
+    }
+
+    /** La socket d'une instance précise, active ou non : `null` pour celle-ci. */
+    connectionFor(instanceId: number | null): DevEyeWs | null {
+        return instanceId === null ? this.local : (this.remotes.get(instanceId)?.conn ?? null);
+    }
+
+    attachRemote(target: WsTarget & { instanceId: number }): DevEyeWs {
+        this.detachRemote(target.instanceId);
+        const conn = new DevEyeWs(target);
+        this.remotes.set(target.instanceId, { conn, unwire: this.wire(conn) });
+        return conn;
+    }
+
+    detachRemote(instanceId: number): void {
+        const entry = this.remotes.get(instanceId);
+        if (!entry) return;
+        entry.unwire();
+        entry.conn.close();
+        this.remotes.delete(instanceId);
+    }
+
+    get state(): ConnectionState {
+        return this.active()?.state ?? 'closed';
+    }
+
+    get hasConnected(): boolean {
+        return this.active()?.hasConnected ?? false;
+    }
+
+    onMessage(fn: EventListener): () => void {
+        this.listeners.add(fn);
+        return () => this.listeners.delete(fn);
+    }
+
+    onStateChange(fn: (s: ConnectionState) => void): () => void {
+        this.stateListeners.add(fn);
+        return () => this.stateListeners.delete(fn);
+    }
+
+    /** La session de CETTE instance : celle d'une instance distante se règle dans `remoteSessions`. */
+    onUnauthorized(fn: () => void): () => void {
+        return this.local.onUnauthorized(fn);
+    }
+
+    connect(): Promise<void> {
+        return this.local.connect();
+    }
+
+    /** Déconnexion : tout se ferme, ici comme ailleurs. */
+    close(): void {
+        for (const instanceId of [...this.remotes.keys()]) this.detachRemote(instanceId);
+        this.local.close();
+    }
+
+    reconnect(): Promise<void> {
+        return (this.active() ?? this.local).reconnect();
+    }
+
+    post(command: string, payload: unknown): void {
+        this.active()?.post(command, payload);
+    }
+
+    send<N extends FeatureCommandName>(
+        command: N,
+        input: CommandInput<N>,
+        opts: SendOpts = {}
+    ): Promise<CommandOutput<N>> {
+        const conn = this.active();
+        if (!conn) return Promise.reject(new WsError('closed', 'Instance distante déconnectée'));
+        return conn.send(command, input, opts);
+    }
+}
+
+export const ws = new WsRouter();

@@ -2,6 +2,7 @@ import { useEffect, useSyncExternalStore } from 'react';
 import type { SecrecyStatus } from '@deveye/types';
 
 import { ws, WsError } from '@/api/ws';
+import { getActiveInstanceId } from './workspace';
 
 /**
  * Client-side coordinator for password-based encryption. Brokers a single global
@@ -28,6 +29,18 @@ export interface SecrecyState {
      */
     alwaysPrompt: boolean;
 }
+
+/**
+ * L'invite vise le coffre d'une AUTRE instance que celle où l'on se trouve (une
+ * copie vers elle) : c'est à elle que part le mot de passe, et l'ouvrir ne dit
+ * rien du coffre d'ici. `null` : le coffre de l'espace actif. Hors de
+ * {@link SecrecyState}, que les modules lisent : c'est l'affaire de l'hôte.
+ */
+export interface UnlockTarget {
+    instanceId: number | null;
+    label: string;
+}
+let unlockTarget: UnlockTarget | null = null;
 
 /**
  * Rejection raised by {@link ensureUnlocked} when the user dismisses the prompt,
@@ -121,6 +134,13 @@ export function getSecrecy(): SecrecyState {
 /** Current grace window length in ms: the full span of the countdown bar. */
 export function getSecrecyWindowMs(): number {
     return windowMs;
+}
+
+const getUnlockTarget = (): UnlockTarget | null => unlockTarget;
+
+/** Le coffre que vise l'invite ouverte ; suit `prompting`, donc le même abonnement. */
+export function useUnlockTarget(): UnlockTarget | null {
+    return useSyncExternalStore(subscribe, getUnlockTarget, getUnlockTarget);
 }
 
 export function useSecrecy(): SecrecyState {
@@ -279,6 +299,21 @@ export function ensureUnlocked(): Promise<void> {
     });
 }
 
+/**
+ * Le coffre d'une instance précise, pour un geste qui parle à une autre que
+ * l'active. On ne connaît pas son état d'ici : l'invite s'ouvre, et c'est le
+ * `locked` de là-bas qui a dit qu'il le fallait.
+ */
+export function ensureUnlockedOn(instanceId: number | null, label: string): Promise<void> {
+    if (instanceId === getActiveInstanceId()) return ensureUnlocked();
+    if (state.prompting) return Promise.reject(new UnlockCancelledError());
+    return new Promise<void>((resolve, reject) => {
+        waiters.push({ resolve, reject });
+        unlockTarget = { instanceId, label };
+        set({ prompting: true });
+    });
+}
+
 /** Open the unlock prompt with no action waiting on it. */
 export function requestUnlock(): Promise<void> {
     return ensureUnlocked();
@@ -306,8 +341,11 @@ export async function withSecrecy<T>(run: () => Promise<T>): Promise<T> {
 
 /** Called by the dialog after a successful `secrecy.unlock`. */
 export function resolveUnlock(): void {
-    // In "validate on every action" mode the session is not kept unlocked.
-    if (singleUse) {
+    // Le coffre ouvert est celui d'une autre instance : celui d'ici n'a pas bougé.
+    if (unlockTarget) {
+        unlockTarget = null;
+        set({ prompting: false });
+    } else if (singleUse) {
         set({ prompting: false });
     } else {
         set({ unlocked: true, prompting: false });
@@ -320,6 +358,7 @@ export function resolveUnlock(): void {
 
 /** Called by the dialog when the user cancels the prompt. */
 export function cancelUnlock(): void {
+    unlockTarget = null;
     set({ prompting: false });
     const pending = waiters;
     waiters = [];

@@ -15,6 +15,7 @@ import { invalidate, type ResourceKey } from '@/stores/invalidation';
 import { type SettingsScope } from '../scope';
 import styles from '../FeatureSettings.module.css';
 import { goToItemSettings } from '../goToHome';
+import CopyItem from './CopyItem';
 import ItemGrantsPanel from './ItemGrantsPanel';
 
 /**
@@ -200,6 +201,18 @@ export default function SharingSection({ scope, onGone }: Props) {
                         </>
                     )}
                 </p>
+                {state.copyable && <CopyItem feature={feature} itemId={itemId} />}
+            </div>
+        );
+    }
+
+    // Gardé par mot de passe : ni projection ni déplacement, aucun autre espace
+    // ne saurait l'ouvrir. Reste la copie, que la destination rescelle chez elle.
+    if (state.blocker === 'item') {
+        return (
+            <div className={styles.section}>
+                <p className={styles.sectionHint}>{BLOCKER_TEXT.item}</p>
+                {state.copyable && <CopyItem feature={feature} itemId={itemId} />}
             </div>
         );
     }
@@ -299,6 +312,12 @@ export default function SharingSection({ scope, onGone }: Props) {
             )}
 
             {error && <p className={styles.notice}>{error}</p>}
+
+            {/* Copier n'est ni partager ni déplacer : l'élément reste, un double
+                naît ailleurs. Le serveur le propose (`copyable`) depuis le
+                domicile, même pour un élément gardé, que partage et déplacement
+                refusent. */}
+            {state.copyable && <CopyItem feature={feature} itemId={itemId} />}
 
             {/* Empilé au-dessus des réglages : il possède alors la couche de
                 fermeture, donc Échap le referme sans emporter le dialogue de

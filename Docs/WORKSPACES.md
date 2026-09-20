@@ -15,6 +15,11 @@ services surveillés, comptes mail, météo, CloudSync, son thème et la disposi
 de son accueil lui appartiennent. Deux membres d'un même espace voient les mêmes
 données. Basculer d'espace change tout l'écran.
 
+Un compte peut aussi ranger sous ses espaces ceux d'un **autre serveur DevEye**
+(une instance distante). Ce ne sont pas des lignes de cette base : le navigateur
+ouvre là-bas sa propre session, et tout ce qui suit décrit chaque serveur pris
+seul. Voir [FEDERATION.md](./FEDERATION.md).
+
 Deux natures, portées par `workspaces.kind` :
 
 |                    | `personal`             | `shared`             |

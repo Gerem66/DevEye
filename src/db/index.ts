@@ -11,6 +11,7 @@ import { pendingSignupsRepo, type PendingSignupsRepo } from './repos/pendingSign
 import { presenceRepo, type PresenceRepo } from './repos/presence';
 import { processSamplesRepo, type ProcessSamplesRepo } from './repos/processSamples';
 import { refreshTokensRepo, type RefreshTokensRepo } from './repos/refreshTokens';
+import { remoteInstancesRepo, type RemoteInstancesRepo } from './repos/remoteInstances';
 import { twoFactorRepo, type TwoFactorRepo } from './repos/twoFactor';
 import { userSecretKeysRepo, type UserSecretKeysRepo } from './repos/userSecretKeys';
 import { usersRepo, type UsersRepo } from './repos/users';
@@ -39,6 +40,7 @@ export interface Database {
     workspaceSecretKeys: WorkspaceSecretKeysRepo;
     workspaceRoles: WorkspaceRolesRepo;
     refreshTokens: RefreshTokensRepo;
+    remoteInstances: RemoteInstancesRepo;
     logs: LogsRepo;
     /** Les signalements des utilisateurs, relus par l'administration. */
     feedback: FeedbackRepo;
@@ -83,6 +85,7 @@ function buildDatabase(pool: DbPool, q: Queryable, inTransaction: boolean): Data
         workspaceSecretKeys: workspaceSecretKeysRepo(q),
         workspaceRoles: workspaceRolesRepo(q),
         refreshTokens: refreshTokensRepo(q),
+        remoteInstances: remoteInstancesRepo(q),
         logs: logsRepo(q),
         feedback: feedbackRepo(q),
         devices: devicesRepo(q),

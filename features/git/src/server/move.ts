@@ -1,13 +1,14 @@
 import {
     countMovableCells,
     FeatureError,
+    movableCellsOf,
     resealCells,
     type FeatureItemsMove,
-    type MovableCell,
     type SdkQueryable
 } from '@deveye/types/sdk/server';
 
 import type { GitRepo } from './repo';
+import { gitTree } from './copy';
 
 /**
  * Le changement d'espace d'un dépôt : sa fiche et tout son cache (commits,
@@ -15,21 +16,9 @@ import type { GitRepo } from './repo';
  * quitté et ne suit pas : le dépôt arrive sans lui, donc sans synchronisation,
  * état que la feature sait déjà dire (`credential_id NULL`).
  *
- * ⚠️ Liste à tenir à jour : toute nouvelle colonne chiffrée suspendue à un dépôt
- * doit y figurer, sinon son contenu reste sous l'ancienne clé et devient
- * illisible. Rien ne peut le détecter, un blob chiffré est indistinguable d'un
- * autre.
+ * Les cellules à resceller viennent de l'arbre de `copy.ts`, la seule liste à tenir.
  */
-const CELLS: readonly MovableCell[] = [
-    { table: 'git_repos', idColumn: 'id', ownerColumn: 'id', column: 'content' },
-    { table: 'git_repos', idColumn: 'id', ownerColumn: 'id', column: 'last_sync_error' },
-    { table: 'git_repos', idColumn: 'id', ownerColumn: 'id', column: 'sync_state' },
-    { table: 'git_commits', idColumn: 'id', ownerColumn: 'repo_id', column: 'content' },
-    { table: 'git_branches', idColumn: 'id', ownerColumn: 'repo_id', column: 'content' },
-    { table: 'git_releases', idColumn: 'id', ownerColumn: 'repo_id', column: 'content' },
-    { table: 'git_pull_requests', idColumn: 'id', ownerColumn: 'repo_id', column: 'content' },
-    { table: 'git_commit_authors', idColumn: 'id', ownerColumn: 'repo_id', column: 'content' }
-];
+const CELLS = movableCellsOf(gitTree);
 
 /** Les tables du cache qui portent leur propre espace, et doivent suivre. */
 const OWNED_TABLES = ['git_commits', 'git_branches', 'git_releases', 'git_pull_requests', 'git_commit_authors'];

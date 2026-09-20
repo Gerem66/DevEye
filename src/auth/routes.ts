@@ -4,6 +4,7 @@ import {
     loginRequestSchema,
     loginResponseSchema,
     ok,
+    refreshRequestSchema,
     twoFactorChallengeRequestSchema
 } from '@deveye/types';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -33,14 +34,21 @@ import {
 } from '@/Services/SecureStore';
 import { hashPassword, needsRehash, verifyPassword } from './argon';
 import {
-    ACCESS_COOKIE,
     REFRESH_COOKIE,
     TWOFA_COOKIE,
     clearAuthCookies,
     clearTwoFactorChallengeCookie,
     setTwoFactorChallengeCookie
 } from './cookies';
-import { signTwoFactorChallenge, verifyAccessToken, verifyRefreshToken, verifyTwoFactorChallenge } from './jwt';
+import { authTransport, federatedOriginOf, readAccessToken } from './federation';
+import { clearFederationCookie, syncFederationCookie } from './federationCookie';
+import {
+    signTwoFactorChallenge,
+    signWsTicket,
+    verifyAccessToken,
+    verifyRefreshToken,
+    verifyTwoFactorChallenge
+} from './jwt';
 import { loadUserBundle } from './loadUserBundle';
 import { issueSession } from './session';
 
@@ -124,6 +132,35 @@ async function unwrapDekForLogin(
         // will simply be prompted to unlock on first encrypted access.
         return null;
     }
+}
+
+/** Le jeton de rafraîchissement, par le seul canal du transport (voir `readAccessToken`). */
+function readRefreshToken(req: FastifyRequest): string | undefined {
+    if (authTransport(req) === 'cookie') return req.cookies[REFRESH_COOKIE];
+    const parsed = refreshRequestSchema.safeParse(req.body);
+    return parsed.success ? parsed.data.refreshToken : undefined;
+}
+
+/** Le défi 2FA en cours : un cookie pour notre page, le corps pour une origine fédérée. */
+function readTwoFactorChallenge(req: FastifyRequest): string | undefined {
+    if (authTransport(req) === 'cookie') return req.cookies[TWOFA_COOKIE];
+    const challenge = (req.body as { challenge?: unknown } | undefined)?.challenge;
+    return typeof challenge === 'string' ? challenge : undefined;
+}
+
+/** Les cookies ne se touchent que pour notre page : une origine fédérée n'en a jamais reçu. */
+function dropAuthCookies(req: FastifyRequest, reply: FastifyReply): void {
+    if (authTransport(req) === 'cookie') clearAuthCookies(reply);
+}
+
+function dropTwoFactorCookie(req: FastifyRequest, reply: FastifyReply): void {
+    if (authTransport(req) === 'cookie') clearTwoFactorChallengeCookie(reply);
+}
+
+/** L'origine fédérée d'une connexion, pour que l'audit dise d'où elle a été ouverte. */
+function federatedMetadata(req: FastifyRequest): { federatedOrigin: string } | Record<string, never> {
+    const origin = federatedOriginOf(req);
+    return origin ? { federatedOrigin: origin } : {};
 }
 
 export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live }: AuthDeps): Promise<void> {
@@ -217,7 +254,8 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
             // opaque reference through the challenge for the TOTP step to claim.
             const pdkToken = pending ? stashPendingDek(row.id, pending.dek, pending.graceMs) : undefined;
             const challenge = await signTwoFactorChallenge(row.id, pdkToken);
-            setTwoFactorChallengeCookie(reply, challenge);
+            const bearer = authTransport(req) === 'bearer';
+            if (!bearer) setTwoFactorChallengeCookie(reply, challenge);
             audit.record({
                 source: 'web',
                 category: 'auth',
@@ -227,7 +265,9 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
                 ip: req.ip,
                 description: `Mot de passe validé pour « ${username} » ; en attente du code 2FA`
             });
-            return reply.send(ok(loginResponseSchema.parse({ twoFactorRequired: true })));
+            return reply.send(
+                ok(loginResponseSchema.parse({ twoFactorRequired: true, ...(bearer ? { challenge } : {}) }))
+            );
         }
 
         await db.users.updateLastLogin(row.id, Math.floor(Date.now() / 1000));
@@ -236,7 +276,8 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
             return reply.code(500).send(err('internal', 'Unable to load user'));
         }
 
-        const sessionId = await issueSession(reply, db, row.id);
+        const { sessionId, tokens } = await issueSession(reply, db, row.id, authTransport(req));
+        syncFederationCookie(req, reply, bundle);
         if (pending) rememberSessionDek(sessionId, row.id, pending.dek, pending.graceMs);
         audit.record({
             source: 'web',
@@ -245,9 +286,10 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
             level: 'info',
             uid: row.id,
             ip: req.ip,
-            description: `Connexion réussie : ${username}`
+            description: `Connexion réussie : ${username}`,
+            metadata: federatedMetadata(req)
         });
-        return reply.send(ok(loginResponseSchema.parse({ twoFactorRequired: false, ...bundle })));
+        return reply.send(ok(loginResponseSchema.parse({ twoFactorRequired: false, ...bundle, tokens })));
     });
 
     app.post(
@@ -258,18 +300,20 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
                     max: 10,
                     timeWindow: '5 minutes',
                     // Par challenge et non par adresse : c'est lui qu'on devine.
+                    // Le corps n'est pas encore lu ici : une origine fédérée, dont
+                    // le défi voyage dans le corps, est comptée par adresse.
                     keyGenerator: (req: FastifyRequest) => sha256hex(req.cookies[TWOFA_COOKIE] ?? req.ip)
                 }
             }
         },
         async (req, reply) => {
-            const challengeToken = req.cookies[TWOFA_COOKIE];
+            const challengeToken = readTwoFactorChallenge(req);
             if (!challengeToken) {
                 return reply.code(401).send(err('auth_required', 'No 2FA challenge in progress'));
             }
             const challenge = await verifyTwoFactorChallenge(challengeToken);
             if (!challenge) {
-                clearTwoFactorChallengeCookie(reply);
+                dropTwoFactorCookie(req, reply);
                 return reply.code(401).send(err('auth_expired', '2FA challenge expired'));
             }
 
@@ -281,7 +325,7 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
             const userId = Number(challenge.sub);
             const twoFa = await db.twoFactor.get(userId);
             if (!twoFa?.enabled) {
-                clearTwoFactorChallengeCookie(reply);
+                dropTwoFactorCookie(req, reply);
                 // Terminal: no session will be issued, so release any DEK we stashed
                 // at the password step instead of letting it linger until its TTL.
                 if (challenge.pendingDekToken) discardPendingDek(challenge.pendingDekToken);
@@ -307,7 +351,7 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
                 // tombe, et la DEK mise de côté à l'étape du mot de passe avec lui.
                 const exhausted = failures >= TWOFA_CHALLENGE_MAX_FAILURES;
                 if (exhausted) {
-                    clearTwoFactorChallengeCookie(reply);
+                    dropTwoFactorCookie(req, reply);
                     if (challenge.pendingDekToken) discardPendingDek(challenge.pendingDekToken);
                 }
                 audit.record({
@@ -327,13 +371,14 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
             }
 
             clearAttempts('twofa', String(userId));
-            clearTwoFactorChallengeCookie(reply);
+            dropTwoFactorCookie(req, reply);
             await db.users.updateLastLogin(userId, Math.floor(Date.now() / 1000));
             const bundle = await loadUserBundle(db, userId);
             if (!bundle) {
                 return reply.code(500).send(err('internal', 'Unable to load user'));
             }
-            const sessionId = await issueSession(reply, db, userId);
+            const { sessionId, tokens } = await issueSession(reply, db, userId, authTransport(req));
+            syncFederationCookie(req, reply, bundle);
             audit.record({
                 source: 'web',
                 category: 'auth',
@@ -342,14 +387,14 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
                 uid: userId,
                 ip: req.ip,
                 description: 'Connexion réussie (2FA validée)',
-                metadata: { twoFactor: true }
+                metadata: { twoFactor: true, ...federatedMetadata(req) }
             });
             // Bind the DEK unwrapped at the password step (if any) to this session.
             if (challenge.pendingDekToken) {
                 const pending = claimPendingDek(challenge.pendingDekToken);
                 if (pending) rememberSessionDek(sessionId, userId, pending.dek, pending.graceMs);
             }
-            return reply.send(ok(loginResponseSchema.parse({ twoFactorRequired: false, ...bundle })));
+            return reply.send(ok(loginResponseSchema.parse({ twoFactorRequired: false, ...bundle, tokens })));
         }
     );
 
@@ -359,12 +404,12 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
      * unconditionally.
      */
     app.post('/api/auth/2fa/cancel', async (req, reply) => {
-        const challengeToken = req.cookies[TWOFA_COOKIE];
+        const challengeToken = readTwoFactorChallenge(req);
         if (challengeToken) {
             const challenge = await verifyTwoFactorChallenge(challengeToken);
             if (challenge?.pendingDekToken) discardPendingDek(challenge.pendingDekToken);
         }
-        clearTwoFactorChallengeCookie(reply);
+        dropTwoFactorCookie(req, reply);
         return reply.send(ok({ cancelled: true as const }));
     });
 
@@ -382,12 +427,12 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
     };
 
     app.post('/api/auth/refresh', async (req, reply) => {
-        const token = req.cookies[REFRESH_COOKIE];
-        if (!token) return reply.code(401).send(err('auth_required', 'Missing refresh cookie'));
+        const token = readRefreshToken(req);
+        if (!token) return reply.code(401).send(err('auth_required', 'Missing refresh token'));
 
         const claims = await verifyRefreshToken(token);
         if (!claims) {
-            clearAuthCookies(reply);
+            dropAuthCookies(req, reply);
             return reply.code(401).send(err('auth_invalid', 'Invalid refresh token'));
         }
 
@@ -403,7 +448,7 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
                 await db.refreshTokens.revokeSession(claims.sid);
                 forgetSessionDek(claims.sid);
                 live.closeSession(claims.sid);
-                clearAuthCookies(reply);
+                dropAuthCookies(req, reply);
                 audit.record({
                     source: 'web',
                     category: 'auth',
@@ -421,16 +466,17 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
         const userId = Number(claims.sub);
         const bundle = await loadUserBundle(db, userId, requestedWorkspace(req));
         if (!bundle) {
-            clearAuthCookies(reply);
+            dropAuthCookies(req, reply);
             return reply.code(401).send(err('auth_invalid', 'Unknown user'));
         }
 
-        await issueSession(reply, db, userId, claims.sid);
-        return reply.send(ok(bundle));
+        const { tokens } = await issueSession(reply, db, userId, authTransport(req), claims.sid);
+        syncFederationCookie(req, reply, bundle);
+        return reply.send(ok({ ...bundle, tokens }));
     });
 
     app.post('/api/auth/logout', async (req, reply) => {
-        const token = req.cookies[REFRESH_COOKIE];
+        const token = readRefreshToken(req);
         if (token) {
             const claims = await verifyRefreshToken(token);
             if (claims) {
@@ -450,12 +496,13 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
                 });
             }
         }
-        clearAuthCookies(reply);
+        dropAuthCookies(req, reply);
+        clearFederationCookie(req, reply);
         return reply.send(ok({ loggedOut: true }));
     });
 
     app.get('/api/auth/me', async (req, reply) => {
-        const accessToken = req.cookies[ACCESS_COOKIE];
+        const accessToken = readAccessToken(req);
         if (!accessToken) return reply.code(401).send(err('auth_required', 'No session'));
 
         const claims = await verifyAccessToken(accessToken);
@@ -464,6 +511,7 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
         const bundle = await loadUserBundle(db, Number(claims.sub), requestedWorkspace(req));
         if (!bundle) return reply.code(401).send(err('auth_invalid', 'Unknown user'));
 
+        syncFederationCookie(req, reply, bundle);
         return reply.send(ok(bundle));
     });
 
@@ -471,7 +519,7 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
         '/api/auth/change-password',
         { config: { rateLimit: { max: 5, timeWindow: '10 minutes' } } },
         async (req, reply) => {
-            const accessToken = req.cookies[ACCESS_COOKIE];
+            const accessToken = readAccessToken(req);
             if (!accessToken) return reply.code(401).send(err('auth_required', 'No session'));
 
             const claims = await verifyAccessToken(accessToken);
@@ -538,7 +586,7 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
             await db.refreshTokens.revokeUser(row.id);
             forgetSessionsOf(row.id, claims.sid);
             live.closeSessionsOf(row.id, claims.sid);
-            await issueSession(reply, db, row.id, claims.sid);
+            const { tokens } = await issueSession(reply, db, row.id, authTransport(req), claims.sid);
 
             audit.record({
                 source: 'web',
@@ -550,7 +598,25 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
                 description: `Mot de passe modifié pour « ${row.username} » ; autres sessions fermées`
             });
 
-            return reply.send(ok({ changed: true as const }));
+            return reply.send(ok({ changed: true as const, tokens }));
         }
     );
+
+    /**
+     * Le ticket d'une socket fédérée. Réservé au transport porteur : notre page
+     * ouvre la sienne sur son cookie, et n'a aucune raison de faire sortir un
+     * droit d'accès dans une URL.
+     */
+    app.post('/api/auth/ws-ticket', async (req, reply) => {
+        if (authTransport(req) !== 'bearer') return reply.code(403).send(err('forbidden', 'Federated origins only'));
+        const accessToken = readAccessToken(req);
+        if (!accessToken) return reply.code(401).send(err('auth_required', 'No session'));
+
+        const claims = await verifyAccessToken(accessToken);
+        if (!claims) return reply.code(401).send(err('auth_expired', 'Access token expired'));
+        if (!(await db.refreshTokens.hasLiveSession(claims.sid))) {
+            return reply.code(401).send(err('auth_invalid', 'Session revoked'));
+        }
+        return reply.send(ok({ ticket: await signWsTicket(Number(claims.sub), claims.sid) }));
+    });
 }

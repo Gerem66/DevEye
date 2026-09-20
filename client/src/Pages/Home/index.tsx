@@ -13,11 +13,13 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useAuth } from '@/auth/AuthProvider';
 import {
     getWorkspaceState,
+    readLastRemoteWorkspace,
     setActiveWorkspace,
     upsertWorkspace,
     useActiveWorkspace,
     useWorkspaceState
 } from '@/stores/workspace';
+import { getLocalUser } from '@/stores/currentUser';
 import { ws } from '@/api/ws';
 import { OpenPopup } from '@/Components/Popup';
 import { isHomeReady, markHomeReady, onHomeReady } from '@/stores/homeReady';
@@ -28,6 +30,15 @@ import { syncThemeFromServer } from '@/stores/theme';
 import { syncHomeLayoutFromServer } from '@/stores/homeLayout';
 import { useHomeLayout, findFolder, getHomeLayout, placedFeatureIds, pruneMissingDevices } from '@/stores/homeLayout';
 import { onOpenViewRequest, onSelectWorkspaceRequest } from '@/stores/viewRequest';
+import {
+    ensureRemoteReady,
+    getRemoteInstances,
+    logoutRemote,
+    refreshRemoteSession,
+    restoreRemoteSessions,
+    useRemoteInstances
+} from '@/stores/remoteInstances';
+import { refreshSecrecyStatus, setUnlocked } from '@/stores/secrecy';
 import { accountViewId, openAccountView, takeAccountViewHint } from '@/stores/accountView';
 import { takeSignupPlan } from '@/stores/signupPlan';
 import { accountEntries } from '@/sdk/registry';
@@ -47,7 +58,9 @@ import { WidgetPopup, FeatureKeepAlive } from '@/Components/WidgetPopup';
 import { Wallpaper } from '@/Components/Wallpaper';
 import { SettingsPanel } from '@/Components/SettingsPanel';
 import { InfoPopup, openInfo } from '@/Components/InfoPopup';
-import CreateWorkspacePopup, { CREATE_WORKSPACE_POPUP } from './popup-create-workspace';
+import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
+import { RemoteLogin } from '@/Components/RemoteLogin';
+import CreateWorkspacePopup, { CREATE_WORKSPACE_POPUP, type CreateWorkspaceChoice } from './popup-create-workspace';
 
 // Structural feature views (no grid card)
 import Security from '@/Features/Security';
@@ -338,6 +351,16 @@ function upperFirst(text: string): string {
     return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+/** L'espace personnel du compte d'ICI : là où l'on rentre en quittant une instance distante. */
+function homeWorkspaceId(): number {
+    const me = getLocalUser();
+    if (!me) throw new Error('Aucune session');
+    return me.personalWorkspaceId;
+}
+
+/** L'instance distante tout juste ajoutée, dont la connexion s'ouvre au retour du rechargement. */
+const PENDING_REMOTE_KEY = 'deveye.pendingRemote';
+
 export default function HomePage() {
     const { user, refresh } = useAuth();
     /** Le retrait de l'accueil derrière un dossier déployé est un mouvement : il
@@ -626,7 +649,10 @@ export default function HomePage() {
     useEffect(() => {
         if (sessionVersion === 0) return;
         void (async () => {
-            await refresh();
+            // Nom, logo et membres d'un espace distant viennent de SA session.
+            const instanceId = getWorkspaceState().activeInstanceId;
+            if (instanceId === null) await refresh();
+            else await refreshRemoteSession(instanceId).catch(() => {});
             reconcileOpenView(getWorkspaceState().permissions);
         })();
     }, [sessionVersion, refresh, reconcileOpenView]);
@@ -836,9 +862,10 @@ export default function HomePage() {
      * `workspace.activate` : d'ici là le contenu est démonté, sinon il
      * interrogerait le nouvel espace avec les droits de l'ancien.
      */
-    const handleSelectWorkspace = (workspaceId: number) => {
+    const handleSelectWorkspace = (workspaceId: number, instanceId: number | null = null) => {
         // Re-choisir l'espace courant n'est pas une bascule.
-        if (workspaceId === getWorkspaceState().activeId) return;
+        const from = getWorkspaceState();
+        if (workspaceId === from.activeId && instanceId === from.activeInstanceId) return;
         const openView = expandedWidget;
         if (openView) unmountFeature(openView);
         // Ce qui appartient à l'espace quitté sort avec lui : un dossier déployé
@@ -851,11 +878,28 @@ export default function HomePage() {
         // tourne contre ceux de l'espace précédent une fois la nouvelle
         // disposition en place, et supprime définitivement ses tuiles.
         devicesModule?.resetDevices();
-        // L'id est publié d'abord : `workspace.activate` part alors avec la
-        // bonne enveloppe, et le dispatcheur en vérifie l'appartenance.
-        setActiveWorkspace(workspaceId);
         void (async () => {
             try {
+                // La socket de l'instance visée s'ouvre AVANT de publier l'espace :
+                // la bascule n'a alors plus qu'un aller-retour à faire, comme entre
+                // deux espaces d'ici, et rien ne se recharge.
+                if (instanceId !== null && !(await ensureRemoteReady(instanceId))) {
+                    devicesModule?.refreshDevices();
+                    if (openView) remountFeature(openView);
+                    void openInfo({
+                        title: 'Instance injoignable',
+                        body: 'Cette instance distante ne répond pas. Vérifiez votre connexion (VPN), puis réessayez.'
+                    });
+                    return;
+                }
+                // L'id est publié d'abord : `workspace.activate` part alors avec la
+                // bonne enveloppe, et le dispatcheur en vérifie l'appartenance.
+                setActiveWorkspace(workspaceId, instanceId);
+                // Le coffre est celui du compte de l'instance où l'on arrive.
+                if (instanceId !== from.activeInstanceId) {
+                    setUnlocked(false);
+                    void refreshSecrecyStatus();
+                }
                 const res = await ws.send('workspace.activate', {});
                 setPermissions(res.permissions);
                 syncThemeFromServer(res.theme);
@@ -870,8 +914,10 @@ export default function HomePage() {
                 } else handleClose();
             } catch {
                 // Accès perdu entre-temps : recharger la session remet le client
-                // sur un espace valide, avant de lever l'écran de bascule.
+                // sur un espace valide, avant de lever l'écran de bascule. Depuis
+                // une instance distante, l'espace valide est le personnel d'ici.
                 if (openView) handleClose();
+                if (instanceId !== null) setActiveWorkspace(homeWorkspaceId(), null);
                 await refresh().catch(() => {});
             } finally {
                 setSwitching(false);
@@ -885,12 +931,93 @@ export default function HomePage() {
 
     const handleCreateWorkspace = () => {
         void (async () => {
-            const name = await OpenPopup<string>(CREATE_WORKSPACE_POPUP);
-            if (!name) return;
-            const res = await ws.send('workspace.add', { name });
-            upsertWorkspace(res.workspace);
-            handleSelectWorkspace(res.workspace.id);
+            const choice = await OpenPopup<CreateWorkspaceChoice>(CREATE_WORKSPACE_POPUP);
+            if (!choice) return;
+            if (choice.kind === 'remote') {
+                // `/me` repose le cookie qui élargit la politique de contenu, puis
+                // la page se recharge : celle d'un document est figée, et sans
+                // cela le navigateur bloquerait tout appel vers l'instance. Le
+                // drapeau rouvre la connexion au retour.
+                await refresh();
+                try {
+                    sessionStorage.setItem(PENDING_REMOTE_KEY, String(choice.instance.id));
+                } catch {
+                    /* sans stockage de session, la connexion se rouvre à la main */
+                }
+                window.location.reload();
+                return;
+            }
+            // Un espace se crée ici, où que l'on se trouve.
+            const res = await ws.local.send('workspace.add', { name: choice.name });
+            upsertWorkspace(res.workspace, null);
+            handleSelectWorkspace(res.workspace.id, null);
         })();
+    };
+
+    // --- Instances distantes ---------------------------------------------------
+    const remotes = useRemoteInstances();
+    const [remoteLogin, setRemoteLogin] = useState<{ instanceId: number; workspaceId?: number } | null>(null);
+    const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
+    const selectRef = useRef(handleSelectWorkspace);
+    selectRef.current = handleSelectWorkspace;
+
+    /** Après connexion : l'espace demandé s'il existe encore là-bas, sinon le personnel de ce compte. */
+    const enterRemote = useCallback((instanceId: number, wanted?: number) => {
+        const list = getWorkspaceState().remoteWorkspaces[instanceId] ?? [];
+        const target = list.find((w) => w.id === wanted) ?? list.find((w) => w.kind === 'personal') ?? list[0];
+        if (target) selectRef.current(target.id, instanceId);
+    }, []);
+
+    // Au chargement : reprendre les sessions retenues sur cet appareil, puis
+    // retourner là où l'on était, ou rouvrir la connexion qu'un ajout attendait.
+    useEffect(() => {
+        void (async () => {
+            await restoreRemoteSessions();
+            let pending: number | null = null;
+            try {
+                const raw = sessionStorage.getItem(PENDING_REMOTE_KEY);
+                sessionStorage.removeItem(PENDING_REMOTE_KEY);
+                pending = raw ? Number(raw) : null;
+            } catch {
+                pending = null;
+            }
+            if (pending !== null && getRemoteInstances().some((r) => r.instance.id === pending)) {
+                setRemoteLogin({ instanceId: pending });
+                return;
+            }
+            const last = readLastRemoteWorkspace();
+            if (
+                last?.instanceId != null &&
+                getRemoteInstances().some((r) => r.instance.id === last.instanceId && r.user)
+            ) {
+                enterRemote(last.instanceId, last.id);
+            }
+        })();
+    }, [enterRemote]);
+
+    const handleLogoutRemote = (instanceId: number) => {
+        // Assis là-bas, on rentre d'abord : la session fermée, plus rien n'y répond.
+        if (getWorkspaceState().activeInstanceId === instanceId) handleSelectWorkspace(homeWorkspaceId(), null);
+        void logoutRemote(instanceId);
+    };
+
+    const handleRemoveRemote = (instanceId: number) => {
+        const entry = remotes.find((r) => r.instance.id === instanceId);
+        if (!entry) return;
+        setConfirm({
+            title: `Retirer ${entry.instance.label} ?`,
+            description:
+                'Ses espaces quittent votre liste. Rien n’est supprimé sur cette instance, et vous pourrez la rajouter.',
+            confirmLabel: 'Retirer',
+            onConfirm: () => {
+                setConfirm(null);
+                void (async () => {
+                    await logoutRemote(instanceId);
+                    await ws.local.send('remote.remove', { id: instanceId });
+                    await refresh();
+                })();
+            }
+        });
     };
 
     /** `autoAdd` pose une première section et ouvre le marché dessus — utilisé
@@ -993,6 +1120,9 @@ export default function HomePage() {
                     onDoneOrganizing={() => setEditing(false)}
                     onManageWorkspace={(e) => handleExpand('workspace', isForceReload(e))}
                     onSelectWorkspace={handleSelectWorkspace}
+                    onConnectRemote={(instanceId, workspaceId) => setRemoteLogin({ instanceId, workspaceId })}
+                    onLogoutRemote={handleLogoutRemote}
+                    onRemoveRemote={handleRemoveRemote}
                     onCreateWorkspace={handleCreateWorkspace}
                 />
 
@@ -1107,6 +1237,16 @@ export default function HomePage() {
 
                 {/* Création d'espace, pilotée depuis le menu de la topbar. */}
                 <CreateWorkspacePopup />
+                <RemoteLogin
+                    entry={remotes.find((r) => r.instance.id === remoteLogin?.instanceId) ?? null}
+                    onClose={() => setRemoteLogin(null)}
+                    onConnected={(instanceId) => {
+                        const wanted = remoteLogin?.workspaceId;
+                        setRemoteLogin(null);
+                        enterRemote(instanceId, wanted);
+                    }}
+                />
+                <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
 
                 {/* Shared info dialog, registered once here so any feature's "i" button
                 opens it via openInfo(). */}

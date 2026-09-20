@@ -1,12 +1,13 @@
 import {
     countMovableCells,
     FeatureError,
+    movableCellsOf,
     resealCells,
-    type FeatureItemsMove,
-    type MovableCell
+    type FeatureItemsMove
 } from '@deveye/types/sdk/server';
 
 import type { MailRepo } from './repo';
+import { mailTree } from './copy';
 
 /**
  * Le changement d'espace d'un compte : ses identifiants, ses dossiers et les
@@ -21,27 +22,9 @@ import type { MailRepo } from './repo';
  * expéditeur d'ici. Le module ne peut pas l'annoncer, la table des canaux ne lui
  * appartenant pas.
  *
- * ⚠️ Liste à tenir à jour : toute nouvelle colonne chiffrée suspendue à un
- * compte doit y figurer, sinon son contenu reste sous l'ancienne clé et devient
- * illisible. Rien ne peut le détecter, un blob chiffré est indistinguable d'un
- * autre.
+ * Les cellules à resceller viennent de l'arbre de `copy.ts`, la seule liste à tenir.
  */
-const CELLS: readonly MovableCell[] = [
-    { table: 'mail_accounts', idColumn: 'id', ownerColumn: 'id', column: 'display_name_enc' },
-    { table: 'mail_accounts', idColumn: 'id', ownerColumn: 'id', column: 'email_address_enc' },
-    { table: 'mail_accounts', idColumn: 'id', ownerColumn: 'id', column: 'last_sync_error_enc' },
-    { table: 'mail_accounts', idColumn: 'id', ownerColumn: 'id', column: 'credentials_enc' },
-    { table: 'mail_folders', idColumn: 'id', ownerColumn: 'account_id', column: 'name_enc' },
-    // Les messages pendent au compte par leur dossier : d'où le sous-parcours,
-    // qui garde la conversion d'un seul tenant plutôt qu'un dossier à la fois.
-    {
-        table: 'mail_messages',
-        idColumn: 'id',
-        ownerColumn: 'folder_id',
-        ownerScope: 'SELECT id FROM mail_folders WHERE account_id = ?',
-        column: 'envelope_enc'
-    }
-];
+const CELLS = movableCellsOf(mailTree);
 
 export const mailMove: FeatureItemsMove<MailRepo> = {
     async plan({ q, itemId }) {

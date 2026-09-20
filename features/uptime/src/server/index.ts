@@ -3,6 +3,7 @@ import type { FeatureServer, SdkCipher } from '@deveye/types/sdk/server';
 
 import { uptimeHandlers } from './handlers';
 import { setMonitor } from './_shared';
+import { uptimeCopy } from './copy';
 import { uptimeMove } from './move';
 import { createRepo, type UptimeRepo } from './repo';
 import { UptimeMonitor } from './service';
@@ -73,6 +74,7 @@ export const serverEntry: FeatureServer<UptimeRepo> = {
         homeOf: async (repo, itemId, workspaceId) =>
             (await repo.services.findVisible(Number(itemId), workspaceId))?.workspace_id ?? null,
         labelOf: (repo, cipher, itemId, workspaceId) => labelOf(repo, cipher, Number(itemId), workspaceId),
-        move: uptimeMove
+        move: uptimeMove,
+        copy: uptimeCopy
     }
 };

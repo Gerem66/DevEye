@@ -2,6 +2,7 @@ import { DEPLOY_ITEMS_PROVIDER, type DeployItemsProvider } from '@deveye/types/s
 import type { FeatureServer, SdkCipher } from '@deveye/types/sdk/server';
 
 import { deployHandlers } from './handlers';
+import { deployCopy } from './copy';
 import { deployMove } from './move';
 import { createRepo, type DeployRepo } from './repo';
 import { DeploySync } from './service';
@@ -68,6 +69,7 @@ export const serverEntry: FeatureServer<DeployRepo> = {
         homeOf: async (repo, itemId, workspaceId) =>
             (await repo.findVisibleTarget(Number(itemId), workspaceId))?.workspace_id ?? null,
         labelOf: (repo, cipher, itemId, workspaceId) => labelOf(repo, cipher, Number(itemId), workspaceId),
-        move: deployMove
+        move: deployMove,
+        copy: deployCopy
     }
 };

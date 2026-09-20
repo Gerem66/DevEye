@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { get } from '@/api/http';
+import { getLocal } from '@/api/http';
 import { serverStatusSchema, type ServerStatus } from '@deveye/types';
 
 /**
@@ -33,7 +33,7 @@ function isDownloading(status: ServerStatus | null): boolean {
 
 async function poll(): Promise<void> {
     try {
-        const status = await get('/api/status', serverStatusSchema);
+        const status = await getLocal('/api/status', serverStatusSchema);
         emit(status);
         // Settled = every task reached a terminal state: stop polling for good.
         const settled = status.tasks.every((t) => t.state === 'done' || t.state === 'warning' || t.state === 'error');

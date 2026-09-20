@@ -1,29 +1,22 @@
 import {
     countMovableCells,
     FeatureError,
+    movableCellsOf,
     resealCells,
-    type FeatureItemsMove,
-    type MovableCell
+    type FeatureItemsMove
 } from '@deveye/types/sdk/server';
 
 import type { UptimeRepo } from './repo';
+import { uptimeTree } from './copy';
 
 /**
  * Le changement d'espace d'un service : sa ligne change de domicile, et tout ce
  * qui pend à lui est relu sous la clé de l'espace quitté puis rescellé sous
  * celle du nouveau.
  *
- * ⚠️ Liste à tenir à jour : toute nouvelle colonne chiffrée suspendue à un
- * service doit y figurer, sinon son contenu reste sous l'ancienne clé et devient
- * illisible. Rien ne peut le détecter, un blob chiffré est indistinguable d'un
- * autre. `uptime_daily` n'y est pas : elle n'agrège que des nombres.
+ * Les cellules à resceller viennent de l'arbre de `copy.ts`, la seule liste à tenir.
  */
-const CELLS: readonly MovableCell[] = [
-    { table: 'uptime_services', idColumn: 'id', ownerColumn: 'id', column: 'content' },
-    { table: 'uptime_services', idColumn: 'id', ownerColumn: 'id', column: 'last_error' },
-    { table: 'uptime_checks', idColumn: 'id', ownerColumn: 'service_id', column: 'error' },
-    { table: 'uptime_incidents', idColumn: 'id', ownerColumn: 'service_id', column: 'error' }
-];
+const CELLS = movableCellsOf(uptimeTree);
 
 export const uptimeMove: FeatureItemsMove<UptimeRepo> = {
     async plan({ q, itemId }) {

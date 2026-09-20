@@ -15,7 +15,7 @@ import { USER_COLOR_OPTIONS, userColorVar } from './userColors';
 import styles from './style.module.css';
 import { HIDE_LIVE_CURSORS } from '@/live/hideCursors';
 import { requestOpenView } from '@/stores/viewRequest';
-import { useWorkspaceState } from '@/stores/workspace';
+import { useWorkspacesHere } from '@/stores/workspace';
 import { useLiteRender, useRenderState, setRenderMode, type RenderMode } from '@/stores/render';
 
 import type { CSSProperties } from 'react';
@@ -43,7 +43,7 @@ function formatDate(time: number): string {
 
 export default function FeatureProfile({ user }: FeatureProps) {
     const { logout, updateUser } = useAuth();
-    const { workspaces } = useWorkspaceState();
+    const workspaces = useWorkspacesHere();
     const [passwordOpen, setPasswordOpen] = useState(false);
     const [usernameOpen, setUsernameOpen] = useState(false);
 

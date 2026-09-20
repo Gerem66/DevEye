@@ -1,12 +1,13 @@
 import {
     countMovableCells,
     FeatureError,
+    movableCellsOf,
     resealCells,
-    type FeatureItemsMove,
-    type MovableCell
+    type FeatureItemsMove
 } from '@deveye/types/sdk/server';
 
 import type { DeployRepo } from './repo';
+import { deployTree } from './copy';
 
 /**
  * Le changement d'espace d'une cible : sa fiche et son historique de
@@ -15,15 +16,9 @@ import type { DeployRepo } from './repo';
  * (`credential_id NULL`). En rattacher un de l'arrivée est un geste de son
  * propriétaire, pas un effet de bord d'un déplacement.
  *
- * ⚠️ Liste à tenir à jour : toute nouvelle colonne chiffrée suspendue à une
- * cible doit y figurer, sinon son contenu reste sous l'ancienne clé et devient
- * illisible. Rien ne peut le détecter, un blob chiffré est indistinguable d'un
- * autre.
+ * Les cellules à resceller viennent de l'arbre de `copy.ts`, la seule liste à tenir.
  */
-const CELLS: readonly MovableCell[] = [
-    { table: 'deploy_targets', idColumn: 'id', ownerColumn: 'id', column: 'content' },
-    { table: 'deployments', idColumn: 'id', ownerColumn: 'target_id', column: 'content' }
-];
+const CELLS = movableCellsOf(deployTree);
 
 export const deployMove: FeatureItemsMove<DeployRepo> = {
     async plan({ q, itemId }) {

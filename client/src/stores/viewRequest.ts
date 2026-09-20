@@ -3,6 +3,7 @@
  * the home page to open another one. The home page registers the single handler,
  * and requests made while none is registered are dropped.
  */
+import { getActiveInstanceId } from './workspace';
 
 type OpenViewHandler = (viewId: string) => void;
 
@@ -27,7 +28,7 @@ export function requestOpenView(viewId: string): void {
  * complète que l'accueil applique déjà : remise à zéro des appareils,
  * `workspace.activate`, thème et disposition.
  */
-type SelectWorkspaceHandler = (workspaceId: number) => void;
+type SelectWorkspaceHandler = (workspaceId: number, instanceId: number | null) => void;
 
 let workspaceHandler: SelectWorkspaceHandler | null = null;
 
@@ -38,6 +39,7 @@ export function onSelectWorkspaceRequest(fn: SelectWorkspaceHandler): () => void
     };
 }
 
-export function requestSelectWorkspace(workspaceId: number): void {
-    workspaceHandler?.(workspaceId);
+/** Sans instance nommée, l'espace est cherché là où l'on se trouve : c'est de là que vient son id. */
+export function requestSelectWorkspace(workspaceId: number, instanceId: number | null = getActiveInstanceId()): void {
+    workspaceHandler?.(workspaceId, instanceId);
 }

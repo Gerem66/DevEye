@@ -15,9 +15,10 @@ import {
 
 import { grantsFor, invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
-import { isModuleMovable, moduleItems, moduleManifest } from '../_sdk/register';
+import { isModuleCopyable, isModuleMovable, moduleItems, moduleManifest } from '../_sdk/register';
 import { isShareWired, shareBlockerFor } from '../_sharing';
 import { canWriteItemIn, detachLinks, itemHomeWorkspace, loadHome } from './_shared';
+import { copyFeatures } from './copy';
 import { moveFeatures } from './move';
 import { projectLinkFeatures } from './projectLinks';
 import { extraOverridesOf } from '@/db/repos/itemSharing';
@@ -96,7 +97,14 @@ async function shareState(
         // Déplacer ne se propose que depuis le domicile, et seulement si la
         // fonctionnalité sait re-chiffrer ses éléments. Les motifs d'un refus
         // sont l'affaire de `share.movePreview`, une fois la cible connue.
-        movable: blocker === null && homeWorkspaceId === ctx.workspaceId && isModuleMovable(feature)
+        movable: blocker === null && homeWorkspaceId === ctx.workspaceId && isModuleMovable(feature),
+        // Copier ne demande que de lire l'élément chez lui : un élément gardé
+        // (`item`) ou qu'on ne peut pas régler (`forbidden`) se copie quand même.
+        copyable:
+            blocker !== 'feature' &&
+            blocker !== 'foreign' &&
+            homeWorkspaceId === ctx.workspaceId &&
+            isModuleCopyable(feature)
     };
 }
 
@@ -384,5 +392,6 @@ export const sharingFeatures: FeatureDefinition<string, any, any>[] = [
     grantListFeature,
     grantSetFeature,
     ...moveFeatures,
+    ...copyFeatures,
     ...projectLinkFeatures
 ];

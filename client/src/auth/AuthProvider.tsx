@@ -8,7 +8,9 @@ import { resetTheme, syncThemeFromServer } from '../stores/theme';
 import { resetHomeLayout, syncHomeLayoutFromServer } from '../stores/homeLayout';
 import { resetWorkspace, syncWorkspacesFromServer } from '../stores/workspace';
 import { resetLive } from '../stores/live';
-import { setCurrentUser } from '../stores/currentUser';
+import { setCurrentUser, useActingUser } from '../stores/currentUser';
+import { forgetRemoteSessions, patchRemoteUser, syncRemoteInstances } from '../stores/remoteInstances';
+import { getActiveInstanceId } from '../stores/workspace';
 import { setFeedbackEnabled } from '../stores/feedbackEnabled';
 import { devicesProvider } from '../devicesProvider';
 
@@ -54,9 +56,17 @@ function isTransportFailure(e: unknown): boolean {
  * partir de lui.
  */
 function applyBundle(bundle: SessionBundle): AuthState {
+    // Publié ici et non au seul effet plus bas : l'accueil monte dans le même
+    // rendu et ses effets passent avant ceux de ce fournisseur.
+    setCurrentUser(bundle.user);
+    syncRemoteInstances(bundle.remoteInstances);
     syncWorkspacesFromServer(bundle.workspaces, bundle.activeWorkspaceId, bundle.permissions);
-    syncThemeFromServer(bundle.theme);
-    syncHomeLayoutFromServer(bundle.homeLayout);
+    // Assis dans un espace distant, l'apparence et l'accueil affichés sont les
+    // siens : ceux que cette session-ci décrit appartiennent à un espace d'ici.
+    if (getActiveInstanceId() === null) {
+        syncThemeFromServer(bundle.theme);
+        syncHomeLayoutFromServer(bundle.homeLayout);
+    }
     setFeedbackEnabled(bundle.feedbackEnabled);
     return { status: 'authenticated', user: bundle.user };
 }
@@ -125,6 +135,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // meme machine heriterait de l'espace, du theme et de l'accueil du precedent,
         // et estampillerait ses commandes avec un espace interdit.
         resetWorkspace();
+        // Après `resetWorkspace` : plus personne n'est assis sur une instance
+        // distante, fermer sa session ne déclenche donc aucune bascule.
+        forgetRemoteSessions();
         resetTheme();
         resetHomeLayout();
         // La liste d'appareils est celle du module Appareils, quand il est là.
@@ -200,6 +213,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, [setAnonymous]);
 
     const updateUser = useCallback((patch: Partial<User>) => {
+        // Le compte qu'on modifie est celui qu'on EST : sur une instance
+        // distante, celui de là-bas.
+        const instanceId = getActiveInstanceId();
+        if (instanceId !== null) {
+            patchRemoteUser(instanceId, patch);
+            return;
+        }
         setState((prev) => (prev.user ? { ...prev, user: { ...prev.user, ...patch } } : prev));
     }, []);
 
@@ -237,9 +257,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return ws.onUnauthorized(() => void reauthenticate());
     }, [reauthenticate]);
 
+    // Dans un espace d'une instance distante, `user` est le compte ouvert là-bas
+    // (voir `stores/currentUser`) : ses membres, ses droits et ses curseurs
+    // portent cet id, pas celui du compte d'ici.
+    const acting = useActingUser();
     const value = useMemo<AuthContextValue>(
-        () => ({ ...state, unreachable, login, logout, refresh, updateUser }),
-        [state, unreachable, login, logout, refresh, updateUser]
+        () => ({ ...state, user: acting ?? state.user, unreachable, login, logout, refresh, updateUser }),
+        [state, acting, unreachable, login, logout, refresh, updateUser]
     );
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

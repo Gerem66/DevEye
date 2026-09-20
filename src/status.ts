@@ -25,7 +25,8 @@ class StatusStore {
         this.tasks.set(id, { ...current, ...patch });
     }
 
-    snapshot(): ServerStatus {
+    /** L'état du démarrage. Ce que le serveur dit de sa configuration s'y ajoute à la route (`app.ts`). */
+    snapshot(): Omit<ServerStatus, 'federation'> {
         const tasks = [...this.tasks.values()];
         // No tasks → ready. Otherwise ready only when every task has settled `done`.
         const ready = tasks.every((t) => t.state === 'done');

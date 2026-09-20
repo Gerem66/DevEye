@@ -18,7 +18,7 @@ import {
     type ShortcutTemplate
 } from '@deveye/types';
 import { ws } from '@/api/ws';
-import { getActiveWorkspaceId } from './workspace';
+import { getActiveWorkspaceKey } from './workspace';
 
 /**
  * Home grid layout: ordered sections, each holding ordered tiles of any kind. A
@@ -30,8 +30,8 @@ const KEY_PREFIX = 'deveye:homeLayout';
 
 /** Meme raisonnement que le theme : la disposition appartient a l'espace. */
 function storageKey(): string | null {
-    const id = getActiveWorkspaceId();
-    return id === null ? null : `${KEY_PREFIX}:${id}`;
+    const key = getActiveWorkspaceKey();
+    return key === null ? null : `${KEY_PREFIX}:${key}`;
 }
 
 const EMPTY_LAYOUT: HomeLayout = { topbar: [], sections: [] };

@@ -21,6 +21,8 @@ import {
 import type { FastifyInstance } from 'fastify';
 
 import { ACCESS_COOKIE } from '@/auth/cookies';
+import { isFederatedOrigin } from '@/auth/federation';
+import { redeemWsTicket } from '@/auth/wsTicket';
 import { verifyAccessToken } from '@/auth/jwt';
 import { createMonitorTransport, type MonitorHub } from '@/agent/hub';
 import { accessEpochNow, createAccessResolver } from '@/features/_access';
@@ -67,23 +69,28 @@ export async function registerWS(
         // qui n'en envoie pas n'est pas un navigateur et ne porte pas ce risque.
         // Hors dev : là, la page vient de Vite, dont l'origine n'est pas la nôtre.
         const origin = req.headers.origin;
-        if (!isDev && origin !== undefined && origin !== env.PUBLIC_ORIGIN) {
+        const federated = isFederatedOrigin(origin);
+        if (!isDev && origin !== undefined && origin !== env.PUBLIC_ORIGIN && !federated) {
             socket.close(4403, 'origin');
             return;
         }
 
-        const accessToken = req.cookies[ACCESS_COOKIE];
         const ip = req.ip;
         let session: Session | null = null;
 
-        if (accessToken) {
-            const claims = await verifyAccessToken(accessToken);
-            // Le jeton d'accès ne porte aucun état : une session révoquée
-            // (déconnexion, mot de passe changé) garderait sa socket jusqu'à
-            // l'expiration du jeton sans ce contrôle, fait une fois par connexion.
-            if (claims && (await db.refreshTokens.hasLiveSession(claims.sid))) {
-                session = { userId: Number(claims.sub), sessionId: claims.sid };
-            }
+        // Une origine fédérée n'entre que sur un ticket, jamais sur un cookie
+        // (voir `auth/federation.ts`).
+        const ticket = (req.query as { ticket?: unknown } | undefined)?.ticket;
+        const claims = federated
+            ? typeof ticket === 'string'
+                ? await redeemWsTicket(ticket)
+                : null
+            : await verifyAccessToken(req.cookies[ACCESS_COOKIE] ?? '');
+        // Le jeton ne porte aucun état : une session révoquée (déconnexion, mot
+        // de passe changé) garderait sa socket jusqu'à son expiration sans ce
+        // contrôle, fait une fois par connexion.
+        if (claims && (await db.refreshTokens.hasLiveSession(claims.sid))) {
+            session = { userId: Number(claims.sub), sessionId: claims.sid };
         }
 
         if (!session) {

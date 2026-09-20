@@ -2,6 +2,7 @@ import type { FeatureServer } from '@deveye/types/sdk/server';
 
 import { notesHandlers } from './handlers';
 import { createRepo, type NotesRepo } from './repo';
+import { notesCopy } from './copy';
 import { notesMove } from './move';
 import { tryDecryptPayload } from './_shared';
 
@@ -35,6 +36,7 @@ export const serverEntry: FeatureServer<NotesRepo> = {
             const row = await repo.findNote(Number(itemId), workspaceId);
             return row !== null && row.is_private === 0;
         },
-        move: notesMove
+        move: notesMove,
+        copy: notesCopy
     }
 };

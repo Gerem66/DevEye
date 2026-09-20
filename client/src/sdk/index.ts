@@ -70,7 +70,7 @@ export const APP_VERSION: string = __APP_VERSION__;
  * un jeton périmé est renouvelé et l'appel rejoué une fois), et le renouvellement
  * explicite du cookie d'accès avant un `fetch` brut qui échappe au client.
  */
-export { ensureFreshAccess, get as httpGet } from '@/api/http';
+export { get as httpGet, httpFetch } from '@/api/http';
 /** Le refus d'un droit dans un panneau : une seule silhouette pour toutes les
  *  fonctionnalités, cadenas compris. */
 export { default as ReadOnlyNotice } from '@/Components/FeatureSettings/ReadOnlyNotice';

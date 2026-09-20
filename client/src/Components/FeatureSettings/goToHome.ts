@@ -3,7 +3,7 @@ import type { FeatureId } from '@deveye/types';
 import { startTeleport } from '@/stores/live';
 import { requestItemSettings } from '@/stores/settingsRequest';
 import { requestSelectWorkspace } from '@/stores/viewRequest';
-import { getWorkspaceState } from '@/stores/workspace';
+import { getWorkspacesHere } from '@/stores/workspace';
 
 /**
  * « Aller régler ça là où ça se règle » : un élément projeté montre des
@@ -18,7 +18,7 @@ import { getWorkspaceState } from '@/stores/workspace';
  *  aucun saut à proposer. */
 export function accessibleWorkspaceName(workspaceId: number | null): string | null {
     if (workspaceId === null) return null;
-    return getWorkspaceState().workspaces.find((w) => w.id === workspaceId)?.name ?? null;
+    return getWorkspacesHere().find((w) => w.id === workspaceId)?.name ?? null;
 }
 
 export function goToItemSettings(workspaceId: number, feature: FeatureId, itemId: string, section: string): void {

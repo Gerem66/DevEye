@@ -18,6 +18,8 @@ import { assertAccessDeclared } from '@/features/_permissions';
 import { featureHandlers } from '@/features/registry';
 import { buildTopicIndex } from '@/features/_topics';
 import { signupRoutes } from '@/auth/signupRoutes';
+import { federatedOriginOf, federationEnabled } from '@/auth/federation';
+import { FEDERATION_COOKIE, openFederationOrigins } from '@/auth/federationCookie';
 import { authRoutes } from '@/auth/routes';
 import { logger } from '@/logger';
 import { env, TRUST_PROXY } from '@/Utils/Env';
@@ -89,6 +91,52 @@ export const CONTENT_SECURITY_POLICY = {
     }
 } as const;
 
+/**
+ * Ce qu'une page fédérée atteint en HTTP : de quoi ouvrir et tenir sa session,
+ * et les routes HTTP que le client appelle hors socket. Une liste fermée : le
+ * reste de `/api` ne répond qu'à notre page.
+ */
+const FEDERATED_PATHS = new Set([
+    '/api/status',
+    '/api/auth/login',
+    '/api/auth/2fa/challenge',
+    '/api/auth/2fa/cancel',
+    '/api/auth/refresh',
+    '/api/auth/logout',
+    '/api/auth/me',
+    '/api/auth/change-password',
+    '/api/auth/ws-ticket',
+    '/api/agent/targets'
+]);
+const FEDERATED_PREFIXES = ['/api/agent/download/'];
+
+function isFederatedPath(url: string): boolean {
+    const end = url.indexOf('?');
+    const path = end === -1 ? url : url.slice(0, end);
+    return FEDERATED_PATHS.has(path) || FEDERATED_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
+
+/** `https://hôte` et sa socket `wss://hôte` : les deux formes que `connect-src` distingue. */
+function connectSourcesOf(origin: string): string[] {
+    return [origin, origin.replace(/^http/, 'ws')];
+}
+
+/**
+ * La politique de contenu d'un document dont le compte a des instances
+ * distantes : celle de tout le monde, `connect-src` élargi à elles seules. La
+ * politique d'un document est figée à son chargement, d'où le rechargement que
+ * le client fait après un ajout.
+ */
+export function documentCsp(remoteOrigins: readonly string[]): string {
+    return Object.entries(CONTENT_SECURITY_POLICY.directives)
+        .map(([name, values]) => {
+            const sources: string[] =
+                name === 'connect-src' ? [...values, ...remoteOrigins.flatMap(connectSourcesOf)] : [...values];
+            return `${name} ${sources.join(' ')}`;
+        })
+        .join(';');
+}
+
 export interface AppDeps {
     db: Database;
     crypt: Encryption;
@@ -119,9 +167,36 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
             callback(null, { origin: '*', credentials: false, methods: ['GET', 'POST'] });
             return;
         }
+        // La page d'une instance fédérée : lisible par elle, jamais avec les
+        // cookies, son jeton voyageant en `Authorization`.
+        const federated = federatedOriginOf(req);
+        if (federated && isFederatedPath(req.url ?? '')) {
+            callback(null, {
+                origin: federated,
+                credentials: false,
+                methods: ['GET', 'POST'],
+                allowedHeaders: ['Content-Type', 'Authorization']
+            });
+            return;
+        }
         callback(null, { origin: env.PUBLIC_ORIGIN, credentials: true, methods: ['GET', 'POST'] });
     });
+    // Une instance auto-hébergée vit souvent sur une adresse privée, et la page
+    // qui la fédère sur une adresse publique : Chrome fait précéder cet appel
+    // d'un prévol qui exige cet en-tête, que `@fastify/cors` ne sait pas poser.
+    app.addHook('onSend', async (req, reply) => {
+        if (req.headers['access-control-request-private-network'] === 'true' && federatedOriginOf(req)) {
+            reply.header('Access-Control-Allow-Private-Network', 'true');
+        }
+    });
     await app.register(fastifyCookie);
+    // Tout ce qui n'est ni l'API ni la socket est le client, document compris :
+    // c'est sa réponse qui porte la politique sous laquelle la page vivra.
+    app.addHook('onSend', async (req, reply) => {
+        if (req.method !== 'GET' || req.url.startsWith('/api') || req.url.startsWith('/ws')) return;
+        const remoteOrigins = openFederationOrigins(req.cookies[FEDERATION_COOKIE]);
+        if (remoteOrigins.length > 0) reply.header('content-security-policy', documentCsp(remoteOrigins));
+    });
     await app.register(fastifyRateLimit, {
         max: env.RATE_LIMIT_MAX,
         timeWindow: env.RATE_LIMIT_WINDOW
@@ -197,7 +272,9 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
 
     // Boot/deployment readiness (agent sync + future steps). Public + cheap so
     // the client can show a discreet topbar zone until the server is fully ready.
-    app.get('/api/status', { logLevel: 'silent' }, async () => ok(serverStatusSchema.parse(status.snapshot())));
+    app.get('/api/status', { logLevel: 'silent' }, async () =>
+        ok(serverStatusSchema.parse({ ...status.snapshot(), federation: federationEnabled() }))
+    );
 
     const hub = new MonitorHub();
     // Construit avant les services de fond : ils lui adressent leurs changements

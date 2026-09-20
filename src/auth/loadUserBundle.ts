@@ -1,6 +1,7 @@
 import type { Database } from '@/db';
 import type { HomeLayout, MinimalUser, SessionBundle, ThemeStateDTO, UserRole, Workspace } from '@deveye/types';
 import { homeLayoutSchema, themeStateSchema } from '@deveye/types';
+import { toRemoteInstance } from '@/db/repos/remoteInstances';
 import { permissionsFor } from '@/features/_access';
 import { env } from '@/Utils/Env';
 
@@ -77,6 +78,7 @@ export async function loadUserBundle(
         row.personal_workspace_id;
 
     const activeRow = await db.workspaces.findById(activeWorkspaceId);
+    const remoteRows = await db.remoteInstances.listByUser(userId);
 
     return {
         user: {
@@ -94,6 +96,7 @@ export async function loadUserBundle(
             created: Number(row.created)
         },
         workspaces,
+        remoteInstances: remoteRows.map(toRemoteInstance),
         activeWorkspaceId,
         theme: parseTheme(activeRow?.theme),
         homeLayout: parseHomeLayout(activeRow?.home_layout),

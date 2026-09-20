@@ -2,6 +2,7 @@ import { MAIL_TRANSPORT_PROVIDER } from '@deveye/types/sdk';
 import type { FeatureServer } from '@deveye/types/sdk/server';
 
 import { mailHandlers } from './handlers';
+import { mailCopy } from './copy';
 import { mailMove } from './move';
 import { createRepo, type MailRepo } from './repo';
 import { mailRoutes } from './routes';
@@ -54,6 +55,7 @@ export const serverEntry: FeatureServer<MailRepo> = {
         // sous une clé que le serveur tient seul, donc dans un autre espace.
         shareable: async (repo, itemId, workspaceId) =>
             (await repo.accounts.findById(Number(itemId), workspaceId))?.security_tier === 'open',
-        move: mailMove
+        move: mailMove,
+        copy: mailCopy
     }
 };

@@ -118,7 +118,7 @@ export async function signupRoutes(app: FastifyInstance, { db, audit, live, sign
             }
 
             const { account } = result;
-            await issueSession(reply, db, account.userId);
+            await issueSession(reply, db, account.userId, 'cookie');
             const bundle = await loadUserBundle(db, account.userId);
             if (!bundle) return reply.code(500).send(err('internal', 'Unable to load user'));
             audit.record({

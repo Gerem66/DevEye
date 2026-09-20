@@ -11,15 +11,26 @@ import type {
     SdkMovePlan,
     SdkQueryable
 } from '@deveye/types/sdk/server';
-import { FeatureError } from '@deveye/types/sdk/server';
+import {
+    exportItemTree,
+    FeatureError,
+    importItemTree,
+    itemTierOf,
+    itemTreeProblem,
+    type ItemTier,
+    type ItemTreeRows,
+    type SdkCopyPlan
+} from '@deveye/types/sdk/server';
 import type { FastifyInstance, FastifyRequest, RouteShorthandOptions } from 'fastify';
 
 import type { Database } from '@/db';
 import type { Queryable } from '@/db/pool';
 import { defineFeature, type FeatureDefinition } from '@/features/_define';
 import type { SdkProviders, SdkPublicApp, SdkPublicHandler, SdkPublicRouteOptions } from '@deveye/types/sdk/server';
+import { logger } from '@/logger';
 import { createSdkContext } from './context';
 import { createDomainsContext, type DomainsHost } from './domains';
+import { createQuota } from './quota';
 import { createServiceDeps, type ModuleServiceHost } from './service';
 
 /**
@@ -77,6 +88,10 @@ export function registerModules(installed: readonly InstalledFeatureModule[]): v
         if (manifest.shareTier !== 'never' && !mod.server.items) {
             throw new Error(`Module « ${manifest.id} » : shareTier '${manifest.shareTier}' exige server.items`);
         }
+        // Chaque nom d'un arbre de copie finit interpolé dans du SQL, et une
+        // table listée avant celle qu'elle référence s'écrirait sans son id.
+        const treeProblem = mod.server.items?.copy && itemTreeProblem(mod.server.items.copy.tree);
+        if (treeProblem) throw new Error(`Module « ${manifest.id} » : arbre de copie invalide (${treeProblem})`);
         // Les deux moitiés vont ensemble : l'onglet sans la sonde ne vérifierait
         // rien, la sonde sans l'onglet ne serait jamais appelée.
         if (Boolean(manifest.domains) !== Boolean(mod.server.domains)) {
@@ -192,12 +207,30 @@ export function moduleItems(
                   ciphers: { from: SdkCipher; to: SdkCipher }
               ): Promise<void>;
           };
+          /** `undefined` quand la fonctionnalité ne sait pas copier ses éléments. */
+          copy?: {
+              plan(itemId: string, workspaceId: number): Promise<SdkCopyPlan>;
+              /** `null` : l'élément n'existe plus. */
+              tierOf(itemId: string): Promise<ItemTier | null>;
+              /** Les lignes de l'élément, en clair. `cipher` est celui de son palier. */
+              read(itemId: string, cipher: SdkCipher): Promise<ItemTreeRows>;
+              /**
+               * Écrit la copie dans `to` et rend son id. `q` est transactionnel.
+               * `rows` vient d'un navigateur : le moteur le valide contre l'arbre.
+               */
+              write(
+                  q: Queryable,
+                  rows: ItemTreeRows,
+                  into: { workspaceId: number; userId: number; cipher: SdkCipher; tier: ItemTier }
+              ): Promise<string>;
+          };
       }
     | undefined {
     const mod = BY_ID.get(featureId);
     const items = mod?.server.items;
     if (!mod || !items) return undefined;
     const move = items.move;
+    const copy = items.copy;
     return {
         homeOf: (itemId, workspaceId) => items.homeOf(mod.repoFor(db), itemId, workspaceId),
         labelOf: (cipher, itemId, workspaceId) => items.labelOf(mod.repoFor(db), cipher, itemId, workspaceId),
@@ -225,6 +258,31 @@ export function moduleItems(
                     toWorkspaceId: to,
                     ciphers
                 })
+        },
+        copy: copy && {
+            plan: (itemId, workspaceId) =>
+                copy.plan?.({ q: sdkQueryable(db.queryable), repo: mod.repoFor(db), itemId, workspaceId }) ??
+                Promise.resolve({ blockers: [], drops: [] }),
+            tierOf: (itemId) => itemTierOf(sdkQueryable(db.queryable), copy.tree, itemId),
+            read: (itemId, cipher) => exportItemTree(sdkQueryable(db.queryable), copy.tree, itemId, cipher),
+            write: async (q, rows, into) => {
+                const to = into.workspaceId;
+                const tx = sdkQueryable(q);
+                const repo = mod.repoFor(db);
+                // Le compte visé est le propriétaire de l'espace d'arrivée : c'est
+                // son offre que la copie entame.
+                const quota = createQuota(
+                    db,
+                    PROVIDERS,
+                    mod.manifest,
+                    async () => (await db.workspaces.findById(to))?.owner_user_id ?? null,
+                    logger
+                );
+                await copy.admit?.({ q: tx, repo, toWorkspaceId: to, rows, quota });
+                const itemId = await importItemTree(tx, copy.tree, rows, into);
+                await copy.settle?.({ q: tx, repo, toWorkspaceId: to, itemId });
+                return itemId;
+            }
         }
     };
 }
@@ -261,6 +319,11 @@ export function moduleDomains(
 /** Les fonctionnalités installées qui gèrent des domaines. */
 export function moduleDomainFeatures(): string[] {
     return MODULES.filter((mod) => mod.manifest.domains && mod.server.domains).map((mod) => mod.manifest.id);
+}
+
+/** Un module dont les éléments se copient ailleurs : l'entrée `copy` de ses `items`. */
+export function isModuleCopyable(featureId: string): boolean {
+    return BY_ID.get(featureId)?.server.items?.copy !== undefined;
 }
 
 /** Un module dont les éléments changent d'espace : l'entrée `move` de ses `items`. */

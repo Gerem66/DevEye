@@ -31,6 +31,19 @@ Il n'existe **plus** de mot de passe par espace : l'ancien `popup-unlock`
 disparu avec le rapatriement du Coffre en module, le 27 août 2026. Personne ne
 l'ouvrait et il ne protégeait rien : la protection réelle est le chiffrement.
 
+## 1 bis. `RemoteLogin` : connexion à une instance distante
+
+- Fichier : `DevEye/client/src/Components/RemoteLogin/index.tsx`, monté une
+  fois par l'accueil.
+- Appels : `POST /api/auth/login` puis, si besoin, `POST /api/auth/2fa/challenge`
+  sur l'**instance distante**, en transport porteur (`stores/remoteInstances.ts`,
+  `loginRemote` / `submitRemoteTwoFactor`). Le serveur d'ici ne voit rien.
+- Rôle : ouvrir la session du compte qu'on a là-bas. Ce n'est PAS le mot de
+  passe du compte d'ici, ni celui du coffre : le coffre de l'instance distante
+  se déverrouille ensuite par le prompt n°1, qui parle alors à cette instance.
+- « Retenir sur cet appareil » garde le jeton de rafraîchissement dans le
+  navigateur, jamais le mot de passe. Voir `FEDERATION.md`.
+
 ## 2. Notes privées — **aucun prompt dédié**
 
 Les notes n'ont plus de mot de passe par note : une note marquée « privée » est

@@ -1,24 +1,22 @@
 import {
     countMovableCells,
     FeatureError,
+    movableCellsOf,
     resealCells,
-    type FeatureItemsMove,
-    type MovableCell
+    type FeatureItemsMove
 } from '@deveye/types/sdk/server';
 
 import type { NotesRepo } from './repo';
+import { notesTree } from './copy';
 
 /**
  * Le changement d'espace d'une note. Une note est une ligne : son corps est le
  * seul blob à resceller, et son classement ne la suit pas, un dossier
  * appartenant à l'espace qu'elle quitte.
  *
- * ⚠️ Liste à tenir à jour : toute nouvelle colonne chiffrée suspendue à une note
- * doit y figurer, sinon son contenu reste sous l'ancienne clé et devient
- * illisible. Rien ne peut le détecter, un blob chiffré est indistinguable d'un
- * autre.
+ * Les cellules à resceller viennent de l'arbre de `copy.ts`, la seule liste à tenir.
  */
-const CELLS: readonly MovableCell[] = [{ table: 'notes', idColumn: 'id', ownerColumn: 'id', column: 'content' }];
+const CELLS = movableCellsOf(notesTree);
 
 export const notesMove: FeatureItemsMove<NotesRepo> = {
     async plan({ q, itemId }) {

@@ -50,7 +50,11 @@ export interface TopNavbarProps {
     /** Leave the home organization mode. */
     onDoneOrganizing?: () => void;
     /** Basculer vers un autre espace de travail. */
-    onSelectWorkspace?: (workspaceId: number) => void;
+    onSelectWorkspace?: (workspaceId: number, instanceId: number | null) => void;
+    /** Les trois gestes sur une instance distante : s'y connecter, s'en déconnecter, la retirer. */
+    onConnectRemote?: (instanceId: number, workspaceId?: number) => void;
+    onLogoutRemote?: (instanceId: number) => void;
+    onRemoveRemote?: (instanceId: number) => void;
     /** Ouvrir la création d'un espace. */
     onCreateWorkspace?: () => void;
     /** Ouvrir la page des retours des utilisateurs (admin). */
@@ -84,6 +88,9 @@ export default function TopNavbar({
     organizing,
     onDoneOrganizing,
     onSelectWorkspace,
+    onConnectRemote,
+    onLogoutRemote,
+    onRemoveRemote,
     onCreateWorkspace,
     onManageWorkspace,
     onOpenFeedback,
@@ -287,9 +294,21 @@ export default function TopNavbar({
                                 tout ce qui suit en dépend. */}
                             {onSelectWorkspace && onCreateWorkspace && onManageWorkspace && (
                                 <WorkspaceSwitcher
-                                    onSelect={(id) => {
-                                        onSelectWorkspace(id);
+                                    onSelect={(id, instanceId) => {
+                                        onSelectWorkspace(id, instanceId);
                                         setLingering(true);
+                                    }}
+                                    onConnectRemote={(instanceId, workspaceId) => {
+                                        onConnectRemote?.(instanceId, workspaceId);
+                                        setMenuOpen(false);
+                                    }}
+                                    onLogoutRemote={(instanceId) => {
+                                        onLogoutRemote?.(instanceId);
+                                        setMenuOpen(false);
+                                    }}
+                                    onRemoveRemote={(instanceId) => {
+                                        onRemoveRemote?.(instanceId);
+                                        setMenuOpen(false);
                                     }}
                                     onCreate={() => {
                                         onCreateWorkspace();

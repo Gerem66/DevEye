@@ -5,6 +5,7 @@ import { AUDIENCE_ITEMS_PROVIDER, type AudienceItemsProvider } from '@deveye/typ
 import type { FeatureServer, SdkCipher } from '@deveye/types/sdk/server';
 
 import { audienceHandlers } from './handlers';
+import { audienceCopy } from './copy';
 import { audienceMove } from './move';
 import { createRepo, type AudienceRepo } from './repo';
 import { audienceRoutes } from './routes';
@@ -80,6 +81,7 @@ export const serverEntry: FeatureServer<AudienceRepo> = {
         homeOf: async (repo, itemId, workspaceId) =>
             (await repo.findVisible(Number(itemId), workspaceId))?.workspace_id ?? null,
         labelOf: (repo, cipher, itemId, workspaceId) => labelOf(repo, cipher, Number(itemId), workspaceId),
-        move: audienceMove
+        move: audienceMove,
+        copy: audienceCopy
     }
 };

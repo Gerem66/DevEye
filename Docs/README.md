@@ -22,6 +22,7 @@ Ce dossier porte le transverse ; la doc d'une feature vit dans son module,
 | [AUTH_PROMPTS.md](./AUTH_PROMPTS.md)     | le prompt de déverrouillage unique, et qui le réutilise                        |
 | [PERMISSIONS.md](./PERMISSIONS.md)       | les quatre étages de droits, et les décisions actées                           |
 | [SHARING.md](./SHARING.md)               | la projection d'éléments entre espaces                                         |
+| [FEDERATION.md](./FEDERATION.md)         | les instances distantes : une seconde session depuis le navigateur             |
 | [LIVE.md](./LIVE.md)                     | la présence en direct : roster, curseurs, invalidation poussée, téléportation  |
 | [SETTINGS.md](./SETTINGS.md)             | la coquille de réglages unique, son bouton commun, ses onglets                 |
 | [QUOTAS.md](./QUOTAS.md)                 | offres et quotas, l'entrée de compte d'un module, illimité sans fournisseur    |

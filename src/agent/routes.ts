@@ -15,7 +15,7 @@ import {
 } from '@deveye/types';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
-import { ACCESS_COOKIE } from '@/auth/cookies';
+import { readAccessToken } from '@/auth/federation';
 import { signDeviceToken, verifyAccessToken } from '@/auth/jwt';
 import { holdsFeatureIn } from '@/features/_access';
 import { sha256hex } from '@/Utils/hash';
@@ -98,7 +98,7 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }
      * Rend `false` après avoir déjà répondu 400/401/403.
      */
     const requirePairing = async (req: FastifyRequest, reply: FastifyReply): Promise<boolean> => {
-        const accessToken = req.cookies[ACCESS_COOKIE];
+        const accessToken = readAccessToken(req);
         if (!accessToken) {
             void reply.code(401).send(err('auth_required', 'No session'));
             return false;

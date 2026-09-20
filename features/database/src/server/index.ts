@@ -13,6 +13,7 @@ import type { FeatureServer, FeatureServiceDeps, SdkCipher } from '@deveye/types
 
 import { assertReadOnly, explainError, openSession, singleNumber } from './engine';
 import { databaseHandlers } from './handlers';
+import { databaseCopy } from './copy';
 import { databaseMove } from './move';
 import { createRepo, type DatabaseRepo } from './repo';
 import { DatabaseMonitor } from './service';
@@ -170,6 +171,7 @@ export const serverEntry: FeatureServer<DatabaseRepo> = {
         homeOf: async (repo, itemId, workspaceId) =>
             (await repo.findVisible(Number(itemId), workspaceId))?.workspace_id ?? null,
         labelOf: (repo, cipher, itemId, workspaceId) => labelOf(repo, cipher, Number(itemId), workspaceId),
-        move: databaseMove
+        move: databaseMove,
+        copy: databaseCopy
     }
 };

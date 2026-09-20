@@ -169,6 +169,11 @@ Remplace l'ancien système de verrou par note (mot de passe dédié par note,
 - Sessions par JWT (access + refresh en cookies), `sessionId` partagée entre le
   monde HTTP (login) et le monde WS (features). C'est cette `sessionId` qui relie
   le pré-cache de la DEK au login à la session WS qui l'utilisera.
+- **Sessions fédérées** : la page d'une autre instance DevEye listée dans
+  `FEDERATION_ORIGINS` ouvre une session « au porteur », jetons dans le corps et
+  ticket à usage unique pour la socket, sans jamais un cookie. Éteint par défaut.
+  Voir [FEDERATION.md](./FEDERATION.md), qui dit aussi ce que ce montage protège
+  et ce qu'il ne protège pas.
 - 2FA TOTP optionnel avec codes de secours à usage unique. Un code TOTP accepté
   ne se rejoue pas (`last_used_counter`) ; les codes de secours (16 caractères)
   sont condensés sous une clé dérivée de la clé serveur, pas en SHA-256 nu : un

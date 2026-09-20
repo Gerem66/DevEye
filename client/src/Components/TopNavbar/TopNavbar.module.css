@@ -455,6 +455,53 @@
     white-space: nowrap;
 }
 
+/* Un espace d'une instance qu'on ne peut pas joindre, ou où l'on n'a pas de
+   session : il garde sa place, en retrait. `filter` et non `opacity`, que
+   framer-motion pilote sur les éléments du menu. */
+.workspaceUnavailable {
+    filter: opacity(0.55);
+}
+
+.workspaceUnavailable:disabled {
+    cursor: not-allowed;
+}
+
+/* La rangée d'une instance sans session : son bouton, et celui qui la retire. */
+.remoteRow {
+    display: flex;
+    align-items: center;
+}
+
+.remoteRow > .workspaceItem {
+    flex: 1;
+    min-width: 0;
+}
+
+.remoteRemove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    margin-right: var(--space-xs);
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.remoteRemove:hover {
+    background: var(--glass-bg-light);
+    color: var(--danger);
+}
+
+.remoteRemove .icon {
+    width: 12px;
+}
+
 /* Le conteneur du dépli : sa hauteur est animée, le débord doit donc être coupé
    pendant la course, sinon le libellé dépasse avant que la place existe. */
 .workspaceActions {

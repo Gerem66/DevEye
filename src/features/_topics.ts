@@ -63,6 +63,9 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     // Les commandes de discussion nomment `['projectsChat']`, sujet secondaire
     // du manifest : un message ne doit pas faire re-solliciter le tableau entier.
     projects: 'projects',
+    // Aucune salle ne les observe : le menu des espaces se relit par compte,
+    // d'où que soient assis les onglets (`remote/index.ts`).
+    remote: null,
     secrecy: 'account',
     // Sujet distinct de `devices` : les constats changent à une tout autre
     // cadence que la liste d'appareils.
@@ -138,7 +141,12 @@ const NON_MUTATING = new Set([
     'agent.logQuery',
     // Écrivent, mais la vue d'administration relit à l'ouverture.
     'feedback.setStatus',
-    'feedback.delete'
+    'feedback.delete',
+    // Écrivent, et préviennent le compte eux-mêmes (`userChanged`).
+    'remote.add',
+    'remote.rename',
+    'remote.remove',
+    'remote.reorder'
 ]);
 
 /** Verbes qui trahissent une écriture, pour le contrôle de démarrage. */

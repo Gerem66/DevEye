@@ -378,7 +378,101 @@ dialogue de progression que rien ne ferme le dit (`ProgressDialog`), puis la
 coquille de réglages se referme et la fiche s'en va (`onGone`, voir
 `SETTINGS.md`) : l'élément n'est plus ici, il n'y a plus rien à en montrer.
 
-## 10. Reste à faire
+## 10. Copier, le troisième geste
+
+Partager projette, déplacer change de domicile, **copier fait naître un double** :
+l'élément reste chez lui, une copie indépendante est écrite ailleurs, et rien ne
+relie ensuite les deux. « Ailleurs » est un autre espace d'ici, ou un espace
+d'une **instance distante** ([FEDERATION.md](./FEDERATION.md)) : le même chemin
+dans les deux cas.
+
+### Deux moitiés qui s'ignorent, le navigateur entre elles
+
+| Moitié          | Commandes                                                                  | Ce qu'elle fait                                                      |
+| --------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| **Source**      | `share.copyPlan`, `share.copyExport`, `share.copyChunk`                    | lit l'élément, l'ouvre, le rend **en clair** par tranches            |
+| **Destination** | `share.copyTarget`, `share.copyBegin`, `share.copyPut`, `share.copyCommit` | reçoit les tranches, vérifie, scelle sous SA clé, en une transaction |
+
+Le client (`FeatureSettings/copyItem.ts`) lit une tranche à la source et la remet
+à la destination, l'une après l'autre : la copie entre deux espaces d'ici
+emprunte exactement ce chemin, les deux moitiés sur le même serveur. Il n'y a
+donc qu'un code, et la copie entre instances n'est pas un cas à part. La source
+ne sait rien de la cible ; les deux serveurs ne se parlent jamais.
+
+Ce qui voyage est **en clair**, par construction : la destination scelle sous une
+clé que la source ne connaît pas. Il n'existe que dans la mémoire des deux
+serveurs et de l'onglet, quelques minutes au plus (`TTL_MS`), et la dernière
+tranche rendue fait oublier le paquet à la source.
+
+### Rien de ce qui arrive n'est cru
+
+Le paquet vient d'un navigateur, donc de n'importe qui :
+
+- il est **borné** (16 Mo par transfert, un plafond global en vol) et son
+  **empreinte** vérifiée à l'arrivée, avec sa taille ;
+- sa **version** doit être celle de l'instance, au mineur près ;
+- ses lignes sont validées par le moteur contre l'arbre du module : les noms de
+  table viennent de l'arbre seul, une colonne doit exister dans la table et ne
+  pas être de celles que la destination décide (espace, compte, palier, rang,
+  colonnes omises), chaque référence doit désigner une ligne du paquet, et toute
+  valeur est liée. Un enfant est raccroché à la copie quoi que dise sa ligne.
+
+Droits : **lire** l'élément chez lui pour la source, **écrire** la fonctionnalité
+dans l'espace d'arrivée pour la destination, revérifié au moment d'écrire. Les
+deux gestes sont audités en `warning` (`share.copyExport`, `share.copy`).
+
+### Un arbre déclaré, un moteur écrit une fois
+
+Un module ne code pas sa copie : il **décrit ce dont un élément est fait**
+(`items.copy.tree`, un `ItemTree`), et le moteur du SDK
+(`@deveye/types/sdk/copy.ts`) fait le reste pour toutes les fonctionnalités,
+natives comme tierces. Par table : sa clé, la colonne qui la rattache à
+l'élément, ses colonnes scellées (`sealed`), ses références vers d'autres tables
+de l'arbre (`refs`, réécrites vers les nouveaux ids), la colonne d'espace, celle
+du compte (réécrite vers qui copie), et ce que la copie laisse à sa valeur par
+défaut (`omit` : une source de l'espace quitté, un état de synchronisation). La
+racine dit en plus son rang (`orderColumn`, la copie arrive en fin de liste), ce
+qui la rend unique dans un espace (`unique`, le condensé d'un nom) et son palier
+(`tier`). Une table `cache: true` est ce que la destination reconstruit seule
+(commits, messages relevés, historique de contrôles) : déplacée, jamais copiée.
+
+C'est **la seule liste tenue à la main** : le déplacement en dérive ses cellules
+(`movableCellsOf(tree)`), là où chaque module tenait auparavant deux listes. Au
+démarrage, `itemTreeProblem` refuse un arbre mal formé, chacun de ses noms
+finissant interpolé dans du SQL.
+
+Trois crochets, tous facultatifs : `plan` (source : ce que la copie n'emporte
+pas, ce qui l'empêche), `admit` (destination, avant d'écrire : affirmer un quota,
+amender une ligne, comme la clé publique d'un site Audience, régénérée), `settle`
+(destination, après).
+
+### Le palier gardé
+
+Un élément chiffré par mot de passe ne se projette ni ne se déplace, mais il se
+**copie**. L'export prend le chiffre gardé : coffre fermé, la source répond
+`locked`, l'écran rouvre le coffre et rappelle. À l'arrivée, le palier est gardé
+si l'espace est personnel (le `locked` de là-bas ouvre l'invite de **ce**
+coffre-là, le second mot de passe, `ensureUnlockedOn`), et **ouvert** dans un
+espace partagé, qui n'a pas ce palier : la confirmation le dit avant, ses membres
+liront la copie.
+
+### Qui se copie
+
+Les huit modules qui se déplacent : Audience, Bases de données, Déploiements,
+Git, Mail, Notes, Projets, Uptime. **Pas les Appareils** : un appareil est une
+machine reliée par le jeton de son agent, qui ne parle qu'à un serveur ; il se
+partage déjà entre espaces.
+
+Ce que la copie n'emporte jamais : projections, permissions par rôle, route
+d'alertes, liaisons de projets. Une copie arrive nue, comme un élément déplacé,
+et pour la même raison : tout cela désigne l'espace d'origine.
+
+Vérifié, pas supposé : `.smoke/copy-audit.ts` copie de vrais éléments de chaque
+module dans une transaction annulée et relit la copie sous la clé d'arrivée ;
+`.smoke/copy-repro.ts` joue le geste de bout en bout, la destination tenue par
+une session fédérée.
+
+## 11. Reste à faire
 
 - L'ordonnanceur de fond n'a pas changé : il sonde les éléments **d'un espace**,
   pas ce qu'on y voit. C'est voulu — sonder deux fois le même service parce

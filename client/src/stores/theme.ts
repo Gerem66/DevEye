@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 import type { ThemeStateDTO } from '@deveye/types';
 import { THEME_SLOT_COUNT, THEME_SLOT_IMAGE_MAX_LENGTH } from '@deveye/types';
 import { ws } from '@/api/ws';
-import { getActiveWorkspaceId } from './workspace';
+import { getActiveWorkspaceKey } from './workspace';
 
 export { THEME_SLOT_COUNT };
 
@@ -18,8 +18,8 @@ const KEY_PREFIX = 'deveye:theme';
  * d'heriter de l'apparence du precedent.
  */
 function storageKey(): string | null {
-    const id = getActiveWorkspaceId();
-    return id === null ? null : `${KEY_PREFIX}:${id}`;
+    const key = getActiveWorkspaceKey();
+    return key === null ? null : `${KEY_PREFIX}:${key}`;
 }
 
 export interface ThemeState {

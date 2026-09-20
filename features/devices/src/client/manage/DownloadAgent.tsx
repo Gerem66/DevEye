@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { APP_VERSION, Button, Dialog, ensureFreshAccess, httpGet, useActiveWorkspace } from 'deveye-sdk-client';
+import { APP_VERSION, Button, Dialog, httpFetch, httpGet, useActiveWorkspace } from 'deveye-sdk-client';
 import {
     AGENT_TARGETS,
     agentTargetsResponseSchema,
@@ -62,7 +62,7 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
     const statusById = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses]);
 
     /**
-     * Télécharge un binaire par `fetch`, après un cookie d'accès frais : une
+     * Télécharge un binaire par `httpFetch`, authentifié comme la session : une
      * navigation `<a href download>` échappe au rejeu sur 401, et le navigateur
      * enregistrerait l'enveloppe JSON du 401 sous le nom du binaire. L'ancre ne
      * sert qu'à déclencher l'enregistrement du blob.
@@ -71,10 +71,7 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
         setError(null);
         setDownloading(id);
         try {
-            await ensureFreshAccess();
-            const res = await fetch(`/api/agent/download/${id}?workspace=${workspaceId ?? ''}`, {
-                credentials: 'include'
-            });
+            const res = await httpFetch(`/api/agent/download/${id}?workspace=${workspaceId ?? ''}`);
             if (!res.ok) {
                 setError(
                     res.status === 404

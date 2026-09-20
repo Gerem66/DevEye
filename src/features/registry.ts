@@ -31,6 +31,7 @@ import {
     workspaceRoleSetDefaultFeature,
     workspaceRoleUpdateFeature
 } from './workspace/roles';
+import { remoteFeatures } from './remote';
 import { workspaceAddFeature } from './workspace/add';
 import { workspaceDeleteFeature } from './workspace/delete';
 import { INSTALLED_MODULES } from './_generated/installed';
@@ -57,6 +58,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     workspaceRoleDeleteFeature,
     workspaceRoleSetDefaultFeature,
     workspaceAssignRoleFeature,
+    ...remoteFeatures,
     userSetAvatarFeature,
     userSetThemeFeature,
     userPlanFeature,
