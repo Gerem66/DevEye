@@ -7,8 +7,7 @@ import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinitio
 /**
  * Gestion des membres d'un espace, par les capacités `workspace.members` et
  * `workspace.manage`. On rejoint un espace parce qu'un membre vous y met,
- * jamais par un lien : l'inscription est déjà sur invitation, une adresse
- * suffit à désigner un compte.
+ * jamais par un lien : une adresse suffit à désigner un compte.
  */
 
 /** Un espace personnel n'a pas de membres : il est personnel. */
@@ -109,7 +108,6 @@ export const workspaceAddMemberFeature: FeatureDefinition<
         assertShared(ctx);
         const email = input.email.trim().toLowerCase();
         const target = await ctx.db.users.findByEmail(email);
-        // On ne crée pas de compte ici : l'inscription est sur invitation.
         if (!target) {
             throw new FeatureError('not_found', 'Aucun compte DevEye avec cette adresse');
         }

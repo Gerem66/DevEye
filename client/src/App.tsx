@@ -1,9 +1,7 @@
 import { MotionConfig } from 'framer-motion';
-import { useEffect, useState } from 'react';
 
 import HomePage from './Pages/Home/index.js';
 import LoginPage from './Pages/Login/index.js';
-import RegisterPage, { readRegisterToken } from './Pages/Login/Register';
 import { SecrecyGate } from './Components/SecrecyGate';
 import { ReportButton } from './Components/ReportButton';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
@@ -22,14 +20,6 @@ import './Styles/input.css';
 
 function AppRoot() {
     const { status } = useAuth();
-    // Lu une seule fois : l'URL est nettoyée dès que le compte est créé, pour
-    // qu'un rafraîchissement ne repropose pas un jeton déjà consommé.
-    const [registerToken, setRegisterToken] = useState<string | null>(readRegisterToken);
-    // Le jeton quitte la barre d'adresse dès qu'il est lu : il ne reste ni dans
-    // l'historique ni sous les yeux pendant que le formulaire se remplit.
-    useEffect(() => {
-        if (registerToken) window.history.replaceState({}, '', '/register');
-    }, [registerToken]);
 
     return (
         <>
@@ -39,21 +29,7 @@ function AppRoot() {
                 n'importe quelle vue, et se poser au-dessus d'elles toutes. */}
             {status === 'authenticated' && <ReportButton />}
 
-            {/* Un lien d'inscription prend l'écran, celui qui le suit n'ayant pas
-                encore de compte. Il reste monté après l'ouverture de la session et
-                décide lui-même de s'effacer, à la fin de son animation : le démonter
-                sur le statut couperait sa barre de progression en plein vol. */}
-            {registerToken ? (
-                <RegisterPage
-                    token={registerToken}
-                    onDone={() => {
-                        setRegisterToken(null);
-                        window.history.replaceState({}, '', '/');
-                    }}
-                />
-            ) : (
-                <LoginPage />
-            )}
+            <LoginPage />
         </>
     );
 }

@@ -196,19 +196,15 @@ adresse — `workspace.addMember`. Immédiat, sans acceptation, avec le rôle pa
 défaut de l'espace — et immédiat aussi **chez l'intéressé** s'il est connecté :
 le hub le vise par compte (`userChanged`, voir `LIVE.md`), puisqu'assis dans un
 autre espace il ne recevrait pas la diffusion de celui-ci. Même voie au retrait
-et à la suppression d'un espace, et pour les membres en place quand une
-invitation de compte installe un nouvel inscrit chez eux ou qu'un
+et à la suppression d'un espace, et pour les membres en place quand un
 administrateur supprime l'un d'eux.
 
 Il y a eu un système de liens d'invitation (`workspace_invites`, cinq commandes,
 un écran `/invite/<token>`). **Il a été entièrement supprimé** (migration 058).
-Raison : l'inscription est déjà sur invitation d'un administrateur, donc tout
-compte candidat existe et une adresse suffit à le désigner. Le jeton n'ajoutait
-qu'un secret transmissible, à expirer et à révoquer, pour le même résultat.
-
-Ne pas confondre avec les **invitations de compte** (`user_invites`, page admin
-« Utilisateurs », URL `/register#<token>`) : celles-là existent toujours et
-créent un compte DevEye. Deux systèmes distincts, deux URL distinctes.
+Raison : tout compte candidat existe déjà et une adresse suffit à le désigner.
+Le jeton n'ajoutait qu'un secret transmissible, à expirer et à révoquer, pour
+le même résultat. Les invitations de compte (`user_invites`) ont disparu à leur
+tour (migration 119).
 
 Une adresse sans compte est refusée explicitement (« Aucun compte DevEye avec
 cette adresse ») plutôt que de créer le compte : l'inscription reste la
@@ -343,8 +339,9 @@ n'en dépendent d'aucune : elles ont leurs propres gardes.
 | 054     | `workspace_invites`                                                          | _(table supprimée depuis par 058 ; pose `uniq_workspace_member`, qui reste)_                     |
 | 055     | `workspace_secret_keys`                                                      | la WDK                                                                                           |
 | 056     | `workspace_roles`                                                            | rôles + `members.role_id`                                                                        |
-| 057     | `user_invites`                                                               | invitations **de compte** — toujours en service                                                  |
+| 057     | `user_invites`                                                               | _(table supprimée depuis par 119)_                                                               |
 | 058     | `drop_workspace_invites`                                                     | fin des invitations d'espace                                                                     |
+| 119     | `drop_user_invites`                                                          | fin des invitations de compte                                                                    |
 | 087     | `notification_channels`                                                      | les canaux d'alerte deviennent des objets d'espace ; `notification_settings` supprimée           |
 
 La suite du chantier est documentée ailleurs : 089 partage d'éléments entre

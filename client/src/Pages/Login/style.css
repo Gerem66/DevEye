@@ -234,30 +234,3 @@
         transform: rotate(360deg);
     }
 }
-
-/* Écran d'inscription sur invitation : il réutilise la scène du login,
-   ci-dessous seulement ce qui lui est propre. */
-.login .register-intro {
-    margin: 0 0 20px;
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-    line-height: 1.45;
-}
-
-/* Aide et erreur partagent la même place : la carte ne change pas de hauteur
-   quand l'une remplace l'autre, donc rien ne saute sous le curseur. */
-.login .register-hint,
-.login .register-error {
-    margin: -4px 0 16px;
-    font-size: 0.8rem;
-    min-height: 1.1em;
-    text-align: left;
-}
-
-.login .register-hint {
-    color: var(--text-muted);
-}
-
-.login .register-error {
-    color: var(--danger);
-}

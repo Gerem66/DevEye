@@ -21,7 +21,6 @@ import {
 } from './repos/workspaces';
 import { workspaceSecretKeysRepo, type WorkspaceSecretKeysRepo } from './repos/workspaceSecretKeys';
 import { workspaceRolesRepo, type WorkspaceRolesRepo } from './repos/workspaceRoles';
-import { userInvitesRepo, type UserInvitesRepo } from './repos/userInvites';
 
 export interface Database {
     /** Le Queryable brut, pour les fabriques de repos des modules uniquement. */
@@ -38,7 +37,6 @@ export interface Database {
     workspaceMembers: WorkspaceMembersRepo;
     workspaceSecretKeys: WorkspaceSecretKeysRepo;
     workspaceRoles: WorkspaceRolesRepo;
-    userInvites: UserInvitesRepo;
     refreshTokens: RefreshTokensRepo;
     logs: LogsRepo;
     /** Les signalements des utilisateurs, relus par l'administration. */
@@ -81,7 +79,6 @@ function buildDatabase(pool: DbPool, q: Queryable, inTransaction: boolean): Data
         workspaceMembers: workspaceMembersRepo(q),
         workspaceSecretKeys: workspaceSecretKeysRepo(q),
         workspaceRoles: workspaceRolesRepo(q),
-        userInvites: userInvitesRepo(q),
         refreshTokens: refreshTokensRepo(q),
         logs: logsRepo(q),
         feedback: feedbackRepo(q),

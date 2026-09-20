@@ -32,12 +32,6 @@
     color: var(--text-secondary);
 }
 
-.headerActions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-}
-
 .errorBanner {
     padding: var(--space-sm) var(--space-md);
     background: var(--danger-bg);
@@ -128,16 +122,6 @@
 .rowMeta {
     font-size: 0.78rem;
     color: var(--text-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-/* Le lien lui-même : monospace, tronqué, jamais sur deux lignes. */
-.token {
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    color: var(--text-secondary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

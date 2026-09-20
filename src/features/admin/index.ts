@@ -1,16 +1,5 @@
-import {
-    adminDeleteUser,
-    adminInviteCreate,
-    adminInviteList,
-    adminInviteRevoke,
-    adminSetUserRole,
-    adminSetUserStatus,
-    adminUserList
-} from '@deveye/types';
-import type { AdminInvite } from '@deveye/types';
+import { adminDeleteUser, adminSetUserRole, adminSetUserStatus, adminUserList } from '@deveye/types';
 
-import type { UserInviteRow } from '@/db/repos/userInvites';
-import { env } from '@/Utils/Env';
 import { invalidateAccess } from '../_access';
 import { forgetSessionsOf } from '@/Services/SecureStore';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
@@ -22,22 +11,6 @@ import { notifyAdmins } from './notify';
  * espace.
  */
 const ADMIN = { admin: true, scope: 'account' } as const;
-
-function toInvite(row: UserInviteRow, authorName: string, workspaceName: string | null): AdminInvite {
-    return {
-        token: row.token,
-        // En fragment : le jeton crée un compte, et un fragment n'atteint ni le
-        // serveur ni les journaux d'un proxy.
-        url: `${env.PUBLIC_ORIGIN.replace(/\/+$/, '')}/register#${row.token}`,
-        email: row.email,
-        workspaceName,
-        expiresAt: row.expires_at === null ? null : Number(row.expires_at),
-        maxUses: row.max_uses,
-        uses: Number(row.uses),
-        createdBy: authorName,
-        created: Number(row.created)
-    };
-}
 
 /** Se retirer soi-même son propre accès est toujours une erreur. */
 function assertNotSelf(ctx: FeatureContext, userId: number, what: string): void {
@@ -180,95 +153,10 @@ export const adminDeleteUserFeature: FeatureDefinition<
     }
 });
 
-export const adminInviteListFeature: FeatureDefinition<
-    typeof adminInviteList.command,
-    typeof adminInviteList.input,
-    typeof adminInviteList.output
-> = defineFeature({
-    ...adminInviteList,
-    access: ADMIN,
-    handler: async (ctx) => {
-        const rows = await ctx.db.userInvites.listActive();
-        const authors = await ctx.db.users.findByIds(Array.from(new Set(rows.map((r) => r.created_by))));
-        const nameOf = new Map(authors.map((u) => [u.id, u.username]));
-        const invites = await Promise.all(
-            rows.map(async (r) => {
-                const ws = r.workspace_id === null ? null : await ctx.db.workspaces.findById(r.workspace_id);
-                return toInvite(r, nameOf.get(r.created_by) ?? '', ws?.name ?? null);
-            })
-        );
-        return { invites };
-    }
-});
-
-export const adminInviteCreateFeature: FeatureDefinition<
-    typeof adminInviteCreate.command,
-    typeof adminInviteCreate.input,
-    typeof adminInviteCreate.output
-> = defineFeature({
-    ...adminInviteCreate,
-    mutates: true,
-    access: ADMIN,
-    handler: async (ctx, input) => {
-        const email = input.email.trim().toLowerCase();
-        const workspace = input.workspaceId === null ? null : await ctx.db.workspaces.findById(input.workspaceId);
-        if (input.workspaceId !== null && !workspace) {
-            throw new FeatureError('not_found', 'Espace introuvable');
-        }
-        if (workspace?.kind === 'personal') {
-            throw new FeatureError('validation', 'On ne rejoint pas l’espace personnel de quelqu’un');
-        }
-
-        const row = await ctx.db.userInvites.create({
-            createdBy: ctx.userId,
-            email: email === '' ? null : email,
-            workspaceId: input.workspaceId,
-            ttlSeconds: input.ttlSeconds,
-            maxUses: input.maxUses
-        });
-        ctx.audit({
-            action: 'user.invite.create',
-            level: 'warning',
-            category: 'user',
-            description: email === '' ? 'Invitation ouverte créée' : `Invitation créée pour ${email}`,
-            metadata: { workspaceId: input.workspaceId, maxUses: input.maxUses }
-        });
-        if (ctx.live) await notifyAdmins(ctx.db, ctx.live, ctx.workspaceId, ctx.userId);
-        const author = await ctx.db.users.findById(ctx.userId);
-        return { invite: toInvite(row, author?.username ?? '', workspace?.name ?? null) };
-    }
-});
-
-export const adminInviteRevokeFeature: FeatureDefinition<
-    typeof adminInviteRevoke.command,
-    typeof adminInviteRevoke.input,
-    typeof adminInviteRevoke.output
-> = defineFeature({
-    ...adminInviteRevoke,
-    mutates: true,
-    access: ADMIN,
-    handler: async (ctx, input) => {
-        if (!(await ctx.db.userInvites.revoke(input.token))) {
-            throw new FeatureError('not_found', 'Invitation introuvable');
-        }
-        if (ctx.live) await notifyAdmins(ctx.db, ctx.live, ctx.workspaceId, ctx.userId);
-        ctx.audit({
-            action: 'user.invite.revoke',
-            level: 'warning',
-            category: 'user',
-            description: 'Invitation révoquée'
-        });
-        return { token: input.token };
-    }
-});
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const adminFeatures: FeatureDefinition<string, any, any>[] = [
     adminUserListFeature,
     adminSetUserRoleFeature,
     adminSetUserStatusFeature,
-    adminDeleteUserFeature,
-    adminInviteListFeature,
-    adminInviteCreateFeature,
-    adminInviteRevokeFeature
+    adminDeleteUserFeature
 ];

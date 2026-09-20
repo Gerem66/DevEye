@@ -4,14 +4,12 @@ import {
     loginRequestSchema,
     loginResponseSchema,
     ok,
-    registerRequestSchema,
     twoFactorChallengeRequestSchema
 } from '@deveye/types';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { randomBytes } from 'node:crypto';
 
-import { notifyAdmins } from '@/features/admin/notify';
 import { env } from '@/Utils/Env';
 import { sha256hex } from '@/Utils/hash';
 import {
@@ -163,89 +161,6 @@ async function unwrapDekForLogin(
 }
 
 export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live }: AuthDeps): Promise<void> {
-    app.post(
-        '/api/auth/register',
-        { config: { rateLimit: { max: 5, timeWindow: '10 minutes' } } },
-        async (req, reply) => {
-            const parsed = registerRequestSchema.safeParse(req.body);
-            if (!parsed.success) {
-                return reply.code(400).send(err('validation', 'Invalid registration payload', parsed.error.flatten()));
-            }
-            const { username, email, password } = parsed.data;
-
-            // L'invitation d'abord : sans elle, la réponse ne dit rien des comptes
-            // existants. Vérifier l'unicité avant ferait de cette route, ouverte à
-            // tous, un annuaire (409 = existe, 403 = libre).
-            const invite = await db.userInvites.findLive(parsed.data.inviteToken, email);
-            if (!invite) {
-                return reply
-                    .code(403)
-                    .send(err('forbidden', 'Invitation invalide, expirée, ou réservée à une autre adresse'));
-            }
-
-            const [existingByName, existingByEmail] = await Promise.all([
-                db.users.findByUsername(username),
-                db.users.findByEmail(email)
-            ]);
-            if (existingByName || existingByEmail) {
-                return reply.code(409).send(err('conflict', 'Username or email already in use'));
-            }
-
-            // Consommer l'invitation avant de créer le compte : un usage brûlé pour
-            // rien vaut mieux qu'un compte créé sur une invitation épuisée. La
-            // consommation revalide tout, d'un seul coup : deux inscriptions
-            // simultanées sur le dernier usage ne passent pas toutes les deux.
-            if (!(await db.userInvites.consume(parsed.data.inviteToken, email))) {
-                return reply
-                    .code(403)
-                    .send(err('forbidden', 'Invitation invalide, expirée, ou réservée à une autre adresse'));
-            }
-
-            const passwordHash = await hashPassword(password);
-            const row = await db.users.create({ email, username, passwordHash, role: 'user' });
-
-            // Tout compte possede un espace personnel, cree ici et nulle part
-            // ailleurs. Il ne peut pas exister avant le compte (sa FK proprietaire
-            // le reference), d'ou l'ordre : compte -> espace -> rattachement.
-            const personal = await db.workspaces.createPersonal(row.id, username);
-            await db.users.setPersonalWorkspace(row.id, personal.id);
-
-            // L'invitation peut installer directement le compte dans une équipe.
-            if (invite.workspace_id !== null) {
-                await db.workspaceMembers.add({ userId: row.id, workspaceId: invite.workspace_id });
-                const fallback = await db.workspaceRoles.findDefault(invite.workspace_id);
-                if (fallback) await db.workspaceRoles.assign(row.id, invite.workspace_id, fallback.id);
-            }
-
-            await issueSession(reply, db, row.id);
-            const bundle = await loadUserBundle(db, row.id);
-            if (!bundle) {
-                return reply.code(500).send(err('internal', 'Unable to load user'));
-            }
-            audit.record({
-                source: 'web',
-                category: 'auth',
-                action: 'register',
-                level: 'info',
-                uid: row.id,
-                ip: req.ip,
-                description: `Nouveau compte créé : ${username}`,
-                metadata: { email }
-            });
-
-            // Né hors de toute commande WS, le compte n'annoncerait rien sans ces
-            // deux signaux : la page Utilisateurs des administrateurs, et la liste
-            // des membres de l'espace rejoint, chacun visé par compte.
-            await notifyAdmins(db, live, personal.id, row.id);
-            if (invite.workspace_id !== null) {
-                for (const m of await db.workspaceMembers.listByWorkspaceIds([invite.workspace_id])) {
-                    if (m.user_id !== row.id) live.userChanged(m.user_id, invite.workspace_id, ['workspace'], row.id);
-                }
-            }
-            return reply.send(ok(loginResponseSchema.parse({ twoFactorRequired: false, ...bundle })));
-        }
-    );
-
     app.post('/api/auth/login', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
         const parsed = loginRequestSchema.safeParse(req.body);
         if (!parsed.success) {
