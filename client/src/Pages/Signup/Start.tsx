@@ -120,7 +120,14 @@ export function SignupStart({ plan, onLogin }: { plan: string | null; onLogin: (
     }
 
     return (
-        <SignupScene onSubmit={submit}>
+        <SignupScene
+            onSubmit={submit}
+            footer={
+                <button type='button' className='text-link' onClick={onLogin}>
+                    Se connecter
+                </button>
+            }
+        >
             <p className='signup-intro'>
                 Créez votre compte DevEye. Le mot de passe se choisit après validation de l’adresse.
             </p>
@@ -154,9 +161,6 @@ export function SignupStart({ plan, onLogin }: { plan: string | null; onLogin: (
 
             <button className='submit' type='submit' disabled={sending}>
                 Créer mon compte
-            </button>
-            <button type='button' className='cancel' onClick={onLogin}>
-                J’ai déjà un compte
             </button>
         </SignupScene>
     );

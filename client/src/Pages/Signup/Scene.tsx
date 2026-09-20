@@ -8,11 +8,13 @@ interface SceneProps {
     /** La scène entière s'efface en fondu. */
     hidden?: boolean;
     onSubmit?: () => void;
+    /** Sous la carte : le bouton texte qui ramène à la connexion. */
+    footer?: ReactNode;
     children: ReactNode;
 }
 
 /** La scène du login, pour l'inscription : c'est le même moment du parcours. */
-export function SignupScene({ collapsing = false, hidden = false, onSubmit, children }: SceneProps) {
+export function SignupScene({ collapsing = false, hidden = false, onSubmit, footer, children }: SceneProps) {
     const cardRef = useRef<HTMLDivElement | null>(null);
     const contentRef = useRef<HTMLDivElement | null>(null);
 
@@ -48,6 +50,7 @@ export function SignupScene({ collapsing = false, hidden = false, onSubmit, chil
                         {children}
                     </div>
                 </div>
+                {!collapsing && footer}
             </form>
         </div>
     );

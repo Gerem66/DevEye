@@ -235,6 +235,26 @@
     }
 }
 
+/* Le bouton texte sous la carte : passer de la connexion à l'inscription, et retour. */
+.login .text-link {
+    display: block;
+    /* La carte garde 48px sous elle pour son effondrement : le lien remonte dedans. */
+    margin: calc(var(--space-md) - 48px) auto 0;
+    padding: var(--space-xs) var(--space-sm);
+    border: none;
+    background: none;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: color var(--transition-fast);
+    animation: loadAnim 1s;
+}
+
+.login .text-link:hover:not(:disabled) {
+    color: var(--accent);
+}
+
 /* Inscription : elle réutilise la scène du login, ci-dessous seulement ce qui
    lui est propre. */
 .login .signup-intro {

@@ -326,11 +326,6 @@ function LoginPage({ onSignup }: { onSignup?: () => void }) {
                                 <button className='submit' onClick={onSubmit} disabled={loading}>
                                     Se connecter
                                 </button>
-                                {signupOpen && onSignup && (
-                                    <button className='cancel' onClick={onSignup} disabled={loading}>
-                                        Créer un compte
-                                    </button>
-                                )}
                             </>
                         ) : (
                             <>
@@ -369,6 +364,13 @@ function LoginPage({ onSignup }: { onSignup?: () => void }) {
                     </div>
                 </div>
 
+                {/* Sous la carte, et seulement devant le formulaire : ni pendant la
+                    barre de progression, ni à l'étape du code 2FA. */}
+                {signupOpen && onSignup && phase === 'form' && !twoFaRequired && (
+                    <button type='button' className='text-link' onClick={onSignup} disabled={loading}>
+                        S’inscrire
+                    </button>
+                )}
                 {unreachable && <p className='unreachable'>Serveur injoignable, reprise automatique…</p>}
             </div>
         </div>
