@@ -174,6 +174,7 @@ export const uptimeHandlers = [
         handler: async (ctx: Ctx, input) => {
             const draft = input.service;
             if (!isAllowedOutboundUrl(draft.url)) throw new FeatureError('validation', OUTBOUND_REFUSED_MESSAGE);
+            await ctx.quota.assert('monitors', async (owned) => (await ctx.repo.services.countInWorkspaces(owned)) + 1);
             const row = await ctx.repo.services.create({
                 userId: ctx.userId,
                 workspaceId: ctx.workspaceId,

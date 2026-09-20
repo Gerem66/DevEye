@@ -12,6 +12,7 @@ export const manifest = {
     links: [{ to: 'mail', what: 'Une adresse hébergée ici se lit dans Mails, ajoutée d’un clic.' }],
     /** Le défi ACME du certificat se sert sur une route publique. */
     nativeCapabilities: ['routes.public'],
+    quotas: [{ key: 'addresses', label: 'adresses hébergées' }],
     domains: {
         hint: 'Les domaines dont DevEye héberge les adresses. Une adresse ne se crée que sur un domaine vérifié.',
         service:

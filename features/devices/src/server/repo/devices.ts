@@ -29,6 +29,7 @@ export interface DeviceRepo {
     /** Un appareil visible depuis cet espace : chez lui, ou par projection. */
     findVisible(id: string, workspaceId: number): Promise<DeviceRow | null>;
     setStatus(id: string, status: DeviceStatus): Promise<void>;
+    countActiveInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
     rename(id: string, name: string): Promise<void>;
     setConfig(id: string, patch: DeviceConfigPatch): Promise<void>;
     /** Mark a device for deletion, remembering its status so it can be restored. */
@@ -92,6 +93,14 @@ export function deviceRepo(q: SdkQueryable): DeviceRepo {
         },
         async setStatus(id, status) {
             await q.execute('UPDATE devices SET status = ? WHERE id = ?', [status, id]);
+        },
+        async countActiveInWorkspaces(workspaceIds) {
+            if (workspaceIds.length === 0) return 0;
+            const rows = await q.query<{ n: number }>(
+                "SELECT COUNT(*) AS n FROM devices WHERE status = 'active' AND workspace_id IN (?)",
+                [[...workspaceIds]]
+            );
+            return Number(rows[0]?.n ?? 0);
         },
         async rename(id, name) {
             await q.execute('UPDATE devices SET name = ? WHERE id = ?', [name, id]);

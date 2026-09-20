@@ -28,6 +28,25 @@ import type { MonitorHub } from './hub';
 import type { LiveHub } from '@/live/hub';
 
 import type { Database } from '@/db';
+import { moduleProvider } from '@/features/_sdk/register';
+import { limitIn, ownedWorkspaceIds, planOf } from '@/Services/quota';
+
+/** La clé que le module Appareils déclare (`manifest.quotas`). */
+const AGENTS_QUOTA = 'devices.agents';
+
+async function withinAgentQuota(
+    db: Database,
+    workspaceId: number,
+    logger: { error(obj: object, msg: string): void }
+): Promise<boolean> {
+    const workspace = await db.workspaces.findById(workspaceId);
+    if (!workspace) return true;
+    const plan = await planOf({ get: <T>(key: string) => moduleProvider<T>(key) }, workspace.owner_user_id, logger);
+    const limit = limitIn(plan, AGENTS_QUOTA);
+    if (limit === null) return true;
+    const owned = await ownedWorkspaceIds(db, workspace.owner_user_id);
+    return (await db.devices.countActiveInWorkspaces(owned)) + 1 <= limit;
+}
 
 interface AgentRouteDeps {
     db: Database;
@@ -225,7 +244,11 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }
             // fiche d'une machine existante (son historique, ses partages), donc
             // il attend toujours une approbation, même sous un code qui approuve
             // d'office. Sans cela, un code de liaison suffirait à saisir une machine.
-            const autoApproved = consumed.autoApprove && !existing;
+            // Un code qui approuve d'office ne passe pas par-dessus l'offre du
+            // propriétaire de l'espace : au-delà, l'appareil attend, et c'est son
+            // approbation à la main qui dira la limite.
+            const autoApproved =
+                consumed.autoApprove && !existing && (await withinAgentQuota(db, workspaceId, app.log));
             await db.devices.markEnrolled(deviceId, autoApproved ? 'active' : 'pending');
             // L'appairage passe par cette route HTTP, pas par une commande WS :
             // sans ce signal, rien n'avertirait l'espace.

@@ -70,6 +70,12 @@ describe('mailserver.create', () => {
         );
     });
 
+    it('une offre sans adresse hébergée refuse toute création', async () => {
+        const { repo, ctx } = setup({ quotaLimits: { addresses: 0 } });
+        await assert.rejects(run(ctx, 'mailserver.create', { ...base, localPart: 'bob', domainId: 1 }), /quota/);
+        assert.equal(repo.mailboxes.length, 0);
+    });
+
     it('refuse une partie locale invalide, un domaine en attente, d’un autre espace, ou une adresse prise', async () => {
         const { ctx } = setup();
         for (const localPart of ['a+b', '.a', 'a b', 'é']) {

@@ -62,6 +62,8 @@ export function memoryRepo(): MemoryRepo {
         find: (id, ws) => Promise.resolve(copy(mailboxes.find((m) => m.id === id && m.workspace_id === ws))),
         findById: (id) => Promise.resolve(copy(mailboxOf(id))),
         findByAddress: (address) => Promise.resolve(copy(mailboxes.find((m) => m.address === address))),
+        countInWorkspaces: (workspaceIds) =>
+            Promise.resolve(mailboxes.filter((m) => workspaceIds.includes(m.workspace_id)).length),
         createMailbox(input) {
             const id = nextId();
             mailboxes.push({

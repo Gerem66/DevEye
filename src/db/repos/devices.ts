@@ -45,6 +45,7 @@ export interface DevicesRepo {
      * bookkeeping), so a previously archived/revoked machine re-pairs cleanly.
      */
     markEnrolled(id: string, status: DeviceStatus): Promise<void>;
+    countActiveInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
     /** Finalise a deletion: archive the device (its history is kept, frozen). */
     archive(id: string): Promise<void>;
     /** Abort a deletion after a self-destruct failure: restore status + record why. */
@@ -141,6 +142,14 @@ export function devicesRepo(pool: Q): DevicesRepo {
                 `UPDATE devices SET status = ?, status_before_delete = NULL, delete_error = NULL WHERE id = ?`,
                 [status, id]
             );
+        },
+        async countActiveInWorkspaces(workspaceIds) {
+            if (workspaceIds.length === 0) return 0;
+            const r = await pool.query<{ n: number }>(
+                "SELECT COUNT(*) AS n FROM devices WHERE status = 'active' AND workspace_id IN (?)",
+                [[...workspaceIds]]
+            );
+            return Number(r.rows[0].n);
         },
         async archive(id) {
             // Keep the row (and its monitoring history) but neutralise the device:

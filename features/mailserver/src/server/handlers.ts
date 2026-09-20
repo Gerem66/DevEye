@@ -140,6 +140,7 @@ export const mailserverHandlers = [
                 throw new FeatureError('conflict', 'Cette adresse existe déjà.');
             }
 
+            await ctx.quota.assert('addresses', async (owned) => (await ctx.repo.countInWorkspaces(owned)) + 1);
             const password = generateSecret();
             const id = await ctx.repo.createMailbox({
                 workspaceId: ctx.workspaceId,

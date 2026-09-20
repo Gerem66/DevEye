@@ -50,6 +50,7 @@ export interface UptimeWindowStat {
 
 export interface UptimeServicesRepo {
     listByWorkspace(workspaceId: number): Promise<UptimeServiceRow[]>;
+    countInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
     /**
      * Les services **visibles** depuis cet espace : les siens, plus ceux qu'un
      * autre espace y projette (`item_shares`).
@@ -236,6 +237,14 @@ function servicesRepo(q: SdkQueryable): UptimeServicesRepo {
     }
 
     return {
+        async countInWorkspaces(workspaceIds) {
+            if (workspaceIds.length === 0) return 0;
+            const rows = await q.query<{ n: number }>(
+                'SELECT COUNT(*) AS n FROM uptime_services WHERE workspace_id IN (?)',
+                [[...workspaceIds]]
+            );
+            return Number(rows[0]?.n ?? 0);
+        },
         async listVisible(workspaceId) {
             // `sort_order` appartient à l'espace d'origine : un service projeté
             // se range donc après les locaux, par identifiant. Lui donner un

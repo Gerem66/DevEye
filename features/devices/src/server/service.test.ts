@@ -33,6 +33,7 @@ function fakeRepo(pruned: string[]): DevicesRepo {
             listVisible: unused,
             findVisible: unused,
             setStatus: unused,
+            countActiveInWorkspaces: unused,
             rename: unused,
             setConfig: unused,
             requestDeletion: unused,

@@ -132,6 +132,7 @@ export interface MailserverRepo {
     find(id: number, workspaceId: number): Promise<MailboxRow | null>;
     findById(id: number): Promise<MailboxRow | null>;
     findByAddress(address: string): Promise<MailboxRow | null>;
+    countInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
     createMailbox(input: {
         workspaceId: number;
         domainId: number;
@@ -342,6 +343,14 @@ export function createRepo(q: SdkQueryable): MailserverRepo {
 
         findById,
 
+        async countInWorkspaces(workspaceIds) {
+            if (workspaceIds.length === 0) return 0;
+            const rows = await q.query<{ n: number }>(
+                'SELECT COUNT(*) AS n FROM ft_mailserver_mailboxes WHERE workspace_id IN (?)',
+                [[...workspaceIds]]
+            );
+            return Number(rows[0]?.n ?? 0);
+        },
         async findByAddress(address) {
             const row = one(
                 await q.query<MailboxRow>(

@@ -216,6 +216,8 @@ function fakeRepo(deviceRows: DeviceRow[], shares: Record<string, number[]> = {}
                 const r = find(id);
                 if (r) r.status = status;
             },
+            countActiveInWorkspaces: async (workspaceIds) =>
+                deviceRows.filter((r) => r.status === 'active' && workspaceIds.includes(r.workspace_id)).length,
             async rename(id, name) {
                 const r = find(id);
                 if (r) r.name = name;
@@ -389,6 +391,7 @@ interface CtxOverrides {
     shares?: Readonly<Record<string, number>>;
     /** Ce que la façade révèle ; par défaut, chaque ligne du dépôt, A seule en ligne. */
     devices?: readonly SdkDevice[];
+    quotaLimits?: Record<string, number>;
 }
 
 function contextFor(repo: FakeRepo, over: CtxOverrides = {}): TestContext<DevicesRepo> {
@@ -508,6 +511,13 @@ describe("le cycle de vie d'un appareil", () => {
             ctx.recorded.audits.map((a) => a.action),
             ['devices.confirm']
         );
+    });
+
+    it("l'approbation s'arrête à l'offre : un appareil actif de plus que la limite est refusé", async () => {
+        const repo = fakeRepo([row({ id: DEVICE_A, status: 'pending' }), row({ id: DEVICE_B, status: 'active' })]);
+        const ctx = contextFor(repo, { isAdmin: true, quotaLimits: { agents: 1 } });
+        await assert.rejects(handlerFor(devicesConfirm)(ctx, { deviceId: DEVICE_A }), failsWith('quota_exceeded'));
+        assert.equal(repo.deviceRows[0].status, 'pending');
     });
 
     it("un appareil révoqué ne s'approuve pas : il se réactive", async () => {

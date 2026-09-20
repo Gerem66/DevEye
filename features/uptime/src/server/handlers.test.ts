@@ -84,6 +84,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         incidents: [],
         services: {
             listByWorkspace: async (workspaceId) => rows.filter((r) => r.workspace_id === workspaceId),
+            countInWorkspaces: async (workspaceIds) => rows.filter((r) => workspaceIds.includes(r.workspace_id)).length,
             listVisible: async (workspaceId) => rows.filter((r) => visible(r, workspaceId)),
             findById: async (id, workspaceId) =>
                 rows.find((r) => r.id === id && r.workspace_id === workspaceId) ?? null,
@@ -309,5 +310,14 @@ describe("l'ordonnanceur", () => {
         // Le blob est passé par `ctx.cipher()` (identité ici) : le nom y est.
         assert.ok(repo.rows[0].content.includes('API renommée'));
         assert.equal(ctx.recorded.audits[0].action, 'uptime.add');
+    });
+
+    it('refuse un service de plus que l’offre, compté sur tous les espaces du propriétaire', async () => {
+        setMonitor(null);
+        const repo = seed(fakeRepo());
+        const owned = repo.rows.length;
+        const ctx = createTestContext({ repo, quotaLimits: { monitors: owned }, ownerWorkspaceIds: [1, 2] });
+        await assert.rejects(handlerFor(uptimeAdd)(ctx, { service: { ...DRAFT, enabled: false } }), /quota/);
+        assert.equal(repo.rows.length, owned);
     });
 });

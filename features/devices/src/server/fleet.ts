@@ -1,5 +1,5 @@
 import type { DeviceRow } from '@deveye/types';
-import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
+import { defineSdkFeature, FeatureError, type SdkFeatureContext } from '@deveye/types/sdk/server';
 
 import {
     devicesCancelDelete,
@@ -52,6 +52,11 @@ export const devicesListFeature = defineSdkFeature<
     }
 });
 
+/** Un appareil de plus en service : borné par l'offre du propriétaire de l'espace. */
+function assertAgentQuota(ctx: SdkFeatureContext<DevicesRepo>): Promise<void> {
+    return ctx.quota.assert('agents', async (owned) => (await ctx.repo.devices.countActiveInWorkspaces(owned)) + 1);
+}
+
 export const devicesConfirmFeature = defineSdkFeature<
     DevicesRepo,
     typeof devicesConfirm.command,
@@ -64,6 +69,7 @@ export const devicesConfirmFeature = defineSdkFeature<
     handler: async (ctx, input) => {
         const row = await loadDevice(ctx, input.deviceId, 'write');
         if (row.status === 'revoked') throw new FeatureError('conflict', 'Device is revoked');
+        await assertAgentQuota(ctx);
         await ctx.repo.devices.setStatus(row.id, 'active');
         // Le statut vit aussi dans la session agent, figée à la connexion : sans
         // cette remise à zéro, un agent déjà connecté verrait sa télémétrie
@@ -120,6 +126,7 @@ export const devicesReactivateFeature = defineSdkFeature<
         if (row.status !== 'revoked') {
             throw new FeatureError('conflict', 'Only a revoked device can be reactivated');
         }
+        await assertAgentQuota(ctx);
         await ctx.repo.devices.setStatus(row.id, 'active');
         ctx.deveye.agents.resetAgentSession(row.id);
         const updated = (await ctx.repo.devices.findById(row.id)) ?? { ...row, status: 'active' as const };

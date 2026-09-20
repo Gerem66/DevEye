@@ -23,6 +23,7 @@ export const manifest = {
     resources: ['uptime.count', 'uptime.list'],
     /** La seule native appelée : les canaux d'alerte de l'espace, par service. */
     nativeCapabilities: ['notify'],
+    quotas: [{ key: 'monitors', label: 'services surveillés' }],
     topbarWidget: { description: 'Services en ligne sur les services surveillés' },
     links: [{ to: 'mail', what: 'envoie ses alertes par un compte Mail' }],
     /**
