@@ -314,6 +314,10 @@ function syncWith(store: FakeRepo, remote: Remote) {
         countByItem: async () => new Map(),
         detach: async () => 0,
         recordEvent: async () => undefined,
+        // Non sollicitées ici : l'écriture des liaisons est testée chez Projets.
+        linkTargets: async () => [],
+        link: async () => undefined,
+        unlink: async () => undefined,
         applyVersion: async (feature, itemId, workspaceId, version) => {
             versions.push([feature, itemId, workspaceId, version]);
         }

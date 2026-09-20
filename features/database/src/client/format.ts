@@ -5,22 +5,10 @@ import type {
     DatabaseStatus,
     DatabaseTable
 } from '../contracts/domain';
-import type { ProjectStatus } from '@deveye/types';
 
 export const ENGINE_LABELS: Record<DatabaseEngine, string> = {
     mysql: 'MySQL / MariaDB',
     postgres: 'PostgreSQL'
-};
-
-/**
- * Copie des libellés de Projets (`STATUS_LABELS` de
- * `features/projects/src/client/api.ts`) : un module n'importe pas un autre module.
- */
-export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
-    draft: 'Brouillon',
-    active: 'En cours',
-    paused: 'En pause',
-    done: 'Terminé'
 };
 
 export const ENGINE_PORTS: Record<DatabaseEngine, number> = {

@@ -373,14 +373,14 @@ export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
             ]);
         },
         async listSiteUsage(siteId, workspaceId) {
-            // L'étage ouvert seul, comme pour les bases, et les archivés à part : un
-            // projet rangé ne suit plus rien à l'écran.
+            // L'étage ouvert seul, comme pour les bases. Les archivés restent :
+            // une liaison qu'ils tiennent encore doit pouvoir se nommer et se
+            // défaire, et le compteur de l'espace les compte déjà.
             return q.query<ProjectUsageRow>(
                 `SELECT p.id AS project_id, p.status, p.content
                    FROM project_audience_links l
                    JOIN projects p ON p.id = l.project_id
                   WHERE l.site_id = ? AND l.workspace_id = ? AND p.security_tier = 'open'
-                    AND p.archived_at IS NULL
                   ORDER BY p.sort_order ASC, p.id ASC`,
                 [siteId, workspaceId]
             );

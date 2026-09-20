@@ -3,7 +3,7 @@ import type { MinimalUser } from '@deveye/types';
 import { Button, FeatureSettingsButton, StatusBadge } from 'deveye-sdk-client';
 import type { GitRepo, GitRepoUsage } from '../contracts/domain';
 
-import { PROJECT_STATUS_LABELS } from './format';
+import { PROJECT_STATUS_LABELS } from '@deveye/types';
 import { RepoView } from './RepoView';
 import styles from './style.module.css';
 

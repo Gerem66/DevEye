@@ -19,6 +19,7 @@ import { isModuleMovable, moduleItems, moduleManifest } from '../_sdk/register';
 import { isShareWired, shareBlockerFor } from '../_sharing';
 import { canWriteItemIn, detachLinks, itemHomeWorkspace, loadHome } from './_shared';
 import { moveFeatures } from './move';
+import { projectLinkFeatures } from './projectLinks';
 import { extraOverridesOf } from '@/db/repos/itemSharing';
 import { parseJsonArray } from '@/Utils/json';
 
@@ -382,5 +383,6 @@ export const sharingFeatures: FeatureDefinition<string, any, any>[] = [
     setFeature,
     grantListFeature,
     grantSetFeature,
-    ...moveFeatures
+    ...moveFeatures,
+    ...projectLinkFeatures
 ];

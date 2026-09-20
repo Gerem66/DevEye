@@ -43,6 +43,10 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     git: 'git',
     home: 'home',
     live: null,
+    // Relier un élément à un projet change le portefeuille ; la liste de la
+    // feature visée se ravive par le sujet que Projets bat dans l'espace du
+    // projet, qui n'est pas forcément l'actif.
+    links: 'projects',
     logs: null,
     mail: 'mail',
     // Le courrier qui passe bat un sujet secondaire (`mailserverFlow`), par le moteur : celui-ci ne sert

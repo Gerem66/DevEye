@@ -1,5 +1,5 @@
 import type { ProjectVersionSource } from '../contracts/domain';
-import { type ProjectsUsageProvider, type ProjectUsage } from '@deveye/types/sdk';
+import { type ProjectLinkTarget, type ProjectsUsageProvider, type ProjectUsage } from '@deveye/types/sdk';
 import type { FeatureServiceDeps } from '@deveye/types/sdk/server';
 
 import type { ProjectsRepo, ProjectUsageRow } from './repo';
@@ -36,32 +36,54 @@ const LINKS: Record<
         usage(repo: ProjectsRepo, itemId: number, workspaceId: number): Promise<ProjectUsageRow[]>;
         counts(repo: ProjectsRepo, workspaceId: number): Promise<Map<number, number>>;
         detach(repo: ProjectsRepo, itemId: number, workspaceId: number): Promise<number>;
+        link(repo: ProjectsRepo, projectId: number, itemId: number, workspaceId: number): Promise<void>;
+        unlink(repo: ProjectsRepo, projectId: number, itemId: number, workspaceId: number): Promise<void>;
     }
 > = {
     audience: {
         usage: (repo, itemId, workspaceId) => repo.links.listSiteUsage(itemId, workspaceId),
         counts: (repo, workspaceId) => repo.links.countSiteLinks(workspaceId),
-        detach: (repo, itemId, workspaceId) => repo.links.detachSite(itemId, workspaceId)
+        detach: (repo, itemId, workspaceId) => repo.links.detachSite(itemId, workspaceId),
+        link: (repo, projectId, itemId, workspaceId) => repo.links.linkSite(projectId, workspaceId, itemId),
+        unlink: async (repo, projectId, itemId, workspaceId) => {
+            await repo.links.unlinkSite(projectId, workspaceId, itemId);
+        }
     },
     database: {
         usage: (repo, itemId, workspaceId) => repo.links.listDatabaseUsage(itemId, workspaceId),
         counts: (repo, workspaceId) => repo.links.countDatabaseLinks(workspaceId),
-        detach: (repo, itemId, workspaceId) => repo.links.detachDatabase(itemId, workspaceId)
+        detach: (repo, itemId, workspaceId) => repo.links.detachDatabase(itemId, workspaceId),
+        link: (repo, projectId, itemId, workspaceId) => repo.links.linkDatabase(projectId, workspaceId, itemId),
+        unlink: async (repo, projectId, itemId, workspaceId) => {
+            await repo.links.unlinkDatabase(projectId, workspaceId, itemId);
+        }
     },
     deploy: {
         usage: (repo, itemId, workspaceId) => repo.links.listDeployUsage(itemId, workspaceId),
         counts: (repo, workspaceId) => repo.links.countDeployLinks(workspaceId),
-        detach: (repo, itemId, workspaceId) => repo.links.detachDeployTarget(itemId, workspaceId)
+        detach: (repo, itemId, workspaceId) => repo.links.detachDeployTarget(itemId, workspaceId),
+        link: (repo, projectId, itemId, workspaceId) => repo.links.linkDeployTarget(projectId, workspaceId, itemId),
+        unlink: async (repo, projectId, itemId, workspaceId) => {
+            await repo.links.unlinkDeployTarget(projectId, workspaceId, itemId);
+        }
     },
     git: {
         usage: (repo, itemId, workspaceId) => repo.links.listRepoUsage(itemId, workspaceId),
         counts: (repo, workspaceId) => repo.links.countRepoLinks(workspaceId),
-        detach: (repo, itemId, workspaceId) => repo.links.detachRepo(itemId, workspaceId)
+        detach: (repo, itemId, workspaceId) => repo.links.detachRepo(itemId, workspaceId),
+        link: (repo, projectId, itemId, workspaceId) => repo.links.linkRepo(projectId, workspaceId, itemId),
+        unlink: async (repo, projectId, itemId, workspaceId) => {
+            await repo.links.unlinkRepo(projectId, workspaceId, itemId);
+        }
     },
     uptime: {
         usage: (repo, itemId, workspaceId) => repo.links.listServiceUsage(itemId, workspaceId),
         counts: (repo, workspaceId) => repo.links.countServiceLinks(workspaceId),
-        detach: (repo, itemId, workspaceId) => repo.links.detachService(itemId, workspaceId)
+        detach: (repo, itemId, workspaceId) => repo.links.detachService(itemId, workspaceId),
+        link: (repo, projectId, itemId, workspaceId) => repo.links.link(projectId, workspaceId, itemId),
+        unlink: async (repo, projectId, itemId, workspaceId) => {
+            await repo.links.unlink(projectId, workspaceId, itemId);
+        }
     }
 };
 
@@ -104,6 +126,55 @@ export function createProjectsUsageProvider(deps: Deps): ProjectsUsageProvider {
             // sans ce battement ils resteraient ouverts sur une liste vide.
             if (removed > 0) deps.live.changed(workspaceId);
             return removed;
+        },
+        /**
+         * Les vivants de l'espace, plus les archivés qui relient encore : on ne
+         * range pas une nouvelle liaison dans un projet rangé, mais on doit
+         * pouvoir défaire celle qui y est.
+         */
+        async linkTargets(feature, itemId, workspaceId) {
+            const link = LINKS[feature];
+            if (!link) return [];
+            const linked = new Set((await link.usage(deps.repo, itemId, workspaceId)).map((r) => r.project_id));
+            const [alive, filed] = await Promise.all([
+                deps.repo.projects.listVisible(workspaceId, false),
+                deps.repo.projects.listVisible(workspaceId, true)
+            ]);
+            const cipher = deps.cipherFor(workspaceId);
+            return Promise.all(
+                [...alive, ...filed.filter((row) => linked.has(row.id))]
+                    // Chez lui et à l'étage ouvert : `listVisible` rend aussi les
+                    // projetés, sur lesquels une liaison ne se pose pas, et un
+                    // projet gardé n'en porte aucune.
+                    .filter((row) => row.workspace_id === workspaceId && row.security_tier === 'open')
+                    .map(async (row): Promise<ProjectLinkTarget> => ({
+                        projectId: row.id,
+                        title: (await tryDecryptProject(cipher, row.content))?.title || 'Sans titre',
+                        status: row.status,
+                        archived: row.archived_at !== null,
+                        linked: linked.has(row.id)
+                    }))
+            );
+        },
+        async link(feature, itemId, workspaceId, projectId) {
+            const entry = LINKS[feature];
+            if (!entry) return;
+            // `findById` est le domicile et jamais une fenêtre : une liaison ne
+            // se pose pas sur un projet projeté, et un gardé n'en prend aucune.
+            const project = await deps.repo.projects.findById(projectId, workspaceId);
+            if (!project || project.security_tier !== 'open') return;
+            await entry.link(deps.repo, projectId, itemId, workspaceId);
+            // L'espace du PROJET, qui n'est pas forcément celui d'où l'on règle :
+            // ses onglets s'ouvrent sur le compte de ses liaisons, et la liste
+            // de la feature visée y montre combien de projets tiennent chaque
+            // élément.
+            deps.live.changed(workspaceId, ['projects', feature]);
+        },
+        async unlink(feature, itemId, workspaceId, projectId) {
+            const entry = LINKS[feature];
+            if (!entry) return;
+            await entry.unlink(deps.repo, projectId, itemId, workspaceId);
+            deps.live.changed(workspaceId, ['projects', feature]);
         },
         async recordEvent(projectId, workspaceId, event) {
             const project = await deps.repo.projects.findById(projectId, workspaceId);

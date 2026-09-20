@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { SHARE_WIRED_FEATURES, featureDescriptor, type FeatureId } from '@deveye/types';
+import { PROJECT_LINKED_FEATURES, SHARE_WIRED_FEATURES, featureDescriptor, type FeatureId } from '@deveye/types';
 
 import Button from '@/Components/Button';
 import { Dialog } from '@/Components/Dialog';
@@ -11,6 +11,7 @@ import { getActiveWorkspaceId, useActiveWorkspace, useWorkspacePermissions } fro
 import DomainsSection from './sections/DomainsSection';
 import NotificationsSection from './sections/NotificationsSection';
 import ItemPermissionsSection from './sections/ItemPermissionsSection';
+import ProjectsSection from './sections/ProjectsSection';
 import SharingSection from './sections/SharingSection';
 import SideNav, { type SideNavItem } from './SideNav';
 import { isModuleShareWired, moduleClient, moduleManifest } from '@/sdk/registry';
@@ -66,6 +67,20 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
         // capacité `workspace.roles`, qui l'englobe), et un espace personnel n'a
         // pas de rôles. « Qui a accès à la fonctionnalité » se règle sur le rôle,
         // dans Gérer l'espace.
+        /*
+         * Projets : ceux, de cet espace et des autres, qui utilisent l'élément.
+         * Trois conditions locales : la fonctionnalité est reliable, le module
+         * Projets est installé, et l'appelant y a accès ICI. Le droit
+         * d'attacher se juge espace par espace, côté serveur : l'onglet s'ouvre
+         * en lecture et les cases y sont inertes là où il manque.
+         */
+        const pushProjectsSection = (into: SectionDef[]): void => {
+            if (scope.kind !== 'item') return;
+            if (!(PROJECT_LINKED_FEATURES as readonly FeatureId[]).includes(scope.feature)) return;
+            if (!moduleManifest('projects') || !permissions.canFeature('projects')) return;
+            into.push({ id: 'projects', label: 'Projets', icon: 'projects' });
+        };
+
         const pushSharingSections = (into: SectionDef[]): void => {
             if (scope.kind !== 'item' || !isShareWired(scope.feature)) return;
             // Sur l'élément : un élément dont l'écriture est ouverte par
@@ -112,6 +127,7 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
             if (descriptor.notifies && (scope.kind === 'feature' || descriptor.hasItems)) {
                 sections.push({ id: 'notifications', label: 'Notifications', icon: 'mail' });
             }
+            pushProjectsSection(sections);
             pushSharingSections(sections);
             return sections;
         }
@@ -123,6 +139,7 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
             sections.push({ id: 'notifications', label: 'Notifications', icon: 'mail' });
         }
 
+        pushProjectsSection(sections);
         pushSharingSections(sections);
         return sections;
     }, [scope.feature, scope.kind, canRead, canWrite, canRestrict, isShared, permissions]);
@@ -131,6 +148,7 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
 /** Les sections que la coquille rend elle-même, native ou module. */
 const GENERIC_SECTIONS: ReadonlySet<SettingsSectionId> = new Set([
     'notifications',
+    'projects',
     'sharing',
     'permissions',
     'domains'
@@ -225,6 +243,7 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection, on
                             />
                         )}
                         {current === 'permissions' && scope.kind === 'item' && <ItemPermissionsSection scope={scope} />}
+                        {current === 'projects' && scope.kind === 'item' && <ProjectsSection scope={scope} />}
                         {current === 'sharing' && <SharingSection scope={scope} onGone={gone} />}
                         {current === 'domains' && scope.kind === 'feature' && <DomainsSection scope={scope} />}
                         {current && !GENERIC_SECTIONS.has(current) && (

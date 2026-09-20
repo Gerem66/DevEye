@@ -4,7 +4,7 @@ import type { Database, DatabaseAlert, DatabaseProbe, DatabaseUsage } from '../c
 
 import { DatabaseHeader } from './DatabaseHeader';
 import { DatabaseView } from './DatabaseView';
-import { PROJECT_STATUS_LABELS } from './format';
+import { PROJECT_STATUS_LABELS } from '@deveye/types';
 import styles from './style.module.css';
 
 interface DatabaseDetailProps {

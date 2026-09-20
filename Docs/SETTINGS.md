@@ -29,6 +29,7 @@ ordre :
 | Notifications   | feature + élément                               | registre `notifies`                                                          | canaux et sélection (voir `NOTIFICATIONS.md`)                     |
 | Synchronisation | élément                                         | `settings.item` du manifest d'un module (Mail)                               | cadence de relève, maintenance                                    |
 | Chiffrement     | élément                                         | `settings.item` du manifest d'un module                                      | sous quelle clé (ou sous quelle forme) la donnée de l'élément vit |
+| Projets         | élément                                         | `PROJECT_LINKED_FEATURES` + module Projets + droit `projects`                | quels projets utilisent l'élément, ici et dans les autres espaces |
 | Partage         | élément                                         | `SHARE_WIRED_FEATURES` + écriture                                            | où l'élément est visible (voir `SHARING.md`)                      |
 | Permissions     | élément                                         | `SHARE_WIRED_FEATURES` + `workspace.roles`                                   | ce que chaque rôle voit de la ligne                               |
 
@@ -42,7 +43,16 @@ un appareil, dont l'id est un UUID), et `ModulePanel` le monte. Un panneau est
 notifications) restent à clé numérique : une feature dont les éléments sont
 des textes n'y est pas branchée, et n'en déclare pas.
 
-Domaines est la quatrième section générique : le module ne fournit aucun
+Projets est une section générique de plus, à l'échelle d'un élément : elle
+liste, espace par espace, les projets qui l'utilisent, et l'y attache ou l'en
+retire. Le module ne fournit aucun panneau. Les liaisons appartiennent à Projets
+(`PROJECTS_USAGE_PROVIDER`), mais les commandes sont natives (`links.projects*`,
+`src/features/sharing/projectLinks.ts`) : un projet vit dans un espace, l'élément
+est visible dans plusieurs, et le contexte d'un module ne sort jamais de l'espace
+actif. Le droit qui tranche est `projects: write` dans l'espace du **projet** ;
+ailleurs la liste reste lisible et ses cases sont inertes.
+
+Domaines est une section générique elle aussi : le module ne fournit aucun
 panneau. Il déclare `domains` dans son manifest (la phrase de tête, la phrase
 de l'étape « relier au service », l'exemple du champ, l'avertissement du
 retrait) et l'entrée `domains` de son serveur (les enregistrements à publier,

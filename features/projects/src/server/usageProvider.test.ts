@@ -48,6 +48,8 @@ interface FakeRepo extends ProjectsRepo {
     eventRows: ProjectEventRow[];
     /** `repoId → projets liés`, la seule liaison que ces tests traversent. */
     repoLinks: Map<number, number[]>;
+    /** `espace → projets d'ailleurs qu'il voit`, pour éprouver le refus de relier une fenêtre. */
+    projectedInto: Map<number, number[]>;
 }
 
 /**
@@ -58,6 +60,7 @@ function fakeRepo(): FakeRepo {
     const projectRows: ProjectRow[] = [];
     const eventRows: ProjectEventRow[] = [];
     const repoLinks = new Map<number, number[]>();
+    const projectedInto = new Map<number, number[]>();
     const usageOf = async (repoId: number, ws: number): Promise<ProjectUsageRow[]> =>
         (repoLinks.get(repoId) ?? [])
             .map((id) => projectRows.find((p) => p.id === id && p.workspace_id === ws))
@@ -81,8 +84,16 @@ function fakeRepo(): FakeRepo {
         listDeployUsage: unused,
         countDeployLinks: unused,
         listRepoIds: unused,
-        linkRepo: unused,
-        unlinkRepo: unused,
+        async linkRepo(projectId: number, _ws: number, repoId: number) {
+            const ids = repoLinks.get(repoId) ?? [];
+            if (!ids.includes(projectId)) ids.push(projectId);
+            repoLinks.set(repoId, ids);
+        },
+        async unlinkRepo(projectId: number, _ws: number, repoId: number) {
+            const ids = (repoLinks.get(repoId) ?? []).filter((id) => id !== projectId);
+            repoLinks.set(repoId, ids);
+            return true;
+        },
         unlinkAllRepos: unused,
         listRepoUsage: usageOf,
         countRepoLinks: async (ws: number) => {
@@ -111,8 +122,16 @@ function fakeRepo(): FakeRepo {
         projectRows,
         eventRows,
         repoLinks,
+        projectedInto,
         projects: {
-            listVisible: unused,
+            // Les projets que cet espace voit : les siens, et ceux qu'un autre
+            // lui projette (`projectedInto`).
+            listVisible: async (ws: number, archived: boolean) =>
+                projectRows.filter(
+                    (p) =>
+                        (p.archived_at !== null) === archived &&
+                        (p.workspace_id === ws || (projectedInto.get(ws) ?? []).includes(p.id))
+                ),
             findById: async (id, ws) => projectRows.find((p) => p.id === id && p.workspace_id === ws) ?? null,
             findVisible: unused,
             create: unused,
@@ -243,5 +262,56 @@ describe('PROJECTS_USAGE_PROVIDER : applyVersion', () => {
         await provider.applyVersion('database', 5, 1, '3.0.0');
         assert.deepEqual(deps.recorded.liveChanges, []);
         assert.equal(JSON.parse(repo.projectRows[0].content).version, '2.0.0');
+    });
+});
+
+describe('PROJECTS_USAGE_PROVIDER : linkTargets / link / unlink', () => {
+    it('propose les projets ouverts de l’espace, l’archivé seulement s’il relie encore', async () => {
+        const repo = fakeRepo();
+        repo.projectRows.push(
+            project({ id: 1 }),
+            project({ id: 2, security_tier: 'guarded', content: body('Gardé') }),
+            project({ id: 3, archived_at: 10, content: body('Rangé relié') }),
+            project({ id: 4, archived_at: 10, content: body('Rangé libre') }),
+            project({ id: 5, workspace_id: 7, content: body('Projeté') })
+        );
+        // Le projet de l'espace 7 est visible d'ici, mais on n'y pose rien.
+        repo.projectedInto.set(1, [5]);
+        repo.repoLinks.set(9, [1, 3]);
+        const { provider } = providerOn(repo);
+        assert.deepEqual(await provider.linkTargets('git', 9, 1), [
+            { projectId: 1, title: 'Projet 1', status: 'active', archived: false, linked: true },
+            { projectId: 3, title: 'Rangé relié', status: 'active', archived: true, linked: true }
+        ]);
+    });
+
+    it('une feature qui ne relie rien vaut vide, jamais une erreur', async () => {
+        const { provider } = providerOn(fakeRepo());
+        assert.deepEqual(await provider.linkTargets('weather', 1, 1), []);
+        await provider.link('weather', 1, 1, 1);
+        await provider.unlink('weather', 1, 1, 1);
+    });
+
+    it('pose et retire la liaison, deux fois sans broncher, en ravivant l’espace du projet', async () => {
+        const repo = fakeRepo();
+        repo.projectRows.push(project({ id: 1 }));
+        const { deps, provider } = providerOn(repo);
+        await provider.link('git', 9, 1, 1);
+        await provider.link('git', 9, 1, 1);
+        assert.deepEqual(repo.repoLinks.get(9), [1]);
+        await provider.unlink('git', 9, 1, 1);
+        assert.deepEqual(repo.repoLinks.get(9), []);
+        assert.deepEqual(deps.recorded.liveChanges, [1, 1, 1]);
+    });
+
+    it('ne relie ni un projet gardé, ni un projet d’un autre espace, sans rien raviver', async () => {
+        const repo = fakeRepo();
+        repo.projectRows.push(project({ id: 2, security_tier: 'guarded' }), project({ id: 5, workspace_id: 7 }));
+        repo.projectedInto.set(1, [5]);
+        const { deps, provider } = providerOn(repo);
+        await provider.link('git', 9, 1, 2);
+        await provider.link('git', 9, 1, 5);
+        assert.equal(repo.repoLinks.get(9), undefined);
+        assert.deepEqual(deps.recorded.liveChanges, []);
     });
 });

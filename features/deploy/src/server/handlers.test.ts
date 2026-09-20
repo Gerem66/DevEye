@@ -258,6 +258,10 @@ function projectsProvider(recorded: { projectId: number; kind: string; label: st
             recorded.push({ projectId, kind: event.kind, label: event.label });
         },
         // Une version ne se reporte que depuis un dépôt git : rien à faire ici.
+        // Non sollicitées ici : l'écriture des liaisons est testée chez Projets.
+        linkTargets: async () => [],
+        link: async () => undefined,
+        unlink: async () => undefined,
         applyVersion: async () => undefined
     };
 }

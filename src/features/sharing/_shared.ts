@@ -1,4 +1,4 @@
-import type { FeatureId } from '@deveye/types';
+import type { FeatureAccess, FeatureId } from '@deveye/types';
 import { PROJECTS_USAGE_PROVIDER, type ProjectsUsageProvider } from '@deveye/types/sdk';
 
 import { grantsFor } from '../_access';
@@ -13,6 +13,30 @@ import { moduleItems, moduleProvider } from '../_sdk/register';
  */
 
 /**
+ * Le droit de l'appelant sur une fonctionnalité dans un espace nommé, et les
+ * éléments qu'une restriction lui y ferme. Une seule résolution de rôle pour
+ * toute une liste, là où {@link canWriteItemIn} en refait une par élément.
+ */
+export async function featureAccessIn(
+    ctx: FeatureContext,
+    workspaceId: number,
+    feature: FeatureId
+): Promise<{ access: FeatureAccess | null; restricted: ReadonlySet<string> }> {
+    const none = { access: null, restricted: new Set<string>() };
+    const workspace = await ctx.db.workspaces.findById(workspaceId);
+    if (!workspace) return none;
+    if (workspace.owner_user_id === ctx.userId) return { access: 'write', restricted: new Set() };
+    if (!(await ctx.db.workspaceMembers.isMember(ctx.userId, workspaceId))) return none;
+    const role = await ctx.db.workspaceRoles.findForMember(ctx.userId, workspaceId);
+    const access = grantsFor(false, role).features.get(feature) ?? null;
+    if (!role || access === null) return none;
+    // La restriction d'élément posée là-bas s'applique là-bas : masqué ou en
+    // lecture seule chez lui, on n'en dispose pas depuis ailleurs.
+    const rows = await ctx.db.itemSharing.grantsForRole(workspaceId, feature, role.id);
+    return { access, restricted: new Set(rows.map((g) => g.item_id)) };
+}
+
+/**
  * L'appelant peut-il écrire cet élément dans un espace donné, pas forcément
  * l'actif ? La réponse est celle qu'il aurait là-bas : membre, écriture sur la
  * fonctionnalité, et aucune restriction sur cette ligne pour son rôle.
@@ -23,17 +47,8 @@ export async function canWriteItemIn(
     feature: FeatureId,
     itemId: string
 ): Promise<boolean> {
-    const workspace = await ctx.db.workspaces.findById(workspaceId);
-    if (!workspace) return false;
-    if (workspace.owner_user_id === ctx.userId) return true;
-    if (!(await ctx.db.workspaceMembers.isMember(ctx.userId, workspaceId))) return false;
-    const role = await ctx.db.workspaceRoles.findForMember(ctx.userId, workspaceId);
-    if (grantsFor(false, role).features.get(feature) !== 'write') return false;
-    if (!role) return false;
-    // La restriction d'élément posée là-bas s'applique là-bas : masqué ou en
-    // lecture seule chez lui, on ne gère pas son partage depuis ailleurs.
-    const restrictions = await ctx.db.itemSharing.grantsForRole(workspaceId, feature, role.id);
-    return !restrictions.some((g) => g.item_id === itemId);
+    const { access, restricted } = await featureAccessIn(ctx, workspaceId, feature);
+    return access === 'write' && !restricted.has(itemId);
 }
 
 /** Où vit cet élément, et l'appelant peut-il en disposer ? */
@@ -62,6 +77,19 @@ export async function itemHomeWorkspace(
     const items = moduleItems(feature, ctx.db);
     if (items) return items.homeOf(itemId, ctx.workspaceId);
     return null;
+}
+
+/**
+ * Où vit l'élément réglé : chez l'appelant, ou le domicile de la projection
+ * qu'il regarde. Contrairement à {@link loadHome}, ne refuse pas une fenêtre :
+ * une liaison de projet se pose sur un élément projeté.
+ */
+export async function resolveItemHome(ctx: FeatureContext, feature: FeatureId, itemId: string): Promise<number> {
+    const home = await itemHomeWorkspace(ctx, feature, itemId);
+    if (home !== null) return home;
+    const share = await ctx.db.itemSharing.findShare(ctx.workspaceId, feature, itemId);
+    if (share) return share.home_workspace_id;
+    throw new FeatureError('not_found', 'Élément introuvable');
 }
 
 /** Le contrat qu'offre Projets, seul détenteur des tables de liaison. */

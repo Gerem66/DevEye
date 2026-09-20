@@ -257,6 +257,12 @@ Elles écrivent sans commande, donc sans socket : elles appellent
 - `auth/signupRoutes.ts` : l'inscription (`POST /api/auth/signup/complete`)
   passe par HTTP elle aussi. Le compte né prévient les administrateurs (sujet
   `admin`, leur page Utilisateurs), visés par compte (`userChanged`).
+- le contrat d'usage de Projets (`features/projects/src/server/usageProvider.ts`) :
+  poser ou retirer la liaison d'un élément à un projet bat **l'espace du
+  projet**, qui n'est pas forcément celui d'où le geste part. La commande qui
+  l'appelle est native et transversale (`links.projects*`), et son `mutates` ne
+  nomme que l'espace actif : sans ce battement, l'onglet d'un projet réglé
+  depuis un autre espace ne paraîtrait qu'au rechargement suivant.
 - et tout service arrivé depuis suit la même règle — sauvegardes, Sentinelle,
   ingestion d'audience (`features/audience/src/server/service.ts`, coalescée
   à une fois par minute et par espace), relevés de bases : qui écrit sans

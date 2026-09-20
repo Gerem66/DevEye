@@ -238,6 +238,10 @@ function projectsProvider(): ProjectsUsageProvider {
             feature === 'git' && workspaceId === 1 ? new Map([[1, 2]]) : new Map(),
         detach: async () => 0,
         recordEvent: async () => undefined,
+        // Non sollicitées ici : l'écriture des liaisons est testée chez Projets.
+        linkTargets: async () => [],
+        link: async () => undefined,
+        unlink: async () => undefined,
         applyVersion: async () => undefined
     };
 }

@@ -305,6 +305,26 @@
     color: var(--text-muted);
 }
 
+/* Un groupe par espace : son nom, puis ses projets. Le liseré n'apparaît qu'à
+   partir du deuxième, un trait au-dessus du premier ferait un faux plafond. */
+.projectGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.projectGroup + .projectGroup {
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--glass-border);
+}
+
+/* Hors de `.channelMeta`, qui tronque sur une ligne : c'est une phrase. */
+.projectGroupNote {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    line-height: 1.45;
+}
+
 /* Action de ligne : icône seule, la cible de clic reste confortable.
    Même forme que `.actionBtn` de l'écran Espace. */
 .rowAction {

@@ -43,6 +43,10 @@ const ACCESS_EXEMPT = new Set([
     'share.set',
     'share.grantList',
     'share.grantSet',
+    // Les liaisons aux projets : la fonctionnalité visée est en entrée, et le
+    // droit qui tranche est `projects` dans l'espace du projet, pas l'actif.
+    'links.projectsGet',
+    'links.projectsSet',
     // Le déplacement ouvre de même : écriture sur la feature et sur l'élément
     // chez lui, puis le droit d'écrire dans l'espace visé.
     'share.movePreview',
