@@ -36,7 +36,7 @@ cp .env.template .env
 ### 2. Installer les dépendances (serveur + client)
 
 ```bash
-npm run install:all
+npm install
 ```
 
 ### 3. Démarrer en développement (hot-reload)
