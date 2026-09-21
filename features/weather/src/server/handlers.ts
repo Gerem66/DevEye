@@ -18,7 +18,7 @@ import {
 } from '../contracts/domain';
 import { defineSdkFeature, FeatureError, type SdkFeatureContext } from '@deveye/types/sdk/server';
 
-import { fetchWeatherReport, forgetProviderReports, getWeatherAdapter, WeatherError } from './provider';
+import { fetchWeatherReport, forgetProviderCaches, geocodeLocation, WeatherError } from './provider';
 import type { WeatherRepo } from './repo';
 
 type Ctx = SdkFeatureContext<WeatherRepo>;
@@ -65,8 +65,15 @@ const LOCATION_NOT_FOUND = 'Cette ville n’existe plus.';
 const FAILURE_TEXT: Record<WeatherError['reason'], string> = {
     not_found: 'Aucun lieu ne correspond à cette recherche.',
     unauthorized: 'Le fournisseur refuse la clé d’API de cet espace.',
-    fetch_failed: 'Le fournisseur météo ne répond pas.'
+    fetch_failed: 'Le fournisseur météo ne répond pas.',
+    rate_limited: 'Le fournisseur météo a atteint sa limite d’appels, réessayez dans quelques minutes.'
 };
+
+function errorCode(reason: WeatherError['reason']): 'not_found' | 'rate_limited' | 'internal' {
+    if (reason === 'not_found') return 'not_found';
+    if (reason === 'rate_limited') return 'rate_limited';
+    return 'internal';
+}
 
 /**
  * La raison voyage en `details` : le client y lit qu'une clé est refusée, seul
@@ -74,8 +81,10 @@ const FAILURE_TEXT: Record<WeatherError['reason'], string> = {
  */
 function mapWeatherError(e: unknown): FeatureError {
     if (!(e instanceof WeatherError)) return new FeatureError('internal', FAILURE_TEXT.fetch_failed);
-    const code = e.reason === 'not_found' ? 'not_found' : 'internal';
-    return new FeatureError(code, FAILURE_TEXT[e.reason], { reason: e.reason });
+    return new FeatureError(errorCode(e.reason), FAILURE_TEXT[e.reason], {
+        reason: e.reason,
+        ...(e.retryAfterMs === undefined ? {} : { retryAfterMs: e.retryAfterMs })
+    });
 }
 
 export const weatherHandlers = [
@@ -94,10 +103,12 @@ export const weatherHandlers = [
             await assertUsable(ctx, input.provider);
             let geo;
             try {
-                geo = await getWeatherAdapter(input.provider).geocode(
-                    input.query,
-                    await workspaceKey(ctx, input.provider)
-                );
+                geo = await geocodeLocation({
+                    workspaceId: ctx.workspaceId,
+                    provider: input.provider,
+                    query: input.query,
+                    apiKey: await workspaceKey(ctx, input.provider)
+                });
             } catch (e) {
                 throw mapWeatherError(e);
             }
@@ -184,6 +195,7 @@ export const weatherHandlers = [
             const apiKey = await workspaceKey(ctx, row.provider);
             try {
                 const report = await fetchWeatherReport({
+                    workspaceId: ctx.workspaceId,
                     locationId: row.id,
                     label: row.label,
                     latitude: row.latitude,
@@ -239,7 +251,7 @@ export const weatherHandlers = [
             }
             // Posée, changée ou retirée : les relevés obtenus avec l'ancienne clé
             // ne valent plus, et c'est après l'écriture qu'ils s'oublient.
-            forgetProviderReports(input.provider);
+            forgetProviderCaches(input.provider);
             ctx.audit({
                 action: 'weather.setKey',
                 description: `Clé API météo ${hasKey ? 'enregistrée' : 'supprimée'} (${input.provider})`,

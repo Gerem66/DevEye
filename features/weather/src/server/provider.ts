@@ -16,8 +16,10 @@ import type {
 
 export class WeatherError extends Error {
     constructor(
-        public readonly reason: 'fetch_failed' | 'not_found' | 'unauthorized',
-        message: string
+        public readonly reason: 'fetch_failed' | 'not_found' | 'unauthorized' | 'rate_limited',
+        message: string,
+        /** Le délai avant de réessayer, quand il est connu. */
+        public readonly retryAfterMs?: number
     ) {
         super(message);
         this.name = 'WeatherError';
@@ -30,7 +32,15 @@ export interface GeocodeResult {
     longitude: number;
 }
 
+export interface GeocodeInput {
+    workspaceId: number;
+    provider: WeatherProvider;
+    query: string;
+    apiKey?: string | null;
+}
+
 export interface FetchReportInput {
+    workspaceId: number;
     locationId: string;
     label: string;
     latitude: number;
@@ -84,19 +94,45 @@ interface OpenMeteoForecast {
     };
 }
 
+/** Sans lui, un fournisseur muet retient le handler aussi longtemps qu'il veut. */
+const PROVIDER_TIMEOUT_MS = 10_000;
+
+/** L'en-tête `Retry-After` du fournisseur, en millisecondes, s'il en donne un. */
+function retryAfterMs(res: Response): number | undefined {
+    const seconds = Number(res.headers.get('retry-after'));
+    return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : undefined;
+}
+
 async function getJson<T>(url: string): Promise<T> {
     let res: Response;
     try {
-        res = await fetch(url, { headers: { accept: 'application/json' } });
+        res = await fetch(url, {
+            headers: { accept: 'application/json' },
+            signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS)
+        });
     } catch (e) {
-        throw new WeatherError('fetch_failed', `Network error: ${(e as Error).message}`);
+        const message =
+            (e as Error).name === 'TimeoutError'
+                ? `Provider timed out after ${PROVIDER_TIMEOUT_MS}ms`
+                : `Network error: ${(e as Error).message}`;
+        throw new WeatherError('fetch_failed', message);
     }
     if (!res.ok) {
-        // 401/403 : c'est la clé, pas le réseau.
-        const reason = res.status === 401 || res.status === 403 ? 'unauthorized' : 'fetch_failed';
-        throw new WeatherError(reason, `Provider responded ${res.status}`);
+        // 401/403 : c'est la clé, pas le réseau. 429 : le quota, que le palier
+        // gratuit compte par adresse IP, donc pour toute l'instance à la fois.
+        const reason =
+            res.status === 401 || res.status === 403
+                ? 'unauthorized'
+                : res.status === 429
+                  ? 'rate_limited'
+                  : 'fetch_failed';
+        throw new WeatherError(reason, `Provider responded ${res.status}`, retryAfterMs(res));
     }
-    return (await res.json()) as T;
+    try {
+        return (await res.json()) as T;
+    } catch (e) {
+        throw new WeatherError('fetch_failed', `Malformed provider response: ${(e as Error).message}`);
+    }
 }
 
 const openMeteoAdapter: WeatherProviderAdapter = {
@@ -375,8 +411,59 @@ const adapters: Record<WeatherProvider, WeatherProviderAdapter> = {
     openweathermap: openWeatherMapAdapter
 };
 
-export function getWeatherAdapter(provider: WeatherProvider): WeatherProviderAdapter {
+function adapterFor(provider: WeatherProvider): WeatherProviderAdapter {
     return adapters[provider];
+}
+
+/* ------------------------- Le budget d'un espace -------------------------- */
+
+/**
+ * Le seau à jetons qui plafonne les appels sortants d'un espace. Le quota du
+ * palier gratuit se compte par adresse IP, donc une seule enveloppe pour toute
+ * l'instance : sans ce frein, un espace qui boucle sur l'ajout de villes
+ * l'épuise pour tous les autres.
+ *
+ * C'est une coupure d'emballement, pas un partage équitable : le seau est assez
+ * large pour qu'un usage réel ne le sente jamais. En régime établi, une ville
+ * suivie coûte six appels par heure (le cache tient dix minutes), et l'ajout
+ * d'une ville un appel.
+ */
+const BUDGET_CAPACITY = 240;
+/** Quatre jetons par minute, de quoi suivre quarante villes sans jamais buter. */
+const BUDGET_REFILL_MS = 15_000;
+/** Au-delà, les seaux revenus à plein s'oublient : ils ne valent plus qu'un absent. */
+const BUDGET_MAX_BUCKETS = 2000;
+
+interface Budget {
+    tokens: number;
+    updated: number;
+}
+
+const budgets = new Map<string, Budget>();
+
+/**
+ * Prend un jeton, ou lève. N'est appelé que pour un appel qui part vraiment :
+ * un relevé servi par le cache ou par une requête déjà en vol ne coûte rien.
+ */
+function spendBudget(workspaceId: number, provider: WeatherProvider): void {
+    const key = `${workspaceId}|${provider}`;
+    const now = Date.now();
+    const bucket = budgets.get(key) ?? { tokens: BUDGET_CAPACITY, updated: now };
+    bucket.tokens = Math.min(BUDGET_CAPACITY, bucket.tokens + (now - bucket.updated) / BUDGET_REFILL_MS);
+    bucket.updated = now;
+    if (bucket.tokens < 1) {
+        budgets.set(key, bucket);
+        throw new WeatherError(
+            'rate_limited',
+            'Workspace call budget exhausted',
+            Math.ceil((1 - bucket.tokens) * BUDGET_REFILL_MS)
+        );
+    }
+    bucket.tokens -= 1;
+    if (budgets.size >= BUDGET_MAX_BUCKETS) {
+        for (const [k, b] of budgets) if (b.tokens >= BUDGET_CAPACITY) budgets.delete(k);
+    }
+    budgets.set(key, bucket);
 }
 
 /* --------------------------------- Le cache -------------------------------- */
@@ -385,61 +472,162 @@ export function getWeatherAdapter(provider: WeatherProvider): WeatherProviderAda
  * Les relevés gardés dix minutes en mémoire : le client relit la ville
  * principale à chaque connexion, et les fournisseurs ne bougent guère plus
  * vite. La clé d'API n'entre pas dans la clé de cache, elle authentifie l'appel
- * sans changer la météo : c'est `forgetProviderReports` qui périme les relevés
+ * sans changer la météo : c'est `forgetProviderCaches` qui périme les entrées
  * quand elle change.
  */
 const REPORT_TTL_MS = 10 * 60 * 1000;
+/** Les lieux géocodés bougent bien moins vite que le temps qu'il y fait. */
+const GEOCODE_TTL_MS = 60 * 60 * 1000;
+/**
+ * L'échec se garde aussi, beaucoup plus court : sans cela, un fournisseur qui
+ * refuse est rappelé par chaque lecture, ce qui ne fait que prolonger son refus.
+ */
+const FAILURE_TTL_MS = 60 * 1000;
 /** Le plafond d'entrées, pour qu'un processus qui dure ne grossisse pas sans fin. */
-const REPORT_CACHE_MAX = 500;
+const CACHE_MAX = 500;
+/** Après un 429, plus rien ne part vers ce fournisseur pendant ce délai. */
+const COOLDOWN_MS = 60 * 1000;
 
-interface CachedReport {
-    report: WeatherReport;
-    expires: number;
-}
+type CacheEntry<T> = { expires: number } & ({ ok: true; value: T } | { ok: false; error: WeatherError });
 
-const reportCache = new Map<string, CachedReport>();
+const reportCache = new Map<string, CacheEntry<WeatherReport>>();
+const geocodeCache = new Map<string, CacheEntry<GeocodeResult>>();
+const reportsInFlight = new Map<string, Promise<WeatherReport>>();
+const geocodesInFlight = new Map<string, Promise<GeocodeResult>>();
 /** Combien de fois la clé d'un fournisseur a changé depuis le démarrage. */
 const keyGeneration = new Map<WeatherProvider, number>();
+const cooldownUntil = new Map<WeatherProvider, number>();
 
 function reportCacheKey(input: FetchReportInput): string {
     // Quatre décimales, soit une dizaine de mètres : plus fin que toute grille de prévision.
     return [input.provider, input.latitude.toFixed(4), input.longitude.toFixed(4), input.days, input.format].join('|');
 }
 
+/** L'entrée encore fraîche, ou `null`. Une entrée périmée s'efface au passage. */
+function readCache<T>(cache: Map<string, CacheEntry<T>>, key: string): CacheEntry<T> | null {
+    const hit = cache.get(key);
+    if (!hit) return null;
+    if (hit.expires > Date.now()) return hit;
+    cache.delete(key);
+    return null;
+}
+
+function writeCache<T>(cache: Map<string, CacheEntry<T>>, key: string, entry: CacheEntry<T>): void {
+    // `Map` garde l'ordre d'insertion : la première clé est la plus ancienne.
+    if (!cache.has(key) && cache.size >= CACHE_MAX) {
+        const oldest = cache.keys().next().value;
+        if (oldest !== undefined) cache.delete(oldest);
+    }
+    cache.set(key, entry);
+}
+
+function forgetPrefix(cache: Map<string, unknown>, prefix: string): void {
+    for (const key of cache.keys()) if (key.startsWith(prefix)) cache.delete(key);
+}
+
 /**
- * Oublier les relevés d'un fournisseur dont la clé vient de changer : sans cela,
- * une clé retirée continuerait dix minutes à servir ce qu'elle seule permettait
- * d'obtenir. La génération avance aussi, pour qu'un appel parti avec l'ancienne
- * clé ne vienne pas repeupler le cache à son retour.
+ * Oublier ce qu'un fournisseur dont la clé vient de changer avait servi : sans
+ * cela, une clé retirée continuerait dix minutes à donner ce qu'elle seule
+ * permettait d'obtenir. La génération avance aussi, pour qu'un appel parti avec
+ * l'ancienne clé ne vienne pas repeupler le cache à son retour.
  *
  * La portée est le processus, comme le cache : un autre espace y perd ses
- * entrées et les reprend à son prochain appel.
+ * entrées et les reprend à son prochain appel. Le recul après un 429, lui, ne
+ * se lève pas : changer de clé ne rend pas le quota.
  */
-export function forgetProviderReports(provider: WeatherProvider): void {
+export function forgetProviderCaches(provider: WeatherProvider): void {
     keyGeneration.set(provider, (keyGeneration.get(provider) ?? 0) + 1);
-    for (const key of reportCache.keys()) {
-        if (key.startsWith(`${provider}|`)) reportCache.delete(key);
+    forgetPrefix(reportCache, `${provider}|`);
+    forgetPrefix(geocodeCache, `${provider}|`);
+}
+
+/**
+ * Le cache, puis la requête unique, puis le budget. Une réponse fraîche, bonne
+ * ou mauvaise, ne dépense rien ; une requête déjà en vol sur la même clé
+ * s'attend plutôt que de se doubler, ce qui compte surtout au redémarrage, où
+ * toutes les sessions relisent d'un coup un cache vide.
+ */
+async function throughCache<T>(opts: {
+    cache: Map<string, CacheEntry<T>>;
+    running: Map<string, Promise<T>>;
+    key: string;
+    ttl: number;
+    provider: WeatherProvider;
+    workspaceId: number;
+    call: () => Promise<T>;
+}): Promise<T> {
+    const hit = readCache(opts.cache, opts.key);
+    if (hit) {
+        if (hit.ok) return hit.value;
+        throw hit.error;
     }
+    const joined = opts.running.get(opts.key);
+    if (joined) return joined;
+
+    const cooldown = (cooldownUntil.get(opts.provider) ?? 0) - Date.now();
+    if (cooldown > 0) throw new WeatherError('rate_limited', 'Provider is cooling down', cooldown);
+    spendBudget(opts.workspaceId, opts.provider);
+
+    // La génération capture l'état de la clé au départ : un appel parti avec
+    // l'ancienne ne repeuple pas le cache à son retour.
+    const generation = keyGeneration.get(opts.provider) ?? 0;
+    const current = (): boolean => (keyGeneration.get(opts.provider) ?? 0) === generation;
+    const started = (async () => {
+        try {
+            const value = await opts.call();
+            if (current()) writeCache(opts.cache, opts.key, { ok: true, value, expires: Date.now() + opts.ttl });
+            return value;
+        } catch (e) {
+            if (e instanceof WeatherError) {
+                // Le quota est du fournisseur, pas de cette clé de cache : c'est
+                // tout ce qui part vers lui qui s'arrête, le temps du recul.
+                if (e.reason === 'rate_limited') {
+                    cooldownUntil.set(opts.provider, Date.now() + Math.max(e.retryAfterMs ?? 0, COOLDOWN_MS));
+                } else if (current()) {
+                    writeCache(opts.cache, opts.key, { ok: false, error: e, expires: Date.now() + FAILURE_TTL_MS });
+                }
+            }
+            throw e;
+        }
+    })();
+    opts.running.set(opts.key, started);
+    return started.finally(() => {
+        if (opts.running.get(opts.key) === started) opts.running.delete(opts.key);
+    });
+}
+
+/**
+ * L'identité vient de l'appelant : deux espaces qui suivent la même ville
+ * partagent un relevé, et chacun doit y lire sa propre ville, pas celle de
+ * l'autre.
+ */
+function withIdentity(report: WeatherReport, input: FetchReportInput): WeatherReport {
+    return { ...report, locationId: input.locationId, label: input.label };
 }
 
 /** La lecture (`weather.get`) : le cache tant qu'il est frais, le fournisseur sinon. */
 export async function fetchWeatherReport(input: FetchReportInput): Promise<WeatherReport> {
-    const key = reportCacheKey(input);
-    const now = Date.now();
+    const report = await throughCache({
+        cache: reportCache,
+        running: reportsInFlight,
+        key: reportCacheKey(input),
+        ttl: REPORT_TTL_MS,
+        provider: input.provider,
+        workspaceId: input.workspaceId,
+        call: () => adapterFor(input.provider).fetchReport(input)
+    });
+    return withIdentity(report, input);
+}
 
-    const hit = reportCache.get(key);
-    if (hit && hit.expires > now) return hit.report;
-    if (hit) reportCache.delete(key);
-
-    const generation = keyGeneration.get(input.provider) ?? 0;
-    const report = await getWeatherAdapter(input.provider).fetchReport(input);
-    if ((keyGeneration.get(input.provider) ?? 0) !== generation) return report;
-
-    // `Map` garde l'ordre d'insertion : la première clé est la plus ancienne.
-    if (reportCache.size >= REPORT_CACHE_MAX) {
-        const oldest = reportCache.keys().next().value;
-        if (oldest !== undefined) reportCache.delete(oldest);
-    }
-    reportCache.set(key, { report, expires: now + REPORT_TTL_MS });
-    return report;
+/** La recherche d'une ville (`weather.add`), au même régime que les relevés. */
+export function geocodeLocation(input: GeocodeInput): Promise<GeocodeResult> {
+    return throughCache({
+        cache: geocodeCache,
+        running: geocodesInFlight,
+        key: `${input.provider}|${input.query.trim().toLowerCase()}`,
+        ttl: GEOCODE_TTL_MS,
+        provider: input.provider,
+        workspaceId: input.workspaceId,
+        call: () => adapterFor(input.provider).geocode(input.query, input.apiKey)
+    });
 }
