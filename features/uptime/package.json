@@ -2,6 +2,7 @@
   "name": "deveye-feature-uptime",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "description": "Uptime, au format module : sondes HTTP, incidents et historique de disponibilité, sixième native rapatriée sur le SDK des features et la première à éléments partagés.",
   "type": "module",
   "main": "src/index.ts",

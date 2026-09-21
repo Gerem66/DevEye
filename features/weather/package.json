@@ -2,6 +2,7 @@
   "name": "deveye-feature-weather",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "description": "Météo, au format module : la première native rapatriée sur le SDK des features.",
   "type": "module",
   "main": "src/index.ts",

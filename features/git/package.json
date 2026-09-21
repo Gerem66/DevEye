@@ -2,6 +2,7 @@
   "name": "deveye-feature-git",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "description": "Git, au format module : dépôts GitHub de l'espace, cache des branches, commits, releases et pull requests, synchronisation de fond, onzième native rapatriée sur le SDK des features.",
   "type": "module",
   "main": "src/index.ts",

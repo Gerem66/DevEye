@@ -2,6 +2,7 @@
   "name": "deveye-feature-backup",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "description": "Sauvegardes, au format module : destinations, travaux programmés et historique des archives, huitième native rapatriée sur le SDK des features et la première à écrire sur les machines par leur agent.",
   "type": "module",
   "main": "src/index.ts",

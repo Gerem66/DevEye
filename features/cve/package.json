@@ -2,6 +2,7 @@
   "name": "deveye-feature-cve",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "description": "Veille CVE : le fil des vulnérabilités publiées, la recherche dans le catalogue du NVD, et les CVE épinglées par l'espace.",
   "type": "module",
   "main": "src/index.ts",

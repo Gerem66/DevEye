@@ -2,6 +2,7 @@
   "name": "deveye-feature-devices",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "description": "Appareils, au format module : la flotte enrôlée (codes de liaison, confirmation, révocation, configuration de collecte, partage entre espaces), les métriques stockées et leur rétention, la supervision en direct (panneau, frise, graphes, matériel, ports, terminal, fichiers, journaux, paquets) et la page d'administration de la flotte, seizième et dernière native rapatriée sur le SDK des features. Le transport des agents (hub, socket, ingestion, commandes agent.*) reste l'infrastructure de l'app.",
   "type": "module",
   "main": "src/index.ts",

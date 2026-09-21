@@ -2,6 +2,7 @@
   "name": "deveye-feature-projects",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "description": "Projets, au format module : le portefeuille de l'espace, le tableau, la frise, la discussion et l'historique de chaque projet, ses liaisons vers les dépôts, les cibles, les bases, les sites et les services surveillés, et le contrat d'usage que les autres features lisent, quatorzième native rapatriée sur le SDK des features.",
   "type": "module",
   "main": "src/index.ts",

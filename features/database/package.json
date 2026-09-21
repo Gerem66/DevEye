@@ -2,6 +2,7 @@
   "name": "deveye-feature-database",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "description": "Bases de données, au format module : inventaire, relevé périodique, alertes SQL, explorateur de tables, neuvième native rapatriée sur le SDK des features et la première dont Projets compose les écrans par un provider client.",
   "type": "module",
   "main": "src/index.ts",

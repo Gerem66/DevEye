@@ -2,6 +2,7 @@
   "name": "deveye-feature-audience",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "description": "Audience, au format module : sites suivis, ingestion publique des visites, statistiques et entonnoirs, douzième native rapatriée sur le SDK des features et la première à ouvrir des routes HTTP publiques.",
   "type": "module",
   "main": "src/index.ts",

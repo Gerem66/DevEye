@@ -43,7 +43,7 @@
     "prestart": "npm run gen:features:local"
   },
   "author": "Gerem",
-  "license": "ISC",
+  "license": "AGPL-3.0-only",
   "dependencies": {
     "@deveye/types": "^0.19.1",
     "@fastify/cookie": "^11.0.2",

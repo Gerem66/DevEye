@@ -82,4 +82,6 @@ managée par Dockploy), healthcheck sur `/api/health`.
 
 ## Licence
 
-Projet privé, tous droits réservés.
+[AGPL-3.0-only](./LICENSE) pour tout ce dépôt, agent compris. Un module qui ne
+passe que par le SDK (`@deveye/types`) se licencie librement : l'exception, la
+marque et les contributions sont dans [LICENSING.md](./LICENSING.md).

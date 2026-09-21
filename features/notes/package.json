@@ -2,6 +2,7 @@
   "name": "deveye-feature-notes",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "description": "Notes et dossiers, au format module : la cinquième native rapatriée sur le SDK des features, à cheval sur les deux étages du chiffrement.",
   "type": "module",
   "main": "src/index.ts",

@@ -2,6 +2,7 @@
   "name": "deveye-feature-password",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "description": "Coffre de mots de passe, au format module : la quatrième native rapatriée sur le SDK des features, la première à l'étage gardé.",
   "type": "module",
   "main": "src/index.ts",

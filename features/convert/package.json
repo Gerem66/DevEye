@@ -2,6 +2,7 @@
   "name": "deveye-feature-convert",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "description": "Convertisseur : vidéo, audio, images et documents convertis sur le serveur, avec réglages de compression et taille cible, plus les devises et les unités.",
   "type": "module",
   "main": "src/index.ts",

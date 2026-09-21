@@ -2,6 +2,7 @@
   "name": "deveye-feature-deploy",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "description": "Déploiements, au format module : cibles Dokploy, déclenchement et suivi, avis Discord vivant, dixième native rapatriée sur le SDK des features.",
   "type": "module",
   "main": "src/index.ts",

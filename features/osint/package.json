@@ -2,6 +2,7 @@
   "name": "deveye-feature-osint",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "description": "OSINT, au format module : recherche en sources ouvertes, sondes parallèles, historique chiffré.",
   "type": "module",
   "main": "src/index.ts",

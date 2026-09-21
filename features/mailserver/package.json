@@ -2,6 +2,7 @@
   "name": "deveye-feature-mailserver",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "description": "Serveur mail : des adresses hébergées par DevEye sur les domaines de l'espace. SMTP entrant et sortant, IMAP, DKIM et certificat ACME, dans le processus de l'app.",
   "type": "module",
   "main": "src/index.ts",

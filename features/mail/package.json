@@ -2,6 +2,7 @@
   "name": "deveye-feature-mail",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "description": "Mail, au format module : boîtes IMAP et OAuth de l'espace, cache des dossiers et des messages, synchronisation de fond, envoi, et le transport des alertes e-mail des autres features, treizième native rapatriée sur le SDK des features.",
   "type": "module",
   "main": "src/index.ts",

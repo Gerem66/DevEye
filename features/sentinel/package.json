@@ -2,6 +2,7 @@
   "name": "deveye-feature-sentinel",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "description": "Sentinelle, au format module : détection d'anomalies sur les appareils (ligne de base, constats, posture, autorisations), septième native rapatriée sur le SDK des features et la première branchée aux agents et à la télémétrie.",
   "type": "module",
   "main": "src/index.ts",
