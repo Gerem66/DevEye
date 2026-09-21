@@ -112,6 +112,7 @@ declare const styles: {
     readonly tool: string;
     readonly warning: string;
     readonly widget: string;
+    readonly widgetFoot: string;
     readonly widgetReady: string;
     readonly workbench: string;
     readonly zoomStage: string;

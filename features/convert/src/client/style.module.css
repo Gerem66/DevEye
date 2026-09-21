@@ -1035,8 +1035,16 @@
 .widget {
     display: flex;
     flex-direction: column;
+    height: 100%;
+}
+
+/* Au pied de la carte, comme le texte des autres vignettes. */
+.widgetFoot {
+    display: flex;
+    flex-direction: column;
     gap: var(--space-xs);
-    font-size: 0.85rem;
+    margin-top: auto;
+    font-size: 0.82rem;
     color: var(--text-muted);
 }
 

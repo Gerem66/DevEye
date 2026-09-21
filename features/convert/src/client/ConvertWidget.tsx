@@ -18,20 +18,22 @@ export function ConvertWidget() {
 
     return (
         <div className={styles.widget}>
-            {data === null ? (
-                'Chargement…'
-            ) : running === 0 && ready === 0 ? (
-                'Vidéos, images, sons, documents, devises et unités.'
-            ) : (
-                <>
-                    {running > 0 && <div>{plural(running, 'conversion en cours', 'conversions en cours')}</div>}
-                    {ready > 0 && (
-                        <div className={styles.widgetReady}>
-                            {plural(ready, 'fichier prêt à récupérer', 'fichiers prêts à récupérer')}
-                        </div>
-                    )}
-                </>
-            )}
+            <div className={styles.widgetFoot}>
+                {data === null ? (
+                    'Chargement…'
+                ) : running === 0 && ready === 0 ? (
+                    'Vidéos, images, sons, documents, devises et unités.'
+                ) : (
+                    <>
+                        {running > 0 && <div>{plural(running, 'conversion en cours', 'conversions en cours')}</div>}
+                        {ready > 0 && (
+                            <div className={styles.widgetReady}>
+                                {plural(ready, 'fichier prêt à récupérer', 'fichiers prêts à récupérer')}
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
         </div>
     );
 }
