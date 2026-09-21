@@ -50,35 +50,37 @@ npm run dev
 En dev, Vite (port 5173) sert le client et **proxifie** `/api` et `/ws` vers le
 serveur (port 3000) : le navigateur ne parle qu'à `localhost:5173` (pas de CORS).
 
-## Docker
-
-### Dev : base vierge mais persistante + compte de dev
+## Auto-hébergement
 
 ```bash
-docker compose -f docker-compose.dev.yml up --build
+cp .env.template .env   # DB_PASSWORD et les clés : chaque commande `openssl` y figure
+docker compose up -d    # http://localhost:3000
 ```
 
-Démarre un MySQL **vide et persistant** (volume nommé `deveye_dev_db`) puis l'app.
-Au premier démarrage : migrations + création d'un compte de dev (`SEED_DEV=true`,
-identifiants `dev` / `devdevdev` par défaut). L'app sert le client et l'API sur la
-même origine : http://localhost:3000
-
-Sans compte de dev, le premier compte se crée par « Créer un compte » sur l'écran
-de connexion : sur une base vide l'inscription est ouverte quel que soit
+[docker-compose.yml](./docker-compose.yml) démarre l'app et sa base MySQL, avec
+leurs volumes (les dossiers `*_STORAGE_ROOT` du `.env`, et deux volumes nommés). Le premier compte se crée par
+« Créer un compte » : sur une base vide l'inscription est ouverte quel que soit
 `SIGNUP_MODE`, et ce premier inscrit devient l'administrateur. Sans `SMTP_HOST`,
-le lien de validation s'affiche dans le journal du serveur.
+le lien de validation s'affiche dans le journal du serveur
+(`docker compose logs app`).
 
-### Prod : same-origin, DB externe (Dockploy)
+L'app parle HTTP : hors de la machine locale, placez un proxy TLS devant elle et
+accordez `PUBLIC_ORIGIN`.
+
+**Avec un MySQL déjà en place**, l'app se lance seule : retirez le service `db`
+et son `depends_on` du compose, et laissez `DB_HOSTNAME`, `DB_USERNAME` et
+`DB_PASSWORD` du `.env` désigner votre base. Les migrations tournent au
+démarrage, le healthcheck répond sur `/api/health`.
+
+### La base du développement
 
 ```bash
-cp .env.template .env   # renseigner les secrets
-docker compose -f docker-compose.prod.yml up --build -d
+docker compose -f docker-compose.dev.yml up -d   # MySQL vide et persistant, sur le port 5001
+npm run dev
 ```
 
-Sur Dockploy, les variables sont injectées via l'UI (onglet Environment), donc le
-fichier `.env` est optionnel (`required: false`). L'app sert le client buildé +
-l'API sur `LISTEN_PORT` (3000) et se connecte à une base MySQL externe (ex: DB
-managée par Dockploy), healthcheck sur `/api/health`.
+`SEED_DEV=true` dans `.env` crée un compte de dev au premier démarrage
+(`dev` / `devdevdev` par défaut).
 
 ## Licence
 

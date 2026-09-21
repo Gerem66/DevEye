@@ -13,3 +13,7 @@
 **/.vscode
 **/.claude
 .smoke
+cloudsync-data
+backup-data
+convert-data
+mailserver-data

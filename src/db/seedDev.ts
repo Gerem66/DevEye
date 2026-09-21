@@ -13,8 +13,7 @@ const DEV_FEATURES = ['devices', 'weather', 'password'];
 
 /**
  * Idempotently create a development account on an otherwise empty database.
- * Runs only when SEED_DEV=true (set by docker-compose.dev.yml), so it never
- * touches a real database.
+ * Runs only when SEED_DEV=true, so it never touches a real database.
  *
  * Passe par les repos plutôt que par du SQL brut, pour ne pas diverger de
  * l'inscription (compte + espace personnel).

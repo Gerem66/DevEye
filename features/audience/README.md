@@ -938,6 +938,5 @@ dev qui porte déjà des données réelles.
 - **Le direct reste local au processus** — deux instances derrière un proxy =
   salles silencieusement séparées. Vrai avant ce module, ça le reste.
 - **Le domaine public reste à créer.** Le code fournit le port dédié
-  (`PUBLIC_LISTEN_PORT`) ; il reste à pointer un domaine dessus dans Dokploy et
-  à accorder `AUDIENCE_ORIGIN`. Le conteneur est déjà sur `dokploy-network`,
-  donc rien à changer au `docker-compose`.
+  (`PUBLIC_LISTEN_PORT`) ; il reste à pointer un domaine dessus dans le proxy et
+  à accorder `AUDIENCE_ORIGIN`.

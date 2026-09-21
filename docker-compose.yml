@@ -1,0 +1,80 @@
+# DevEye, auto-hébergé : l'app et sa base MySQL.
+#
+#   cp .env.template .env      # renseigner DB_PASSWORD et les clés (chaque commande `openssl` y figure)
+#   docker compose up -d       # http://localhost:3000
+#
+# Le premier compte créé devient l'administrateur. L'app parle HTTP : hors de la
+# machine locale, placez un proxy TLS devant elle et accordez `PUBLIC_ORIGIN`.
+#
+# Avec un MySQL déjà en place, l'image se lance seule : retirez le service `db`,
+# `depends_on`, et laissez `DB_HOSTNAME` du `.env` désigner votre base.
+
+name: deveye
+
+services:
+  db:
+    image: mysql:8
+    restart: unless-stopped
+    environment:
+      MYSQL_RANDOM_ROOT_PASSWORD: 'yes'
+      MYSQL_DATABASE: ${DB_DATABASE:-DevEye}
+      MYSQL_USER: ${DB_USERNAME:-deveye}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD manque dans .env}
+    volumes:
+      - db:/var/lib/mysql
+    healthcheck:
+      test: ['CMD-SHELL', 'mysqladmin ping -h localhost -u"$$MYSQL_USER" -p"$$MYSQL_PASSWORD"']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      DB_HOSTNAME: db
+      DB_PORT: '3306'
+      DB_DATABASE: ${DB_DATABASE:-DevEye}
+      DB_USERNAME: ${DB_USERNAME:-deveye}
+    # Tout ce que l'app écrit vit hors du conteneur : sur sa couche d'écriture,
+    # un partage, une archive ou un courrier disparaîtrait à la mise à jour
+    # suivante. La source est un chemin de l'HÔTE (`*_STORAGE_ROOT`), la cible le
+    # chemin du conteneur que lit le serveur (`*_STORAGE_DIR`).
+    volumes:
+      - agent-bin:/app/DevEye/agent/dist
+      - ${CLOUDSYNC_STORAGE_ROOT:-./cloudsync-data}:/data/cloudsync
+      - ${BACKUP_STORAGE_ROOT:-./backup-data}:/data/backups
+      - ${MAILSERVER_STORAGE_ROOT:-./mailserver-data}:/data/mailserver
+      - ${CONVERT_STORAGE_ROOT:-./convert-data}:/data/convert
+    ports:
+      - '${LISTEN_PORT:-3000}:${LISTEN_PORT:-3000}'
+      # Le serveur mail ne passe pas par le proxy HTTP. Pour le mettre en
+      # service, publier ses ports : SMTP, soumission (TLS puis STARTTLS), IMAP.
+      # - '25:2525'
+      # - '465:4465'
+      # - '587:5587'
+      # - '993:9993'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:${LISTEN_PORT:-3000}/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+volumes:
+  db:
+  agent-bin:
