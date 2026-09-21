@@ -10,9 +10,10 @@ import {
     useWorkspacePermissions
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
-import type { AudienceSite, AudienceUsage } from '../contracts/domain';
+import type { AudienceEventsQuota, AudienceSite, AudienceUsage } from '../contracts/domain';
 
 import { api } from './api';
+import QuotaNotice from './QuotaNotice';
 import SiteDetail from './SiteDetail';
 import SiteDialog from './SiteDialog';
 import SiteList from './SiteList';
@@ -34,6 +35,7 @@ export function FeatureAudience(_props: FeatureViewProps) {
     const workspaceId = useActiveWorkspace()?.id ?? null;
 
     const [sites, setSites] = useState<AudienceSite[] | null>(null);
+    const [eventsQuota, setEventsQuota] = useState<AudienceEventsQuota | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     /** Le site ouvert ; `null` = on est sur la liste. */
@@ -77,6 +79,7 @@ export function FeatureAudience(_props: FeatureViewProps) {
         try {
             const res = await api.send('audience.list', {});
             setSites(res.sites);
+            setEventsQuota(res.eventsQuota);
             setError(null);
         } catch (e) {
             setError(humanizeError(e, 'Impossible de charger les sites.'));
@@ -160,6 +163,7 @@ export function FeatureAudience(_props: FeatureViewProps) {
                     </header>
 
                     {error && <p className={styles.error}>{error}</p>}
+                    <QuotaNotice quota={eventsQuota} />
 
                     {sites === null ? (
                         <p className={styles.empty}>Chargement…</p>
@@ -173,6 +177,7 @@ export function FeatureAudience(_props: FeatureViewProps) {
                     ) : (
                         <SiteList
                             sites={sites}
+                            eventsQuota={eventsQuota}
                             outlineFor={outlineFor}
                             canWrite={canWrite}
                             onOpen={setOpenedId}
@@ -186,6 +191,7 @@ export function FeatureAudience(_props: FeatureViewProps) {
             ) : (
                 <SiteDetail
                     site={opened.site}
+                    eventsQuota={eventsQuota}
                     usage={opened.usage}
                     ingestOrigin={opened.ingestOrigin}
                     canWrite={canWrite}

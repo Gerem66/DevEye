@@ -30,6 +30,7 @@ import {
     audienceSubmissionSchema,
     audienceSummarySchema,
     audienceVisitorModeSchema,
+    audienceEventsQuotaSchema,
     audienceSiteSchema,
     audienceUsageSchema
 } from './domain';
@@ -84,7 +85,8 @@ export const audienceCount = {
 export const audienceList = {
     command: 'audience.list' as const,
     input: z.object({}),
-    output: z.object({ sites: z.array(audienceSiteSchema) })
+    /** `eventsQuota` à `null` : aucune offre ne borne les vues de cet espace. */
+    output: z.object({ sites: z.array(audienceSiteSchema), eventsQuota: audienceEventsQuotaSchema.nullable() })
 };
 
 /**

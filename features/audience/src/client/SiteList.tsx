@@ -1,12 +1,14 @@
 import { useDragReorder, type LiveOutlineProps } from 'deveye-sdk-client';
-import type { AudienceSite } from '../contracts/domain';
+import type { AudienceEventsQuota, AudienceSite } from '../contracts/domain';
 
-import { formatAgo, formatCount } from './format';
+import { formatAgo, formatCount, siteStatus } from './format';
 import styles from './style.module.css';
 
 interface SiteListProps {
     /** Les sites, déjà dans l'ordre de l'utilisateur. */
     sites: AudienceSite[];
+    /** Où en sont les vues du mois face à l'offre : un site qui ne mesure plus le dit. */
+    eventsQuota: AudienceEventsQuota | null;
     /** Le halo de présence d'un site (`useLiveOutlines('l1')` de l'appelant). */
     outlineFor: (value: string | null) => LiveOutlineProps;
     /** Ranger est une écriture : sans le droit, la poignée n'existe pas. */
@@ -21,7 +23,15 @@ interface SiteListProps {
  * `useDragReorder`, le seul du SDK pour ça : ne restent ici que l'apparence de
  * la carte, de la poignée et de la barre d'insertion.
  */
-export function SiteList({ sites, outlineFor, canWrite, onOpen, onReorder, onDragStateChange }: SiteListProps) {
+export function SiteList({
+    sites,
+    eventsQuota,
+    outlineFor,
+    canWrite,
+    onOpen,
+    onReorder,
+    onDragStateChange
+}: SiteListProps) {
     const drag = useDragReorder<HTMLUListElement, HTMLLIElement>({
         ids: sites.map((s) => s.id),
         rowSelector: '[data-site-card]',
@@ -35,6 +45,7 @@ export function SiteList({ sites, outlineFor, canWrite, onOpen, onReorder, onDra
                 <SiteCard
                     key={site.id}
                     site={site}
+                    eventsQuota={eventsQuota}
                     outline={outlineFor(String(site.id))}
                     dragging={drag.draggingId === site.id}
                     onOpen={() => onOpen(site.id)}
@@ -51,25 +62,15 @@ export function SiteList({ sites, outlineFor, canWrite, onOpen, onReorder, onDra
 
 interface SiteCardProps {
     site: AudienceSite;
+    eventsQuota: AudienceEventsQuota | null;
     outline: LiveOutlineProps;
     dragging: boolean;
     onOpen: () => void;
     onDragPointerDown?: (e: React.PointerEvent) => void;
 }
 
-/**
- * Trois états, un seul alarmant : « en attente » est l'état normal d'un site
- * qu'on vient de déclarer, et le peindre en rouge ferait passer une
- * installation en cours pour un incident.
- */
-function toneOf(site: AudienceSite): { label: string; tone: 'neutral' | 'online' | 'danger' } {
-    if (!site.active) return { label: 'éteint', tone: 'danger' };
-    if (site.lastEventAt === null) return { label: 'en attente', tone: 'neutral' };
-    return { label: 'actif', tone: 'online' };
-}
-
-function SiteCard({ site, outline, dragging, onOpen, onDragPointerDown }: SiteCardProps) {
-    const status = toneOf(site);
+function SiteCard({ site, eventsQuota, outline, dragging, onOpen, onDragPointerDown }: SiteCardProps) {
+    const status = siteStatus(site, eventsQuota);
 
     return (
         <li className={`${styles.card} ${dragging ? styles.cardDragging : ''}`} data-site-card='' {...outline}>

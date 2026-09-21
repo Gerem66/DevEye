@@ -46,6 +46,16 @@ export const AUDIENCE_QUOTA_MAX = 100_000;
 /** L'origine qui accepte tout, par opposition à la liste vide qui n'accepte rien. */
 export const AUDIENCE_ORIGIN_ANY = '*';
 
+/**
+ * Les vues et événements du mois face à l'offre du propriétaire de l'espace.
+ * `used` peut dépasser `limit` : une offre qui baisse ne retire rien d'écrit.
+ */
+export const audienceEventsQuotaSchema = z.object({
+    limit: z.number().int().nonnegative(),
+    used: z.number().int().nonnegative()
+});
+export type AudienceEventsQuota = z.infer<typeof audienceEventsQuotaSchema>;
+
 export const AUDIENCE_RETENTION_MIN_DAYS = 7;
 export const AUDIENCE_RETENTION_MAX_DAYS = 730;
 export const AUDIENCE_RETENTION_DEFAULT_DAYS = 90;

@@ -1,5 +1,6 @@
 import type {
     AudienceDimension,
+    AudienceEventsQuota,
     AudienceFieldKind,
     AudienceFieldValue,
     AudienceFormField,
@@ -7,6 +8,7 @@ import type {
     AudiencePlatform,
     AudienceRange,
     AudienceResolution,
+    AudienceSite,
     AudienceVisitorMode
 } from '../contracts/domain';
 
@@ -477,4 +479,25 @@ export function submitSnippetFor(form: string): string {
         '    if (sent) e.target.reset();',
         '});'
     ].join('\n');
+}
+
+export interface SiteStatus {
+    label: string;
+    tone: 'neutral' | 'online' | 'warning' | 'danger';
+}
+
+/** Les vues du mois ont atteint ce que permet l'offre du propriétaire de l'espace : plus rien n'est mesuré. */
+export const quotaReached = (quota: AudienceEventsQuota | null): boolean => quota !== null && quota.used >= quota.limit;
+
+/**
+ * Quatre états, un seul alarmant : « en attente » est l'état normal d'un site
+ * qu'on vient de déclarer, et le peindre en rouge ferait passer une
+ * installation en cours pour un incident. La limite de l'offre ne dit rien d'un
+ * site partagé ici : c'est celle de son propre espace qui le borne.
+ */
+export function siteStatus(site: AudienceSite, quota: AudienceEventsQuota | null): SiteStatus {
+    if (!site.active) return { label: 'éteint', tone: 'danger' };
+    if (quotaReached(quota) && !site.foreign) return { label: 'limite atteinte', tone: 'warning' };
+    if (site.lastEventAt === null) return { label: 'en attente', tone: 'neutral' };
+    return { label: 'actif', tone: 'online' };
 }

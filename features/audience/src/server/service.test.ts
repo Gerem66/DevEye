@@ -775,6 +775,22 @@ describe('AudienceIngest : les vues de l’offre du compte', () => {
         assert.equal(repo.events.length, 5);
     });
 
+    it('prévient les écrans une fois la limite atteinte, après avoir écrit les dernières vues', async () => {
+        const repo = fakeRepo([site()]);
+        repo.eventsSince = async () => 9;
+        const { deps, ingest, flush } = ingestWith(repo, { events: 10 });
+        await ingest.accept(view('/derniere'));
+        await ingest.accept(view('/refusee'));
+        assert.deepEqual(deps.recorded.liveChanges, [], 'rien tant que la dernière vue n’est pas en base');
+        await flush();
+        assert.equal(repo.events.length, 1);
+        // La vidange prévient pour la vue écrite, puis pour l'état qui change.
+        assert.deepEqual(deps.recorded.liveChanges, [1, 1]);
+        await ingest.accept(view('/encore'));
+        await flush();
+        assert.deepEqual(deps.recorded.liveChanges, [1, 1], 'une seule annonce par limite atteinte');
+    });
+
     it('coupe un lot au milieu plutôt que d’enjamber la limite', async () => {
         const repo = fakeRepo([site()]);
         repo.eventsSince = async () => 9;

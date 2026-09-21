@@ -522,6 +522,29 @@ ne fait aucune requête, et lui en donner une par visite défairait ce qui le fa
 tenir. Il est donc approximatif, remis à zéro au redémarrage, et **illimité par
 défaut**, pour qu'aucun site en place ne se mette à perdre des vues.
 
+### La limite de l'offre, exacte sans requête par vue
+
+Le quota `events` borne les vues et événements du **mois** (UTC), contre l'offre
+du propriétaire de l'espace. Trois choses le rendent exact sans coûter une
+requête par vue :
+
+- le compte se lit une fois par minute et par espace : l'agrégat journalier pour
+  les jours révolus, **les événements bruts pour aujourd'hui**. L'agrégat seul
+  ne suffit pas, il n'est refait qu'au ménage horaire : une limite de 10 laissait
+  passer tout ce qui arrivait dans l'heure ;
+- entre deux lectures, l'ingestion **compte elle-même** ce qu'elle accepte,
+  événement par événement, pour qu'un lot n'enjambe pas la limite ;
+- une seule relecture tourne à la fois par espace, et l'ancien compte sert en
+  attendant : quand il expire, mille vues simultanées ne lancent pas mille
+  requêtes.
+
+`audience.list` rend ce même compte (`eventsQuota`), lu en base et jamais dans la
+mémoire de l'ingestion. L'écran en tire l'état « limite atteinte », sur la liste
+comme sur la fiche, et un bandeau vers les offres. Pour qu'il change sans
+recharger, l'ingestion prévient l'espace à la vidange qui suit le premier refus :
+après, et non pendant, parce que les dernières vues acceptées ne sont en base
+qu'à ce moment-là. Les retours des formulaires ne passent pas par ce quota.
+
 ### Les deux portes d'envoi, et la redirection
 
 `POST /api/t/s` accepte deux formes de corps : le JSON de `deveye.submit` (ou

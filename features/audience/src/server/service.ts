@@ -23,6 +23,7 @@ import {
     visitorRef
 } from './normalize';
 import { countAnswers } from './answers';
+import { eventsUsage } from './planUsage';
 import type { AudienceRepo, PendingEventRow } from './repo';
 import { validateSubmission, type ValidationReason } from './validate';
 import { nameRef, parseOrigins, readJson } from './_shared';
@@ -222,6 +223,8 @@ export class AudienceIngest {
     private readonly eventCounts = new Map<string, { from: number; count: number }>();
     /** Le compte mensuel de l'offre, par espace : voir `planUsage`. */
     private readonly planQuota = new Map<number, PlanUsage>();
+    /** Les espaces dont la limite vient d'être atteinte : leurs écrans ouverts sont prévenus à la vidange suivante, une fois les dernières vues en base. */
+    private readonly limitReached = new Set<number>();
     /** Les relectures en cours : une seule par espace, quel que soit le nombre de vues qui arrivent. */
     private readonly planReads = new Map<number, Promise<PlanUsage>>();
     /** `siteId:visitorRef` → session ouverte. */
@@ -539,24 +542,18 @@ export class AudienceIngest {
     private async readPlanUsage(workspaceId: number, warned: boolean): Promise<PlanUsage> {
         const usage: PlanUsage = { at: Date.now(), limit: null, count: 0, warned };
         try {
-            const quota = this.deps.quotaFor(workspaceId);
-            usage.limit = await quota.limit('events');
-            if (usage.limit !== null) {
-                const now = Math.floor(Date.now() / 1000);
-                const month = new Date(now * 1000);
-                const fromDay = month.getUTCFullYear() * 10000 + (month.getUTCMonth() + 1) * 100 + 1;
-                // `assert` est la seule voie vers les espaces du propriétaire : on y
-                // lit le compte, et le `0` rendu ne lui fait rien refuser.
-                await quota.assert('events', async (owned) => {
-                    usage.count = await this.deps.repo.eventsSince(owned, fromDay, dayKey(now), dayBounds(now).from);
-                    return 0;
-                });
+            const read = await eventsUsage(
+                this.deps.quotaFor(workspaceId),
+                this.deps.repo,
+                Math.floor(Date.now() / 1000)
+            );
+            if (read) {
+                usage.limit = read.limit;
                 // Acceptés mais pas encore écrits : la base ne les compte pas.
-                usage.count += this.queue.filter((queued) => queued.workspaceId === workspaceId).length;
+                usage.count = read.used + this.queue.filter((queued) => queued.workspaceId === workspaceId).length;
             }
         } catch (e) {
             // Une offre illisible ne doit pas arrêter l'ingestion de tout le monde.
-            usage.limit = null;
             this.deps.logger.error({ err: (e as Error).message, workspaceId }, 'Audience: offre illisible');
         }
         this.planQuota.set(workspaceId, usage);
@@ -570,6 +567,7 @@ export class AudienceIngest {
         }
         if (!usage.warned) {
             usage.warned = true;
+            this.limitReached.add(workspaceId);
             this.deps.logger.warn({ workspaceId }, 'Audience: quota mensuel atteint, ingestion suspendue');
         }
         return true;
@@ -678,7 +676,11 @@ export class AudienceIngest {
     }
 
     private async flush(): Promise<void> {
-        if (this.flushing || this.queue.length === 0) return;
+        if (this.flushing) return;
+        if (this.queue.length === 0) {
+            this.announceLimitReached();
+            return;
+        }
         this.flushing = true;
         const batch = this.queue;
         this.queue = [];
@@ -738,6 +740,7 @@ export class AudienceIngest {
                 await this.deps.repo.touchSite(siteId, at);
             }
             for (const workspaceId of workspaces) this.maybeBroadcast(workspaceId);
+            this.announceLimitReached();
         } catch (e) {
             // La file a déjà été vidée : ce lot est perdu, et c'est voulu. Le remettre en
             // tête ferait boucler sur une écriture qui échoue, en accumulant la suite.
@@ -786,6 +789,12 @@ export class AudienceIngest {
     private remember(key: string, session: CachedSession): void {
         if (this.sessions.size >= SESSION_CACHE_MAX) this.sessions.clear();
         this.sessions.set(key, session);
+    }
+
+    /** Hors du plancher de `maybeBroadcast` : c'est un changement d'état, pas une vue de plus. */
+    private announceLimitReached(): void {
+        for (const workspaceId of this.limitReached) this.deps.live.changed(workspaceId);
+        this.limitReached.clear();
     }
 
     private maybeBroadcast(workspaceId: number): void {

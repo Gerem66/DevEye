@@ -39,6 +39,7 @@ declare const styles: {
     readonly contextTags: string;
     readonly detail: string;
     readonly detailActions: string;
+    readonly detailBadge: string;
     readonly detailDesc: string;
     readonly detailHead: string;
     readonly detailName: string;
@@ -119,6 +120,8 @@ declare const styles: {
     readonly panelHead: string;
     readonly panelTitle: string;
     readonly panels: string;
+    readonly quotaNotice: string;
+    readonly quotaTitle: string;
     readonly range: string;
     readonly rangeActive: string;
     readonly ranges: string;

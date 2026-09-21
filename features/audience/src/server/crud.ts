@@ -11,6 +11,8 @@ import {
 import type { AudienceSite } from '../contracts/domain';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
+import { eventsUsage } from './planUsage';
+
 import {
     generatePublicKey,
     ingestOf,
@@ -70,8 +72,14 @@ export const audienceListFeature = defineSdkFeature({
         // liste plutôt que d'y figurer grisés.
         const hidden = await ctx.items.restrictions();
         const visible = rows.filter((r) => hidden.get(String(r.id)) !== 'none');
-        const [shares, counts] = await Promise.all([ctx.sharing.scope(), projectCountsOf(ctx)]);
+        const [shares, counts, eventsQuota] = await Promise.all([
+            ctx.sharing.scope(),
+            projectCountsOf(ctx),
+            // Une offre illisible ne doit pas priver l'espace de sa liste.
+            eventsUsage(ctx.quota, ctx.repo, Math.floor(Date.now() / 1000)).catch(() => null)
+        ]);
         return {
+            eventsQuota,
             sites: await Promise.all(
                 visible.map(async (row) =>
                     toSite(

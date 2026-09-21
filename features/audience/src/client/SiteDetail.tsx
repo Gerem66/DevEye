@@ -8,18 +8,22 @@ import {
     useLiveSegment,
     useStickyOffset
 } from 'deveye-sdk-client';
-import type { AudienceForm, AudienceSite, AudienceUsage } from '../contracts/domain';
+import type { AudienceEventsQuota, AudienceForm, AudienceSite, AudienceUsage } from '../contracts/domain';
 
+import { siteStatus } from './format';
 import Forms from './Forms/Forms';
 import Funnels from './Funnels';
 import HubTrend from './HubTrend';
 import InstallDialog from './InstallDialog';
+import QuotaNotice from './QuotaNotice';
 import SiteHub, { type SiteSection } from './SiteHub';
 import SiteView from './SiteView';
 import styles from './style.module.css';
 
 interface SiteDetailProps {
     site: AudienceSite;
+    /** Où en sont les vues du mois face à l'offre de l'espace. */
+    eventsQuota: AudienceEventsQuota | null;
     usage: AudienceUsage[];
     /** L'adresse de la balise, telle que le serveur la connaît. */
     ingestOrigin: string;
@@ -47,7 +51,15 @@ const SECTION_LABELS: Record<SiteSection, string> = {
  * retours ne répondent pas à la même question, et les empiler rendait la fiche
  * trop longue pour qu'on y trouve quoi que ce soit.
  */
-export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onSiteChanged }: SiteDetailProps) {
+export function SiteDetail({
+    site,
+    eventsQuota,
+    usage,
+    ingestOrigin,
+    canWrite,
+    onBack,
+    onSiteChanged
+}: SiteDetailProps) {
     const [installOpen, setInstallOpen] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [section, setSection] = useState<Section>(null);
@@ -72,6 +84,7 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onSite
      * passe en avant. Sur les Retours c'est l'absence de formulaire qui le dit,
      * un site peut n'en poser aucun et mesurer très bien.
      */
+    const status = siteStatus(site, eventsQuota);
     const awaiting = section === 'forms' ? currentForm === null : site.lastEventAt === null;
 
     /**
@@ -103,11 +116,14 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onSite
                 <div className={styles.detailTitle}>
                     <h2 className={styles.detailName}>
                         {section === null ? site.name : SECTION_LABELS[section]}
+                        <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
                         {/* Sans cette pastille, rien ne distingue un site local d'une
                             fenêtre sur l'espace voisin. */}
                         {site.foreign && (
-                            <span title='Ce site appartient à un autre espace qui le partage ici'>
-                                {' '}
+                            <span
+                                className={styles.detailBadge}
+                                title='Ce site appartient à un autre espace qui le partage ici'
+                            >
                                 <StatusBadge tone='accent'>partagé</StatusBadge>
                             </span>
                         )}
@@ -150,6 +166,8 @@ export function SiteDetail({ site, usage, ingestOrigin, canWrite, onBack, onSite
                 </div>
             </header>
 
+            {/* Un site partagé ici est borné par l'offre de son propre espace, pas par celle-ci. */}
+            {site.active && !site.foreign && <QuotaNotice quota={eventsQuota} />}
             {!site.active && (
                 <p className={styles.notice}>
                     La mesure est éteinte : plus rien n’entre, retours compris. L’historique ne bouge plus.

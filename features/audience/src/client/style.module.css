@@ -54,6 +54,35 @@
     font-size: 0.85rem;
 }
 
+/* La limite de l'offre : ce qui se passe à gauche, ce qu'on peut y faire à droite. */
+.quotaNotice {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-sm) var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--warning-bg);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.quotaNotice > div {
+    flex: 1;
+    min-width: 260px;
+}
+
+.quotaNotice p {
+    margin: 0;
+}
+
+.quotaTitle {
+    font-weight: 600;
+    color: var(--warning);
+}
+
 .empty {
     margin: 0;
     padding: var(--space-md);
@@ -242,6 +271,11 @@
     box-shadow: 0 0 6px var(--danger);
 }
 
+.statusDot[data-tone='warning'] {
+    background: var(--warning);
+    box-shadow: 0 0 6px var(--warning);
+}
+
 .statusTag {
     padding: 1px 8px;
     border-radius: var(--radius-pill);
@@ -258,6 +292,11 @@
 .statusTag[data-tone='danger'] {
     color: var(--danger);
     background: var(--danger-bg);
+}
+
+.statusTag[data-tone='warning'] {
+    color: var(--warning);
+    background: var(--warning-bg);
 }
 
 /* ------------------------------------------------------------- la fiche */
@@ -288,9 +327,19 @@
 }
 
 .detailName {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-xs) var(--space-sm);
     margin: 0;
     font-size: 1.15rem;
     color: var(--text-primary);
+}
+
+/* L'enveloppe qui porte l'infobulle : en flex, elle prend la hauteur de sa pastille,
+   au lieu de la poser sur la ligne de base d'une ligne haute comme le titre. */
+.detailBadge {
+    display: inline-flex;
 }
 
 .detailDesc {

@@ -348,6 +348,25 @@ describe('audience.count et audience.list', () => {
         assert.deepEqual(await handlerFor(audienceCount)(ctx, {}), { count: 2 });
     });
 
+    it('dit où en sont les vues du mois face à l’offre, ou rien quand aucune ne les borne', async () => {
+        const repo = seed(fakeRepo(), site({ id: 1, workspace_id: 1 }));
+        repo.eventsSince = async () => 14;
+        const bounded = await handlerFor(audienceList)(createTestContext({ repo, quotaLimits: { events: 10 } }), {});
+        assert.deepEqual(bounded.eventsQuota, { limit: 10, used: 14 });
+        const free = await handlerFor(audienceList)(createTestContext({ repo }), {});
+        assert.equal(free.eventsQuota, null);
+    });
+
+    it('rend la liste même quand le compte du mois est illisible', async () => {
+        const repo = seed(fakeRepo(), site({ id: 1, workspace_id: 1 }));
+        repo.eventsSince = async () => {
+            throw new Error('base injoignable');
+        };
+        const listed = await handlerFor(audienceList)(createTestContext({ repo, quotaLimits: { events: 10 } }), {});
+        assert.equal(listed.sites.length, 1);
+        assert.equal(listed.eventsQuota, null);
+    });
+
     it('sans contrat de Projets, le compte vaut zéro plutôt qu’une erreur', async () => {
         const repo = seed(fakeRepo(), site({ id: 1, workspace_id: 1 }));
         const listed = await handlerFor(audienceList)(createTestContext({ repo }), {});
