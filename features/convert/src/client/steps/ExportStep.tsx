@@ -34,6 +34,7 @@ interface ExportStepProps {
     source: SourceFormat;
     target: TargetFormat;
     estimate: SizeEstimate | null;
+    pending: boolean;
     sending: Sending | null;
     tracked: Tracked | null;
     error: string | null;
@@ -120,7 +121,7 @@ export function ExportStep(props: ExportStepProps) {
                         <dd>{outputName(file.name, target)}</dd>
                     </div>
                 </dl>
-                <SizeSummary inputBytes={file.size} estimate={produced ?? props.estimate} />
+                <SizeSummary inputBytes={file.size} estimate={produced ?? props.estimate} pending={props.pending} />
             </div>
 
             <div aria-live='polite'>

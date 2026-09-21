@@ -1,4 +1,4 @@
-import { SegmentedControl, SelectInput, Slider, Switch } from 'deveye-sdk-client';
+import { NumberInput, SegmentedControl, SelectInput, Slider, Switch } from 'deveye-sdk-client';
 
 import type { Dims } from '../../contracts/geometry';
 import {
@@ -11,7 +11,6 @@ import {
 import styles from '../style.module.css';
 import { BytesField } from './BytesField';
 import { CropField } from './CropField';
-import { NumberField } from './NumberField';
 import { SizeField } from './SizeField';
 
 /** Au-delà, les choix ne tiennent plus côte à côte : ils passent en liste déroulante. */
@@ -91,11 +90,12 @@ export function OptionControl({ spec, value, sourceDims, croppedDims, onChange }
             }
             case 'number':
                 return (
-                    <NumberField
+                    <NumberInput
                         aria-label={spec.unit ? `${spec.label}, en ${spec.unit}` : spec.label}
                         value={typeof value === 'number' ? value : null}
                         min={spec.min}
                         max={spec.max}
+                        step={spec.step}
                         placeholder={spec.unit ? `en ${spec.unit}` : undefined}
                         onChange={onChange}
                     />

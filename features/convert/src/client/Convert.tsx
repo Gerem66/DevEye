@@ -88,7 +88,7 @@ export default function Convert(_props: FeatureViewProps) {
     const sourceQuality = state.info?.sourceQuality ?? null;
     const specs = useMemo(() => (target ? adaptOptions(target, sourceQuality) : []), [target, sourceQuality]);
     const values = useMemo(() => resolveOptions(specs, state.values), [specs, state.values]);
-    const { estimate, sample } = useEstimate(target, values, state.info, file);
+    const { estimate, sample, pending } = useEstimate(target, values, state.info, file);
 
     const maxFileBytes = caps.data?.maxFileBytes ?? null;
     const fileProblem =
@@ -259,7 +259,7 @@ export default function Convert(_props: FeatureViewProps) {
                             <FormatStep wizard={wizard} family={family} fileProblem={fileProblem} />
                         )}
                         {state.view === 'options' && target && (
-                            <OptionsStep wizard={wizard} specs={specs} estimate={estimate} />
+                            <OptionsStep wizard={wizard} specs={specs} estimate={estimate} pending={pending} />
                         )}
                         {state.view === 'export' && source && target && (
                             <ExportStep
@@ -267,6 +267,7 @@ export default function Convert(_props: FeatureViewProps) {
                                 source={source}
                                 target={target}
                                 estimate={estimate}
+                                pending={pending}
                                 sending={sending}
                                 tracked={tracked}
                                 error={exportError}

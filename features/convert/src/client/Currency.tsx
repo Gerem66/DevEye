@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { SearchSelect, useResource } from 'deveye-sdk-client';
+import { NumberInput, SearchSelect, useResource } from 'deveye-sdk-client';
 
 import { convertCurrency } from '../contracts/units';
 import { api } from './api';
-import { NumberField } from './controls/NumberField';
 import { currencyOption } from './currencies';
 import { formatAmount } from './format';
 import styles from './style.module.css';
@@ -62,7 +61,13 @@ export function Currency() {
                 <>
                     <div className={styles.converter}>
                         <div className={styles.converterSide}>
-                            <NumberField aria-label='Montant à convertir' value={amount} min={0} onChange={setAmount} />
+                            <NumberInput
+                                live
+                                aria-label='Montant à convertir'
+                                value={amount}
+                                min={0}
+                                onChange={setAmount}
+                            />
                             <SearchSelect
                                 aria-label='Devise de départ'
                                 searchPlaceholder='Nom, code ou pays…'

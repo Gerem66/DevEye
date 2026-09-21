@@ -66,12 +66,3 @@ const AMOUNT = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2, maximu
 
 export const formatNumber = (value: number): string => NUMBER.format(value);
 export const formatAmount = (value: number): string => AMOUNT.format(value);
-
-/** Une saisie française (« 1 234,5 ») lue comme un nombre. `null` : rien d'exploitable. */
-export function parseNumber(raw: string): number | null {
-    // `\s` couvre aussi les espaces insécables qu'une saisie française glisse entre les milliers.
-    const cleaned = raw.replace(/\s/g, '').replace(',', '.');
-    if (cleaned === '' || cleaned === '-') return null;
-    const value = Number(cleaned);
-    return Number.isFinite(value) ? value : null;
-}

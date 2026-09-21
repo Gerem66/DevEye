@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { SegmentedControl } from 'deveye-sdk-client';
+import { NumberInput, SegmentedControl } from 'deveye-sdk-client';
 
 import styles from '../style.module.css';
-import { NumberField } from './NumberField';
 
 const UNITS = [
     { value: 'kb', label: 'Ko', factor: 1024 },
@@ -35,7 +34,7 @@ export function BytesField({
     return (
         <div className={styles.bytesField}>
             <div className={styles.bytesRow}>
-                <NumberField
+                <NumberInput
                     aria-label={label}
                     value={Math.round((value / factor) * 100) / 100}
                     min={0.01}

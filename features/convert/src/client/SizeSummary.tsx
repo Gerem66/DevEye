@@ -6,10 +6,12 @@ import styles from './style.module.css';
 interface SizeSummaryProps {
     inputBytes: number;
     estimate: SizeEstimate | null;
+    /** Un essai d'encodage est en route : sans estimation encore, c'est une attente, pas une inconnue. */
+    pending?: boolean;
 }
 
 /** Le poids du fichier, avant et après : les deux lignes se lisent l'une sous l'autre, aux mêmes colonnes. */
-export function SizeSummary({ inputBytes, estimate }: SizeSummaryProps) {
+export function SizeSummary({ inputBytes, estimate, pending }: SizeSummaryProps) {
     const delta = estimate && inputBytes > 0 ? Math.round((1 - estimate.bytes / inputBytes) * 100) : 0;
     return (
         <dl className={styles.sizes} aria-live='polite'>
@@ -29,7 +31,9 @@ export function SizeSummary({ inputBytes, estimate }: SizeSummaryProps) {
                         {delta <= -5 && <span className={styles.sizesLoss}> {-delta} % de plus</span>}
                     </dd>
                 ) : (
-                    <dd className={styles.sizesUnknown}>connu à la fin de la conversion</dd>
+                    <dd className={styles.sizesUnknown}>
+                        {pending ? 'calcul en cours…' : 'connu à la fin de la conversion'}
+                    </dd>
                 )}
             </div>
         </dl>

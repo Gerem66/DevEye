@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react';
-import { SearchSelect, SelectInput, type SearchSelectOption } from 'deveye-sdk-client';
+import { NumberInput, SearchSelect, SelectInput, type SearchSelectOption } from 'deveye-sdk-client';
 
 import { convertUnit, UNIT_CATEGORIES, type UnitCategory } from '../contracts/units';
-import { NumberField } from './controls/NumberField';
 import { formatNumber } from './format';
 import styles from './style.module.css';
 
@@ -43,7 +42,7 @@ export function Units() {
 
             <div className={styles.converter}>
                 <div className={styles.converterSide}>
-                    <NumberField aria-label='Valeur à convertir' value={value} onChange={setValue} />
+                    <NumberInput live aria-label='Valeur à convertir' value={value} onChange={setValue} />
                     <SearchSelect
                         aria-label='Unité de départ'
                         searchPlaceholder='Chercher une unité…'

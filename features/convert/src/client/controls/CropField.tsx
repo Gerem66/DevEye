@@ -1,9 +1,9 @@
-import { SelectInput, Slider } from 'deveye-sdk-client';
+import { useId } from 'react';
+import { NumberInput, SelectInput, Slider } from 'deveye-sdk-client';
 
 import { cropRect, type Dims } from '../../contracts/geometry';
 import type { CropValue } from '../../contracts/options';
 import styles from '../style.module.css';
-import { NumberField } from './NumberField';
 
 const NONE: CropValue = { top: 0, right: 0, bottom: 0, left: 0 };
 
@@ -47,6 +47,7 @@ interface CropFieldProps {
  * geste remonte aussitôt, l'aperçu suit le curseur.
  */
 export function CropField({ value, source, onChange }: CropFieldProps) {
+    const id = useId();
     const edges = value ?? NONE;
     const emit = (next: CropValue): void => onChange(same(next, NONE) ? null : next);
     const preset = source ? (RATIOS.find((r) => same(centered(source, r.ratio), edges))?.id ?? 'custom') : 'custom';
@@ -95,17 +96,17 @@ export function CropField({ value, source, onChange }: CropFieldProps) {
                             }
                         />
                     ) : (
-                        <label key={edge.id} className={styles.pairField}>
-                            <span>{edge.label} (px)</span>
-                            <NumberField
+                        <div key={edge.id} className={styles.pairField}>
+                            <label htmlFor={`${id}-${edge.id}`}>{edge.label} (px)</label>
+                            <NumberInput
                                 live
-                                aria-label={`À retirer du bord ${edge.label.toLowerCase()}, en pixels`}
+                                id={`${id}-${edge.id}`}
                                 value={edges[edge.id] || null}
                                 min={0}
                                 placeholder='0'
                                 onChange={(next) => emit({ ...edges, [edge.id]: Math.round(next ?? 0) })}
                             />
-                        </label>
+                        </div>
                     )
                 )}
             </div>

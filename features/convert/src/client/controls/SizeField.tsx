@@ -1,7 +1,9 @@
+import { useId } from 'react';
+import { NumberInput } from 'deveye-sdk-client';
+
 import type { Dims } from '../../contracts/geometry';
 import type { SizeValue } from '../../contracts/options';
 import styles from '../style.module.css';
-import { NumberField } from './NumberField';
 
 const MAX_SIDE = 16_384;
 
@@ -19,6 +21,7 @@ interface SizeFieldProps {
  * redimensionnement n'est alors demandé au serveur.
  */
 export function SizeField({ value, natural, onChange }: SizeFieldProps) {
+    const id = useId();
     const shown = { width: value.width ?? natural?.width ?? null, height: value.height ?? natural?.height ?? null };
     const ratio = natural ? natural.width / natural.height : null;
 
@@ -47,18 +50,18 @@ export function SizeField({ value, natural, onChange }: SizeFieldProps) {
 
     return (
         <div className={styles.sizeRow}>
-            <label className={styles.pairField}>
-                <span>Largeur (px)</span>
-                <NumberField
+            <div className={styles.pairField}>
+                <label htmlFor={`${id}-width`}>Largeur (px)</label>
+                <NumberInput
                     live
-                    aria-label='Largeur, en pixels'
+                    id={`${id}-width`}
                     value={shown.width}
                     min={1}
                     max={MAX_SIDE}
                     placeholder='inchangée'
                     onChange={(width) => edit('width', width)}
                 />
-            </label>
+            </div>
             <button
                 type='button'
                 className={`${styles.lock} ${value.keepRatio ? styles.lockOn : ''}`}
@@ -69,18 +72,18 @@ export function SizeField({ value, natural, onChange }: SizeFieldProps) {
             >
                 <span className={`icon ${value.keepRatio ? 'icon-lock' : 'icon-unlock'}`} aria-hidden='true' />
             </button>
-            <label className={styles.pairField}>
-                <span>Hauteur (px)</span>
-                <NumberField
+            <div className={styles.pairField}>
+                <label htmlFor={`${id}-height`}>Hauteur (px)</label>
+                <NumberInput
                     live
-                    aria-label='Hauteur, en pixels'
+                    id={`${id}-height`}
                     value={shown.height}
                     min={1}
                     max={MAX_SIDE}
                     placeholder='inchangée'
                     onChange={(height) => edit('height', height)}
                 />
-            </label>
+            </div>
         </div>
     );
 }

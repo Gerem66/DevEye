@@ -13,9 +13,10 @@ interface OptionsStepProps {
     /** Les réglages de la cible, ajustés au fichier choisi (`adaptOptions`). */
     specs: readonly OptionSpec[];
     estimate: SizeEstimate | null;
+    pending: boolean;
 }
 
-export function OptionsStep({ wizard, specs, estimate }: OptionsStepProps) {
+export function OptionsStep({ wizard, specs, estimate, pending }: OptionsStepProps) {
     const { state } = wizard;
     const values = resolveOptions(specs, state.values);
     const visible = specs.filter((spec) => isActive(spec, values));
@@ -55,7 +56,7 @@ export function OptionsStep({ wizard, specs, estimate }: OptionsStepProps) {
             ))}
 
             <div className={styles.stickyFoot}>
-                <SizeSummary inputBytes={state.file?.size ?? 0} estimate={estimate} />
+                <SizeSummary inputBytes={state.file?.size ?? 0} estimate={estimate} pending={pending} />
                 <div className={styles.stepNav}>
                     <Button variant='ghost' icon='arrow-left' onClick={() => wizard.open('format')}>
                         Format

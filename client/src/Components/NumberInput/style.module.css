@@ -1,0 +1,84 @@
+.field {
+    display: flex;
+    align-items: stretch;
+    width: 100%;
+    height: calc(2.25rem + 2px);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    background: var(--input-bg);
+    overflow: hidden;
+    transition:
+        border-color var(--transition-fast),
+        background-color var(--transition-fast);
+}
+
+.field:focus-within {
+    border-color: var(--input-focus);
+    background: var(--glass-bg-light);
+}
+
+.disabled {
+    filter: opacity(0.6);
+}
+
+.input {
+    flex: 1;
+    min-width: 0;
+    padding: 0 var(--space-xs);
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--text-primary);
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    /* Les flèches natives, différentes d'un navigateur à l'autre, cèdent la place aux boutons ±. */
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+.input::-webkit-outer-spin-button,
+.input::-webkit-inner-spin-button {
+    margin: 0;
+    -webkit-appearance: none;
+}
+
+.input::placeholder {
+    color: var(--input-placeholder);
+}
+
+.input:disabled {
+    cursor: not-allowed;
+}
+
+.step {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 36px;
+    border: none;
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font-size: 1.2rem;
+    line-height: 1;
+    cursor: pointer;
+    user-select: none;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.step:hover:not(:disabled) {
+    background: var(--glass-border);
+    color: var(--text-primary);
+}
+
+.step:active:not(:disabled) {
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+.step:disabled {
+    color: var(--text-muted);
+    cursor: not-allowed;
+}
