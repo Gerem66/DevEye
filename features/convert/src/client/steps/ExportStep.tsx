@@ -135,7 +135,7 @@ export function ExportStep(props: ExportStepProps) {
             {!props.canWrite && (
                 <p className={styles.note}>Votre rôle dans cet espace ne permet pas de lancer une conversion.</p>
             )}
-            {props.resultTtlSeconds !== null && !locked && (
+            {props.resultTtlSeconds !== null && !done && (
                 <ul className={styles.promises}>
                     <li>Votre fichier d’origine est supprimé du serveur dès que la conversion est terminée.</li>
                     <li>

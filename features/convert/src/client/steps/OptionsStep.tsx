@@ -25,9 +25,12 @@ interface OptionsStepProps {
     specs: readonly OptionSpec[];
     estimate: SizeEstimate | null;
     pending: boolean;
+    canWrite: boolean;
+    /** Passe à l'étape suivante ET lance l'export : il n'y a rien à confirmer une seconde fois. */
+    onExport: () => void;
 }
 
-export function OptionsStep({ wizard, specs, estimate, pending }: OptionsStepProps) {
+export function OptionsStep({ wizard, specs, estimate, pending, canWrite, onExport }: OptionsStepProps) {
     const { state } = wizard;
     const values = resolveOptions(specs, state.values);
     const visible = specs.filter((spec) => isActive(spec, values));
@@ -105,13 +108,16 @@ export function OptionsStep({ wizard, specs, estimate, pending }: OptionsStepPro
             ))}
 
             <div className={styles.stickyFoot}>
+                {!canWrite && (
+                    <p className={styles.note}>Votre rôle dans cet espace ne permet pas de lancer une conversion.</p>
+                )}
                 <SizeSummary inputBytes={state.file?.size ?? 0} estimate={estimate} pending={pending} />
                 <div className={styles.stepNav}>
                     <Button variant='ghost' icon='arrow-left' onClick={() => wizard.open('format')}>
                         Format
                     </Button>
-                    <Button variant='primary' onClick={() => wizard.open('export')}>
-                        Continuer
+                    <Button variant='primary' disabled={!canWrite} onClick={onExport}>
+                        Exporter
                     </Button>
                 </div>
             </div>

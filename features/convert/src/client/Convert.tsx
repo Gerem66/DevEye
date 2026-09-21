@@ -217,7 +217,8 @@ export default function Convert(_props: FeatureViewProps) {
         { id: 'kinds', label: 'Type', reachable: !locked },
         { id: 'format', label: 'Format', reachable: kind !== null && !locked },
         { id: 'options', label: 'Options', reachable: ready && !locked },
-        { id: 'export', label: 'Export', reachable: ready }
+        // On n'y entre que par le bouton Exporter de l'étape d'avant : y arriver, c'est avoir lancé l'export.
+        { id: 'export', label: 'Export', reachable: state.view === 'export' }
     ];
     const family = caps.data?.families.find((f) => f.kind === kind);
     const atRoot = state.view === 'kinds' || kind === null;
@@ -270,7 +271,17 @@ export default function Convert(_props: FeatureViewProps) {
                             <FormatStep wizard={wizard} family={family} fileProblem={fileProblem} />
                         )}
                         {state.view === 'options' && target && (
-                            <OptionsStep wizard={wizard} specs={specs} estimate={estimate} pending={pending} />
+                            <OptionsStep
+                                wizard={wizard}
+                                specs={specs}
+                                estimate={estimate}
+                                pending={pending}
+                                canWrite={canWrite}
+                                onExport={() => {
+                                    wizard.open('export');
+                                    void startExport();
+                                }}
+                            />
                         )}
                         {state.view === 'export' && source && target && (
                             <ExportStep
