@@ -312,8 +312,8 @@ function submission(over: Partial<SubmitRequest> = {}): SubmitRequest {
 }
 
 /** Le service sur le harnais : les deux tickers, dans l'ordre où le service les pose. */
-function ingestWith(repo: FakeRepo) {
-    const deps = createTestServiceDeps({ repo });
+function ingestWith(repo: FakeRepo, quotaLimits?: Record<string, number>) {
+    const deps = createTestServiceDeps({ repo, quotaLimits });
     const ingest = new AudienceIngest(deps);
     return {
         deps,
@@ -735,6 +735,25 @@ describe('AudienceIngest : le quota d’événements', () => {
         }
         await flush();
         assert.equal(repo.events.length, 4, 'deux par adresse');
+    });
+});
+
+describe('AudienceIngest : les vues de l’offre du compte', () => {
+    it('n’écrit rien quand l’offre n’en inclut aucune, dès la première', async () => {
+        const repo = fakeRepo([site()]);
+        const { ingest, flush } = ingestWith(repo, { events: 0 });
+        await ingest.accept(request());
+        await flush();
+        assert.equal(repo.events.length, 0);
+    });
+
+    it('accepte jusqu’à la limite, elle comprise', async () => {
+        const repo = fakeRepo([site()]);
+        repo.eventsSince = async () => 9;
+        const { ingest, flush } = ingestWith(repo, { events: 10 });
+        await ingest.accept(request());
+        await flush();
+        assert.equal(repo.events.length, 1);
     });
 });
 

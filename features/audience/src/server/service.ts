@@ -513,9 +513,11 @@ export class AudienceIngest {
         const fromDay = month.getUTCFullYear() * 10000 + (month.getUTCMonth() + 1) * 100 + 1;
         let over = false;
         try {
+            // Le total une fois cette vue écrite : sans le `+ 1`, une offre qui
+            // n'en inclut aucune laisserait passer la première.
             await this.deps
                 .quotaFor(workspaceId)
-                .assert('events', (owned) => this.deps.repo.eventsSince(owned, fromDay));
+                .assert('events', async (owned) => (await this.deps.repo.eventsSince(owned, fromDay)) + 1);
         } catch (e) {
             over = e instanceof FeatureError && e.code === 'quota_exceeded';
             if (!over) {
