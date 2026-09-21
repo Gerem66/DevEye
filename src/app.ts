@@ -151,7 +151,8 @@ export interface BuiltApp {
 export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     const app = Fastify({
         loggerInstance: logger as FastifyBaseLogger,
-        trustProxy: TRUST_PROXY
+        trustProxy: TRUST_PROXY,
+        requestTimeout: env.REQUEST_TIMEOUT_SECONDS * 1000
     });
 
     await app.register(fastifyHelmet, { contentSecurityPolicy: CONTENT_SECURITY_POLICY });
@@ -326,7 +327,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // Routes publiques des modules (capacité `routes.public`), aussi montées
     // sur la surface publique quand elle existe (`publicApp.ts`). Après la
     // création des services, qui les déclarent.
-    modulePublicRoutes(app, 'app');
+    await modulePublicRoutes(app, 'app');
     await registerWS(app, {
         db: deps.db,
         crypt: deps.crypt,

@@ -334,23 +334,6 @@
     border-top: 1px solid var(--glass-border);
 }
 
-.sliderRow {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-xs);
-}
-
-.sliderLabel {
-    font-size: 0.82rem;
-    color: var(--text-secondary);
-}
-
-.slider {
-    width: 100%;
-    accent-color: var(--accent);
-    cursor: pointer;
-}
-
 .toggleRow {
     display: flex;
     align-items: center;

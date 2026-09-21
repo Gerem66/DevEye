@@ -56,6 +56,7 @@ services:
       # Les boîtes du serveur mail : les corps des messages, chiffrés. Hors du
       # conteneur pour la même raison, et parce qu'un courrier perdu ne se refait pas.
       - ${MAILSERVER_STORAGE_ROOT:-./mailserver-data}:/data/mailserver
+      - ${CONVERT_STORAGE_ROOT:-./convert-data}:/data/convert
     ports:
       - '127.0.0.1:${LISTEN_PORT:-3000}:${LISTEN_PORT:-3000}'
       # Le serveur mail. Par défaut sur la boucle locale et des ports hauts : rien

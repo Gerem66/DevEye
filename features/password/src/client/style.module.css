@@ -286,31 +286,6 @@
     z-index: var(--z-toast);
 }
 
-.generatorLengthRow {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-xs);
-}
-
-.generatorLengthLabel {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-}
-
-.generatorLengthValue {
-    font-weight: 600;
-    color: var(--text-primary);
-    font-variant-numeric: tabular-nums;
-}
-
-.generatorSlider {
-    width: 100%;
-    accent-color: var(--accent);
-    cursor: pointer;
-}
-
 .generatorOptions {
     display: flex;
     flex-direction: column;

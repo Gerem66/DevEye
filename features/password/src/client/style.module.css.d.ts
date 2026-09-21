@@ -16,12 +16,8 @@ declare const styles: {
     readonly errorBanner: string;
     readonly form: string;
     readonly generatorGenerateBtn: string;
-    readonly generatorLengthLabel: string;
-    readonly generatorLengthRow: string;
-    readonly generatorLengthValue: string;
     readonly generatorMenu: string;
     readonly generatorOptions: string;
-    readonly generatorSlider: string;
     readonly generatorTrigger: string;
     readonly generatorWarning: string;
     readonly generatorWrap: string;

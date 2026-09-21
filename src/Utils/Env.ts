@@ -111,6 +111,12 @@ export const env = {
     RATE_LIMIT_MAX: getEnvVar('RATE_LIMIT_MAX', 'number', false) || 200,
     RATE_LIMIT_WINDOW: getEnvVar('RATE_LIMIT_WINDOW', 'string', false) || '1 minute',
 
+    // Le temps accordé à une requête pour arriver en entier, corps compris. Le
+    // défaut de Node (300 s) couperait un gros envoi sur une ligne ordinaire :
+    // 5 Gio demandent 17 Mo/s soutenus. Fini et non nul : c'est ce qui borne un
+    // corps envoyé au compte-gouttes. Le délai des en-têtes, lui, ne bouge pas.
+    REQUEST_TIMEOUT_SECONDS: getEnvVar('REQUEST_TIMEOUT_SECONDS', 'number', false) || 7200,
+
     // Les appels sortants vers une adresse qu'un membre choisit (sondes Uptime,
     // webhooks, Dokploy, S3) peuvent-ils viser le réseau privé ? Fermé par
     // défaut : sur une instance partagée, ce serait offrir le réseau de l'hôte à

@@ -31,6 +31,9 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     // Le fil des vulnérabilités a son propre sujet secondaire (`cveFeed`), battu
     // par l'ingestion : le sujet nommé ici ne sert qu'aux écritures d'un membre.
     cve: 'cve',
+    // Les taux de change ont leur sujet secondaire (`convertRates`), battu par le
+    // service : un travail qui avance ne les fait pas relire.
+    convert: 'convert',
     database: 'database',
     deploy: 'deploy',
     devices: 'devices',

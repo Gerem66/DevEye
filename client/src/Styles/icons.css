@@ -364,6 +364,10 @@
     -webkit-mask-image: url(/icons/bug.svg);
     mask-image: url(/icons/bug.svg);
 }
+.icon.icon-convert {
+    -webkit-mask-image: url(/icons/convert.svg);
+    mask-image: url(/icons/convert.svg);
+}
 .icon.icon-at {
     -webkit-mask-image: url(/icons/at.svg);
     mask-image: url(/icons/at.svg);

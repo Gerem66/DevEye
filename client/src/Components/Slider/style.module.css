@@ -1,0 +1,42 @@
+.slider {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.head {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+.value {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.input {
+    width: 100%;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.input:disabled {
+    cursor: not-allowed;
+}
+
+.marks {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.hint {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}

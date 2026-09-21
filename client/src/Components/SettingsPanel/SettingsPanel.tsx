@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDismissLayer } from '@/Components/Dialog';
+import Slider from '@/Components/Slider';
 import {
     useTheme,
     setTheme,
@@ -283,30 +284,20 @@ export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
 
                                 {theme.bgImage && (
                                     <div className={styles.bgTune}>
-                                        <div className={styles.sliderRow}>
-                                            <span className={styles.sliderLabel}>Assombrir le fond</span>
-                                            <input
-                                                type='range'
-                                                min={0}
-                                                max={100}
-                                                step={1}
-                                                value={theme.bgDim}
-                                                className={styles.slider}
-                                                onChange={(e) => setTheme({ bgDim: Number(e.target.value) })}
-                                            />
-                                        </div>
-                                        <div className={styles.sliderRow}>
-                                            <span className={styles.sliderLabel}>Flouter le fond</span>
-                                            <input
-                                                type='range'
-                                                min={0}
-                                                max={100}
-                                                step={1}
-                                                value={theme.bgBlur}
-                                                className={styles.slider}
-                                                onChange={(e) => setTheme({ bgBlur: Number(e.target.value) })}
-                                            />
-                                        </div>
+                                        <Slider
+                                            label='Assombrir le fond'
+                                            min={0}
+                                            max={100}
+                                            value={theme.bgDim}
+                                            onChange={(bgDim) => setTheme({ bgDim })}
+                                        />
+                                        <Slider
+                                            label='Flouter le fond'
+                                            min={0}
+                                            max={100}
+                                            value={theme.bgBlur}
+                                            onChange={(bgBlur) => setTheme({ bgBlur })}
+                                        />
                                     </div>
                                 )}
                             </div>

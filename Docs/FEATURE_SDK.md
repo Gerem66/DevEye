@@ -672,7 +672,13 @@ d'hôte), `createTicker` (boucle avec garde de réentrance), `logger`. Un servic
 aussi déclarer `publicRoutes(app: SdkPublicApp)` (capacité `'routes.public'`) :
 l'hôte monte ces routes sur chacun de ses écouteurs exposés, hors session
 (`exposure: 'app'` pour n'en monter une que sur l'origine de l'app ; la
-requête porte `headers`, `body` et `query` décodés, `ip`). Les hooks agent
+requête porte `headers`, `body` et `query` décodés, `ip`). Une route qui
+reçoit un fichier se déclare par `postStream` : le corps n'est ni décodé ni
+tamponné, l'hôte le rend en flux (`body.bytes()`) et coupe la connexion au-delà
+du `maxBytes` déclaré, dans un contexte Fastify à lui où aucun parseur n'est
+enregistré. Elle ne se monte que sur l'origine de l'app (`exposure: 'app'`,
+obligatoire et littéral), reste hors des chemins que le délégateur CORS élargit,
+et s'authentifie par un ticket (`features/convert/src/server/routes.ts`). Les hooks agent
 d'un module (connexion, télémétrie après persistance, sync) qui échouent sont
 isolés et journalisés (`moduleAgentHooks`), deux modules offrant le même
 provider sont refusés au boot, et `validateGrantExtras` vérifie les extras

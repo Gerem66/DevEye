@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Checkbox } from 'deveye-sdk-client';
+import { Checkbox, Slider } from 'deveye-sdk-client';
 
 import styles from './style.module.css';
 import {
@@ -115,21 +115,14 @@ function PasswordGeneratorMenu({ onGenerate }: PasswordGeneratorMenuProps) {
                             exit={{ opacity: 0, y: 0 }}
                             transition={{ duration: 0.15 }}
                         >
-                            <div className={styles.generatorLengthRow}>
-                                <span className={styles.generatorLengthLabel}>
-                                    Longueur
-                                    <span className={styles.generatorLengthValue}>{options.length}</span>
-                                </span>
-                                <input
-                                    type='range'
-                                    min={GENERATOR_LENGTH_MIN}
-                                    max={GENERATOR_LENGTH_MAX}
-                                    step={1}
-                                    value={options.length}
-                                    className={styles.generatorSlider}
-                                    onChange={(e) => setOptions((o) => ({ ...o, length: Number(e.target.value) }))}
-                                />
-                            </div>
+                            <Slider
+                                label='Longueur'
+                                valueLabel={String(options.length)}
+                                min={GENERATOR_LENGTH_MIN}
+                                max={GENERATOR_LENGTH_MAX}
+                                value={options.length}
+                                onChange={(length) => setOptions((o) => ({ ...o, length }))}
+                            />
 
                             <div className={styles.generatorOptions}>
                                 {CHARSET_TOGGLES.map(({ key, label }) => (

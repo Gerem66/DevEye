@@ -670,5 +670,7 @@ const WHEN: Record<NotificationFeature, string> = {
     database:
         'Envoyées au franchissement d’un seuil d’alerte d’une base, dans les deux sens — déclenchement et retour à la normale.',
     deploy: 'Envoyées à l’atterrissage d’un déploiement, échec comme succès, y compris ceux lancés depuis Dokploy, une CI ou un push git.',
-    backup: 'Envoyées à l’échec d’une sauvegarde. Les réussites ne disent rien, sinon l’échec se perdrait dans le flot des succès.'
+    backup: 'Envoyées à l’échec d’une sauvegarde. Les réussites ne disent rien, sinon l’échec se perdrait dans le flot des succès.',
+    convert:
+        'Envoyées à la fin d’une conversion assez longue pour qu’on ait quitté l’écran. La durée à partir de laquelle prévenir se règle dans l’onglet Général.'
 };

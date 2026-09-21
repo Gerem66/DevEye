@@ -38,7 +38,8 @@ function fakeApp(): { app: SdkPublicApp; routes: Route[] } {
         routes,
         app: {
             get: (path, opts, handler) => routes.push({ method: 'get', path, opts, handler }),
-            post: (path, opts, handler) => routes.push({ method: 'post', path, opts, handler })
+            post: (path, opts, handler) => routes.push({ method: 'post', path, opts, handler }),
+            postStream: () => assert.fail('aucune route en flux attendue')
         }
     };
 }

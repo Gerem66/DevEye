@@ -1,0 +1,21 @@
+{
+  "name": "deveye-feature-convert",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Convertisseur : vidéo, audio, images et documents convertis sur le serveur, avec réglages de compression et taille cible, plus les devises et les unités.",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server/index.ts",
+    "./client": "./src/client/index.tsx",
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "@deveye/types": ">=0.19.1",
+    "framer-motion": "^12.0.0",
+    "react": "^19.0.0",
+    "zod": "^4.0.0"
+  }
+}

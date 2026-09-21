@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policymap [
+<!ELEMENT policymap (policy)*>
+<!ATTLIST policymap xmlns CDATA #FIXED "">
+<!ELEMENT policy EMPTY>
+<!ATTLIST policy xmlns CDATA #FIXED "">
+<!ATTLIST policy domain NMTOKEN #REQUIRED>
+<!ATTLIST policy name NMTOKEN #IMPLIED>
+<!ATTLIST policy pattern CDATA #IMPLIED>
+<!ATTLIST policy rights NMTOKEN #IMPLIED>
+<!ATTLIST policy stealth NMTOKEN #IMPLIED>
+<!ATTLIST policy value CDATA #IMPLIED>
+]>
+<!--
+  La politique ImageMagick du Convertisseur de DevEye, que le Dockerfile copie
+  dans son image. Elle borne ce que peut coûter un fichier hostile et ferme ce
+  que nulle conversion ne demande. Une politique ne se contourne pas par un
+  argument, au contraire des limites que le module passe aussi en ligne de
+  commande.
+
+  PIEGE : aucune apostrophe ni guillemet dans un commentaire de ce fichier.
+  Le lecteur XML de ImageMagick les prend pour un début de chaîne et avale en
+  silence toutes les règles qui suivent, sans rien signaler. Après toute
+  retouche, relire le résultat avec : magick -list policy
+-->
+<policymap>
+  <!-- Une image de quelques kilo-octets peut annoncer des milliards de pixels. -->
+  <policy domain="resource" name="width" value="16KP"/>
+  <policy domain="resource" name="height" value="16KP"/>
+  <policy domain="resource" name="area" value="256MP"/>
+  <policy domain="resource" name="memory" value="512MiB"/>
+  <policy domain="resource" name="map" value="1GiB"/>
+  <policy domain="resource" name="disk" value="4GiB"/>
+  <policy domain="resource" name="thread" value="2"/>
+  <policy domain="resource" name="list-length" value="64"/>
+
+  <!-- Aucun programme externe : les attaques connues contre ImageMagick passent par ses délégués. -->
+  <policy domain="delegate" rights="none" pattern="*"/>
+  <!-- Ni lecture par adresse, ni fichier désigné par une liste. -->
+  <policy domain="path" rights="none" pattern="@*"/>
+  <policy domain="coder" rights="none" pattern="{URL,HTTP,HTTPS,FTP}"/>
+  <!-- Les formats qui sont des programmes, ou qui en appellent un. -->
+  <policy domain="coder" rights="none" pattern="{MSL,MVG,PS,PS2,PS3,EPS,EPT,XPS,SVG,MSVG,TEXT,LABEL,SHOW,WIN,EPHEMERAL}"/>
+  <!-- Un PDF se fabrique (image vers PDF) mais ne se lit jamais ici : le lire passerait par Ghostscript. -->
+  <policy domain="coder" rights="write" pattern="PDF"/>
+</policymap>

@@ -51,6 +51,10 @@ export type ResourceKey =
     | 'mailserver.activity'
     | 'mailserver.queueList'
     | 'mailserver.serverStatus'
+    | 'convert.list'
+    | 'convert.capabilities'
+    | 'convert.rates'
+    | 'convert.settings'
     | 'workspace.roleList'
     /** L'état de l'espace actif tel que `workspace.activate` le rend : droits, apparence, disposition. */
     | 'workspace.activate'

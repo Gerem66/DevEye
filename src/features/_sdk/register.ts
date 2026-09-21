@@ -21,12 +21,23 @@ import {
     type ItemTreeRows,
     type SdkCopyPlan
 } from '@deveye/types/sdk/server';
+// Pour ses types seulement : c'est lui qui déclare `config.rateLimit` sur une route.
+import type {} from '@fastify/rate-limit';
 import type { FastifyInstance, FastifyRequest, RouteShorthandOptions } from 'fastify';
+import type { Readable } from 'node:stream';
 
 import type { Database } from '@/db';
 import type { Queryable } from '@/db/pool';
 import { defineFeature, type FeatureDefinition } from '@/features/_define';
-import type { SdkProviders, SdkPublicApp, SdkPublicHandler, SdkPublicRouteOptions } from '@deveye/types/sdk/server';
+import type {
+    SdkProviders,
+    SdkPublicApp,
+    SdkPublicHandler,
+    SdkPublicRouteOptions,
+    SdkPublicStreamHandler,
+    SdkPublicStreamRequest,
+    SdkPublicStreamRouteOptions
+} from '@deveye/types/sdk/server';
 import { logger } from '@/logger';
 import { createSdkContext } from './context';
 import { createDomainsContext, type DomainsHost } from './domains';
@@ -479,7 +490,7 @@ export function isModulePublicPath(url: string): boolean {
  * la capacité déclarée, refus : ouvrir une porte ne se fait pas en douce. Pas
  * de session, journal silencieux, plafond de débit par route à la demande.
  */
-export function modulePublicRoutes(app: FastifyInstance, listener: 'app' | 'public'): void {
+export async function modulePublicRoutes(app: FastifyInstance, listener: 'app' | 'public'): Promise<void> {
     for (const s of SERVICES) {
         const routes = s.service.publicRoutes;
         if (!routes) continue;
@@ -518,12 +529,70 @@ export function modulePublicRoutes(app: FastifyInstance, listener: 'app' | 'publ
             if (method === 'get') app.get(path, route, (req, reply) => handler(req, reply));
             else app.post(path, route, (req, reply) => handler(req, reply));
         };
+        const streams: { path: string; opts: SdkPublicStreamRouteOptions; handler: SdkPublicStreamHandler }[] = [];
         const surface: SdkPublicApp = {
             get: (path, opts, handler) => mount('get', path, opts, handler),
-            post: (path, opts, handler) => mount('post', path, opts, handler)
+            post: (path, opts, handler) => mount('post', path, opts, handler),
+            postStream: (path, opts, handler) => {
+                if (/[:*]/.test(path)) {
+                    throw new Error(`Module « ${s.manifest.id} » : postStream n'accepte pas de chemin paramétré`);
+                }
+                streams.push({ path, opts, handler });
+            }
         };
         routes.call(s.service, surface);
+
+        // Hors de PUBLIC_PATHS à dessein : le délégateur CORS ne les élargit
+        // pas, et un envoi venu d'un autre site est arrêté au prévol par son
+        // propre navigateur, avant le premier octet.
+        if (streams.length === 0 || listener === 'public') continue;
+        await app.register(async (scoped) => {
+            // Les parseurs de contenu sont encapsulés : dans ce contexte seul,
+            // rien n'est décodé et le corps reste le flux de la requête.
+            scoped.removeAllContentTypeParsers();
+            scoped.addContentTypeParser('*', (_req, payload, done) => done(null, payload));
+            for (const stream of streams) {
+                const route: RouteShorthandOptions = { logLevel: 'silent' };
+                if (stream.opts.rateLimit) route.config = { rateLimit: stream.opts.rateLimit };
+                scoped.post(stream.path, route, (req, reply) =>
+                    stream.handler(streamRequest(req, stream.opts.maxBytes), reply)
+                );
+            }
+        });
     }
+}
+
+/**
+ * La requête d'une route en flux telle qu'un module la voit. Le plafond est
+ * tenu ici et non par `bodyLimit`, qui ne s'applique pas à un parseur qui ne
+ * tamponne pas.
+ */
+export function streamRequest(req: FastifyRequest, maxBytes: number): SdkPublicStreamRequest {
+    const raw = req.body as Readable;
+    const declared = Number(req.headers['content-length']);
+    return {
+        headers: req.headers,
+        query: req.query,
+        params: req.params,
+        host: req.host,
+        ip: req.ip,
+        body: {
+            contentLength: Number.isFinite(declared) ? declared : null,
+            bytes: async function* () {
+                let seen = 0;
+                for await (const chunk of raw as AsyncIterable<Buffer>) {
+                    seen += chunk.length;
+                    if (seen > maxBytes) {
+                        // Détruire et non cesser de lire : sinon le client
+                        // continue d'émettre dans un tampon qui ne se vide plus.
+                        raw.destroy();
+                        throw new FeatureError('validation', `Corps trop volumineux (plafond de ${maxBytes} octets)`);
+                    }
+                    yield chunk;
+                }
+            }
+        }
+    };
 }
 
 declare module 'fastify' {

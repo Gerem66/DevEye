@@ -372,6 +372,28 @@ const ART: Record<ArtId, ReactNode> = {
         </>
     ),
 
+    // Un fichier qui en devient un autre : deux feuilles, la flèche, et le curseur de qualité dessous.
+    convert: (
+        <>
+            <rect x='22' y='12' width='40' height='48' rx='5' fill={M} opacity='0.14' />
+            <rect x='22' y='12' width='40' height='48' rx='5' stroke={M} {...thin} />
+            <Line x={30} y={24} w={24} o={0.45} />
+            <Line x={30} y={34} w={18} o={0.3} />
+            <Line x={30} y={44} w={22} o={0.3} />
+
+            <path d='M70 36h18M82 29l7 7-7 7' stroke={A} {...stroke} />
+
+            <rect x='98' y='12' width='40' height='48' rx='5' fill={A} opacity='0.16' />
+            <rect x='98' y='12' width='40' height='48' rx='5' stroke={A} {...thin} />
+            <Line x={106} y={24} w={24} c={A} o={0.85} />
+            <Line x={106} y={34} w={14} c={A} o={0.55} />
+
+            <rect x='22' y='72' width='116' height='4' rx='2' fill={M} opacity='0.3' />
+            <rect x='22' y='72' width='70' height='4' rx='2' fill={A} />
+            <circle cx='92' cy='74' r='5' fill={A} />
+        </>
+    ),
+
     // Une machine : son nom, son état, et l'activité qui la traverse.
     device: (
         <>

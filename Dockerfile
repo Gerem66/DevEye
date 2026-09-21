@@ -70,6 +70,34 @@ WORKDIR /app/DevEye
 RUN apt-get update \
     && apt-get install --no-install-recommends -y default-mysql-client postgresql-client \
     && rm -rf /var/lib/apt/lists/*
+# Les outils du Convertisseur. Aucun ne sait faire le travail de l'autre : ffmpeg
+# pour la vidéo et le son, ImageMagick pour les images (il tient l'orientation
+# des photos, les profils de couleur et l'ICO, que ffmpeg perd ou ignore), et
+# pour les documents LibreOffice, poppler (une page de PDF en image, son texte)
+# et Ghostscript (alléger un PDF).
+#
+# Tous tournent HORS du processus du serveur : un décodeur qui s'effondre sur un
+# fichier hostile n'emporte que lui, et un budget de temps peut le tuer.
+#
+# Les polices ne sont pas un confort : sans elles LibreOffice rend un document
+# en carrés et décale toute sa mise en page, sans rien signaler.
+#
+# WITH_DOCUMENTS=0 laisse LibreOffice hors de l'image, qu'il alourdit à lui seul
+# de plusieurs centaines de Mo. Sans un outil, le module ne tombe pas : il retire
+# les formats concernés de l'écran en nommant ce qui manque.
+ARG WITH_DOCUMENTS=1
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y ffmpeg imagemagick \
+    && if [ "$WITH_DOCUMENTS" = "1" ]; then \
+        apt-get install --no-install-recommends -y \
+            libreoffice-core libreoffice-writer libreoffice-calc libreoffice-impress \
+            fonts-liberation2 fonts-dejavu-core fonts-noto-core \
+            poppler-utils ghostscript; \
+    fi \
+    && rm -rf /var/lib/apt/lists/*
+# Sous les deux noms : le dossier suit la version majeure d'ImageMagick que Debian livre.
+COPY features/convert/policy/policy.xml /etc/ImageMagick-6/policy.xml
+COPY features/convert/policy/policy.xml /etc/ImageMagick-7/policy.xml
 # App + installed dependencies + built client.
 COPY --from=build /app/DevEye ./
 EXPOSE 3000

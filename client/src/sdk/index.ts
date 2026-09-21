@@ -29,6 +29,7 @@ export { ConfirmDialog } from '@/Components/ConfirmDialog';
 export type { ConfirmRequest } from '@/Components/ConfirmDialog';
 export { default as SegmentedControl } from '@/Components/SegmentedControl';
 export { default as SelectInput } from '@/Components/SelectInput';
+export { default as Slider } from '@/Components/Slider';
 export { StatusBadge } from '@/Components/StatusBadge';
 export { default as Switch } from '@/Components/Switch';
 export { default as TextInput } from '@/Components/TextInput';
