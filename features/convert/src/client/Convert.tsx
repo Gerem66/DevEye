@@ -86,10 +86,10 @@ export default function Convert(_props: FeatureViewProps) {
 
     const source = kind && state.sourceId ? sourceOf(kind, state.sourceId) : null;
     const target = kind && state.sourceId && state.targetId ? targetOf(kind, state.sourceId, state.targetId) : null;
-    const { sourceQuality = null, audioKbps = null, fps = null, height = null } = state.info ?? {};
+    const { sourceQuality = null, audioKbps = null, fps = null, width = null, height = null } = state.info ?? {};
     const specs = useMemo(
-        () => (target ? adaptOptions(target, { sourceQuality, audioKbps, fps, height }) : []),
-        [target, sourceQuality, audioKbps, fps, height]
+        () => (target ? adaptOptions(target, { sourceQuality, audioKbps, fps, width, height }) : []),
+        [target, sourceQuality, audioKbps, fps, width, height]
     );
     const values = useMemo(() => resolveOptions(specs, state.values), [specs, state.values]);
     const { estimate, sample, pending } = useEstimate(target, values, state.info, file);
@@ -259,6 +259,7 @@ export default function Convert(_props: FeatureViewProps) {
                     <FilePane
                         wizard={wizard}
                         family={family}
+                        target={target}
                         values={values}
                         sample={sample}
                         locked={locked}

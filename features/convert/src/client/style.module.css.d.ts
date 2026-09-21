@@ -68,6 +68,8 @@ declare const styles: {
     readonly pairField: string;
     readonly playerBar: string;
     readonly playerButton: string;
+    readonly playerHidden: string;
+    readonly playerNote: string;
     readonly playerSeek: string;
     readonly playerTime: string;
     readonly previewAction: string;

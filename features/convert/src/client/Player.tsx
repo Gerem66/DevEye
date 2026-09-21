@@ -15,6 +15,11 @@ interface PlayerProps {
     /** Le passage gardé, en secondes. `null` : depuis le début, jusqu'à la fin. */
     start: number | null;
     end: number | null;
+    /**
+     * Le résultat sera un GIF : l'aperçu se dessine à sa cadence et à ses
+     * dimensions, muet et en boucle, comme lui. `null` : la vidéo telle quelle.
+     */
+    simulate: { fps: number; dims: Dims } | null;
     /** Une autre vue du même fichier a pris le relais : celle-ci se tait. */
     suspended: boolean;
     /** Les boutons posés sur le cadre. */
@@ -34,8 +39,10 @@ const clock = (seconds: number): string => {
  * régler le début ou la fin montre aussitôt l'image où l'on coupe. Rien n'est
  * encodé : définition, cadence et qualité ne se voient qu'au résultat.
  */
-export function Player({ kind, url, name, source, area, start, end, suspended, actions, onError }: PlayerProps) {
+export function Player(props: PlayerProps) {
+    const { kind, url, name, source, area, start, end, simulate, suspended, actions, onError } = props;
     const media = useRef<HTMLVideoElement & HTMLAudioElement>(null);
+    const canvas = useRef<HTMLCanvasElement>(null);
     const [duration, setDuration] = useState<number | null>(null);
     const [time, setTime] = useState(0);
     const [playing, setPlaying] = useState(false);
@@ -64,6 +71,36 @@ export function Player({ kind, url, name, source, area, start, end, suspended, a
         if (suspended) media.current?.pause();
     }, [suspended]);
 
+    // Le GIF simulé : la vidéo joue hors de vue, et une image n'est recopiée sur
+    // le canevas que lorsque la cadence choisie le veut. On y voit les saccades
+    // et la définition du résultat, pas sa palette de 256 couleurs.
+    const fps = simulate?.fps ?? null;
+    // En nombres, et non par `source` ou `area` : ces objets renaissent à chaque rendu, et la boucle avec eux.
+    const [areaX, areaY] = [area?.x ?? 0, area?.y ?? 0];
+    const [areaW, areaH] = [area?.width ?? source?.width, area?.height ?? source?.height];
+    useEffect(() => {
+        if (fps === null || areaW === undefined || areaH === undefined) return;
+        let frame = 0;
+        let drawnAt = -1;
+        const tick = (): void => {
+            const video = media.current;
+            const surface = canvas.current;
+            if (video && surface && video.readyState >= 2 && !video.seeking) {
+                const at = video.currentTime;
+                const due = video.paused ? at !== drawnAt : Math.abs(at - drawnAt) >= 1 / fps;
+                if (drawnAt < 0 || due) {
+                    surface
+                        .getContext('2d')
+                        ?.drawImage(video, areaX, areaY, areaW, areaH, 0, 0, surface.width, surface.height);
+                    drawnAt = at;
+                }
+            }
+            frame = requestAnimationFrame(tick);
+        };
+        frame = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(frame);
+    }, [fps, areaX, areaY, areaW, areaH, simulate?.dims.width, simulate?.dims.height]);
+
     const toggle = (): void => {
         const element = media.current;
         if (!element) return;
@@ -87,12 +124,21 @@ export function Player({ kind, url, name, source, area, start, end, suspended, a
             const element = media.current;
             if (!element) return;
             setTime(element.currentTime);
-            // La lecture s'arrête où le résultat s'arrêtera.
-            if (to > from && element.currentTime >= to) element.pause();
+            // La lecture s'arrête où le résultat s'arrêtera ; un GIF, lui, repart du début.
+            if (to > from && element.currentTime >= to) {
+                if (simulate) seek(from);
+                else element.pause();
+            }
         }
     };
 
-    const ratio = area ? area.width / area.height : source ? source.width / source.height : null;
+    const ratio = simulate
+        ? simulate.dims.width / simulate.dims.height
+        : area
+          ? area.width / area.height
+          : source
+            ? source.width / source.height
+            : null;
     return (
         <>
             <div className={styles.previewFrame}>
@@ -102,6 +148,22 @@ export function Player({ kind, url, name, source, area, start, end, suspended, a
                         <audio {...shared}>
                             <track kind='captions' />
                         </audio>
+                    </div>
+                ) : source && ratio && simulate ? (
+                    <div className={styles.stage} style={{ '--ratio': ratio } as CSSProperties}>
+                        <video {...shared} className={styles.playerHidden} muted playsInline>
+                            <track kind='captions' />
+                        </video>
+                        <canvas
+                            ref={canvas}
+                            className={styles.stageLayer}
+                            style={{ width: '100%', height: '100%', left: 0, top: 0 }}
+                            width={simulate.dims.width}
+                            height={simulate.dims.height}
+                            role='img'
+                            aria-label={`Aperçu du GIF tiré de ${name}`}
+                            onClick={toggle}
+                        />
                     </div>
                 ) : source && ratio ? (
                     <div className={styles.stage} style={{ '--ratio': ratio } as CSSProperties}>
@@ -155,6 +217,12 @@ export function Player({ kind, url, name, source, area, start, end, suspended, a
                     {clock(time - from)} / {clock(to - from)}
                 </span>
             </div>
+            {simulate && (
+                <p className={styles.playerNote}>
+                    Aperçu des dimensions et de la cadence. Les couleurs d’un GIF, limitées à 256, seront un peu moins
+                    fines.
+                </p>
+            )}
         </>
     );
 }

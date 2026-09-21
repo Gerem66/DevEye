@@ -353,6 +353,22 @@
     cursor: pointer;
 }
 
+/* La vidéo que le canevas recopie : elle doit jouer, mais ne se montre pas. */
+.playerHidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.playerNote {
+    margin: 0;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--text-muted);
+}
+
 .playerTime {
     flex-shrink: 0;
     font-size: 0.8rem;

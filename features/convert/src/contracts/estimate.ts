@@ -1,5 +1,5 @@
 import type { TargetFormat } from './catalogue';
-import { cropRect, imageDims, keptSeconds, videoDims, type Dims } from './geometry';
+import { cropRect, imageDims, keptSeconds, scaledDims, videoDims, type Dims } from './geometry';
 import { cropOf, flag, num, sizeOf, str, type OptionValues } from './options';
 
 /**
@@ -96,9 +96,7 @@ export function outputDims(target: TargetFormat, values: OptionValues, info: Med
             return videoDims(source, cropOf(values, 'crop'), height && height !== 'source' ? Number(height) : null);
         }
         case 'gif': {
-            const area = cropRect(source, cropOf(values, 'crop')) ?? source;
-            const width = Math.min(num(values, 'gifWidth') ?? 480, area.width);
-            return { width, height: Math.max(1, Math.round((width * area.height) / area.width)) };
+            return scaledDims(cropRect(source, cropOf(values, 'crop')) ?? source, num(values, 'gifScale') ?? 50);
         }
         case 'image':
             return imageDims(source, cropOf(values, 'crop'), sizeOf(values, 'resize'));

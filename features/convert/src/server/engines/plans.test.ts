@@ -225,9 +225,9 @@ describe('plans audio et GIF', () => {
     });
 
     it('calcule la palette d’un GIF sur la vidéo elle-même', () => {
-        const [args] = gifPlan(plan('video', 'mp4', 'gif', { gifWidth: 320, gifFps: 10 })).passes;
+        const [args] = gifPlan(plan('video', 'mp4', 'gif', { gifScale: 25, gifFps: 10 })).passes;
         const filter = args[args.indexOf('-filter_complex') + 1];
-        assert.match(filter, /^\[0:v:0\]fps=10,scale=320:-2:flags=lanczos,split/);
+        assert.match(filter, /^\[0:v:0\]fps=10,scale=480:270:flags=lanczos,split/);
         assert.match(filter, /palettegen.*paletteuse/);
     });
 });

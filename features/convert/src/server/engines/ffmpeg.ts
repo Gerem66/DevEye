@@ -1,6 +1,6 @@
 import type { SourceFormat } from '../../contracts/catalogue';
 import { keptBitrate, minTargetBytes, minVideoBitrate, videoBitrateForTarget } from '../../contracts/estimate';
-import { cropRect, keptSeconds, videoDims } from '../../contracts/geometry';
+import { cropRect, keptSeconds, scaledDims, videoDims } from '../../contracts/geometry';
 import { cropOf, flag, num, str } from '../../contracts/options';
 import { formatBytes } from '../_shared';
 import { env } from '../env';
@@ -262,11 +262,11 @@ export function gifPlan(job: PlanInput): FfmpegPlan {
     const source = requireVideo(job);
     const seconds = keptSeconds(job.probe.durationMs ?? 0, num(job.options, 'trimStart'), num(job.options, 'trimEnd'));
     const crop = cropRect(source, cropOf(job.options, 'crop'));
-    const width = Math.min(num(job.options, 'gifWidth') ?? 480, crop?.width ?? source.width);
+    const dims = scaledDims(crop ?? source, num(job.options, 'gifScale') ?? 50);
     const chain = [
         ...(crop ? [`crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}`] : []),
         `fps=${num(job.options, 'gifFps') ?? 12}`,
-        `scale=${width}:-2:flags=lanczos`,
+        `scale=${dims.width}:${dims.height}:flags=lanczos`,
         // La palette se calcule sur la vidéo elle-même : celle par défaut donne des aplats sales.
         'split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5'
     ].join(',');

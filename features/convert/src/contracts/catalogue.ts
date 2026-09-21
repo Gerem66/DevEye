@@ -224,24 +224,31 @@ const VIDEO_OPTIONS: readonly OptionSpec[] = [
     }
 ];
 
+/** La largeur qu'un GIF vise quand rien n'est choisi : au-delà, il pèse vite des dizaines de Mo. */
+export const GIF_DEFAULT_WIDTH = 480;
+
+// Les dimensions et la cadence sont les seuls leviers du poids d'un GIF : elles
+// vont sous « Qualité et poids », pas dans la rubrique Image, qui s'efface.
 const GIF_OPTIONS: readonly OptionSpec[] = [
     {
         kind: 'slider',
-        id: 'gifWidth',
-        section: 'picture',
-        label: 'Largeur du GIF',
-        hint: 'La largeur de l’image produite, en pixels. La hauteur suit toute seule, pour garder les proportions. Un GIF pèse vite très lourd : plus il est étroit, plus il est léger.',
-        min: 120,
-        max: 960,
-        step: 20,
-        default: 480,
-        unit: 'px'
+        id: 'gifScale',
+        section: 'quality',
+        label: 'Dimensions',
+        hint: 'Plus le GIF est petit, plus il est léger.',
+        min: 10,
+        max: 100,
+        step: 5,
+        default: 50,
+        unit: '%',
+        readout: 'scaledDims'
     },
     {
         kind: 'slider',
         id: 'gifFps',
-        section: 'picture',
+        section: 'quality',
         label: 'Images par seconde',
+        hint: 'Moins il y en a, plus le GIF est léger, et saccadé.',
         min: 5,
         max: 30,
         step: 1,
@@ -762,9 +769,9 @@ export const CATALOGUE: readonly KindSpec[] = [
                         label: 'Allègement',
                         hint: 'Ce sont les images du document qui sont recompressées : un PDF de texte seul ne maigrit presque pas.',
                         options: [
-                            { value: 'screen', label: 'Fort' },
+                            { value: 'printer', label: 'Léger' },
                             { value: 'ebook', label: 'Équilibré' },
-                            { value: 'printer', label: 'Léger' }
+                            { value: 'screen', label: 'Fort' }
                         ],
                         default: 'ebook'
                     }

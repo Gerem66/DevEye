@@ -1,6 +1,6 @@
 import { NumberInput, SegmentedControl, SelectInput, Slider, Switch } from 'deveye-sdk-client';
 
-import type { Dims } from '../../contracts/geometry';
+import { scaledDims, type Dims } from '../../contracts/geometry';
 import {
     cropValueSchema,
     EMPTY_SIZE,
@@ -38,6 +38,8 @@ export function OptionControl({ spec, value, sourceDims, croppedDims, onChange }
 
     if (spec.kind === 'slider') {
         const current = typeof value === 'number' ? value : spec.default;
+        const plain = spec.unit ? `${current} ${spec.unit}` : String(current);
+        const scaled = spec.readout === 'scaledDims' && croppedDims ? scaledDims(croppedDims, current) : null;
         return (
             <Slider
                 className={width}
@@ -47,7 +49,7 @@ export function OptionControl({ spec, value, sourceDims, croppedDims, onChange }
                 max={spec.max}
                 step={spec.step}
                 value={current}
-                valueLabel={spec.unit ? `${current} ${spec.unit}` : String(current)}
+                valueLabel={scaled ? `${scaled.width} × ${scaled.height} px · ${plain}` : plain}
                 marks={spec.marks}
                 indicator={spec.indicator}
                 onChange={onChange}

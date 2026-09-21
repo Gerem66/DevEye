@@ -3,7 +3,7 @@ import { Dialog } from 'deveye-sdk-client';
 
 import type { ConvertKind } from '../contracts/catalogue';
 import type { MediaInfo } from '../contracts/estimate';
-import { cropRect, imageDims } from '../contracts/geometry';
+import { cropRect, imageDims, type Dims } from '../contracts/geometry';
 import type { CropValue, SizeValue } from '../contracts/options';
 import { Compare } from './Compare';
 import { framing } from './framing';
@@ -22,6 +22,8 @@ interface PreviewProps {
     resize: SizeValue;
     /** Le passage gardé d'une vidéo ou d'un son, en secondes. */
     trim: { start: number | null; end: number | null };
+    /** La cadence et les dimensions d'un GIF à venir : l'aperçu les imite. */
+    simulate: { fps: number; dims: Dims } | null;
     /** L'image telle qu'elle sortirait. Présente, l'aperçu devient une comparaison avant / après. */
     sample: Blob | null;
     /** Le résultat est prêt : un bouton discret le donne, à côté de l'agrandissement. */
@@ -47,7 +49,8 @@ function NoPreview({ kind, reason }: { kind: ConvertKind; reason: string }) {
  * format que le navigateur ne sait pas ouvrir garde le cadre et le dit ; la
  * conversion, elle, se fait sur le serveur et n'en dépend pas.
  */
-export function Preview({ file, kind, isPdf, info, crop, resize, trim, sample, onDownload }: PreviewProps) {
+export function Preview(props: PreviewProps) {
+    const { file, kind, isPdf, info, crop, resize, trim, simulate, sample, onDownload } = props;
     const url = useObjectUrl(file, isPdf ? 'application/pdf' : undefined);
     const sampleUrl = useObjectUrl(sample);
     const [failed, setFailed] = useState(false);
@@ -125,6 +128,7 @@ export function Preview({ file, kind, isPdf, info, crop, resize, trim, sample, o
             area={area}
             start={trim.start}
             end={trim.end}
+            simulate={simulate}
             suspended={suspended}
             actions={shown}
             onError={() => setFailed(true)}

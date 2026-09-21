@@ -86,6 +86,14 @@ export function sizeAtScale(size: SizeValue, scale: Scale, area: Dims): SizeValu
         : { ...size, width, height };
 }
 
+/** Des dimensions ramenées à un pourcentage, en gardant les proportions. */
+export function scaledDims(source: Dims, percent: number): Dims {
+    return {
+        width: Math.max(1, Math.round((source.width * percent) / 100)),
+        height: Math.max(1, Math.round((source.height * percent) / 100))
+    };
+}
+
 /** Ce que devient une vidéo : recadrée, puis ramenée à la hauteur demandée, en dimensions paires. */
 export function videoDims(source: Dims, crop: CropValue | null, maxHeight: number | null): Dims {
     const base: Dims = cropRect(source, crop) ?? source;

@@ -5,7 +5,7 @@ import { targetOf } from '../contracts/catalogue';
 import { resolveOptions } from '../contracts/options';
 import { adaptOptions } from './adaptOptions';
 
-const NOTHING = { sourceQuality: null, audioKbps: null, fps: null, height: null };
+const NOTHING = { sourceQuality: null, audioKbps: null, fps: null, width: null, height: null };
 const jpeg = (sourceQuality: number) => ({ ...NOTHING, sourceQuality });
 const sound = (audioKbps: number) => ({ ...NOTHING, audioKbps });
 
@@ -69,6 +69,15 @@ describe('réglages ajustés au fichier', () => {
         };
         assert.equal(detailOf('fps'), '29,97 i/s');
         assert.equal(detailOf('height'), '1080p');
+    });
+
+    it('vise une largeur raisonnable pour un GIF, quelle que soit la vidéo', () => {
+        const gif = targetOf('video', 'mp4', 'gif');
+        assert.ok(gif);
+        const scaleFor = (width: number) => resolveOptions(adaptOptions(gif, { ...NOTHING, width }), {}).gifScale;
+        assert.equal(scaleFor(1920), 25);
+        assert.equal(scaleFor(3840), 15, 'au cran le plus proche de 12,5');
+        assert.equal(scaleFor(320), 100, 'jamais agrandi');
     });
 
     it('ne descend pas sous un plancher', () => {

@@ -1,7 +1,8 @@
 import { useRef } from 'react';
 import { Button, formatBytesFr } from 'deveye-sdk-client';
 
-import { kindOf, sourceOf } from '../contracts/catalogue';
+import { kindOf, sourceOf, type TargetFormat } from '../contracts/catalogue';
+import { outputDims } from '../contracts/estimate';
 import type { ConvertFamily } from '../contracts/domain';
 import type { Dims } from '../contracts/geometry';
 import { cropOf, num, sizeOf, type OptionValues } from '../contracts/options';
@@ -14,6 +15,8 @@ import type { Wizard } from './useWizard';
 interface FilePaneProps {
     wizard: Wizard;
     family: ConvertFamily | undefined;
+    /** La cible choisie, quand il y en a une : un GIF se prévisualise à sa cadence. */
+    target: TargetFormat | null;
     /** Les réglages en cours : le recadrage se voit dans l'aperçu. */
     values: OptionValues;
     sample: Blob | null;
@@ -38,7 +41,7 @@ export interface FileResult {
  * en a pas, puis son aperçu. Elle ne se démonte pas d'une étape à l'autre, si
  * bien qu'une vidéo en lecture continue pendant qu'on règle ses options.
  */
-export function FilePane({ wizard, family, values, sample, locked, result }: FilePaneProps) {
+export function FilePane({ wizard, family, target, values, sample, locked, result }: FilePaneProps) {
     const { state } = wizard;
     const input = useRef<HTMLInputElement>(null);
     if (!state.kind) return null;
@@ -64,6 +67,7 @@ export function FilePane({ wizard, family, values, sample, locked, result }: Fil
 
     const { file, info } = state;
     const dims = info?.width && info.height ? { width: info.width, height: info.height } : null;
+    const gifDims = target?.recipe.engine === 'gif' && info ? outputDims(target, values, info) : null;
     const facts = [
         formatBytesFr(file.size),
         dims && `${dims.width} × ${dims.height} px`,
@@ -80,6 +84,7 @@ export function FilePane({ wizard, family, values, sample, locked, result }: Fil
                 crop={cropOf(values, 'crop')}
                 resize={sizeOf(values, 'resize')}
                 trim={{ start: num(values, 'trimStart'), end: num(values, 'trimEnd') }}
+                simulate={gifDims ? { fps: num(values, 'gifFps') ?? 12, dims: gifDims } : null}
                 sample={state.view === 'format' ? null : sample}
                 onDownload={result?.onDownload ?? null}
             />
