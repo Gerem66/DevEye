@@ -12,19 +12,20 @@ import {
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
 
-import { kindOf, sourceOf, targetOf } from '../contracts/catalogue';
+import { kindOf, outputName, sourceOf, targetOf } from '../contracts/catalogue';
 import {
     CONVERT_PROGRESS_EVENT,
     convertProgressSchema,
     type ConvertJob,
     type ConvertProgress
 } from '../contracts/domain';
+import { outputDims } from '../contracts/estimate';
 import { resolveOptions } from '../contracts/options';
 import { manifest } from '../manifest';
 import { adaptOptions } from './adaptOptions';
 import { api } from './api';
 import { Currency } from './Currency';
-import { FilePane } from './FilePane';
+import { FilePane, type FileResult } from './FilePane';
 import { KIND_NOUNS } from './format';
 import { JobList } from './JobList';
 import { probeFile } from './probe';
@@ -86,7 +87,11 @@ export default function Convert(_props: FeatureViewProps) {
     const source = kind && state.sourceId ? sourceOf(kind, state.sourceId) : null;
     const target = kind && state.sourceId && state.targetId ? targetOf(kind, state.sourceId, state.targetId) : null;
     const sourceQuality = state.info?.sourceQuality ?? null;
-    const specs = useMemo(() => (target ? adaptOptions(target, sourceQuality) : []), [target, sourceQuality]);
+    const sourceKbps = state.info?.sourceKbps ?? null;
+    const specs = useMemo(
+        () => (target ? adaptOptions(target, { sourceQuality, sourceKbps }) : []),
+        [target, sourceQuality, sourceKbps]
+    );
     const values = useMemo(() => resolveOptions(specs, state.values), [specs, state.values]);
     const { estimate, sample, pending } = useEstimate(target, values, state.info, file);
 
@@ -197,6 +202,18 @@ export default function Convert(_props: FeatureViewProps) {
         setExportError(null);
     };
 
+    const done = locked && tracked?.job.phase === 'done';
+    const result: FileResult | null =
+        done && file && target
+            ? {
+                  name: outputName(file.name, target),
+                  bytes: tracked.job.outputBytes,
+                  dims: state.info ? outputDims(target, values, state.info) : null,
+                  label: target.label,
+                  onDownload: () => onDownload(tracked.job)
+              }
+            : null;
+
     const steps: StepperStep[] = [
         { id: 'kinds', label: 'Type', reachable: !locked },
         { id: 'format', label: 'Format', reachable: kind !== null && !locked },
@@ -246,13 +263,7 @@ export default function Convert(_props: FeatureViewProps) {
                         values={values}
                         sample={sample}
                         locked={locked}
-                        overlay={
-                            locked && tracked?.job.phase === 'done' ? (
-                                <Button variant='primary' icon='download' onClick={() => onDownload(tracked.job)}>
-                                    Télécharger
-                                </Button>
-                            ) : null
-                        }
+                        result={result}
                     />
                     <div className={styles.stepPane}>
                         {state.view === 'format' && (
@@ -289,18 +300,21 @@ export default function Convert(_props: FeatureViewProps) {
                     {exportError}
                 </p>
             )}
-            {list.error && <p className={styles.problem}>{list.error}</p>}
-            <JobList
-                // À l'étape Export, le travail suivi est déjà à l'écran : il ne s'y montre pas deux fois.
-                jobs={(list.data ?? []).filter(
-                    (job) => !(state.view === 'export' && locked && job.id === active?.job.id)
-                )}
-                live={live}
-                canWrite={canWrite}
-                onDownload={onDownload}
-                onCancel={onCancel}
-                onRemove={onRemove}
-            />
+            {/* À l'accueil, et une fois l'export terminé : entre les deux, la liste n'aide à rien. */}
+            {(atRoot || done) && (
+                <>
+                    {list.error && <p className={styles.problem}>{list.error}</p>}
+                    <JobList
+                        // Le travail suivi est déjà à l'écran : il ne s'y montre pas deux fois.
+                        jobs={(list.data ?? []).filter((job) => !(done && job.id === active?.job.id))}
+                        live={live}
+                        canWrite={canWrite}
+                        onDownload={onDownload}
+                        onCancel={onCancel}
+                        onRemove={onRemove}
+                    />
+                </>
+            )}
 
             <Dialog
                 open={tool !== null}

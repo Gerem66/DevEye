@@ -63,6 +63,10 @@ ticket, et quitte le disque à l'échéance. L'original part dès la conversion 
   chaque entretien et à la descente : un stockage vidé donne des travaux en échec
   `file_lost`, jamais des résultats « prêts » introuvables. Un stockage
   injoignable, lui, ne déclare rien de perdu.
+- **Le lecteur de l'aperçu est maison** (`client/Player.tsx`) : ses commandes
+  restent hors de l'image, qui se recadre ainsi en CSS comme elle le sera, et la
+  lecture se borne au passage gardé. Rien n'est encodé : définition, cadence et
+  qualité d'une vidéo ne se voient qu'au résultat.
 - **Un recadrage est quatre marges, pas un rectangle** (`top`, `right`, `bottom`,
   `left`). Elles se règlent sans connaître les dimensions du fichier, que le
   navigateur ne lit pas toujours, et c'est le serveur qui les applique aux

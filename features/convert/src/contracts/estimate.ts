@@ -1,5 +1,5 @@
 import type { TargetFormat } from './catalogue';
-import { cropRect, imageDims, keptSeconds, videoDims } from './geometry';
+import { cropRect, imageDims, keptSeconds, videoDims, type Dims } from './geometry';
 import { cropOf, flag, num, sizeOf, str, type OptionValues } from './options';
 
 /**
@@ -66,6 +66,31 @@ export function minTargetBytes(
     return Math.ceil(((minVideoBitrate(width, height) + audioBitrate) * seconds * (1 + overhead)) / 8);
 }
 
+/**
+ * Les dimensions du fichier produit, d'après celles de l'original et les
+ * réglages. `null` quand la cible n'a pas d'image, ou que l'original n'a pas
+ * laissé lire les siennes.
+ */
+export function outputDims(target: TargetFormat, values: OptionValues, info: MediaInfo): Dims | null {
+    if (!info.width || !info.height) return null;
+    const source = { width: info.width, height: info.height };
+    switch (target.recipe.engine) {
+        case 'video': {
+            const height = str(values, 'height');
+            return videoDims(source, cropOf(values, 'crop'), height && height !== 'source' ? Number(height) : null);
+        }
+        case 'gif': {
+            const area = cropRect(source, cropOf(values, 'crop')) ?? source;
+            const width = Math.min(num(values, 'gifWidth') ?? 480, area.width);
+            return { width, height: Math.max(1, Math.round((width * area.height) / area.width)) };
+        }
+        case 'image':
+            return imageDims(source, cropOf(values, 'crop'), sizeOf(values, 'resize'));
+        default:
+            return null;
+    }
+}
+
 export function estimateSize(target: TargetFormat, values: OptionValues, info: MediaInfo): SizeEstimate | null {
     const recipe = target.recipe;
     switch (recipe.engine) {
@@ -74,14 +99,9 @@ export function estimateSize(target: TargetFormat, values: OptionValues, info: M
                 const bytes = num(values, 'targetBytes');
                 return bytes ? { bytes, exact: true } : null;
             }
-            if (!info.durationMs || !info.width || !info.height) return null;
+            const dims = outputDims(target, values, info);
+            if (!info.durationMs || !dims) return null;
             const seconds = keptSeconds(info.durationMs, num(values, 'trimStart'), num(values, 'trimEnd'));
-            const height = str(values, 'height');
-            const dims = videoDims(
-                { width: info.width, height: info.height },
-                cropOf(values, 'crop'),
-                height && height !== 'source' ? Number(height) : null
-            );
             const fpsChoice = str(values, 'fps');
             const fps = fpsChoice && fpsChoice !== 'source' ? Number(fpsChoice) : (info.fps ?? DEFAULT_FPS);
             const bitsPerPixel = geometric(...VIDEO_BITS_PER_PIXEL, (num(values, 'quality') ?? 65) / 100);
@@ -90,14 +110,11 @@ export function estimateSize(target: TargetFormat, values: OptionValues, info: M
             return { bytes: Math.round(((video + audio) * seconds * (1 + recipe.overhead)) / 8), exact: false };
         }
         case 'gif': {
-            if (!info.durationMs || !info.width || !info.height) return null;
+            const dims = outputDims(target, values, info);
+            if (!info.durationMs || !dims) return null;
             const seconds = keptSeconds(info.durationMs, num(values, 'trimStart'), num(values, 'trimEnd'));
-            const full = { width: info.width, height: info.height };
-            const source = cropRect(full, cropOf(values, 'crop')) ?? full;
-            const width = Math.min(num(values, 'gifWidth') ?? 480, source.width);
-            const height = (width * source.height) / source.width;
             const frames = seconds * (num(values, 'gifFps') ?? 12);
-            return { bytes: Math.round(width * height * frames * GIF_BYTES_PER_PIXEL), exact: false };
+            return { bytes: Math.round(dims.width * dims.height * frames * GIF_BYTES_PER_PIXEL), exact: false };
         }
         case 'audio': {
             if (!info.durationMs) return null;
@@ -114,12 +131,8 @@ export function estimateSize(target: TargetFormat, values: OptionValues, info: M
             return { bytes: Math.round(recipe.codec === 'flac' ? pcm * 0.6 : pcm), exact: false };
         }
         case 'image': {
-            if (!info.width || !info.height) return null;
-            const dims = imageDims(
-                { width: info.width, height: info.height },
-                cropOf(values, 'crop'),
-                sizeOf(values, 'resize')
-            );
+            const dims = outputDims(target, values, info);
+            if (!dims) return null;
             const quality = recipe.lossy ? ((num(values, 'quality') ?? 82) - 1) / 99 : 1;
             const bytesPerPixel = geometric(recipe.bytesPerPixel[0], recipe.bytesPerPixel[1], quality);
             return { bytes: Math.round(dims.width * dims.height * bytesPerPixel), exact: false };

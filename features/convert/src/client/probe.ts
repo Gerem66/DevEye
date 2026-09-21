@@ -15,6 +15,11 @@ const PROBE_TIMEOUT_MS = 8000;
 export interface FileInfo extends MediaInfo {
     /** La qualité à laquelle un JPEG a été enregistré. `null` pour tout autre fichier. */
     sourceQuality: number | null;
+    /**
+     * Le débit d'un fichier audio, en kb/s : son poids rapporté à sa durée. `null`
+     * ailleurs : dans une vidéo, l'image pèse l'essentiel et le calcul ne dirait rien du son.
+     */
+    sourceKbps: number | null;
 }
 
 function probeElement(file: File, tag: 'video' | 'audio'): Promise<Partial<MediaInfo>> {
@@ -59,9 +64,15 @@ export async function probeFile(file: File, kind: ConvertKind): Promise<FileInfo
         width: null,
         height: null,
         fps: null,
-        sourceQuality: null
+        sourceQuality: null,
+        sourceKbps: null
     };
-    if (kind === 'video' || kind === 'audio') return { ...base, ...(await probeElement(file, kind)) };
+    if (kind === 'video') return { ...base, ...(await probeElement(file, kind)) };
+    if (kind === 'audio') {
+        const media = await probeElement(file, kind);
+        const seconds = (media.durationMs ?? 0) / 1000;
+        return { ...base, ...media, sourceKbps: seconds > 0 ? Math.round((file.size * 8) / seconds / 1000) : null };
+    }
     if (kind === 'image') {
         const [dims, sourceQuality] = await Promise.all([probeImage(file), jpegQualityOf(file)]);
         return { ...base, ...dims, sourceQuality };

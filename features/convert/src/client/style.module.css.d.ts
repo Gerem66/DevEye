@@ -44,6 +44,7 @@ declare const styles: {
     readonly fileName: string;
     readonly filePane: string;
     readonly fileText: string;
+    readonly fileTextEnd: string;
     readonly formatArrow: string;
     readonly formatField: string;
     readonly formats: string;
@@ -66,13 +67,16 @@ declare const styles: {
     readonly optionSectionQuiet: string;
     readonly optionSectionTitle: string;
     readonly pairField: string;
-    readonly previewAudio: string;
+    readonly playerBar: string;
+    readonly playerButton: string;
+    readonly playerSeek: string;
+    readonly playerTime: string;
+    readonly previewAction: string;
+    readonly previewActions: string;
     readonly previewFrame: string;
     readonly previewImage: string;
-    readonly previewOverlay: string;
     readonly previewPdf: string;
     readonly previewVideo: string;
-    readonly previewWrap: string;
     readonly problem: string;
     readonly promises: string;
     readonly recap: string;
@@ -111,7 +115,6 @@ declare const styles: {
     readonly widget: string;
     readonly widgetReady: string;
     readonly workbench: string;
-    readonly zoomButton: string;
     readonly zoomStage: string;
 };
 export = styles;

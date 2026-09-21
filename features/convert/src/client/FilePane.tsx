@@ -1,9 +1,10 @@
-import { useRef, type ReactNode } from 'react';
+import { useRef } from 'react';
 import { Button, formatBytesFr } from 'deveye-sdk-client';
 
 import { kindOf, sourceOf } from '../contracts/catalogue';
 import type { ConvertFamily } from '../contracts/domain';
-import { cropOf, sizeOf, type OptionValues } from '../contracts/options';
+import type { Dims } from '../contracts/geometry';
+import { cropOf, num, sizeOf, type OptionValues } from '../contracts/options';
 import { Dropzone } from './Dropzone';
 import { formatDuration, KIND_NOUNS } from './format';
 import { Preview } from './Preview';
@@ -18,8 +19,18 @@ interface FilePaneProps {
     sample: Blob | null;
     /** L'export est parti : on ne change plus de fichier. */
     locked: boolean;
-    /** Ce qui se pose au centre de l'aperçu : le téléchargement, une fois le résultat prêt. */
-    overlay: ReactNode;
+    /** Le fichier produit, une fois l'export fini. Il prend alors la place des boutons, face à l'original. */
+    result: FileResult | null;
+}
+
+/** Ce qu'on dit du fichier produit, dans les mêmes termes que de l'original. */
+export interface FileResult {
+    name: string;
+    bytes: number | null;
+    dims: Dims | null;
+    /** Le format, tel que le catalogue le nomme. */
+    label: string;
+    onDownload: () => void;
 }
 
 /**
@@ -27,7 +38,7 @@ interface FilePaneProps {
  * en a pas, puis son aperçu. Elle ne se démonte pas d'une étape à l'autre, si
  * bien qu'une vidéo en lecture continue pendant qu'on règle ses options.
  */
-export function FilePane({ wizard, family, values, sample, locked, overlay }: FilePaneProps) {
+export function FilePane({ wizard, family, values, sample, locked, result }: FilePaneProps) {
     const { state } = wizard;
     const input = useRef<HTMLInputElement>(null);
     if (!state.kind) return null;
@@ -61,31 +72,46 @@ export function FilePane({ wizard, family, values, sample, locked, overlay }: Fi
 
     return (
         <div className={styles.filePane}>
-            <div className={styles.previewWrap}>
-                <Preview
-                    file={file}
-                    kind={state.kind}
-                    isPdf={state.sourceId !== null && sourceOf(state.kind, state.sourceId)?.group === 'pdf'}
-                    info={info}
-                    crop={cropOf(values, 'crop')}
-                    resize={sizeOf(values, 'resize')}
-                    sample={state.view === 'format' ? null : sample}
-                />
-                {overlay && <div className={styles.previewOverlay}>{overlay}</div>}
-            </div>
+            <Preview
+                file={file}
+                kind={state.kind}
+                isPdf={state.sourceId !== null && sourceOf(state.kind, state.sourceId)?.group === 'pdf'}
+                info={info}
+                crop={cropOf(values, 'crop')}
+                resize={sizeOf(values, 'resize')}
+                trim={{ start: num(values, 'trimStart'), end: num(values, 'trimEnd') }}
+                sample={state.view === 'format' ? null : sample}
+                onDownload={result?.onDownload ?? null}
+            />
             <div className={styles.fileBar}>
                 <div className={styles.fileText}>
                     <span className={styles.fileName}>{file.name}</span>
                     <span className={styles.fileMeta}>{facts.join(' · ')}</span>
                 </div>
-                <div className={styles.fileActions}>
-                    <Button variant='secondary' disabled={locked} onClick={() => input.current?.click()}>
-                        Changer
-                    </Button>
-                    <Button variant='ghost' icon='trash' disabled={locked} onClick={wizard.removeFile}>
-                        Retirer
-                    </Button>
-                </div>
+                {result ? (
+                    // L'original à gauche, le résultat à droite : le même ordre que le rideau de l'aperçu.
+                    <div className={`${styles.fileText} ${styles.fileTextEnd}`}>
+                        <span className={styles.fileName}>{result.name}</span>
+                        <span className={styles.fileMeta}>
+                            {[
+                                result.bytes !== null && formatBytesFr(result.bytes),
+                                result.dims && `${result.dims.width} × ${result.dims.height} px`,
+                                result.label
+                            ]
+                                .filter(Boolean)
+                                .join(' · ')}
+                        </span>
+                    </div>
+                ) : (
+                    <div className={styles.fileActions}>
+                        <Button variant='secondary' disabled={locked} onClick={() => input.current?.click()}>
+                            Changer
+                        </Button>
+                        <Button variant='ghost' icon='trash' disabled={locked} onClick={wizard.removeFile}>
+                            Retirer
+                        </Button>
+                    </div>
+                )}
             </div>
             <input
                 ref={input}

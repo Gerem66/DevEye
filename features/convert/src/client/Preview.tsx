@@ -3,10 +3,12 @@ import { Dialog } from 'deveye-sdk-client';
 
 import type { ConvertKind } from '../contracts/catalogue';
 import type { MediaInfo } from '../contracts/estimate';
-import { cropRect, imageDims, type Dims, type Rect } from '../contracts/geometry';
+import { cropRect, imageDims } from '../contracts/geometry';
 import type { CropValue, SizeValue } from '../contracts/options';
 import { Compare } from './Compare';
+import { framing } from './framing';
 import { Picto } from './icons';
+import { Player } from './Player';
 import styles from './style.module.css';
 import { useObjectUrl } from './useObjectUrl';
 
@@ -18,28 +20,18 @@ interface PreviewProps {
     info: MediaInfo | null;
     crop: CropValue | null;
     resize: SizeValue;
+    /** Le passage gardé d'une vidéo ou d'un son, en secondes. */
+    trim: { start: number | null; end: number | null };
     /** L'image telle qu'elle sortirait. Présente, l'aperçu devient une comparaison avant / après. */
     sample: Blob | null;
+    /** Le résultat est prêt : un bouton discret le donne, à côté de l'agrandissement. */
+    onDownload: (() => void) | null;
 }
 
 /** La vue agrandie prend ce que la fenêtre offre : le dialogue borne de lui-même sa largeur. */
 const ZOOM_WIDTH = 2400;
 /** Une image minuscule reste visible, sans être étalée sur toute la colonne. */
 const MIN_SHOWN_WIDTH = 320;
-
-/**
- * Le cadrage du résultat appliqué à l'image d'origine, en CSS pur : l'image est
- * agrandie et décalée derrière une fenêtre aux proportions du recadrage.
- */
-function framing(source: Dims, area: Rect | null): CSSProperties {
-    if (!area) return { width: '100%', height: '100%', left: 0, top: 0 };
-    return {
-        width: `${(source.width / area.width) * 100}%`,
-        height: `${(source.height / area.height) * 100}%`,
-        left: `${(-area.x / area.width) * 100}%`,
-        top: `${(-area.y / area.height) * 100}%`
-    };
-}
 
 function NoPreview({ kind, reason }: { kind: ConvertKind; reason: string }) {
     return (
@@ -55,7 +47,7 @@ function NoPreview({ kind, reason }: { kind: ConvertKind; reason: string }) {
  * format que le navigateur ne sait pas ouvrir garde le cadre et le dit ; la
  * conversion, elle, se fait sur le serveur et n'en dépend pas.
  */
-export function Preview({ file, kind, isPdf, info, crop, resize, sample }: PreviewProps) {
+export function Preview({ file, kind, isPdf, info, crop, resize, trim, sample, onDownload }: PreviewProps) {
     const url = useObjectUrl(file, isPdf ? 'application/pdf' : undefined);
     const sampleUrl = useObjectUrl(sample);
     const [failed, setFailed] = useState(false);
@@ -68,14 +60,45 @@ export function Preview({ file, kind, isPdf, info, crop, resize, sample }: Previ
 
     if (!url) return <div className={styles.previewFrame} />;
 
+    const source = info?.width && info.height ? { width: info.width, height: info.height } : null;
+    const area = source ? cropRect(source, crop) : null;
+    const playable = !failed && (kind === 'video' || kind === 'audio');
+    const zoomable = !failed && (kind === 'image' || kind === 'video' || isPdf);
+
+    /** Les boutons posés en bas à droite du cadre. Absents de la vue agrandie, qui n'a que l'image. */
+    const actions: ReactNode = (
+        <div className={styles.previewActions}>
+            {onDownload && (
+                <button
+                    type='button'
+                    className={styles.previewAction}
+                    aria-label='Télécharger le fichier converti'
+                    title='Télécharger'
+                    onClick={onDownload}
+                >
+                    <span className='icon icon-download' aria-hidden='true' />
+                </button>
+            )}
+            {zoomable && (
+                <button
+                    type='button'
+                    className={styles.previewAction}
+                    aria-label='Agrandir l’aperçu'
+                    title='Agrandir'
+                    onClick={() => setZoomed(true)}
+                >
+                    <span className='icon icon-expand' aria-hidden='true' />
+                </button>
+            )}
+        </div>
+    );
+
     /** L'image, à la taille du cadre ou à celle de la vue agrandie : les deux partagent tout, curseur compris. */
     const picture = (large: boolean): ReactNode => {
         const image = { src: url, alt: `Aperçu de ${file.name}`, draggable: false, onError: () => setFailed(true) };
-        const source = info?.width && info.height ? { width: info.width, height: info.height } : null;
         // Dimensions encore inconnues : l'image entière, sans cadrage ni comparaison.
         if (!source) return <img className={styles.previewImage} {...image} />;
 
-        const area = cropRect(source, crop);
         const output = imageDims(source, crop, resize);
         const shape = {
             '--ratio': output.width / output.height,
@@ -93,8 +116,22 @@ export function Preview({ file, kind, isPdf, info, crop, resize, sample }: Previ
         );
     };
 
+    const player = (suspended: boolean, shown: ReactNode): ReactNode => (
+        <Player
+            kind={kind === 'audio' ? 'audio' : 'video'}
+            url={url}
+            name={file.name}
+            source={source}
+            area={area}
+            start={trim.start}
+            end={trim.end}
+            suspended={suspended}
+            actions={shown}
+            onError={() => setFailed(true)}
+        />
+    );
+
     let body: ReactNode;
-    let zoomable = false;
     if (failed) {
         body = (
             <NoPreview
@@ -104,37 +141,8 @@ export function Preview({ file, kind, isPdf, info, crop, resize, sample }: Previ
         );
     } else if (kind === 'image') {
         body = picture(false);
-        zoomable = true;
-    } else if (kind === 'video') {
-        body = (
-            <video
-                className={styles.previewVideo}
-                src={url}
-                controls
-                preload='metadata'
-                onError={() => setFailed(true)}
-            >
-                <track kind='captions' />
-            </video>
-        );
-    } else if (kind === 'audio') {
-        body = (
-            <div className={styles.noPreview}>
-                <Picto id='audio' size={40} />
-                <audio
-                    className={styles.previewAudio}
-                    src={url}
-                    controls
-                    preload='metadata'
-                    onError={() => setFailed(true)}
-                >
-                    <track kind='captions' />
-                </audio>
-            </div>
-        );
     } else if (isPdf) {
         body = <iframe className={styles.previewPdf} src={url} title={`Aperçu de ${file.name}`} />;
-        zoomable = true;
     } else {
         body = (
             <NoPreview
@@ -145,29 +153,26 @@ export function Preview({ file, kind, isPdf, info, crop, resize, sample }: Previ
     }
 
     return (
-        <div className={styles.previewFrame}>
-            {body}
-            {zoomable && (
-                <button
-                    type='button'
-                    className={styles.zoomButton}
-                    aria-label='Agrandir l’aperçu'
-                    title='Agrandir'
-                    onClick={() => setZoomed(true)}
-                >
-                    <span className='icon icon-expand' aria-hidden='true' />
-                </button>
+        <>
+            {playable ? (
+                player(zoomed, actions)
+            ) : (
+                <div className={styles.previewFrame}>
+                    {body}
+                    {actions}
+                </div>
             )}
-            {/* La vidéo n'en a pas besoin : son lecteur a déjà son plein écran. */}
             <Dialog open={zoomed} onClose={() => setZoomed(false)} width={ZOOM_WIDTH}>
                 <div className={styles.zoomStage}>
-                    {isPdf ? (
+                    {kind === 'video' ? (
+                        player(false, null)
+                    ) : isPdf ? (
                         <iframe className={styles.previewPdf} src={url} title={`Aperçu de ${file.name}`} />
                     ) : (
                         picture(true)
                     )}
                 </div>
             </Dialog>
-        </div>
+        </>
     );
 }

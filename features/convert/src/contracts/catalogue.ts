@@ -178,9 +178,9 @@ const VIDEO_OPTIONS: readonly OptionSpec[] = [
         label: 'Images par seconde',
         options: [
             { value: 'source', label: 'Original' },
-            { value: '60', label: '60' },
+            { value: '24', label: '24' },
             { value: '30', label: '30' },
-            { value: '24', label: '24' }
+            { value: '60', label: '60' }
         ],
         default: 'source'
     },
@@ -189,7 +189,7 @@ const VIDEO_OPTIONS: readonly OptionSpec[] = [
         id: 'speed',
         section: 'quality',
         label: 'Effort de compression',
-        hint: 'À qualité égale, plus d’effort donne un fichier plus petit, et une conversion plus longue.',
+        hint: 'Plus d’effort donne une meilleure image pour un même poids, et une conversion plus longue. Le poids, lui, change peu.',
         options: [
             { value: 'fast', label: 'Rapide' },
             { value: 'balanced', label: 'Équilibré' },

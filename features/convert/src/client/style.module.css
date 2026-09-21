@@ -258,10 +258,6 @@
     max-height: var(--stage-max-h);
 }
 
-.previewAudio {
-    width: min(100%, 360px);
-}
-
 .previewPdf {
     display: block;
     width: 100%;
@@ -286,25 +282,16 @@
     margin: 0;
 }
 
-.previewWrap {
-    position: relative;
-}
-
-/* Le résultat est prêt : l'aperçu s'efface derrière le bouton qui le donne. */
-.previewOverlay {
-    position: absolute;
-    inset: 0;
-    display: grid;
-    place-items: center;
-    border-radius: var(--radius-lg);
-    background: var(--glass-bg);
-    backdrop-filter: var(--glass-backdrop-scrim);
-}
-
-.zoomButton {
+/* Les boutons posés sur l'aperçu, en bas à droite : discrets, mais toujours au même endroit. */
+.previewActions {
     position: absolute;
     right: var(--space-sm);
     bottom: var(--space-sm);
+    display: flex;
+    gap: var(--space-xs);
+}
+
+.previewAction {
     display: grid;
     place-items: center;
     width: 36px;
@@ -317,17 +304,78 @@
     transition: border-color var(--transition-fast);
 }
 
-.zoomButton:hover,
-.zoomButton:focus-visible {
+.previewAction:hover,
+.previewAction:focus-visible {
     border-color: var(--accent);
+}
+
+/* Le lecteur : ses commandes vivent sous l'image, qui peut ainsi être recadrée sans elles. */
+.playerBar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.playerButton {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
+.playerButton .icon {
+    width: 12px;
+}
+
+.playerButton:hover:not(:disabled),
+.playerButton:focus-visible {
+    border-color: var(--accent);
+}
+
+.playerButton:disabled {
+    cursor: not-allowed;
+    filter: opacity(0.5);
+}
+
+.playerSeek {
+    flex: 1;
+    min-width: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.playerTime {
+    flex-shrink: 0;
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
 }
 
 /* La vue agrandie vit dans un dialogue, hors de `.root` : elle pose sa propre hauteur. */
 .zoomStage {
-    --stage-max-h: calc(100vh - 9rem);
+    --stage-max-h: calc(100vh - 12rem);
     display: grid;
     place-items: center;
+    gap: var(--space-sm);
     min-height: min(60vh, var(--stage-max-h));
+}
+
+/* Le lecteur agrandi : son cadre et ses commandes prennent la largeur, sans le décor du cadre d'aperçu. */
+.zoomStage .previewFrame,
+.zoomStage .playerBar {
+    justify-self: stretch;
+}
+
+.zoomStage .previewFrame {
+    min-height: 0;
+    border: none;
+    background: none;
 }
 
 /* Avant / après */
@@ -407,6 +455,12 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
+}
+
+/* Le résultat, à droite, fait face à l'original. */
+.fileTextEnd {
+    align-items: flex-end;
+    text-align: right;
 }
 
 .fileName {
