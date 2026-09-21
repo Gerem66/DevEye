@@ -40,15 +40,20 @@ export type OptionValue = z.infer<typeof optionValueSchema>;
 export const optionValuesSchema = z.record(z.string().max(32), optionValueSchema);
 export type OptionValues = z.infer<typeof optionValuesSchema>;
 
-/** Les rubriques de l'étape « Options », dans l'ordre où elles se présentent. */
-export const OPTION_SECTIONS = [
+export type OptionSection = 'quality' | 'picture' | 'sound' | 'trim' | 'privacy';
+
+/**
+ * Les rubriques de l'étape « Options », dans l'ordre où elles se présentent.
+ * `quiet` : ce qu'on ne touche que rarement s'efface tant qu'on n'y a rien
+ * changé, pour laisser l'œil sur l'essentiel.
+ */
+export const OPTION_SECTIONS: readonly { id: OptionSection; label: string; quiet?: boolean }[] = [
     { id: 'quality', label: 'Qualité et poids' },
-    { id: 'picture', label: 'Image' },
+    { id: 'picture', label: 'Image', quiet: true },
     { id: 'sound', label: 'Son' },
     { id: 'trim', label: 'Passage à garder' },
     { id: 'privacy', label: 'Confidentialité' }
-] as const;
-export type OptionSection = (typeof OPTION_SECTIONS)[number]['id'];
+];
 
 interface OptionBase {
     id: string;
@@ -132,6 +137,15 @@ function coerce(spec: OptionSpec, value: OptionValue | undefined): OptionValue {
             return parsed.success ? parsed.data : null;
         }
     }
+}
+
+/** Le réglage est resté tel que le catalogue le propose. */
+export function isDefault(spec: OptionSpec, value: OptionValue | undefined): boolean {
+    const initial = defaultOf(spec);
+    if (value === undefined || value === initial) return true;
+    if (typeof value !== 'object' || typeof initial !== 'object' || value === null || initial === null) return false;
+    const [a, b] = [value, initial] as [Record<string, unknown>, Record<string, unknown>];
+    return Object.keys(a).length === Object.keys(b).length && Object.keys(a).every((key) => a[key] === b[key]);
 }
 
 export function isActive(spec: OptionSpec, values: OptionValues): boolean {

@@ -61,6 +61,7 @@ declare const styles: {
     readonly noPreview: string;
     readonly note: string;
     readonly optionSection: string;
+    readonly optionSectionQuiet: string;
     readonly optionSectionTitle: string;
     readonly pairField: string;
     readonly previewAudio: string;

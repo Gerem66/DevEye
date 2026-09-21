@@ -1,7 +1,7 @@
 import { useId } from 'react';
 import { NumberInput, SelectInput, Slider } from 'deveye-sdk-client';
 
-import { cropRect, type Dims } from '../../contracts/geometry';
+import { cropRect, MIN_KEPT, type Dims } from '../../contracts/geometry';
 import type { CropValue } from '../../contracts/options';
 import styles from '../style.module.css';
 
@@ -85,15 +85,11 @@ export function CropField({ value, source, onChange }: CropFieldProps) {
                             label={edge.label}
                             valueLabel={`${edges[edge.id]} px`}
                             min={0}
-                            max={source[edge.axis] - 2}
+                            // Ce que le bord d'en face a déjà pris n'est plus à prendre : le curseur
+                            // plein veut toujours dire « tout ce qui reste ».
+                            max={source[edge.axis] - MIN_KEPT - edges[edge.opposite]}
                             value={edges[edge.id]}
-                            // Le bord d'en face garde toujours sa place : on ne rogne que ce qu'il laisse.
-                            onChange={(next) =>
-                                emit({
-                                    ...edges,
-                                    [edge.id]: Math.min(next, source[edge.axis] - 2 - edges[edge.opposite])
-                                })
-                            }
+                            onChange={(next) => emit({ ...edges, [edge.id]: next })}
                         />
                     ) : (
                         <div key={edge.id} className={styles.pairField}>

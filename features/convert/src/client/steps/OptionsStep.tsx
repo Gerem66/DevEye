@@ -2,7 +2,15 @@ import { Button } from 'deveye-sdk-client';
 
 import type { SizeEstimate } from '../../contracts/estimate';
 import { cropRect } from '../../contracts/geometry';
-import { cropOf, defaultOf, isActive, OPTION_SECTIONS, resolveOptions, type OptionSpec } from '../../contracts/options';
+import {
+    cropOf,
+    defaultOf,
+    isActive,
+    isDefault,
+    OPTION_SECTIONS,
+    resolveOptions,
+    type OptionSpec
+} from '../../contracts/options';
 import { OptionControl } from '../controls/OptionControl';
 import { SizeSummary } from '../SizeSummary';
 import styles from '../style.module.css';
@@ -36,7 +44,15 @@ export function OptionsStep({ wizard, specs, estimate, pending }: OptionsStepPro
             </p>
 
             {sections.map((section) => (
-                <section key={section.id} className={styles.optionSection} aria-labelledby={`convert-${section.id}`}>
+                <section
+                    key={section.id}
+                    className={`${styles.optionSection} ${
+                        section.quiet && section.specs.every((spec) => isDefault(spec, values[spec.id]))
+                            ? styles.optionSectionQuiet
+                            : ''
+                    }`}
+                    aria-labelledby={`convert-${section.id}`}
+                >
                     <h3 id={`convert-${section.id}`} className={styles.optionSectionTitle}>
                         {section.label}
                     </h3>

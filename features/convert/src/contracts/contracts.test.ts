@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import { CATALOGUE, detectSource, outputName, targetOf, targetsFor } from './catalogue';
 import { estimateSize, minTargetBytes, minVideoBitrate, videoBitrateForTarget, type MediaInfo } from './estimate';
 import { cropRect, fitInside, imageDims, keptSeconds, resizeDims, videoDims } from './geometry';
-import { isActive, resolveOptions, type OptionValues } from './options';
+import { isActive, isDefault, resolveOptions, type OptionValues } from './options';
 import { convertCurrency, convertUnit, UNIT_CATEGORIES } from './units';
 
 /**
@@ -105,6 +105,19 @@ describe('réglages', () => {
         const spec = specs.find((o) => o.id === 'targetBytes');
         assert.ok(spec);
         assert.equal(isActive(spec, values), false);
+    });
+
+    it('sait dire qu’un réglage n’a pas bougé, quel que soit l’ordre de ses champs', () => {
+        const image = targetOf('image', 'png', 'jpg')?.options ?? [];
+        const resize = image.find((o) => o.id === 'resize');
+        const crop = image.find((o) => o.id === 'crop');
+        assert.ok(resize && crop);
+        assert.equal(isDefault(resize, { keepRatio: true, height: null, width: null }), true);
+        assert.equal(isDefault(resize, { width: 800, height: null, keepRatio: true }), false);
+        assert.equal(isDefault(resize, { width: null, height: null, keepRatio: false }), false);
+        assert.equal(isDefault(crop, null), true);
+        assert.equal(isDefault(crop, { top: 0, right: 10, bottom: 0, left: 0 }), false);
+        assert.equal(isDefault(crop, undefined), true);
     });
 
     it('refuse un recadrage mal formé', () => {

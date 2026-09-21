@@ -516,6 +516,19 @@
     border-top: 1px solid var(--glass-border);
 }
 
+/* Une rubrique qu'on touche rarement, et à laquelle rien n'a été changé : elle
+   revient au survol, au clavier, et pour de bon dès qu'on y règle quelque chose.
+   `filter` et non `opacity`, comme les autres états atténués de l'app. */
+.optionSectionQuiet {
+    filter: opacity(0.5);
+    transition: filter var(--transition-normal);
+}
+
+.optionSectionQuiet:hover,
+.optionSectionQuiet:focus-within {
+    filter: none;
+}
+
 .optionSectionTitle {
     margin: 0;
     font-size: 0.78rem;

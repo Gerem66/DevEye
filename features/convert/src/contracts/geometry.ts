@@ -13,7 +13,7 @@ export interface Rect extends Dims {
 }
 
 /** Ce qu'un recadrage laisse au moins, par côté : un codec refuse une image d'un pixel. */
-const MIN_KEPT = 2;
+export const MIN_KEPT = 2;
 
 /** Deux marges opposées, ramenées à ce que le côté peut perdre. La première l'emporte. */
 function clampPair(near: number, far: number, length: number): [number, number] {
