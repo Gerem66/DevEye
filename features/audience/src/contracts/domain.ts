@@ -48,7 +48,7 @@ export const AUDIENCE_ORIGIN_ANY = '*';
 
 export const AUDIENCE_RETENTION_MIN_DAYS = 7;
 export const AUDIENCE_RETENTION_MAX_DAYS = 730;
-export const AUDIENCE_RETENTION_DEFAULT_DAYS = 180;
+export const AUDIENCE_RETENTION_DEFAULT_DAYS = 90;
 
 /** Événements acceptés dans un seul envoi. Borne le coût d'une requête publique. */
 export const AUDIENCE_BATCH_MAX = 20;
