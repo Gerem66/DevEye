@@ -45,6 +45,14 @@ export function formatDuration(seconds: number): string {
     return `${Math.floor(total / 3600)} h ${String(Math.floor((total % 3600) / 60)).padStart(2, '0')}`;
 }
 
+/** Une durée de conservation, en toutes lettres : « 45 minutes », « 1 heure », « 2 heures ». */
+export function formatTtl(seconds: number): string {
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 60 || minutes % 60 !== 0) return `${minutes} minute${minutes > 1 ? 's' : ''}`;
+    const hours = minutes / 60;
+    return `${hours} heure${hours > 1 ? 's' : ''}`;
+}
+
 /** Dans combien de temps, dit simplement : « dans 40 min », « dans moins d’une minute ». */
 export function formatRemaining(untilEpochSeconds: number): string {
     const seconds = untilEpochSeconds - Date.now() / 1000;

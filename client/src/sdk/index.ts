@@ -28,6 +28,8 @@ export { default as ChoiceCards } from '@/Components/ChoiceCards';
 export { ConfirmDialog } from '@/Components/ConfirmDialog';
 export type { ConfirmRequest } from '@/Components/ConfirmDialog';
 export { default as SegmentedControl } from '@/Components/SegmentedControl';
+export { default as SearchSelect } from '@/Components/SearchSelect';
+export type { SearchSelectOption } from '@/Components/SearchSelect';
 export { default as SelectInput } from '@/Components/SelectInput';
 export { default as Slider } from '@/Components/Slider';
 export { StatusBadge } from '@/Components/StatusBadge';

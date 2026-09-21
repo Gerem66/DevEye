@@ -1,12 +1,13 @@
-import { Button, formatBytesFr } from 'deveye-sdk-client';
+import { Button } from 'deveye-sdk-client';
 
 import type { SourceFormat, TargetFormat } from '../../contracts/catalogue';
 import { outputName } from '../../contracts/catalogue';
 import type { SizeEstimate } from '../../contracts/estimate';
+import { formatTtl } from '../format';
 import { ProgressBar } from '../ProgressBar';
+import { SizeSummary } from '../SizeSummary';
 import styles from '../style.module.css';
 import type { Wizard } from '../useWizard';
-import { EstimateLine } from './OptionsStep';
 
 /** Où en est l'envoi. À 100 % le serveur écrit et vérifie encore : l'écran le dit au lieu de rester figé. */
 export type Sending = { stage: 'uploading'; ratio: number } | { stage: 'verifying' };
@@ -31,28 +32,25 @@ export function ExportStep(props: ExportStepProps) {
 
     return (
         <div className={styles.stepBody}>
-            <dl className={styles.recap}>
-                <div>
-                    <dt>Fichier</dt>
-                    <dd>
-                        {file.name} <span className={styles.fileMeta}>({formatBytesFr(file.size)})</span>
-                    </dd>
-                </div>
-                <div>
-                    <dt>Conversion</dt>
-                    <dd>
-                        {source.label} vers {target.label}
-                    </dd>
-                </div>
-                <div>
-                    <dt>Résultat</dt>
-                    <dd>
-                        {outputName(file.name, target)}
-                        <br />
-                        <EstimateLine estimate={estimate} inputBytes={file.size} />
-                    </dd>
-                </div>
-            </dl>
+            <div className={styles.recapBox}>
+                <dl className={styles.recap}>
+                    <div>
+                        <dt>Fichier</dt>
+                        <dd>{file.name}</dd>
+                    </div>
+                    <div>
+                        <dt>Conversion</dt>
+                        <dd>
+                            {source.label} vers {target.label}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Nom du résultat</dt>
+                        <dd>{outputName(file.name, target)}</dd>
+                    </div>
+                </dl>
+                <SizeSummary inputBytes={file.size} estimate={estimate} />
+            </div>
 
             {sending && (
                 <div className={styles.sending} aria-live='polite'>
@@ -76,10 +74,13 @@ export function ExportStep(props: ExportStepProps) {
                 <p className={styles.note}>Votre rôle dans cet espace ne permet pas de lancer une conversion.</p>
             )}
             {props.resultTtlSeconds !== null && !sending && (
-                <p className={styles.note}>
-                    Le fichier converti reste disponible {Math.round(props.resultTtlSeconds / 60)} minutes, puis il est
-                    retiré du serveur, comme l’original dès la conversion finie.
-                </p>
+                <ul className={styles.promises}>
+                    <li>Votre fichier d’origine est supprimé du serveur dès que la conversion est terminée.</li>
+                    <li>
+                        Le fichier converti reste téléchargeable pendant {formatTtl(props.resultTtlSeconds)}, puis il
+                        est supprimé à son tour.
+                    </li>
+                </ul>
             )}
 
             <div className={styles.stepNav}>

@@ -10,7 +10,7 @@ import type { OptionValue, OptionValues } from '../contracts/options';
  * portent le même nom (la qualité d'un MP4 reste celle du WebM choisi ensuite).
  */
 
-export type WizardView = 'kinds' | 'format' | 'options' | 'export' | 'currency' | 'units';
+export type WizardView = 'kinds' | 'format' | 'options' | 'export';
 
 export interface WizardState {
     view: WizardView;
@@ -18,6 +18,8 @@ export interface WizardState {
     file: File | null;
     info: MediaInfo | null;
     sourceId: string | null;
+    /** Ce que le nom du fichier a laissé reconnaître. Le choix reste libre : une extension peut mentir. */
+    detectedSourceId: string | null;
     targetId: string | null;
     values: OptionValues;
 }
@@ -26,6 +28,7 @@ type Action =
     | { type: 'open'; view: WizardView }
     | { type: 'pickKind'; kind: ConvertKind }
     | { type: 'pickFile'; file: File }
+    | { type: 'removeFile' }
     | { type: 'info'; info: MediaInfo }
     | { type: 'source'; sourceId: string }
     | { type: 'target'; targetId: string }
@@ -38,6 +41,7 @@ const INITIAL: WizardState = {
     file: null,
     info: null,
     sourceId: null,
+    detectedSourceId: null,
     targetId: null,
     values: {}
 };
@@ -60,7 +64,8 @@ function reduce(state: WizardState, action: Action): WizardState {
             const detected = detectSource(action.file.name);
             const kind = detected?.kind ?? state.kind;
             if (!kind) return state;
-            const sourceId = detected?.source.id ?? (kind === state.kind ? state.sourceId : null);
+            const sameKind = kind === state.kind;
+            const sourceId = detected?.source.id ?? (sameKind ? state.sourceId : null);
             return {
                 ...state,
                 view: 'format',
@@ -68,9 +73,12 @@ function reduce(state: WizardState, action: Action): WizardState {
                 file: action.file,
                 info: null,
                 sourceId,
-                targetId: sourceId ? keepTarget(kind, sourceId, kind === state.kind ? state.targetId : null) : null
+                detectedSourceId: detected?.source.id ?? null,
+                targetId: sourceId ? keepTarget(kind, sourceId, sameKind ? state.targetId : null) : null
             };
         }
+        case 'removeFile':
+            return { ...INITIAL, view: 'format', kind: state.kind, values: state.values };
         case 'info':
             return { ...state, info: action.info };
         case 'source':
@@ -97,6 +105,7 @@ export function useWizard() {
         open: useCallback((view: WizardView) => dispatch({ type: 'open', view }), []),
         pickKind: useCallback((kind: ConvertKind) => dispatch({ type: 'pickKind', kind }), []),
         pickFile: useCallback((file: File) => dispatch({ type: 'pickFile', file }), []),
+        removeFile: useCallback(() => dispatch({ type: 'removeFile' }), []),
         setInfo: useCallback((info: MediaInfo) => dispatch({ type: 'info', info }), []),
         setSource: useCallback((sourceId: string) => dispatch({ type: 'source', sourceId }), []),
         setTarget: useCallback((targetId: string) => dispatch({ type: 'target', targetId }), []),

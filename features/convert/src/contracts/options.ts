@@ -34,9 +34,22 @@ export type OptionValue = z.infer<typeof optionValueSchema>;
 export const optionValuesSchema = z.record(z.string().max(32), optionValueSchema);
 export type OptionValues = z.infer<typeof optionValuesSchema>;
 
+/** Les rubriques de l'étape « Options », dans l'ordre où elles se présentent. */
+export const OPTION_SECTIONS = [
+    { id: 'quality', label: 'Qualité et poids' },
+    { id: 'picture', label: 'Image' },
+    { id: 'sound', label: 'Son' },
+    { id: 'trim', label: 'Passage à garder' },
+    { id: 'privacy', label: 'Confidentialité' }
+] as const;
+export type OptionSection = (typeof OPTION_SECTIONS)[number]['id'];
+
 interface OptionBase {
     id: string;
     label: string;
+    section: OptionSection;
+    /** Deux réglages qui vont par paire (début et fin) se partagent une ligne. */
+    half?: boolean;
     /** Une phrase pour quelqu'un qui débute, sous le contrôle. */
     hint?: string;
     /** Le réglage n'apparaît, et ne compte, que si un autre a cette valeur. */

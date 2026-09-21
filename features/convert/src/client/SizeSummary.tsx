@@ -1,0 +1,37 @@
+import { formatBytesFr } from 'deveye-sdk-client';
+
+import type { SizeEstimate } from '../contracts/estimate';
+import styles from './style.module.css';
+
+interface SizeSummaryProps {
+    inputBytes: number;
+    estimate: SizeEstimate | null;
+}
+
+/** Le poids du fichier, avant et après : les deux lignes se lisent l'une sous l'autre, aux mêmes colonnes. */
+export function SizeSummary({ inputBytes, estimate }: SizeSummaryProps) {
+    const delta = estimate && inputBytes > 0 ? Math.round((1 - estimate.bytes / inputBytes) * 100) : 0;
+    return (
+        <dl className={styles.sizes} aria-live='polite'>
+            <div>
+                <dt>Fichier d’origine</dt>
+                <dd>{formatBytesFr(inputBytes)}</dd>
+            </div>
+            <div>
+                <dt>Après conversion</dt>
+                {estimate ? (
+                    <dd>
+                        <strong>
+                            {estimate.exact ? '' : 'environ '}
+                            {formatBytesFr(estimate.bytes)}
+                        </strong>
+                        {delta >= 5 && <span className={styles.sizesGain}> {delta} % de moins</span>}
+                        {delta <= -5 && <span className={styles.sizesLoss}> {-delta} % de plus</span>}
+                    </dd>
+                ) : (
+                    <dd className={styles.sizesUnknown}>connu à la fin de la conversion</dd>
+                )}
+            </div>
+        </dl>
+    );
+}

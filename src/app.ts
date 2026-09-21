@@ -62,6 +62,12 @@ export const WS_MAX_PAYLOAD = 12 * 1024 * 1024;
  * ne peut plus exécuter de code. `style-src 'unsafe-inline'` reste nécessaire
  * au thème (styles inline, `setProperty`) ; `img-src https:` aux fonds d'écran
  * et avatars distants, `frame-src 'self'` au corps de mail en bac à sable.
+ *
+ * `blob:` en `media-src` et `frame-src` sert l'aperçu d'un fichier choisi sur le
+ * poste (vidéo, son, PDF), lu sans être envoyé. Une adresse `blob:` ne se
+ * fabrique que par un script de l'origine : qui n'a qu'une injection HTML n'en
+ * obtient aucune, et le document ainsi encadré hérite de cette politique,
+ * `script-src` compris.
  */
 export const CONTENT_SECURITY_POLICY = {
     useDefaults: false,
@@ -82,7 +88,8 @@ export const CONTENT_SECURITY_POLICY = {
             'https://ipv6.icanhazip.com',
             'https://ipwho.is'
         ],
-        'frame-src': ["'self'"],
+        'media-src': ["'self'", 'blob:'],
+        'frame-src': ["'self'", 'blob:'],
         'worker-src': ["'self'", 'blob:'],
         'frame-ancestors': ["'none'"],
         'base-uri': ["'none'"],

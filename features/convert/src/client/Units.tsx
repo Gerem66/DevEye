@@ -1,13 +1,16 @@
 import { useMemo, useState } from 'react';
-import { Button, SelectInput } from 'deveye-sdk-client';
+import { SearchSelect, SelectInput, type SearchSelectOption } from 'deveye-sdk-client';
 
-import { convertUnit, UNIT_CATEGORIES } from '../contracts/units';
+import { convertUnit, UNIT_CATEGORIES, type UnitCategory } from '../contracts/units';
 import { NumberField } from './controls/NumberField';
 import { formatNumber } from './format';
 import styles from './style.module.css';
 
+const optionsOf = (category: UnitCategory): SearchSelectOption[] =>
+    category.units.map((u) => ({ value: u.id, label: u.label, detail: u.symbol }));
+
 /** Les unités physiques. Tout se calcule ici, dans le navigateur : rien ne part sur le réseau. */
-export function Units({ onBack }: { onBack: () => void }) {
+export function Units() {
     const [categoryId, setCategoryId] = useState(UNIT_CATEGORIES[0].id);
     const category = UNIT_CATEGORIES.find((c) => c.id === categoryId) ?? UNIT_CATEGORIES[0];
     const [from, setFrom] = useState(category.units[0].id);
@@ -21,16 +24,14 @@ export function Units({ onBack }: { onBack: () => void }) {
         setTo(next.units[1].id);
     };
 
-    const result = useMemo(
-        () => (value === null ? null : convertUnit(category, from, to, value)),
-        [category, from, to, value]
-    );
-    const symbol = (id: string): string => category.units.find((u) => u.id === id)?.symbol ?? '';
+    const options = useMemo(() => optionsOf(category), [category]);
+    const result = value === null ? null : convertUnit(category, from, to, value);
+    const symbol = category.units.find((u) => u.id === to)?.symbol ?? '';
 
     return (
-        <div className={styles.stepBody}>
+        <div className={styles.tool}>
             <label className={styles.formatField}>
-                <span className={styles.optionLabel}>Grandeur</span>
+                <span className={styles.fieldLabel}>Grandeur</span>
                 <SelectInput value={category.id} onChange={(e) => pickCategory(e.target.value)}>
                     {UNIT_CATEGORIES.map((c) => (
                         <option key={c.id} value={c.id}>
@@ -43,13 +44,13 @@ export function Units({ onBack }: { onBack: () => void }) {
             <div className={styles.converter}>
                 <div className={styles.converterSide}>
                     <NumberField aria-label='Valeur à convertir' value={value} onChange={setValue} />
-                    <SelectInput aria-label='Unité de départ' value={from} onChange={(e) => setFrom(e.target.value)}>
-                        {category.units.map((u) => (
-                            <option key={u.id} value={u.id}>
-                                {u.label} ({u.symbol})
-                            </option>
-                        ))}
-                    </SelectInput>
+                    <SearchSelect
+                        aria-label='Unité de départ'
+                        searchPlaceholder='Chercher une unité…'
+                        value={from}
+                        options={options}
+                        onChange={setFrom}
+                    />
                 </div>
                 <button
                     type='button'
@@ -64,22 +65,16 @@ export function Units({ onBack }: { onBack: () => void }) {
                 </button>
                 <div className={styles.converterSide}>
                     <output className={styles.result} aria-live='polite'>
-                        {result === null ? '…' : `${formatNumber(result)} ${symbol(to)}`}
+                        {result === null ? '…' : `${formatNumber(result)} ${symbol}`}
                     </output>
-                    <SelectInput aria-label='Unité d’arrivée' value={to} onChange={(e) => setTo(e.target.value)}>
-                        {category.units.map((u) => (
-                            <option key={u.id} value={u.id}>
-                                {u.label} ({u.symbol})
-                            </option>
-                        ))}
-                    </SelectInput>
+                    <SearchSelect
+                        aria-label='Unité d’arrivée'
+                        searchPlaceholder='Chercher une unité…'
+                        value={to}
+                        options={options}
+                        onChange={setTo}
+                    />
                 </div>
-            </div>
-
-            <div className={styles.stepNav}>
-                <Button variant='ghost' icon='arrow-left' onClick={onBack}>
-                    Convertisseur
-                </Button>
             </div>
         </div>
     );

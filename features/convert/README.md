@@ -63,6 +63,10 @@ ticket, et quitte le disque à l'échéance. L'original part dès la conversion 
   chaque entretien et à la descente : un stockage vidé donne des travaux en échec
   `file_lost`, jamais des résultats « prêts » introuvables. Un stockage
   injoignable, lui, ne déclare rien de perdu.
+- **L'aperçu ne quitte pas le poste.** Image, vidéo, son et PDF se lisent dans le
+  navigateur par une adresse `blob:` (d'où `media-src` et `frame-src` dans la CSP
+  de l'app) ; la comparaison avant / après réutilise l'essai d'encodage qui sert
+  déjà à peser le résultat. Rien ne monte avant le clic sur Exporter.
 - **Une conversion est personnelle.** Un membre ne voit que les siennes, même
   dans un espace partagé.
 - **Trois bornes de taille, de la plus large à la plus étroite** : le mur du

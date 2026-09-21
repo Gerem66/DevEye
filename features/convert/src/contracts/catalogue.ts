@@ -98,6 +98,8 @@ const TRIM: readonly OptionSpec[] = [
     {
         kind: 'number',
         id: 'trimStart',
+        section: 'trim',
+        half: true,
         label: 'Début',
         hint: 'Pour ne garder qu’un passage : où il commence.',
         min: 0,
@@ -105,13 +107,24 @@ const TRIM: readonly OptionSpec[] = [
         step: 1,
         unit: 's'
     },
-    { kind: 'number', id: 'trimEnd', label: 'Fin', min: 0, max: 86_400, step: 1, unit: 's' }
+    {
+        kind: 'number',
+        id: 'trimEnd',
+        section: 'trim',
+        half: true,
+        label: 'Fin',
+        min: 0,
+        max: 86_400,
+        step: 1,
+        unit: 's'
+    }
 ];
 
 const VIDEO_OPTIONS: readonly OptionSpec[] = [
     {
         kind: 'segments',
         id: 'mode',
+        section: 'quality',
         label: 'Ce qui compte',
         options: [
             { value: 'quality', label: 'La qualité' },
@@ -122,6 +135,7 @@ const VIDEO_OPTIONS: readonly OptionSpec[] = [
     {
         kind: 'slider',
         id: 'quality',
+        section: 'quality',
         label: 'Qualité',
         hint: 'Plus à gauche, le fichier est petit et l’image se dégrade. Au milieu, la différence ne se voit presque pas.',
         min: 0,
@@ -134,6 +148,7 @@ const VIDEO_OPTIONS: readonly OptionSpec[] = [
     {
         kind: 'bytes',
         id: 'targetBytes',
+        section: 'quality',
         label: 'Taille à ne pas dépasser',
         hint: 'La conversion se fait en deux passages pour tomber juste : elle dure environ deux fois plus longtemps.',
         default: 25 * 1024 * 1024,
@@ -142,6 +157,7 @@ const VIDEO_OPTIONS: readonly OptionSpec[] = [
     {
         kind: 'segments',
         id: 'height',
+        section: 'picture',
         label: 'Définition',
         hint: 'Une vidéo n’est jamais agrandie : une définition plus haute que l’originale est ignorée.',
         options: [
@@ -158,6 +174,7 @@ const VIDEO_OPTIONS: readonly OptionSpec[] = [
     {
         kind: 'segments',
         id: 'fps',
+        section: 'picture',
         label: 'Images par seconde',
         options: [
             { value: 'source', label: 'Original' },
@@ -170,6 +187,7 @@ const VIDEO_OPTIONS: readonly OptionSpec[] = [
     {
         kind: 'segments',
         id: 'speed',
+        section: 'quality',
         label: 'Effort de compression',
         hint: 'À qualité égale, plus d’effort donne un fichier plus petit, et une conversion plus longue.',
         options: [
@@ -179,10 +197,11 @@ const VIDEO_OPTIONS: readonly OptionSpec[] = [
         ],
         default: 'balanced'
     },
-    { kind: 'toggle', id: 'audio', label: 'Garder le son', default: true },
+    { kind: 'toggle', id: 'audio', section: 'sound', label: 'Garder le son', default: true },
     {
         kind: 'slider',
         id: 'audioBitrate',
+        section: 'sound',
         label: 'Qualité du son',
         min: 64,
         max: 320,
@@ -191,11 +210,12 @@ const VIDEO_OPTIONS: readonly OptionSpec[] = [
         unit: 'kb/s',
         when: { option: 'audio', equals: true }
     },
-    { kind: 'crop', id: 'crop', label: 'Recadrer' },
+    { kind: 'crop', id: 'crop', section: 'picture', label: 'Recadrer' },
     ...TRIM,
     {
         kind: 'toggle',
         id: 'stripMetadata',
+        section: 'privacy',
         label: 'Retirer les informations cachées',
         hint: 'Une vidéo de téléphone embarque souvent le lieu et la date du tournage.',
         default: true
@@ -206,6 +226,7 @@ const GIF_OPTIONS: readonly OptionSpec[] = [
     {
         kind: 'slider',
         id: 'gifWidth',
+        section: 'picture',
         label: 'Largeur',
         hint: 'Un GIF pèse vite très lourd : la largeur et la cadence sont ses deux seuls leviers.',
         min: 120,
@@ -214,8 +235,17 @@ const GIF_OPTIONS: readonly OptionSpec[] = [
         default: 480,
         unit: 'px'
     },
-    { kind: 'slider', id: 'gifFps', label: 'Images par seconde', min: 5, max: 30, step: 1, default: 12 },
-    { kind: 'crop', id: 'crop', label: 'Recadrer' },
+    {
+        kind: 'slider',
+        id: 'gifFps',
+        section: 'picture',
+        label: 'Images par seconde',
+        min: 5,
+        max: 30,
+        step: 1,
+        default: 12
+    },
+    { kind: 'crop', id: 'crop', section: 'picture', label: 'Recadrer' },
     ...TRIM
 ];
 
@@ -223,6 +253,7 @@ const AUDIO_SHAPE: readonly OptionSpec[] = [
     {
         kind: 'segments',
         id: 'sampleRate',
+        section: 'sound',
         label: 'Fréquence',
         options: [
             { value: 'source', label: 'Originale' },
@@ -235,6 +266,7 @@ const AUDIO_SHAPE: readonly OptionSpec[] = [
     {
         kind: 'segments',
         id: 'channels',
+        section: 'sound',
         label: 'Canaux',
         options: [
             { value: 'source', label: 'Originaux' },
@@ -246,6 +278,7 @@ const AUDIO_SHAPE: readonly OptionSpec[] = [
     {
         kind: 'toggle',
         id: 'normalize',
+        section: 'sound',
         label: 'Égaliser le volume',
         hint: 'Ramène le niveau sonore à celui d’une diffusion ordinaire, sans écrêter.',
         default: false
@@ -256,6 +289,7 @@ const AUDIO_SHAPE: readonly OptionSpec[] = [
 const AUDIO_BITRATE: OptionSpec = {
     kind: 'slider',
     id: 'bitrate',
+    section: 'quality',
     label: 'Qualité',
     hint: '192 kb/s est indiscernable de l’original pour la plupart des oreilles.',
     min: 64,
@@ -272,13 +306,15 @@ const IMAGE_SHAPE: readonly OptionSpec[] = [
     {
         kind: 'size',
         id: 'resize',
+        section: 'picture',
         label: 'Dimensions maximales',
         hint: 'L’image tient dans ce cadre en gardant ses proportions. Elle n’est jamais agrandie.'
     },
-    { kind: 'crop', id: 'crop', label: 'Recadrer' },
+    { kind: 'crop', id: 'crop', section: 'picture', label: 'Recadrer' },
     {
         kind: 'toggle',
         id: 'stripMetadata',
+        section: 'privacy',
         label: 'Retirer les informations cachées',
         hint: 'Une photo embarque souvent le lieu de la prise de vue, la date et le modèle de l’appareil.',
         default: true
@@ -288,6 +324,7 @@ const IMAGE_SHAPE: readonly OptionSpec[] = [
 const IMAGE_QUALITY: OptionSpec = {
     kind: 'slider',
     id: 'quality',
+    section: 'quality',
     label: 'Qualité',
     hint: 'Autour de 80, la compression ne se voit pas à l’œil nu.',
     min: 1,
@@ -302,6 +339,7 @@ const LOSSY_IMAGE: readonly OptionSpec[] = [IMAGE_QUALITY, ...IMAGE_SHAPE];
 const PDF_PAGE: OptionSpec = {
     kind: 'slider',
     id: 'page',
+    section: 'picture',
     label: 'Page à exporter',
     min: 1,
     max: 500,
@@ -311,6 +349,7 @@ const PDF_PAGE: OptionSpec = {
 const PDF_DPI: OptionSpec = {
     kind: 'slider',
     id: 'dpi',
+    section: 'picture',
     label: 'Finesse',
     hint: '150 suffit pour un écran, 300 pour une impression.',
     min: 72,
@@ -711,6 +750,7 @@ export const CATALOGUE: readonly KindSpec[] = [
                     {
                         kind: 'segments',
                         id: 'level',
+                        section: 'quality',
                         label: 'Allègement',
                         hint: 'Ce sont les images du document qui sont recompressées : un PDF de texte seul ne maigrit presque pas.',
                         options: [

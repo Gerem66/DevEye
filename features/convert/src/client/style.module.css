@@ -1,22 +1,30 @@
 .root {
+    /* La hauteur de l'aperçu, commune à l'image, à la vidéo et au PDF : les
+       étapes ne font pas sauter la colonne du fichier. */
+    --stage-max-h: 420px;
     display: flex;
     flex-direction: column;
     gap: var(--space-lg);
     min-height: 100%;
 }
 
+/* En-tête : retour, titre, actions */
 .header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: var(--space-md);
 }
 
 .title {
+    flex: 1;
+    min-width: 0;
     margin: 0;
+    overflow: hidden;
     font-size: 1.5rem;
     font-weight: 700;
     color: var(--text-primary);
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 .sectionTitle {
@@ -26,11 +34,19 @@
     color: var(--text-secondary);
 }
 
-.note {
+.note,
+.warning {
     margin: 0;
     font-size: 0.85rem;
     line-height: 1.5;
     color: var(--text-muted);
+}
+
+.warning {
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--warning-bg);
+    color: var(--warning);
 }
 
 .problem {
@@ -59,6 +75,7 @@
 .stepButton {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: var(--space-sm);
     width: 100%;
     padding: var(--space-sm);
@@ -116,6 +133,27 @@
     color: var(--on-accent);
 }
 
+/* Étapes 2 à 4 : le fichier à gauche, l'étape à droite */
+.workbench {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+    gap: var(--space-xl);
+}
+
+.filePane {
+    position: sticky;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    min-width: 0;
+}
+
+.stepPane {
+    min-width: 0;
+}
+
 .stepBody {
     display: flex;
     flex-direction: column;
@@ -129,11 +167,16 @@
     gap: var(--space-md);
 }
 
+.stepNavEnd {
+    justify-content: flex-end;
+}
+
 /* Dépôt de fichier */
 .dropzone {
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     gap: var(--space-xs);
     width: 100%;
     padding: var(--space-xl) var(--space-md);
@@ -158,12 +201,8 @@
     color: var(--text-primary);
 }
 
-.dropzoneCompact {
-    flex-direction: row;
-    width: auto;
-    padding: var(--space-sm) var(--space-md);
-    border-width: 1px;
-    border-radius: var(--radius-md);
+.dropzoneFill {
+    min-height: var(--stage-max-h);
 }
 
 .dropzoneTitle {
@@ -171,14 +210,173 @@
     color: var(--text-primary);
 }
 
-.dropzoneCompact .dropzoneTitle {
-    font-size: 0.85rem;
-    font-weight: 500;
-}
-
 .dropzoneHint {
     font-size: 0.82rem;
     color: var(--text-muted);
+}
+
+/* Aperçu */
+.previewFrame {
+    display: grid;
+    place-items: center;
+    min-height: var(--stage-max-h);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-subtle);
+    overflow: hidden;
+}
+
+/* Une boîte aux proportions exactes de l'image, contenue dans le cadre : sa
+   largeur se déduit de la hauteur permise, jamais l'inverse. */
+.stage {
+    position: relative;
+    width: min(100%, calc(var(--stage-max-h) * var(--ratio)));
+    aspect-ratio: var(--ratio);
+    overflow: hidden;
+}
+
+.stageLayer {
+    position: absolute;
+    max-width: none;
+    user-select: none;
+}
+
+.previewImage {
+    display: block;
+    max-width: 100%;
+    max-height: var(--stage-max-h);
+}
+
+.previewVideo {
+    display: block;
+    width: 100%;
+    max-height: var(--stage-max-h);
+}
+
+.previewAudio {
+    width: min(100%, 360px);
+}
+
+.previewPdf {
+    display: block;
+    width: 100%;
+    height: var(--stage-max-h);
+    border: none;
+}
+
+.noPreview {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-md);
+    max-width: 340px;
+    padding: var(--space-lg);
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    line-height: 1.5;
+    text-align: center;
+}
+
+.noPreview p {
+    margin: 0;
+}
+
+/* Avant / après */
+.compare {
+    position: absolute;
+    inset: 0;
+}
+
+.compareAfter {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    clip-path: inset(0 0 0 var(--split));
+    user-select: none;
+}
+
+.compareLine {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: var(--split);
+    width: 2px;
+    margin-left: -1px;
+    background: var(--accent);
+    box-shadow: var(--shadow-sm);
+    pointer-events: none;
+}
+
+.compareTag {
+    position: absolute;
+    top: var(--space-sm);
+    padding: 2px var(--space-sm);
+    border-radius: var(--radius-pill);
+    background: var(--surface-popup-solid);
+    color: var(--text-primary);
+    font-size: 0.72rem;
+    font-weight: 600;
+    pointer-events: none;
+}
+
+.compareTagBefore {
+    left: var(--space-sm);
+}
+
+.compareTagAfter {
+    right: var(--space-sm);
+}
+
+/* Le rideau : un curseur natif, invisible, qui couvre l'image. */
+.compareRange {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: ew-resize;
+}
+
+/* Au clavier, le rideau s'épaissit : c'est le seul signe visible du focus. */
+.compare:focus-within .compareLine {
+    width: 4px;
+    margin-left: -2px;
+}
+
+/* Le fichier choisi, sous son aperçu */
+.fileBar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+}
+
+.fileText {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.fileName {
+    overflow: hidden;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.fileMeta {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.fileActions {
+    display: flex;
+    flex-shrink: 0;
+    gap: var(--space-sm);
 }
 
 /* Cartes de l'étape 1 */
@@ -239,39 +437,9 @@
 }
 
 /* Étape 2 */
-.fileChip {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-md);
-    padding: var(--space-sm) var(--space-md);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-md);
-    background: var(--surface-subtle);
-}
-
-.fileChipText {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-}
-
-.fileName {
-    overflow: hidden;
-    font-weight: 600;
-    color: var(--text-primary);
-    white-space: nowrap;
-    text-overflow: ellipsis;
-}
-
-.fileMeta {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-}
-
 .formats {
     display: grid;
-    grid-template-columns: 1fr auto 1fr;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: end;
     gap: var(--space-md);
 }
@@ -289,34 +457,76 @@
     color: var(--accent);
 }
 
-/* Étape 3 */
-.options {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: var(--space-lg) var(--space-xl);
+/* Étape 3 : des rubriques, et dans chacune une grille à deux colonnes où un
+   réglage occupe toute la ligne, sauf ceux qui vont par paire. */
+.optionSection {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--glass-border);
 }
 
-.option {
+.optionSectionTitle {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.fields {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-md);
+}
+
+.field {
     display: flex;
     flex-direction: column;
     gap: var(--space-xs);
+    min-width: 0;
 }
 
-.optionLabel {
+.fieldFull {
+    grid-column: 1 / -1;
+}
+
+.fieldHalf {
+    grid-column: span 1;
+}
+
+.fieldInline {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+}
+
+.fieldText {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    min-width: 0;
+}
+
+.fieldLabel {
     font-size: 0.82rem;
     color: var(--text-secondary);
 }
 
-.optionHint {
+.fieldHint {
     margin: 0;
     font-size: 0.78rem;
+    line-height: 1.45;
     color: var(--text-muted);
 }
 
 .pairRow,
 .cropGrid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: var(--space-sm);
 }
 
@@ -336,7 +546,8 @@
 }
 
 .bytesRow {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: var(--space-sm);
 }
@@ -373,53 +584,77 @@
     bottom: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--space-sm);
+    gap: var(--space-md);
     padding: var(--space-md) 0 var(--space-xs);
     border-top: 1px solid var(--glass-border);
     background: var(--surface-popup-solid);
 }
 
-.estimate {
-    font-size: 0.92rem;
-    color: var(--text-primary);
-}
-
-.estimateMuted {
-    color: var(--text-muted);
-}
-
-.estimateGain {
-    color: var(--success);
-}
-
-/* Étape 4 */
+/* Le poids, avant et après : deux lignes aux mêmes colonnes */
+.sizes,
 .recap {
     display: flex;
     flex-direction: column;
-    gap: var(--space-sm);
+    gap: var(--space-xs);
     margin: 0;
+}
+
+.sizes > div,
+.recap > div {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr);
+    gap: var(--space-md);
+}
+
+.sizes dt,
+.recap dt {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.sizes dd,
+.recap dd {
+    margin: 0;
+    min-width: 0;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
+.sizesGain {
+    color: var(--success);
+}
+
+.sizesLoss,
+.sizesUnknown {
+    color: var(--text-muted);
+}
+
+/* Étape 4 */
+.recapBox {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
     padding: var(--space-md);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
     background: var(--surface-subtle);
 }
 
-.recap > div {
-    display: grid;
-    grid-template-columns: 110px 1fr;
-    gap: var(--space-md);
+.recapBox .sizes {
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--glass-border);
 }
 
-.recap dt {
-    font-size: 0.82rem;
-    color: var(--text-muted);
-}
-
-.recap dd {
+.promises {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
     margin: 0;
-    min-width: 0;
-    color: var(--text-primary);
-    overflow-wrap: anywhere;
+    padding-left: var(--space-md);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--text-muted);
 }
 
 .sending {
@@ -525,10 +760,16 @@
     display: none;
 }
 
-/* Devises et unités */
+/* Devises et unités, dans leur dialogue */
+.tool {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
 .converter {
     display: grid;
-    grid-template-columns: 1fr auto 1fr;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
     gap: var(--space-md);
 }
@@ -561,15 +802,17 @@
 .result {
     display: flex;
     align-items: center;
-    min-height: 40px;
+    height: calc(2.25rem + 2px);
     padding: 0 var(--space-md);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-sm);
     background: var(--accent-bg);
     color: var(--text-primary);
-    font-size: 1.15rem;
+    font-size: 1.05rem;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
-    overflow-wrap: anywhere;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 /* Carte de l'accueil */
@@ -585,10 +828,26 @@
     color: var(--success);
 }
 
+@media (max-width: 900px) {
+    .root {
+        --stage-max-h: 280px;
+    }
+
+    .workbench {
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--space-lg);
+    }
+
+    .filePane {
+        position: static;
+    }
+}
+
 @media (max-width: 640px) {
     .formats,
-    .converter {
-        grid-template-columns: 1fr;
+    .converter,
+    .fields {
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .formatArrow {
@@ -606,16 +865,13 @@
         display: none;
     }
 
-    .stepButton {
-        justify-content: center;
-    }
-
+    .sizes > div,
     .recap > div {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
         gap: 0;
     }
 
-    .fileChip {
+    .fileBar {
         flex-direction: column;
         align-items: stretch;
     }

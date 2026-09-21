@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+    Button,
+    Dialog,
     FeatureSettingsButton,
     formatBytesFr,
     humanizeError,
@@ -10,7 +12,7 @@ import {
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
 
-import { sourceOf, targetOf } from '../contracts/catalogue';
+import { kindOf, sourceOf, targetOf } from '../contracts/catalogue';
 import {
     CONVERT_PROGRESS_EVENT,
     convertProgressSchema,
@@ -21,6 +23,8 @@ import { resolveOptions } from '../contracts/options';
 import { manifest } from '../manifest';
 import { api } from './api';
 import { Currency } from './Currency';
+import { FilePane } from './FilePane';
+import { KIND_NOUNS } from './format';
 import { JobList } from './JobList';
 import { probeFile } from './probe';
 import { Stepper, type StepperStep } from './Stepper';
@@ -34,12 +38,15 @@ import { saveFrom, UploadError, uploadFile, type UploadHandle } from './upload';
 import { useEstimate } from './useEstimate';
 import { useWizard } from './useWizard';
 
-const TITLES = { currency: 'Devises', units: 'Unités' } as const;
+type Tool = 'currency' | 'units';
+const TOOL_TITLES: Record<Tool, string> = { currency: 'Devises', units: 'Unités' };
+const TOOL_DIALOG_WIDTH = 560;
 
 export default function Convert(_props: FeatureViewProps) {
     const wizard = useWizard();
     const { state } = wizard;
     const canWrite = useWorkspacePermissions().canFeature('convert', 'write');
+    const [tool, setTool] = useState<Tool | null>(null);
 
     const caps = useResource(
         'convert.capabilities',
@@ -78,7 +85,7 @@ export default function Convert(_props: FeatureViewProps) {
     const source = kind && state.sourceId ? sourceOf(kind, state.sourceId) : null;
     const target = kind && state.sourceId && state.targetId ? targetOf(kind, state.sourceId, state.targetId) : null;
     const values = useMemo(() => (target ? resolveOptions(target.options, state.values) : {}), [target, state.values]);
-    const estimate = useEstimate(target, values, state.info, file);
+    const { estimate, sample } = useEstimate(target, values, state.info, file);
 
     const maxFileBytes = caps.data?.maxFileBytes ?? null;
     const fileProblem =
@@ -151,75 +158,98 @@ export default function Convert(_props: FeatureViewProps) {
         { id: 'options', label: 'Options', reachable: ready && sending === null },
         { id: 'export', label: 'Export', reachable: ready }
     ];
-    const tool = state.view === 'currency' || state.view === 'units' ? state.view : null;
+    const family = caps.data?.families.find((f) => f.kind === kind);
+    const atRoot = state.view === 'kinds' || kind === null;
 
     return (
         <div className={styles.root}>
             <div className={styles.header}>
-                <h2 className={styles.title}>{tool ? TITLES[tool] : manifest.label}</h2>
+                {!atRoot && (
+                    <Button
+                        variant='ghost'
+                        icon='arrow-left'
+                        disabled={sending !== null}
+                        onClick={() => wizard.open('kinds')}
+                    >
+                        Tous les types
+                    </Button>
+                )}
+                <h2 className={styles.title}>{atRoot ? manifest.label : `Convertir ${KIND_NOUNS[kindOf(kind).id]}`}</h2>
                 <FeatureSettingsButton scope={{ kind: 'feature', feature: 'convert' }} />
             </div>
 
-            {!tool && (
-                <Stepper steps={steps} current={state.view} onGo={(id) => wizard.open(id as typeof state.view)} />
-            )}
+            <Stepper steps={steps} current={state.view} onGo={(id) => wizard.open(id as typeof state.view)} />
             {caps.error && (
                 <p className={styles.problem} role='alert'>
                     {caps.error}
                 </p>
             )}
 
-            {state.view === 'kinds' && (
+            {atRoot ? (
                 <KindStep
                     families={caps.data?.families ?? []}
                     onKind={wizard.pickKind}
                     onFile={wizard.pickFile}
-                    onTool={wizard.open}
+                    onTool={setTool}
                 />
-            )}
-            {state.view === 'format' && (
-                <FormatStep
-                    wizard={wizard}
-                    family={caps.data?.families.find((f) => f.kind === kind)}
-                    fileProblem={fileProblem}
-                />
-            )}
-            {state.view === 'options' && target && <OptionsStep wizard={wizard} target={target} estimate={estimate} />}
-            {state.view === 'export' && source && target && (
-                <ExportStep
-                    wizard={wizard}
-                    source={source}
-                    target={target}
-                    estimate={estimate}
-                    sending={sending}
-                    error={exportError}
-                    canWrite={canWrite}
-                    resultTtlSeconds={caps.data?.resultTtlSeconds ?? null}
-                    onExport={() => void startExport()}
-                    onAbort={() => upload.current?.handle.abort()}
-                />
-            )}
-            {state.view === 'currency' && <Currency onBack={() => wizard.open('kinds')} />}
-            {state.view === 'units' && <Units onBack={() => wizard.open('kinds')} />}
-
-            {!tool && (
-                <>
-                    {state.view !== 'export' && exportError && (
-                        <p className={styles.problem} role='alert'>
-                            {exportError}
-                        </p>
-                    )}
-                    {list.error && <p className={styles.problem}>{list.error}</p>}
-                    <JobList
-                        jobs={list.data ?? []}
-                        live={live}
-                        canWrite={canWrite}
-                        onDownload={onDownload}
-                        onCancel={onCancel}
-                        onRemove={onRemove}
+            ) : (
+                <div className={styles.workbench}>
+                    <FilePane
+                        wizard={wizard}
+                        family={family}
+                        values={values}
+                        sample={sample}
+                        locked={sending !== null}
                     />
-                </>
+                    <div className={styles.stepPane}>
+                        {state.view === 'format' && (
+                            <FormatStep wizard={wizard} family={family} fileProblem={fileProblem} />
+                        )}
+                        {state.view === 'options' && target && (
+                            <OptionsStep wizard={wizard} target={target} estimate={estimate} />
+                        )}
+                        {state.view === 'export' && source && target && (
+                            <ExportStep
+                                wizard={wizard}
+                                source={source}
+                                target={target}
+                                estimate={estimate}
+                                sending={sending}
+                                error={exportError}
+                                canWrite={canWrite}
+                                resultTtlSeconds={caps.data?.resultTtlSeconds ?? null}
+                                onExport={() => void startExport()}
+                                onAbort={() => upload.current?.handle.abort()}
+                            />
+                        )}
+                    </div>
+                </div>
             )}
+
+            {state.view !== 'export' && exportError && (
+                <p className={styles.problem} role='alert'>
+                    {exportError}
+                </p>
+            )}
+            {list.error && <p className={styles.problem}>{list.error}</p>}
+            <JobList
+                jobs={list.data ?? []}
+                live={live}
+                canWrite={canWrite}
+                onDownload={onDownload}
+                onCancel={onCancel}
+                onRemove={onRemove}
+            />
+
+            <Dialog
+                open={tool !== null}
+                onClose={() => setTool(null)}
+                title={tool ? TOOL_TITLES[tool] : undefined}
+                width={TOOL_DIALOG_WIDTH}
+            >
+                {tool === 'currency' && <Currency />}
+                {tool === 'units' && <Units />}
+            </Dialog>
         </div>
     );
 }

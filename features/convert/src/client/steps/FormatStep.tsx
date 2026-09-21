@@ -1,9 +1,7 @@
-import { Button, formatBytesFr, SelectInput } from 'deveye-sdk-client';
+import { Button, SelectInput } from 'deveye-sdk-client';
 
 import { kindOf, targetsFor } from '../../contracts/catalogue';
 import type { ConvertFamily } from '../../contracts/domain';
-import { Dropzone } from '../Dropzone';
-import { KIND_NOUNS } from '../format';
 import styles from '../style.module.css';
 import type { Wizard } from '../useWizard';
 
@@ -22,42 +20,21 @@ export function FormatStep({ wizard, family, fileProblem }: FormatStepProps) {
     const targets = state.sourceId
         ? targetsFor(state.kind, state.sourceId).filter((t) => !family?.missingTargets.includes(t.id))
         : [];
-    const accept = sources.flatMap((s) => s.ext.map((e) => `.${e}`)).join(',');
+    const detected = kind.sources.find((s) => s.id === state.detectedSourceId);
+    const overridden = detected !== undefined && state.sourceId !== null && state.sourceId !== detected.id;
 
     return (
         <div className={styles.stepBody}>
-            {state.file ? (
-                <div className={styles.fileChip}>
-                    <div className={styles.fileChipText}>
-                        <span className={styles.fileName}>{state.file.name}</span>
-                        <span className={styles.fileMeta}>{formatBytesFr(state.file.size)}</span>
-                    </div>
-                    <Dropzone compact title='Changer de fichier' accept={accept} onFile={wizard.pickFile} />
-                </div>
-            ) : (
-                <Dropzone
-                    title={`Choisissez ${KIND_NOUNS[state.kind]}`}
-                    hint='Déposez le fichier ici, ou cliquez pour le choisir.'
-                    accept={accept}
-                    onFile={wizard.pickFile}
-                />
-            )}
-            {fileProblem && (
-                <p className={styles.problem} role='alert'>
-                    {fileProblem}
-                </p>
-            )}
-
             <div className={styles.formats}>
                 <label className={styles.formatField}>
-                    <span className={styles.optionLabel}>Format du fichier</span>
+                    <span className={styles.fieldLabel}>Format du fichier</span>
                     <SelectInput value={state.sourceId ?? ''} onChange={(e) => wizard.setSource(e.target.value)}>
                         <option value='' disabled>
                             Choisir…
                         </option>
                         {sources.map((s) => (
                             <option key={s.id} value={s.id}>
-                                {s.label}
+                                {s.id === detected?.id ? `${s.label} (détecté)` : s.label}
                             </option>
                         ))}
                     </SelectInput>
@@ -66,7 +43,7 @@ export function FormatStep({ wizard, family, fileProblem }: FormatStepProps) {
                     →
                 </span>
                 <label className={styles.formatField}>
-                    <span className={styles.optionLabel}>Format voulu</span>
+                    <span className={styles.fieldLabel}>Format voulu</span>
                     <SelectInput
                         value={state.targetId ?? ''}
                         disabled={!state.sourceId}
@@ -83,16 +60,25 @@ export function FormatStep({ wizard, family, fileProblem }: FormatStepProps) {
                     </SelectInput>
                 </label>
             </div>
-            {state.file && !state.sourceId && (
+
+            {overridden && (
+                <p className={styles.warning}>
+                    Ce fichier a été reconnu comme {detected.label}. Avec un autre format d’entrée, la conversion risque
+                    d’échouer : ne le changez que si l’extension du fichier est trompeuse.
+                </p>
+            )}
+            {state.file && !detected && (
                 <p className={styles.note}>
                     Le type de ce fichier n’a pas été reconnu à son nom : indiquez son format à la main.
                 </p>
             )}
+            {fileProblem && (
+                <p className={styles.problem} role='alert'>
+                    {fileProblem}
+                </p>
+            )}
 
-            <div className={styles.stepNav}>
-                <Button variant='ghost' icon='arrow-left' onClick={() => wizard.open('kinds')}>
-                    Type de fichier
-                </Button>
+            <div className={`${styles.stepNav} ${styles.stepNavEnd}`}>
                 <Button
                     variant='primary'
                     disabled={!state.file || !state.sourceId || !state.targetId || fileProblem !== null}

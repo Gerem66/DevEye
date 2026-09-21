@@ -1,0 +1,115 @@
+.trigger {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    height: calc(2.25rem + 2px);
+    padding: 0 0.75rem;
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    background-color: var(--input-bg);
+    color: var(--text-primary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        border-color var(--transition-fast),
+        background-color var(--transition-fast);
+}
+
+.trigger:focus-visible,
+.trigger[aria-expanded='true'] {
+    outline: none;
+    border-color: var(--input-focus);
+    background-color: var(--glass-bg-light);
+}
+
+.trigger:disabled {
+    cursor: not-allowed;
+    filter: opacity(0.6);
+}
+
+.prefix {
+    flex-shrink: 0;
+}
+
+.label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.detail {
+    flex-shrink: 0;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.chevron {
+    width: 14px;
+    color: var(--text-muted);
+}
+
+/* Au-dessus d'un dialogue : le panneau naît dans <body>, hors de sa pile. */
+.panel {
+    position: fixed;
+    z-index: var(--z-toast);
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--glass-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-popup-solid);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+}
+
+.search {
+    flex-shrink: 0;
+    padding: var(--space-sm) var(--space-md);
+    border: none;
+    border-bottom: 1px solid var(--glass-border);
+    outline: none;
+    background: none;
+    color: var(--text-primary);
+    font: inherit;
+}
+
+.search::placeholder {
+    color: var(--input-placeholder);
+}
+
+.list {
+    margin: 0;
+    padding: var(--space-xs);
+    list-style: none;
+    overflow-y: auto;
+}
+
+.option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.optionActive {
+    background: var(--surface-subtle);
+    color: var(--text-primary);
+}
+
+.optionSelected {
+    color: var(--accent);
+}
+
+.empty {
+    padding: var(--space-md);
+    font-size: 0.88rem;
+    color: var(--text-muted);
+    text-align: center;
+}

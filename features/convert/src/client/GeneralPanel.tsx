@@ -4,8 +4,8 @@ import {
     invalidate,
     ReadOnlyNotice,
     SaveButton,
+    SearchSelect,
     SegmentedControl,
-    SelectInput,
     settingsStyles as shell,
     useResource
 } from 'deveye-sdk-client';
@@ -13,6 +13,7 @@ import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
 import { DEFAULT_SETTINGS, type ConvertSettings } from '../contracts/domain';
 import { api } from './api';
+import { currencyOption } from './currencies';
 
 const NOTIFY_OPTIONS = [
     { value: '0', label: 'Toujours' },
@@ -20,8 +21,6 @@ const NOTIFY_OPTIONS = [
     { value: '300', label: 'Après 5 min' },
     { value: '900', label: 'Après 15 min' }
 ] as const;
-
-const NAMES = new Intl.DisplayNames(['fr'], { type: 'currency' });
 
 export default function GeneralPanel({ canWrite }: SettingsPanelProps) {
     const stored = useResource(
@@ -54,18 +53,14 @@ export default function GeneralPanel({ canWrite }: SettingsPanelProps) {
             <p className={shell.sectionHint}>
                 Celle que le convertisseur de devises propose en premier, pour tout l’espace.
             </p>
-            <SelectInput
+            <SearchSelect
                 aria-label='Devise de référence'
-                value={draft.baseCurrency}
+                searchPlaceholder='Nom, code ou pays…'
                 disabled={!canWrite}
-                onChange={(e) => setDraft({ ...draft, baseCurrency: e.target.value })}
-            >
-                {codes.map((code) => (
-                    <option key={code} value={code}>
-                        {NAMES.of(code) ?? code} ({code})
-                    </option>
-                ))}
-            </SelectInput>
+                value={draft.baseCurrency}
+                options={codes.map(currencyOption)}
+                onChange={(baseCurrency) => setDraft({ ...draft, baseCurrency })}
+            />
 
             <span className={shell.sectionLabel}>Avis de fin de conversion</span>
             <p className={shell.sectionHint}>

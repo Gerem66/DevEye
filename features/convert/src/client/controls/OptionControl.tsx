@@ -21,12 +21,19 @@ interface OptionControlProps {
 /**
  * Un réglage du catalogue, rendu d'après sa seule forme. Ce composant ne
  * connaît aucun format : ajouter un réglage à une cible ne demande rien ici.
+ *
+ * Tous partagent la même ossature (intitulé, contrôle, explication) pour
+ * tomber sur les mêmes lignes ; seul l'interrupteur se range à droite de son
+ * intitulé, comme partout ailleurs dans l'app.
  */
 export function OptionControl({ spec, value, sourceDims, onChange }: OptionControlProps) {
+    const width = spec.half ? styles.fieldHalf : styles.fieldFull;
+
     if (spec.kind === 'slider') {
         const current = typeof value === 'number' ? value : spec.default;
         return (
             <Slider
+                className={width}
                 label={spec.label}
                 hint={spec.hint}
                 min={spec.min}
@@ -39,11 +46,20 @@ export function OptionControl({ spec, value, sourceDims, onChange }: OptionContr
             />
         );
     }
+
     if (spec.kind === 'toggle') {
-        return <Switch label={spec.label} hint={spec.hint} checked={value === true} onChange={onChange} />;
+        return (
+            <div className={`${styles.field} ${styles.fieldInline} ${width}`}>
+                <div className={styles.fieldText}>
+                    <span className={styles.fieldLabel}>{spec.label}</span>
+                    {spec.hint && <p className={styles.fieldHint}>{spec.hint}</p>}
+                </div>
+                <Switch aria-label={spec.label} checked={value === true} onChange={onChange} />
+            </div>
+        );
     }
 
-    const body = (() => {
+    const control = (() => {
         switch (spec.kind) {
             case 'segments': {
                 const current = typeof value === 'string' ? value : spec.default;
@@ -103,10 +119,10 @@ export function OptionControl({ spec, value, sourceDims, onChange }: OptionContr
     })();
 
     return (
-        <div className={styles.option}>
-            <span className={styles.optionLabel}>{spec.label}</span>
-            {body}
-            {spec.hint && <p className={styles.optionHint}>{spec.hint}</p>}
+        <div className={`${styles.field} ${width}`}>
+            <span className={styles.fieldLabel}>{spec.label}</span>
+            {control}
+            {spec.hint && <p className={styles.fieldHint}>{spec.hint}</p>}
         </div>
     );
 }

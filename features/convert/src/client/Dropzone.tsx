@@ -10,14 +10,15 @@ interface DropzoneProps {
     hint?: string;
     /** Les extensions proposées par le sélecteur du système (`.mp4,.mov`). Le dépôt, lui, accepte tout. */
     accept?: string;
-    compact?: boolean;
+    /** Occupe tout le cadre de l'aperçu, qu'il remplace tant qu'aucun fichier n'est choisi. */
+    fill?: boolean;
 }
 
 /**
  * Le dépôt d'un fichier. Un vrai bouton : le clavier et les lecteurs d'écran
  * ouvrent le sélecteur du système, le glisser-déposer n'est qu'un raccourci.
  */
-export function Dropzone({ onFile, title, hint, accept, compact }: DropzoneProps) {
+export function Dropzone({ onFile, title, hint, accept, fill }: DropzoneProps) {
     const input = useRef<HTMLInputElement>(null);
     const [over, setOver] = useState(false);
 
@@ -32,7 +33,7 @@ export function Dropzone({ onFile, title, hint, accept, compact }: DropzoneProps
         <>
             <button
                 type='button'
-                className={`${styles.dropzone} ${over ? styles.dropzoneOver : ''} ${compact ? styles.dropzoneCompact : ''}`}
+                className={`${styles.dropzone} ${over ? styles.dropzoneOver : ''} ${fill ? styles.dropzoneFill : ''}`}
                 onClick={() => input.current?.click()}
                 onDragOver={(e) => {
                     e.preventDefault();
@@ -41,7 +42,7 @@ export function Dropzone({ onFile, title, hint, accept, compact }: DropzoneProps
                 onDragLeave={() => setOver(false)}
                 onDrop={onDrop}
             >
-                <Picto id='upload' size={compact ? 22 : 32} />
+                <Picto id='upload' size={32} />
                 <span className={styles.dropzoneTitle}>{title}</span>
                 {hint && <span className={styles.dropzoneHint}>{hint}</span>}
             </button>

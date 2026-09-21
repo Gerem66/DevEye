@@ -1,9 +1,10 @@
-import { Button, formatBytesFr } from 'deveye-sdk-client';
+import { Button } from 'deveye-sdk-client';
 
 import type { TargetFormat } from '../../contracts/catalogue';
 import type { SizeEstimate } from '../../contracts/estimate';
-import { defaultOf, isActive, resolveOptions } from '../../contracts/options';
+import { defaultOf, isActive, OPTION_SECTIONS, resolveOptions } from '../../contracts/options';
 import { OptionControl } from '../controls/OptionControl';
+import { SizeSummary } from '../SizeSummary';
 import styles from '../style.module.css';
 import type { Wizard } from '../useWizard';
 
@@ -13,40 +14,31 @@ interface OptionsStepProps {
     estimate: SizeEstimate | null;
 }
 
-export function EstimateLine({ estimate, inputBytes }: { estimate: SizeEstimate | null; inputBytes: number }) {
-    if (!estimate)
-        return <span className={styles.estimateMuted}>Taille finale : connue à la fin de la conversion</span>;
-    const saved = inputBytes > 0 ? Math.round((1 - estimate.bytes / inputBytes) * 100) : 0;
-    return (
-        <span>
-            Taille finale :{' '}
-            <strong>
-                {estimate.exact ? '' : 'environ '}
-                {formatBytesFr(estimate.bytes)}
-            </strong>
-            {saved >= 5 && <span className={styles.estimateGain}> ({saved} % de moins)</span>}
-            {saved <= -5 && <span className={styles.estimateMuted}> ({-saved} % de plus)</span>}
-        </span>
-    );
-}
-
 export function OptionsStep({ wizard, target, estimate }: OptionsStepProps) {
     const { state } = wizard;
     const values = resolveOptions(target.options, state.values);
     const visible = target.options.filter((spec) => isActive(spec, values));
     const dims = state.info?.width && state.info.height ? { width: state.info.width, height: state.info.height } : null;
+    const sections = OPTION_SECTIONS.map((section) => ({
+        ...section,
+        specs: visible.filter((spec) => spec.section === section.id)
+    })).filter((section) => section.specs.length > 0);
 
     return (
         <div className={styles.stepBody}>
-            {visible.length === 0 ? (
-                <p className={styles.note}>Rien à régler pour ce format : la conversion se fait telle quelle.</p>
-            ) : (
-                <>
-                    <p className={styles.note}>
-                        Tout est facultatif : les réglages proposés conviennent dans la plupart des cas.
-                    </p>
-                    <div className={styles.options}>
-                        {visible.map((spec) => (
+            <p className={styles.note}>
+                {sections.length === 0
+                    ? 'Rien à régler pour ce format : la conversion se fait telle quelle.'
+                    : 'Tout est facultatif : les réglages proposés conviennent dans la plupart des cas.'}
+            </p>
+
+            {sections.map((section) => (
+                <section key={section.id} className={styles.optionSection} aria-labelledby={`convert-${section.id}`}>
+                    <h3 id={`convert-${section.id}`} className={styles.optionSectionTitle}>
+                        {section.label}
+                    </h3>
+                    <div className={styles.fields}>
+                        {section.specs.map((spec) => (
                             <OptionControl
                                 key={spec.id}
                                 spec={spec}
@@ -56,13 +48,11 @@ export function OptionsStep({ wizard, target, estimate }: OptionsStepProps) {
                             />
                         ))}
                     </div>
-                </>
-            )}
+                </section>
+            ))}
 
             <div className={styles.stickyFoot}>
-                <span className={styles.estimate} aria-live='polite'>
-                    <EstimateLine estimate={estimate} inputBytes={state.file?.size ?? 0} />
-                </span>
+                <SizeSummary inputBytes={state.file?.size ?? 0} estimate={estimate} />
                 <div className={styles.stepNav}>
                     <Button variant='ghost' icon='arrow-left' onClick={() => wizard.open('format')}>
                         Format
