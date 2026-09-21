@@ -71,6 +71,7 @@ declare const styles: {
     readonly playerHidden: string;
     readonly playerNote: string;
     readonly playerSeek: string;
+    readonly playerSeekWrap: string;
     readonly playerTime: string;
     readonly previewAction: string;
     readonly previewActions: string;
@@ -112,6 +113,7 @@ declare const styles: {
     readonly swap: string;
     readonly title: string;
     readonly tool: string;
+    readonly trimPill: string;
     readonly warning: string;
     readonly widget: string;
     readonly widgetFoot: string;

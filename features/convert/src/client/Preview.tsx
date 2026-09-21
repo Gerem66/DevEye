@@ -22,6 +22,8 @@ interface PreviewProps {
     resize: SizeValue;
     /** Le passage gardé d'une vidéo ou d'un son, en secondes. */
     trim: { start: number | null; end: number | null };
+    /** Faire de l'instant affiché le début ou la fin du passage gardé, là où il se règle. */
+    onTrim: ((edge: 'start' | 'end', seconds: number) => void) | null;
     /** La cadence et les dimensions d'un GIF à venir : l'aperçu les imite. */
     simulate: { fps: number; dims: Dims } | null;
     /** L'image telle qu'elle sortirait. Présente, l'aperçu devient une comparaison avant / après. */
@@ -50,7 +52,7 @@ function NoPreview({ kind, reason }: { kind: ConvertKind; reason: string }) {
  * conversion, elle, se fait sur le serveur et n'en dépend pas.
  */
 export function Preview(props: PreviewProps) {
-    const { file, kind, isPdf, info, crop, resize, trim, simulate, sample, onDownload } = props;
+    const { file, kind, isPdf, info, crop, resize, trim, onTrim, simulate, sample, onDownload } = props;
     const url = useObjectUrl(file, isPdf ? 'application/pdf' : undefined);
     const sampleUrl = useObjectUrl(sample);
     const [failed, setFailed] = useState(false);
@@ -129,6 +131,7 @@ export function Preview(props: PreviewProps) {
             start={trim.start}
             end={trim.end}
             simulate={simulate}
+            onTrim={onTrim}
             suspended={suspended}
             actions={shown}
             onError={() => setFailed(true)}

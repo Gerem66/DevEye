@@ -1,9 +1,12 @@
 .root {
     /* Le cadre de l'aperçu a une hauteur de repos, commune au dépôt, à l'image,
        à la vidéo et au PDF : les étapes ne font pas sauter la colonne. Une image
-       haute peut le grandir, jusqu'à un plafond qui tient dans la fenêtre. */
+       haute peut le grandir, jusqu'à un plafond qui laisse tenir à l'écran ce qui
+       l'entoure : l'en-tête et le fil d'étapes au-dessus, le lecteur, sa note et
+       le fichier en dessous. D'où des pixels retranchés à la fenêtre, et non une
+       part de sa hauteur. */
     --stage-min-h: 420px;
-    --stage-max-h: max(var(--stage-min-h), min(72vh, 820px));
+    --stage-max-h: max(var(--stage-min-h), min(calc(100vh - 430px), 820px));
     display: flex;
     flex-direction: column;
     gap: var(--space-lg);
@@ -344,6 +347,57 @@
 .playerButton:disabled {
     cursor: not-allowed;
     filter: opacity(0.5);
+}
+
+.playerSeekWrap {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    display: flex;
+}
+
+/* Au-dessus de la poignée, dont le centre s'arrête à une demi-poignée de chaque
+   bord (16 px sous Chromium et WebKit, 20 sous Firefox). Bornée des deux côtés :
+   à gauche pour rester dans le cadre, à droite pour ne pas couvrir ses boutons. */
+.trimPill {
+    --thumb: 16px;
+    position: absolute;
+    bottom: calc(100% + var(--space-xs));
+    left: clamp(70px, calc(var(--at) * (100% - var(--thumb)) + var(--thumb) / 2), calc(100% - 90px));
+    display: flex;
+    border: 1px solid var(--glass-border-strong);
+    border-radius: var(--radius-pill);
+    background: var(--surface-popup-solid);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    transform: translateX(-50%);
+    white-space: nowrap;
+}
+
+@supports (-moz-appearance: none) {
+    .trimPill {
+        --thumb: 20px;
+    }
+}
+
+.trimPill button {
+    padding: 2px var(--space-sm);
+    border: none;
+    background: none;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.72rem;
+    cursor: pointer;
+}
+
+.trimPill button + button {
+    border-left: 1px solid var(--glass-border);
+}
+
+.trimPill button:hover,
+.trimPill button:focus-visible {
+    background: var(--accent-bg);
+    color: var(--accent);
 }
 
 .playerSeek {

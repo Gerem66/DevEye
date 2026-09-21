@@ -20,12 +20,20 @@ interface PlayerProps {
      * dimensions, muet et en boucle, comme lui. `null` : la vidéo telle quelle.
      */
     simulate: { fps: number; dims: Dims } | null;
+    /**
+     * Faire de l'instant affiché le début ou la fin du passage gardé. Absent là
+     * où le passage ne se règle pas : la pastille ne s'offre alors pas.
+     */
+    onTrim: ((edge: 'start' | 'end', seconds: number) => void) | null;
     /** Une autre vue du même fichier a pris le relais : celle-ci se tait. */
     suspended: boolean;
     /** Les boutons posés sur le cadre. */
     actions: ReactNode;
     onError: () => void;
 }
+
+/** Aux extrémités du passage, il n'y a rien à couper : la pastille ne s'offre qu'au-delà. */
+const TRIM_MARGIN = 0.2;
 
 const clock = (seconds: number): string => {
     const total = Math.max(0, Math.floor(seconds));
@@ -40,7 +48,7 @@ const clock = (seconds: number): string => {
  * encodé : définition, cadence et qualité ne se voient qu'au résultat.
  */
 export function Player(props: PlayerProps) {
-    const { kind, url, name, source, area, start, end, simulate, suspended, actions, onError } = props;
+    const { kind, url, name, source, area, start, end, simulate, onTrim, suspended, actions, onError } = props;
     const media = useRef<HTMLVideoElement & HTMLAudioElement>(null);
     const canvas = useRef<HTMLCanvasElement>(null);
     const [duration, setDuration] = useState<number | null>(null);
@@ -201,18 +209,41 @@ export function Player(props: PlayerProps) {
                 >
                     <span className={`icon ${playing ? 'icon-pause' : 'icon-play'}`} aria-hidden='true' />
                 </button>
-                <input
-                    className={styles.playerSeek}
-                    type='range'
-                    min={from}
-                    max={Math.max(to, from)}
-                    step={0.05}
-                    value={Math.min(Math.max(time, from), Math.max(to, from))}
-                    disabled={duration === null}
-                    aria-label='Position dans le passage gardé'
-                    aria-valuetext={`${clock(time - from)} sur ${clock(to - from)}`}
-                    onChange={(event) => seek(Number(event.target.value))}
-                />
+                <div className={styles.playerSeekWrap}>
+                    {onTrim && time > from + TRIM_MARGIN && time < to - TRIM_MARGIN && (
+                        <div
+                            className={styles.trimPill}
+                            style={{ '--at': (time - from) / (to - from) } as CSSProperties}
+                        >
+                            <button
+                                type='button'
+                                title='Définir ce point comme début'
+                                onClick={() => onTrim('start', Math.round(time * 10) / 10)}
+                            >
+                                Début ici
+                            </button>
+                            <button
+                                type='button'
+                                title='Définir ce point comme fin'
+                                onClick={() => onTrim('end', Math.round(time * 10) / 10)}
+                            >
+                                Fin ici
+                            </button>
+                        </div>
+                    )}
+                    <input
+                        className={styles.playerSeek}
+                        type='range'
+                        min={from}
+                        max={Math.max(to, from)}
+                        step={0.05}
+                        value={Math.min(Math.max(time, from), Math.max(to, from))}
+                        disabled={duration === null}
+                        aria-label='Position dans le passage gardé'
+                        aria-valuetext={`${clock(time - from)} sur ${clock(to - from)}`}
+                        onChange={(event) => seek(Number(event.target.value))}
+                    />
+                </div>
                 <span className={styles.playerTime}>
                     {clock(time - from)} / {clock(to - from)}
                 </span>

@@ -67,6 +67,8 @@ export function FilePane({ wizard, family, target, values, sample, locked, resul
 
     const { file, info } = state;
     const dims = info?.width && info.height ? { width: info.width, height: info.height } : null;
+    // Le passage ne se règle qu'à l'étape des options, et pour une cible qui le permet.
+    const trims = state.view === 'options' && target?.options.some((spec) => spec.id === 'trimStart');
     const gifDims = target?.recipe.engine === 'gif' && info ? outputDims(target, values, info) : null;
     const facts = [
         formatBytesFr(file.size),
@@ -84,6 +86,11 @@ export function FilePane({ wizard, family, target, values, sample, locked, resul
                 crop={cropOf(values, 'crop')}
                 resize={sizeOf(values, 'resize')}
                 trim={{ start: num(values, 'trimStart'), end: num(values, 'trimEnd') }}
+                onTrim={
+                    trims
+                        ? (edge, seconds) => wizard.setValue(edge === 'start' ? 'trimStart' : 'trimEnd', seconds)
+                        : null
+                }
                 simulate={gifDims ? { fps: num(values, 'gifFps') ?? 12, dims: gifDims } : null}
                 sample={state.view === 'format' ? null : sample}
                 onDownload={result?.onDownload ?? null}
