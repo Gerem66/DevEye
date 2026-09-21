@@ -1,5 +1,5 @@
 import type { SourceFormat } from '../../contracts/catalogue';
-import { minTargetBytes, minVideoBitrate, videoBitrateForTarget } from '../../contracts/estimate';
+import { keptBitrate, minTargetBytes, minVideoBitrate, videoBitrateForTarget } from '../../contracts/estimate';
 import { cropRect, keptSeconds, videoDims } from '../../contracts/geometry';
 import { cropOf, flag, num, str } from '../../contracts/options';
 import { formatBytes } from '../_shared';
@@ -23,10 +23,11 @@ interface FfprobeStream {
     width?: number;
     height?: number;
     avg_frame_rate?: string;
+    bit_rate?: string;
     disposition?: { attached_pic?: number };
 }
 interface FfprobeOutput {
-    format?: { format_name?: string; duration?: string };
+    format?: { format_name?: string; duration?: string; bit_rate?: string };
     streams?: FfprobeStream[];
 }
 
@@ -82,14 +83,18 @@ export async function probeMedia(
         throw new ConvertFailure('unsupported', `Image trop grande : ${MAX_DIMENSION} pixels de côté au plus.`);
     }
     const seconds = Number(parsed.format?.duration);
+    const audio = streams.find((s) => s.codec_type === 'audio');
+    // La piste le dit quand elle le sait. Sinon, pour un fichier sans image, c'est le débit du fichier entier.
+    const bitsPerSecond = Number(audio?.bit_rate) || (audio && !video ? Number(parsed.format?.bit_rate) : 0);
     return {
         bytes: inputBytes,
         durationMs: Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds * 1000) : null,
         width,
         height,
         fps: frameRate(video?.avg_frame_rate),
+        audioKbps: bitsPerSecond > 0 ? Math.round(bitsPerSecond / 1000) : null,
         reader,
-        hasAudio: streams.some((s) => s.codec_type === 'audio'),
+        hasAudio: audio !== undefined,
         pages: null
     };
 }
@@ -202,6 +207,13 @@ export function videoPlan(job: PlanInput): FfmpegPlan {
     };
 }
 
+/** Le débit d'origine quand il est demandé et que le fichier le dit, celui du curseur sinon. */
+function audioKbps(job: PlanInput): number {
+    const chosen = num(job.options, 'bitrate') ?? 192;
+    if (!flag(job.options, 'keepBitrate') || job.probe.audioKbps === null) return chosen;
+    return keptBitrate(job.target, job.probe.audioKbps);
+}
+
 export function audioPlan(job: PlanInput): FfmpegPlan {
     const recipe = job.target.recipe;
     if (recipe.engine !== 'audio') throw new Error('Recette audio attendue');
@@ -220,7 +232,7 @@ export function audioPlan(job: PlanInput): FfmpegPlan {
                 '-dn',
                 '-c:a',
                 recipe.codec,
-                ...(recipe.lossy ? ['-b:a', String((num(job.options, 'bitrate') ?? 192) * 1000)] : []),
+                ...(recipe.lossy ? ['-b:a', String(audioKbps(job) * 1000)] : []),
                 ...(rate && rate !== 'source' ? ['-ar', rate] : []),
                 ...(channels && channels !== 'source' ? ['-ac', channels] : []),
                 ...(flag(job.options, 'normalize') ? ['-af', 'loudnorm=I=-16:TP=-1.5:LRA=11'] : []),

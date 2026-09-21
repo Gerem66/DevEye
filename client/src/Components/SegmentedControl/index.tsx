@@ -5,6 +5,8 @@ export interface SegmentedOption<T extends string> {
     label: string;
     /** Infobulle : ce que le choix recouvre, quand le libellé seul est trop court. */
     title?: string;
+    /** Une précision en petit sous le libellé : ce que le choix vaut ici (« Original », puis « 30 i/s »). */
+    detail?: string;
 }
 
 export interface SegmentedControlProps<T extends string> {
@@ -56,6 +58,7 @@ export default function SegmentedControl<T extends string>({
                     onClick={() => o.value !== value && onChange(o.value)}
                 >
                     {o.label}
+                    {o.detail && <span className={styles.detail}>{o.detail}</span>}
                 </button>
             ))}
         </div>

@@ -292,6 +292,7 @@
 }
 
 .previewAction {
+    padding: 0;
     display: grid;
     place-items: center;
     width: 36px;
@@ -317,6 +318,7 @@
 }
 
 .playerButton {
+    padding: 0;
     display: grid;
     place-items: center;
     flex-shrink: 0;
@@ -329,7 +331,8 @@
     cursor: pointer;
 }
 
-.playerButton .icon {
+/* `:global` : sans lui, CSS Modules en ferait une classe du module, qui ne désigne rien. */
+.playerButton :global(.icon) {
     width: 12px;
 }
 
@@ -593,6 +596,7 @@
 }
 
 .sectionReset {
+    padding: 0;
     display: grid;
     place-items: center;
     width: 24px;
@@ -607,7 +611,7 @@
         background var(--transition-fast);
 }
 
-.sectionReset .icon {
+.sectionReset :global(.icon) {
     width: 14px;
 }
 
@@ -687,6 +691,7 @@
 }
 
 .lock {
+    padding: 0;
     display: grid;
     place-items: center;
     width: calc(2.25rem + 2px);
@@ -992,6 +997,7 @@
 }
 
 .swap {
+    padding: 0;
     display: grid;
     place-items: center;
     width: 40px;

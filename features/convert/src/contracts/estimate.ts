@@ -15,6 +15,19 @@ export interface MediaInfo {
     width: number | null;
     height: number | null;
     fps: number | null;
+    /**
+     * Le débit du son, en kb/s. Dans le navigateur il ne se connaît que pour un
+     * fichier audio (son poids rapporté à sa durée) ; le serveur le lit aussi
+     * dans la piste d'une vidéo.
+     */
+    audioKbps: number | null;
+}
+
+/** Le débit d'un son qui garde sa qualité d'origine : celui du fichier, dans ce que le curseur de la cible admet. */
+export function keptBitrate(target: TargetFormat, audioKbps: number): number {
+    const slider = target.options.find((spec) => spec.kind === 'slider' && spec.id === 'bitrate');
+    if (slider?.kind !== 'slider') return audioKbps;
+    return Math.min(slider.max, Math.max(slider.min, Math.round(audioKbps)));
 }
 
 export interface SizeEstimate {
@@ -120,7 +133,14 @@ export function estimateSize(target: TargetFormat, values: OptionValues, info: M
             if (!info.durationMs) return null;
             const seconds = keptSeconds(info.durationMs, num(values, 'trimStart'), num(values, 'trimEnd'));
             if (recipe.lossy) {
-                const bitrate = (num(values, 'bitrate') ?? 192) * 1000;
+                // Débit d'origine gardé, mais inconnu ici (le son d'une vidéo) : seul le serveur le lira.
+                const keep = flag(values, 'keepBitrate');
+                if (keep && info.audioKbps === null) return null;
+                const kbps =
+                    keep && info.audioKbps !== null
+                        ? keptBitrate(target, info.audioKbps)
+                        : (num(values, 'bitrate') ?? 192);
+                const bitrate = kbps * 1000;
                 return { bytes: Math.round((bitrate * seconds * (1 + recipe.overhead)) / 8), exact: true };
             }
             // Fréquence et canaux de l'original ne se lisent pas dans le navigateur :

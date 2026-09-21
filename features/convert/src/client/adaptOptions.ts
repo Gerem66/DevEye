@@ -6,8 +6,20 @@ export interface SourceFacts {
     /** La qualité d'enregistrement d'un JPEG. */
     sourceQuality: number | null;
     /** Le débit d'un fichier audio, en kb/s. */
-    sourceKbps: number | null;
+    audioKbps: number | null;
+    /** La cadence et la hauteur d'une vidéo. */
+    fps: number | null;
+    height: number | null;
 }
+
+type SegmentsSpec = Extract<OptionSpec, { kind: 'segments' }>;
+
+/** « Original » dit ce qu'il vaut pour ce fichier, en petit sous son libellé. */
+function sourceDetail(spec: SegmentsSpec, detail: string): SegmentsSpec {
+    return { ...spec, options: spec.options.map((o) => (o.value === 'source' ? { ...o, detail } : o)) };
+}
+
+const FPS = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 });
 
 /** Réencodé à sa propre qualité, un JPEG garde son poids : il faut descendre un peu pour l'alléger. */
 const BELOW_SOURCE = 5;
@@ -44,17 +56,23 @@ function anchored(spec: SliderSpec, source: number, lowered: number, said: strin
  */
 export function adaptOptions(target: TargetFormat, facts: SourceFacts): readonly OptionSpec[] {
     const recipe = target.recipe;
-    const { sourceQuality, sourceKbps } = facts;
+    const { sourceQuality, audioKbps, fps, height } = facts;
     return map(target.options, (spec) => {
+        if (spec.kind === 'segments' && spec.id === 'fps' && fps !== null) {
+            return sourceDetail(spec, `${FPS.format(fps)} i/s`);
+        }
+        if (spec.kind === 'segments' && spec.id === 'height' && height !== null) {
+            return sourceDetail(spec, `${height}p`);
+        }
         if (spec.kind !== 'slider') return spec;
         if (spec.id === 'quality' && sourceQuality !== null && recipe.engine === 'image' && recipe.coder === 'JPEG') {
             const lowered = Math.max(LOWEST_DEFAULT, sourceQuality - BELOW_SOURCE);
             return anchored(spec, sourceQuality, lowered, `compressé à environ ${sourceQuality}`);
         }
-        if (spec.id === 'bitrate' && sourceKbps !== null && recipe.engine === 'audio') {
+        if (spec.id === 'bitrate' && audioKbps !== null && recipe.engine === 'audio') {
             // Le cran du curseur juste sous le débit d'origine.
-            const lowered = spec.min + Math.floor((sourceKbps - spec.min) / spec.step) * spec.step;
-            return anchored(spec, sourceKbps, lowered, `à environ ${sourceKbps} kb/s`);
+            const lowered = spec.min + Math.floor((audioKbps - spec.min) / spec.step) * spec.step;
+            return anchored(spec, audioKbps, lowered, `à environ ${audioKbps} kb/s`);
         }
         return spec;
     });

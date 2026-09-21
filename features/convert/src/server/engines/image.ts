@@ -80,6 +80,7 @@ export async function probeImage(
         width,
         height,
         fps: null,
+        audioKbps: null,
         reader: source.readers?.[0] ?? null,
         hasAudio: false,
         pages: null
@@ -104,7 +105,8 @@ export function imageArgs(job: PlanInput): string[] {
         ...(crop ? ['-crop', `${crop.width}x${crop.height}+${crop.x}+${crop.y}`, '+repage'] : []),
         // `!` : les dimensions sont déjà calculées, ImageMagick n'a plus à les ajuster.
         ...(resized ? ['-resize', `${dims.width}x${dims.height}!`] : []),
-        ...(flag(job.options, 'stripMetadata') ? ['-strip'] : []),
+        // Tout sauf le profil de couleur : `-strip` l'emporterait aussi, et une photo en gamut large sortirait terne.
+        ...(flag(job.options, 'stripMetadata') ? ['+profile', '!icc,*', '-set', 'comment', ''] : []),
         ...(recipe.alpha ? [] : ['-background', 'white', '-alpha', 'remove', '-alpha', 'off']),
         ...(recipe.lossy ? ['-quality', String(num(job.options, 'quality') ?? 82)] : []),
         `${recipe.coder}:${job.paths.outputPart}`

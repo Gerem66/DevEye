@@ -5,9 +5,9 @@ import { targetOf } from '../contracts/catalogue';
 import { resolveOptions } from '../contracts/options';
 import { adaptOptions } from './adaptOptions';
 
-const NOTHING = { sourceQuality: null, sourceKbps: null };
+const NOTHING = { sourceQuality: null, audioKbps: null, fps: null, height: null };
 const jpeg = (sourceQuality: number) => ({ ...NOTHING, sourceQuality });
-const sound = (sourceKbps: number) => ({ ...NOTHING, sourceKbps });
+const sound = (audioKbps: number) => ({ ...NOTHING, audioKbps });
 
 const jpg = targetOf('image', 'jpg', 'jpg');
 const mp3 = targetOf('audio', 'mp3', 'mp3');
@@ -50,13 +50,25 @@ describe('réglages ajustés au fichier', () => {
         const bitrate = specs.find((s) => s.id === 'bitrate');
         assert.ok(bitrate?.kind === 'slider');
         assert.equal(bitrate.indicator, 130);
-        assert.equal(resolveOptions(specs, {}).bitrate, 128);
+        assert.equal(resolveOptions(specs, { keepBitrate: false }).bitrate, 128);
         assert.match(bitrate.hint ?? '', /130 kb\/s/);
     });
 
     it('ne marque rien quand le débit d’origine dépasse la piste (un WAV)', () => {
         assert.ok(mp3);
         assert.equal(adaptOptions(mp3, sound(1411)), mp3.options);
+    });
+
+    it('dit ce que vaut « Original » pour ce fichier', () => {
+        const mp4 = targetOf('video', 'mp4', 'mp4');
+        assert.ok(mp4);
+        const specs = adaptOptions(mp4, { ...NOTHING, fps: 29.97, height: 1080 });
+        const detailOf = (id: string) => {
+            const spec = specs.find((s) => s.id === id);
+            return spec?.kind === 'segments' ? spec.options.find((o) => o.value === 'source')?.detail : undefined;
+        };
+        assert.equal(detailOf('fps'), '29,97 i/s');
+        assert.equal(detailOf('height'), '1080p');
     });
 
     it('ne descend pas sous un plancher', () => {

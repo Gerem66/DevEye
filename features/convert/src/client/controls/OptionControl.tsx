@@ -83,7 +83,7 @@ export function OptionControl({ spec, value, sourceDims, croppedDims, onChange }
                     <SelectInput aria-label={spec.label} value={current} onChange={(e) => onChange(e.target.value)}>
                         {spec.options.map((o) => (
                             <option key={o.value} value={o.value}>
-                                {o.label}
+                                {o.detail ? `${o.label} (${o.detail})` : o.label}
                             </option>
                         ))}
                     </SelectInput>

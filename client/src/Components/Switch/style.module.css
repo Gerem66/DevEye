@@ -40,7 +40,8 @@
 .switchThumb {
     position: absolute;
     top: 50%;
-    left: 3px;
+    /* 2 px de chaque côté : la piste fait 36 px à l'intérieur de sa bordure, la poignée 16, sa course 16. */
+    left: 2px;
     width: 16px;
     height: 16px;
     border-radius: 50%;

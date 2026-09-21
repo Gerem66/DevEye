@@ -40,7 +40,7 @@ export type OptionValue = z.infer<typeof optionValueSchema>;
 export const optionValuesSchema = z.record(z.string().max(32), optionValueSchema);
 export type OptionValues = z.infer<typeof optionValuesSchema>;
 
-export type OptionSection = 'quality' | 'picture' | 'sound' | 'trim' | 'privacy';
+export type OptionSection = 'quality' | 'picture' | 'sound' | 'trim' | 'privacy' | 'advanced';
 
 /**
  * Les rubriques de l'étape « Options », dans l'ordre où elles se présentent.
@@ -52,7 +52,8 @@ export const OPTION_SECTIONS: readonly { id: OptionSection; label: string; quiet
     { id: 'picture', label: 'Image', quiet: true },
     { id: 'sound', label: 'Son' },
     { id: 'trim', label: 'Passage à garder' },
-    { id: 'privacy', label: 'Confidentialité' }
+    { id: 'privacy', label: 'Confidentialité' },
+    { id: 'advanced', label: 'Avancé', quiet: true }
 ];
 
 interface OptionBase {
@@ -82,7 +83,8 @@ export type OptionSpec =
       })
     | (OptionBase & {
           kind: 'segments';
-          options: readonly { value: string; label: string }[];
+          /** `detail` : ce que le choix vaut pour CE fichier, en petit sous son libellé. */
+          options: readonly { value: string; label: string; detail?: string }[];
           default: string;
       })
     | (OptionBase & { kind: 'toggle'; default: boolean })

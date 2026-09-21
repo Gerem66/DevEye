@@ -12,7 +12,14 @@ import { convertCurrency, convertUnit, UNIT_CATEGORIES } from './units';
  * ce qu'aucun typage ne garantit d'une entrée ajoutée à la main.
  */
 
-const VIDEO: MediaInfo = { bytes: 50_000_000, durationMs: 60_000, width: 1920, height: 1080, fps: 30 };
+const VIDEO: MediaInfo = {
+    bytes: 50_000_000,
+    durationMs: 60_000,
+    width: 1920,
+    height: 1080,
+    fps: 30,
+    audioKbps: null
+};
 
 describe('catalogue', () => {
     it('ne porte aucun identifiant en double, ni réglage en double dans une cible', () => {
@@ -243,15 +250,16 @@ describe('estimation', () => {
         assert.equal(low.exact, false);
     });
 
-    it('calcule un fichier audio au débit près', () => {
+    it('calcule un fichier audio au débit près, choisi ou gardé', () => {
         assert.ok(mp3);
-        const estimate = estimateSize(mp3, resolveOptions(mp3.options, { bitrate: 192 }), {
-            ...VIDEO,
-            width: null,
-            height: null
-        });
-        assert.ok(estimate?.exact);
-        assert.ok(Math.abs(estimate.bytes - (192_000 * 60) / 8) < 5000);
+        const sound = { ...VIDEO, width: null, height: null };
+        const chosen = estimateSize(mp3, resolveOptions(mp3.options, { keepBitrate: false, bitrate: 192 }), sound);
+        assert.ok(chosen?.exact);
+        assert.ok(Math.abs(chosen.bytes - (192_000 * 60) / 8) < 5000);
+
+        const kept = estimateSize(mp3, resolveOptions(mp3.options, {}), { ...sound, audioKbps: 128 });
+        assert.ok(kept && Math.abs(kept.bytes - (128_000 * 60) / 8) < 5000);
+        assert.equal(estimateSize(mp3, resolveOptions(mp3.options, {}), sound), null, 'débit gardé mais inconnu');
     });
 
     it('ne dit rien quand elle ne sait pas', () => {

@@ -50,6 +50,7 @@ export async function probeDocument(
         width: null,
         height: null,
         fps: null,
+        audioKbps: null,
         reader: null,
         hasAudio: false,
         pages: null

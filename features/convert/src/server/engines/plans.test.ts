@@ -25,6 +25,7 @@ const PROBE: InputProbe = {
     width: 1920,
     height: 1080,
     fps: 30,
+    audioKbps: 256,
     reader: 'mov',
     hasAudio: true,
     pages: null
@@ -151,7 +152,7 @@ describe('plans audio et GIF', () => {
                 'audio',
                 'wav',
                 'mp3',
-                { bitrate: 128, channels: '1', sampleRate: '44100', normalize: true },
+                { keepBitrate: false, bitrate: 128, channels: '1', sampleRate: '44100', normalize: true },
                 { ...PROBE, reader: 'wav' }
             )
         ).passes;
@@ -186,6 +187,20 @@ describe('plans audio et GIF', () => {
         ]);
     });
 
+    it('garde par défaut le débit que le fichier avait, dans ce que le format admet', () => {
+        const bitrateOf = (audioKbps: number | null): string => {
+            const [args] = audioPlan(
+                plan('audio', 'mp3', 'mp3', { bitrate: 96 }, { ...PROBE, reader: 'mp3', audioKbps })
+            ).passes;
+            return args[args.indexOf('-b:a') + 1];
+        };
+        assert.equal(bitrateOf(130), '130000');
+        assert.equal(bitrateOf(1411), '320000', 'un son sans perte plafonne au plus haut débit du format');
+        assert.equal(bitrateOf(24), '64000');
+        // Le curseur, masqué tant que la qualité d'origine est gardée, est revenu à son défaut.
+        assert.equal(bitrateOf(null), '192000', 'illisible : le débit par défaut du format');
+    });
+
     it('ne pose pas de débit sur un format sans perte', () => {
         const [args] = audioPlan(plan('audio', 'mp3', 'flac', {}, { ...PROBE, reader: 'mp3' })).passes;
         assert.equal(args.includes('-b:a'), false);
@@ -218,7 +233,11 @@ describe('arguments d’image', () => {
             '-auto-orient',
             '-resize',
             '2000x1500!',
-            '-strip',
+            '+profile',
+            '!icc,*',
+            '-set',
+            'comment',
+            '',
             '-background',
             'white',
             '-alpha',
@@ -234,7 +253,7 @@ describe('arguments d’image', () => {
 
     it('garde les informations cachées quand on le demande, et la transparence quand le format la porte', () => {
         const args = imageArgs(plan('image', 'png', 'webp', { stripMetadata: false }, IMAGE));
-        assert.equal(args.includes('-strip'), false);
+        assert.equal(args.includes('+profile'), false);
         assert.equal(args.includes('-alpha'), false);
     });
 });

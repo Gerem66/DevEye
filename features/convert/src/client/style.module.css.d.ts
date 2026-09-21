@@ -49,7 +49,6 @@ declare const styles: {
     readonly formatField: string;
     readonly formats: string;
     readonly header: string;
-    readonly icon: string;
     readonly job: string;
     readonly jobActions: string;
     readonly jobError: string;

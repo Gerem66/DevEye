@@ -187,13 +187,13 @@ const VIDEO_OPTIONS: readonly OptionSpec[] = [
     {
         kind: 'segments',
         id: 'speed',
-        section: 'quality',
-        label: 'Effort de compression',
-        hint: 'Plus d’effort donne une meilleure image pour un même poids, et une conversion plus longue. Le poids, lui, change peu.',
+        section: 'advanced',
+        label: 'Vitesse de conversion',
+        hint: 'Le temps que le serveur passe à chercher la meilleure compression : « Rapide » va environ trois fois plus vite que « Normale », « Lente » trois fois moins. Le résultat change peu, et l’estimation de taille n’en tient pas compte.',
         options: [
             { value: 'fast', label: 'Rapide' },
-            { value: 'balanced', label: 'Équilibré' },
-            { value: 'small', label: 'Compact' }
+            { value: 'balanced', label: 'Normale' },
+            { value: 'small', label: 'Lente' }
         ],
         default: 'balanced'
     },
@@ -216,8 +216,8 @@ const VIDEO_OPTIONS: readonly OptionSpec[] = [
         kind: 'toggle',
         id: 'stripMetadata',
         section: 'privacy',
-        label: 'Retirer les informations cachées',
-        hint: 'Une vidéo de téléphone embarque souvent le lieu et la date du tournage.',
+        label: 'Retirer les métadonnées',
+        hint: 'Les informations que l’appareil écrit dans le fichier sans les montrer : souvent le lieu et la date du tournage, et le modèle du téléphone.',
         default: true
     }
 ];
@@ -297,10 +297,20 @@ const AUDIO_BITRATE: OptionSpec = {
     step: 16,
     default: 192,
     unit: 'kb/s',
-    marks: QUALITY_MARKS
+    marks: QUALITY_MARKS,
+    when: { option: 'keepBitrate', equals: false }
 };
 
-const LOSSY_AUDIO: readonly OptionSpec[] = [AUDIO_BITRATE, ...AUDIO_SHAPE];
+const KEEP_BITRATE: OptionSpec = {
+    kind: 'toggle',
+    id: 'keepBitrate',
+    section: 'quality',
+    label: 'Garder la qualité d’origine',
+    hint: 'Le son garde le débit du fichier d’origine, dans la limite de ce que le format permet. Décochez pour le choisir et alléger le fichier.',
+    default: true
+};
+
+const LOSSY_AUDIO: readonly OptionSpec[] = [KEEP_BITRATE, AUDIO_BITRATE, ...AUDIO_SHAPE];
 
 const IMAGE_SHAPE: readonly OptionSpec[] = [
     {
@@ -315,8 +325,8 @@ const IMAGE_SHAPE: readonly OptionSpec[] = [
         kind: 'toggle',
         id: 'stripMetadata',
         section: 'privacy',
-        label: 'Retirer les informations cachées',
-        hint: 'Une photo embarque souvent le lieu de la prise de vue, la date et le modèle de l’appareil.',
+        label: 'Retirer les métadonnées',
+        hint: 'Les données EXIF, XMP et IPTC que l’appareil écrit dans le fichier sans les montrer : souvent le lieu de la prise de vue, la date et le modèle de l’appareil. Les couleurs de l’image sont gardées.',
         default: true
     }
 ];
