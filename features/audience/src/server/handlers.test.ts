@@ -432,6 +432,18 @@ describe('audience.get', () => {
 });
 
 describe('audience.siteAdd et audience.siteUpdate', () => {
+    it('refuse un site de plus que l’offre, dès le premier quand elle n’en inclut aucun', async () => {
+        const repo = fakeRepo();
+        mountIngest();
+        await assert.rejects(
+            handlerFor(audienceSiteAdd)(createTestContext({ repo, quotaLimits: { sites: 0 } }), body),
+            {
+                code: 'quota_exceeded'
+            }
+        );
+        assert.equal(repo.sites.length, 0);
+    });
+
     it('déclare un site chiffré à l’étage ouvert, origines normalisées, et vide le cache de l’ingestion', async () => {
         const repo = fakeRepo();
         const ctx = createTestContext({ repo });

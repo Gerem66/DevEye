@@ -27,7 +27,6 @@ import type { AudienceRepo, PendingEventRow } from './repo';
 import { validateSubmission, type ValidationReason } from './validate';
 import { nameRef, parseOrigins, readJson } from './_shared';
 import { looksLikeBot, parseUserAgent } from './userAgent';
-import { FeatureError } from '@deveye/types/sdk/server';
 
 /**
  * L'ingestion de l'audience : le seul chemin de DevEye ouvert sur Internet.
@@ -164,8 +163,17 @@ const BROADCAST_FLOOR_MS = 60_000;
  * serveur tomberait pour une feature qui n'est pas critique.
  */
 const QUEUE_MAX = 20_000;
-/** Fraîcheur du verdict de quota mensuel : l'ingestion ne lit pas la base à chaque vue. */
+/** Fraîcheur du compte mensuel lu en base : entre deux lectures, l'ingestion compte elle-même ce qu'elle accepte. */
 const PLAN_QUOTA_TTL_MS = 60_000;
+
+/** Où en est l'offre du propriétaire d'un espace. `limit` à `null` : rien ne borne. */
+interface PlanUsage {
+    at: number;
+    limit: number | null;
+    /** Écrits ce mois-ci, plus ce qui a été accepté depuis la lecture. */
+    count: number;
+    warned: boolean;
+}
 
 /** Bornes des caches. Un dépassement vide, sans finesse : on recalcule. */
 const LABEL_CACHE_MAX = 20_000;
@@ -212,8 +220,10 @@ export class AudienceIngest {
      * gratuite vaut mieux ici qu'une fenêtre exacte et coûteuse.
      */
     private readonly eventCounts = new Map<string, { from: number; count: number }>();
-    /** Verdict du quota mensuel, par espace : voir `overPlanQuota`. */
-    private readonly planQuota = new Map<number, { at: number; over: boolean }>();
+    /** Le compte mensuel de l'offre, par espace : voir `planUsage`. */
+    private readonly planQuota = new Map<number, PlanUsage>();
+    /** Les relectures en cours : une seule par espace, quel que soit le nombre de vues qui arrivent. */
+    private readonly planReads = new Map<number, Promise<PlanUsage>>();
     /** `siteId:visitorRef` → session ouverte. */
     private readonly sessions = new Map<string, CachedSession>();
 
@@ -266,7 +276,8 @@ export class AudienceIngest {
         if (!originAllowed(site.origins, req.origin, site.platform)) return;
         if (looksLikeBot(req.userAgent)) return;
         if (this.overEventQuota(site, req.ip)) return;
-        if (await this.overPlanQuota(site.workspaceId)) return;
+        const usage = await this.planUsage(site.workspaceId);
+        if (this.planFull(usage, site.workspaceId)) return;
 
         const ua = parseUserAgent(req.userAgent);
 
@@ -288,6 +299,9 @@ export class AudienceIngest {
             const name = event.type === 'event' ? event.name?.trim() || null : null;
             // Un événement nommé sans nom produirait une ligne que rien ne désigne.
             if (event.type === 'event' && !name) continue;
+            // Par événement, pas par requête : un lot ne doit pas enjamber la limite.
+            if (this.planFull(usage, site.workspaceId)) return;
+            usage.count++;
 
             this.queue.push({
                 siteId: site.id,
@@ -499,36 +513,66 @@ export class AudienceIngest {
      * perdre des vues sans qu'on l'ait demandé.
      */
     /**
-     * L'offre du propriétaire de l'espace borne les vues du mois en cours. Lu
-     * dans l'agrégat journalier, jamais dans les événements bruts : une seule
-     * requête indexée, dont le retard vaut au plus un tour de ménage.
+     * L'offre du propriétaire de l'espace borne les vues du mois en cours.
      *
-     * Le verdict est gardé une minute : l'ingestion est la voie la plus chaude
-     * de l'app, elle ne peut pas interroger la base à chaque vue.
+     * La base n'est lue qu'une fois par minute : l'ingestion est la voie la plus
+     * chaude de l'app. Entre deux lectures, chaque événement accepté est compté
+     * ici, sans quoi une petite limite serait enjambée d'autant de vues qu'il en
+     * arrive en une minute. La relecture ne bloque personne : une seule à la
+     * fois par espace, l'ancien compte servant en attendant.
      */
-    private async overPlanQuota(workspaceId: number): Promise<boolean> {
+    private planUsage(workspaceId: number): PlanUsage | Promise<PlanUsage> {
         const cached = this.planQuota.get(workspaceId);
-        if (cached && Date.now() - cached.at < PLAN_QUOTA_TTL_MS) return cached.over;
-        const month = new Date();
-        const fromDay = month.getUTCFullYear() * 10000 + (month.getUTCMonth() + 1) * 100 + 1;
-        let over = false;
-        try {
-            // Le total une fois cette vue écrite : sans le `+ 1`, une offre qui
-            // n'en inclut aucune laisserait passer la première.
-            await this.deps
-                .quotaFor(workspaceId)
-                .assert('events', async (owned) => (await this.deps.repo.eventsSince(owned, fromDay)) + 1);
-        } catch (e) {
-            over = e instanceof FeatureError && e.code === 'quota_exceeded';
-            if (!over) {
-                // Une offre illisible ne doit pas arrêter l'ingestion de tout le monde.
-                this.deps.logger.error({ err: (e as Error).message, workspaceId }, 'Audience: offre illisible');
-            } else if (!cached?.over) {
-                this.deps.logger.warn({ workspaceId }, 'Audience: quota mensuel atteint, ingestion suspendue');
-            }
+        if (cached && Date.now() - cached.at < PLAN_QUOTA_TTL_MS) return cached;
+        let reading = this.planReads.get(workspaceId);
+        if (!reading) {
+            reading = this.readPlanUsage(workspaceId, cached?.warned ?? false).finally(() =>
+                this.planReads.delete(workspaceId)
+            );
+            this.planReads.set(workspaceId, reading);
         }
-        this.planQuota.set(workspaceId, { at: Date.now(), over });
-        return over;
+        // Le compte périmé sert pendant la relecture, et continue de compter : seule
+        // la toute première vue d'un espace attend la base.
+        return cached ?? reading;
+    }
+
+    private async readPlanUsage(workspaceId: number, warned: boolean): Promise<PlanUsage> {
+        const usage: PlanUsage = { at: Date.now(), limit: null, count: 0, warned };
+        try {
+            const quota = this.deps.quotaFor(workspaceId);
+            usage.limit = await quota.limit('events');
+            if (usage.limit !== null) {
+                const now = Math.floor(Date.now() / 1000);
+                const month = new Date(now * 1000);
+                const fromDay = month.getUTCFullYear() * 10000 + (month.getUTCMonth() + 1) * 100 + 1;
+                // `assert` est la seule voie vers les espaces du propriétaire : on y
+                // lit le compte, et le `0` rendu ne lui fait rien refuser.
+                await quota.assert('events', async (owned) => {
+                    usage.count = await this.deps.repo.eventsSince(owned, fromDay, dayKey(now), dayBounds(now).from);
+                    return 0;
+                });
+                // Acceptés mais pas encore écrits : la base ne les compte pas.
+                usage.count += this.queue.filter((queued) => queued.workspaceId === workspaceId).length;
+            }
+        } catch (e) {
+            // Une offre illisible ne doit pas arrêter l'ingestion de tout le monde.
+            usage.limit = null;
+            this.deps.logger.error({ err: (e as Error).message, workspaceId }, 'Audience: offre illisible');
+        }
+        this.planQuota.set(workspaceId, usage);
+        return usage;
+    }
+
+    private planFull(usage: PlanUsage, workspaceId: number): boolean {
+        if (usage.limit === null || usage.count < usage.limit) {
+            usage.warned = false;
+            return false;
+        }
+        if (!usage.warned) {
+            usage.warned = true;
+            this.deps.logger.warn({ workspaceId }, 'Audience: quota mensuel atteint, ingestion suspendue');
+        }
+        return true;
     }
 
     private overEventQuota(site: CachedSite, ip: string): boolean {

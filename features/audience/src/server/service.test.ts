@@ -739,6 +739,8 @@ describe('AudienceIngest : le quota d’événements', () => {
 });
 
 describe('AudienceIngest : les vues de l’offre du compte', () => {
+    const view = (path: string) => request({ events: [{ type: 'view', path }] });
+
     it('n’écrit rien quand l’offre n’en inclut aucune, dès la première', async () => {
         const repo = fakeRepo([site()]);
         const { ingest, flush } = ingestWith(repo, { events: 0 });
@@ -747,13 +749,59 @@ describe('AudienceIngest : les vues de l’offre du compte', () => {
         assert.equal(repo.events.length, 0);
     });
 
-    it('accepte jusqu’à la limite, elle comprise', async () => {
+    it('s’arrête à la limite sans relire la base : elle compte ce qu’elle accepte', async () => {
+        const repo = fakeRepo([site()]);
+        let reads = 0;
+        repo.eventsSince = async () => (reads++, 8);
+        const { ingest, flush } = ingestWith(repo, { events: 10 });
+        for (let i = 0; i < 6; i++) await ingest.accept(view(`/p${i}`));
+        await flush();
+        assert.equal(repo.events.length, 2, 'la neuvième et la dixième');
+        assert.equal(reads, 1);
+    });
+
+    it('ne lit la base qu’une fois quand les vues arrivent ensemble', async () => {
+        const repo = fakeRepo([site()]);
+        let reads = 0;
+        repo.eventsSince = async () => {
+            reads++;
+            await new Promise((resolve) => setImmediate(resolve));
+            return 0;
+        };
+        const { ingest, flush } = ingestWith(repo, { events: 10 });
+        await Promise.all(Array.from({ length: 5 }, (_, i) => ingest.accept(view(`/p${i}`))));
+        await flush();
+        assert.equal(reads, 1);
+        assert.equal(repo.events.length, 5);
+    });
+
+    it('coupe un lot au milieu plutôt que d’enjamber la limite', async () => {
         const repo = fakeRepo([site()]);
         repo.eventsSince = async () => 9;
         const { ingest, flush } = ingestWith(repo, { events: 10 });
-        await ingest.accept(request());
+        await ingest.accept(
+            request({
+                events: [
+                    { type: 'view', path: '/a' },
+                    { type: 'view', path: '/b' },
+                    { type: 'view', path: '/c' }
+                ]
+            })
+        );
         await flush();
         assert.equal(repo.events.length, 1);
+    });
+
+    it('compte le jour en cours dans les événements bruts, que l’agrégat ne connaît pas encore', async () => {
+        const repo = fakeRepo([site()]);
+        const asked: number[][] = [];
+        repo.eventsSince = async (_ids, fromDay, today, todayFrom) => (asked.push([fromDay, today, todayFrom]), 0);
+        const { ingest } = ingestWith(repo, { events: 10 });
+        await ingest.accept(request());
+        const [[fromDay, today, todayFrom]] = asked;
+        assert.equal(fromDay % 100, 1, 'le premier du mois');
+        assert.equal(Math.floor(fromDay / 100), Math.floor(today / 100), 'le mois en cours');
+        assert.equal(todayFrom % 86400, 0, 'le début du jour UTC');
     });
 });
 
