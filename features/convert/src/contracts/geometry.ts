@@ -61,6 +61,31 @@ export function resizeDims(source: Dims, size: SizeValue): Dims {
     };
 }
 
+/** Le rapport entre des dimensions demandées et la zone qu'elles redimensionnent, axe par axe. */
+export interface Scale {
+    x: number;
+    y: number;
+}
+
+/** L'échelle que des dimensions demandent à une zone. Une dimension laissée libre vaut 1. */
+export function scaleOf(size: SizeValue, area: Dims): Scale {
+    return { x: (size.width ?? area.width) / area.width, y: (size.height ?? area.height) / area.height };
+}
+
+/**
+ * Les dimensions qui gardent une échelle sur une autre zone : ce que devient un
+ * redimensionnement quand le recadrage change. Partir de l'échelle, et non des
+ * dimensions précédentes, évite qu'un arrondi s'ajoute à chaque geste. Retomber
+ * sur la zone elle-même vaut « inchangé ».
+ */
+export function sizeAtScale(size: SizeValue, scale: Scale, area: Dims): SizeValue {
+    const width = Math.max(1, Math.round(area.width * scale.x));
+    const height = Math.max(1, Math.round(area.height * scale.y));
+    return width === area.width && height === area.height
+        ? { ...size, width: null, height: null }
+        : { ...size, width, height };
+}
+
 /** Ce que devient une vidéo : recadrée, puis ramenée à la hauteur demandée, en dimensions paires. */
 export function videoDims(source: Dims, crop: CropValue | null, maxHeight: number | null): Dims {
     const base: Dims = cropRect(source, crop) ?? source;

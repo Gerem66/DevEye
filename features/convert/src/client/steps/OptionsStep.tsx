@@ -1,7 +1,8 @@
+import { useRef } from 'react';
 import { Button } from 'deveye-sdk-client';
 
 import type { SizeEstimate } from '../../contracts/estimate';
-import { cropRect } from '../../contracts/geometry';
+import { cropRect, scaleOf, sizeAtScale, type Scale } from '../../contracts/geometry';
 import {
     cropOf,
     defaultOf,
@@ -9,7 +10,9 @@ import {
     isDefault,
     OPTION_SECTIONS,
     resolveOptions,
-    type OptionSpec
+    sizeOf,
+    type OptionSpec,
+    type OptionValue
 } from '../../contracts/options';
 import { OptionControl } from '../controls/OptionControl';
 import { SizeSummary } from '../SizeSummary';
@@ -30,10 +33,26 @@ export function OptionsStep({ wizard, specs, estimate, pending }: OptionsStepPro
     const visible = specs.filter((spec) => isActive(spec, values));
     const dims = state.info?.width && state.info.height ? { width: state.info.width, height: state.info.height } : null;
     const cropped = dims ? (cropRect(dims, cropOf(values, 'crop')) ?? dims) : null;
-    const sections = OPTION_SECTIONS.map((section) => ({
-        ...section,
-        specs: visible.filter((spec) => spec.section === section.id)
-    })).filter((section) => section.specs.length > 0);
+    const sections = OPTION_SECTIONS.map((section) => {
+        const own = visible.filter((spec) => spec.section === section.id);
+        return { ...section, specs: own, touched: own.some((spec) => !isDefault(spec, values[spec.id])) };
+    }).filter((section) => section.specs.length > 0);
+
+    // L'échelle que les dimensions demandées représentent, retenue tant que c'est
+    // le recadrage qui bouge : les dimensions le suivent sans qu'un arrondi
+    // s'ajoute à chaque geste. Dès qu'on les saisit soi-même, elle se relit.
+    const scale = useRef<Scale | null>(null);
+    const change = (spec: OptionSpec, value: OptionValue): void => {
+        wizard.setValue(spec.id, value);
+        if (spec.kind === 'size') scale.current = null;
+        const resize = specs.find((other) => other.kind === 'size');
+        if (spec.kind !== 'crop' || !resize || !dims || !cropped) return;
+        const size = sizeOf(values, resize.id);
+        if (size.width === null && size.height === null) return;
+        scale.current ??= scaleOf(size, cropped);
+        const area = cropRect(dims, cropOf({ [spec.id]: value }, spec.id)) ?? dims;
+        wizard.setValue(resize.id, sizeAtScale(size, scale.current, area));
+    };
 
     return (
         <div className={styles.stepBody}>
@@ -47,15 +66,29 @@ export function OptionsStep({ wizard, specs, estimate, pending }: OptionsStepPro
                 <section
                     key={section.id}
                     className={`${styles.optionSection} ${
-                        section.quiet && section.specs.every((spec) => isDefault(spec, values[spec.id]))
-                            ? styles.optionSectionQuiet
-                            : ''
+                        section.quiet && !section.touched ? styles.optionSectionQuiet : ''
                     }`}
                     aria-labelledby={`convert-${section.id}`}
                 >
-                    <h3 id={`convert-${section.id}`} className={styles.optionSectionTitle}>
-                        {section.label}
-                    </h3>
+                    <div className={styles.optionSectionHead}>
+                        <h3 id={`convert-${section.id}`} className={styles.optionSectionTitle}>
+                            {section.label}
+                        </h3>
+                        {section.quiet && section.touched && (
+                            <button
+                                type='button'
+                                className={styles.sectionReset}
+                                aria-label={`Rétablir les réglages d’origine : ${section.label}`}
+                                title='Rétablir les réglages d’origine'
+                                onClick={() => {
+                                    scale.current = null;
+                                    wizard.forgetValues(section.specs.map((spec) => spec.id));
+                                }}
+                            >
+                                <span className='icon icon-restart' aria-hidden='true' />
+                            </button>
+                        )}
+                    </div>
                     <div className={styles.fields}>
                         {section.specs.map((spec) => (
                             <OptionControl
@@ -64,7 +97,7 @@ export function OptionsStep({ wizard, specs, estimate, pending }: OptionsStepPro
                                 value={values[spec.id] ?? defaultOf(spec)}
                                 sourceDims={dims}
                                 croppedDims={cropped}
-                                onChange={(value) => wizard.setValue(spec.id, value)}
+                                onChange={(value) => change(spec, value)}
                             />
                         ))}
                     </div>

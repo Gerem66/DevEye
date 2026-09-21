@@ -45,7 +45,7 @@ export type OptionSection = 'quality' | 'picture' | 'sound' | 'trim' | 'privacy'
 /**
  * Les rubriques de l'étape « Options », dans l'ordre où elles se présentent.
  * `quiet` : ce qu'on ne touche que rarement s'efface tant qu'on n'y a rien
- * changé, pour laisser l'œil sur l'essentiel.
+ * changé, pour laisser l'œil sur l'essentiel, et offre d'y revenir une fois touché.
  */
 export const OPTION_SECTIONS: readonly { id: OptionSection; label: string; quiet?: boolean }[] = [
     { id: 'quality', label: 'Qualité et poids' },

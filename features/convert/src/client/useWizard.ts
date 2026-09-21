@@ -33,6 +33,7 @@ type Action =
     | { type: 'source'; sourceId: string }
     | { type: 'target'; targetId: string }
     | { type: 'value'; id: string; value: OptionValue }
+    | { type: 'forget'; ids: readonly string[] }
     | { type: 'reset' };
 
 const INITIAL: WizardState = {
@@ -93,6 +94,12 @@ function reduce(state: WizardState, action: Action): WizardState {
             return { ...state, targetId: action.targetId };
         case 'value':
             return { ...state, values: { ...state.values, [action.id]: action.value } };
+        case 'forget':
+            // Oublier un réglage le rend à son défaut, y compris à celui que le fichier ajuste.
+            return {
+                ...state,
+                values: Object.fromEntries(Object.entries(state.values).filter(([id]) => !action.ids.includes(id)))
+            };
         case 'reset':
             return INITIAL;
     }
@@ -110,6 +117,7 @@ export function useWizard() {
         setSource: useCallback((sourceId: string) => dispatch({ type: 'source', sourceId }), []),
         setTarget: useCallback((targetId: string) => dispatch({ type: 'target', targetId }), []),
         setValue: useCallback((id: string, value: OptionValue) => dispatch({ type: 'value', id, value }), []),
+        forgetValues: useCallback((ids: readonly string[]) => dispatch({ type: 'forget', ids }), []),
         reset: useCallback(() => dispatch({ type: 'reset' }), [])
     };
 }

@@ -529,6 +529,40 @@
     filter: none;
 }
 
+.optionSectionHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    /* La hauteur du bouton, qu'il soit là ou non : la rubrique ne bouge pas quand il apparaît. */
+    min-height: 24px;
+}
+
+.sectionReset {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: var(--radius-pill);
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition:
+        color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.sectionReset .icon {
+    width: 14px;
+}
+
+.sectionReset:hover,
+.sectionReset:focus-visible {
+    background: var(--surface-subtle);
+    color: var(--text-primary);
+}
+
 .optionSectionTitle {
     margin: 0;
     font-size: 0.78rem;

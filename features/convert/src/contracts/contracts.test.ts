@@ -3,8 +3,8 @@ import { describe, it } from 'node:test';
 
 import { CATALOGUE, detectSource, outputName, targetOf, targetsFor } from './catalogue';
 import { estimateSize, minTargetBytes, minVideoBitrate, videoBitrateForTarget, type MediaInfo } from './estimate';
-import { cropRect, fitInside, imageDims, keptSeconds, resizeDims, videoDims } from './geometry';
-import { isActive, isDefault, resolveOptions, type OptionValues } from './options';
+import { cropRect, fitInside, imageDims, keptSeconds, resizeDims, scaleOf, sizeAtScale, videoDims } from './geometry';
+import { isActive, isDefault, resolveOptions, type OptionValues, type SizeValue } from './options';
 import { convertCurrency, convertUnit, UNIT_CATEGORIES } from './units';
 
 /**
@@ -171,6 +171,27 @@ describe('géométrie', () => {
             height: 1200
         });
         assert.deepEqual(resizeDims(source, { width: null, height: null, keepRatio: false }), source);
+    });
+
+    it('garde l’échelle d’un redimensionnement quand la zone recadrée change, sans dérive', () => {
+        const half = { width: 2000, height: 1500, keepRatio: true };
+        const scale = scaleOf(half, { width: 4000, height: 3000 });
+        assert.deepEqual(scale, { x: 0.5, y: 0.5 });
+        assert.deepEqual(sizeAtScale(half, scale, { width: 3000, height: 3000 }), { ...half, width: 1500 });
+        // Mille petits gestes, puis retour à la zone de départ : exactement les dimensions de départ.
+        let size: SizeValue = half;
+        for (let width = 3999; width > 3000; width--) size = sizeAtScale(size, scale, { width, height: 3000 });
+        assert.deepEqual(sizeAtScale(size, scale, { width: 4000, height: 3000 }), half);
+    });
+
+    it('rend « inchangé » quand les dimensions retombent sur la zone', () => {
+        const full = { width: 4000, height: 3000, keepRatio: true };
+        const scale = scaleOf(full, { width: 4000, height: 3000 });
+        assert.deepEqual(sizeAtScale(full, scale, { width: 2000, height: 1000 }), {
+            width: null,
+            height: null,
+            keepRatio: true
+        });
     });
 
     it('recadre avant de redimensionner', () => {

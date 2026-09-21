@@ -48,6 +48,7 @@ declare const styles: {
     readonly formatField: string;
     readonly formats: string;
     readonly header: string;
+    readonly icon: string;
     readonly job: string;
     readonly jobActions: string;
     readonly jobError: string;
@@ -61,6 +62,7 @@ declare const styles: {
     readonly noPreview: string;
     readonly note: string;
     readonly optionSection: string;
+    readonly optionSectionHead: string;
     readonly optionSectionQuiet: string;
     readonly optionSectionTitle: string;
     readonly pairField: string;
@@ -77,6 +79,7 @@ declare const styles: {
     readonly recapBox: string;
     readonly result: string;
     readonly root: string;
+    readonly sectionReset: string;
     readonly sectionTitle: string;
     readonly sizeRow: string;
     readonly sizes: string;

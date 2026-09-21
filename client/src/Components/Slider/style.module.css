@@ -27,7 +27,8 @@
 
 /* Le centre de la poignée ne parcourt pas toute la largeur : il s'arrête à une
    demi-poignée de chaque bord. Le repère suit la même course, sans quoi il
-   tomberait à côté de la valeur qu'il désigne. */
+   tomberait à côté de la valeur qu'il désigne. La poignée native mesure 16 px
+   sous Chromium et WebKit, 20 px sous Firefox. */
 .indicator {
     --thumb: 16px;
     position: absolute;
@@ -40,6 +41,12 @@
     background: var(--text-muted);
     transform: translate(-50%, -50%);
     pointer-events: none;
+}
+
+@supports (-moz-appearance: none) {
+    .indicator {
+        --thumb: 20px;
+    }
 }
 
 .input {
