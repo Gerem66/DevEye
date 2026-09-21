@@ -3,8 +3,7 @@ import { Button, formatBytesFr } from 'deveye-sdk-client';
 
 import { kindOf, sourceOf } from '../contracts/catalogue';
 import type { ConvertFamily } from '../contracts/domain';
-import { clampCrop } from '../contracts/geometry';
-import { cropOf, type OptionValues } from '../contracts/options';
+import { cropOf, sizeOf, type OptionValues } from '../contracts/options';
 import { Dropzone } from './Dropzone';
 import { formatDuration, KIND_NOUNS } from './format';
 import { Preview } from './Preview';
@@ -65,7 +64,8 @@ export function FilePane({ wizard, family, values, sample, locked }: FilePanePro
                 kind={state.kind}
                 isPdf={state.sourceId !== null && sourceOf(state.kind, state.sourceId)?.group === 'pdf'}
                 info={info}
-                crop={dims ? clampCrop(dims, cropOf(values, 'crop')) : null}
+                crop={cropOf(values, 'crop')}
+                resize={sizeOf(values, 'resize')}
                 sample={state.view === 'format' ? null : sample}
             />
             <div className={styles.fileBar}>

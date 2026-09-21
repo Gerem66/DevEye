@@ -2,7 +2,8 @@ import { Button } from 'deveye-sdk-client';
 
 import type { TargetFormat } from '../../contracts/catalogue';
 import type { SizeEstimate } from '../../contracts/estimate';
-import { defaultOf, isActive, OPTION_SECTIONS, resolveOptions } from '../../contracts/options';
+import { cropRect } from '../../contracts/geometry';
+import { cropOf, defaultOf, isActive, OPTION_SECTIONS, resolveOptions } from '../../contracts/options';
 import { OptionControl } from '../controls/OptionControl';
 import { SizeSummary } from '../SizeSummary';
 import styles from '../style.module.css';
@@ -19,6 +20,7 @@ export function OptionsStep({ wizard, target, estimate }: OptionsStepProps) {
     const values = resolveOptions(target.options, state.values);
     const visible = target.options.filter((spec) => isActive(spec, values));
     const dims = state.info?.width && state.info.height ? { width: state.info.width, height: state.info.height } : null;
+    const cropped = dims ? (cropRect(dims, cropOf(values, 'crop')) ?? dims) : null;
     const sections = OPTION_SECTIONS.map((section) => ({
         ...section,
         specs: visible.filter((spec) => spec.section === section.id)
@@ -44,6 +46,7 @@ export function OptionsStep({ wizard, target, estimate }: OptionsStepProps) {
                                 spec={spec}
                                 value={values[spec.id] ?? defaultOf(spec)}
                                 sourceDims={dims}
+                                croppedDims={cropped}
                                 onChange={(value) => wizard.setValue(spec.id, value)}
                             />
                         ))}

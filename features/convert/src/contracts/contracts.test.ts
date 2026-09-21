@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import { CATALOGUE, detectSource, outputName, targetOf, targetsFor } from './catalogue';
 import { estimateSize, minTargetBytes, minVideoBitrate, videoBitrateForTarget, type MediaInfo } from './estimate';
-import { clampCrop, fitInside, imageDims, keptSeconds, videoDims } from './geometry';
+import { cropRect, fitInside, imageDims, keptSeconds, resizeDims, videoDims } from './geometry';
 import { isActive, resolveOptions, type OptionValues } from './options';
 import { convertCurrency, convertUnit, UNIT_CATEGORIES } from './units';
 
@@ -108,33 +108,74 @@ describe('réglages', () => {
     });
 
     it('refuse un recadrage mal formé', () => {
-        assert.equal(resolveOptions(specs, { crop: { x: -1, y: 0, width: 10, height: 10 } }).crop, null);
+        assert.equal(resolveOptions(specs, { crop: { top: -1, right: 0, bottom: 0, left: 0 } }).crop, null);
+        const rectangle = { crop: { x: 0, y: 0, width: 10, height: 10 } } as unknown as OptionValues;
+        assert.equal(resolveOptions(specs, rectangle).crop, null, 'un rectangle n’est pas des marges');
     });
 });
 
 describe('géométrie', () => {
-    it('ramène un recadrage dans l’image, et l’ignore quand il la couvre', () => {
-        assert.deepEqual(clampCrop({ width: 100, height: 100 }, { x: 90, y: 0, width: 50, height: 50 }), {
-            x: 90,
-            y: 0,
-            width: 10,
-            height: 50
+    const SOURCE = { width: 100, height: 80 };
+
+    it('tire des marges la zone gardée, et rien quand elles ne retirent rien', () => {
+        assert.deepEqual(cropRect(SOURCE, { top: 10, right: 20, bottom: 30, left: 5 }), {
+            x: 5,
+            y: 10,
+            width: 75,
+            height: 40
         });
-        assert.equal(clampCrop({ width: 100, height: 100 }, { x: 0, y: 0, width: 100, height: 100 }), null);
+        assert.equal(cropRect(SOURCE, { top: 0, right: 0, bottom: 0, left: 0 }), null);
+        assert.equal(cropRect(SOURCE, null), null);
     });
 
-    it('n’agrandit jamais', () => {
+    it('laisse toujours deux pixels, quelles que soient les marges', () => {
+        assert.deepEqual(cropRect(SOURCE, { top: 0, right: 500, bottom: 0, left: 90 }), {
+            x: 90,
+            y: 0,
+            width: 2,
+            height: 80
+        });
+        assert.deepEqual(cropRect(SOURCE, { top: 999, right: 0, bottom: 999, left: 0 })?.height, 2);
+    });
+
+    it('garde les proportions dans un cadre, ou étire aux dimensions exactes', () => {
+        const source = { width: 800, height: 600 };
+        assert.deepEqual(resizeDims(source, { width: 400, height: null, keepRatio: true }), {
+            width: 400,
+            height: 300
+        });
+        assert.deepEqual(resizeDims(source, { width: 400, height: 400, keepRatio: true }), { width: 400, height: 300 });
+        assert.deepEqual(resizeDims(source, { width: 400, height: 400, keepRatio: false }), {
+            width: 400,
+            height: 400
+        });
+        assert.deepEqual(resizeDims(source, { width: null, height: 100, keepRatio: false }), {
+            width: 800,
+            height: 100
+        });
+        assert.deepEqual(resizeDims(source, { width: 1600, height: null, keepRatio: true }), {
+            width: 1600,
+            height: 1200
+        });
+        assert.deepEqual(resizeDims(source, { width: null, height: null, keepRatio: false }), source);
+    });
+
+    it('recadre avant de redimensionner', () => {
+        assert.deepEqual(
+            imageDims(
+                { width: 800, height: 600 },
+                { top: 0, right: 200, bottom: 0, left: 0 },
+                { width: 300, height: null, keepRatio: true }
+            ),
+            { width: 300, height: 300 }
+        );
+    });
+
+    it('n’agrandit jamais une vidéo, et lui rend des dimensions paires', () => {
         assert.deepEqual(fitInside({ width: 800, height: 600 }, { width: 4000, height: null }), {
             width: 800,
             height: 600
         });
-        assert.deepEqual(imageDims({ width: 800, height: 600 }, null, { width: 400, height: 400 }), {
-            width: 400,
-            height: 300
-        });
-    });
-
-    it('rend à une vidéo des dimensions paires', () => {
         const dims = videoDims({ width: 1921, height: 1081 }, null, 721);
         assert.equal(dims.width % 2, 0);
         assert.equal(dims.height % 2, 0);

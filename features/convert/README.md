@@ -63,6 +63,10 @@ ticket, et quitte le disque à l'échéance. L'original part dès la conversion 
   chaque entretien et à la descente : un stockage vidé donne des travaux en échec
   `file_lost`, jamais des résultats « prêts » introuvables. Un stockage
   injoignable, lui, ne déclare rien de perdu.
+- **Un recadrage est quatre marges, pas un rectangle** (`top`, `right`, `bottom`,
+  `left`). Elles se règlent sans connaître les dimensions du fichier, que le
+  navigateur ne lit pas toujours, et c'est le serveur qui les applique aux
+  vraies (`cropRect`), en laissant toujours deux pixels par côté.
 - **L'aperçu ne quitte pas le poste.** Image, vidéo, son et PDF se lisent dans le
   navigateur par une adresse `blob:` (d'où `media-src` et `frame-src` dans la CSP
   de l'app) ; la comparaison avant / après réutilise l'essai d'encodage qui sert

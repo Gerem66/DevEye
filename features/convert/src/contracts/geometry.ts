@@ -6,23 +6,36 @@ export interface Dims {
     height: number;
 }
 
-/** Le recadrage demandé, ramené dans l'image. `null` s'il n'en reste rien. */
-export function clampCrop(source: Dims, crop: CropValue | null): CropValue | null {
+/** Une zone de l'image, origine en haut à gauche. */
+export interface Rect extends Dims {
+    x: number;
+    y: number;
+}
+
+/** Ce qu'un recadrage laisse au moins, par côté : un codec refuse une image d'un pixel. */
+const MIN_KEPT = 2;
+
+/** Deux marges opposées, ramenées à ce que le côté peut perdre. La première l'emporte. */
+function clampPair(near: number, far: number, length: number): [number, number] {
+    const room = Math.max(0, length - MIN_KEPT);
+    const first = Math.min(near, room);
+    return [first, Math.min(far, room - first)];
+}
+
+/** La zone que des marges laissent. `null` quand elles ne retirent rien. */
+export function cropRect(source: Dims, crop: CropValue | null): Rect | null {
     if (!crop) return null;
-    const x = Math.min(crop.x, source.width - 1);
-    const y = Math.min(crop.y, source.height - 1);
-    const width = Math.min(crop.width, source.width - x);
-    const height = Math.min(crop.height, source.height - y);
-    if (width < 2 || height < 2) return null;
-    if (x === 0 && y === 0 && width === source.width && height === source.height) return null;
-    return { x, y, width, height };
+    const [left, right] = clampPair(crop.left, crop.right, source.width);
+    const [top, bottom] = clampPair(crop.top, crop.bottom, source.height);
+    if (left + right + top + bottom === 0) return null;
+    return { x: left, y: top, width: source.width - left - right, height: source.height - top - bottom };
 }
 
 /** Un codec vidéo n'accepte que des dimensions paires. */
 const even = (n: number): number => Math.max(2, Math.round(n / 2) * 2);
 
 /** Tenir dans un cadre en gardant les proportions, sans jamais agrandir. */
-export function fitInside(source: Dims, box: SizeValue): Dims {
+export function fitInside(source: Dims, box: { width: number | null; height: number | null }): Dims {
     const ratio = Math.min(box.width ? box.width / source.width : 1, box.height ? box.height / source.height : 1, 1);
     return {
         width: Math.max(1, Math.round(source.width * ratio)),
@@ -30,18 +43,34 @@ export function fitInside(source: Dims, box: SizeValue): Dims {
     };
 }
 
+/**
+ * Les dimensions demandées pour une image. Proportions gardées, elle tient dans
+ * le cadre donné (une seule dimension suffit à le fixer) ; sinon elle prend
+ * exactement celles-ci. Agrandir est permis : c'est un choix explicite.
+ */
+export function resizeDims(source: Dims, size: SizeValue): Dims {
+    if (size.width === null && size.height === null) return source;
+    if (!size.keepRatio) return { width: size.width ?? source.width, height: size.height ?? source.height };
+    const scale = Math.min(
+        size.width ? size.width / source.width : Infinity,
+        size.height ? size.height / source.height : Infinity
+    );
+    return {
+        width: Math.max(1, Math.round(source.width * scale)),
+        height: Math.max(1, Math.round(source.height * scale))
+    };
+}
+
 /** Ce que devient une vidéo : recadrée, puis ramenée à la hauteur demandée, en dimensions paires. */
 export function videoDims(source: Dims, crop: CropValue | null, maxHeight: number | null): Dims {
-    const cropped = clampCrop(source, crop);
-    const base: Dims = cropped ? { width: cropped.width, height: cropped.height } : source;
+    const base: Dims = cropRect(source, crop) ?? source;
     const fitted = maxHeight ? fitInside(base, { width: null, height: maxHeight }) : base;
     return { width: even(fitted.width), height: even(fitted.height) };
 }
 
-/** Ce que devient une image : recadrée, puis ramenée dans le cadre demandé. */
-export function imageDims(source: Dims, crop: CropValue | null, box: SizeValue): Dims {
-    const cropped = clampCrop(source, crop);
-    return fitInside(cropped ? { width: cropped.width, height: cropped.height } : source, box);
+/** Ce que devient une image : recadrée, puis mise aux dimensions demandées. */
+export function imageDims(source: Dims, crop: CropValue | null, size: SizeValue): Dims {
+    return resizeDims(cropRect(source, crop) ?? source, size);
 }
 
 /** La durée gardée, en secondes, une fois le passage découpé. */

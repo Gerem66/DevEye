@@ -55,12 +55,13 @@ declare const styles: {
     readonly jobMeta: string;
     readonly jobName: string;
     readonly jobs: string;
+    readonly lock: string;
+    readonly lockOn: string;
     readonly noPreview: string;
     readonly note: string;
     readonly optionSection: string;
     readonly optionSectionTitle: string;
     readonly pairField: string;
-    readonly pairRow: string;
     readonly previewAudio: string;
     readonly previewFrame: string;
     readonly previewImage: string;
@@ -74,6 +75,7 @@ declare const styles: {
     readonly root: string;
     readonly sectionTitle: string;
     readonly sending: string;
+    readonly sizeRow: string;
     readonly sizes: string;
     readonly sizesGain: string;
     readonly sizesLoss: string;
@@ -99,5 +101,7 @@ declare const styles: {
     readonly widget: string;
     readonly widgetReady: string;
     readonly workbench: string;
+    readonly zoomButton: string;
+    readonly zoomStage: string;
 };
 export = styles;

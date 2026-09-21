@@ -1,5 +1,5 @@
 import type { SourceFormat } from '../../contracts/catalogue';
-import { clampCrop, imageDims } from '../../contracts/geometry';
+import { cropRect, imageDims } from '../../contracts/geometry';
 import { cropOf, flag, num, sizeOf } from '../../contracts/options';
 import { env } from '../env';
 import { captureTool, ConvertFailure, runTool } from '../spawn';
@@ -92,8 +92,8 @@ export function imageArgs(job: PlanInput): string[] {
     const recipe = job.target.recipe;
     if (recipe.engine !== 'image') throw new Error('Recette image attendue');
     const source = { width: job.probe.width ?? 0, height: job.probe.height ?? 0 };
-    const crop = clampCrop(source, cropOf(job.options, 'crop'));
-    const dims = imageDims(source, crop, sizeOf(job.options, 'resize'));
+    const crop = cropRect(source, cropOf(job.options, 'crop'));
+    const dims = imageDims(source, cropOf(job.options, 'crop'), sizeOf(job.options, 'resize'));
     const resized = dims.width !== (crop?.width ?? source.width) || dims.height !== (crop?.height ?? source.height);
     return [
         ...LIMITS,
@@ -102,7 +102,8 @@ export function imageArgs(job: PlanInput): string[] {
         // que ses informations cachées, qui portaient l'orientation, sont retirées.
         '-auto-orient',
         ...(crop ? ['-crop', `${crop.width}x${crop.height}+${crop.x}+${crop.y}`, '+repage'] : []),
-        ...(resized ? ['-resize', `${dims.width}x${dims.height}`] : []),
+        // `!` : les dimensions sont déjà calculées, ImageMagick n'a plus à les ajuster.
+        ...(resized ? ['-resize', `${dims.width}x${dims.height}!`] : []),
         ...(flag(job.options, 'stripMetadata') ? ['-strip'] : []),
         ...(recipe.alpha ? [] : ['-background', 'white', '-alpha', 'remove', '-alpha', 'off']),
         ...(recipe.lossy ? ['-quality', String(num(job.options, 'quality') ?? 82)] : []),

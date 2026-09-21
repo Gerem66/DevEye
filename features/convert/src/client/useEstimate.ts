@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import type { TargetFormat } from '../contracts/catalogue';
 import { estimateSize, type MediaInfo, type SizeEstimate } from '../contracts/estimate';
-import { clampCrop, imageDims } from '../contracts/geometry';
+import { cropRect, imageDims } from '../contracts/geometry';
 import { cropOf, num, sizeOf, type OptionValues } from '../contracts/options';
 
 /** Les formats que le navigateur sait encoder lui-même, et donc peser pour de vrai. */
@@ -42,8 +42,8 @@ export function useEstimate(
     useEffect(() => {
         if (!key || !type || !file || !info?.width || !info.height) return;
         const source = { width: info.width, height: info.height };
-        const crop = clampCrop(source, cropOf(values, 'crop'));
-        const dims = imageDims(source, crop, sizeOf(values, 'resize'));
+        const crop = cropRect(source, cropOf(values, 'crop'));
+        const dims = imageDims(source, cropOf(values, 'crop'), sizeOf(values, 'resize'));
         if (dims.width * dims.height > CANVAS_MAX_PIXELS) return;
 
         let cancelled = false;

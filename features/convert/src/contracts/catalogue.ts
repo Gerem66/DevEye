@@ -307,8 +307,8 @@ const IMAGE_SHAPE: readonly OptionSpec[] = [
         kind: 'size',
         id: 'resize',
         section: 'picture',
-        label: 'Dimensions maximales',
-        hint: 'L’image tient dans ce cadre en gardant ses proportions. Elle n’est jamais agrandie.'
+        label: 'Dimensions',
+        hint: 'Cadenas fermé, l’image garde ses proportions. Ouvert, elle est étirée aux dimensions exactes.'
     },
     { kind: 'crop', id: 'crop', section: 'picture', label: 'Recadrer' },
     {

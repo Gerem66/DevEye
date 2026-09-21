@@ -8,16 +8,22 @@ import { z } from 'zod';
 
 export const sizeValueSchema = z.object({
     width: z.number().int().positive().nullable(),
-    height: z.number().int().positive().nullable()
+    height: z.number().int().positive().nullable(),
+    /** Vrai : l'image tient dans ces dimensions sans se déformer. Faux : elle est étirée pour les remplir exactement. */
+    keepRatio: z.boolean().default(true)
 });
 export type SizeValue = z.infer<typeof sizeValueSchema>;
 
-/** En pixels de la source, origine en haut à gauche. */
+/**
+ * Ce qu'on retire de chaque bord, en pixels de la source. Des marges et non un
+ * rectangle : elles se règlent sans connaître les dimensions du fichier, que le
+ * navigateur ne sait pas toujours lire, et le serveur les applique aux vraies.
+ */
 export const cropValueSchema = z.object({
-    x: z.number().int().nonnegative(),
-    y: z.number().int().nonnegative(),
-    width: z.number().int().positive(),
-    height: z.number().int().positive()
+    top: z.number().int().nonnegative(),
+    right: z.number().int().nonnegative(),
+    bottom: z.number().int().nonnegative(),
+    left: z.number().int().nonnegative()
 });
 export type CropValue = z.infer<typeof cropValueSchema>;
 
@@ -75,13 +81,13 @@ export type OptionSpec =
     | (OptionBase & { kind: 'toggle'; default: boolean })
     /** `null` : laissé tel quel. */
     | (OptionBase & { kind: 'number'; min: number; max: number; step: number; unit?: string })
-    /** Largeur et hauteur maximales, proportions toujours gardées. `null` : inchangé. */
+    /** Les dimensions du résultat, proportions gardées ou non. `null` : inchangé. */
     | (OptionBase & { kind: 'size' })
     | (OptionBase & { kind: 'crop' })
     /** Une taille de fichier, en octets. */
     | (OptionBase & { kind: 'bytes'; default: number });
 
-const EMPTY_SIZE: SizeValue = { width: null, height: null };
+export const EMPTY_SIZE: SizeValue = { width: null, height: null, keepRatio: true };
 
 export function defaultOf(spec: OptionSpec): OptionValue {
     switch (spec.kind) {

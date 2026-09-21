@@ -52,7 +52,7 @@ describe('plan vidéo', () => {
                 audioBitrate: 96,
                 trimStart: 10,
                 trimEnd: 40,
-                crop: { x: 0, y: 140, width: 1920, height: 800 }
+                crop: { top: 140, right: 0, bottom: 140, left: 0 }
             })
         );
         assert.equal(seconds, 30);
@@ -211,13 +211,13 @@ describe('arguments d’image', () => {
 
     it('impose le codeur, redresse avant tout, aplatit la transparence vers un format qui n’en a pas', () => {
         const args = imageArgs(
-            plan('image', 'png', 'jpg', { quality: 70, resize: { width: 2000, height: null } }, IMAGE)
+            plan('image', 'png', 'jpg', { quality: 70, resize: { width: 2000, height: null, keepRatio: true } }, IMAGE)
         );
         assert.deepEqual(args.slice(args.indexOf(`PNG:${IN}[0]`)), [
             `PNG:${IN}[0]`,
             '-auto-orient',
             '-resize',
-            '2000x1500',
+            '2000x1500!',
             '-strip',
             '-background',
             'white',

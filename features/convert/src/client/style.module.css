@@ -1,7 +1,9 @@
 .root {
-    /* La hauteur de l'aperçu, commune à l'image, à la vidéo et au PDF : les
-       étapes ne font pas sauter la colonne du fichier. */
-    --stage-max-h: 420px;
+    /* Le cadre de l'aperçu a une hauteur de repos, commune au dépôt, à l'image,
+       à la vidéo et au PDF : les étapes ne font pas sauter la colonne. Une image
+       haute peut le grandir, jusqu'à un plafond qui tient dans la fenêtre. */
+    --stage-min-h: 420px;
+    --stage-max-h: max(var(--stage-min-h), min(72vh, 820px));
     display: flex;
     flex-direction: column;
     gap: var(--space-lg);
@@ -142,6 +144,8 @@
 }
 
 .filePane {
+    /* À droite à l'écran, en premier dans le document : sur une colonne, le fichier vient avant ses réglages. */
+    order: 2;
     position: sticky;
     top: 0;
     display: flex;
@@ -202,7 +206,7 @@
 }
 
 .dropzoneFill {
-    min-height: var(--stage-max-h);
+    min-height: var(--stage-min-h);
 }
 
 .dropzoneTitle {
@@ -217,9 +221,10 @@
 
 /* Aperçu */
 .previewFrame {
+    position: relative;
     display: grid;
     place-items: center;
-    min-height: var(--stage-max-h);
+    min-height: var(--stage-min-h);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-lg);
     background: var(--surface-subtle);
@@ -230,7 +235,7 @@
    largeur se déduit de la hauteur permise, jamais l'inverse. */
 .stage {
     position: relative;
-    width: min(100%, calc(var(--stage-max-h) * var(--ratio)));
+    width: min(100%, calc(var(--stage-max-h) * var(--ratio)), var(--natural-w, 100%));
     aspect-ratio: var(--ratio);
     overflow: hidden;
 }
@@ -279,6 +284,35 @@
 
 .noPreview p {
     margin: 0;
+}
+
+.zoomButton {
+    position: absolute;
+    right: var(--space-sm);
+    bottom: var(--space-sm);
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--glass-border-strong);
+    border-radius: var(--radius-pill);
+    background: var(--surface-popup-solid);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: border-color var(--transition-fast);
+}
+
+.zoomButton:hover,
+.zoomButton:focus-visible {
+    border-color: var(--accent);
+}
+
+/* La vue agrandie vit dans un dialogue, hors de `.root` : elle pose sa propre hauteur. */
+.zoomStage {
+    --stage-max-h: calc(100vh - 9rem);
+    display: grid;
+    place-items: center;
+    min-height: min(60vh, var(--stage-max-h));
 }
 
 /* Avant / après */
@@ -523,11 +557,43 @@
     color: var(--text-muted);
 }
 
-.pairRow,
 .cropGrid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-md);
+}
+
+.sizeRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: end;
     gap: var(--space-sm);
+}
+
+.lock {
+    display: grid;
+    place-items: center;
+    width: calc(2.25rem + 2px);
+    height: calc(2.25rem + 2px);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    background: var(--input-bg);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition:
+        border-color var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.lock:hover,
+.lock:focus-visible {
+    border-color: var(--input-focus);
+}
+
+.lockOn {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+    color: var(--accent);
 }
 
 .pairField {
@@ -830,7 +896,8 @@
 
 @media (max-width: 900px) {
     .root {
-        --stage-max-h: 280px;
+        --stage-min-h: 280px;
+        --stage-max-h: max(var(--stage-min-h), 60vh);
     }
 
     .workbench {
@@ -839,6 +906,7 @@
     }
 
     .filePane {
+        order: 0;
         position: static;
     }
 }

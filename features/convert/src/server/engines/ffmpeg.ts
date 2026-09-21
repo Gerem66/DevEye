@@ -1,6 +1,6 @@
 import type { SourceFormat } from '../../contracts/catalogue';
 import { minTargetBytes, minVideoBitrate, videoBitrateForTarget } from '../../contracts/estimate';
-import { clampCrop, keptSeconds, videoDims } from '../../contracts/geometry';
+import { cropRect, keptSeconds, videoDims } from '../../contracts/geometry';
 import { cropOf, flag, num, str } from '../../contracts/options';
 import { formatBytes } from '../_shared';
 import { env } from '../env';
@@ -126,9 +126,13 @@ export function videoPlan(job: PlanInput): FfmpegPlan {
     const source = requireVideo(job);
     const seconds = keptSeconds(job.probe.durationMs ?? 0, num(job.options, 'trimStart'), num(job.options, 'trimEnd'));
 
-    const crop = clampCrop(source, cropOf(job.options, 'crop'));
+    const crop = cropRect(source, cropOf(job.options, 'crop'));
     const heightChoice = str(job.options, 'height');
-    const dims = videoDims(source, crop, heightChoice && heightChoice !== 'source' ? Number(heightChoice) : null);
+    const dims = videoDims(
+        source,
+        cropOf(job.options, 'crop'),
+        heightChoice && heightChoice !== 'source' ? Number(heightChoice) : null
+    );
     const filters: string[] = [];
     if (crop) filters.push(`crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}`);
     if (dims.width !== (crop?.width ?? source.width) || dims.height !== (crop?.height ?? source.height)) {
@@ -235,7 +239,7 @@ export function audioPlan(job: PlanInput): FfmpegPlan {
 export function gifPlan(job: PlanInput): FfmpegPlan {
     const source = requireVideo(job);
     const seconds = keptSeconds(job.probe.durationMs ?? 0, num(job.options, 'trimStart'), num(job.options, 'trimEnd'));
-    const crop = clampCrop(source, cropOf(job.options, 'crop'));
+    const crop = cropRect(source, cropOf(job.options, 'crop'));
     const width = Math.min(num(job.options, 'gifWidth') ?? 480, crop?.width ?? source.width);
     const chain = [
         ...(crop ? [`crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}`] : []),

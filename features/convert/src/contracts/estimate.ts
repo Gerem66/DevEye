@@ -1,5 +1,5 @@
 import type { TargetFormat } from './catalogue';
-import { imageDims, keptSeconds, videoDims } from './geometry';
+import { cropRect, imageDims, keptSeconds, videoDims } from './geometry';
 import { cropOf, flag, num, sizeOf, str, type OptionValues } from './options';
 
 /**
@@ -92,10 +92,8 @@ export function estimateSize(target: TargetFormat, values: OptionValues, info: M
         case 'gif': {
             if (!info.durationMs || !info.width || !info.height) return null;
             const seconds = keptSeconds(info.durationMs, num(values, 'trimStart'), num(values, 'trimEnd'));
-            const crop = cropOf(values, 'crop');
-            const source = crop
-                ? { width: crop.width, height: crop.height }
-                : { width: info.width, height: info.height };
+            const full = { width: info.width, height: info.height };
+            const source = cropRect(full, cropOf(values, 'crop')) ?? full;
             const width = Math.min(num(values, 'gifWidth') ?? 480, source.width);
             const height = (width * source.height) / source.width;
             const frames = seconds * (num(values, 'gifFps') ?? 12);

@@ -1,7 +1,13 @@
 import { SegmentedControl, SelectInput, Slider, Switch } from 'deveye-sdk-client';
 
 import type { Dims } from '../../contracts/geometry';
-import { cropValueSchema, sizeValueSchema, type OptionSpec, type OptionValue } from '../../contracts/options';
+import {
+    cropValueSchema,
+    EMPTY_SIZE,
+    sizeValueSchema,
+    type OptionSpec,
+    type OptionValue
+} from '../../contracts/options';
 import styles from '../style.module.css';
 import { BytesField } from './BytesField';
 import { CropField } from './CropField';
@@ -15,6 +21,8 @@ interface OptionControlProps {
     spec: OptionSpec;
     value: OptionValue;
     sourceDims: Dims | null;
+    /** Les dimensions une fois le recadrage en cours appliqué : le point de départ d'un redimensionnement. */
+    croppedDims: Dims | null;
     onChange: (value: OptionValue) => void;
 }
 
@@ -26,7 +34,7 @@ interface OptionControlProps {
  * tomber sur les mêmes lignes ; seul l'interrupteur se range à droite de son
  * intitulé, comme partout ailleurs dans l'app.
  */
-export function OptionControl({ spec, value, sourceDims, onChange }: OptionControlProps) {
+export function OptionControl({ spec, value, sourceDims, croppedDims, onChange }: OptionControlProps) {
     const width = spec.half ? styles.fieldHalf : styles.fieldFull;
 
     if (spec.kind === 'slider') {
@@ -104,7 +112,8 @@ export function OptionControl({ spec, value, sourceDims, onChange }: OptionContr
                 const parsed = sizeValueSchema.safeParse(value);
                 return (
                     <SizeField
-                        value={parsed.success ? parsed.data : { width: null, height: null }}
+                        value={parsed.success ? parsed.data : EMPTY_SIZE}
+                        natural={croppedDims}
                         onChange={onChange}
                     />
                 );
