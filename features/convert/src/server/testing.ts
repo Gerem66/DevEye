@@ -61,6 +61,20 @@ export function memoryRepo(): MemoryRepo {
                     .filter((r) => r.workspace_id === workspaceId && holding.has(r.phase))
                     .reduce((sum, r) => sum + Number(r.phase === 'done' ? (r.output_bytes ?? 0) : r.input_bytes), 0)
             ),
+        openJobs: (workspaceIds) =>
+            Promise.resolve(
+                rows.filter(
+                    (r) =>
+                        workspaceIds.includes(r.workspace_id) &&
+                        ['awaiting_upload', 'uploading', 'queued', 'running'].includes(r.phase)
+                ).length
+            ),
+        resultBytes: (workspaceIds) =>
+            Promise.resolve(
+                rows
+                    .filter((r) => workspaceIds.includes(r.workspace_id) && r.phase === 'done')
+                    .reduce((sum, r) => sum + Number(r.output_bytes ?? 0), 0)
+            ),
         claimForUpload(id, workspaceId) {
             const row = byId(id);
             if (!row || row.workspace_id !== workspaceId || row.phase !== 'awaiting_upload')

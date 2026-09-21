@@ -103,6 +103,45 @@ describe('convert.create', () => {
     });
 });
 
+describe('limites d’une offre', () => {
+    const open = { ...IMAGE, declaredBytes: 1000 };
+
+    it('borne les conversions ouvertes à la fois, tous espaces du propriétaire confondus', async (t) => {
+        const repo = memoryRepo();
+        const ctx = (workspaceId: number) =>
+            context(repo, { workspaceId, quotaLimits: { activeJobs: 1 }, ownerWorkspaceIds: [1, 2] });
+        try {
+            await handlerFor(convertCreate)(ctx(1), open);
+        } catch (e) {
+            if (e instanceof FeatureError && e.code === 'conflict') return t.skip('ImageMagick absent de ce poste');
+            throw e;
+        }
+        await assert.rejects(
+            handlerFor(convertCreate)(ctx(2), open),
+            (e: unknown) => e instanceof FeatureError && e.code === 'quota_exceeded'
+        );
+        // Une conversion finie libère sa place.
+        repo.rows[0].phase = 'done';
+        await handlerFor(convertCreate)(ctx(2), open);
+    });
+
+    it('refuse une conversion de plus quand la réserve de résultats est déjà pleine', async (t) => {
+        const repo = memoryRepo();
+        const ctx = context(repo, { quotaLimits: { resultBytes: 5000 } });
+        try {
+            await handlerFor(convertCreate)(ctx, open);
+        } catch (e) {
+            if (e instanceof FeatureError && e.code === 'conflict') return t.skip('ImageMagick absent de ce poste');
+            throw e;
+        }
+        Object.assign(repo.rows[0], { phase: 'done', output_bytes: 5000 });
+        await assert.rejects(
+            handlerFor(convertCreate)(ctx, open),
+            (e: unknown) => e instanceof FeatureError && e.code === 'quota_exceeded'
+        );
+    });
+});
+
 describe('visibilité et cycle de vie', () => {
     async function seeded() {
         const repo = memoryRepo();

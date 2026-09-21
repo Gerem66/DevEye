@@ -68,6 +68,10 @@ export interface ConvertRepo {
     list(workspaceId: number, userId: number, limit: number): Promise<JobRow[]>;
     /** Ce que les travaux de l'espace occupent, ou vont occuper, sur le disque. */
     heldBytes(workspaceId: number): Promise<number>;
+    /** Les travaux ouverts dans ces espaces : créés, en montée, en file ou en cours. Ce qu'une offre borne. */
+    openJobs(workspaceIds: readonly number[]): Promise<number>;
+    /** Le poids des résultats qui attendent d'être récupérés dans ces espaces. Ce qu'une offre borne. */
+    resultBytes(workspaceIds: readonly number[]): Promise<number>;
 
     claimForUpload(id: number, workspaceId: number): Promise<JobRow | null>;
     queue(id: number, inputBytes: number): Promise<void>;
@@ -101,6 +105,9 @@ export interface ConvertRepo {
     fxState(): Promise<{ lastAttemptAt: number; lastSuccessAt: number }>;
     markFxAttempt(at: number, success: boolean): Promise<void>;
 }
+
+/** Autant de `?` que d'identifiants, pour un `IN (...)`. */
+const marks = (ids: readonly number[]): string => ids.map(() => '?').join(', ');
 
 const HOLDING = "('awaiting_upload', 'uploading', 'queued', 'running', 'done')";
 
@@ -151,6 +158,27 @@ export function createRepo(q: SdkQueryable): ConvertRepo {
                 `SELECT SUM(CASE WHEN phase = 'done' THEN COALESCE(output_bytes, 0) ELSE input_bytes END) AS held
                  FROM ft_convert_jobs WHERE workspace_id = ? AND phase IN ${HOLDING}`,
                 [workspaceId]
+            );
+            return Number(rows[0]?.held ?? 0);
+        },
+
+        async openJobs(workspaceIds) {
+            if (workspaceIds.length === 0) return 0;
+            const rows = await q.query<{ open: number | string }>(
+                `SELECT COUNT(*) AS open FROM ft_convert_jobs
+                 WHERE workspace_id IN (${marks(workspaceIds)})
+                   AND phase IN ('awaiting_upload', 'uploading', 'queued', 'running')`,
+                [...workspaceIds]
+            );
+            return Number(rows[0]?.open ?? 0);
+        },
+
+        async resultBytes(workspaceIds) {
+            if (workspaceIds.length === 0) return 0;
+            const rows = await q.query<{ held: number | string | null }>(
+                `SELECT SUM(output_bytes) AS held FROM ft_convert_jobs
+                 WHERE workspace_id IN (${marks(workspaceIds)}) AND phase = 'done'`,
+                [...workspaceIds]
             );
             return Number(rows[0]?.held ?? 0);
         },

@@ -147,12 +147,16 @@ export function probeInput(
     }
 }
 
-/** Mène la conversion jusqu'à `out.part`. Le plafond de sortie suit le fichier d'entrée, avec un plancher. */
-export async function convert(job: EngineJob): Promise<void> {
-    const maxOutputBytes = Math.min(
+/** Ce qu'un résultat peut peser au plus sur ce serveur : le plafond suit le fichier d'entrée, avec un plancher. */
+export function outputCeiling(inputBytes: number): number {
+    return Math.min(
         env.CONVERT_MAX_OUTPUT_BYTES,
-        Math.max(job.probe.bytes * env.CONVERT_OUTPUT_RATIO_MAX, MIN_OUTPUT_CEILING)
+        Math.max(inputBytes * env.CONVERT_OUTPUT_RATIO_MAX, MIN_OUTPUT_CEILING)
     );
+}
+
+/** Mène la conversion jusqu'à `out.part`, tuée si le fichier produit dépasse `maxOutputBytes`. */
+export async function convert(job: EngineJob, maxOutputBytes: number): Promise<void> {
     switch (job.target.recipe.engine) {
         case 'video':
             return runFfmpeg(job, videoPlan(job), maxOutputBytes);

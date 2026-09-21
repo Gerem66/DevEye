@@ -11,7 +11,7 @@ import {
 } from '../contracts/domain';
 import { optionValuesSchema, resolveOptions } from '../contracts/options';
 import { formatBytes, now, setJobAborter, setQueueWaker, SETTINGS_KEY } from './_shared';
-import { convert, probeEngines, probeInput } from './engines';
+import { convert, outputCeiling, probeEngines, probeInput } from './engines';
 import { env } from './env';
 import { frankfurter, refreshRates, type FxClient } from './fx';
 import type { ConvertRepo, JobRow } from './repo';
@@ -117,19 +117,41 @@ export function createService(deps: FeatureServiceDeps<ConvertRepo>, seam: Conve
             const stored = optionValuesSchema.safeParse(
                 typeof job.options === 'string' ? JSON.parse(job.options) : job.options
             );
-            await convert({
-                source,
-                target,
-                options: resolveOptions(target.options, stored.success ? stored.data : {}),
-                probe,
-                paths,
-                signal,
-                onProgress
-            });
+            const room = await resultRoom(job.workspace_id);
+            const ceiling = Math.min(outputCeiling(inputBytes), room ?? Infinity);
+            // Ce que le membre lit quand c'est sa réserve, et non le serveur, qui a dit stop.
+            const overflow = (): ConvertFailure =>
+                room !== null && room <= outputCeiling(inputBytes)
+                    ? new ConvertFailure(
+                          'output_too_large',
+                          'Le résultat dépasse ce que votre offre permet de garder en attente de téléchargement : récupérez puis retirez des résultats, ou choisissez des réglages plus légers.'
+                      )
+                    : new ConvertFailure(
+                          'output_too_large',
+                          'Le fichier produit dépasse la taille permise : choisir un format ou des réglages plus légers.'
+                      );
+            try {
+                await convert(
+                    {
+                        source,
+                        target,
+                        options: resolveOptions(target.options, stored.success ? stored.data : {}),
+                        probe,
+                        paths,
+                        signal,
+                        onProgress
+                    },
+                    ceiling
+                );
+            } catch (e) {
+                throw e instanceof ConvertFailure && e.code === 'output_too_large' ? overflow() : e;
+            }
             if (signal.aborted) throw new ConvertCanceled();
 
             const outputBytes = await fileSize(paths.outputPart);
             if (!outputBytes) throw new ConvertFailure('engine_failed', 'La conversion n’a rien produit.');
+            // Un outil qui finit en moins de temps qu'il n'en faut à la surveillance pour passer.
+            if (outputBytes > ceiling) throw overflow();
             // Le renommage rend l'état `done` et la présence du résultat inséparables.
             await fs.rename(paths.outputPart, paths.output);
             await fs.rm(paths.input, { force: true });
@@ -156,6 +178,24 @@ export function createService(deps: FeatureServiceDeps<ConvertRepo>, seam: Conve
             const sealed = await deps.cipherFor(job.workspace_id).encrypt(failure.message);
             await deps.repo.fail(job.id, failure.code, sealed, now());
         }
+    }
+
+    /**
+     * Ce que l'offre du propriétaire de l'espace laisse encore aux résultats en
+     * attente, en octets. `null` : aucune limite. `assert` ne sert ici qu'à
+     * apprendre quels espaces comptent pour cette offre : le compteur qu'on lui
+     * rend est nul, il ne refuse donc jamais.
+     */
+    async function resultRoom(workspaceId: number): Promise<number | null> {
+        const quota = deps.quotaFor(workspaceId);
+        const limit = await quota.limit('resultBytes');
+        if (limit === null) return null;
+        let held = 0;
+        await quota.assert('resultBytes', async (owned) => {
+            held = await deps.repo.resultBytes(owned);
+            return 0;
+        });
+        return Math.max(0, limit - held);
     }
 
     /** Prévient à la fin d'un travail assez long pour qu'on ait quitté l'écran. */

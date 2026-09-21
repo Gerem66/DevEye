@@ -23,9 +23,12 @@ export interface MediaInfo {
     audioKbps: number | null;
 }
 
-/** Le débit d'un son qui garde sa qualité d'origine : celui du fichier, dans ce que le curseur de la cible admet. */
-export function keptBitrate(target: TargetFormat, audioKbps: number): number {
-    const slider = target.options.find((spec) => spec.kind === 'slider' && spec.id === 'bitrate');
+/**
+ * Le débit d'un son qui garde sa qualité d'origine : celui du fichier, dans ce
+ * que le curseur de débit de la cible (`sliderId`) admet.
+ */
+export function keptBitrate(target: TargetFormat, sliderId: string, audioKbps: number): number {
+    const slider = target.options.find((spec) => spec.kind === 'slider' && spec.id === sliderId);
     if (slider?.kind !== 'slider') return audioKbps;
     return Math.min(slider.max, Math.max(slider.min, Math.round(audioKbps)));
 }
@@ -119,7 +122,11 @@ export function estimateSize(target: TargetFormat, values: OptionValues, info: M
             const fps = fpsChoice && fpsChoice !== 'source' ? Number(fpsChoice) : (info.fps ?? DEFAULT_FPS);
             const bitsPerPixel = geometric(...VIDEO_BITS_PER_PIXEL, (num(values, 'quality') ?? 65) / 100);
             const video = dims.width * dims.height * fps * bitsPerPixel * recipe.efficiency;
-            const audio = flag(values, 'audio') ? (num(values, 'audioBitrate') ?? 128) * 1000 : 0;
+            // Débit du son gardé : le navigateur ne lit pas celui d'une piste vidéo. Celui d'un son ordinaire en tient lieu.
+            const audioKbps = flag(values, 'keepAudioBitrate')
+                ? keptBitrate(target, 'audioBitrate', info.audioKbps ?? 128)
+                : (num(values, 'audioBitrate') ?? 128);
+            const audio = flag(values, 'audio') ? audioKbps * 1000 : 0;
             return { bytes: Math.round(((video + audio) * seconds * (1 + recipe.overhead)) / 8), exact: false };
         }
         case 'gif': {
@@ -138,7 +145,7 @@ export function estimateSize(target: TargetFormat, values: OptionValues, info: M
                 if (keep && info.audioKbps === null) return null;
                 const kbps =
                     keep && info.audioKbps !== null
-                        ? keptBitrate(target, info.audioKbps)
+                        ? keptBitrate(target, 'bitrate', info.audioKbps)
                         : (num(values, 'bitrate') ?? 192);
                 const bitrate = kbps * 1000;
                 return { bytes: Math.round((bitrate * seconds * (1 + recipe.overhead)) / 8), exact: true };

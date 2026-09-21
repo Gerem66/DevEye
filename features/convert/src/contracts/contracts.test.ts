@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import { CATALOGUE, detectSource, outputName, targetOf, targetsFor } from './catalogue';
 import { estimateSize, minTargetBytes, minVideoBitrate, videoBitrateForTarget, type MediaInfo } from './estimate';
 import { cropRect, fitInside, imageDims, keptSeconds, resizeDims, scaleOf, sizeAtScale, videoDims } from './geometry';
-import { isActive, isDefault, resolveOptions, type OptionValues, type SizeValue } from './options';
+import { conditionsOf, isActive, isDefault, resolveOptions, type OptionValues, type SizeValue } from './options';
 import { convertCurrency, convertUnit, UNIT_CATEGORIES } from './units';
 
 /**
@@ -35,19 +35,36 @@ describe('catalogue', () => {
         }
     });
 
-    it('ne conditionne un réglage qu’à un réglage qui existe, et qui peut prendre cette valeur', () => {
+    it('ne conditionne un réglage qu’à un réglage déclaré avant lui, et qui peut prendre cette valeur', () => {
         for (const kind of CATALOGUE) {
             for (const target of kind.targets) {
-                for (const option of target.options) {
-                    if (!option.when) continue;
-                    const parent = target.options.find((o) => o.id === option.when?.option);
-                    assert.ok(parent, `${target.id}.${option.id} dépend d’un réglage absent`);
-                    if (parent.kind === 'segments') {
-                        assert.ok(parent.options.some((o) => o.value === option.when?.equals));
+                target.options.forEach((option, index) => {
+                    for (const condition of conditionsOf(option)) {
+                        const at = target.options.findIndex((o) => o.id === condition.option);
+                        // Avant lui : un réglage masqué retombe sur son défaut dans l'ordre du catalogue.
+                        assert.ok(
+                            at !== -1 && at < index,
+                            `${target.id}.${option.id} dépend de « ${condition.option} »`
+                        );
+                        const parent = target.options[at];
+                        if (parent.kind === 'segments') {
+                            assert.ok(parent.options.some((o) => o.value === condition.equals));
+                        }
                     }
-                }
+                });
             }
         }
+    });
+
+    it('masque le débit du son d’une vidéo tant que sa qualité est gardée, et tout ce qui touche au son quand il est retiré', () => {
+        const specs = targetOf('video', 'mp4', 'mp4')?.options ?? [];
+        const shown = (values: OptionValues): string[] => {
+            const resolved = resolveOptions(specs, values);
+            return specs.filter((s) => s.section === 'sound' && isActive(s, resolved)).map((s) => s.id);
+        };
+        assert.deepEqual(shown({}), ['audio', 'keepAudioBitrate']);
+        assert.deepEqual(shown({ keepAudioBitrate: false }), ['audio', 'keepAudioBitrate', 'audioBitrate']);
+        assert.deepEqual(shown({ audio: false, keepAudioBitrate: false }), ['audio']);
     });
 
     it('donne à chaque source au moins une cible, et à chaque cible au moins une source', () => {

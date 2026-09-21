@@ -40,7 +40,7 @@ export type OptionValue = z.infer<typeof optionValueSchema>;
 export const optionValuesSchema = z.record(z.string().max(32), optionValueSchema);
 export type OptionValues = z.infer<typeof optionValuesSchema>;
 
-export type OptionSection = 'quality' | 'picture' | 'sound' | 'trim' | 'privacy' | 'advanced';
+export type OptionSection = 'quality' | 'picture' | 'sound' | 'trim' | 'privacy';
 
 /**
  * Les rubriques de l'étape « Options », dans l'ordre où elles se présentent.
@@ -52,9 +52,13 @@ export const OPTION_SECTIONS: readonly { id: OptionSection; label: string; quiet
     { id: 'picture', label: 'Image', quiet: true },
     { id: 'sound', label: 'Son' },
     { id: 'trim', label: 'Passage à garder' },
-    { id: 'privacy', label: 'Confidentialité' },
-    { id: 'advanced', label: 'Avancé', quiet: true }
+    { id: 'privacy', label: 'Confidentialité' }
 ];
+
+export interface OptionCondition {
+    option: string;
+    equals: string | boolean;
+}
 
 interface OptionBase {
     id: string;
@@ -64,8 +68,11 @@ interface OptionBase {
     half?: boolean;
     /** Une phrase pour quelqu'un qui débute, sous le contrôle. */
     hint?: string;
-    /** Le réglage n'apparaît, et ne compte, que si un autre a cette valeur. */
-    when?: { option: string; equals: string | boolean };
+    /**
+     * Le réglage n'apparaît, et ne compte, que si un autre a cette valeur ; tous,
+     * quand il y en a plusieurs. Un réglage dont dépend un autre se déclare avant lui.
+     */
+    when?: OptionCondition | readonly OptionCondition[];
 }
 
 export type OptionSpec =
@@ -152,8 +159,13 @@ export function isDefault(spec: OptionSpec, value: OptionValue | undefined): boo
     return Object.keys(a).length === Object.keys(b).length && Object.keys(a).every((key) => a[key] === b[key]);
 }
 
+export function conditionsOf(spec: OptionSpec): readonly OptionCondition[] {
+    if (!spec.when) return [];
+    return 'option' in spec.when ? [spec.when] : spec.when;
+}
+
 export function isActive(spec: OptionSpec, values: OptionValues): boolean {
-    return !spec.when || values[spec.when.option] === spec.when.equals;
+    return conditionsOf(spec).every((condition) => values[condition.option] === condition.equals);
 }
 
 /**

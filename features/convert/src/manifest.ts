@@ -19,9 +19,15 @@ export const manifest = {
     settings: { feature: ['general', 'notifications'] },
     nativeCapabilities: ['notify', 'routes.public', 'live.publish'],
     /**
-     * La taille d'UN fichier, pas un cumul : ce qui coûte au serveur est le
-     * temps de calcul d'une conversion, et il croît avec le fichier.
+     * Ce qu'une conversion coûte au serveur : du temps de calcul, qui croît avec
+     * le fichier (`fileBytes`) ; une place dans la file, qui est commune à tous
+     * (`activeJobs`) ; et du disque, tant que le résultat attend d'être récupéré
+     * (`resultBytes`).
      */
-    quotas: [{ key: 'fileBytes', label: 'par fichier à convertir', unit: 'bytes' }],
+    quotas: [
+        { key: 'fileBytes', label: 'par fichier à convertir', unit: 'bytes' },
+        { key: 'activeJobs', label: 'conversions en cours à la fois' },
+        { key: 'resultBytes', label: 'de résultats en attente de téléchargement', unit: 'bytes' }
+    ],
     commands: convertCommands
 } satisfies FeatureManifest;

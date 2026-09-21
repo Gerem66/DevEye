@@ -90,6 +90,10 @@ export const convertHandlers = [
             }
             // Une taille et non un décompte : ce que ce fichier pèserait, contre la limite de l'offre.
             await ctx.quota.assert('fileBytes', async () => input.declaredBytes);
+            await ctx.quota.assert('activeJobs', async (owned) => (await ctx.repo.openJobs(owned)) + 1);
+            // Le poids du résultat ne se connaît pas encore : on refuse seulement quand la réserve est déjà pleine.
+            // La conversion, elle, s'arrêtera si elle la dépasse.
+            await ctx.quota.assert('resultBytes', async (owned) => (await ctx.repo.resultBytes(owned)) + 1);
 
             const held = await ctx.repo.heldBytes(ctx.workspaceId);
             if (held + input.declaredBytes > env.CONVERT_WORKSPACE_QUOTA_BYTES) {

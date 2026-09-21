@@ -49,7 +49,7 @@ describe('plan vidéo', () => {
                 quality: 50,
                 height: '720',
                 fps: '24',
-                speed: 'fast',
+                keepAudioBitrate: false,
                 audioBitrate: 96,
                 trimStart: 10,
                 trimEnd: 40,
@@ -81,7 +81,7 @@ describe('plan vidéo', () => {
                 '-crf',
                 '27',
                 '-preset',
-                'veryfast',
+                'medium',
                 '-map',
                 '0:a:0',
                 '-c:a',
@@ -107,6 +107,16 @@ describe('plan vidéo', () => {
         ]);
     });
 
+    it('garde par défaut le débit du son de la vidéo, dans ce que le format admet', () => {
+        const soundOf = (audioKbps: number | null): string => {
+            const [args] = videoPlan(plan('video', 'mp4', 'mp4', {}, { ...PROBE, audioKbps })).passes;
+            return args[args.indexOf('-b:a') + 1];
+        };
+        assert.equal(soundOf(256), '256000');
+        assert.equal(soundOf(1536), '320000');
+        assert.equal(soundOf(null), '128000', 'illisible : le débit par défaut');
+    });
+
     it('n’agrandit pas, et coupe le son quand il n’y en a pas', () => {
         const [args] = videoPlan(
             plan('video', 'mp4', 'webm', { height: '2160' }, { ...PROBE, hasAudio: false })
@@ -126,7 +136,8 @@ describe('plan vidéo', () => {
         assert.equal(first[first.indexOf('-passlogfile') + 1], '/data/convert/ws-7/42/work/pass');
         assert.equal(second.at(-1), OUT);
         const bitrate = Number(second[second.indexOf('-b:v') + 1]);
-        assert.ok(Math.abs(((bitrate + 128_000) * 60 * 1.015) / 8 - 20_000_000) < 1000);
+        // Le son garde ses 256 kb/s d'origine : c'est autant que l'image n'aura pas.
+        assert.ok(Math.abs(((bitrate + 256_000) * 60 * 1.015) / 8 - 20_000_000) < 1000);
     });
 
     it('refuse une taille intenable, et cite le plancher', () => {

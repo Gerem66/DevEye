@@ -218,6 +218,24 @@ describe('de la montée au résultat', () => {
         assert.equal(mine.state.headers['Content-Length'], String(row?.output_bytes));
     });
 
+    it('arrête une conversion dont le résultat dépasserait la réserve de l’offre, et le dit', async (t) => {
+        if (!hasFfmpeg()) return t.skip('ffmpeg absent de ce poste');
+        const tight = createTestServiceDeps<ConvertRepo>({ repo, quotaLimits: { resultBytes: 100 } });
+        const service = createService(tight, { fx: () => Promise.reject(new Error('hors ligne')) });
+        const id = await seed(repo, 'wav', 'mp3');
+        const paths = jobPaths(1, id);
+        await fs.mkdir(paths.work, { recursive: true });
+        await fs.writeFile(paths.input, wav(2));
+        Object.assign(repo.rows.find((r) => r.id === id) ?? {}, { phase: 'queued', input_bytes: 32_044 });
+
+        service.publicRoutes?.({ get: () => undefined, post: () => undefined, postStream: () => undefined });
+        await tight.recorded.tickers[0]?.tick();
+        const row = repo.rows.find((r) => r.id === id);
+        assert.deepEqual([row?.phase, row?.error_code], ['error', 'output_too_large']);
+        assert.match(row?.error_enc ?? '', /votre offre/);
+        await assert.rejects(fs.stat(paths.dir), 'rien ne reste sur le disque');
+    });
+
     it('dit d’un résultat dont le fichier a disparu qu’il est perdu, au lieu de le laisser « prêt »', async () => {
         const viaUpkeep = await seed(repo, 'wav', 'mp3');
         const viaDownload = await seed(repo, 'wav', 'mp3');

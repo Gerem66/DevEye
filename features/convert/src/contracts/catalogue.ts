@@ -24,8 +24,11 @@ export type Recipe =
           crf: { best: number; worst: number };
           /** Ce que le codec exige en plus du facteur pour encoder à qualité constante. */
           constantQuality?: readonly string[];
-          /** Les arguments de chaque niveau d'effort de compression. */
-          speed: Readonly<Record<'fast' | 'balanced' | 'small', readonly string[]>>;
+          /**
+           * Le temps que l'encodeur passe à chercher. Pas un réglage : mesuré, il
+           * fait varier la durée de un à dix et le résultat de quelques pour cent.
+           */
+          effort: readonly string[];
           /** Débit nécessaire à qualité égale, rapporté au H.264 (1). Ne sert qu'à l'estimation. */
           efficiency: number;
           /** Part de l'enveloppe dans le fichier produit. */
@@ -184,20 +187,16 @@ const VIDEO_OPTIONS: readonly OptionSpec[] = [
         ],
         default: 'source'
     },
-    {
-        kind: 'segments',
-        id: 'speed',
-        section: 'advanced',
-        label: 'Vitesse de conversion',
-        hint: 'Le temps que le serveur passe à chercher la meilleure compression : « Rapide » va environ trois fois plus vite que « Normale », « Lente » trois fois moins. Le résultat change peu, et l’estimation de taille n’en tient pas compte.',
-        options: [
-            { value: 'fast', label: 'Rapide' },
-            { value: 'balanced', label: 'Normale' },
-            { value: 'small', label: 'Lente' }
-        ],
-        default: 'balanced'
-    },
     { kind: 'toggle', id: 'audio', section: 'sound', label: 'Garder le son', default: true },
+    {
+        kind: 'toggle',
+        id: 'keepAudioBitrate',
+        section: 'sound',
+        label: 'Garder la qualité du son',
+        hint: 'Le son garde le débit du fichier d’origine, dans la limite de ce que le format permet. Décochez pour le choisir.',
+        default: true,
+        when: { option: 'audio', equals: true }
+    },
     {
         kind: 'slider',
         id: 'audioBitrate',
@@ -208,7 +207,10 @@ const VIDEO_OPTIONS: readonly OptionSpec[] = [
         step: 16,
         default: 128,
         unit: 'kb/s',
-        when: { option: 'audio', equals: true }
+        when: [
+            { option: 'audio', equals: true },
+            { option: 'keepAudioBitrate', equals: false }
+        ]
     },
     { kind: 'crop', id: 'crop', section: 'picture', label: 'Recadrer' },
     ...TRIM,
@@ -227,8 +229,8 @@ const GIF_OPTIONS: readonly OptionSpec[] = [
         kind: 'slider',
         id: 'gifWidth',
         section: 'picture',
-        label: 'Largeur',
-        hint: 'Un GIF pèse vite très lourd : la largeur et la cadence sont ses deux seuls leviers.',
+        label: 'Largeur du GIF',
+        hint: 'La largeur de l’image produite, en pixels. La hauteur suit toute seule, pour garder les proportions. Un GIF pèse vite très lourd : plus il est étroit, plus il est léger.',
         min: 120,
         max: 960,
         step: 20,
@@ -373,7 +375,7 @@ const x264 = {
     videoCodec: 'libx264',
     crf: { best: 17, worst: 36 },
     efficiency: 1,
-    speed: { fast: ['-preset', 'veryfast'], balanced: ['-preset', 'medium'], small: ['-preset', 'slow'] }
+    effort: ['-preset', 'medium']
 } as const;
 
 export const CATALOGUE: readonly KindSpec[] = [
@@ -429,11 +431,7 @@ export const CATALOGUE: readonly KindSpec[] = [
                     audioCodec: 'libopus',
                     crf: { best: 22, worst: 46 },
                     constantQuality: ['-b:v', '0'],
-                    speed: {
-                        fast: ['-deadline', 'good', '-cpu-used', '5'],
-                        balanced: ['-deadline', 'good', '-cpu-used', '3'],
-                        small: ['-deadline', 'good', '-cpu-used', '1']
-                    },
+                    effort: ['-deadline', 'good', '-cpu-used', '3'],
                     efficiency: 0.7,
                     overhead: 0.005,
                     extra: ['-pix_fmt', 'yuv420p', '-row-mt', '1']

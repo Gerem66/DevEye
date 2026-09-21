@@ -147,8 +147,11 @@ export function videoPlan(job: PlanInput): FfmpegPlan {
     if (fps && fps !== 'source') filters.push(`fps=${Number(fps)}`);
 
     const withAudio = flag(job.options, 'audio') && job.probe.hasAudio;
-    const audioBitrate = withAudio ? (num(job.options, 'audioBitrate') ?? 128) * 1000 : 0;
-    const speed = recipe.speed[(str(job.options, 'speed') ?? 'balanced') as keyof typeof recipe.speed];
+    const audioKbps =
+        flag(job.options, 'keepAudioBitrate') && job.probe.audioKbps !== null
+            ? keptBitrate(job.target, 'audioBitrate', job.probe.audioKbps)
+            : (num(job.options, 'audioBitrate') ?? 128);
+    const audioBitrate = withAudio ? audioKbps * 1000 : 0;
 
     const picture = ['-map', '0:v:0', '-sn', '-dn', ...(filters.length ? ['-vf', filters.join(',')] : [])];
     const sound = withAudio ? ['-map', '0:a:0', '-c:a', recipe.audioCodec, '-b:a', String(audioBitrate)] : ['-an'];
@@ -168,7 +171,14 @@ export function videoPlan(job: PlanInput): FfmpegPlan {
     if (str(job.options, 'mode') !== 'size') {
         const quality = (num(job.options, 'quality') ?? 65) / 100;
         const crf = Math.round(recipe.crf.worst - quality * (recipe.crf.worst - recipe.crf.best));
-        const encode = ['-c:v', recipe.videoCodec, '-crf', String(crf), ...(recipe.constantQuality ?? []), ...speed];
+        const encode = [
+            '-c:v',
+            recipe.videoCodec,
+            '-crf',
+            String(crf),
+            ...(recipe.constantQuality ?? []),
+            ...recipe.effort
+        ];
         return { passes: [[...input, ...picture, ...encode, ...sound, ...tail]], seconds };
     }
 
@@ -194,7 +204,7 @@ export function videoPlan(job: PlanInput): FfmpegPlan {
         recipe.videoCodec,
         '-b:v',
         String(bitrate),
-        ...speed,
+        ...recipe.effort,
         '-passlogfile',
         `${job.paths.work}/pass`
     ];
@@ -211,7 +221,7 @@ export function videoPlan(job: PlanInput): FfmpegPlan {
 function audioKbps(job: PlanInput): number {
     const chosen = num(job.options, 'bitrate') ?? 192;
     if (!flag(job.options, 'keepBitrate') || job.probe.audioKbps === null) return chosen;
-    return keptBitrate(job.target, job.probe.audioKbps);
+    return keptBitrate(job.target, 'bitrate', job.probe.audioKbps);
 }
 
 export function audioPlan(job: PlanInput): FfmpegPlan {

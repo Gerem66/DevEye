@@ -84,9 +84,14 @@ ticket, et quitte le disque à l'échéance. L'original part dès la conversion 
   le curseur part dessous, faute de quoi « compresser » alourdirait.
 - **Une conversion est personnelle.** Un membre ne voit que les siennes, même
   dans un espace partagé.
-- **Trois bornes de taille, de la plus large à la plus étroite** : le mur du
-  serveur (`CONVERT_MAX_FILE_BYTES`), l'offre du propriétaire de l'espace
-  (quota `convert.fileBytes`, voir `Docs/QUOTAS.md`), et la place libre.
+- **Ce qu'un fichier peut peser** : le mur du serveur (`CONVERT_MAX_FILE_BYTES`),
+  l'offre du propriétaire de l'espace (`convert.fileBytes`), et la place libre.
+- **Ce qu'une offre borne en plus** (`Docs/QUOTAS.md`), tous espaces du
+  propriétaire confondus : les conversions ouvertes à la fois
+  (`convert.activeJobs`, la file étant commune à tout le serveur) et le poids des
+  résultats en attente de téléchargement (`convert.resultBytes`). Ce dernier ne
+  se connaît qu'à la fin : la création refuse quand la réserve est déjà pleine,
+  et la conversion s'arrête d'elle-même si son résultat la dépasse.
 - **`policy.xml` : ni apostrophe ni guillemet dans un commentaire.** Le lecteur
   XML d'ImageMagick les prend pour un début de chaîne et avale en silence les
   règles qui suivent. `policy.test.ts` le garde ; après une retouche, relire le

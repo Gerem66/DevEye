@@ -19,8 +19,14 @@ export const env = {
     CONVERT_MAX_FILE_BYTES: positive('CONVERT_MAX_FILE_BYTES', 5 * GIB),
     /** Combien de temps un résultat attend d'être récupéré avant d'être retiré du disque. */
     CONVERT_RESULT_TTL_SECONDS: positive('CONVERT_RESULT_TTL_SECONDS', 3600),
-    /** Un travail ouvert dont le fichier n'est jamais arrivé cesse de compter après ce délai. */
-    CONVERT_UPLOAD_TTL_SECONDS: positive('CONVERT_UPLOAD_TTL_SECONDS', 6 * 3600),
+    /**
+     * Le temps laissé à un envoi pour COMMENCER : le ticket est lu à l'arrivée des
+     * en-têtes, avant le premier octet, si bien que la durée de la montée n'entre
+     * pas en compte. Passé ce délai, un travail dont le fichier n'est jamais venu
+     * cesse de compter : sinon un onglet fermé au mauvais moment tiendrait
+     * pendant des heures la seule place d'une offre gratuite.
+     */
+    CONVERT_UPLOAD_TTL_SECONDS: positive('CONVERT_UPLOAD_TTL_SECONDS', 600),
     /** Ce que les travaux d'un même espace peuvent occuper ensemble sur le disque. */
     CONVERT_WORKSPACE_QUOTA_BYTES: positive('CONVERT_WORKSPACE_QUOTA_BYTES', 20 * GIB),
     /** Ce qui doit rester libre sur le disque une fois un fichier accepté. */
