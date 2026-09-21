@@ -566,7 +566,7 @@ export const CATALOGUE: readonly KindSpec[] = [
         label: 'Image',
         description: 'Changer de format, compresser, redimensionner, recadrer, retirer le lieu et la date cachés.',
         sources: [
-            { id: 'jpg', label: 'JPEG', ext: ['jpg', 'jpeg'], group: 'raster', readers: ['JPEG'] },
+            { id: 'jpg', label: 'JPEG / JPG', ext: ['jpg', 'jpeg'], group: 'raster', readers: ['JPEG'] },
             { id: 'png', label: 'PNG', ext: ['png'], group: 'raster', readers: ['PNG'] },
             { id: 'webp', label: 'WebP', ext: ['webp'], group: 'raster', readers: ['WEBP'] },
             { id: 'avif', label: 'AVIF', ext: ['avif'], group: 'raster', readers: ['AVIF'] },
@@ -578,7 +578,7 @@ export const CATALOGUE: readonly KindSpec[] = [
         targets: [
             {
                 id: 'jpg',
-                label: 'JPEG',
+                label: 'JPEG / JPG',
                 ext: 'jpg',
                 mime: 'image/jpeg',
                 from: ['raster'],
@@ -774,7 +774,7 @@ export const CATALOGUE: readonly KindSpec[] = [
             },
             {
                 id: 'jpg',
-                label: 'Image JPEG (une page)',
+                label: 'Image JPEG / JPG (une page)',
                 ext: 'jpg',
                 mime: 'image/jpeg',
                 from: ['pdf'],
