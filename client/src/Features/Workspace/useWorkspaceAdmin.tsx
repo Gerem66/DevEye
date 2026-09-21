@@ -5,13 +5,38 @@ import type { WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRole } from '
 import { ws, WsError } from '@/api/ws';
 import { useAuth } from '@/auth/AuthProvider';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
-import { resetWorkspace, upsertWorkspace, useActiveWorkspace } from '@/stores/workspace';
+import { getCurrentUser } from '@/stores/currentUser';
+import { refreshRemoteSession } from '@/stores/remoteInstances';
+import { requestSelectWorkspace } from '@/stores/viewRequest';
+import { forgetActiveWorkspace, getActiveInstanceId, upsertWorkspace, useActiveWorkspace } from '@/stores/workspace';
 
 /**
  * Toute la logique de la page « Espace », séparée de son rendu : le composant
  * décrit l'écran, ce hook porte l'état, les appels et les erreurs. Une seule
  * chaîne d'erreur, affichée en tête de page plutôt qu'une par action.
  */
+/**
+ * L'espace où l'on se trouvait vient de disparaître pour nous. Ici, on l'oublie
+ * et `onDone` recharge la session : le serveur replace le client sur un espace
+ * valide au lieu d'un id devenu interdit. Sur une instance distante, on retombe
+ * sur l'espace personnel du compte de là-bas et c'est SA session qu'on relit (sa
+ * liste d'espaces en sort à jour) : on reste sur l'instance, connecté.
+ */
+async function afterLosingWorkspace(onDone: () => void): Promise<void> {
+    const instanceId = getActiveInstanceId();
+    if (instanceId === null) {
+        forgetActiveWorkspace();
+        onDone();
+        return;
+    }
+    // La bascule d'abord : l'espace personnel de là-bas est déjà dans la liste,
+    // alors que relire la session en retire l'espace perdu, et la page n'aurait
+    // plus d'espace courant le temps d'y arriver.
+    const there = getCurrentUser();
+    if (there) requestSelectWorkspace(there.personalWorkspaceId, instanceId);
+    await refreshRemoteSession(instanceId);
+}
+
 export function useWorkspaceAdmin() {
     const { user } = useAuth();
     const workspace = useActiveWorkspace();
@@ -193,23 +218,19 @@ export function useWorkspaceAdmin() {
             }, 'Exclusion impossible.'),
 
         /**
-         * Quitter fait perdre l'espace courant. `resetWorkspace` efface l'id local,
-         * puis `onDone` recharge la session : le serveur replace alors le client sur
-         * un espace valide au lieu d'un id devenu interdit.
+         * Quitter fait perdre l'espace courant : voir {@link afterLosingWorkspace}.
          */
         leave: (onDone: () => void) =>
             run(async () => {
                 await ws.send('workspace.leave', {});
-                resetWorkspace();
-                onDone();
+                await afterLosingWorkspace(onDone);
             }, 'Impossible de quitter cet espace.'),
 
         remove: (onDone: () => void) =>
             run(async () => {
                 if (!workspace) return;
                 await ws.send('workspace.delete', { workspaceId: workspace.id });
-                resetWorkspace();
-                onDone();
+                await afterLosingWorkspace(onDone);
             }, 'Suppression impossible.')
     };
 }

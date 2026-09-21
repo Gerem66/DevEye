@@ -850,10 +850,6 @@ export default function HomePage() {
 
     const popupConfig = expandedConfig ?? lastConfig;
 
-    if (!user || !currentWorkspace) return null;
-
-    const heading = homeHeading(currentWorkspace, user.username);
-
     /**
      * Bascule d'espace : publier l'id (les commandes suivantes le portent), puis
      * recharger l'état de la cible. La vue ouverte survit si la cible la propose
@@ -994,6 +990,14 @@ export default function HomePage() {
             }
         })();
     }, [enterRemote]);
+
+    // APRÈS le dernier hook, jamais avant : quitter ou supprimer l'espace où l'on
+    // se trouve laisse un instant la page sans espace courant, et un retour
+    // placé plus haut changerait le nombre de hooks d'un rendu à l'autre, ce
+    // que React sanctionne en faisant tomber tout l'écran.
+    if (!user || !currentWorkspace) return null;
+
+    const heading = homeHeading(currentWorkspace, user.username);
 
     const handleLogoutRemote = (instanceId: number) => {
         // Assis là-bas, on rentre d'abord : la session fermée, plus rien n'y répond.

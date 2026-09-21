@@ -237,8 +237,28 @@ export function upsertWorkspace(workspace: Workspace, instanceId: number | null 
 }
 
 /**
- * Remet le store à zéro : la session suivante ne doit pas estampiller ses
- * commandes avec un espace auquel elle n'a pas accès.
+ * L'espace d'ICI où l'on se trouvait n'existe plus pour nous (quitté, supprimé) :
+ * on l'oublie, et la session que l'appelant relit ensuite replace le client sur
+ * un espace valide. Les espaces des instances distantes ne sont pas concernés :
+ * leurs sessions vivent toujours.
+ */
+export function forgetActiveWorkspace(): void {
+    state = {
+        ...state,
+        activeId: null,
+        activeInstanceId: null,
+        workspaces: [],
+        permissions: NO_PERMISSIONS,
+        epoch: state.epoch + 1
+    };
+    persistActiveId(null);
+    persistRemoteWorkspace(null);
+    emit();
+}
+
+/**
+ * Remet le store à zéro, à la déconnexion : la session suivante ne doit pas
+ * estampiller ses commandes avec un espace auquel elle n'a pas accès.
  */
 export function resetWorkspace(): void {
     state = {

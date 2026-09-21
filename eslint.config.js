@@ -2,6 +2,7 @@ import js from '@eslint/js';
 import eslintConfigPrettier from 'eslint-config-prettier';
 import prettierPlugin from 'eslint-plugin-prettier';
 import react from 'eslint-plugin-react';
+import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
@@ -24,10 +25,12 @@ export default [
             }
         },
         plugins: {
-            react: react
+            react: react,
+            'react-hooks': reactHooks
         },
         rules: {
             ...react.configs.recommended.rules,
+            'react-hooks/rules-of-hooks': 'error',
             'react/react-in-jsx-scope': 'off',
             'react/prop-types': 'off'
         },

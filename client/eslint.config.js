@@ -1,5 +1,6 @@
 import js from '@eslint/js';
 import react from 'eslint-plugin-react';
+import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 import prettierPlugin from 'eslint-plugin-prettier';
@@ -33,10 +34,14 @@ export default [
     {
         plugins: {
             react: react,
+            'react-hooks': reactHooks,
             prettier: prettierPlugin
         },
         rules: {
             ...react.configs.recommended.rules,
+            // Un hook après un retour anticipé fait tomber l'écran le jour où le
+            // retour se déclenche, et pas avant : seul le lint le voit à temps.
+            'react-hooks/rules-of-hooks': 'error',
             'react/react-in-jsx-scope': 'off',
             'react/prop-types': 'off',
             '@typescript-eslint/no-unused-vars': [
