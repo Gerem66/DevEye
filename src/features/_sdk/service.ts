@@ -177,6 +177,11 @@ export function createServiceDeps(
             list: async (userIds) => {
                 gateAccounts();
                 return (await host.db.users.findByIds([...userIds])).map(toSdkAccount);
+            },
+            search: async (query, limit) => {
+                gateAccounts();
+                const capped = Math.min(Math.max(1, Math.trunc(limit ?? 20)), 50);
+                return (await host.db.users.search(query.trim(), capped)).map(toSdkAccount);
             }
         },
         audit: (entry) => {

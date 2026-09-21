@@ -8,6 +8,12 @@ export interface UsersRepo {
     findByUsername(username: string): Promise<UserRow | null>;
     findByEmail(email: string): Promise<UserRow | null>;
     findByIds(ids: number[]): Promise<UserRow[]>;
+    /**
+     * Les comptes dont le pseudo ou l'adresse contient `query`, par pseudo. Une
+     * requête tout en chiffres vise aussi cet id, classé premier. Vide : les
+     * premiers comptes.
+     */
+    search(query: string, limit: number): Promise<UserRow[]>;
     create(input: { email: string; username: string; passwordHash: string; role?: 'user' | 'admin' }): Promise<UserRow>;
     updateLastLogin(id: number, lastLogin: number): Promise<void>;
     /** Rattache le compte à son espace personnel, juste après l'avoir créé. */
@@ -40,6 +46,11 @@ export interface UsersRepo {
     countForUpdate(): Promise<number>;
 }
 
+/** Échappe ce que LIKE lit comme des jokers, pour qu'un terme reste un terme. */
+function likeTerm(term: string): string {
+    return `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+}
+
 export function usersRepo(pool: Q): UsersRepo {
     return {
         async findById(id) {
@@ -57,6 +68,29 @@ export function usersRepo(pool: Q): UsersRepo {
         async findByIds(ids) {
             if (ids.length === 0) return [];
             const r = await pool.query<UserRow>('SELECT * FROM users WHERE id IN (?)', [ids]);
+            return r.rows;
+        },
+        async search(query, limit) {
+            if (query === '') {
+                const r = await pool.query<UserRow>('SELECT * FROM users ORDER BY username ASC LIMIT ?', [limit]);
+                return r.rows;
+            }
+            const like = likeTerm(query);
+            // L'id ne se compare que pour une requête tout en chiffres : liée en
+            // chaîne, « 12abc » vaudrait 12 pour MySQL.
+            if (/^\d{1,10}$/.test(query)) {
+                const id = Number(query);
+                const r = await pool.query<UserRow>(
+                    `SELECT * FROM users WHERE id = ? OR username LIKE ? OR email LIKE ?
+                     ORDER BY (id = ?) DESC, username ASC LIMIT ?`,
+                    [id, like, like, id, limit]
+                );
+                return r.rows;
+            }
+            const r = await pool.query<UserRow>(
+                'SELECT * FROM users WHERE username LIKE ? OR email LIKE ? ORDER BY username ASC LIMIT ?',
+                [like, like, limit]
+            );
             return r.rows;
         },
         async create({ email, username, passwordHash, role = 'user' }) {

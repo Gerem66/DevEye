@@ -45,6 +45,7 @@ function fakeHost() {
     const errors: { obj: unknown; msg?: string }[] = [];
     const records: AuditEvent[] = [];
     const listByWorkspaceCalls: number[] = [];
+    const searchCalls: { query: string; limit: number }[] = [];
     const logger = {
         debug() {},
         info() {},
@@ -63,6 +64,12 @@ function fakeHost() {
                         { id: 'dev-1', name: 'Portable', status: 'active', owner_id: 7, workspace_id: ws },
                         { id: 'dev-2', name: 'Serveur', status: 'active', owner_id: 7, workspace_id: ws }
                     ].map((r) => ({ ...r, metric_interval_seconds: null, report_json: null }));
+                }
+            },
+            users: {
+                search: async (query: string, limit: number) => {
+                    searchCalls.push({ query, limit });
+                    return [{ id: 7, email: 'alice@exemple.fr', username: 'alice', role: 'admin', created: 12 }];
                 }
             },
             featureKv: {
@@ -91,7 +98,7 @@ function fakeHost() {
         },
         logger: logger as unknown as Logger
     } as unknown as ModuleServiceHost;
-    return { host, errors, records, listByWorkspaceCalls };
+    return { host, errors, records, listByWorkspaceCalls, searchCalls };
 }
 
 setSdkHost(
@@ -224,6 +231,30 @@ describe('createServiceDeps : devicesFor', () => {
         const { host } = fakeHost();
         const devices = createServiceDeps(host, manifest(ID, ['devices.read']), null, NO_PROVIDERS).devicesFor(1);
         assert.deepEqual(Object.keys(devices).sort(), ['isOnline', 'list']);
+    });
+});
+
+describe('createServiceDeps : accounts', () => {
+    it("sans 'accounts.read' : forbidden sur search, sans toucher à la base", async () => {
+        const { host, searchCalls } = fakeHost();
+        const { accounts } = createServiceDeps(host, manifest(ID), null, NO_PROVIDERS);
+        await assert.rejects(accounts.search('alice'), forbidden);
+        assert.deepEqual(searchCalls, []);
+    });
+
+    it('avec la capacité : requête rognée, limite bornée ici, compte traduit', async () => {
+        const { host, searchCalls } = fakeHost();
+        const { accounts } = createServiceDeps(host, manifest(ID, ['accounts.read']), null, NO_PROVIDERS);
+        assert.deepEqual(await accounts.search('  alice '), [
+            { id: 7, email: 'alice@exemple.fr', username: 'alice', isAdmin: true, created: 12_000 }
+        ]);
+        await accounts.search('', 999);
+        await accounts.search('', 0);
+        assert.deepEqual(searchCalls, [
+            { query: 'alice', limit: 20 },
+            { query: '', limit: 50 },
+            { query: '', limit: 1 }
+        ]);
     });
 });
 
