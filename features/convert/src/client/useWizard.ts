@@ -1,8 +1,8 @@
 import { useCallback, useReducer } from 'react';
 
 import { detectSource, targetOf, targetsFor, type ConvertKind } from '../contracts/catalogue';
-import type { MediaInfo } from '../contracts/estimate';
 import type { OptionValue, OptionValues } from '../contracts/options';
+import type { FileInfo } from './probe';
 
 /**
  * L'état de l'assistant. Revenir en arrière ne perd rien : les réglages vivent
@@ -16,7 +16,7 @@ export interface WizardState {
     view: WizardView;
     kind: ConvertKind | null;
     file: File | null;
-    info: MediaInfo | null;
+    info: FileInfo | null;
     sourceId: string | null;
     /** Ce que le nom du fichier a laissé reconnaître. Le choix reste libre : une extension peut mentir. */
     detectedSourceId: string | null;
@@ -29,7 +29,7 @@ type Action =
     | { type: 'pickKind'; kind: ConvertKind }
     | { type: 'pickFile'; file: File }
     | { type: 'removeFile' }
-    | { type: 'info'; info: MediaInfo }
+    | { type: 'info'; info: FileInfo }
     | { type: 'source'; sourceId: string }
     | { type: 'target'; targetId: string }
     | { type: 'value'; id: string; value: OptionValue }
@@ -106,7 +106,7 @@ export function useWizard() {
         pickKind: useCallback((kind: ConvertKind) => dispatch({ type: 'pickKind', kind }), []),
         pickFile: useCallback((file: File) => dispatch({ type: 'pickFile', file }), []),
         removeFile: useCallback(() => dispatch({ type: 'removeFile' }), []),
-        setInfo: useCallback((info: MediaInfo) => dispatch({ type: 'info', info }), []),
+        setInfo: useCallback((info: FileInfo) => dispatch({ type: 'info', info }), []),
         setSource: useCallback((sourceId: string) => dispatch({ type: 'source', sourceId }), []),
         setTarget: useCallback((targetId: string) => dispatch({ type: 'target', targetId }), []),
         setValue: useCallback((id: string, value: OptionValue) => dispatch({ type: 'value', id, value }), []),

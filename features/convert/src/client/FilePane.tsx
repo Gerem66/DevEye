@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { Button, formatBytesFr } from 'deveye-sdk-client';
 
 import { kindOf, sourceOf } from '../contracts/catalogue';
@@ -16,8 +16,10 @@ interface FilePaneProps {
     /** Les réglages en cours : le recadrage se voit dans l'aperçu. */
     values: OptionValues;
     sample: Blob | null;
-    /** L'envoi est parti : on ne change plus de fichier. */
+    /** L'export est parti : on ne change plus de fichier. */
     locked: boolean;
+    /** Ce qui se pose au centre de l'aperçu : le téléchargement, une fois le résultat prêt. */
+    overlay: ReactNode;
 }
 
 /**
@@ -25,7 +27,7 @@ interface FilePaneProps {
  * en a pas, puis son aperçu. Elle ne se démonte pas d'une étape à l'autre, si
  * bien qu'une vidéo en lecture continue pendant qu'on règle ses options.
  */
-export function FilePane({ wizard, family, values, sample, locked }: FilePaneProps) {
+export function FilePane({ wizard, family, values, sample, locked, overlay }: FilePaneProps) {
     const { state } = wizard;
     const input = useRef<HTMLInputElement>(null);
     if (!state.kind) return null;
@@ -59,15 +61,18 @@ export function FilePane({ wizard, family, values, sample, locked }: FilePanePro
 
     return (
         <div className={styles.filePane}>
-            <Preview
-                file={file}
-                kind={state.kind}
-                isPdf={state.sourceId !== null && sourceOf(state.kind, state.sourceId)?.group === 'pdf'}
-                info={info}
-                crop={cropOf(values, 'crop')}
-                resize={sizeOf(values, 'resize')}
-                sample={state.view === 'format' ? null : sample}
-            />
+            <div className={styles.previewWrap}>
+                <Preview
+                    file={file}
+                    kind={state.kind}
+                    isPdf={state.sourceId !== null && sourceOf(state.kind, state.sourceId)?.group === 'pdf'}
+                    info={info}
+                    crop={cropOf(values, 'crop')}
+                    resize={sizeOf(values, 'resize')}
+                    sample={state.view === 'format' ? null : sample}
+                />
+                {overlay && <div className={styles.previewOverlay}>{overlay}</div>}
+            </div>
             <div className={styles.fileBar}>
                 <div className={styles.fileText}>
                     <span className={styles.fileName}>{file.name}</span>

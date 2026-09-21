@@ -71,6 +71,13 @@ ticket, et quitte le disque à l'échéance. L'original part dès la conversion 
   navigateur par une adresse `blob:` (d'où `media-src` et `frame-src` dans la CSP
   de l'app) ; la comparaison avant / après réutilise l'essai d'encodage qui sert
   déjà à peser le résultat. Rien ne monte avant le clic sur Exporter.
+- **L'étape Export suit le travail qu'elle a lancé** : envoi, file, conversion,
+  puis téléchargement. Les étapes d'avant restent fermées tant qu'il n'a pas
+  échoué ; le retour en en-tête repart de zéro et laisse le travail finir dans la
+  liste de l'accueil.
+- **Un réglage peut s'ajuster au fichier** (`client/adaptOptions.ts`) : la qualité
+  d'un JPEG se lit dans sa table de quantification (`client/jpegQuality.ts`), et
+  le curseur part dessous, faute de quoi « compresser » alourdirait.
 - **Une conversion est personnelle.** Un membre ne voit que les siennes, même
   dans un espace partagé.
 - **Trois bornes de taille, de la plus large à la plus étroite** : le mur du

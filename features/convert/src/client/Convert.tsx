@@ -21,6 +21,7 @@ import {
 } from '../contracts/domain';
 import { resolveOptions } from '../contracts/options';
 import { manifest } from '../manifest';
+import { adaptOptions } from './adaptOptions';
 import { api } from './api';
 import { Currency } from './Currency';
 import { FilePane } from './FilePane';
@@ -28,7 +29,7 @@ import { KIND_NOUNS } from './format';
 import { JobList } from './JobList';
 import { probeFile } from './probe';
 import { Stepper, type StepperStep } from './Stepper';
-import { ExportStep, type Sending } from './steps/ExportStep';
+import { ExportStep, isLocked, type Sending, type Tracked } from './steps/ExportStep';
 import { FormatStep } from './steps/FormatStep';
 import { KindStep } from './steps/KindStep';
 import { OptionsStep } from './steps/OptionsStep';
@@ -84,7 +85,9 @@ export default function Convert(_props: FeatureViewProps) {
 
     const source = kind && state.sourceId ? sourceOf(kind, state.sourceId) : null;
     const target = kind && state.sourceId && state.targetId ? targetOf(kind, state.sourceId, state.targetId) : null;
-    const values = useMemo(() => (target ? resolveOptions(target.options, state.values) : {}), [target, state.values]);
+    const sourceQuality = state.info?.sourceQuality ?? null;
+    const specs = useMemo(() => (target ? adaptOptions(target, sourceQuality) : []), [target, sourceQuality]);
+    const values = useMemo(() => resolveOptions(specs, state.values), [specs, state.values]);
     const { estimate, sample } = useEstimate(target, values, state.info, file);
 
     const maxFileBytes = caps.data?.maxFileBytes ?? null;
@@ -97,6 +100,27 @@ export default function Convert(_props: FeatureViewProps) {
     const [sending, setSending] = useState<Sending | null>(null);
     const [exportError, setExportError] = useState<string | null>(null);
     const upload = useRef<{ handle: UploadHandle; jobId: number } | null>(null);
+
+    // Le travail né du dernier export. `seen` : la liste l'a déjà montré, si bien
+    // que son absence veut dire « parti », et non « pas encore arrivé ».
+    const [active, setActive] = useState<{ job: ConvertJob; seen: boolean } | null>(null);
+    const listed = active ? list.data?.find((job) => job.id === active.job.id) : undefined;
+    useEffect(() => {
+        if (listed && active && !active.seen) setActive({ ...active, seen: true });
+    }, [listed, active]);
+    const tracked: Tracked | null = active
+        ? {
+              job: listed ?? active.job,
+              progress: live.get(active.job.id),
+              gone: active.seen && !listed && list.data !== null
+          }
+        : null;
+    const locked = isLocked(sending, tracked);
+
+    // Un export qui a échoué ou été annulé rend la main : dès qu'on quitte l'étape, son message s'efface.
+    useEffect(() => {
+        if (active && !locked && state.view !== 'export') setActive(null);
+    }, [active, locked, state.view]);
 
     const startExport = async (): Promise<void> => {
         if (!file || !kind || !source || !target) return;
@@ -116,9 +140,12 @@ export default function Convert(_props: FeatureViewProps) {
                 setSending(ratio >= 1 ? { stage: 'verifying' } : { stage: 'uploading', ratio })
             );
             upload.current = { handle, jobId: created.job.id };
+            setActive({ job: created.job, seen: false });
             await handle.done;
-            wizard.reset();
+            // Le fichier est arrivé et vérifié : il attend son tour, quoi que la liste ait eu le temps de dire.
+            setActive((current) => current && { ...current, job: { ...current.job, phase: 'queued' } });
         } catch (e) {
+            setActive(null);
             const aborted = e instanceof UploadError && e.aborted;
             if (aborted && upload.current)
                 void api.send('convert.cancel', { jobId: upload.current.jobId }).catch(() => undefined);
@@ -133,11 +160,14 @@ export default function Convert(_props: FeatureViewProps) {
         }
     };
 
-    const act = useCallback(async (run: () => Promise<unknown>, fallback: string): Promise<void> => {
+    /** Rend vrai quand l'action a abouti. */
+    const act = useCallback(async (run: () => Promise<unknown>, fallback: string): Promise<boolean> => {
         try {
             await run();
+            return true;
         } catch (e) {
             setExportError(humanizeError(e, fallback));
+            return false;
         } finally {
             invalidate('convert.list');
         }
@@ -152,10 +182,25 @@ export default function Convert(_props: FeatureViewProps) {
     const onRemove = (job: ConvertJob): void =>
         void act(() => api.send('convert.remove', { jobId: job.id }), 'Cette conversion n’a pas pu être retirée.');
 
+    // Un travail annulé quitte la liste : l'écran revient à l'export, prêt à repartir, plutôt que de le chercher.
+    const cancelActive = (): void => {
+        if (!tracked) return;
+        const jobId = tracked.job.id;
+        void act(() => api.send('convert.cancel', { jobId }), 'L’annulation a échoué.').then((canceled) => {
+            if (canceled) setActive(null);
+        });
+    };
+
+    const startOver = (): void => {
+        wizard.reset();
+        setActive(null);
+        setExportError(null);
+    };
+
     const steps: StepperStep[] = [
-        { id: 'kinds', label: 'Type', reachable: sending === null },
-        { id: 'format', label: 'Format', reachable: kind !== null && sending === null },
-        { id: 'options', label: 'Options', reachable: ready && sending === null },
+        { id: 'kinds', label: 'Type', reachable: !locked },
+        { id: 'format', label: 'Format', reachable: kind !== null && !locked },
+        { id: 'options', label: 'Options', reachable: ready && !locked },
         { id: 'export', label: 'Export', reachable: ready }
     ];
     const family = caps.data?.families.find((f) => f.kind === kind);
@@ -169,7 +214,8 @@ export default function Convert(_props: FeatureViewProps) {
                         variant='ghost'
                         icon='arrow-left'
                         disabled={sending !== null}
-                        onClick={() => wizard.open('kinds')}
+                        // Un export parti suit son cours sans cet écran : il reste dans la liste de l'accueil.
+                        onClick={() => (active ? startOver() : wizard.open('kinds'))}
                     >
                         Tous les types
                     </Button>
@@ -199,14 +245,21 @@ export default function Convert(_props: FeatureViewProps) {
                         family={family}
                         values={values}
                         sample={sample}
-                        locked={sending !== null}
+                        locked={locked}
+                        overlay={
+                            locked && tracked?.job.phase === 'done' ? (
+                                <Button variant='primary' icon='download' onClick={() => onDownload(tracked.job)}>
+                                    Télécharger
+                                </Button>
+                            ) : null
+                        }
                     />
                     <div className={styles.stepPane}>
                         {state.view === 'format' && (
                             <FormatStep wizard={wizard} family={family} fileProblem={fileProblem} />
                         )}
                         {state.view === 'options' && target && (
-                            <OptionsStep wizard={wizard} target={target} estimate={estimate} />
+                            <OptionsStep wizard={wizard} specs={specs} estimate={estimate} />
                         )}
                         {state.view === 'export' && source && target && (
                             <ExportStep
@@ -215,11 +268,15 @@ export default function Convert(_props: FeatureViewProps) {
                                 target={target}
                                 estimate={estimate}
                                 sending={sending}
+                                tracked={tracked}
                                 error={exportError}
                                 canWrite={canWrite}
                                 resultTtlSeconds={caps.data?.resultTtlSeconds ?? null}
                                 onExport={() => void startExport()}
-                                onAbort={() => upload.current?.handle.abort()}
+                                onAbortUpload={() => upload.current?.handle.abort()}
+                                onCancel={cancelActive}
+                                onDownload={() => tracked && onDownload(tracked.job)}
+                                onNew={startOver}
                             />
                         )}
                     </div>
@@ -233,7 +290,10 @@ export default function Convert(_props: FeatureViewProps) {
             )}
             {list.error && <p className={styles.problem}>{list.error}</p>}
             <JobList
-                jobs={list.data ?? []}
+                // À l'étape Export, le travail suivi est déjà à l'écran : il ne s'y montre pas deux fois.
+                jobs={(list.data ?? []).filter(
+                    (job) => !(state.view === 'export' && locked && job.id === active?.job.id)
+                )}
                 live={live}
                 canWrite={canWrite}
                 onDownload={onDownload}

@@ -286,6 +286,21 @@
     margin: 0;
 }
 
+.previewWrap {
+    position: relative;
+}
+
+/* Le résultat est prêt : l'aperçu s'efface derrière le bouton qui le donne. */
+.previewOverlay {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    border-radius: var(--radius-lg);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-backdrop-scrim);
+}
+
 .zoomButton {
     position: absolute;
     right: var(--space-sm);
@@ -712,6 +727,15 @@
     border-top: 1px solid var(--glass-border);
 }
 
+.success {
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--success-bg);
+    color: var(--success);
+    font-size: 0.88rem;
+}
+
 .promises {
     display: flex;
     flex-direction: column;
@@ -723,7 +747,7 @@
     color: var(--text-muted);
 }
 
-.sending {
+.status {
     display: flex;
     flex-direction: column;
     gap: var(--space-xs);

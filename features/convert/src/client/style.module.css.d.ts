@@ -65,8 +65,10 @@ declare const styles: {
     readonly previewAudio: string;
     readonly previewFrame: string;
     readonly previewImage: string;
+    readonly previewOverlay: string;
     readonly previewPdf: string;
     readonly previewVideo: string;
+    readonly previewWrap: string;
     readonly problem: string;
     readonly promises: string;
     readonly recap: string;
@@ -74,7 +76,6 @@ declare const styles: {
     readonly result: string;
     readonly root: string;
     readonly sectionTitle: string;
-    readonly sending: string;
     readonly sizeRow: string;
     readonly sizes: string;
     readonly sizesGain: string;
@@ -82,6 +83,7 @@ declare const styles: {
     readonly sizesUnknown: string;
     readonly stage: string;
     readonly stageLayer: string;
+    readonly status: string;
     readonly step: string;
     readonly stepActive: string;
     readonly stepBody: string;
@@ -94,6 +96,7 @@ declare const styles: {
     readonly stepPane: string;
     readonly stepper: string;
     readonly stickyFoot: string;
+    readonly success: string;
     readonly swap: string;
     readonly title: string;
     readonly tool: string;

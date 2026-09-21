@@ -1,9 +1,8 @@
 import { Button } from 'deveye-sdk-client';
 
-import type { TargetFormat } from '../../contracts/catalogue';
 import type { SizeEstimate } from '../../contracts/estimate';
 import { cropRect } from '../../contracts/geometry';
-import { cropOf, defaultOf, isActive, OPTION_SECTIONS, resolveOptions } from '../../contracts/options';
+import { cropOf, defaultOf, isActive, OPTION_SECTIONS, resolveOptions, type OptionSpec } from '../../contracts/options';
 import { OptionControl } from '../controls/OptionControl';
 import { SizeSummary } from '../SizeSummary';
 import styles from '../style.module.css';
@@ -11,14 +10,15 @@ import type { Wizard } from '../useWizard';
 
 interface OptionsStepProps {
     wizard: Wizard;
-    target: TargetFormat;
+    /** Les réglages de la cible, ajustés au fichier choisi (`adaptOptions`). */
+    specs: readonly OptionSpec[];
     estimate: SizeEstimate | null;
 }
 
-export function OptionsStep({ wizard, target, estimate }: OptionsStepProps) {
+export function OptionsStep({ wizard, specs, estimate }: OptionsStepProps) {
     const { state } = wizard;
-    const values = resolveOptions(target.options, state.values);
-    const visible = target.options.filter((spec) => isActive(spec, values));
+    const values = resolveOptions(specs, state.values);
+    const visible = specs.filter((spec) => isActive(spec, values));
     const dims = state.info?.width && state.info.height ? { width: state.info.width, height: state.info.height } : null;
     const cropped = dims ? (cropRect(dims, cropOf(values, 'crop')) ?? dims) : null;
     const sections = OPTION_SECTIONS.map((section) => ({

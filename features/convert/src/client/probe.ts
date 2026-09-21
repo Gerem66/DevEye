@@ -1,5 +1,6 @@
 import type { ConvertKind } from '../contracts/catalogue';
 import type { MediaInfo } from '../contracts/estimate';
+import { jpegQualityOf } from './jpegQuality';
 
 /**
  * Ce que le navigateur sait lire d'un fichier sans l'envoyer : de quoi poser
@@ -9,6 +10,12 @@ import type { MediaInfo } from '../contracts/estimate';
  */
 
 const PROBE_TIMEOUT_MS = 8000;
+
+/** Ce que le navigateur lit en plus, et dont le serveur n'a pas besoin. */
+export interface FileInfo extends MediaInfo {
+    /** La qualité à laquelle un JPEG a été enregistré. `null` pour tout autre fichier. */
+    sourceQuality: number | null;
+}
 
 function probeElement(file: File, tag: 'video' | 'audio'): Promise<Partial<MediaInfo>> {
     return new Promise((resolve) => {
@@ -45,9 +52,19 @@ async function probeImage(file: File): Promise<Partial<MediaInfo>> {
     }
 }
 
-export async function probeFile(file: File, kind: ConvertKind): Promise<MediaInfo> {
-    const base: MediaInfo = { bytes: file.size, durationMs: null, width: null, height: null, fps: null };
+export async function probeFile(file: File, kind: ConvertKind): Promise<FileInfo> {
+    const base: FileInfo = {
+        bytes: file.size,
+        durationMs: null,
+        width: null,
+        height: null,
+        fps: null,
+        sourceQuality: null
+    };
     if (kind === 'video' || kind === 'audio') return { ...base, ...(await probeElement(file, kind)) };
-    if (kind === 'image') return { ...base, ...(await probeImage(file)) };
+    if (kind === 'image') {
+        const [dims, sourceQuality] = await Promise.all([probeImage(file), jpegQualityOf(file)]);
+        return { ...base, ...dims, sourceQuality };
+    }
     return base;
 }
