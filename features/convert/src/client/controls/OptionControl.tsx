@@ -49,6 +49,7 @@ export function OptionControl({ spec, value, sourceDims, croppedDims, onChange }
                 value={current}
                 valueLabel={spec.unit ? `${current} ${spec.unit}` : String(current)}
                 marks={spec.marks}
+                indicator={spec.indicator}
                 onChange={onChange}
             />
         );

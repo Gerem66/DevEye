@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId, type CSSProperties } from 'react';
 
 import styles from './style.module.css';
 
@@ -13,6 +13,12 @@ export interface SliderProps {
     valueLabel?: string;
     /** Repères sous la piste, de gauche à droite (« Léger », « Fidèle »). */
     marks?: readonly string[];
+    /**
+     * Une valeur de référence, marquée d'un trait discret sur la piste (la
+     * qualité d'origine d'un fichier, par exemple). Décoratif : ce qu'il veut
+     * dire se dit dans `hint`.
+     */
+    indicator?: number;
     hint?: string;
     disabled?: boolean;
     className?: string;
@@ -32,6 +38,7 @@ export function Slider({
     label,
     valueLabel,
     marks,
+    indicator,
     hint,
     disabled,
     className
@@ -43,18 +50,27 @@ export function Slider({
                 {label}
                 {valueLabel !== undefined && <span className={styles.value}>{valueLabel}</span>}
             </label>
-            <input
-                id={id}
-                type='range'
-                min={min}
-                max={max}
-                step={step}
-                value={value}
-                disabled={disabled}
-                aria-valuetext={valueLabel}
-                className={styles.input}
-                onChange={(e) => onChange(Number(e.target.value))}
-            />
+            <div className={styles.track}>
+                {indicator !== undefined && indicator >= min && indicator <= max && max > min && (
+                    <span
+                        className={styles.indicator}
+                        style={{ '--at': (indicator - min) / (max - min) } as CSSProperties}
+                        aria-hidden='true'
+                    />
+                )}
+                <input
+                    id={id}
+                    type='range'
+                    min={min}
+                    max={max}
+                    step={step}
+                    value={value}
+                    disabled={disabled}
+                    aria-valuetext={valueLabel}
+                    className={styles.input}
+                    onChange={(e) => onChange(Number(e.target.value))}
+                />
+            </div>
             {marks && marks.length > 0 && (
                 <div className={styles.marks} aria-hidden='true'>
                     {marks.map((mark) => (

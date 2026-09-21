@@ -77,6 +77,8 @@ export type OptionSpec =
           unit?: string;
           /** Repères sous la piste, de gauche à droite. */
           marks?: readonly string[];
+          /** Une valeur de référence à marquer sur la piste, propre au fichier choisi. */
+          indicator?: number;
       })
     | (OptionBase & {
           kind: 'segments';

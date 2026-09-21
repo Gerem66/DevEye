@@ -13,13 +13,24 @@ describe('réglages ajustés au fichier', () => {
         assert.ok(jpg);
         const specs = adaptOptions(jpg, 78);
         assert.equal(resolveOptions(specs, {}).quality, 73);
-        assert.match(specs.find((s) => s.id === 'quality')?.hint ?? '', /environ 78/);
+        const quality = specs.find((s) => s.id === 'quality');
+        assert.match(quality?.hint ?? '', /environ 78/);
+        assert.equal(quality?.kind === 'slider' && quality.indicator, 78);
         assert.equal(resolveOptions(specs, { quality: 90 }).quality, 90, 'le choix reste libre');
     });
 
-    it('ne touche à rien quand la source est meilleure que le défaut, ou inconnue', () => {
+    it('marque la qualité d’origine sur la piste, sans toucher au défaut quand elle lui est supérieure', () => {
         assert.ok(jpg);
-        assert.equal(adaptOptions(jpg, 95), jpg.options);
+        const specs = adaptOptions(jpg, 95);
+        const quality = specs.find((s) => s.id === 'quality');
+        assert.ok(quality?.kind === 'slider');
+        assert.equal(quality.indicator, 95);
+        assert.equal(resolveOptions(specs, {}).quality, 82);
+        assert.match(quality.hint ?? '', /environ 95/);
+    });
+
+    it('ne touche à rien quand la qualité d’origine est inconnue', () => {
+        assert.ok(jpg);
         assert.equal(adaptOptions(jpg, null), jpg.options);
     });
 

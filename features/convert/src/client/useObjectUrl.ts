@@ -5,6 +5,10 @@ import { useEffect, useState } from 'react';
  * est révoquée dès que le fichier change ou que l'écran se démonte : une adresse
  * oubliée retient le fichier entier en mémoire.
  *
+ * Sans source, pas d'adresse, et tout de suite : celle d'avant ne survit pas à
+ * un passage par `null`. D'une source à la suivante, en revanche, l'ancienne
+ * tient le temps d'un rendu, pour que l'image se remplace sans clignoter.
+ *
  * `type` impose le type du contenu : c'est lui, et non le nom du fichier, qui
  * décide de ce que le navigateur en fait.
  */
@@ -16,5 +20,5 @@ export function useObjectUrl(source: Blob | null, type?: string): string | null 
         setUrl(next);
         return () => URL.revokeObjectURL(next);
     }, [source, type]);
-    return url;
+    return source ? url : null;
 }

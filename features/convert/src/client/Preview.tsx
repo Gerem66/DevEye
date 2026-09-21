@@ -60,6 +60,7 @@ export function Preview({ file, kind, isPdf, info, crop, resize, sample }: Previ
     const sampleUrl = useObjectUrl(sample);
     const [failed, setFailed] = useState(false);
     const [zoomed, setZoomed] = useState(false);
+    const [split, setSplit] = useState(50);
     useEffect(() => {
         setFailed(false);
         setZoomed(false);
@@ -83,7 +84,11 @@ export function Preview({ file, kind, isPdf, info, crop, resize, sample }: Previ
         const original = <img className={styles.stageLayer} style={framing(source, area)} {...image} />;
         return (
             <div className={styles.stage} style={shape}>
-                {sampleUrl ? <Compare before={original} afterUrl={sampleUrl} /> : original}
+                {sampleUrl ? (
+                    <Compare before={original} afterUrl={sampleUrl} split={split} onSplit={setSplit} />
+                ) : (
+                    original
+                )}
             </div>
         );
     };

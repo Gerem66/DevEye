@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import type { CSSProperties } from 'react';
 
 import styles from './style.module.css';
 
@@ -6,6 +6,9 @@ interface CompareProps {
     /** L'image d'origine, déjà cadrée comme le résultat. */
     before: React.ReactNode;
     afterUrl: string;
+    /** La place du rideau, en pour cent. Tenue par l'appelant : la comparaison peut s'effacer un instant sans la perdre. */
+    split: number;
+    onSplit: (split: number) => void;
 }
 
 /**
@@ -13,8 +16,7 @@ interface CompareProps {
  * rideau est un vrai `<input type='range'>` invisible posé sur l'image : le
  * clavier, le tactile et un lecteur d'écran le manient sans rien de plus.
  */
-export function Compare({ before, afterUrl }: CompareProps) {
-    const [split, setSplit] = useState(50);
+export function Compare({ before, afterUrl, split, onSplit }: CompareProps) {
     return (
         <div className={styles.compare} style={{ '--split': `${split}%` } as CSSProperties}>
             {before}
@@ -34,7 +36,7 @@ export function Compare({ before, afterUrl }: CompareProps) {
                 value={split}
                 aria-label='Comparer l’image avant et après conversion'
                 aria-valuetext={`${split} % de l’image d’origine visible`}
-                onChange={(e) => setSplit(Number(e.target.value))}
+                onChange={(e) => onSplit(Number(e.target.value))}
             />
         </div>
     );

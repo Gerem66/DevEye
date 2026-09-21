@@ -13,7 +13,12 @@ const DEBOUNCE_MS = 350;
 
 export interface Estimation {
     estimate: SizeEstimate | null;
-    /** L'image telle qu'elle sortirait, quand le navigateur a su l'encoder : de quoi comparer avant et après. */
+    /**
+     * L'image telle qu'elle sortirait, quand le navigateur a su l'encoder : de
+     * quoi comparer avant et après. Seulement si elle a le cadrage en cours : un
+     * essai d'avant le dernier recadrage, étiré dans le nouveau cadre, montrerait
+     * une image déformée à côté de la bonne.
+     */
     sample: Blob | null;
     /** Un essai d'encodage est en route : `estimate`, s'il y en a une, est celle d'avant le dernier geste. */
     pending: boolean;
@@ -25,6 +30,8 @@ interface Measure {
     scope: string;
     /** Les réglages qui pèsent. */
     key: string;
+    /** Parmi eux, ceux qui changent la forme de l'image. */
+    geometry: string;
     blob: Blob;
 }
 
@@ -36,7 +43,7 @@ interface Measure {
  * tromper du simple au quadruple. Entre deux essais, c'est donc la dernière
  * valeur mesurée qui reste, signalée comme dépassée (`pending`), jamais un
  * chiffre intermédiaire qu'on pourrait lire pour vrai. Le dernier aperçu reste
- * en place de la même façon.
+ * en place de la même façon, tant que le cadrage n'a pas bougé.
  */
 export function useEstimate(
     target: TargetFormat | null,
@@ -57,7 +64,8 @@ export function useEstimate(
     const measurable = Boolean(type && file && dims && dims.width * dims.height <= CANVAS_MAX_PIXELS);
 
     const scope = measurable && file && target ? `${target.id}|${file.name}|${file.size}|${file.lastModified}` : null;
-    const key = scope ? JSON.stringify([values.quality, values.resize, values.crop]) : null;
+    const geometry = JSON.stringify([values.resize, values.crop]);
+    const key = scope ? JSON.stringify([values.quality, geometry]) : null;
 
     useEffect(() => {
         if (!scope || !key || !type || !file || !source || !dims) return;
@@ -76,7 +84,7 @@ export function useEstimate(
                     bitmap.close();
                     canvas.toBlob(
                         (blob) => {
-                            if (blob && !cancelled) setMeasure({ scope, key, blob });
+                            if (blob && !cancelled) setMeasure({ scope, key, geometry, blob });
                         },
                         type,
                         (num(values, 'quality') ?? 82) / 100
@@ -98,7 +106,7 @@ export function useEstimate(
     const last = measure?.scope === scope ? measure : null;
     return {
         estimate: last ? { bytes: last.blob.size, exact: false } : null,
-        sample: last?.blob ?? null,
+        sample: last?.geometry === geometry ? last.blob : null,
         pending: last?.key !== key
     };
 }

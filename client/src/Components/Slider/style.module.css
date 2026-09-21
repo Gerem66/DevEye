@@ -18,6 +18,30 @@
     font-variant-numeric: tabular-nums;
 }
 
+/* `isolation` : le repère passe DERRIÈRE la piste sans glisser sous le reste de la page. */
+.track {
+    position: relative;
+    display: flex;
+    isolation: isolate;
+}
+
+/* Le centre de la poignée ne parcourt pas toute la largeur : il s'arrête à une
+   demi-poignée de chaque bord. Le repère suit la même course, sans quoi il
+   tomberait à côté de la valeur qu'il désigne. */
+.indicator {
+    --thumb: 16px;
+    position: absolute;
+    top: 50%;
+    left: calc(var(--at) * (100% - var(--thumb)) + var(--thumb) / 2);
+    z-index: -1;
+    width: 2px;
+    height: 16px;
+    border-radius: 1px;
+    background: var(--text-muted);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
 .input {
     width: 100%;
     accent-color: var(--accent);
