@@ -706,6 +706,25 @@
     color: var(--success);
 }
 
+/* La valeur d'avant le dernier geste : lisible, mais visiblement en attente. */
+.sizes .sizesStale,
+.sizes .sizesStale .sizesGain {
+    color: var(--text-muted);
+}
+
+.spin {
+    width: 14px;
+    margin-left: var(--space-sm);
+    vertical-align: -2px;
+    animation: convert-spin 0.9s linear infinite;
+}
+
+@keyframes convert-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 .sizesLoss,
 .sizesUnknown {
     color: var(--text-muted);

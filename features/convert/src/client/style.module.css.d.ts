@@ -20,6 +20,7 @@ declare const styles: {
     readonly compareTagAfter: string;
     readonly compareTagBefore: string;
     readonly 'convert-slide': string;
+    readonly 'convert-spin': string;
     readonly converter: string;
     readonly converterSide: string;
     readonly cropField: string;
@@ -80,7 +81,9 @@ declare const styles: {
     readonly sizes: string;
     readonly sizesGain: string;
     readonly sizesLoss: string;
+    readonly sizesStale: string;
     readonly sizesUnknown: string;
+    readonly spin: string;
     readonly stage: string;
     readonly stageLayer: string;
     readonly status: string;

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 
 import styles from './style.module.css';
 
@@ -24,6 +24,11 @@ export interface NumberInputProps {
     className?: string;
 }
 
+/** Ctrl ou Maj enfoncé, un cran de molette vaut autant de pas. */
+const WHEEL_BOOST = 50;
+/** Un pavé tactile envoie des dizaines d'événements par seconde : au-delà de ce rythme, ils sont ignorés. */
+const WHEEL_EVERY_MS = 50;
+
 const text = (value: number | null): string => (value === null ? '' : String(value));
 const decimalsOf = (n: number): number => (String(n).split('.')[1] ?? '').length;
 
@@ -32,6 +37,9 @@ const decimalsOf = (n: number): number => (String(n).split('.')[1] ?? '').length
  * maison, les flèches natives, différentes d'un navigateur à l'autre, étant
  * masquées. Ce qu'on tape n'est jamais réécrit tant que le champ a le focus :
  * la valeur n'est bornée qu'à sa sortie.
+ *
+ * La molette fait un pas, cinquante avec Ctrl ou Maj, mais seulement sur le
+ * champ qui a le focus : ailleurs, elle fait défiler la page comme partout.
  */
 export function NumberInput({
     value,
@@ -73,13 +81,37 @@ export function NumberInput({
         setEditing(false);
     };
 
-    const bump = (direction: 1 | -1): void => {
-        const base = value ?? min ?? 0;
+    const bump = (direction: 1 | -1, steps = 1): void => {
+        // Ce qui est tapé et pas encore remonté compte : le pas part de ce qu'on voit.
+        const typed = draft === '' ? NaN : Number(draft);
+        const base = Number.isFinite(typed) ? typed : (value ?? min ?? 0);
         const precision = Math.max(decimalsOf(step), decimalsOf(base));
-        const next = clamp(Number((base + direction * step).toFixed(precision)));
+        const next = clamp(Number((base + direction * step * steps).toFixed(precision)));
         setDraft(text(next));
         onChange(next);
     };
+
+    // Un écouteur natif, non passif : celui de React ne peut pas retenir le
+    // défilement de la page, ni le zoom que Ctrl + molette déclenche.
+    const input = useRef<HTMLInputElement>(null);
+    const lastWheel = useRef(0);
+    const onWheel = useRef<(event: WheelEvent) => void>(() => undefined);
+    onWheel.current = (event) => {
+        if (disabled || document.activeElement !== input.current) return;
+        event.preventDefault();
+        // Maj enfoncé, le navigateur range le mouvement sur l'axe horizontal.
+        const delta = event.deltaY !== 0 ? event.deltaY : event.deltaX;
+        if (delta === 0 || event.timeStamp - lastWheel.current < WHEEL_EVERY_MS) return;
+        lastWheel.current = event.timeStamp;
+        bump(delta < 0 ? 1 : -1, event.ctrlKey || event.shiftKey ? WHEEL_BOOST : 1);
+    };
+    useEffect(() => {
+        const element = input.current;
+        if (!element) return;
+        const listener = (event: WheelEvent): void => onWheel.current(event);
+        element.addEventListener('wheel', listener, { passive: false });
+        return () => element.removeEventListener('wheel', listener);
+    }, []);
 
     return (
         <div className={`${styles.field} ${disabled ? styles.disabled : ''} ${className ?? ''}`}>
@@ -95,6 +127,7 @@ export function NumberInput({
                 −
             </button>
             <input
+                ref={input}
                 id={id}
                 className={styles.input}
                 type='number'
@@ -109,8 +142,6 @@ export function NumberInput({
                 onFocus={() => setEditing(true)}
                 onChange={type}
                 onBlur={commit}
-                // La molette sur un champ qui a le focus changerait sa valeur en faisant défiler la page.
-                onWheel={(event) => event.currentTarget.blur()}
                 onKeyDown={(event) => {
                     if (event.key === 'Enter') event.currentTarget.blur();
                 }}

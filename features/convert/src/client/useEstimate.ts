@@ -15,43 +15,28 @@ export interface Estimation {
     estimate: SizeEstimate | null;
     /** L'image telle qu'elle sortirait, quand le navigateur a su l'encoder : de quoi comparer avant et après. */
     sample: Blob | null;
-    /** Un essai d'encodage est en route : `estimate`, s'il y en a une, est provisoire. */
+    /** Un essai d'encodage est en route : `estimate`, s'il y en a une, est celle d'avant le dernier geste. */
     pending: boolean;
 }
 
-/** Le dernier essai abouti, et ce que le calcul du catalogue disait au même moment. */
+/** Le dernier essai abouti. */
 interface Measure {
     /** Le fichier et la cible : hors d'eux, un essai ne dit plus rien. */
     scope: string;
     /** Les réglages qui pèsent. */
     key: string;
     blob: Blob;
-    computedBytes: number | null;
-}
-
-/**
- * Le calcul du catalogue, recalé sur un essai réel de la même image dans le même
- * format : le rapport entre ce qu'il disait alors et ce que l'essai a pesé.
- */
-export function recalibrate(
-    computedBytes: number | null,
-    measuredBytes: number,
-    computedThen: number | null
-): number | null {
-    if (!computedBytes || !computedThen) return null;
-    return Math.round(computedBytes * (measuredBytes / computedThen));
 }
 
 /**
  * La taille du résultat, avant de l'avoir produit.
  *
- * Pour une image que le navigateur sait encoder, un essai réel fait foi. Entre
- * deux essais, le calcul du catalogue ne s'affiche jamais tel quel : il ignore
- * ce que l'image contient et peut se tromper du simple au quadruple, ce qui
- * ferait sauter le chiffre à chaque geste. Il est recalé sur le dernier essai
- * (même image, même format : l'erreur est la même), si bien que le chiffre suit
- * le curseur sans à-coup, puis se corrige de peu. Le dernier aperçu reste en
- * place de la même façon.
+ * Pour une image que le navigateur sait encoder, un essai réel fait foi, et lui
+ * seul : le calcul du catalogue ignore ce que l'image contient et peut se
+ * tromper du simple au quadruple. Entre deux essais, c'est donc la dernière
+ * valeur mesurée qui reste, signalée comme dépassée (`pending`), jamais un
+ * chiffre intermédiaire qu'on pourrait lire pour vrai. Le dernier aperçu reste
+ * en place de la même façon.
  */
 export function useEstimate(
     target: TargetFormat | null,
@@ -73,7 +58,6 @@ export function useEstimate(
 
     const scope = measurable && file && target ? `${target.id}|${file.name}|${file.size}|${file.lastModified}` : null;
     const key = scope ? JSON.stringify([values.quality, values.resize, values.crop]) : null;
-    const computedBytes = computed?.bytes ?? null;
 
     useEffect(() => {
         if (!scope || !key || !type || !file || !source || !dims) return;
@@ -92,7 +76,7 @@ export function useEstimate(
                     bitmap.close();
                     canvas.toBlob(
                         (blob) => {
-                            if (blob && !cancelled) setMeasure({ scope, key, blob, computedBytes });
+                            if (blob && !cancelled) setMeasure({ scope, key, blob });
                         },
                         type,
                         (num(values, 'quality') ?? 82) / 100
@@ -112,10 +96,9 @@ export function useEstimate(
     if (!scope) return { estimate: computed, sample: null, pending: false };
 
     const last = measure?.scope === scope ? measure : null;
-    if (last?.key === key)
-        return { estimate: { bytes: last.blob.size, exact: false }, sample: last.blob, pending: false };
-
-    const bytes = last ? recalibrate(computedBytes, last.blob.size, last.computedBytes) : null;
-    const recalibrated = bytes === null ? null : { bytes, exact: false };
-    return { estimate: recalibrated, sample: last?.blob ?? null, pending: true };
+    return {
+        estimate: last ? { bytes: last.blob.size, exact: false } : null,
+        sample: last?.blob ?? null,
+        pending: last?.key !== key
+    };
 }

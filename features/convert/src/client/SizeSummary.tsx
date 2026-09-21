@@ -6,7 +6,7 @@ import styles from './style.module.css';
 interface SizeSummaryProps {
     inputBytes: number;
     estimate: SizeEstimate | null;
-    /** Un essai d'encodage est en route : sans estimation encore, c'est une attente, pas une inconnue. */
+    /** Un essai d'encodage est en route : la valeur affichée date d'avant le dernier geste, elle se grise. */
     pending?: boolean;
 }
 
@@ -21,20 +21,25 @@ export function SizeSummary({ inputBytes, estimate, pending }: SizeSummaryProps)
             </div>
             <div>
                 <dt>Après conversion</dt>
-                {estimate ? (
-                    <dd>
-                        <strong>
-                            {estimate.exact ? '' : 'environ '}
-                            {formatBytesFr(estimate.bytes)}
-                        </strong>
-                        {delta >= 5 && <span className={styles.sizesGain}> {delta} % de moins</span>}
-                        {delta <= -5 && <span className={styles.sizesLoss}> {-delta} % de plus</span>}
-                    </dd>
-                ) : (
-                    <dd className={styles.sizesUnknown}>
-                        {pending ? 'calcul en cours…' : 'connu à la fin de la conversion'}
-                    </dd>
-                )}
+                <dd className={pending ? styles.sizesStale : undefined}>
+                    {estimate ? (
+                        <>
+                            <strong>
+                                {estimate.exact ? '' : 'environ '}
+                                {formatBytesFr(estimate.bytes)}
+                            </strong>
+                            {delta >= 5 && <span className={styles.sizesGain}> {delta} % de moins</span>}
+                            {delta <= -5 && <span className={styles.sizesLoss}> {-delta} % de plus</span>}
+                        </>
+                    ) : (
+                        <span className={styles.sizesUnknown}>
+                            {pending ? 'calcul en cours' : 'connu à la fin de la conversion'}
+                        </span>
+                    )}
+                    {pending && (
+                        <span className={`icon icon-spinner ${styles.spin}`} role='img' aria-label='Calcul en cours' />
+                    )}
+                </dd>
             </div>
         </dl>
     );
