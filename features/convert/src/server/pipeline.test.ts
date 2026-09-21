@@ -218,6 +218,61 @@ describe('de la montée au résultat', () => {
         assert.equal(mine.state.headers['Content-Length'], String(row?.output_bytes));
     });
 
+    it('dit d’un résultat dont le fichier a disparu qu’il est perdu, au lieu de le laisser « prêt »', async () => {
+        const viaUpkeep = await seed(repo, 'wav', 'mp3');
+        const viaDownload = await seed(repo, 'wav', 'mp3');
+        const soon = Math.floor(Date.now() / 1000) + 600;
+        for (const id of [viaUpkeep, viaDownload]) {
+            Object.assign(repo.rows.find((r) => r.id === id) ?? {}, {
+                phase: 'done',
+                output_bytes: 10,
+                expires_at: soon
+            });
+        }
+
+        const asked = fakeReply();
+        await download(
+            { headers: {}, body: undefined, query: { token: ticket(viaDownload, 'download') }, ip: '::1' },
+            asked.reply
+        );
+        assert.equal(asked.state.status, 404);
+        assert.equal(repo.rows.find((r) => r.id === viaDownload)?.error_code, 'file_lost');
+
+        await deps.recorded.tickers[1].tick();
+        const row = repo.rows.find((r) => r.id === viaUpkeep);
+        assert.deepEqual([row?.phase, row?.error_code, row?.expires_at], ['error', 'file_lost', null]);
+    });
+
+    it('n’accuse pas un fichier illisible quand c’est l’entrée qui a disparu', async () => {
+        const id = await seed(repo, 'wav', 'mp3');
+        Object.assign(repo.rows.find((r) => r.id === id) ?? {}, { phase: 'queued' });
+        await deps.recorded.tickers[0].tick();
+        const row = repo.rows.find((r) => r.id === id);
+        assert.deepEqual([row?.phase, row?.error_code], ['error', 'file_lost']);
+    });
+
+    it('ne déclare rien de perdu quand c’est le stockage qui est injoignable', async () => {
+        const id = await seed(repo, 'wav', 'mp3');
+        Object.assign(repo.rows.find((r) => r.id === id) ?? {}, {
+            phase: 'done',
+            output_bytes: 10,
+            expires_at: 9_999_999_999
+        });
+        const blocker = path.join(root, 'fichier');
+        await fs.writeFile(blocker, '');
+        env.CONVERT_STORAGE_DIR = path.join(blocker, 'sous');
+        try {
+            await deps.recorded.tickers[1].tick();
+        } finally {
+            env.CONVERT_STORAGE_DIR = root;
+        }
+        assert.equal(repo.rows.find((r) => r.id === id)?.phase, 'done');
+        repo.rows.splice(
+            repo.rows.findIndex((r) => r.id === id),
+            1
+        );
+    });
+
     it('retire du disque un résultat échu', async (t) => {
         if (!hasFfmpeg()) return t.skip('ffmpeg absent de ce poste');
         const done = repo.rows.find((r) => r.phase === 'done');

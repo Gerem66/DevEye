@@ -25,6 +25,7 @@ import { fileSize, freeBytes, jobPaths, probeStorage, removeJobDir, sweepStorage
  * vidéos de front suffiraient à faire tousser tout le reste.
  */
 
+const FILE_LOST = 'Le fichier n’est plus sur le serveur. Relancer la conversion.';
 const PUBLISH_EVERY_MS = 1000;
 const PERSIST_EVERY_MS = 5000;
 /** Les travaux au repos (échec, annulation, résultat parti) quittent la base après ce délai. */
@@ -105,6 +106,7 @@ export function createService(deps: FeatureServiceDeps<ConvertRepo>, seam: Conve
             const target = targetOf(job.kind, job.source_format, job.target_format);
             if (!source || !target)
                 throw new ConvertFailure('unsupported', 'Cette conversion n’est plus prise en charge.');
+            if ((await fileSize(paths.input)) === null) throw new ConvertFailure('file_lost', FILE_LOST);
             const inputBytes = Number(job.input_bytes);
             // La place a pu partir depuis que le fichier a été accepté.
             if ((await freeBytes()) < inputBytes + env.CONVERT_DISK_FLOOR_BYTES) {
@@ -188,11 +190,30 @@ export function createService(deps: FeatureServiceDeps<ConvertRepo>, seam: Conve
         }
     }
 
+    /**
+     * Un état qui promet un fichier se vérifie contre le disque : un stockage
+     * vidé (volume non monté, dossier effacé) laisserait sinon des résultats
+     * « prêts » que personne ne peut récupérer.
+     */
+    async function reconcile(): Promise<void> {
+        // Un stockage injoignable n'a perdu aucun fichier : tout y paraîtrait absent.
+        if ((await probeStorage()) !== null) return;
+        const lost = new Set<number>();
+        for (const job of await deps.repo.promisingFile()) {
+            const paths = jobPaths(job.workspaceId, job.id);
+            if ((await fileSize(job.phase === 'done' ? paths.output : paths.input)) !== null) continue;
+            if (await deps.repo.markLost(job.id, job.phase, now())) lost.add(job.workspaceId);
+        }
+        if (lost.size > 0) deps.logger.warn({ workspaces: lost.size }, 'convert: fichiers absents du stockage');
+        for (const workspaceId of lost) deps.live.changed(workspaceId);
+    }
+
     async function upkeep(): Promise<void> {
         const at = now();
         const expired = await deps.repo.expire(at, at - env.CONVERT_UPLOAD_TTL_SECONDS);
         for (const job of expired) await removeJobDir(job.workspaceId, job.id);
         for (const workspaceId of new Set(expired.map((job) => job.workspaceId))) deps.live.changed(workspaceId);
+        await reconcile();
         await sweepStorage(await deps.repo.liveKeys(), deps.logger);
         await deps.repo.purgeOld(at - KEPT_SECONDS);
         await refreshFx();
@@ -218,6 +239,7 @@ export function createService(deps: FeatureServiceDeps<ConvertRepo>, seam: Conve
             // Un arrêt brutal ne repasse par aucun `finally` : le ménage se fait ici.
             const requeued = await deps.repo.recoverStale(env.CONVERT_MAX_ATTEMPTS, now());
             if (requeued > 0) deps.logger.info({ requeued }, 'convert: travaux remis en file après un arrêt');
+            await reconcile();
             await sweepStorage(await deps.repo.liveKeys(), deps.logger);
 
             setQueueWaker(() => {

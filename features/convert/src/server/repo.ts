@@ -43,6 +43,9 @@ export interface StoredRates {
     rates: Record<string, number>;
 }
 
+/** Les deux états au repos qui promettent un fichier. */
+export type FilePhase = 'queued' | 'done';
+
 /** Un travail désigné par ce qui suffit à retrouver son dossier. */
 export interface JobRef {
     id: number;
@@ -83,6 +86,14 @@ export interface ConvertRepo {
     expire(at: number, uploadsBefore: number): Promise<JobRef[]>;
     /** Les travaux dont le dossier doit survivre à un balayage, sous la forme `espace/travail`. */
     liveKeys(): Promise<Set<string>>;
+    /** Les travaux dont l'état promet un fichier sur le disque : l'entrée en file, le résultat une fois fini. */
+    promisingFile(): Promise<(JobRef & { phase: FilePhase })[]>;
+    /**
+     * Le fichier promis a disparu. Ne touche la ligne que si elle est encore
+     * dans l'état où on l'a lue : un travail parti entre-temps a, lui, retiré
+     * son entrée pour de bon.
+     */
+    markLost(id: number, phase: FilePhase, at: number): Promise<boolean>;
     purgeOld(before: number): Promise<void>;
 
     rates(): Promise<StoredRates>;
@@ -252,6 +263,24 @@ export function createRepo(q: SdkQueryable): ConvertRepo {
                 `SELECT id, workspace_id FROM ft_convert_jobs WHERE phase IN ${HOLDING}`
             );
             return new Set(rows.map((row) => `${row.workspace_id}/${row.id}`));
+        },
+
+        async promisingFile() {
+            const rows = await q.query<{ id: number; workspace_id: number; phase: FilePhase }>(
+                `SELECT id, workspace_id, phase FROM ft_convert_jobs WHERE phase IN ('queued', 'done')`
+            );
+            return rows.map((row) => ({ id: row.id, workspaceId: row.workspace_id, phase: row.phase }));
+        },
+
+        async markLost(id, phase, at) {
+            const result = await q.execute(
+                `UPDATE ft_convert_jobs
+                 SET phase = 'error', error_code = 'file_lost', error_enc = NULL, expires_at = NULL,
+                     finished_at = COALESCE(finished_at, ?)
+                 WHERE id = ? AND phase = ?`,
+                [at, id, phase]
+            );
+            return result.affectedRows === 1;
         },
 
         async purgeOld(before) {

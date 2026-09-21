@@ -39,6 +39,7 @@ export const convertErrorCodeSchema = z.enum([
     'corrupt',
     'upload_interrupted',
     'interrupted',
+    'file_lost',
     'engine_failed'
 ]);
 export type ConvertErrorCode = z.infer<typeof convertErrorCodeSchema>;

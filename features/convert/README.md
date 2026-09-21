@@ -59,6 +59,10 @@ ticket, et quitte le disque à l'échéance. L'original part dès la conversion 
 - **Chaque transition d'état est un `UPDATE … WHERE phase = <attendue>`.** Le
   ticket de montée est rejouable tant qu'il vit : c'est la ligne qui interdit
   deux envois.
+- **Un état qui promet un fichier se vérifie contre le disque**, au démarrage, à
+  chaque entretien et à la descente : un stockage vidé donne des travaux en échec
+  `file_lost`, jamais des résultats « prêts » introuvables. Un stockage
+  injoignable, lui, ne déclare rien de perdu.
 - **Une conversion est personnelle.** Un membre ne voit que les siennes, même
   dans un espace partagé.
 - **Trois bornes de taille, de la plus large à la plus étroite** : le mur du

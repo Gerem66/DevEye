@@ -143,6 +143,24 @@ export function memoryRepo(): MemoryRepo {
         },
         liveKeys: () =>
             Promise.resolve(new Set(rows.filter((r) => holding.has(r.phase)).map((r) => `${r.workspace_id}/${r.id}`))),
+        promisingFile: () =>
+            Promise.resolve(
+                rows
+                    .filter((r) => r.phase === 'queued' || r.phase === 'done')
+                    .map((r) => ({ id: r.id, workspaceId: r.workspace_id, phase: r.phase as 'queued' | 'done' }))
+            ),
+        markLost(id, phase, at) {
+            const row = byId(id);
+            if (row?.phase !== phase) return Promise.resolve(false);
+            Object.assign(row, {
+                phase: 'error',
+                error_code: 'file_lost',
+                error_enc: null,
+                expires_at: null,
+                finished_at: row.finished_at ?? at
+            });
+            return Promise.resolve(true);
+        },
         purgeOld: () => Promise.resolve(),
         rates: () => Promise.resolve(repo.stored),
         saveRates(asOf, rates) {

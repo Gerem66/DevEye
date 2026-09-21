@@ -26,6 +26,7 @@ export const ERROR_LABELS: Record<ConvertErrorCode, string> = {
     corrupt: 'Ce fichier ne se lit pas : il est peut-être abîmé.',
     upload_interrupted: 'L’envoi du fichier a été interrompu.',
     interrupted: 'Le serveur a redémarré pendant la conversion.',
+    file_lost: 'Le fichier n’est plus sur le serveur. Relancer la conversion.',
     engine_failed: 'La conversion a échoué.'
 };
 

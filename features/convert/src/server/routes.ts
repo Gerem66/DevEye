@@ -125,7 +125,12 @@ export function convertRoutes(app: SdkPublicApp, deps: ConvertRouteDeps): void {
         const target = targetOf(job.kind, job.source_format, job.target_format);
         const output = jobPaths(ticket.workspaceId, jobId).output;
         const size = await fileSize(output);
-        if (!target || size === null) return reply.code(404).send({ error: 'not_found' });
+        if (size === null) {
+            // L'écran montrait encore « Prêt » : la ligne dit désormais ce qu'il en est.
+            if (await deps.repo.markLost(jobId, 'done', now())) deps.live.changed(ticket.workspaceId);
+            return reply.code(404).send({ error: 'not_found' });
+        }
+        if (!target) return reply.code(404).send({ error: 'not_found' });
 
         const original = (await ticket.cipher.server.tryDecrypt(job.original_name_enc)) ?? 'fichier';
         // Le type vient du catalogue, jamais de l'envoi, et toujours en pièce
