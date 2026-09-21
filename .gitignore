@@ -7,10 +7,11 @@
 !.env.test
 config*.json
 
-# React
+# React / Vite
 dist
 build
 node_modules
+.vite
 
 # Logs
 /logs/
