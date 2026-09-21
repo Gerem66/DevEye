@@ -6,7 +6,7 @@ import { resolveOptions, type OptionValues } from '../../contracts/options';
 import { env } from '../env';
 import { ConvertFailure } from '../spawn';
 import { jobPaths } from '../storage';
-import { audioPlan, gifPlan, progressOf, videoPlan } from './ffmpeg';
+import { audioPlan, displayedDims, gifPlan, progressOf, videoPlan } from './ffmpeg';
 import { imageArgs } from './image';
 import type { InputProbe } from './types';
 
@@ -266,6 +266,29 @@ describe('arguments d’image', () => {
         const args = imageArgs(plan('image', 'png', 'webp', { stripMetadata: false }, IMAGE));
         assert.equal(args.includes('+profile'), false);
         assert.equal(args.includes('-alpha'), false);
+    });
+});
+
+describe('dimensions affichées', () => {
+    it('inverse celles d’une vidéo filmée en portrait, que ffmpeg redresse avant ses filtres', () => {
+        const coded = { width: 1920, height: 1080 };
+        assert.deepEqual(displayedDims({ ...coded, side_data_list: [{ rotation: 90 }] }), {
+            width: 1080,
+            height: 1920
+        });
+        assert.deepEqual(displayedDims({ ...coded, side_data_list: [{ rotation: -90 }] }), {
+            width: 1080,
+            height: 1920
+        });
+        assert.deepEqual(displayedDims({ ...coded, tags: { rotate: '270' } }), { width: 1080, height: 1920 });
+    });
+
+    it('garde celles d’une vidéo droite, ou retournée', () => {
+        const coded = { width: 1920, height: 1080 };
+        assert.deepEqual(displayedDims(coded), coded);
+        assert.deepEqual(displayedDims({ ...coded, side_data_list: [{ rotation: 180 }] }), coded);
+        assert.deepEqual(displayedDims({ ...coded, side_data_list: [{}] }), coded);
+        assert.equal(displayedDims({}), null);
     });
 });
 

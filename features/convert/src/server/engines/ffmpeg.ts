@@ -18,13 +18,30 @@ const PROBE_TIMEOUT_MS = 60_000;
 const SAFE_INPUT = ['-protocol_whitelist', 'file'] as const;
 const QUIET = ['-hide_banner', '-nostdin', '-y', '-loglevel', 'error', '-nostats', '-progress', 'pipe:1'] as const;
 
-interface FfprobeStream {
+export interface FfprobeStream {
     codec_type?: string;
     width?: number;
     height?: number;
     avg_frame_rate?: string;
     bit_rate?: string;
     disposition?: { attached_pic?: number };
+    /** La matrice d'affichage : c'est là qu'un téléphone note qu'il a filmé en portrait. */
+    side_data_list?: { rotation?: number }[];
+    tags?: { rotate?: string };
+}
+
+/**
+ * Les dimensions de l'image telle qu'on la voit. ffprobe rend celles du flux
+ * codé, mais ffmpeg redresse l'image AVANT ses filtres : pour une vidéo filmée
+ * en portrait, l'échelle et le recadrage portent donc sur des dimensions
+ * inversées par rapport à celles-là. Le navigateur, lui, rend déjà les bonnes.
+ */
+export function displayedDims(stream: FfprobeStream): { width: number; height: number } | null {
+    if (!stream.width || !stream.height) return null;
+    const rotation =
+        stream.side_data_list?.find((d) => d.rotation !== undefined)?.rotation ?? Number(stream.tags?.rotate ?? 0);
+    const sideways = Math.abs(Math.round(rotation)) % 180 === 90;
+    return sideways ? { width: stream.height, height: stream.width } : { width: stream.width, height: stream.height };
 }
 interface FfprobeOutput {
     format?: { format_name?: string; duration?: string; bit_rate?: string };
@@ -77,8 +94,9 @@ export async function probeMedia(
 
     const streams = parsed.streams ?? [];
     const video = streams.find((s) => s.codec_type === 'video' && s.disposition?.attached_pic !== 1);
-    const width = video?.width ?? null;
-    const height = video?.height ?? null;
+    const shown = video ? displayedDims(video) : null;
+    const width = shown?.width ?? null;
+    const height = shown?.height ?? null;
     if ((width ?? 0) > MAX_DIMENSION || (height ?? 0) > MAX_DIMENSION) {
         throw new ConvertFailure('unsupported', `Image trop grande : ${MAX_DIMENSION} pixels de côté au plus.`);
     }
