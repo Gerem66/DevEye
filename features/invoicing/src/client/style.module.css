@@ -1,0 +1,1265 @@
+/* La coquille de la feature, ses écrans, et la carte de l'accueil. */
+
+.feature {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    height: 100%;
+    min-height: 0;
+}
+
+.panel {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.placeholder {
+    margin: 0;
+    padding: var(--space-md) 0;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+/* Le refus et, quand il désigne un réglage, le bouton qui y mène : sur une
+   ligne, le geste poussé à droite. */
+.error {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    margin: 0 0 var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-sm);
+    background: var(--danger-bg);
+    color: var(--danger);
+    font-size: 0.9rem;
+}
+
+.errorText {
+    flex: 1 1 16rem;
+}
+
+/* Un état vide qui apprend quelque chose plutôt qu'une ligne grise. */
+.empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-sm);
+    max-width: 30rem;
+    margin: var(--space-xl) auto;
+    padding: var(--space-lg);
+    border: 1px dashed var(--glass-border);
+    border-radius: var(--radius-md);
+    text-align: center;
+}
+
+.emptyIcon {
+    width: 32px;
+    color: var(--text-muted);
+}
+
+.emptyTitle {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.emptyBody {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+/* ── La carte de l'accueil ─────────────────────────────────────────────── */
+
+/* La silhouette commune à toutes les cartes de l'accueil : la valeur en haut,
+   la phrase poussée tout en bas à gauche par `margin-top: auto`. */
+.widget {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    height: 100%;
+}
+
+.widgetStat {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-sm);
+    margin-top: var(--space-sm);
+}
+
+.widgetValue {
+    color: var(--accent);
+    font-size: 1.9rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
+.widgetLabel {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.widgetFoot {
+    margin-top: auto;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+
+/* Le retard est la seule chose que cette carte doive crier. */
+.widgetLate {
+    color: var(--danger);
+}
+
+/* ── Les panneaux de réglages ──────────────────────────────────────────── */
+
+/* Deux colonnes quand la place le permet, une seule sinon : le panneau de la
+   coquille change de largeur sans que la fenêtre bouge, d'où la requête de
+   conteneur plutôt qu'une media query, qui mentirait. */
+.fieldGrid {
+    display: grid;
+    gap: var(--space-md);
+    grid-template-columns: 1fr;
+    container-type: inline-size;
+}
+
+@container (min-width: 440px) {
+    .fieldGrid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .fieldWide {
+        grid-column: 1 / -1;
+    }
+}
+
+.textarea {
+    width: 100%;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font: inherit;
+    line-height: 1.5;
+    resize: vertical;
+}
+
+.textarea:focus {
+    border-color: var(--input-focus);
+    outline: none;
+}
+
+.textarea::placeholder {
+    color: var(--input-placeholder);
+}
+
+.textarea:disabled {
+    /* framer-motion possède l'opacité de ce qui l'entoure : un filtre atténue
+       sans qu'elle ait à la réconcilier. */
+    filter: opacity(0.6);
+}
+
+.logoRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+.logo,
+.logoEmpty {
+    width: 64px;
+    height: 64px;
+    flex: none;
+    border-radius: var(--radius-sm);
+    object-fit: contain;
+}
+
+.logoEmpty {
+    display: grid;
+    place-items: center;
+    border: 1px dashed var(--glass-border);
+    color: var(--text-muted);
+}
+
+.logoActions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    align-items: flex-start;
+}
+
+/* Le champ de fichier natif est illisible : le libellé porte le geste, l'entrée
+   reste dans le flux pour que le clavier l'atteigne. */
+.logoPick input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.logoPick {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    padding: var(--space-xs) var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-pill);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.logoPick:hover,
+.logoPick:focus-within {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* ── Listes, rangées et fiches ─────────────────────────────────────────── */
+
+.pane {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.paneHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+}
+
+.paneCount {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.rows {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    /* Le conteneur dont les rangées lisent la largeur, pour se replier. */
+    container-type: inline-size;
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.rows > li + li .row {
+    border-top: 1px solid var(--glass-border);
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: var(--space-sm) var(--space-md);
+    background: none;
+    border: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.row:hover {
+    background: var(--surface-subtle);
+}
+
+/* À l'étroit, l'état et le montant passent sous le titre plutôt que de l'écraser.
+   Une requête de conteneur et non de fenêtre : le panneau change de largeur sans
+   que la fenêtre bouge. */
+@container (max-width: 460px) {
+    .row {
+        flex-wrap: wrap;
+    }
+
+    .rowText {
+        flex: 1 1 100%;
+    }
+
+    .rowRight {
+        flex: 1 1 100%;
+        justify-content: flex-start;
+        padding-left: calc(18px + var(--space-sm));
+    }
+}
+
+.rowIcon {
+    flex: none;
+    color: var(--text-muted);
+}
+
+.rowText {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.rowLabel {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+/* Une seule ligne, tronquée : deux rangées voisines doivent garder la même
+   hauteur pour que l'oeil descende la liste sans accrocher. */
+.rowMeta {
+    overflow: hidden;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rowRight {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex: none;
+}
+
+.rowAmount {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Les chiffres d'une fiche : une grille qui se replie, jamais un tableau. */
+.figures {
+    display: grid;
+    gap: var(--space-md);
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    margin: 0;
+}
+
+.figure {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding: var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+}
+
+.figure dt {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+.figure dd {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.15rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.figureBad dd {
+    color: var(--danger);
+}
+
+.dialogFields {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.dialogField {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.dialogLabel {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.dialogHint {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+/* ── L'éditeur de lignes ───────────────────────────────────────────────── */
+
+/* Le conteneur porte la requête : la popup change de largeur sans que la
+   fenêtre bouge, et une media query mentirait. */
+.editor {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    container-type: inline-size;
+}
+
+.lineHead {
+    display: none;
+}
+
+/* `relative` ancre la barre d'insertion : elle se dessine dans cette boîte, et
+   suit le défilement sans qu'aucun code ne corrige un `scrollTop`. */
+.lines {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+/* L'interstice visé par le glissé : horizontale, puisque les lignes s'empilent. */
+.dropBar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent-glow);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.lineDragging {
+    filter: opacity(0.4);
+    cursor: grabbing;
+}
+
+/* À l'étroit, la ligne se replie en étages : la désignation, les deux mesures,
+   les deux prix, le total. Les zones changent, le DOM ne bouge pas : pas de
+   double rendu, pas de focus perdu au redimensionnement. Chaque cellule a sa
+   propre zone, sans quoi elles se superposeraient toutes dans la même case. */
+.lineRow {
+    display: grid;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xs);
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) auto;
+    grid-template-areas:
+        'grip  label label drop'
+        '.     qty   unit  .'
+        '.     price vat   .'
+        '.     total total .';
+}
+
+.lineRowNote {
+    grid-template-areas:
+        'grip  label label drop'
+        '.     note  note  .';
+}
+
+.lineRow:hover {
+    background: var(--surface-subtle);
+}
+
+.lineBroken {
+    border-color: var(--warning);
+}
+
+.lineGrip {
+    grid-area: grip;
+    color: var(--text-muted);
+    cursor: grab;
+    touch-action: none;
+}
+
+.cellLabel {
+    grid-area: label;
+}
+
+/* Les colonnes de nombres se rangent à droite, comme sur le papier : c'est ce
+   qui fait tomber les unités sous les unités, et `tabular-nums` n'aligne rien
+   si les champs, eux, ne s'alignent pas. */
+.cellQty {
+    grid-area: qty;
+    text-align: right;
+}
+
+.cellUnit {
+    grid-area: unit;
+}
+
+.cellPrice {
+    grid-area: price;
+    text-align: right;
+}
+
+.cellVat {
+    grid-area: vat;
+}
+
+/* Le même retrait qu'une liste déroulante : la phrase prend la place du contrôle
+   qu'elle remplace, et tombe donc sous le même titre. */
+.cellVatOff {
+    grid-area: vat;
+    align-self: center;
+    padding-left: 0.75rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
+/* Le même retrait que le padding d'un champ : sans lui, le total se collerait au
+   bord de la colonne, un cran à droite des prix qu'il totalise. */
+.cellTotal {
+    grid-area: total;
+    padding: 0 0.75rem;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+.cellNote {
+    grid-area: note;
+    align-self: center;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-style: italic;
+    text-align: center;
+}
+
+.lineDrop {
+    grid-area: drop;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.lineDrop:hover {
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+@container (min-width: 620px) {
+    .lineHead {
+        display: grid;
+        gap: var(--space-xs);
+        grid-template-columns: 18px minmax(0, 1fr) 5.5rem 7.5rem 7rem 6.75rem 6.5rem 32px;
+        padding: 0 var(--space-xs);
+        color: var(--text-muted);
+        font-size: 0.75rem;
+    }
+
+    /* La première colonne du bandeau est vide : elle tient la place de la poignée. */
+    .headLabel {
+        grid-column: 2;
+        padding-left: 0.75rem;
+    }
+
+    /* Chaque titre tombe sur le texte de sa cellule, et non sur le bord de sa
+       colonne : un champ comme une liste écrit après son propre padding. */
+    .headText {
+        padding-left: 0.75rem;
+    }
+
+    .headNum {
+        padding-right: 0.75rem;
+        text-align: right;
+    }
+
+    .lineRow {
+        grid-template-columns: 18px minmax(0, 1fr) 5.5rem 7.5rem 7rem 6.75rem 6.5rem 32px;
+        grid-template-areas: none;
+    }
+
+    .lineRow > * {
+        grid-area: auto;
+    }
+
+    .cellNote {
+        grid-column: 3 / 8;
+    }
+}
+
+.editorActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.editorHint {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.editorWarn {
+    margin: 0;
+    color: var(--warning);
+    font-size: 0.85rem;
+}
+
+/* ── La fiche d'un document ────────────────────────────────────────────── */
+
+/* L'en-tête d'un brouillon : des champs, pas un engrenage. Chacun dit la place
+   qu'il prend, sinon une date de dix caractères s'étire sur la moitié de la
+   popup. */
+.headerForm {
+    display: flex;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    min-width: 0;
+}
+
+.fieldClient {
+    flex: 1 1 16rem;
+}
+
+.fieldSubject {
+    flex: 2 1 18rem;
+}
+
+.fieldDate {
+    flex: 0 1 12rem;
+}
+
+.fieldRef {
+    flex: 0 1 14rem;
+}
+
+.readHeader {
+    display: grid;
+    gap: var(--space-md);
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    margin: 0;
+    padding: var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+}
+
+.readHeader dt {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+.readHeader dd {
+    margin: 0;
+    color: var(--text-primary);
+}
+
+.frozen {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+/* Un tableau de données peut déborder : il défile seul, la page jamais. */
+.tableWrap {
+    overflow-x: auto;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.table th,
+.table td {
+    padding: var(--space-sm);
+    border-bottom: 1px solid var(--glass-border);
+    text-align: left;
+    vertical-align: top;
+}
+
+.table thead th {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.table tbody th {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.table td:not(:first-child) {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.tableDetail {
+    display: block;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 400;
+}
+
+.tableNote td {
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+/* Masqué à l'oeil, lu par les lecteurs d'écran. */
+.visuallyHidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.totals {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    align-self: flex-end;
+    min-width: min(100%, 22rem);
+    margin: 0;
+    padding: var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+}
+
+.totalRow {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-md);
+}
+
+.totalRow dt {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.totalRow dd {
+    margin: 0;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.totalGross dt,
+.totalGross dd {
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+/* Une seule rangée, et des proportions tenues : les champs de l'app sont en
+   `width: 100%`, donc c'est à leur enveloppe de dire la place qu'ils prennent.
+   Sans elle, un déroulant mange toute la ligne et pousse la recherche dessous. */
+.filters {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.filterState {
+    flex: 0 1 12rem;
+    min-width: 9rem;
+}
+
+.filterYear {
+    flex: 0 1 7rem;
+    min-width: 6rem;
+}
+
+/* La recherche prend ce qui reste, et ne descend qu'à l'étroit pour de bon. */
+.filterSearch {
+    flex: 1 1 10rem;
+    min-width: 8rem;
+}
+
+.countLate {
+    color: var(--danger);
+}
+
+.rowSubject {
+    color: var(--text-secondary);
+    font-weight: 400;
+}
+
+.actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+/* Ce que l'offre permet, dit avant le refus et non à sa place. */
+.quotaNote,
+.quotaFull {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.quotaFull {
+    color: var(--warning);
+}
+
+/* ── L'aperçu imprimable ───────────────────────────────────────────────── */
+
+/* L'aperçu prend toute la hauteur qu'on lui laisse : quand la popup est plus
+   haute que le document, c'est lui qui s'étire, pas le vide. */
+.preview {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    gap: var(--space-sm);
+}
+
+/* Le document est blanc, quel que soit le thème : c'est du papier. */
+.previewFrame {
+    flex: 1;
+    width: 100%;
+    min-height: 60vh;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: #fff;
+}
+
+/* Une rangée qui ne mène nulle part : même silhouette, sans le geste. */
+.rowStatic {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: var(--space-sm) var(--space-md);
+}
+
+/* ── Le tableau de bord ────────────────────────────────────────────────── */
+
+.figureNote {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+
+.sectionTitle {
+    margin: 0 0 var(--space-sm);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.chart {
+    margin: 0;
+}
+
+.chartLegend {
+    display: flex;
+    gap: var(--space-md);
+    margin-bottom: var(--space-xs);
+    font-size: 0.8rem;
+}
+
+.chartKeyBilled,
+.chartKeyCashed {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    color: var(--text-secondary);
+}
+
+.chartKeyBilled::before,
+.chartKeyCashed::before {
+    content: '';
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+}
+
+.chartKeyBilled::before {
+    background: var(--palette-blue);
+}
+
+.chartKeyCashed::before {
+    background: var(--success);
+}
+
+.chartSvg {
+    width: 100%;
+    height: auto;
+}
+
+.chartAxis {
+    stroke: var(--glass-border);
+    stroke-width: 1;
+}
+
+.chartBilled {
+    fill: var(--palette-blue);
+    opacity: 0.55;
+}
+
+.chartCashed {
+    fill: var(--success);
+}
+
+.chartLabel {
+    fill: var(--text-muted);
+    font-size: 11px;
+}
+
+/* ── La remise au client : le lien d'abord, la réponse ensuite ─────────── */
+
+.delivery {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--glass-bg-light);
+}
+
+.deliveryLink {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+/* L'URL est ce qu'on vient chercher : elle prend la ligne, en écriture fixe. */
+.deliveryUrl {
+    flex: 1 1 16rem;
+    min-width: 0;
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-sm);
+    background: var(--glass-bg);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    word-break: break-all;
+}
+
+.deliveryActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.deliveryNote {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.45;
+}
+
+/* La réponse reçue, ou la voie de secours pour la noter à la main. */
+.deliveryAnswer {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+    padding-top: var(--space-sm);
+    border-top: 1px solid var(--glass-border);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.deliveryAnswerText {
+    flex: 1 1 14rem;
+    margin: 0;
+}
+
+.deliveryDone {
+    color: var(--text-primary);
+}
+
+/* ── L'accueil de la feature, ses pages et ses fiches ─────────────────── */
+
+.home,
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+/* L'en-tête commun à toutes les features : l'identité à gauche (titre, puis une
+   ligne qui la situe), les gestes à droite. Le trait de séparation garde sa
+   marge pour ne toucher à rien, et le bouton de réglages ferme la rangée. */
+.header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.heading {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.headingSoft {
+    color: var(--text-secondary);
+    font-weight: 400;
+}
+
+.subheading {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+    margin: var(--space-xs) 0 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+/* Une fiche : le retour, puis l'identité, sur la même ligne. */
+.detailHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    min-width: 0;
+}
+
+.ident {
+    flex: 1;
+    min-width: 0;
+}
+
+.pageHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.pageTitle {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+/* ── Les onglets d'une fiche, soulignés, sur toute la largeur ───────────── */
+
+.tabs {
+    display: flex;
+    gap: var(--space-xs);
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.tab,
+.tabActive {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-md);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    color: var(--text-secondary);
+    font: inherit;
+    cursor: pointer;
+    transition: color var(--transition-fast);
+}
+
+.tab:hover {
+    color: var(--text-primary);
+}
+
+.tabActive {
+    border-bottom-color: var(--accent);
+    color: var(--accent);
+}
+
+@media (max-width: 720px) {
+    .tabLabel {
+        display: none;
+    }
+}
+
+/* ── La fiche d'un document et son bandeau du bas ───────────────────────── */
+
+/* La fiche remplit la hauteur de la popup, pour que le bandeau se pose au bord
+   du bas même quand le contenu est court. */
+.sheet {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    min-height: 100%;
+}
+
+.sheetBody {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    gap: var(--space-md);
+}
+
+/* Collé au bas de la zone qui défile : ce qu'on garde sous les yeux en
+   rédigeant, et le seul geste qui fasse avancer le document.
+
+   Rien en dessous : l'espace du bas est celui de la popup (`--space-md` sur son
+   corps, `--space-sm` à l'étroit), et un padding ici s'y serait ajouté, posant la
+   rangée trois fois plus près du séparateur que du bord. Le padding du haut vaut
+   donc celui de la popup, dont la propre media query décide. */
+.sheetFoot {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    margin-top: auto;
+    padding: var(--space-md) 0 0;
+    background: var(--surface-popup);
+    border-top: 1px solid var(--glass-border);
+}
+
+@media (max-width: 640px) {
+    .sheetFoot {
+        padding-top: var(--space-sm);
+    }
+}
+
+.footTotals {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    flex: 1 1 auto;
+    min-width: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.footLabel {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+.footGrand {
+    color: var(--text-primary);
+    font-size: 1.05rem;
+}
+
+/* Les gestes restent à droite, y compris quand ils passent à la ligne : une
+   marge automatique absorbe la place libre de LEUR ligne, ce que
+   `justify-content` du bandeau ne fait pas pour un élément replié seul. */
+.footActions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    margin-left: auto;
+}
+
+.sheetContact {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.sectionHead {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.sectionHint {
+    flex: 1;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+/* Sans phrase entre le titre et les gestes, c'est au titre de pousser. */
+.sectionHead > .sectionTitle:only-of-type {
+    flex: 1;
+}
+
+.sectionActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.moreRow {
+    display: flex;
+    justify-content: center;
+}
+
+/* Le cul-de-sac d'un carnet vide : la phrase, puis le geste qui le remplit. */
+.pickerEmpty {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-sm);
+}
+
+/* La période des chiffres, seule sur sa ligne, juste au-dessus d'eux. */
+.periodRow {
+    display: flex;
+}
+
+/* Le bandeau qui prévient : une phrase, et le geste qui la règle. */
+.banner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--warning);
+    border-radius: var(--radius-md);
+    background: var(--warning-bg);
+    color: var(--text-primary);
+}
+
+.banner > .icon {
+    flex: none;
+    color: var(--warning);
+}
+
+.bannerText {
+    flex: 1 1 18rem;
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.45;
+}

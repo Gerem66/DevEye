@@ -368,6 +368,11 @@
     -webkit-mask-image: url(/icons/convert.svg);
     mask-image: url(/icons/convert.svg);
 }
+
+.icon.icon-invoicing {
+    -webkit-mask-image: url(/icons/invoicing.svg);
+    mask-image: url(/icons/invoicing.svg);
+}
 .icon.icon-at {
     -webkit-mask-image: url(/icons/at.svg);
     mask-image: url(/icons/at.svg);

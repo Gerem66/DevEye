@@ -672,5 +672,7 @@ const WHEN: Record<NotificationFeature, string> = {
     deploy: 'Envoyées à l’atterrissage d’un déploiement, échec comme succès, y compris ceux lancés depuis Dokploy, une CI ou un push git.',
     backup: 'Envoyées à l’échec d’une sauvegarde. Les réussites ne disent rien, sinon l’échec se perdrait dans le flot des succès.',
     convert:
-        'Envoyées à la fin d’une conversion assez longue pour qu’on ait quitté l’écran. La durée à partir de laquelle prévenir se règle dans l’onglet Général.'
+        'Envoyées à la fin d’une conversion assez longue pour qu’on ait quitté l’écran. La durée à partir de laquelle prévenir se règle dans l’onglet Général.',
+    invoicing:
+        'Envoyées quand une facture dépasse son échéance sans être soldée, et quand un client accepte ou refuse un devis depuis le lien que vous lui avez envoyé.'
 };

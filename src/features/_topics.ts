@@ -45,6 +45,10 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     finance: 'finance',
     git: 'git',
     home: 'home',
+    // Les brouillons ont leur sujet secondaire (`invoicingDrafts`), battu par
+    // l'écriture au fil de la frappe : un devis en cours de rédaction ne fait
+    // pas relire le tableau de bord de tout l'espace.
+    invoicing: 'invoicing',
     live: null,
     // Relier un élément à un projet change le portefeuille ; la liste de la
     // feature visée se ravive par le sujet que Projets bat dans l'espace du
@@ -120,6 +124,7 @@ const NON_MUTATING = new Set([
     'git.syncStatuses',
     // Lecture pure : c'est « settings » qui porte le verbe `set`, pas la commande.
     'x-rdv.settings',
+    'convert.settingsGet',
     'mail.oauthStart',
     'mail.accountTestConnection',
     'mail.attachmentScan',

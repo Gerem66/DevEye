@@ -96,6 +96,12 @@ export type ResourceKey =
     | 'audience.stats'
     /** Les retours reçus : un formulaire, son tableau et ses résultats. */
     | 'audience.forms'
+    | 'invoicing.count'
+    | 'invoicing.dashboard'
+    | 'invoicing.docList'
+    | 'invoicing.doc'
+    | 'invoicing.clientList'
+    | 'invoicing.config'
     /** Les clés d'un module externe (`<id>.<nom>`), déclarées par son manifest. */
     | ExternalResourceKey;
 

@@ -393,6 +393,26 @@ const ART: Record<ArtId, ReactNode> = {
             <circle cx='92' cy='74' r='5' fill={A} />
         </>
     ),
+    // La feuille d'un document : ses lignes, et le total qui les ferme.
+    invoicing: (
+        <>
+            <rect x='30' y='10' width='100' height='70' rx='5' fill={M} opacity='0.12' />
+            <rect x='30' y='10' width='100' height='70' rx='5' stroke={M} {...thin} />
+            <Line x={40} y={20} w={30} c={A} o={0.85} />
+            <Line x={104} y={20} w={16} o={0.3} />
+
+            <Line x={40} y={36} w={38} o={0.4} />
+            <Line x={102} y={36} w={18} o={0.28} />
+            <Line x={40} y={46} w={30} o={0.4} />
+            <Line x={102} y={46} w={18} o={0.28} />
+            <Line x={40} y={56} w={34} o={0.4} />
+            <Line x={102} y={56} w={18} o={0.28} />
+
+            <line x1='40' y1='66' x2='120' y2='66' stroke={M} {...thin} />
+            <Line x={40} y={70} w={20} o={0.3} />
+            <rect x='96' y='68' width='24' height='8' rx='4' fill={A} opacity='0.85' />
+        </>
+    ),
 
     // Une machine : son nom, son état, et l'activité qui la traverse.
     device: (

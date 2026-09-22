@@ -54,6 +54,9 @@
     },
     {
       "package": "deveye-feature-convert"
+    },
+    {
+      "package": "deveye-feature-invoicing"
     }
   ]
 }
