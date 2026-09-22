@@ -86,6 +86,8 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
         columnId: number | null;
         /** L'onglet demandé par le geste d'ouverture. */
         focus?: CardTab;
+        /** Les dates d'une création posée sur la frise. */
+        dates?: { startDate: number; dueDate: number };
     } | null>(null);
     const [columnDialog, setColumnDialog] = useState<{ column: ProjectColumn | null } | null>(null);
     const [milestones, setMilestones] = useState<ProjectMilestone[]>([]);
@@ -558,6 +560,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                     milestones={milestones}
                     deps={deps}
                     canPlan={rights.canPlan}
+                    canTasks={rights.canTasks && columns.length > 0}
                     canDate={rights.canDate}
                     onCardOpen={(card) => {
                         setDialogError(null);
@@ -566,6 +569,14 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                     onCardDates={(card, startDate, dueDate) =>
                         void patchCard(card, { startDate, dueDate }, 'Le déplacement a échoué.')
                     }
+                    onCardCreate={(dates) => {
+                        // La première colonne : celle par où le tableau fait entrer
+                        // les tâches, la frise n'en désignant aucune.
+                        const columnId = columns[0]?.id;
+                        if (columnId === undefined) return;
+                        setDialogError(null);
+                        setCardDialog({ card: null, columnId, dates });
+                    }}
                     onMilestoneCreate={() => {
                         setDialogError(null);
                         setMilestoneDialog({ milestone: null });
@@ -615,6 +626,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                 open={cardDialog !== null}
                 card={cardDialog?.card ?? null}
                 focus={cardDialog?.focus}
+                dates={cardDialog?.dates}
                 members={members}
                 meUserId={meUserId}
                 canWrite={canWrite}

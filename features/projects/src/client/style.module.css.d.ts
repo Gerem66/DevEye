@@ -7,6 +7,7 @@ declare const styles: {
     readonly bar: string;
     readonly barDraggable: string;
     readonly barGhost: string;
+    readonly barGhostNew: string;
     readonly barGripEnd: string;
     readonly barGripStart: string;
     readonly barLabel: string;
@@ -234,11 +235,13 @@ declare const styles: {
     readonly taskTitle: string;
     readonly textarea: string;
     readonly timeline: string;
+    readonly timelineActions: string;
     readonly timelineBar: string;
     readonly timelineEmpty: string;
     readonly timelineInner: string;
     readonly timelineScroll: string;
     readonly title: string;
+    readonly tlAddCard: string;
     readonly tlDay: string;
     readonly tlDayOff: string;
     readonly tlDayToday: string;

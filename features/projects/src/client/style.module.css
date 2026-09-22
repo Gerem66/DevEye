@@ -1547,6 +1547,20 @@
     gap: var(--space-md);
 }
 
+.timelineActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+/* Le « + » des tâches se glisse aussi sur un jour de la frise (voir `dateDrag.ts`).
+   `touch-action` parce qu'au doigt le geste serait sinon pris pour un défilement.
+   Sélecteur double pour battre le `cursor` du bouton du SDK. */
+button.tlAddCard {
+    cursor: grab;
+    touch-action: none;
+}
+
 .zoom {
     display: flex;
     gap: 2px;
@@ -1604,6 +1618,7 @@
     position: absolute;
     inset: var(--space-sm) 0 auto 0;
     pointer-events: none;
+    transition: height var(--transition-fast);
     /* Deux motifs de fond plutôt que N éléments : une ligne par jour, et la teinte
        du week-end, de période sept jours, calée sur le lundi par `--week-shift`
        (le rang du premier jour dans sa semaine, en négatif). Les pas sont exacts et
@@ -1743,8 +1758,11 @@
     fill-opacity: 0.85;
 }
 
+/* La hauteur ne compte que les lignes visibles (voir `Timeline.tsx`) : elle bouge
+   en même temps que les barres, donc du même mouvement. */
 .rows {
     position: relative;
+    transition: height var(--transition-fast);
 }
 
 /* Préfixée aussi : `.row` est déjà la ligne de formulaire, plus haut. Sa ligne lui
@@ -1872,6 +1890,13 @@
     overflow: hidden;
     white-space: nowrap;
     pointer-events: none;
+}
+
+/* Celui d'une tâche à créer : rien à écrire encore, juste le « + » qu'on tient. */
+.barGhostNew {
+    composes: barGhost;
+    justify-content: center;
+    padding: 0;
 }
 
 .barLabel {

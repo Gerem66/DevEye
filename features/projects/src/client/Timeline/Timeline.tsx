@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Button, useLiveOutlines, useRequestPopupWidth } from 'deveye-sdk-client';
 import { formatDate } from '../api';
 import type { ProjectCard, ProjectCardDep, ProjectMilestone } from '../../contracts/domain';
@@ -15,9 +15,9 @@ import {
     ZOOM_LEVELS,
     type ZoomId
 } from './scale';
-import { popupTargetWidth, TIMELINE_WIDTH_REQUEST } from '../Board/width';
+import { popupTargetWidth, timelineNaturalWidth } from '../Board/width';
 import { modeAt, useDateDrag } from './dateDrag';
-import { useTimelinePan } from './pan';
+import { useScrollLeft, useTimelinePan } from './pan';
 import styles from '../style.module.css';
 
 /** Hauteur d'une ligne, en px. Fixe : c'est ce qui rend les flèches calculables
@@ -34,6 +34,28 @@ const HEAD_H = 44;
 const DAYS_H = 16;
 /** En deçà, la pile d'avatars mangerait le titre de la barre. */
 const STACK_MIN_BAR_WIDTH = 56;
+
+/**
+ * Les marges de la frise, en jours : une barre posée au bord touche sinon le
+ * cadre. La seconde compte le dernier jour pour lui-même.
+ */
+const PAD_BEFORE = 2;
+const PAD_AFTER = 3;
+
+/**
+ * Le plancher de la frise, en lignes : elle garde cette hauteur même vide, pour
+ * qu'un défilement qui traverse une période creuse ne la fasse pas se replier
+ * sur elle-même.
+ */
+const MIN_ROWS = 5;
+
+/** Le fantôme d'une tâche à créer : assez large pour que son « + » se lise. */
+const CREATE_GHOST_MIN_WIDTH = 24;
+
+/** La date qui range une carte dans la frise : son début, ou son échéance seule. */
+function startKey(card: ProjectCard): number {
+    return card.startDate ?? card.dueDate ?? 0;
+}
 
 /** Rayon des coudes du tracé de dépendance, et repli quand rien ne suit. */
 const DEP_RADIUS = 8;
@@ -73,11 +95,18 @@ interface TimelineProps {
     deps: ProjectCardDep[];
     /** Tenir les jalons : la planification du projet, sans exception de propriété. */
     canPlan: boolean;
+    /** Créer une tâche : le droit de les tenir, et une colonne où la poser. */
+    canTasks: boolean;
     /** Poser ou retirer les dates de CETTE carte : le droit de planifier, ou elle est sienne. */
     canDate: (card: ProjectCard) => boolean;
     onCardOpen: (card: ProjectCard) => void;
     /** Repose les dates d'une carte après un glissé sur la frise. */
     onCardDates: (card: ProjectCard, startDate: number | null, dueDate: number | null) => void;
+    /**
+     * Ouvre la création d'une tâche. Les dates viennent d'un dépôt du « + » sur un
+     * jour de la frise ; un clic simple ouvre la popup sans rien dater.
+     */
+    onCardCreate: (dates?: { startDate: number; dueDate: number }) => void;
     onMilestoneCreate: () => void;
     onMilestoneOpen: (milestone: ProjectMilestone) => void;
 }
@@ -99,9 +128,11 @@ export function Timeline({
     milestones,
     deps,
     canPlan,
+    canTasks,
     canDate,
     onCardOpen,
     onCardDates,
+    onCardCreate,
     onMilestoneCreate,
     onMilestoneOpen
 }: TimelineProps) {
@@ -110,10 +141,6 @@ export function Timeline({
     const [zoom, setZoom] = useState<ZoomId>(defaultZoom);
     // `l3` : l'onglet du projet occupe `l2` (voir `ProjectDetail`).
     const outlineFor = useLiveOutlines('l3');
-
-    // La frise prend toute la largeur que la fenêtre accorde : c'est elle qui
-    // décide de la durée visible.
-    useRequestPopupWidth(TIMELINE_WIDTH_REQUEST);
 
     /**
      * La largeur offerte : elle ne découle d'aucune donnée, c'est la popup qui la
@@ -135,13 +162,31 @@ export function Timeline({
         return () => ro.disconnect();
     }, []);
 
-    /**
-     * Les cartes datées telles qu'enregistrées. C'est d'elles seules que découle la
-     * fenêtre : si l'aperçu d'un glissé y entrait, tirer une barre au-delà du bord
-     * redimensionnerait toute la frise sous le pointeur.
-     */
+    /** Les cartes posées sur le temps, et celles qui restent à dater. */
     const dated = useMemo(() => cards.filter((c) => c.startDate !== null || c.dueDate !== null), [cards]);
     const undated = useMemo(() => cards.filter((c) => c.startDate === null && c.dueDate === null), [cards]);
+
+    /**
+     * Le premier et le dernier jour datés du projet, jalons compris : l'étendue
+     * qu'il y a à montrer, `null` quand rien n'est daté. Les dates enregistrées
+     * seulement : si l'aperçu d'un glissé y entrait, tirer une barre au-delà du
+     * bord redimensionnerait toute la frise sous le pointeur.
+     */
+    const content = useMemo(() => {
+        const points: number[] = [];
+        for (const c of dated) {
+            if (c.startDate !== null) points.push(c.startDate * 1000);
+            if (c.dueDate !== null) points.push(c.dueDate * 1000);
+        }
+        for (const m of milestones) points.push(m.dueDate * 1000);
+        if (points.length === 0) return null;
+        return { min: startOfDay(Math.min(...points)), max: startOfDay(Math.max(...points)) };
+    }, [dated, milestones]);
+
+    // La popup s'élargit de ce que le projet couvre, et pas d'un pixel de plus :
+    // une frise qui tient dans la largeur de confort garde celle des autres onglets.
+    const spanDays = content === null ? 0 : Math.round((content.max - content.min) / DAY_MS) + PAD_BEFORE + PAD_AFTER;
+    useRequestPopupWidth(timelineNaturalWidth(zoom, spanDays));
 
     /**
      * Ce que le zoom ouvre : une durée visible, ancrée sur aujourd'hui au tiers,
@@ -159,19 +204,12 @@ export function Timeline({
      * fraction de jour.
      */
     const range = useMemo(() => {
-        const points: number[] = [view.start, view.start + view.days * DAY_MS];
-        for (const c of dated) {
-            if (c.startDate !== null) points.push(c.startDate * 1000);
-            if (c.dueDate !== null) points.push(c.dueDate * 1000);
-        }
-        for (const m of milestones) points.push(m.dueDate * 1000);
-        // Deux jours de marge à gauche, trois à droite (le dernier jour compte
-        // pour lui-même) : une barre posée au bord touche sinon le cadre.
-        const min = startOfDay(Math.min(...points)) - 2 * DAY_MS;
-        const last = startOfDay(Math.max(...points));
-        const days = Math.round((last - min) / DAY_MS) + 3;
+        const viewEnd = startOfDay(view.start + view.days * DAY_MS);
+        const min = Math.min(content?.min ?? view.start, view.start) - PAD_BEFORE * DAY_MS;
+        const last = Math.max(content?.max ?? viewEnd, viewEnd);
+        const days = Math.round((last - min) / DAY_MS) + PAD_AFTER;
         return { min, days, max: min + days * DAY_MS };
-    }, [dated, milestones, view]);
+    }, [content, view]);
 
     const days = range.days;
     const dayWidth = view.dayWidth;
@@ -185,6 +223,7 @@ export function Timeline({
      * est. La clé retient ce qui a déjà été calé, sinon le moindre re-rendu
      * ramènerait la frise au tiers sous le pointeur.
      */
+    const [scrollLeft, syncScroll] = useScrollLeft(scrollRef);
     const anchored = useRef<string | null>(null);
     useLayoutEffect(() => {
         const el = scrollRef.current;
@@ -193,6 +232,9 @@ export function Timeline({
         if (anchored.current === key) return;
         anchored.current = key;
         el.scrollLeft = Math.max(0, ((view.start - range.min) / DAY_MS) * dayWidth);
+        // Relu tout de suite : les lignes tenues se déduisent de la fenêtre
+        // visible, que ce calage vient de déplacer.
+        syncScroll(el.scrollLeft);
     }, [zoom, dayWidth, avail, view.start, range.min]);
 
     const ticks = useMemo(() => timelineTicks(range.min, range.max, dayWidth), [range, dayWidth]);
@@ -202,6 +244,7 @@ export function Timeline({
         view: drag,
         onBarPointerDown,
         onTagPointerDown,
+        onCreatePointerDown,
         consumeClick
     } = useDateDrag({
         dayWidth,
@@ -209,17 +252,20 @@ export function Timeline({
         rangeMin: range.min,
         scrollRef,
         dropRef,
-        onCommit: onCardDates
+        onCommit: onCardDates,
+        onCreate: (startDate, dueDate) => onCardCreate({ startDate, dueDate })
     });
     // Saisir le fond de la frise la fait défiler, tant qu'aucun autre geste ne
     // tient le pointeur.
     const pan = useTimelinePan(scrollRef, drag === null);
 
     /** La pastille en vol : la carte tenue, qui n'a de ligne que sur un jour de la frise. */
-    const placing = drag?.placing ? drag : null;
+    const placing = drag?.placing && drag.card !== null ? drag : null;
+    /** Le jour visé par le « + » qu'on promène, en secondes ; `null` hors de la frise. */
+    const creating = drag?.placing && drag.card === null ? (drag.next?.startDate ?? null) : null;
     /** La barre tenue est au-dessus de la zone sans date : elle va les perdre. */
     const unplanning = (card: ProjectCard) =>
-        drag !== null && !drag.placing && drag.card.id === card.id && drag.overDrop;
+        drag !== null && !drag.placing && drag.card?.id === card.id && drag.overDrop;
 
     /**
      * La carte telle qu'affichée : ses dates, ou l'aperçu du geste en cours.
@@ -227,7 +273,7 @@ export function Timeline({
      * qu'on efface, pas une position qu'on vise.
      */
     const shown = (card: ProjectCard): ProjectCard =>
-        drag && drag.card.id === card.id && drag.next && !drag.overDrop
+        drag && drag.card?.id === card.id && drag.next && !drag.overDrop
             ? { ...card, startDate: drag.next.startDate, dueDate: drag.next.dueDate }
             : card;
 
@@ -235,14 +281,14 @@ export function Timeline({
      * Les lignes, dans l'ordre du temps, aperçu compris : la barre qu'on tient
      * change de ligne pendant le geste et se trouve à sa place au relâchement.
      */
-    const ordered = useMemo(() => {
-        const key = (c: ProjectCard) => c.startDate ?? c.dueDate ?? 0;
-        return cards
-            .map(shown)
-            .filter((c) => c.startDate !== null || c.dueDate !== null)
-            .sort((a, b) => key(a) - key(b) || a.id - b.id);
-    }, [cards, drag]);
-    const rowOf = useMemo(() => new Map(ordered.map((c, i) => [c.id, i])), [ordered]);
+    const ordered = useMemo(
+        () =>
+            cards
+                .map(shown)
+                .filter((c) => c.startDate !== null || c.dueDate !== null)
+                .sort((a, b) => startKey(a) - startKey(b) || a.id - b.id),
+        [cards, drag]
+    );
 
     /** Le segment occupé par une carte : [début, fin] en px. */
     const spanOf = (card: ProjectCard) => {
@@ -254,6 +300,29 @@ export function Timeline({
         const right = Math.max(x(end) + dayWidth, left + Math.max(dayWidth, 6));
         return { left, width: right - left, pointOnly: card.startDate === null || card.dueDate === null };
     };
+
+    /**
+     * Les lignes, et leur nombre : une carte n'en occupe une que si sa barre touche
+     * la fenêtre visible. La frise ne fait donc jamais la hauteur de tout le projet,
+     * seulement celle de ce qu'elle montre, et une barre qui entre par un bord glisse
+     * à sa place au lieu d'y apparaître. Hors champ, une carte prend le rang de sa
+     * voisine : c'est de là qu'elle revient.
+     *
+     * Avant la première mesure, la fenêtre vaut toute la frise : rien ne doit
+     * disparaître le temps d'un rendu.
+     */
+    const seenTo = scrollLeft + (avail || width);
+    const rowOf = new Map<number, number>();
+    let visibleRows = 0;
+    let ghostRow: number | null = null;
+    for (const card of ordered) {
+        if (creating !== null && ghostRow === null && creating < startKey(card)) ghostRow = visibleRows++;
+        rowOf.set(card.id, visibleRows);
+        const s = spanOf(card);
+        if (s.left < seenTo && s.left + s.width > scrollLeft) visibleRows++;
+    }
+    if (creating !== null && ghostRow === null) ghostRow = visibleRows++;
+    const rowsHeight = Math.max(visibleRows, MIN_ROWS) * ROW_H;
 
     /**
      * L'abscisse du coude des flèches partant d'une tâche : à mi-chemin de la
@@ -278,14 +347,19 @@ export function Timeline({
     if (dated.length === 0 && milestones.length === 0 && undated.length === 0) {
         return (
             <div className={styles.timelineEmpty}>
-                <p className={styles.empty}>
-                    Aucune carte ni jalon. Créez une tâche dans le tableau pour la placer ici.
-                </p>
-                {canPlan && (
-                    <Button variant='secondary' icon='add' onClick={onMilestoneCreate}>
-                        Ajouter un jalon
-                    </Button>
-                )}
+                <p className={styles.empty}>Aucune carte ni jalon sur ce projet.</p>
+                <div className={styles.timelineActions}>
+                    {canTasks && (
+                        <Button variant='secondary' icon='add' onClick={() => onCardCreate()}>
+                            Ajouter une tâche
+                        </Button>
+                    )}
+                    {canPlan && (
+                        <Button variant='secondary' icon='add' onClick={onMilestoneCreate}>
+                            Ajouter un jalon
+                        </Button>
+                    )}
+                </div>
             </div>
         );
     }
@@ -308,11 +382,27 @@ export function Timeline({
                         </button>
                     ))}
                 </div>
-                {canPlan && (
-                    <Button variant='secondary' icon='add' onClick={onMilestoneCreate}>
-                        Jalon
-                    </Button>
-                )}
+                <div className={styles.timelineActions}>
+                    {canTasks && (
+                        <Button
+                            variant='secondary'
+                            icon='add'
+                            className={styles.tlAddCard}
+                            title='Ajouter une tâche, ou glissez ce bouton sur un jour pour la dater'
+                            onPointerDown={onCreatePointerDown}
+                            onClick={() => {
+                                if (!consumeClick(null)) onCardCreate();
+                            }}
+                        >
+                            Tâche
+                        </Button>
+                    )}
+                    {canPlan && (
+                        <Button variant='secondary' icon='add' onClick={onMilestoneCreate}>
+                            Jalon
+                        </Button>
+                    )}
+                </div>
             </div>
 
             {/* `data-pannable` seulement quand il y a de quoi défiler : un curseur
@@ -334,7 +424,7 @@ export function Timeline({
                         className={styles.tlGrid}
                         style={
                             {
-                                height: ordered.length * ROW_H + HEAD_H + (dayLetters ? DAYS_H : 0),
+                                height: rowsHeight + HEAD_H + (dayLetters ? DAYS_H : 0),
                                 '--day-w': `${dayWidth}px`,
                                 // Sous le plancher, une ligne tous les deux ou
                                 // trois pixels ne dessine plus des journées,
@@ -378,7 +468,7 @@ export function Timeline({
                     <svg
                         className={styles.depLayer}
                         width={width}
-                        height={ordered.length * ROW_H}
+                        height={rowsHeight}
                         // Les marges intérieures de `.timelineInner` comptent :
                         // un élément absolu se cale sur la boîte de marge
                         // intérieure, alors que les lignes, elles, sont dans le
@@ -465,7 +555,7 @@ export function Timeline({
                         d'ordre glisse au lieu de sauter. Rendues par identifiant et
                         non par rang, pour que le nœud d'une barre ne bouge jamais dans
                         l'arbre, ce qui couperait sa transition. */}
-                    <div className={styles.rows} style={{ marginTop: HEAD_H, height: ordered.length * ROW_H }}>
+                    <div className={styles.rows} style={{ marginTop: HEAD_H, height: rowsHeight }}>
                         {[...ordered]
                             .sort((a, b) => a.id - b.id)
                             .map((at) => {
@@ -475,7 +565,7 @@ export function Timeline({
                                     height: ROW_H,
                                     transform: `translateY(${(rowOf.get(at.id) ?? 0) * ROW_H}px)`
                                 };
-                                if (placing?.card.id === at.id) {
+                                if (placing?.card?.id === at.id) {
                                     return (
                                         <div key={at.id} className={styles.tlRow} style={rowStyle}>
                                             <div
@@ -554,11 +644,31 @@ export function Timeline({
                                     </div>
                                 );
                             })}
+
+                        {/* La tâche qu'on pose : à sa ligne comme les autres, pour
+                            qu'on voie où elle tombera dans l'ordre du temps. */}
+                        {creating !== null && ghostRow !== null && (
+                            <div
+                                className={styles.tlRow}
+                                style={{ height: ROW_H, transform: `translateY(${ghostRow * ROW_H}px)` }}
+                            >
+                                <div
+                                    className={styles.barGhostNew}
+                                    style={{
+                                        left: x(creating * 1000),
+                                        width: Math.max(dayWidth, CREATE_GHOST_MIN_WIDTH),
+                                        height: BAR_H
+                                    }}
+                                >
+                                    <span className='icon icon-add' />
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {dayLetters && (
                         <DayLetters
-                            scrollRef={scrollRef}
+                            scrollLeft={scrollLeft}
                             rangeMin={range.min}
                             days={days}
                             dayWidth={dayWidth}
@@ -594,7 +704,7 @@ export function Timeline({
                                     <button
                                         type='button'
                                         className={`${movable ? styles.tagDraggable : ''} ${
-                                            placing?.card.id === card.id ? styles.tagDragging : ''
+                                            placing?.card?.id === card.id ? styles.tagDragging : ''
                                         }`}
                                         title={
                                             movable
@@ -619,7 +729,8 @@ export function Timeline({
 }
 
 interface DayLettersProps {
-    scrollRef: RefObject<HTMLDivElement | null>;
+    /** Le défilement de la frise, d'où se déduisent les jours à écrire. */
+    scrollLeft: number;
     rangeMin: number;
     days: number;
     dayWidth: number;
@@ -627,28 +738,8 @@ interface DayLettersProps {
     viewport: number;
 }
 
-/**
- * La lettre de chaque jour, sous les lignes. Seuls les jours à l'écran sont rendus,
- * et le défilement est tenu ici : lui seul se redessine quand la frise défile.
- */
-function DayLetters({ scrollRef, rangeMin, days, dayWidth, viewport }: DayLettersProps) {
-    const [scrollLeft, setScrollLeft] = useState(0);
-    useEffect(() => {
-        const el = scrollRef.current;
-        if (!el) return;
-        let frame = 0;
-        const onScroll = () => {
-            cancelAnimationFrame(frame);
-            frame = requestAnimationFrame(() => setScrollLeft(el.scrollLeft));
-        };
-        setScrollLeft(el.scrollLeft);
-        el.addEventListener('scroll', onScroll, { passive: true });
-        return () => {
-            cancelAnimationFrame(frame);
-            el.removeEventListener('scroll', onScroll);
-        };
-    }, [scrollRef]);
-
+/** La lettre de chaque jour, sous les lignes. Seuls les jours à l'écran sont rendus. */
+function DayLetters({ scrollLeft, rangeMin, days, dayWidth, viewport }: DayLettersProps) {
     // Par addition sur le rang du premier jour, jamais par une date par jour : un
     // changement d'heure décalerait d'un cran les lettres qui le suivent.
     const baseDow = weekdayIndex(rangeMin);

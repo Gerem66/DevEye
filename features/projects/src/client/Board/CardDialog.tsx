@@ -40,6 +40,8 @@ interface CardDialogProps {
     card: ProjectCard | null;
     /** L'onglet demandé à l'ouverture ; sans lui, le fil s'il a du non-lu, le suivi sinon. */
     focus?: CardTab;
+    /** Les dates d'une tâche créée depuis la frise. Sans objet à l'ouverture d'une carte. */
+    dates?: { startDate: number; dueDate: number };
     members: readonly MinimalUser[];
     /** L'appelant, pour ne pas s'annoncer soi-même « en train d'écrire ». */
     meUserId: number;
@@ -107,6 +109,7 @@ export function CardDialog({
     open,
     card,
     focus,
+    dates,
     members,
     meUserId,
     canWrite,
@@ -177,7 +180,7 @@ export function CardDialog({
                       dueDate: card.dueDate,
                       estimateMinutes: card.estimateMinutes
                   }
-                : EMPTY
+                : { ...EMPTY, ...dates }
         );
         setMilestoneId(card?.milestoneId ?? null);
         setBlockerIds(savedBlockerIds);

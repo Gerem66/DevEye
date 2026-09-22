@@ -1,3 +1,5 @@
+import { zoomLevel, type ZoomId } from '../Timeline/scale';
+
 /**
  * Le chrome horizontal de la popup autour du contenu : deux fois le padding du
  * corps, plus la gouttière de la barre de défilement et les bordures.
@@ -26,13 +28,20 @@ export function tabsNaturalWidth(innerWidth: number): number {
 }
 
 /**
- * Ce que la frise réclame : tout ce que la fenêtre accorde. Sa fenêtre de temps
- * se déduit de la place offerte, jamais l'inverse : chaque pixel de plus est une
- * journée de plus sous les yeux, et c'est la lisibilité de l'échelle qui en
- * dépend. Le store écrête à la fenêtre, marges déduites, et rend la largeur à la
- * sortie de l'onglet.
+ * Ce que la frise réclame : la place où le zoom choisi montre tout ce que le
+ * projet couvre, à la densité que son intitulé promet. Chaque pixel de plus est
+ * une journée de plus sous les yeux, mais jamais au-delà de ce que le niveau
+ * accepte d'afficher : « Semaine » ne s'étire pas jusqu'au trimestre parce qu'une
+ * tâche traîne en septembre. Un projet court reste donc à la largeur de confort,
+ * celle des autres onglets, et le store écrête à la fenêtre.
+ *
+ * `spanDays` se lit sur les dates seules : la demande ne dépend pas de la largeur
+ * obtenue, elle ne peut donc pas boucler sur sa réponse.
  */
-export const TIMELINE_WIDTH_REQUEST = Number.MAX_SAFE_INTEGER;
+export function timelineNaturalWidth(zoom: ZoomId, spanDays: number): number {
+    const level = zoomLevel(zoom);
+    return Math.min(spanDays, level.maxDays) * level.target + POPUP_CHROME;
+}
 
 /**
  * La largeur que `box` ATTEINDRA dans la popup, et non celle qu'elle a. La popup

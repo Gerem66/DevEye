@@ -10,10 +10,11 @@ import type { ProjectCard } from '../../contracts/domain';
 import { startOfDay } from './scale';
 
 /**
- * Poser les dates d'une carte à la souris. Deux gestes, un seul mécanisme :
+ * Poser les dates d'une carte à la souris. Trois gestes, un seul mécanisme :
  * une barre déjà sur la frise se déplace ou s'étire, et se ramène dans la zone
  * des cartes sans date pour perdre les siennes ; une pastille de cette zone se
- * dépose sur un jour, qui devient à la fois son début et son échéance.
+ * dépose sur un jour, qui devient à la fois son début et son échéance ; le « + »
+ * de la barre d'outils se dépose de même, pour une tâche qui n'existe pas encore.
  *
  * Rien n'est persisté avant le relâchement, seul un aperçu local bouge : écrire
  * à chaque pixel enverrait cinquante commandes par déplacement, et la carte
@@ -34,7 +35,8 @@ export interface DatePreview {
 
 /** Le geste en cours, tel que la frise le peint. */
 export interface DragView {
-    card: ProjectCard;
+    /** `null` : une tâche à créer, tenue depuis le « + » de la barre d'outils. */
+    card: ProjectCard | null;
     /** Une pastille en vol, par opposition à une barre déjà posée. */
     placing: boolean;
     /** Ce que le relâchement écrirait ; `null` quand il n'écrirait rien. */
@@ -56,6 +58,8 @@ interface Options {
     dropRef: RefObject<HTMLElement | null>;
     /** Persiste le geste. Appelé une fois, au relâchement, jamais pendant. */
     onCommit: (card: ProjectCard, startDate: number | null, dueDate: number | null) => void;
+    /** Ouvre la création d'une tâche aux dates du dépôt. Même règle : au relâchement seul. */
+    onCreate: (startDate: number, dueDate: number) => void;
 }
 
 /** En deçà, c'est encore un clic : la carte s'ouvre au lieu de bouger. */
@@ -126,13 +130,13 @@ function inside(el: HTMLElement | null, clientX: number, clientY: number): boole
     return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
 }
 
-export function useDateDrag({ dayWidth, days, rangeMin, scrollRef, dropRef, onCommit }: Options) {
+export function useDateDrag({ dayWidth, days, rangeMin, scrollRef, dropRef, onCommit, onCreate }: Options) {
     const [view, setView] = useState<DragView | null>(null);
 
     /** Le geste en cours. Un `ref` : les écouteurs le lisent hors du rendu. */
     const press = useRef<{
-        card: ProjectCard;
-        /** Absent : c'est une pastille qu'on dépose, elle n'a pas de bord à saisir. */
+        card: ProjectCard | null;
+        /** Absent : une pastille ou le « + » qu'on dépose, sans bord à saisir. */
         mode: DragMode | null;
         pointerId: number;
         x: number;
@@ -141,19 +145,19 @@ export function useDateDrag({ dayWidth, days, rangeMin, scrollRef, dropRef, onCo
     /** Le seuil a été franchi : le relâchement ne doit plus ouvrir la carte. */
     const moved = useRef(false);
     /**
-     * La carte dont le prochain clic est à avaler. Nommée, et non un simple
-     * booléen : une pastille déposée quitte la liste avant que son clic
-     * n'arrive, et le drapeau resté levé aurait mangé le clic suivant, sur une
+     * La carte dont le prochain clic est à avaler, `null` valant le « + ». Nommée,
+     * et non un simple booléen : une pastille déposée quitte la liste avant que son
+     * clic n'arrive, et le drapeau resté levé aurait mangé le clic suivant, sur une
      * tout autre carte.
      */
-    const handled = useRef<{ id: number; at: number } | null>(null);
+    const handled = useRef<{ id: number | null; at: number } | null>(null);
     /** L'aperçu courant, pour que le relâchement le persiste sans re-rendu. */
     const latest = useRef<DragView | null>(null);
 
     // Les valeurs changeantes passent par des `ref` : les cinq écouteurs sont
     // créés une fois pour toutes, comme dans `dragReorder`.
-    const opts = useRef({ dayWidth, days, rangeMin, scrollRef, dropRef, onCommit });
-    opts.current = { dayWidth, days, rangeMin, scrollRef, dropRef, onCommit };
+    const opts = useRef({ dayWidth, days, rangeMin, scrollRef, dropRef, onCommit, onCreate });
+    opts.current = { dayWidth, days, rangeMin, scrollRef, dropRef, onCommit, onCreate };
 
     const handlers = useRef<{
         move: (e: PointerEvent) => void;
@@ -202,7 +206,7 @@ export function useDateDrag({ dayWidth, days, rangeMin, scrollRef, dropRef, onCo
                 const overDrop = inside(drop.current, e.clientX, e.clientY);
                 const el = box.current;
                 let next: DatePreview | null = null;
-                if (p.mode !== null) {
+                if (p.card !== null && p.mode !== null) {
                     next = overDrop
                         ? { startDate: null, dueDate: null }
                         : applyDrag(p.card, p.mode, Math.round(dx / width));
@@ -228,11 +232,18 @@ export function useDateDrag({ dayWidth, days, rangeMin, scrollRef, dropRef, onCo
                 if (!p || e.pointerId !== p.pointerId) return;
                 const result = moved.current ? latest.current : null;
                 const card = p.card;
-                if (moved.current) handled.current = { id: card.id, at: performance.now() };
+                if (moved.current) handled.current = { id: card?.id ?? null, at: performance.now() };
                 endRef.current();
                 // Rien n'a bougé d'un jour entier, ou le lâcher tombe hors de
                 // la frise : inutile de réécrire les mêmes dates.
                 if (!result?.next) return;
+                if (card === null) {
+                    // Une tâche à créer se pose sur un jour, et sur rien d'autre :
+                    // ses deux bords y sont donnés ensemble ou pas du tout.
+                    const { startDate, dueDate } = result.next;
+                    if (startDate !== null && dueDate !== null) opts.current.onCreate(startDate, dueDate);
+                    return;
+                }
                 if (result.next.startDate === card.startDate && result.next.dueDate === card.dueDate) return;
                 opts.current.onCommit(card, result.next.startDate, result.next.dueDate);
             },
@@ -252,7 +263,7 @@ export function useDateDrag({ dayWidth, days, rangeMin, scrollRef, dropRef, onCo
     // d'onglet, popup refermée en plein glissé).
     useEffect(() => () => endRef.current(), []);
 
-    const start = useCallback((e: ReactPointerEvent, card: ProjectCard, mode: DragMode | null) => {
+    const start = useCallback((e: ReactPointerEvent, card: ProjectCard | null, mode: DragMode | null) => {
         if (e.button !== 0) return;
         const h = handlers.current;
         if (!h) return;
@@ -271,9 +282,10 @@ export function useDateDrag({ dayWidth, days, rangeMin, scrollRef, dropRef, onCo
         [start]
     );
     const onTagPointerDown = useCallback((e: ReactPointerEvent, card: ProjectCard) => start(e, card, null), [start]);
+    const onCreatePointerDown = useCallback((e: ReactPointerEvent) => start(e, null, null), [start]);
 
-    /** Le clic qui suit un glissé n'est pas un clic : il n'ouvre pas la carte. */
-    const consumeClick = useCallback((cardId: number) => {
+    /** Le clic qui suit un glissé n'est pas un clic : il n'ouvre ni la carte ni la création. */
+    const consumeClick = useCallback((cardId: number | null) => {
         const last = handled.current;
         handled.current = null;
         // Périssable : la barre change de ligne pendant le geste, le relâchement
@@ -282,5 +294,5 @@ export function useDateDrag({ dayWidth, days, rangeMin, scrollRef, dropRef, onCo
         return last !== null && last.id === cardId && performance.now() - last.at < CLICK_AFTER_DRAG_MS;
     }, []);
 
-    return { view, onBarPointerDown, onTagPointerDown, consumeClick };
+    return { view, onBarPointerDown, onTagPointerDown, onCreatePointerDown, consumeClick };
 }

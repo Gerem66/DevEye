@@ -17,6 +17,32 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, ty
  */
 const OWN_GESTURE = 'button, a, input, select, textarea, summary, [role="switch"]';
 
+/**
+ * Le défilement de la frise, à raison d'une valeur par image : la fenêtre visible
+ * s'en déduit, et c'est elle qui décide des lignes tenues et des jours écrits.
+ * La fonction rendue le remet à jour sans attendre l'événement, pour qu'un
+ * défilement posé à la main soit connu du rendu qui le pose.
+ */
+export function useScrollLeft(scrollRef: RefObject<HTMLElement | null>): [number, (px: number) => void] {
+    const [scrollLeft, setScrollLeft] = useState(0);
+    useEffect(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+        let frame = 0;
+        const onScroll = () => {
+            cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(() => setScrollLeft(el.scrollLeft));
+        };
+        setScrollLeft(el.scrollLeft);
+        el.addEventListener('scroll', onScroll, { passive: true });
+        return () => {
+            cancelAnimationFrame(frame);
+            el.removeEventListener('scroll', onScroll);
+        };
+    }, [scrollRef]);
+    return [scrollLeft, setScrollLeft];
+}
+
 export interface TimelinePan {
     /** Un défilement est en cours : le curseur le dit, et rien ne doit le doubler. */
     panning: boolean;

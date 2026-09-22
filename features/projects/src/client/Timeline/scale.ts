@@ -44,6 +44,11 @@ export const ZOOM_LEVELS: readonly ZoomLevel[] = [
 /** Le même jeu que `projectTimelineZoomSchema` : le projet enregistre son échelle d'ouverture. */
 export type ZoomId = ProjectTimelineZoom;
 
+/** Le niveau demandé ; le mois à défaut, si l'enregistrement dit autre chose. */
+export function zoomLevel(zoom: ZoomId): ZoomLevel {
+    return ZOOM_LEVELS.find((z) => z.id === zoom) ?? ZOOM_LEVELS[2];
+}
+
 /**
  * Où tombe aujourd'hui dans la fenêtre : au tiers. Un projet se lit vers
  * l'avant, mais ce qu'on vient de faire explique ce qui vient.
@@ -69,7 +74,7 @@ export interface TimelineWindow {
  * première mesure) rend la fenêtre nominale, que le premier rendu remplacera.
  */
 export function zoomWindow(zoom: ZoomId, avail: number, now: number): TimelineWindow {
-    const level = ZOOM_LEVELS.find((z) => z.id === zoom) ?? ZOOM_LEVELS[2];
+    const level = zoomLevel(zoom);
     const wanted = avail > 0 ? Math.round(avail / level.target) : level.minDays;
     const days = Math.min(Math.max(wanted, level.minDays), level.maxDays);
     const dayWidth = Math.max(avail > 0 ? avail / days : level.target, MIN_DAY_WIDTH);
