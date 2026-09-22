@@ -34,6 +34,8 @@ const HEAD_H = 44;
 const DAYS_H = 16;
 /** En deçà, la pile d'avatars mangerait le titre de la barre. */
 const STACK_MIN_BAR_WIDTH = 56;
+/** En deçà, le compte de sous-tâches mangerait le titre de la barre. */
+const PROGRESS_MIN_BAR_WIDTH = 104;
 
 /**
  * Les marges de la frise, en jours : une barre posée au bord touche sinon le
@@ -51,6 +53,14 @@ const MIN_ROWS = 5;
 
 /** Le fantôme d'une tâche à créer : assez large pour que son « + » se lise. */
 const CREATE_GHOST_MIN_WIDTH = 24;
+
+/** L'avancement des sous-tâches d'une carte, ou `null` quand elle n'en a pas. */
+function progressOf(card: ProjectCard): { done: number; total: number; ratio: number } | null {
+    const total = card.checklist.length;
+    if (total === 0) return null;
+    const done = card.checklist.filter((i) => i.done).length;
+    return { done, total, ratio: done / total };
+}
 
 /** La date qui range une carte dans la frise : son début, ou son échéance seule. */
 function startKey(card: ProjectCard): number {
@@ -588,6 +598,7 @@ export function Timeline({
                                 const period = [formatDate(at.startDate), formatDate(at.dueDate)]
                                     .filter(Boolean)
                                     .join(' → ');
+                                const progress = progressOf(card);
                                 return (
                                     <div key={at.id} className={styles.tlRow} style={rowStyle}>
                                         <button
@@ -618,7 +629,14 @@ export function Timeline({
                                             onClick={() => {
                                                 if (!consumeClick(card.id)) onCardOpen(card);
                                             }}
-                                            title={period ? `${card.title || 'Sans titre'} : ${period}` : card.title}
+                                            title={[
+                                                period
+                                                    ? `${card.title || 'Sans titre'} : ${period}`
+                                                    : card.title || 'Sans titre',
+                                                progress ? `${progress.done} / ${progress.total} sous-tâches` : ''
+                                            ]
+                                                .filter(Boolean)
+                                                .join('\n')}
                                             {...outlineFor(`card:${card.id}`)}
                                         >
                                             {/* Deux lisières, là seulement pour le
@@ -631,7 +649,22 @@ export function Timeline({
                                                     <span className={styles.barGripEnd} aria-hidden='true' />
                                                 </>
                                             )}
+                                            {/* Le remplissage de l'avancement, sous le
+                                                contenu : d'un coup d'oeil, la part
+                                                des sous-tâches faites. */}
+                                            {progress && (
+                                                <span
+                                                    className={styles.barFill}
+                                                    style={{ width: `${progress.ratio * 100}%` }}
+                                                    aria-hidden='true'
+                                                />
+                                            )}
                                             <span className={styles.barLabel}>{card.title || 'Sans titre'}</span>
+                                            {progress && s.width >= PROGRESS_MIN_BAR_WIDTH && (
+                                                <span className={styles.barCount}>
+                                                    {progress.done} / {progress.total}
+                                                </span>
+                                            )}
                                             {s.width >= STACK_MIN_BAR_WIDTH && (
                                                 <MemberStack
                                                     userId={card.assigneeUserId}

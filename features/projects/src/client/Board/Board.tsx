@@ -162,6 +162,7 @@ export function Board({
     }, [columns, cards]);
 
     const activeCard = activeId === null ? null : (cards.find((c) => c.id === activeId) ?? null);
+    const activeColumnDone = columns.find((c) => c.id === activeCard?.columnId)?.countsAsDone ?? false;
 
     /**
      * La colonne visée : soit une carte survolée, soit la colonne elle-même —
@@ -338,7 +339,7 @@ export function Board({
                 deux cadres superposés seraient illisibles. */}
             {createPortal(
                 <DragOverlay style={{ zIndex: 'var(--z-drag)' }}>
-                    {activeCard && <CardBody card={activeCard} dragging />}
+                    {activeCard && <CardBody card={activeCard} columnDone={activeColumnDone} dragging />}
                 </DragOverlay>,
                 document.body
             )}
@@ -449,6 +450,7 @@ function Column({
                         <SortableCard
                             key={card.id}
                             card={card}
+                            columnDone={column.countsAsDone}
                             draggable={canWrite}
                             outline={outlineFor(`card:${card.id}`)}
                             onOpen={(tab) => onCardOpen(card, tab)}
@@ -467,13 +469,14 @@ function Column({
 
 interface SortableCardProps {
     card: ProjectCard;
+    columnDone: boolean;
     /** Sans l'écriture, la carte s'ouvre mais ne se déplace pas. */
     draggable: boolean;
     outline: LiveOutlineProps;
     onOpen: (tab: CardTab) => void;
 }
 
-function SortableCard({ card, draggable, outline, onOpen }: SortableCardProps) {
+function SortableCard({ card, columnDone, draggable, outline, onOpen }: SortableCardProps) {
     const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
         id: card.id,
         disabled: !draggable
@@ -491,13 +494,20 @@ function SortableCard({ card, draggable, outline, onOpen }: SortableCardProps) {
     // seul élément de la carte à porter le rôle de ce qui se trie.
     return (
         <div ref={setNodeRef} style={style} {...listeners} {...outline}>
-            <CardBody card={card} onOpen={onOpen} opener={{ ref: setActivatorNodeRef, ...attributes }} />
+            <CardBody
+                card={card}
+                columnDone={columnDone}
+                onOpen={onOpen}
+                opener={{ ref: setActivatorNodeRef, ...attributes }}
+            />
         </div>
     );
 }
 
 interface CardBodyProps {
     card: ProjectCard;
+    /** La colonne vaut « terminé » : une échéance passée n'y est plus un retard. */
+    columnDone: boolean;
     dragging?: boolean;
     onOpen?: (tab: CardTab) => void;
     /** Ce que le tri pose sur le bouton d'ouverture. */
@@ -509,16 +519,16 @@ interface CardBodyProps {
  * l'ouverture par défaut ; les puces, ses sœurs posées au-dessus, portent les deux
  * autres. Aucun bouton n'en contient un autre.
  */
-function CardBody({ card, dragging, onOpen, opener }: CardBodyProps) {
+function CardBody({ card, columnDone, dragging, onOpen, opener }: CardBodyProps) {
     const due = formatDate(card.dueDate);
-    const overdue = card.dueDate !== null && card.dueDate * 1000 < Date.now();
+    const overdue = !columnDone && card.dueDate !== null && card.dueDate * 1000 < Date.now();
     const done = card.checklist.filter((i) => i.done).length;
     const held = card.checklist.filter((i) => i.required && !i.done).length;
     const title = card.title || 'Sans titre';
 
     const checkChip = (
         <>
-            <span className={`icon icon-square-check ${styles.chipIcon} ${styles.chipCheck}`} />
+            <span className={`icon icon-square-check ${styles.chipIcon}`} />
             {card.checklist.length > 0 ? `${done}/${card.checklist.length}` : 0}
         </>
     );
@@ -565,22 +575,26 @@ function CardBody({ card, dragging, onOpen, opener }: CardBodyProps) {
                 sans l'ouvrir. */}
             {card.description && <p className={styles.card2Desc}>{card.description}</p>}
 
+            {/* Les deux puces sont là quelle que soit leur valeur, et la copie
+                flottante porte les mêmes : une carte saisie doit rester la carte
+                qu'on vient de quitter. */}
             <div className={styles.card2Meta}>
-                {(onOpen || card.checklist.length > 0) &&
-                    (onOpen ? (
-                        <button
-                            type='button'
-                            className={styles.card2ChipButton}
-                            data-held={held > 0 ? '' : undefined}
-                            title={checkTitle}
-                            aria-label={`Ouvrir le suivi. ${checkTitle}`}
-                            onClick={() => onOpen('work')}
-                        >
-                            {checkChip}
-                        </button>
-                    ) : (
-                        <span className={styles.card2Chip}>{checkChip}</span>
-                    ))}
+                {onOpen ? (
+                    <button
+                        type='button'
+                        className={styles.card2ChipButton}
+                        data-held={held > 0 ? '' : undefined}
+                        title={checkTitle}
+                        aria-label={`Ouvrir le suivi. ${checkTitle}`}
+                        onClick={() => onOpen('work')}
+                    >
+                        {checkChip}
+                    </button>
+                ) : (
+                    <span className={styles.card2ChipStatic} data-held={held > 0 ? '' : undefined}>
+                        {checkChip}
+                    </span>
+                )}
                 {onOpen ? (
                     <button
                         type='button'
@@ -594,7 +608,7 @@ function CardBody({ card, dragging, onOpen, opener }: CardBodyProps) {
                         {chatChip}
                     </button>
                 ) : (
-                    card.messageCount > 0 && <span className={styles.card2Chip}>{chatChip}</span>
+                    <span className={styles.card2ChipStatic}>{chatChip}</span>
                 )}
                 {due && <span className={overdue ? styles.overdue : undefined}>{due}</span>}
                 <span className={styles.card2Spacer} />

@@ -1078,6 +1078,9 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
+    /* Le chiffre n'occupe que sa propre hauteur : sans cela son interligne le
+       décale sous l'icône, d'autant plus que le texte est court. */
+    line-height: 1;
 }
 
 /* À cette taille de texte, l'icône pleine taille pèse deux fois trop lourd. Double
@@ -1119,6 +1122,12 @@
         color var(--transition-fast);
 }
 
+/* La même puce dans la copie flottante d'un glissé : elle ne répond à rien. */
+.card2ChipStatic {
+    composes: card2ChipButton;
+    cursor: inherit;
+}
+
 .card2ChipButton:hover,
 .card2ChipButton:focus-visible {
     outline: none;
@@ -1130,18 +1139,8 @@
     width: 14px;
 }
 
-/*
- * La coche remplit sa boîte symétriquement, là où la bulle porte sa queue sous son
- * corps : à boîte égale, leurs encres ne tombent pas à la même hauteur. Un pixel
- * rend à la coche l'assise de sa voisine. Ici et non dans `square-check.svg`, que
- * cinq autres écrans partagent.
- */
-.chipCheck {
-    transform: translateY(0.5px);
-}
-
 /* Il reste des sous-tâches obligatoires : la tâche ne peut pas encore être terminée. */
-.card2ChipButton[data-held] .chipIcon {
+.card2Chip[data-held] .chipIcon {
     color: var(--warning);
 }
 
@@ -1956,6 +1955,34 @@ button.tlAddCard {
     composes: barGhost;
     justify-content: center;
     padding: 0;
+}
+
+/*
+ * L'avancement des sous-tâches, peint dans la barre : `z-index: -1` le glisse
+ * sous le libellé sans sortir de la barre, qui porte un `transform` et fait
+ * donc contexte d'empilement. La teinte est celle du fond, redoublée.
+ */
+.barFill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    background: var(--accent-bg);
+    z-index: -1;
+    pointer-events: none;
+}
+
+.barLate .barFill {
+    background: var(--danger-bg);
+}
+
+/* Discret : le compte se lit si on le cherche, sans disputer le titre. */
+.barCount {
+    flex: none;
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
 .barLabel {

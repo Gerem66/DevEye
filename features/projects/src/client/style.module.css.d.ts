@@ -5,7 +5,9 @@ declare const styles: {
     readonly archivedList: string;
     readonly archivedRow: string;
     readonly bar: string;
+    readonly barCount: string;
     readonly barDraggable: string;
+    readonly barFill: string;
     readonly barGhost: string;
     readonly barGhostNew: string;
     readonly barGripEnd: string;
@@ -25,6 +27,7 @@ declare const styles: {
     readonly card2: string;
     readonly card2Chip: string;
     readonly card2ChipButton: string;
+    readonly card2ChipStatic: string;
     readonly card2Desc: string;
     readonly card2Dragging: string;
     readonly card2Meta: string;
@@ -61,7 +64,6 @@ declare const styles: {
     readonly checkScroll: string;
     readonly checkStamp: string;
     readonly checklist: string;
-    readonly chipCheck: string;
     readonly chipIcon: string;
     readonly chipIconHot: string;
     readonly column: string;
