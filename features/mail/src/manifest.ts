@@ -31,7 +31,7 @@ export const manifest = {
      * le navigateur télécharge nativement) et le retour OAuth, tous deux sur
      * l'origine de l'app seulement (`exposure: 'app'`).
      */
-    nativeCapabilities: ['routes.public'],
+    nativeCapabilities: ['routes.public', 'live.publish'],
     quotas: [{ key: 'accounts', label: 'comptes mail' }],
     /**
      * À l'échelle d'un compte, Général est la boîte elle-même (nom, serveurs,

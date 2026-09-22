@@ -32,6 +32,24 @@ export const MAIL_SYNC_INTERVAL_MAX_MINUTES = 180;
 export const MAIL_SYNC_INTERVAL_DEFAULT_MINUTES = 10;
 
 /**
+ * La trame d'avancement d'une relève : le changement, jamais l'état. Une trame
+ * perdue ne coûte rien, `mail.accountList` fait foi et rend le même couple à
+ * chaque relecture.
+ *
+ * `syncing` en fait partie parce qu'une relève qui n'a rien rapporté ne diffuse
+ * aucun changement de liste : sans trame terminale, la barre resterait posée
+ * jusqu'à la prochaine relecture.
+ */
+export const MAIL_SYNC_PROGRESS_EVENT = 'mail.syncProgress';
+export const mailSyncProgressSchema = z.object({
+    accountId: z.number().int().positive(),
+    syncing: z.boolean(),
+    /** Fraction 0-1, ou `null` quand le nombre de dossiers n'est pas encore connu. */
+    progress: z.number().min(0).max(1).nullable()
+});
+export type MailSyncProgress = z.infer<typeof mailSyncProgressSchema>;
+
+/**
  * Taille d'une page de messages, et de la fenêtre que la synchro relit à chaque
  * passage pour y réconcilier drapeaux et disparus : le même nombre à dessein,
  * pour que la relève garde honnête exactement ce que l'écran affiche sans

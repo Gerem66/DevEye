@@ -1,10 +1,17 @@
 import type { FeatureService, FeatureServiceDeps } from '@deveye/types/sdk/server';
 
 import * as mailClient from './client';
+import { MAIL_SYNC_PROGRESS_EVENT, type MailSyncProgress } from '../contracts/domain';
 import { env } from './env';
 import type { MailRepo } from './repo';
 import { syncAccountFolders, syncOneFolder, type SyncClient } from './sync';
-import { beginAccountSync, endAccountSync, markFolderSynced, reportFolderProgress } from './syncStatus';
+import {
+    beginAccountSync,
+    endAccountSync,
+    getAccountSyncStatus,
+    markFolderSynced,
+    reportFolderProgress
+} from './syncStatus';
 import { classifyMailError, decryptCredentials, persistRefreshedToken } from './_shared';
 
 /**
@@ -30,6 +37,9 @@ import { classifyMailError, decryptCredentials, persistRefreshedToken } from './
  * qu'elle occupait dans la rotation est rendue, et une écriture tardive reste
  * inoffensive, le cache s'écrivant par upsert idempotent.
  */
+/** Cadence des trames d'avancement : `reportFolderProgress` tombe à chaque message. */
+const PUBLISH_EVERY_MS = 1000;
+
 async function withDeadline<T>(work: Promise<T>, deadline: number, message: string): Promise<T> {
     let timer: NodeJS.Timeout | undefined;
     try {
@@ -114,6 +124,19 @@ export class MailSync {
                 // Toute la passe sur une seule connexion : la liste des dossiers
                 // puis chacun d'eux. La poignée de main coûte plus que la relève,
                 // et une boîte fournie a des dizaines de dossiers.
+                // L'avancement part en trames : elles animent la barre, et
+                // `mail.accountList` fait foi. Sans elles, un écran ouvert n'a
+                // d'autre recours que de redemander la liste en boucle.
+                let lastPublish = 0;
+                const publish = (force: boolean): void => {
+                    const at = Date.now();
+                    if (!force && at - lastPublish < PUBLISH_EVERY_MS) return;
+                    lastPublish = at;
+                    const { syncing, progress } = getAccountSyncStatus(accountId);
+                    const frame: MailSyncProgress = { accountId, syncing, progress };
+                    this.deps.live.publish(row.workspace_id, MAIL_SYNC_PROGRESS_EVENT, frame);
+                };
+
                 const moved = await this.client.withSession(
                     credentials,
                     persistRefreshedToken(this.deps.repo, row.id, credentials, cipher),
@@ -124,21 +147,28 @@ export class MailSync {
                             'Relève interrompue : la liste des dossiers n’a pas répondu à temps'
                         );
                         beginAccountSync(accountId, folders.length);
+                        publish(true);
                         let count = 0;
                         try {
                             for (const folder of folders) {
                                 const outcome = await withDeadline(
-                                    syncOneFolder(session, this.deps.repo, cipher, folder, (done, estimatedTotal) =>
-                                        reportFolderProgress(accountId, done / estimatedTotal)
-                                    ),
+                                    syncOneFolder(session, this.deps.repo, cipher, folder, (done, estimatedTotal) => {
+                                        reportFolderProgress(accountId, done / estimatedTotal);
+                                        publish(false);
+                                    }),
                                     deadline,
                                     `Relève interrompue : le dossier « ${folder.imap_path} » n'a pas répondu à temps`
                                 );
                                 count += outcome.newCount + outcome.changedCount + outcome.removedCount;
                                 markFolderSynced(accountId);
+                                publish(false);
                             }
                         } finally {
+                            // Hors cadence : la trame terminale est la seule que
+                            // personne ne peut déduire, et la barre reste posée
+                            // jusqu'à la prochaine relecture si elle manque.
                             endAccountSync(accountId);
+                            publish(true);
                         }
                         return count;
                     }

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { MAIL_SYNC_PROGRESS_EVENT, mailSyncProgressSchema } from '../contracts/domain';
 import type { MailAccountRow, MailFolderRow, MailMessageRow } from '../contracts/domain';
 import { createTestServiceDeps } from '@deveye/types/sdk/testing';
 
@@ -340,6 +341,24 @@ describe('la relève de fond', () => {
         assert.deepEqual(client.calls, []);
         assert.deepEqual(repo.synced, []);
         assert.deepEqual(deps.recorded.liveChanges, []);
+    });
+
+    it('encadre la relève de deux trames d’avancement, dont la terminale qui repose la barre', async () => {
+        const repo = fakeRepo([account({ id: 1 })]);
+        const deps = createTestServiceDeps({ repo });
+        const sync = new MailSync(deps, { mailClient: fakeClient([envelope(1)]) });
+        await sync.syncOne(1);
+
+        const frames = deps.recorded.livePublishes.filter((f) => f.event === MAIL_SYNC_PROGRESS_EVENT);
+        // La première annonce la relève, la dernière la termine : sans elle la
+        // barre resterait posée, une relève sans rien de neuf ne diffusant aucun
+        // changement de liste.
+        assert.ok(frames.length >= 2);
+        assert.equal(frames[0].workspaceId, 1);
+        assert.deepEqual(frames[0].payload, { accountId: 1, syncing: true, progress: 0 });
+        assert.deepEqual(frames[frames.length - 1].payload, { accountId: 1, syncing: false, progress: null });
+        // Toutes se relisent sous le contrat que le client applique.
+        for (const frame of frames) mailSyncProgressSchema.parse(frame.payload);
     });
 
     it('une boîte qui ne répond pas est abandonnée à l’échéance, consignée `unreachable`, annoncée, puis rendue à la rotation', async () => {

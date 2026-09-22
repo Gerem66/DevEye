@@ -4,6 +4,7 @@ import {
     FeatureSettingsButton,
     invalidate,
     onResourceChange,
+    onServerEvent,
     onSocketOpen,
     OpenPopup,
     TextInput,
@@ -28,7 +29,7 @@ import { canReconnect, providerLabel, reconnectAccount } from './oauthWindow';
 import { api, humanizeError, withSettingsDefaults } from './api';
 import styles from './style.module.css';
 
-import { MAIL_MESSAGE_PAGE_SIZE } from '../contracts/domain';
+import { MAIL_MESSAGE_PAGE_SIZE, MAIL_SYNC_PROGRESS_EVENT, mailSyncProgressSchema } from '../contracts/domain';
 
 import type {
     MailAccount,
@@ -201,16 +202,21 @@ export default function Mail(_props: FeatureViewProps) {
         });
     }, [reloadAccounts]);
 
-    // Pas un sondage de données : la barre de progression d'une synchro en cours
-    // lit un compteur qui ne vit qu'en mémoire du serveur, le temps de celle-ci.
-    const anySyncing = accounts.some((a) => a.syncing);
-    useEffect(() => {
-        if (!anySyncing) return;
-        const id = setInterval(() => {
-            if (!draggingRef.current) void reloadAccounts();
-        }, 1500);
-        return () => clearInterval(id);
-    }, [anySyncing, reloadAccounts]);
+    // L'avancement d'une relève arrive par trames : elles animent la barre, et
+    // `mail.accountList` fait foi, qui rend le même couple à chaque relecture.
+    // Rien à redemander, et la liste ne se réordonne pas sous le pointeur, la
+    // trame ne touchant que deux champs du compte qu'elle nomme.
+    useEffect(
+        () =>
+            onServerEvent(MAIL_SYNC_PROGRESS_EVENT, mailSyncProgressSchema, (frame) =>
+                setAccounts((current) =>
+                    current.map((a) =>
+                        a.id === frame.accountId ? { ...a, syncing: frame.syncing, syncProgress: frame.progress } : a
+                    )
+                )
+            ),
+        []
+    );
 
     // Une boîte qui n'est plus dans la liste ne peut pas rester sélectionnée :
     // supprimée depuis ses réglages, retirée par un autre membre ou départagée,
