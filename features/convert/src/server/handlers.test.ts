@@ -9,7 +9,7 @@ import { FeatureError, type SdkFeatureContext } from '@deveye/types/sdk/server';
 import { createTestContext, type TestContextOverrides } from '@deveye/types/sdk/testing';
 
 import { convertCancel, convertCreate, convertDownload, convertList, convertRemove } from '../contracts/commands';
-import { probeEngines } from './engines';
+import { engineFamilies, probeEngines } from './engines';
 import { env } from './env';
 import { convertHandlers } from './handlers';
 import type { ConvertRepo } from './repo';
@@ -40,12 +40,26 @@ const IMAGE = {
 };
 
 let root: string;
+/**
+ * La conversion qu'ouvrent ces tests est-elle seulement servie ici ? La commande
+ * vérifie l'outil avant tout le reste : sans ImageMagick, la taille, l'offre et le
+ * quota se refusent tous du même « conflict », et il ne reste rien à éprouver.
+ *
+ * Sondé une fois, et non déduit d'un refus attrapé : un vrai conflit passerait
+ * sinon pour un poste mal outillé, et le test se tairait au lieu d'échouer.
+ */
+let imagesServed = false;
 before(async () => {
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'convert-handlers-'));
     env.CONVERT_STORAGE_DIR = root;
     env.CONVERT_DISK_FLOOR_BYTES = 1;
-    // Les outils réellement présents sur le poste décident de ce que ce serveur sert : PNG et JPEG le sont partout.
     await probeEngines(null, { debug() {}, info() {}, warn() {}, error() {} });
+    const family = engineFamilies().find((f) => f.kind === IMAGE.kind);
+    imagesServed =
+        family !== undefined &&
+        family.available &&
+        !family.missingSources.includes(IMAGE.sourceFormat) &&
+        !family.missingTargets.includes(IMAGE.targetFormat);
 });
 after(async () => {
     await fs.rm(root, { recursive: true, force: true });
@@ -56,15 +70,10 @@ const context = (repo: ConvertRepo, over: TestContextOverrides<ConvertRepo> = {}
 
 describe('convert.create', () => {
     it('ouvre un travail, scelle le nom, et rend une adresse de montée à ticket', async (t) => {
+        if (!imagesServed) return t.skip('ImageMagick absent de ce poste');
         const repo = memoryRepo();
         const ctx = context(repo);
-        let out;
-        try {
-            out = await handlerFor(convertCreate)(ctx, IMAGE);
-        } catch (e) {
-            if (e instanceof FeatureError && e.code === 'conflict') return t.skip('ImageMagick absent de ce poste');
-            throw e;
-        }
+        const out = await handlerFor(convertCreate)(ctx, IMAGE);
         assert.equal(out.job.phase, 'awaiting_upload');
         assert.equal(out.job.originalName, IMAGE.originalName);
         assert.match(out.uploadUrl, /^\/api\/convert\/upload\?token=/);
@@ -86,6 +95,7 @@ describe('convert.create', () => {
     });
 
     it('refuse au-delà du mur du serveur, puis au-delà de l’offre', async (t) => {
+        if (!imagesServed) return t.skip('ImageMagick absent de ce poste');
         await assert.rejects(
             handlerFor(convertCreate)(context(memoryRepo()), {
                 ...IMAGE,
@@ -93,13 +103,10 @@ describe('convert.create', () => {
             }),
             (e: unknown) => e instanceof FeatureError && e.code === 'validation' && /trop lourd/.test(e.message)
         );
-        try {
-            await handlerFor(convertCreate)(context(memoryRepo(), { quotaLimits: { fileBytes: 1_000_000 } }), IMAGE);
-            assert.fail('l’offre devait refuser');
-        } catch (e) {
-            if (e instanceof FeatureError && e.code === 'conflict') return t.skip('ImageMagick absent de ce poste');
-            assert.ok(e instanceof FeatureError && e.code === 'quota_exceeded');
-        }
+        await assert.rejects(
+            handlerFor(convertCreate)(context(memoryRepo(), { quotaLimits: { fileBytes: 1_000_000 } }), IMAGE),
+            (e: unknown) => e instanceof FeatureError && e.code === 'quota_exceeded'
+        );
     });
 });
 
@@ -107,15 +114,11 @@ describe('limites d’une offre', () => {
     const open = { ...IMAGE, declaredBytes: 1000 };
 
     it('borne les conversions ouvertes à la fois, tous espaces du propriétaire confondus', async (t) => {
+        if (!imagesServed) return t.skip('ImageMagick absent de ce poste');
         const repo = memoryRepo();
         const ctx = (workspaceId: number) =>
             context(repo, { workspaceId, quotaLimits: { activeJobs: 1 }, ownerWorkspaceIds: [1, 2] });
-        try {
-            await handlerFor(convertCreate)(ctx(1), open);
-        } catch (e) {
-            if (e instanceof FeatureError && e.code === 'conflict') return t.skip('ImageMagick absent de ce poste');
-            throw e;
-        }
+        await handlerFor(convertCreate)(ctx(1), open);
         await assert.rejects(
             handlerFor(convertCreate)(ctx(2), open),
             (e: unknown) => e instanceof FeatureError && e.code === 'quota_exceeded'
@@ -126,14 +129,10 @@ describe('limites d’une offre', () => {
     });
 
     it('refuse une conversion de plus quand la réserve de résultats est déjà pleine', async (t) => {
+        if (!imagesServed) return t.skip('ImageMagick absent de ce poste');
         const repo = memoryRepo();
         const ctx = context(repo, { quotaLimits: { resultBytes: 5000 } });
-        try {
-            await handlerFor(convertCreate)(ctx, open);
-        } catch (e) {
-            if (e instanceof FeatureError && e.code === 'conflict') return t.skip('ImageMagick absent de ce poste');
-            throw e;
-        }
+        await handlerFor(convertCreate)(ctx, open);
         Object.assign(repo.rows[0], { phase: 'done', output_bytes: 5000 });
         await assert.rejects(
             handlerFor(convertCreate)(ctx, open),
