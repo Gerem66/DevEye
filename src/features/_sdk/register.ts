@@ -273,7 +273,7 @@ export function moduleItems(
         copy: copy && {
             plan: (itemId, workspaceId) =>
                 copy.plan?.({ q: sdkQueryable(db.queryable), repo: mod.repoFor(db), itemId, workspaceId }) ??
-                Promise.resolve({ blockers: [], drops: [] }),
+                Promise.resolve({ blockers: [], drops: [], carries: [] }),
             tierOf: (itemId) => itemTierOf(sdkQueryable(db.queryable), copy.tree, itemId),
             read: (itemId, cipher) => exportItemTree(sdkQueryable(db.queryable), copy.tree, itemId, cipher),
             write: async (q, rows, into) => {

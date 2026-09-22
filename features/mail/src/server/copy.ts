@@ -45,6 +45,13 @@ export const mailCopy: FeatureItemsCopy<MailRepo> = {
         ]);
         return {
             blockers: [],
+            // Le mot de passe de la boîte voyage avec elle, rescellé sous la clé
+            // de la destination : dans un espace partagé, ses membres relèvent
+            // et envoient au nom de cette adresse. Rien à l'écran ne le dirait.
+            carries:
+                rows[0]?.auth_method === 'password'
+                    ? ['Le mot de passe de la boîte : qui peut lire la copie peut s’y connecter']
+                    : ['L’accès à la boîte : qui peut lire la copie peut relever et envoyer en son nom'],
             drops: [
                 'Ses dossiers et messages déjà relevés : la copie les relèvera de nouveau',
                 // Un jeton OAuth est lié à l'application enregistrée par CE

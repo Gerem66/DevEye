@@ -1,3 +1,4 @@
+import { MAIL_SYNC_INTERVAL_MAX_MINUTES, MAIL_SYNC_INTERVAL_MIN_MINUTES } from '../contracts/domain';
 import type {
     MailAccount,
     MailAccountRow,
@@ -12,6 +13,10 @@ import type {
     MailSettingsRow
 } from '../contracts/domain';
 import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
+
+// Le garde des appels sortants, partagé par toute l'app : un hôte refusé est un
+// réglage à corriger, et se classe donc sans dépendre du texte de son message.
+import { UnsafeTargetError } from '@/Services/netFetch';
 
 import { MailReauthRequiredError } from './client';
 import type { MailCredentials, MailPasswordCredentials, TokenRefreshCallback } from './client';
@@ -76,6 +81,9 @@ export function classifyMailError(error: unknown): Exclude<MailAccountStatus, 'o
     // fournisseur a définitivement refusé, et lui seul peut rendre l'accès, ou
     // son point de jetons a flanché sans que rien soit révoqué.
     if (error instanceof MailReauthRequiredError) return 'auth';
+    // Ni une panne ni un refus d'identité : l'adresse saisie est hors des clous
+    // de l'instance. La reprise de `syncFoldersWithRetry` n'a rien à y gagner.
+    if (error instanceof UnsafeTargetError) return 'error';
     if (error instanceof OAuthTokenError) return error.permanent ? 'auth' : 'unreachable';
     const m = (error instanceof Error ? error.message : String(error)).toLowerCase();
     if (
@@ -298,7 +306,13 @@ export async function toAccountDTO(cipher: SdkCipher, row: MailAccountRow, forei
         status: row.last_sync_status,
         lastErrorAt: row.last_error_at,
         needsReauth,
-        syncIntervalMinutes: Math.max(1, Math.round(row.sync_interval_seconds / 60)),
+        // Borné aux mêmes valeurs que le contrat : une ligne venue d'une autre
+        // instance peut porter une cadence que l'écran ne sait plus produire, et
+        // la validation de sortie ferait tomber tout le listage de l'espace.
+        syncIntervalMinutes: Math.min(
+            MAIL_SYNC_INTERVAL_MAX_MINUTES,
+            Math.max(MAIL_SYNC_INTERVAL_MIN_MINUTES, Math.round(row.sync_interval_seconds / 60))
+        ),
         syncing: syncStatus.syncing,
         syncProgress: syncStatus.progress,
         created: row.created

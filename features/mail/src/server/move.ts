@@ -30,7 +30,14 @@ export const mailMove: FeatureItemsMove<MailRepo> = {
     async plan({ q, itemId }) {
         // Aucun nom unique par espace à heurter : deux espaces peuvent relever
         // la même boîte.
-        return { blockers: [], drops: [], rows: await countMovableCells(q, CELLS, Number(itemId)) };
+        return {
+            blockers: [],
+            drops: [],
+            // Les identifiants suivent le compte, rescellés sous la clé du nouvel
+            // espace : s'il est partagé, ses membres y ont accès.
+            carries: ['L’accès à la boîte : qui peut la lire là-bas peut relever et envoyer en son nom'],
+            rows: await countMovableCells(q, CELLS, Number(itemId))
+        };
     },
 
     async apply({ q, itemId, fromWorkspaceId, toWorkspaceId, ciphers }) {

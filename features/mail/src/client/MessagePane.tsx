@@ -39,7 +39,9 @@ function formatFullDate(epochSeconds: number): string {
 
 /** Minimal standalone document the "raw" mode iframe renders — white background, the message's own styling untouched. */
 function rawDocument(bodyHtml: string): string {
-    return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"></head><body style="background:#fff;color:#111;margin:0;padding:16px;font-family:sans-serif;">${bodyHtml}</body></html>`;
+    // `meta referrer` couvre tout ce que le document chargerait, au-dela des
+    // `referrerpolicy` que le serveur pose sur les images.
+    return `<!doctype html><html><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><base target="_blank"></head><body style="background:#fff;color:#111;margin:0;padding:16px;font-family:sans-serif;">${bodyHtml}</body></html>`;
 }
 
 /**

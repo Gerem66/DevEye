@@ -36,6 +36,26 @@ describe('sanitizeMailHtml', () => {
         });
         assert.equal(trusted.remoteImagesBlocked, false);
         assert.ok(trusted.html.includes('src="https://cdn.exemple.fr/logo.png"'));
+        // Chargée, mais sans dire d'où on la regarde.
+        assert.ok(trusted.html.includes('referrerpolicy="no-referrer"'));
+    });
+
+    it('bloque une image relative au protocole, barre inversée comprise', () => {
+        const slashes = sanitizeMailHtml('<img src="//pixel.tracker.fr/p.gif">', opts);
+        assert.equal(slashes.remoteImagesBlocked, true);
+        assert.deepEqual(slashes.blockedSources, ['pixel.tracker.fr']);
+        assert.ok(!slashes.html.includes(' src='));
+
+        const backslashes = sanitizeMailHtml(String.raw`<img src="\\pixel.tracker.fr\p.gif">`, opts);
+        assert.equal(backslashes.remoteImagesBlocked, true);
+        assert.ok(!backslashes.html.includes(' src='));
+
+        const css = sanitizeMailHtml('<style>.a{background:url("//pixel.tracker.fr/b.png")}</style>', {
+            ...opts,
+            preserveStyling: true
+        });
+        assert.ok(css.html.includes('url(none)'));
+        assert.equal(css.remoteImagesBlocked, true);
     });
 
     it('refuse les schémas autres que http(s) et mailto', () => {

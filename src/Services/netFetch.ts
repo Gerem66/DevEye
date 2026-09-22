@@ -9,6 +9,7 @@
  * peut l'atteindre : l'app ne l'importe pas deux fois.
  */
 import { lookup as dnsLookup, type LookupAddress, type LookupOptions } from 'node:dns';
+import { isIP } from 'node:net';
 
 import { isPublicIp, isSafePublicUrl } from '@deveye/types/sdk/server';
 import { Agent, fetch as undiciFetch, type RequestInit, type Response } from 'undici';
@@ -99,10 +100,38 @@ export function setSafeFetchTransportForTest(fake: Transport | null): void {
 
 /** Une cible refusée par le garde, à distinguer d'une panne réseau. */
 export class UnsafeTargetError extends Error {
-    constructor() {
-        super(OUTBOUND_REFUSED_MESSAGE);
+    constructor(message: string = OUTBOUND_REFUSED_MESSAGE) {
+        super(message);
         this.name = 'UnsafeTargetError';
     }
+}
+
+/** Le refus d'un hôte nu, pour les protocoles qui n'ont pas d'URL à montrer. */
+export const OUTBOUND_HOST_REFUSED_MESSAGE =
+    'Ce serveur n’est pas joignable depuis l’application : seules les adresses publiques sont permises ' +
+    '(une installation personnelle peut ouvrir son réseau privé avec OUTBOUND_ALLOW_PRIVATE).';
+
+/**
+ * Le garde de {@link publicLookup} pour un hôte sans URL : IMAP, SMTP, un
+ * proxy. Deux cas qu'un `lookup` ne couvre pas à lui seul : une IP littérale
+ * ne passe par aucune résolution, donc par aucun `lookup`, et une bibliothèque
+ * qui résout elle-même avant de se connecter (nodemailer) n'en accepte pas.
+ *
+ * Une panne DNS ordinaire n'est pas un refus : on la laisse passer pour que la
+ * connexion échoue ensuite avec sa vraie raison, plutôt que d'accuser le garde.
+ */
+export async function assertAllowedOutboundHost(host: string): Promise<void> {
+    const bare = host.replace(/^\[|\]$/g, '');
+    if (isIP(bare)) {
+        if (!isAllowedAddress(bare)) throw new UnsafeTargetError(OUTBOUND_HOST_REFUSED_MESSAGE);
+        return;
+    }
+    await new Promise<void>((resolve, reject) => {
+        publicLookup(host, { all: true }, (err) => {
+            if (err?.code === 'ENOTPUBLIC') return reject(new UnsafeTargetError(OUTBOUND_HOST_REFUSED_MESSAGE));
+            resolve();
+        });
+    });
 }
 
 /**

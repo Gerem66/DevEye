@@ -112,7 +112,13 @@ const planFeature = defineFeature({
         if (tier === null) throw new FeatureError('not_found', 'Élément introuvable');
         const plan = await copy.plan(input.itemId, home);
         const label = await moduleItems(input.feature, ctx.db)!.labelOf(ctx.secure.open, input.itemId, home);
-        return { label, tier, blockers: [...plan.blockers], drops: [...plan.drops] };
+        return {
+            label,
+            tier,
+            blockers: [...plan.blockers],
+            drops: [...plan.drops],
+            carries: [...(plan.carries ?? [])]
+        };
     }
 });
 

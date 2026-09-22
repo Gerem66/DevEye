@@ -108,6 +108,16 @@ export default function CopyItem({ feature, itemId }: Props) {
                                     copie.
                                 </p>
                             )}
+                            {plan.carries.length > 0 && (
+                                <>
+                                    <p>La copie emporte aussi :</p>
+                                    <ul className={styles.usageList}>
+                                        {plan.carries.map((line) => (
+                                            <li key={line}>{line}</li>
+                                        ))}
+                                    </ul>
+                                </>
+                            )}
                             {plan.drops.length > 0 && (
                                 <>
                                     <p>La copie n’emporte pas :</p>

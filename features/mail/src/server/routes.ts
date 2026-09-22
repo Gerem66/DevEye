@@ -28,7 +28,7 @@ import { decryptCredentials, encryptCredentials, persistRefreshedToken, tryDecry
 
 export type MailRouteDeps = Pick<
     FeatureServiceDeps<MailRepo>,
-    'repo' | 'secrecy' | 'cipherFor' | 'origins' | 'logger' | 'audit'
+    'repo' | 'secrecy' | 'cipherFor' | 'origins' | 'logger' | 'audit' | 'quotaFor'
 >;
 
 /**
@@ -293,6 +293,12 @@ export function mailRoutes(app: SdkPublicApp, deps: MailRouteDeps, seam: MailRou
                 });
                 return page(true);
             }
+
+            // Même barrage que `mail.accountAdd` : sans lui, le consentement
+            // serait la porte par laquelle on dépasse l'offre de son compte.
+            await deps
+                .quotaFor(ticket.workspaceId)
+                .assert('accounts', async (owned) => (await deps.repo.accounts.countInWorkspaces(owned)) + 1);
 
             const account = await deps.repo.accounts.create({
                 userId: ticket.userId,

@@ -142,6 +142,7 @@ async function buildContext(
     const blockers: string[] = [];
     let rows = 0;
     let drops: string[] = [];
+    let carries: string[] = [];
 
     if (!items || !move) {
         blockers.push(`${label} ne sait pas encore déplacer ses éléments d’un espace à l’autre.`);
@@ -156,6 +157,7 @@ async function buildContext(
         blockers.push(...plan.blockers);
         rows = plan.rows;
         drops = [...plan.drops];
+        carries = [...(plan.carries ?? [])];
     }
 
     if (blockers.length === 0) drops = [...drops, ...(await dropsOf(ctx.db, feature, itemId, homeWorkspaceId))];
@@ -172,6 +174,7 @@ async function buildContext(
             losesSharedAccess: ctx.workspace.kind === 'shared',
             blockers,
             drops,
+            carries,
             rows,
             dependencies:
                 blockers.length === 0

@@ -1,6 +1,11 @@
 import { ImapFlow, type FetchMessageObject, type ImapFlowOptions, type ListResponse } from 'imapflow';
 import nodemailer, { type Transporter } from 'nodemailer';
 import type { MailAddress, MailFolderSpecialUse, MailOAuthProvider, MailProxy } from '../contracts/domain';
+// Le garde des appels sortants, partagé par toute l'app : les serveurs IMAP,
+// SMTP et le proxy d'une boîte sont saisis par un membre, et rien d'autre
+// n'empêche le serveur d'aller frapper à une adresse de son réseau interne.
+import { assertAllowedOutboundHost, publicLookup } from '@/Services/netFetch';
+
 import { oauthProviderEndpoints, refreshAccessToken, OAuthTokenError, type RefreshedToken } from './oauth';
 
 /**
@@ -162,6 +167,11 @@ function describeError(e: unknown): string {
 }
 
 async function withImap<T>(auth: ResolvedAuth, fn: (client: ImapFlow) => Promise<T>): Promise<T> {
+    await assertAllowedOutboundHost(auth.imapHost);
+    // Le proxy est l'autre bout du même fil : sans lui, l'interdit se contourne
+    // en faisant sortir la connexion par une adresse interne.
+    if (auth.imapProxy) await assertAllowedOutboundHost(new URL(auth.imapProxy).hostname);
+
     const implicitTls = auth.imapPort === 993;
     const options: StrictImapFlowOptions = {
         host: auth.imapHost,
@@ -170,6 +180,10 @@ async function withImap<T>(auth: ResolvedAuth, fn: (client: ImapFlow) => Promise
         doSTARTTLS: implicitTls ? undefined : true,
         auth: auth.imapAuth,
         proxy: auth.imapProxy ?? undefined,
+        // imapflow verse ces options dans `tls.connect` comme dans `net.connect` :
+        // le `lookup` couvre donc les deux chemins, et referme la fenêtre entre
+        // la vérification ci-dessus et la connexion (rebinding DNS).
+        tls: { lookup: publicLookup },
         // Délais resserrés sur ceux d'imapflow (90 s / 16 s / 5 min) : la relève
         // de fond n'a que `MAIL_SYNC_CONCURRENCY` places, et un serveur muet en
         // immobiliserait une cinq minutes durant.
@@ -219,7 +233,14 @@ function requireMailbox(client: ImapFlow): Exclude<ImapFlow['mailbox'], boolean 
     return box;
 }
 
-function smtpTransport(auth: ResolvedAuth): Transporter {
+/**
+ * Asynchrone pour son seul garde : nodemailer résout le nom lui-même avant de
+ * se connecter, donc un `lookup` n'y a aucune prise et la vérification doit
+ * précéder. Il reste une fenêtre de rebinding entre les deux, que rien ne
+ * ferme sans réécrire la résolution de nodemailer.
+ */
+async function smtpTransport(auth: ResolvedAuth): Promise<Transporter> {
+    await assertAllowedOutboundHost(auth.smtpHost);
     const implicitTls = auth.smtpPort === 465;
     return nodemailer.createTransport({
         host: auth.smtpHost,
@@ -248,7 +269,7 @@ export async function testConnection(
         } catch (e) {
             errors.push(`IMAP : ${e instanceof Error ? e.message : String(e)}`);
         }
-        const transport = smtpTransport(auth);
+        const transport = await smtpTransport(auth);
         try {
             await transport.verify();
             smtpOk = true;
@@ -644,7 +665,7 @@ export async function sendMail(
     onTokenRefreshed?: TokenRefreshCallback
 ): Promise<{ messageId: string }> {
     const auth = await resolveAuth(credentials, onTokenRefreshed);
-    const transport = smtpTransport(auth);
+    const transport = await smtpTransport(auth);
     try {
         const info = await transport.sendMail({
             from: message.from,

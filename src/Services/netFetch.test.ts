@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { publicLookup, safeFetch, UnsafeTargetError } from './netFetch';
+import {
+    assertAllowedOutboundHost,
+    publicLookup,
+    safeFetch,
+    setAllowPrivateForTest,
+    UnsafeTargetError
+} from './netFetch';
 
 describe('safeFetch', () => {
     it('refuse une cible interne avant toute connexion', async () => {
@@ -27,5 +33,28 @@ describe('publicLookup', () => {
             assert.equal(err?.code, 'ENOTPUBLIC');
             done();
         });
+    });
+});
+
+describe('assertAllowedOutboundHost', () => {
+    it('refuse une IP littérale interne, qu’aucune résolution ne verrait passer', async () => {
+        for (const host of ['127.0.0.1', '10.0.0.5', '169.254.169.254', '::1', '[::1]']) {
+            await assert.rejects(assertAllowedOutboundHost(host), UnsafeTargetError, host);
+        }
+        await assert.rejects(assertAllowedOutboundHost('localhost'), UnsafeTargetError);
+    });
+
+    it('laisse passer une adresse publique', async () => {
+        await assertAllowedOutboundHost('93.184.216.34');
+    });
+
+    it('ouvre le réseau privé quand l’instance l’autorise, sauf le lien-local', async () => {
+        setAllowPrivateForTest(true);
+        try {
+            await assertAllowedOutboundHost('10.0.0.5');
+            await assert.rejects(assertAllowedOutboundHost('169.254.169.254'), UnsafeTargetError);
+        } finally {
+            setAllowPrivateForTest(false);
+        }
     });
 });

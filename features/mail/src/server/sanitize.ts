@@ -51,18 +51,27 @@ const ALLOWED_TAGS = [
 const ALLOWED_ATTRIBUTES: sanitizeHtml.IOptions['allowedAttributes'] = {
     // `target`/`rel` are added by the transform below, never taken from the message.
     a: ['href', 'title', 'target', 'rel'],
-    img: ['src', 'alt', 'width', 'height', 'data-blocked-src'],
+    img: ['src', 'alt', 'width', 'height', 'data-blocked-src', 'referrerpolicy'],
     td: ['colspan', 'rowspan'],
     th: ['colspan', 'rowspan']
 };
 
+/**
+ * Une référence distante au sens du navigateur. Les formes relatives au
+ * protocole en font partie : `//hote/pixel.gif`, que sanitize-html laisse
+ * passer et que le navigateur résout en https, est un pixel espion complet.
+ * Une barre inversée y vaut une barre, comme dans l'analyseur d'URL.
+ */
 function isRemote(src: string): boolean {
-    return /^https?:\/\//i.test(src);
+    return /^(?:https?:)?[/\\]{2}/i.test(src.trim());
 }
 
 function hostnameOf(src: string): string | null {
+    const trimmed = src.trim();
     try {
-        return new URL(src).hostname.toLowerCase();
+        // Une forme relative au protocole n'est pas une URL absolue : on lui
+        // donne celui que le navigateur lui donnerait pour pouvoir la lire.
+        return new URL(/^[/\\]{2}/.test(trimmed) ? `https:${trimmed}` : trimmed).hostname.toLowerCase();
     } catch {
         return null;
     }
@@ -135,7 +144,10 @@ export function sanitizeMailHtml(rawHtml: string, opts: SanitizeOptions): Saniti
                     const { src: _dropped, ...rest } = attribs;
                     return { tagName: 'img', attribs: { ...rest, 'data-blocked-src': src } };
                 }
-                return { tagName: 'img', attribs };
+                // Une image qu'on accepte de charger n'a pas à dire d'où on la
+                // regarde : sans cela, l'adresse de la page part en `Referer`
+                // chez l'hôte de l'image, qui est souvent celui qui piste.
+                return { tagName: 'img', attribs: { ...attribs, referrerpolicy: 'no-referrer' } };
             }
         }
     });
@@ -144,13 +156,16 @@ export function sanitizeMailHtml(rawHtml: string, opts: SanitizeOptions): Saniti
     // `background-image: url(...)` could still act as a tracking pixel in `raw`
     // mode. Best-effort text-level strip, same trust rules as the `<img>` pass.
     if (opts.preserveStyling && !opts.allowRemoteImages) {
-        html = html.replace(/url\(\s*(['"]?)(https?:\/\/[^'")]+)\1\s*\)/gi, (match, _quote: string, url: string) => {
-            const host = hostnameOf(url);
-            if (isTrusted(host, opts.trustedDomains)) return match;
-            remoteImagesBlocked = true;
-            if (host) blockedHosts.add(host);
-            return 'url(none)';
-        });
+        html = html.replace(
+            /url\(\s*(['"]?)((?:https?:)?\/\/[^'")]+)\1\s*\)/gi,
+            (match, _quote: string, url: string) => {
+                const host = hostnameOf(url);
+                if (isTrusted(host, opts.trustedDomains)) return match;
+                remoteImagesBlocked = true;
+                if (host) blockedHosts.add(host);
+                return 'url(none)';
+            }
+        );
     }
 
     return { html, remoteImagesBlocked, blockedSources: Array.from(blockedHosts) };

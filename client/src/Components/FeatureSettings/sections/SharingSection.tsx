@@ -135,6 +135,16 @@ export default function SharingSection({ scope, onGone }: Props) {
                             {preview.losesSharedAccess && (
                                 <p>Les membres de « {preview.homeWorkspaceName} » n’y auront plus accès.</p>
                             )}
+                            {preview.carries.length > 0 && (
+                                <>
+                                    <p>Le déplacement emporte aussi :</p>
+                                    <ul className={styles.usageList}>
+                                        {preview.carries.map((line) => (
+                                            <li key={line}>{line}</li>
+                                        ))}
+                                    </ul>
+                                </>
+                            )}
                             {lost.length > 0 && (
                                 <ul className={styles.usageList}>
                                     {lost.map((line) => (
