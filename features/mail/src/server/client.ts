@@ -211,19 +211,62 @@ async function withImap<T>(auth: ResolvedAuth, fn: (client: ImapFlow) => Promise
 }
 
 /**
- * {@link withImap} plus an exclusive lock on one mailbox, released whatever
- * happens. Every per-message operation needs both, and a lock leaked on an
- * error path wedges every later operation on that connection.
+ * Un verrou exclusif sur une boîte d'une connexion déjà ouverte, rendu quoi
+ * qu'il arrive : un verrou perdu sur un chemin d'erreur coince toutes les
+ * opérations suivantes de cette connexion.
  */
+async function onMailbox<T>(client: ImapFlow, imapPath: string, fn: (client: ImapFlow) => Promise<T>): Promise<T> {
+    const lock = await client.getMailboxLock(imapPath);
+    try {
+        return await fn(client);
+    } finally {
+        lock.release();
+    }
+}
+
+/** {@link withImap} plus {@link onMailbox}, pour une opération isolée. */
 async function withMailbox<T>(auth: ResolvedAuth, imapPath: string, fn: (client: ImapFlow) => Promise<T>): Promise<T> {
-    return withImap(auth, async (client) => {
-        const lock = await client.getMailboxLock(imapPath);
-        try {
-            return await fn(client);
-        } finally {
-            lock.release();
-        }
-    });
+    return withImap(auth, (client) => onMailbox(client, imapPath, fn));
+}
+
+/**
+ * Une connexion ouverte sur laquelle plusieurs opérations s'enchaînent, chacune
+ * verrouillant la boîte dont elle a besoin.
+ *
+ * C'est la forme que prend une relève : elle parcourt tous les dossiers d'un
+ * compte, et la poignée de main TCP+TLS+LOGIN coûte plus que la relève
+ * elle-même. Une connexion par dossier la ferait payer autant de fois qu'il y a
+ * de dossiers, soit des dizaines sur une boîte fournie.
+ *
+ * La portée est une passe, pas davantage : la connexion vit quelques secondes,
+ * ce qui évite d'avoir à la maintenir en vie contre les délais d'inactivité des
+ * serveurs IMAP, et un jeton OAuth ne se résout qu'une fois pour toute la passe.
+ */
+export interface MailSession {
+    listFolders(): Promise<RemoteFolder[]>;
+    syncFolder(options: SyncFolderOptions): Promise<FolderSyncResult>;
+    fetchOlderMessages(imapPath: string, beforeUid: number | null, limit: number): Promise<OlderMessagesResult>;
+}
+
+/**
+ * Ouvre une connexion, la prête à `fn`, et la referme quoi qu'il arrive. Une
+ * erreur au milieu d'une passe l'abandonne en entier : la connexion porte de
+ * l'état, et la réutiliser après un échec est le meilleur moyen de coincer tout
+ * ce qui suit.
+ */
+export async function withSession<T>(
+    credentials: MailCredentials,
+    onTokenRefreshed: TokenRefreshCallback | undefined,
+    fn: (session: MailSession) => Promise<T>
+): Promise<T> {
+    const auth = await resolveAuth(credentials, onTokenRefreshed);
+    return withImap(auth, (client) =>
+        fn({
+            listFolders: () => listFoldersOn(client),
+            syncFolder: (options) => syncFolderOn(client, options),
+            fetchOlderMessages: (imapPath, beforeUid, limit) => fetchOlderMessagesOn(client, imapPath, beforeUid, limit)
+        })
+    );
 }
 
 /** The open mailbox's state, or a clear error when the path doesn't resolve to one. */
@@ -299,21 +342,15 @@ const SPECIAL_USE_MAP: Record<string, MailFolderSpecialUse> = {
     '\\Archive': 'archive'
 };
 
-export async function listFolders(
-    credentials: MailCredentials,
-    onTokenRefreshed?: TokenRefreshCallback
-): Promise<RemoteFolder[]> {
-    const auth = await resolveAuth(credentials, onTokenRefreshed);
-    return withImap(auth, async (client) => {
-        const list: ListResponse[] = await client.list();
-        return list
-            .filter((f) => f.listed && !f.flags.has('\\Noselect'))
-            .map((f) => ({
-                imapPath: f.path,
-                name: f.name,
-                specialUse: SPECIAL_USE_MAP[f.specialUse ?? ''] ?? 'other'
-            }));
-    });
+async function listFoldersOn(client: ImapFlow): Promise<RemoteFolder[]> {
+    const list: ListResponse[] = await client.list();
+    return list
+        .filter((f) => f.listed && !f.flags.has('\\Noselect'))
+        .map((f) => ({
+            imapPath: f.path,
+            name: f.name,
+            specialUse: SPECIAL_USE_MAP[f.specialUse ?? ''] ?? 'other'
+        }));
 }
 
 export interface RemoteEnvelope {
@@ -377,7 +414,6 @@ export interface ReconcileWindow {
 }
 
 export interface SyncFolderOptions {
-    credentials: MailCredentials;
     imapPath: string;
     sinceUid: number | null;
     initialLimit: number;
@@ -386,7 +422,6 @@ export interface SyncFolderOptions {
      * du fetch avant : ouvrir la boîte est le coût dominant.
      */
     reconcile?: ReconcileWindow | null;
-    onTokenRefreshed?: TokenRefreshCallback;
     onProgress?: (done: number, estimatedTotal: number) => void;
 }
 
@@ -415,17 +450,11 @@ export interface FolderSyncResult {
  * boîte déjà ouverte : c'est ce qui rend la relève capable d'apprendre autre
  * chose que l'arrivée d'un message.
  */
-export async function syncFolder({
-    credentials,
-    imapPath,
-    sinceUid,
-    initialLimit,
-    reconcile = null,
-    onTokenRefreshed,
-    onProgress
-}: SyncFolderOptions): Promise<FolderSyncResult> {
-    const auth = await resolveAuth(credentials, onTokenRefreshed);
-    return withMailbox(auth, imapPath, async (client) => {
+async function syncFolderOn(
+    client: ImapFlow,
+    { imapPath, sinceUid, initialLimit, reconcile = null, onProgress }: SyncFolderOptions
+): Promise<FolderSyncResult> {
+    return onMailbox(client, imapPath, async (client) => {
         const box = requireMailbox(client);
         const messages: RemoteEnvelope[] = [];
         if (box.exists > 0 && sinceUid !== null) {
@@ -494,15 +523,13 @@ export interface OlderMessagesResult {
  * messages, not UID values; the two are only ever equal in a mailbox nothing
  * was deleted from. `reachedStart` is true once nothing older remains.
  */
-export async function fetchOlderMessages(
-    credentials: MailCredentials,
+async function fetchOlderMessagesOn(
+    client: ImapFlow,
     imapPath: string,
     beforeUid: number | null,
-    limit: number,
-    onTokenRefreshed?: TokenRefreshCallback
+    limit: number
 ): Promise<OlderMessagesResult> {
-    const auth = await resolveAuth(credentials, onTokenRefreshed);
-    return withMailbox(auth, imapPath, async (client) => {
+    return onMailbox(client, imapPath, async (client) => {
         const box = requireMailbox(client);
         const upperBound = (beforeUid ?? box.uidNext) - 1;
         if (box.exists === 0 || upperBound < 1) return { messages: [], reachedStart: true };

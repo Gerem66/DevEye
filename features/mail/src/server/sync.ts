@@ -1,20 +1,20 @@
-import { MAIL_MESSAGE_PAGE_SIZE, type MailAccountRow, type MailFolderRow } from '../contracts/domain';
+import { MAIL_MESSAGE_PAGE_SIZE, type MailFolderRow } from '../contracts/domain';
 import type { SdkCipher } from '@deveye/types/sdk/server';
 
-import type { MailCredentials, RemoteEnvelope } from './client';
+import type { MailSession, RemoteEnvelope } from './client';
 import type { MailRepo } from './repo';
-import { encryptEnvelope, persistRefreshedToken } from './_shared';
+import { encryptEnvelope } from './_shared';
 
 /**
  * Sync logic shared between the on-demand commands (live WS session) and the
  * background tick of `service.ts` for "open"-tier accounts (no session). Both
- * sides already hold the right cipher for the account's tier and its decrypted
- * credentials: this module only talks to IMAP and writes the metadata cache,
+ * sides hand it an open {@link MailSession} and the right cipher for the
+ * account's tier: this module only talks to IMAP and writes the metadata cache,
  * nothing about auth/gating.
  */
 
-/** Ce que la relève demande au client IMAP : le sous-ensemble de `client.ts` qu'un test simule. */
-export type SyncClient = Pick<typeof import('./client'), 'listFolders' | 'syncFolder' | 'fetchOlderMessages'>;
+/** Ce que la relève demande à `client.ts` : l'ouverture d'une session, qu'un test simule. */
+export type SyncClient = Pick<typeof import('./client'), 'withSession'>;
 
 /** First-sync cap: how many of a folder's most recent messages to backfill. */
 export const INITIAL_SYNC_LIMIT = 200;
@@ -76,23 +76,22 @@ export async function refreshFolderCounts(repo: MailRepo, folder: MailFolderRow)
 
 /** Refresh the folder list from IMAP and upsert it into `mail_folders`. */
 export async function syncAccountFolders(
-    client: SyncClient,
+    session: MailSession,
     repo: MailRepo,
     cipher: SdkCipher,
-    account: MailAccountRow,
-    credentials: MailCredentials
+    accountId: number
 ): Promise<MailFolderRow[]> {
-    const remote = await client.listFolders(credentials, persistRefreshedToken(repo, account.id, credentials, cipher));
+    const remote = await session.listFolders();
     for (const folder of remote) {
         await repo.folders.upsert({
-            accountId: account.id,
+            accountId,
             imapPath: folder.imapPath,
             nameEnc: await cipher.encrypt(folder.name),
             specialUse: folder.specialUse,
             uidValidity: null
         });
     }
-    return repo.folders.listByAccount(account.id);
+    return repo.folders.listByAccount(accountId);
 }
 
 /**
@@ -106,16 +105,13 @@ export async function syncAccountFolders(
  * seule façon d'apprendre qu'un mail a été lu, marqué ou supprimé ailleurs.
  */
 export async function syncOneFolder(
-    client: SyncClient,
+    session: MailSession,
     repo: MailRepo,
     cipher: SdkCipher,
-    account: MailAccountRow,
-    credentials: MailCredentials,
     folder: MailFolderRow,
     /** Message-level progress within this one folder. */
     onProgress?: (done: number, estimatedTotal: number) => void
 ): Promise<SyncFolderOutcome> {
-    const refresh = persistRefreshedToken(repo, account.id, credentials, cipher);
     let sinceUid = folder.last_seen_uid;
 
     // Fenêtre à réconcilier, lue avant tout fetch. Bornée par le plus haut UID
@@ -125,13 +121,11 @@ export async function syncOneFolder(
         folder.uid_validity === null ? [] : await repo.messages.listFlagsWindow(folder.id, MAIL_MESSAGE_PAGE_SIZE);
     const reconcile = window.length > 0 ? { fromUid: window[window.length - 1].uid, toUid: window[0].uid } : null;
 
-    let result = await client.syncFolder({
-        credentials,
+    let result = await session.syncFolder({
         imapPath: folder.imap_path,
         sinceUid,
         initialLimit: INITIAL_SYNC_LIMIT,
         reconcile,
-        onTokenRefreshed: refresh,
         onProgress
     });
 
@@ -142,13 +136,11 @@ export async function syncOneFolder(
         sinceUid = null;
         // Cache détruit : plus rien à réconcilier, ni ici ni au retour.
         window = [];
-        result = await client.syncFolder({
-            credentials,
+        result = await session.syncFolder({
             imapPath: folder.imap_path,
             sinceUid,
             initialLimit: INITIAL_SYNC_LIMIT,
             reconcile: null,
-            onTokenRefreshed: refresh,
             onProgress
         });
     }
@@ -219,16 +211,14 @@ export async function syncOneFolder(
  * au-delà de la fenêtre que {@link syncOneFolder} réconcilie à chaque passage.
  */
 export async function resetFolder(
-    client: SyncClient,
+    session: MailSession,
     repo: MailRepo,
     cipher: SdkCipher,
-    account: MailAccountRow,
-    credentials: MailCredentials,
     folder: MailFolderRow
 ): Promise<{ count: number }> {
     await repo.messages.deleteByFolder(folder.id);
     const cleared: MailFolderRow = { ...folder, uid_validity: null, last_seen_uid: null, first_seen_uid: null };
-    const { newCount } = await syncOneFolder(client, repo, cipher, account, credentials, cleared);
+    const { newCount } = await syncOneFolder(session, repo, cipher, cleared);
     return { count: newCount };
 }
 
@@ -239,22 +229,13 @@ export async function resetFolder(
  * this again based on `reachedStart`.
  */
 export async function backfillFolder(
-    client: SyncClient,
+    session: MailSession,
     repo: MailRepo,
     cipher: SdkCipher,
-    account: MailAccountRow,
-    credentials: MailCredentials,
     folder: MailFolderRow,
     limit: number
 ): Promise<{ addedCount: number; reachedStart: boolean }> {
-    const refresh = persistRefreshedToken(repo, account.id, credentials, cipher);
-    const result = await client.fetchOlderMessages(
-        credentials,
-        folder.imap_path,
-        folder.first_seen_uid,
-        limit,
-        refresh
-    );
+    const result = await session.fetchOlderMessages(folder.imap_path, folder.first_seen_uid, limit);
 
     await cacheEnvelopes(repo, cipher, folder.id, result.messages);
     await refreshFolderCounts(repo, folder);

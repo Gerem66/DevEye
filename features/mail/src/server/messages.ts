@@ -26,6 +26,7 @@ import {
     messageMatchesTerms,
     parseTrustedImageDomains,
     refreshCallback,
+    sessionFor,
     searchTerms,
     toMessageSummaryDTO,
     WRITE
@@ -56,9 +57,7 @@ export const mailMessageListFeature = defineSdkFeature<
         // failure (offline, bad creds) still serves whatever is already cached.
         if (account.security_tier === 'guarded') {
             try {
-                await imapFor(ctx, account, (credentials) =>
-                    syncOneFolder(mailClient, ctx.repo, cipher, account, credentials, folder)
-                );
+                await sessionFor(ctx, account, cipher, (session) => syncOneFolder(session, ctx.repo, cipher, folder));
             } catch (e) {
                 ctx.logger.warn(
                     { folderId: folder.id, err: e instanceof Error ? e.message : String(e) },

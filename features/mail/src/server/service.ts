@@ -5,7 +5,7 @@ import { env } from './env';
 import type { MailRepo } from './repo';
 import { syncAccountFolders, syncOneFolder, type SyncClient } from './sync';
 import { beginAccountSync, endAccountSync, markFolderSynced, reportFolderProgress } from './syncStatus';
-import { classifyMailError, decryptCredentials } from './_shared';
+import { classifyMailError, decryptCredentials, persistRefreshedToken } from './_shared';
 
 /**
  * Background sync loop (process singleton). Runs with no session and no
@@ -111,34 +111,38 @@ export class MailSync {
             const cipher = this.deps.cipherFor(row.workspace_id);
             try {
                 const credentials = await decryptCredentials(cipher, row.credentials_enc);
-                const folders = await withDeadline(
-                    syncAccountFolders(this.client, this.deps.repo, cipher, row, credentials),
-                    deadline,
-                    'Relève interrompue : la liste des dossiers n’a pas répondu à temps'
-                );
-                beginAccountSync(accountId, folders.length);
-                let moved = 0;
-                try {
-                    for (const folder of folders) {
-                        const outcome = await withDeadline(
-                            syncOneFolder(
-                                this.client,
-                                this.deps.repo,
-                                cipher,
-                                row,
-                                credentials,
-                                folder,
-                                (done, estimatedTotal) => reportFolderProgress(accountId, done / estimatedTotal)
-                            ),
+                // Toute la passe sur une seule connexion : la liste des dossiers
+                // puis chacun d'eux. La poignée de main coûte plus que la relève,
+                // et une boîte fournie a des dizaines de dossiers.
+                const moved = await this.client.withSession(
+                    credentials,
+                    persistRefreshedToken(this.deps.repo, row.id, credentials, cipher),
+                    async (session) => {
+                        const folders = await withDeadline(
+                            syncAccountFolders(session, this.deps.repo, cipher, row.id),
                             deadline,
-                            `Relève interrompue : le dossier « ${folder.imap_path} » n'a pas répondu à temps`
+                            'Relève interrompue : la liste des dossiers n’a pas répondu à temps'
                         );
-                        moved += outcome.newCount + outcome.changedCount + outcome.removedCount;
-                        markFolderSynced(accountId);
+                        beginAccountSync(accountId, folders.length);
+                        let count = 0;
+                        try {
+                            for (const folder of folders) {
+                                const outcome = await withDeadline(
+                                    syncOneFolder(session, this.deps.repo, cipher, folder, (done, estimatedTotal) =>
+                                        reportFolderProgress(accountId, done / estimatedTotal)
+                                    ),
+                                    deadline,
+                                    `Relève interrompue : le dossier « ${folder.imap_path} » n'a pas répondu à temps`
+                                );
+                                count += outcome.newCount + outcome.changedCount + outcome.removedCount;
+                                markFolderSynced(accountId);
+                            }
+                        } finally {
+                            endAccountSync(accountId);
+                        }
+                        return count;
                     }
-                } finally {
-                    endAccountSync(accountId);
-                }
+                );
                 await this.deps.repo.accounts.recordSync(row.id, Math.floor(Date.now() / 1000), null, 'ok');
                 this.deps.logger.debug({ accountId, moved }, 'Mail account synced');
                 // Sous condition, parce que c'est la seule source de

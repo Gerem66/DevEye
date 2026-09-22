@@ -5,7 +5,7 @@ import type { MailAccountRow, MailFolderRow, MailMessageRow } from '../contracts
 import { createTestServiceDeps } from '@deveye/types/sdk/testing';
 
 import { MailReauthRequiredError } from './client';
-import type { MailCredentials, OutgoingMail, RemoteEnvelope } from './client';
+import type { MailCredentials, MailSession, OutgoingMail, RemoteEnvelope } from './client';
 import { OAuthTokenError } from './oauth';
 import { classifyMailError } from './_shared';
 import type { MailRepo } from './repo';
@@ -248,8 +248,7 @@ function envelope(uid: number): RemoteEnvelope {
 /** Un client IMAP sans réseau : un dossier, et les arrivées qu'on lui donne. */
 function fakeClient(arrivals: RemoteEnvelope[]): SyncClient & { calls: string[] } {
     const calls: string[] = [];
-    return {
-        calls,
+    const session: MailSession = {
         listFolders: async () => {
             calls.push('listFolders');
             return [{ imapPath: 'INBOX', name: 'Boîte de réception', specialUse: 'inbox' }];
@@ -270,6 +269,8 @@ function fakeClient(arrivals: RemoteEnvelope[]): SyncClient & { calls: string[] 
             return { messages: [], reachedStart: true };
         }
     };
+    // Une passe entière tient sur la même session : c'est ce que la relève fait.
+    return { calls, withSession: (_credentials, _onTokenRefreshed, fn) => fn(session) };
 }
 
 describe('la relève de fond', () => {
@@ -348,9 +349,12 @@ describe('la relève de fond', () => {
             // Répond bien après l'échéance : le cas qu'`inFlight` seul ne rendait
             // jamais. Le minuteur de l'échéance est `unref`, il ne retient pas le
             // processus de test.
-            listFolders: () => new Promise((resolve) => setTimeout(() => resolve([]), 200)),
-            syncFolder: unused,
-            fetchOlderMessages: unused
+            withSession: (_credentials, _onTokenRefreshed, fn) =>
+                fn({
+                    listFolders: () => new Promise((resolve) => setTimeout(() => resolve([]), 200)),
+                    syncFolder: unused,
+                    fetchOlderMessages: unused
+                })
         };
         const sync = new MailSync(deps, { mailClient: client, accountTimeoutMs: 20 });
         await sync.syncOne(1);

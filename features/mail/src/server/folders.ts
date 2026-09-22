@@ -8,14 +8,13 @@ import {
 import type { MailAccountRow, MailFolderRow } from '../contracts/domain';
 import { defineSdkFeature, type SdkCipher } from '@deveye/types/sdk/server';
 
-import * as mailClient from './client';
 import type { MailRepo } from './repo';
 import { backfillFolder, resetFolder, syncAccountFolders, syncOneFolder } from './sync';
 import {
     accountCipher,
     assertMailUnlocked,
     classifyMailError,
-    imapFor,
+    sessionFor,
     loadAccount,
     loadFolderWithAccount,
     toFolderDTO,
@@ -48,7 +47,7 @@ const INITIAL_SYNC_RETRY_MS = 1500;
  */
 async function syncFoldersWithRetry(ctx: Ctx, account: MailAccountRow, cipher: SdkCipher): Promise<MailFolderRow[]> {
     const attempt = () =>
-        imapFor(ctx, account, (credentials) => syncAccountFolders(mailClient, ctx.repo, cipher, account, credentials));
+        sessionFor(ctx, account, cipher, (session) => syncAccountFolders(session, ctx.repo, cipher, account.id));
     try {
         return await attempt();
     } catch (e) {
@@ -122,8 +121,8 @@ export const mailFolderSyncFeature = defineSdkFeature<
         const { folder, account } = await loadFolderWithAccount(ctx, input.folderId, 'write');
         await assertMailUnlocked(ctx, account.security_tier);
         const cipher = await accountCipher(ctx, account);
-        const outcome = await imapFor(ctx, account, (credentials) =>
-            syncOneFolder(mailClient, ctx.repo, cipher, account, credentials, folder)
+        const outcome = await sessionFor(ctx, account, cipher, (session) =>
+            syncOneFolder(session, ctx.repo, cipher, folder)
         );
         return { ok: true, ...outcome };
     }
@@ -142,8 +141,8 @@ export const mailFolderBackfillFeature = defineSdkFeature<
         const { folder, account } = await loadFolderWithAccount(ctx, input.folderId, 'write');
         await assertMailUnlocked(ctx, account.security_tier);
         const cipher = await accountCipher(ctx, account);
-        return imapFor(ctx, account, (credentials) =>
-            backfillFolder(mailClient, ctx.repo, cipher, account, credentials, folder, input.limit)
+        return sessionFor(ctx, account, cipher, (session) =>
+            backfillFolder(session, ctx.repo, cipher, folder, input.limit)
         );
     }
 });
@@ -161,8 +160,6 @@ export const mailFolderResetFeature = defineSdkFeature<
         const { folder, account } = await loadFolderWithAccount(ctx, input.folderId, 'write');
         await assertMailUnlocked(ctx, account.security_tier);
         const cipher = await accountCipher(ctx, account);
-        return imapFor(ctx, account, (credentials) =>
-            resetFolder(mailClient, ctx.repo, cipher, account, credentials, folder)
-        );
+        return sessionFor(ctx, account, cipher, (session) => resetFolder(session, ctx.repo, cipher, folder));
     }
 });

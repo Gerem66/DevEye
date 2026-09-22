@@ -18,7 +18,7 @@ import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/ty
 // réglage à corriger, et se classe donc sans dépendre du texte de son message.
 import { UnsafeTargetError } from '@/Services/netFetch';
 
-import { MailReauthRequiredError } from './client';
+import { MailReauthRequiredError, withSession, type MailSession } from './client';
 import type { MailCredentials, MailPasswordCredentials, TokenRefreshCallback } from './client';
 import { oauthProviderEndpoints, OAuthTokenError } from './oauth';
 import type { MailRepo } from './repo';
@@ -561,6 +561,23 @@ export async function imapFor<T>(
         ctx.logger.warn({ err: e, accountId: account.id }, 'Mail command failed');
         throw mailCommandFailure(e);
     }
+}
+
+/**
+ * {@link imapFor} pour une suite d'opérations : une seule connexion ouverte,
+ * prêtée au travail puis refermée. Toute relève passe par là, parce qu'elle
+ * parcourt des dossiers et que la poignée de main est le coût dominant
+ * ({@link MailSession}).
+ */
+export async function sessionFor<T>(
+    ctx: Ctx,
+    account: MailAccountRow,
+    cipher: SdkCipher,
+    work: (session: MailSession) => Promise<T>
+): Promise<T> {
+    return imapFor(ctx, account, (credentials) =>
+        withSession(credentials, refreshCallback(ctx, account, credentials, cipher), work)
+    );
 }
 
 /**
