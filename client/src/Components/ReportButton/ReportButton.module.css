@@ -48,6 +48,104 @@
 }
 
 /*
+ * Tant que la bulle de bienvenue le désigne, le déclencheur sort de sa
+ * réserve : une pastille à moitié effacée ferait une cible peu crédible pour
+ * une flèche.
+ */
+.triggerHinted {
+    filter: opacity(1);
+    border-color: var(--glass-border-strong);
+    color: var(--accent);
+}
+
+/*
+ * La bulle de bienvenue, posée juste au-dessus du déclencheur et alignée sur
+ * son bord gauche : sa flèche tombe alors pile sur le milieu de la pastille.
+ * Elle ne prend pas le clic hors de sa croix, pour ne rien retenir de ce qui
+ * se trouve dessous.
+ */
+.hint {
+    position: fixed;
+    bottom: calc(var(--space-lg) + 36px + var(--space-sm));
+    left: var(--space-lg);
+    z-index: var(--z-report);
+
+    width: 280px;
+    max-width: calc(100vw - 2 * var(--space-lg));
+    padding: var(--space-md);
+    padding-right: calc(var(--space-md) + 18px);
+
+    border: 1px solid var(--glass-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-backdrop);
+    -webkit-backdrop-filter: var(--glass-backdrop);
+    box-shadow: var(--shadow-md);
+}
+
+/* La flèche : un carré tourné dont on ne garde que les deux côtés visibles,
+   centré sur le milieu du déclencheur (18px) à un demi-côté près. */
+.hint::after {
+    content: '';
+    position: absolute;
+    bottom: -6px;
+    left: 12px;
+    width: 11px;
+    height: 11px;
+    border-right: 1px solid var(--glass-border-strong);
+    border-bottom: 1px solid var(--glass-border-strong);
+    background: var(--glass-bg);
+    transform: rotate(45deg);
+}
+
+.hintClose {
+    position: absolute;
+    top: var(--space-xs);
+    right: var(--space-xs);
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.hintClose:hover,
+.hintClose:focus-visible {
+    background: var(--glass-bg-light);
+    color: var(--text-primary);
+}
+
+.hintClose .icon {
+    width: 14px;
+    height: 14px;
+}
+
+.hintTitle {
+    margin: 0 0 var(--space-xs);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.hintBody {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    line-height: 1.5;
+}
+
+/*
  * Le champ de saisie : quatre lignes au repos, qui grandit avec le texte, sans
  * JavaScript. La grille superpose deux boîtes dans la même cellule, la zone de
  * saisie et un `::after` qui rejoue le même texte, invisible ; c'est la copie
