@@ -1,10 +1,10 @@
 import type { FeatureAccess, WorkspaceFeatureId } from '@deveye/types';
-import type { ProjectLinkCounts } from '../contracts/domain';
+import type { Project, ProjectLinkCounts } from '../contracts/domain';
 
 /**
- * Les onglets d'un projet : quatre permanents (vue d'ensemble, tableau, frise,
- * historique) et cinq suspendus à leurs liaisons, qui paraissent au premier
- * élément et se replient dans le menu « + » de la barre avec le dernier.
+ * Les onglets d'un projet : trois permanents (tableau, frise, historique), la vue
+ * d'ensemble au choix du projet, et cinq suspendus à leurs liaisons, qui paraissent
+ * au premier élément et se replient dans le menu « + » de la barre avec le dernier.
  */
 
 /** Les onglets qui ne montrent que des liaisons, donc escamotables. */
@@ -40,10 +40,10 @@ export interface ProjectFeatureTab extends ProjectTab {
     add: ProjectTabAddAction;
 }
 
+/** En tête quand le projet l'affiche : ses tuiles de tâches ne dépendent d'aucune liaison. */
+const OVERVIEW: ProjectTab = { id: 'overview', label: 'Vue d’ensemble', icon: 'activity' };
+
 const LEADING: ProjectTab[] = [
-    // En tête et jamais escamotable : c'est l'onglet d'arrivée, et ses tuiles de
-    // tâches ne dépendent d'aucune liaison.
-    { id: 'overview', label: 'Vue d’ensemble', icon: 'activity' },
     { id: 'board', label: 'Tableau', icon: 'projects' },
     { id: 'timeline', label: 'Frise', icon: 'clock' }
 ];
@@ -87,17 +87,23 @@ export const PROJECT_FEATURE_TABS: ProjectFeatureTab[] = [
     }
 ];
 
-export const PROJECT_TABS: ProjectTab[] = [...LEADING, ...PROJECT_FEATURE_TABS, ...TRAILING];
+export const PROJECT_TABS: ProjectTab[] = [OVERVIEW, ...LEADING, ...PROJECT_FEATURE_TABS, ...TRAILING];
 
 export function isProjectTabId(value: string): value is ProjectTabId {
     return PROJECT_TABS.some((tab) => tab.id === value);
+}
+
+/** L'onglet où le projet s'ouvre, et où l'on retombe quand celui qu'on lisait quitte la barre. */
+export function landingTab(project: Project): ProjectTabId {
+    return project.showOverview ? 'overview' : 'board';
 }
 
 /**
  * `null` = compteurs pas encore connus, on ne montre que les permanents. Tout
  * afficher puis retirer ferait bouger la barre sous le curseur au chargement.
  */
-export function visibleProjectTabs(counts: ProjectLinkCounts | null): ProjectTab[] {
-    if (counts === null) return [...LEADING, ...TRAILING];
-    return [...LEADING, ...PROJECT_FEATURE_TABS.filter((tab) => counts[tab.id] > 0), ...TRAILING];
+export function visibleProjectTabs(counts: ProjectLinkCounts | null, showOverview: boolean): ProjectTab[] {
+    const leading = showOverview ? [OVERVIEW, ...LEADING] : LEADING;
+    if (counts === null) return [...leading, ...TRAILING];
+    return [...leading, ...PROJECT_FEATURE_TABS.filter((tab) => counts[tab.id] > 0), ...TRAILING];
 }

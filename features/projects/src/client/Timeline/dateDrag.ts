@@ -61,6 +61,9 @@ interface Options {
 /** En deçà, c'est encore un clic : la carte s'ouvre au lieu de bouger. */
 const DRAG_THRESHOLD = 3;
 
+/** Le clic que le navigateur émet au relâchement suit celui-ci de quelques millisecondes. */
+const CLICK_AFTER_DRAG_MS = 300;
+
 /**
  * Décale une date d'un nombre de jours calendaires, en heure locale, et non de
  * `n × 86 400 s` : les dates du module sont des minuits locaux, qu'un passage à
@@ -143,7 +146,7 @@ export function useDateDrag({ dayWidth, days, rangeMin, scrollRef, dropRef, onCo
      * n'arrive, et le drapeau resté levé aurait mangé le clic suivant, sur une
      * tout autre carte.
      */
-    const handled = useRef<number | null>(null);
+    const handled = useRef<{ id: number; at: number } | null>(null);
     /** L'aperçu courant, pour que le relâchement le persiste sans re-rendu. */
     const latest = useRef<DragView | null>(null);
 
@@ -225,7 +228,7 @@ export function useDateDrag({ dayWidth, days, rangeMin, scrollRef, dropRef, onCo
                 if (!p || e.pointerId !== p.pointerId) return;
                 const result = moved.current ? latest.current : null;
                 const card = p.card;
-                if (moved.current) handled.current = card.id;
+                if (moved.current) handled.current = { id: card.id, at: performance.now() };
                 endRef.current();
                 // Rien n'a bougé d'un jour entier, ou le lâcher tombe hors de
                 // la frise : inutile de réécrire les mêmes dates.
@@ -271,9 +274,12 @@ export function useDateDrag({ dayWidth, days, rangeMin, scrollRef, dropRef, onCo
 
     /** Le clic qui suit un glissé n'est pas un clic : il n'ouvre pas la carte. */
     const consumeClick = useCallback((cardId: number) => {
-        if (handled.current !== cardId) return false;
+        const last = handled.current;
         handled.current = null;
-        return true;
+        // Périssable : la barre change de ligne pendant le geste, le relâchement
+        // peut donc tomber à côté d'elle et ne produire aucun clic à consommer.
+        // Sans cette limite, c'est le clic suivant, un vrai, qui serait avalé.
+        return last !== null && last.id === cardId && performance.now() - last.at < CLICK_AFTER_DRAG_MS;
     }, []);
 
     return { view, onBarPointerDown, onTagPointerDown, consumeClick };

@@ -105,26 +105,29 @@ appartient à l'espace.
 
 ## 2. Ce que ça donne à l'usage
 
-| Vue                  | Contenu                                                                                              |
-| -------------------- | ---------------------------------------------------------------------------------------------------- |
-| **Portefeuille**     | tous les projets, avancement, retards, prochaine échéance, non-lus                                   |
-| **Mes tâches**       | mes cartes assignées, tous projets visibles d'ici confondus, projetés compris                        |
-| **Archives**         | projets archivés, restaurables                                                                       |
-| **Vue d'ensemble**   | les tuiles du projet : tâches, échéances, jalon, un résumé par élément relié, indicateurs sur mesure |
-| **Tableau**          | kanban, glisser-déposer (dnd-kit), colonnes, limites WIP                                             |
-| **Frise**            | cartes datées, jalons, dépendances « bloque / bloqué par »                                           |
-| **Git**              | les dépôts reliés — une vue sur la feature Git, voir [Git](../git/README.md)                         |
-| **Bases de données** | les bases reliées — une vue sur la feature Bases, voir [Bases de données](../database/README.md)     |
-| **Audience**         | les sites suivis reliés — une vue sur la feature Audience, voir [Audience](../audience/README.md)    |
-| **Déploiements**     | les cibles reliées, une vue sur la feature Déploiements, voir [Déploiements](../deploy/README.md)    |
-| **Uptime**           | les services surveillés rattachés, une vue sur la feature Uptime, voir [Uptime](../uptime/README.md) |
-| **Historique**       | frise verticale des faits marquants, blocs archivés en lecture seule                                 |
+| Vue                  | Contenu                                                                                                |
+| -------------------- | ------------------------------------------------------------------------------------------------------ |
+| **Portefeuille**     | tous les projets, avancement, retards, prochaine échéance, non-lus                                     |
+| **Mes tâches**       | mes cartes assignées, tous projets visibles d'ici confondus, projetés compris                          |
+| **Archives**         | projets archivés, restaurables                                                                         |
+| **Vue d'ensemble**   | avancement par colonne, échéances, mes tâches, charge de l'équipe, jalon, mises à jour, puis les liens |
+| **Tableau**          | kanban, glisser-déposer (dnd-kit), colonnes, limites WIP                                               |
+| **Frise**            | cartes datées, jalons, dépendances « bloque / bloqué par »                                             |
+| **Git**              | les dépôts reliés — une vue sur la feature Git, voir [Git](../git/README.md)                           |
+| **Bases de données** | les bases reliées — une vue sur la feature Bases, voir [Bases de données](../database/README.md)       |
+| **Audience**         | les sites suivis reliés — une vue sur la feature Audience, voir [Audience](../audience/README.md)      |
+| **Déploiements**     | les cibles reliées, une vue sur la feature Déploiements, voir [Déploiements](../deploy/README.md)      |
+| **Uptime**           | les services surveillés rattachés, une vue sur la feature Uptime, voir [Uptime](../uptime/README.md)   |
+| **Historique**       | frise verticale des faits marquants, blocs archivés en lecture seule                                   |
 
 ### La barre d'onglets suit le contenu du projet
 
-**Quatre onglets permanents, cinq à la demande.** Vue d'ensemble, Tableau,
-Frise et Historique parlent du travail : ils existent dès le premier jour, et
-c'est sur la Vue d'ensemble qu'on arrive en ouvrant un projet. Les cinq autres ne
+**Trois onglets permanents, un au choix, cinq à la demande.** Tableau, Frise et
+Historique parlent du travail : ils existent dès le premier jour. La Vue
+d'ensemble les précède et ouvre le projet, sauf si son réglage « Afficher la vue
+d'ensemble » (onglet Général, colonne claire `projects.show_overview`) la retire :
+le projet s'ouvre alors sur son Tableau. Ses tuiles de tâches se calculent de ce
+que la fiche tient déjà, sans aucun aller-retour. Les cinq autres ne
 montrent que des **liaisons** vers des objets d'espace — tant qu'un projet n'en
 a aucune, ils n'affichaient qu'une phrase disant qu'il n'y a rien, quatre fois
 de suite, et il fallait les ouvrir un par un pour s'en apercevoir.
@@ -157,6 +160,27 @@ Trois conséquences à connaître :
 - **Retirer le dernier élément referme l'onglet sous soi**, et renvoie au
   tableau. C'est le prix de la règle, et le geste inverse est à un clic dans le
   « + ».
+
+### La tâche s'ouvre sur trois onglets
+
+**Modifier, Suivi, Discussion.** Depuis le tableau, le corps de la carte ouvre le
+premier, la puce des sous-tâches le deuxième, celle du fil le troisième ; sans
+demande, une tâche s'ouvre sur son fil s'il a du non-lu, sur son suivi sinon. Le
+fil reste monté derrière les autres onglets pour garder son abonnement, mais ne
+marque rien lu tant qu'il n'est pas au premier plan.
+
+Une **sous-tâche** porte un texte (500 caractères), un assigné, et le drapeau
+« obligatoire ». Elle vit dans le corps chiffré de la carte : son assigné ne
+remonte donc pas dans « Mes tâches ». Ses trois horodatages (création, coche,
+auteur de la coche) sont **posés par le serveur**, qui compare la liste reçue à
+la liste enregistrée : ce que le client en envoie est ignoré.
+
+Une sous-tâche obligatoire ouverte **ferme à sa tâche l'entrée d'une colonne qui
+vaut « terminé »**. `projects.cardMove` ne déchiffrant rien, le compte est tenu
+en clair (`project_cards.required_open_count`), écrit par `cardAdd` et
+`cardUpdate`. Seules les cartes qui entrent sont jugées : ranger la colonne reste
+libre, et le serveur, qui ne voit aucun titre, rend les identifiants retenus que
+le client nomme.
 
 ### Les cinq onglets d'intégration ont la même forme
 

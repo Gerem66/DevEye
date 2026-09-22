@@ -12,7 +12,7 @@ import {
     withSecrecy
 } from 'deveye-sdk-client';
 import type { MinimalUser } from '@deveye/types';
-import { api, STATUS_LABELS } from './api';
+import { api, moveRefusal, STATUS_LABELS } from './api';
 import type {
     Project,
     ProjectCard,
@@ -23,7 +23,7 @@ import type {
     ProjectMilestoneDraft
 } from '../contracts/domain';
 import { Board } from './Board/Board';
-import { CardDialog } from './Board/CardDialog';
+import { CardDialog, type CardTab } from './Board/CardDialog';
 import { ColumnDialog, type ColumnDialogResult } from './Board/ColumnDialog';
 import { Timeline } from './Timeline/Timeline';
 import { MilestoneDialog } from './Timeline/MilestoneDialog';
@@ -37,7 +37,7 @@ import { Uptime } from './Uptime/Uptime';
 import { Overview } from './Dashboard/Overview';
 import { AddFeatureDialog } from './AddFeatureDialog';
 import { ProjectTabs } from './ProjectTabs';
-import { isProjectTabId, type ProjectTabAddKey, type ProjectTabId } from './tabs';
+import { isProjectTabId, landingTab, type ProjectTabAddKey, type ProjectTabId } from './tabs';
 import { useProjectTabs } from './useProjectTabs';
 import { useProjectRights } from './rights';
 import styles from './style.module.css';
@@ -56,7 +56,7 @@ interface ProjectDetailProps {
  * `l1` est au parent, et un niveau n'admet qu'un déclarant.
  */
 export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDetailProps) {
-    const [tab, setTab] = useState<ProjectTabId>('overview');
+    const [tab, setTab] = useState<ProjectTabId>(landingTab(project));
 
     // Les droits se lisent sur CE projet : une surcharge posée sur lui seul
     // ouvre ou ferme des gestes que le portefeuille, qui ne connaît que le rôle,
@@ -76,8 +76,19 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
     const [cards, setCards] = useState<ProjectCard[]>([]);
     const [loaded, setLoaded] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    /**
+     * L'échec d'un geste, à part de `error` : le geste raté re-sollicite le tableau,
+     * et une relecture réussie efface `error`. Reste jusqu'à ce qu'on le ferme, ou
+     * jusqu'au geste suivant.
+     */
+    const [actionError, setActionError] = useState<string | null>(null);
 
-    const [cardDialog, setCardDialog] = useState<{ card: ProjectCard | null; columnId: number | null } | null>(null);
+    const [cardDialog, setCardDialog] = useState<{
+        card: ProjectCard | null;
+        columnId: number | null;
+        /** L'onglet demandé par le geste d'ouverture. */
+        focus?: CardTab;
+    } | null>(null);
     const [columnDialog, setColumnDialog] = useState<{ column: ProjectColumn | null } | null>(null);
     const [milestones, setMilestones] = useState<ProjectMilestone[]>([]);
     const [deps, setDeps] = useState<ProjectCardDep[]>([]);
@@ -111,14 +122,14 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
 
     /*
      * Un onglet quitte la barre avec son dernier élément, et on ne peut pas rester
-     * sur un onglet qui n'existe plus : repli sur la vue d'ensemble. Attendre `ready` est
+     * sur un onglet qui n'existe plus : repli sur l'onglet d'arrivée. Attendre `ready` est
      * ce qui rend l'ajout depuis le « + » possible, compteurs inconnus ne renvoie
      * personne nulle part.
      */
     useEffect(() => {
         if (!tabs.ready) return;
-        if (!tabs.visible.some((t) => t.id === tab)) setTab('overview');
-    }, [tabs.ready, tabs.visible, tab]);
+        if (!tabs.visible.some((t) => t.id === tab)) setTab(landingTab(project));
+    }, [tabs.ready, tabs.visible, tab, project.showOverview]);
 
     /**
      * Déclarer le niveau ne suffit pas : il dit où on est, pas où l'on nous demande
@@ -182,21 +193,35 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
         }
     }, [project.id]);
 
+    /** Un glissé du tableau est en cours : une relecture déferait son aperçu sous le pointeur. */
+    const boardDragging = useRef(false);
+    const reloadHeld = useRef(false);
+
     useEffect(() => {
-        void reload();
+        if (boardDragging.current) reloadHeld.current = true;
+        else void reload();
     }, [reload, version]);
+
+    const onBoardDrag = (dragging: boolean) => {
+        boardDragging.current = dragging;
+        if (dragging || !reloadHeld.current) return;
+        reloadHeld.current = false;
+        void reload();
+    };
 
     /**
      * Déplacement optimiste : sans le nouvel ordre posé tout de suite, la carte
      * reviendrait en arrière le temps de l'aller-retour. Un échec re-sollicite.
      */
     const onCardsMoved = async (columnId: number, cardIds: number[], next: ProjectCard[]) => {
+        const before = cards;
         setCards(next);
+        setActionError(null);
         try {
             await api.send('projects.cardMove', { columnId, cardIds });
             invalidate('projects.list');
         } catch (e) {
-            setError(humanizeError(e, 'Le déplacement a échoué.'));
+            setActionError(moveRefusal(e, before) ?? humanizeError(e, 'Le déplacement a échoué.'));
             void reload();
         }
     };
@@ -256,6 +281,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
      * Optimiste, comme le déplacement d'une carte.
      */
     const patchCard = async (card: ProjectCard, change: Partial<ProjectCard>, failure: string) => {
+        setActionError(null);
         const next = { ...card, ...change };
         const draft: ProjectCardDraft = {
             title: next.title,
@@ -275,7 +301,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
             await withSecrecy(() => api.send('projects.cardUpdate', { cardId: card.id, card: draft }));
             invalidate('projects.board', 'projects.list');
         } catch (e) {
-            setError(humanizeError(e, failure));
+            setActionError(humanizeError(e, failure));
             void reload();
         }
     };
@@ -348,7 +374,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
             invalidate('projects.board', 'projects.list');
             setArchivedView(null);
         } catch (e) {
-            setError(humanizeError(e, 'La restauration a échoué.'));
+            setActionError(humanizeError(e, 'La restauration a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -415,7 +441,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
         try {
             await api.send('projects.columnReorder', { projectId: project.id, columnIds: ids });
         } catch (e) {
-            setError(humanizeError(e, 'Le déplacement a échoué.'));
+            setActionError(humanizeError(e, 'Le déplacement a échoué.'));
             void reload();
         }
     };
@@ -485,6 +511,19 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
             </div>
 
             {error && <p className={styles.error}>{error}</p>}
+            {actionError && (
+                <p className={styles.errorDismissible} role='alert'>
+                    <span>{actionError}</span>
+                    <button
+                        type='button'
+                        className={styles.errorClose}
+                        aria-label='Fermer ce message'
+                        onClick={() => setActionError(null)}
+                    >
+                        <span className='icon icon-x' />
+                    </button>
+                </p>
+            )}
             {!loaded && <p className={styles.empty}>Chargement…</p>}
 
             {loaded && tab === 'overview' && (
@@ -494,7 +533,13 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                     cards={cards}
                     milestones={milestones}
                     deps={deps}
+                    meUserId={meUserId}
                     canWrite={rights.canLinks}
+                    onOpenCard={(card) => {
+                        setDialogError(null);
+                        setCardDialog({ card, columnId: card.columnId });
+                    }}
+                    onOpenTab={setTab}
                 />
             )}
 
@@ -505,10 +550,12 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                     canWrite={canWrite}
                     canTasks={rights.canTasks}
                     canManage={rights.canManage}
+                    onCardsPreview={setCards}
+                    onDragStateChange={onBoardDrag}
                     onCardsMoved={(columnId, cardIds, next) => void onCardsMoved(columnId, cardIds, next)}
-                    onCardOpen={(card) => {
+                    onCardOpen={(card, focus) => {
                         setDialogError(null);
-                        setCardDialog({ card, columnId: card.columnId });
+                        setCardDialog({ card, columnId: card.columnId, focus });
                     }}
                     onCardCreate={(columnId) => {
                         setDialogError(null);
@@ -605,6 +652,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
             <CardDialog
                 open={cardDialog !== null}
                 card={cardDialog?.card ?? null}
+                focus={cardDialog?.focus}
                 members={members}
                 meUserId={meUserId}
                 canWrite={canWrite}
@@ -620,6 +668,16 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                 onSubmit={(draft, links) => void submitCard(draft, links)}
                 onChecklistChange={(checklist) => {
                     if (cardDialog?.card) void patchCard(cardDialog.card, { checklist }, 'L’enregistrement a échoué.');
+                }}
+                onRead={() => {
+                    const id = cardDialog?.card?.id;
+                    if (id === undefined) return;
+                    setCards((prev) => prev.map((c) => (c.id === id && c.unread > 0 ? { ...c, unread: 0 } : c)));
+                    setCardDialog((prev) =>
+                        prev?.card?.id === id && prev.card.unread > 0
+                            ? { ...prev, card: { ...prev.card, unread: 0 } }
+                            : prev
+                    );
                 }}
                 onArchive={cardDialog?.card && rights.canTasks ? () => void archiveCard() : undefined}
             />

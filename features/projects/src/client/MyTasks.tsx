@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { humanizeError, StatusBadge, useResourceVersion } from 'deveye-sdk-client';
+import { CountBadge, humanizeError, StatusBadge, useResourceVersion } from 'deveye-sdk-client';
 import { api, formatDate, PRIORITY_LABELS } from './api';
 import type { MyTask } from '../contracts/domain';
 import styles from './style.module.css';
@@ -79,7 +79,12 @@ export function MyTasks({ foreignProjectIds, onOpenProject }: MyTasksProps) {
                                         </span>
                                     )}
                                     {due && <span className={overdue ? styles.overdue : styles.itemDate}>{due}</span>}
-                                    {task.card.unread > 0 && <span className={styles.unread}>{task.card.unread}</span>}
+                                    {task.card.unread > 0 && (
+                                        <CountBadge
+                                            count={task.card.unread}
+                                            aria-label={`${task.card.unread} non lu${task.card.unread > 1 ? 's' : ''}`}
+                                        />
+                                    )}
                                 </button>
                             </li>
                         );

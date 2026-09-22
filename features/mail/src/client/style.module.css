@@ -736,15 +736,6 @@
     white-space: nowrap;
 }
 
-.folderUnread {
-    font-size: 0.7rem;
-    font-weight: 700;
-    color: var(--on-accent);
-    background: var(--accent);
-    border-radius: var(--radius-pill);
-    padding: 1px 6px;
-}
-
 /* Message list */
 
 /* No `gap`: it belongs to neither neighbour, so it stayed unlit on hover.

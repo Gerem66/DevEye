@@ -77,7 +77,7 @@ export function useProjectTabs(project: Project, canWrite: boolean): ProjectTabs
         };
     }, [project.id, version]);
 
-    const visible = useMemo(() => visibleProjectTabs(counts), [counts]);
+    const visible = useMemo(() => visibleProjectTabs(counts, project.showOverview), [counts, project.showOverview]);
 
     const reveal = useCallback((id: ProjectFeatureTabId) => {
         latest.current += 1;

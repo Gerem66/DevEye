@@ -13,6 +13,7 @@ import {
     projectCardArchive,
     projectCardMove,
     projectCardRestore,
+    projectCardUpdate,
     projectCardSetMilestone,
     projectColumnAdd,
     projectColumnRemove,
@@ -149,6 +150,7 @@ function project(over: Partial<ProjectRow> & { id: number }): ProjectRow {
         status: 'active',
         security_tier: 'open',
         version_source: 'manual',
+        show_overview: 1,
         sort_order: over.id,
         start_date: null,
         due_date: null,
@@ -182,6 +184,7 @@ function card(over: Partial<ProjectCardRow> & { id: number; project_id: number; 
         start_date: null,
         due_date: null,
         estimate_minutes: null,
+        required_open_count: 0,
         milestone_id: null,
         archived_at: null,
         message_count: 0,
@@ -337,6 +340,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                     workspace_id: input.workspaceId,
                     user_id: input.userId,
                     status: input.status,
+                    show_overview: input.showOverview ? 1 : 0,
                     security_tier: input.securityTier,
                     start_date: input.startDate,
                     due_date: input.dueDate,
@@ -351,6 +355,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                 if (!row) return null;
                 Object.assign(row, {
                     status: input.status,
+                    show_overview: input.showOverview ? 1 : 0,
                     start_date: input.startDate,
                     due_date: input.dueDate,
                     content: input.content,
@@ -476,6 +481,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                     start_date: input.startDate,
                     due_date: input.dueDate,
                     estimate_minutes: input.estimateMinutes,
+                    required_open_count: input.requiredOpen,
                     content: input.content
                 });
                 rows.cards.push(row);
@@ -490,6 +496,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                     start_date: input.startDate,
                     due_date: input.dueDate,
                     estimate_minutes: input.estimateMinutes,
+                    required_open_count: input.requiredOpen,
                     content: input.content,
                     updated: row.updated + 1
                 });
@@ -867,6 +874,7 @@ const DRAFT: ProjectDraft = {
     description: '',
     tags: [],
     status: 'active',
+    showOverview: true,
     startDate: null,
     dueDate: null
 };
@@ -1434,6 +1442,75 @@ describe('projects.cardAdd / cardMove / cardArchive : les cartes', () => {
         repo.rows.columns.push(column({ id: 22, project_id: 2 }));
         await handlerFor(projectCardMove)(ctx, { columnId: 22, cardIds: [21] });
         assert.equal(repo.rows.cards[1].column_id, 22);
+    });
+
+    const ITEM = { label: 'Relire', assigneeUserId: null, required: true, createdAt: null, doneAt: null, doneBy: null };
+
+    it('les horodatages d’une sous-tâche viennent du serveur, jamais du client', async () => {
+        const repo = fakeRepo();
+        seedTwoTiers(repo);
+        const ctx = contextWith(repo);
+        const forged = { ...ITEM, id: 'a', done: true, doneAt: 5, doneBy: 99, createdAt: 5 };
+        const first = await handlerFor(projectCardUpdate)(ctx, { cardId: 11, card: { ...CARD, checklist: [forged] } });
+        const [stamped] = first.card.checklist;
+        assert.equal(stamped.doneBy, 1);
+        assert.ok((stamped.doneAt ?? 0) > 5 && (stamped.createdAt ?? 0) > 5);
+
+        // Déjà cochée : un second envoi, même forgé, reporte ce qui est enregistré.
+        const again = await handlerFor(projectCardUpdate)(ctx, {
+            cardId: 11,
+            card: { ...CARD, checklist: [{ ...forged, doneBy: 42 }] }
+        });
+        assert.deepEqual(again.card.checklist[0], stamped);
+
+        const undone = await handlerFor(projectCardUpdate)(ctx, {
+            cardId: 11,
+            card: { ...CARD, checklist: [{ ...forged, done: false }] }
+        });
+        assert.deepEqual([undone.card.checklist[0].doneAt, undone.card.checklist[0].doneBy], [null, null]);
+    });
+
+    it('refuse une sous-tâche assignée à quelqu’un qui n’est pas membre', async () => {
+        const repo = fakeRepo();
+        seedTwoTiers(repo);
+        await assert.rejects(
+            handlerFor(projectCardUpdate)(contextWith(repo), {
+                cardId: 11,
+                card: { ...CARD, checklist: [{ ...ITEM, id: 'a', done: false, assigneeUserId: 2 }] }
+            }),
+            failsWith('validation')
+        );
+    });
+
+    it('une sous-tâche obligatoire ouverte ferme l’entrée d’une colonne terminée, pas son rangement', async () => {
+        const repo = fakeRepo();
+        seedTwoTiers(repo);
+        repo.rows.columns.push(column({ id: 12, project_id: 1, counts_as_done: 1 }));
+        repo.rows.cards.push(card({ id: 13, project_id: 1, column_id: 12, required_open_count: 1 }));
+        const ctx = contextWith(repo);
+        await handlerFor(projectCardUpdate)(ctx, {
+            cardId: 11,
+            card: {
+                ...CARD,
+                checklist: [
+                    { ...ITEM, id: 'a', done: false },
+                    { ...ITEM, id: 'b', done: true }
+                ]
+            }
+        });
+        assert.equal(repo.rows.cards[0].required_open_count, 1);
+
+        await assert.rejects(
+            handlerFor(projectCardMove)(ctx, { columnId: 12, cardIds: [13, 11] }),
+            (e: unknown) =>
+                failsWith('conflict')(e) &&
+                JSON.stringify((e as { details?: unknown }).details) ===
+                    JSON.stringify({ cards: [{ cardId: 11, remaining: 1 }] })
+        );
+        assert.equal(repo.rows.cards[0].column_id, 10);
+
+        // Déjà dans la colonne : la ranger ne bute sur rien.
+        await handlerFor(projectCardMove)(ctx, { columnId: 12, cardIds: [13] });
     });
 
     it('archiver une carte pose son titre dans la frise et une ligne d’audit', async () => {

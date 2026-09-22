@@ -11,7 +11,13 @@ import {
     projectColumnUpdate
 } from '../contracts/commands';
 import { PROJECT_MAX_COLUMNS } from '../contracts/domain';
-import type { ProjectCardDraft, ProjectCardRow, ProjectColumnRow, ProjectRow } from '../contracts/domain';
+import type {
+    ProjectCardDraft,
+    ProjectCardRow,
+    ProjectChecklistItem,
+    ProjectColumnRow,
+    ProjectRow
+} from '../contracts/domain';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
 import {
@@ -20,7 +26,6 @@ import {
     decryptColumn,
     encryptCard,
     encryptColumn,
-    isMember,
     loadProject,
     MANAGE,
     priorityToDb,
@@ -93,20 +98,51 @@ async function assertDatable(
 }
 
 /**
- * Un membre à qui attribuer une carte doit appartenir à l'espace actif, même sur un
- * projet projeté : on assigne parmi les gens qu'on voit. Sans cette garde, la colonne
- * étant en clair et sans contrainte d'appartenance, un identifiant quelconque
- * passerait et la carte s'afficherait attribuée à un inconnu.
+ * Un assigné, de carte ou de sous-tâche, doit appartenir à l'espace actif, même sur
+ * un projet projeté : on assigne parmi les gens qu'on voit. Sans cette garde, un
+ * identifiant quelconque passerait et la carte s'afficherait attribuée à un inconnu.
  */
-async function assertAssignee(ctx: Ctx, userId: number | null): Promise<void> {
-    if (userId === null) return;
-    if (!(await isMember(ctx, userId))) {
-        throw new FeatureError('validation', 'Cette personne n’est pas membre de cet espace.');
+async function assertAssignees(ctx: Ctx, draft: ProjectCardDraft): Promise<void> {
+    const wanted = new Set(
+        [draft.assigneeUserId, ...draft.checklist.map((i) => i.assigneeUserId)].filter(
+            (id): id is number => id !== null
+        )
+    );
+    if (wanted.size === 0) return;
+    const members = new Set((await ctx.deveye.members.list()).map((m) => m.userId));
+    for (const id of wanted) {
+        if (!members.has(id)) throw new FeatureError('validation', 'Cette personne n’est pas membre de cet espace.');
     }
 }
 
-function toStoredCard(draft: ProjectCardDraft): StoredCard {
-    return { title: draft.title, description: draft.description, checklist: draft.checklist };
+/**
+ * Les horodatages d'une liste de sous-tâches, recalculés contre la liste
+ * enregistrée : ce que le client en envoie ne compte pas.
+ */
+function stampChecklist(
+    next: readonly ProjectChecklistItem[],
+    saved: readonly ProjectChecklistItem[],
+    userId: number,
+    now: number
+): ProjectChecklistItem[] {
+    const before = new Map(saved.map((i) => [i.id, i]));
+    return next.map((item) => {
+        const old = before.get(item.id);
+        const createdAt = old ? old.createdAt : now;
+        if (!item.done) return { ...item, createdAt, doneAt: null, doneBy: null };
+        return old?.done
+            ? { ...item, createdAt, doneAt: old.doneAt, doneBy: old.doneBy }
+            : { ...item, createdAt, doneAt: now, doneBy: userId };
+    });
+}
+
+/** Ce que `cardMove` doit savoir sans rien déchiffrer. */
+function requiredOpen(checklist: readonly ProjectChecklistItem[]): number {
+    return checklist.filter((i) => i.required && !i.done).length;
+}
+
+function toStoredCard(draft: ProjectCardDraft, checklist: ProjectChecklistItem[]): StoredCard {
+    return { title: draft.title, description: draft.description, checklist };
 }
 
 export const projectBoardFeature = defineSdkFeature({
@@ -234,10 +270,11 @@ export const projectCardAddFeature = defineSdkFeature({
             throw new FeatureError('validation', 'Cette colonne n’appartient pas à ce projet.');
         }
         await assertProjectUnlocked(ctx, project);
-        await assertAssignee(ctx, input.card.assigneeUserId);
+        await assertAssignees(ctx, input.card);
 
         const cipher = await projectCipher(ctx, project);
-        const payload = toStoredCard(input.card);
+        const now = Math.floor(Date.now() / 1000);
+        const payload = toStoredCard(input.card, stampChecklist(input.card.checklist, [], ctx.userId, now));
         const row = await ctx.repo.board.createCard({
             projectId: input.projectId,
             workspaceId: project.workspace_id,
@@ -248,6 +285,7 @@ export const projectCardAddFeature = defineSdkFeature({
             startDate: input.card.startDate,
             dueDate: input.card.dueDate,
             estimateMinutes: input.card.estimateMinutes,
+            requiredOpen: requiredOpen(payload.checklist),
             content: await encryptCard(cipher, payload)
         });
         return { card: toCard(row, payload, 0) };
@@ -261,7 +299,7 @@ export const projectCardUpdateFeature = defineSdkFeature({
     handler: async (ctx: Ctx, input) => {
         const { card, project } = await loadCard(ctx, input.cardId, 'write');
         await assertProjectUnlocked(ctx, project);
-        await assertAssignee(ctx, input.card.assigneeUserId);
+        await assertAssignees(ctx, input.card);
         await assertDatable(
             ctx,
             project,
@@ -270,13 +308,19 @@ export const projectCardUpdateFeature = defineSdkFeature({
         );
 
         const cipher = await projectCipher(ctx, project);
-        const payload = toStoredCard(input.card);
+        const saved = await decryptCard(cipher, card.content);
+        const now = Math.floor(Date.now() / 1000);
+        const payload = toStoredCard(
+            input.card,
+            stampChecklist(input.card.checklist, saved.checklist, ctx.userId, now)
+        );
         const row = await ctx.repo.board.updateCard(input.cardId, project.workspace_id, {
             assigneeUserId: input.card.assigneeUserId,
             priority: priorityToDb(input.card.priority),
             startDate: input.card.startDate,
             dueDate: input.card.dueDate,
             estimateMinutes: input.card.estimateMinutes,
+            requiredOpen: requiredOpen(payload.checklist),
             content: await encryptCard(cipher, payload)
         });
         if (!row) throw new FeatureError('not_found', 'Carte introuvable');
@@ -294,12 +338,27 @@ export const projectCardMoveFeature = defineSdkFeature({
         // Chaque carte listée doit déjà appartenir au projet de la colonne
         // d'arrivée : sinon un glisser-déposer transplanterait une carte d'un projet
         // à l'autre, ce que l'interface ne propose jamais.
+        const held: { cardId: number; remaining: number }[] = [];
         for (const cardId of input.cardIds) {
             const row = await ctx.repo.board.findCard(cardId);
             if (!row) throw new FeatureError('not_found', 'Carte introuvable');
             if (row.project_id !== column.project_id) {
                 throw new FeatureError('validation', 'Une carte ne change pas de projet.');
             }
+            // Seules les cartes qui ENTRENT sont jugées : `cardIds` porte la colonne
+            // entière, ranger celles qui y sont déjà ne doit buter sur rien.
+            if (column.counts_as_done === 1 && row.column_id !== column.id && row.required_open_count > 0) {
+                held.push({ cardId: row.id, remaining: row.required_open_count });
+            }
+        }
+        if (held.length > 0) {
+            // Titres et libellés sont chiffrés : le client, qui les a en clair,
+            // nomme ce qui reste à partir de `details`.
+            throw new FeatureError(
+                'conflict',
+                'Il reste des sous-tâches obligatoires à terminer avant d’entrer dans cette colonne.',
+                { cards: held }
+            );
         }
 
         // Aucun corps chiffré n'est touché : un projet confidentiel se réordonne

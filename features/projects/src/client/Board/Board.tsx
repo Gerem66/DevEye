@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ButtonHTMLAttributes } from 'react';
 import { createPortal } from 'react-dom';
 import {
     DndContext,
@@ -19,15 +19,17 @@ import {
 import {
     SortableContext,
     arrayMove,
+    hasSortableData,
     sortableKeyboardCoordinates,
     useSortable,
     verticalListSortingStrategy
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Button, useLiveOutlines, useRequestPopupWidth, type LiveOutlineProps } from 'deveye-sdk-client';
+import { Button, CountBadge, type LiveOutlineProps, useLiveOutlines, useRequestPopupWidth } from 'deveye-sdk-client';
 import { formatDate, PRIORITY_LABELS } from '../api';
 import type { ProjectCard, ProjectColumn } from '../../contracts/domain';
-import { MemberAvatar } from '../Member';
+import { MemberStack } from '../Member';
+import type { CardTab } from './CardDialog';
 import { boardNaturalWidth } from './width';
 import styles from '../style.module.css';
 
@@ -40,9 +42,14 @@ interface BoardProps {
     canTasks: boolean;
     /** Tenir les colonnes. */
     canManage: boolean;
-    /** Applique un nouvel ordre localement (optimiste) puis le persiste. */
+    /** L'aperçu d'un glissé en cours : local, rien ne part au serveur. */
+    onCardsPreview: (next: ProjectCard[]) => void;
+    /** Un glissé commence ou finit : l'appelant retient ses relectures, qui déferaient l'aperçu. */
+    onDragStateChange: (dragging: boolean) => void;
+    /** Le dépôt : une seule écriture par geste, l'ordre complet de la colonne d'arrivée. */
     onCardsMoved: (columnId: number, cardIds: number[], next: ProjectCard[]) => void;
-    onCardOpen: (card: ProjectCard) => void;
+    /** `tab` : l'onglet que le geste vise (le corps, la puce du suivi, celle du fil). */
+    onCardOpen: (card: ProjectCard, tab: CardTab) => void;
     onCardCreate: (columnId: number) => void;
     onColumnEdit: (column: ProjectColumn) => void;
     onColumnMove: (columnId: number, direction: -1 | 1) => void;
@@ -63,6 +70,8 @@ export function Board({
     canWrite,
     canTasks,
     canManage,
+    onCardsPreview,
+    onDragStateChange,
     onCardsMoved,
     onCardOpen,
     onCardCreate,
@@ -76,9 +85,27 @@ export function Board({
     // `l3` : l'onglet du projet occupe `l2` (voir `ProjectDetail`).
     const outlineFor = useLiveOutlines('l3');
 
-    // Le tableau réclame à la popup la largeur exacte de ses colonnes ; la
-    // demande est relâchée au démontage, donc en quittant l'onglet.
-    useRequestPopupWidth(boardNaturalWidth(columns.length, canManage));
+    /**
+     * Le tableau réclame à la popup la largeur de ses colonnes, de la première à
+     * la dernière : mesurée sur elles et non sur le tableau, dont la boîte suit la
+     * popup. La demande est relâchée au démontage, donc en quittant l'onglet.
+     */
+    const boardRef = useRef<HTMLDivElement>(null);
+    const [columnsWidth, setColumnsWidth] = useState<number | null>(null);
+    useLayoutEffect(() => {
+        const board = boardRef.current;
+        if (!board) return;
+        const measure = () => {
+            const first = board.firstElementChild as HTMLElement | null;
+            const last = board.lastElementChild as HTMLElement | null;
+            setColumnsWidth(first && last ? last.offsetLeft + last.offsetWidth - first.offsetLeft : null);
+        };
+        measure();
+        const ro = new ResizeObserver(measure);
+        for (const child of board.children) ro.observe(child);
+        return () => ro.disconnect();
+    }, [columns.length, canManage]);
+    useRequestPopupWidth(columnsWidth === null ? null : boardNaturalWidth(columnsWidth));
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -112,11 +139,37 @@ export function Board({
         [cards]
     );
 
-    const collisionDetection = useCallback<CollisionDetection>((args) => {
-        // `pointerWithin` d'abord : lui seul distingue une colonne vide survolée.
-        const pointer = pointerWithin(args);
-        return pointer.length > 0 ? pointer : closestCenter(args);
-    }, []);
+    /**
+     * La colonne contient ses cartes : dans la gouttière qui les sépare, elle seule
+     * répond au pointeur. Or elle n'est pas un élément de la liste triée, qui
+     * peindrait alors le trou d'atterrissage en tête de colonne. On vise donc
+     * toujours une carte, la plus proche du pointeur, et la colonne seulement vide.
+     */
+    const collisionDetection = useCallback<CollisionDetection>(
+        (args) => {
+            const within = pointerWithin(args);
+            const hits = within.length > 0 ? within : closestCenter(args);
+            const direct = hits.find((h) => !String(h.id).startsWith('col:'));
+            if (direct) return [direct];
+            const column = hits[0];
+            const pointerY = args.pointerCoordinates?.y;
+            if (!column || pointerY === undefined) return hits;
+
+            const columnId = Number(String(column.id).slice(4));
+            let nearest: { id: number; distance: number } | null = null;
+            for (const card of byColumn.get(columnId) ?? []) {
+                if (card.id === args.active.id) continue;
+                const rect = args.droppableRects.get(card.id);
+                if (!rect) continue;
+                const distance = Math.abs(rect.top + rect.height / 2 - pointerY);
+                if (nearest === null || distance < nearest.distance) nearest = { id: card.id, distance };
+            }
+            if (nearest === null) return [column];
+            const container = args.droppableContainers.find((c) => c.id === nearest?.id);
+            return container ? [{ id: nearest.id, data: { droppableContainer: container, value: 0 } }] : [column];
+        },
+        [byColumn]
+    );
 
     const locate = (cardId: number) => {
         const card = cards.find((c) => c.id === cardId);
@@ -129,9 +182,10 @@ export function Board({
         const id = Number(e.active.id);
         origin.current = locate(id);
         setActiveId(id);
+        onDragStateChange(true);
     };
 
-    /** Reclasse localement pendant le survol, sans rien envoyer au serveur. */
+    /** Reclasse localement pendant le survol : rien ne part avant le dépôt. */
     const onDragOver = (e: DragOverEvent) => {
         const { active, over } = e;
         if (!over || activeId === null) return;
@@ -142,35 +196,49 @@ export function Board({
         if (!current || current.columnId === targetColumn) return;
 
         const target = byColumn.get(targetColumn) ?? [];
-        const overIndex = target.findIndex((c) => c.id === Number(over.id));
-        const at = overIndex < 0 ? target.length : overIndex;
+        const at = hasSortableData(over) ? over.data.current.sortable.index : target.length;
         const nextIds = [...target.map((c) => c.id)];
         nextIds.splice(at, 0, activeCardId);
-        onCardsMoved(targetColumn, nextIds, applyOrder(cards, targetColumn, nextIds));
+        onCardsPreview(applyOrder(cards, targetColumn, nextIds));
     };
 
     const onDragEnd = (e: DragEndEvent) => {
         const { active, over } = e;
+        const back = origin.current;
         setActiveId(null);
         origin.current = null;
-        if (!over) return;
+        onDragStateChange(false);
+        if (!over) {
+            restore(back, Number(active.id));
+            return;
+        }
 
         const cardId = Number(active.id);
         const card = cards.find((c) => c.id === cardId);
         if (!card) return;
-        const overId = String(over.id);
-        const targetColumn = columnOf(overId);
+        const targetColumn = columnOf(String(over.id));
         if (targetColumn === null) return;
 
         const list = byColumn.get(targetColumn) ?? [];
-        const from = list.findIndex((c) => c.id === cardId);
-        // Sous la dernière carte, le curseur n'en survole plus aucune : c'est la
-        // colonne qui répond, et « sous toutes » veut dire à la fin. Sans ce cas,
-        // la carte resterait là où son entrée dans la colonne l'avait posée.
-        const to = overId.startsWith('col:') ? list.length - 1 : list.findIndex((c) => c.id === Number(overId));
         const ids = list.map((c) => c.id);
+        // Les index sont ceux que la liste triée a peints : le dépôt ne peut pas
+        // contredire l'aperçu. Une colonne pour cible veut dire qu'elle est vide,
+        // ou que la carte y est seule.
+        const from = ids.indexOf(cardId);
+        const to = hasSortableData(over) ? over.data.current.sortable.index : ids.length - 1;
         const nextIds = from >= 0 && to >= 0 && from !== to ? arrayMove(ids, from, to) : ids;
+
+        const unmoved = back !== null && back.columnId === targetColumn && back.index === nextIds.indexOf(cardId);
+        if (unmoved) return;
         onCardsMoved(targetColumn, nextIds, applyOrder(cards, targetColumn, nextIds));
+    };
+
+    /** Remet l'aperçu comme avant le geste, sans rien écrire. */
+    const restore = (back: { columnId: number; index: number } | null, id: number) => {
+        if (!back) return;
+        const list = (byColumn.get(back.columnId) ?? []).map((c) => c.id).filter((c) => c !== id);
+        list.splice(back.index, 0, id);
+        onCardsPreview(applyOrder(cards, back.columnId, list));
     };
 
     /** Échap en cours de glisser : la carte retourne d'où elle vient. */
@@ -179,10 +247,8 @@ export function Board({
         const id = activeId;
         setActiveId(null);
         origin.current = null;
-        if (!back || id === null) return;
-        const list = (byColumn.get(back.columnId) ?? []).map((c) => c.id).filter((c) => c !== id);
-        list.splice(back.index, 0, id);
-        onCardsMoved(back.columnId, list, applyOrder(cards, back.columnId, list));
+        onDragStateChange(false);
+        if (id !== null) restore(back, id);
     };
 
     return (
@@ -195,7 +261,7 @@ export function Board({
             onDragEnd={onDragEnd}
             onDragCancel={onDragCancel}
         >
-            <div className={styles.board}>
+            <div ref={boardRef} className={styles.board}>
                 {columns.map((column, index) => (
                     <Column
                         key={column.id}
@@ -254,7 +320,7 @@ interface ColumnProps {
     first: boolean;
     last: boolean;
     outlineFor: (value: string | null) => LiveOutlineProps;
-    onCardOpen: (card: ProjectCard) => void;
+    onCardOpen: (card: ProjectCard, tab: CardTab) => void;
     onCardCreate: (columnId: number) => void;
     onEdit: (column: ProjectColumn) => void;
     onMove: (columnId: number, direction: -1 | 1) => void;
@@ -343,14 +409,14 @@ function Column({
             </header>
 
             <div ref={setNodeRef} className={`${styles.columnBody} ${isOver ? styles.columnOver : ''}`}>
-                <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+                <SortableContext id={`col:${column.id}`} items={ids} strategy={verticalListSortingStrategy}>
                     {cards.map((card) => (
                         <SortableCard
                             key={card.id}
                             card={card}
                             draggable={canWrite}
                             outline={outlineFor(`card:${card.id}`)}
-                            onOpen={() => onCardOpen(card)}
+                            onOpen={(tab) => onCardOpen(card, tab)}
                         />
                     ))}
                 </SortableContext>
@@ -369,11 +435,11 @@ interface SortableCardProps {
     /** Sans l'écriture, la carte s'ouvre mais ne se déplace pas. */
     draggable: boolean;
     outline: LiveOutlineProps;
-    onOpen: () => void;
+    onOpen: (tab: CardTab) => void;
 }
 
 function SortableCard({ card, draggable, outline, onOpen }: SortableCardProps) {
-    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
         id: card.id,
         disabled: !draggable
     });
@@ -385,9 +451,12 @@ function SortableCard({ card, draggable, outline, onOpen }: SortableCardProps) {
         filter: isDragging ? 'opacity(0.35)' : undefined
     };
 
+    // Le pointeur saisit la carte n'importe où, puces comprises. Le clavier, lui,
+    // part du bouton d'ouverture : c'est l'activateur que son capteur exige, et le
+    // seul élément de la carte à porter le rôle de ce qui se trie.
     return (
-        <div ref={setNodeRef} style={style} {...attributes} {...listeners} {...outline}>
-            <CardBody card={card} onOpen={onOpen} />
+        <div ref={setNodeRef} style={style} {...listeners} {...outline}>
+            <CardBody card={card} onOpen={onOpen} opener={{ ref: setActivatorNodeRef, ...attributes }} />
         </div>
     );
 }
@@ -395,28 +464,54 @@ function SortableCard({ card, draggable, outline, onOpen }: SortableCardProps) {
 interface CardBodyProps {
     card: ProjectCard;
     dragging?: boolean;
-    onOpen?: () => void;
+    onOpen?: (tab: CardTab) => void;
+    /** Ce que le tri pose sur le bouton d'ouverture. */
+    opener?: ButtonHTMLAttributes<HTMLButtonElement> & { ref: (node: HTMLElement | null) => void };
 }
 
-function CardBody({ card, dragging, onOpen }: CardBodyProps) {
+/**
+ * La carte s'ouvre par trois gestes. Un bouton étiré sous le contenu porte
+ * l'ouverture par défaut ; les puces, ses sœurs posées au-dessus, portent les deux
+ * autres. Aucun bouton n'en contient un autre.
+ */
+function CardBody({ card, dragging, onOpen, opener }: CardBodyProps) {
     const due = formatDate(card.dueDate);
     const overdue = card.dueDate !== null && card.dueDate * 1000 < Date.now();
     const done = card.checklist.filter((i) => i.done).length;
+    const held = card.checklist.filter((i) => i.required && !i.done).length;
+    const title = card.title || 'Sans titre';
+
+    const checkChip = (
+        <>
+            <span className={`icon icon-square-check ${styles.chipIcon} ${styles.chipCheck}`} />
+            {card.checklist.length > 0 ? `${done}/${card.checklist.length}` : 0}
+        </>
+    );
+    const chatChip = (
+        <>
+            <span
+                className={`icon icon-chat-outline ${styles.chipIcon} ${card.unread > 0 ? styles.chipIconHot : ''}`}
+            />
+            {card.messageCount}
+        </>
+    );
+    const checkTitle =
+        held > 0
+            ? `${held} sous-tâche${held > 1 ? 's' : ''} obligatoire${held > 1 ? 's' : ''} à terminer`
+            : `Sous-tâches : ${done} sur ${card.checklist.length}`;
 
     return (
-        <article
-            className={`${styles.card2} ${dragging ? styles.card2Dragging : ''}`}
-            onClick={onOpen}
-            role={onOpen ? 'button' : undefined}
-            tabIndex={onOpen ? 0 : undefined}
-            onKeyDown={(e) => {
-                if (!onOpen) return;
-                if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onOpen();
-                }
-            }}
-        >
+        <article className={`${styles.card2} ${dragging ? styles.card2Dragging : ''}`}>
+            {onOpen && (
+                <button
+                    type='button'
+                    className={styles.card2Open}
+                    aria-label={`Ouvrir ${title}`}
+                    onClick={() => onOpen('settings')}
+                    {...opener}
+                />
+            )}
+
             <div className={styles.card2Top}>
                 {card.priority !== 'none' && (
                     <span
@@ -425,8 +520,10 @@ function CardBody({ card, dragging, onOpen }: CardBodyProps) {
                         title={`Priorité ${PRIORITY_LABELS[card.priority].toLowerCase()}`}
                     />
                 )}
-                <span className={styles.card2Title}>{card.title || 'Sans titre'}</span>
-                {card.unread > 0 && <span className={styles.unread}>{card.unread}</span>}
+                <span className={styles.card2Title}>{title}</span>
+                {card.unread > 0 && (
+                    <CountBadge count={card.unread} aria-label={`${card.unread} non lu${card.unread > 1 ? 's' : ''}`} />
+                )}
             </div>
 
             {/* Bornée à trois lignes par le CSS : de quoi reconnaître une tâche
@@ -434,22 +531,44 @@ function CardBody({ card, dragging, onOpen }: CardBodyProps) {
             {card.description && <p className={styles.card2Desc}>{card.description}</p>}
 
             <div className={styles.card2Meta}>
-                {card.checklist.length > 0 && (
-                    <span className={styles.card2Chip}>
-                        <span className={`icon icon-square-check ${styles.chipIcon}`} />
-                        {done}/{card.checklist.length}
-                    </span>
-                )}
-                {card.messageCount > 0 && (
-                    <span className={styles.card2Chip}>
-                        <span className={`icon icon-notes ${styles.chipIcon}`} />
-                        {card.messageCount}
-                    </span>
+                {(onOpen || card.checklist.length > 0) &&
+                    (onOpen ? (
+                        <button
+                            type='button'
+                            className={styles.card2ChipButton}
+                            data-held={held > 0 ? '' : undefined}
+                            title={checkTitle}
+                            aria-label={`Ouvrir le suivi. ${checkTitle}`}
+                            onClick={() => onOpen('work')}
+                        >
+                            {checkChip}
+                        </button>
+                    ) : (
+                        <span className={styles.card2Chip}>{checkChip}</span>
+                    ))}
+                {onOpen ? (
+                    <button
+                        type='button'
+                        className={styles.card2ChipButton}
+                        title='Ouvrir la discussion'
+                        aria-label={`Ouvrir la discussion, ${card.messageCount} message${card.messageCount > 1 ? 's' : ''}${
+                            card.unread > 0 ? `, ${card.unread} non lu${card.unread > 1 ? 's' : ''}` : ''
+                        }`}
+                        onClick={() => onOpen('chat')}
+                    >
+                        {chatChip}
+                    </button>
+                ) : (
+                    card.messageCount > 0 && <span className={styles.card2Chip}>{chatChip}</span>
                 )}
                 {due && <span className={overdue ? styles.overdue : undefined}>{due}</span>}
                 <span className={styles.card2Spacer} />
-                {/* Masqué s'il n'est pas membre d'ici (projet projeté). */}
-                {card.assigneeUserId !== null && <MemberAvatar userId={card.assigneeUserId} size={20} />}
+                <MemberStack
+                    userId={card.assigneeUserId}
+                    others={card.checklist.map((i) => i.assigneeUserId)}
+                    size={20}
+                    spread
+                />
             </div>
         </article>
     );

@@ -1,13 +1,23 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Button, Dialog, SelectInput, TextInput, useLiveOutlines, useLiveSegment } from 'deveye-sdk-client';
+import {
+    Button,
+    CountBadge,
+    Dialog,
+    invalidate,
+    NumberInput,
+    SearchSelect,
+    SelectInput,
+    TextInput,
+    useLiveOutlines,
+    useLiveSegment,
+    useResourceVersion
+} from 'deveye-sdk-client';
 import type { MinimalUser } from '@deveye/types';
-import { dateInputToSeconds, dateInputValue, PRIORITY_LABELS } from '../api';
+import { compareFr, dateInputToSeconds, dateInputValue, PRIORITY_LABELS } from '../api';
 import { missingPermission, NO_WRITE } from '../rights';
 import {
     PROJECT_CARD_TITLE_MAX_LENGTH,
-    PROJECT_CHECKLIST_LABEL_MAX_LENGTH,
-    PROJECT_MAX_CHECKLIST_ITEMS,
     PROJECT_PRIORITIES,
     type ProjectCard,
     type ProjectCardDep,
@@ -17,13 +27,21 @@ import {
     type ProjectPriority
 } from '../../contracts/domain';
 import { Chat } from '../Chat/Chat';
-import { HIDDEN_MEMBER_LABEL } from '../Member';
+import { useAssigneeOptions } from '../Member';
+import { Subtasks } from './Subtasks';
 import styles from '../style.module.css';
+
+/** `settings` : la tâche et ses réglages. `work` : ses sous-tâches. `chat` : son fil. */
+export type CardTab = 'settings' | 'work' | 'chat';
+
+const CARD_TABS: readonly CardTab[] = ['settings', 'work', 'chat'];
 
 interface CardDialogProps {
     open: boolean;
     /** `null` = création. */
     card: ProjectCard | null;
+    /** L'onglet demandé à l'ouverture ; sans lui, le fil s'il a du non-lu, le suivi sinon. */
+    focus?: CardTab;
     members: readonly MinimalUser[];
     /** L'appelant, pour ne pas s'annoncer soi-même « en train d'écrire ». */
     meUserId: number;
@@ -50,10 +68,12 @@ interface CardDialogProps {
     onSubmit: (draft: ProjectCardDraft, links: { milestoneId: number | null; blockedBy: number[] }) => void;
     /**
      * La liste de sous-tâches d'une carte existante, qui ne suit pas le sort du
-     * reste du formulaire : on la coche depuis l'onglet « Suivi », qui n'a pas de
-     * bouton pour l'enregistrer, donc chaque geste part sur-le-champ.
+     * reste du formulaire : l'onglet « Suivi » n'a pas de bouton pour
+     * l'enregistrer, donc chaque geste part sur-le-champ.
      */
     onChecklistChange: (checklist: ProjectChecklistItem[]) => void;
+    /** Le fil vient d'être lu : à l'appelant d'éteindre le badge de la carte. */
+    onRead: () => void;
     onArchive?: () => void;
 }
 
@@ -67,17 +87,6 @@ const EMPTY: ProjectCardDraft = {
     dueDate: null,
     estimateMinutes: null
 };
-
-/** Identifiant local d'une sous-tâche : c'est sa clé de rendu, pas une clé SQL. */
-function newItemId(): string {
-    return `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
-}
-
-/**
- * `work` : le fil et les sous-tâches. `settings` : la description et les réglages.
- * Une création n'a pas de fil à suivre, elle reste sur `settings`.
- */
-type CardTab = 'work' | 'settings';
 
 /**
  * Le brouillon s'écarte-t-il de la carte enregistrée ? La liste de sous-tâches n'y
@@ -99,6 +108,7 @@ function isChanged(draft: ProjectCardDraft, card: ProjectCard | null): boolean {
 export function CardDialog({
     open,
     card,
+    focus,
     members,
     meUserId,
     canWrite,
@@ -113,6 +123,7 @@ export function CardDialog({
     onClose,
     onSubmit,
     onChecklistChange,
+    onRead,
     onArchive
 }: CardDialogProps) {
     const [draft, setDraft] = useState<ProjectCardDraft>(EMPTY);
@@ -124,18 +135,10 @@ export function CardDialog({
      */
     const tab: CardTab = card ? openTab : 'settings';
     const setTab = setOpenTab;
-    const [itemLabel, setItemLabel] = useState('');
     /** Le jalon choisi, hors du brouillon (voir `onSubmit`). */
     const [milestoneId, setMilestoneId] = useState<number | null>(null);
     /** Les tâches déclarées bloquantes. Idem : posées à l'enregistrement. */
     const [blockerIds, setBlockerIds] = useState<number[]>([]);
-    /** La sous-tâche dont on vient de demander le retrait ; `null` = personne. */
-    const [removing, setRemoving] = useState<ProjectChecklistItem | null>(null);
-    /**
-     * Son libellé, gardé à part : la popup s'efface en fondu, et lire une phrase
-     * au nom vide pendant sa sortie serait pire que rien.
-     */
-    const [removingLabel, setRemovingLabel] = useState('');
 
     /** Les bloqueurs tels que le serveur les connaît, avant nos retouches. */
     const savedBlockerIds = card ? deps.filter((d) => d.cardId === card.id).map((d) => d.blockedByCardId) : [];
@@ -144,13 +147,22 @@ export function CardDialog({
     const titleOf = (id: number) => siblings.find((c) => c.id === id)?.title || `Tâche #${id}`;
     // On ne propose ni la carte elle-même, ni un bloqueur déjà déclaré. Les
     // cycles plus longs sont refusés par le serveur, qui voit tout le graphe.
-    const candidates = siblings.filter((c) => c.id !== card?.id && !blockerIds.includes(c.id));
+    const candidates = useMemo(
+        () =>
+            siblings
+                .filter((c) => c.id !== card?.id && !blockerIds.includes(c.id))
+                .map((c) => ({ value: String(c.id), label: c.title || `Tâche #${c.id}` }))
+                .sort((a, b) => compareFr(a.label, b.label)),
+        [siblings, card?.id, blockerIds]
+    );
+    const assigneeOptions = useAssigneeOptions(members, draft.assigneeUserId);
 
     /**
      * Remet la popup à l'état de la carte ouverte. Déclenchée sur l'identifiant et
      * non sur l'objet : choisir un jalon remplace la carte détenue par l'appelant,
      * et rejouer la remise à zéro renverrait le brouillon à sa valeur enregistrée
-     * en plein milieu d'une saisie.
+     * en plein milieu d'une saisie. `focus` n'y est pas non plus : l'onglet demandé
+     * s'impose à l'ouverture, jamais après.
      */
     const cardId = card?.id ?? null;
     useEffect(() => {
@@ -169,13 +181,11 @@ export function CardDialog({
                   }
                 : EMPTY
         );
-        setItemLabel('');
-        setRemoving(null);
         setMilestoneId(card?.milestoneId ?? null);
         setBlockerIds(savedBlockerIds);
-        // On rouvre une tâche pour son fil, on ouvre une création pour la
-        // remplir : chacune s'ouvre là où il y a quelque chose à faire.
-        setTab(card ? 'work' : 'settings');
+        // Sans demande, une tâche s'ouvre là où quelque chose attend : son fil
+        // s'il a du non-lu, son suivi sinon.
+        setTab(card ? (focus ?? (card.unread > 0 ? 'chat' : 'work')) : 'settings');
     }, [open, cardId]);
 
     /**
@@ -188,9 +198,21 @@ export function CardDialog({
 
     useEffect(() => {
         if (!tabTarget?.value) return;
-        const wanted = tabTarget.value.replace(/^tab:/, '');
-        if (wanted === 'work' || wanted === 'settings') setTab(wanted);
+        const wanted = tabTarget.value.replace(/^tab:/, '') as CardTab;
+        if (CARD_TABS.includes(wanted)) setTab(wanted);
     }, [tabTarget]);
+
+    /**
+     * Un message arrivé pendant qu'on est sur un autre onglet : le fil ne ravive
+     * pas le tableau, et c'est le tableau qui porte le compte de non-lus du badge.
+     */
+    const messagesVersion = useResourceVersion('projects.messages');
+    const seenMessages = useRef(messagesVersion);
+    useEffect(() => {
+        if (seenMessages.current === messagesVersion) return;
+        seenMessages.current = messagesVersion;
+        if (open && card && tab !== 'chat') invalidate('projects.board');
+    }, [messagesVersion]);
 
     const patch = (next: Partial<ProjectCardDraft>) => setDraft((d) => ({ ...d, ...next }));
 
@@ -198,13 +220,19 @@ export function CardDialog({
      * Seule la liste de sous-tâches suit la carte quand elle bouge ailleurs : les
      * autres champs attendent « Enregistrer » et les rafraîchir effacerait une
      * saisie. La comparaison évite le rendu inutile, et surtout le retour en
-     * arrière de notre propre coche pendant l'aller-retour.
+     * arrière de notre propre coche pendant l'aller-retour. Pendant un glissé, ce
+     * qui arrive attend le relâchement : la liste ne bouge pas sous le pointeur.
      */
     const savedChecklist = card?.checklist ?? null;
     const savedKey = savedChecklist === null ? null : JSON.stringify(savedChecklist);
+    const dragging = useRef(false);
+    const pending = useRef<ProjectChecklistItem[] | null>(null);
+    const adopt = (list: ProjectChecklistItem[]) =>
+        setDraft((d) => (JSON.stringify(d.checklist) === JSON.stringify(list) ? d : { ...d, checklist: list }));
     useEffect(() => {
         if (savedChecklist === null) return;
-        setDraft((d) => (JSON.stringify(d.checklist) === savedKey ? d : { ...d, checklist: savedChecklist }));
+        if (dragging.current) pending.current = savedChecklist;
+        else adopt(savedChecklist);
         // `savedKey` seul : il change exactement quand la liste change, là où
         // l'objet, lui, est neuf à chaque re-sollicitation.
     }, [savedKey]);
@@ -215,30 +243,17 @@ export function CardDialog({
      * du formulaire.
      */
     const commitChecklist = (next: ProjectChecklistItem[]) => {
+        // Notre dépôt l'emporte sur ce qui attendait : il part de la liste affichée.
+        pending.current = null;
         patch({ checklist: next });
         if (card) onChecklistChange(next);
     };
 
-    const addItem = () => {
-        const label = itemLabel.trim();
-        if (!label || draft.checklist.length >= PROJECT_MAX_CHECKLIST_ITEMS) return;
-        commitChecklist([...draft.checklist, { id: newItemId(), label, done: false }]);
-        setItemLabel('');
-    };
-
-    const toggleItem = (id: string) =>
-        commitChecklist(draft.checklist.map((i) => (i.id === id ? { ...i, done: !i.done } : i)));
-
-    const askRemove = (item: ProjectChecklistItem) => {
-        setRemoving(item);
-        setRemovingLabel(item.label);
-    };
-
-    /** Le retrait n'est pas rattrapable, d'où la confirmation qui y mène. */
-    const removeConfirmed = () => {
-        if (!removing) return;
-        commitChecklist(draft.checklist.filter((i) => i.id !== removing.id));
-        setRemoving(null);
+    const onSubtaskDrag = (active: boolean) => {
+        dragging.current = active;
+        if (active || pending.current === null) return;
+        adopt(pending.current);
+        pending.current = null;
     };
 
     const submit = () => {
@@ -246,7 +261,6 @@ export function CardDialog({
         onSubmit({ ...draft, title: draft.title.trim() }, { milestoneId, blockedBy: blockerIds });
     };
 
-    const doneCount = draft.checklist.filter((i) => i.done).length;
     /**
      * Ce qui reste à enregistrer, jalon et dépendances compris : c'est ce drapeau
      * que le Dialog consulte pour retenir une fermeture.
@@ -259,7 +273,7 @@ export function CardDialog({
                 blockerIds.some((id) => !savedBlockerIds.includes(id))));
 
     /**
-     * La hauteur du contenu de l'onglet, mesurée et non calculée : les deux onglets
+     * La hauteur du contenu de l'onglet, mesurée et non calculée : les onglets
      * n'ont pas la même mise en page, et l'un contient une discussion dont la
      * taille dépend du fil.
      */
@@ -319,21 +333,16 @@ export function CardDialog({
                             </ul>
                         )}
                         {/* Choisir une tâche l'ajoute : le choix est l'intention.
-                            Le sélecteur revient aussitôt sur son intitulé. */}
+                            Aucune option ne porte la valeur vide, le sélecteur
+                            revient donc aussitôt sur son intitulé. */}
                         {canPlan && candidates.length > 0 && (
-                            <SelectInput
+                            <SearchSelect
+                                aria-label='Ajouter une dépendance'
+                                placeholder='Choisir une tâche…'
                                 value=''
-                                onChange={(e) =>
-                                    e.target.value && setBlockerIds((prev) => [...prev, Number(e.target.value)])
-                                }
-                            >
-                                <option value=''>Choisir une tâche…</option>
-                                {candidates.map((c) => (
-                                    <option key={c.id} value={c.id}>
-                                        {c.title || `Tâche #${c.id}`}
-                                    </option>
-                                ))}
-                            </SelectInput>
+                                options={candidates}
+                                onChange={(v) => v && setBlockerIds((prev) => [...prev, Number(v)])}
+                            />
                         )}
                         {blocking.length > 0 && (
                             <span className={styles.hint}>
@@ -345,28 +354,15 @@ export function CardDialog({
             </div>
 
             <div className={styles.row}>
-                <label className={styles.field}>
+                <div className={styles.field}>
                     <span className={styles.label}>Assignée à</span>
-                    <SelectInput
+                    <SearchSelect
+                        aria-label='Assignée à'
                         value={draft.assigneeUserId === null ? '' : String(draft.assigneeUserId)}
-                        onChange={(e) => patch({ assigneeUserId: e.target.value ? Number(e.target.value) : null })}
-                    >
-                        <option value=''>Personne</option>
-                        {/* Seuls les membres d'ici se proposent ; l'assigné courant
-                            peut n'en être pas (projet projeté), on nomme alors la
-                            valeur sans l'offrir. */}
-                        {draft.assigneeUserId !== null && !members.some((m) => m.id === draft.assigneeUserId) && (
-                            <option value={draft.assigneeUserId} disabled>
-                                {HIDDEN_MEMBER_LABEL}
-                            </option>
-                        )}
-                        {members.map((m) => (
-                            <option key={m.id} value={m.id}>
-                                {m.username}
-                            </option>
-                        ))}
-                    </SelectInput>
-                </label>
+                        options={assigneeOptions}
+                        onChange={(v) => patch({ assigneeUserId: v ? Number(v) : null })}
+                    />
+                </div>
                 <label className={styles.field}>
                     <span className={styles.label}>Priorité</span>
                     <SelectInput
@@ -403,110 +399,50 @@ export function CardDialog({
                         onChange={(e) => patch({ dueDate: dateInputToSeconds(e.target.value) })}
                     />
                 </label>
-                <label className={styles.field}>
+                {/* Un `div` et non un `label` : englobé par un label, le champ
+                    verrait un clic sur l'intitulé activer son bouton « − ». */}
+                <div className={styles.field}>
                     <span className={styles.label}>Estimation (min)</span>
-                    <TextInput
-                        type='number'
+                    <NumberInput
+                        aria-label='Estimation en minutes'
                         min={0}
-                        value={draft.estimateMinutes === null ? '' : String(draft.estimateMinutes)}
-                        onChange={(e) => patch({ estimateMinutes: e.target.value ? Number(e.target.value) : null })}
+                        value={draft.estimateMinutes}
+                        onChange={(v) => patch({ estimateMinutes: v })}
                     />
-                </label>
+                </div>
             </div>
         </>
     );
 
-    /* Centré à la création, en colonne contre la discussion sur une tâche
-       existante. */
     const subtasks = (
-        <div className={card ? styles.checkPanelSide : styles.checkPanel}>
-            <div className={styles.checkHead}>
-                <span className={styles.label}>Sous-tâches</span>
-                {draft.checklist.length > 0 && (
-                    <span className={styles.checkCount}>
-                        {doneCount}/{draft.checklist.length}
-                    </span>
-                )}
-            </div>
+        <Subtasks
+            items={draft.checklist}
+            members={members}
+            meUserId={meUserId}
+            onChange={commitChecklist}
+            onDragStateChange={onSubtaskDrag}
+            autoFocus={tab === 'work'}
+        />
+    );
 
-            {draft.checklist.length > 0 && (
-                <ul className={styles.checklist}>
-                    {draft.checklist.map((item) => (
-                        <li key={item.id} className={styles.checkItem}>
-                            <button
-                                type='button'
-                                className={styles.checkToggle}
-                                onClick={() => toggleItem(item.id)}
-                                aria-pressed={item.done}
-                            >
-                                <span className={`icon icon-${item.done ? 'square-check' : 'square-empty'}`} />
-                            </button>
-                            {/* L'intitulé porte toujours `checkLabel` : c'est lui
-                                qui tient la croix à droite, cochée ou non. */}
-                            <span
-                                className={item.done ? `${styles.checkLabel} ${styles.checkDone}` : styles.checkLabel}
-                            >
-                                {item.label}
-                            </span>
-                            <button
-                                type='button'
-                                className={styles.tagRemove}
-                                aria-label={`Retirer ${item.label}`}
-                                onClick={() => askRemove(item)}
-                            >
-                                <span className='icon icon-x' />
-                            </button>
-                        </li>
-                    ))}
-                </ul>
-            )}
-
-            <div className={styles.checkAdd}>
-                <TextInput
-                    value={itemLabel}
-                    maxLength={PROJECT_CHECKLIST_LABEL_MAX_LENGTH}
-                    placeholder='Ajouter une sous-tâche'
-                    onChange={(e) => setItemLabel(e.target.value)}
-                />
-                <Button variant='secondary' onClick={addItem} disabled={!itemLabel.trim()}>
-                    Ajouter
-                </Button>
-            </div>
-
-            {/* Déclaré ici, contre ce qu'il protège : un Dialog se rend dans un
-                portail, sa place dans l'arbre n'a aucun effet de mise en page, et
-                la pile de fermeture étant chronologique, Échap annule le retrait
-                sans refermer la tâche dessous. */}
-            <Dialog
-                open={removing !== null}
-                onClose={() => setRemoving(null)}
-                onSubmit={removeConfirmed}
-                title='Retirer la sous-tâche'
-                footer={
-                    <>
-                        <Button variant='secondary' onClick={() => setRemoving(null)}>
-                            Annuler
-                        </Button>
-                        <Button variant='danger' onClick={removeConfirmed}>
-                            Retirer
-                        </Button>
-                    </>
-                }
-            >
-                <p>« {removingLabel} » quittera la liste. Le retrait est définitif à l’enregistrement de la tâche.</p>
-            </Dialog>
-        </div>
+    const tabButton = (id: CardTab, icon: string, label: string, badge = 0) => (
+        <button
+            type='button'
+            className={tab === id ? styles.tabActive : styles.tab}
+            aria-current={tab === id ? 'page' : undefined}
+            onClick={() => setTab(id)}
+            {...outlineForTab(`tab:${id}`)}
+        >
+            <span className={`icon icon-${icon} ${badge > 0 ? styles.chipIconHot : ''}`} /> {label}
+            {badge > 0 && <CountBadge count={badge} aria-label={`${badge} non lu${badge > 1 ? 's' : ''}`} />}
+        </button>
     );
 
     return (
         <Dialog
             open={open}
             onClose={onClose}
-            // Sur « Suivi », l'en-tête porte le titre de la tâche ; sur
-            // « Modifier », l'intitulé de ce qu'on y fait.
-            title={card ? (tab === 'work' ? draft.title || 'Sans titre' : 'Modifier la tâche') : 'Nouvelle tâche'}
-            // Plus large en édition : la discussion et les sous-tâches y partagent
-            // une ligne, deux colonnes de 350 px ne se liraient ni l'une ni l'autre.
+            title={card ? draft.title || 'Sans titre' : 'Nouvelle tâche'}
             width={card ? 980 : 720}
             onSubmit={submit}
             holdSecrecy
@@ -515,8 +451,8 @@ export function CardDialog({
             dirty={card !== null && changed}
             onSave={submit}
             footer={
-                // Uniquement sur l'onglet des réglages : sur « Suivi » on lit un
-                // fil et on coche des cases, un formulaire n'y correspond à rien.
+                // Uniquement sur l'onglet des réglages : ailleurs on coche des cases
+                // et on lit un fil, un formulaire n'y correspond à rien.
                 tab === 'settings' ? (
                     <>
                         {/* Une carte ne se supprime pas : l'archivage est la seule sortie. */}
@@ -542,24 +478,9 @@ export function CardDialog({
             <div className={styles.form}>
                 {card && (
                     <nav className={styles.tabs}>
-                        <button
-                            type='button'
-                            className={tab === 'work' ? styles.tabActive : styles.tab}
-                            aria-current={tab === 'work' ? 'page' : undefined}
-                            onClick={() => setTab('work')}
-                            {...outlineForTab('tab:work')}
-                        >
-                            <span className='icon icon-notes' /> Suivi
-                        </button>
-                        <button
-                            type='button'
-                            className={tab === 'settings' ? styles.tabActive : styles.tab}
-                            aria-current={tab === 'settings' ? 'page' : undefined}
-                            onClick={() => setTab('settings')}
-                            {...outlineForTab('tab:settings')}
-                        >
-                            <span className='icon icon-edit' /> Modifier
-                        </button>
+                        {tabButton('settings', 'edit', 'Modifier')}
+                        {tabButton('work', 'square-check', 'Suivi')}
+                        {tabButton('chat', 'chat', 'Discussion', card.unread)}
                     </nav>
                 )}
 
@@ -598,17 +519,31 @@ export function CardDialog({
                             </>
                         )}
 
-                        {/* Masqué et non démonté en passant sur « Modifier » : le
-                            fil garde ses messages et son abonnement, là où un
+                        {/* Masqués et non démontés : le fil garde ses messages et son
+                            abonnement, le suivi une édition en cours, là où un
                             remontage rejouerait un « Chargement… » au retour. */}
                         {card && (
-                            <div
-                                className={tab === 'work' ? styles.workRow : styles.tabHidden}
-                                aria-hidden={tab === 'work' ? undefined : true}
-                            >
-                                <Chat cardId={card.id} members={members} meUserId={meUserId} canWrite={canChat} />
-                                {subtasks}
-                            </div>
+                            <>
+                                <div
+                                    className={tab === 'work' ? undefined : styles.tabHidden}
+                                    aria-hidden={tab === 'work' ? undefined : true}
+                                >
+                                    {subtasks}
+                                </div>
+                                <div
+                                    className={tab === 'chat' ? styles.chatTab : styles.tabHidden}
+                                    aria-hidden={tab === 'chat' ? undefined : true}
+                                >
+                                    <Chat
+                                        cardId={card.id}
+                                        members={members}
+                                        meUserId={meUserId}
+                                        canWrite={canChat}
+                                        active={open && tab === 'chat'}
+                                        onRead={onRead}
+                                    />
+                                </div>
+                            </>
                         )}
 
                         {!card && subtasks}

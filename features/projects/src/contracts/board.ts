@@ -12,7 +12,7 @@ export const PROJECT_COLUMN_NAME_MAX_LENGTH = 48;
 export const PROJECT_MAX_COLUMNS = 12;
 export const PROJECT_CARD_TITLE_MAX_LENGTH = 160;
 export const PROJECT_CARD_DESCRIPTION_MAX_LENGTH = 4000;
-export const PROJECT_CHECKLIST_LABEL_MAX_LENGTH = 160;
+export const PROJECT_CHECKLIST_LABEL_MAX_LENGTH = 500;
 export const PROJECT_MAX_CHECKLIST_ITEMS = 50;
 
 /**
@@ -24,11 +24,24 @@ export const projectPrioritySchema = z.enum(['none', 'low', 'normal', 'high']);
 export type ProjectPriority = z.infer<typeof projectPrioritySchema>;
 export const PROJECT_PRIORITIES = projectPrioritySchema.options;
 
-/** `id` est engendré par le client : c'est sa clé de rendu. */
+/**
+ * `id` est engendré par le client : c'est sa clé de rendu. Les trois horodatages
+ * sont posés par le serveur, qui compare à la liste enregistrée : ce que le client
+ * en envoie est ignoré, personne ne peut donc signer une coche à la place d'un autre.
+ */
 export const projectChecklistItemSchema = z.object({
     id: z.string().min(1).max(64),
     label: z.string().max(PROJECT_CHECKLIST_LABEL_MAX_LENGTH),
-    done: z.boolean()
+    done: z.boolean(),
+    /** Un membre de l'espace actif. Ne remonte pas dans « Mes tâches ». */
+    assigneeUserId: z.number().int().positive().nullable(),
+    /** Tant qu'elle n'est pas cochée, la tâche n'entre pas dans une colonne qui vaut « terminé ». */
+    required: z.boolean(),
+    /** `null` : née avant que la date ne soit tenue. */
+    createdAt: z.number().int().nullable(),
+    doneAt: z.number().int().nullable(),
+    /** `null` aussi quand le compte a été supprimé depuis. */
+    doneBy: z.number().int().positive().nullable()
 });
 export type ProjectChecklistItem = z.infer<typeof projectChecklistItemSchema>;
 
@@ -112,6 +125,8 @@ export interface ProjectCardRow {
     start_date: number | null;
     due_date: number | null;
     estimate_minutes: number | null;
+    /** Sous-tâches obligatoires encore ouvertes : ce que `cardMove` lit sans rien déchiffrer. */
+    required_open_count: number;
     milestone_id: number | null;
     archived_at: number | null;
     message_count: number;

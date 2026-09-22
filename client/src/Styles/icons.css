@@ -377,3 +377,11 @@
     -webkit-mask-image: url(/icons/chat.svg);
     mask-image: url(/icons/chat.svg);
 }
+
+/* La jumelle en trait de `chat`, pour se tenir à côté d'une icône en trait sans
+   peser deux fois plus lourd. Son corps est centré dans la boîte, la queue
+   dépassant seule vers le bas : c'est le corps que l'œil aligne. */
+.icon.icon-chat-outline {
+    -webkit-mask-image: url(/icons/chat-outline.svg);
+    mask-image: url(/icons/chat-outline.svg);
+}

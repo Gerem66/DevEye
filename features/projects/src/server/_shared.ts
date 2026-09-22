@@ -12,7 +12,13 @@ import type {
     ProjectSummary,
     ProjectTag
 } from '../contracts/domain';
-import { PROJECT_PRIORITIES, projectCardSchema, projectColumnSchema, projectSchema } from '../contracts/domain';
+import {
+    PROJECT_CHECKLIST_LABEL_MAX_LENGTH,
+    PROJECT_PRIORITIES,
+    projectCardSchema,
+    projectColumnSchema,
+    projectSchema
+} from '../contracts/domain';
 import { FeatureError, type SdkCipher, type SdkFeatureContext, type SdkShareScope } from '@deveye/types/sdk/server';
 
 import type { ProjectsRepo, ProjectStats } from './repo';
@@ -140,6 +146,7 @@ export function toProject(row: ProjectRow, payload: StoredProject, foreign: bool
         tags: payload.tags,
         version: payload.version,
         versionSource: row.version_source,
+        showOverview: row.show_overview === 1,
         status: row.status,
         securityTier: row.security_tier,
         startDate: row.start_date,
@@ -310,13 +317,35 @@ function parseColumn(plain: string): StoredColumn {
     }
 }
 
+/** Le corps est une entrée non validée : chaque item en sort complet, `toCard` le parse strictement ensuite. */
+function parseChecklist(value: unknown): ProjectChecklistItem[] {
+    if (!Array.isArray(value)) return [];
+    return value.flatMap((raw): ProjectChecklistItem[] => {
+        const item = (raw ?? {}) as Partial<ProjectChecklistItem>;
+        if (typeof item.id !== 'string' || typeof item.label !== 'string') return [];
+        const stamp = (v: unknown): number | null => (typeof v === 'number' ? v : null);
+        return [
+            {
+                id: item.id,
+                label: item.label.slice(0, PROJECT_CHECKLIST_LABEL_MAX_LENGTH),
+                done: item.done === true,
+                assigneeUserId: stamp(item.assigneeUserId),
+                required: item.required === true,
+                createdAt: stamp(item.createdAt),
+                doneAt: stamp(item.doneAt),
+                doneBy: stamp(item.doneBy)
+            }
+        ];
+    });
+}
+
 function parseCard(plain: string): StoredCard {
     try {
         const parsed = JSON.parse(plain) as Partial<StoredCard>;
         return {
             title: typeof parsed.title === 'string' ? parsed.title : '',
             description: typeof parsed.description === 'string' ? parsed.description : '',
-            checklist: Array.isArray(parsed.checklist) ? (parsed.checklist as ProjectChecklistItem[]) : []
+            checklist: parseChecklist(parsed.checklist)
         };
     } catch {
         return { title: '', description: '', checklist: [] };

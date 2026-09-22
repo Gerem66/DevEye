@@ -40,6 +40,7 @@ export interface ProjectRepo {
         userId: number;
         workspaceId: number;
         status: ProjectStatus;
+        showOverview: boolean;
         securityTier: ProjectSecurityTier;
         startDate: number | null;
         dueDate: number | null;
@@ -48,7 +49,13 @@ export interface ProjectRepo {
     update(
         id: number,
         workspaceId: number,
-        input: { status: ProjectStatus; startDate: number | null; dueDate: number | null; content: string }
+        input: {
+            status: ProjectStatus;
+            showOverview: boolean;
+            startDate: number | null;
+            dueDate: number | null;
+            content: string;
+        }
     ): Promise<ProjectRow | null>;
     setStatus(id: number, workspaceId: number, status: ProjectStatus): Promise<ProjectRow | null>;
     /** Pose la source de version ; le numéro lui-même vit dans `content`. */
@@ -121,22 +128,34 @@ export function projectRepo(q: SdkQueryable): ProjectRepo {
             );
             return rows[0] ?? null;
         },
-        async create({ userId, workspaceId, status, securityTier, startDate, dueDate, content }) {
+        async create({ userId, workspaceId, status, showOverview, securityTier, startDate, dueDate, content }) {
             const sortOrder = await nextSortOrder(q, workspaceId);
             const res = await q.execute(
                 `INSERT INTO projects
-                     (workspace_id, user_id, status, security_tier, sort_order, start_date, due_date, content)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                [workspaceId, userId, status, securityTier, sortOrder, startDate, dueDate, content]
+                     (workspace_id, user_id, status, show_overview, security_tier, sort_order, start_date, due_date,
+                      content)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    workspaceId,
+                    userId,
+                    status,
+                    showOverview ? 1 : 0,
+                    securityTier,
+                    sortOrder,
+                    startDate,
+                    dueDate,
+                    content
+                ]
             );
             const rows = await q.query<ProjectRow>('SELECT * FROM projects WHERE id = ?', [res.insertId]);
             return rows[0];
         },
-        async update(id, workspaceId, { status, startDate, dueDate, content }) {
+        async update(id, workspaceId, { status, showOverview, startDate, dueDate, content }) {
             const res = await q.execute(
-                `UPDATE projects SET status = ?, start_date = ?, due_date = ?, content = ?, updated = UNIX_TIMESTAMP()
+                `UPDATE projects SET status = ?, show_overview = ?, start_date = ?, due_date = ?, content = ?,
+                        updated = UNIX_TIMESTAMP()
                  WHERE id = ? AND workspace_id = ?`,
-                [status, startDate, dueDate, content, id, workspaceId]
+                [status, showOverview ? 1 : 0, startDate, dueDate, content, id, workspaceId]
             );
             if (res.affectedRows === 0) return null;
             return this.findById(id, workspaceId);

@@ -25,6 +25,8 @@ import type { z, ZodType } from 'zod';
 export { default as Button } from '@/Components/Button';
 export { default as Checkbox } from '@/Components/Checkbox';
 export { default as ChoiceCards } from '@/Components/ChoiceCards';
+export { default as CountBadge } from '@/Components/CountBadge';
+export type { CountBadgeProps } from '@/Components/CountBadge';
 export { ConfirmDialog } from '@/Components/ConfirmDialog';
 export type { ConfirmRequest } from '@/Components/ConfirmDialog';
 export { default as SegmentedControl } from '@/Components/SegmentedControl';

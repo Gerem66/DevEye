@@ -50,6 +50,7 @@ export interface ProjectBoardRepo {
         startDate: number | null;
         dueDate: number | null;
         estimateMinutes: number | null;
+        requiredOpen: number;
         content: string;
     }): Promise<ProjectCardRow>;
     updateCard(
@@ -61,6 +62,7 @@ export interface ProjectBoardRepo {
             startDate: number | null;
             dueDate: number | null;
             estimateMinutes: number | null;
+            requiredOpen: number;
             content: string;
         }
     ): Promise<ProjectCardRow | null>;
@@ -164,8 +166,8 @@ export function projectBoardRepo(q: SdkQueryable): ProjectBoardRepo {
             const res = await q.execute(
                 `INSERT INTO project_cards
                      (project_id, workspace_id, column_id, sort_order, author_user_id, assignee_user_id,
-                      priority, start_date, due_date, estimate_minutes, content)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                      priority, start_date, due_date, estimate_minutes, required_open_count, content)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     input.projectId,
                     input.workspaceId,
@@ -177,6 +179,7 @@ export function projectBoardRepo(q: SdkQueryable): ProjectBoardRepo {
                     input.startDate,
                     input.dueDate,
                     input.estimateMinutes,
+                    input.requiredOpen,
                     input.content
                 ]
             );
@@ -186,7 +189,7 @@ export function projectBoardRepo(q: SdkQueryable): ProjectBoardRepo {
         async updateCard(cardId, workspaceId, input) {
             const res = await q.execute(
                 `UPDATE project_cards SET assignee_user_id = ?, priority = ?, start_date = ?, due_date = ?,
-                        estimate_minutes = ?, content = ?, updated = UNIX_TIMESTAMP()
+                        estimate_minutes = ?, required_open_count = ?, content = ?, updated = UNIX_TIMESTAMP()
                  WHERE id = ? AND workspace_id = ?`,
                 [
                     input.assigneeUserId,
@@ -194,6 +197,7 @@ export function projectBoardRepo(q: SdkQueryable): ProjectBoardRepo {
                     input.startDate,
                     input.dueDate,
                     input.estimateMinutes,
+                    input.requiredOpen,
                     input.content,
                     cardId,
                     workspaceId

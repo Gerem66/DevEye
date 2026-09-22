@@ -1,4 +1,13 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import {
+    useEffect,
+    useId,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState,
+    type KeyboardEvent,
+    type ReactNode
+} from 'react';
 import { createPortal } from 'react-dom';
 
 import { useDismissLayer } from '@/Components/Dialog';
@@ -8,8 +17,8 @@ import styles from './style.module.css';
 export interface SearchSelectOption<T extends string = string> {
     value: T;
     label: string;
-    /** Un repère devant le libellé : un drapeau, un symbole. Décoratif, jamais lu. */
-    prefix?: string;
+    /** Un repère devant le libellé : un drapeau, un avatar. Décoratif, jamais lu. */
+    prefix?: ReactNode;
     /** Une précision à droite du libellé : un code, une unité. */
     detail?: string;
     /** Ce que la recherche lit en plus du libellé et de la précision. */
@@ -21,6 +30,8 @@ export interface SearchSelectProps<T extends string> {
     options: readonly SearchSelectOption<T>[];
     onChange: (value: T) => void;
     'aria-label': string;
+    /** Ce que le déclencheur affiche quand aucune option ne porte la valeur courante. */
+    placeholder?: string;
     searchPlaceholder?: string;
     emptyText?: string;
     disabled?: boolean;
@@ -53,6 +64,7 @@ export function SearchSelect<T extends string>({
     value,
     options,
     onChange,
+    placeholder = '…',
     searchPlaceholder = 'Rechercher…',
     emptyText = 'Aucun résultat',
     disabled,
@@ -183,7 +195,9 @@ export function SearchSelect<T extends string>({
                         {selected.prefix}
                     </span>
                 )}
-                <span className={styles.label}>{selected?.label ?? '…'}</span>
+                <span className={selected ? styles.label : `${styles.label} ${styles.placeholder}`}>
+                    {selected?.label ?? placeholder}
+                </span>
                 {selected?.detail && <span className={styles.detail}>{selected.detail}</span>}
                 <span className={`icon icon-chevron-down ${styles.chevron}`} aria-hidden='true' />
             </button>

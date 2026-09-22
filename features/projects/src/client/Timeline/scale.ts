@@ -77,6 +77,17 @@ export function startOfDay(t: number): number {
     return d.getTime();
 }
 
+/** Lundi d'abord, comme `startOfStep` compte ses semaines. */
+export const WEEKDAY_LETTERS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'] as const;
+
+/** En deçà, une lettre par jour se colle à ses voisines. */
+export const DAY_LETTER_MIN_WIDTH = 18;
+
+/** Le rang du jour dans la semaine, 0 = lundi. */
+export function weekdayIndex(t: number): number {
+    return (new Date(t).getDay() + 6) % 7;
+}
+
 /** Recule au premier jour de la période contenant `t`. */
 function startOfStep(t: number, step: Step): Date {
     const d = new Date(startOfDay(t));

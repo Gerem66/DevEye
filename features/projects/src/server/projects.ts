@@ -166,6 +166,7 @@ export const projectAddFeature = defineSdkFeature({
             userId: ctx.userId,
             workspaceId: ctx.workspaceId,
             status: input.project.status,
+            showOverview: input.project.showOverview,
             securityTier: input.securityTier,
             startDate: input.project.startDate,
             dueDate: input.project.dueDate,
@@ -210,6 +211,7 @@ export const projectUpdateFeature = defineSdkFeature({
         const payload = toPayload(input.project, previous.version);
         const row = await ctx.repo.projects.update(input.projectId, existing.workspace_id, {
             status: input.project.status,
+            showOverview: input.project.showOverview,
             startDate: input.project.startDate,
             dueDate: input.project.dueDate,
             content: await encryptProject(cipher, payload)
@@ -292,6 +294,7 @@ export const projectSetVersionFeature = defineSdkFeature({
 
         const updated = await ctx.repo.projects.update(input.projectId, existing.workspace_id, {
             status: existing.status,
+            showOverview: existing.show_overview === 1,
             startDate: existing.start_date,
             dueDate: existing.due_date,
             content: await encryptProject(cipher, payload)

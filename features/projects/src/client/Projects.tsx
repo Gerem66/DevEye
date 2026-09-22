@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import {
     Button,
+    CountBadge,
     humanizeError,
     invalidate,
     StatusBadge,
@@ -552,7 +553,12 @@ function ProjectCard({
                 </div>
 
                 <div className={styles.cardAside}>
-                    {unread > 0 && <span className={styles.unread}>{unread}</span>}
+                    {unread > 0 && (
+                        <CountBadge
+                            count={unread}
+                            aria-label={`${unread} message${unread > 1 ? 's' : ''} non lu${unread > 1 ? 's' : ''}`}
+                        />
+                    )}
 
                     {/* Symbole et non bouton : il dit que toute la ligne est
                         cliquable. */}

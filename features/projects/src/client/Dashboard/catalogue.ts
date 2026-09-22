@@ -10,19 +10,32 @@ import type { DashboardTile, Project, ProjectLinkCounts } from '../../contracts/
 /** Les familles dont une tuile résume un élément relié. */
 export type TileFeature = 'git' | 'database' | 'audience' | 'deploy' | 'uptime';
 
+export type TileSize = 'normal' | 'wide';
+
+/** Les tuiles de tâches, nommées : leur rendu bascule dessus sans cas par défaut. */
+export type TaskTileKey =
+    'tasks.progress' | 'tasks.due' | 'tasks.mine' | 'tasks.workload' | 'tasks.milestone' | 'tasks.activity';
+
 export type TileSpec =
-    | { kind: 'tasks'; key: string; title: string }
+    | { kind: 'tasks'; key: TaskTileKey; title: string; size: TileSize }
     | { kind: 'item'; key: string; feature: TileFeature; itemId: number }
     | { kind: 'kpi'; key: string };
 
 /** Les identifiants reliés, tels que `projects.dashboard` les rend. */
 export type DashboardLinks = Record<TileFeature, number[]>;
 
-/** Les tuiles de tâches, toujours là : elles ne dépendent d'aucun service extérieur. */
+/**
+ * Les tuiles de tâches, toujours là : elles ne dépendent d'aucun service extérieur.
+ * Les deux larges ouvrent une rangée à toutes les largeurs de grille, l'ordre ne
+ * laisse donc aucun trou.
+ */
 const TASK_TILES: TileSpec[] = [
-    { kind: 'tasks', key: 'tasks.counts', title: 'Tâches' },
-    { kind: 'tasks', key: 'tasks.due', title: 'Échéances' },
-    { kind: 'tasks', key: 'tasks.milestone', title: 'Prochain jalon' }
+    { kind: 'tasks', key: 'tasks.progress', title: 'Avancement', size: 'wide' },
+    { kind: 'tasks', key: 'tasks.due', title: 'Échéances', size: 'normal' },
+    { kind: 'tasks', key: 'tasks.mine', title: 'Mes tâches ici', size: 'normal' },
+    { kind: 'tasks', key: 'tasks.workload', title: 'Charge de l’équipe', size: 'wide' },
+    { kind: 'tasks', key: 'tasks.milestone', title: 'Prochain jalon', size: 'normal' },
+    { kind: 'tasks', key: 'tasks.activity', title: 'Dernières mises à jour', size: 'normal' }
 ];
 
 /** L'ordre naturel des familles : ce qu'on livre, puis ce que ça donne. */

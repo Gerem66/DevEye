@@ -68,6 +68,11 @@ export const projectSchema = z.object({
     versionSource: projectVersionSourceSchema,
     status: projectStatusSchema,
     securityTier: projectSecurityTierSchema,
+    /**
+     * L'onglet « Vue d'ensemble » paraît-il dans la barre ? Au projet et non à son
+     * lecteur. En clair : la barre se dessine avant tout déchiffrement.
+     */
+    showOverview: z.boolean(),
     /** Bornes de la fenêtre du projet, en secondes unix. */
     startDate: z.number().int().nullable(),
     dueDate: z.number().int().nullable(),
@@ -127,6 +132,7 @@ export const projectDraftSchema = z.object({
     description: z.string().max(PROJECT_DESCRIPTION_MAX_LENGTH),
     tags: z.array(projectTagSchema).max(PROJECT_MAX_TAGS),
     status: projectStatusSchema,
+    showOverview: z.boolean(),
     startDate: z.number().int().nullable(),
     dueDate: z.number().int().nullable()
 });
@@ -140,6 +146,7 @@ export interface ProjectRow {
     status: ProjectStatus;
     security_tier: ProjectSecurityTier;
     version_source: ProjectVersionSource;
+    show_overview: number;
     sort_order: number;
     start_date: number | null;
     due_date: number | null;

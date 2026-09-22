@@ -1,6 +1,7 @@
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import type { SdkTileMetric } from '@deveye/types/sdk/client';
 
+import type { TileSize } from './catalogue';
 import styles from '../style.module.css';
 
 interface TileProps {
@@ -8,6 +9,10 @@ interface TileProps {
     title: string;
     /** Deux ou trois chiffres : une tuile n'est pas un écran. */
     metrics: readonly SdkTileMetric[];
+    /** Deux pistes de la grille, quand elle en offre au moins deux. */
+    size?: TileSize;
+    /** Le corps libre d'une tuile de tâches : barres, listes, visages. */
+    children?: ReactNode;
     /** Ce qui empêche de mesurer, en une phrase. La tuile reste, elle ne s'excuse pas ailleurs. */
     unavailable?: string | null;
     /** La date de la mesure, quand elle en a une (« mesuré il y a 12 min »). */
@@ -31,6 +36,8 @@ export function Tile({
     tileKey,
     title,
     metrics,
+    size = 'normal',
+    children,
     unavailable,
     note,
     stale = false,
@@ -41,7 +48,12 @@ export function Tile({
     actions
 }: TileProps) {
     return (
-        <section className={dragging ? styles.dashTileDragging : styles.dashTile} data-dash-tile='' data-key={tileKey}>
+        <section
+            className={dragging ? styles.dashTileDragging : styles.dashTile}
+            data-dash-tile=''
+            data-key={tileKey}
+            data-size={size}
+        >
             <header className={styles.dashTileHead}>
                 <p className={styles.dashTileName} title={title}>
                     {title}
@@ -90,6 +102,8 @@ export function Tile({
                     ))}
                 </div>
             )}
+
+            {children && <div className={styles.dashTileBody}>{children}</div>}
 
             {unavailable && <p className={styles.dashTileError}>{unavailable}</p>}
             {!unavailable && note && <p className={styles.dashTileNote}>{note}</p>}

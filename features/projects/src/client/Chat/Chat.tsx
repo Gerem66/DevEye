@@ -15,6 +15,10 @@ interface ChatProps {
     members: readonly MinimalUser[];
     meUserId: number;
     canWrite: boolean;
+    /** L'onglet du fil est au premier plan. Derrière, il reste monté et abonné mais ne marque rien lu. */
+    active: boolean;
+    /** Le fil vient d'être marqué lu : la lecture ne diffusant rien, c'est à l'appelant d'éteindre son badge. */
+    onRead: () => void;
 }
 
 /**
@@ -23,7 +27,7 @@ interface ChatProps {
  * niveau que déclare le dialogue de carte : le serveur ne diffuse la frappe qu'aux
  * pairs situés exactement là, rien à déclarer de plus ici.
  */
-export function Chat({ cardId, members, meUserId, canWrite }: ChatProps) {
+export function Chat({ cardId, members, meUserId, canWrite, active, onRead }: ChatProps) {
     const [messages, setMessages] = useState<ProjectMessage[] | null>(null);
     const [hasMore, setHasMore] = useState(false);
     const [text, setText] = useState('');
@@ -62,17 +66,21 @@ export function Chat({ cardId, members, meUserId, canWrite }: ChatProps) {
      * dernier message reçu : c'est ce qui fait disparaître le badge de la carte.
      */
     useEffect(() => {
-        if (!messages || messages.length === 0) return;
+        if (!active || !messages || messages.length === 0) return;
         const last = messages[messages.length - 1];
-        void api.send('projects.markRead', { cardId, lastMessageId: last.id }).catch(() => {
-            /* sans conséquence : la marque repartira à la prochaine ouverture */
-        });
-    }, [cardId, messages]);
+        void api
+            .send('projects.markRead', { cardId, lastMessageId: last.id })
+            .then(onRead)
+            .catch(() => {
+                /* sans conséquence : la marque repartira à la prochaine ouverture */
+            });
+    }, [cardId, messages, active]);
 
     // Le fil s'écrit par le bas : on y reste collé à chaque nouvelle arrivée.
+    // Masqué, il n'a pas de géométrie : le recalage attend qu'il reparaisse.
     useEffect(() => {
-        bottomRef.current?.scrollIntoView({ block: 'end' });
-    }, [messages]);
+        if (active) bottomRef.current?.scrollIntoView({ block: 'end' });
+    }, [messages, active]);
 
     const send = async () => {
         const body = text.trim();
@@ -103,13 +111,6 @@ export function Chat({ cardId, members, meUserId, canWrite }: ChatProps) {
 
     return (
         <div className={styles.chat}>
-            <div className={styles.chatHead}>
-                <span className={styles.label}>Discussion</span>
-                {messages !== null && messages.length > 0 && (
-                    <span className={styles.checkCount}>{messages.length}</span>
-                )}
-            </div>
-
             {error && <p className={styles.error}>{error}</p>}
 
             <div className={styles.chatScroll}>
@@ -164,6 +165,7 @@ export function Chat({ cardId, members, meUserId, canWrite }: ChatProps) {
                     <div className={styles.grow} data-value={text}>
                         <textarea
                             className={styles.textarea}
+                            data-autofocus={active ? '' : undefined}
                             value={text}
                             rows={1}
                             maxLength={PROJECT_MESSAGE_MAX_LENGTH}

@@ -1,10 +1,19 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import { Button, useLiveOutlines, useRequestPopupWidth } from 'deveye-sdk-client';
 import { formatDate } from '../api';
 import type { ProjectCard, ProjectCardDep, ProjectMilestone } from '../../contracts/domain';
-import { MemberAvatar } from '../Member';
+import { MemberStack } from '../Member';
 import { timelineNaturalWidth } from '../Board/width';
-import { DAY_MS, startOfDay, timelineTicks, ZOOM_LEVELS, type ZoomId } from './scale';
+import {
+    DAY_LETTER_MIN_WIDTH,
+    DAY_MS,
+    startOfDay,
+    timelineTicks,
+    WEEKDAY_LETTERS,
+    weekdayIndex,
+    ZOOM_LEVELS,
+    type ZoomId
+} from './scale';
 import { modeAt, useDateDrag } from './dateDrag';
 import styles from '../style.module.css';
 
@@ -18,6 +27,10 @@ const BAR_H = 20;
  * ce qui empêche jalons et barres de se chevaucher.
  */
 const HEAD_H = 44;
+/** Hauteur de la bande des jours de la semaine, sous les lignes. */
+const DAYS_H = 16;
+/** En deçà, la pile d'avatars mangerait le titre de la barre. */
+const STACK_MIN_BAR_WIDTH = 56;
 
 /**
  * Étirement maximal, en px par jour : sans plafond, une fenêtre courte sur un
@@ -114,13 +127,12 @@ export function Timeline({
         return () => ro.disconnect();
     }, []);
 
-    const dated = useMemo(
-        () =>
-            cards
-                .filter((c) => c.startDate !== null || c.dueDate !== null)
-                .sort((a, b) => (a.startDate ?? a.dueDate ?? 0) - (b.startDate ?? b.dueDate ?? 0)),
-        [cards]
-    );
+    /**
+     * Les cartes datées telles qu'enregistrées. C'est d'elles seules que découle la
+     * fenêtre : si l'aperçu d'un glissé y entrait, tirer une barre au-delà du bord
+     * redimensionnerait toute la frise sous le pointeur.
+     */
+    const dated = useMemo(() => cards.filter((c) => c.startDate !== null || c.dueDate !== null), [cards]);
     const undated = useMemo(() => cards.filter((c) => c.startDate === null && c.dueDate === null), [cards]);
 
     /**
@@ -172,8 +184,6 @@ export function Timeline({
     const x = (t: number) => ((t - range.min) / DAY_MS) * dayWidth;
     const ticks = useMemo(() => timelineTicks(range.min, range.max, dayWidth), [range, dayWidth]);
 
-    const rowOf = useMemo(() => new Map(dated.map((c, i) => [c.id, i])), [dated]);
-
     const dropRef = useRef<HTMLDetailsElement>(null);
     const {
         view: drag,
@@ -188,24 +198,34 @@ export function Timeline({
         dropRef,
         onCommit: onCardDates
     });
-    /** La pastille en vol : la carte tenue, et le jour sous le pointeur s'il y en a un. */
+    /** La pastille en vol : la carte tenue, qui n'a de ligne que sur un jour de la frise. */
     const placing = drag?.placing ? drag : null;
-    const ghostAt = placing?.next?.startDate ?? null;
     /** La barre tenue est au-dessus de la zone sans date : elle va les perdre. */
     const unplanning = (card: ProjectCard) =>
         drag !== null && !drag.placing && drag.card.id === card.id && drag.overDrop;
 
     /**
      * La carte telle qu'affichée : ses dates, ou l'aperçu du geste en cours.
-     * L'aperçu ne remonte pas jusqu'à `dated`, sinon la barre qu'on tient
-     * changerait de ligne dès qu'elle dépasse sa voisine. Au-dessus de la zone
-     * sans date, la barre garde sa place : ce sont ses dates qu'on efface, pas
-     * une position qu'on vise.
+     * Au-dessus de la zone sans date, la barre garde sa place : ce sont ses dates
+     * qu'on efface, pas une position qu'on vise.
      */
     const shown = (card: ProjectCard): ProjectCard =>
-        drag && !drag.placing && drag.card.id === card.id && drag.next && !drag.overDrop
+        drag && drag.card.id === card.id && drag.next && !drag.overDrop
             ? { ...card, startDate: drag.next.startDate, dueDate: drag.next.dueDate }
             : card;
+
+    /**
+     * Les lignes, dans l'ordre du temps, aperçu compris : la barre qu'on tient
+     * change de ligne pendant le geste et se trouve à sa place au relâchement.
+     */
+    const ordered = useMemo(() => {
+        const key = (c: ProjectCard) => c.startDate ?? c.dueDate ?? 0;
+        return cards
+            .map(shown)
+            .filter((c) => c.startDate !== null || c.dueDate !== null)
+            .sort((a, b) => key(a) - key(b) || a.id - b.id);
+    }, [cards, drag]);
+    const rowOf = useMemo(() => new Map(ordered.map((c, i) => [c.id, i])), [ordered]);
 
     /** Le segment occupé par une carte : [début, fin] en px. */
     const spanOf = (card: ProjectCard) => {
@@ -254,6 +274,7 @@ export function Timeline({
     }
 
     const now = x(Date.now());
+    const dayLetters = dayWidth >= DAY_LETTER_MIN_WIDTH;
 
     return (
         <div className={styles.timeline}>
@@ -285,10 +306,13 @@ export function Timeline({
                         exactement une par jour, sans un nœud de plus. */}
                     <div
                         className={styles.tlGrid}
-                        style={{
-                            height: (dated.length + (ghostAt !== null ? 1 : 0)) * ROW_H + HEAD_H,
-                            backgroundSize: `${dayWidth}px 100%`
-                        }}
+                        style={
+                            {
+                                height: ordered.length * ROW_H + HEAD_H + (dayLetters ? DAYS_H : 0),
+                                '--day-w': `${dayWidth}px`,
+                                '--week-shift': -weekdayIndex(range.min)
+                            } as CSSProperties
+                        }
                     >
                         {ticks.map((tick) => (
                             <div
@@ -308,7 +332,7 @@ export function Timeline({
                                 type='button'
                                 className={m.reachedAt !== null ? styles.milestoneDone : styles.milestone}
                                 style={{ left: x(m.dueDate * 1000) }}
-                                title={`${m.name || 'Jalon'} — ${new Date(m.dueDate * 1000).toLocaleDateString('fr-FR')}`}
+                                title={`${m.name || 'Jalon'} : ${new Date(m.dueDate * 1000).toLocaleDateString('fr-FR')}`}
                                 onClick={() => onMilestoneOpen(m)}
                             >
                                 <span className={`icon icon-star ${styles.milestoneIcon}`} />
@@ -324,7 +348,7 @@ export function Timeline({
                     <svg
                         className={styles.depLayer}
                         width={width}
-                        height={dated.length * ROW_H}
+                        height={ordered.length * ROW_H}
                         // Les marges intérieures de `.timelineInner` comptent :
                         // un élément absolu se cale sur la boîte de marge
                         // intérieure, alors que les lignes, elles, sont dans le
@@ -407,87 +431,110 @@ export function Timeline({
                         })}
                     </svg>
 
-                    <div className={styles.rows} style={{ marginTop: HEAD_H }}>
-                        {dated.map((card) => {
-                            const at = shown(card);
-                            const s = spanOf(at);
-                            const overdue = at.dueDate !== null && at.dueDate * 1000 < Date.now();
-                            const movable = canDate(card);
-                            // Étirable seulement si les deux bouts existent :
-                            // un point n'a qu'une date, il se déplace en bloc.
-                            const resizable = movable && !s.pointOnly;
-                            // Les dates dans l'infobulle : après un glissé,
-                            // c'est ce qui dit où la barre a atterri sans avoir
-                            // à rouvrir la tâche.
-                            const period = [formatDate(at.startDate), formatDate(at.dueDate)]
-                                .filter(Boolean)
-                                .join(' → ');
-                            return (
-                                <div key={card.id} className={styles.tlRow} style={{ height: ROW_H }}>
-                                    <button
-                                        type='button'
-                                        className={`${styles.bar} ${s.pointOnly ? styles.barPoint : ''} ${
-                                            overdue ? styles.barLate : ''
-                                        } ${movable ? styles.barDraggable : ''} ${
-                                            unplanning(card) ? styles.barLeaving : ''
-                                        }`}
-                                        style={{ left: s.left, width: s.width, height: BAR_H }}
-                                        onPointerDown={
-                                            movable
-                                                ? (e) =>
-                                                      onBarPointerDown(
-                                                          e,
-                                                          card,
-                                                          modeAt(
-                                                              e.currentTarget.getBoundingClientRect(),
-                                                              e.clientX,
-                                                              resizable
+                    {/* Hors du flux, chacune à sa ligne par une translation : changer
+                        d'ordre glisse au lieu de sauter. Rendues par identifiant et
+                        non par rang, pour que le nœud d'une barre ne bouge jamais dans
+                        l'arbre, ce qui couperait sa transition. */}
+                    <div className={styles.rows} style={{ marginTop: HEAD_H, height: ordered.length * ROW_H }}>
+                        {[...ordered]
+                            .sort((a, b) => a.id - b.id)
+                            .map((at) => {
+                                const card = cards.find((c) => c.id === at.id) ?? at;
+                                const s = spanOf(at);
+                                const rowStyle = {
+                                    height: ROW_H,
+                                    transform: `translateY(${(rowOf.get(at.id) ?? 0) * ROW_H}px)`
+                                };
+                                if (placing?.card.id === at.id) {
+                                    return (
+                                        <div key={at.id} className={styles.tlRow} style={rowStyle}>
+                                            <div
+                                                className={styles.barGhost}
+                                                style={{ left: s.left, width: dayWidth, height: BAR_H }}
+                                            >
+                                                <span className={styles.barLabel}>{at.title || 'Sans titre'}</span>
+                                            </div>
+                                        </div>
+                                    );
+                                }
+                                const overdue = at.dueDate !== null && at.dueDate * 1000 < Date.now();
+                                const movable = canDate(card);
+                                // Étirable seulement si les deux bouts existent :
+                                // un point n'a qu'une date, il se déplace en bloc.
+                                const resizable = movable && !s.pointOnly;
+                                // Les dates dans l'infobulle : après un glissé,
+                                // c'est ce qui dit où la barre a atterri sans avoir
+                                // à rouvrir la tâche.
+                                const period = [formatDate(at.startDate), formatDate(at.dueDate)]
+                                    .filter(Boolean)
+                                    .join(' → ');
+                                return (
+                                    <div key={at.id} className={styles.tlRow} style={rowStyle}>
+                                        <button
+                                            type='button'
+                                            className={`${styles.bar} ${s.pointOnly ? styles.barPoint : ''} ${
+                                                overdue ? styles.barLate : ''
+                                            } ${movable ? styles.barDraggable : ''} ${
+                                                unplanning(card) ? styles.barLeaving : ''
+                                            }`}
+                                            style={{ left: s.left, width: s.width, height: BAR_H }}
+                                            onPointerDown={
+                                                movable
+                                                    ? (e) =>
+                                                          onBarPointerDown(
+                                                              e,
+                                                              card,
+                                                              modeAt(
+                                                                  e.currentTarget.getBoundingClientRect(),
+                                                                  e.clientX,
+                                                                  resizable
+                                                              )
                                                           )
-                                                      )
-                                                : undefined
-                                        }
-                                        // Le clic qui clôt un glissé n'ouvre pas
-                                        // la carte : on vient de poser des dates,
-                                        // pas de demander à les lire.
-                                        onClick={() => {
-                                            if (!consumeClick(card.id)) onCardOpen(card);
-                                        }}
-                                        title={period ? `${card.title || 'Sans titre'} — ${period}` : card.title}
-                                        {...outlineFor(`card:${card.id}`)}
-                                    >
-                                        {/* Deux lisières, là seulement pour le
-                                            curseur : le mode est décidé par la
-                                            position du pointeur, pas par la
-                                            cible de l'événement. */}
-                                        {resizable && (
-                                            <>
-                                                <span className={styles.barGripStart} aria-hidden='true' />
-                                                <span className={styles.barGripEnd} aria-hidden='true' />
-                                            </>
-                                        )}
-                                        <span className={styles.barLabel}>{card.title || 'Sans titre'}</span>
-                                        {card.assigneeUserId !== null && (
-                                            <MemberAvatar userId={card.assigneeUserId} size={16} />
-                                        )}
-                                    </button>
-                                </div>
-                            );
-                        })}
-
-                        {/* La pastille en vol, dans une ligne de plus ajoutée en
-                            fin : l'insérer à son rang la ferait sauter de ligne
-                            sous le pointeur, le rang se décidant sur la date. */}
-                        {placing && ghostAt !== null && (
-                            <div className={styles.tlRow} style={{ height: ROW_H }}>
-                                <div
-                                    className={styles.barGhost}
-                                    style={{ left: x(ghostAt * 1000), width: dayWidth, height: BAR_H }}
-                                >
-                                    <span className={styles.barLabel}>{placing.card.title || 'Sans titre'}</span>
-                                </div>
-                            </div>
-                        )}
+                                                    : undefined
+                                            }
+                                            // Le clic qui clôt un glissé n'ouvre pas
+                                            // la carte : on vient de poser des dates,
+                                            // pas de demander à les lire.
+                                            onClick={() => {
+                                                if (!consumeClick(card.id)) onCardOpen(card);
+                                            }}
+                                            title={period ? `${card.title || 'Sans titre'} : ${period}` : card.title}
+                                            {...outlineFor(`card:${card.id}`)}
+                                        >
+                                            {/* Deux lisières, là seulement pour le
+                                                curseur : le mode est décidé par la
+                                                position du pointeur, pas par la
+                                                cible de l'événement. */}
+                                            {resizable && (
+                                                <>
+                                                    <span className={styles.barGripStart} aria-hidden='true' />
+                                                    <span className={styles.barGripEnd} aria-hidden='true' />
+                                                </>
+                                            )}
+                                            <span className={styles.barLabel}>{card.title || 'Sans titre'}</span>
+                                            {s.width >= STACK_MIN_BAR_WIDTH && (
+                                                <MemberStack
+                                                    userId={card.assigneeUserId}
+                                                    others={card.checklist.map((i) => i.assigneeUserId)}
+                                                    size={16}
+                                                    max={3}
+                                                />
+                                            )}
+                                        </button>
+                                    </div>
+                                );
+                            })}
                     </div>
+
+                    {dayLetters && (
+                        <DayLetters
+                            scrollRef={scrollRef}
+                            rangeMin={range.min}
+                            days={days}
+                            dayWidth={dayWidth}
+                            viewport={avail}
+                        />
+                    )}
                 </div>
             </div>
 
@@ -498,12 +545,16 @@ export function Timeline({
                 <details
                     ref={dropRef}
                     className={`${styles.undated} ${drag?.overDrop ? styles.undatedOver : ''}`}
-                    open={undated.length === 0 ? true : undefined}
+                    // Constante : React ne retouche donc jamais l'attribut, et un
+                    // repli à la main tient, y compris en plein geste.
+                    open
                 >
                     <summary>
                         {drag !== null && !drag.placing
                             ? 'Déposer ici pour retirer les dates'
-                            : `${undated.length} carte${undated.length > 1 ? 's' : ''} sans date`}
+                            : undated.length === 1
+                              ? '1 carte sans date : glissez-la sur la frise pour la dater'
+                              : `${undated.length} cartes sans date : glissez-en une sur la frise pour la dater`}
                     </summary>
                     <ul className={styles.undatedList}>
                         {undated.map((card) => {
@@ -533,6 +584,64 @@ export function Timeline({
                     </ul>
                 </details>
             )}
+        </div>
+    );
+}
+
+interface DayLettersProps {
+    scrollRef: RefObject<HTMLDivElement | null>;
+    rangeMin: number;
+    days: number;
+    dayWidth: number;
+    /** Largeur visible de la frise. */
+    viewport: number;
+}
+
+/**
+ * La lettre de chaque jour, sous les lignes. Seuls les jours à l'écran sont rendus,
+ * et le défilement est tenu ici : lui seul se redessine quand la frise défile.
+ */
+function DayLetters({ scrollRef, rangeMin, days, dayWidth, viewport }: DayLettersProps) {
+    const [scrollLeft, setScrollLeft] = useState(0);
+    useEffect(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+        let frame = 0;
+        const onScroll = () => {
+            cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(() => setScrollLeft(el.scrollLeft));
+        };
+        setScrollLeft(el.scrollLeft);
+        el.addEventListener('scroll', onScroll, { passive: true });
+        return () => {
+            cancelAnimationFrame(frame);
+            el.removeEventListener('scroll', onScroll);
+        };
+    }, [scrollRef]);
+
+    // Par addition sur le rang du premier jour, jamais par une date par jour : un
+    // changement d'heure décalerait d'un cran les lettres qui le suivent.
+    const baseDow = weekdayIndex(rangeMin);
+    const today = Math.round((startOfDay(Date.now()) - rangeMin) / DAY_MS);
+    const first = Math.max(0, Math.floor(scrollLeft / dayWidth) - 1);
+    const last = Math.min(days - 1, Math.ceil((scrollLeft + viewport) / dayWidth) + 1);
+
+    const letters = [];
+    for (let i = first; i <= last; i++) {
+        const dow = (baseDow + i) % 7;
+        letters.push(
+            <span
+                key={i}
+                className={i === today ? styles.tlDayToday : dow >= 5 ? styles.tlDayOff : styles.tlDay}
+                style={{ left: i * dayWidth, width: dayWidth }}
+            >
+                {WEEKDAY_LETTERS[dow]}
+            </span>
+        );
+    }
+    return (
+        <div className={styles.tlDays} style={{ height: DAYS_H }} aria-hidden='true'>
+            {letters}
         </div>
     );
 }

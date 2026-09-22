@@ -1,4 +1,4 @@
-import { useLiveOutlines } from 'deveye-sdk-client';
+import { CountBadge, useLiveOutlines } from 'deveye-sdk-client';
 
 import styles from './style.module.css';
 
@@ -36,7 +36,9 @@ export function FolderTree({ folders, selectedId, onSelect }: FolderTreeProps) {
                 >
                     <span className={`icon icon-${SPECIAL_ICONS[folder.specialUse] ?? 'folder'}`} />
                     <span className={styles.folderName}>{folder.name}</span>
-                    {folder.unreadCount > 0 && <span className={styles.folderUnread}>{folder.unreadCount}</span>}
+                    {folder.unreadCount > 0 && (
+                        <CountBadge count={folder.unreadCount} aria-label={`${folder.unreadCount} unread`} />
+                    )}
                 </button>
             ))}
         </div>

@@ -1,9 +1,9 @@
-import { featureApi } from 'deveye-sdk-client';
+import { featureApi, WsError } from 'deveye-sdk-client';
 import type { ProjectStatus } from '@deveye/types';
 
 import { manifest } from '../manifest';
 
-import type { ProjectPriority, ProjectTagKind } from '../contracts/domain';
+import type { ProjectCard, ProjectPriority, ProjectTagKind } from '../contracts/domain';
 
 /**
  * L'envoi typé des commandes du module. Le portefeuille et les compteurs
@@ -54,4 +54,42 @@ export function dateInputToSeconds(value: string): number | null {
     if (!value) return null;
     const ms = new Date(`${value}T00:00:00`).getTime();
     return Number.isNaN(ms) ? null : Math.floor(ms / 1000);
+}
+
+/** Tri d'affichage : l'ordre du français, accents et casse ignorés. */
+export const compareFr = new Intl.Collator('fr', { sensitivity: 'base', numeric: true }).compare;
+
+/** « il y a 3 h » : l'âge d'un instant passé, en secondes unix. */
+export function relativeAgo(seconds: number, now = Math.floor(Date.now() / 1000)): string {
+    const elapsed = Math.max(0, now - seconds);
+    if (elapsed < 60) return 'à l’instant';
+    const minutes = Math.floor(elapsed / 60);
+    if (minutes < 60) return `il y a ${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `il y a ${hours} h`;
+    return `il y a ${Math.floor(hours / 24)} j`;
+}
+
+export function formatDateTime(seconds: number): string {
+    return new Date(seconds * 1000).toLocaleString('fr-FR', {
+        day: 'numeric',
+        month: 'long',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+/**
+ * Le refus d'un déplacement, nommé. Le serveur ne voit ni les titres ni les
+ * libellés : il ne rend que les cartes retenues, et c'est d'ici qu'on les nomme.
+ */
+export function moveRefusal(error: unknown, cards: readonly ProjectCard[]): string | null {
+    if (!(error instanceof WsError) || error.code !== 'conflict') return null;
+    const held = (error.details as { cards?: { cardId: number }[] } | undefined)?.cards ?? [];
+    const card = cards.find((c) => c.id === held[0]?.cardId);
+    if (!card) return null;
+    const open = card.checklist.filter((i) => i.required && !i.done).map((i) => `« ${i.label} »`);
+    const named = open.length > 3 ? [...open.slice(0, 3), '…'] : open;
+    const title = card.title || 'Cette tâche';
+    return `« ${title} » ne peut pas être terminée : il reste ${named.join(', ')}.`;
 }

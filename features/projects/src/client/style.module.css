@@ -57,6 +57,37 @@
     font-size: 0.85rem;
 }
 
+/* L'échec d'un geste : il reste tant qu'on ne l'a pas lu, d'où la croix. */
+.errorDismissible {
+    composes: error;
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+}
+
+.errorDismissible > span {
+    flex: 1;
+    min-width: 0;
+}
+
+.errorClose {
+    display: inline-flex;
+    flex-shrink: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+    filter: opacity(0.7);
+    transition: filter var(--transition-fast);
+}
+
+.errorClose:hover,
+.errorClose:focus-visible {
+    outline: none;
+    filter: opacity(1);
+}
+
 /* ------------------------------------------------------------ portefeuille */
 
 /*
@@ -312,17 +343,6 @@
 }
 
 /* Badge de non-lus : rendu seulement quand il y en a (voir Projects.tsx). */
-.unread {
-    flex: 0 0 auto;
-    min-width: 20px;
-    padding: 1px 6px;
-    border-radius: var(--radius-pill);
-    background: var(--accent);
-    color: var(--on-accent);
-    font-size: 0.72rem;
-    font-weight: 700;
-    text-align: center;
-}
 
 /* Le titre se tronque plutôt que de pousser la barre d'avancement hors de la carte.
    `flex-shrink` sans `flex-grow` : il garde sa largeur naturelle tant qu'il y a la
@@ -769,6 +789,9 @@
     flex-direction: column;
     gap: var(--space-sm);
     flex: 0 0 288px;
+    /* Sans lui, un élément flex ne descend pas sous son contenu : un nom de colonne
+       long élargirait la sienne au lieu de s'abréger. */
+    min-width: 0;
     min-height: 0;
     padding: var(--space-sm);
     border-radius: var(--radius-lg);
@@ -784,6 +807,7 @@
 }
 
 .columnName {
+    min-width: 0;
     font-weight: 600;
     font-size: 0.9rem;
     color: var(--text-primary);
@@ -901,6 +925,7 @@
     gap: var(--space-xs);
     padding: var(--space-sm);
     border-radius: var(--radius-md);
+    position: relative;
     background: var(--surface-widget);
     border: 1px solid var(--glass-border);
     cursor: pointer;
@@ -994,6 +1019,115 @@
    l'ordre d'injection des feuilles. */
 .card2Chip .chipIcon {
     width: 14px;
+}
+
+/* L'ouverture par défaut, étirée sous tout le contenu de la carte : ce qui doit
+   répondre à son propre clic (puces, pile d'avatars) se pose au-dessus d'elle. */
+.card2Open {
+    position: absolute;
+    inset: 0;
+    padding: 0;
+    border: none;
+    border-radius: inherit;
+    background: none;
+    cursor: inherit;
+}
+
+.card2Open:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+.card2ChipButton {
+    composes: card2Chip;
+    position: relative;
+    padding: 2px 6px;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-pill);
+    background: var(--glass-bg-light);
+    color: var(--text-secondary);
+    font: inherit;
+    cursor: pointer;
+    transition:
+        border-color var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.card2ChipButton:hover,
+.card2ChipButton:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+    color: var(--text-primary);
+}
+
+.card2ChipButton .chipIcon {
+    width: 14px;
+}
+
+/*
+ * La coche remplit sa boîte symétriquement, là où la bulle porte sa queue sous son
+ * corps : à boîte égale, leurs encres ne tombent pas à la même hauteur. Un pixel
+ * rend à la coche l'assise de sa voisine. Ici et non dans `square-check.svg`, que
+ * cinq autres écrans partagent.
+ */
+.chipCheck {
+    transform: translateY(0.5px);
+}
+
+/* Il reste des sous-tâches obligatoires : la tâche ne peut pas encore être terminée. */
+.card2ChipButton[data-held] .chipIcon {
+    color: var(--warning);
+}
+
+/*
+ * La pile d'avatars : l'assigné de la tâche à droite et au-dessus, ceux des
+ * sous-tâches enfouis derrière lui. `row-reverse` fait du premier enfant le plus à
+ * droite, et la marge négative des suivants les glisse dessous. L'anneau est une
+ * ombre et non une bordure : la bulle garde sa taille, elle tient donc dans une
+ * barre de frise.
+ */
+.stack {
+    --overlap: -7px;
+
+    position: relative;
+    display: inline-flex;
+    flex-direction: row-reverse;
+    flex-shrink: 0;
+    max-width: 100%;
+}
+
+.stackBubble {
+    display: inline-flex;
+    margin-right: var(--overlap);
+    border-radius: var(--radius-pill);
+    box-shadow: 0 0 0 var(--stack-ring, 2px) var(--surface-popup-solid);
+    transition: margin-right var(--transition-fast);
+}
+
+.stackBubble:first-child {
+    margin-right: 0;
+}
+
+/* La place vient du ressort de la ligne, qui se rétracte d'autant : rien à mesurer. */
+.stackSpread:hover .stackBubble,
+.stackSpread:focus-within .stackBubble {
+    --overlap: 2px;
+}
+
+.stackMore {
+    composes: stackBubble;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+    background: var(--surface-popup-solid);
+    color: var(--text-secondary);
+    font-size: 0.62rem;
+    font-weight: 700;
+}
+
+/* Des messages attendent : l'icône du fil passe à l'accent. */
+.chipIconHot {
+    color: var(--accent);
 }
 
 .card2Spacer {
@@ -1100,26 +1234,22 @@
 }
 
 /*
- * Les sous-tâches, dans leur propre encart : à la suite des autres champs elles se
- * lisent comme un champ de plus, alors qu'on ne les remplit pas, on les coche. La
- * largeur est bornée, une sous-tâche tenant en quelques mots, et l'encart centré :
- * calé à gauche, il laisserait toute la place vide du même côté.
+ * La page des sous-tâches : une liste pleine largeur qu'on coche, qu'on range par
+ * sa poignée, et dont chaque ligne se déplie en place pour se retoucher.
  */
-.checkPanel {
-    align-self: center;
-    width: 100%;
-    max-width: 27rem;
+.subPage {
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);
-    padding: var(--space-sm) var(--space-md);
-    border-radius: var(--radius-md);
-    border: 1px solid var(--glass-border);
-    background: var(--surface-subtle);
+    min-width: 0;
+    /* Sans liste, il ne reste que l'entête et la ligne d'ajout : la popup se
+       ramasserait sur deux lignes puis bondirait à la première sous-tâche. La
+       même hauteur que le fil vide, pour qu'aucun onglet ne fasse sauter la popup. */
+    min-height: 350px;
 }
 
-/* Intitulé à gauche, décompte à droite : une seule ligne sert de titre d'encart et
-   de jauge d'avancement. */
+/* Intitulé à gauche, décompte à droite : une seule ligne sert de titre et de jauge
+   d'avancement. */
 .checkHead {
     display: flex;
     align-items: baseline;
@@ -1133,45 +1263,106 @@
     font-variant-numeric: tabular-nums;
 }
 
+/* C'est cette boîte qui défile, pas la liste : la barre d'insertion est posée en
+   absolu dans la liste, et une liste défilante la décalerait de son `scrollTop`. */
+.checkScroll {
+    max-height: min(52vh, 30rem);
+    overflow-y: auto;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border);
+    background: var(--surface-subtle);
+}
+
 .checklist {
+    position: relative;
     display: flex;
     flex-direction: column;
-    gap: var(--space-xs);
-    margin: 0 0 var(--space-xs);
-    padding: 0;
+    margin: 0;
+    padding: var(--space-xs);
     list-style: none;
 }
 
-/* Dans l'encart, l'espacement vient du `gap` : la marge ferait double emploi. */
-.checkPanel .checklist {
-    margin: 0;
+.checkRow {
+    border-radius: var(--radius-sm);
+}
+
+.checkRow + .checkRow,
+.checkRowDragging + .checkRow,
+.checkRow + .checkRowDragging {
+    border-top: 1px solid var(--glass-border);
+}
+
+.checkRowDragging {
+    composes: checkRow;
+    filter: opacity(0.4);
 }
 
 .checkItem {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-xs);
     font-size: 0.85rem;
     color: var(--text-primary);
 }
 
-.checkToggle {
+.checkGrip {
     display: inline-flex;
+    flex-shrink: 0;
     padding: 0;
-    background: none;
     border: none;
-    color: var(--accent);
-    cursor: pointer;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: grab;
+    touch-action: none;
+    filter: opacity(0);
+    transition: filter var(--transition-fast);
+}
+
+.checkRow:hover .checkGrip,
+.checkRow:focus-within .checkGrip {
+    filter: opacity(1);
+}
+
+.checkGrip:active {
+    cursor: grabbing;
+}
+
+/* Au doigt, il n'y a pas de survol : la poignée doit être là d'emblée. */
+@media (pointer: coarse) {
+    .checkGrip {
+        filter: opacity(1);
+    }
+}
+
+.checkDropBar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent-glow);
+    opacity: 0;
+    pointer-events: none;
 }
 
 /*
- * Le seul élément élastique de la ligne : c'est lui qui pousse la croix contre le
- * bord droit, à toutes les sous-tâches, cochées ou non.
+ * Le seul élément élastique de la ligne : c'est lui qui pousse le reste contre le
+ * bord droit. Trois lignes au plus, une sous-tâche pouvant porter un paragraphe
+ * que son éditeur montre en entier.
  */
 .checkLabel {
     flex: 1;
     min-width: 0;
     overflow-wrap: anywhere;
+    white-space: pre-line;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
 }
 
 .checkDone {
@@ -1179,91 +1370,86 @@
     color: var(--text-muted);
 }
 
-/* Saisie et « Ajouter » sur une seule ligne : l'encart est trop étroit pour qu'un
-   retour à la ligne y soit lisible, le champ prend ce que le bouton laisse. */
-.checkAdd {
+.checkRequired {
+    display: inline-flex;
+    flex-shrink: 0;
+    color: var(--warning);
+}
+
+.checkRequired :global(.icon),
+.checkRequiredMet :global(.icon) {
+    width: 14px;
+}
+
+/* Cochée, elle ne retient plus rien : le repère reste, sans alerter. */
+.checkRequiredMet {
+    composes: checkRequired;
+    color: var(--text-muted);
+}
+
+.checkStamp {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    gap: 4px;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.checkEdit {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin: 0 var(--space-xs) var(--space-sm) calc(var(--space-xs) + 18px + var(--space-sm));
+    padding: var(--space-sm);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg-light);
+}
+
+.checkEditRow {
     display: flex;
     align-items: center;
-    gap: var(--space-sm);
-}
-
-.checkAdd > *:first-child {
-    flex: 1;
-    min-width: 0;
-}
-
-/*
- * Discussion et sous-tâches côte à côte, les deux choses qu'on regarde en même
- * temps. Le partage est laissé au flex plutôt que dicté : chacun annonce la largeur
- * qu'il lui faut pour rester lisible (`flex-basis`) et le `wrap` les empile dès que
- * les deux ne tiennent plus, sans point de rupture à choisir.
- */
-.workRow {
-    /*
-     * Les bornes de hauteur des deux encarts, posées sur les encarts et non sur la
-     * rangée : une boîte flex de hauteur automatique étire d'abord ses enfants à la
-     * hauteur de leur contenu puis se laisse rogner par le plafond, et les encarts
-     * déborderaient sans qu'aucun ascenseur n'apparaisse. Sur l'encart, le plafond
-     * agit sur l'axe principal de sa propre colonne, et le contenu défile chez lui.
-     *
-     * Le plafond est ce que la fenêtre laisse une fois retiré tout ce que la popup
-     * occupe autour. Large plutôt que juste : le sous-estimer ne coûte qu'un peu
-     * d'air en bas, le surestimer redonnerait un ascenseur à la popup.
-     */
-    --work-min: 350px;
-    --work-max: calc(100vh - 260px);
-
-    display: flex;
     flex-wrap: wrap;
-    align-items: stretch;
-    gap: var(--space-md);
+    gap: var(--space-sm) var(--space-md);
 }
 
-/* La discussion prend la part du lion de la place en trop, mais toutes deux
-   grandissent : sinon celle qui reste seule sur sa ligne, une fois empilées,
-   garderait sa largeur de colonne au milieu du vide. */
-.workRow .chat {
-    flex: 3 1 22rem;
-    min-width: 0;
-    min-height: var(--work-min);
-    max-height: var(--work-max);
+.checkEditAssignee {
+    flex: 0 1 16rem;
+    min-width: 12rem;
 }
 
-.checkPanelSide {
-    composes: checkPanel;
-    align-self: stretch;
-    flex: 1 1 17rem;
-    max-width: none;
-    min-height: var(--work-min);
-    max-height: var(--work-max);
+.checkEditFooter {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+/* Le champ prend ce que le bouton laisse, et grandit vers le bas : le bouton reste
+   calé sur la première ligne. */
+.checkAdd {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
 }
 
 /*
  * L'onglet qui n'est pas au premier plan : hors de la mise en page, mais toujours
  * monté. `display: none` et non un démontage, pour que la discussion garde ses
- * messages et son abonnement pendant qu'on est sur « Modifier » ; hors mise en page,
- * elle ne pèse rien sur la hauteur mesurée pour l'animation. Déclarée après
- * `.workRow` : à spécificité égale, c'est la dernière qui gagne.
+ * messages et son abonnement et le suivi une édition en cours ; hors mise en page,
+ * il ne pèse rien sur la hauteur mesurée pour l'animation.
  */
 .tabHidden {
     display: none;
 }
 
-/* Empilés faute de largeur, les deux encarts se partagent la hauteur au lieu de la
-   réclamer chacun. Le seuil est celui où le `wrap` se déclenche. */
-@media (max-width: 720px) {
-    .workRow {
-        --work-min: 260px;
-        --work-max: 40vh;
-    }
-}
-
-/* Dans la colonne, la liste devient la zone défilante : l'entête et la saisie
-   restent en vue, comme le composeur de la discussion en face. */
-.checkPanelSide .checklist {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
+/* Le fil seul dans son onglet. Le plafond est ce que la fenêtre laisse une fois
+   retiré ce que la popup occupe autour : large plutôt que juste, le surestimer
+   redonnerait un ascenseur à la popup. */
+.chatTab {
+    display: flex;
+    min-height: 350px;
+    max-height: calc(100vh - 260px);
 }
 
 /* ------------------------------------------------------------------ frise */
@@ -1335,14 +1521,23 @@
     position: absolute;
     inset: var(--space-sm) 0 auto 0;
     pointer-events: none;
-    /* Une ligne par jour, toujours : un motif de fond dont la largeur de tuile est
-       posée en ligne (`backgroundSize`). Un dégradé plutôt que N éléments, le pas
-       est exact et une frise d'un an ne coûte pas 365 nœuds. */
-    background-image: linear-gradient(
-        to right,
-        color-mix(in srgb, var(--glass-border) 55%, transparent) 0 1px,
-        transparent 1px
-    );
+    /* Deux motifs de fond plutôt que N éléments : une ligne par jour, et la teinte
+       du week-end, de période sept jours, calée sur le lundi par `--week-shift`
+       (le rang du premier jour dans sa semaine, en négatif). Les pas sont exacts et
+       une frise d'un an ne coûte pas 365 nœuds. */
+    background-image:
+        linear-gradient(to right, color-mix(in srgb, var(--glass-border) 55%, transparent) 0 1px, transparent 1px),
+        linear-gradient(
+            to right,
+            transparent 0 calc(var(--day-w) * 5),
+            color-mix(in srgb, var(--text-muted) 8%, transparent) calc(var(--day-w) * 5)
+        );
+    background-size:
+        var(--day-w) 100%,
+        calc(var(--day-w) * 7) 100%;
+    background-position:
+        0 0,
+        calc(var(--day-w) * var(--week-shift)) 0;
 }
 
 .gridLine,
@@ -1464,12 +1659,45 @@
     position: relative;
 }
 
-/* Préfixée aussi : `.row` est déjà la ligne de formulaire, plus haut. */
+/* Préfixée aussi : `.row` est déjà la ligne de formulaire, plus haut. Sa ligne lui
+   vient d'une translation posée en ligne : c'est elle qui glisse quand l'ordre
+   change, sans mise en page. */
 .tlRow {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    transition: transform var(--transition-fast);
+}
+
+.tlDays {
     position: relative;
+    font-size: 0.62rem;
+    line-height: 16px;
+    pointer-events: none;
+}
+
+.tlDay {
+    position: absolute;
+    top: 0;
+    text-align: center;
+    color: var(--text-secondary);
+}
+
+.tlDayOff {
+    composes: tlDay;
+    color: var(--text-muted);
+}
+
+.tlDayToday {
+    composes: tlDay;
+    color: var(--accent);
+    font-weight: 700;
 }
 
 .bar {
+    --stack-ring: 1px;
+
     position: absolute;
     top: 50%;
     transform: translateY(-50%);
@@ -1824,12 +2052,6 @@
     padding: var(--space-sm) var(--space-md);
 }
 
-/* L'entête de l'encart, jumelle de celle des sous-tâches : intitulé à gauche,
-   décompte calé à droite. */
-.chatHead {
-    composes: checkHead;
-}
-
 /*
  * Le fil, seule zone défilante de l'encart. `min-height: 0` et non une valeur en
  * pixels : l'encart ayant une hauteur bornée, ce qui reste après l'entête et le
@@ -2029,7 +2251,7 @@
 /* `resize: none` : la hauteur appartient au contenu, et une poignée donnerait deux
    autorités concurrentes sur la même valeur. `overflow: hidden` parce que le
    défilement appartient au conteneur. */
-.composer .textarea {
+.grow > .textarea {
     resize: none;
     overflow: hidden;
 }
@@ -2351,6 +2573,9 @@
 
 .dashGrid {
     position: relative;
+    /* La popup change de largeur sans que la fenêtre bouge : c'est la grille qui
+       dit si une tuile large a la place de l'être, une media query mentirait. */
+    container-type: inline-size;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: var(--space-md);
@@ -2365,6 +2590,221 @@
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-lg);
     background: var(--surface-subtle);
+}
+
+/* Deux pistes de 220 px et leur écart : en deçà la grille n'en a qu'une, qu'une
+   tuile large déborderait. Jamais de remplissage `dense` : le glissé lit les
+   rangées dans l'ordre du DOM, qui doit rester l'ordre visible. */
+@container (min-width: 456px) {
+    .dashTile[data-size='wide'] {
+        grid-column: span 2;
+    }
+}
+
+.dashTileBody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    min-width: 0;
+}
+
+/* Aucune tranche translucide : derrière la popup il y a un fond d'écran, dont une
+   couleur à demi transparente prendrait la teinte. `--step` est la part d'accent. */
+.dashStack {
+    display: flex;
+    gap: 2px;
+    height: 10px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    overflow: hidden;
+}
+
+.dashStackSlice,
+.dashLegendDot {
+    background: color-mix(in srgb, var(--accent) calc(var(--step) * 1%), var(--surface-popup-solid));
+}
+
+.dashStackSlice {
+    flex: 0 0 auto;
+    min-width: 3px;
+}
+
+.dashStackSlice[data-done],
+.dashLegendDot[data-done] {
+    background: var(--success);
+}
+
+.dashLegend {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+    gap: var(--space-xs) var(--space-md);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.dashLegendItem {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    min-width: 0;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+.dashLegendDot {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-pill);
+}
+
+.dashLegendCount {
+    flex: 0 0 auto;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.dashRows {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.dashRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    width: 100%;
+    min-width: 0;
+    padding: 4px var(--space-xs);
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 0.8rem;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+}
+
+.dashRow:hover,
+.dashRow:focus-visible {
+    outline: none;
+    background: var(--glass-bg-light);
+}
+
+/* Centrée sur la ligne : la pastille de priorité porte ailleurs une marge qui
+   l'aligne sur la première ligne d'un titre. */
+.dashRow .priority {
+    margin-top: 0;
+}
+
+.dashRowName {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.dashChip {
+    flex: 0 0 auto;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.dashChipWarn {
+    composes: dashChip;
+    color: var(--warning);
+}
+
+.dashChipDanger {
+    composes: dashChip;
+    color: var(--danger);
+}
+
+.dashLoad {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    min-width: 0;
+    padding: 3px var(--space-xs);
+    font-size: 0.8rem;
+}
+
+.dashLoadName {
+    flex: 0 1 9rem;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--text-primary);
+}
+
+.dashLoadName[data-muted] {
+    color: var(--text-muted);
+}
+
+.dashMeter {
+    display: block;
+    flex: 1 1 4rem;
+    height: 6px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    overflow: hidden;
+}
+
+.dashMeterFill {
+    display: block;
+    height: 100%;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    transition: width var(--transition-normal);
+}
+
+.dashMeterFill[data-muted] {
+    background: var(--text-muted);
+}
+
+.dashLink {
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.dashLink:hover,
+.dashLink:focus-visible {
+    outline: none;
+    text-decoration: underline;
+}
+
+.dashStart {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    padding: var(--space-lg);
+    border: 1px dashed var(--glass-border-strong);
+    border-radius: var(--radius-lg);
+}
+
+.dashStartTitle {
+    margin: 0;
+    font-weight: 600;
+    color: var(--text-primary);
 }
 
 /* Estompée pendant son propre glissé, comme les cartes du tableau. */

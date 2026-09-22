@@ -51,7 +51,6 @@ declare const styles: {
     readonly folderRowSelected: string;
     readonly folderScroll: string;
     readonly folderTree: string;
-    readonly folderUnread: string;
     readonly form: string;
     readonly formRow: string;
     readonly headline: string;

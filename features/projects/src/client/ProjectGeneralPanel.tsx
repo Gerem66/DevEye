@@ -10,6 +10,7 @@ import {
     SaveButton,
     SelectInput,
     settingsStyles as shell,
+    Switch,
     TextInput,
     useWorkspacePermissions,
     withSecrecy,
@@ -45,6 +46,7 @@ function draftOf(project: Project): ProjectDraft {
         description: project.description,
         tags: project.tags,
         status: project.status,
+        showOverview: project.showOverview,
         startDate: project.startDate,
         dueDate: project.dueDate
     };
@@ -328,6 +330,14 @@ export default function ProjectGeneralPanel({ scope, canWrite, gone }: SettingsP
                     </ul>
                 )}
             </div>
+
+            <Switch
+                checked={draft.showOverview}
+                disabled={!editable}
+                label='Afficher la vue d’ensemble'
+                hint='Son onglet ouvre le projet et résume l’avancement, les échéances et la charge de chacun. Sans elle, le projet s’ouvre sur son Tableau ; les indicateurs déjà posés restent enregistrés.'
+                onChange={(showOverview) => set({ showOverview })}
+            />
 
             {canManage ? (
                 <div className={shell.sectionActions}>

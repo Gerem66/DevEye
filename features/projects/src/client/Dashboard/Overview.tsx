@@ -16,7 +16,8 @@ import {
     useWorkspacePermissions
 } from 'deveye-sdk-client';
 
-import { api } from '../api';
+import { api, relativeAgo } from '../api';
+import type { ProjectTabId } from '../tabs';
 import {
     DUE_SOON_DAYS,
     KPI_STALE_SECONDS,
@@ -35,6 +36,7 @@ import {
     type TileFeature
 } from './catalogue';
 import { KpiDialog } from './KpiDialog';
+import { TaskTileBody } from './TaskTiles';
 import { taskStats } from './taskStats';
 import { Tile } from './Tile';
 import styles from '../style.module.css';
@@ -66,14 +68,7 @@ interface Summarizer {
 const EMPTY_LINKS: DashboardLinks = { git: [], database: [], audience: [], deploy: [], uptime: [] };
 
 function formatAgo(at: number | null): string {
-    if (at === null) return 'jamais mesuré';
-    const seconds = Math.max(0, Math.floor(Date.now() / 1000) - at);
-    if (seconds < 60) return 'mesuré à l’instant';
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `mesuré il y a ${minutes} min`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `mesuré il y a ${hours} h`;
-    return `mesuré il y a ${Math.floor(hours / 24)} j`;
+    return at === null ? 'jamais mesuré' : `mesuré ${relativeAgo(at)}`;
 }
 
 interface OverviewProps {
@@ -82,10 +77,23 @@ interface OverviewProps {
     cards: readonly ProjectCard[];
     milestones: readonly ProjectMilestone[];
     deps: readonly ProjectCardDep[];
+    meUserId: number;
     canWrite: boolean;
+    onOpenCard: (card: ProjectCard) => void;
+    onOpenTab: (tab: ProjectTabId) => void;
 }
 
-export function Overview({ project, columns, cards, milestones, deps, canWrite }: OverviewProps) {
+export function Overview({
+    project,
+    columns,
+    cards,
+    milestones,
+    deps,
+    meUserId,
+    canWrite,
+    onOpenCard,
+    onOpenTab
+}: OverviewProps) {
     const permissions = useWorkspacePermissions();
     const boardVersion = useResourceVersion('projects.board');
 
@@ -119,13 +127,21 @@ export function Overview({ project, columns, cards, milestones, deps, canWrite }
 
     const catalogue = useMemo(() => dashboardCatalogue(project, links), [project, links]);
     const arranged = useMemo(() => arrangeTiles(catalogue, tiles), [catalogue, tiles]);
-    const visible = arranged.filter((t) => !t.hidden);
-    const hidden = arranged.filter((t) => t.hidden);
-
     const stats = useMemo(
-        () => taskStats(columns, cards, milestones, deps, Math.floor(Date.now() / 1000)),
-        [columns, cards, milestones, deps]
+        () => taskStats(columns, cards, milestones, deps, meUserId, Math.floor(Date.now() / 1000)),
+        [columns, cards, milestones, deps, meUserId]
     );
+
+    /**
+     * Un projet sans tâche ni jalon : six tuiles de zéros n'apprendraient rien, un
+     * seul bloc les remplace. Elles gardent leur rang, `persist` travaillant sur
+     * `arranged` ; seul ce qui se dessine est filtré, et le glissé avec, qui ne
+     * connaît que les boîtes rendues.
+     */
+    const barren = stats.total === 0 && milestones.length === 0;
+    const drawn = arranged.filter((t) => !(barren && t.spec.kind === 'tasks'));
+    const visible = drawn.filter((t) => !t.hidden);
+    const hidden = drawn.filter((t) => t.hidden);
 
     /*
      * Les droits en une chaîne, et non l'objet de `useWorkspacePermissions` :
@@ -194,7 +210,8 @@ export function Overview({ project, columns, cards, milestones, deps, canWrite }
         onReorder: (keys) => {
             const byKey = new Map(arranged.map((t) => [t.spec.key, t]));
             const reordered = (keys as string[]).flatMap((key) => byKey.get(key) ?? []);
-            void persist([...reordered, ...hidden]);
+            const kept = new Set(reordered.map((t) => t.spec.key));
+            void persist([...reordered, ...arranged.filter((t) => !kept.has(t.spec.key))]);
         }
     });
 
@@ -230,69 +247,64 @@ export function Overview({ project, columns, cards, milestones, deps, canWrite }
         };
 
         if (spec.kind === 'tasks') {
-            if (spec.key === 'tasks.counts') {
-                return (
-                    <Tile
-                        key={spec.key}
-                        {...common}
-                        title='Tâches'
-                        metrics={[
-                            { key: 'open', label: 'ouvertes', value: String(stats.open) },
-                            { key: 'done', label: 'terminées', value: String(stats.done), tone: 'good' },
-                            { key: 'blocked', label: 'bloquées', value: String(stats.blocked), tone: 'warn' }
-                        ]}
-                        note={stats.total === 0 ? 'Aucune tâche sur ce tableau.' : null}
-                    />
-                );
-            }
-            if (spec.key === 'tasks.due') {
-                return (
-                    <Tile
-                        key={spec.key}
-                        {...common}
-                        title='Échéances'
-                        metrics={[
+            const next = stats.nextMilestone;
+            const metrics =
+                spec.key === 'tasks.progress'
+                    ? [
+                          {
+                              key: 'percent',
+                              label: 'terminé',
+                              value: `${stats.percentDone} %`,
+                              tone: 'accent' as const
+                          },
+                          { key: 'done', label: 'terminées', value: `${stats.done} / ${stats.total}` }
+                      ]
+                    : spec.key === 'tasks.due'
+                      ? [
                             {
                                 key: 'overdue',
                                 label: 'dépassées',
                                 value: String(stats.overdue),
-                                tone: stats.overdue > 0 ? 'bad' : 'neutral'
+                                tone: stats.overdue > 0 ? ('bad' as const) : ('neutral' as const)
                             },
                             {
                                 key: 'soon',
                                 label: `dans ${DUE_SOON_DAYS} jours`,
                                 value: String(stats.dueSoon),
-                                tone: stats.dueSoon > 0 ? 'warn' : 'neutral'
+                                tone: stats.dueSoon > 0 ? ('warn' as const) : ('neutral' as const)
                             },
                             { key: 'undated', label: 'sans date', value: String(stats.undated) }
-                        ]}
-                    />
-                );
-            }
-            const next = stats.nextMilestone;
+                        ]
+                      : spec.key === 'tasks.milestone' && next !== null
+                        ? [
+                              {
+                                  key: 'days',
+                                  label: next.name,
+                                  value: `J-${Math.max(0, Math.ceil((next.dueDate - now) / 86400))}`
+                              }
+                          ]
+                        : [];
             return (
                 <Tile
                     key={spec.key}
                     {...common}
-                    title='Prochain jalon'
-                    metrics={
-                        next === null
-                            ? []
-                            : [
-                                  {
-                                      key: 'days',
-                                      label: next.name,
-                                      value: `J-${Math.max(0, Math.ceil((next.dueDate - now) / 86400))}`
-                                  }
-                              ]
-                    }
-                    note={next === null ? 'Aucun jalon à venir.' : null}
+                    title={spec.title}
+                    size={spec.size}
+                    metrics={metrics}
                     unavailable={
-                        stats.lateMilestones > 0
+                        spec.key === 'tasks.milestone' && stats.lateMilestones > 0
                             ? `${stats.lateMilestones} jalon(s) ont laissé passer leur date.`
                             : null
                     }
-                />
+                >
+                    <TaskTileBody
+                        tileKey={spec.key}
+                        stats={stats}
+                        now={now}
+                        onOpenCard={onOpenCard}
+                        onOpenTab={onOpenTab}
+                    />
+                </Tile>
             );
         }
 
@@ -378,6 +390,19 @@ export function Overview({ project, columns, cards, milestones, deps, canWrite }
     return (
         <div className={styles.dashboard}>
             {error && <p className={styles.error}>{error}</p>}
+
+            {barren && (
+                <section className={styles.dashStart}>
+                    <p className={styles.dashStartTitle}>Ce projet n’a pas encore de tâche</p>
+                    <p className={styles.dashTileNote}>
+                        La vue d’ensemble se remplit toute seule dès la première : avancement, échéances, charge de
+                        chacun.
+                    </p>
+                    <Button icon='projects' onClick={() => onOpenTab('board')}>
+                        Ouvrir le Tableau
+                    </Button>
+                </section>
+            )}
 
             <div ref={drag.listRef} className={styles.dashGrid}>
                 {visible.map(renderTile)}

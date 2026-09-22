@@ -34,6 +34,7 @@ const EMPTY: ProjectDraft = {
     description: '',
     tags: [],
     status: 'active',
+    showOverview: true,
     startDate: null,
     dueDate: null
 };
