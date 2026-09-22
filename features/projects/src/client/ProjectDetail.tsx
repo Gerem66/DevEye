@@ -118,6 +118,12 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
     /** Les colonnes qui valent « terminé » : la frise y lit ses tâches en vert. */
     const doneColumnIds = useMemo(() => new Set(columns.filter((c) => c.countsAsDone).map((c) => c.id)), [columns]);
 
+    /** Les dates des jalons, sauf celui qu'on édite : un jour n'en porte qu'un. */
+    const otherMilestoneDates = useMemo(
+        () => new Set(milestones.filter((m) => m.id !== milestoneDialog?.milestone?.id).map((m) => m.dueDate)),
+        [milestones, milestoneDialog]
+    );
+
     const version = useResourceVersion('projects.board');
     const reloadRef = useRef<Promise<void> | null>(null);
 
@@ -644,6 +650,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                 open={milestoneDialog !== null}
                 milestone={milestoneDialog?.milestone ?? null}
                 dueDate={milestoneDialog?.dueDate}
+                takenDates={otherMilestoneDates}
                 canPlan={rights.canPlan}
                 busy={busy}
                 error={dialogError}

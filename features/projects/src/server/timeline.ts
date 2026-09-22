@@ -105,6 +105,25 @@ function reaches(deps: ProjectCardDepRow[], from: number, target: number): boole
     return false;
 }
 
+/**
+ * Un jalon par jour : deux jalons à la même date se superposeraient trait pour
+ * trait sur la frise, et l'un cacherait l'autre.
+ */
+async function assertMilestoneDateFree(
+    ctx: Ctx,
+    project: ProjectRow,
+    dueDate: number,
+    exceptId?: number
+): Promise<void> {
+    const taken = await ctx.repo.plan.milestoneDateTaken({
+        projectId: project.id,
+        workspaceId: project.workspace_id,
+        dueDate,
+        exceptId
+    });
+    if (taken) throw new FeatureError('conflict', 'Un jalon occupe déjà cette date.');
+}
+
 export const projectPlanFeature = defineSdkFeature({
     ...projectPlan,
     handler: async (ctx: Ctx, input) => {
@@ -135,6 +154,8 @@ export const projectMilestoneAddFeature = defineSdkFeature({
         const project = await loadProject(ctx, input.projectId, 'write');
         await assertProjectUnlocked(ctx, project);
 
+        await assertMilestoneDateFree(ctx, project, input.milestone.dueDate);
+
         const cipher = await projectCipher(ctx, project);
         const payload = { name: input.milestone.name, description: input.milestone.description };
         const row = await ctx.repo.plan.createMilestone({
@@ -154,6 +175,7 @@ export const projectMilestoneUpdateFeature = defineSdkFeature({
     handler: async (ctx: Ctx, input) => {
         const { project } = await loadMilestone(ctx, input.milestoneId, 'write');
         await assertProjectUnlocked(ctx, project);
+        await assertMilestoneDateFree(ctx, project, input.milestone.dueDate, input.milestoneId);
 
         const cipher = await projectCipher(ctx, project);
         const payload = { name: input.milestone.name, description: input.milestone.description };

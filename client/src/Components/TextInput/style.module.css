@@ -17,6 +17,10 @@
     border: 1px solid var(--input-border);
     border-radius: var(--radius-sm);
     outline: none;
+    /* `color-scheme` et non une surcharge de `::-webkit-calendar-picker-indicator` :
+       l'application est sombre de bout en bout, et c'est ce qui donne leur teinte
+       claire à tous les rouages natifs du champ, la pastille du calendrier comprise. */
+    color-scheme: dark;
     transition:
         border-color var(--transition-fast),
         background-color var(--transition-fast);

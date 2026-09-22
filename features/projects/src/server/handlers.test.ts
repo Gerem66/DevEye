@@ -583,6 +583,14 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                     .filter((m) => m.project_id === projectId && m.workspace_id === ws)
                     .sort((a, b) => a.due_date - b.due_date || a.id - b.id),
             findMilestone: async (id) => findAny(rows.milestones, id),
+            milestoneDateTaken: async ({ projectId, workspaceId, dueDate, exceptId }) =>
+                rows.milestones.some(
+                    (m) =>
+                        m.project_id === projectId &&
+                        m.workspace_id === workspaceId &&
+                        m.due_date === dueDate &&
+                        m.id !== exceptId
+                ),
             async createMilestone(input) {
                 const row: ProjectMilestoneRow = {
                     id: ++seq,

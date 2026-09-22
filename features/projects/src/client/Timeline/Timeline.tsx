@@ -253,6 +253,9 @@ export function Timeline({
 
     const ticks = useMemo(() => timelineTicks(range.min, range.max, dayWidth), [range, dayWidth]);
 
+    /** Un jalon par jour : celui qu'on pose enjambe les dates déjà tenues. */
+    const milestoneDates = useMemo(() => new Set(milestones.map((m) => m.dueDate)), [milestones]);
+
     const dropRef = useRef<HTMLDetailsElement>(null);
     const {
         view: drag,
@@ -268,7 +271,8 @@ export function Timeline({
         dropRef,
         onCommit: onCardDates,
         onCreate: (startDate, dueDate) => onCardCreate({ startDate, dueDate }),
-        onCreateMilestone: (dueDate) => onMilestoneCreate(dueDate)
+        onCreateMilestone: (dueDate) => onMilestoneCreate(dueDate),
+        takenMilestoneDates: milestoneDates
     });
     // Saisir le fond de la frise la fait défiler, tant qu'aucun autre geste ne
     // tient le pointeur.

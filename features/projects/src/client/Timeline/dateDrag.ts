@@ -68,6 +68,11 @@ interface Options {
     onCreate: (startDate: number, dueDate: number) => void;
     /** Ouvre la création d'un jalon à la date du dépôt. */
     onCreateMilestone: (dueDate: number) => void;
+    /**
+     * Les dates déjà tenues par un jalon, en secondes : un jalon déposé les
+     * enjambe, deux traits au même jour se cacheraient l'un l'autre.
+     */
+    takenMilestoneDates: ReadonlySet<number>;
 }
 
 /** En deçà, c'est encore un clic : la carte s'ouvre au lieu de bouger. */
@@ -75,6 +80,9 @@ const DRAG_THRESHOLD = 3;
 
 /** Le clic que le navigateur émet au relâchement suit celui-ci de quelques millisecondes. */
 const CLICK_AFTER_DRAG_MS = 300;
+
+/** Jusqu'où s'écarter d'un jour occupé pour poser un jalon. */
+const FREE_DAY_REACH = 60;
 
 /**
  * Décale une date d'un nombre de jours calendaires, en heure locale, et non de
@@ -131,6 +139,23 @@ function samePreview(a: DatePreview | null, b: DatePreview | null): boolean {
     return a.startDate === b.startDate && a.dueDate === b.dueDate;
 }
 
+/**
+ * La date libre la plus proche du jour visé, en s'écartant d'un jour à la fois,
+ * le suivant d'abord : un jalon déposé sur un jour pris se range à côté plutôt
+ * que de disparaître sous son voisin. `null` quand tout est pris à portée, ce
+ * qui n'arrive qu'avec plus de jalons que de jours de recherche.
+ */
+function freeDay(first: number, day: number, taken: ReadonlySet<number>): number | null {
+    for (let step = 0; step <= FREE_DAY_REACH; step++) {
+        for (const at of step === 0
+            ? [shiftDays(first, day)]
+            : [shiftDays(first, day + step), shiftDays(first, day - step)]) {
+            if (!taken.has(at)) return at;
+        }
+    }
+    return null;
+}
+
 /** Le pointeur est-il dans cette boîte ? */
 function inside(el: HTMLElement | null, clientX: number, clientY: number): boolean {
     if (!el) return false;
@@ -146,7 +171,8 @@ export function useDateDrag({
     dropRef,
     onCommit,
     onCreate,
-    onCreateMilestone
+    onCreateMilestone,
+    takenMilestoneDates
 }: Options) {
     const [view, setView] = useState<DragView | null>(null);
 
@@ -175,8 +201,28 @@ export function useDateDrag({
 
     // Les valeurs changeantes passent par des `ref` : les cinq écouteurs sont
     // créés une fois pour toutes, comme dans `dragReorder`.
-    const opts = useRef({ dayWidth, days, rangeMin, scrollRef, dropRef, onCommit, onCreate, onCreateMilestone });
-    opts.current = { dayWidth, days, rangeMin, scrollRef, dropRef, onCommit, onCreate, onCreateMilestone };
+    const opts = useRef({
+        dayWidth,
+        days,
+        rangeMin,
+        scrollRef,
+        dropRef,
+        onCommit,
+        onCreate,
+        onCreateMilestone,
+        takenMilestoneDates
+    });
+    opts.current = {
+        dayWidth,
+        days,
+        rangeMin,
+        scrollRef,
+        dropRef,
+        onCommit,
+        onCreate,
+        onCreateMilestone,
+        takenMilestoneDates
+    };
 
     const handlers = useRef<{
         move: (e: PointerEvent) => void;
@@ -244,8 +290,10 @@ export function useDateDrag({
                     const marker = p.create === 'milestone';
                     const aimed = marker ? Math.round(raw) : Math.floor(raw);
                     const day = Math.min(Math.max(aimed, 0), marker ? span : span - 1);
-                    const at = shiftDays(Math.floor(startOfDay(origin) / 1000), day);
-                    next = { startDate: at, dueDate: at };
+                    const first = Math.floor(startOfDay(origin) / 1000);
+                    const at = marker ? freeDay(first, day, opts.current.takenMilestoneDates) : shiftDays(first, day);
+                    // `null` : aucune date libre à portée, le dépôt n'écrirait rien.
+                    if (at !== null) next = { startDate: at, dueDate: at };
                 }
 
                 const held = latest.current;

@@ -9,6 +9,16 @@ export interface ProjectPlanRepo {
      * l'appelant vérifie avant d'agir. Les écritures prennent le domicile du projet.
      */
     findMilestone(milestoneId: number): Promise<ProjectMilestoneRow | null>;
+    /**
+     * Un autre jalon du projet tient-il déjà cette date ? Deux jalons au même
+     * jour se superposeraient trait pour trait sur la frise.
+     */
+    milestoneDateTaken(input: {
+        projectId: number;
+        workspaceId: number;
+        dueDate: number;
+        exceptId?: number;
+    }): Promise<boolean>;
     createMilestone(input: {
         projectId: number;
         workspaceId: number;
@@ -48,6 +58,15 @@ export function projectPlanRepo(q: SdkQueryable): ProjectPlanRepo {
                 milestoneId
             ]);
             return rows[0] ?? null;
+        },
+        async milestoneDateTaken({ projectId, workspaceId, dueDate, exceptId }) {
+            const rows = await q.query<{ id: number }>(
+                `SELECT id FROM project_milestones
+                 WHERE project_id = ? AND workspace_id = ? AND due_date = ? AND id <> ?
+                 LIMIT 1`,
+                [projectId, workspaceId, dueDate, exceptId ?? 0]
+            );
+            return rows.length > 0;
         },
         async createMilestone({ projectId, workspaceId, dueDate, content }) {
             const next = await q.query<{ next: number }>(

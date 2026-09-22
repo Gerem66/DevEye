@@ -14,6 +14,8 @@ interface MilestoneDialogProps {
     milestone: ProjectMilestone | null;
     /** L'échéance d'un jalon posé sur la frise, à la création. */
     dueDate?: number;
+    /** Les dates des autres jalons du projet : un jour n'en porte qu'un. */
+    takenDates: ReadonlySet<number>;
     /** Sans la planification, le jalon se lit sans pouvoir s'écrire. */
     canPlan: boolean;
     busy: boolean;
@@ -28,6 +30,7 @@ export function MilestoneDialog({
     open,
     milestone,
     dueDate: initialDueDate,
+    takenDates,
     canPlan,
     busy,
     error,
@@ -47,9 +50,11 @@ export function MilestoneDialog({
         setDueDate(dateInputValue(milestone?.dueDate ?? initialDueDate ?? Math.floor(Date.now() / 1000)));
     }, [open, milestone, initialDueDate]);
 
+    const due = dateInputToSeconds(dueDate);
+    const taken = due !== null && takenDates.has(due);
+
     const submit = () => {
-        const due = dateInputToSeconds(dueDate);
-        if (busy || !name.trim() || due === null) return;
+        if (busy || !name.trim() || due === null || taken) return;
         onSubmit({ name: name.trim(), description, dueDate: due });
     };
 
@@ -71,7 +76,7 @@ export function MilestoneDialog({
                     <Button variant='secondary' onClick={onClose} disabled={busy}>
                         Annuler
                     </Button>
-                    <Button onClick={submit} disabled={busy || !canPlan || !name.trim() || !dueDate}>
+                    <Button onClick={submit} disabled={busy || !canPlan || !name.trim() || !dueDate || taken}>
                         {busy ? 'Enregistrement…' : milestone ? 'Enregistrer' : 'Créer'}
                     </Button>
                 </>
@@ -92,6 +97,7 @@ export function MilestoneDialog({
                 <label className={styles.field}>
                     <span className={styles.label}>Échéance</span>
                     <TextInput type='date' value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                    {taken && <span className={styles.error}>Un jalon occupe déjà cette date.</span>}
                 </label>
 
                 <label className={styles.field}>
