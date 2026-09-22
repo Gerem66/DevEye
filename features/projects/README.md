@@ -230,11 +230,21 @@ créer, et c'est aussi le seul endroit où le niveau de confidentialité se
 choisit (voir [Docs/SETTINGS.md](../../Docs/SETTINGS.md)). **Restaurer**, en
 revanche, reste sur la carte archivée : c'est le seul geste de cet écran-là.
 
-**Tableau et Frise réclament la largeur de leur contenu** (`useRequestPopupWidth`
-du barrel client), entre le plancher commun de 1240 px et la fenêtre : un kanban
-de trois colonnes n'a aucune raison de s'étaler jusqu'aux bords. La demande est
-calculée, jamais mesurée : mesurer le `scrollWidth` reviendrait à lire une
-géométrie qui dépend de la largeur qu'on est en train de décider.
+**Le tableau et la barre d'onglets réclament la largeur de leur contenu**
+(`useRequestPopupWidth` du barrel client), entre le plancher commun de 1240 px et
+la fenêtre : un kanban de trois colonnes n'a aucune raison de s'étaler jusqu'aux
+bords. La demande est calculée, jamais mesurée : mesurer le `scrollWidth`
+reviendrait à lire une géométrie qui dépend de la largeur qu'on est en train de
+décider.
+
+**La frise, elle, réclame tout ce que la fenêtre accorde** : sa fenêtre de temps se
+déduit de la place offerte, donc chaque pixel de plus est une journée de plus sous
+les yeux. Et elle se dessine sur la largeur que la popup **vise**, pas sur celle
+qu'elle a (`popupTargetWidth`) : la popup s'élargit par une transition CSS de
+400 ms, et une frise recalculée à chaque image de cette transition rouvre sa
+fenêtre de temps quarante fois de suite — tout son contenu glisse sous les yeux
+pendant que le cadre grandit. Dessinée sur la cible, elle est juste dès la première
+image et le cadre ne fait que la découvrir.
 
 Le fil de discussion vit **dans la carte** : messages en direct, groupement par
 auteur, « X est en train d'écrire… », badge de non-lus sur le kanban et la frise.
@@ -247,6 +257,14 @@ sans date sont des pastilles, dans un repli. Le geste va dans les deux sens :
 une barre d'un jour aussitôt étirable ; **une barre se ramène sur la zone des
 pastilles** et y perd ses dates. Rien n'attend la popup, et rien ne part avant
 le relâchement : pendant le geste, seul un aperçu local bouge.
+
+**Le fond, lui, fait défiler** (`Timeline/pan.ts`) : on saisit la frise et elle
+suit le pointeur au pixel, comme une carte. Le geste ne part que du vide, c'est-à-dire
+d'un point où aucun bouton ne réclame le pointeur (une barre, un jalon) : l'ancêtre
+interactif de la cible décide, pas la cible elle-même, une barre portant un libellé
+et une pile d'avatars. À la souris seulement, le doigt ayant déjà le défilement
+natif de la boîte, et le curseur de préhension n'apparaît que quand il y a
+effectivement de quoi défiler.
 
 Trois détails qui ne se devinent pas, dans `Timeline/dateDrag.ts` :
 
@@ -264,6 +282,15 @@ Trois détails qui ne se devinent pas, dans `Timeline/dateDrag.ts` :
 
 La frise se dessine désormais même sans aucune carte datée, dès qu'il reste une
 pastille : sans elle, le geste n'aurait nulle part où atterrir.
+
+Le zoom règle une **durée visible** et non une densité de pixels
+(`Timeline/scale.ts`) : c'est la place offerte qui en déduit la largeur d'un jour.
+**L'échelle d'ouverture est un réglage du projet** (`timelineZoom`, onglet Général,
+sous l'interrupteur de la frise), et vaut « Semaine » par défaut : c'est la seule
+échelle où les dates se lisent au jour et où une lisière se saisit sans viser, les
+autres servant à situer. Elle vit dans le corps chiffré du projet, avec le profil :
+aucune requête ne la lit. La barre de la frise en change pour le temps de la
+visite, sans réécrire le réglage.
 
 ### Six droits, dont cinq découpent l'écriture
 

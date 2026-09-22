@@ -3,18 +3,21 @@ import { Button, useLiveOutlines, useRequestPopupWidth } from 'deveye-sdk-client
 import { formatDate } from '../api';
 import type { ProjectCard, ProjectCardDep, ProjectMilestone } from '../../contracts/domain';
 import { MemberStack } from '../Member';
-import { timelineNaturalWidth } from '../Board/width';
 import {
     DAY_LETTER_MIN_WIDTH,
+    DAY_LINE_MIN_WIDTH,
     DAY_MS,
     startOfDay,
     timelineTicks,
     WEEKDAY_LETTERS,
     weekdayIndex,
+    zoomWindow,
     ZOOM_LEVELS,
     type ZoomId
 } from './scale';
+import { popupTargetWidth, TIMELINE_WIDTH_REQUEST } from '../Board/width';
 import { modeAt, useDateDrag } from './dateDrag';
+import { useTimelinePan } from './pan';
 import styles from '../style.module.css';
 
 /** Hauteur d'une ligne, en px. Fixe : c'est ce qui rend les flèches calculables
@@ -31,13 +34,6 @@ const HEAD_H = 44;
 const DAYS_H = 16;
 /** En deçà, la pile d'avatars mangerait le titre de la barre. */
 const STACK_MIN_BAR_WIDTH = 56;
-
-/**
- * Étirement maximal, en px par jour : sans plafond, une fenêtre courte sur un
- * grand écran donnerait des journées de 200 px et des barres illisibles. Une
- * popup ordinaire remplit sa largeur bien avant de l'atteindre.
- */
-const MAX_STRETCH_DAY_WIDTH = 96;
 
 /** Rayon des coudes du tracé de dépendance, et repli quand rien ne suit. */
 const DEP_RADIUS = 8;
@@ -70,6 +66,8 @@ function depPath(x1: number, y1: number, x2: number, y2: number, mid: number): s
 }
 
 interface TimelineProps {
+    /** L'échelle sur laquelle la frise s'ouvre, réglée par le projet. */
+    defaultZoom: ZoomId;
     cards: ProjectCard[];
     milestones: ProjectMilestone[];
     deps: ProjectCardDep[];
@@ -96,6 +94,7 @@ interface TimelineProps {
  * par la popup.
  */
 export function Timeline({
+    defaultZoom,
     cards,
     milestones,
     deps,
@@ -106,24 +105,33 @@ export function Timeline({
     onMilestoneCreate,
     onMilestoneOpen
 }: TimelineProps) {
-    const [zoom, setZoom] = useState<ZoomId>('month');
-    const zoomDayWidth = ZOOM_LEVELS.find((z) => z.id === zoom)?.dayWidth ?? 10;
+    // Le réglage du projet donne l'échelle d'ouverture ; la barre la change pour
+    // le temps de la visite, sans la réécrire.
+    const [zoom, setZoom] = useState<ZoomId>(defaultZoom);
     // `l3` : l'onglet du projet occupe `l2` (voir `ProjectDetail`).
     const outlineFor = useLiveOutlines('l3');
 
+    // La frise prend toute la largeur que la fenêtre accorde : c'est elle qui
+    // décide de la durée visible.
+    useRequestPopupWidth(TIMELINE_WIDTH_REQUEST);
+
     /**
-     * La largeur offerte, mesurée : elle ne découle d'aucune donnée, c'est la
-     * popup qui la décide. Elle sert à étirer une frise plus courte que sa
-     * boîte, jamais à la calculer, ce qui bouclerait.
+     * La largeur offerte : elle ne découle d'aucune donnée, c'est la popup qui la
+     * décide. C'est elle qui déduit la largeur d'un jour de la durée visible,
+     * jamais l'inverse, ce qui bouclerait. Celle que la popup VISE et non celle
+     * qu'elle a, pour ne pas refaire la fenêtre de temps à chaque image de son
+     * élargissement (voir `popupTargetWidth`) : l'observateur dit quand relire, la
+     * valeur vient de la cible.
      */
     const scrollRef = useRef<HTMLDivElement>(null);
     const [avail, setAvail] = useState(0);
     useLayoutEffect(() => {
         const el = scrollRef.current;
         if (!el) return;
-        const ro = new ResizeObserver(([entry]) => setAvail(entry.contentRect.width));
+        const measure = () => setAvail(popupTargetWidth(el));
+        const ro = new ResizeObserver(measure);
         ro.observe(el);
-        setAvail(el.clientWidth);
+        measure();
         return () => ro.disconnect();
     }, []);
 
@@ -136,52 +144,57 @@ export function Timeline({
     const undated = useMemo(() => cards.filter((c) => c.startDate === null && c.dueDate === null), [cards]);
 
     /**
-     * La fenêtre couverte, en **jours entiers**.
-     *
-     * Bornée à minuit des deux côtés : la frise est une grille de journées, une
-     * fenêtre qui s'arrêterait à 14 h 37 (l'instant du dernier point) décalerait
-     * toutes les lignes d'une fraction de jour et rendrait la dernière colonne
-     * plus étroite que les autres, sans raison lisible.
+     * Ce que le zoom ouvre : une durée visible, ancrée sur aujourd'hui au tiers,
+     * et la largeur de jour qui la fait tenir dans la boîte. Rien ici ne dépend
+     * des dates des tâches : « Semaine » montre une semaine, qu'une tâche traîne
+     * en septembre ou non.
+     */
+    const view = useMemo(() => zoomWindow(zoom, avail, Date.now()), [zoom, avail]);
+
+    /**
+     * La fenêtre dessinée, en **jours entiers** : celle du zoom, élargie à ce
+     * que les tâches et les jalons couvrent, pour qu'on puisse défiler jusqu'à
+     * eux. Bornée à minuit des deux côtés, la frise étant une grille de journées :
+     * une fenêtre qui s'arrêterait à 14 h 37 décalerait toutes les lignes d'une
+     * fraction de jour.
      */
     const range = useMemo(() => {
-        const points: number[] = [];
+        const points: number[] = [view.start, view.start + view.days * DAY_MS];
         for (const c of dated) {
             if (c.startDate !== null) points.push(c.startDate * 1000);
             if (c.dueDate !== null) points.push(c.dueDate * 1000);
         }
         for (const m of milestones) points.push(m.dueDate * 1000);
-        points.push(Date.now());
         // Deux jours de marge à gauche, trois à droite (le dernier jour compte
-        // pour lui-même). Au moins dix-huit jours en tout, sinon une frise à une
-        // seule carte s'écrase sur un trait.
+        // pour lui-même) : une barre posée au bord touche sinon le cadre.
         const min = startOfDay(Math.min(...points)) - 2 * DAY_MS;
         const last = startOfDay(Math.max(...points));
-        const days = Math.max(Math.round((last - min) / DAY_MS) + 3, 18);
+        const days = Math.round((last - min) / DAY_MS) + 3;
         return { min, days, max: min + days * DAY_MS };
-    }, [dated, milestones]);
+    }, [dated, milestones, view]);
 
     const days = range.days;
-    /** Ce que le zoom choisi réclame, indépendamment de la place disponible. */
-    const naturalWidth = days * zoomDayWidth;
-
-    // La largeur NATURELLE, tirée de la fenêtre et du zoom : changer de zoom
-    // fait suivre la popup. Jamais la largeur étirée, qui dépend de la popup et
-    // ferait boucler la demande sur sa réponse.
-    useRequestPopupWidth(timelineNaturalWidth(naturalWidth));
-
-    /**
-     * Le jour en pixels, place disponible comprise : une fenêtre plus courte que
-     * la boîte étire ses journées pour l'occuper, jusqu'au plafond ; une frise
-     * plus longue défile.
-     *
-     * Un entier, sans quoi la frise dépasse sa boîte de quelques dixièmes de
-     * pixel (ascenseur horizontal fantôme) et les lignes de grille tombent
-     * entre deux pixels.
-     */
-    const dayWidth = avail > naturalWidth ? Math.min(Math.floor(avail / days), MAX_STRETCH_DAY_WIDTH) : zoomDayWidth;
+    const dayWidth = view.dayWidth;
     const width = days * dayWidth;
 
     const x = (t: number) => ((t - range.min) / DAY_MS) * dayWidth;
+
+    /**
+     * La fenêtre du zoom amenée sous les yeux, et elle seule : changer de zoom
+     * repose la vue sur aujourd'hui, un défilement à la main la laisse où elle
+     * est. La clé retient ce qui a déjà été calé, sinon le moindre re-rendu
+     * ramènerait la frise au tiers sous le pointeur.
+     */
+    const anchored = useRef<string | null>(null);
+    useLayoutEffect(() => {
+        const el = scrollRef.current;
+        if (!el || avail === 0) return;
+        const key = `${zoom}:${Math.round(dayWidth)}:${range.min}`;
+        if (anchored.current === key) return;
+        anchored.current = key;
+        el.scrollLeft = Math.max(0, ((view.start - range.min) / DAY_MS) * dayWidth);
+    }, [zoom, dayWidth, avail, view.start, range.min]);
+
     const ticks = useMemo(() => timelineTicks(range.min, range.max, dayWidth), [range, dayWidth]);
 
     const dropRef = useRef<HTMLDetailsElement>(null);
@@ -198,6 +211,10 @@ export function Timeline({
         dropRef,
         onCommit: onCardDates
     });
+    // Saisir le fond de la frise la fait défiler, tant qu'aucun autre geste ne
+    // tient le pointeur.
+    const pan = useTimelinePan(scrollRef, drag === null);
+
     /** La pastille en vol : la carte tenue, qui n'a de ligne que sur un jour de la frise. */
     const placing = drag?.placing ? drag : null;
     /** La barre tenue est au-dessus de la zone sans date : elle va les perdre. */
@@ -298,7 +315,16 @@ export function Timeline({
                 )}
             </div>
 
-            <div className={styles.timelineScroll} ref={scrollRef}>
+            {/* `data-pannable` seulement quand il y a de quoi défiler : un curseur
+                de préhension sur une frise qui tient dans sa boîte promet un geste
+                sans effet. */}
+            <div
+                className={styles.timelineScroll}
+                ref={scrollRef}
+                data-pannable={width > avail ? '' : undefined}
+                data-panning={pan.panning ? '' : undefined}
+                onPointerDown={pan.onPointerDown}
+            >
                 <div className={styles.timelineInner} style={{ width }}>
                     {/* Graduations + jalons : une seule couche de fond, sous les
                         barres. Les lignes quotidiennes sont le fond lui-même —
@@ -310,6 +336,10 @@ export function Timeline({
                             {
                                 height: ordered.length * ROW_H + HEAD_H + (dayLetters ? DAYS_H : 0),
                                 '--day-w': `${dayWidth}px`,
+                                // Sous le plancher, une ligne tous les deux ou
+                                // trois pixels ne dessine plus des journées,
+                                // elle grise la frise.
+                                '--day-line': dayWidth >= DAY_LINE_MIN_WIDTH ? 1 : 0,
                                 '--week-shift': -weekdayIndex(range.min)
                             } as CSSProperties
                         }

@@ -879,6 +879,7 @@ const DRAFT: ProjectDraft = {
     status: 'active',
     showOverview: true,
     showTimeline: true,
+    timelineZoom: 'week',
     startDate: null,
     dueDate: null
 };

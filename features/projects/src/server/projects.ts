@@ -61,7 +61,8 @@ function toPayload(draft: ProjectDraft, version: string): StoredProject {
         icon: draft.icon,
         description: draft.description,
         tags: draft.tags,
-        version
+        version,
+        timelineZoom: draft.timelineZoom
     };
 }
 

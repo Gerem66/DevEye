@@ -204,6 +204,7 @@ declare const styles: {
     readonly status: string;
     readonly subPage: string;
     readonly subheading: string;
+    readonly switchChild: string;
     readonly tab: string;
     readonly tabActive: string;
     readonly tabAdd: string;

@@ -37,6 +37,7 @@ const EMPTY: ProjectDraft = {
     // Le tableau suffit à un projet neuf : la vue d'ensemble se demande, la frise vient d'office.
     showOverview: false,
     showTimeline: true,
+    timelineZoom: 'week',
     startDate: null,
     dueDate: null
 };

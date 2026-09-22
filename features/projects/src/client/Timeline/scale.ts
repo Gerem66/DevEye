@@ -7,21 +7,74 @@
  * ses paliers s'arrêtent à 24 h, quand un projet s'étale sur des trimestres.
  */
 
+import type { ProjectTimelineZoom } from '../../contracts/domain';
+
 export const DAY_MS = 86_400_000;
 
-/**
- * Niveaux de zoom, en pixels par jour. L'intitulé nomme la granularité qui devient
- * lisible, pas ce qui tient à l'écran. Sous le plancher de 6 px, la ligne
- * quotidienne devient un aplat gris et la frise perd son unité.
- */
-export const ZOOM_LEVELS = [
-    { id: 'year', label: 'Année', dayWidth: 6 },
-    { id: 'quarter', label: 'Trimestre', dayWidth: 12 },
-    { id: 'month', label: 'Mois', dayWidth: 28 },
-    { id: 'week', label: 'Semaine', dayWidth: 72 }
-] as const;
+/** Un niveau, et ce qu'il promet : voir {@link ZOOM_LEVELS}. */
+export interface ZoomLevel {
+    id: ProjectTimelineZoom;
+    label: string;
+    target: number;
+    minDays: number;
+    maxDays: number;
+}
 
-export type ZoomId = (typeof ZOOM_LEVELS)[number]['id'];
+/**
+ * Les niveaux de zoom : une **durée visible**, pas une densité de pixels. Le
+ * choix dit combien de temps on veut avoir sous les yeux ; c'est la place
+ * disponible qui en déduit la largeur d'un jour, et non l'inverse. Un zoom qui
+ * ne réglerait que la densité laisserait la fenêtre suivre les dates des tâches,
+ * et « Semaine » montrerait deux mois dès qu'une tâche traîne en septembre.
+ *
+ * `target` est la largeur de jour visée, celle où l'échelle se lit : la fenêtre
+ * s'étire ou se resserre autour d'elle, entre `minDays` et `maxDays`, selon ce
+ * que l'écran offre. Les bornes sont ce que l'intitulé promet : « Semaine »
+ * montre d'une à trois semaines, jamais un trimestre.
+ *
+ * L'ordre est celui de la barre : du plus large au plus fin.
+ */
+export const ZOOM_LEVELS: readonly ZoomLevel[] = [
+    { id: 'year', label: 'Année', target: 3, minDays: 365, maxDays: 1095 },
+    { id: 'quarter', label: 'Trimestre', target: 9, minDays: 90, maxDays: 273 },
+    { id: 'month', label: 'Mois', target: 26, minDays: 30, maxDays: 92 },
+    { id: 'week', label: 'Semaine', target: 80, minDays: 7, maxDays: 21 }
+];
+
+/** Le même jeu que `projectTimelineZoomSchema` : le projet enregistre son échelle d'ouverture. */
+export type ZoomId = ProjectTimelineZoom;
+
+/**
+ * Où tombe aujourd'hui dans la fenêtre : au tiers. Un projet se lit vers
+ * l'avant, mais ce qu'on vient de faire explique ce qui vient.
+ */
+export const TODAY_AT = 1 / 3;
+
+/** Sous ce plancher, la frise défile plutôt que d'écraser ses journées. */
+const MIN_DAY_WIDTH = 2;
+
+/** En deçà, la ligne quotidienne devient un aplat gris et la frise perd son unité. */
+export const DAY_LINE_MIN_WIDTH = 6;
+
+export interface TimelineWindow {
+    /** Minuit du premier jour visible. */
+    start: number;
+    /** Durée visible, en jours entiers. */
+    days: number;
+    dayWidth: number;
+}
+
+/**
+ * La fenêtre qu'un zoom ouvre sur une largeur donnée. `avail` à zéro (avant la
+ * première mesure) rend la fenêtre nominale, que le premier rendu remplacera.
+ */
+export function zoomWindow(zoom: ZoomId, avail: number, now: number): TimelineWindow {
+    const level = ZOOM_LEVELS.find((z) => z.id === zoom) ?? ZOOM_LEVELS[2];
+    const wanted = avail > 0 ? Math.round(avail / level.target) : level.minDays;
+    const days = Math.min(Math.max(wanted, level.minDays), level.maxDays);
+    const dayWidth = Math.max(avail > 0 ? avail / days : level.target, MIN_DAY_WIDTH);
+    return { start: startOfDay(now) - Math.floor(days * TODAY_AT) * DAY_MS, days, dayWidth };
+}
 
 /** Le pas des étiquettes. Des périodes du calendrier, et rien entre elles. */
 export type TickUnit = 'day' | 'week' | 'month' | 'quarter' | 'year';

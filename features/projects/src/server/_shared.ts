@@ -10,14 +10,16 @@ import type {
     ProjectRow,
     ProjectSecurityTier,
     ProjectSummary,
-    ProjectTag
+    ProjectTag,
+    ProjectTimelineZoom
 } from '../contracts/domain';
 import {
     PROJECT_CHECKLIST_LABEL_MAX_LENGTH,
     PROJECT_PRIORITIES,
     projectCardSchema,
     projectColumnSchema,
-    projectSchema
+    projectSchema,
+    projectTimelineZoomSchema
 } from '../contracts/domain';
 import { FeatureError, type SdkCipher, type SdkFeatureContext, type SdkShareScope } from '@deveye/types/sdk/server';
 
@@ -59,6 +61,8 @@ export interface StoredProject {
     description: string;
     tags: ProjectTag[];
     version: string;
+    /** L'échelle d'ouverture de la frise. Ici et non en clair : rien ne la requête. */
+    timelineZoom: ProjectTimelineZoom;
 }
 
 /**
@@ -115,12 +119,14 @@ export async function encryptProject(cipher: SdkCipher, payload: StoredProject):
 export function parseProject(plain: string): StoredProject | null {
     try {
         const parsed = JSON.parse(plain) as Partial<StoredProject>;
+        const zoom = projectTimelineZoomSchema.safeParse(parsed.timelineZoom);
         return {
             title: typeof parsed.title === 'string' ? parsed.title : '',
             icon: typeof parsed.icon === 'string' ? parsed.icon : '',
             description: typeof parsed.description === 'string' ? parsed.description : '',
             tags: Array.isArray(parsed.tags) ? (parsed.tags as ProjectTag[]) : [],
-            version: typeof parsed.version === 'string' ? parsed.version : ''
+            version: typeof parsed.version === 'string' ? parsed.version : '',
+            timelineZoom: zoom.success ? zoom.data : 'week'
         };
     } catch {
         return null;
@@ -153,6 +159,7 @@ export function toProject(row: ProjectRow, payload: StoredProject, foreign: bool
         versionSource: row.version_source,
         showOverview: row.show_overview === 1,
         showTimeline: row.show_timeline === 1,
+        timelineZoom: payload.timelineZoom,
         status: row.status,
         securityTier: row.security_tier,
         startDate: row.start_date,
@@ -176,7 +183,7 @@ export function toMaskedSummary(row: ProjectRow, stats: ProjectStats | undefined
     // Icône vide comprise : une vignette identifie autant qu'un titre, la laisser
     // passer sur un projet verrouillé viderait la garde de son sens.
     return withStats(
-        toProject(row, { title: '', icon: '', description: '', tags: [], version: '' }, false),
+        toProject(row, { title: '', icon: '', description: '', tags: [], version: '', timelineZoom: 'week' }, false),
         true,
         stats,
         false

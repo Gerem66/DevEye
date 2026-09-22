@@ -1183,6 +1183,29 @@
 }
 
 /*
+ * Un réglage qui n'existe que par l'interrupteur au-dessus de lui. La coquille
+ * espace ses rangées de `--space-lg`, ce qui poserait ce réglage à égale distance
+ * de l'interrupteur qu'il suit et du suivant : on annule cet écart et on l'aligne
+ * sous le libellé de l'interrupteur (la piste fait 38 px), pour qu'il se lise
+ * comme sa suite. L'interrupteur libellé porte déjà sa marge basse, elle fait le
+ * peu d'air qu'il faut entre les deux.
+ */
+.switchChild {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    margin-top: calc(-1 * var(--space-lg));
+    padding-left: calc(38px + var(--space-sm));
+}
+
+/* Sur un écran étroit, l'alinéa mangerait la rangée de choix. */
+@media (max-width: 560px) {
+    .switchChild {
+        padding-left: 0;
+    }
+}
+
+/*
  * Toute zone de texte du module. `--field-line` est la hauteur d'une ligne, marges
  * intérieures et bordures comprises : la plus petite qui ait un sens pour un champ
  * de texte. Elle sert de plancher ici, et de pas au plafond du composeur.
@@ -1558,6 +1581,17 @@
     background: var(--surface-subtle);
 }
 
+/* Le fond se saisit pour faire défiler (voir `Timeline/pan.ts`) ; les barres et
+   les jalons gardent le leur, ils sont dessous dans l'arbre. */
+.timelineScroll[data-pannable] {
+    cursor: grab;
+}
+
+.timelineScroll[data-panning],
+.timelineScroll[data-panning] * {
+    cursor: grabbing;
+}
+
 .timelineInner {
     position: relative;
     padding: var(--space-sm) 0;
@@ -1573,9 +1607,14 @@
     /* Deux motifs de fond plutôt que N éléments : une ligne par jour, et la teinte
        du week-end, de période sept jours, calée sur le lundi par `--week-shift`
        (le rang du premier jour dans sa semaine, en négatif). Les pas sont exacts et
-       une frise d'un an ne coûte pas 365 nœuds. */
+       une frise d'un an ne coûte pas 365 nœuds. `--day-line` éteint la ligne
+       quotidienne quand la journée devient trop étroite pour se distinguer. */
     background-image:
-        linear-gradient(to right, color-mix(in srgb, var(--glass-border) 55%, transparent) 0 1px, transparent 1px),
+        linear-gradient(
+            to right,
+            color-mix(in srgb, var(--glass-border) calc(var(--day-line) * 55%), transparent) 0 1px,
+            transparent 1px
+        ),
         linear-gradient(
             to right,
             transparent 0 calc(var(--day-w) * 5),

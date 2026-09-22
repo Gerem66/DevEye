@@ -553,6 +553,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
 
             {loaded && tab === 'timeline' && (
                 <Timeline
+                    defaultZoom={project.timelineZoom}
                     cards={cards}
                     milestones={milestones}
                     deps={deps}

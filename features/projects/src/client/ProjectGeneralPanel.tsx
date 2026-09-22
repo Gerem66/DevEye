@@ -8,6 +8,7 @@ import {
     invalidate,
     ReadOnlyNotice,
     SaveButton,
+    SegmentedControl,
     SelectInput,
     settingsStyles as shell,
     Switch,
@@ -28,6 +29,7 @@ import {
     type ProjectTag
 } from '../contracts/domain';
 
+import { ZOOM_LEVELS } from './Timeline/scale';
 import {
     api,
     dateInputToSeconds,
@@ -48,6 +50,7 @@ function draftOf(project: Project): ProjectDraft {
         status: project.status,
         showOverview: project.showOverview,
         showTimeline: project.showTimeline,
+        timelineZoom: project.timelineZoom,
         startDate: project.startDate,
         dueDate: project.dueDate
     };
@@ -339,6 +342,25 @@ export default function ProjectGeneralPanel({ scope, canWrite, gone }: SettingsP
                 hint='Les tâches datées posées sur le temps, avec les jalons et les dépendances. Les dates restent sur les tâches quand elle est retirée.'
                 onChange={(showTimeline) => set({ showTimeline })}
             />
+
+            {/* Rattaché à l'interrupteur au-dessus, dont il dépend : une échelle
+                d'ouverture pour une vue absente ne veut rien dire. */}
+            {draft.showTimeline && (
+                <div className={styles.switchChild}>
+                    <span className={shell.fieldLabel}>Échelle à l’ouverture</span>
+                    <SegmentedControl
+                        aria-label='Échelle d’ouverture de la frise'
+                        fullWidth
+                        disabled={!editable}
+                        value={draft.timelineZoom}
+                        options={ZOOM_LEVELS.map((level) => ({ value: level.id, label: level.label }))}
+                        onChange={(timelineZoom) => set({ timelineZoom })}
+                    />
+                    <span className={shell.fieldHint}>
+                        Chacun peut en changer pendant sa visite, sans toucher à ce réglage.
+                    </span>
+                </div>
+            )}
 
             <Switch
                 checked={draft.showOverview}

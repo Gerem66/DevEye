@@ -44,6 +44,14 @@ export const projectVersionSourceSchema = z.enum(['manual', 'github_release']);
 export type ProjectVersionSource = z.infer<typeof projectVersionSourceSchema>;
 
 /**
+ * L'échelle sur laquelle la frise d'un projet s'ouvre : une durée visible, de
+ * l'année à la semaine (voir `client/Timeline/scale.ts`). Un projet qui se pilote
+ * au trimestre n'a pas à remettre son échelle à chaque ouverture.
+ */
+export const projectTimelineZoomSchema = z.enum(['year', 'quarter', 'month', 'week']);
+export type ProjectTimelineZoom = z.infer<typeof projectTimelineZoomSchema>;
+
+/**
  * Les deux familles d'étiquettes, cumulables : ce que le projet est (`type`) et ce
  * avec quoi il est fait (`tech`). Le libellé reste libre, une pile technique se
  * renouvelle plus vite qu'un schéma. Les étiquettes voyageant dans le payload
@@ -75,6 +83,8 @@ export const projectSchema = z.object({
     showOverview: z.boolean(),
     /** Idem pour la Frise. Le Tableau, lui, ne se retire pas : c'est la vue d'arrivée. */
     showTimeline: z.boolean(),
+    /** L'échelle d'ouverture de la frise. Dans le corps chiffré : rien ne la requête. */
+    timelineZoom: projectTimelineZoomSchema,
     /** Bornes de la fenêtre du projet, en secondes unix. */
     startDate: z.number().int().nullable(),
     dueDate: z.number().int().nullable(),
@@ -136,6 +146,7 @@ export const projectDraftSchema = z.object({
     status: projectStatusSchema,
     showOverview: z.boolean(),
     showTimeline: z.boolean(),
+    timelineZoom: projectTimelineZoomSchema,
     startDate: z.number().int().nullable(),
     dueDate: z.number().int().nullable()
 });
