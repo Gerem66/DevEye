@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { createElement, useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import {
     Button,
     FeatureSettingsButton,
@@ -35,7 +35,14 @@ import { Uptime } from './Uptime/Uptime';
 import { Overview } from './Dashboard/Overview';
 import { AddFeatureDialog } from './AddFeatureDialog';
 import { ProjectTabs } from './ProjectTabs';
-import { isProjectTabId, LANDING_TAB, type ProjectTabAddKey, type ProjectTabId } from './tabs';
+import {
+    isProjectFeatureTabId,
+    isProjectTabId,
+    LANDING_TAB,
+    type ProjectFeatureTabId,
+    type ProjectTabAddKey,
+    type ProjectTabId
+} from './tabs';
 import { useProjectTabs } from './useProjectTabs';
 import { useProjectRights } from './rights';
 import styles from './style.module.css';
@@ -53,6 +60,14 @@ interface ProjectDetailProps {
  * Possède les niveaux `l2` (l'onglet) et `l3` (la carte ouverte) de la présence ;
  * `l1` est au parent, et un niveau n'admet qu'un déclarant.
  */
+const FEATURE_TAB_VIEWS: Record<ProjectFeatureTabId, ComponentType<{ project: Project; canWrite: boolean }>> = {
+    git: Git,
+    database: Databases,
+    audience: Audience,
+    deploy: Deploy,
+    uptime: Uptime
+};
+
 export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDetailProps) {
     const [tab, setTab] = useState<ProjectTabId>(LANDING_TAB);
 
@@ -92,9 +107,16 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
     const [columnDialog, setColumnDialog] = useState<{ column: ProjectColumn | null } | null>(null);
     const [milestones, setMilestones] = useState<ProjectMilestone[]>([]);
     const [deps, setDeps] = useState<ProjectCardDep[]>([]);
-    const [milestoneDialog, setMilestoneDialog] = useState<{ milestone: ProjectMilestone | null } | null>(null);
+    const [milestoneDialog, setMilestoneDialog] = useState<{
+        milestone: ProjectMilestone | null;
+        /** L'échéance d'une création posée sur la frise. */
+        dueDate?: number;
+    } | null>(null);
     const [busy, setBusy] = useState(false);
     const [dialogError, setDialogError] = useState<string | null>(null);
+
+    /** Les colonnes qui valent « terminé » : la frise y lit ses tâches en vert. */
+    const doneColumnIds = useMemo(() => new Set(columns.filter((c) => c.countsAsDone).map((c) => c.id)), [columns]);
 
     const version = useResourceVersion('projects.board');
     const reloadRef = useRef<Promise<void> | null>(null);
@@ -503,7 +525,8 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                     </button>
                 </p>
             )}
-            {!loaded && <p className={styles.empty}>Chargement…</p>}
+            {/* Les onglets de liaison portent leur propre chargement. */}
+            {!loaded && !isProjectFeatureTabId(tab) && <p className={styles.empty}>Chargement…</p>}
 
             {loaded && tab === 'overview' && (
                 <Overview
@@ -558,6 +581,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                     cards={cards}
                     milestones={milestones}
                     deps={deps}
+                    doneColumnIds={doneColumnIds}
                     canPlan={rights.canPlan}
                     canTasks={rights.canTasks && columns.length > 0}
                     canDate={rights.canDate}
@@ -576,9 +600,9 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                         setDialogError(null);
                         setCardDialog({ card: null, columnId, dates });
                     }}
-                    onMilestoneCreate={() => {
+                    onMilestoneCreate={(dueDate) => {
                         setDialogError(null);
-                        setMilestoneDialog({ milestone: null });
+                        setMilestoneDialog({ milestone: null, dueDate });
                     }}
                     onMilestoneOpen={(milestone) => {
                         setDialogError(null);
@@ -587,12 +611,21 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                 />
             )}
 
-            {loaded && tab === 'git' && <Git project={project} canWrite={rights.canLinks} />}
-            {loaded && tab === 'database' && <Databases project={project} canWrite={rights.canLinks} />}
-            {loaded && tab === 'audience' && <Audience project={project} canWrite={rights.canLinks} />}
-
-            {loaded && tab === 'deploy' && <Deploy project={project} canWrite={rights.canLinks} />}
-            {loaded && tab === 'uptime' && <Uptime project={project} canWrite={rights.canLinks} />}
+            {/*
+                Les onglets de liaison sont montés dès que la barre les déclare, et
+                aucun ne se démonte en changeant d'onglet : leurs requêtes partent
+                donc à l'ouverture du projet, une seule fois, et leur contenu se
+                tient à jour sur `projects.board` comme le reste de l'écran. Le
+                cadre qui les cache est en `display: contents` tant qu'il est
+                visible, pour laisser chaque onglet enfant direct de la racine.
+            */}
+            {tabs.visible.map((t) =>
+                isProjectFeatureTabId(t.id) ? (
+                    <div key={t.id} className={styles.tabPane} hidden={tab !== t.id}>
+                        {createElement(FEATURE_TAB_VIEWS[t.id], { project, canWrite: rights.canLinks })}
+                    </div>
+                ) : null
+            )}
 
             {/* Le geste d'ajout lancé depuis le « + » : dès qu'il aboutit,
                 l'onglet existe et s'ouvre dans la foulée. */}
@@ -610,6 +643,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
             <MilestoneDialog
                 open={milestoneDialog !== null}
                 milestone={milestoneDialog?.milestone ?? null}
+                dueDate={milestoneDialog?.dueDate}
                 canPlan={rights.canPlan}
                 busy={busy}
                 error={dialogError}

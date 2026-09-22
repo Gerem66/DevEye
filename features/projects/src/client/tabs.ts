@@ -85,6 +85,10 @@ export const PROJECT_FEATURE_TABS: ProjectFeatureTab[] = [
 
 export const PROJECT_TABS: ProjectTab[] = [OVERVIEW, BOARD, TIMELINE, ...PROJECT_FEATURE_TABS];
 
+export function isProjectFeatureTabId(value: ProjectTabId): value is ProjectFeatureTabId {
+    return PROJECT_FEATURE_TABS.some((tab) => tab.id === value);
+}
+
 export function isProjectTabId(value: string): value is ProjectTabId {
     return PROJECT_TABS.some((tab) => tab.id === value);
 }

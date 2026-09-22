@@ -107,6 +107,8 @@ interface TimelineProps {
     canPlan: boolean;
     /** Créer une tâche : le droit de les tenir, et une colonne où la poser. */
     canTasks: boolean;
+    /** Les colonnes qui valent « terminé » : leurs tâches se lisent en vert. */
+    doneColumnIds: ReadonlySet<number>;
     /** Poser ou retirer les dates de CETTE carte : le droit de planifier, ou elle est sienne. */
     canDate: (card: ProjectCard) => boolean;
     onCardOpen: (card: ProjectCard) => void;
@@ -117,7 +119,8 @@ interface TimelineProps {
      * jour de la frise ; un clic simple ouvre la popup sans rien dater.
      */
     onCardCreate: (dates?: { startDate: number; dueDate: number }) => void;
-    onMilestoneCreate: () => void;
+    /** `dueDate` quand le jalon naît d'un dépôt sur un jour de la frise. */
+    onMilestoneCreate: (dueDate?: number) => void;
     onMilestoneOpen: (milestone: ProjectMilestone) => void;
 }
 
@@ -139,6 +142,7 @@ export function Timeline({
     deps,
     canPlan,
     canTasks,
+    doneColumnIds,
     canDate,
     onCardOpen,
     onCardDates,
@@ -263,7 +267,8 @@ export function Timeline({
         scrollRef,
         dropRef,
         onCommit: onCardDates,
-        onCreate: (startDate, dueDate) => onCardCreate({ startDate, dueDate })
+        onCreate: (startDate, dueDate) => onCardCreate({ startDate, dueDate }),
+        onCreateMilestone: (dueDate) => onMilestoneCreate(dueDate)
     });
     // Saisir le fond de la frise la fait défiler, tant qu'aucun autre geste ne
     // tient le pointeur.
@@ -272,7 +277,15 @@ export function Timeline({
     /** La pastille en vol : la carte tenue, qui n'a de ligne que sur un jour de la frise. */
     const placing = drag?.placing && drag.card !== null ? drag : null;
     /** Le jour visé par le « + » qu'on promène, en secondes ; `null` hors de la frise. */
-    const creating = drag?.placing && drag.card === null ? (drag.next?.startDate ?? null) : null;
+    const placingAt = drag?.placing && drag.card === null ? (drag.next?.startDate ?? null) : null;
+    /** Le « + Tâche » en vol : il se donne une ligne dans l'ordre du temps. */
+    const creating = drag?.create === 'card' ? placingAt : null;
+    /** Le « + Jalon » en vol : il se pose dans la bande d'en-tête, comme ses pairs. */
+    const creatingMilestone = drag?.create === 'milestone' ? placingAt : null;
+
+    /** Rangée dans une colonne qui vaut « terminé ». */
+    const isDone = (card: ProjectCard) => card.columnId !== null && doneColumnIds.has(card.columnId);
+
     /** La barre tenue est au-dessus de la zone sans date : elle va les perdre. */
     const unplanning = (card: ProjectCard) =>
         drag !== null && !drag.placing && drag.card?.id === card.id && drag.overDrop;
@@ -365,7 +378,7 @@ export function Timeline({
                         </Button>
                     )}
                     {canPlan && (
-                        <Button variant='secondary' icon='add' onClick={onMilestoneCreate}>
+                        <Button variant='secondary' icon='add' onClick={() => onMilestoneCreate()}>
                             Ajouter un jalon
                         </Button>
                     )}
@@ -399,7 +412,7 @@ export function Timeline({
                             icon='add'
                             className={styles.tlAddCard}
                             title='Ajouter une tâche, ou glissez ce bouton sur un jour pour la dater'
-                            onPointerDown={onCreatePointerDown}
+                            onPointerDown={(e) => onCreatePointerDown(e, 'card')}
                             onClick={() => {
                                 if (!consumeClick(null)) onCardCreate();
                             }}
@@ -408,7 +421,16 @@ export function Timeline({
                         </Button>
                     )}
                     {canPlan && (
-                        <Button variant='secondary' icon='add' onClick={onMilestoneCreate}>
+                        <Button
+                            variant='secondary'
+                            icon='add'
+                            className={styles.tlAddCard}
+                            title='Ajouter un jalon, ou glissez ce bouton sur un jour pour le dater'
+                            onPointerDown={(e) => onCreatePointerDown(e, 'milestone')}
+                            onClick={() => {
+                                if (!consumeClick(null)) onMilestoneCreate();
+                            }}
+                        >
                             Jalon
                         </Button>
                     )}
@@ -469,6 +491,15 @@ export function Timeline({
                                 <span className={styles.milestoneLabel}>{m.name || 'Jalon'}</span>
                             </button>
                         ))}
+
+                        {/* Le jalon qu'on pose, à sa date : en tirets, rien n'est
+                            encore écrit. */}
+                        {creatingMilestone !== null && (
+                            <div className={styles.milestoneGhost} style={{ left: x(creatingMilestone * 1000) }}>
+                                <span className={`icon icon-star ${styles.milestoneIcon}`} />
+                                <span className={`icon icon-add ${styles.milestoneIcon}`} />
+                            </div>
+                        )}
                     </div>
 
                     {/* Les liens de dépendance, au-dessus de la grille et sous
@@ -587,7 +618,9 @@ export function Timeline({
                                         </div>
                                     );
                                 }
-                                const overdue = at.dueDate !== null && at.dueDate * 1000 < Date.now();
+                                const done = isDone(card);
+                                // Terminée, une échéance dépassée n'est plus un retard.
+                                const overdue = !done && at.dueDate !== null && at.dueDate * 1000 < Date.now();
                                 const movable = canDate(card);
                                 // Étirable seulement si les deux bouts existent :
                                 // un point n'a qu'une date, il se déplace en bloc.
@@ -605,7 +638,7 @@ export function Timeline({
                                             type='button'
                                             className={`${styles.bar} ${s.pointOnly ? styles.barPoint : ''} ${
                                                 overdue ? styles.barLate : ''
-                                            } ${movable ? styles.barDraggable : ''} ${
+                                            } ${done ? styles.barDone : ''} ${movable ? styles.barDraggable : ''} ${
                                                 unplanning(card) ? styles.barLeaving : ''
                                             }`}
                                             style={{ left: s.left, width: s.width, height: BAR_H }}
@@ -737,8 +770,8 @@ export function Timeline({
                                     <button
                                         type='button'
                                         className={`${movable ? styles.tagDraggable : ''} ${
-                                            placing?.card?.id === card.id ? styles.tagDragging : ''
-                                        }`}
+                                            isDone(card) ? styles.tagDone : ''
+                                        } ${placing?.card?.id === card.id ? styles.tagDragging : ''}`}
                                         title={
                                             movable
                                                 ? `${card.title || 'Sans titre'} : glissez-la sur la frise pour la dater`

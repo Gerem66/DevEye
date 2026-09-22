@@ -6,6 +6,7 @@ declare const styles: {
     readonly archivedRow: string;
     readonly bar: string;
     readonly barCount: string;
+    readonly barDone: string;
     readonly barDraggable: string;
     readonly barFill: string;
     readonly barGhost: string;
@@ -176,6 +177,7 @@ declare const styles: {
     readonly metaLeft: string;
     readonly milestone: string;
     readonly milestoneDone: string;
+    readonly milestoneGhost: string;
     readonly milestoneIcon: string;
     readonly milestoneLabel: string;
     readonly msgAuthor: string;
@@ -222,12 +224,14 @@ declare const styles: {
     readonly tabMenuIcon: string;
     readonly tabMenuItem: string;
     readonly tabMenuText: string;
+    readonly tabPane: string;
     readonly tabPanel: string;
     readonly tabPanelInner: string;
     readonly tabs: string;
     readonly tabsGhost: string;
     readonly tabsWrap: string;
     readonly tag: string;
+    readonly tagDone: string;
     readonly tagDraggable: string;
     readonly tagDragging: string;
     readonly tagRemove: string;

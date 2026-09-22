@@ -12,6 +12,8 @@ interface MilestoneDialogProps {
     open: boolean;
     /** `null` = création. */
     milestone: ProjectMilestone | null;
+    /** L'échéance d'un jalon posé sur la frise, à la création. */
+    dueDate?: number;
     /** Sans la planification, le jalon se lit sans pouvoir s'écrire. */
     canPlan: boolean;
     busy: boolean;
@@ -25,6 +27,7 @@ interface MilestoneDialogProps {
 export function MilestoneDialog({
     open,
     milestone,
+    dueDate: initialDueDate,
     canPlan,
     busy,
     error,
@@ -41,8 +44,8 @@ export function MilestoneDialog({
         if (!open) return;
         setName(milestone?.name ?? '');
         setDescription(milestone?.description ?? '');
-        setDueDate(dateInputValue(milestone?.dueDate ?? Math.floor(Date.now() / 1000)));
-    }, [open, milestone]);
+        setDueDate(dateInputValue(milestone?.dueDate ?? initialDueDate ?? Math.floor(Date.now() / 1000)));
+    }, [open, milestone, initialDueDate]);
 
     const submit = () => {
         const due = dateInputToSeconds(dueDate);

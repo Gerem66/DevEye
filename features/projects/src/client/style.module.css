@@ -19,6 +19,19 @@
     height: 100%;
 }
 
+/*
+ * Le cadre d'un onglet de liaison, qui reste monté d'un onglet à l'autre :
+ * `contents` l'efface de la mise en page, son contenu reste donc enfant direct
+ * de la racine et garde l'espacement de la colonne.
+ */
+.tabPane {
+    display: contents;
+}
+
+.tabPane[hidden] {
+    display: none;
+}
+
 /* ----------------------------------------------------------------- en-tête */
 
 .header {
@@ -1611,7 +1624,7 @@
     gap: var(--space-sm);
 }
 
-/* Le « + » des tâches se glisse aussi sur un jour de la frise (voir `dateDrag.ts`).
+/* Les « + » de la barre d'outils se glissent aussi sur un jour de la frise (voir `dateDrag.ts`).
    `touch-action` parce qu'au doigt le geste serait sinon pris pour un défilement.
    Sélecteur double pour battre le `cursor` du bouton du SDK. */
 button.tlAddCard {
@@ -1763,10 +1776,20 @@ button.tlAddCard {
     color: var(--success);
 }
 
+/* Le jalon qu'on tient, tel qu'il se posera. En tirets comme la pastille d'une
+   tâche à créer : rien n'est encore écrit. */
+.milestoneGhost {
+    composes: milestone;
+    border-style: dashed;
+    cursor: grabbing;
+    pointer-events: none;
+}
+
 /* L'étoile à l'échelle du texte qu'elle accompagne : à 18 px elle touche les deux
    bordures de la pastille. Double sélecteur pour battre le `.icon` global. */
 .milestone .milestoneIcon,
-.milestoneDone .milestoneIcon {
+.milestoneDone .milestoneIcon,
+.milestoneGhost .milestoneIcon {
     width: 11px;
 }
 
@@ -1891,6 +1914,13 @@ button.tlAddCard {
     background: var(--danger-bg);
 }
 
+/* Rangée dans une colonne qui vaut « terminé » : l'avancement du projet se lit
+   d'un bout à l'autre de la frise sans ouvrir une seule tâche. */
+.barDone {
+    border-color: var(--success);
+    background: var(--success-bg);
+}
+
 /* Attrapable : la barre entière déplace les deux dates (voir `dateDrag.ts`). */
 .barDraggable {
     cursor: grab;
@@ -1976,6 +2006,10 @@ button.tlAddCard {
     background: var(--danger-bg);
 }
 
+.barDone .barFill {
+    background: var(--success-bg);
+}
+
 /* Discret : le compte se lit si on le cherche, sans disputer le titre. */
 .barCount {
     flex: none;
@@ -2037,6 +2071,14 @@ button.tlAddCard {
 .undatedList button:hover {
     border-color: var(--accent);
     color: var(--accent);
+}
+
+/* La même couleur que sa barre, pour une tâche terminée qu'on n'a pas datée.
+   Sélecteur double : celui de la pastille nue porterait sinon plus de poids. */
+.undatedList .tagDone {
+    border-color: var(--success);
+    background: var(--success-bg);
+    color: var(--text-primary);
 }
 
 /* Attrapable : la pastille se dépose sur un jour de la frise. `touch-action`

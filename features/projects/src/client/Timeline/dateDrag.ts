@@ -14,7 +14,8 @@ import { startOfDay } from './scale';
  * une barre déjà sur la frise se déplace ou s'étire, et se ramène dans la zone
  * des cartes sans date pour perdre les siennes ; une pastille de cette zone se
  * dépose sur un jour, qui devient à la fois son début et son échéance ; le « + »
- * de la barre d'outils se dépose de même, pour une tâche qui n'existe pas encore.
+ * de la barre d'outils se dépose de même, pour une tâche ou un jalon qui
+ * n'existent pas encore.
  *
  * Rien n'est persisté avant le relâchement, seul un aperçu local bouge : écrire
  * à chaque pixel enverrait cinquante commandes par déplacement, et la carte
@@ -27,6 +28,9 @@ import { startOfDay } from './scale';
 /** Ce qu'on tient d'une barre : une extrémité, ou la barre entière. */
 export type DragMode = 'start' | 'due' | 'move';
 
+/** Ce qu'un « + » de la barre d'outils fera naître au dépôt. */
+export type CreateKind = 'card' | 'milestone';
+
 /** Les dates telles qu'elles seront si on relâche maintenant. */
 export interface DatePreview {
     startDate: number | null;
@@ -35,8 +39,10 @@ export interface DatePreview {
 
 /** Le geste en cours, tel que la frise le peint. */
 export interface DragView {
-    /** `null` : une tâche à créer, tenue depuis le « + » de la barre d'outils. */
+    /** `null` : un élément à créer, tenu depuis un « + » de la barre d'outils. */
     card: ProjectCard | null;
+    /** Ce que le dépôt créera ; `null` quand c'est une carte existante qu'on tient. */
+    create: CreateKind | null;
     /** Une pastille en vol, par opposition à une barre déjà posée. */
     placing: boolean;
     /** Ce que le relâchement écrirait ; `null` quand il n'écrirait rien. */
@@ -60,6 +66,8 @@ interface Options {
     onCommit: (card: ProjectCard, startDate: number | null, dueDate: number | null) => void;
     /** Ouvre la création d'une tâche aux dates du dépôt. Même règle : au relâchement seul. */
     onCreate: (startDate: number, dueDate: number) => void;
+    /** Ouvre la création d'un jalon à la date du dépôt. */
+    onCreateMilestone: (dueDate: number) => void;
 }
 
 /** En deçà, c'est encore un clic : la carte s'ouvre au lieu de bouger. */
@@ -130,12 +138,23 @@ function inside(el: HTMLElement | null, clientX: number, clientY: number): boole
     return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
 }
 
-export function useDateDrag({ dayWidth, days, rangeMin, scrollRef, dropRef, onCommit, onCreate }: Options) {
+export function useDateDrag({
+    dayWidth,
+    days,
+    rangeMin,
+    scrollRef,
+    dropRef,
+    onCommit,
+    onCreate,
+    onCreateMilestone
+}: Options) {
     const [view, setView] = useState<DragView | null>(null);
 
     /** Le geste en cours. Un `ref` : les écouteurs le lisent hors du rendu. */
     const press = useRef<{
         card: ProjectCard | null;
+        /** Ce que le dépôt créera, quand `card` est nul. */
+        create: CreateKind | null;
         /** Absent : une pastille ou le « + » qu'on dépose, sans bord à saisir. */
         mode: DragMode | null;
         pointerId: number;
@@ -156,8 +175,8 @@ export function useDateDrag({ dayWidth, days, rangeMin, scrollRef, dropRef, onCo
 
     // Les valeurs changeantes passent par des `ref` : les cinq écouteurs sont
     // créés une fois pour toutes, comme dans `dragReorder`.
-    const opts = useRef({ dayWidth, days, rangeMin, scrollRef, dropRef, onCommit, onCreate });
-    opts.current = { dayWidth, days, rangeMin, scrollRef, dropRef, onCommit, onCreate };
+    const opts = useRef({ dayWidth, days, rangeMin, scrollRef, dropRef, onCommit, onCreate, onCreateMilestone });
+    opts.current = { dayWidth, days, rangeMin, scrollRef, dropRef, onCommit, onCreate, onCreateMilestone };
 
     const handlers = useRef<{
         move: (e: PointerEvent) => void;
@@ -216,14 +235,22 @@ export function useDateDrag({ dayWidth, days, rangeMin, scrollRef, dropRef, onCo
                     // `clientLeft` retire la bordure, `scrollLeft` remet la
                     // frise à son origine quand elle est plus large que sa boîte.
                     const left = el.getBoundingClientRect().left + el.clientLeft - el.scrollLeft;
-                    const day = Math.min(Math.max(Math.floor((e.clientX - left) / width), 0), span - 1);
+                    const raw = (e.clientX - left) / width;
+                    // Une tâche occupe la case qu'elle survole ; un jalon se peint
+                    // sur un trait de la grille, et rejoint donc le plus proche,
+                    // sans quoi la moitié droite d'une journée le renverrait au
+                    // trait qu'on vient de dépasser. D'où un jour de plus à sa
+                    // borne : le dernier trait de la frise est une date visable.
+                    const marker = p.create === 'milestone';
+                    const aimed = marker ? Math.round(raw) : Math.floor(raw);
+                    const day = Math.min(Math.max(aimed, 0), marker ? span : span - 1);
                     const at = shiftDays(Math.floor(startOfDay(origin) / 1000), day);
                     next = { startDate: at, dueDate: at };
                 }
 
                 const held = latest.current;
                 if (held && held.overDrop === overDrop && samePreview(held.next, next)) return;
-                const shown: DragView = { card: p.card, placing: p.mode === null, next, overDrop };
+                const shown: DragView = { card: p.card, create: p.create, placing: p.mode === null, next, overDrop };
                 latest.current = shown;
                 setView(shown);
             },
@@ -238,10 +265,12 @@ export function useDateDrag({ dayWidth, days, rangeMin, scrollRef, dropRef, onCo
                 // la frise : inutile de réécrire les mêmes dates.
                 if (!result?.next) return;
                 if (card === null) {
-                    // Une tâche à créer se pose sur un jour, et sur rien d'autre :
-                    // ses deux bords y sont donnés ensemble ou pas du tout.
+                    // Ce qui n'existe pas encore se pose sur un jour, et sur rien
+                    // d'autre : ses deux bords y sont donnés ensemble ou pas du tout.
                     const { startDate, dueDate } = result.next;
-                    if (startDate !== null && dueDate !== null) opts.current.onCreate(startDate, dueDate);
+                    if (startDate === null || dueDate === null) return;
+                    if (p.create === 'milestone') opts.current.onCreateMilestone(dueDate);
+                    else opts.current.onCreate(startDate, dueDate);
                     return;
                 }
                 if (result.next.startDate === card.startDate && result.next.dueDate === card.dueDate) return;
@@ -263,26 +292,32 @@ export function useDateDrag({ dayWidth, days, rangeMin, scrollRef, dropRef, onCo
     // d'onglet, popup refermée en plein glissé).
     useEffect(() => () => endRef.current(), []);
 
-    const start = useCallback((e: ReactPointerEvent, card: ProjectCard | null, mode: DragMode | null) => {
-        if (e.button !== 0) return;
-        const h = handlers.current;
-        if (!h) return;
-        moved.current = false;
-        handled.current = null;
-        press.current = { card, mode, pointerId: e.pointerId, x: e.clientX, y: e.clientY };
-        window.addEventListener('pointermove', h.move);
-        window.addEventListener('pointerup', h.up);
-        window.addEventListener('pointercancel', h.cancel);
-        window.addEventListener('blur', h.blur);
-        window.addEventListener('keydown', h.keydown);
-    }, []);
+    const start = useCallback(
+        (e: ReactPointerEvent, card: ProjectCard | null, mode: DragMode | null, create: CreateKind | null = null) => {
+            if (e.button !== 0) return;
+            const h = handlers.current;
+            if (!h) return;
+            moved.current = false;
+            handled.current = null;
+            press.current = { card, create, mode, pointerId: e.pointerId, x: e.clientX, y: e.clientY };
+            window.addEventListener('pointermove', h.move);
+            window.addEventListener('pointerup', h.up);
+            window.addEventListener('pointercancel', h.cancel);
+            window.addEventListener('blur', h.blur);
+            window.addEventListener('keydown', h.keydown);
+        },
+        []
+    );
 
     const onBarPointerDown = useCallback(
         (e: ReactPointerEvent, card: ProjectCard, mode: DragMode) => start(e, card, mode),
         [start]
     );
     const onTagPointerDown = useCallback((e: ReactPointerEvent, card: ProjectCard) => start(e, card, null), [start]);
-    const onCreatePointerDown = useCallback((e: ReactPointerEvent) => start(e, null, null), [start]);
+    const onCreatePointerDown = useCallback(
+        (e: ReactPointerEvent, kind: CreateKind) => start(e, null, null, kind),
+        [start]
+    );
 
     /** Le clic qui suit un glissé n'est pas un clic : il n'ouvre ni la carte ni la création. */
     const consumeClick = useCallback((cardId: number | null) => {
