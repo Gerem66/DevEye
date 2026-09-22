@@ -470,7 +470,10 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
     };
 
     return (
-        <div className={tab === 'board' ? `${styles.root} ${styles.rootFit}` : styles.root} style={sticky.style}>
+        <div
+            className={tab === 'board' || tab === 'timeline' ? `${styles.root} ${styles.rootFit}` : styles.root}
+            style={sticky.style}
+        >
             {/* En-tête et onglets dans un seul bloc collant : deux blocs
                 superposés glisseraient l'un sous l'autre au défilement. */}
             <div ref={sticky.ref} className={styles.detailSticky}>

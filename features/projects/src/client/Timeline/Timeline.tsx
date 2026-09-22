@@ -47,9 +47,22 @@ const PAD_AFTER = 3;
 /**
  * Le plancher de la frise, en lignes : elle garde cette hauteur même vide, pour
  * qu'un défilement qui traverse une période creuse ne la fasse pas se replier
- * sur elle-même.
+ * sur elle-même. Ce n'est qu'un plancher de secours : la frise remplit d'abord
+ * la boîte que la fiche lui laisse.
  */
 const MIN_ROWS = 5;
+
+/** Le rembourrage vertical de la frise, des deux côtés (`--space-sm`, en dur ici
+ * pour que la hauteur des lignes se calcule sans mesurer une variable de thème). */
+const INNER_PAD = 8;
+
+/**
+ * La part de la hauteur offerte que la frise prend. Le reste est la place de la
+ * zone des cartes sans date, qui paraît et disparaît au fil des dépôts : sans
+ * cette réserve, la frise se replierait et se rouvrirait sous le pointeur à
+ * chaque geste.
+ */
+const FILL_RATIO = 0.9;
 
 /** Le fantôme d'une tâche à créer : assez large pour que son « + » se lise. */
 const CREATE_GHOST_MIN_WIDTH = 24;
@@ -165,13 +178,27 @@ export function Timeline({
      * valeur vient de la cible.
      */
     const scrollRef = useRef<HTMLDivElement>(null);
+    const rootRef = useRef<HTMLDivElement>(null);
     const [avail, setAvail] = useState(0);
+    /**
+     * La hauteur que la frise s'autorise : ce qui reste sous sa barre d'outils,
+     * moins la réserve. Elle se déduit de la boîte de l'onglet et de la position
+     * de la frise dedans, jamais de sa hauteur à elle : rien de ce qui grandit
+     * avec les lignes n'entre dans le calcul, aucune boucle n'est donc possible.
+     */
+    const [availHeight, setAvailHeight] = useState(0);
     useLayoutEffect(() => {
         const el = scrollRef.current;
-        if (!el) return;
-        const measure = () => setAvail(popupTargetWidth(el));
+        const root = rootRef.current;
+        if (!el || !root) return;
+        const measure = () => {
+            setAvail(popupTargetWidth(el));
+            const top = el.getBoundingClientRect().top - root.getBoundingClientRect().top;
+            setAvailHeight(Math.round((root.clientHeight - top) * FILL_RATIO));
+        };
         const ro = new ResizeObserver(measure);
         ro.observe(el);
+        ro.observe(root);
         measure();
         return () => ro.disconnect();
     }, []);
@@ -328,6 +355,9 @@ export function Timeline({
         return { left, width: right - left, pointOnly: card.startDate === null || card.dueDate === null };
     };
 
+    /** La lettre du jour ne se lit qu'à partir d'une certaine largeur de journée. */
+    const dayLetters = dayWidth >= DAY_LETTER_MIN_WIDTH;
+
     /**
      * Les lignes, et leur nombre : une carte n'en occupe une que si sa barre touche
      * la fenêtre visible. La frise ne fait donc jamais la hauteur de tout le projet,
@@ -349,7 +379,13 @@ export function Timeline({
         if (s.left < seenTo && s.left + s.width > scrollLeft) visibleRows++;
     }
     if (creating !== null && ghostRow === null) ghostRow = visibleRows++;
-    const rowsHeight = Math.max(visibleRows, MIN_ROWS) * ROW_H;
+    /**
+     * Les lignes remplissent la hauteur autorisée : en deçà, la grille s'arrêterait
+     * au milieu de la page et laisserait un vide sous elle. Au-delà, c'est le
+     * contenu qui commande et la boîte défile.
+     */
+    const boxRows = Math.floor((availHeight - HEAD_H - (dayLetters ? DAYS_H : 0) - INNER_PAD * 2) / ROW_H);
+    const rowsHeight = Math.max(visibleRows, boxRows, MIN_ROWS) * ROW_H;
 
     /**
      * L'abscisse du coude des flèches partant d'une tâche : à mi-chemin de la
@@ -392,10 +428,9 @@ export function Timeline({
     }
 
     const now = x(Date.now());
-    const dayLetters = dayWidth >= DAY_LETTER_MIN_WIDTH;
 
     return (
-        <div className={styles.timeline}>
+        <div className={styles.timeline} ref={rootRef}>
             <div className={styles.timelineBar}>
                 <div className={styles.zoom}>
                     {ZOOM_LEVELS.map((z) => (
@@ -447,6 +482,7 @@ export function Timeline({
             <div
                 className={styles.timelineScroll}
                 ref={scrollRef}
+                style={{ maxHeight: availHeight || undefined }}
                 data-pannable={width > avail ? '' : undefined}
                 data-panning={pan.panning ? '' : undefined}
                 onPointerDown={pan.onPointerDown}

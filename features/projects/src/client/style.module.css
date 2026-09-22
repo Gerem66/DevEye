@@ -12,9 +12,10 @@
     min-height: 100%;
 }
 
-/* Sur le tableau, la fiche tient exactement la boîte défilante de la popup, ni plus
-   ni moins : la hauteur des colonnes se déduit alors du flex, sans rien supposer du
-   cadre (ses bordures, son rembourrage) ni de l'arrondi du bandeau collant. */
+/* Sur le tableau et sur la frise, la fiche tient exactement la boîte défilante de
+   la popup, ni plus ni moins : la hauteur des colonnes et celle de la frise se
+   déduisent alors du flex, sans rien supposer du cadre (ses bordures, son
+   rembourrage) ni de l'arrondi du bandeau collant. */
 .rootFit {
     height: 100%;
 }
@@ -1629,10 +1630,15 @@
 
 /* ------------------------------------------------------------------ frise */
 
+/* La frise prend ce que la fiche lui laisse : elle remplit la page plutôt que de
+   s'arrêter à la hauteur de ses tâches, et la zone des cartes sans date garde sa
+   place sous elle. */
 .timeline {
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);
+    flex: 1;
+    min-height: 0;
 }
 
 .timelineEmpty {
@@ -1689,10 +1695,16 @@ button.tlAddCard {
     color: var(--on-accent);
 }
 
-/* La frise défile dans sa propre boîte : la page ne part jamais en travers. */
+/* La frise défile dans sa propre boîte : la page ne part jamais en travers. Sa
+   hauteur vient de ses lignes, plafonnée en ligne par ce que l'onglet autorise
+   (`FILL_RATIO`) : elle ne se replie donc pas quand la zone des cartes sans date
+   paraît sous elle, et défile à son tour au-delà. */
 .timelineScroll {
+    /* Jamais comprimée : c'est la zone des cartes sans date qui cède, sinon la
+       frise se replierait au premier dépôt. */
+    flex-shrink: 0;
     overflow-x: auto;
-    overflow-y: hidden;
+    overflow-y: auto;
     border-radius: var(--radius-md);
     border: 1px solid var(--glass-border);
     background: var(--surface-subtle);
@@ -2059,8 +2071,11 @@ button.tlAddCard {
 }
 
 /* La bordure existe au repos, transparente : le survol d'un dépôt ne doit pas
-   pousser la liste d'un pixel. */
+   pousser la liste d'un pixel. La zone défile dans la place que la frise lui
+   laisse plutôt que de déborder de l'onglet. */
 .undated {
+    min-height: 0;
+    overflow-y: auto;
     font-size: 0.8rem;
     color: var(--text-secondary);
     padding: var(--space-xs) var(--space-sm);
