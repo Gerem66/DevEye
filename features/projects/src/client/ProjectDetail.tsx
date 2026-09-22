@@ -411,15 +411,14 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
         }
     };
 
-    const moveColumn = async (columnId: number, direction: -1 | 1) => {
-        const ids = columns.map((c) => c.id);
-        const from = ids.indexOf(columnId);
-        const to = from + direction;
-        if (from < 0 || to < 0 || to >= ids.length) return;
-        [ids[from], ids[to]] = [ids[to], ids[from]];
-        setColumns(ids.map((id) => columns.find((c) => c.id === id) as ProjectColumn));
+    /** Optimiste, comme le déplacement d'une carte : sans l'ordre posé tout de
+     *  suite, la colonne reviendrait en arrière le temps de l'aller-retour. */
+    const reorderColumns = async (columnIds: number[]) => {
+        setActionError(null);
+        const byId = new Map(columns.map((c) => [c.id, c]));
+        setColumns(columnIds.flatMap((id) => byId.get(id) ?? []));
         try {
-            await api.send('projects.columnReorder', { projectId: project.id, columnIds: ids });
+            await api.send('projects.columnReorder', { projectId: project.id, columnIds });
         } catch (e) {
             setActionError(humanizeError(e, 'Le déplacement a échoué.'));
             void reload();
@@ -545,7 +544,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                         setDialogError(null);
                         setColumnDialog({ column });
                     }}
-                    onColumnMove={(columnId, direction) => void moveColumn(columnId, direction)}
+                    onColumnsReorder={(columnIds) => void reorderColumns(columnIds)}
                     onColumnCreate={() => {
                         setDialogError(null);
                         setColumnDialog({ column: null });

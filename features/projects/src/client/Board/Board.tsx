@@ -1,4 +1,12 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ButtonHTMLAttributes } from 'react';
+import {
+    useCallback,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState,
+    type ButtonHTMLAttributes,
+    type PointerEvent as ReactPointerEvent
+} from 'react';
 import { createPortal } from 'react-dom';
 import {
     DndContext,
@@ -25,7 +33,14 @@ import {
     verticalListSortingStrategy
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Button, CountBadge, type LiveOutlineProps, useLiveOutlines, useRequestPopupWidth } from 'deveye-sdk-client';
+import {
+    Button,
+    CountBadge,
+    type LiveOutlineProps,
+    useDragReorder,
+    useLiveOutlines,
+    useRequestPopupWidth
+} from 'deveye-sdk-client';
 import { formatDate, PRIORITY_LABELS } from '../api';
 import type { ProjectCard, ProjectColumn } from '../../contracts/domain';
 import { MemberStack } from '../Member';
@@ -52,17 +67,18 @@ interface BoardProps {
     onCardOpen: (card: ProjectCard, tab: CardTab) => void;
     onCardCreate: (columnId: number) => void;
     onColumnEdit: (column: ProjectColumn) => void;
-    onColumnMove: (columnId: number, direction: -1 | 1) => void;
+    /** L'ordre complet des colonnes après un glissé de poignée. */
+    onColumnsReorder: (columnIds: number[]) => void;
     onColumnCreate: () => void;
 }
 
 /**
  * Le kanban, sur dnd-kit. La carte rejoint la colonne survolée dès qu'elle y
  * entre (`onDragOver`) et non au lâcher, pour que les voisines s'écartent et que
- * la colonne d'origine se referme. Les colonnes, elles, se réordonnent par des
- * flèches : un second niveau de tri dans le même DndContext coûte cher en cas
- * limites. `nativeDrag.ts` neutralisant les glissers HTML5 natifs de
- * l'application, un `draggable` maison serait mort-né ici.
+ * la colonne d'origine se referme. Les colonnes, elles, se réordonnent par leur
+ * poignée, sur `useDragReorder` et hors du DndContext : un second niveau de tri
+ * dans le même contexte coûte cher en cas limites, et les deux gestes ne peuvent
+ * pas se croiser, un pointeur ne tenant qu'une chose à la fois.
  */
 export function Board({
     columns,
@@ -76,7 +92,7 @@ export function Board({
     onCardOpen,
     onCardCreate,
     onColumnEdit,
-    onColumnMove,
+    onColumnsReorder,
     onColumnCreate
 }: BoardProps) {
     const [activeId, setActiveId] = useState<number | null>(null);
@@ -86,25 +102,46 @@ export function Board({
     const outlineFor = useLiveOutlines('l3');
 
     /**
-     * Le tableau réclame à la popup la largeur de ses colonnes, de la première à
-     * la dernière : mesurée sur elles et non sur le tableau, dont la boîte suit la
-     * popup. La demande est relâchée au démontage, donc en quittant l'onglet.
+     * Réordonner les colonnes à la poignée. La piste porte la barre d'insertion :
+     * posée en absolu, elle doit l'être dans une boîte qui défile avec le contenu,
+     * là où le cadre défilant la décalerait de son `scrollLeft`.
      */
-    const boardRef = useRef<HTMLDivElement>(null);
+    const columnDrag = useDragReorder<HTMLDivElement, HTMLDivElement>({
+        ids: columns.map((c) => c.id),
+        rowSelector: '[data-board-column]',
+        layout: 'grid',
+        onReorder: (ids) => onColumnsReorder(ids as number[]),
+        onDragStateChange
+    });
+
+    /**
+     * Le tableau réclame à la popup la largeur de ses colonnes, de la première au
+     * bouton d'ajout : mesurée sur elles et non sur le tableau, dont la boîte suit
+     * la popup. La demande est relâchée au démontage, donc en quittant l'onglet.
+     *
+     * Par union des boîtes et non par les deux bouts : la barre d'insertion est
+     * hors flux et ne doit pas passer pour la dernière colonne.
+     */
+    const trackRef = columnDrag.listRef;
     const [columnsWidth, setColumnsWidth] = useState<number | null>(null);
     useLayoutEffect(() => {
-        const board = boardRef.current;
-        if (!board) return;
+        const track = trackRef.current;
+        if (!track) return;
         const measure = () => {
-            const first = board.firstElementChild as HTMLElement | null;
-            const last = board.lastElementChild as HTMLElement | null;
-            setColumnsWidth(first && last ? last.offsetLeft + last.offsetWidth - first.offsetLeft : null);
+            let left = Infinity;
+            let right = -Infinity;
+            for (const child of track.children) {
+                const el = child as HTMLElement;
+                left = Math.min(left, el.offsetLeft);
+                right = Math.max(right, el.offsetLeft + el.offsetWidth);
+            }
+            setColumnsWidth(right > left ? right - left : null);
         };
         measure();
         const ro = new ResizeObserver(measure);
-        for (const child of board.children) ro.observe(child);
+        for (const child of track.children) ro.observe(child);
         return () => ro.disconnect();
-    }, [columns.length, canManage]);
+    }, [trackRef, columns.length, canManage]);
     useRequestPopupWidth(columnsWidth === null ? null : boardNaturalWidth(columnsWidth));
 
     const sensors = useSensors(
@@ -261,29 +298,35 @@ export function Board({
             onDragEnd={onDragEnd}
             onDragCancel={onDragCancel}
         >
-            <div ref={boardRef} className={styles.board}>
-                {columns.map((column, index) => (
-                    <Column
-                        key={column.id}
-                        column={column}
-                        cards={byColumn.get(column.id) ?? []}
-                        canWrite={canWrite}
-                        canTasks={canTasks}
-                        canManage={canManage}
-                        first={index === 0}
-                        last={index === columns.length - 1}
-                        outlineFor={outlineFor}
-                        onCardOpen={onCardOpen}
-                        onCardCreate={onCardCreate}
-                        onEdit={onColumnEdit}
-                        onMove={onColumnMove}
-                    />
-                ))}
-                {canManage && (
-                    <button type='button' className={styles.addColumn} onClick={onColumnCreate}>
-                        <span className='icon icon-add' /> Colonne
-                    </button>
-                )}
+            <div className={styles.board}>
+                <div ref={trackRef} className={styles.boardTrack}>
+                    {columns.map((column) => (
+                        <Column
+                            key={column.id}
+                            column={column}
+                            cards={byColumn.get(column.id) ?? []}
+                            canWrite={canWrite}
+                            canTasks={canTasks}
+                            canManage={canManage}
+                            outlineFor={outlineFor}
+                            onCardOpen={onCardOpen}
+                            onCardCreate={onCardCreate}
+                            onEdit={onColumnEdit}
+                            // Seule d'elle-même, une colonne n'a nulle part où aller.
+                            onDragPointerDown={
+                                canManage && columns.length > 1
+                                    ? (e) => columnDrag.onGripPointerDown(e, column.id)
+                                    : undefined
+                            }
+                        />
+                    ))}
+                    {canManage && (
+                        <button type='button' className={styles.addColumn} onClick={onColumnCreate}>
+                            <span className='icon icon-add' /> Colonne
+                        </button>
+                    )}
+                    <div ref={columnDrag.barRef} className={styles.dropBar} aria-hidden='true' />
+                </div>
             </div>
 
             {/* La copie flottante est en `position: fixed`, et le `backdrop-filter`
@@ -317,13 +360,12 @@ interface ColumnProps {
     canWrite: boolean;
     canTasks: boolean;
     canManage: boolean;
-    first: boolean;
-    last: boolean;
     outlineFor: (value: string | null) => LiveOutlineProps;
     onCardOpen: (card: ProjectCard, tab: CardTab) => void;
     onCardCreate: (columnId: number) => void;
     onEdit: (column: ProjectColumn) => void;
-    onMove: (columnId: number, direction: -1 | 1) => void;
+    /** Absent : la colonne ne se déplace pas, faute de droit ou de voisine. */
+    onDragPointerDown?: (e: ReactPointerEvent) => void;
 }
 
 function Column({
@@ -332,13 +374,11 @@ function Column({
     canWrite,
     canTasks,
     canManage,
-    first,
-    last,
     outlineFor,
     onCardOpen,
     onCardCreate,
     onEdit,
-    onMove
+    onDragPointerDown
 }: ColumnProps) {
     // Droppable propre à la colonne : c'est ce qui rend une colonne vide capable
     // de recevoir une carte.
@@ -348,9 +388,24 @@ function Column({
     const overLimit = column.wipLimit !== null && cards.length > column.wipLimit;
 
     return (
-        <section className={styles.column}>
+        <section className={styles.column} data-board-column=''>
             <header className={styles.columnHead}>
-                <span className={styles.columnName}>{column.name || 'Sans nom'}</span>
+                {onDragPointerDown && (
+                    <button
+                        type='button'
+                        className={styles.columnGrip}
+                        title='Déplacer cette colonne'
+                        aria-label={`Réordonner ${column.name || 'cette colonne'}`}
+                        onPointerDown={onDragPointerDown}
+                    >
+                        <span className='icon icon-drag' />
+                    </button>
+                )}
+                {/* Le nom est abrégé par la largeur fixe de la colonne : l'infobulle
+                    est le seul endroit où un intitulé long se lit en entier. */}
+                <span className={styles.columnName} title={column.name || 'Sans nom'}>
+                    {column.name || 'Sans nom'}
+                </span>
                 <span className={overLimit ? styles.columnCountOver : styles.columnCount}>
                     {cards.length}
                     {column.wipLimit !== null && `/${column.wipLimit}`}
@@ -375,34 +430,14 @@ function Column({
                             </button>
                         )}
                         {canManage && (
-                            <>
-                                <button
-                                    type='button'
-                                    onClick={() => onMove(column.id, -1)}
-                                    disabled={first}
-                                    title='Déplacer à gauche'
-                                    aria-label='Déplacer la colonne à gauche'
-                                >
-                                    <span className='icon icon-move-to-left' />
-                                </button>
-                                <button
-                                    type='button'
-                                    onClick={() => onMove(column.id, 1)}
-                                    disabled={last}
-                                    title='Déplacer à droite'
-                                    aria-label='Déplacer la colonne à droite'
-                                >
-                                    <span className='icon icon-move-to-right' />
-                                </button>
-                                <button
-                                    type='button'
-                                    onClick={() => onEdit(column)}
-                                    title='Modifier la colonne'
-                                    aria-label='Modifier la colonne'
-                                >
-                                    <span className='icon icon-settings' />
-                                </button>
-                            </>
+                            <button
+                                type='button'
+                                onClick={() => onEdit(column)}
+                                title='Modifier la colonne'
+                                aria-label='Modifier la colonne'
+                            >
+                                <span className='icon icon-settings' />
+                            </button>
                         )}
                     </span>
                 )}

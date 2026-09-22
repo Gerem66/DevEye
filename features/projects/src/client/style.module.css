@@ -108,10 +108,10 @@
 }
 
 /*
- * Barre d'insertion du glisser-déposer, verticale contrairement aux autres
- * features : le portefeuille est la seule liste à plusieurs colonnes, où un trait
- * horizontal désignerait une rangée entière alors qu'une carte se dépose entre deux
- * voisines. Sa hauteur est posée par le geste, la feuille ne garde que l'épaisseur.
+ * Barre d'insertion verticale, celle des listes à plusieurs colonnes : le
+ * portefeuille et les colonnes du tableau, où un trait horizontal désignerait une
+ * rangée entière alors qu'une carte se dépose entre deux voisines. Sa hauteur est
+ * posée par le geste, la feuille ne garde que l'épaisseur.
  */
 .dropBar {
     position: absolute;
@@ -768,10 +768,6 @@
 
 .board {
     display: flex;
-    /* `stretch` : les colonnes prennent toute la hauteur disponible, ce qui donne
-       une cible de dépôt franche même quand elles sont presque vides. */
-    align-items: stretch;
-    gap: var(--space-md);
     /* Le tableau défile horizontalement dans sa propre boîte : la page ne doit
        jamais partir en travers. */
     overflow-x: auto;
@@ -782,6 +778,22 @@
        `min-height: 0` autorise les colonnes à défiler au lieu de pousser la fiche. */
     flex: 1;
     min-height: 0;
+}
+
+/*
+ * La piste des colonnes, distincte du cadre qui défile : la barre d'insertion est
+ * posée en absolu ici, et une boîte défilante la décalerait de son `scrollLeft`.
+ * `flex: 1 0 auto` lui donne la largeur de son contenu, jamais moins, et la fait
+ * remplir le cadre quand les colonnes n'y suffisent pas.
+ */
+.boardTrack {
+    position: relative;
+    display: flex;
+    /* `stretch` : les colonnes prennent toute la hauteur disponible, ce qui donne
+       une cible de dépôt franche même quand elles sont presque vides. */
+    align-items: stretch;
+    gap: var(--space-md);
+    flex: 1 0 auto;
 }
 
 .column {
@@ -804,6 +816,38 @@
     align-items: center;
     gap: var(--space-xs);
     padding: 0 var(--space-xs);
+}
+
+/* La poignée de réordonnancement, révélée au survol de la colonne. Elle garde sa
+   place au repos : le nom sauterait d'un cran à chaque passage du pointeur. */
+.columnGrip {
+    display: inline-flex;
+    flex-shrink: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: grab;
+    touch-action: none;
+    /* `filter` et non `opacity`, que les surfaces animées revendiquent en style inline. */
+    filter: opacity(0);
+    transition: filter var(--transition-fast);
+}
+
+.column:hover .columnGrip,
+.column:focus-within .columnGrip {
+    filter: opacity(1);
+}
+
+.columnGrip:active {
+    cursor: grabbing;
+}
+
+/* Au doigt, il n'y a pas de survol : la poignée doit être là d'emblée. */
+@media (pointer: coarse) {
+    .columnGrip {
+        filter: opacity(1);
+    }
 }
 
 .columnName {
@@ -1380,19 +1424,14 @@
 
 /*
  * Le seul élément élastique de la ligne : c'est lui qui pousse le reste contre le
- * bord droit. Trois lignes au plus, une sous-tâche pouvant porter un paragraphe
- * que son éditeur montre en entier.
+ * bord droit. En entier, jamais abrégé : le libellé EST la sous-tâche, et la boîte
+ * défilante de la liste borne déjà ce que la hauteur peut coûter.
  */
 .checkLabel {
     flex: 1;
     min-width: 0;
     overflow-wrap: anywhere;
     white-space: pre-line;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
-    line-clamp: 3;
-    overflow: hidden;
 }
 
 .checkDone {

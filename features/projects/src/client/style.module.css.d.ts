@@ -20,6 +20,7 @@ declare const styles: {
     readonly blockMeta: string;
     readonly blockName: string;
     readonly board: string;
+    readonly boardTrack: string;
     readonly card: string;
     readonly card2: string;
     readonly card2Chip: string;
@@ -68,6 +69,7 @@ declare const styles: {
     readonly columnBody: string;
     readonly columnCount: string;
     readonly columnCountOver: string;
+    readonly columnGrip: string;
     readonly columnHead: string;
     readonly columnName: string;
     readonly columnOver: string;
