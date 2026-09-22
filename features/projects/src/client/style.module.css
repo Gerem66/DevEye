@@ -1314,10 +1314,8 @@
     list-style: none;
 }
 
-.checkRow {
-    border-radius: var(--radius-sm);
-}
-
+/* Le trait de séparation, et rien d'autre : la ligne ne porte aucun rayon, un
+   `border-top` sur une boîte arrondie plongeant vers le bas à ses deux bouts. */
 .checkRow + .checkRow,
 .checkRowDragging + .checkRow,
 .checkRow + .checkRowDragging {
