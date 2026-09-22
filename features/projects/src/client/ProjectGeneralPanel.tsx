@@ -371,9 +371,7 @@ export default function ProjectGeneralPanel({ scope, canWrite, gone }: SettingsP
             />
 
             {canManage ? (
-                <div className={shell.sectionActions}>
-                    <SaveButton onSave={save} disabled={busy || !draft.title.trim()} />
-                </div>
+                <SaveButton onSave={save} disabled={busy || !draft.title.trim()} />
             ) : (
                 <ReadOnlyNotice>
                     Votre rôle ne permet pas de modifier un projet : cela relève de la permission « Gérer les projets »

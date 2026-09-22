@@ -77,9 +77,7 @@ export default function GeneralPanel({ canWrite }: SettingsPanelProps) {
             />
 
             {canWrite ? (
-                <div className={shell.sectionActions}>
-                    <SaveButton onSave={save} />
-                </div>
+                <SaveButton onSave={save} />
             ) : (
                 <ReadOnlyNotice>
                     Votre rôle ne permet pas de modifier ces réglages : ils relèvent de l’écriture sur le Convertisseur.

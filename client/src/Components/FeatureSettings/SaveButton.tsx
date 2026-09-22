@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import Button from '@/Components/Button';
+
+import { useSettingsFooter } from './footer';
 
 /**
  * Le bouton d'enregistrement d'un panneau de réglages.
@@ -10,6 +13,12 @@ import Button from '@/Components/Button';
  * message posé à côté déplaçait la rangée au moment précis où l'œil y revenait,
  * et chaque panneau réinventait le sien. Les erreurs, elles, restent au panneau :
  * elles ont besoin de place et ne s'effacent pas toutes seules.
+ *
+ * Sa place dépend de ce qu'il enregistre. Tout l'onglet : le pied du dialogue,
+ * en bas à droite, hors de ce qui défile, sans quoi il finit sous le contenu,
+ * hors de vue dès qu'il y a un ascenseur. Une partie seulement (un bloc, un
+ * élément d'une liste) : dans le panneau, à côté de ce qu'il concerne. Le portail
+ * ne déplace que le DOM : le bouton garde son arbre React, donc son `onSave`.
  */
 
 /** Combien de temps le bouton garde « Enregistré » avant de reprendre son intitulé. */
@@ -25,6 +34,12 @@ interface SaveButtonProps {
     variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
     icon?: string;
     title?: string;
+    /**
+     * `footer` (défaut) : le pied du dialogue de réglages, pour un bouton qui
+     * enregistre tout l'onglet. `inline` : là où il est écrit, pour un bouton qui
+     * n'enregistre qu'une partie. Hors coquille, tout est inline.
+     */
+    placement?: 'footer' | 'inline';
 }
 
 export default function SaveButton({
@@ -33,8 +48,10 @@ export default function SaveButton({
     disabled,
     variant,
     icon,
-    title
+    title,
+    placement = 'footer'
 }: SaveButtonProps) {
+    const footer = useSettingsFooter();
     const [state, setState] = useState<'idle' | 'saving' | 'saved'>('idle');
     const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
     // Un panneau démonté pendant l'aller-retour ne doit pas rendre la main sur
@@ -68,7 +85,7 @@ export default function SaveButton({
         }
     }, [onSave, state]);
 
-    return (
+    const button = (
         <Button
             onClick={() => void click()}
             disabled={disabled || state === 'saving'}
@@ -79,4 +96,10 @@ export default function SaveButton({
             {state === 'saving' ? 'Enregistrement…' : state === 'saved' ? 'Enregistré' : children}
         </Button>
     );
+
+    if (placement === 'inline' || footer === undefined) return button;
+    // La coquille est là mais son pied pas encore monté : un rendu d'attente
+    // plutôt qu'un bouton qui apparaît en bas du panneau puis saute.
+    if (footer === null) return null;
+    return createPortal(button, footer);
 }

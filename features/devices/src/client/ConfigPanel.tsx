@@ -179,11 +179,7 @@ export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite
                 />
             </div>
             {error && <p className={styles.configError}>{error}</p>}
-            {editable && (
-                <div className={shell.sectionActions}>
-                    <SaveButton onSave={() => save(device)} />
-                </div>
-            )}
+            {editable && <SaveButton onSave={() => save(device)} />}
             {/* Le droit, jamais l'état : l'appareil archivé dit déjà pourquoi il
                 est inerte, et le motif de rôle passe avant lui. */}
             {!canWrite && (

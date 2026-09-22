@@ -80,9 +80,7 @@ export default function TaxesPanel({ canWrite }: SettingsPanelProps) {
             )}
 
             {canWrite ? (
-                <div className={shell.sectionActions}>
-                    <SaveButton onSave={save} disabled={busy} />
-                </div>
+                <SaveButton onSave={save} disabled={busy} />
             ) : (
                 <ReadOnlyNotice>
                     Votre rôle ne permet pas de modifier ces réglages : ils relèvent de l’écriture sur Facturation.

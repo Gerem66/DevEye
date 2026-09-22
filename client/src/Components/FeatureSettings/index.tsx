@@ -13,6 +13,7 @@ import NotificationsSection from './sections/NotificationsSection';
 import ItemPermissionsSection from './sections/ItemPermissionsSection';
 import ProjectsSection from './sections/ProjectsSection';
 import SharingSection from './sections/SharingSection';
+import { SettingsFooterContext } from './footer';
 import SideNav, { type SideNavItem } from './SideNav';
 import { isModuleShareWired, moduleClient, moduleManifest } from '@/sdk/registry';
 import { liveSettingsValue, scopeDescription, scopeTitle, type SettingsScope, type SettingsSectionId } from './scope';
@@ -189,6 +190,13 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection, on
      *  par-dessus ; la coquille d'une fonctionnalité ne propose pas ce saut. */
     const [manageChannels, setManageChannels] = useState(false);
     const current = active && sections.some((s) => s.id === active) ? active : sections[0]?.id;
+    /**
+     * Le pied du dialogue, offert aux panneaux par contexte : le bouton qui
+     * enregistre tout un onglet s'y projette, au lieu de finir en bas d'un
+     * contenu qui défile. Toujours rendu, même vide : un pied qui va et vient
+     * d'un onglet à l'autre ferait changer la hauteur du dialogue à chaque clic.
+     */
+    const [footerEl, setFooterEl] = useState<HTMLElement | null>(null);
 
     // À chaque ouverture, revenir à la section demandée : un dialogue réutilisé
     // (celui du « + ») doit retomber sur Sources, pas sur le dernier onglet vu.
@@ -226,35 +234,40 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection, on
                 description={scopeDescription(scope)}
                 width={880}
                 fill
+                footer={<div ref={setFooterEl} className={styles.footer} />}
             >
-                <div className={styles.layout}>
-                    {/* Toujours visible, même à une seule section : tous les
+                <SettingsFooterContext.Provider value={footerEl}>
+                    <div className={styles.layout}>
+                        {/* Toujours visible, même à une seule section : tous les
                         dialogues de réglages ont la même silhouette. */}
-                    <SideNav
-                        items={items}
-                        active={current}
-                        onSelect={setActive}
-                        label={`Réglages · ${scopeTitle(scope)}`}
-                    />
-                    <div className={styles.panel}>
-                        {/* Sections génériques de la coquille (canaux, partage,
+                        <SideNav
+                            items={items}
+                            active={current}
+                            onSelect={setActive}
+                            label={`Réglages · ${scopeTitle(scope)}`}
+                        />
+                        <div className={styles.panel}>
+                            {/* Sections génériques de la coquille (canaux, partage,
                             restrictions) ; le reste vient des panneaux du module
                             (`settingsPanels`). */}
-                        {current === 'notifications' && (
-                            <NotificationsSection
-                                scope={scope}
-                                onManageChannels={scope.kind === 'item' ? () => setManageChannels(true) : undefined}
-                            />
-                        )}
-                        {current === 'permissions' && scope.kind === 'item' && <ItemPermissionsSection scope={scope} />}
-                        {current === 'projects' && scope.kind === 'item' && <ProjectsSection scope={scope} />}
-                        {current === 'sharing' && <SharingSection scope={scope} onGone={gone} />}
-                        {current === 'domains' && scope.kind === 'feature' && <DomainsSection scope={scope} />}
-                        {current && !GENERIC_SECTIONS.has(current) && (
-                            <ModulePanel scope={scope} section={current} close={onClose} gone={gone} />
-                        )}
+                            {current === 'notifications' && (
+                                <NotificationsSection
+                                    scope={scope}
+                                    onManageChannels={scope.kind === 'item' ? () => setManageChannels(true) : undefined}
+                                />
+                            )}
+                            {current === 'permissions' && scope.kind === 'item' && (
+                                <ItemPermissionsSection scope={scope} />
+                            )}
+                            {current === 'projects' && scope.kind === 'item' && <ProjectsSection scope={scope} />}
+                            {current === 'sharing' && <SharingSection scope={scope} onGone={gone} />}
+                            {current === 'domains' && scope.kind === 'feature' && <DomainsSection scope={scope} />}
+                            {current && !GENERIC_SECTIONS.has(current) && (
+                                <ModulePanel scope={scope} section={current} close={onClose} gone={gone} />
+                            )}
+                        </div>
                     </div>
-                </div>
+                </SettingsFooterContext.Provider>
             </Dialog>
             {/* Les réglages de la fonctionnalité empilés par-dessus ceux de
                 l'élément ; la pile de couches route Échap vers le plus haut. */}

@@ -216,9 +216,7 @@ export default function RepoGeneralPanel({ scope, canWrite, close, gone }: Setti
             </Checkbox>
 
             {canWrite ? (
-                <div className={shell.sectionActions}>
-                    <SaveButton onSave={save} disabled={busy || unchanged} />
-                </div>
+                <SaveButton onSave={save} disabled={busy || unchanged} />
             ) : (
                 <ReadOnlyNotice>
                     Votre rôle ne permet pas de modifier un dépôt : cela relève de l’écriture sur Git.

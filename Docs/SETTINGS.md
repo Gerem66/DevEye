@@ -79,6 +79,27 @@ pas après coup (le `owner/repo` d'un dépôt) s'y montre sans se modifier, avec
 la phrase qui dit pourquoi. Une porte pour changer une chose, et la même dans
 toutes les features.
 
+## Le bouton Enregistrer est au pied du dialogue
+
+Un `SaveButton` qui enregistre **tout l'onglet** ne se pose pas en bas du
+contenu : dès qu'il y a un ascenseur, il est hors de vue, et il est de toute
+façon le geste le plus discret de la page alors qu'il est le seul qui compte.
+La coquille lui offre le pied du dialogue, épinglé en bas à droite, hors de ce
+qui défile : c'est là qu'il va par défaut (`placement='footer'`), par un
+portail, sans quitter l'arbre React de son panneau. On l'écrit donc là où
+l'on écrivait le bouton, sans conteneur autour : un `sectionActions` vide
+laisserait son écart en bas du panneau.
+
+Un bouton qui n'enregistre **qu'une partie** (un champ à côté de son bouton,
+l'élément en cours d'une liste) reste où il est écrit, avec
+`placement='inline'` : sa place dit ce qu'il concerne. Les autres gestes d'un
+onglet (tester la connexion, supprimer l'élément) restent dans le panneau,
+dans leur `sectionActions`.
+
+Le pied est toujours rendu, même quand aucun panneau ne l'occupe : un pied qui
+apparaît et disparaît selon l'onglet ferait changer la hauteur du dialogue à
+chaque clic de la nav.
+
 Deux sorties, dans le contrat des panneaux (`SettingsPanelProps`) :
 
 - `close()` referme la coquille et rien d'autre, pour un geste qui se suit

@@ -254,12 +254,14 @@ export default function DatabaseGeneralPanel({ scope, canWrite, gone }: Settings
             />
 
             {canWrite ? (
-                <div className={shell.sectionActions}>
+                <>
                     <SaveButton onSave={save} disabled={busy || !complete || unchanged} />
-                    <Button variant='secondary' disabled={busy || testing || !complete} onClick={() => void test()}>
-                        {testing ? 'Essai…' : 'Tester la connexion'}
-                    </Button>
-                </div>
+                    <div className={shell.sectionActions}>
+                        <Button variant='secondary' disabled={busy || testing || !complete} onClick={() => void test()}>
+                            {testing ? 'Essai…' : 'Tester la connexion'}
+                        </Button>
+                    </div>
+                </>
             ) : (
                 <ReadOnlyNotice>
                     Votre rôle ne permet pas de modifier une base : cela relève de l’écriture sur Bases de données.

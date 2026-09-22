@@ -233,9 +233,7 @@ function DeviceRow({ device, canWrite }: { device: DeviceSentinelState; canWrite
             </Checkbox>
 
             {canWrite ? (
-                <div className={shell.sectionActions}>
-                    <SaveButton onSave={() => apply(device.enabled)} disabled={busy} />
-                </div>
+                <SaveButton onSave={() => apply(device.enabled)} disabled={busy} />
             ) : (
                 <ReadOnlyNotice>
                     Votre rôle ne permet pas de modifier ces réglages : ils relèvent de l’écriture sur Sentinelle.

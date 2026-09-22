@@ -378,14 +378,20 @@ export default function MailAccountSettingsPanel({ scope, canWrite, gone }: Sett
             </div>
 
             {!readOnly && (
-                <div className={shell.sectionActions}>
+                <>
                     <SaveButton onSave={save} disabled={busy} />
                     {!providerManaged && (
-                        <Button variant='secondary' disabled={testing || busy} onClick={() => void testConnection()}>
-                            {testing ? 'Test…' : 'Tester la connexion'}
-                        </Button>
+                        <div className={shell.sectionActions}>
+                            <Button
+                                variant='secondary'
+                                disabled={testing || busy}
+                                onClick={() => void testConnection()}
+                            >
+                                {testing ? 'Test…' : 'Tester la connexion'}
+                            </Button>
+                        </div>
                     )}
-                </div>
+                </>
             )}
 
             {account.foreign && (

@@ -180,9 +180,7 @@ export default function ClientPanel({ scope, canWrite, gone }: SettingsPanelProp
 
             {canWrite ? (
                 <>
-                    <div className={shell.sectionActions}>
-                        <SaveButton onSave={submit} disabled={busy} />
-                    </div>
+                    <SaveButton onSave={submit} disabled={busy} />
                     <div className={shell.sectionActions}>
                         <Button variant='danger' onClick={remove} disabled={busy}>
                             Retirer ce client

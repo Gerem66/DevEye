@@ -69,9 +69,7 @@ export default function SiteFormsPanel({ scope, canWrite }: SettingsPanelProps) 
             </div>
 
             {canWrite ? (
-                <div className={shell.sectionActions}>
-                    <SaveButton onSave={save} disabled={busy} />
-                </div>
+                <SaveButton onSave={save} disabled={busy} />
             ) : (
                 <ReadOnlyNotice>
                     Votre rôle ne permet pas de modifier un site : cela relève de l’écriture sur Audience.

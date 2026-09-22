@@ -308,9 +308,7 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
             </div>
 
             {canWrite ? (
-                <div className={shell.sectionActions}>
-                    <SaveButton onSave={save} disabled={busy || unchanged} />
-                </div>
+                <SaveButton onSave={save} disabled={busy || unchanged} />
             ) : (
                 <ReadOnlyNotice>
                     Votre rôle ne permet pas de modifier un service : cela relève de l’écriture sur Uptime.

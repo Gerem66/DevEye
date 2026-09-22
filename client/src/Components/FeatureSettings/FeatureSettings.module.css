@@ -132,6 +132,19 @@
 
 /* La phrase de tete d'une section, posee juste au-dessus du panneau : sans ce
    souffle, le tableau lui colle et le bloc entier se lit comme un pave. */
+/* Le pied du dialogue, où les panneaux projettent leur bouton d'enregistrement.
+   Une hauteur de bouton même vide : la silhouette ne bouge pas d'un onglet à
+   l'autre. */
+.footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+    width: 100%;
+    min-height: calc(1.2em + 2 * var(--space-sm) + 2px);
+}
+
 .panelLead {
     margin-bottom: var(--space-sm);
 }

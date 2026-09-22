@@ -98,9 +98,7 @@ export default function FinanceGeneralPanel({ canWrite }: SettingsPanelProps) {
             />
 
             {canWrite ? (
-                <div className={shell.sectionActions}>
-                    <SaveButton onSave={submit} disabled={busy} />
-                </div>
+                <SaveButton onSave={submit} disabled={busy} />
             ) : (
                 <ReadOnlyNotice>
                     Votre rôle ne permet pas de modifier ces réglages : ils relèvent de l’écriture sur Finances.

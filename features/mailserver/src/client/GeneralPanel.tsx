@@ -224,13 +224,7 @@ function MailboxForm({
                 label='Adresse active'
                 hint='Éteinte, elle refuse le courrier entrant et toute connexion, sans rien effacer.'
             />
-            {editable && (
-                <div className={shell.sectionActions}>
-                    <SaveButton onSave={save} disabled={unchanged || !valid}>
-                        Enregistrer
-                    </SaveButton>
-                </div>
-            )}
+            {editable && <SaveButton onSave={save} disabled={unchanged || !valid} />}
 
             {link.available && (
                 <div className={shell.section}>

@@ -329,9 +329,7 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
             </div>
 
             {canWrite ? (
-                <div className={shell.sectionActions}>
-                    <SaveButton onSave={save} disabled={busy || unchanged || !complete} />
-                </div>
+                <SaveButton onSave={save} disabled={busy || unchanged || !complete} />
             ) : (
                 <ReadOnlyNotice>
                     Votre rôle ne permet pas de modifier une cible : cela relève de l’écriture sur Déploiement.

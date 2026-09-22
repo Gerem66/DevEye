@@ -100,11 +100,7 @@ export function TerminalSettings({ deviceId, canWrite }: { deviceId: string; can
             </label>
 
             {error && <p className={shell.errorText}>{error}</p>}
-            {editable && (
-                <div className={shell.sectionActions}>
-                    <SaveButton onSave={save} disabled={!userValid} />
-                </div>
-            )}
+            {editable && <SaveButton onSave={save} disabled={!userValid} />}
             {/* Le droit, jamais l'état : l'appareil archivé dit déjà pourquoi il
                 est inerte, et le motif de rôle passe avant lui. */}
             {!canWrite && (

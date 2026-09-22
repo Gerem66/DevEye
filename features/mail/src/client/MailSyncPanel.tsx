@@ -123,7 +123,7 @@ export default function MailSyncPanel({ scope, canWrite }: SettingsPanelProps) {
                         onChange={(e) => setIntervalMinutes(e.target.value)}
                         aria-label='Cadence de relève, en minutes'
                     />
-                    {canWrite && <SaveButton onSave={saveInterval} disabled={guarded || busy} />}
+                    {canWrite && <SaveButton placement='inline' onSave={saveInterval} disabled={guarded || busy} />}
                 </div>
                 <span className={shell.fieldHint}>
                     {guarded

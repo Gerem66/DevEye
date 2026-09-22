@@ -116,9 +116,7 @@ export default function JobEncryptionPanel({ scope, canWrite }: SettingsPanelPro
             </p>
 
             {canWrite ? (
-                <div className={shell.sectionActions}>
-                    <SaveButton onSave={save} disabled={busy || mode === job.encryption} />
-                </div>
+                <SaveButton onSave={save} disabled={busy || mode === job.encryption} />
             ) : (
                 <ReadOnlyNotice>
                     Votre rôle ne permet pas de modifier la forme des archives : elle relève de l’écriture sur les
