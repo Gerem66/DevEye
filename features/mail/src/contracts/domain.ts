@@ -22,7 +22,12 @@ export const MAIL_SNIPPET_MAX_LENGTH = 280;
 /** Upper bound on a `mail.messageSearch` query — a needle, not a document. */
 export const MAIL_SEARCH_QUERY_MAX_LENGTH = 128;
 
-export const MAIL_SYNC_INTERVAL_MIN_MINUTES = 1;
+/**
+ * Plancher de la cadence de relève. Une relève ouvre une connexion IMAP par
+ * dossier : sous ce seuil, une boîte un peu fournie passe son temps à se
+ * reconnecter sans rien apprendre de plus.
+ */
+export const MAIL_SYNC_INTERVAL_MIN_MINUTES = 5;
 export const MAIL_SYNC_INTERVAL_MAX_MINUTES = 180;
 export const MAIL_SYNC_INTERVAL_DEFAULT_MINUTES = 10;
 
