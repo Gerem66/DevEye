@@ -354,36 +354,39 @@ export default function Mail(_props: FeatureViewProps) {
                 api.send('mail.messageList', { folderId, cursor, limit: MESSAGE_PAGE_SIZE })
             );
             if (stale()) return;
-            let messages = page.messages;
-            let nextCursor = page.nextCursor;
+            const messages = page.messages;
+            setMessages((prev) => (cursor === null ? messages : [...prev, ...messages]));
+            setNextCursor(page.nextCursor);
+            setError(null);
+            // Posée ici, et pas au bout : à partir de cette ligne, ce qui est à
+            // l'écran est bien le dossier sélectionné. Ce qui suit ne fait que
+            // l'allonger par le bas, et n'a donc plus à masquer quoi que ce soit.
+            if (cursor === null) setFirstPageLoading(false);
 
-            if (nextCursor === null) {
-                const older = await withSecrecy(() =>
-                    api.send('mail.folderBackfill', { folderId, limit: BACKFILL_BATCH_SIZE })
-                );
-                if (stale()) return;
-                setReachedFolderStart(older.reachedStart);
-                if (older.addedCount > 0) {
-                    // The batch landed below everything already cached, so the
-                    // re-read picks up exactly where this page stopped.
-                    const refetched = await withSecrecy(() =>
-                        api.send('mail.messageList', {
-                            folderId,
-                            cursor: cursorOf(messages[messages.length - 1]) ?? cursor,
-                            limit: MESSAGE_PAGE_SIZE
-                        })
-                    );
-                    if (stale()) return;
-                    messages = [...messages, ...refetched.messages];
-                    nextCursor = refetched.nextCursor;
-                }
-            } else {
+            if (page.nextCursor !== null) {
                 setReachedFolderStart(false);
+                return;
             }
 
-            setMessages((prev) => (cursor === null ? messages : [...prev, ...messages]));
-            setNextCursor(nextCursor);
-            setError(null);
+            // Le cache est épuisé : une seule incursion vers le passé, dont les
+            // lignes se posent sous celles déjà affichées.
+            const older = await withSecrecy(() =>
+                api.send('mail.folderBackfill', { folderId, limit: BACKFILL_BATCH_SIZE })
+            );
+            if (stale()) return;
+            setReachedFolderStart(older.reachedStart);
+            if (older.addedCount === 0) return;
+
+            const refetched = await withSecrecy(() =>
+                api.send('mail.messageList', {
+                    folderId,
+                    cursor: cursorOf(messages[messages.length - 1]) ?? cursor,
+                    limit: MESSAGE_PAGE_SIZE
+                })
+            );
+            if (stale()) return;
+            setMessages((prev) => [...prev, ...refetched.messages]);
+            setNextCursor(refetched.nextCursor);
         } catch (e) {
             if (stale()) return;
             setError(humanizeError(e, 'Chargement des messages impossible.'));

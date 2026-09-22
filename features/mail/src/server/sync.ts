@@ -235,6 +235,11 @@ export async function backfillFolder(
     folder: MailFolderRow,
     limit: number
 ): Promise<{ addedCount: number; reachedStart: boolean }> {
+    // Rien ne peut exister sous l'UID 1 : la question ne vaut pas un aller-retour
+    // IMAP, et l'ouverture d'un dossier déjà remonté jusqu'à son début la pose à
+    // chaque fois.
+    if (folder.first_seen_uid === 1) return { addedCount: 0, reachedStart: true };
+
     const result = await session.fetchOlderMessages(folder.imap_path, folder.first_seen_uid, limit);
 
     await cacheEnvelopes(repo, cipher, folder.id, result.messages);
