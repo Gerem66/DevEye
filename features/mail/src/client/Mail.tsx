@@ -36,8 +36,7 @@ import type {
     MailFolder,
     MailMessage,
     MailMessageCursor,
-    MailMessageSummary,
-    MailSecurityTier
+    MailMessageSummary
 } from '../contracts/domain';
 
 /**
@@ -112,8 +111,6 @@ export default function Mail(_props: FeatureViewProps) {
     const folderRunRef = useRef(0);
     /** Jeton de la relève en vol, s'il y en a une (`null` sinon). */
     const syncRunRef = useRef<number | null>(null);
-    /** Palier du compte ouvert, lu par l'ouverture d'un dossier (voir `openFolder`). */
-    const selectedAccountTierRef = useRef<MailSecurityTier | null>(null);
 
     const [messages, setMessages] = useState<MailMessageSummary[]>([]);
     const [nextCursor, setNextCursor] = useState<MailMessageCursor | null>(null);
@@ -549,15 +546,14 @@ export default function Mail(_props: FeatureViewProps) {
     /**
      * Ouvrir un dossier : la page la plus récente d'abord, depuis le cache local,
      * donc immédiate, puis une relève IMAP dont seule la tête de liste est
-     * refusionnée. La relève est sautée pour les comptes « guarded » :
-     * `mail.messageList` vient déjà de synchroniser le dossier côté serveur, et en
-     * redemander une ouvrirait une seconde connexion IMAP pour rien.
+     * refusionnée. Les deux paliers suivent ce chemin : une boîte gardée n'a pas
+     * de relève de fond, et c'est ici qu'elle se met à jour.
      */
     const openFolder = useCallback(
         async (folderId: number) => {
             const run = folderRunRef.current;
             await loadMessages(folderId, null);
-            if (folderRunRef.current !== run || selectedAccountTierRef.current === 'guarded') return;
+            if (folderRunRef.current !== run) return;
             await syncNow();
         },
         [loadMessages, syncNow]
@@ -642,7 +638,6 @@ export default function Mail(_props: FeatureViewProps) {
     const selectedAccount = accounts.find((a) => a.id === selectedAccountId) ?? null;
     const accountStatus = selectedAccount ? describeAccountStatus(selectedAccount) : null;
     selectedAccountIdRef.current = selectedAccountId;
-    selectedAccountTierRef.current = selectedAccount?.securityTier ?? null;
     const selectedFolder = folders.find((f) => f.id === selectedFolderId) ?? null;
 
     /**

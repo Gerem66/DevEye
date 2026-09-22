@@ -15,7 +15,7 @@ import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 import * as mailClient from './client';
 import { parseAndSanitize } from './parse';
 import type { MailRepo } from './repo';
-import { cacheEnvelopes, refreshFolderCounts, syncOneFolder } from './sync';
+import { cacheEnvelopes, refreshFolderCounts } from './sync';
 import {
     accountCipher,
     assertMailUnlocked,
@@ -26,7 +26,6 @@ import {
     messageMatchesTerms,
     parseTrustedImageDomains,
     refreshCallback,
-    sessionFor,
     searchTerms,
     toMessageSummaryDTO,
     WRITE
@@ -49,22 +48,12 @@ export const mailMessageListFeature = defineSdkFeature<
 >({
     ...mailMessageList,
     handler: async (ctx, input) => {
-        const { folder, account } = await loadFolderWithAccount(ctx, input.folderId);
+        const { account } = await loadFolderWithAccount(ctx, input.folderId);
         await assertMailUnlocked(ctx, account.security_tier);
         const cipher = await accountCipher(ctx, account);
-        // "Guarded" accounts have no background sync — this is their only chance
-        // to refresh, so the list is synced on every open. Best-effort: a sync
-        // failure (offline, bad creds) still serves whatever is already cached.
-        if (account.security_tier === 'guarded') {
-            try {
-                await sessionFor(ctx, account, cipher, (session) => syncOneFolder(session, ctx.repo, cipher, folder));
-            } catch (e) {
-                ctx.logger.warn(
-                    { folderId: folder.id, err: e instanceof Error ? e.message : String(e) },
-                    'mail.messageList: on-demand sync failed'
-                );
-            }
-        }
+        // Le cache, et rien d'autre : la liste ne touche jamais IMAP, quel que
+        // soit le palier. La fraîcheur est le travail de `mail.folderSync`, que
+        // l'écran lance derrière et dont il refusionne la tête de liste.
         const rows = await ctx.repo.messages.listByFolder(input.folderId, input.cursor, input.limit);
         const messages = await Promise.all(rows.map((row) => toMessageSummaryDTO(cipher, row, account.id)));
         // A short page is the end of the folder; a full one resumes just past
