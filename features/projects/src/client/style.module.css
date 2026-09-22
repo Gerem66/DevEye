@@ -1409,9 +1409,16 @@
     display: flex;
     align-items: flex-start;
     gap: var(--space-sm);
-    padding: var(--space-sm) var(--space-xs);
+    /* Le rembourrage vertical est porté par les enfants et non par la ligne :
+       c'est ce qui permet au libellé de descendre jusqu'aux bords et de répondre
+       au clic sur toute la hauteur, coin compris. */
+    padding: 0 var(--space-xs);
     font-size: 0.85rem;
     color: var(--text-primary);
+}
+
+.checkItem > * {
+    margin-block: var(--space-sm);
 }
 
 .checkGrip {
@@ -1468,9 +1475,34 @@
     white-space: pre-line;
 }
 
+/* Le libellé est le bouton qui ouvre la ligne : toute sa largeur et toute sa
+   hauteur répondent, on n'a ni à viser le chevron ni à viser le texte. */
+.checkLabelOpen {
+    composes: checkLabel;
+    align-self: stretch;
+    margin-block: 0;
+    padding: var(--space-sm) 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
 .checkDone {
     text-decoration: line-through;
     color: var(--text-muted);
+}
+
+/* Le chevron qui ouvre la ligne, retourné une fois qu'elle l'est. */
+.checkToggle {
+    composes: tagRemove;
+    transition: transform var(--transition-fast);
+}
+
+.checkToggle[data-open] {
+    transform: rotate(180deg);
 }
 
 .checkRequired {
@@ -2457,6 +2489,14 @@ button.tlAddCard {
     transition:
         border-color var(--transition-fast),
         background-color var(--transition-fast);
+}
+
+/* Le libellé d'une sous-tâche qu'on retouche : une ligne au repos, dix au plus.
+   Plus long que le composeur du fil, une sous-tâche se relisant d'un coup.
+   Déclaré ici et non parmi les `check*` : `composes` exige la classe plus haut. */
+.checkEditText {
+    composes: grow;
+    max-height: calc(10 * 1.5em + 2 * var(--space-sm) + 2px);
 }
 
 .grow:focus-within {

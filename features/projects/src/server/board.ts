@@ -314,6 +314,18 @@ export const projectCardUpdateFeature = defineSdkFeature({
             input.card,
             stampChecklist(input.card.checklist, saved.checklist, ctx.userId, now)
         );
+        // Une tâche déjà rangée comme terminée ne peut pas rouvrir une sous-tâche
+        // obligatoire : sa colonne dirait le contraire de son contenu.
+        if (requiredOpen(payload.checklist) > 0 && card.column_id !== null) {
+            const column = await ctx.repo.board.findColumn(card.column_id);
+            if (column?.counts_as_done === 1) {
+                throw new FeatureError(
+                    'conflict',
+                    'Cette tâche est dans une colonne terminée : sortez-l’en avant de rouvrir une sous-tâche obligatoire.'
+                );
+            }
+        }
+
         const row = await ctx.repo.board.updateCard(input.cardId, project.workspace_id, {
             assigneeUserId: input.card.assigneeUserId,
             priority: priorityToDb(input.card.priority),

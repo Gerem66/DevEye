@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, Checkbox, Dialog, SearchSelect, useDragReorder } from 'deveye-sdk-client';
 import type { MinimalUser } from '@deveye/types';
 import { formatDate, formatDateTime, relativeAgo } from '../api';
@@ -20,6 +20,11 @@ interface SubtasksProps {
     onDragStateChange: (dragging: boolean) => void;
     /** Le champ d'ajout prend le focus à l'ouverture de la popup. */
     autoFocus: boolean;
+    /**
+     * La tâche est rangée dans une colonne qui vaut « terminé » : rouvrir une
+     * sous-tâche obligatoire ferait dire à sa colonne le contraire de son contenu.
+     */
+    columnDone: boolean;
 }
 
 /** Identifiant local d'une sous-tâche : c'est sa clé de rendu, pas une clé SQL. */
@@ -29,12 +34,22 @@ function newItemId(): string {
 
 /**
  * La liste de sous-tâches d'une carte. Elle se coche, se range par sa poignée, et
- * chaque ligne se déplie en place pour se retoucher : texte, assigné, et le
- * drapeau qui ferme à la tâche l'entrée d'une colonne terminée.
+ * chaque ligne s'ouvre au clic sur son libellé pour se retoucher : texte, assigné,
+ * et le drapeau qui ferme à la tâche l'entrée d'une colonne terminée.
  */
-export function Subtasks({ items, members, meUserId, onChange, onDragStateChange, autoFocus }: SubtasksProps) {
+export function Subtasks({
+    items,
+    members,
+    meUserId,
+    onChange,
+    onDragStateChange,
+    autoFocus,
+    columnDone
+}: SubtasksProps) {
     const [label, setLabel] = useState('');
-    const [editingId, setEditingId] = useState<string | null>(null);
+    const [openId, setOpenId] = useState<string | null>(null);
+    /** Le refus de rouvrir une sous-tâche obligatoire, le temps qu'on le lise. */
+    const [refused, setRefused] = useState<string | null>(null);
     const [removing, setRemoving] = useState<ProjectChecklistItem | null>(null);
     /** Gardé à part : la popup s'efface en fondu, et y lire un nom vide serait pire que rien. */
     const [removingLabel, setRemovingLabel] = useState('');
@@ -72,7 +87,15 @@ export function Subtasks({ items, members, meUserId, onChange, onDragStateChange
 
     // Les horodatages posés ici ne servent qu'à l'affichage immédiat : le serveur
     // les recalcule et c'est sa version qui revient.
-    const toggle = (id: string) => {
+    const toggle = (item: ProjectChecklistItem) => {
+        if (item.done && item.required && columnDone) {
+            setRefused(
+                'Cette tâche est dans une colonne terminée : sortez-l’en avant de rouvrir une sous-tâche obligatoire.'
+            );
+            return;
+        }
+        setRefused(null);
+        const id = item.id;
         const now = Math.floor(Date.now() / 1000);
         onChange(
             items.map((i) =>
@@ -125,16 +148,24 @@ export function Subtasks({ items, members, meUserId, onChange, onDragStateChange
                                     </button>
                                     <Checkbox
                                         checked={item.done}
-                                        onChange={() => toggle(item.id)}
+                                        onChange={() => toggle(item)}
                                         aria-label={item.label}
                                     />
-                                    <span
+                                    <button
+                                        type='button'
                                         className={
-                                            item.done ? `${styles.checkLabel} ${styles.checkDone}` : styles.checkLabel
+                                            item.done
+                                                ? `${styles.checkLabelOpen} ${styles.checkDone}`
+                                                : styles.checkLabelOpen
                                         }
+                                        aria-expanded={openId === item.id}
+                                        onClick={() => {
+                                            setRefused(null);
+                                            setOpenId(openId === item.id ? null : item.id);
+                                        }}
                                     >
                                         {item.label}
-                                    </span>
+                                    </button>
                                     {item.required && (
                                         <span
                                             className={item.done ? styles.checkRequiredMet : styles.checkRequired}
@@ -162,12 +193,16 @@ export function Subtasks({ items, members, meUserId, onChange, onDragStateChange
                                     )}
                                     <button
                                         type='button'
-                                        className={styles.tagRemove}
+                                        className={styles.checkToggle}
+                                        data-open={openId === item.id ? '' : undefined}
                                         aria-label={`Modifier ${item.label}`}
-                                        aria-expanded={editingId === item.id}
-                                        onClick={() => setEditingId(editingId === item.id ? null : item.id)}
+                                        aria-expanded={openId === item.id}
+                                        onClick={() => {
+                                            setRefused(null);
+                                            setOpenId(openId === item.id ? null : item.id);
+                                        }}
                                     >
-                                        <span className='icon icon-edit' />
+                                        <span className='icon icon-chevron-down' />
                                     </button>
                                     <button
                                         type='button'
@@ -182,7 +217,7 @@ export function Subtasks({ items, members, meUserId, onChange, onDragStateChange
                                     </button>
                                 </div>
 
-                                {editingId === item.id && (
+                                {openId === item.id && (
                                     <SubtaskEditor
                                         item={item}
                                         members={members}
@@ -192,10 +227,10 @@ export function Subtasks({ items, members, meUserId, onChange, onDragStateChange
                                         ]
                                             .filter(Boolean)
                                             .join(' · ')}
-                                        onCancel={() => setEditingId(null)}
+                                        onCancel={() => setOpenId(null)}
                                         onSave={(next) => {
                                             onChange(items.map((i) => (i.id === next.id ? next : i)));
-                                            setEditingId(null);
+                                            setOpenId(null);
                                         }}
                                     />
                                 )}
@@ -204,6 +239,12 @@ export function Subtasks({ items, members, meUserId, onChange, onDragStateChange
                         <li ref={drag.barRef} className={styles.checkDropBar} aria-hidden='true' />
                     </ul>
                 </div>
+            )}
+
+            {refused && (
+                <p className={styles.error} role='alert'>
+                    {refused}
+                </p>
             )}
 
             <div className={styles.checkAdd}>
@@ -276,11 +317,22 @@ interface SubtaskEditorProps {
     onSave: (next: ProjectChecklistItem) => void;
 }
 
+/** Ce que la ligne ouverte montre sous elle, et qui n'est écrit qu'à « Enregistrer ». */
 function SubtaskEditor({ item, members, footer, onCancel, onSave }: SubtaskEditorProps) {
     const [label, setLabel] = useState(item.label);
     const [assigneeUserId, setAssigneeUserId] = useState(item.assigneeUserId);
     const [required, setRequired] = useState(item.required);
     const options = useAssigneeOptions(members, assigneeUserId);
+    const textRef = useRef<HTMLTextAreaElement>(null);
+
+    // Le curseur après le texte et non devant : on ouvre une sous-tâche pour la
+    // compléter bien plus souvent que pour la réécrire.
+    useEffect(() => {
+        const el = textRef.current;
+        if (!el) return;
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+    }, []);
 
     const save = () => {
         const text = label.trim();
@@ -289,10 +341,10 @@ function SubtaskEditor({ item, members, footer, onCancel, onSave }: SubtaskEdito
 
     return (
         <div className={styles.checkEdit}>
-            <div className={styles.grow} data-value={label}>
+            <div className={styles.checkEditText} data-value={label}>
                 <textarea
+                    ref={textRef}
                     className={styles.textarea}
-                    autoFocus
                     value={label}
                     rows={1}
                     maxLength={PROJECT_CHECKLIST_LABEL_MAX_LENGTH}

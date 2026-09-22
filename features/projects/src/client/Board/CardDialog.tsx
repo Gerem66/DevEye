@@ -48,6 +48,8 @@ interface CardDialogProps {
     canWrite: boolean;
     /** Poser les dates et le jalon de cette carte : le droit de planifier, ou la carte est sienne. */
     canDate: boolean;
+    /** La colonne de la carte vaut « terminé » : ses sous-tâches obligatoires ne se rouvrent pas. */
+    columnDone: boolean;
     /** Tenir les jalons et les dépendances du projet. */
     canPlan: boolean;
     /** Écrire dans le fil de la carte. */
@@ -114,6 +116,7 @@ export function CardDialog({
     meUserId,
     canWrite,
     canDate,
+    columnDone,
     canPlan,
     canChat,
     siblings,
@@ -413,6 +416,7 @@ export function CardDialog({
             onChange={commitChecklist}
             onDragStateChange={onSubtaskDrag}
             autoFocus={tab === 'work'}
+            columnDone={columnDone}
         />
     );
 

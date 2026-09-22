@@ -1,6 +1,7 @@
 import { createElement, useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import {
     Button,
+    Dialog,
     FeatureSettingsButton,
     humanizeError,
     invalidate,
@@ -95,6 +96,12 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
      * jusqu'au geste suivant.
      */
     const [actionError, setActionError] = useState<string | null>(null);
+    /**
+     * Le refus d'un déplacement, à part de `actionError` : le bandeau naît loin de
+     * la carte, et on manquerait le retour en arrière à le lire. La popup, elle,
+     * retient le regard le temps que la carte reparte d'où elle vient.
+     */
+    const [heldBack, setHeldBack] = useState<string | null>(null);
 
     const [cardDialog, setCardDialog] = useState<{
         card: ProjectCard | null;
@@ -243,7 +250,9 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
             await api.send('projects.cardMove', { columnId, cardIds });
             invalidate('projects.list');
         } catch (e) {
-            setActionError(moveRefusal(e, before) ?? humanizeError(e, 'Le déplacement a échoué.'));
+            const refusal = moveRefusal(e, before);
+            if (refusal) setHeldBack(refusal);
+            else setActionError(humanizeError(e, 'Le déplacement a échoué.'));
             void reload();
         }
     };
@@ -302,7 +311,13 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
      * la carte enregistrée, sans emporter une saisie en cours dans la popup.
      * Optimiste, comme le déplacement d'une carte.
      */
-    const patchCard = async (card: ProjectCard, change: Partial<ProjectCard>, failure: string) => {
+    const patchCard = async (
+        card: ProjectCard,
+        change: Partial<ProjectCard>,
+        failure: string,
+        /** Le refus se dit dans la popup quand c'est d'elle que le geste part. */
+        inDialog = false
+    ) => {
         setActionError(null);
         const next = { ...card, ...change };
         const draft: ProjectCardDraft = {
@@ -323,7 +338,8 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
             await withSecrecy(() => api.send('projects.cardUpdate', { cardId: card.id, card: draft }));
             invalidate('projects.board', 'projects.list');
         } catch (e) {
-            setActionError(humanizeError(e, failure));
+            if (inDialog) setDialogError(humanizeError(e, failure));
+            else setActionError(humanizeError(e, failure));
             void reload();
         }
     };
@@ -633,6 +649,18 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                 ) : null
             )}
 
+            {/* Le refus d'un déplacement, sous les yeux : la carte retourne à sa
+                colonne pendant qu'on le lit. */}
+            <Dialog
+                open={heldBack !== null}
+                onClose={() => setHeldBack(null)}
+                title='Sous-tâches à terminer'
+                width={420}
+                footer={<Button onClick={() => setHeldBack(null)}>J’ai compris</Button>}
+            >
+                <p>{heldBack}</p>
+            </Dialog>
+
             {/* Le geste d'ajout lancé depuis le « + » : dès qu'il aboutit,
                 l'onglet existe et s'ouvre dans la foulée. */}
             <AddFeatureDialog
@@ -671,6 +699,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                 meUserId={meUserId}
                 canWrite={canWrite}
                 canDate={cardDialog?.card ? rights.canDate(cardDialog.card) : rights.canWrite}
+                columnDone={cardDialog?.columnId !== null && doneColumnIds.has(cardDialog?.columnId ?? -1)}
                 canPlan={rights.canPlan}
                 canChat={rights.canChat}
                 siblings={cards}
@@ -681,7 +710,9 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                 onClose={() => setCardDialog(null)}
                 onSubmit={(draft, links) => void submitCard(draft, links)}
                 onChecklistChange={(checklist) => {
-                    if (cardDialog?.card) void patchCard(cardDialog.card, { checklist }, 'L’enregistrement a échoué.');
+                    if (!cardDialog?.card) return;
+                    setDialogError(null);
+                    void patchCard(cardDialog.card, { checklist }, 'L’enregistrement a échoué.', true);
                 }}
                 onRead={() => {
                     const id = cardDialog?.card?.id;
