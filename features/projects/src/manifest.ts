@@ -76,6 +76,13 @@ export const manifest = {
             type: 'toggle'
         },
         {
+            key: 'history',
+            label: 'Consulter l’historique',
+            description:
+                'Lire la frise des faits marquants d’un projet : qui l’a renommé, changé de statut, archivé, quand un jalon est tombé. Les tâches archivées, elles, restent accessibles à qui voit le projet.',
+            type: 'toggle'
+        },
+        {
             key: 'chat',
             label: 'Participer à la discussion',
             description:
@@ -84,9 +91,11 @@ export const manifest = {
         }
     ],
     /**
-     * Le projet lui-même (profil, archivage) dans l'onglet Général de sa fiche.
+     * Le projet lui-même (profil, archivage) dans l'onglet Général de sa fiche, et
+     * son histoire dans le dernier : on l'ouvre rarement, pour une question
+     * précise, et elle prenait un onglet de la barre toute la journée pour ça.
      * Partage et Permissions viennent du descripteur.
      */
-    settings: { item: ['general'] },
+    settings: { item: ['general', { id: 'history', label: 'Historique', icon: 'archive' }] },
     commands: projectCommands
 } satisfies FeatureManifest;

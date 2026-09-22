@@ -34,7 +34,9 @@ const EMPTY: ProjectDraft = {
     description: '',
     tags: [],
     status: 'active',
-    showOverview: true,
+    // Le tableau suffit à un projet neuf : la vue d'ensemble se demande, la frise vient d'office.
+    showOverview: false,
+    showTimeline: true,
     startDate: null,
     dueDate: null
 };

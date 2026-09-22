@@ -27,6 +27,11 @@ export type Ctx = SdkFeatureContext<ProjectsRepo>;
 
 /** La lecture est le défaut du SDK : seules les écritures déclarent leur niveau. */
 export const WRITE = { level: 'write' } as const;
+/**
+ * La seule permission propre qui garde une lecture, et donc la seule sans
+ * `level` : la lecture est le niveau par défaut.
+ */
+export const HISTORY = { extras: ['history'] } as const;
 
 /**
  * Les cinq surfaces que `write` ne suffit plus à ouvrir (voir le manifest).
@@ -147,6 +152,7 @@ export function toProject(row: ProjectRow, payload: StoredProject, foreign: bool
         version: payload.version,
         versionSource: row.version_source,
         showOverview: row.show_overview === 1,
+        showTimeline: row.show_timeline === 1,
         status: row.status,
         securityTier: row.security_tier,
         startDate: row.start_date,

@@ -220,6 +220,7 @@ export function createProjectsUsageProvider(deps: Deps): ProjectsUsageProvider {
                 await deps.repo.projects.update(project.id, workspaceId, {
                     status: project.status,
                     showOverview: project.show_overview === 1,
+                    showTimeline: project.show_timeline === 1,
                     startDate: project.start_date,
                     dueDate: project.due_date,
                     content: await encryptProject(cipher, { ...body, version })

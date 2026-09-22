@@ -2,6 +2,8 @@ declare const styles: {
     readonly actions: string;
     readonly addColumn: string;
     readonly addRow: string;
+    readonly archivedList: string;
+    readonly archivedRow: string;
     readonly bar: string;
     readonly barDraggable: string;
     readonly barGhost: string;

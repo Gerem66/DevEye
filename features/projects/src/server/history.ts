@@ -3,7 +3,7 @@ import { PROJECT_EVENT_PAGE_SIZE, projectEventSchema } from '../contracts/domain
 import type { ProjectEvent, ProjectEventRow } from '../contracts/domain';
 import { defineSdkFeature, type SdkCipher } from '@deveye/types/sdk/server';
 
-import { assertProjectUnlocked, loadProject, projectCipher, type Ctx, type StoredEvent } from './_shared';
+import { assertProjectUnlocked, HISTORY, loadProject, projectCipher, type Ctx, type StoredEvent } from './_shared';
 
 /**
  * La frise verticale d'un projet, en lecture seule : les événements sont posés par
@@ -45,6 +45,7 @@ function toEvent(row: ProjectEventRow, payload: StoredEvent): ProjectEvent {
 
 export const projectEventListFeature = defineSdkFeature({
     ...projectEventList,
+    access: HISTORY,
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId);
         await assertProjectUnlocked(ctx, project);

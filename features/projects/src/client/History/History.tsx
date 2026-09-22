@@ -32,7 +32,8 @@ interface HistoryProps {
 /**
  * L'historique d'un projet : une frise verticale, tenue par un trait fin à
  * gauche. Volontairement sobre : on l'ouvre rarement, pour une question précise
- * (quand a-t-on archivé ceci, depuis quand est-on en v2).
+ * (quand a-t-on archivé ceci, depuis quand est-on en v2). D'où sa place, le
+ * dernier onglet des réglages du projet.
  */
 export function History({ projectId, archivedCards, onOpenArchived }: HistoryProps) {
     const [events, setEvents] = useState<ProjectEvent[] | null>(null);

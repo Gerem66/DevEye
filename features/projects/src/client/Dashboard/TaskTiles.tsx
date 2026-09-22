@@ -274,7 +274,7 @@ export function TaskTileBody({ tileKey, stats, now, onOpenCard, onOpenTab }: Tas
                         )}
                     </ul>
                     <p className={styles.dashTileNote}>
-                        {link('history', 'Archivages, versions et déploiements sont dans l’Historique.')}
+                        Archivages, versions et déploiements sont dans l’Historique, au dernier onglet des réglages.
                     </p>
                 </>
             );

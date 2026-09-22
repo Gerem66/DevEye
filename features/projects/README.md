@@ -122,12 +122,16 @@ appartient à l'espace.
 
 ### La barre d'onglets suit le contenu du projet
 
-**Trois onglets permanents, un au choix, cinq à la demande.** Tableau, Frise et
-Historique parlent du travail : ils existent dès le premier jour. La Vue
-d'ensemble les précède et ouvre le projet, sauf si son réglage « Afficher la vue
-d'ensemble » (onglet Général, colonne claire `projects.show_overview`) la retire :
-le projet s'ouvre alors sur son Tableau. Ses tuiles de tâches se calculent de ce
-que la fiche tient déjà, sans aucun aller-retour. Les cinq autres ne
+**Un onglet obligatoire, deux au choix, cinq à la demande.** Le **Tableau** ne se
+retire pas et ouvre toujours le projet : un projet sans tableau n'a plus de travail
+à montrer. La **Frise** et la **Vue d'ensemble** se déclarent dans l'onglet Général
+des réglages, en colonnes claires (`projects.show_timeline`, `projects.show_overview`) :
+la barre se dessine avant tout déchiffrement, et un projet confidentiel verrouillé
+doit pouvoir s'ouvrir sans rien réclamer. La frise vient d'office, la vue d'ensemble
+se demande : elle résume, elle ne fait pas travailler, et un projet neuf n'a rien à
+y montrer. L'**Historique** n'est plus un onglet de la barre mais le dernier onglet
+des réglages du projet : on l'ouvre rarement, pour une question précise, et il
+occupait la barre toute la journée pour ça. Les cinq autres ne
 montrent que des **liaisons** vers des objets d'espace — tant qu'un projet n'en
 a aucune, ils n'affichaient qu'une phrase disant qu'il n'y a rien, quatre fois
 de suite, et il fallait les ouvrir un par un pour s'en apercevoir.
@@ -261,11 +265,14 @@ Trois détails qui ne se devinent pas, dans `Timeline/dateDrag.ts` :
 La frise se dessine désormais même sans aucune carte datée, dès qu'il reste une
 pastille : sans elle, le geste n'aurait nulle part où atterrir.
 
-### Cinq droits découpent l'écriture
+### Six droits, dont cinq découpent l'écriture
 
 `write` sur Projets laisse **participer au tableau** : retoucher une tâche et la
 faire changer de colonne. Le reste se confie séparément, par les
-`extraPermissions` du manifest (voir [Docs/PERMISSIONS.md](../../Docs/PERMISSIONS.md)) :
+`extraPermissions` du manifest. `history` est le seul à garder une **lecture** et
+non un geste : l'histoire d'un projet ne se donne pas avec le projet. Les tâches
+archivées, elles, restent ouvertes à qui voit le projet, parce que c'est de là
+qu'on en restaure une et que l'archivage est la seule sortie d'une tâche. Voir [Docs/PERMISSIONS.md](../../Docs/PERMISSIONS.md) :
 
 | Droit            | Ce qu'il ouvre                                                                     |
 | ---------------- | ---------------------------------------------------------------------------------- |
@@ -274,6 +281,7 @@ faire changer de colonne. Le reste se confie séparément, par les
 | `plan`           | les dates sur la frise, les jalons, les dépendances                                |
 | `links`          | rattacher le projet à un dépôt, une cible, une base, un site, un service surveillé |
 | `chat`           | écrire et modifier dans le fil                                                     |
+| `history`        | lire la frise des faits marquants d'un projet                                      |
 
 Chacun se surcharge **projet par projet**, par l'onglet Permissions de sa fiche :
 confier la planification d'un seul projet à quelqu'un est le cas courant.

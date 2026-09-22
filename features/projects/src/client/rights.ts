@@ -4,8 +4,8 @@ import { manifest } from '../manifest';
 import type { ProjectCard } from '../contracts/domain';
 
 /**
- * Ce que l'appelant a le droit de faire dans CE projet. Les cinq permissions
- * propres du module se surchargent projet par projet (onglet Permissions de sa
+ * Ce que l'appelant a le droit de faire dans CE projet. Les permissions propres
+ * du module se surchargent projet par projet (onglet Permissions de sa
  * fiche) : toutes se lisent donc avec son identifiant, jamais à l'échelle de la
  * fonctionnalité seule, sous peine de proposer un geste que le serveur refuse.
  *

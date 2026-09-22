@@ -151,6 +151,7 @@ function project(over: Partial<ProjectRow> & { id: number }): ProjectRow {
         security_tier: 'open',
         version_source: 'manual',
         show_overview: 1,
+        show_timeline: 1,
         sort_order: over.id,
         start_date: null,
         due_date: null,
@@ -341,6 +342,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                     user_id: input.userId,
                     status: input.status,
                     show_overview: input.showOverview ? 1 : 0,
+                    show_timeline: input.showTimeline ? 1 : 0,
                     security_tier: input.securityTier,
                     start_date: input.startDate,
                     due_date: input.dueDate,
@@ -356,6 +358,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                 Object.assign(row, {
                     status: input.status,
                     show_overview: input.showOverview ? 1 : 0,
+                    show_timeline: input.showTimeline ? 1 : 0,
                     start_date: input.startDate,
                     due_date: input.dueDate,
                     content: input.content,
@@ -875,6 +878,7 @@ const DRAFT: ProjectDraft = {
     tags: [],
     status: 'active',
     showOverview: true,
+    showTimeline: true,
     startDate: null,
     dueDate: null
 };
@@ -923,6 +927,13 @@ describe('le registre des commandes', () => {
             if (reads.has(h.command)) {
                 assert.equal(h.mutates, undefined, `${h.command} lit, et ne doit rien battre`);
                 assert.equal(h.access?.level, undefined, `${h.command} lit, au niveau par défaut`);
+                // Une lecture peut tout de même demander une permission propre :
+                // l'histoire d'un projet ne se donne pas avec le projet.
+                assert.deepEqual(
+                    h.access?.extras,
+                    h.command === 'projects.eventList' ? ['history'] : undefined,
+                    `${h.command} et ses permissions propres`
+                );
             } else if (gestures.has(h.command)) {
                 assert.equal(h.mutates, undefined, `${h.command} ne persiste rien, et ne doit rien battre`);
                 assert.equal(h.access?.level, 'write', `${h.command} est un geste, sous le droit write`);

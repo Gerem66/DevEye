@@ -47,6 +47,7 @@ function draftOf(project: Project): ProjectDraft {
         tags: project.tags,
         status: project.status,
         showOverview: project.showOverview,
+        showTimeline: project.showTimeline,
         startDate: project.startDate,
         dueDate: project.dueDate
     };
@@ -332,10 +333,18 @@ export default function ProjectGeneralPanel({ scope, canWrite, gone }: SettingsP
             </div>
 
             <Switch
+                checked={draft.showTimeline}
+                disabled={!editable}
+                label='Afficher la frise'
+                hint='Les tâches datées posées sur le temps, avec les jalons et les dépendances. Les dates restent sur les tâches quand elle est retirée.'
+                onChange={(showTimeline) => set({ showTimeline })}
+            />
+
+            <Switch
                 checked={draft.showOverview}
                 disabled={!editable}
                 label='Afficher la vue d’ensemble'
-                hint='Son onglet ouvre le projet et résume l’avancement, les échéances et la charge de chacun. Sans elle, le projet s’ouvre sur son Tableau ; les indicateurs déjà posés restent enregistrés.'
+                hint='Un résumé du projet : avancement, échéances, charge de chacun. Retirée, ses indicateurs sur mesure restent enregistrés.'
                 onChange={(showOverview) => set({ showOverview })}
             />
 

@@ -1452,6 +1452,46 @@
     max-height: calc(100vh - 260px);
 }
 
+/* Les tâches archivées, dans l'onglet Historique des réglages : une ligne par
+   tâche, qui l'ouvre en lecture seule. */
+.archivedList {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.archivedRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    width: 100%;
+    min-width: 0;
+    padding: 4px var(--space-xs);
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 0.8rem;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+}
+
+.archivedRow:hover,
+.archivedRow:focus-visible {
+    outline: none;
+    background: var(--glass-bg-light);
+}
+
+.archivedRow :global(.icon) {
+    width: 14px;
+    color: var(--text-muted);
+}
+
 /* ------------------------------------------------------------------ frise */
 
 .timeline {

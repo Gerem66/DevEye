@@ -29,6 +29,7 @@ function project(over: Partial<ProjectRow> & { id: number }): ProjectRow {
         security_tier: 'open',
         version_source: 'manual',
         show_overview: 1,
+        show_timeline: 1,
         sort_order: over.id,
         start_date: null,
         due_date: null,

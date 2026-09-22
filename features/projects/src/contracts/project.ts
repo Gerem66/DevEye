@@ -73,6 +73,8 @@ export const projectSchema = z.object({
      * lecteur. En clair : la barre se dessine avant tout déchiffrement.
      */
     showOverview: z.boolean(),
+    /** Idem pour la Frise. Le Tableau, lui, ne se retire pas : c'est la vue d'arrivée. */
+    showTimeline: z.boolean(),
     /** Bornes de la fenêtre du projet, en secondes unix. */
     startDate: z.number().int().nullable(),
     dueDate: z.number().int().nullable(),
@@ -133,6 +135,7 @@ export const projectDraftSchema = z.object({
     tags: z.array(projectTagSchema).max(PROJECT_MAX_TAGS),
     status: projectStatusSchema,
     showOverview: z.boolean(),
+    showTimeline: z.boolean(),
     startDate: z.number().int().nullable(),
     dueDate: z.number().int().nullable()
 });
@@ -147,6 +150,7 @@ export interface ProjectRow {
     security_tier: ProjectSecurityTier;
     version_source: ProjectVersionSource;
     show_overview: number;
+    show_timeline: number;
     sort_order: number;
     start_date: number | null;
     due_date: number | null;

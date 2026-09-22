@@ -27,8 +27,6 @@ import { CardDialog, type CardTab } from './Board/CardDialog';
 import { ColumnDialog, type ColumnDialogResult } from './Board/ColumnDialog';
 import { Timeline } from './Timeline/Timeline';
 import { MilestoneDialog } from './Timeline/MilestoneDialog';
-import { History } from './History/History';
-import { ArchivedCardDialog } from './History/ArchivedCardDialog';
 import { Git } from './Git/Git';
 import { Databases } from './Database/Databases';
 import { Audience } from './Audience/Audience';
@@ -37,7 +35,7 @@ import { Uptime } from './Uptime/Uptime';
 import { Overview } from './Dashboard/Overview';
 import { AddFeatureDialog } from './AddFeatureDialog';
 import { ProjectTabs } from './ProjectTabs';
-import { isProjectTabId, landingTab, type ProjectTabAddKey, type ProjectTabId } from './tabs';
+import { isProjectTabId, LANDING_TAB, type ProjectTabAddKey, type ProjectTabId } from './tabs';
 import { useProjectTabs } from './useProjectTabs';
 import { useProjectRights } from './rights';
 import styles from './style.module.css';
@@ -56,7 +54,7 @@ interface ProjectDetailProps {
  * `l1` est au parent, et un niveau n'admet qu'un déclarant.
  */
 export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDetailProps) {
-    const [tab, setTab] = useState<ProjectTabId>(landingTab(project));
+    const [tab, setTab] = useState<ProjectTabId>(LANDING_TAB);
 
     // Les droits se lisent sur CE projet : une surcharge posée sur lui seul
     // ouvre ou ferme des gestes que le portefeuille, qui ne connaît que le rôle,
@@ -93,8 +91,6 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
     const [milestones, setMilestones] = useState<ProjectMilestone[]>([]);
     const [deps, setDeps] = useState<ProjectCardDep[]>([]);
     const [milestoneDialog, setMilestoneDialog] = useState<{ milestone: ProjectMilestone | null } | null>(null);
-    const [archivedCards, setArchivedCards] = useState<ProjectCard[]>([]);
-    const [archivedView, setArchivedView] = useState<ProjectCard | null>(null);
     const [busy, setBusy] = useState(false);
     const [dialogError, setDialogError] = useState<string | null>(null);
 
@@ -122,14 +118,14 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
 
     /*
      * Un onglet quitte la barre avec son dernier élément, et on ne peut pas rester
-     * sur un onglet qui n'existe plus : repli sur l'onglet d'arrivée. Attendre `ready` est
+     * sur un onglet qui n'existe plus : repli sur le tableau. Attendre `ready` est
      * ce qui rend l'ajout depuis le « + » possible, compteurs inconnus ne renvoie
      * personne nulle part.
      */
     useEffect(() => {
         if (!tabs.ready) return;
-        if (!tabs.visible.some((t) => t.id === tab)) setTab(landingTab(project));
-    }, [tabs.ready, tabs.visible, tab, project.showOverview]);
+        if (!tabs.visible.some((t) => t.id === tab)) setTab(LANDING_TAB);
+    }, [tabs.ready, tabs.visible, tab]);
 
     /**
      * Déclarer le niveau ne suffit pas : il dit où on est, pas où l'on nous demande
@@ -156,18 +152,14 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
             try {
                 // Un projet confidentiel exige une session déverrouillée : les
                 // titres des cartes sont chiffrés au même étage que le projet.
-                const [board, plan, archived] = await Promise.all([
+                const [board, plan] = await Promise.all([
                     withSecrecy(() => api.send('projects.board', { projectId: project.id })),
-                    withSecrecy(() => api.send('projects.plan', { projectId: project.id })),
-                    // Les cartes archivées d'avance : l'historique en ouvre une
-                    // en lecture seule sans second aller-retour.
-                    withSecrecy(() => api.send('projects.board', { projectId: project.id, archived: true }))
+                    withSecrecy(() => api.send('projects.plan', { projectId: project.id }))
                 ]);
                 setColumns(board.columns);
                 setCards(board.cards);
                 setMilestones(plan.milestones);
                 setDeps(plan.deps);
-                setArchivedCards(archived.cards);
                 // La popup détient sa propre copie de la carte : sans cette remise
                 // à jour, une modification venue d'ailleurs n'atteindrait que le
                 // tableau derrière.
@@ -361,20 +353,6 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
             // Le serveur refuse tant que la colonne porte des cartes : son
             // message dit exactement combien, on l'affiche tel quel.
             setDialogError(humanizeError(e, 'Le retrait a échoué.'));
-        } finally {
-            setBusy(false);
-        }
-    };
-
-    const restoreArchivedCard = async () => {
-        if (!archivedView) return;
-        setBusy(true);
-        try {
-            await withSecrecy(() => api.send('projects.cardRestore', { cardId: archivedView.id }));
-            invalidate('projects.board', 'projects.list');
-            setArchivedView(null);
-        } catch (e) {
-            setActionError(humanizeError(e, 'La restauration a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -605,14 +583,6 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
             {loaded && tab === 'deploy' && <Deploy project={project} canWrite={rights.canLinks} />}
             {loaded && tab === 'uptime' && <Uptime project={project} canWrite={rights.canLinks} />}
 
-            {loaded && tab === 'history' && (
-                <History
-                    projectId={project.id}
-                    archivedCards={archivedCards}
-                    onOpenArchived={(card) => setArchivedView(card)}
-                />
-            )}
-
             {/* Le geste d'ajout lancé depuis le « + » : dès qu'il aboutit,
                 l'onglet existe et s'ouvre dans la foulée. */}
             <AddFeatureDialog
@@ -624,15 +594,6 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                     tabs.reveal(id);
                     setTab(id);
                 }}
-            />
-
-            <ArchivedCardDialog
-                open={archivedView !== null}
-                card={archivedView}
-                canWrite={rights.canTasks}
-                busy={busy}
-                onClose={() => setArchivedView(null)}
-                onRestore={() => void restoreArchivedCard()}
             />
 
             <MilestoneDialog
