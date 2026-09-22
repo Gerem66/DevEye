@@ -818,24 +818,44 @@
     padding: 0 var(--space-xs);
 }
 
-/* La poignée de réordonnancement, révélée au survol de la colonne. Elle garde sa
-   place au repos : le nom sauterait d'un cran à chaque passage du pointeur. */
+/*
+ * La poignée de réordonnancement : au repos elle ne coûte rien, le nom occupe
+ * toute la rangée, et le survol de la colonne la fait paraître en poussant le nom
+ * vers la droite. C'est la marge qui s'anime et non une translation : le nom
+ * change alors vraiment de largeur, et ses points de suspension se reposent où il
+ * faut.
+ *
+ * La marge négative absorbe la poignée ET la gouttière de l'en-tête, si bien
+ * qu'elle se superpose au début du nom ; `pointer-events` lui retire le pointeur
+ * au repos, sans quoi le curseur de préhension se prendrait sur un titre qui ne
+ * montre aucune poignée.
+ */
 .columnGrip {
+    /* Le gabarit d'icône : la marge doit l'absorber au pixel. */
+    --grip-width: 18px;
+
     display: inline-flex;
     flex-shrink: 0;
+    width: var(--grip-width);
+    margin-right: calc(-1 * (var(--grip-width) + var(--space-xs)));
     padding: 0;
     border: none;
     background: transparent;
     color: var(--text-muted);
     cursor: grab;
     touch-action: none;
+    pointer-events: none;
     /* `filter` et non `opacity`, que les surfaces animées revendiquent en style inline. */
     filter: opacity(0);
-    transition: filter var(--transition-fast);
+    transition:
+        margin-right var(--transition-fast),
+        filter var(--transition-fast);
 }
 
 .column:hover .columnGrip,
 .column:focus-within .columnGrip {
+    margin-right: 0;
+    pointer-events: auto;
     filter: opacity(1);
 }
 
@@ -843,9 +863,11 @@
     cursor: grabbing;
 }
 
-/* Au doigt, il n'y a pas de survol : la poignée doit être là d'emblée. */
+/* Au doigt, il n'y a pas de survol : la poignée est là d'emblée, et à sa place. */
 @media (pointer: coarse) {
     .columnGrip {
+        margin-right: 0;
+        pointer-events: auto;
         filter: opacity(1);
     }
 }
