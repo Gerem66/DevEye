@@ -2,10 +2,13 @@ import { useEffect, useState } from 'react';
 import { Button, Checkbox, Dialog, TextInput } from 'deveye-sdk-client';
 import { dateInputToSeconds, dateInputValue } from '../api';
 import {
+    PROJECT_MILESTONE_COLORS,
     PROJECT_MILESTONE_NAME_MAX_LENGTH,
     type ProjectMilestone,
+    type ProjectMilestoneColor,
     type ProjectMilestoneDraft
 } from '../../contracts/domain';
+import { milestoneColorVar } from '../Milestone';
 import styles from '../style.module.css';
 
 interface MilestoneDialogProps {
@@ -41,12 +44,14 @@ export function MilestoneDialog({
 }: MilestoneDialogProps) {
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
+    const [color, setColor] = useState<ProjectMilestoneColor | null>(null);
     const [dueDate, setDueDate] = useState('');
 
     useEffect(() => {
         if (!open) return;
         setName(milestone?.name ?? '');
         setDescription(milestone?.description ?? '');
+        setColor(milestone?.color ?? null);
         setDueDate(dateInputValue(milestone?.dueDate ?? initialDueDate ?? Math.floor(Date.now() / 1000)));
     }, [open, milestone, initialDueDate]);
 
@@ -55,7 +60,7 @@ export function MilestoneDialog({
 
     const submit = () => {
         if (busy || !name.trim() || due === null || taken) return;
-        onSubmit({ name: name.trim(), description, dueDate: due });
+        onSubmit({ name: name.trim(), description, color, dueDate: due });
     };
 
     return (
@@ -99,6 +104,35 @@ export function MilestoneDialog({
                     <TextInput type='date' value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
                     {taken && <span className={styles.error}>Un jalon occupe déjà cette date.</span>}
                 </label>
+
+                {/* Facultative : sans elle, le jalon et ses tâches gardent les
+                    couleurs communes de la frise. */}
+                <div className={styles.field}>
+                    <span className={styles.label}>Couleur</span>
+                    <div className={styles.swatches}>
+                        <button
+                            type='button'
+                            aria-label='Aucune couleur'
+                            aria-pressed={color === null}
+                            title='Aucune'
+                            className={color === null ? styles.swatchNoneActive : styles.swatchNone}
+                            onClick={() => setColor(null)}
+                        >
+                            <span className='icon icon-x' />
+                        </button>
+                        {PROJECT_MILESTONE_COLORS.map((c) => (
+                            <button
+                                key={c}
+                                type='button'
+                                aria-label={c}
+                                aria-pressed={color === c}
+                                className={color === c ? styles.swatchActive : styles.swatch}
+                                style={{ background: milestoneColorVar(c) }}
+                                onClick={() => setColor(c)}
+                            />
+                        ))}
+                    </div>
+                </div>
 
                 <label className={styles.field}>
                     <span className={styles.label}>Description</span>

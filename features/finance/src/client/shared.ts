@@ -33,7 +33,7 @@ export function categoryOf(categories: FinanceCategory[], id: number | null): Fi
 
 /** Une variable CSS, jamais un hexadécimal : la catégorie suit le thème. */
 export function colorVar(color: FinanceColor): string {
-    return `var(--finance-${color})`;
+    return `var(--palette-${color})`;
 }
 
 /** Le nom d'un compte, ou un repli lisible quand il a disparu. */

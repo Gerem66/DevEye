@@ -112,6 +112,8 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
         dates?: { startDate: number; dueDate: number };
     } | null>(null);
     const [columnDialog, setColumnDialog] = useState<{ column: ProjectColumn | null } | null>(null);
+    /** La colonne qu'on s'apprête à vider dans l'archive ; `null` = aucune. */
+    const [purging, setPurging] = useState<ProjectColumn | null>(null);
     const [milestones, setMilestones] = useState<ProjectMilestone[]>([]);
     const [deps, setDeps] = useState<ProjectCardDep[]>([]);
     const [milestoneDialog, setMilestoneDialog] = useState<{
@@ -130,6 +132,13 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
         () => new Set(milestones.filter((m) => m.id !== milestoneDialog?.milestone?.id).map((m) => m.dueDate)),
         [milestones, milestoneDialog]
     );
+
+    /** Ce que la confirmation annonce : le compte exact, et que rien n'est détruit. */
+    const purgeCount = purging === null ? 0 : cards.filter((c) => c.columnId === purging.id).length;
+    const purgeSentence =
+        purgeCount === 1
+            ? `La tâche de « ${purging?.name || 'cette colonne'} » rejoindra l’archive, d’où elle peut revenir.`
+            : `Les ${purgeCount} tâches de « ${purging?.name || 'cette colonne'} » rejoindront l’archive, d’où elles peuvent revenir.`;
 
     const version = useResourceVersion('projects.board');
     const reloadRef = useRef<Promise<void> | null>(null);
@@ -341,6 +350,20 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
             if (inDialog) setDialogError(humanizeError(e, failure));
             else setActionError(humanizeError(e, failure));
             void reload();
+        }
+    };
+
+    const purgeColumn = async () => {
+        const column = purging;
+        if (!column) return;
+        setPurging(null);
+        setActionError(null);
+        try {
+            await withSecrecy(() => api.send('projects.columnPurge', { columnId: column.id }));
+            invalidate('projects.board', 'projects.list');
+            void reload();
+        } catch (e) {
+            setActionError(humanizeError(e, 'L’archivage a échoué.'));
         }
     };
 
@@ -574,6 +597,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                 <Board
                     columns={columns}
                     cards={cards}
+                    milestones={milestones}
                     canWrite={canWrite}
                     canTasks={rights.canTasks}
                     canManage={rights.canManage}
@@ -597,6 +621,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                         setDialogError(null);
                         setColumnDialog({ column: null });
                     }}
+                    onColumnPurge={(column) => setPurging(column)}
                 />
             )}
 
@@ -651,6 +676,25 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                     </div>
                 ) : null
             )}
+
+            {/* Vider une colonne : le compte est dit avant, l'archive garde tout. */}
+            <Dialog
+                open={purging !== null}
+                onClose={() => setPurging(null)}
+                onSubmit={() => void purgeColumn()}
+                title='Archiver les tâches'
+                width={440}
+                footer={
+                    <>
+                        <Button variant='secondary' onClick={() => setPurging(null)}>
+                            Annuler
+                        </Button>
+                        <Button onClick={() => void purgeColumn()}>Archiver</Button>
+                    </>
+                }
+            >
+                <p>{purgeSentence}</p>
+            </Dialog>
 
             {/* Le refus d'un déplacement, sous les yeux : la carte retourne à sa
                 colonne pendant qu'on le lit. */}

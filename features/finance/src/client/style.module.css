@@ -1,6 +1,6 @@
 /*
  * Finances. Une seule feuille pour toute la feature. Aucune couleur en dur :
- * tout passe par les jetons du thème, y compris la palette `--finance-*`.
+ * tout passe par les jetons du thème, y compris la palette `--palette-*`.
  */
 
 .widget {

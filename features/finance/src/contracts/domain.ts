@@ -29,7 +29,7 @@ export const financeDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date a
 /** Un mois civil, `AAAA-MM`, tel que le rendent les séries du tableau de bord. */
 export const financeMonthSchema = z.string().regex(/^\d{4}-\d{2}$/);
 
-/** Palette nommée, adossée aux jetons `--finance-<nom>` : la valeur stockée suit le thème. */
+/** Palette nommée, adossée aux jetons `--palette-<nom>` : la valeur stockée suit le thème. */
 export const financeColorSchema = z.enum(['red', 'orange', 'yellow', 'green', 'blue', 'indigo', 'purple', 'pink']);
 export type FinanceColor = z.infer<typeof financeColorSchema>;
 

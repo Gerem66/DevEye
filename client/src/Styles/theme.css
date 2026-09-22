@@ -45,19 +45,19 @@
     --danger: #ff5370;
     --danger-bg: rgba(255, 83, 112, 0.13);
 
-    /* La palette nommée des comptes et des catégories (`--finance-<nom>`, miroir
-     de financeColorSchema dans @deveye/types). Huit teintes, parce qu'un
+    /* La palette nommée que les features donnent à ce qu'on range : comptes et
+     catégories des Finances, jalons des Projets. Huit teintes, parce qu'un
      camembert de catégories en demande beaucoup, et sans cyan : c'est celui de
      --accent, et une part de cette couleur se lirait comme un élément de
      l'interface. */
-    --finance-red: #ff6b81;
-    --finance-orange: #ff9f43;
-    --finance-yellow: #ffd54a;
-    --finance-green: #38d9a9;
-    --finance-blue: #4da8ff;
-    --finance-indigo: #7c8cff;
-    --finance-purple: #b088ff;
-    --finance-pink: #ff7ac6;
+    --palette-red: #ff6b81;
+    --palette-orange: #ff9f43;
+    --palette-yellow: #ffd54a;
+    --palette-green: #38d9a9;
+    --palette-blue: #4da8ff;
+    --palette-indigo: #7c8cff;
+    --palette-purple: #b088ff;
+    --palette-pink: #ff7ac6;
 
     /* L'identité visuelle d'un compte dans la présence en direct (`--user-<nom>`,
      miroir de userColorSchema dans @deveye/types) : son curseur chez les autres,

@@ -1,7 +1,8 @@
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Button, useLiveOutlines, useRequestPopupWidth } from 'deveye-sdk-client';
 import { formatDate } from '../api';
-import type { ProjectCard, ProjectCardDep, ProjectMilestone } from '../../contracts/domain';
+import type { ProjectCard, ProjectCardDep, ProjectMilestone, ProjectMilestoneColor } from '../../contracts/domain';
+import { MilestoneDot, milestoneColorVar, milestoneOf } from '../Milestone';
 import { MemberStack } from '../Member';
 import {
     DAY_LETTER_MIN_WIDTH,
@@ -34,6 +35,8 @@ const HEAD_H = 44;
 const DAYS_H = 16;
 /** En deçà, la pile d'avatars mangerait le titre de la barre. */
 const STACK_MIN_BAR_WIDTH = 56;
+/** En deçà, la pastille du jalon ne laisserait plus rien lire du titre. */
+const MILESTONE_DOT_MIN_BAR_WIDTH = 32;
 /** En deçà, le compte de sous-tâches mangerait le titre de la barre. */
 const PROGRESS_MIN_BAR_WIDTH = 104;
 
@@ -73,6 +76,16 @@ function progressOf(card: ProjectCard): { done: number; total: number; ratio: nu
     if (total === 0) return null;
     const done = card.checklist.filter((i) => i.done).length;
     return { done, total, ratio: done / total };
+}
+
+/**
+ * La teinte d'un jalon, posée en variables locales : le bord et le fond des
+ * règles existantes s'y adossent, une tâche terminée ou en retard garde donc sa
+ * propre lecture sans qu'on multiplie les classes.
+ */
+function tint(color: ProjectMilestoneColor | null): CSSProperties {
+    if (color === null) return {};
+    return { '--hue': milestoneColorVar(color) } as CSSProperties;
 }
 
 /** La date qui range une carte dans la frise : son début, ou son échéance seule. */
@@ -523,7 +536,10 @@ export function Timeline({
                                 key={m.id}
                                 type='button'
                                 className={m.reachedAt !== null ? styles.milestoneDone : styles.milestone}
-                                style={{ left: x(m.dueDate * 1000) }}
+                                // La teinte du jalon l'emporte sur celle de son état :
+                                // elle est ce qui le rend reconnaissable d'un bout à
+                                // l'autre de la frise.
+                                style={{ left: x(m.dueDate * 1000), ...tint(m.color) }}
                                 title={`${m.name || 'Jalon'} : ${new Date(m.dueDate * 1000).toLocaleDateString('fr-FR')}`}
                                 onClick={() => onMilestoneOpen(m)}
                             >
@@ -659,6 +675,7 @@ export function Timeline({
                                     );
                                 }
                                 const done = isDone(card);
+                                const hue = milestoneOf(milestones, card.milestoneId)?.color ?? null;
                                 // Terminée, une échéance dépassée n'est plus un retard.
                                 const overdue = !done && at.dueDate !== null && at.dueDate * 1000 < Date.now();
                                 const movable = canDate(card);
@@ -681,7 +698,7 @@ export function Timeline({
                                             } ${done ? styles.barDone : ''} ${movable ? styles.barDraggable : ''} ${
                                                 unplanning(card) ? styles.barLeaving : ''
                                             }`}
-                                            style={{ left: s.left, width: s.width, height: BAR_H }}
+                                            style={{ left: s.left, width: s.width, height: BAR_H, ...tint(hue) }}
                                             onPointerDown={
                                                 movable
                                                     ? (e) =>
@@ -712,6 +729,16 @@ export function Timeline({
                                                 .join('\n')}
                                             {...outlineFor(`card:${card.id}`)}
                                         >
+                                            {/* La pastille du jalon, à gauche et sur
+                                                toutes les barres : l'état (terminée,
+                                                en retard) reprend la teinte du fond,
+                                                elle seule dit alors l'appartenance,
+                                                et sa place ne bouge pas d'une barre
+                                                à l'autre. */}
+                                            {hue !== null && s.width >= MILESTONE_DOT_MIN_BAR_WIDTH && (
+                                                <MilestoneDot color={hue} />
+                                            )}
+
                                             {/* Deux lisières, là seulement pour le
                                                 curseur : le mode est décidé par la
                                                 position du pointeur, pas par la

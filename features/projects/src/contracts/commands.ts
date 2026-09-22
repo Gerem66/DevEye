@@ -250,6 +250,17 @@ export const projectCardArchive = {
     output: z.object({ cardId })
 };
 
+/**
+ * Archive d'un coup toutes les cartes vivantes d'une colonne. Le geste de la fin
+ * d'un cycle : une colonne « terminé » se vide sans qu'on ouvre ses cartes une à
+ * une. Rien n'est détruit, l'archive les garde toutes.
+ */
+export const projectColumnPurge = {
+    command: 'projects.columnPurge' as const,
+    input: z.object({ columnId }),
+    output: z.object({ columnId, archived: z.number().int().nonnegative() })
+};
+
 export const projectCardRestore = {
     command: 'projects.cardRestore' as const,
     input: z.object({ cardId }),
@@ -709,6 +720,7 @@ export const projectCommands = [
     projectCardUpdate,
     projectCardMove,
     projectCardArchive,
+    projectColumnPurge,
     projectCardRestore,
     projectMessageList,
     projectMessageSend,

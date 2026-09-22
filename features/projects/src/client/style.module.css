@@ -780,6 +780,25 @@
 
 /* ------------------------------------------------------------------ kanban */
 
+/* La mise en avant d'un jalon, discrète : une ligne fine au-dessus du tableau,
+   absente quand le projet n'a aucun jalon. */
+.boardFilter {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex: none;
+}
+
+.boardFilterLabel {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.boardFilterSelect {
+    flex: 0 1 14rem;
+    min-width: 9rem;
+}
+
 .board {
     display: flex;
     /* Le tableau défile horizontalement dans sa propre boîte : la page ne doit
@@ -1102,6 +1121,28 @@
    l'ordre d'injection des feuilles. */
 .card2Chip .chipIcon {
     width: 14px;
+}
+
+/* Le jalon au coin haut droit de la carte, là où la pastille de priorité tient le
+   coin gauche, calé sur la première ligne du titre. Le nom prend la place qui
+   reste et pas un pixel de plus : `flex: 0 1 auto` le fait céder au titre, et la
+   moitié de la carte le borne même quand le titre est court. */
+.card2Milestone {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 50%;
+    margin-top: 2px;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.card2MilestoneName {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* L'ouverture par défaut, étirée sous tout le contenu de la carte : ce qui doit
@@ -1803,9 +1844,11 @@ button.tlAddCard {
     gap: 4px;
     padding: 1px 8px;
     border-radius: var(--radius-pill);
-    border: 1px solid var(--warning);
-    background: var(--warning-bg);
-    color: var(--warning);
+    /* `--hue` : la teinte du jalon, posée en ligne quand il en a une. À défaut,
+       celle de tous les jalons. */
+    border: 1px solid var(--hue, var(--warning));
+    background: color-mix(in srgb, var(--hue, var(--warning)) 14%, transparent);
+    color: var(--hue, var(--warning));
     font: inherit;
     font-size: 0.68rem;
     white-space: nowrap;
@@ -1814,6 +1857,7 @@ button.tlAddCard {
     z-index: var(--z-base);
 }
 
+/* Atteint : l'état prime sur la teinte, comme pour une barre terminée. */
 .milestoneDone {
     border-color: var(--success);
     background: var(--success-bg);
@@ -1827,6 +1871,76 @@ button.tlAddCard {
     border-style: dashed;
     cursor: grabbing;
     pointer-events: none;
+}
+
+/* La palette d'un jalon : les mêmes pastilles que celles des Finances, plus un
+   « aucune » en creux, la couleur étant facultative. */
+.swatches {
+    display: flex;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+}
+
+.swatch,
+.swatchActive,
+.swatchNone,
+.swatchNoneActive {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    transition: transform var(--transition-fast);
+}
+
+.swatch:hover,
+.swatchActive:hover,
+.swatchNone:hover,
+.swatchNoneActive:hover {
+    transform: scale(1.12);
+}
+
+/* L'anneau, et non un contour : posé à l'intérieur, il reste lisible quelle que
+   soit la couleur de la pastille. */
+.swatchActive,
+.swatchNoneActive {
+    box-shadow:
+        0 0 0 2px var(--surface-popup-solid),
+        0 0 0 4px var(--accent);
+}
+
+.swatchNone,
+.swatchNoneActive {
+    border-color: var(--glass-border);
+    background: none;
+    color: var(--text-muted);
+}
+
+.swatchNone :global(.icon),
+.swatchNoneActive :global(.icon) {
+    width: 12px;
+}
+
+/* La pastille qui porte la couleur d'un jalon partout ailleurs : sur une carte,
+   dans un sélecteur. En creux quand le jalon n'a pas de couleur, pour que les
+   lignes d'une liste restent alignées. */
+.milestoneDot {
+    display: inline-block;
+    flex-shrink: 0;
+    /* `--dot-size` : c'est le contexte qui décide, une barre de frise étant plus
+       serrée qu'une carte du tableau. */
+    width: var(--dot-size, 8px);
+    height: var(--dot-size, 8px);
+    border-radius: var(--radius-pill);
+}
+
+.milestoneDotNone {
+    composes: milestoneDot;
+    border: 1px solid var(--text-muted);
 }
 
 /* L'étoile à l'échelle du texte qu'elle accompagne : à 18 px elle touche les deux
@@ -1928,6 +2042,7 @@ button.tlAddCard {
 
 .bar {
     --stack-ring: 1px;
+    --dot-size: 6px;
 
     position: absolute;
     top: 50%;
@@ -1937,8 +2052,11 @@ button.tlAddCard {
     gap: var(--space-xs);
     padding: 0 var(--space-sm);
     border-radius: var(--radius-sm);
-    border: 1px solid var(--accent);
-    background: var(--accent-bg);
+    /* `--hue` : la teinte du jalon de la tâche, posée en ligne quand il en a une
+       (voir `tint` dans `Timeline.tsx`). Sans jalon coloré, la barre garde
+       l'accent, et l'état (en retard, terminée) reprend la main plus bas. */
+    border: 1px solid var(--hue, var(--accent));
+    background: color-mix(in srgb, var(--hue, var(--accent)) 14%, transparent);
     color: var(--text-primary);
     font: inherit;
     font-size: 0.75rem;
@@ -1959,7 +2077,8 @@ button.tlAddCard {
 }
 
 /* Rangée dans une colonne qui vaut « terminé » : l'avancement du projet se lit
-   d'un bout à l'autre de la frise sans ouvrir une seule tâche. */
+   d'un bout à l'autre de la frise sans ouvrir une seule tâche. L'état prime sur
+   la teinte du jalon, qui ne dit que l'appartenance. */
 .barDone {
     border-color: var(--success);
     background: var(--success-bg);
@@ -2041,7 +2160,7 @@ button.tlAddCard {
     top: 0;
     bottom: 0;
     left: 0;
-    background: var(--accent-bg);
+    background: color-mix(in srgb, var(--hue, var(--accent)) 14%, transparent);
     z-index: -1;
     pointer-events: none;
 }

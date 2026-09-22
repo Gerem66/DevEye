@@ -4,6 +4,7 @@ import {
     projectCardArchive,
     projectCardMove,
     projectCardRestore,
+    projectColumnPurge,
     projectCardUpdate,
     projectColumnAdd,
     projectColumnRemove,
@@ -408,6 +409,40 @@ export const projectCardArchiveFeature = defineSdkFeature({
     }
 });
 
+export const projectColumnPurgeFeature = defineSdkFeature({
+    ...projectColumnPurge,
+    mutates: true,
+    access: TASKS,
+    handler: async (ctx: Ctx, input) => {
+        const { column, project } = await loadColumn(ctx, input.columnId, 'write');
+        await assertProjectUnlocked(ctx, project);
+
+        const archived = await ctx.repo.board.archiveColumnCards(
+            input.columnId,
+            project.workspace_id,
+            Math.floor(Date.now() / 1000)
+        );
+        // Une entrée pour la colonne et non une par carte : la frise du projet
+        // garde le geste, sans que vingt lignes identiques la noient.
+        if (archived > 0) {
+            const name = (await decryptColumn(await projectCipher(ctx, project), column.content)).name;
+            await recordEvent(ctx, project, {
+                kind: 'column.purged',
+                refType: null,
+                refId: null,
+                label: name,
+                to: String(archived)
+            });
+        }
+        ctx.audit({
+            action: 'projects.columnPurge',
+            description: 'Colonne vidée dans l’archive',
+            metadata: { columnId: input.columnId, projectId: project.id, archived }
+        });
+        return { columnId: input.columnId, archived };
+    }
+});
+
 export const projectCardRestoreFeature = defineSdkFeature({
     ...projectCardRestore,
     mutates: true,
@@ -449,5 +484,6 @@ export const projectBoardFeatures = [
     projectCardUpdateFeature,
     projectCardMoveFeature,
     projectCardArchiveFeature,
+    projectColumnPurgeFeature,
     projectCardRestoreFeature
 ];

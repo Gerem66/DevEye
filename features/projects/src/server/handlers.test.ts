@@ -424,6 +424,13 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                     .filter((c) => c.project_id === projectId && c.workspace_id === ws)
                     .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id),
             findColumn: async (id) => findAny(rows.columns, id),
+            archiveColumnCards: async (columnId, ws, at) => {
+                const hit = rows.cards.filter(
+                    (c) => c.column_id === columnId && c.workspace_id === ws && c.archived_at === null
+                );
+                for (const c of hit) c.archived_at = at;
+                return hit.length;
+            },
             async createColumn(input) {
                 const row = column({
                     id: ++seq,
@@ -1993,7 +2000,7 @@ describe('le partage inter-espaces', () => {
 
         const milestone = await handlerFor(projectMilestoneAdd)(window, {
             projectId: 1,
-            milestone: { name: 'V1', description: '', dueDate: 20 }
+            milestone: { name: 'V1', description: '', color: null, dueDate: 20 }
         });
         const milestoneRow = repo.rows.milestones.find((m) => m.id === milestone.milestone.id)!;
         assert.deepEqual([milestoneRow.workspace_id, milestoneRow.content.startsWith('home:')], [42, true]);

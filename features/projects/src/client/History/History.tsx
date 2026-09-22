@@ -16,6 +16,7 @@ const KIND_META: Record<ProjectEventKind, { icon: string; text: string }> = {
     'projects.restored': { icon: 'refresh', text: 'Projet restauré' },
     'card.archived': { icon: 'archive', text: 'Bloc archivé' },
     'card.restored': { icon: 'refresh', text: 'Bloc restauré' },
+    'column.purged': { icon: 'archive', text: 'Colonne vidée' },
     'milestone.reached': { icon: 'check-circle', text: 'Jalon atteint' },
     'deploy.triggered': { icon: 'rocket', text: 'Déploiement lancé' },
     'deploy.succeeded': { icon: 'check-circle', text: 'Déploiement réussi' },

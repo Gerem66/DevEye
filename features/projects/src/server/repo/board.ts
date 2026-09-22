@@ -69,6 +69,8 @@ export interface ProjectBoardRepo {
     /** Verse chaque carte listée dans `columnId` et la range à son indice. */
     moveCards(workspaceId: number, columnId: number, cardIds: number[]): Promise<void>;
     archiveCard(cardId: number, workspaceId: number, at: number): Promise<boolean>;
+    /** Archive la colonne entière d'un coup, et rend le nombre de cartes parties. */
+    archiveColumnCards(columnId: number, workspaceId: number, at: number): Promise<number>;
     /** `columnId` est la colonne de retour : celle d'origine, ou une autre si elle a disparu. */
     restoreCard(cardId: number, workspaceId: number, columnId: number): Promise<boolean>;
 
@@ -223,6 +225,14 @@ export function projectBoardRepo(q: SdkQueryable): ProjectBoardRepo {
                 workspaceId
             ]);
             return res.affectedRows > 0;
+        },
+        async archiveColumnCards(columnId, workspaceId, at) {
+            const res = await q.execute(
+                `UPDATE project_cards SET archived_at = ?
+                 WHERE column_id = ? AND workspace_id = ? AND archived_at IS NULL`,
+                [at, columnId, workspaceId]
+            );
+            return res.affectedRows;
         },
         async restoreCard(cardId, workspaceId, columnId) {
             // Son ancien rang appartenait à une colonne qui a bougé : elle repart de

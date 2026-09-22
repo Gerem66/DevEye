@@ -37,12 +37,14 @@ import {
     Button,
     CountBadge,
     type LiveOutlineProps,
+    SearchSelect,
     useDragReorder,
     useLiveOutlines,
     useRequestPopupWidth
 } from 'deveye-sdk-client';
 import { formatDate, PRIORITY_LABELS } from '../api';
-import type { ProjectCard, ProjectColumn } from '../../contracts/domain';
+import type { ProjectCard, ProjectColumn, ProjectMilestone } from '../../contracts/domain';
+import { MilestoneDot, milestoneOf } from '../Milestone';
 import { MemberStack } from '../Member';
 import type { CardTab } from './CardDialog';
 import { boardNaturalWidth } from './width';
@@ -70,6 +72,10 @@ interface BoardProps {
     /** L'ordre complet des colonnes après un glissé de poignée. */
     onColumnsReorder: (columnIds: number[]) => void;
     onColumnCreate: () => void;
+    /** Archive d'un coup les cartes d'une colonne terminée. */
+    onColumnPurge: (column: ProjectColumn) => void;
+    /** Les jalons du projet : la carte montre celui qu'elle porte, et le filtre s'en sert. */
+    milestones: ProjectMilestone[];
 }
 
 /**
@@ -93,7 +99,9 @@ export function Board({
     onCardCreate,
     onColumnEdit,
     onColumnsReorder,
-    onColumnCreate
+    onColumnCreate,
+    onColumnPurge,
+    milestones
 }: BoardProps) {
     const [activeId, setActiveId] = useState<number | null>(null);
     /** D'où la carte est partie, pour la remettre en place sur Échap. */
@@ -143,6 +151,9 @@ export function Board({
         return () => ro.disconnect();
     }, [trackRef, columns.length, canManage]);
     useRequestPopupWidth(columnsWidth === null ? null : boardNaturalWidth(columnsWidth));
+
+    /** Le jalon mis en avant ; `null` = aucun, toutes les tâches à plein. */
+    const [focus, setFocus] = useState<number | null>(null);
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -299,6 +310,29 @@ export function Board({
             onDragEnd={onDragEnd}
             onDragCancel={onDragCancel}
         >
+            {/* Mettre un jalon en avant : les tâches des autres s'estompent, aucune
+                ne quitte sa colonne. Un vrai filtre les retirerait de l'ordre que
+                le dépôt renvoie, et les ferait remonter à la fin de leur colonne. */}
+            {milestones.length > 0 && (
+                <div className={styles.boardFilter}>
+                    <span className={styles.boardFilterLabel}>Jalon</span>
+                    <SearchSelect
+                        aria-label='Mettre un jalon en avant'
+                        className={styles.boardFilterSelect}
+                        value={focus === null ? '' : String(focus)}
+                        options={[
+                            { value: '', label: 'Tous', prefix: <MilestoneDot color={null} /> },
+                            ...milestones.map((m) => ({
+                                value: String(m.id),
+                                label: m.name || `Jalon #${m.id}`,
+                                prefix: <MilestoneDot color={m.color} />
+                            }))
+                        ]}
+                        onChange={(v) => setFocus(v ? Number(v) : null)}
+                    />
+                </div>
+            )}
+
             <div className={styles.board}>
                 <div ref={trackRef} className={styles.boardTrack}>
                     {columns.map((column) => (
@@ -313,6 +347,9 @@ export function Board({
                             onCardOpen={onCardOpen}
                             onCardCreate={onCardCreate}
                             onEdit={onColumnEdit}
+                            onPurge={onColumnPurge}
+                            milestone={(card) => milestoneOf(milestones, card.milestoneId)}
+                            dimmed={(card) => focus !== null && card.milestoneId !== focus}
                             // Seule d'elle-même, une colonne n'a nulle part où aller.
                             onDragPointerDown={
                                 canManage && columns.length > 1
@@ -339,7 +376,14 @@ export function Board({
                 deux cadres superposés seraient illisibles. */}
             {createPortal(
                 <DragOverlay style={{ zIndex: 'var(--z-drag)' }}>
-                    {activeCard && <CardBody card={activeCard} columnDone={activeColumnDone} dragging />}
+                    {activeCard && (
+                        <CardBody
+                            card={activeCard}
+                            columnDone={activeColumnDone}
+                            milestone={milestoneOf(milestones, activeCard.milestoneId)}
+                            dragging
+                        />
+                    )}
                 </DragOverlay>,
                 document.body
             )}
@@ -365,6 +409,9 @@ interface ColumnProps {
     onCardOpen: (card: ProjectCard, tab: CardTab) => void;
     onCardCreate: (columnId: number) => void;
     onEdit: (column: ProjectColumn) => void;
+    onPurge: (column: ProjectColumn) => void;
+    milestone: (card: ProjectCard) => ProjectMilestone | null;
+    dimmed: (card: ProjectCard) => boolean;
     /** Absent : la colonne ne se déplace pas, faute de droit ou de voisine. */
     onDragPointerDown?: (e: ReactPointerEvent) => void;
 }
@@ -379,6 +426,9 @@ function Column({
     onCardOpen,
     onCardCreate,
     onEdit,
+    onPurge,
+    milestone,
+    dimmed,
     onDragPointerDown
 }: ColumnProps) {
     // Droppable propre à la colonne : c'est ce qui rend une colonne vide capable
@@ -430,6 +480,19 @@ function Column({
                                 <span className='icon icon-add' />
                             </button>
                         )}
+                        {/* Vider la colonne : le geste de la fin d'un cycle, à portée
+                            de main plutôt qu'enfoui dans les réglages. Absent d'une
+                            colonne vide, qui n'a rien à archiver. */}
+                        {canTasks && column.countsAsDone && cards.length > 0 && (
+                            <button
+                                type='button'
+                                onClick={() => onPurge(column)}
+                                title='Archiver les tâches de cette colonne'
+                                aria-label='Archiver les tâches de cette colonne'
+                            >
+                                <span className='icon icon-archive' />
+                            </button>
+                        )}
                         {canManage && (
                             <button
                                 type='button'
@@ -451,6 +514,8 @@ function Column({
                             key={card.id}
                             card={card}
                             columnDone={column.countsAsDone}
+                            milestone={milestone(card)}
+                            dimmed={dimmed(card)}
                             draggable={canWrite}
                             outline={outlineFor(`card:${card.id}`)}
                             onOpen={(tab) => onCardOpen(card, tab)}
@@ -470,13 +535,16 @@ function Column({
 interface SortableCardProps {
     card: ProjectCard;
     columnDone: boolean;
+    milestone: ProjectMilestone | null;
+    /** Un autre jalon est mis en avant : la carte s'efface sans quitter sa colonne. */
+    dimmed: boolean;
     /** Sans l'écriture, la carte s'ouvre mais ne se déplace pas. */
     draggable: boolean;
     outline: LiveOutlineProps;
     onOpen: (tab: CardTab) => void;
 }
 
-function SortableCard({ card, columnDone, draggable, outline, onOpen }: SortableCardProps) {
+function SortableCard({ card, columnDone, milestone, dimmed, draggable, outline, onOpen }: SortableCardProps) {
     const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
         id: card.id,
         disabled: !draggable
@@ -486,7 +554,7 @@ function SortableCard({ card, columnDone, draggable, outline, onOpen }: Sortable
         transition,
         // `filter` et non `opacity` : dans le reste de la feature, c'est
         // framer-motion qui possède l'opacité.
-        filter: isDragging ? 'opacity(0.35)' : undefined
+        filter: isDragging ? 'opacity(0.35)' : dimmed ? 'opacity(0.3)' : undefined
     };
 
     // Le pointeur saisit la carte n'importe où, puces comprises. Le clavier, lui,
@@ -497,6 +565,7 @@ function SortableCard({ card, columnDone, draggable, outline, onOpen }: Sortable
             <CardBody
                 card={card}
                 columnDone={columnDone}
+                milestone={milestone}
                 onOpen={onOpen}
                 opener={{ ref: setActivatorNodeRef, ...attributes }}
             />
@@ -508,6 +577,8 @@ interface CardBodyProps {
     card: ProjectCard;
     /** La colonne vaut « terminé » : une échéance passée n'y est plus un retard. */
     columnDone: boolean;
+    /** Le jalon de la carte, montré en puce ; `null` quand elle n'en porte pas. */
+    milestone: ProjectMilestone | null;
     dragging?: boolean;
     onOpen?: (tab: CardTab) => void;
     /** Ce que le tri pose sur le bouton d'ouverture. */
@@ -519,7 +590,7 @@ interface CardBodyProps {
  * l'ouverture par défaut ; les puces, ses sœurs posées au-dessus, portent les deux
  * autres. Aucun bouton n'en contient un autre.
  */
-function CardBody({ card, columnDone, dragging, onOpen, opener }: CardBodyProps) {
+function CardBody({ card, columnDone, milestone, dragging, onOpen, opener }: CardBodyProps) {
     const due = formatDate(card.dueDate);
     const overdue = !columnDone && card.dueDate !== null && card.dueDate * 1000 < Date.now();
     const done = card.checklist.filter((i) => i.done).length;
@@ -568,6 +639,14 @@ function CardBody({ card, columnDone, dragging, onOpen, opener }: CardBodyProps)
                 <span className={styles.card2Title}>{title}</span>
                 {card.unread > 0 && (
                     <CountBadge count={card.unread} aria-label={`${card.unread} non lu${card.unread > 1 ? 's' : ''}`} />
+                )}
+                {/* Le jalon au coin, en pendant de la pastille de priorité. Son nom
+                    cède le pas au titre : il s'abrège, et l'infobulle le rend entier. */}
+                {milestone && (
+                    <span className={styles.card2Milestone} title={`Jalon : ${milestone.name || 'Sans nom'}`}>
+                        <MilestoneDot color={milestone.color} />
+                        <span className={styles.card2MilestoneName}>{milestone.name || 'Sans nom'}</span>
+                    </span>
                 )}
             </div>
 

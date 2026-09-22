@@ -8,8 +8,14 @@ import {
     projectMilestoneUpdate,
     projectPlan
 } from '../contracts/commands';
-import { projectMilestoneSchema } from '../contracts/domain';
-import type { ProjectCardDepRow, ProjectMilestone, ProjectMilestoneRow, ProjectRow } from '../contracts/domain';
+import { projectMilestoneColorSchema, projectMilestoneSchema } from '../contracts/domain';
+import type {
+    ProjectCardDepRow,
+    ProjectMilestone,
+    ProjectMilestoneColor,
+    ProjectMilestoneRow,
+    ProjectRow
+} from '../contracts/domain';
 import { defineSdkFeature, FeatureError, type SdkCipher } from '@deveye/types/sdk/server';
 
 import {
@@ -32,6 +38,7 @@ import {
 interface StoredMilestone {
     name: string;
     description: string;
+    color: ProjectMilestoneColor | null;
 }
 
 async function encryptMilestone(cipher: SdkCipher, payload: StoredMilestone): Promise<string> {
@@ -40,16 +47,18 @@ async function encryptMilestone(cipher: SdkCipher, payload: StoredMilestone): Pr
 
 /** Ne lève jamais : un jalon illisible reste sur la frise, sans son nom. */
 async function decryptMilestone(cipher: SdkCipher, content: string): Promise<StoredMilestone> {
+    const empty: StoredMilestone = { name: '', description: '', color: null };
     const plain = await cipher.tryDecrypt(content);
-    if (plain === null) return { name: '', description: '' };
+    if (plain === null) return empty;
     try {
         const parsed = JSON.parse(plain) as Partial<StoredMilestone>;
         return {
             name: typeof parsed.name === 'string' ? parsed.name : '',
-            description: typeof parsed.description === 'string' ? parsed.description : ''
+            description: typeof parsed.description === 'string' ? parsed.description : '',
+            color: projectMilestoneColorSchema.nullable().catch(null).parse(parsed.color)
         };
     } catch {
-        return { name: '', description: '' };
+        return empty;
     }
 }
 
@@ -59,6 +68,7 @@ function toMilestone(row: ProjectMilestoneRow, payload: StoredMilestone): Projec
         projectId: row.project_id,
         name: payload.name,
         description: payload.description,
+        color: payload.color,
         dueDate: row.due_date,
         reachedAt: row.reached_at,
         sortOrder: row.sort_order
@@ -157,7 +167,11 @@ export const projectMilestoneAddFeature = defineSdkFeature({
         await assertMilestoneDateFree(ctx, project, input.milestone.dueDate);
 
         const cipher = await projectCipher(ctx, project);
-        const payload = { name: input.milestone.name, description: input.milestone.description };
+        const payload = {
+            name: input.milestone.name,
+            description: input.milestone.description,
+            color: input.milestone.color
+        };
         const row = await ctx.repo.plan.createMilestone({
             projectId: input.projectId,
             workspaceId: project.workspace_id,
@@ -178,7 +192,11 @@ export const projectMilestoneUpdateFeature = defineSdkFeature({
         await assertMilestoneDateFree(ctx, project, input.milestone.dueDate, input.milestoneId);
 
         const cipher = await projectCipher(ctx, project);
-        const payload = { name: input.milestone.name, description: input.milestone.description };
+        const payload = {
+            name: input.milestone.name,
+            description: input.milestone.description,
+            color: input.milestone.color
+        };
         const row = await ctx.repo.plan.updateMilestone(input.milestoneId, project.workspace_id, {
             dueDate: input.milestone.dueDate,
             content: await encryptMilestone(cipher, payload)

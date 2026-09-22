@@ -26,6 +26,7 @@ import {
 } from '../../contracts/domain';
 import { Chat } from '../Chat/Chat';
 import { useAssigneeOptions } from '../Member';
+import { MilestoneDot } from '../Milestone';
 import { Subtasks } from './Subtasks';
 import styles from '../style.module.css';
 
@@ -286,19 +287,22 @@ export function CardDialog({
             <div className={styles.row}>
                 <label className={styles.field}>
                     <span className={styles.label}>Jalon</span>
-                    <SelectInput
+                    {/* `SearchSelect` et non le déroulant natif : c'est ce qui
+                        permet la pastille de couleur devant chaque jalon. */}
+                    <SearchSelect
+                        aria-label='Jalon de la tâche'
                         value={milestoneId === null ? '' : String(milestoneId)}
                         disabled={!canPlan}
-                        title={canPlan ? undefined : missingPermission('plan')}
-                        onChange={(e) => setMilestoneId(e.target.value ? Number(e.target.value) : null)}
-                    >
-                        <option value=''>Aucun</option>
-                        {milestones.map((m) => (
-                            <option key={m.id} value={m.id}>
-                                {m.name || `Jalon #${m.id}`}
-                            </option>
-                        ))}
-                    </SelectInput>
+                        options={[
+                            { value: '', label: 'Aucun', prefix: <MilestoneDot color={null} /> },
+                            ...milestones.map((m) => ({
+                                value: String(m.id),
+                                label: m.name || `Jalon #${m.id}`,
+                                prefix: <MilestoneDot color={m.color} />
+                            }))
+                        ]}
+                        onChange={(v) => setMilestoneId(v ? Number(v) : null)}
+                    />
                 </label>
 
                 {/* Ce qui doit être terminé avant que la tâche puisse démarrer. Le

@@ -23,6 +23,9 @@ declare const styles: {
     readonly blockMeta: string;
     readonly blockName: string;
     readonly board: string;
+    readonly boardFilter: string;
+    readonly boardFilterLabel: string;
+    readonly boardFilterSelect: string;
     readonly boardTrack: string;
     readonly card: string;
     readonly card2: string;
@@ -32,6 +35,8 @@ declare const styles: {
     readonly card2Desc: string;
     readonly card2Dragging: string;
     readonly card2Meta: string;
+    readonly card2Milestone: string;
+    readonly card2MilestoneName: string;
     readonly card2Open: string;
     readonly card2Spacer: string;
     readonly card2Title: string;
@@ -180,6 +185,8 @@ declare const styles: {
     readonly metaLeft: string;
     readonly milestone: string;
     readonly milestoneDone: string;
+    readonly milestoneDot: string;
+    readonly milestoneDotNone: string;
     readonly milestoneGhost: string;
     readonly milestoneIcon: string;
     readonly milestoneLabel: string;
@@ -214,6 +221,11 @@ declare const styles: {
     readonly status: string;
     readonly subPage: string;
     readonly subheading: string;
+    readonly swatch: string;
+    readonly swatchActive: string;
+    readonly swatchNone: string;
+    readonly swatchNoneActive: string;
+    readonly swatches: string;
     readonly switchChild: string;
     readonly tab: string;
     readonly tabActive: string;

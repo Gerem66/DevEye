@@ -25,6 +25,7 @@ export const projectEventKindSchema = z.enum([
     'projects.restored',
     'card.archived',
     'card.restored',
+    'column.purged',
     'milestone.reached',
     'deploy.triggered',
     'deploy.succeeded',
