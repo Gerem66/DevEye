@@ -4,14 +4,12 @@ import {
     Button,
     CountBadge,
     Dialog,
-    invalidate,
     NumberInput,
     SearchSelect,
     SelectInput,
     TextInput,
     useLiveOutlines,
-    useLiveSegment,
-    useResourceVersion
+    useLiveSegment
 } from 'deveye-sdk-client';
 import type { MinimalUser } from '@deveye/types';
 import { compareFr, dateInputToSeconds, dateInputValue, PRIORITY_LABELS } from '../api';
@@ -202,18 +200,6 @@ export function CardDialog({
         if (CARD_TABS.includes(wanted)) setTab(wanted);
     }, [tabTarget]);
 
-    /**
-     * Un message arrivé pendant qu'on est sur un autre onglet : le fil ne ravive
-     * pas le tableau, et c'est le tableau qui porte le compte de non-lus du badge.
-     */
-    const messagesVersion = useResourceVersion('projects.messages');
-    const seenMessages = useRef(messagesVersion);
-    useEffect(() => {
-        if (seenMessages.current === messagesVersion) return;
-        seenMessages.current = messagesVersion;
-        if (open && card && tab !== 'chat') invalidate('projects.board');
-    }, [messagesVersion]);
-
     const patch = (next: Partial<ProjectCardDraft>) => setDraft((d) => ({ ...d, ...next }));
 
     /**
@@ -282,7 +268,9 @@ export function CardDialog({
     useLayoutEffect(() => {
         const el = panelRef.current;
         if (!el) return;
-        const ro = new ResizeObserver(([entry]) => setPanelHeight(entry.contentRect.height));
+        // Arrondie au pixel supérieur : la mesure est fractionnaire, la boîte qui
+        // rogne ne l'est pas, et le manque coupait la bordure basse du fil.
+        const ro = new ResizeObserver(([entry]) => setPanelHeight(Math.ceil(entry.contentRect.height)));
         ro.observe(el);
         return () => ro.disconnect();
     }, [open]);
@@ -525,7 +513,7 @@ export function CardDialog({
                         {card && (
                             <>
                                 <div
-                                    className={tab === 'work' ? undefined : styles.tabHidden}
+                                    className={tab === 'work' ? styles.workTab : styles.tabHidden}
                                     aria-hidden={tab === 'work' ? undefined : true}
                                 >
                                     {subtasks}

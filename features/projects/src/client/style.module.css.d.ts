@@ -252,6 +252,7 @@ declare const styles: {
     readonly uptimeDot: string;
     readonly uptimeLinks: string;
     readonly version: string;
+    readonly workTab: string;
     readonly zoom: string;
     readonly zoomActive: string;
     readonly zoomBtn: string;

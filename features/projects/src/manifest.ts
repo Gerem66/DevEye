@@ -29,12 +29,14 @@ export const manifest = {
     /**
      * Le détail ouvert (tableau, frise, liaisons, historique) tient dans une seule
      * clé : ils se relisent ensemble. Le sujet `projects` ravive les quatre
-     * premières ; `projectsChat` les messages et le portefeuille, pour ses
-     * compteurs de non-lus.
+     * premières ; `projectsChat` les messages, le portefeuille et le tableau,
+     * parce que la carte porte le compte de son fil et ce qu'il reste à y lire.
+     * Seul un écran monté relit : ravive donc qui regarde ce projet, personne
+     * d'autre.
      */
     resources: ['projects.count', 'projects.list', 'projects.board', 'projects.myTasks', 'projects.messages'],
     invalidatedByTopic: ['projects.count', 'projects.list', 'projects.board', 'projects.myTasks'],
-    topics: [{ id: 'projectsChat', keys: ['projects.messages', 'projects.list'] }],
+    topics: [{ id: 'projectsChat', keys: ['projects.messages', 'projects.list', 'projects.board'] }],
     /** Les assignés d'une carte et les auteurs d'un message sont des membres. */
     nativeCapabilities: ['members.read'],
     /**

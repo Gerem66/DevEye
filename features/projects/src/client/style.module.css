@@ -1242,9 +1242,18 @@
     flex-direction: column;
     gap: var(--space-sm);
     min-width: 0;
-    /* Sans liste, il ne reste que l'entête et la ligne d'ajout : la popup se
-       ramasserait sur deux lignes puis bondirait à la première sous-tâche. La
-       même hauteur que le fil vide, pour qu'aucun onglet ne fasse sauter la popup. */
+}
+
+/*
+ * L'onglet du suivi, et lui seul : sans liste il ne reste que l'entête et la
+ * ligne d'ajout, et la popup se ramasserait sur deux lignes avant de bondir à la
+ * première sous-tâche. La même hauteur que le fil vide, pour qu'aucun onglet ne
+ * la fasse sauter. En création, la liste suit le formulaire et n'a rien à
+ * combler.
+ */
+.workTab {
+    display: flex;
+    flex-direction: column;
     min-height: 350px;
 }
 
@@ -2089,7 +2098,7 @@
     border-radius: var(--radius-md);
     border: 1px solid var(--glass-border);
     background: var(--surface-subtle);
-    padding: var(--space-sm) var(--space-md);
+    padding: var(--space-sm) var(--space-md) calc(var(--space-sm) + 4px);
 }
 
 /*

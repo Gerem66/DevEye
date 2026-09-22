@@ -316,8 +316,10 @@ second.
 les messages. Sans cette coupure, chaque message ferait re-solliciter le
 tableau, la frise et le portefeuille entiers. `projectsChat` est le premier
 **sujet secondaire de module** : déclaré par le manifest (`topics:
-[{ id: 'projectsChat', keys: ['projects.messages', 'projects.list'] }]`, le
-portefeuille suivant pour ses compteurs de non-lus), validé au boot par
+[{ id: 'projectsChat', keys: ['projects.messages', 'projects.list', 'projects.board'] }]`,
+le portefeuille et le tableau suivant parce que la carte porte le compte de son
+fil et ce qu'il reste à y lire ; seul un écran monté relit, donc seuls ceux qui
+regardent ce projet), validé au boot par
 `buildTopicIndex` contre les manifests installés, et battu par les deux
 écritures de la discussion (`mutates: ['projectsChat']` sur
 `projects.messageSend` et `messageEdit`). Il relève de la feature qui le

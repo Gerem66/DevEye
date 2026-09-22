@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, humanizeError, useResourceVersion, useTypers, useTypingSignal, withSecrecy } from 'deveye-sdk-client';
+import {
+    Button,
+    humanizeError,
+    invalidate,
+    useResourceVersion,
+    useTypers,
+    useTypingSignal,
+    withSecrecy
+} from 'deveye-sdk-client';
 import type { MinimalUser } from '@deveye/types';
 import { api } from '../api';
 import { PROJECT_MESSAGE_MAX_LENGTH, type ProjectMessage } from '../../contracts/domain';
@@ -94,6 +102,9 @@ export function Chat({ cardId, members, meUserId, canWrite, active, onRead }: Ch
                 api.send('projects.messageSend', { cardId, text: body, mentions: findMentions(body, members) })
             );
             setText('');
+            // Le hub n'annonce rien à l'auteur de l'écriture : le compte de la carte
+            // et celui du portefeuille ne bougeraient pas sous ses propres messages.
+            invalidate('projects.board', 'projects.list');
             await load();
         } catch (e) {
             setError(humanizeError(e, 'L’envoi a échoué.'));
