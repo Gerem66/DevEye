@@ -23,7 +23,11 @@ type Layout = 'rows' | 'grid';
 export interface DragReorder<L extends HTMLElement, B extends HTMLElement> {
     /** À poser sur le conteneur de la liste (il doit être `position: relative`). */
     listRef: RefObject<L | null>;
-    /** À poser sur la barre d'insertion, cachée par défaut. */
+    /**
+     * À poser sur la barre d'insertion, cachée par défaut. **Obligatoire** : c'est
+     * sa position qui dit l'interstice visé, donc sans elle le geste part, ne
+     * dessine rien et n'appelle jamais `onReorder`, sans la moindre erreur.
+     */
     barRef: RefObject<B | null>;
     /** À câbler sur le `onPointerDown` de la poignée d'une ligne. */
     onGripPointerDown: (e: ReactPointerEvent, id: RowId) => void;
