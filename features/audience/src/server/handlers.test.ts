@@ -104,7 +104,8 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         sites,
         funnels,
         steps,
-        eventsSince: async (ids: readonly number[]) => ids.length - ids.length,
+        monthlyEvents: async (ids: readonly number[]) => ids.length - ids.length,
+        bumpUsage: async () => undefined,
         countInWorkspaces: async (ids: readonly number[]) => sites.filter((r) => ids.includes(r.workspace_id)).length,
         list: async (workspaceId) => sites.filter((s) => s.workspace_id === workspaceId).map(withStats),
         listVisible: async (workspaceId) => sites.filter((s) => visible(s, workspaceId)).map(withStats),
@@ -352,7 +353,7 @@ describe('audience.count et audience.list', () => {
 
     it('dit où en sont les vues du mois face à l’offre, ou rien quand aucune ne les borne', async () => {
         const repo = seed(fakeRepo(), site({ id: 1, workspace_id: 1 }));
-        repo.eventsSince = async () => 14;
+        repo.monthlyEvents = async () => 14;
         const bounded = await handlerFor(audienceList)(createTestContext({ repo, quotaLimits: { events: 10 } }), {});
         assert.deepEqual(bounded.eventsQuota, { limit: 10, used: 14 });
         const free = await handlerFor(audienceList)(createTestContext({ repo }), {});
@@ -361,7 +362,7 @@ describe('audience.count et audience.list', () => {
 
     it('rend la liste même quand le compte du mois est illisible', async () => {
         const repo = seed(fakeRepo(), site({ id: 1, workspace_id: 1 }));
-        repo.eventsSince = async () => {
+        repo.monthlyEvents = async () => {
             throw new Error('base injoignable');
         };
         const listed = await handlerFor(audienceList)(createTestContext({ repo, quotaLimits: { events: 10 } }), {});

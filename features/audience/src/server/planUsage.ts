@@ -1,7 +1,7 @@
 import type { SdkQuota } from '@deveye/types/sdk/server';
 
 import type { AudienceEventsQuota } from '../contracts/domain';
-import { dayBounds, dayKey } from './normalize';
+import { monthKey } from './normalize';
 import type { AudienceRepo } from './repo';
 
 /**
@@ -11,18 +11,16 @@ import type { AudienceRepo } from './repo';
  */
 export async function eventsUsage(
     quota: SdkQuota,
-    repo: Pick<AudienceRepo, 'eventsSince'>,
+    repo: Pick<AudienceRepo, 'monthlyEvents'>,
     nowSeconds: number
 ): Promise<AudienceEventsQuota | null> {
     const limit = await quota.limit('events');
     if (limit === null) return null;
-    const month = new Date(nowSeconds * 1000);
-    const fromDay = month.getUTCFullYear() * 10000 + (month.getUTCMonth() + 1) * 100 + 1;
     let used = 0;
     // `assert` est la seule voie vers les espaces du propriétaire : on y lit le
     // compte, et le `0` rendu ne lui fait rien refuser.
     await quota.assert('events', async (owned) => {
-        used = await repo.eventsSince(owned, fromDay, dayKey(nowSeconds), dayBounds(nowSeconds).from);
+        used = await repo.monthlyEvents(owned, monthKey(nowSeconds));
         return 0;
     });
     return { limit, used };

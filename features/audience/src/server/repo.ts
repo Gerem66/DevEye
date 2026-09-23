@@ -137,12 +137,16 @@ export interface AudienceRepo extends AudienceFormsRepo {
     count(workspaceId: number): Promise<number>;
     countInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
     /**
-     * Vues et événements nommés écrits depuis le jour `fromDay` (AAAAMMJJ) dans
-     * ces espaces. Les jours passés se lisent dans l'agrégat ; celui d'aujourd'hui
-     * (`today`, qui commence à `todayFrom`, en secondes) se compte dans les
-     * événements bruts, l'agrégat n'étant refait qu'au ménage horaire.
+     * Vues et événements nommés acceptés ce mois-ci (AAAAMM) dans ces espaces.
+     *
+     * Le compte pend à l'espace et non aux sites : porté par eux, supprimer un
+     * site puis le recréer remettrait la consommation du mois à zéro, et
+     * l'offre ne serait plus bornée que par la patience de qui recolle une
+     * balise.
      */
-    eventsSince(workspaceIds: readonly number[], fromDay: number, today: number, todayFrom: number): Promise<number>;
+    monthlyEvents(workspaceIds: readonly number[], month: number): Promise<number>;
+    /** Ajoute `delta` au compte du mois, en une ligne par espace et par vidange. */
+    bumpUsage(workspaceId: number, month: number, delta: number): Promise<void>;
     create(input: {
         workspaceId: number;
         publicKey: string;
@@ -366,25 +370,21 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
             );
             return rows[0] ?? null;
         },
-        async eventsSince(workspaceIds, fromDay, today, todayFrom) {
+        async monthlyEvents(workspaceIds, month) {
             if (workspaceIds.length === 0) return 0;
-            const [past, current] = await Promise.all([
-                q.query<{ total: number | null }>(
-                    `SELECT COALESCE(SUM(d.events), 0) AS total
-                       FROM audience_daily d
-                       JOIN audience_sites s ON s.id = d.site_id
-                      WHERE s.workspace_id IN (?) AND d.day >= ? AND d.day < ?`,
-                    [[...workspaceIds], fromDay, today]
-                ),
-                q.query<{ total: number }>(
-                    `SELECT COUNT(*) AS total
-                       FROM audience_events e
-                       JOIN audience_sites s ON s.id = e.site_id
-                      WHERE s.workspace_id IN (?) AND e.ts >= ?`,
-                    [[...workspaceIds], todayFrom]
-                )
-            ]);
-            return Number(past[0]?.total ?? 0) + Number(current[0]?.total ?? 0);
+            const rows = await q.query<{ total: number | null }>(
+                `SELECT COALESCE(SUM(events), 0) AS total FROM ft_audience_usage
+                  WHERE workspace_id IN (?) AND month = ?`,
+                [[...workspaceIds], month]
+            );
+            return Number(rows[0]?.total ?? 0);
+        },
+        async bumpUsage(workspaceId, month, delta) {
+            await q.execute(
+                `INSERT INTO ft_audience_usage (workspace_id, month, events) VALUES (?, ?, ?)
+                 ON DUPLICATE KEY UPDATE events = events + VALUES(events)`,
+                [workspaceId, month, delta]
+            );
         },
         async countInWorkspaces(workspaceIds) {
             if (workspaceIds.length === 0) return 0;

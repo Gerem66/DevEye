@@ -13,7 +13,7 @@ import { AUDIENCE_ITEMS_PROVIDER, type AudienceItemsProvider } from '@deveye/typ
 import { createTestServiceDeps } from '@deveye/types/sdk/testing';
 
 import { countAnswers } from './answers';
-import { dayKey } from './normalize';
+import { dayKey, monthKey } from './normalize';
 import { nameRef } from './_shared';
 import { serverEntry } from './index';
 import type { AudienceRepo, NewSessionInput, PendingEventRow } from './repo';
@@ -45,6 +45,8 @@ interface FakeRepo extends AudienceRepo {
     formLabels: AudienceFormLabelRow[];
     /** `formId:fieldId:valueId` → compte. */
     answers: Map<string, number>;
+    /** `workspaceId:mois` → événements, la table de consommation en mémoire. */
+    usage: Map<string, number>;
 }
 
 const KEY = 'pk_000000000000000000000001';
@@ -76,6 +78,7 @@ function site(over: Partial<AudienceSiteRow> = {}): AudienceSiteRow {
 /** Un dépôt en mémoire ; le harnais chiffre à l'identité, donc les libellés sont en clair. */
 function fakeRepo(sites: AudienceSiteRow[]): FakeRepo {
     let seq = 0;
+    const usage = new Map<string, number>();
     const repo: FakeRepo = {
         sites,
         sessions: [],
@@ -88,7 +91,13 @@ function fakeRepo(sites: AudienceSiteRow[]): FakeRepo {
         submissions: [],
         formLabels: [],
         answers: new Map(),
-        eventsSince: async (ids: readonly number[]) => ids.length - ids.length,
+        usage,
+        monthlyEvents: async (ids: readonly number[], month: number) =>
+            ids.reduce((total, id) => total + (usage.get(`${id}:${month}`) ?? 0), 0),
+        bumpUsage: async (workspaceId: number, month: number, delta: number) => {
+            const key = `${workspaceId}:${month}`;
+            usage.set(key, (usage.get(key) ?? 0) + delta);
+        },
         countInWorkspaces: async (ids: readonly number[]) => sites.filter((r) => ids.includes(r.workspace_id)).length,
         list: unused,
         listVisible: unused,
@@ -752,7 +761,7 @@ describe('AudienceIngest : les vues de l’offre du compte', () => {
     it('s’arrête à la limite sans relire la base : elle compte ce qu’elle accepte', async () => {
         const repo = fakeRepo([site()]);
         let reads = 0;
-        repo.eventsSince = async () => (reads++, 8);
+        repo.monthlyEvents = async () => (reads++, 8);
         const { ingest, flush } = ingestWith(repo, { events: 10 });
         for (let i = 0; i < 6; i++) await ingest.accept(view(`/p${i}`));
         await flush();
@@ -763,7 +772,7 @@ describe('AudienceIngest : les vues de l’offre du compte', () => {
     it('ne lit la base qu’une fois quand les vues arrivent ensemble', async () => {
         const repo = fakeRepo([site()]);
         let reads = 0;
-        repo.eventsSince = async () => {
+        repo.monthlyEvents = async () => {
             reads++;
             await new Promise((resolve) => setImmediate(resolve));
             return 0;
@@ -777,7 +786,7 @@ describe('AudienceIngest : les vues de l’offre du compte', () => {
 
     it('prévient les écrans une fois la limite atteinte, après avoir écrit les dernières vues', async () => {
         const repo = fakeRepo([site()]);
-        repo.eventsSince = async () => 9;
+        repo.monthlyEvents = async () => 9;
         const { deps, ingest, flush } = ingestWith(repo, { events: 10 });
         await ingest.accept(view('/derniere'));
         await ingest.accept(view('/refusee'));
@@ -793,7 +802,7 @@ describe('AudienceIngest : les vues de l’offre du compte', () => {
 
     it('coupe un lot au milieu plutôt que d’enjamber la limite', async () => {
         const repo = fakeRepo([site()]);
-        repo.eventsSince = async () => 9;
+        repo.monthlyEvents = async () => 9;
         const { ingest, flush } = ingestWith(repo, { events: 10 });
         await ingest.accept(
             request({
@@ -808,16 +817,28 @@ describe('AudienceIngest : les vues de l’offre du compte', () => {
         assert.equal(repo.events.length, 1);
     });
 
-    it('compte le jour en cours dans les événements bruts, que l’agrégat ne connaît pas encore', async () => {
+    it('tient le compte du mois sur l’espace, que la suppression d’un site ne touche pas', async () => {
+        // Lu sur les sites, il tombait avec eux : supprimer puis recréer son site
+        // remettait la consommation du mois à zéro.
         const repo = fakeRepo([site()]);
-        const asked: number[][] = [];
-        repo.eventsSince = async (_ids, fromDay, today, todayFrom) => (asked.push([fromDay, today, todayFrom]), 0);
-        const { ingest } = ingestWith(repo, { events: 10 });
-        await ingest.accept(request());
-        const [[fromDay, today, todayFrom]] = asked;
-        assert.equal(fromDay % 100, 1, 'le premier du mois');
-        assert.equal(Math.floor(fromDay / 100), Math.floor(today / 100), 'le mois en cours');
-        assert.equal(todayFrom % 86400, 0, 'le début du jour UTC');
+        const { ingest, flush } = ingestWith(repo, { events: 10 });
+        await ingest.accept(
+            request({
+                events: [
+                    { type: 'view', path: '/a' },
+                    { type: 'view', path: '/b' }
+                ]
+            })
+        );
+        await flush();
+
+        const month = monthKey(Math.floor(Date.now() / 1000));
+        assert.deepEqual([...repo.usage], [[`1:${month}`, 2]]);
+        assert.equal(await repo.monthlyEvents([1], month), 2);
+
+        // Le site s'en va, le compte reste.
+        repo.sites.length = 0;
+        assert.equal(await repo.monthlyEvents([1], month), 2);
     });
 });
 

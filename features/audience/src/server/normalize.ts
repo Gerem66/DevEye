@@ -160,10 +160,16 @@ export function persistentVisitorRef(secret: string, siteKey: string, visitorId:
         .slice(0, 16);
 }
 
-/** Le jour UTC d'un instant, en `YYYYMMDD` — la clé d'`audience_daily`. */
+/** Le jour UTC d'un instant, en `YYYYMMDD` : la clé d'`audience_daily`. */
 export function dayKey(tsSeconds: number): number {
     const d = new Date(tsSeconds * 1000);
     return d.getUTCFullYear() * 10000 + (d.getUTCMonth() + 1) * 100 + d.getUTCDate();
+}
+
+/** Le mois UTC d'un instant, en `YYYYMM` : la clé de `ft_audience_usage`. */
+export function monthKey(tsSeconds: number): number {
+    const d = new Date(tsSeconds * 1000);
+    return d.getUTCFullYear() * 100 + d.getUTCMonth() + 1;
 }
 
 /** Les bornes UTC du jour qui contient cet instant, en secondes. */

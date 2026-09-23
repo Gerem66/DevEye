@@ -16,6 +16,7 @@ import {
     dayBounds,
     dayKey,
     labelRef,
+    monthKey,
     normalizePath,
     normalizeReferrer,
     originAllowed,
@@ -695,7 +696,8 @@ export class AudienceIngest {
             /** `sessionId` → vues à ajouter et instant le plus récent. */
             const touched = new Map<number, { views: number; lastAt: number }>();
             const siteLastAt = new Map<number, number>();
-            const workspaces = new Set<number>();
+            /** `workspaceId` → événements de ce lot, pour le compte du mois. */
+            const workspaces = new Map<number, number>();
 
             for (const item of batch) {
                 const cipher = this.deps.cipherFor(item.workspaceId);
@@ -729,7 +731,7 @@ export class AudienceIngest {
                 });
                 session.lastAt = Math.max(session.lastAt, item.ts);
                 siteLastAt.set(item.siteId, Math.max(siteLastAt.get(item.siteId) ?? 0, item.ts));
-                workspaces.add(item.workspaceId);
+                workspaces.set(item.workspaceId, (workspaces.get(item.workspaceId) ?? 0) + 1);
             }
 
             await this.deps.repo.insertEvents(events);
@@ -739,7 +741,14 @@ export class AudienceIngest {
             for (const [siteId, at] of siteLastAt) {
                 await this.deps.repo.touchSite(siteId, at);
             }
-            for (const workspaceId of workspaces) this.maybeBroadcast(workspaceId);
+            // Le compte du mois s'écrit ici, une ligne par espace et par vidange :
+            // le tenir sur les sites le ferait tomber avec eux, et supprimer un
+            // site suffirait à repartir de zéro.
+            const month = monthKey(Math.floor(Date.now() / 1000));
+            for (const [workspaceId, count] of workspaces) {
+                await this.deps.repo.bumpUsage(workspaceId, month, count);
+            }
+            for (const workspaceId of workspaces.keys()) this.maybeBroadcast(workspaceId);
             this.announceLimitReached();
         } catch (e) {
             // La file a déjà été vidée : ce lot est perdu, et c'est voulu. Le remettre en
