@@ -1,5 +1,6 @@
 import {
     AUDIENCE_ANSWER_VALUE_MAX_LENGTH,
+    AUDIENCE_ANSWER_FIELDS_MAX,
     AUDIENCE_ANSWER_VALUES_MAX,
     AUDIENCE_FIELD_NAME_MAX_LENGTH,
     type AudienceFieldValue
@@ -92,12 +93,21 @@ export async function countAnswers(
     for (const answer of indexableAnswers(fields)) {
         let fieldId = fieldIds.get(answer.field);
         if (fieldId === undefined) {
-            fieldId = await repo.resolveFormLabel(
-                formId,
-                'field',
-                labelRef(answer.field),
-                await cipher.encrypt(answer.field)
-            );
+            // En décrémentation on ne crée rien : le libellé d'une question vidée
+            // entre-temps n'a pas à renaître pour qu'on retire un compte qui
+            // n'existe plus. Absent, il n'y a simplement rien à défaire.
+            const ref = labelRef(answer.field);
+            let found = await repo.findFormLabel(formId, 'field', ref);
+            if (found === null && delta > 0) {
+                // Le nombre de questions n'était borné que sur un formulaire
+                // déclaré. En mode `auto`, chaque envoi pouvait en apporter
+                // quarante inédites, et la table des libellés grossissait au
+                // rythme du quota horaire, sans rétention pour la vider.
+                if ((await repo.countAnswerFields(formId)) >= AUDIENCE_ANSWER_FIELDS_MAX) continue;
+                found = await repo.resolveFormLabel(formId, 'field', ref, await cipher.encrypt(answer.field));
+            }
+            if (found === null) continue;
+            fieldId = found;
             fieldIds.set(answer.field, fieldId);
         }
 

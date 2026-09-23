@@ -79,26 +79,30 @@ export const audienceFunnelListFeature = defineSdkFeature({
             stepRows.map((step) => ({ kind: step.match_kind, labelRef: step.label_ref }))
         );
 
-        const funnels: AudienceFunnel[] = [];
-        for (const row of rows) {
-            const steps = stepRows.filter((step) => step.funnel_id === row.id);
-            const resolved: ResolvedStep[] = steps.map((step) => ({
-                kind: step.match_kind === 'path' ? 'path' : 'event',
-                labelId: labels.get(`${step.match_kind}:${step.label_ref}`) ?? null
-            }));
-            const counts = await ctx.repo.retention(input.siteId, resolved, window.from, window.to);
-            funnels.push({
-                id: row.id,
-                name: (await readLabel(cipher, row.content)) || 'Sans nom',
-                steps: await Promise.all(
-                    steps.map(async (step, i) => ({
-                        kind: step.match_kind === 'path' ? ('path' as const) : ('event' as const),
-                        value: await readLabel(cipher, step.content),
-                        sessions: counts[i] ?? 0
-                    }))
-                )
-            });
-        }
+        // Ensemble et non l'un après l'autre : chaque `retention` balaie la fenêtre
+        // d'événements du site, et vingt entonnoirs en séquence tenaient une
+        // connexion du pool pendant tout ce temps.
+        const funnels: AudienceFunnel[] = await Promise.all(
+            rows.map(async (row): Promise<AudienceFunnel> => {
+                const steps = stepRows.filter((step) => step.funnel_id === row.id);
+                const resolved: ResolvedStep[] = steps.map((step) => ({
+                    kind: step.match_kind === 'path' ? 'path' : 'event',
+                    labelId: labels.get(`${step.match_kind}:${step.label_ref}`) ?? null
+                }));
+                const counts = await ctx.repo.retention(input.siteId, resolved, window.from, window.to);
+                return {
+                    id: row.id,
+                    name: (await readLabel(cipher, row.content)) || 'Sans nom',
+                    steps: await Promise.all(
+                        steps.map(async (step, i) => ({
+                            kind: step.match_kind === 'path' ? ('path' as const) : ('event' as const),
+                            value: await readLabel(cipher, step.content),
+                            sessions: counts[i] ?? 0
+                        }))
+                    )
+                };
+            })
+        );
         return { funnels };
     }
 });

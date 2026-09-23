@@ -186,6 +186,14 @@ const UNKNOWN_KEY_CACHE_MAX = 1_000;
 const EVENT_COUNT_CACHE_MAX = 50_000;
 
 /**
+ * Lignes retirées par requête au ménage, et paquets par site et par tour. Le
+ * produit borne ce qu'un tour peut effacer d'un site ; ce qu'il n'a pas pris,
+ * le tour suivant le prendra, une heure plus tard.
+ */
+const PRUNE_BATCH = 5_000;
+const PRUNE_BATCHES_MAX = 20;
+
+/**
  * Les deux paramètres de la dérivation du sel des visiteurs, fixes : le sel
  * doit être le même d'un redémarrage à l'autre.
  */
@@ -196,6 +204,7 @@ export class AudienceIngest {
     private readonly flushTicker: FeatureService;
     private readonly maintenanceTicker: FeatureService;
     private flushing = false;
+    private maintaining = false;
 
     /**
      * Le secret d'où sortent les condensés de visiteurs : 32 octets dérivés de
@@ -281,7 +290,6 @@ export class AudienceIngest {
         if (!site || !site.active) return;
         if (!originAllowed(site.origins, req.origin, site.platform)) return;
         if (looksLikeBot(req.userAgent)) return;
-        if (this.overEventQuota(site, req.ip)) return;
         const usage = await this.planUsage(site.workspaceId);
         if (this.planFull(usage, site.workspaceId)) return;
 
@@ -305,6 +313,10 @@ export class AudienceIngest {
             const name = event.type === 'event' ? event.name?.trim() || null : null;
             // Un événement nommé sans nom produirait une ligne que rien ne désigne.
             if (event.type === 'event' && !name) continue;
+            // Par événement, comme la limite de l'offre juste dessous : compté par
+            // requête, un plafond de 100 en laissait passer vingt fois plus, un lot
+            // pouvant en porter AUDIENCE_BATCH_MAX.
+            if (this.overEventQuota(site, req.ip)) return;
             // Par événement, pas par requête : un lot ne doit pas enjamber la limite.
             if (this.planFull(usage, site.workspaceId)) return;
             usage.count++;
@@ -412,10 +424,18 @@ export class AudienceIngest {
                 sessionId: session?.id ?? null,
                 content: await cipher.encrypt(JSON.stringify({ fields, path }))
             });
-            await countAnswers(this.deps.repo, cipher, form.id, fields, 1);
-            await this.deps.repo.touchForm(form.id, now);
-            form.submissions++;
-            await this.banIfFlooding(site, ip, now);
+            // Le message est en base : ce qui suit ne tient que des compteurs, et
+            // rien de tout cela ne vaut qu'on réponde « réessayez ». Le visiteur
+            // renverrait, et le même message serait stocké deux fois pendant que
+            // les compteurs, eux, ne compteraient qu'une fois et demie.
+            try {
+                await countAnswers(this.deps.repo, cipher, form.id, fields, 1);
+                await this.deps.repo.touchForm(form.id, now);
+                form.submissions++;
+                await this.banIfFlooding(site, ip, now);
+            } catch (e) {
+                this.deps.logger.error({ err: e, formId: form.id }, 'Audience submit: compteurs non tenus');
+            }
             this.maybeBroadcast(site.workspaceId);
             return { status: 'stored' };
         } catch (e) {
@@ -615,14 +635,27 @@ export class AudienceIngest {
         const key = `${site.id}:${ip}`;
         const seen = this.eventCounts.get(key);
         if (!seen || now - seen.from >= 3600_000) {
-            // Bornée par une entrée publique, donc vidée sans finesse : on
-            // recommence à compter plutôt que de laisser la carte enfler.
-            if (this.eventCounts.size >= EVENT_COUNT_CACHE_MAX) this.eventCounts.clear();
+            // Les périmées seules s'en vont, jamais la carte entière : qui dispose
+            // d'un /64 fabrique cinquante mille clés en quelques secondes, et un
+            // `clear()` global remettrait à zéro les compteurs honnêtes, en boucle.
+            if (this.eventCounts.size >= EVENT_COUNT_CACHE_MAX) this.evictEventCounts(now);
             this.eventCounts.set(key, { from: now, count: 1 });
             return false;
         }
         seen.count++;
         return seen.count > site.eventIpQuota;
+    }
+
+    /**
+     * Retire les fenêtres échues. Si tout est encore frais, la carte est pleine
+     * de compteurs vivants et il faut bien céder : on repart alors de zéro,
+     * faute de pouvoir choisir qui garder.
+     */
+    private evictEventCounts(now: number): void {
+        for (const [key, seen] of this.eventCounts) {
+            if (now - seen.from >= 3600_000) this.eventCounts.delete(key);
+        }
+        if (this.eventCounts.size >= EVENT_COUNT_CACHE_MAX) this.eventCounts.clear();
     }
 
     /**
@@ -856,6 +889,11 @@ export class AudienceIngest {
      * un trou définitif dès que les événements bruts ont expiré.
      */
     private async maintain(): Promise<void> {
+        // `flush()` a la sienne depuis toujours ; celui-ci n'en avait pas, alors
+        // qu'il est le plus long des deux. Sur un parc de quelques milliers de
+        // sites, un tour qui déborde d'une heure en croiserait un second.
+        if (this.maintaining) return;
+        this.maintaining = true;
         try {
             const now = Math.floor(Date.now() / 1000);
             const sites = await this.deps.repo.listForMaintenance();
@@ -867,8 +905,10 @@ export class AudienceIngest {
                 }
 
                 const before = now - site.retention_days * 86400;
-                const events = await this.deps.repo.pruneEvents(site.id, before);
-                const sessions = await this.deps.repo.pruneSessions(site.id, before);
+                const events = await this.pruneInBatches((limit) => this.deps.repo.pruneEvents(site.id, before, limit));
+                const sessions = await this.pruneInBatches((limit) =>
+                    this.deps.repo.pruneSessions(site.id, before, limit)
+                );
                 if (events + sessions > 0) {
                     // Les caches sont vidés AVANT le balayage : entre la suppression
                     // et l'oubli, toute vidange emploierait des identifiants que la
@@ -889,6 +929,19 @@ export class AudienceIngest {
             if (bans > 0) this.deps.logger.info({ bans }, 'Audience: mises à l’écart échues retirées');
         } catch (e) {
             this.deps.logger.error({ err: e }, 'Audience ingest: maintenance failed');
+        } finally {
+            this.maintaining = false;
         }
+    }
+
+    /** Efface par paquets jusqu'à épuisement, ou jusqu'au plafond du tour. */
+    private async pruneInBatches(prune: (limit: number) => Promise<number>): Promise<number> {
+        let total = 0;
+        for (let round = 0; round < PRUNE_BATCHES_MAX; round++) {
+            const gone = await prune(PRUNE_BATCH);
+            total += gone;
+            if (gone < PRUNE_BATCH) break;
+        }
+        return total;
     }
 }

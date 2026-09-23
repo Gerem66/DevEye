@@ -1,4 +1,4 @@
-import type { AudienceFormRow, AudienceSubmissionRow } from '../contracts/domain';
+import { AUDIENCE_ANSWER_ROWS_MAX, type AudienceFormRow, type AudienceSubmissionRow } from '../contracts/domain';
 import type { SdkQueryable } from '@deveye/types/sdk/server';
 
 /**
@@ -63,9 +63,9 @@ export interface AudienceFormsRepo {
         open: boolean;
     }): Promise<void>;
     /**
-     * Ferme un formulaire sans qu'on l'ait demandé, en inscrivant pourquoi. Une
-     * fermeture datée et réversible borne une rafale dans le temps, là où le
-     * plafond de stockage seul condamnerait le canal jusqu'au prochain vidage.
+     * Ferme un formulaire sans qu'on l'ait demandé, en inscrivant pourquoi. Un
+     * seul motif subsiste, le plafond de stockage : une rafale écarte la
+     * provenance qui l'envoie et ne touche pas au canal.
      */
     closeForm(formId: number, at: number, reason: string): Promise<void>;
     removeForm(formId: number): Promise<boolean>;
@@ -113,6 +113,8 @@ export interface AudienceFormsRepo {
     findFormLabel(formId: number, kind: 'field' | 'value', labelRef: string): Promise<number | null>;
     /** Combien de valeurs distinctes ce champ a déjà, seau compris. */
     countAnswerValues(formId: number, fieldId: number): Promise<number>;
+    /** Combien de questions distinctes ce formulaire indexe déjà. */
+    countAnswerFields(formId: number): Promise<number>;
     bumpAnswer(formId: number, fieldId: number, valueId: number, delta: number): Promise<void>;
 
     // -- lectures -----------------------------------------------------------
@@ -293,15 +295,31 @@ export function createFormsRepo(q: SdkQueryable): AudienceFormsRepo {
             );
             return Number(rows[0]?.n ?? 0);
         },
+        async countAnswerFields(formId) {
+            const rows = await q.query<{ n: number }>(
+                "SELECT COUNT(*) AS n FROM ft_audience_form_labels WHERE form_id = ? AND kind = 'field'",
+                [formId]
+            );
+            return Number(rows[0]?.n ?? 0);
+        },
         async bumpAnswer(formId, fieldId, valueId, delta) {
-            // `GREATEST(0, …)` : une décrémentation ne peut pas rendre un compteur
-            // négatif, quelle qu'ait été l'histoire de la ligne. Le ménage des
-            // compteurs à zéro se fait au vidage, pas ici.
+            // Une décrémentation ne crée jamais la ligne : l'upsert en posait une à
+            // zéro sur un couple inconnu, et ces fantômes comptaient dans
+            // `countAnswerValues`, poussant le champ au seau « texte libre » sans
+            // qu'aucune réponse ne l'ait justifié.
+            if (delta < 0) {
+                await q.execute(
+                    `UPDATE ft_audience_answers SET hits = GREATEST(0, hits + ?)
+                      WHERE form_id = ? AND field_id = ? AND value_id = ?`,
+                    [delta, formId, fieldId, valueId]
+                );
+                return;
+            }
             await q.execute(
                 `INSERT INTO ft_audience_answers (form_id, field_id, value_id, hits)
                  VALUES (?, ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE hits = GREATEST(0, hits + ?)`,
-                [formId, fieldId, valueId, Math.max(0, delta), delta]
+                 ON DUPLICATE KEY UPDATE hits = hits + ?`,
+                [formId, fieldId, valueId, delta, delta]
             );
         },
 
@@ -362,8 +380,9 @@ export function createFormsRepo(q: SdkQueryable): AudienceFormsRepo {
                    JOIN ft_audience_form_labels f ON f.id = a.field_id
                    LEFT JOIN ft_audience_form_labels v ON v.id = a.value_id
                   WHERE a.form_id = ? AND a.hits > 0
-                  ORDER BY a.field_id ASC, a.hits DESC, a.value_id ASC`,
-                [formId]
+                  ORDER BY a.field_id ASC, a.hits DESC, a.value_id ASC
+                  LIMIT ?`,
+                [formId, AUDIENCE_ANSWER_ROWS_MAX]
             );
         },
         async feedbackStats(siteId, since) {

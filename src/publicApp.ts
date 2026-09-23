@@ -23,6 +23,38 @@ import { env, TRUST_PROXY } from '@/Utils/Env';
  * Le harnais (helmet, débit, analyseurs, erreurs) est volontairement dupliqué
  * depuis `app.ts` : les politiques diffèrent, et ce port doit se relire seul.
  */
+/**
+ * Signale, une fois, un `TRUST_PROXY` qui ne colle pas à la chaîne réelle.
+ *
+ * Tout ce qui borne par adresse sur ce port en dépend : les plafonds de débit,
+ * les quotas par provenance, les mises à l'écart. Avec un saut de trop devant
+ * (un CDN ajouté au-dessus du proxy), `req.ip` devient l'adresse de ce dernier
+ * et **le monde entier se rabat sur une seule clé** : un visiteur actif ferme
+ * alors la porte à tous les autres. Rien dans le code ne peut deviner la
+ * topologie, mais un `X-Forwarded-For` plus long que le nombre de sauts
+ * accordés la trahit à coup sûr.
+ *
+ * Le contrôle ne vaut que pour la forme numérique : en liste d'adresses, c'est
+ * proxy-addr qui tranche et le compte des sauts ne dit plus rien.
+ */
+function warnOnProxyMismatch(app: FastifyInstance): void {
+    const hops = /^\d+$/.test(env.TRUST_PROXY.trim()) ? Number(env.TRUST_PROXY.trim()) : null;
+    if (hops === null) return;
+    let warned = false;
+    app.addHook('onRequest', async (req) => {
+        if (warned) return;
+        const forwarded = req.headers['x-forwarded-for'];
+        if (typeof forwarded !== 'string') return;
+        const chain = forwarded.split(',').filter((part) => part.trim().length > 0).length;
+        if (chain <= hops) return;
+        warned = true;
+        req.log.warn(
+            { chain, hops, seen: req.ip },
+            'TRUST_PROXY est plus court que la chaîne réelle : toutes les bornes par adresse comptent la même'
+        );
+    });
+}
+
 export async function buildPublicApp(): Promise<FastifyInstance> {
     const app = Fastify({
         loggerInstance: logger.child({ surface: 'public' }) as FastifyBaseLogger,
@@ -102,6 +134,8 @@ export async function buildPublicApp(): Promise<FastifyInstance> {
         const code: ErrorCode = status === 400 ? 'validation' : 'internal';
         return reply.code(status).send(err(code, status >= 500 ? 'Erreur interne' : 'Requête invalide'));
     });
+
+    warnOnProxyMismatch(app);
 
     // Sonde de vivacité seulement : ni version ni état de la base, `/api/status`
     // reste sur le port privé.

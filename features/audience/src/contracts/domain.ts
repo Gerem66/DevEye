@@ -39,8 +39,27 @@ export const AUDIENCE_PUBLIC_KEY_LENGTH = 27;
 /** Défauts des quotas d'un site, tous réglables dans l'onglet de leur section. */
 export const AUDIENCE_SUBMISSION_IP_QUOTA_DEFAULT = 5;
 export const AUDIENCE_FORM_HOURLY_QUOTA_DEFAULT = 200;
-/** `0` = illimité : aucun site en place ne doit se mettre à perdre des vues. */
-export const AUDIENCE_EVENT_IP_QUOTA_DEFAULT = 0;
+/**
+ * Événements de mesure par adresse, par site et par heure, sur un site neuf.
+ * Généreux, parce qu'une seule adresse peut porter tout un bureau ou un
+ * opérateur mobile, mais fini : sans plafond, qui lit la clé publique fait
+ * grossir la table des libellés au rythme que le débit lui laisse.
+ *
+ * `0` reste « aucune limite », et c'est ce que gardent les sites en place :
+ * aucun ne doit se mettre à perdre des vues parce que ce défaut a changé.
+ */
+export const AUDIENCE_EVENT_IP_QUOTA_DEFAULT = 20_000;
+
+/**
+ * Questions distinctes indexées par formulaire. Ne borne que le mode `auto`,
+ * où les colonnes se découvrent : un formulaire déclaré en porte au plus
+ * `AUDIENCE_FORM_FIELDS_MAX`. Au-delà, la question n'est plus comptée, et
+ * c'est le signe que ce ne sont plus des questions.
+ */
+export const AUDIENCE_ANSWER_FIELDS_MAX = 100;
+
+/** Lignes de répartition relues par la vue Résultats. */
+export const AUDIENCE_ANSWER_ROWS_MAX = 2_000;
 /**
  * Retours d'une même adresse sur tout le site, par heure, avant qu'elle ne soit
  * écartée. Largement au-dessus du quota par formulaire : celui-ci écarte l'envoi
@@ -442,6 +461,15 @@ export const AUDIENCE_FORM_SUBMISSIONS_MAX = 50_000;
 
 /** Lignes rendues par page de tableau. */
 export const AUDIENCE_SUBMISSION_PAGE = 100;
+
+/**
+ * Octets qu'une page de retours peut peser, contenu déchiffré compris. Un
+ * sondage à quarante questions généreusement dotées tient dans quelques
+ * centaines de kilo-octets à lui seul : cent d'entre eux dépasseraient la
+ * trame WebSocket du client, et la page n'arriverait jamais. La page se coupe
+ * donc plus tôt, et son curseur dit la suite.
+ */
+export const AUDIENCE_SUBMISSION_PAGE_BYTES = 2 * 1024 * 1024;
 
 /**
  * Ce qu'une réponse peut valoir. Fermé volontairement : un objet imbriqué se

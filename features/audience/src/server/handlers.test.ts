@@ -264,6 +264,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         resolveFormLabel: unused,
         findFormLabel: unused,
         countAnswerValues: unused,
+        countAnswerFields: unused,
         bumpAnswer: unused,
         listSubmissions: unused,
         findSubmission: unused,

@@ -283,8 +283,8 @@ export interface AudienceRepo extends AudienceFormsRepo {
      * Purge les faits antérieurs à `before`. Les événements d'abord, les
      * sessions ensuite : l'inverse buterait sur la clé étrangère.
      */
-    pruneEvents(siteId: number, before: number): Promise<number>;
-    pruneSessions(siteId: number, before: number): Promise<number>;
+    pruneEvents(siteId: number, before: number, limit: number): Promise<number>;
+    pruneSessions(siteId: number, before: number, limit: number): Promise<number>;
     /**
      * Les libellés que plus aucun fait ne cite : sans ce ménage, un chemin
      * disparu du site resterait pour toujours dans la table de dimensions.
@@ -903,8 +903,11 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
 
         // -- maintenance ----------------------------------------------------
         async listForMaintenance() {
+            // Un site qui n'a jamais rien reçu n'a ni agrégat à refaire ni ligne à
+            // élaguer : l'écarter épargne six requêtes par tour et par site mort.
             const rows = await q.query<AudienceMaintenanceRow>(
-                'SELECT id, workspace_id, retention_days FROM audience_sites ORDER BY id ASC'
+                `SELECT id, workspace_id, retention_days FROM audience_sites
+                  WHERE last_event_at IS NOT NULL ORDER BY id ASC`
             );
             return rows.map((row) => ({
                 id: Number(row.id),
@@ -942,14 +945,22 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
                 ]
             );
         },
-        async pruneEvents(siteId, before) {
-            const res = await q.execute('DELETE FROM audience_events WHERE site_id = ? AND ts < ?', [siteId, before]);
+        async pruneEvents(siteId, before, limit) {
+            // Par paquets : un site qui expire cinq millions d'événements tenait
+            // sinon un verrou et un journal de transaction à leur mesure, et
+            // mettait la réplication en retard le temps d'un seul DELETE.
+            const res = await q.execute('DELETE FROM audience_events WHERE site_id = ? AND ts < ? LIMIT ?', [
+                siteId,
+                before,
+                limit
+            ]);
             return res.affectedRows;
         },
-        async pruneSessions(siteId, before) {
-            const res = await q.execute('DELETE FROM audience_sessions WHERE site_id = ? AND last_at < ?', [
+        async pruneSessions(siteId, before, limit) {
+            const res = await q.execute('DELETE FROM audience_sessions WHERE site_id = ? AND last_at < ? LIMIT ?', [
                 siteId,
-                before
+                before,
+                limit
             ]);
             return res.affectedRows;
         },

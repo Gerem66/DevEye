@@ -290,6 +290,8 @@ function fakeRepo(sites: AudienceSiteRow[]): FakeRepo {
             null,
         countAnswerValues: async (formId, fieldId) =>
             [...repo.answers.keys()].filter((k) => k.startsWith(`${formId}:${fieldId}:`)).length,
+        countAnswerFields: async (formId) =>
+            repo.formLabels.filter((l) => l.form_id === formId && l.kind === 'field').length,
         async bumpAnswer(formId, fieldId, valueId, delta) {
             const key = `${formId}:${fieldId}:${valueId}`;
             repo.answers.set(key, Math.max(0, (repo.answers.get(key) ?? 0) + delta));
@@ -789,6 +791,25 @@ describe('AudienceIngest : le quota d’événements', () => {
         }
         await flush();
         assert.equal(repo.events.length, 4, 'deux par adresse');
+    });
+
+    it('compte par événement et non par requête : un lot ne l’enjambe pas', async () => {
+        // Compté par requête, un plafond de 2 laissait passer un lot entier, soit
+        // AUDIENCE_BATCH_MAX fois trop.
+        const repo = fakeRepo([site({ event_ip_quota: 2 })]);
+        const { ingest, flush } = ingestWith(repo);
+        await ingest.accept(
+            request({
+                events: [
+                    { type: 'view', path: '/a' },
+                    { type: 'view', path: '/b' },
+                    { type: 'view', path: '/c' },
+                    { type: 'view', path: '/d' }
+                ]
+            })
+        );
+        await flush();
+        assert.equal(repo.events.length, 2);
     });
 });
 

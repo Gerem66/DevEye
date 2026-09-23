@@ -227,6 +227,8 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             repo.formLabels.find((l) => l.form_id === formId && l.kind === kind && l.label_ref === ref)?.id ?? null,
         countAnswerValues: async (formId, fieldId) =>
             [...repo.answers.keys()].filter((k) => k.startsWith(`${formId}:${fieldId}:`)).length,
+        countAnswerFields: async (formId) =>
+            repo.formLabels.filter((l) => l.form_id === formId && l.kind === 'field').length,
         async bumpAnswer(formId, fieldId, valueId, delta) {
             const key = `${formId}:${fieldId}:${valueId}`;
             repo.answers.set(key, Math.max(0, (repo.answers.get(key) ?? 0) + delta));
@@ -477,6 +479,26 @@ describe('audience.submissionRemove', () => {
         assert.equal(repo.forms[0].submissions, 1);
         const results = await handlerFor(audienceResults)(ctx, { formId: 10 });
         // « oui » tombe à zéro et disparaît du classement, « non » ne bouge pas.
+        assert.deepEqual(results.fields[0].values, [{ label: 'non', count: 1 }]);
+    });
+
+    it('ne décompte qu’une fois ce qu’il n’a supprimé qu’une fois', async () => {
+        // Deux appels concurrents lisent la ligne avant qu'aucun ne l'efface : le
+        // premier supprime, le second ne retire rien. Sans le verdict de la
+        // suppression, les deux décrémentaient, et plus rien ne le rattrapait,
+        // la charge utile étant chiffrée. On fige ici la lecture pour que les
+        // deux voient la ligne, ce que la course produit d'elle-même.
+        const repo = await seeded();
+        mountIngest();
+        const ctx = createTestContext({ repo, workspaceId: 1 });
+        const seen = repo.submissions[0];
+        repo.findSubmission = async () => seen;
+
+        await handlerFor(audienceSubmissionRemove)(ctx, { submissionId: 1 });
+        await handlerFor(audienceSubmissionRemove)(ctx, { submissionId: 1 });
+
+        assert.equal(repo.forms[0].submissions, 1);
+        const results = await handlerFor(audienceResults)(ctx, { formId: 10 });
         assert.deepEqual(results.fields[0].values, [{ label: 'non', count: 1 }]);
     });
 

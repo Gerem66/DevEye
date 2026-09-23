@@ -11,6 +11,7 @@ import {
 import {
     AUDIENCE_MAX_FORMS,
     AUDIENCE_SUBMISSION_PAGE,
+    AUDIENCE_SUBMISSION_PAGE_BYTES,
     type AudienceFieldValue,
     type AudienceForm,
     type AudienceFormClosure,
@@ -250,12 +251,22 @@ export const audienceSubmissionListFeature = defineSdkFeature({
             cursorId: cursor?.id ?? null,
             limit: limit + 1
         });
-        const page = rows.slice(0, limit);
+        // La page se coupe aussi au poids : les charges utiles sont libres, et cent
+        // sondages bien remplis ne tiendraient pas dans une trame. La première
+        // ligne passe toujours, sinon une seule trop grosse bloquerait la lecture.
+        const page = [];
+        let bytes = 0;
+        for (const row of rows.slice(0, limit)) {
+            if (page.length > 0 && bytes >= AUDIENCE_SUBMISSION_PAGE_BYTES) break;
+            bytes += row.content.length;
+            page.push(row);
+        }
         const last = page[page.length - 1];
+        const more = rows.length > page.length;
 
         return {
             submissions: await Promise.all(page.map((row) => toSubmission(cipher, row))),
-            nextCursor: rows.length > limit && last ? `${Number(last.ts)}:${Number(last.id)}` : null
+            nextCursor: more && last ? `${Number(last.ts)}:${Number(last.id)}` : null
         };
     }
 });
@@ -274,7 +285,11 @@ export const audienceSubmissionRemoveFeature = defineSdkFeature({
         // Sans cela, la vue Résultats compterait indéfiniment des réponses effacées.
         const cipher = ctx.cipher();
         const stored = await readJson<Partial<StoredSubmission>>(cipher, row.content);
-        await ctx.repo.removeSubmission(input.submissionId);
+        // Deux suppressions du même retour lisent toutes deux sa ligne : sans ce
+        // verdict, la seconde ne retire rien et décrémente quand même, et les
+        // compteurs partent faux pour toujours (`content` est chiffré, rien ne les
+        // recalcule).
+        if (!(await ctx.repo.removeSubmission(input.submissionId))) return { ok: true as const };
         if (stored?.fields) {
             await countAnswers(ctx.repo, cipher, Number(row.form_id), stored.fields, -1);
         }
