@@ -40,3 +40,23 @@ test('sqlTableTargets voit le DDL, le DML et les deux côtés d’un RENAME', ()
         ])
     );
 });
+
+test('un upsert ne fait pas passer sa première colonne pour une table', () => {
+    // `ON DUPLICATE KEY UPDATE events = …` se lisait `UPDATE events`, et tout
+    // module qui écrit un compteur dans une migration échouait au contrôle.
+    assert.deepEqual(
+        sqlTableTargets(
+            `INSERT INTO ft_audience_usage (workspace_id, month, events) VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE events = events + VALUES(events);`
+        ),
+        ['ft_audience_usage']
+    );
+    // Un vrai UPDATE qui suit reste vu.
+    assert.deepEqual(
+        sqlTableTargets(
+            `INSERT INTO ft_x_a (id) VALUES (1) ON DUPLICATE KEY UPDATE hits = 1;
+             UPDATE ft_x_b SET n = 0;`
+        ),
+        ['ft_x_a', 'ft_x_b']
+    );
+});

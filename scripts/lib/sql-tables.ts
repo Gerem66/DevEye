@@ -4,6 +4,10 @@
  * qu'un ALTER). Partagé par `gen-features` et `uninstall-feature`.
  */
 export function sqlTableTargets(sql: string): string[] {
+    // `ON DUPLICATE KEY UPDATE col = …` n'est pas un `UPDATE table` : sans cette
+    // neutralisation, le nom de la première colonne affectée passe pour une table
+    // visée, et tout upsert dans une migration de module échoue au contrôle.
+    const scanned = sql.replace(/ON\s+DUPLICATE\s+KEY\s+UPDATE\b/gi, 'ON DUPLICATE KEY SET');
     const targets: string[] = [];
     const patterns = [
         /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"]?([A-Za-z0-9_]+)/gi,
@@ -20,11 +24,11 @@ export function sqlTableTargets(sql: string): string[] {
         /LOAD\s+DATA\s+(?:LOCAL\s+)?INFILE\s+\S+\s+(?:REPLACE\s+|IGNORE\s+)?INTO\s+TABLE\s+[`"]?([A-Za-z0-9_]+)/gi
     ];
     for (const re of patterns) {
-        for (let m = re.exec(sql); m !== null; m = re.exec(sql)) targets.push(m[1]);
+        for (let m = re.exec(scanned); m !== null; m = re.exec(scanned)) targets.push(m[1]);
     }
     // `RENAME TABLE a TO b, c TO d` : les deux côtés de chaque paire sont visés.
     const renames = /RENAME\s+TABLE\s+([^;]+)/gi;
-    for (let m = renames.exec(sql); m !== null; m = renames.exec(sql)) {
+    for (let m = renames.exec(scanned); m !== null; m = renames.exec(scanned)) {
         const pairs = /[`"]?([A-Za-z0-9_]+)[`"]?\s+TO\s+[`"]?([A-Za-z0-9_]+)/gi;
         for (let p = pairs.exec(m[1]); p !== null; p = pairs.exec(m[1])) targets.push(p[1], p[2]);
     }
