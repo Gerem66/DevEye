@@ -117,7 +117,7 @@ function SiteCard({ site, eventsQuota, outline, dragging, onOpen, onDragPointerD
                         )}
                     </p>
                     <p className={styles.cardMeta}>
-                        {site.origins.length > 0 ? site.origins.join(' · ') : 'toutes origines acceptées'}
+                        {site.origins.length > 0 ? site.origins.join(' · ') : 'aucune origine : rien n’entre'}
                     </p>
                     <div className={styles.cardFoot}>
                         <span className={styles.statusTag} data-tone={status.tone}>

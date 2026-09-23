@@ -288,6 +288,34 @@ describe('POST /api/t/s', () => {
         assert.match(String(state.payload), /Merci/);
     });
 
+    it('nomme le champ refusé au lieu de remercier, sur un `<form>` sans JavaScript', async () => {
+        // Le pire mode d'échec de la route : un remerciement sur un message
+        // jamais écrit. Personne ne le découvre, ni le visiteur ni le site.
+        const cases: [Record<string, unknown>, RegExp][] = [
+            // Une clé mal recopiée dans la page : la longueur ne colle pas.
+            [{ _key: 'pk_trop-court', _form: 'contact', message: 'bonjour' }, /_key/],
+            // Un message plus long que ce qu'un retour conserve.
+            [{ _key: KEY, _form: 'contact', message: 'x'.repeat(5000) }, /message/]
+        ];
+        for (const [body, names] of cases) {
+            const { submitted, state } = await submit(body);
+            assert.equal(state.status, 400, JSON.stringify(Object.keys(body)));
+            assert.equal(state.headers['Content-Type'], 'text/html; charset=utf-8');
+            assert.match(String(state.payload), /refusé/);
+            assert.match(String(state.payload), names);
+            assert.equal(submitted.length, 0);
+        }
+    });
+
+    it('garde le remerciement quand le pot de miel est rempli, corps illisible compris', async () => {
+        // Le piège l'emporte sur le refus : nommer le champ à un robot lui
+        // apprendrait qu'il a été vu, et il essaierait autre chose.
+        const { submitted, state } = await submit({ _key: KEY, _hp: 'robot', message: 'x'.repeat(5000) });
+        assert.equal(state.status, 200);
+        assert.match(String(state.payload), /Merci/);
+        assert.equal(submitted.length, 0);
+    });
+
     it('ignore `_next` quand la requête n’a pas d’origine (curl, appel serveur)', async () => {
         const { routeOf, submitted } = mount();
         const { reply, state } = fakeReply();

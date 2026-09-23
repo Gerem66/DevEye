@@ -37,7 +37,10 @@ export const audienceTree: ItemTree = [
         table: 'ft_audience_forms',
         idColumn: 'id',
         ownerColumn: 'site_id',
-        sealed: ['content'],
+        // `form_schema` porte les questions déclarées, chiffrées : sans lui dans
+        // `sealed`, un déplacement les laisse sous l'ancienne clé et le formulaire
+        // strict refuse alors tout envoi, sans rien signaler.
+        sealed: ['content', 'form_schema'],
         // Ce que le formulaire a reçu reste avec les réponses, là où elles sont.
         omit: ['submissions', 'last_at', 'created']
     },

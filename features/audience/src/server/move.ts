@@ -9,6 +9,7 @@ import {
 
 import type { AudienceRepo } from './repo';
 import { audienceTree } from './copy';
+import { ingestOf } from './_shared';
 
 /**
  * Le changement d'espace d'un site : sa fiche, ses entonnoirs, ses libellés et
@@ -57,5 +58,10 @@ export const audienceMove: FeatureItemsMove<AudienceRepo> = {
         if (res.affectedRows !== 1) {
             throw new FeatureError('not_found', 'Ce site n’est plus dans cet espace : déplacement annulé.');
         }
+
+        // Le cache de l'ingestion retient l'espace d'un site sans expiration : sans
+        // cette purge, les visites suivantes resteraient chiffrées sous la clé de
+        // l'espace quitté, donc illisibles depuis le nouveau, et définitivement.
+        ingestOf()?.invalidate();
     }
 };

@@ -152,9 +152,13 @@ export function SiteDialog({ open, onClose, onSaved }: SiteDialogProps) {
                         onChange={(e) => setOrigins(e.target.value)}
                         placeholder={'exemple.fr\nwww.exemple.fr'}
                     />
+                    {/* Le vide est le plus sévère des trois états, et c'est celui
+                        du champ à l'ouverture : l'annoncer à l'envers ferait coller
+                        une balise à un site qui ne mesurera jamais rien. */}
                     <span className={styles.hint}>
-                        Un hôte par ligne ; le port et le protocole sont ignorés.
-                        {origins.trim().length === 0 && ' Vide, toute origine est acceptée.'}
+                        {origins.trim().length === 0
+                            ? 'Vide : rien n’est accepté, ni mesure ni retour. Déclarez un hôte, ou « * » pour tout accepter.'
+                            : 'Un hôte par ligne ; le port et le protocole sont ignorés.'}
                     </span>
                 </label>
 

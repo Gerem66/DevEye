@@ -87,6 +87,19 @@ p{max-width:32rem;padding:2rem;text-align:center}code{font-family:ui-monospace,m
 à ce que ce formulaire attend.</p></body></html>`;
 }
 
+/**
+ * Le champ que zod a refusé, nommé comme le site l'a écrit dans son `<form>` :
+ * les réservés reprennent leur tiret bas, une réponse garde son nom. Sans cette
+ * traduction, l'écran parlerait de `key` là où la page porte `_key`.
+ */
+function htmlFieldOf(error: { issues: readonly { path: readonly PropertyKey[] }[] }): string {
+    const path = error.issues[0]?.path ?? [];
+    const [head, next] = path;
+    if (head === 'fields') return String(next ?? 'inconnu');
+    if (typeof head === 'string') return `_${head}`;
+    return 'inconnu';
+}
+
 function escapeHtml(value: string): string {
     return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -202,6 +215,16 @@ export function audienceRoutes(app: SdkPublicApp, ingest: AudienceIngest): void 
             // panne, et il n'y a alors pas grand-chose d'autre qui tienne debout.
             if (outcome.status === 'failed') return reply.code(503).send({ ok: false });
             return reply.send({ ok: true });
+        }
+
+        // Un corps que zod refuse nomme son champ, il ne remercie pas : sans quoi
+        // une clé mal recopiée, un texte trop long ou trop de champs feraient lire
+        // « message envoyé » sur un message que personne n'a écrit. Aucun de ces
+        // refus ne dit quelles clés existent. Le pot de miel garde le succès, lui :
+        // un robot ne doit pas apprendre qu'il a été vu.
+        if (!parsed.success && !trapped) {
+            reply.header('Content-Type', 'text/html; charset=utf-8');
+            return reply.code(400).send(invalidPage(htmlFieldOf(parsed.error)));
         }
 
         if (outcome.status === 'failed') {
