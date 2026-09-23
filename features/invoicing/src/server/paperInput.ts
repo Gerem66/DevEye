@@ -7,12 +7,11 @@ import {
     invoicingIssuerSchema,
     type DocumentKind,
     type InvoicingClientContent,
-    type InvoicingIssuer,
-    type VatRegime
+    type InvoicingIssuer
 } from '../contracts/domain';
 import type { PaperInput } from './paper';
 import { openJson, settingsOf, type RepoIo } from './_shared';
-import { toLine } from './views';
+import { regimeOf, toLine } from './views';
 import type { InvoicingDocRow } from './repo';
 
 /**
@@ -62,8 +61,11 @@ export async function paperInputOf(io: RepoIo, row: InvoicingDocRow): Promise<Pa
         }
     }
 
+    // Un brouillon s'imprime dans le régime vivant : son aperçu doit montrer ce
+    // que l'émission figera, pas ce que ses colonnes gardent encore.
+    const vatRegime = regimeOf(row, settings.vatRegime);
     const lines = await Promise.all(
-        (await io.repo.listLines([row.id], io.workspaceId)).map((line) => toLine(io, line))
+        (await io.repo.listLines([row.id], io.workspaceId)).map((line) => toLine(io, line, vatRegime))
     );
     const computed = documentTotals(
         lines.map((line) => ({
@@ -110,7 +112,7 @@ export async function paperInputOf(io: RepoIo, row: InvoicingDocRow): Promise<Pa
         validUntil: row.valid_until,
         performedOn: row.performed_on,
         currency: row.currency,
-        vatRegime: row.vat_regime as VatRegime,
+        vatRegime,
         issuer,
         client,
         wording: settings.wording,

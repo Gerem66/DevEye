@@ -417,12 +417,15 @@ export function memoryRepo(store: MemoryStore = emptyStore()): InvoicingRepo & {
             return 1;
         },
 
-        freezeLines: async (docId, workspaceId, nets) => {
-            for (const entry of nets) {
+        freezeLines: async (docId, workspaceId, lines) => {
+            for (const entry of lines) {
                 const line = store.lines.find(
                     (l) => l.id === entry.id && l.doc_id === docId && l.workspace_id === workspaceId
                 );
-                if (line) line.net_amount = entry.net;
+                if (line) {
+                    line.net_amount = entry.net;
+                    line.vat_bp = entry.vatBp;
+                }
             }
         },
 

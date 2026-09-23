@@ -508,6 +508,10 @@
 /* Le même retrait qu'une liste déroulante : la phrase prend la place du contrôle
    qu'elle remplace, et tombe donc sous le même titre. */
 .cellVatOff {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
     grid-area: vat;
     align-self: center;
     padding-left: 0.75rem;

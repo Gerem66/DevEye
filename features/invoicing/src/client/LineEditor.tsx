@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, SelectInput, TextInput, randomUuid, useDragReorder } from 'deveye-sdk-client';
+import { Button, FeatureSettingsButton, SelectInput, TextInput, randomUuid, useDragReorder } from 'deveye-sdk-client';
 
 import { documentTotals, type MoneyLine } from '../contracts/money';
 import type {
@@ -352,7 +352,19 @@ export default function LineEditor(props: LineEditorProps) {
                                     {props.vatRegime === 'exempt' ? (
                                         // Un déroulant désactivé sur « 0 % » aurait l'air d'une
                                         // panne : en franchise, c'est un fait, pas un choix.
-                                        <span className={styles.cellVatOff}>Sans TVA</span>
+                                        // Le lien mène là où ce fait se change, puisque c'est
+                                        // ici qu'on s'aperçoit qu'il ne convient pas.
+                                        <span className={styles.cellVatOff}>
+                                            Sans TVA
+                                            {canWrite && (
+                                                <FeatureSettingsButton
+                                                    scope={{ kind: 'feature', feature: 'invoicing' }}
+                                                    initialSection='taxes'
+                                                    variant='link'
+                                                    label='Définir'
+                                                />
+                                            )}
+                                        </span>
                                     ) : (
                                         <SelectInput
                                             className={styles.cellVat}

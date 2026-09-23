@@ -3,9 +3,14 @@ import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 import { invoicingDocDerive } from '../../contracts/commands';
 import { formatVatRate, kindLabel } from '../../contracts/display';
 import { documentTotals } from '../../contracts/money';
-import { invoicingDocContentSchema, invoicingLineInputSchema, type DocumentKind } from '../../contracts/domain';
+import {
+    invoicingDocContentSchema,
+    invoicingLineInputSchema,
+    type DocumentKind,
+    type VatRegime
+} from '../../contracts/domain';
 import { assertClient, docOr404, now, openJson, seal, settingsOf, today, WRITE, type Ctx } from '../_shared';
-import { toDoc, toLine } from '../views';
+import { regimeOf, toDoc, toLine } from '../views';
 import type { InvoicingDocRow, LineWrite } from '../repo';
 
 /**
@@ -18,12 +23,15 @@ import type { InvoicingDocRow, LineWrite } from '../repo';
 const lineContentSchema = invoicingLineInputSchema.pick({ label: true, description: true });
 const EMPTY_CONTENT = invoicingDocContentSchema.parse({});
 
-async function linesOf(ctx: Ctx, docId: number) {
-    return Promise.all((await ctx.repo.listLines([docId], ctx.workspaceId)).map((line) => toLine(ctx, line)));
+async function linesOf(ctx: Ctx, doc: InvoicingDocRow, live: VatRegime) {
+    const vatRegime = regimeOf(doc, live);
+    return Promise.all(
+        (await ctx.repo.listLines([doc.id], ctx.workspaceId)).map((line) => toLine(ctx, line, vatRegime))
+    );
 }
 
-async function copyLines(ctx: Ctx, from: number, to: number): Promise<void> {
-    const lines = await linesOf(ctx, from);
+async function copyLines(ctx: Ctx, from: InvoicingDocRow, to: number, live: VatRegime): Promise<void> {
+    const lines = await linesOf(ctx, from, live);
     const writes: LineWrite[] = [];
     for (const [index, line] of lines.entries()) {
         writes.push({
@@ -45,8 +53,14 @@ async function copyLines(ctx: Ctx, from: number, to: number): Promise<void> {
  * de sa base. Une seule ligne au taux dominant serait plus simple et fausserait
  * la ventilation de TVA dès qu'un devis mélange deux taux.
  */
-async function depositLines(ctx: Ctx, quote: InvoicingDocRow, to: number, percentBp: number): Promise<void> {
-    const lines = await linesOf(ctx, quote.id);
+async function depositLines(
+    ctx: Ctx,
+    quote: InvoicingDocRow,
+    to: number,
+    percentBp: number,
+    live: VatRegime
+): Promise<void> {
+    const lines = await linesOf(ctx, quote, live);
     const totals = documentTotals(
         lines.map((line) => ({
             kind: line.kind,
@@ -165,8 +179,8 @@ export const docDerive = defineSdkFeature({
             at
         );
 
-        if (input.mode === 'deposit') await depositLines(ctx, source, id, input.percentBp);
-        else await copyLines(ctx, source.id, id);
+        if (input.mode === 'deposit') await depositLines(ctx, source, id, input.percentBp, settings.vatRegime);
+        else await copyLines(ctx, source, id, settings.vatRegime);
 
         if (input.mode === 'invoice') {
             // La facture de solde déduit les acomptes déjà émis sur ce devis :
@@ -184,11 +198,12 @@ export const docDerive = defineSdkFeature({
         const [settled, parentNumbers, lines] = await Promise.all([
             ctx.repo.settledOf([id], ctx.workspaceId),
             ctx.repo.numbersOf([source.id], ctx.workspaceId),
-            linesOf(ctx, id)
+            linesOf(ctx, row, settings.vatRegime)
         ]);
         return {
             doc: await toDoc(ctx, row, lines, {
                 today: day,
+                vatRegime: settings.vatRegime,
                 publicOrigin: ctx.origins.public,
                 clientNames: new Map(),
                 settled,

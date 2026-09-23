@@ -145,6 +145,24 @@
     min-height: calc(1.2em + 2 * var(--space-sm) + 2px);
 }
 
+/* Le geste de réglage glissé dans une phrase ou dans une cellule : un mot, pas
+   un bouton, mais la même porte. */
+.settingsLink {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    font-size: 0.75rem;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.settingsLink:hover,
+.settingsLink:focus-visible {
+    color: var(--text-primary);
+}
+
 .panelLead {
     margin-bottom: var(--space-sm);
 }

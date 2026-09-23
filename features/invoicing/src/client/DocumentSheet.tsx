@@ -54,6 +54,8 @@ export interface DocumentSheetProps {
     id: number;
     /** Ce que l'offre permet ce mois-ci, pour le dire AVANT le refus. */
     usage: InvoicingQuotaUsage | null;
+    /** Le taux que porte une ligne neuve, tel qu'il est réglé (zéro en franchise). */
+    defaultVatBp: number;
     /** Ce que le bouton de retour annonce : d'où l'on vient. */
     backLabel: string;
     onBack(): void;
@@ -94,7 +96,7 @@ function issueWording(doc: InvoicingDoc): { title: string; description: string }
     };
 }
 
-export default function DocumentSheet({ id, usage, backLabel, onBack, onOpen }: DocumentSheetProps) {
+export default function DocumentSheet({ id, usage, defaultVatBp, backLabel, onBack, onOpen }: DocumentSheetProps) {
     const canWrite = useWorkspacePermissions().canFeature('invoicing', 'write');
     const [doc, setDoc] = useState<InvoicingDoc | null>(null);
     const [lines, setLines] = useState<readonly InvoicingLine[]>([]);
@@ -719,7 +721,7 @@ export default function DocumentSheet({ id, usage, backLabel, onBack, onOpen }: 
                         lines={lines}
                         currency={doc.currency}
                         vatRegime={doc.vatRegime}
-                        defaultVatBp={withVat ? 2000 : 0}
+                        defaultVatBp={defaultVatBp}
                         canWrite={canWrite}
                         onSaved={(saved, savedTotals) => {
                             setLines(saved);

@@ -33,13 +33,32 @@ const NO_SETTLED: InvoicingSettled = { paidCents: 0, creditedCents: 0, deductedC
 const lineContentSchema = invoicingLineInputSchema.pick({ label: true, description: true });
 const EMPTY_LINE_CONTENT = lineContentSchema.parse({ label: '' });
 
-export async function toLine(io: CipherIo, row: InvoicingLineRow): Promise<InvoicingLine> {
+/**
+ * Le régime de TVA qui s'applique à un document : celui des réglages tant que
+ * c'est un brouillon, celui que l'émission a figé ensuite. Un brouillon suit le
+ * vivant, comme il suit le nom vivant de son client : rien n'y est encore engagé,
+ * et passer à la TVA en cours de route doit rattraper ce qui n'est pas parti.
+ */
+export function regimeOf(row: InvoicingDocRow, live: VatRegime): VatRegime {
+    return row.status === 'draft' ? live : (row.vat_regime as VatRegime);
+}
+
+export async function toLine(
+    io: CipherIo,
+    row: InvoicingLineRow,
+    /** Le régime du document ({@link regimeOf}) : en franchise, aucun taux ne tient. */
+    vatRegime: VatRegime
+): Promise<InvoicingLine> {
     const content = await openJson(io, row.content, lineContentSchema, EMPTY_LINE_CONTENT);
+    // En franchise, le taux resté sur une ligne d'un brouillon ne vaut plus rien :
+    // il s'efface ici pour que l'écran, les totaux et l'émission voient la même
+    // chose. L'émission le fige ensuite à zéro.
+    const vatRateBp = vatRegime === 'exempt' ? 0 : row.vat_bp;
     const line: MoneyLine = {
         kind: row.kind as LineKind,
         quantityMilli: row.quantity_milli,
         unitPrice: row.unit_price,
-        vatRateBp: row.vat_bp
+        vatRateBp
     };
     return {
         id: row.id,
@@ -49,7 +68,7 @@ export async function toLine(io: CipherIo, row: InvoicingLineRow): Promise<Invoi
         quantityMilli: row.quantity_milli,
         unit: row.unit as LineUnit,
         unitPrice: row.unit_price,
-        vatRateBp: row.vat_bp,
+        vatRateBp,
         // Figé à l'émission, recalculé tant que c'est un brouillon : les deux
         // passent par la même fonction, donc ils ne peuvent pas diverger.
         netCents: row.net_amount ?? documentTotals([line]).netCents
@@ -78,6 +97,8 @@ function totalsOf(row: InvoicingDocRow, lines: readonly InvoicingLine[]): Invoic
 
 export interface DocViewContext {
     today: string;
+    /** Le régime de TVA de l'espace, celui que suivent les brouillons. */
+    vatRegime: VatRegime;
     /** L'origine publique de cet hôte, pour écrire le lien du client. */
     publicOrigin: string;
     /** Le nom vivant des clients, pour les brouillons. */
@@ -132,7 +153,7 @@ export async function toDoc(
         validUntil: row.valid_until,
         performedOn: row.performed_on,
         currency: row.currency,
-        vatRegime: row.vat_regime as VatRegime,
+        vatRegime: regimeOf(row, view.vatRegime),
         totals,
         settledCents,
         remainingCents: Math.max(0, totals.grossCents - settledCents),

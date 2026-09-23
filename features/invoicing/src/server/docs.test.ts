@@ -214,15 +214,40 @@ describe('invoicing.linesSet', () => {
         assert.equal(res.totals.vat.length, 1);
     });
 
-    it('refuse un taux sur un document en franchise de TVA', async () => {
+    it('ramène les taux à zéro en franchise de TVA, sans refuser l’écriture', async () => {
         const store = emptyStore();
         const ctx = ctxOf(store);
         const created = await docSave.handler(ctx, { id: null, kind: 'invoice', doc: header() });
 
-        await assert.rejects(
-            () => linesSet.handler(ctx, { docId: created.doc.id, lines: [line({ vatRateBp: 2000 })] }),
-            (error: unknown) => error instanceof FeatureError && error.code === 'validation'
-        );
+        // Un refus aurait bloqué un brouillon né avant le passage en franchise :
+        // l'écran n'y propose plus de taux, donc plus aucun geste ne le débloque.
+        const res = await linesSet.handler(ctx, { docId: created.doc.id, lines: [line({ vatRateBp: 2000 })] });
+
+        assert.equal(res.lines[0].vatRateBp, 0);
+        assert.equal(res.totals.vatCents, 0);
+        assert.equal(store.lines[0].vat_bp, 0, 'la base non plus ne garde pas le taux');
+    });
+
+    it('suit le régime de TVA vivant tant que le document est un brouillon', async () => {
+        const store = emptyStore();
+        liableToVat(store);
+        const ctx = ctxOf(store);
+        const created = await docSave.handler(ctx, { id: null, kind: 'invoice', doc: header() });
+        await linesSet.handler(ctx, { docId: created.doc.id, lines: [line({ vatRateBp: 2000 })] });
+
+        // L'espace repasse en franchise après coup : rien n'est émis, donc tout
+        // doit suivre, y compris les taux déjà posés sur les lignes.
+        store.settings.get(1)!.vat_regime = 'exempt';
+        const exempt = await docGet.handler(ctx, { id: created.doc.id });
+        assert.equal(exempt.doc.vatRegime, 'exempt');
+        assert.equal(exempt.lines[0].vatRateBp, 0);
+        assert.equal(exempt.doc.totals.vatCents, 0);
+
+        store.settings.get(1)!.vat_regime = 'standard';
+        const liable = await docGet.handler(ctx, { id: created.doc.id });
+        assert.equal(liable.doc.vatRegime, 'standard');
+        assert.equal(liable.lines[0].vatRateBp, 2000);
+        assert.equal(liable.doc.totals.vatCents, 10_000);
     });
 
     it('refuse de toucher aux lignes d’un document émis', async () => {

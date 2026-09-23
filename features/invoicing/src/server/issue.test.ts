@@ -243,6 +243,29 @@ describe('invoicing.docIssue', () => {
         assert.equal(res.doc.numberLabel, `F${YEAR}-0043`);
     });
 
+    it('fige le régime de TVA du jour, et les taux avec lui', async () => {
+        const store = emptyStore();
+        const { ctx, id } = await readyDraft(store);
+
+        // Le brouillon est né assujetti, ses lignes portent 20 % ; l'espace passe
+        // en franchise avant l'émission. La pièce émise ne peut pas dire
+        // « franchise » et porter de la TVA : les deux se figent ensemble.
+        store.settings.get(1)!.vat_regime = 'exempt';
+        store.settings.get(1)!.default_vat_bp = 0;
+
+        const res = await docIssue.handler(ctx, { id, issuedOn: DAY });
+
+        assert.equal(res.doc.vatRegime, 'exempt');
+        assert.equal(res.doc.totals.vatCents, 0);
+        assert.equal(res.doc.totals.grossCents, 100_000);
+        assert.equal(store.docs.find((d) => d.id === id)?.vat_regime, 'exempt');
+        assert.deepEqual(
+            store.lines.filter((l) => l.doc_id === id).map((l) => l.vat_bp),
+            [0],
+            'le taux figé suit le régime figé'
+        );
+    });
+
     it('refuse sans identité d’émetteur', async () => {
         const store = emptyStore();
         const { ctx, id } = await readyDraft(store);

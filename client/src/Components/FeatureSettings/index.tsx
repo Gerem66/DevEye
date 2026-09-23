@@ -285,7 +285,12 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection, on
 
 export interface FeatureSettingsButtonProps {
     scope: SettingsScope;
-    variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+    /**
+     * `link` : un mot souligné plutôt qu'un bouton, pour le geste glissé dans une
+     * phrase ou dans une cellule trop étroite pour un bouton. Même porte, même
+     * dialogue, autre peau.
+     */
+    variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'link';
     /** Intitulé ; « Réglages » par défaut. */
     label?: string;
     /** La section ouverte par un clic manuel ; la première à défaut. Le « + »
@@ -352,21 +357,27 @@ export function FeatureSettingsButton({
 
     if (sections.length === 0) return null;
 
+    // Une ouverture manuelle repart de la section du bouton : l'onglet d'une
+    // intention passée n'a plus rien de demandé.
+    const openSettings = (): void => {
+        setSection(initialSection);
+        setOpen(true);
+    };
+
     return (
         <>
-            <Button
-                variant={variant}
-                icon='settings'
-                {...outline}
-                onClick={() => {
-                    // Une ouverture manuelle repart de la section du bouton :
-                    // l'onglet d'une intention passée n'a plus rien de demandé.
-                    setSection(initialSection);
-                    setOpen(true);
-                }}
-            >
-                {label}
-            </Button>
+            {variant === 'link' ? (
+                /* Le halo de présence appartient au bouton canonique de l'écran :
+                   un lien répété sur chaque ligne d'un tableau se mettrait à
+                   clignoter en même temps partout. */
+                <button type='button' className={styles.settingsLink} onClick={openSettings}>
+                    {label}
+                </button>
+            ) : (
+                <Button variant={variant} icon='settings' {...outline} onClick={openSettings}>
+                    {label}
+                </Button>
+            )}
             <FeatureSettingsDialog
                 open={open}
                 onClose={() => setOpen(false)}

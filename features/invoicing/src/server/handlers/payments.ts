@@ -7,7 +7,7 @@ import { invoicingPaymentInputSchema, type InvoicingDoc, type InvoicingPayment }
 import { now, seal, settingsOf, today, WRITE, type Ctx, docOr404, assertClient } from '../_shared';
 import { monthUsage } from '../planUsage';
 import { EMPTY_CLIENT_USAGE, toClient } from './clients';
-import { clientNamesOf, toDoc, toLine, toPayments } from '../views';
+import { clientNamesOf, regimeOf, toDoc, toLine, toPayments } from '../views';
 
 /** Ce qu'une période met en face du mois précédent, et jusqu'où « bientôt » va. */
 const SOON_DAYS = 8;
@@ -24,10 +24,12 @@ async function refreshed(ctx: Ctx, id: number): Promise<{ doc: InvoicingDoc; pay
         ctx.repo.listLines([id], ctx.workspaceId),
         toPayments(ctx, id)
     ]);
-    const lines = await Promise.all(lineRows.map((line) => toLine(ctx, line)));
+    const vatRegime = regimeOf(row, settings.vatRegime);
+    const lines = await Promise.all(lineRows.map((line) => toLine(ctx, line, vatRegime)));
     return {
         doc: await toDoc(ctx, row, lines, {
             today: today(settings),
+            vatRegime: settings.vatRegime,
             publicOrigin: ctx.origins.public,
             clientNames,
             settled,
@@ -172,7 +174,14 @@ export const dashboard = defineSdkFeature({
             recentRows.map((row) => row.parent_doc_id).filter((id): id is number => id !== null),
             ctx.workspaceId
         );
-        const view = { today: day, publicOrigin: ctx.origins.public, clientNames, settled, parentNumbers };
+        const view = {
+            today: day,
+            vatRegime: settings.vatRegime,
+            publicOrigin: ctx.origins.public,
+            clientNames,
+            settled,
+            parentNumbers
+        };
 
         const actionable: InvoicingDoc[] = [];
         for (const row of rows) actionable.push(await toDoc(ctx, row, [], view));

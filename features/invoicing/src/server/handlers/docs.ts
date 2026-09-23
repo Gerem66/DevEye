@@ -12,10 +12,11 @@ import {
     invoicingDocContentSchema,
     invoicingLineInputSchema,
     type InvoicingDoc,
-    type InvoicingLine
+    type InvoicingLine,
+    type VatRegime
 } from '../../contracts/domain';
-import { now, seal, settingsError, settingsOf, today, WRITE, type Ctx, docOr404, assertClient } from '../_shared';
-import { clientNamesOf, toDoc, toLine, toPayments, type DocViewContext } from '../views';
+import { now, seal, settingsOf, today, WRITE, type Ctx, docOr404, assertClient } from '../_shared';
+import { clientNamesOf, regimeOf, toDoc, toLine, toPayments, type DocViewContext } from '../views';
 import type { InvoicingDocRow, LineWrite } from '../repo';
 
 const lineContentSchema = invoicingLineInputSchema.pick({ label: true, description: true });
@@ -32,14 +33,25 @@ async function viewContextOf(ctx: Ctx, rows: readonly InvoicingDocRow[]): Promis
         ),
         ctx.repo.numbersOf(parentIds, ctx.workspaceId)
     ]);
-    return { today: today(settings), publicOrigin: ctx.origins.public, clientNames, settled, parentNumbers };
+    return {
+        today: today(settings),
+        vatRegime: settings.vatRegime,
+        publicOrigin: ctx.origins.public,
+        clientNames,
+        settled,
+        parentNumbers
+    };
 }
 
-async function linesByDoc(ctx: Ctx, docIds: readonly number[]): Promise<Map<number, InvoicingLine[]>> {
+async function linesByDoc(
+    ctx: Ctx,
+    docIds: readonly number[],
+    vatRegime: VatRegime
+): Promise<Map<number, InvoicingLine[]>> {
     const rows = await ctx.repo.listLines(docIds, ctx.workspaceId);
     const byDoc = new Map<number, InvoicingLine[]>();
     for (const row of rows) {
-        const line = await toLine(ctx, row);
+        const line = await toLine(ctx, row, vatRegime);
         const bucket = byDoc.get(row.doc_id);
         if (bucket) bucket.push(line);
         else byDoc.set(row.doc_id, [line]);
@@ -62,7 +74,7 @@ export const docList = defineSdkFeature({
         // Seuls les brouillons ont besoin de leurs lignes : un document émis
         // porte ses totaux, et les relire ligne à ligne serait gratuit.
         const draftIds = rows.filter((row) => row.total_gross === null).map((row) => row.id);
-        const byDoc = await linesByDoc(ctx, draftIds);
+        const byDoc = await linesByDoc(ctx, draftIds, settings.vatRegime);
 
         const docs: InvoicingDoc[] = [];
         for (const row of rows) docs.push(await toDoc(ctx, row, byDoc.get(row.id) ?? [], view));
@@ -84,9 +96,10 @@ export const docGet = defineSdkFeature({
         const row = await docOr404(ctx, input.id);
         await assertClient(ctx, row.client_id, 'read');
 
+        const settings = await settingsOf(ctx);
         const [view, byDoc, payments] = await Promise.all([
             viewContextOf(ctx, [row]),
-            linesByDoc(ctx, [row.id]),
+            linesByDoc(ctx, [row.id], regimeOf(row, settings.vatRegime)),
             toPayments(ctx, row.id)
         ]);
         const lines = byDoc.get(row.id) ?? [];
@@ -149,7 +162,10 @@ export const docSave = defineSdkFeature({
         }
 
         const row = await docOr404(ctx, id);
-        const [view, byDoc] = await Promise.all([viewContextOf(ctx, [row]), linesByDoc(ctx, [row.id])]);
+        const [view, byDoc] = await Promise.all([
+            viewContextOf(ctx, [row]),
+            linesByDoc(ctx, [row.id], regimeOf(row, settings.vatRegime))
+        ]);
         return { doc: await toDoc(ctx, row, byDoc.get(row.id) ?? [], view) };
     }
 });
@@ -167,13 +183,12 @@ export const linesSet = defineSdkFeature({
                 'Ce document est émis : ses lignes ne changent plus. Une erreur se corrige par un avoir.'
             );
         }
-        if (row.vat_regime === 'exempt' && input.lines.some((line) => line.vatRateBp !== 0)) {
-            throw settingsError(
-                'validation',
-                'Ce document est en franchise de TVA : ses lignes ne peuvent pas porter de taux.',
-                'taxes'
-            );
-        }
+        // Un brouillon suit le régime vivant, et non celui qui régnait à sa
+        // création : en franchise, les taux tombent à zéro plutôt que d'être
+        // refusés. Un refus aurait bloqué l'édition d'un brouillon né avant le
+        // changement, sans qu'aucun geste de l'écran ne puisse le débloquer.
+        const settings = await settingsOf(ctx);
+        const exempt = settings.vatRegime === 'exempt';
 
         const writes: LineWrite[] = [];
         for (const [index, line] of input.lines.entries()) {
@@ -184,13 +199,13 @@ export const linesSet = defineSdkFeature({
                 quantity_milli: line.quantityMilli,
                 unit: line.unit,
                 unit_price: line.unitPrice,
-                vat_bp: line.vatRateBp,
+                vat_bp: exempt ? 0 : line.vatRateBp,
                 content: await seal(ctx, lineContentSchema.parse(line))
             });
         }
         await ctx.repo.setLines(input.docId, ctx.workspaceId, writes);
 
-        const byDoc = await linesByDoc(ctx, [input.docId]);
+        const byDoc = await linesByDoc(ctx, [input.docId], settings.vatRegime);
         const lines = byDoc.get(input.docId) ?? [];
         const totals = documentTotals(
             lines.map((line) => ({

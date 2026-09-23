@@ -137,6 +137,7 @@ export default function Invoicing() {
                         <DocumentSheet
                             id={view.id}
                             usage={data.usage}
+                            defaultVatBp={data.settings.defaultVatBp}
                             backLabel={LABELS[view.from]}
                             onBack={back(view.from)}
                             onOpen={(id) => setView({ kind: 'document', id, from: view.from })}

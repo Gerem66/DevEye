@@ -7,7 +7,8 @@ import {
     invoicingClientContentSchema,
     type DocumentKind,
     type InvoicingClientContent,
-    type InvoicingSettings
+    type InvoicingSettings,
+    type VatRegime
 } from '../../contracts/domain';
 import {
     clientError,
@@ -79,7 +80,7 @@ export const docIssue = defineSdkFeature({
         }
 
         const lineRows = await ctx.repo.listLines([row.id], ctx.workspaceId);
-        const lines = await Promise.all(lineRows.map((line) => toLine(ctx, line)));
+        const lines = await Promise.all(lineRows.map((line) => toLine(ctx, line, settings.vatRegime)));
         if (lines.some((line) => line.kind !== 'text' && line.label.trim().length === 0)) {
             throw new FeatureError('validation', 'Une ligne est sans désignation : complétez-la avant d’émettre.');
         }
@@ -137,6 +138,9 @@ export const docIssue = defineSdkFeature({
         const at = now();
         const issued = await ctx.repo.issueDoc(row.id, ctx.workspaceId, {
             status: kind === 'quote' ? 'sent' : 'issued',
+            // Le régime se fige ici, et non à la création du brouillon : c'est
+            // l'émission qui engage, et c'est le réglage de ce jour-là qui vaut.
+            vat_regime: settings.vatRegime,
             issued_on: issuedOn,
             due_on: dueOn,
             valid_until: validUntil,
@@ -165,7 +169,7 @@ export const docIssue = defineSdkFeature({
         await ctx.repo.freezeLines(
             row.id,
             ctx.workspaceId,
-            lines.map((line) => ({ id: line.id, net: line.netCents }))
+            lines.map((line) => ({ id: line.id, net: line.netCents, vatBp: line.vatRateBp }))
         );
 
         // Un avoir qui couvre sa facture l'annule : c'est la seule voie, et elle
@@ -193,11 +197,14 @@ export const docIssue = defineSdkFeature({
             ctx.workspaceId
         );
         const freshLines = await Promise.all(
-            (await ctx.repo.listLines([after.id], ctx.workspaceId)).map((line) => toLine(ctx, line))
+            (await ctx.repo.listLines([after.id], ctx.workspaceId)).map((line) =>
+                toLine(ctx, line, after.vat_regime as VatRegime)
+            )
         );
         return {
             doc: await toDoc(ctx, after, freshLines, {
                 today: day,
+                vatRegime: settings.vatRegime,
                 publicOrigin: ctx.origins.public,
                 clientNames: new Map([[clientRow.id, client.name]]),
                 settled,
@@ -244,11 +251,14 @@ export const docStatus = defineSdkFeature({
         const settings = await settingsOf(ctx);
         const settled = await ctx.repo.settledOf([after.id], ctx.workspaceId);
         const lines = await Promise.all(
-            (await ctx.repo.listLines([after.id], ctx.workspaceId)).map((line) => toLine(ctx, line))
+            (await ctx.repo.listLines([after.id], ctx.workspaceId)).map((line) =>
+                toLine(ctx, line, after.vat_regime as VatRegime)
+            )
         );
         return {
             doc: await toDoc(ctx, after, lines, {
                 today: today(settings),
+                vatRegime: settings.vatRegime,
                 publicOrigin: ctx.origins.public,
                 clientNames: new Map(),
                 settled,

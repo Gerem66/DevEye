@@ -33,6 +33,16 @@ c'est la pratique française, et c'est ce qui évite le centime d'écart entre l
 récapitulatif imprimé et le total. La somme des tranches est donc égale au total
 de TVA par construction, et un test le vérifie.
 
+Le **régime de TVA d'un brouillon est celui des réglages**, pas celui qui régnait
+le jour de sa création : il suit le vivant comme il suit le nom vivant de son
+client, puisque rien n'y est encore engagé. Passer à la TVA rattrape donc les
+brouillons en attente, et repasser en franchise efface les taux qu'ils portaient,
+à l'écran comme dans leurs totaux. L'émission fige les deux ensemble, régime et
+taux de chaque ligne : une pièce émise ne peut pas dire « franchise » et porter
+de la TVA. Une écriture de lignes en franchise ramène les taux à zéro plutôt que
+de refuser : un refus aurait bloqué l'édition d'un brouillon né avant le
+changement, sans qu'aucun geste de l'écran ne puisse le débloquer.
+
 ### 2. Les dates sont des jours, pas des instants
 
 Colonnes `DATE`, chaînes `AAAA-MM-JJ`, comparables et triables telles quelles.

@@ -172,8 +172,17 @@ export interface InvoicingRepo {
     reserveNumber(id: number, workspaceId: number, seqYear: number, value: number, label: string): Promise<number>;
     /** Fige le document : ses totaux, ses instantanés, ses dates, son statut. */
     issueDoc(id: number, workspaceId: number, input: IssueWrite): Promise<number>;
-    /** Fige le hors taxe de chaque ligne, calculé une fois pour toutes. */
-    freezeLines(docId: number, workspaceId: number, nets: readonly { id: number; net: number }[]): Promise<void>;
+    /**
+     * Fige le hors taxe et le taux de chaque ligne, calculés une fois pour
+     * toutes. Le taux aussi : un brouillon suit le régime vivant de l'espace, et
+     * ce qu'il portait avant un passage en franchise ne doit pas survivre à son
+     * émission.
+     */
+    freezeLines(
+        docId: number,
+        workspaceId: number,
+        lines: readonly { id: number; net: number; vatBp: number }[]
+    ): Promise<void>;
     /**
      * Le document que ce jeton désigne, sans espace en argument : le jeton EST
      * la clé, et son index unique porte sur toute la table.
@@ -270,6 +279,8 @@ export interface InvoicingMonth {
 
 export interface IssueWrite {
     status: string;
+    /** Figé à l'émission : le régime de l'espace ce jour-là, non celui de la création. */
+    vat_regime: string;
     issued_on: string;
     due_on: string | null;
     valid_until: string | null;
@@ -862,12 +873,13 @@ export function createRepo(q: SdkQueryable): InvoicingRepo {
         async issueDoc(id, workspaceId, input) {
             const res = await q.execute(
                 `UPDATE ft_invoicing_docs
-                    SET status = ?, issued_on = ?, due_on = ?, valid_until = ?,
+                    SET status = ?, vat_regime = ?, issued_on = ?, due_on = ?, valid_until = ?,
                         total_net = ?, total_vat = ?, total_gross = ?,
                         issuer_snapshot = ?, client_snapshot = ?, issued_by = ?, updated = ?
                   WHERE id = ? AND workspace_id = ? AND status = 'draft'`,
                 [
                     input.status,
+                    input.vat_regime,
                     input.issued_on,
                     input.due_on,
                     input.valid_until,
@@ -885,12 +897,12 @@ export function createRepo(q: SdkQueryable): InvoicingRepo {
             return res.affectedRows;
         },
 
-        async freezeLines(docId, workspaceId, nets) {
-            for (const entry of nets) {
+        async freezeLines(docId, workspaceId, lines) {
+            for (const entry of lines) {
                 await q.execute(
-                    `UPDATE ft_invoicing_lines SET net_amount = ?
+                    `UPDATE ft_invoicing_lines SET net_amount = ?, vat_bp = ?
                       WHERE id = ? AND doc_id = ? AND workspace_id = ?`,
-                    [entry.net, entry.id, docId, workspaceId]
+                    [entry.net, entry.vatBp, entry.id, docId, workspaceId]
                 );
             }
         },
