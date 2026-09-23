@@ -6,6 +6,8 @@ import {
     audienceCount,
     audienceFunnelAdd,
     audienceFunnelList,
+    audienceFunnelRemove,
+    audienceFunnelUpdate,
     audienceGet,
     audienceList,
     audienceOverview,
@@ -623,6 +625,40 @@ describe('les entonnoirs', () => {
             failsWith('forbidden')
         );
         assert.deepEqual(repo.funnels, []);
+    });
+
+    it('refuse de régler ou de supprimer l’entonnoir d’un site qu’une restriction masque', async () => {
+        // La jointure de `findFunnelInWorkspace` tient l'espace, pas le rôle : un
+        // identifiant d'entonnoir s'énumère, et le site masqué n'apparaît nulle
+        // part pour qu'on le devine autrement.
+        const repo = seed(fakeRepo(), site({ id: 1, workspace_id: 1 }), site({ id: 3, workspace_id: 1 }));
+        const open = createTestContext({ repo });
+        const { funnelId } = await handlerFor(audienceFunnelAdd)(open, {
+            siteId: 3,
+            name: 'Devis',
+            steps: [
+                { kind: 'path', value: '/a' },
+                { kind: 'path', value: '/b' }
+            ]
+        });
+
+        const masked = createTestContext({ repo, itemRestrictions: { 3: 'none' } });
+        await assert.rejects(
+            handlerFor(audienceFunnelUpdate)(masked, {
+                funnelId,
+                name: 'Renommé',
+                steps: [
+                    { kind: 'path', value: '/a' },
+                    { kind: 'path', value: '/b' }
+                ]
+            }),
+            failsWith('forbidden')
+        );
+        await assert.rejects(handlerFor(audienceFunnelRemove)(masked, { funnelId }), failsWith('forbidden'));
+        assert.deepEqual(
+            repo.funnels.map((f) => f.id),
+            [funnelId]
+        );
     });
 });
 

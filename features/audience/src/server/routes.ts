@@ -1,4 +1,9 @@
-import { audienceEventInputSchema, audienceIngestSchema, audienceSubmitSchema } from '../contracts/domain';
+import {
+    AUDIENCE_PUBLIC_KEY_LENGTH,
+    audienceEventInputSchema,
+    audienceIngestSchema,
+    audienceSubmitSchema
+} from '../contracts/domain';
 import type { SdkPublicApp, SdkPublicReply, SdkPublicRequest } from '@deveye/types/sdk/server';
 
 import { normalizeHost } from './normalize';
@@ -45,6 +50,19 @@ const INGEST_RATE_LIMIT = { max: 600, timeWindow: '1 minute' };
  * à un robot qui insiste.
  */
 const SUBMIT_RATE_LIMIT = { max: 30, timeWindow: '1 minute' };
+
+/**
+ * Ce qu'un corps légitime pèse, et guère plus. Le défaut de l'hôte vaut un
+ * mégaoctet, analysé en entier avant que le moindre schéma ne regarde : à 600
+ * requêtes la minute et par adresse, c'est le vrai coût d'une porte publique.
+ *
+ * Un lot porte vingt événements dont les libellés plafonnent à 512 caractères ;
+ * un retour porte quarante réponses, généreusement dotées. Le plus gros sondage
+ * qu'on ait vu tient dans le dixième du dernier chiffre.
+ */
+const BATCH_BODY_LIMIT = 64 * 1024;
+const EVENT_BODY_LIMIT = 8 * 1024;
+const SUBMIT_BODY_LIMIT = 256 * 1024;
 
 /**
  * Les champs réservés d'un envoi de formulaire HTML. Le tiret bas les distingue
@@ -138,7 +156,7 @@ export function audienceRoutes(app: SdkPublicApp, ingest: AudienceIngest): void 
     });
 
     /** Un lot d'événements : la voie normale, celle qu'emprunte le script. */
-    app.post('/api/t/b', { rateLimit: INGEST_RATE_LIMIT }, async (req, reply) => {
+    app.post('/api/t/b', { rateLimit: INGEST_RATE_LIMIT, bodyLimit: BATCH_BODY_LIMIT }, async (req, reply) => {
         allowCrossOrigin(reply);
         const parsed = audienceIngestSchema.safeParse(req.body);
         if (parsed.success) {
@@ -152,10 +170,13 @@ export function audienceRoutes(app: SdkPublicApp, ingest: AudienceIngest): void 
      * existe pour ce qui n'a pas de file d'attente, un `curl` de vérification,
      * un appel depuis un serveur, un client minimal.
      */
-    app.post('/api/t/e', { rateLimit: INGEST_RATE_LIMIT }, async (req, reply) => {
+    app.post('/api/t/e', { rateLimit: INGEST_RATE_LIMIT, bodyLimit: EVENT_BODY_LIMIT }, async (req, reply) => {
         allowCrossOrigin(reply);
+        // La longueur est confrontée ici, le schéma de l'événement ne portant pas
+        // la clé : sans elle, une chaîne quelconque descend jusqu'au cache des
+        // clés inconnues, qui borne son nombre d'entrées et non leurs octets.
         const body = req.body as { key?: unknown } | undefined;
-        const key = typeof body?.key === 'string' ? body.key : '';
+        const key = typeof body?.key === 'string' && body.key.length === AUDIENCE_PUBLIC_KEY_LENGTH ? body.key : '';
         const parsed = audienceEventInputSchema.safeParse(req.body);
         if (key && parsed.success) {
             await acceptEvents(req, ingest, key, [parsed.data], parsed.data.visitorId ?? null);
@@ -170,7 +191,7 @@ export function audienceRoutes(app: SdkPublicApp, ingest: AudienceIngest): void 
      * `<form method="post">` sans une ligne de JavaScript. La seconde se
      * reconnaît à son `_key`, et l'analyseur de l'hôte a déjà fait le décodage.
      */
-    app.post('/api/t/s', { rateLimit: SUBMIT_RATE_LIMIT }, async (req, reply) => {
+    app.post('/api/t/s', { rateLimit: SUBMIT_RATE_LIMIT, bodyLimit: SUBMIT_BODY_LIMIT }, async (req, reply) => {
         allowCrossOrigin(reply);
         // Un `_key` à la racine signe un envoi de formulaire HTML : ses champs
         // arrivent à plat, là où le JSON les range sous `fields`.

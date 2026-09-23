@@ -91,14 +91,16 @@ describe('la déclaration', () => {
     it('déclare le script et les trois points d’entrée, les POST avec leur plafond', () => {
         const { routes } = mount();
         assert.deepEqual(
-            routes.map((r) => [r.method, r.path, r.opts.rateLimit ?? null]),
+            routes.map((r) => [r.method, r.path, r.opts.rateLimit ?? null, r.opts.bodyLimit ?? null]),
             [
-                ['get', '/t.js', null],
-                ['post', '/api/t/b', { max: 600, timeWindow: '1 minute' }],
-                ['post', '/api/t/e', { max: 600, timeWindow: '1 minute' }],
+                ['get', '/t.js', null, null],
+                // Le plafond de corps compte autant que celui de débit : le défaut
+                // de l'hôte vaut un mégaoctet, analysé avant toute validation.
+                ['post', '/api/t/b', { max: 600, timeWindow: '1 minute' }, 64 * 1024],
+                ['post', '/api/t/e', { max: 600, timeWindow: '1 minute' }, 8 * 1024],
                 // Bien plus serré que la mesure : une requête de retour écrit une
                 // ligne et chiffre, là où une mesure range un entier dans une file.
-                ['post', '/api/t/s', { max: 30, timeWindow: '1 minute' }]
+                ['post', '/api/t/s', { max: 30, timeWindow: '1 minute' }, 256 * 1024]
             ]
         );
     });
@@ -174,6 +176,22 @@ describe('POST /api/t/b', () => {
 });
 
 describe('POST /api/t/e', () => {
+    it('écarte une clé qui n’a pas la bonne longueur, avant d’atteindre l’ingestion', async () => {
+        // Le schéma de l'événement ne porte pas la clé : sans cette confrontation,
+        // une chaîne quelconque descend jusqu'au cache des clés inconnues, qui
+        // borne son nombre d'entrées et non leurs octets.
+        const { routeOf, accepted } = mount();
+        for (const key of ['x'.repeat(10_000), 'pk_court', '']) {
+            const { reply, state } = fakeReply();
+            await routeOf('post', '/api/t/e').handler(
+                { headers: {}, body: { key, type: 'view', path: '/x' }, ip: '203.0.113.7' },
+                reply
+            );
+            assert.equal(state.status, 204, `longueur ${key.length}`);
+        }
+        assert.deepEqual(accepted, []);
+    });
+
     it('transmet un événement isolé, `Origin` absent compris (un client natif n’en envoie pas)', async () => {
         const { routeOf, accepted } = mount();
         const { reply, state } = fakeReply();

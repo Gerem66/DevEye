@@ -24,9 +24,14 @@ export function toCsv(columns: readonly string[], submissions: readonly Audience
 /**
  * Une cellule échappée. Les guillemets doublés et le champ entier entre
  * guillemets dès qu'il porte un séparateur, un saut de ligne ou un guillemet.
+ *
+ * L'apostrophe de tête n'est pas une coquetterie : le contenu vient d'un
+ * formulaire public, et un tableur réévalue toute cellule qui commence par l'un
+ * de ces caractères. Les guillemets n'y changent rien, il les retire avant.
  */
 function cell(value: string): string {
-    return /[";\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+    const safe = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+    return /[";\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
 /** Propose le fichier au navigateur, puis rend l'URL temporaire. */

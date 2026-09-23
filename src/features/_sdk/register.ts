@@ -519,6 +519,10 @@ export async function modulePublicRoutes(app: FastifyInstance, listener: 'app' |
                 PUBLIC_PATHS.add(path);
             }
             const route: RouteShorthandOptions = { logLevel: 'silent' };
+            // Le plafond de corps se pose par route : le défaut de Fastify vaut un
+            // mégaoctet, analysé avant toute validation, là où une balise en envoie
+            // quelques kilo-octets.
+            if (opts.bodyLimit !== undefined) route.bodyLimit = opts.bodyLimit;
             route.config = {
                 ...(opts.rateLimit ? { rateLimit: opts.rateLimit } : {}),
                 ...(opts.rawBody ? { rawBody: true } : {})
@@ -611,6 +615,36 @@ declare module 'fastify' {
  */
 export function keepRawBody(req: FastifyRequest, body: string): void {
     if (req.routeOptions.config.rawBody) req.rawBody = body;
+}
+
+/**
+ * Ce qu'un `<form method="post">` sans JavaScript envoie, décodé pour les deux
+ * écouteurs. Un nom répété devient un tableau, sans quoi un groupe de cases à
+ * cocher perdrait toutes ses valeurs sauf une.
+ *
+ * Le plafond de paires n'est pas décoratif : sans lui, un corps d'un mégaoctet
+ * de `a0=&a1=&…` fait deux cent mille entrées, chacune validée ensuite contre
+ * le schéma du module avant qu'aucune borne de cardinalité ne morde. Un
+ * formulaire réel en porte quelques dizaines ; au-delà, le corps n'en est pas
+ * un et vaut `undefined`, que la validation écarte comme le reste.
+ *
+ * Sans prototype : un champ nommé `__proto__` poserait sinon un accesseur au
+ * lieu d'une réponse.
+ */
+const FORM_FIELDS_MAX = 64;
+
+export function parseFormFields(body: string): Record<string, string | string[]> | undefined {
+    const fields: Record<string, string | string[]> = Object.create(null);
+    let count = 0;
+    for (const [name, value] of new URLSearchParams(body)) {
+        const seen = fields[name];
+        if (seen === undefined) {
+            if (++count > FORM_FIELDS_MAX) return undefined;
+            fields[name] = value;
+        } else if (Array.isArray(seen)) seen.push(value);
+        else fields[name] = [seen, value];
+    }
+    return fields;
 }
 
 /**

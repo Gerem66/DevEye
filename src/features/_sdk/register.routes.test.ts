@@ -5,7 +5,7 @@ import type { Logger } from 'pino';
 import type { FeatureManifest } from '@deveye/types/sdk';
 import type { FeatureServer } from '@deveye/types/sdk/server';
 
-import { createModuleServices, modulePublicRoutes, registerModules } from './register';
+import { createModuleServices, modulePublicRoutes, parseFormFields, registerModules } from './register';
 import type { ModuleServiceHost } from './service';
 
 /**
@@ -126,5 +126,39 @@ describe('postStream', () => {
         } finally {
             await open.close();
         }
+    });
+});
+
+/**
+ * Le décodage d'un `<form method="post">`, partagé par les deux écouteurs. Ce
+ * qui se tient ici est une borne : sans elle, un corps d'un mégaoctet descend
+ * entrée par entrée dans la validation du module avant qu'aucun plafond de
+ * cardinalité ne morde.
+ */
+describe('parseFormFields', () => {
+    it('groupe un nom répété, sans quoi des cases à cocher perdraient leurs valeurs', () => {
+        assert.deepEqual(
+            { ...parseFormFields('_key=pk_1&canaux=mail&canaux=sms&message=bonjour') },
+            {
+                _key: 'pk_1',
+                canaux: ['mail', 'sms'],
+                message: 'bonjour'
+            }
+        );
+    });
+
+    it('refuse le corps entier au-delà du plafond de champs, plutôt que d’en perdre en route', () => {
+        const pairs = (n: number) => Array.from({ length: n }, (_, i) => `a${i}=x`).join('&');
+        assert.notEqual(parseFormFields(pairs(64)), undefined);
+        assert.equal(parseFormFields(pairs(65)), undefined);
+        // Un nom répété ne consomme qu'une place : c'est un champ, pas deux.
+        assert.notEqual(parseFormFields(`${pairs(64)}&a0=y&a0=z`), undefined);
+    });
+
+    it('rend un objet sans prototype : `__proto__` est une réponse, pas un accesseur', () => {
+        const fields = parseFormFields('__proto__=x&message=bonjour');
+        assert.equal(Object.getPrototypeOf(fields), null);
+        assert.deepEqual(Object.keys(fields ?? {}), ['__proto__', 'message']);
+        assert.equal(({} as Record<string, unknown>).polluted, undefined);
     });
 });

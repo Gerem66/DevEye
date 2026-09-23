@@ -4,7 +4,7 @@ import fastifyRateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyBaseLogger, type FastifyError, type FastifyInstance } from 'fastify';
 import { err, type ErrorCode } from '@deveye/types';
 
-import { keepRawBody, modulePublicRoutes } from '@/features/_sdk/register';
+import { keepRawBody, modulePublicRoutes, parseFormFields } from '@/features/_sdk/register';
 import { logger } from '@/logger';
 import { env, TRUST_PROXY } from '@/Utils/Env';
 
@@ -28,7 +28,16 @@ export async function buildPublicApp(): Promise<FastifyInstance> {
         loggerInstance: logger.child({ surface: 'public' }) as FastifyBaseLogger,
         // Le plafond de débit compte par IP : sans cela il verrait celle du
         // proxy, et un seul visiteur actif fermerait la porte à tous.
-        trustProxy: TRUST_PROXY
+        trustProxy: TRUST_PROXY,
+        // Ce port ne sert que des corps minuscules, et il est exposé : à défaut
+        // de délai, un corps envoyé au compte-gouttes immobilise une socket
+        // jusqu'aux cinq minutes de Node, pour le prix d'un octet de temps en
+        // temps. L'écouteur applicatif garde le sien, long par nécessité (les
+        // téléversements), mais il vit derrière le VPN.
+        requestTimeout: 15_000,
+        // Un filet sous les plafonds que chaque route déclare : ce qui n'en a
+        // pas n'a aucune raison d'être gros non plus.
+        bodyLimit: 256 * 1024
     });
 
     // Aucune page servie ici, seulement des routes de données : tout est fermé.
@@ -74,21 +83,14 @@ export async function buildPublicApp(): Promise<FastifyInstance> {
 
     // `application/x-www-form-urlencoded` : ce qu'émet un `<form method="post">`
     // sans une ligne de JavaScript, la seule forme qu'un site vraiment statique
-    // sait produire. Un nom répété devient un tableau, sans quoi un groupe de
-    // cases à cocher perdrait toutes ses valeurs sauf une.
+    // sait produire. Le décodage et son plafond de paires sont partagés avec
+    // l'écouteur applicatif : c'est une borne, elle ne se tient pas à deux endroits.
     app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => {
         if (!body) {
             done(null, undefined);
             return;
         }
-        const fields: Record<string, string | string[]> = {};
-        for (const [name, value] of new URLSearchParams(body as string)) {
-            const seen = fields[name];
-            if (seen === undefined) fields[name] = value;
-            else if (Array.isArray(seen)) seen.push(value);
-            else fields[name] = [seen, value];
-        }
-        done(null, fields);
+        done(null, parseFormFields(body as string));
     });
 
     // Aucune erreur ne raconte quoi que ce soit du serveur : ce port est exposé,

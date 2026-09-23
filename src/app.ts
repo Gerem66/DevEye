@@ -29,7 +29,8 @@ import {
     isModulePublicPath,
     keepRawBody,
     moduleAgentHooks,
-    modulePublicRoutes
+    modulePublicRoutes,
+    parseFormFields
 } from '@/features/_sdk/register';
 import { setSdkHost } from '@/features/_sdk/host';
 import type { FeatureService } from '@deveye/types/sdk/server';
@@ -259,21 +260,14 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
 
     // `application/x-www-form-urlencoded` : ce qu'émet un `<form method="post">`
     // sans une ligne de JavaScript, la seule forme qu'un site vraiment statique
-    // sait produire. Un nom répété devient un tableau, sans quoi un groupe de
-    // cases à cocher perdrait toutes ses valeurs sauf une.
+    // sait produire. Le décodage et son plafond de paires sont partagés avec
+    // l'écouteur public : c'est une borne, elle ne se tient pas à deux endroits.
     app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => {
         if (!body) {
             done(null, undefined);
             return;
         }
-        const fields: Record<string, string | string[]> = {};
-        for (const [name, value] of new URLSearchParams(body as string)) {
-            const seen = fields[name];
-            if (seen === undefined) fields[name] = value;
-            else if (Array.isArray(seen)) seen.push(value);
-            else fields[name] = [seen, value];
-        }
-        done(null, fields);
+        done(null, parseFormFields(body as string));
     });
 
     app.get('/api/health', { logLevel: 'silent' }, async () => ({ ok: true }));

@@ -45,10 +45,16 @@ async function toStoredStep(
     return { kind: step.kind, labelRef: labelRef(value), content: await cipher.encrypt(value), value };
 }
 
-/** L'entonnoir de cet espace, ou `not_found`. La jointure est la garde. */
+/**
+ * L'entonnoir de cet espace, ou `not_found`. La jointure tient la frontière
+ * d'espace ; la restriction par élément, elle, se demande sur le site, sans quoi
+ * un identifiant énuméré atteindrait les entonnoirs d'un site qu'un rôle masque.
+ * Ses deux appelants écrivent, d'où le niveau.
+ */
 async function loadFunnel(ctx: Ctx, funnelId: number) {
     const row = await ctx.repo.findFunnelInWorkspace(funnelId, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Entonnoir introuvable');
+    await ctx.items.assert(String(row.site_id), 'write');
     return row;
 }
 

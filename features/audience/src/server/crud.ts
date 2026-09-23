@@ -255,9 +255,13 @@ export const audienceReorderFeature = defineSdkFeature({
     mutates: true,
     access: { level: 'write' },
     handler: async (ctx: Ctx, input) => {
+        // Les sites qu'une restriction masque sortent de la liste avant l'écriture :
+        // les ranger depuis un identifiant énuméré dirait lesquels existent.
+        const hidden = await ctx.items.restrictions();
+        const siteIds = input.siteIds.filter((id) => hidden.get(String(id)) !== 'none');
         // Aucune invalidation ici : l'ordre d'affichage n'entre dans aucune décision de
         // l'ingestion, et vider son cache lui ferait relire la base sans raison.
-        await ctx.repo.reorder(ctx.workspaceId, input.siteIds);
+        if (siteIds.length > 0) await ctx.repo.reorder(ctx.workspaceId, siteIds);
         return { ok: true as const };
     }
 });
