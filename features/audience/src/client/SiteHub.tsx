@@ -71,7 +71,9 @@ export function SiteHub({ site, onOpen }: SiteHubProps) {
                 <SectionCard
                     title='Retours'
                     empty={
-                        data.feedback.forms === 0 ? 'Aucun formulaire. Branchez-en un depuis « Installer ».' : undefined
+                        data.feedback.forms === 0
+                            ? 'Aucun formulaire. Déclarez-en un pour recevoir des messages depuis votre site.'
+                            : undefined
                     }
                     figures={[
                         { value: formatCount(data.feedback.submissions), label: 'reçus' },

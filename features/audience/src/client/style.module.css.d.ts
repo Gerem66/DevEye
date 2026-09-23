@@ -122,9 +122,7 @@ declare const styles: {
     readonly panels: string;
     readonly quotaNotice: string;
     readonly quotaTitle: string;
-    readonly range: string;
-    readonly rangeActive: string;
-    readonly ranges: string;
+    readonly quotaUsage: string;
     readonly raw: string;
     readonly rawMeta: string;
     readonly received: string;

@@ -30,7 +30,7 @@ export function FunnelDetailDialog({ funnel, canWrite, onClose, onEdit }: Funnel
             title={funnel?.name ?? ''}
             description={
                 funnel && entered > 0
-                    ? `${formatCount(entered)} visites entrées, ${formatCount(done)} arrivées au bout — ${formatPercent(
+                    ? `${formatCount(entered)} visites entrées, ${formatCount(done)} arrivées au bout, soit ${formatPercent(
                           done / entered
                       )}.`
                     : 'Aucune visite n’est entrée dans cet entonnoir sur cette période.'

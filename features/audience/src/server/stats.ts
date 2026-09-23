@@ -88,6 +88,9 @@ export const audienceOverviewFeature = defineSdkFeature({
             metrics: toMetrics(metrics, returning[0]),
             previous: toMetrics(previous, returning[1]),
             resolution: window.resolution,
+            from: window.from,
+            to: window.to,
+            bucket: window.bucket,
             points
         };
     }

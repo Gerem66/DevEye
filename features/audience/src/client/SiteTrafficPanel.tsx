@@ -88,7 +88,7 @@ export default function SiteTrafficPanel({ scope, canWrite }: SettingsPanelProps
             </div>
 
             <div className={shell.field}>
-                <span className={shell.sectionLabel}>Événements par adresse et par heure</span>
+                <span className={shell.sectionLabel}>Événements par visiteur et par heure</span>
                 <TextInput
                     type='number'
                     value={draft.eventIpQuota}
@@ -97,9 +97,9 @@ export default function SiteTrafficPanel({ scope, canWrite }: SettingsPanelProps
                     onChange={(e) => set('eventIpQuota', e.target.value)}
                 />
                 <span className={shell.fieldHint}>
-                    0 = illimité, et c’est le défaut : une page qui change souvent de route en envoie beaucoup, et un
-                    plafond trop bas ferait disparaître des visites réelles. Compté en mémoire, donc approximatif et
-                    remis à zéro au redémarrage.
+                    Volontairement haut : une même adresse peut porter tout un bureau ou un opérateur mobile, et un
+                    plafond trop bas ferait disparaître des visites réelles. 0 = ne rien plafonner. Compté en mémoire,
+                    donc approximatif et remis à zéro au redémarrage.
                 </span>
             </div>
 

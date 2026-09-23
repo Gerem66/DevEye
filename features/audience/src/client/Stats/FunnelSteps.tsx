@@ -30,7 +30,7 @@ export function FunnelSteps({ funnel }: FunnelStepsProps) {
                         <p className={i === worst ? styles.funnelLinkWorst : styles.funnelLink}>
                             <span className={`icon icon-chevron ${styles.funnelLinkIcon}`} aria-hidden='true' />
                             {formatPercent(drops[i] as number)} d’abandon
-                            {i === worst && (drops[i] as number) > 0 ? ' — le plus coûteux' : ''}
+                            {i === worst && (drops[i] as number) > 0 ? ' (le plus coûteux)' : ''}
                         </p>
                     )}
 

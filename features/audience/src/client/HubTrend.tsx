@@ -3,7 +3,6 @@ import { useResourceVersion } from 'deveye-sdk-client';
 import type { AudienceOverview, AudienceSite } from '../contracts/domain';
 
 import { api } from './api';
-import { bucketOf } from './format';
 import TrendChart from './Stats/TrendChart';
 import styles from './style.module.css';
 
@@ -28,7 +27,7 @@ interface HubTrendProps {
  * Elle ne s'affiche que si le site a réellement mesuré quelque chose : un site
  * qui vient d'être déclaré n'a pas de courbe à montrer, il a une balise à
  * coller, et la carte du dessus le dit déjà. Passé ce cap, elle reste là même
- * creuse — une semaine sans visite est une information, pas un panneau à
+ * creuse : une semaine sans visite est une information, pas un panneau à
  * escamoter. Un échec de lecture, lui, ne rend rien : c'est un supplément, pas
  * une donnée qu'on doit à l'écran.
  */
@@ -67,9 +66,9 @@ export function HubTrend({ site, onOpen }: HubTrendProps) {
             <TrendChart
                 points={overview.points}
                 resolution={overview.resolution}
-                from={overview.points[0]?.at ?? 0}
-                to={(overview.points[overview.points.length - 1]?.at ?? 0) + 1}
-                bucket={bucketOf(overview)}
+                from={overview.from}
+                to={overview.to}
+                bucket={overview.bucket}
             />
         </section>
     );

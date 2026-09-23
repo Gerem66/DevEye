@@ -86,7 +86,7 @@ function explainKind(field: AudienceFormField): void {
     const help = FIELD_FORMAT_HELP[field.kind];
     const name = field.name.trim() || 'question';
     void openInfo({
-        title: `${FIELD_KIND_LABELS[field.kind]} — format attendu`,
+        title: `${FIELD_KIND_LABELS[field.kind]} : format attendu`,
         width: 520,
         body: (
             <div className={styles.formatHelp}>
@@ -390,8 +390,7 @@ export function FormEditor({ form, siteId, open, canWrite, onClose, onSaved }: F
                                     onClick={() =>
                                         setConfirm({
                                             title: 'Supprimer ce formulaire ?',
-                                            description:
-                                                'Tout ce qu’il a reçu part avec lui, et le site ne pourra plus lui écrire tant qu’il n’est pas redéclaré.',
+                                            description: `Ses ${formatCount(form.submissions)} retours partent avec lui, et le site ne pourra plus lui écrire tant qu’il n’est pas redéclaré.`,
                                             confirmLabel: 'Supprimer',
                                             tone: 'danger',
                                             onConfirm: () =>

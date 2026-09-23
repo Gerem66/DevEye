@@ -270,7 +270,13 @@ export function Forms({ site, canWrite, onCurrentForm }: FormsProps) {
                     <span className={`icon icon-spinner ${styles.spin}`} aria-hidden='true' /> Chargement des retours…
                 </p>
             ) : tab === 'results' ? (
-                results && <Results results={results} />
+                // Le bandeau d'erreur est plus haut, hors de ce cadre : sans ce
+                // repli, un échec de lecture ne rendait rien du tout.
+                results ? (
+                    <Results results={results} />
+                ) : (
+                    <p className={styles.empty}>La répartition n’a pas pu être lue.</p>
+                )
             ) : (
                 <SubmissionTable
                     submissions={submissions}

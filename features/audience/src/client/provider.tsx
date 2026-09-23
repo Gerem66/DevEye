@@ -138,7 +138,7 @@ function summarize(siteIds: readonly number[]): Promise<readonly SdkTileSummary[
             siteIds.map(async (id): Promise<SdkTileSummary> => {
                 const site = sites.find((s) => s.id === id);
                 if (!site) {
-                    return { itemId: id, title: `Site #${id}`, metrics: [], unavailable: 'Ce site n’est plus ici.' };
+                    return { itemId: id, title: 'Site supprimé', metrics: [], unavailable: 'Ce site n’est plus ici.' };
                 }
                 try {
                     const { traffic } = await api.send('audience.summary', { siteId: id });

@@ -23,9 +23,21 @@ export function Heatmap({ cells }: HeatmapProps) {
         return <p className={styles.empty}>Pas encore assez de visites pour dessiner une carte d’activité.</p>;
     }
 
+    // Le relief se lit d'un coup, mais seulement avec les yeux : le `title` de
+    // chaque case n'existe ni au clavier ni au toucher. Le résumé dit donc ce
+    // qu'on vient chercher, le moment le plus fréquenté.
+    const peak = [...byKey.entries()].reduce<{ key: string; views: number }>(
+        (best, [key, views]) => (views > best.views ? { key, views } : best),
+        { key: '', views: 0 }
+    );
+    const summary =
+        peak.views === 0
+            ? 'Carte d’activité par jour et par heure : aucune visite sur cette période.'
+            : `Carte d’activité par jour et par heure. Pic ${DAY_LABELS[Number(peak.key.split(':')[0])]} vers ${peak.key.split(':')[1]} h, ${formatCount(peak.views)} vues.`;
+
     return (
-        <div className={styles.heatmap}>
-            <div className={styles.heatmapGrid}>
+        <div className={styles.heatmap} role='img' aria-label={summary}>
+            <div className={styles.heatmapGrid} aria-hidden='true'>
                 {DAY_LABELS.map((label, day) => (
                     <div key={label} className={styles.heatmapRow}>
                         <span className={styles.heatmapDay}>{label}</span>
@@ -40,7 +52,7 @@ export function Heatmap({ cells }: HeatmapProps) {
                                     className={styles.heatmapCell}
                                     style={{ opacity: views === 0 ? undefined : 0.15 + (views / max) * 0.85 }}
                                     data-empty={views === 0 ? '' : undefined}
-                                    title={`${label} ${String(hour).padStart(2, '0')} h — ${formatCount(views)} vue${views > 1 ? 's' : ''}`}
+                                    title={`${label} ${String(hour).padStart(2, '0')} h : ${formatCount(views)} vue${views > 1 ? 's' : ''}`}
                                 />
                             );
                         })}

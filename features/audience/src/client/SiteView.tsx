@@ -11,7 +11,7 @@ import {
 } from '../contracts/domain';
 
 import { api } from './api';
-import { bucketOf, DIMENSION_HINTS, DIMENSION_LABELS, formatCount } from './format';
+import { DIMENSION_HINTS, DIMENSION_LABELS, formatCount } from './format';
 import RangeBar from './RangeBar';
 import Heatmap from './Stats/Heatmap';
 import StatBand from './Stats/StatBand';
@@ -238,9 +238,9 @@ export function SiteView({ site, heading, actions }: SiteViewProps) {
                 <TrendChart
                     points={overview.points}
                     resolution={overview.resolution}
-                    from={overview.points[0]?.at ?? 0}
-                    to={(overview.points[overview.points.length - 1]?.at ?? 0) + 1}
-                    bucket={bucketOf(overview)}
+                    from={overview.from}
+                    to={overview.to}
+                    bucket={overview.bucket}
                 />
             )}
 

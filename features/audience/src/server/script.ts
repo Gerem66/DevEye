@@ -26,6 +26,11 @@ import { createHash } from 'crypto';
 export const TRACKER_SCRIPT = `(function () {
     'use strict';
 
+    // Deux balises sur la même page (un thème et un module qui la posent chacun)
+    // compteraient double chaque navigation, les enrobages de l'History API se
+    // cumulant. La première installée gagne.
+    if (window.deveye) return;
+
     var script = document.currentScript;
     if (!script) return;
 

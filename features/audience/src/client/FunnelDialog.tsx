@@ -196,6 +196,10 @@ export function FunnelDialog({ open, siteId, funnel, onClose, onSaved }: FunnelD
                                     <SelectInput
                                         className={styles.stepKind}
                                         value={step.kind}
+                                        // La ligne n'a pas la place d'un libellé visible :
+                                        // sans celui-ci, la marche s'annonce « liste » et
+                                        // « zone de texte », sans son rang.
+                                        aria-label={`Type de la marche ${index + 1}`}
                                         onChange={(e) =>
                                             setStep(index, { kind: e.target.value as AudienceFunnelStepKind })
                                         }
@@ -211,6 +215,7 @@ export function FunnelDialog({ open, siteId, funnel, onClose, onSaved }: FunnelD
                                             value={step.value}
                                             list={step.kind === 'path' ? 'audiencePaths' : 'audienceEvents'}
                                             placeholder={step.kind === 'path' ? '/devis' : 'devis-envoye'}
+                                            aria-label={`Valeur de la marche ${index + 1}`}
                                             onChange={(e) => setStep(index, { value: e.target.value })}
                                         />
                                     </div>

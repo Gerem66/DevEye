@@ -187,7 +187,15 @@ export function FeatureAudience(_props: FeatureViewProps) {
                     )}
                 </>
             ) : opened === null ? (
-                <p className={styles.empty}>{error ?? 'Chargement…'}</p>
+                // L'en-tête et son bouton « Sites » vivent dans `SiteDetail`, que ce
+                // cas ne monte pas : sans ce retour, une fiche qui n'a pas pu se
+                // charger ne laisse aucune issue.
+                <div className={styles.view}>
+                    <Button variant='ghost' icon='arrow-left' onClick={() => setOpenedId(null)}>
+                        Sites
+                    </Button>
+                    <p className={error ? styles.error : styles.empty}>{error ?? 'Chargement…'}</p>
+                </div>
             ) : (
                 <SiteDetail
                     site={opened.site}

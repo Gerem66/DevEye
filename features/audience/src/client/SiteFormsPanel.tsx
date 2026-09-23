@@ -38,7 +38,7 @@ export default function SiteFormsPanel({ scope, canWrite }: SettingsPanelProps) 
             />
 
             <div className={shell.field}>
-                <span className={shell.sectionLabel}>Retours par adresse et par heure</span>
+                <span className={shell.sectionLabel}>Retours par visiteur et par heure</span>
                 <TextInput
                     type='number'
                     value={draft.submissionIpQuota}

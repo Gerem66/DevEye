@@ -871,7 +871,7 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
         },
         async touchSession(id, at, viewsDelta) {
             // `GREATEST` : un client natif peut livrer un lot dans le désordre
-            // après une coupure, et `last_at` ne doit jamais reculer — la durée
+            // après une coupure, et `last_at` ne doit jamais reculer, la durée
             // de la session en deviendrait négative.
             await q.execute(
                 'UPDATE audience_sessions SET last_at = GREATEST(last_at, ?), views = views + ? WHERE id = ?',

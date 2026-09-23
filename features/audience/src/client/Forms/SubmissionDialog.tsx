@@ -76,7 +76,7 @@ export function SubmissionDialog({ submission, canWrite, onClose, onRemoved }: S
                         {/* Le pictogramme ne change pas, seul l'intitulé : c'est ce que
                             fait déjà le bouton de copie de l'écran d'installation. */}
                         <Button variant='secondary' icon='copy' onClick={copy}>
-                            {copied ? 'Copié' : 'Copier le brut'}
+                            {copied ? 'Copié' : 'Copier le détail'}
                         </Button>
                         <DialogCancelButton>Fermer</DialogCancelButton>
                     </>

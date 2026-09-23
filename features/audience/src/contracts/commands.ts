@@ -51,7 +51,7 @@ import {
 
 const siteId = z.number().int().positive();
 
-/** Ce qu'on peut régler sur un site — identique à l'ajout et à la modification. */
+/** Ce qu'on peut régler sur un site, identique à l'ajout et à la modification. */
 const siteBody = {
     name: z.string().min(1).max(AUDIENCE_SITE_NAME_MAX_LENGTH),
     description: z.string().max(AUDIENCE_SITE_DESCRIPTION_MAX_LENGTH),

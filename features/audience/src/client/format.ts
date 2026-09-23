@@ -4,7 +4,6 @@ import type {
     AudienceFieldKind,
     AudienceFieldValue,
     AudienceFormField,
-    AudienceOverview,
     AudiencePlatform,
     AudienceRange,
     AudienceResolution,
@@ -46,14 +45,14 @@ export const DIMENSION_LABELS: Record<AudienceDimension, string> = {
  */
 export const DIMENSION_EMPTY: Record<AudienceDimension, string> = {
     path: 'Aucune page vue sur cette période.',
-    referrer: 'Aucune provenance externe — les visiteurs arrivent en direct.',
+    referrer: 'Aucune provenance externe : les visiteurs arrivent en direct.',
     browser: 'Aucune visite sur cette période.',
     os: 'Aucune visite sur cette période.',
     device: 'Aucune visite sur cette période.',
     timezone: 'Aucun fuseau déclaré.',
     language: 'Aucune langue déclarée.',
-    event: 'Aucun événement nommé. Appelez deveye.event("nom") pour en poser.',
-    identity: 'Aucun utilisateur identifié. Appelez deveye.identify(id) pour en nommer.'
+    event: 'Aucun événement nommé. Le bouton « Installer » explique comment en poser depuis votre site.',
+    identity: 'Aucun utilisateur identifié. Le bouton « Installer » explique comment votre site peut les nommer.'
 };
 
 /** Ce qu'un type de question veut dire pour celui qui déclare le formulaire. */
@@ -190,7 +189,7 @@ export const FIELD_FORMAT_HELP: Record<AudienceFieldKind, { accepts: string; sto
         stored: 'Un nombre. « 4 » et 4 tombent donc sur la même ligne de répartition.'
     },
     boolean: {
-        accepts: 'true / false, ou "on" — ce qu’envoie une case cochée. Une case décochée n’envoie rien du tout.',
+        accepts: 'true / false, ou "on" : ce qu’envoie une case cochée. Une case décochée n’envoie rien du tout.',
         stored: 'Un booléen. Une case décochée compte comme « non », pas comme une absence de réponse.'
     },
     choice: {
@@ -211,22 +210,12 @@ export function fieldExampleValue(field: AudienceFormField): string {
     return '"Bonjour"';
 }
 
-/**
- * Le pas de la courbe, déduit de deux points consécutifs. Le serveur rend la
- * résolution mais pas la largeur d'un seau : la transporter deux fois ouvrirait
- * la porte à ce qu'elles se contredisent.
- */
-export function bucketOf(overview: AudienceOverview): number {
-    if (overview.points.length >= 2) return overview.points[1].at - overview.points[0].at;
-    return overview.resolution === 'hour' ? 3600 : overview.resolution === 'day' ? 86400 : 7 * 86400;
-}
-
-/** « 1 284 » — un nombre de vues se lit par tranches de mille. */
+/** « 1 284 » : un nombre de vues se lit par tranches de mille. */
 export function formatCount(value: number): string {
     return value.toLocaleString('fr-FR');
 }
 
-/** « 2 min 40 s » — une durée de visite, pas un chronomètre. */
+/** « 2 min 40 s » : une durée de visite, pas un chronomètre. */
 export function formatDuration(seconds: number): string {
     const total = Math.round(seconds);
     if (total < 60) return `${total} s`;
@@ -239,7 +228,7 @@ export function formatDuration(seconds: number): string {
     return `${hours} h ${minutes % 60} min`;
 }
 
-/** « 38 % » — un taux se lit entier ; la décimale n'apprend rien ici. */
+/** « 38 % » : un taux se lit entier, la décimale n'apprend rien ici. */
 export function formatPercent(ratio: number): string {
     return `${Math.round(ratio * 100)} %`;
 }
@@ -255,7 +244,7 @@ export function delta(current: number, previous: number): number | null {
     return (current - previous) / previous;
 }
 
-/** « +18 % », « −4 % » — avec le vrai signe moins, pas un trait d'union. */
+/** « +18 % », « −4 % », avec le vrai signe moins et non un trait d'union. */
 export function formatDelta(value: number): string {
     const percent = Math.round(value * 100);
     if (percent === 0) return '±0 %';
@@ -288,7 +277,7 @@ export function formatPointTitle(at: number, resolution: AudienceResolution): st
     return date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
-/** « il y a 4 min » — la fraîcheur d'une mesure, pas sa date exacte. */
+/** « il y a 4 min » : la fraîcheur d'une mesure, pas sa date exacte. */
 export function formatAgo(epochSeconds: number | null): string {
     if (epochSeconds === null) return 'aucune mesure';
     const seconds = Math.max(0, Math.floor(Date.now() / 1000) - epochSeconds);
@@ -332,7 +321,7 @@ export interface FunnelSegment {
     kind: 'lost' | 'done';
     /** Part de l'entrée, entre 0 et 1. Les parts somment à 1. */
     share: number;
-    /** La marche concernée — celle qu'on n'a pas franchie, ou la dernière. */
+    /** La marche concernée : celle qu'on n'a pas franchie, ou la dernière. */
     step: number;
     /** L'abandon le plus coûteux, celui que la barre met en avant. */
     worst: boolean;
@@ -395,7 +384,7 @@ export function formatFieldValue(value: AudienceFieldValue): string {
     return String(value);
 }
 
-/** « 12 mars 2026, 14:32 » — la date exacte d'un retour, pas sa fraîcheur. */
+/** « 12 mars 2026, 14:32 » : la date exacte d'un retour, pas sa fraîcheur. */
 export function formatDateTime(epochSeconds: number): string {
     return new Date(epochSeconds * 1000).toLocaleString('fr-FR', {
         day: 'numeric',
@@ -454,7 +443,7 @@ function fieldMarkup(field: AudienceFormField): string[] {
         return [
             label,
             `    <select id="f-${field.name}" name="${field.name}"${multiple}${required}>`,
-            ...(field.required || field.multiple ? [] : ['        <option value="">—</option>']),
+            ...(field.required || field.multiple ? [] : ['        <option value=""></option>']),
             ...field.choices.map((choice) => `        <option>${choice}</option>`),
             '    </select>',
             ''

@@ -75,9 +75,14 @@ export function Funnels({ site, canWrite, heading, actions }: FunnelsProps) {
                 {actions}
             </div>
 
-            {error && <p className={styles.error}>{error}</p>}
+            {error && funnels.length > 0 && <p className={styles.error}>{error}</p>}
 
-            {loading && funnels.length === 0 ? (
+            {/* L'erreur remplace la liste plutôt que de la coiffer : « Aucun
+                entonnoir » sous un bandeau rouge invite à créer là où la lecture a
+                simplement échoué. */}
+            {error && funnels.length === 0 ? (
+                <p className={styles.error}>{error}</p>
+            ) : loading && funnels.length === 0 ? (
                 <p className={styles.empty}>Chargement…</p>
             ) : funnels.length === 0 ? (
                 <p className={styles.empty}>

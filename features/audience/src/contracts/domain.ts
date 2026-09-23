@@ -308,6 +308,15 @@ export const audienceOverviewSchema = z.object({
     metrics: audienceMetricsSchema,
     previous: audienceMetricsSchema,
     resolution: audienceResolutionSchema,
+    /**
+     * La fenêtre demandée, en secondes, et la largeur d'un seau. L'axe est
+     * celle-là et non l'étendue des points : un `GROUP BY` ne rend que les seaux
+     * non vides, et les déduire des données donnait un pas faux dès qu'un trou
+     * séparait les deux premiers, puis une courbe aplatie sur des dates fausses.
+     */
+    from: z.number().int().nonnegative(),
+    to: z.number().int().nonnegative(),
+    bucket: z.number().int().positive(),
     points: z.array(audiencePointSchema)
 });
 export type AudienceOverview = z.infer<typeof audienceOverviewSchema>;

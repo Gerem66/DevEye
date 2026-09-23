@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { AudiencePoint, AudienceResolution } from '../../contracts/domain';
 
 import { formatCount, formatPointLabel, formatPointTitle } from '../format';
@@ -34,6 +34,9 @@ interface TrendChartProps {
  */
 export function TrendChart({ points, resolution, from, to, bucket }: TrendChartProps) {
     const [hover, setHover] = useState<AudiencePoint | null>(null);
+    // Unique par instance : deux courbes sur la même page (un projet relié à deux
+    // sites) partageraient sinon le même dégradé.
+    const fillId = useId();
 
     // Les seaux vides ne remontent pas de SQL, un GROUP BY ne rendant que ce qui
     // existe : sans cette grille complète, deux jours sans visite se toucheraient et la
@@ -45,6 +48,7 @@ export function TrendChart({ points, resolution, from, to, bucket }: TrendChartP
     }
 
     const max = Math.max(1, ...slots.map((s) => s.views));
+    const totalViews = slots.reduce((sum, slot) => sum + slot.views, 0);
     const plotH = H - PAD_BOTTOM;
     const step = W / Math.max(1, slots.length);
     const x = (index: number) => index * step + step / 2;
@@ -61,15 +65,21 @@ export function TrendChart({ points, resolution, from, to, bucket }: TrendChartP
 
     return (
         <figure className={styles.chart}>
-            <svg viewBox={`0 0 ${W} ${H}`} className={styles.chartSvg} role='img' aria-label='Vues sur la période'>
+            <svg
+                viewBox={`0 0 ${W} ${H}`}
+                className={styles.chartSvg}
+                role='img'
+                // Un dessin sans ses totaux ne dit rien à qui ne le voit pas.
+                aria-label={`Vues sur la période : ${totalViews} au total, ${max} au plus haut.`}
+            >
                 <defs>
-                    <linearGradient id='audienceFill' x1='0' y1='0' x2='0' y2='1'>
+                    <linearGradient id={fillId} x1='0' y1='0' x2='0' y2='1'>
                         <stop offset='0%' stopColor='var(--accent)' stopOpacity='0.28' />
                         <stop offset='100%' stopColor='var(--accent)' stopOpacity='0' />
                     </linearGradient>
                 </defs>
 
-                <path d={area} fill='url(#audienceFill)' />
+                <path d={area} fill={`url(#${fillId})`} />
                 <path d={line((p) => p.views)} className={styles.chartLine} />
                 <path d={line((p) => p.visitors)} className={styles.chartLineSecondary} />
 

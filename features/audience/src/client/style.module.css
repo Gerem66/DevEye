@@ -83,6 +83,14 @@
     color: var(--warning);
 }
 
+/* Le compte du mois tant qu'il n'inquiète pas : une ligne, pas un bandeau. */
+.quotaUsage {
+    margin: 0;
+    padding: 0 var(--space-md);
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
 .empty {
     margin: 0;
     padding: var(--space-md);
@@ -423,7 +431,7 @@
     font-size: 0.88rem;
 }
 
-/* Le tour continu d'un indicateur d'attente — distinct de `.spinning`, qui ne
+/* Le tour continu d'un indicateur d'attente, distinct de `.spinning`, qui ne
    fait qu'un tour pour acquitter un clic. */
 .spin {
     animation: audienceSpin 0.9s linear infinite;
@@ -461,34 +469,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-}
-
-.ranges {
-    display: inline-flex;
-    padding: 2px;
-    border-radius: var(--radius-pill);
-    background: var(--surface-subtle);
-}
-
-.range {
-    padding: 4px 12px;
-    border: none;
-    border-radius: var(--radius-pill);
-    background: transparent;
-    color: var(--text-muted);
-    font: inherit;
-    font-size: 0.8rem;
-    cursor: pointer;
-}
-
-.range:hover {
-    color: var(--text-primary);
-}
-
-.rangeActive {
-    composes: range;
-    background: var(--accent-bg);
-    color: var(--accent);
 }
 
 .liveTag {
@@ -534,7 +514,7 @@
     gap: 2px;
     min-width: 0;
     /* Chaque tuile porte sa définition en `title`. Sans ce curseur, rien ne
-       dirait qu'il y a quelque chose à survoler — une info-bulle qu'on ne
+       dirait qu'il y a quelque chose à survoler : une info-bulle qu'on ne
        cherche pas est une info-bulle qui n'existe pas. */
     cursor: help;
 }
@@ -877,7 +857,7 @@
 }
 
 /* Une carte entière cliquable : la barre compacte ne répond qu'à « est-ce que
-   ça passe ? », le détail est derrière. Un `button` et non un `div` — c'est un
+   ça passe ? », le détail est derrière. Un `button` et non un `div` : c'est un
    vrai geste, il doit être atteignable au clavier. */
 .funnelCard {
     display: flex;
@@ -937,7 +917,7 @@
 }
 
 /* La barre unique : ses parts somment à 1, donc `flex` sans `flex-wrap` et des
-   largeurs en pourcentage suffisent — aucune ne peut déborder. */
+   largeurs en pourcentage suffisent, aucune ne pouvant déborder. */
 .funnelSegments {
     display: flex;
     gap: 2px;
@@ -953,7 +933,7 @@
 
 /* Trois teintes, pas une de plus : ce qui a converti, l'abandon le plus
    coûteux, et tout le reste. Une couleur par marche aurait demandé une
-   légende — c'est-à-dire un second aller-retour du regard, pour une vue qui
+   légende, c'est-à-dire un second aller-retour du regard, pour une vue qui
    n'existe que pour éviter le premier. */
 .funnelSegmentLost {
     background: var(--glass-border-strong);
@@ -977,7 +957,7 @@
 }
 
 /* Le tour d'icône du bouton de rafraîchissement : il acquitte le clic, il ne
-   mesure rien. `filter` et non `opacity` — framer-motion possède la seconde. */
+   mesure rien. `filter` et non `opacity` : framer-motion possède la seconde. */
 .spinning {
     animation: audienceSpin 0.6s linear;
 }
@@ -1319,8 +1299,8 @@
 }
 
 /* Le mémo pour un agent : un `textarea` en lecture seule, pour qu'un Ctrl+A ne
-   sélectionne que lui. Non redimensionnable en largeur — il déborderait du
-   dialogue — mais en hauteur, pour qui veut tout voir d'un coup. */
+   sélectionne que lui. Non redimensionnable en largeur, il déborderait du
+   dialogue, mais en hauteur, pour qui veut tout voir d'un coup. */
 .brief {
     width: 100%;
     padding: var(--space-sm) var(--space-md);

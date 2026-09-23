@@ -67,7 +67,13 @@ export function SubmissionTable({ submissions, nextCursor, loadingMore, onLoadMo
         setSort((prev) => (prev.column === column ? { column, asc: !prev.asc } : { column, asc: true }));
 
     const header = (column: string | null, label: string) => (
-        <th key={column ?? label} scope='col'>
+        <th
+            key={column ?? label}
+            scope='col'
+            // La flèche est décorative : sans `aria-sort`, rien ne dit à un lecteur
+            // d'écran quelle colonne trie ni dans quel sens.
+            aria-sort={sort.column !== column ? 'none' : sort.asc ? 'ascending' : 'descending'}
+        >
             <button type='button' className={styles.tableSort} onClick={() => toggle(column)}>
                 {label}
                 <span className={styles.tableArrow} aria-hidden='true'>
@@ -104,7 +110,7 @@ export function SubmissionTable({ submissions, nextCursor, loadingMore, onLoadMo
                                 {header(null, 'Reçu le')}
                                 {columns.map((column) => header(column, column))}
                                 <th scope='col' className={styles.tableRawHead}>
-                                    Brut
+                                    Détail
                                 </th>
                             </tr>
                         </thead>
@@ -122,7 +128,7 @@ export function SubmissionTable({ submissions, nextCursor, loadingMore, onLoadMo
                                             variant='ghost'
                                             onClick={() => onOpen(submission)}
                                             title='Voir le retour tel qu’il est arrivé'
-                                            aria-label='Voir le retour brut'
+                                            aria-label='Voir le détail de ce retour'
                                         >
                                             <span className='icon icon-details' aria-hidden='true' />
                                         </Button>
