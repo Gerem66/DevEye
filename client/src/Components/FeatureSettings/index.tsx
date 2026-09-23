@@ -388,17 +388,20 @@ export function FeatureSettingsButton({
     const outline = useLiveOutline('settings', liveSettingsValue(scope));
 
     /* Une action prise hors des réglages montre ce bouton : on y apprend où vit
-       ce qui vient de changer. La clé en chaîne, jamais l'objet `scope`. */
+       ce qui vient de changer. Le bouton canonique seul, celui qui ouvre sur la
+       première section : les raccourcis vers un onglet précis partagent la
+       même portée, et s'éclaireraient tous ensemble. */
     const myFlashKey = flashKey(
         scope.kind === 'item'
             ? { kind: 'item', feature: scope.feature, itemId: scope.itemId }
             : { kind: 'feature', feature: scope.feature }
     );
     const [flashing, setFlashing] = useState(false);
+    const canonical = initialSection === undefined;
     useEffect(() => {
         let timer: number | undefined;
         const stop = onFlash((key) => {
-            if (key !== myFlashKey) return;
+            if (key !== myFlashKey || !canonical) return;
             window.clearTimeout(timer);
             // Retomber a faux d'abord relance l'animation si elle jouait deja.
             setFlashing(false);
@@ -409,7 +412,7 @@ export function FeatureSettingsButton({
             stop();
             window.clearTimeout(timer);
         };
-    }, [myFlashKey]);
+    }, [myFlashKey, canonical]);
 
     if (sections.length === 0) return null;
 
