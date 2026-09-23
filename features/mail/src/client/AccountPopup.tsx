@@ -346,6 +346,7 @@ export function AccountPopup() {
                         />
                         <StepBody id='mail-account-step-1' open={step === 1}>
                             <SecurityTierChoice
+                                advise
                                 value={draft.securityTier}
                                 onChange={(tier) => set('securityTier', tier)}
                                 onPick={() => setStep(2)}

@@ -127,3 +127,10 @@
         transition: none;
     }
 }
+
+/* Le conseil se lit après le libellé sans lui disputer la place. */
+.hint {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 400;
+}

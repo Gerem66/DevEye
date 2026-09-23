@@ -9,6 +9,8 @@ export interface ChoiceCardOption<T extends string> {
     description: ReactNode;
     /** Classe d'icône (`icon-lock`…), montrée à côté du libellé. */
     icon?: string;
+    /** Un mot en retrait après le libellé, pour désigner le choix conseillé. */
+    hint?: ReactNode;
     /** Pourquoi ce choix n'est pas offert ; le rend inerte et s'affiche sous la description. */
     unavailable?: ReactNode;
 }
@@ -78,6 +80,7 @@ export default function ChoiceCards<T extends string>({
                             <span className={styles.mark} aria-hidden='true' />
                             {o.icon && <span className={`icon ${o.icon} ${styles.icon}`} aria-hidden='true' />}
                             <span className={styles.label}>{o.label}</span>
+                            {o.hint && <span className={styles.hint}>{o.hint}</span>}
                             {pending === o.value && <span className={styles.pending}>Application…</span>}
                         </label>
                         <div id={descriptionId} className={styles.description}>
