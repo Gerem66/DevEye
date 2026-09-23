@@ -291,6 +291,13 @@
     background: var(--accent-bg);
 }
 
+/* Le même point d'ajout, en tête de liste : une rangée basse, pour ne pas peser
+   autant que le bloc qui ferme la page. */
+.addSectionTop {
+    min-height: 36px;
+    padding: var(--space-xs) var(--space-md);
+}
+
 .confirmText {
     margin: 0;
     font-size: 0.9rem;

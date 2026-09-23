@@ -145,7 +145,11 @@ export function findFolder(layout: HomeLayout, folderId: string): { section: Hom
  * intermédiaire. Une fonctionnalité déjà posée est sautée, donc un modèle
  * s'applique par-dessus un autre. Rend l'id de la section.
  */
-export function addSectionWith(title: string, featureIds: readonly HomeFeatureId[]): string {
+export function addSectionWith(
+    title: string,
+    featureIds: readonly HomeFeatureId[],
+    where: 'start' | 'end' = 'end'
+): string {
     const id = uid();
     const placed = new Set<string>(placedFeatureIds(state));
     const items: HomeTile[] = [];
@@ -155,28 +159,36 @@ export function addSectionWith(title: string, featureIds: readonly HomeFeatureId
         items.push(featureId);
     }
     const next = title.trim().slice(0, 40);
-    commit({ ...state, sections: [...state.sections, { id, items, ...(next ? { title: next } : {}) }] });
+    const section: HomeSection = { id, items, ...(next ? { title: next } : {}) };
+    commit({
+        ...state,
+        sections: where === 'start' ? [section, ...state.sections] : [...state.sections, section]
+    });
     return id;
 }
 
-/** Append an empty section and return its id, so the UI can focus it. */
-export function addSection(): string {
-    return addSectionWith('', []);
+/** Pose une section vide et rend son id, pour que l'interface la vise. */
+export function addSection(where: 'start' | 'end' = 'end'): string {
+    return addSectionWith('', [], where);
 }
 
 export function removeSection(sectionId: string): void {
     commit({ ...state, sections: state.sections.filter((s) => s.id !== sectionId) });
 }
 
-/** Blank title → drop the field entirely (back to an untitled section). */
+/**
+ * Titre vide → le champ disparaît (retour à une section sans titre). La valeur
+ * est stockée telle quelle : la rogner ici avalerait l'espace qu'on vient de
+ * taper, le champ étant contrôlé.
+ */
 export function renameSection(sectionId: string, title: string): void {
-    const next = title.trim();
+    const next = title.slice(0, 40);
     commit({
         ...state,
         sections: state.sections.map((s) => {
             if (s.id !== sectionId) return s;
             const { title: _dropped, ...rest } = s;
-            return next ? { ...rest, title: next } : rest;
+            return next.trim() ? { ...rest, title: next } : rest;
         })
     });
 }

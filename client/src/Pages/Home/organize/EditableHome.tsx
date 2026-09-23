@@ -325,6 +325,7 @@ function FolderPanel({ folder, onClose }: { folder: HomeFolder; onClose: () => v
                     className={styles.sectionTitleInput}
                     value={folder.title}
                     onChange={(e) => renameFolder(folder.id, e.target.value)}
+                    onBlur={(e) => renameFolder(folder.id, e.target.value.trim())}
                     placeholder='Nom du dossier'
                     maxLength={40}
                     aria-label='Nom du dossier'
@@ -472,13 +473,16 @@ function SortableSection({
                 >
                     <span className={`icon icon-drag ${styles.handleIcon}`} />
                 </button>
-                {/* The title is optional: left empty, the section renders with no
-                    heading on the home. Committed on every keystroke — the server
-                    sync is already debounced, so nothing can be lost on exit. */}
+                {/* Titre facultatif : laissé vide, la section s'affiche sans
+                    en-tête sur l'accueil. Validé à chaque frappe, la synchro
+                    serveur étant déjà différée ; les espaces de bout ne partent
+                    qu'à la sortie du champ, sinon l'espace qu'on vient de taper
+                    serait avalé. */}
                 <input
                     className={styles.sectionTitleInput}
                     value={section.title ?? ''}
                     onChange={(e) => renameSection(section.id, e.target.value)}
+                    onBlur={(e) => renameSection(section.id, e.target.value.trim())}
                     placeholder='Titre (facultatif)'
                     maxLength={40}
                     aria-label='Titre de la section'
@@ -522,6 +526,21 @@ function SortableSection({
             />
             {openFolder && <FolderPanel folder={openFolder} onClose={onCloseFolder} />}
         </section>
+    );
+}
+
+/** Le point d'ajout d'une section, en rangée fine au-dessus de la liste ou en
+ *  bloc sous elle. */
+function AddSectionButton({ compact, onClick }: { compact?: boolean; onClick: () => void }) {
+    return (
+        <button
+            type='button'
+            className={`${styles.addSection} ${compact ? styles.addSectionTop : ''}`}
+            onClick={onClick}
+        >
+            <span className={`icon icon-plus ${styles.addTileIcon}`} />
+            <span className={styles.addTileLabel}>Ajouter une section</span>
+        </button>
     );
 }
 
@@ -792,6 +811,10 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
 
     return (
         <div className={styles.editRoot}>
+            {/* Rien au-dessus d'un accueil sans section : les deux points d'ajout
+                se suivraient. */}
+            {sections.length > 0 && <AddSectionButton compact onClick={() => setAddTarget(addSection('start'))} />}
+
             <DndContext
                 sensors={sensors}
                 collisionDetection={collisionDetection}
@@ -834,10 +857,7 @@ export function EditableHome({ autoOpenAdd = false }: EditableHomeProps) {
 
             {/* Ajoutée sur-le-champ, et le marché s'ouvre dans la foulée sur la
                 section neuve. */}
-            <button type='button' className={styles.addSection} onClick={() => setAddTarget(addSection())}>
-                <span className={`icon icon-plus ${styles.addTileIcon}`} />
-                <span className={styles.addTileLabel}>Ajouter une section</span>
-            </button>
+            <AddSectionButton onClick={() => setAddTarget(addSection())} />
 
             <AddTileMarket
                 section={editShortcut ? editTarget : addSectionTarget}
