@@ -213,19 +213,19 @@ export default function IssuerPanel({ canWrite }: SettingsPanelProps) {
                     </SelectInput>
                     <Button
                         variant='ghost'
-                        icon='mail'
-                        aria-label='Ouvrir vos comptes mail'
-                        title='Ouvrir la fonctionnalité Mail : lire vos boîtes, les modifier, en ajouter'
-                        disabled={mail === undefined}
-                        onClick={() => openFeature('mail')}
-                    />
-                    <Button
-                        variant='ghost'
                         icon='add'
                         aria-label='Ajouter un compte mail'
                         title='Ajouter un compte mail : il sera choisi ici une fois créé'
                         disabled={!canWrite || mail === undefined}
                         onClick={openAdd}
+                    />
+                    <Button
+                        variant='ghost'
+                        icon='mail'
+                        aria-label='Ouvrir vos comptes mail'
+                        title='Ouvrir la fonctionnalité Mail : lire vos boîtes, les modifier, en ajouter'
+                        disabled={mail === undefined}
+                        onClick={() => openFeature('mail')}
                     />
                 </div>
                 <span className={shell.fieldHint}>
