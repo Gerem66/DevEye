@@ -6,10 +6,9 @@ import ClientDialog from './ClientDialog';
 import styles from './style.module.css';
 
 /**
- * Le choix du client d'un document. Quand le carnet est vide, un sélecteur vide
- * est un cul-de-sac : on met à sa place le bouton qui ouvre la popup d'ajout,
- * et le client créé se retrouve choisi. Le carnet se ravive de lui-même, la
- * popup invalidant sa clé de ressource.
+ * Le choix du client d'un document : le sélecteur, et collé à lui le « + » qui
+ * ouvre la popup d'ajout. Le client créé s'y retrouve choisi, et le carnet se
+ * ravive de lui-même, la popup invalidant sa clé de ressource.
  */
 export interface ClientPickerProps {
     /** `null` tant que le carnet n'est pas lu : on n'annonce pas un vide qu'on ignore. */
@@ -26,17 +25,9 @@ export default function ClientPicker({ clients, value, disabled, onChange }: Cli
 
     return (
         <>
-            {empty ? (
-                <div className={styles.pickerEmpty}>
-                    <span className={styles.dialogHint}>
-                        Votre carnet est vide, et un document a besoin d’un destinataire.
-                    </span>
-                    <Button variant='secondary' icon='add' disabled={disabled} onClick={() => setAdding(true)}>
-                        Ajouter un client
-                    </Button>
-                </div>
-            ) : (
+            <div className={styles.pickerRow}>
                 <SearchSelect
+                    className={styles.pickerSelect}
                     value={value === null ? '' : String(value)}
                     options={(clients ?? []).map((client) => ({
                         value: String(client.id),
@@ -49,6 +40,20 @@ export default function ClientPicker({ clients, value, disabled, onChange }: Cli
                     disabled={disabled}
                     onChange={(next) => onChange(next === '' ? null : Number(next))}
                 />
+                <Button
+                    variant='ghost'
+                    icon='add'
+                    aria-label='Ajouter un client'
+                    title='Ajouter un client : il sera choisi ici une fois créé'
+                    disabled={disabled}
+                    onClick={() => setAdding(true)}
+                />
+            </div>
+
+            {empty && (
+                <span className={styles.dialogHint}>
+                    Votre carnet est vide : ce bouton ajoute votre premier client.
+                </span>
             )}
 
             <ClientDialog

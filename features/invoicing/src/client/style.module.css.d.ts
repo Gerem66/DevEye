@@ -97,7 +97,8 @@ declare const styles: {
     readonly paneHead: string;
     readonly panel: string;
     readonly periodRow: string;
-    readonly pickerEmpty: string;
+    readonly pickerRow: string;
+    readonly pickerSelect: string;
     readonly placeholder: string;
     readonly preview: string;
     readonly previewFrame: string;
