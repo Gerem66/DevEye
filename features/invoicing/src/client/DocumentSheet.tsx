@@ -21,7 +21,8 @@ import type {
     InvoicingLine,
     InvoicingPayment,
     InvoicingQuotaUsage,
-    InvoicingTotals
+    InvoicingTotals,
+    VatRegime
 } from '../contracts/domain';
 import ClientPicker from './ClientPicker';
 import DocumentPreview from './DocumentPreview';
@@ -56,6 +57,8 @@ export interface DocumentSheetProps {
     usage: InvoicingQuotaUsage | null;
     /** Le taux que porte une ligne neuve, tel qu'il est réglé (zéro en franchise). */
     defaultVatBp: number;
+    /** Le régime vivant de l'espace : un brouillon le suit, un document émis garde le sien. */
+    vatRegime: VatRegime;
     /** Ce que le bouton de retour annonce : d'où l'on vient. */
     backLabel: string;
     onBack(): void;
@@ -96,7 +99,15 @@ function issueWording(doc: InvoicingDoc): { title: string; description: string }
     };
 }
 
-export default function DocumentSheet({ id, usage, defaultVatBp, backLabel, onBack, onOpen }: DocumentSheetProps) {
+export default function DocumentSheet({
+    id,
+    usage,
+    defaultVatBp,
+    vatRegime: liveVatRegime,
+    backLabel,
+    onBack,
+    onOpen
+}: DocumentSheetProps) {
     const canWrite = useWorkspacePermissions().canFeature('invoicing', 'write');
     const [doc, setDoc] = useState<InvoicingDoc | null>(null);
     const [lines, setLines] = useState<readonly InvoicingLine[]>([]);
@@ -160,6 +171,20 @@ export default function DocumentSheet({ id, usage, defaultVatBp, backLabel, onBa
         setRevision((count) => count + 1);
         void load();
     }, [docVersion, isDraft, load]);
+
+    /**
+     * Le régime de l'espace a changé sous un brouillon : l'aperçu gardé en cache
+     * porte encore l'ancienne mention, et ses lignes reprennent un autre taux.
+     */
+    const seenRegime = useRef(liveVatRegime);
+    useEffect(() => {
+        if (liveVatRegime === seenRegime.current) return;
+        seenRegime.current = liveVatRegime;
+        if (!isDraft) return;
+        paperCache.current = null;
+        setPaper(null);
+        setRevision((count) => count + 1);
+    }, [liveVatRegime, isDraft]);
 
     /** L'en-tête d'un brouillon part peu après la frappe, comme les lignes. */
     const saveHeader = useCallback((next: InvoicingDoc) => {
@@ -293,7 +318,11 @@ export default function DocumentSheet({ id, usage, defaultVatBp, backLabel, onBa
     const draft = doc.status === 'draft';
     const totals = liveTotals ?? doc.totals;
     const note = deadlineNote(doc.displayStatus, doc.dueOn, doc.validUntil);
-    const withVat = doc.vatRegime === 'standard';
+    // Le régime d'un brouillon est celui de l'espace, comme le calcule le serveur
+    // (`regimeOf`) : passer à la TVA dans les réglages se voit ici sans relire la
+    // fiche, ce qu'on ne peut pas faire tant qu'on y tape.
+    const vatRegime = draft ? liveVatRegime : doc.vatRegime;
+    const withVat = vatRegime === 'standard';
     const wording = issueWording(doc);
 
     const derive = (mode: 'invoice' | 'deposit' | 'credit', percentBp: number, fallback: string) =>
@@ -720,7 +749,7 @@ export default function DocumentSheet({ id, usage, defaultVatBp, backLabel, onBa
                         docId={doc.id}
                         lines={lines}
                         currency={doc.currency}
-                        vatRegime={doc.vatRegime}
+                        vatRegime={vatRegime}
                         defaultVatBp={defaultVatBp}
                         canWrite={canWrite}
                         onSaved={(saved, savedTotals) => {

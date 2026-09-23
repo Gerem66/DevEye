@@ -190,6 +190,21 @@ export default function LineEditor(props: LineEditorProps) {
         [schedule]
     );
 
+    /**
+     * Le régime a changé pendant qu'on édite : les taux affichés ne valent plus
+     * rien, puisqu'une franchise les remet à zéro et qu'en sortir les y laisse.
+     * Toutes les lignes reprennent alors celui d'une ligne neuve, et l'écriture
+     * part comme une frappe.
+     */
+    const seenRegime = useRef(props.vatRegime);
+    useEffect(() => {
+        if (props.vatRegime === seenRegime.current) return;
+        seenRegime.current = props.vatRegime;
+        const vatRateBp = props.vatRegime === 'exempt' ? 0 : defaultVatBp;
+        if (!canWrite || drafts.every((draft) => draft.vatRateBp === vatRateBp)) return;
+        apply(drafts.map((draft) => ({ ...draft, vatRateBp })));
+    }, [props.vatRegime, defaultVatBp, canWrite, drafts, apply]);
+
     const patch = (index: number, change: Partial<Draft>) =>
         apply(drafts.map((draft, position) => (position === index ? { ...draft, ...change } : draft)));
 

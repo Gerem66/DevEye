@@ -52,7 +52,13 @@ export function useSettingsDraft(): SettingsDraft {
             setDraft(res.settings);
             // La devise, le régime de TVA et la numérotation changent ce que
             // chaque écran affiche, jusqu'au symbole de chaque montant.
-            invalidate('invoicing.config', 'invoicing.count', 'invoicing.docList', 'invoicing.doc');
+            invalidate(
+                'invoicing.config',
+                'invoicing.count',
+                'invoicing.docList',
+                'invoicing.doc',
+                'invoicing.dashboard'
+            );
         } catch (e) {
             setError(humanizeError(e, 'Enregistrement impossible.'));
             // Relancé : le bouton n'annonce « Enregistré » que sur un succès.

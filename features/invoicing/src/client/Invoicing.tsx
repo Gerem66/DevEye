@@ -138,6 +138,7 @@ export default function Invoicing() {
                             id={view.id}
                             usage={data.usage}
                             defaultVatBp={data.settings.defaultVatBp}
+                            vatRegime={data.settings.vatRegime}
                             backLabel={LABELS[view.from]}
                             onBack={back(view.from)}
                             onOpen={(id) => setView({ kind: 'document', id, from: view.from })}
