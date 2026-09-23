@@ -1,0 +1,18 @@
+.note {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    margin: 0 0 var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-sm);
+    background: var(--danger-bg);
+    color: var(--danger);
+    font-size: 0.9rem;
+}
+
+/* La phrase garde la rangée tant qu'elle tient, et repousse les gestes à la
+   ligne plutôt que de se comprimer contre eux. */
+.text {
+    flex: 1 1 16rem;
+}

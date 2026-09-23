@@ -86,6 +86,12 @@ export { get as httpGet, httpFetch } from '@/api/http';
 /** Le refus d'un droit dans un panneau : une seule silhouette pour toutes les
  *  fonctionnalités, cadenas compris. */
 export { default as ReadOnlyNotice } from '@/Components/FeatureSettings/ReadOnlyNotice';
+/** Le bandeau d'un refus : la phrase, les gestes de réparation passés en
+ *  enfants, et le signalement quand l'erreur n'est pas de celles qui se
+ *  réparent seules. */
+export { default as ErrorNote, type ErrorNoteInput, type ErrorNoteProps } from '@/Components/ErrorNote';
+/** Ouvrir le formulaire de signalement, amorcé par ce qui a échoué. */
+export { requestOpenReport as openReport } from '@/stores/reportRequest';
 /** Les classes de rangées canoniques des écrans de réglages (channelRow, etc.). */
 export { default as SaveButton } from '@/Components/FeatureSettings/SaveButton';
 export { default as settingsStyles } from '@/Components/FeatureSettings/FeatureSettings.module.css';

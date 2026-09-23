@@ -362,6 +362,8 @@ export default function DocumentSheet({
             setError({
                 message:
                     'Ce devis n’est plus valable assez longtemps : repoussez la date « Valable jusqu’au », votre client doit avoir le temps de répondre.',
+                // Le même refus que le serveur : une saisie à corriger, pas un incident.
+                code: 'validation',
                 section: null,
                 clientFiche: false
             });

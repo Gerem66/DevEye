@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { UserSettingFlag } from '@deveye/types';
 
 import { ws } from '@/api/ws';
 import { useAuth } from '@/auth/AuthProvider';
 import { useFeedbackEnabled } from '@/stores/feedbackEnabled';
+import { onOpenReportRequest } from '@/stores/reportRequest';
 import { FeedbackHint } from './FeedbackHint';
 import { ReportDialog } from './ReportDialog';
 
@@ -27,6 +28,13 @@ export function ReportButton() {
     const enabled = useFeedbackEnabled();
     const { user, updateUser } = useAuth();
     const [open, setOpen] = useState(false);
+    const [context, setContext] = useState<string | null>(null);
+
+    // Le gestionnaire est réenregistré à chaque rendu sans relancer l'effet :
+    // il lit `user` par la référence, et un effet qui dépendrait du compte se
+    // désenregistrerait à chaque changement de réglage.
+    const openRef = useRef<(context: string | null) => void>(() => {});
+    useEffect(() => onOpenReportRequest((from) => openRef.current(from)), []);
 
     if (!enabled) return null;
 
@@ -47,10 +55,12 @@ export function ReportButton() {
         );
     };
 
-    const openDialog = (): void => {
+    const openDialog = (from: string | null = null): void => {
         dismissHint();
+        setContext(from);
         setOpen(true);
     };
+    openRef.current = openDialog;
 
     return (
         <>
@@ -60,7 +70,7 @@ export function ReportButton() {
                     <button
                         type='button'
                         className={`${styles.trigger} ${showHint ? styles.triggerHinted : ''}`}
-                        onClick={openDialog}
+                        onClick={() => openDialog()}
                         title='Signaler un bug ou faire un retour'
                         aria-label='Signaler un bug ou faire un retour'
                     >
@@ -68,7 +78,7 @@ export function ReportButton() {
                     </button>
                 </>
             )}
-            <ReportDialog open={open} onClose={() => setOpen(false)} />
+            <ReportDialog open={open} context={context} onClose={() => setOpen(false)} />
         </>
     );
 }

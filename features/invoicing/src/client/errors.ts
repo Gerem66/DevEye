@@ -8,6 +8,9 @@ import { invoicingErrorDetailsSchema, type InvoicingSettingsSection } from '../c
  */
 export interface ErrorNote {
     message: string;
+    /** Le code du refus, `null` quand l'échec n'en porte pas : il décide si un
+     *  signalement a du sens. */
+    code: string | null;
     /** L'onglet de réglages de la feature qui porte la réponse. */
     section: InvoicingSettingsSection | null;
     /** Ou bien : la réponse est dans la fiche du client de ce document. */
@@ -22,8 +25,10 @@ export interface ErrorNote {
 export function errorNote(e: unknown, fallback: string): ErrorNote {
     const details = (e as { details?: unknown } | null)?.details;
     const parsed = invoicingErrorDetailsSchema.safeParse(details);
+    const code = (e as { code?: unknown } | null)?.code;
     return {
         message: humanizeError(e, fallback),
+        code: typeof code === 'string' ? code : null,
         section: parsed.success ? (parsed.data.settingsSection ?? null) : null,
         clientFiche: parsed.success && parsed.data.clientFiche === true
     };

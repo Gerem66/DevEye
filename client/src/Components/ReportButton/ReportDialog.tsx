@@ -27,9 +27,11 @@ type Outcome = { ok: true } | { ok: false; reason: string };
 export interface ReportDialogProps {
     open: boolean;
     onClose: () => void;
+    /** Ce qui a échoué, quand le formulaire est ouvert depuis un refus. */
+    context?: string | null;
 }
 
-export function ReportDialog({ open, onClose }: ReportDialogProps) {
+export function ReportDialog({ open, onClose, context = null }: ReportDialogProps) {
     const [kind, setKind] = useState<FeedbackKind>('general');
     const [message, setMessage] = useState('');
     const [busy, setBusy] = useState(false);
@@ -44,7 +46,14 @@ export function ReportDialog({ open, onClose }: ReportDialogProps) {
         if (!open) return;
         setSnapshot(buildSnapshot());
         setDetailOpen(false);
-    }, [open]);
+        // Ouvert depuis un refus : le message est amorcé par ce qui a échoué, et
+        // le rapport technique suit, faute de quoi le signalement arriverait
+        // sans rien de ce que l'utilisateur venait de voir.
+        if (context !== null) {
+            setKind('bug');
+            setMessage(`Erreur rencontrée : « ${context} »\n\n`);
+        }
+    }, [open, context]);
 
     const detail = useMemo(() => (snapshot ? JSON.stringify(snapshot, null, 2) : ''), [snapshot]);
     const weight = useMemo(() => (snapshot ? formatBytesFr(snapshotBytes(snapshot)) : ''), [snapshot]);

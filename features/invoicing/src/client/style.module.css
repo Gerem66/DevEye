@@ -36,10 +36,6 @@
     font-size: 0.9rem;
 }
 
-.errorText {
-    flex: 1 1 16rem;
-}
-
 /* Un état vide qui apprend quelque chose plutôt qu'une ligne grise. */
 .empty {
     display: flex;

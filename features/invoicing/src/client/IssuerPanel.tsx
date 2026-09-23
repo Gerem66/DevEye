@@ -1,16 +1,19 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ACCEPTED_TYPES,
     Button,
     fileToSquareDataUrl,
     humanizeError,
+    moduleClientProvider,
+    openFeature,
     ReadOnlyNotice,
     SaveButton,
     SelectInput,
     settingsStyles as shell,
     TextInput
 } from 'deveye-sdk-client';
-import type { SettingsPanelProps } from '@deveye/types/sdk/client';
+import { MAIL_CLIENT_PROVIDER } from '@deveye/types/sdk';
+import type { MailClientProvider, SettingsPanelProps } from '@deveye/types/sdk/client';
 
 import type { InvoicingIssuer } from '../contracts/domain';
 import { api } from './api';
@@ -62,6 +65,11 @@ export default function IssuerPanel({ canWrite }: SettingsPanelProps) {
     const { draft, error, patch, save, busy } = useSettingsDraft();
     const [logoError, setLogoError] = useState<string | null>(null);
     const [senders, setSenders] = useState<{ id: number; label: string; address: string }[] | null>(null);
+    // Sans module Mail installé, `undefined` : les deux gestes se désactivent
+    // plutôt que de disparaître, la rangée garde la même forme partout.
+    const mail = moduleClientProvider<MailClientProvider>(MAIL_CLIENT_PROVIDER);
+    const [adding, setAdding] = useState(false);
+    const known = useRef<Set<number> | null>(null);
 
     // Les comptes mail de l'espace. Sans module Mail installé, la commande
     // échoue et l'écran le dit plutôt que de promettre un envoi.
@@ -76,6 +84,30 @@ export default function IssuerPanel({ canWrite }: SettingsPanelProps) {
     useEffect(() => {
         void loadSenders();
     }, [loadSenders]);
+
+    const openAdd = (): void => {
+        known.current = new Set((senders ?? []).map((sender) => sender.id));
+        setAdding(true);
+    };
+
+    /**
+     * Le compte qui vient d'apparaître devient l'expéditeur, sans le faire
+     * choisir une seconde fois. Une boîte créée à l'étage gardé n'expédie pas :
+     * elle n'entre pas dans la liste, et rien n'est adopté.
+     */
+    const onAdded = useCallback(async () => {
+        setAdding(false);
+        const before = known.current;
+        known.current = null;
+        try {
+            const list = (await api.send('invoicing.mailAccounts', {})).senders;
+            setSenders(list);
+            const fresh = list.find((sender) => before === null || !before.has(sender.id));
+            if (fresh !== undefined) patch({ mailSenderId: fresh.id });
+        } catch {
+            setSenders([]);
+        }
+    }, [patch]);
 
     if (draft === null) {
         return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
@@ -165,25 +197,49 @@ export default function IssuerPanel({ canWrite }: SettingsPanelProps) {
 
             <label className={shell.field}>
                 <span className={shell.fieldLabel}>Compte qui expédie vos documents</span>
-                <SelectInput
-                    value={draft.mailSenderId === null ? '' : String(draft.mailSenderId)}
-                    disabled={!canWrite || senders === null || senders.length === 0}
-                    onChange={(e) => patch({ mailSenderId: e.target.value === '' ? null : Number(e.target.value) })}
-                >
-                    <option value=''>Aucun</option>
-                    {(senders ?? []).map((sender) => (
-                        <option key={sender.id} value={String(sender.id)}>
-                            {sender.label}
-                            {sender.address.length > 0 && ` · ${sender.address}`}
-                        </option>
-                    ))}
-                </SelectInput>
+                <div className={shell.fieldWithAction}>
+                    <SelectInput
+                        value={draft.mailSenderId === null ? '' : String(draft.mailSenderId)}
+                        disabled={!canWrite || senders === null || senders.length === 0}
+                        onChange={(e) => patch({ mailSenderId: e.target.value === '' ? null : Number(e.target.value) })}
+                    >
+                        <option value=''>Aucun</option>
+                        {(senders ?? []).map((sender) => (
+                            <option key={sender.id} value={String(sender.id)}>
+                                {sender.label}
+                                {sender.address.length > 0 && ` · ${sender.address}`}
+                            </option>
+                        ))}
+                    </SelectInput>
+                    <Button
+                        variant='ghost'
+                        icon='mail'
+                        aria-label='Ouvrir vos comptes mail'
+                        title='Ouvrir la fonctionnalité Mail : lire vos boîtes, les modifier, en ajouter'
+                        disabled={mail === undefined}
+                        onClick={() => openFeature('mail')}
+                    />
+                    <Button
+                        variant='ghost'
+                        icon='add'
+                        aria-label='Ajouter un compte mail'
+                        title='Ajouter un compte mail : il sera choisi ici une fois créé'
+                        disabled={!canWrite || mail === undefined}
+                        onClick={openAdd}
+                    />
+                </div>
                 <span className={shell.fieldHint}>
-                    {senders !== null && senders.length === 0
-                        ? 'Aucun compte mail n’est prêt dans cet espace : vos documents se téléchargent et s’envoient à la main.'
-                        : 'Vos devis et factures partiront depuis ce compte.'}
+                    {mail === undefined
+                        ? 'Aucun module Mail n’est installé sur ce DevEye : vos documents se téléchargent et s’envoient à la main.'
+                        : senders !== null && senders.length === 0
+                          ? 'Aucun compte mail n’est prêt dans cet espace : le « + » ci-contre en ajoute un.'
+                          : 'Vos devis et factures partiront depuis ce compte.'}
                 </span>
             </label>
+
+            {mail !== undefined && (
+                <mail.AccountDialog open={adding} onClose={() => setAdding(false)} onSaved={() => void onAdded()} />
+            )}
 
             {canWrite ? (
                 <SaveButton onSave={save} disabled={busy} />
