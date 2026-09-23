@@ -52,9 +52,13 @@ export function scopeDescription(scope: SettingsScope): string {
     if (scope.kind === 'feature') {
         // Le libellé tel quel : « Uptime », « OSINT » sont des noms propres, en
         // minuscules ils se lisent comme une faute.
-        return `Réglages communs à ${feature.label} — ils s’appliquent à tout ce que la fonctionnalité contient.`;
+        return feature.hasItems
+            ? `Réglages généraux de ${feature.label} : ils valent pour tout ce qu’elle contient, sauf là où un élément règle le sien.`
+            : `Réglages généraux de ${feature.label}.`;
     }
-    return `Réglages propres à ${itemNounForms(scope.feature).dem}. Ce qui n’est pas réglé ici suit ${feature.label}.`;
+    // Le même mot, « réglages généraux », aux deux échelles : c'est lui qui rend
+    // lisible qu'un élément hérite de sa fonctionnalité et peut s'en écarter.
+    return `Réglages propres à ${itemNounForms(scope.feature).dem}. Ce qui n’est pas réglé ici suit les réglages généraux de ${feature.label}.`;
 }
 
 /**

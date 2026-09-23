@@ -13,6 +13,7 @@ import NotificationsSection from './sections/NotificationsSection';
 import ItemPermissionsSection from './sections/ItemPermissionsSection';
 import ProjectsSection from './sections/ProjectsSection';
 import SharingSection from './sections/SharingSection';
+import { flashKey, onFlash } from './flash';
 import { SettingsFooterContext } from './footer';
 import SideNav, { type SideNavItem } from './SideNav';
 import { isModuleShareWired, moduleClient, moduleManifest } from '@/sdk/registry';
@@ -186,9 +187,14 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection, on
      *  s'ouvre. Nommer ici une section en dur la ferait gagner partout où elle
      *  existe, quelle que soit sa place dans la nav. */
     const [active, setActive] = useState<SettingsSectionId | undefined>(initialSection);
-    /** « Gérer les canaux » d'un élément ouvre les réglages de sa fonctionnalité
-     *  par-dessus ; la coquille d'une fonctionnalité ne propose pas ce saut. */
-    const [manageChannels, setManageChannels] = useState(false);
+    /**
+     * Les réglages généraux, empilés par-dessus ceux d'un élément : ouverts par
+     * le fil d'Ariane, ou par « Gérer les canaux » sur leur onglet. La coquille
+     * d'une fonctionnalité ne propose pas ce saut, elle est déjà tout en haut.
+     */
+    const [general, setGeneral] = useState<{ section?: SettingsSectionId } | null>(null);
+    const generalSections = useSettingsSections({ kind: 'feature', feature: scope.feature });
+    const canOpenGeneral = scope.kind === 'item' && generalSections.length > 0;
     const current = active && sections.some((s) => s.id === active) ? active : sections[0]?.id;
     /**
      * Le pied du dialogue, offert aux panneaux par contexte : le bouton qui
@@ -230,6 +236,30 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection, on
             <Dialog
                 open={open && sections.length > 0}
                 onClose={onClose}
+                // Le fil d'Ariane : où l'on est, et d'un clic les réglages
+                // généraux qu'un élément surcharge.
+                kicker={
+                    <nav className={styles.trail} aria-label='Emplacement'>
+                        <span>Réglages</span>
+                        {scope.kind === 'item' && (
+                            <>
+                                <span aria-hidden='true'>·</span>
+                                {canOpenGeneral ? (
+                                    <button
+                                        type='button'
+                                        className={styles.trailLink}
+                                        title='Ouvrir les réglages généraux'
+                                        onClick={() => setGeneral({})}
+                                    >
+                                        {featureDescriptor(scope.feature).label}
+                                    </button>
+                                ) : (
+                                    <span>{featureDescriptor(scope.feature).label}</span>
+                                )}
+                            </>
+                        )}
+                    </nav>
+                }
                 title={scopeTitle(scope)}
                 description={scopeDescription(scope)}
                 width={880}
@@ -253,7 +283,9 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection, on
                             {current === 'notifications' && (
                                 <NotificationsSection
                                     scope={scope}
-                                    onManageChannels={scope.kind === 'item' ? () => setManageChannels(true) : undefined}
+                                    onManageChannels={
+                                        canOpenGeneral ? () => setGeneral({ section: 'notifications' }) : undefined
+                                    }
                                 />
                             )}
                             {current === 'permissions' && scope.kind === 'item' && (
@@ -269,14 +301,14 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection, on
                     </div>
                 </SettingsFooterContext.Provider>
             </Dialog>
-            {/* Les réglages de la fonctionnalité empilés par-dessus ceux de
-                l'élément ; la pile de couches route Échap vers le plus haut. */}
+            {/* Les réglages généraux empilés par-dessus ceux de l'élément ; la
+                pile de couches route Échap vers le plus haut. */}
             {scope.kind === 'item' && (
                 <FeatureSettingsDialog
-                    open={manageChannels}
-                    onClose={() => setManageChannels(false)}
+                    open={general !== null}
+                    onClose={() => setGeneral(null)}
                     scope={{ kind: 'feature', feature: scope.feature }}
-                    initialSection='notifications'
+                    initialSection={general?.section}
                 />
             )}
         </>
@@ -355,6 +387,30 @@ export function FeatureSettingsButton({
     // donc sur le bouton, et non sur ce que la coquille recouvre.
     const outline = useLiveOutline('settings', liveSettingsValue(scope));
 
+    /* Une action prise hors des réglages montre ce bouton : on y apprend où vit
+       ce qui vient de changer. La clé en chaîne, jamais l'objet `scope`. */
+    const myFlashKey = flashKey(
+        scope.kind === 'item'
+            ? { kind: 'item', feature: scope.feature, itemId: scope.itemId }
+            : { kind: 'feature', feature: scope.feature }
+    );
+    const [flashing, setFlashing] = useState(false);
+    useEffect(() => {
+        let timer: number | undefined;
+        const stop = onFlash((key) => {
+            if (key !== myFlashKey) return;
+            window.clearTimeout(timer);
+            // Retomber a faux d'abord relance l'animation si elle jouait deja.
+            setFlashing(false);
+            window.requestAnimationFrame(() => setFlashing(true));
+            timer = window.setTimeout(() => setFlashing(false), 1600);
+        });
+        return () => {
+            stop();
+            window.clearTimeout(timer);
+        };
+    }, [myFlashKey]);
+
     if (sections.length === 0) return null;
 
     // Une ouverture manuelle repart de la section du bouton : l'onglet d'une
@@ -374,7 +430,13 @@ export function FeatureSettingsButton({
                     {label}
                 </button>
             ) : (
-                <Button variant={variant} icon='settings' {...outline} onClick={openSettings}>
+                <Button
+                    variant={variant}
+                    icon='settings'
+                    {...outline}
+                    className={flashing ? styles.flash : undefined}
+                    onClick={openSettings}
+                >
                     {label}
                 </Button>
             )}

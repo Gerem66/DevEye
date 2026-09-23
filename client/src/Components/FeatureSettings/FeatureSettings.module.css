@@ -566,3 +566,56 @@
        faire sauter le dialogue qui le porte. */
     min-height: 220px;
 }
+
+/* La mise en avant d'un bouton de réglages après une action prise ailleurs
+   (`flashSettings`) : deux pulsations d'un halo d'accent, puis rien. */
+.flash {
+    animation: settingsFlash 0.8s ease-out 2;
+}
+
+@keyframes settingsFlash {
+    0% {
+        box-shadow: 0 0 0 0 var(--accent-glow);
+    }
+    60% {
+        box-shadow: 0 0 0 6px var(--accent-glow);
+    }
+    100% {
+        box-shadow: 0 0 0 10px transparent;
+    }
+}
+
+/* Sans mouvement : un contour fixe, le temps de la mise en avant. */
+@media (prefers-reduced-motion: reduce) {
+    .flash {
+        animation: none;
+        box-shadow: 0 0 0 2px var(--accent);
+    }
+}
+
+/* Le fil d'Ariane au-dessus du titre d'un dialogue de réglages. */
+.trail {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0 0 2px;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.trailLink {
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+}
+
+.trailLink:hover,
+.trailLink:focus-visible {
+    color: var(--accent);
+}

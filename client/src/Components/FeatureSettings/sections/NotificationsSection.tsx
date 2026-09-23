@@ -53,7 +53,13 @@ const KIND_ICON: Record<NotificationChannelKind, string> = {
     discord: 'users'
 };
 
-const EMPTY_DRAFT: NotificationChannelInput = { kind: 'discord', label: '', target: '', mailAccountId: null };
+/**
+ * Le brouillon d'un canal neuf. L'e-mail d'abord : c'est le canal que la
+ * plupart des gens attendent. Sans module Mail pour l'expédier, Discord.
+ */
+function emptyDraft(mailAvailable: boolean): NotificationChannelInput {
+    return { kind: mailAvailable ? 'email' : 'discord', label: '', target: '', mailAccountId: null };
+}
 
 /** Un expéditeur prêt, tel que le module Mail le rend : ouvert et actif, déjà filtré. */
 type MailSender = Awaited<ReturnType<MailClientProvider['listSenders']>>[number];
@@ -173,11 +179,27 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
         }, 'Enregistrement impossible.');
     };
 
+    const startAdd = (): void => {
+        setEditing(null);
+        setDraft(emptyDraft(mail !== undefined));
+    };
+
     const saveDraft = (): void => {
         if (!draft || !draft.label.trim()) return;
         void run(async () => {
-            if (editing === null) await ws.send('notify.channelAdd', { ...draft, feature });
-            else await ws.send('notify.channelUpdate', { ...draft, id: editing, enabled: true });
+            if (editing === null) {
+                const created = await ws.send('notify.channelAdd', { ...draft, feature });
+                /* Créé depuis un élément, le canal est là pour lui : il part coché,
+                   sans quoi l'utilisateur croit être prévenu et ne l'est pas. */
+                if (showSelection && canRoute) {
+                    const next = [...selected, created.channel.id];
+                    setSelected(next);
+                    await ws.send('notify.routeSet', { feature, itemId, channelIds: next });
+                    invalidate('notify.routeGet');
+                }
+            } else {
+                await ws.send('notify.channelUpdate', { ...draft, id: editing, enabled: true });
+            }
             setDraft(null);
             setEditing(null);
             invalidate('notify.channelList');
@@ -273,7 +295,7 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
 
     return (
         <div className={styles.section}>
-            <p className={styles.sectionHint}>{WHEN[feature]}</p>
+            {descriptor.notifications && <p className={styles.sectionHint}>{descriptor.notifications.hint}</p>}
 
             {/* À cette échelle on déclare les sources ; le choix se fait sur
                 chaque élément, et le dire évite de chercher des cases ici. */}
@@ -299,23 +321,15 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                     // sans ajouter).
                     <div className={styles.emptyRow}>
                         <span>
-                            {`Aucun canal pour ${descriptor.label}.`}
-                            {onManageChannels
-                                ? ' Le « + » ouvre les réglages de la fonctionnalité, où ils se déclarent.'
-                                : canManage
-                                  ? ' Ajoutez-en un ci-dessous : il recevra ses alertes.'
-                                  : ' Demandez à un gestionnaire de l’espace d’en déclarer un.'}
+                            {`Aucun canal pour ${descriptor.label} : rien ne vous préviendra.`}
+                            {canManage && managedHere
+                                ? ' Ajoutez-en un : il sera coché pour vous.'
+                                : ' Demandez à un gestionnaire de l’espace d’en déclarer un.'}
                         </span>
-                        {onManageChannels && (
-                            <button
-                                type='button'
-                                className={styles.rowAction}
-                                title='Ouvrir les réglages de la fonctionnalité, où les canaux se déclarent'
-                                aria-label='Déclarer un canal dans les réglages de la fonctionnalité'
-                                onClick={onManageChannels}
-                            >
-                                <span className='icon icon-plus' />
-                            </button>
+                        {canManage && managedHere && (
+                            <Button variant='secondary' icon='plus' disabled={busy} onClick={startAdd}>
+                                Ajouter un canal
+                            </Button>
                         )}
                     </div>
                 )}
@@ -410,7 +424,7 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                         <span className={styles.channelText}>
                             <span className={styles.channelLabel}>{channel.label}</span>
                             <span className={styles.channelMeta}>
-                                Réglé dans l’espace d’origine — vous ne pouvez ni le lire ni le modifier d’ici.
+                                Réglé dans l’espace d’origine : vous ne pouvez ni le lire ni le modifier d’ici.
                             </span>
                         </span>
                     </div>
@@ -442,17 +456,9 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                 </p>
             )}
 
-            {scope.kind === 'feature' && canManage && (
+            {scope.kind === 'feature' && canManage && channels.length > 0 && (
                 <div className={styles.sectionActions}>
-                    <Button
-                        variant='secondary'
-                        icon='plus'
-                        disabled={busy}
-                        onClick={() => {
-                            setEditing(null);
-                            setDraft(EMPTY_DRAFT);
-                        }}
-                    >
+                    <Button variant='secondary' icon='plus' disabled={busy} onClick={startAdd}>
                         Ajouter un canal
                     </Button>
                     {/* « Tester cet envoi » éprouve une **sélection** : elle
@@ -471,7 +477,12 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                 les canaux se gèrent. */}
             {scope.kind === 'item' && managedHere && (
                 <div className={styles.sectionActions}>
-                    {canRoute && (
+                    {canManage && channels.length > 0 && (
+                        <Button variant='secondary' icon='plus' disabled={busy} onClick={startAdd}>
+                            Ajouter un canal
+                        </Button>
+                    )}
+                    {canRoute && channels.length > 0 && (
                         <Button variant='ghost' icon='play' disabled={busy} onClick={testRoute}>
                             Tester cet envoi
                         </Button>
@@ -524,11 +535,11 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                                     setDraft({ ...draft, kind: e.target.value as NotificationChannelKind })
                                 }
                             >
-                                <option value='discord'>Discord — mise en page riche, suivi vivant</option>
-                                <option value='webhook'>Webhook — POST JSON générique</option>
                                 {/* Un canal e-mail n'existe qu'avec le module Mail ; un
                                     canal déjà déclaré garde son type affiché. */}
                                 {(mail || draft.kind === 'email') && <option value='email'>E-mail</option>}
+                                <option value='discord'>Discord : mise en page riche, suivi vivant</option>
+                                <option value='webhook'>Webhook : POST JSON générique</option>
                             </SelectInput>
                             <span className={styles.fieldHint}>{KIND_HINT[draft.kind]}</span>
                             {!mail && (
@@ -616,7 +627,7 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                                     !looksLikeDiscord(draft.target) && (
                                         <span className={styles.warning}>
                                             Cette URL ne ressemble pas à un webhook Discord. Les embeds y partiront
-                                            quand même, et un point d’entrée qui ne les attend pas les refusera —
+                                            quand même, et un point d’entrée qui ne les attend pas les refusera :
                                             choisissez « Webhook » pour lui envoyer du texte.
                                         </span>
                                     )}
@@ -660,19 +671,4 @@ const KIND_HINT: Record<NotificationChannelKind, string> = {
         'Le message lisible est répété dans « content » (Discord) et « text » (Slack), les champs structurés suivent pour un point d’entrée maison.',
     discord:
         'Mise en page riche (couleurs, champs), et pour le déploiement un seul message qui se met à jour du début à la fin.'
-};
-
-/** Quand cette fonctionnalité écrit — la phrase qui évite de régler la mauvaise. */
-const WHEN: Record<NotificationFeature, string> = {
-    uptime: 'Envoyées à chaque bascule d’un service surveillé : hors ligne (avec l’heure et l’erreur) puis retour en ligne (avec la durée de la panne).',
-    sentinel:
-        'Envoyées à chaque nouveau constat de la Sentinelle : une machine suspecte, une dérive de configuration, une règle enfreinte.',
-    database:
-        'Envoyées au franchissement d’un seuil d’alerte d’une base, dans les deux sens — déclenchement et retour à la normale.',
-    deploy: 'Envoyées à l’atterrissage d’un déploiement, échec comme succès, y compris ceux lancés depuis Dokploy, une CI ou un push git.',
-    backup: 'Envoyées à l’échec d’une sauvegarde. Les réussites ne disent rien, sinon l’échec se perdrait dans le flot des succès.',
-    convert:
-        'Envoyées à la fin d’une conversion assez longue pour qu’on ait quitté l’écran. La durée à partir de laquelle prévenir se règle dans l’onglet Général.',
-    invoicing:
-        'Envoyées quand une facture dépasse son échéance sans être soldée, et quand un client accepte ou refuse un devis depuis le lien que vous lui avez envoyé.'
 };

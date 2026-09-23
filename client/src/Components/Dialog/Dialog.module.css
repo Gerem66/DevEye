@@ -112,6 +112,10 @@
     width: 16px;
 }
 
+.kicker {
+    margin: 0 var(--space-xl) 2px 0;
+}
+
 .title {
     font-size: 1.25rem;
     font-weight: 700;

@@ -47,6 +47,7 @@ export { openInfo } from '@/Components/InfoPopup';
 export { default as Term } from '@/Components/Term';
 export type { GlossaryTermId } from '@/Components/Term';
 export { FeatureSettingsButton } from '@/Components/FeatureSettings';
+export { flashSettings } from '@/Components/FeatureSettings/flash';
 // La liste des fournisseurs d'une feature et la clé qu'ils demandent : l'état et
 // le geste sur la même rangée, la saisie dans un dialogue.
 export { ProviderKeys } from '@/Components/FeatureSettings/sections/ProviderKeys';

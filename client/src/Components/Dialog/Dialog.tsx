@@ -15,6 +15,11 @@ export interface DialogProps {
     onClose: () => void;
     /** Heading shown at the top. */
     title?: string;
+    /**
+     * A small line above the title: where this dialog sits (the settings
+     * trail, « Réglages · Rendez-vous »). The title stays the last step.
+     */
+    kicker?: ReactNode;
     /** Optional sub-text under the title. */
     description?: ReactNode;
     /** Dialog body. */
@@ -108,6 +113,7 @@ export default function Dialog({
     open,
     onClose,
     title,
+    kicker,
     description,
     children,
     footer,
@@ -236,6 +242,7 @@ export default function Dialog({
                                 </button>
                             )}
                         </div>
+                        {kicker && <div className={styles.kicker}>{kicker}</div>}
                         {title && <h3 className={styles.title}>{title}</h3>}
                         {description && <p className={styles.description}>{description}</p>}
                         <DialogCloseContext.Provider value={attemptClose}>
