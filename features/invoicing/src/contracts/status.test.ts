@@ -13,6 +13,7 @@ function doc(over: Partial<StatusInput> = {}): StatusInput {
         validUntil: null,
         grossCents: 120_000,
         settledCents: 0,
+        sentAt: null,
         ...over
     };
 }
@@ -67,13 +68,21 @@ describe('effectiveStatus, un devis', () => {
     const quote = (over: Partial<StatusInput> = {}) =>
         doc({ kind: 'quote', status: 'sent', dueOn: null, validUntil: '2026-10-22', ...over });
 
-    it('est envoyé tant qu’il est valable', () => {
-        assert.equal(effectiveStatus(quote(), TODAY), 'sent');
+    it('est émis tant que rien n’est parti par mail', () => {
+        assert.equal(effectiveStatus(quote(), TODAY), 'issued');
+    });
+
+    it('n’est envoyé qu’une fois le mail parti', () => {
+        assert.equal(effectiveStatus(quote({ sentAt: 1_700_000_000 }), TODAY), 'sent');
     });
 
     it('expire le lendemain de sa validité', () => {
-        assert.equal(effectiveStatus(quote({ validUntil: TODAY }), TODAY), 'sent');
+        assert.equal(effectiveStatus(quote({ validUntil: TODAY }), TODAY), 'issued');
         assert.equal(effectiveStatus(quote({ validUntil: '2026-09-21' }), TODAY), 'expired');
+    });
+
+    it('expiré l’emporte sur envoyé', () => {
+        assert.equal(effectiveStatus(quote({ validUntil: '2026-09-21', sentAt: 1_700_000_000 }), TODAY), 'expired');
     });
 
     it('accepté ou refusé l’emporte sur l’expiration', () => {
@@ -82,7 +91,7 @@ describe('effectiveStatus, un devis', () => {
     });
 
     it('ne se dit jamais payé, même avec un total', () => {
-        assert.equal(effectiveStatus(quote({ settledCents: 120_000 }), TODAY), 'sent');
+        assert.equal(effectiveStatus(quote({ settledCents: 120_000 }), TODAY), 'issued');
     });
 });
 

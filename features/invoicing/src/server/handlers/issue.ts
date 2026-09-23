@@ -1,7 +1,8 @@
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
 import { invoicingDocIssue, invoicingDocStatus } from '../../contracts/commands';
-import { addDays, dueDateOf, startOfMonth } from '../../contracts/calendar';
+import { addDays, dueDateOf, leavesAnswerTime, startOfMonth } from '../../contracts/calendar';
+import { formatDate } from '../../contracts/display';
 import { documentTotals } from '../../contracts/money';
 import {
     invoicingClientContentSchema,
@@ -106,6 +107,35 @@ export const docIssue = defineSdkFeature({
         }
 
         const kind = row.kind as DocumentKind;
+
+        const termsDays = clientRow.payment_terms_days ?? settings.paymentTermsDays;
+        const dueOn = kind === 'quote' ? null : (row.due_on ?? dueDateOf(issuedOn, termsDays));
+        const validUntil =
+            kind === 'quote' ? (row.valid_until ?? dueDateOf(issuedOn, settings.quoteValidityDays)) : null;
+
+        // Avant la réservation du rang : un brouillon numéroté ne se supprime plus.
+        // La règle porte sur la date résolue, donc couvre aussi celle qui vient
+        // des réglages quand l'émission est antidatée.
+        if (kind === 'quote' && validUntil !== null && !leavesAnswerTime(validUntil, day)) {
+            if (row.valid_until !== null) {
+                throw new FeatureError(
+                    'validation',
+                    `Ce devis n’est valable que jusqu’au ${formatDate(validUntil)} : repoussez la date « Valable jusqu’au », votre client doit avoir le temps de répondre.`
+                );
+            }
+            throw settingsError(
+                'validation',
+                `Avec une validité de ${settings.quoteValidityDays} jours, ce devis naîtrait déjà expiré : allongez ce délai, ou fixez vous-même sa date « Valable jusqu’au ».`,
+                'wording'
+            );
+        }
+        if (dueOn !== null && dueOn < issuedOn) {
+            throw new FeatureError(
+                'validation',
+                'L’échéance de ce document précède sa date d’émission : rien ne peut être à payer avant d’être émis.'
+            );
+        }
+
         // Le quota compte les pièces de CE type émises ce mois-ci sur tous les
         // espaces du propriétaire, et il est demandé AVANT la réservation du
         // rang : un refus ne doit pas consommer de numéro. Un avoir n'est borné
@@ -129,11 +159,6 @@ export const docIssue = defineSdkFeature({
                 `Le dernier document de cette suite est daté du ${last} : une date antérieure ouvrirait une suite incohérente.`
             );
         }
-
-        const termsDays = clientRow.payment_terms_days ?? settings.paymentTermsDays;
-        const dueOn = kind === 'quote' ? null : (row.due_on ?? dueDateOf(issuedOn, termsDays));
-        const validUntil =
-            kind === 'quote' ? (row.valid_until ?? dueDateOf(issuedOn, settings.quoteValidityDays)) : null;
 
         const at = now();
         const issued = await ctx.repo.issueDoc(row.id, ctx.workspaceId, {

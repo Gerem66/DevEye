@@ -3,10 +3,10 @@ import type { DocumentKind, DocumentStatus } from './domain';
 
 /**
  * Le statut **affiché**, qui n'est pas celui qui est stocké. « En retard »,
- * « payée » et « expiré » sont des fonctions des dates, des sommes et du jour
- * courant : les stocker demanderait une tâche de fond pour faire passer minuit,
- * et une facture réglée hier resterait en retard jusqu'à ce que quelqu'un
- * repasse derrière.
+ * « payée », « expiré » et « envoyé » sont des fonctions des dates, des sommes,
+ * du jour courant et de l'envoi : les stocker demanderait une tâche de fond pour
+ * faire passer minuit, et une facture réglée hier resterait en retard jusqu'à ce
+ * que quelqu'un repasse derrière.
  *
  * Cette fonction est partagée par le client et le serveur, et le dépôt écrit le
  * même prédicat en SQL pour filtrer « en retard » : deux règles divergentes
@@ -24,11 +24,14 @@ export interface StatusInput {
     grossCents: number | null;
     /** Règlements, avoirs et acomptes déduits, additionnés. */
     settledCents: number;
+    /** Quand le document est parti par mail depuis DevEye. Nul s'il n'est pas parti. */
+    sentAt: number | null;
 }
 
 /**
  * Ordre de préséance : annulé, puis payé, puis en retard, puis payé en partie,
- * puis expiré, puis le statut stocké.
+ * puis expiré, puis le statut stocké. L'expiration l'emporte sur l'envoi : un
+ * devis périmé se dit expiré, qu'il soit parti ou non.
  */
 export function effectiveStatus(doc: StatusInput, today: string): DisplayStatus {
     if (doc.status === 'cancelled') return 'cancelled';
@@ -36,7 +39,9 @@ export function effectiveStatus(doc: StatusInput, today: string): DisplayStatus 
 
     if (doc.kind === 'quote') {
         if (doc.status === 'accepted' || doc.status === 'declined') return doc.status;
-        return isExpired(doc.validUntil, today) ? 'expired' : 'sent';
+        if (isExpired(doc.validUntil, today)) return 'expired';
+        // Émis n'est pas envoyé : le seul témoin d'un envoi est `sentAt`.
+        return doc.sentAt === null ? 'issued' : 'sent';
     }
 
     // Un avoir ne s'encaisse pas : il éteint une créance ailleurs.

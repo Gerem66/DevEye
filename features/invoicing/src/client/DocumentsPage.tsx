@@ -26,7 +26,7 @@ type DerivedFilter = 'overdue' | 'unpaid' | 'expired';
 const STATES: { value: string; label: string; status: DocumentStatus | null; derived: DerivedFilter | null }[] = [
     { value: 'all', label: 'Tous les états', status: null, derived: null },
     { value: 'draft', label: 'Brouillons', status: 'draft', derived: null },
-    { value: 'sent', label: 'Envoyés', status: 'sent', derived: null },
+    { value: 'sent', label: 'Devis émis', status: 'sent', derived: null },
     { value: 'accepted', label: 'Devis acceptés', status: 'accepted', derived: null },
     { value: 'declined', label: 'Devis refusés', status: 'declined', derived: null },
     { value: 'expired', label: 'Devis expirés', status: null, derived: 'expired' },

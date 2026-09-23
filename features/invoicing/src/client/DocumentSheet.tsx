@@ -16,6 +16,7 @@ import {
     type ConfirmRequest
 } from 'deveye-sdk-client';
 
+import { addDays, leavesAnswerTime } from '../contracts/calendar';
 import type {
     InvoicingDoc,
     InvoicingLine,
@@ -35,7 +36,16 @@ import QuotaNote from './QuotaNote';
 import Totals from './Totals';
 import { api } from './api';
 import { errorNote, type ErrorNote as Note } from './errors';
-import { deadlineNote, formatDate, formatMoment, formatMoney, kindLabel, STATUS_TONE, statusLabel } from './format';
+import {
+    deadlineNote,
+    formatDate,
+    formatMoment,
+    formatMoney,
+    kindLabel,
+    STATUS_TONE,
+    statusLabel,
+    todayIso
+} from './format';
 import styles from './style.module.css';
 
 /**
@@ -317,7 +327,7 @@ export default function DocumentSheet({
     const opened = doc;
     const draft = doc.status === 'draft';
     const totals = liveTotals ?? doc.totals;
-    const note = deadlineNote(doc.displayStatus, doc.dueOn, doc.validUntil);
+    const note = deadlineNote(doc.kind, doc.displayStatus, doc.dueOn, doc.validUntil);
     // Le régime d'un brouillon est celui de l'espace, comme le calcule le serveur
     // (`regimeOf`) : passer à la TVA dans les réglages se voit ici sans relire la
     // fiche, ce qu'on ne peut pas faire tant qu'on y tape.
@@ -338,7 +348,25 @@ export default function DocumentSheet({
         void derive('deposit', Math.round(percent * 100), 'L’acompte n’a pas pu être préparé.');
     };
 
-    const issue = () =>
+    // Le serveur refuse aussi, mais dire non avant la popup vaut mieux qu'un
+    // bouton « Émettre » qui échoue une fois la confirmation donnée. Un jour de
+    // marge : le navigateur n'est pas dans le fuseau de l'espace, et cet écran ne
+    // doit jamais bloquer ce que le serveur aurait accepté.
+    const issue = () => {
+        const lenientToday = addDays(todayIso(), -1);
+        if (
+            opened.kind === 'quote' &&
+            opened.validUntil !== null &&
+            !leavesAnswerTime(opened.validUntil, lenientToday)
+        ) {
+            setError({
+                message:
+                    'Ce devis n’est plus valable assez longtemps : repoussez la date « Valable jusqu’au », votre client doit avoir le temps de répondre.',
+                section: null,
+                clientFiche: false
+            });
+            return;
+        }
         setConfirm({
             ...wording,
             confirmLabel: 'Émettre',
@@ -349,6 +377,7 @@ export default function DocumentSheet({
                     'Ce document n’a pas pu être émis.'
                 )
         });
+    };
 
     /**
      * Le geste principal, un seul, celui qui fait avancer le document : émettre
@@ -498,7 +527,9 @@ export default function DocumentSheet({
                             <p className={styles.deliveryNote}>
                                 Ce lien ouvre le document sans compte ni installation.
                                 {quote && !answered && ' Votre client y répond d’un clic, et sa réponse arrive ici.'}
-                                {doc.sentAt !== null && ` Envoyé par mail le ${formatMoment(doc.sentAt)}.`}
+                                {doc.sentAt === null
+                                    ? ' Vous ne l’avez pas encore envoyé par mail depuis DevEye.'
+                                    : ` Envoyé par mail le ${formatMoment(doc.sentAt)}.`}
                             </p>
                         </>
                     )}
@@ -687,6 +718,7 @@ export default function DocumentSheet({
                             <TextInput
                                 type='date'
                                 value={(doc.kind === 'quote' ? doc.validUntil : doc.dueOn) ?? ''}
+                                min={doc.kind === 'quote' ? addDays(todayIso(), 1) : undefined}
                                 disabled={!canWrite}
                                 placeholder='Selon vos réglages'
                                 onChange={(e) =>

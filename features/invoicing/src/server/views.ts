@@ -139,7 +139,15 @@ export async function toDoc(
         kind,
         status,
         displayStatus: effectiveStatus(
-            { kind, status, dueOn: row.due_on, validUntil: row.valid_until, grossCents: row.total_gross, settledCents },
+            {
+                kind,
+                status,
+                dueOn: row.due_on,
+                validUntil: row.valid_until,
+                grossCents: row.total_gross,
+                settledCents,
+                sentAt: row.sent_at
+            },
             view.today
         ),
         numberLabel: row.number_label,

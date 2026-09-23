@@ -17,7 +17,7 @@ export interface DocumentRowProps {
 }
 
 export default function DocumentRow({ doc, currency, amount = 'gross', onOpen }: DocumentRowProps) {
-    const note = deadlineNote(doc.displayStatus, doc.dueOn, doc.validUntil);
+    const note = deadlineNote(doc.kind, doc.displayStatus, doc.dueOn, doc.validUntil);
     const meta = [
         doc.clientName.length > 0 ? doc.clientName : 'Sans client',
         doc.issuedOn !== null ? formatDateShort(doc.issuedOn) : 'à rédiger',

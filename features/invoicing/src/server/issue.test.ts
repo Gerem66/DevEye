@@ -155,15 +155,77 @@ describe('invoicing.docIssue', () => {
         assert.equal(store.lines.find((l) => l.doc_id === id)?.net_amount, 100_000);
     });
 
-    it('envoie un devis plutôt que de l’émettre, et le date de sa validité', async () => {
+    it('émet un devis et le date de sa validité, sans le dire envoyé', async () => {
         const store = emptyStore();
         const { ctx, id } = await readyDraft(store, 'quote');
         const res = await docIssue.handler(ctx, { id, issuedOn: DAY });
 
         assert.equal(res.doc.status, 'sent');
+        // Émettre n'envoie aucun mail : l'écran ne doit pas dire le contraire.
+        assert.equal(res.doc.displayStatus, 'issued');
         assert.equal(res.doc.numberLabel, `D${YEAR}-0001`);
         assert.equal(res.doc.validUntil, addDays(DAY, 30));
         assert.equal(res.doc.dueOn, null);
+    });
+
+    it('refuse un devis qui ne laisse plus le temps de répondre, sans consommer de rang', async () => {
+        for (const validUntil of [DAY, addDays(DAY, -1)]) {
+            const store = emptyStore();
+            const { ctx, id } = await readyDraft(store, 'quote');
+            store.docs.find((d) => d.id === id)!.valid_until = validUntil;
+
+            await assert.rejects(
+                () => docIssue.handler(ctx, { id, issuedOn: DAY }),
+                (error: unknown) => error instanceof FeatureError && error.code === 'validation'
+            );
+            assert.equal(store.docs.find((d) => d.id === id)?.number, null, 'aucun rang n’est consommé');
+        }
+    });
+
+    it('accepte un devis valable jusqu’au lendemain', async () => {
+        const store = emptyStore();
+        const { ctx, id } = await readyDraft(store, 'quote');
+        store.docs.find((d) => d.id === id)!.valid_until = addDays(DAY, 1);
+
+        const res = await docIssue.handler(ctx, { id, issuedOn: DAY });
+        assert.equal(res.doc.validUntil, addDays(DAY, 1));
+    });
+
+    it('refuse une validité calculée déjà dépassée, et désigne les réglages', async () => {
+        const store = emptyStore();
+        const { ctx, id } = await readyDraft(store, 'quote');
+        store.settings.get(1)!.quote_validity_days = 5;
+
+        await assert.rejects(
+            () => docIssue.handler(ctx, { id, issuedOn: addDays(DAY, -10) }),
+            (error: unknown) =>
+                error instanceof FeatureError &&
+                invoicingErrorDetailsSchema.parse(error.details).settingsSection === 'wording'
+        );
+        assert.equal(store.docs.find((d) => d.id === id)?.number, null);
+    });
+
+    it('refuse une échéance antérieure à l’émission, sans consommer de rang', async () => {
+        const store = emptyStore();
+        const { ctx, id } = await readyDraft(store);
+        store.docs.find((d) => d.id === id)!.due_on = addDays(DAY, -1);
+
+        await assert.rejects(
+            () => docIssue.handler(ctx, { id, issuedOn: DAY }),
+            (error: unknown) => error instanceof FeatureError && error.code === 'validation'
+        );
+        assert.equal(store.docs.find((d) => d.id === id)?.number, null);
+    });
+
+    it('laisse passer une facture antidatée dont l’échéance est passée', async () => {
+        const store = emptyStore();
+        const { ctx, id } = await readyDraft(store);
+        store.docs.find((d) => d.id === id)!.due_on = addDays(DAY, -1);
+
+        // Facturer après coup une prestation dont le délai a couru : elle naît
+        // en retard, et c'est exactement ce qu'elle est.
+        const res = await docIssue.handler(ctx, { id, issuedOn: addDays(DAY, -20) });
+        assert.equal(res.doc.displayStatus, 'late');
     });
 
     it('garde l’instantané du client même s’il change de nom ensuite', async () => {

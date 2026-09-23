@@ -18,7 +18,8 @@ export function statusLabel(kind: DocumentKind, status: DisplayStatus): string {
         if (status === 'accepted') return 'Accepté';
         if (status === 'declined') return 'Refusé';
         if (status === 'expired') return 'Expiré';
-        return 'Envoyé';
+        // Émettre ne remet rien au client : seul un mail parti se dit envoyé.
+        return status === 'sent' ? 'Envoyé' : 'Émis';
     }
     if (kind === 'credit') return 'Émis';
     if (status === 'paid') return 'Payée';
@@ -51,8 +52,15 @@ export function formatMoment(at: number): string {
  * Ce qui presse, en toutes lettres à côté du badge : la couleur dit l'état,
  * cette phrase dit ce qu'il coûte d'attendre.
  */
-export function deadlineNote(status: DisplayStatus, dueOn: string | null, validUntil: string | null): string | null {
-    const day = status === 'expired' || status === 'sent' ? validUntil : dueOn;
+export function deadlineNote(
+    kind: DocumentKind,
+    status: DisplayStatus,
+    dueOn: string | null,
+    validUntil: string | null
+): string | null {
+    // Un devis se lit sur sa validité, une facture sur son échéance : le statut
+    // affiché ne les distingue pas, `issued` vaut pour les deux.
+    const day = kind === 'quote' ? validUntil : dueOn;
     if (day === null) return null;
     const days = daysBetween(todayIso(), day);
 

@@ -96,3 +96,12 @@ export function isOverdue(dueOn: string | null, today: string): boolean {
 export function isExpired(validUntil: string | null, today: string): boolean {
     return validUntil !== null && validUntil < today;
 }
+
+/**
+ * Ce qu’un devis doit laisser à son client au moment où il est émis : au moins
+ * un jour pour répondre. Plus strict qu’`isExpired`, qui laisse passer le dernier
+ * jour de validité : un devis émis ce jour-là naîtrait expiré le lendemain.
+ */
+export function leavesAnswerTime(validUntil: string, today: string): boolean {
+    return validUntil >= addDays(today, 1);
+}

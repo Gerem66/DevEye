@@ -9,6 +9,7 @@ import {
     endOfMonth,
     isExpired,
     isOverdue,
+    leavesAnswerTime,
     periodBounds,
     startOfMonth,
     todayIn
@@ -132,5 +133,18 @@ describe('isOverdue et isExpired', () => {
     it('ne disent rien sans date', () => {
         assert.equal(isOverdue(null, '2026-09-23'), false);
         assert.equal(isExpired(null, '2026-09-23'), false);
+    });
+});
+
+describe('leavesAnswerTime', () => {
+    it('exige au moins un jour devant soi', () => {
+        assert.equal(leavesAnswerTime('2026-09-21', '2026-09-22'), false);
+        assert.equal(leavesAnswerTime('2026-09-22', '2026-09-22'), false);
+        assert.equal(leavesAnswerTime('2026-09-23', '2026-09-22'), true);
+    });
+
+    it('est plus strict qu’isExpired le dernier jour de validité', () => {
+        assert.equal(isExpired('2026-09-22', '2026-09-22'), false);
+        assert.equal(leavesAnswerTime('2026-09-22', '2026-09-22'), false);
     });
 });
