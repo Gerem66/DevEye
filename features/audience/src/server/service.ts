@@ -1,5 +1,6 @@
 import {
     AUDIENCE_FORM_SUBMISSIONS_MAX,
+    AUDIENCE_SUBMISSION_BAN_SECONDS,
     AUDIENCE_MAX_FORMS,
     AUDIENCE_SESSION_GAP_SECONDS,
     type AudienceEventInput,
@@ -119,6 +120,7 @@ interface CachedSite {
     active: boolean;
     formsAuto: boolean;
     submissionIpQuota: number;
+    submissionBanQuota: number;
     formHourlyQuota: number;
     eventIpQuota: number;
 }
@@ -389,6 +391,7 @@ export class AudienceIngest {
             // L'adresse ne sert qu'à compter et n'est jamais conservée : le même
             // condensé salé au jour que pour un visiteur, sans le user-agent.
             const ip = visitorRef(this.dailySalt(), site.publicKey, req.ip, '');
+            if (await this.banned(site, ip, now)) return { status: 'ignored' };
             if (await this.overQuota(site, form, ip, now)) return { status: 'ignored' };
 
             const persistent = site.visitorMode === 'persistent' && !!req.visitorId;
@@ -412,6 +415,7 @@ export class AudienceIngest {
             await countAnswers(this.deps.repo, cipher, form.id, fields, 1);
             await this.deps.repo.touchForm(form.id, now);
             form.submissions++;
+            await this.banIfFlooding(site, ip, now);
             this.maybeBroadcast(site.workspaceId);
             return { status: 'stored' };
         } catch (e) {
@@ -421,15 +425,27 @@ export class AudienceIngest {
     }
 
     /**
+     * Cette provenance est-elle écartée du site ? Posée avant toute autre garde :
+     * c'est celle qui doit coûter le moins à qui insiste.
+     */
+    private async banned(site: CachedSite, ip: string, now: number): Promise<boolean> {
+        const until = await this.deps.repo.banUntil(site.id, ip);
+        return until !== null && until > now;
+    }
+
+    /**
      * Les deux quotas de la dernière heure, en fenêtre glissante : celui d'une
      * provenance sur ce formulaire, puis celui du formulaire toutes provenances
      * confondues. Le motif du plafond horaire des signalements du socle, un
      * `COUNT(*)` servi par un index composite, sans table de compteurs ni
      * fenêtre à purger.
      *
-     * Le second **ferme** le formulaire : un flot distribué ne s'essouffle pas
-     * tout seul, et une porte close et datée vaut mieux qu'un canal rempli
-     * jusqu'au plafond de stockage, qu'il faudrait alors vider à la main.
+     * Ni l'un ni l'autre ne ferme quoi que ce soit. Le premier écarte l'envoi
+     * d'une provenance qui insiste ; le second signale seulement que le
+     * formulaire reçoit beaucoup, ce que l'écran montre et que rien ne punit.
+     * Fermer le canal faisait payer au site ce qu'un tiers lui faisait, et la
+     * clé publique est dans sa page : c'était un déni de service à qui sait lire
+     * une source. Ce qui arrête une rafale est `banIfFlooding`.
      *
      * Deux requêtes par retour : abordable ici, impensable sur le chemin de la
      * mesure, d'où le compteur en mémoire de celle-ci.
@@ -443,15 +459,33 @@ export class AudienceIngest {
         if (site.formHourlyQuota > 0) {
             const total = await this.deps.repo.countSubmissionsSince(form.id, null, since);
             if (total >= site.formHourlyQuota) {
-                await this.closeForm(form, 'quota');
-                return true;
+                this.deps.logger.warn(
+                    { formId: form.id, siteId: site.id, hourly: total },
+                    'Audience: afflux de retours sur un formulaire'
+                );
             }
         }
         return false;
     }
 
+    /**
+     * Écarte une provenance qui dépasse le seuil du site, tous formulaires
+     * confondus : répartir sa rafale sur vingt canaux ne doit pas la diviser par
+     * vingt. Appelée une fois le retour écrit, sans quoi il ne compterait pas.
+     *
+     * Le banni reçoit la même réponse que tout le monde, la règle du `204` ne
+     * souffrant pas d'exception ici, et le formulaire reste ouvert aux autres.
+     */
+    private async banIfFlooding(site: CachedSite, ip: string, now: number): Promise<void> {
+        if (site.submissionBanQuota <= 0) return;
+        const fromIp = await this.deps.repo.countSiteSubmissionsSince(site.id, ip, now - 3600);
+        if (fromIp < site.submissionBanQuota) return;
+        await this.deps.repo.ban(site.id, ip, now + AUDIENCE_SUBMISSION_BAN_SECONDS);
+        this.deps.logger.warn({ siteId: site.id, hourly: fromIp }, 'Audience: provenance écartée après une rafale');
+    }
+
     /** Ferme un formulaire de son propre chef, en base et dans le cache. */
-    private async closeForm(form: CachedForm, reason: 'quota' | 'full'): Promise<void> {
+    private async closeForm(form: CachedForm, reason: 'full'): Promise<void> {
         if (!form.open) return;
         form.open = false;
         await this.deps.repo.closeForm(form.id, Math.floor(Date.now() / 1000), reason);
@@ -641,6 +675,7 @@ export class AudienceIngest {
             active: Number(row.active) === 1,
             formsAuto: Number(row.forms_auto) === 1,
             submissionIpQuota: Number(row.submission_ip_quota),
+            submissionBanQuota: Number(row.submission_ban_quota),
             formHourlyQuota: Number(row.form_hourly_quota),
             eventIpQuota: Number(row.event_ip_quota)
         };
@@ -835,16 +870,23 @@ export class AudienceIngest {
                 const events = await this.deps.repo.pruneEvents(site.id, before);
                 const sessions = await this.deps.repo.pruneSessions(site.id, before);
                 if (events + sessions > 0) {
+                    // Les caches sont vidés AVANT le balayage : entre la suppression
+                    // et l'oubli, toute vidange emploierait des identifiants que la
+                    // base vient de perdre, et le lot entier buterait sur une clé
+                    // étrangère morte.
+                    this.labels.clear();
+                    this.sessions.clear();
                     // Les libellés ne sont balayés que si quelque chose a réellement
                     // disparu : la requête parcourt deux tables de faits.
                     const labels = await this.deps.repo.pruneOrphanLabels(site.id);
                     this.deps.logger.info({ siteId: site.id, events, sessions, labels }, 'Audience retention sweep');
-                    // Des identifiants viennent de disparaître : le cache les rendrait
-                    // encore, et l'insertion suivante buterait sur une clé étrangère morte.
-                    this.labels.clear();
-                    this.sessions.clear();
                 }
             }
+
+            // Les mises à l'écart échues : une ligne par provenance bannie, qui ne
+            // vaut plus rien passé son échéance.
+            const bans = await this.deps.repo.pruneBans(now);
+            if (bans > 0) this.deps.logger.info({ bans }, 'Audience: mises à l’écart échues retirées');
         } catch (e) {
             this.deps.logger.error({ err: e }, 'Audience ingest: maintenance failed');
         }

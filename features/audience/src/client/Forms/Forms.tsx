@@ -234,11 +234,9 @@ export function Forms({ site, canWrite, onCurrentForm }: FormsProps) {
             {error && <p className={styles.error}>{error}</p>}
             {!current.open && (
                 <p className={styles.notice}>
-                    {current.closedReason === 'quota'
-                        ? 'Fermé automatiquement : une rafale a dépassé le quota horaire. Les retours ci-dessous ne bougent plus, et vous pouvez le rouvrir depuis les réglages du site.'
-                        : current.closedReason === 'full'
-                          ? 'Fermé automatiquement : le plafond de stockage est atteint. Videz-le avant de le rouvrir.'
-                          : 'Ce formulaire est fermé : plus rien n’entre. Les retours ci-dessous ne bougent plus.'}
+                    {current.closedReason === 'full'
+                        ? 'Fermé tout seul : ce formulaire a atteint les 50 000 retours qu’il peut garder. Videz-le avant de le rouvrir.'
+                        : 'Ce formulaire est fermé : plus rien n’entre. Les retours ci-dessous ne bougent plus.'}
                 </p>
             )}
 

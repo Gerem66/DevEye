@@ -66,6 +66,7 @@ const siteBody = {
     retentionDays: z.number().int().min(AUDIENCE_RETENTION_MIN_DAYS).max(AUDIENCE_RETENTION_MAX_DAYS),
     formsAuto: z.boolean(),
     submissionIpQuota: z.number().int().min(0).max(AUDIENCE_QUOTA_MAX),
+    submissionBanQuota: z.number().int().min(0).max(AUDIENCE_QUOTA_MAX),
     formHourlyQuota: z.number().int().min(0).max(AUDIENCE_QUOTA_MAX),
     eventIpQuota: z.number().int().min(0).max(AUDIENCE_QUOTA_MAX),
     /** Un chemin par entrée, tel que saisi : le serveur normalise et dédoublonne. */

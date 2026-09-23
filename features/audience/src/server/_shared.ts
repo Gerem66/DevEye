@@ -170,6 +170,7 @@ export async function toSite(
         retentionDays: Number(row.retention_days),
         formsAuto: Number(row.forms_auto) === 1,
         submissionIpQuota: Number(row.submission_ip_quota),
+        submissionBanQuota: Number(row.submission_ban_quota),
         formHourlyQuota: Number(row.form_hourly_quota),
         eventIpQuota: Number(row.event_ip_quota),
         lastEventAt: row.last_event_at === null ? null : Number(row.last_event_at),

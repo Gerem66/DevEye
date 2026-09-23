@@ -41,6 +41,14 @@ export const AUDIENCE_SUBMISSION_IP_QUOTA_DEFAULT = 5;
 export const AUDIENCE_FORM_HOURLY_QUOTA_DEFAULT = 200;
 /** `0` = illimité : aucun site en place ne doit se mettre à perdre des vues. */
 export const AUDIENCE_EVENT_IP_QUOTA_DEFAULT = 0;
+/**
+ * Retours d'une même adresse sur tout le site, par heure, avant qu'elle ne soit
+ * écartée. Largement au-dessus du quota par formulaire : celui-ci écarte l'envoi
+ * de qui insiste, celui-là écarte la provenance elle-même.
+ */
+export const AUDIENCE_SUBMISSION_BAN_QUOTA_DEFAULT = 60;
+/** Durée d'une mise à l'écart, en secondes. */
+export const AUDIENCE_SUBMISSION_BAN_SECONDS = 24 * 3600;
 export const AUDIENCE_QUOTA_MAX = 100_000;
 
 /** L'origine qui accepte tout, par opposition à la liste vide qui n'accepte rien. */
@@ -193,7 +201,13 @@ export const audienceSiteSchema = z.object({
     formsAuto: z.boolean(),
     /** Retours acceptés d'une même adresse vers un même formulaire, par heure. */
     submissionIpQuota: z.number().int().min(0).max(AUDIENCE_QUOTA_MAX),
-    /** Retours par heure et par formulaire ; dépassé, le formulaire se ferme. */
+    /**
+     * Retours d'une même adresse sur tout le site et par heure, au-delà desquels
+     * elle est écartée pour un jour. C'est la garde contre une rafale, et elle
+     * ne vise que la provenance : le formulaire reste ouvert pour tout le monde.
+     */
+    submissionBanQuota: z.number().int().min(0).max(AUDIENCE_QUOTA_MAX),
+    /** Retours par heure et par formulaire, au-delà desquels l'écran le signale. */
     formHourlyQuota: z.number().int().min(0).max(AUDIENCE_QUOTA_MAX),
     /** Événements de mesure par adresse et par heure. `0` = illimité. */
     eventIpQuota: z.number().int().min(0).max(AUDIENCE_QUOTA_MAX),
@@ -420,9 +434,9 @@ export const AUDIENCE_ANSWER_VALUES_MAX = 50;
  * de N jours perdrait ce que l'utilisateur avait demandé à collecter.
  *
  * Garde de stockage seulement, et surtout pas la seule borne : atteint, il
- * condamnerait le formulaire jusqu'à ce qu'on le vide, ce qui offrirait un déni
- * de service à qui connaît la clé. C'est le quota horaire ci-dessous qui arrête
- * une rafale, en fermant le formulaire de façon datée et réversible.
+ * condamne le formulaire jusqu'à ce qu'on le vide. Ce qui arrête une rafale
+ * avant d'en arriver là est le seuil par provenance, qui écarte l'adresse et
+ * laisse le canal ouvert.
  */
 export const AUDIENCE_FORM_SUBMISSIONS_MAX = 50_000;
 
@@ -505,11 +519,15 @@ export type AudienceFormMode = z.infer<typeof audienceFormModeSchema>;
 export const audienceFormFieldsSchema = z.array(audienceFormFieldSchema).max(AUDIENCE_FORM_FIELDS_MAX);
 
 /**
- * Pourquoi un formulaire s'est fermé tout seul. `quota` = une rafale a dépassé
- * le quota horaire du site ; `full` = le plafond de stockage est atteint. La
- * réouverture est un geste manuel, pour qu'on regarde ce qui est entré avant.
+ * Pourquoi un formulaire s'est fermé tout seul : `full`, son plafond de
+ * stockage est atteint. La réouverture est un geste manuel, pour qu'on regarde
+ * ce qui est entré avant.
+ *
+ * Une rafale n'en ferme aucun : elle écarte la provenance qui l'envoie
+ * (`submissionBanQuota`). Fermer le canal punissait le site pour ce qu'un tiers
+ * lui faisait, et qui lit la clé publique dans la page en tenait le moyen.
  */
-export const audienceFormClosureSchema = z.enum(['quota', 'full']);
+export const audienceFormClosureSchema = z.enum(['full']);
 export type AudienceFormClosure = z.infer<typeof audienceFormClosureSchema>;
 
 export const audienceFormSchema = z.object({
@@ -687,6 +705,7 @@ export interface AudienceSiteRow {
     retention_days: number;
     forms_auto: number;
     submission_ip_quota: number;
+    submission_ban_quota: number;
     form_hourly_quota: number;
     event_ip_quota: number;
     sort_order: number;
@@ -849,6 +868,17 @@ export interface AudienceFormLabelRow {
  * réception : une répartition se lit alors sans déchiffrer quoi que ce soit.
  * `value_id = 0` est le seau « texte libre », qui ne pointe aucun libellé.
  */
+/**
+ * Une provenance écartée d'un site. `ip_ref` est le condensé salé au jour, comme
+ * celui d'un retour : l'adresse elle-même n'entre ni ne sort d'ici.
+ */
+export interface AudienceBanRow {
+    site_id: number;
+    ip_ref: string;
+    /** Secondes epoch. Passée, la ligne ne vaut plus rien et le ménage la retire. */
+    until: number;
+}
+
 export interface AudienceAnswerRow {
     form_id: number;
     field_id: number;

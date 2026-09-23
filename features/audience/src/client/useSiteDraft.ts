@@ -43,6 +43,7 @@ export interface Draft {
     retentionDays: string;
     formsAuto: boolean;
     submissionIpQuota: string;
+    submissionBanQuota: string;
     formHourlyQuota: string;
     eventIpQuota: string;
 }
@@ -59,6 +60,7 @@ function draftOf(site: AudienceSite): Draft {
         retentionDays: String(site.retentionDays),
         formsAuto: site.formsAuto,
         submissionIpQuota: String(site.submissionIpQuota),
+        submissionBanQuota: String(site.submissionBanQuota),
         formHourlyQuota: String(site.formHourlyQuota),
         eventIpQuota: String(site.eventIpQuota)
     };
@@ -122,6 +124,7 @@ export function useSiteDraft(scope: SdkSettingsScope): SitePanel {
         const name = draft.name.trim();
         const retentionDays = bounded(draft.retentionDays, AUDIENCE_RETENTION_MIN_DAYS, AUDIENCE_RETENTION_MAX_DAYS);
         const submissionIpQuota = bounded(draft.submissionIpQuota, 0, AUDIENCE_QUOTA_MAX);
+        const submissionBanQuota = bounded(draft.submissionBanQuota, 0, AUDIENCE_QUOTA_MAX);
         const formHourlyQuota = bounded(draft.formHourlyQuota, 0, AUDIENCE_QUOTA_MAX);
         const eventIpQuota = bounded(draft.eventIpQuota, 0, AUDIENCE_QUOTA_MAX);
         const transitPaths = lines(draft.transitPaths);
@@ -131,7 +134,10 @@ export function useSiteDraft(scope: SdkSettingsScope): SitePanel {
                 ? 'Donnez un nom à ce site.'
                 : retentionDays === null
                   ? `La conservation va de ${AUDIENCE_RETENTION_MIN_DAYS} à ${AUDIENCE_RETENTION_MAX_DAYS} jours.`
-                  : submissionIpQuota === null || formHourlyQuota === null || eventIpQuota === null
+                  : submissionIpQuota === null ||
+                      submissionBanQuota === null ||
+                      formHourlyQuota === null ||
+                      eventIpQuota === null
                     ? `Un quota est un entier, de 0 à ${AUDIENCE_QUOTA_MAX}.`
                     : transitPaths.length > AUDIENCE_MAX_TRANSIT_PATHS
                       ? `Au plus ${AUDIENCE_MAX_TRANSIT_PATHS} pages de transit.`
@@ -156,6 +162,7 @@ export function useSiteDraft(scope: SdkSettingsScope): SitePanel {
                 retentionDays: retentionDays as number,
                 formsAuto: draft.formsAuto,
                 submissionIpQuota: submissionIpQuota as number,
+                submissionBanQuota: submissionBanQuota as number,
                 formHourlyQuota: formHourlyQuota as number,
                 eventIpQuota: eventIpQuota as number
             });

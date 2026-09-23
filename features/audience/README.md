@@ -509,10 +509,24 @@ index composite, sans table de compteurs ni fenêtre à purger) :
 
 - **par adresse et par formulaire** (défaut 5/h) : l'envoi est ignoré, rien ne
   se ferme. C'est une provenance qui insiste ;
-- **par formulaire, toutes adresses** (défaut 200/h) : le formulaire **se
-  ferme**, daté et motivé (`closed_at`, `closed_reason`). Un flot distribué ne
-  s'essouffle pas tout seul, et une porte close et réversible vaut mieux qu'un
-  canal rempli jusqu'au plafond.
+- **par adresse et par site** (défaut 60/h, tous formulaires confondus) : la
+  provenance est **écartée pour 24 h** (`ft_audience_bans`), et tout le reste du
+  trafic continue. Le seuil est celui du site et non d'un formulaire, sans quoi
+  répartir une rafale sur vingt canaux la diviserait par vingt ;
+- **par formulaire, toutes adresses** (défaut 200/h) : un simple **signalement**.
+  Rien n'est refusé, rien n'est fermé.
+
+> **Ce qui a été retiré, et pourquoi.** Le troisième seuil fermait le formulaire
+> (`closed_reason = 'quota'`). Or la clé publique est en clair dans la page du
+> site : qui la lit tenait là de quoi couper un formulaire de contact pour des
+> jours, et le propriétaire ne le découvrait qu'en constatant l'absence de
+> messages. La garde punissait le site pour ce qu'un tiers lui faisait. On
+> sanctionne désormais la provenance, jamais le canal.
+>
+> Le prix, à dire franchement : un flot **distribué** (mille adresses, dix envois
+> chacune) passe sous un seuil qui ne vise qu'une provenance. C'était l'argument
+> de la fermeture. Reste alors le plafond de stockage, et le signalement pour
+> qu'on le voie venir. C'est un meilleur échange, ce n'en est pas moins un.
 
 L'adresse n'est jamais conservée : `ip_ref` est le même condensé salé au jour
 que `visitor_ref`, sans le user-agent.
@@ -528,10 +542,12 @@ Le quota `events` borne les vues et événements du **mois** (UTC), contre l'off
 du propriétaire de l'espace. Trois choses le rendent exact sans coûter une
 requête par vue :
 
-- le compte se lit une fois par minute et par espace : l'agrégat journalier pour
-  les jours révolus, **les événements bruts pour aujourd'hui**. L'agrégat seul
-  ne suffit pas, il n'est refait qu'au ménage horaire : une limite de 10 laissait
-  passer tout ce qui arrivait dans l'heure ;
+- le compte est tenu dans `ft_audience_usage (workspace_id, month, events)`, que
+  la vidange de la file incrémente : une écriture par espace et par seconde au
+  pire, jamais une par vue. Il **pend à l'espace et non aux sites**, sans quoi
+  supprimer son site puis le recréer remettrait le mois à zéro, et il ne
+  resterait entre l'offre gratuite et la Pro que la patience de qui recolle une
+  balise. Il se lit une fois par minute et par espace ;
 - entre deux lectures, l'ingestion **compte elle-même** ce qu'elle accepte,
   événement par événement, pour qu'un lot n'enjambe pas la limite ;
 - une seule relecture tourne à la fois par espace, et l'ancien compte sert en
@@ -611,8 +627,11 @@ index.ts        serverEntry : createRepo, features, migrationsDir, createService
 repo.ts         AudienceRepo sur SdkQueryable : les trois dépôts natifs en un contrat, sections gardées
                 (sites et lectures agrégées : le chemin froid ; entonnoirs ; ingestion : le chemin chaud)
 repoForms.ts    la section « retours » du même contrat, détachée : formulaires, soumissions, compteurs
-migrations/     001_forms.sql — les 4 tables ft_audience_* des retours (les 7 autres datent du socle)
-                002_forms_declared.sql — schéma déclaré, quotas, et « origines vides = rien »
+migrations/     001_forms.sql : les 4 tables ft_audience_* des retours (les 7 autres datent du socle)
+                002_forms_declared.sql : schéma déclaré, quotas, et « origines vides = rien »
+                003_daily_events.sql : le total journalier, vues et événements nommés
+                004_usage.sql : ft_audience_usage, la consommation mensuelle par espace
+                005_submission_bans.sql : ft_audience_bans, et la fin de la fermeture automatique
 _shared.ts      Ctx, StoredSite, nameRef, generatePublicKey, packOrigins/parseOrigins, loadSite,
                 loadHomeSite, siteCipher, toSite(…, projectCount), rangeWindow, toMetrics,
                 setIngest/ingestOf (le singleton), projectsProvider/projectCountsOf/projectUsageOf

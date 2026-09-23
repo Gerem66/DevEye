@@ -153,6 +153,7 @@ export const audienceSiteAddFeature = defineSdkFeature({
             retentionDays: input.retentionDays,
             formsAuto: input.formsAuto,
             submissionIpQuota: input.submissionIpQuota,
+            submissionBanQuota: input.submissionBanQuota,
             formHourlyQuota: input.formHourlyQuota,
             eventIpQuota: input.eventIpQuota,
             content: await cipher.encrypt(JSON.stringify(body))
@@ -193,6 +194,7 @@ export const audienceSiteUpdateFeature = defineSdkFeature({
             retentionDays: input.retentionDays,
             formsAuto: input.formsAuto,
             submissionIpQuota: input.submissionIpQuota,
+            submissionBanQuota: input.submissionBanQuota,
             formHourlyQuota: input.formHourlyQuota,
             eventIpQuota: input.eventIpQuota,
             content: await cipher.encrypt(JSON.stringify(body))

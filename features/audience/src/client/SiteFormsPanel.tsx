@@ -48,12 +48,28 @@ export default function SiteFormsPanel({ scope, canWrite }: SettingsPanelProps) 
                 />
                 <span className={shell.fieldHint}>
                     Sur un même formulaire. Personne n’envoie six messages de contact en une heure ; au-delà, l’envoi
-                    est ignoré sans rien fermer. 0 = illimité.
+                    est ignoré, et rien d’autre ne bouge. 0 = aucune limite.
                 </span>
             </div>
 
             <div className={shell.field}>
-                <span className={shell.sectionLabel}>Retours par heure et par formulaire</span>
+                <span className={shell.sectionLabel}>Envois avant de bloquer un visiteur</span>
+                <TextInput
+                    type='number'
+                    value={draft.submissionBanQuota}
+                    min={0}
+                    disabled={!editable}
+                    onChange={(e) => set('submissionBanQuota', e.target.value)}
+                />
+                <span className={shell.fieldHint}>
+                    Sur tout le site et en une heure, tous formulaires confondus. Au-delà, ce visiteur est bloqué
+                    pendant 24 heures et lui seul : vos formulaires restent ouverts à tout le monde. 0 = ne bloquer
+                    personne.
+                </span>
+            </div>
+
+            <div className={shell.field}>
+                <span className={shell.sectionLabel}>Envois par heure avant de vous alerter</span>
                 <TextInput
                     type='number'
                     value={draft.formHourlyQuota}
@@ -62,9 +78,8 @@ export default function SiteFormsPanel({ scope, canWrite }: SettingsPanelProps) 
                     onChange={(e) => set('formHourlyQuota', e.target.value)}
                 />
                 <span className={shell.fieldHint}>
-                    Toutes adresses confondues : c’est la borne contre une rafale venue de partout, que le quota par
-                    adresse ne peut pas voir. Dépassé, le formulaire se ferme, daté et motivé, et vous le rouvrez. 0 =
-                    illimité.
+                    Sur un même formulaire, tous visiteurs confondus. Au-delà, l’afflux est signalé, et rien n’est
+                    refusé ni fermé. 0 = ne rien signaler.
                 </span>
             </div>
 

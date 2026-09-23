@@ -88,6 +88,18 @@ export interface AudienceFormsRepo {
      * un index composite, sans table de compteurs ni fenêtre à purger.
      */
     countSubmissionsSince(formId: number, ipRef: string | null, since: number): Promise<number>;
+    /**
+     * Envois de cette provenance vers TOUT le site depuis `since`. Le seuil qui
+     * l'écarte est celui du site et non d'un formulaire : répartir sa rafale sur
+     * vingt canaux ne doit pas la diviser par vingt.
+     */
+    countSiteSubmissionsSince(siteId: number, ipRef: string, since: number): Promise<number>;
+    /** L'instant jusqu'auquel cette provenance est écartée, ou `null`. */
+    banUntil(siteId: number, ipRef: string): Promise<number | null>;
+    /** Écarte une provenance jusqu'à `until`, ou repousse l'échéance en place. */
+    ban(siteId: number, ipRef: string, until: number): Promise<void>;
+    /** Retire les mises à l'écart échues. Rendu : lignes supprimées. */
+    pruneBans(now: number): Promise<number>;
     /** Le compteur dénormalisé et la date du dernier reçu, en une écriture. */
     touchForm(formId: number, at: number): Promise<void>;
     /** Corrige le compteur dénormalisé après une suppression à l'unité. */
@@ -205,6 +217,36 @@ export function createFormsRepo(q: SdkQueryable): AudienceFormsRepo {
                 [input.formId, input.siteId, input.ts, input.ipRef, input.sessionId, input.content]
             );
             return Number(res.insertId);
+        },
+        async countSiteSubmissionsSince(siteId, ipRef, since) {
+            // `idx_ft_audience_submissions_site (site_id, ts)` sert la fenêtre ;
+            // `ip_ref` se lit sur les lignes qu'elle rend, peu nombreuses à l'heure.
+            const rows = await q.query<{ n: number }>(
+                `SELECT COUNT(*) AS n FROM ft_audience_submissions
+                  WHERE site_id = ? AND ts >= ? AND ip_ref = ?`,
+                [siteId, since, ipRef]
+            );
+            return Number(rows[0]?.n ?? 0);
+        },
+        async banUntil(siteId, ipRef) {
+            const rows = await q.query<{ until: number }>(
+                'SELECT until FROM ft_audience_bans WHERE site_id = ? AND ip_ref = ?',
+                [siteId, ipRef]
+            );
+            return rows[0] ? Number(rows[0].until) : null;
+        },
+        async ban(siteId, ipRef, until) {
+            // `GREATEST` : une rafale qui reprend repousse l'échéance, elle ne la
+            // raccourcit jamais.
+            await q.execute(
+                `INSERT INTO ft_audience_bans (site_id, ip_ref, until) VALUES (?, ?, ?)
+                 ON DUPLICATE KEY UPDATE until = GREATEST(until, VALUES(until))`,
+                [siteId, ipRef, until]
+            );
+        },
+        async pruneBans(now) {
+            const res = await q.execute('DELETE FROM ft_audience_bans WHERE until < ?', [now]);
+            return res.affectedRows;
         },
         async countSubmissionsSince(formId, ipRef, since) {
             const rows = await q.query<{ n: number }>(

@@ -47,6 +47,8 @@ interface FakeRepo extends AudienceRepo {
     answers: Map<string, number>;
     /** `workspaceId:mois` → événements, la table de consommation en mémoire. */
     usage: Map<string, number>;
+    /** `siteId:ipRef` → échéance, les provenances écartées. */
+    bans: Map<string, number>;
 }
 
 const KEY = 'pk_000000000000000000000001';
@@ -65,6 +67,7 @@ function site(over: Partial<AudienceSiteRow> = {}): AudienceSiteRow {
         retention_days: 30,
         forms_auto: 0,
         submission_ip_quota: 5,
+        submission_ban_quota: 60,
         form_hourly_quota: 200,
         event_ip_quota: 0,
         sort_order: 0,
@@ -92,6 +95,7 @@ function fakeRepo(sites: AudienceSiteRow[]): FakeRepo {
         formLabels: [],
         answers: new Map(),
         usage,
+        bans: new Map(),
         monthlyEvents: async (ids: readonly number[], month: number) =>
             ids.reduce((total, id) => total + (usage.get(`${id}:${month}`) ?? 0), 0),
         bumpUsage: async (workspaceId: number, month: number, delta: number) => {
@@ -231,6 +235,25 @@ function fakeRepo(sites: AudienceSiteRow[]): FakeRepo {
             return repo.submissions.filter(
                 (b) => b.form_id === formId && b.ts >= since && (ipRef === null || b.ip_ref === ipRef)
             ).length;
+        },
+        async countSiteSubmissionsSince(siteId, ipRef, since) {
+            return repo.submissions.filter((b) => b.site_id === siteId && b.ts >= since && b.ip_ref === ipRef).length;
+        },
+        async banUntil(siteId, ipRef) {
+            return repo.bans.get(`${siteId}:${ipRef}`) ?? null;
+        },
+        async ban(siteId, ipRef, until) {
+            const key = `${siteId}:${ipRef}`;
+            repo.bans.set(key, Math.max(repo.bans.get(key) ?? 0, until));
+        },
+        async pruneBans(now) {
+            let gone = 0;
+            for (const [key, until] of repo.bans) {
+                if (until >= now) continue;
+                repo.bans.delete(key);
+                gone++;
+            }
+            return gone;
         },
         async insertSubmission(input) {
             const id = ++seq;
@@ -694,19 +717,41 @@ describe('AudienceIngest : les quotas de retours', () => {
         assert.equal(repo.forms[0].is_open, 1);
     });
 
-    it('ferme le formulaire, daté et motivé, quand la rafale est distribuée', async () => {
-        // Le quota par adresse ne peut rien contre un flot venu de partout : c'est
-        // le quota du formulaire qui borne, en fermant plutôt qu'en se remplissant
-        // jusqu'au plafond de stockage.
-        const repo = fakeRepo([autoSite({ submission_ip_quota: 0, form_hourly_quota: 3 })]);
+    it('écarte la provenance qui inonde, et laisse le formulaire ouvert aux autres', async () => {
+        // La clé publique est dans la page du site : fermer le canal faisait payer
+        // au site ce qu'un tiers lui faisait, et pour des jours.
+        const repo = fakeRepo([autoSite({ submission_ip_quota: 0, submission_ban_quota: 3 })]);
+        const { ingest } = ingestWith(repo);
+
+        for (let i = 0; i < 6; i++) await ingest.submit(submission({ ip: '203.0.113.9' }));
+        assert.equal(repo.submissions.length, 3, 'les trois du seuil, puis plus rien de cette adresse');
+        assert.equal(repo.bans.size, 1);
+
+        // Le formulaire n'a pas bougé, et le voisin passe.
+        assert.equal(repo.forms[0].is_open, 1);
+        assert.equal(repo.forms[0].closed_reason, null);
+        await ingest.submit(submission({ ip: '198.51.100.4' }));
+        assert.equal(repo.submissions.length, 4);
+    });
+
+    it('ne ferme plus rien sur un afflux distribué : chaque adresse reste sous le seuil', async () => {
+        // C'est le prix assumé du choix : un flot réparti sur mille adresses passe
+        // sous une garde qui ne vise que la provenance.
+        const repo = fakeRepo([autoSite({ submission_ip_quota: 0, submission_ban_quota: 3, form_hourly_quota: 3 })]);
         const { ingest } = ingestWith(repo);
 
         for (let i = 0; i < 6; i++) await ingest.submit(submission({ ip: `203.0.113.${i}` }));
+        assert.equal(repo.submissions.length, 6);
+        assert.equal(repo.bans.size, 0);
+        assert.equal(repo.forms[0].is_open, 1);
+    });
 
-        assert.equal(repo.submissions.length, 3);
-        assert.equal(repo.forms[0].is_open, 0);
-        assert.equal(repo.forms[0].closed_reason, 'quota');
-        assert.ok(repo.forms[0].closed_at);
+    it('n’écarte personne quand le seuil est à zéro', async () => {
+        const repo = fakeRepo([autoSite({ submission_ip_quota: 0, submission_ban_quota: 0 })]);
+        const { ingest } = ingestWith(repo);
+        for (let i = 0; i < 5; i++) await ingest.submit(submission({ fields: { a: String(i) } }));
+        assert.equal(repo.submissions.length, 5);
+        assert.equal(repo.bans.size, 0);
     });
 
     it('ne compte rien quand le quota est à zéro', async () => {

@@ -158,6 +158,7 @@ export interface AudienceRepo extends AudienceFormsRepo {
         retentionDays: number;
         formsAuto: boolean;
         submissionIpQuota: number;
+        submissionBanQuota: number;
         formHourlyQuota: number;
         eventIpQuota: number;
         content: string;
@@ -174,6 +175,7 @@ export interface AudienceRepo extends AudienceFormsRepo {
             retentionDays: number;
             formsAuto: boolean;
             submissionIpQuota: number;
+            submissionBanQuota: number;
             formHourlyQuota: number;
             eventIpQuota: number;
             content: string;
@@ -410,9 +412,9 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
             const res = await q.execute(
                 `INSERT INTO audience_sites
                      (workspace_id, public_key, name_ref, platform, visitor_mode, origins, active,
-                      retention_days, forms_auto, submission_ip_quota, form_hourly_quota, event_ip_quota,
-                      sort_order, content)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                      retention_days, forms_auto, submission_ip_quota, submission_ban_quota,
+                      form_hourly_quota, event_ip_quota, sort_order, content)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     input.workspaceId,
                     input.publicKey,
@@ -424,6 +426,7 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
                     input.retentionDays,
                     input.formsAuto ? 1 : 0,
                     input.submissionIpQuota,
+                    input.submissionBanQuota,
                     input.formHourlyQuota,
                     input.eventIpQuota,
                     Number(posRows[0]?.next ?? 0),
@@ -438,7 +441,7 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
                 `UPDATE audience_sites
                     SET name_ref = ?, platform = ?, visitor_mode = ?, origins = ?, active = ?,
                         retention_days = ?, forms_auto = ?, submission_ip_quota = ?,
-                        form_hourly_quota = ?, event_ip_quota = ?, content = ?
+                        submission_ban_quota = ?, form_hourly_quota = ?, event_ip_quota = ?, content = ?
                   WHERE id = ? AND workspace_id = ?`,
                 [
                     input.nameRef,
@@ -449,6 +452,7 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
                     input.retentionDays,
                     input.formsAuto ? 1 : 0,
                     input.submissionIpQuota,
+                    input.submissionBanQuota,
                     input.formHourlyQuota,
                     input.eventIpQuota,
                     input.content,

@@ -5,6 +5,7 @@ import {
     AUDIENCE_FORM_HOURLY_QUOTA_DEFAULT,
     AUDIENCE_RETENTION_DEFAULT_DAYS,
     AUDIENCE_SITE_NAME_MAX_LENGTH,
+    AUDIENCE_SUBMISSION_BAN_QUOTA_DEFAULT,
     AUDIENCE_SUBMISSION_IP_QUOTA_DEFAULT,
     audiencePlatformSchema,
     type AudiencePlatform,
@@ -78,6 +79,7 @@ export function SiteDialog({ open, onClose, onSaved }: SiteDialogProps) {
                 // onglet, sur un site qui existe.
                 formsAuto: false,
                 submissionIpQuota: AUDIENCE_SUBMISSION_IP_QUOTA_DEFAULT,
+                submissionBanQuota: AUDIENCE_SUBMISSION_BAN_QUOTA_DEFAULT,
                 formHourlyQuota: AUDIENCE_FORM_HOURLY_QUOTA_DEFAULT,
                 eventIpQuota: AUDIENCE_EVENT_IP_QUOTA_DEFAULT,
                 retentionDays: AUDIENCE_RETENTION_DEFAULT_DAYS

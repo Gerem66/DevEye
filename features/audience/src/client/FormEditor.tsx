@@ -355,11 +355,9 @@ export function FormEditor({ form, siteId, open, canWrite, onClose, onSaved }: F
                             disabled={!canWrite}
                             label='Accepter les retours'
                             hint={
-                                form.closedReason === 'quota'
-                                    ? 'Fermé automatiquement : une rafale a dépassé le quota horaire du site.'
-                                    : form.closedReason === 'full'
-                                      ? 'Fermé automatiquement : le plafond de stockage est atteint. Videz-le avant de rouvrir.'
-                                      : 'Fermé, plus rien n’entre. Ce qui est déjà là ne bouge pas.'
+                                form.closedReason === 'full'
+                                    ? 'Fermé tout seul : les 50 000 retours qu’il peut garder sont atteints. Videz-le avant de rouvrir.'
+                                    : 'Fermé, plus rien n’entre. Ce qui est déjà là ne bouge pas.'
                             }
                             onChange={setAccepting}
                         />
