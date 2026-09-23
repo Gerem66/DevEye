@@ -403,9 +403,6 @@
     width: auto;
     max-width: 12rem;
     flex-shrink: 0;
-    /* SelectInput réserve 48px pour la flèche native ; des noms de rôle courts
-       s'en contentent de 32. */
-    padding-right: 32px;
 }
 
 /* Pastille colorée du rôle, dans la liste des membres. */

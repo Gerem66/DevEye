@@ -3,7 +3,10 @@
     width: 100%;
     height: calc(2.25rem + 2px);
     padding: 0.5rem 0.75rem;
-    padding-right: 48px;
+    /* La place de la flèche, que le navigateur dessine lui-même au bord droit :
+       ce qu'il lui faut, et pas un pixel de plus. Une réserve plus large coupe
+       la valeur des champs étroits bien avant la flèche. */
+    padding-right: 2rem;
     font-size: 1em;
     font-weight: 400;
     font-family: var(--font-sans);

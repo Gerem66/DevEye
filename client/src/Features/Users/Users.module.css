@@ -252,9 +252,6 @@
 .roleSelect {
     width: auto;
     flex-shrink: 0;
-    /* SelectInput réserve 48px pour la flèche native ; deux libellés courts s'en
-       contentent de 32. */
-    padding-right: 32px;
 }
 
 /*

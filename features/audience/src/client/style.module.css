@@ -1117,16 +1117,11 @@
     flex-shrink: 0;
 }
 
-/* `SelectInput` pose `padding-right: 48px`, une réserve pour une flèche
-   personnalisée qui n'existe pas : le composant rend un `<select>` nu, le
-   navigateur dessine sa flèche native au bord, et le texte est coupé 48 px
-   avant elle. Élargir le champ ne fait qu'agrandir ce vide.
-   Double sélecteur pour battre les règles de `SelectInput` : à spécificité
-   égale (0,1,0) c'est l'ordre d'injection qui tranche, deux classes locales
-   montent à (0,2,0) et gagnent quel que soit cet ordre. */
+/* Double sélecteur pour battre le `width: 100%` de `SelectInput` : à
+   spécificité égale (0,1,0) c'est l'ordre d'injection qui tranche, deux classes
+   locales montent à (0,2,0) et gagnent quel que soit cet ordre. */
 .stepRow .stepKind {
     width: 140px;
-    padding-right: 8px;
 }
 
 /* `TextInput` rend un conteneur `position: relative` **sans largeur propre** :
