@@ -21,6 +21,7 @@ import { FeatureError, type SdkFeatureContext } from '@deveye/types/sdk/server';
 import { createTestContext } from '@deveye/types/sdk/testing';
 
 import { audienceHandlers } from './handlers';
+import { manifest } from '../manifest';
 import { labelRef } from './normalize';
 import type { AudienceRepo } from './repo';
 import type { AudienceSubmissionWithContextRow } from './repoForms';
@@ -504,5 +505,30 @@ describe('audience.formClear et audience.formRemove', () => {
 
         await handlerFor(audienceFormRemove)(ctx, { formId: 10 });
         assert.equal(repo.forms.length, 0);
+    });
+});
+
+/**
+ * Ce que les visiteurs écrivent est la seule donnée nominative du module. Deux
+ * droits de rôle l'ouvrent, et `absent = refusé` est le contrat du SDK : un
+ * oubli de déclaration n'échoue nulle part, il ouvre simplement la porte.
+ */
+describe('les droits sur les retours', () => {
+    it('les déclare dans le manifest, tous deux en interrupteur', () => {
+        assert.deepEqual(
+            (manifest.extraPermissions ?? []).map((extra) => [extra.key, extra.type]),
+            [
+                ['submissions', 'toggle'],
+                ['submissionsExport', 'toggle']
+            ]
+        );
+    });
+
+    it('ferme les trois commandes qui rendent des messages, et elles seules', () => {
+        const gated = audienceHandlers
+            .filter((def) => (def.access?.extras ?? []).includes('submissions'))
+            .map((def) => def.command)
+            .sort();
+        assert.deepEqual(gated, ['audience.results', 'audience.submissionList', 'audience.submissionRemove']);
     });
 });

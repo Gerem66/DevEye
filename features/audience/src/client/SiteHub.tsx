@@ -1,4 +1,4 @@
-import { useResource, useResourceVersion } from 'deveye-sdk-client';
+import { useResource, useResourceVersion, useWorkspacePermissions } from 'deveye-sdk-client';
 import type { AudienceSite, AudienceSummary } from '../contracts/domain';
 
 import { api } from './api';
@@ -18,11 +18,13 @@ interface SiteHubProps {
  * la même question. Empiler les trois écrans complets sur une seule page les
  * rendrait tous illisibles, et le sommaire dit surtout lequel a bougé.
  *
- * Les trois cartes sont toujours là, y compris sur un site qui n'a jamais rien
- * mesuré : un site statique peut ne poser aucune balise et ne se servir que de
- * ses formulaires, et cacher la carte Retours lui fermerait la porte.
+ * Les cartes sont là même sur un site qui n'a jamais rien mesuré : un site
+ * statique peut ne poser aucune balise et ne se servir que de ses formulaires,
+ * et cacher la carte Retours lui fermerait la porte. Seul un rôle sans accès
+ * aux messages reçus ne la voit pas : l'ouvrir ne lui rendrait qu'un refus.
  */
 export function SiteHub({ site, onOpen }: SiteHubProps) {
+    const canReadSubmissions = useWorkspacePermissions().canExtra('audience', 'submissions', String(site.id));
     // La ressource des retours change sans que les statistiques bougent (et
     // l'inverse) : les deux doivent rouvrir ce sommaire.
     const formsVersion = useResourceVersion('audience.forms');
@@ -65,20 +67,24 @@ export function SiteHub({ site, onOpen }: SiteHubProps) {
                 onOpen={() => onOpen('funnels')}
             />
 
-            <SectionCard
-                title='Retours'
-                empty={data.feedback.forms === 0 ? 'Aucun formulaire. Branchez-en un depuis « Installer ».' : undefined}
-                figures={[
-                    { value: formatCount(data.feedback.submissions), label: 'reçus' },
-                    { value: formatCount(data.feedback.last7d), label: '7 derniers jours' },
-                    { value: formatCount(data.feedback.forms), label: 'formulaires' }
-                ]}
-                onOpen={() => onOpen('forms')}
-            >
-                {data.feedback.lastAt !== null && (
-                    <span className={styles.sectionFoot}>Dernier {formatAgo(data.feedback.lastAt)}</span>
-                )}
-            </SectionCard>
+            {canReadSubmissions && (
+                <SectionCard
+                    title='Retours'
+                    empty={
+                        data.feedback.forms === 0 ? 'Aucun formulaire. Branchez-en un depuis « Installer ».' : undefined
+                    }
+                    figures={[
+                        { value: formatCount(data.feedback.submissions), label: 'reçus' },
+                        { value: formatCount(data.feedback.last7d), label: '7 derniers jours' },
+                        { value: formatCount(data.feedback.forms), label: 'formulaires' }
+                    ]}
+                    onOpen={() => onOpen('forms')}
+                >
+                    {data.feedback.lastAt !== null && (
+                        <span className={styles.sectionFoot}>Dernier {formatAgo(data.feedback.lastAt)}</span>
+                    )}
+                </SectionCard>
+            )}
         </div>
     );
 }

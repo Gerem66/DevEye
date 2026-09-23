@@ -40,6 +40,38 @@ export const manifest = {
         { key: 'events', label: 'vues et événements par mois' }
     ],
     /**
+     * Les retours sont la seule donnée nominative du module : ce que les
+     * visiteurs d'un site écrivent, noms et adresses compris. Les statistiques
+     * n'en portent aucune, et beaucoup de rôles n'ont à voir qu'elles.
+     *
+     * Ce sont des ressources de la fonctionnalité et non des verbes, ce que
+     * `Docs/PERMISSIONS.md` §2 distingue : « lire les retours » ouvre une
+     * section, il n'autorise pas un geste de plus sur ce qu'on voyait déjà.
+     *
+     * Une restriction par élément porte l'espace depuis lequel elle s'applique :
+     * un site partagé à trois équipes n'ouvre donc ses retours qu'à celles à qui
+     * on les accorde, chacune réglant ses propres rôles.
+     */
+    extraPermissions: [
+        {
+            key: 'submissions',
+            label: 'Retours des formulaires',
+            description:
+                'Lire les messages reçus par les formulaires des sites de cet espace, et les supprimer : ' +
+                'noms, adresses et textes libres que les visiteurs ont écrits. Sans ce droit, le rôle voit ' +
+                'toutes les statistiques, et la section Retours reste fermée.',
+            type: 'toggle'
+        },
+        {
+            key: 'submissionsExport',
+            label: 'Exporter les retours',
+            description:
+                'Télécharger les retours en tableur. Demande le droit ci-dessus. C’est un garde-fou ' +
+                'd’interface et non une frontière : qui lit les retours à l’écran peut toujours les recopier.',
+            type: 'toggle'
+        }
+    ],
+    /**
      * Trois panneaux à l'échelle d'un site, un par section de sa fiche : ce qui
      * vaut pour le site entier (identité, origines, état, suppression), ce qui
      * ne règle que la mesure, et ce qui ne règle que les retours.

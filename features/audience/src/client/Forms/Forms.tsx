@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button, humanizeError, SegmentedControl, SelectInput, useResourceVersion } from 'deveye-sdk-client';
+import {
+    Button,
+    humanizeError,
+    ReadOnlyNotice,
+    SegmentedControl,
+    SelectInput,
+    useResourceVersion,
+    useWorkspacePermissions
+} from 'deveye-sdk-client';
 import type { AudienceForm, AudienceResults, AudienceSite, AudienceSubmission } from '../../contracts/domain';
 
 import { api } from '../api';
@@ -35,6 +43,11 @@ interface FormsProps {
  * faut ensuite coller dans le site vient de « Installer », dans l'en-tête.
  */
 export function Forms({ site, canWrite, onCurrentForm }: FormsProps) {
+    // Les messages des visiteurs sont la seule donnée nominative du module, et
+    // le seul écran qu'un rôle peut se voir refuser sans perdre les chiffres.
+    const permissions = useWorkspacePermissions();
+    const canRead = permissions.canExtra('audience', 'submissions', String(site.id));
+    const canExport = canRead && permissions.canExtra('audience', 'submissionsExport', String(site.id));
     const [forms, setForms] = useState<AudienceForm[] | null>(null);
     const [formId, setFormId] = useState<number | null>(null);
     const [tab, setTab] = useState<Tab>('table');
@@ -53,6 +66,7 @@ export function Forms({ site, canWrite, onCurrentForm }: FormsProps) {
     const formsVersion = useResourceVersion('audience.forms');
 
     useEffect(() => {
+        if (!canRead) return;
         let cancelled = false;
         api.send('audience.formList', { siteId: site.id })
             .then((res) => {
@@ -71,7 +85,7 @@ export function Forms({ site, canWrite, onCurrentForm }: FormsProps) {
         return () => {
             cancelled = true;
         };
-    }, [site.id, formsVersion]);
+    }, [site.id, formsVersion, canRead]);
 
     const load = useCallback(async (id: number) => {
         setLoading(true);
@@ -139,6 +153,15 @@ export function Forms({ site, canWrite, onCurrentForm }: FormsProps) {
             }}
         />
     );
+
+    if (!canRead) {
+        return (
+            <ReadOnlyNotice>
+                Votre rôle ne donne pas accès aux messages reçus par les formulaires de ce site. Les statistiques,
+                elles, restent ouvertes.
+            </ReadOnlyNotice>
+        );
+    }
 
     if (forms === null) return <p className={error ? styles.error : styles.empty}>{error ?? 'Chargement…'}</p>;
 
@@ -220,14 +243,16 @@ export function Forms({ site, canWrite, onCurrentForm }: FormsProps) {
                             Modifier
                         </Button>
                     )}
-                    <Button
-                        variant='secondary'
-                        icon='download'
-                        disabled={submissions.length === 0}
-                        onClick={() => downloadCsv(current.name, toCsv(columns, submissions))}
-                    >
-                        Exporter
-                    </Button>
+                    {canExport && (
+                        <Button
+                            variant='secondary'
+                            icon='download'
+                            disabled={submissions.length === 0}
+                            onClick={() => downloadCsv(current.name, toCsv(columns, submissions))}
+                        >
+                            Exporter
+                        </Button>
+                    )}
                 </div>
             </div>
 

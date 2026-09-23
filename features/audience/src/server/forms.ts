@@ -232,6 +232,9 @@ export const audienceFormRemoveFeature = defineSdkFeature({
 
 export const audienceSubmissionListFeature = defineSdkFeature({
     ...audienceSubmissionList,
+    // Ce que les visiteurs ont écrit est la seule donnée nominative du module :
+    // un rôle peut lire toutes les statistiques d'un site sans y avoir accès.
+    access: { extras: ['submissions'] },
     handler: async (ctx: Ctx, input) => {
         const form = await loadForm(ctx, input.formId);
         const cipher = await siteCipher(ctx, Number(form.site_id));
@@ -260,7 +263,7 @@ export const audienceSubmissionListFeature = defineSdkFeature({
 export const audienceSubmissionRemoveFeature = defineSdkFeature({
     ...audienceSubmissionRemove,
     mutates: true,
-    access: { level: 'write' },
+    access: { level: 'write', extras: ['submissions'] },
     handler: async (ctx: Ctx, input) => {
         const row = await ctx.repo.findSubmission(input.submissionId);
         if (!row) throw new FeatureError('not_found', 'Retour introuvable');
@@ -284,6 +287,9 @@ export const audienceSubmissionRemoveFeature = defineSdkFeature({
 
 export const audienceResultsFeature = defineSdkFeature({
     ...audienceResults,
+    // La répartition est un agrégat, mais de ce que les gens ont écrit : les
+    // valeurs y figurent en clair, et la partager n'est pas partager un chiffre.
+    access: { extras: ['submissions'] },
     handler: async (ctx: Ctx, input) => {
         const form = await loadForm(ctx, input.formId);
         const cipher = await siteCipher(ctx, Number(form.site_id));
