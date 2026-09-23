@@ -1,4 +1,4 @@
-# Audience — le suivi d'usage des projets livrés
+# Audience : le suivi d'usage des projets livrés
 
 > Écrit le 13 août 2026, à la fin du chantier qui l'a introduite ; relu le
 > 21 août 2026. Compagnon de [Projets](../projects/README.md) : celui-ci suit le
@@ -14,7 +14,7 @@
 > première à ouvrir des routes HTTP publiques (capacité `routes.public`). Ce
 > document décrit l'état après ce rapatriement ; la section 6 en est la carte.
 
-DevEye savait piloter le travail, suivre le code, surveiller l'infra — mais rien
+DevEye savait piloter le travail, suivre le code, surveiller l'infra, mais rien
 ne disait ce que les visiteurs faisaient des projets une fois livrés. Il
 manquait la boucle de retour.
 
@@ -30,8 +30,8 @@ Un **site suivi** appartient à l'espace. Plusieurs projets peuvent suivre le
 même, certains sites ne servent aucun projet, et un projet n'en garde qu'une
 **liaison** (`project_audience_links`, PK composite, FK en `CASCADE`).
 
-C'est la quatrième entité de cette famille — dépôts (069), services surveillés
-(067), bases (068), sites (077) — et la forme est désormais établie : ce sont
+C'est la quatrième entité de cette famille (dépôts 069, services surveillés
+067, bases 068, sites 077), et la forme est désormais établie : ce sont
 des objets d'espace, pas des propriétés d'un projet.
 
 ---
@@ -53,8 +53,8 @@ Conséquences assumées, identiques à git et aux bases :
 
 ### 2.2 Une statistique est un `GROUP BY`, donc rien de ce qu'on agrège n'est chiffré
 
-C'est le nœud de tout le module. La sortie est celle que le dépôt emploie déjà —
-les colonnes `*_ref` — poussée jusqu'à une **table de dimensions** :
+C'est le nœud de tout le module. La sortie est celle que le dépôt emploie déjà,
+les colonnes `*_ref`, poussée jusqu'à une **table de dimensions** :
 
 ```
 audience_labels    site_id, kind, label_ref, content   ← le libellé chiffré, une fois
@@ -73,7 +73,7 @@ de rekey au lieu de six, un seul cache, un seul chemin de résolution.
 ### 2.3 Ce qui reste en clair, et pourquoi c'en est la place
 
 `public_key`, `origins`, `active`, `platform`. Ce sont exactement les champs dont
-l'ingestion a besoin pour **router une requête sans session ni clé** — ce que
+l'ingestion a besoin pour **router une requête sans session ni clé**, ce que
 [Projets](../projects/README.md) §1.2 autorise explicitement. Ils sont de toute
 façon publics : la balise les expose dans le HTML de chaque page suivie.
 
@@ -95,7 +95,7 @@ de ne plus manipuler la clé serveur.
 Trois conséquences, toutes voulues :
 
 - rien à faire accepter par un bandeau de consentement ;
-- un même visiteur n'est **pas** reconnaissable d'un jour à l'autre — donc pas
+- un même visiteur n'est **pas** reconnaissable d'un jour à l'autre, donc pas
   de « visiteurs récurrents », et c'est le prix assumé ;
 - la clé du site entre dans le condensé, donc croiser les audiences de deux
   sites est mécaniquement impossible.
@@ -113,7 +113,7 @@ Le « par qui » nominatif vient d'ailleurs, et seulement si le site le veut : u
 pages suivies atteignent l'ingestion, et c'est le serveur qui la rend au client
 (`audience.get`, par `ctx.origins.public` : le contexte du SDK la porte pour
 tous les modules, aucun ne lit la variable). La déduire de
-`window.location.origin` — ce que faisait la première version — donnait une
+`window.location.origin`, ce que faisait la première version, donnait une
 balise juste en développement et **fausse en production** : l'application vit
 derrière le VPN, l'ingestion doit être joignable sans lui, donc les deux
 adresses diffèrent par construction.
@@ -121,7 +121,7 @@ adresses diffèrent par construction.
 En développement sur l'hôte, le client est servi par Vite sur `:5173` : `/t.js`
 est donc aussi **proxifié** dans `client/vite.config.ts`, à côté de `/api` et
 `/ws`. Sans cette entrée, Vite cherche le script parmi ses propres fichiers et
-rend un 404 — la balise semble cassée alors que le serveur la sert parfaitement.
+rend un 404 : la balise semble cassée alors que le serveur la sert parfaitement.
 
 ### 3.0 bis Un second écouteur, et non une garde
 
@@ -174,13 +174,13 @@ l'écouteur qui change, pas l'ingestion.
    analysé.
 3. **La clé de site est publique** et ne protège rien. Ce qui filtre, c'est la
    liste d'**origines autorisées** par site, confrontée à l'en-tête `Origin`
-   côté serveur — là où un client ne peut pas mentir. Le CORS, lui, est un
+   côté serveur, là où un client ne peut pas mentir. Le CORS, lui, est un
    mécanisme que le navigateur applique à lui-même : ce n'est pas une garde.
 
 ### 3.2 Toujours `204`
 
 Clé inconnue, origine refusée, site éteint, charge utile invalide : même
-réponse. Un endpoint public qui distingue ses refus est un **oracle** — il dirait
+réponse. Un endpoint public qui distingue ses refus est un **oracle** : il dirait
 à qui le sonde quelles clés existent, et laquelle vient d'être révoquée.
 
 ### 3.3 La requête ne touche pas la base
@@ -199,26 +199,26 @@ indisponible ne doit pas transformer la mémoire du processus en file sans fond.
 ### 3.4 CORP : un 200 parfait que le navigateur jette
 
 `@fastify/helmet` pose `Cross-Origin-Resource-Policy: same-origin` sur **toutes**
-les réponses du serveur. C'est le bon défaut pour une application — et c'est
+les réponses du serveur. C'est le bon défaut pour une application, et c'est
 exactement ce qu'il ne faut pas sur `/t.js`, dont l'objet est d'être chargé
 depuis ailleurs.
 
 La panne ne ressemble à rien de connu : le serveur répond `200`, la réponse
 arrive complète, puis le navigateur la jette avec
-`ERR_BLOCKED_BY_RESPONSE.NotSameOrigin`. **Aucun en-tête CORS n'est en cause** —
+`ERR_BLOCKED_BY_RESPONSE.NotSameOrigin`. **Aucun en-tête CORS n'est en cause** :
 on peut les régler parfaitement sans que rien ne change, parce qu'un
 `<script src>` est une requête `no-cors`, et que c'est là que CORP s'applique.
 
 Les trois routes publiques posent donc `Cross-Origin-Resource-Policy:
-cross-origin`. Sur l'ingestion c'est une précaution — ses requêtes sont en mode
-`cors`, hors du champ de CORP aujourd'hui — mais rien ne garantit qu'un client
+cross-origin`. Sur l'ingestion c'est une précaution (ses requêtes sont en mode
+`cors`, hors du champ de CORP aujourd'hui), mais rien ne garantit qu'un client
 futur les émettra de la même façon.
 
 > **Ce que ça dit du banc d'essai.** Le premier jeu de vérifications montait
 > Fastify avec le CORS et l'analyseur de contenu, mais **pas helmet** : il ne
 > pouvait donc pas voir ce défaut, et il annonçait tout vert. Un banc qui ne
 > monte pas les mêmes couches que la production ne vérifie pas la production. Il
-> monte helmet depuis, et l'assertion a été éprouvée en retirant le correctif —
+> monte helmet depuis, et l'assertion a été éprouvée en retirant le correctif :
 > une vérification qui ne peut pas échouer ne vérifie rien.
 
 ### 3.5 `text/plain`, et ce n'est pas un détail
@@ -226,7 +226,7 @@ futur les émettra de la même façon.
 `navigator.sendBeacon` avec un `Blob` de type `text/plain` produit une requête
 **simple** au sens CORS : aucune requête préalable `OPTIONS`. C'est ce qui fait
 tenir la mesure en un aller simple depuis une page tierce. D'où l'analyseur de
-contenu ajouté dans `app.ts` — aucune autre route n'accepte ce type.
+contenu ajouté dans `app.ts` : aucune autre route n'accepte ce type.
 
 ### 3.6 Ce qui prépare React Native sans le construire
 
@@ -234,7 +234,7 @@ Le contrat d'ingestion ne suppose **rien du navigateur** : aucun champ web n'est
 requis, `path` désigne une route _ou_ un écran, les trois champs d'appareil
 peuvent être renseignés explicitement par un client natif qui les connaît, et
 `at` permet de livrer ce qu'on a mis de côté hors ligne (borné à 24 h côté
-serveur — une horloge fausse ne doit pas dater une visite de 2038).
+serveur, une horloge fausse ne doit pas dater une visite de 2038).
 
 `audience_sites.platform` (`web` | `app` | `both`) décide si l'`Origin` est
 confronté : un binaire natif n'en envoie aucun, et refuser son absence lui
@@ -261,7 +261,7 @@ Six décisions d'écran qui méritent d'être connues :
 
 - **L'écart est la moitié de l'information.** « 1 240 vues » ne dit pas s'il faut
   regarder de plus près ; « 1 240 vues, +18 % » le dit. La période de comparaison
-  est de même longueur et immédiatement antérieure — comparer à « le mois
+  est de même longueur et immédiatement antérieure : comparer à « le mois
   dernier » calendaire ferait varier le diviseur avec le nombre de jours, et un
   février paraîtrait toujours en baisse.
 - **Un site sans aucune mesure ne montre pas cinq zéros**, il montre son écran
@@ -293,7 +293,7 @@ Six décisions d'écran qui méritent d'être connues :
   ne dit pas s'il s'agit de visites ou de visiteurs.
 
 Les graphes sont du **SVG écrit à la main**, `viewBox` fixe, sans
-`ResizeObserver` — le patron d'`UptimeChart`. Aucune dépendance de graphes n'a
+`ResizeObserver`, le patron d'`UptimeChart`. Aucune dépendance de graphes n'a
 été ajoutée : le client n'en avait pas, et n'en voulait pas.
 
 ---
@@ -318,7 +318,7 @@ produit.
 `LiveHub.changed()` ne fait déjà rien quand la salle est vide : personne ne
 regarde, rien ne part. Il n'y avait donc pas de seconde garde à écrire.
 
-**Le sujet `audience` invalide les quatre clés d'un coup** — `count`, `list`,
+**Le sujet `audience` invalide les quatre clés d'un coup** : `count`, `list`,
 `detail`, `stats`. C'est délibéré : ce battement doit rafraîchir _tout_ ce qui
 montre de l'audience au même instant (tuile d'accueil, liste, fiche ouverte,
 onglet d'un projet), sinon deux écrans de la même donnée divergeraient à la même
@@ -332,13 +332,13 @@ de faire relire six requêtes d'agrégat.
 
 ### Le découpage, et pourquoi il tient tout
 
-Le site suivi émet des **signaux nommés** — une page vue, un
+Le site suivi émet des **signaux nommés** : une page vue, un
 `deveye.event('devis-etape-2')`. L'entonnoir, lui, se compose **dans DevEye**, à
 partir de ce qui a déjà été observé. Trois conséquences, et ce sont elles qui
 font la valeur du découpage :
 
 - mesurer un autre parcours ne demande **aucun redéploiement** du site suivi ;
-- un entonnoir supprimé ne perd **aucune mesure** — il n'a jamais rien collecté,
+- un entonnoir supprimé ne perd **aucune mesure** : il n'a jamais rien collecté,
   il relit. Le recréer à l'identique rend exactement les mêmes chiffres ;
 - un entonnoir peut être défini **avant** que le site n'émette le signal : la
   marche compte alors zéro, ce qui est la vérité et non une erreur.
@@ -351,7 +351,7 @@ font la valeur du découpage :
 Deux choses en découlent, et les taire serait malhonnête : un visiteur qui
 revient en arrière puis repart peut ne pas être compté ; et un entonnoir dont
 deux marches reconnaissent la même valeur les voit franchies ensemble. C'est le
-prix d'une définition déterministe qui tient en **une** requête — et une
+prix d'une définition déterministe qui tient en **une** requête, et une
 définition floue aurait été pire qu'une définition stricte qu'on énonce.
 
 Techniquement : une sous-requête groupe par session et rend la première
@@ -363,7 +363,7 @@ suit aussi.
 ⚠️ **`>=` et non `>`.** Les horodatages sont à la seconde et le script groupe
 ses envois sur une demi-seconde : un même clic produit couramment une vue et un
 événement dans la **même** seconde. Avec `>`, tout entonnoir dont deux marches
-consécutives naissent du même geste — « ouvrir /devis » puis « devis-ouvert » —
+consécutives naissent du même geste (« ouvrir /devis » puis « devis-ouvert »)
 compterait zéro conversion, sans rien pour l'expliquer.
 
 ⚠️ Les seules parties **interpolées** de cette requête sont un indice de colonne
@@ -377,7 +377,7 @@ que le serveur a lui-même écrit.
 Une suite de barres décroissantes se lit vite mais ne **désigne** rien. La
 question qu'on se pose en ouvrant cette section est « où est-ce que je perds le
 plus de monde », et y répondre demande de comparer les chutes entre elles, pas
-les hauteurs — d'où la marche la plus coûteuse mise en avant, et une seule (à
+les hauteurs, d'où la marche la plus coûteuse mise en avant, et une seule (à
 égalité, la première l'emporte).
 
 Les largeurs sont rapportées à la **première** marche : un entonnoir se lit
@@ -388,7 +388,7 @@ vient voir.
 Le dialogue propose en **suggestions** les pages et les événements réellement
 observés sur un an. Ce n'est pas un confort : le nom exact d'un signal vit dans
 le code du site suivi, et le retaper de mémoire est le meilleur moyen de définir
-une marche qui ne comptera jamais rien — sans que rien ne le signale, puisque
+une marche qui ne comptera jamais rien, sans que rien ne le signale, puisque
 zéro est une réponse valable. La saisie libre reste ouverte, pour préparer une
 mesure avant la mise en ligne.
 
@@ -533,8 +533,18 @@ que `visitor_ref`, sans le user-agent.
 
 La mesure a son équivalent (`event_ip_quota`), mais **en mémoire** : son chemin
 ne fait aucune requête, et lui en donner une par visite défairait ce qui le fait
-tenir. Il est donc approximatif, remis à zéro au redémarrage, et **illimité par
-défaut**, pour qu'aucun site en place ne se mette à perdre des vues.
+tenir. Il est donc approximatif et remis à zéro au redémarrage. Il compte **par
+événement et non par requête** : compté par requête, un plafond de 100 en
+laissait passer 2 000, un lot pouvant porter vingt événements.
+
+Son défaut vaut 20 000 par heure sur un site neuf, et non plus « aucune
+limite » : généreux, parce qu'une seule adresse peut porter tout un bureau ou un
+opérateur mobile, mais fini. Les sites en place gardent le leur, pour qu'aucun
+ne se mette à perdre des vues parce que ce défaut a changé.
+
+Son cache s'évince par âge. Le vider en bloc au dépassement était une garde
+retournable : qui dispose d'un `/64` fabrique cinquante mille clés en quelques
+secondes, et remettait ainsi à zéro les compteurs de tout le monde, en boucle.
 
 ### La limite de l'offre, exacte sans requête par vue
 
@@ -602,7 +612,7 @@ Depuis le 28 août 2026, tout ce qui est propre à la feature vit dans le module
 `DevEye/features/audience/` ; l'app ne garde que ce qui appartient à Projets
 (la liaison) et l'infrastructure des routes publiques.
 
-### Le module — `DevEye/features/audience/`
+### Le module : `DevEye/features/audience/`
 
 ```
 package.json, deveye-feature.json    deveye-feature-audience ; allowlist des 7 tables historiques
@@ -619,7 +629,7 @@ sujet live et de registre) et les **couplages déclarés** :
 de liaison (`ProjectAudienceLinkRow`) vit chez Projets
 (`features/projects/src/contracts/link.ts`, la table est à Projets).
 
-### Serveur — `features/audience/src/server/`
+### Serveur : `features/audience/src/server/`
 
 ```
 index.ts        serverEntry : createRepo, features, migrationsDir, createService (ingestion + provider
@@ -644,7 +654,7 @@ validate.ts     un envoi confronté aux questions déclarées, et converti (pur)
 stats.ts        (aussi) summary : les trois cartes du sommaire, en un aller-retour
 handlers.ts     l'agrégat des vingt-quatre commandes
 service.ts      AudienceIngest sur FeatureServiceDeps : caches, file, lot, coalescence, ménage, sel dérivé ;
-                submit() — la réception des retours, synchrone (§5 ter)
+                submit() : la réception des retours, synchrone (§5 ter)
 answers.ts      ce qu'on compte dans un retour (pur), et countAnswers qui l'applique
 routes.ts       publicRoutes sur SdkPublicApp : GET /t.js · POST /api/t/b · POST /api/t/e · POST /api/t/s
 script.ts       le script servi aux pages suivies, et son ETag
@@ -669,7 +679,7 @@ Ce qui a changé de main au rapatriement, et pourquoi :
   c'est l'hôte qui les monte, sur chaque écouteur ;
 - **`ingestOrigin()` est `ctx.origins.public`**, voir §3.0.
 
-### Ce qui reste dans l'app — `DevEye/src/`
+### Ce qui reste dans l'app : `DevEye/src/`
 
 ```
 db/migrations/076_audience.sql             5 tables (historiques, allowlist du module)
@@ -688,7 +698,7 @@ publicApp.ts                               le second écouteur : mêmes analyseu
 Utils/Env.ts                               AUDIENCE_ORIGIN, PUBLIC_LISTEN_PORT (infrastructure)
 ```
 
-### Client — `features/audience/src/client/`
+### Client : `features/audience/src/client/`
 
 ```
 index.tsx           clientEntry : Widget, Full, settingsPanels, providers
@@ -737,14 +747,14 @@ la barre d'onglets, qui rouvre le même `LinkSiteDialog` (voir
 ### Deux tuiles voisines ne peuvent pas porter le même pictogramme
 
 L'icône était `activity`, celle de Monitoring. Sur la grille d'accueil, deux
-tuiles côte à côte devenaient indiscernables — ce qui est exactement ce qu'on
+tuiles côte à côte devenaient indiscernables, ce qui est exactement ce qu'on
 demande à une grille d'icônes de ne pas faire. C'est `eye-open` : l'œil dit
 « des vues », la courbe d'activité dit « une machine qui tourne ».
 
 ### `audience` voulait déjà dire autre chose
 
 `FeatureAudience` désignait dans `Pages/Home/catalog.tsx` « à qui une tuile
-d'accueil est destinée » — dans le fichier même où la nouvelle feature devait
+d'accueil est destinée », dans le fichier même où la nouvelle feature devait
 s'enregistrer. Deux sens du mot à trois lignes d'écart, c'est la collision que
 rien ne signale et qu'on paye six mois plus tard. L'ancien est devenu
 **`HomeAudience`**, qui dit mieux ce qu'il est.
@@ -762,7 +772,7 @@ fait échouer le démarrage : c'est un contrat, pas une heuristique.
 `ingestOf()?.invalidate()` (le singleton posé par `createService`, l'ex
 `ctx.audience`). Sans lui, un site qu'on vient d'éteindre continue
 d'accepter des mesures pendant toute la vie du processus, et une clé qu'on vient
-de renouveler laisse l'ancienne entrer — c'est-à-dire que la rotation ne sert à
+de renouveler laisse l'ancienne entrer, c'est-à-dire que la rotation ne sert à
 rien, précisément dans le cas où on la demande. La panne est silencieuse : elle
 se découvre en relisant des chiffres qu'on croyait arrêtés.
 
@@ -771,7 +781,7 @@ l'ordre d'affichage n'entre dans aucune décision de l'ingestion.
 
 ### Le ménage des libellés était le seul coût non borné
 
-La forme naturelle — `NOT EXISTS (… WHERE e.path_id = l.id OR …)` — est un piège :
+La forme naturelle, `NOT EXISTS (… WHERE e.path_id = l.id OR …)`, est un piège :
 la sous-requête est **corrélée**, donc rejouée pour chaque libellé, sur des
 colonnes qu'aucun index ne couvre. Un site à trois cents libellés y parcourait
 trois cents fois sa table de faits, toutes les heures.
@@ -798,8 +808,8 @@ retrouve par jointure sur `audience_sites`.
 
 `/produits?utm_source=x` compte comme `/produits`. Les garder ferait de chaque
 paramètre une ligne de plus dans le classement, et « /produits » finirait
-éparpillé sur trois cents entrées qui ne disent rien. Ce qu'on perd — la
-provenance — est déjà porté par le référent, à sa place.
+éparpillé sur trois cents entrées qui ne disent rien. Ce qu'on perd, la
+provenance, est déjà porté par le référent, à sa place.
 
 ### L'ordre des tests de user-agent **est** le sujet
 
@@ -900,27 +910,27 @@ dev qui porte déjà des données réelles.
 
 ### Points d'attention à l'essai manuel
 
-1. **Installation** — la balise pose un événement ; l'écran passe de « en
+1. **Installation** : la balise pose un événement ; l'écran passe de « en
    attente » à « première mesure reçue ».
-2. **SPA** — une navigation `pushState` produit une seconde vue et **une seule**
+2. **SPA** : une navigation `pushState` produit une seconde vue et **une seule**
    session ; deux `replaceState` sur la même route n'en produisent qu'une.
-3. **Origines** — `curl` sans `Origin` sur un site `web` : refusé, `204`, rien en
+3. **Origines** : `curl` sans `Origin` sur un site `web` : refusé, `204`, rien en
    base. Sur un site `app` : accepté. Clé inconnue : `204` indistinguable.
-4. **Extinction** — site éteint, plus rien n'entre ; l'historique reste.
-5. **Rotation** — l'ancienne clé cesse d'être acceptée **immédiatement**, sans
+4. **Extinction** : site éteint, plus rien n'entre ; l'historique reste.
+5. **Rotation** : l'ancienne clé cesse d'être acceptée **immédiatement**, sans
    redémarrage.
-6. **Direct, à deux navigateurs** — une visite chez l'un fait bouger le compteur
+6. **Direct, à deux navigateurs** : une visite chez l'un fait bouger le compteur
    chez l'autre **dans la minute**, sur la liste, la fiche et l'onglet du projet.
    Et pas plus souvent.
-7. **Droits** — un rôle sans `audience` : tuile désaturée, `handleExpand` refuse,
+7. **Droits** : un rôle sans `audience` : tuile désaturée, `handleExpand` refuse,
    l'onglet d'un projet en « accès restreint ». ⚠️ _Fail-closed_ : les rôles
    existants ne l'accordent pas.
-8. **Confidentialité** — passer un projet en confidentiel retire ses liaisons ;
+8. **Confidentialité** : passer un projet en confidentiel retire ses liaisons ;
    les sites survivent.
-9. **Entonnoir** — le composer depuis les suggestions, vérifier que la première
+9. **Entonnoir** : le composer depuis les suggestions, vérifier que la première
    marche vaut le nombre d'entrées et que la dernière vaut les conversions ;
    ajouter une marche inexistante et vérifier qu'elle affiche zéro sans erreur ;
-   supprimer l'entonnoir et le recréer à l'identique — **les chiffres doivent
+   supprimer l'entonnoir et le recréer à l'identique : **les chiffres doivent
    être exactement les mêmes**, c'est la preuve qu'il ne collecte rien.
 
 ---
@@ -930,9 +940,9 @@ dev qui porte déjà des données réelles.
 - **Pas de propriétés sur un événement.** La variante doit entrer dans le nom
   (`tarif-choisi-studio` plutôt que `tarif-choisi` + `{plan}`). C'est la limite
   qui se fait sentir en premier à l'usage.
-- **Pas de temps de conversion** — on sait combien passent une marche, pas
+- **Pas de temps de conversion** : on sait combien passent une marche, pas
   combien de temps ils mettent.
-- **Pas de pays** — il faudrait embarquer une base GeoIP et la tenir à jour. Les
+- **Pas de pays** : il faudrait embarquer une base GeoIP et la tenir à jour. Les
   fuseaux répondent à la même question à moindres frais.
 - **Aucune notification à l'arrivée d'un retour.** C'est le manque qui se fera
   sentir en premier sur un formulaire de contact. Il fait basculer le module en
@@ -944,17 +954,34 @@ dev qui porte déjà des données réelles.
 - **Le tri et la recherche du tableau portent sur les lignes chargées**, jamais
   sur tout le formulaire : la charge utile est chiffrée, la base n'a rien à quoi
   appliquer un `ORDER BY` ni un `LIKE`. L'écran le dit sous le tableau.
-- **Pas de package npm ni de module React Native** — la balise couvre les pages
+- **Pas de package npm ni de module React Native** : la balise couvre les pages
   web et les projets React ; le contrat d'ingestion est déjà neutre (§3.5).
-- **Pas de visiteurs récurrents** — conséquence directe du sel tournant (§2.4).
+- **Pas de visiteurs récurrents** : conséquence directe du sel tournant (§2.4).
 - **Perte d'une seconde d'événements** sur un arrêt brutal (§3.3).
-- **Rien ne borne la cardinalité des libellés.** Qui connaît la clé d'un site et
-  se trouve sur une origine autorisée peut envoyer des chemins tirés au sort et
-  faire grossir `audience_labels`. Le plafond de débit par IP et la liste
-  d'origines sont les seules gardes ; le ménage horaire finit par rendre la
-  place, mais seulement une fois les faits expirés. Un plafond de libellés par
-  site serait le correctif, il n'est pas écrit.
-- **Le direct reste local au processus** — deux instances derrière un proxy =
+- **La cardinalité des libellés n'est bornée qu'indirectement.** Qui connaît la
+  clé d'un site et se trouve sur une origine autorisée peut envoyer des chemins
+  tirés au sort et faire grossir `audience_labels`. Le plafond par adresse
+  (20 000/h sur un site neuf), le plafond de débit et la liste d'origines le
+  bornent ; le ménage horaire rend la place, mais seulement une fois les faits
+  expirés. Un plafond de libellés par site serait plus direct, il n'est pas
+  écrit.
+- **Les compteurs des retours ne se recalculent pas.** La charge utile est
+  chiffrée, donc rien ne relit le passé pour les rétablir : les deux voies qui
+  les écrivent passent par `countAnswers`, mais aucune transaction ne les lie à
+  l'écriture du retour lui-même. Le SDK n'expose pas de transaction ; c'est ce
+  qu'il faudrait.
+- **La coquille de réglages ne garde pas d'un départ.** Les trois panneaux
+  signalent un brouillon non enregistré, mais rien ne retient la fermeture :
+  cela relève de la coquille, pour toutes les features à la fois.
+- **Deux migrations anciennes ne sont pas réparées, et c'est délibéré.** La
+  `002` finit par un `UPDATE origins = '*'` qui n'est pas idempotent : un échec
+  plus loin dans le fichier le rejouerait et rouvrirait des sites délibérément
+  fermés. Les `CREATE TABLE` de `076` à `078` n'épinglent pas leur collation, ce
+  qui fait diverger un conteneur neuf de la production. Les deux sont jouées :
+  les modifier violerait la règle qui veut qu'une migration jouée ne bouge plus,
+  et les réécrire coûterait un `CONVERT TO CHARACTER SET` sur les tables qui
+  grandissent le plus vite, pour un défaut qu'aucune requête actuelle ne touche.
+- **Le direct reste local au processus** : deux instances derrière un proxy =
   salles silencieusement séparées. Vrai avant ce module, ça le reste.
 - **Le domaine public reste à créer.** Le code fournit le port dédié
   (`PUBLIC_LISTEN_PORT`) ; il reste à pointer un domaine dessus dans le proxy et

@@ -24,7 +24,7 @@ const VISITOR_OPTIONS = audienceVisitorModeSchema.options.map((value) => ({ valu
  * remis à zéro au redémarrage, et éteint par défaut.
  */
 export default function SiteTrafficPanel({ scope, canWrite }: SettingsPanelProps) {
-    const { site, draft, busy, error, set, save } = useSiteDraft(scope);
+    const { site, draft, busy, error, set, save, dirty } = useSiteDraft(scope);
 
     if (!site || !draft) {
         return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
@@ -104,7 +104,13 @@ export default function SiteTrafficPanel({ scope, canWrite }: SettingsPanelProps
             </div>
 
             {canWrite ? (
-                <SaveButton onSave={save} disabled={busy} />
+                <>
+                    {/* La coquille de réglages n'a pas de garde à la fermeture :
+                        le dire à l'écran vaut mieux que de laisser partir une
+                        saisie sans un mot. */}
+                    {dirty && <p className={shell.fieldHint}>Modifications non enregistrées.</p>}
+                    <SaveButton onSave={save} disabled={busy} />
+                </>
             ) : (
                 <ReadOnlyNotice>
                     Votre rôle ne permet pas de modifier un site : cela relève de l’écriture sur Audience.

@@ -91,6 +91,12 @@ export interface SitePanel {
     /** Lève sur un refus : le bouton n'annonce « Enregistré » que sur un succès. */
     save: () => Promise<void>;
     reload: () => Promise<void>;
+    /**
+     * Le brouillon s'écarte du site enregistré. La coquille de réglages n'a pas
+     * de garde à la fermeture : les panneaux le disent donc à l'écran, plutôt
+     * que de laisser partir une saisie sans un mot.
+     */
+    dirty: boolean;
 }
 
 export function useSiteDraft(scope: SdkSettingsScope): SitePanel {
@@ -177,5 +183,7 @@ export function useSiteDraft(scope: SdkSettingsScope): SitePanel {
         }
     }, [busy, site, draft]);
 
-    return { site, draft, busy, error, setError, set, save, reload };
+    const dirty = site !== null && draft !== null && JSON.stringify(draft) !== JSON.stringify(draftOf(site));
+
+    return { site, draft, busy, error, setError, set, save, reload, dirty };
 }

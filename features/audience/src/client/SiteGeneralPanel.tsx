@@ -36,7 +36,7 @@ const PLATFORM_OPTIONS = audiencePlatformSchema.options.map((value) => ({ value,
  * ligne se réécrit sous la clé de son espace, et le serveur refuserait.
  */
 export default function SiteGeneralPanel({ scope, canWrite, gone }: SettingsPanelProps) {
-    const { site, draft, busy, error, setError, set, save } = useSiteDraft(scope);
+    const { site, draft, busy, error, setError, set, save, dirty } = useSiteDraft(scope);
     const [removing, setRemoving] = useState(false);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
@@ -147,7 +147,13 @@ export default function SiteGeneralPanel({ scope, canWrite, gone }: SettingsPane
             />
 
             {canWrite ? (
-                <SaveButton onSave={save} disabled={busy || removing} />
+                <>
+                    {/* La coquille de réglages n'a pas de garde à la fermeture :
+                        le dire à l'écran vaut mieux que de laisser partir une
+                        saisie sans un mot. */}
+                    {dirty && <p className={shell.fieldHint}>Modifications non enregistrées.</p>}
+                    <SaveButton onSave={save} disabled={busy || removing} />
+                </>
             ) : (
                 <ReadOnlyNotice>
                     Votre rôle ne permet pas de modifier un site : cela relève de l’écriture sur Audience.
