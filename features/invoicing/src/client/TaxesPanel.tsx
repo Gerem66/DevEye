@@ -59,7 +59,7 @@ export default function TaxesPanel({ canWrite }: SettingsPanelProps) {
                         aria-label='Taux de TVA par défaut'
                     />
                     <span className={shell.fieldHint}>
-                        Chaque ligne garde son propre taux : celui-ci n’est que le point de départ.
+                        Chaque document garde son propre taux : celui-ci n’est que le point de départ.
                     </span>
                 </div>
             ) : (
