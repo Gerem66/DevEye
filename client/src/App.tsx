@@ -1,13 +1,16 @@
 import { MotionConfig } from 'framer-motion';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import HomePage from './Pages/Home/index.js';
 import LoginPage from './Pages/Login/index.js';
+import MaintenancePage from './Pages/Maintenance';
 import SignupPage from './Pages/Signup';
 import { readSignupRoute, type SignupRoute } from './Pages/Signup/route';
 import { SecrecyGate } from './Components/SecrecyGate';
 import { ReportButton } from './Components/ReportButton';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
+import { useLocalUser } from './stores/currentUser';
+import { refreshPublicMaintenance, useSiteMaintenance } from './stores/maintenance';
 
 import './Styles/theme.css';
 import './Styles/fonts.css';
@@ -22,8 +25,28 @@ import './Styles/live.css';
 import './Styles/input.css';
 
 function AppRoot() {
-    const { status } = useAuth();
+    const { status, refresh, logout } = useAuth();
     const [signup, setSignup] = useState<SignupRoute | null>(readSignupRoute);
+    const maintenance = useSiteMaintenance();
+    const localUser = useLocalUser();
+    const [adminLogin, setAdminLogin] = useState(false);
+    // Tout compte d'ici hors l'administrateur. Sa session reste ouverte : elle
+    // reprend à la levée, sans nouvelle connexion.
+    const heldOut = maintenance.site && !(status === 'authenticated' && localUser?.role === 'admin');
+
+    // Sans socket ni bundle, seul l'état public dit la maintenance.
+    useEffect(() => {
+        if (status === 'anonymous') void refreshPublicMaintenance();
+    }, [status]);
+
+    const wasHeldOut = useRef(heldOut);
+    useEffect(() => {
+        if (wasHeldOut.current && !maintenance.site) {
+            setAdminLogin(false);
+            void refresh();
+        }
+        wasHeldOut.current = heldOut;
+    }, [heldOut, maintenance.site, refresh]);
 
     // Le jeton quitte la barre d'adresse dès qu'il est lu : il ne reste ni dans
     // l'historique ni sous les yeux pendant que le formulaire se remplit.
@@ -41,6 +64,21 @@ function AppRoot() {
         window.history.pushState({}, '', path);
         setSignup(readSignupRoute());
     };
+
+    if (heldOut && !adminLogin) {
+        return (
+            <MaintenancePage
+                message={maintenance.message}
+                onAdminLogin={() => {
+                    // Un compte ouvert passe la main : le formulaire ne sert
+                    // qu'à une session neuve.
+                    if (status === 'authenticated') void logout().then(() => setAdminLogin(true));
+                    else setAdminLogin(true);
+                }}
+            />
+        );
+    }
+    if (heldOut) return <LoginPage onBack={() => setAdminLogin(false)} />;
 
     return (
         <>

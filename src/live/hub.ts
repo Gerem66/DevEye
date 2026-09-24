@@ -400,6 +400,18 @@ export class LiveHub {
         }
     }
 
+    /** Toutes les connexions de ce serveur, salle ou pas, fédérées comprises. */
+    broadcast(command: string, data: unknown): void {
+        for (const conn of this.bySocket.values()) this.send(conn, command, data);
+    }
+
+    /** Ferme les connexions des comptes que `refuse` désigne. */
+    closeWhere(refuse: (userId: number) => boolean, code: number, reason: string): void {
+        for (const conn of [...this.bySocket.values()]) {
+            if (refuse(conn.userId)) conn.socket.close(code, reason);
+        }
+    }
+
     // ---------------------------------------------------------------- droits
 
     /**

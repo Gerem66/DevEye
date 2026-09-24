@@ -25,7 +25,7 @@ export const serverEntry: FeatureServer<DevicesRepo> = {
                 sweep.start();
             },
             stop() {
-                sweep.stop();
+                return sweep.stop();
             }
         };
     },

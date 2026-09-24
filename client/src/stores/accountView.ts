@@ -1,8 +1,14 @@
 import { accountEntries } from '@/sdk/registry';
 import { requestOpenView } from './viewRequest';
 
+const ACCOUNT_VIEW_PREFIX = 'account:';
+
 /** L'identifiant de vue de l'entrée de compte d'un module. */
-export const accountViewId = (featureId: string): string => `account:${featureId}`;
+export const accountViewId = (featureId: string): string => `${ACCOUNT_VIEW_PREFIX}${featureId}`;
+
+/** Le module derrière une vue de compte, ou `null` pour une autre vue. */
+export const accountViewFeature = (viewId: string): string | null =>
+    viewId.startsWith(ACCOUNT_VIEW_PREFIX) ? viewId.slice(ACCOUNT_VIEW_PREFIX.length) : null;
 
 const hints = new Map<string, string>();
 

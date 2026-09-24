@@ -104,6 +104,11 @@
 /* Coin haut-droite du titre : une case de largeur fixe où le bouclier (repos)
    et la flèche (survol) se superposent en absolu, sinon la case changerait de
    largeur au survol et le titre sauterait. */
+.badge {
+    flex: none;
+    display: flex;
+}
+
 .headerMark {
     position: relative;
     flex: none;

@@ -158,7 +158,7 @@ export class DeploySync {
      * tour hors cadence, et deux tours concurrents publieraient deux messages
      * pour le même déploiement.
      */
-    private ticking = false;
+    private ticking: Promise<void> | null = null;
 
     /**
      * Cibles en recul, jusqu'à l'instant indiqué. En mémoire : c'est l'état d'une
@@ -190,8 +190,9 @@ export class DeploySync {
         this.deps.logger.info({ tickSeconds: DEPLOY_TICK_SECONDS }, 'Deploy sync started');
     }
 
-    stop(): void {
-        this.ticker.stop();
+    async stop(): Promise<void> {
+        await this.ticker.stop();
+        await this.ticking;
     }
 
     /**
@@ -207,16 +208,13 @@ export class DeploySync {
      * Un tour : rapprocher les cibles, entretenir les messages. Un tour qui
      * dépasse son intervalle saute un battement plutôt que de se chevaucher.
      */
-    private async tick(): Promise<void> {
-        if (this.ticking) return;
-        this.ticking = true;
-        try {
-            await this.syncDeployTargets();
-        } catch (e) {
-            this.deps.logger.error({ err: e }, 'Deploy sync: tick failed');
-        } finally {
-            this.ticking = false;
-        }
+    private tick(): Promise<void> {
+        this.ticking ??= this.syncDeployTargets()
+            .catch((e: unknown) => this.deps.logger.error({ err: e }, 'Deploy sync: tick failed'))
+            .finally(() => {
+                this.ticking = null;
+            });
+        return this.ticking;
     }
 
     /**

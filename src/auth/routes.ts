@@ -53,6 +53,8 @@ import { loadUserBundle } from './loadUserBundle';
 import { issueSession } from './session';
 
 import type { AuditLog } from '@/Services/AuditLog';
+import { maintenance, MaintenanceError } from '@/Services/maintenance';
+import { isAdminUser } from '@/features/_access';
 import type { Database } from '@/db';
 import type { LiveHub } from '@/live/hub';
 
@@ -232,6 +234,9 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
             });
             return reply.code(403).send(err('forbidden', 'Ce compte est suspendu. Contactez un administrateur.'));
         }
+
+        // Avant la 2FA : pendant la maintenance du site, un code saisi pour rien.
+        if (maintenance.siteDown() && row.role !== 'admin') throw new MaintenanceError(maintenance.message());
 
         // Transparently upgrade legacy (bcrypt) hashes to argon2 after a successful login.
         if (row.password_hash && needsRehash(row.password_hash)) {
@@ -436,6 +441,12 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
             return reply.code(401).send(err('auth_invalid', 'Invalid refresh token'));
         }
 
+        // Avant la rotation : un refus après elle laisserait le compte sans
+        // jeton valide, déconnecté à la fin de la maintenance.
+        if (maintenance.siteDown() && !(await isAdminUser(db, Number(claims.sub)))) {
+            throw new MaintenanceError(maintenance.message());
+        }
+
         const valid = await db.refreshTokens.isValid(claims.jti, token);
         if (valid) {
             await db.refreshTokens.revoke(claims.jti);
@@ -616,6 +627,9 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
         if (!claims) return reply.code(401).send(err('auth_expired', 'Access token expired'));
         if (!(await db.refreshTokens.hasLiveSession(claims.sid))) {
             return reply.code(401).send(err('auth_invalid', 'Session revoked'));
+        }
+        if (maintenance.siteDown() && !(await isAdminUser(db, Number(claims.sub)))) {
+            throw new MaintenanceError(maintenance.message());
         }
         return reply.send(ok({ ticket: await signWsTicket(Number(claims.sub), claims.sid) }));
     });

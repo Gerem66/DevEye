@@ -43,8 +43,8 @@ export class DatabaseMonitor {
         this.deps.logger.info({ tickSeconds: TICK_SECONDS }, 'Database monitor started');
     }
 
-    stop(): void {
-        this.ticker.stop();
+    async stop(): Promise<void> {
+        await this.ticker.stop();
     }
 
     private async tick(): Promise<void> {

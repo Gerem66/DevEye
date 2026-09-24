@@ -118,7 +118,8 @@ export class UptimeMonitor {
     private readonly ticker: FeatureService;
     private readonly pruner: FeatureService;
     /** Guards against a slow tick overlapping the next one. */
-    private ticking = false;
+    private ticking: Promise<void> | null = null;
+    private pruning: Promise<void> = Promise.resolve();
     /**
      * Probes currently running, by service id. A second request for the same
      * service joins the running one instead of starting its own: two concurrent
@@ -141,29 +142,32 @@ export class UptimeMonitor {
         // Un tour tout de suite : un serveur qui redémarre ne laisse pas ses
         // services attendre le premier réveil.
         void this.tick();
-        void this.prune();
+        this.pruning = this.prune();
         this.deps.logger.info({ tickSeconds: TICK_SECONDS }, 'Uptime monitor started');
     }
 
-    stop(): void {
-        this.ticker.stop();
-        this.pruner.stop();
+    async stop(): Promise<void> {
+        await Promise.all([this.ticker.stop(), this.pruner.stop(), this.pruning]);
+        await this.ticking;
     }
 
     /** Claim every due service and probe them, `UPTIME_CONCURRENCY` at a time. */
-    private async tick(): Promise<void> {
-        if (this.ticking) return;
-        this.ticking = true;
-        try {
-            const now = Math.floor(Date.now() / 1000);
-            const due = await this.deps.repo.services.listDue(now, CONCURRENCY * 4);
-            for (let i = 0; i < due.length; i += CONCURRENCY) {
-                await Promise.all(due.slice(i, i + CONCURRENCY).map((row) => this.runOne(row)));
-            }
-        } catch (e) {
-            this.deps.logger.error({ err: e instanceof Error ? e.message : String(e) }, 'Uptime tick failed');
-        } finally {
-            this.ticking = false;
+    private tick(): Promise<void> {
+        this.ticking ??= this.probeDue()
+            .catch((e: unknown) =>
+                this.deps.logger.error({ err: e instanceof Error ? e.message : String(e) }, 'Uptime tick failed')
+            )
+            .finally(() => {
+                this.ticking = null;
+            });
+        return this.ticking;
+    }
+
+    private async probeDue(): Promise<void> {
+        const now = Math.floor(Date.now() / 1000);
+        const due = await this.deps.repo.services.listDue(now, CONCURRENCY * 4);
+        for (let i = 0; i < due.length; i += CONCURRENCY) {
+            await Promise.all(due.slice(i, i + CONCURRENCY).map((row) => this.runOne(row)));
         }
     }
 

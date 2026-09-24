@@ -297,6 +297,10 @@
     -webkit-mask-image: url(/icons/settings.svg);
     mask-image: url(/icons/settings.svg);
 }
+.icon.icon-wrench {
+    -webkit-mask-image: url(/icons/wrench.svg);
+    mask-image: url(/icons/wrench.svg);
+}
 .icon.icon-logout {
     -webkit-mask-image: url(/icons/logout.svg);
     mask-image: url(/icons/logout.svg);

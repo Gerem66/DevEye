@@ -40,6 +40,8 @@ const PURGE_EVERY_S = 24 * 3600;
 export function createService(deps: FeatureServiceDeps<CveRepo>, client: NvdClient = nvdClient): FeatureService {
     let lastPurgeAt = 0;
     let running = false;
+    let stopping = false;
+    let first: Promise<void> = Promise.resolve();
 
     /**
      * N'importe quelle clé d'espace relève le quota de l'ingestion commune : le
@@ -81,7 +83,8 @@ export function createService(deps: FeatureServiceDeps<CveRepo>, client: NvdClie
         let cursor = (await deps.repo.getState('ingestCursor')) ?? now - FIRST_WINDOW_S;
         let ingested = 0;
 
-        for (let window = 0; window < MAX_WINDOWS_PER_TICK && cursor < now; window++) {
+        // Le curseur est en base : un arrêt entre deux fenêtres ne perd rien.
+        for (let window = 0; window < MAX_WINDOWS_PER_TICK && cursor < now && !stopping; window++) {
             const to = Math.min(now, cursor + WINDOW_S);
             const entries = await client.window(cursor, to, apiKey, INGEST_MAX_PAGES);
             await deps.repo.upsertMany(entries);
@@ -103,14 +106,18 @@ export function createService(deps: FeatureServiceDeps<CveRepo>, client: NvdClie
     const ticker = deps.createTicker({ intervalMs: TICK_MS, tick });
     return {
         start() {
+            stopping = false;
             ticker.start();
             // Sans ce premier tour, le fil resterait vide une demi-heure après
             // l'installation. Lancé sans être attendu : le démarrage du serveur
             // n'a pas à dépendre de la disponibilité du NVD.
-            void tick().catch((e: unknown) => {
+            first = tick().catch((e: unknown) => {
                 deps.logger.warn({ err: (e as Error).message }, 'Premier tour d’ingestion CVE échoué');
             });
         },
-        stop: () => ticker.stop()
+        async stop() {
+            stopping = true;
+            await Promise.all([ticker.stop(), first]);
+        }
     };
 }

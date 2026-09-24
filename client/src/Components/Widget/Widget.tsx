@@ -12,6 +12,8 @@ export interface WidgetProps extends Omit<HTMLMotionProps<'div'>, 'children'> {
     title?: string;
     /** Optional icon (name) displayed before the title. */
     icon?: string;
+    /** Une pastille à droite du titre : un état de la feature, pas du contenu. */
+    badge?: ReactNode;
     /** Content rendered inside the widget body. */
     children?: ReactNode;
     /** Called when the widget is clicked (e.g., to expand into popup). */
@@ -40,7 +42,7 @@ export interface WidgetProps extends Omit<HTMLMotionProps<'div'>, 'children'> {
  * into a popup. Clicking anywhere triggers `onExpand`.
  */
 const Widget = forwardRef<HTMLDivElement, WidgetProps>(function Widget(
-    { widgetId, title, icon, children, onExpand, className, compact, interactive = true, href, ...motionProps },
+    { widgetId, title, icon, badge, children, onExpand, className, compact, interactive = true, href, ...motionProps },
     ref
 ) {
     // Présence : la tuile s'entoure de la couleur de qui se trouve dans la
@@ -83,6 +85,7 @@ const Widget = forwardRef<HTMLDivElement, WidgetProps>(function Widget(
                         </span>
                     )}
                     <span className={styles.title}>{title}</span>
+                    {badge && <span className={styles.badge}>{badge}</span>}
                     {interactive && (
                         <span className={styles.headerMark}>
                             <span className={`icon icon-arrow ${styles.expandHint}`} aria-hidden='true' />

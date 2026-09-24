@@ -17,6 +17,7 @@ import { serverKeysOf } from './host';
 import { ORIGINS, publishFrame } from './context';
 import { createOpenCipher, createSecureStore } from '@/Services/SecureStore';
 import { verifyModuleTicket } from '@/auth/jwt';
+import { maintenance } from '@/Services/maintenance';
 import type { Logger } from 'pino';
 import type { AuditLog } from '@/Services/AuditLog';
 import type { LiveHub } from '@/live/hub';
@@ -116,6 +117,12 @@ export function createServiceDeps(
             redeem: async (ticket) => {
                 const claims = await verifyModuleTicket(manifest.id, ticket);
                 if (!claims) return null;
+                // Les routes réservées à l'app passent le filtre de maintenance :
+                // pendant elle, leur ticket ne vaut plus que pour un administrateur.
+                if (maintenance.siteDown() || maintenance.featureLevel(manifest.id) !== null) {
+                    const holder = await host.db.users.findById(claims.userId);
+                    if (holder?.role !== 'admin') return null;
+                }
                 const workspace = await host.db.workspaces.findById(claims.workspaceId);
                 if (!workspace) return null;
                 const { store } = createSecureStore(host.db, host.crypt, workspace, claims.sessionId);
@@ -201,29 +208,32 @@ export function createServiceDeps(
         keys,
         providers,
         createTicker: ({ intervalMs, tick }): FeatureService => {
-            // setInterval + garde de réentrance + unref, rien d'autre.
+            // setInterval + garde de réentrance + unref ; stop() attend le tour en vol,
+            // pour qu'un start() rapproché ne croise pas ses restes.
             let timer: ReturnType<typeof setInterval> | null = null;
-            let ticking = false;
+            let ticking: Promise<void> | null = null;
             const run = async (): Promise<void> => {
-                if (ticking) return;
-                ticking = true;
                 try {
                     await tick();
                 } catch (e) {
                     host.logger.error({ feature: manifest.id, err: (e as Error).message }, 'Module tick failed');
-                } finally {
-                    ticking = false;
                 }
             };
             return {
                 start: () => {
                     if (timer) return;
-                    timer = setInterval(() => void run(), intervalMs);
+                    timer = setInterval(() => {
+                        if (ticking) return;
+                        ticking = run().finally(() => {
+                            ticking = null;
+                        });
+                    }, intervalMs);
                     timer.unref();
                 },
-                stop: () => {
+                stop: async () => {
                     if (timer) clearInterval(timer);
                     timer = null;
+                    await ticking;
                 }
             };
         },

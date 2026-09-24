@@ -12,6 +12,7 @@ import { setCurrentUser, useActingUser } from '../stores/currentUser';
 import { forgetRemoteSessions, patchRemoteUser, syncRemoteInstances } from '../stores/remoteInstances';
 import { getActiveInstanceId } from '../stores/workspace';
 import { setFeedbackEnabled } from '../stores/feedbackEnabled';
+import { setMaintenanceEnvNotice, setPublicMaintenance } from '../stores/maintenance';
 import { devicesProvider } from '../devicesProvider';
 
 interface AuthState {
@@ -51,6 +52,16 @@ function isTransportFailure(e: unknown): boolean {
 }
 
 /**
+ * Le site est en maintenance et ce compte n'y entre pas : la page de maintenance
+ * prend l'écran (`App.tsx`), la session reste telle quelle pour la reprise.
+ */
+function isMaintenanceRefusal(e: unknown): boolean {
+    if (!(e instanceof ApiError) || e.code !== 'maintenance') return false;
+    setPublicMaintenance({ site: true, message: e.message });
+    return true;
+}
+
+/**
  * Applique un bundle de session. L'ordre compte : l'espace actif est publie avant
  * le theme et la disposition, ces deux stores resolvant leur cle de stockage a
  * partir de lui.
@@ -68,6 +79,7 @@ function applyBundle(bundle: SessionBundle): AuthState {
         syncHomeLayoutFromServer(bundle.homeLayout);
     }
     setFeedbackEnabled(bundle.feedbackEnabled);
+    setMaintenanceEnvNotice(bundle.maintenanceEnvNotice);
     return { status: 'authenticated', user: bundle.user };
 }
 
@@ -149,6 +161,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setState({ status: 'anonymous', user: null });
     }, [cancelRetry]);
 
+    /**
+     * Refusé au démarrage : le formulaire de connexion doit pouvoir servir à un
+     * administrateur, sans rien effacer d'une session qui reprendra à la levée.
+     */
+    const holdForMaintenance = useCallback(() => {
+        cancelRetry();
+        setState((prev) => (prev.status === 'unknown' ? { status: 'anonymous', user: null } : prev));
+    }, [cancelRetry]);
+
     /** La session est ouverte : publier le bundle, rouvrir la socket, relire le secret. */
     const startSession = useCallback(
         async (bundle: SessionBundle) => {
@@ -169,12 +190,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             try {
                 await startSession(await apiMe());
             } catch (e) {
+                // Avant `isTransportFailure`, qui prendrait ce 503 pour une panne.
+                if (isMaintenanceRefusal(e)) return holdForMaintenance();
                 if (e instanceof ApiError && (e.code === 'auth_required' || e.code === 'auth_expired')) {
                     try {
                         await apiRefresh();
                         await startSession(await apiMe());
                     } catch (renewal) {
-                        if (isTransportFailure(renewal)) scheduleRetry();
+                        if (isMaintenanceRefusal(renewal)) holdForMaintenance();
+                        else if (isTransportFailure(renewal)) scheduleRetry();
                         else setAnonymous();
                     }
                     return;
@@ -189,11 +213,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } finally {
             refreshing.current = null;
         }
-    }, [setAnonymous, scheduleRetry, startSession]);
+    }, [setAnonymous, scheduleRetry, startSession, holdForMaintenance]);
 
     const login = useCallback(
         async (username: string, password: string): Promise<LoginResult> => {
-            const bundle = await apiLogin({ username, password });
+            const bundle = await apiLogin({ username, password }).catch((e: unknown) => {
+                // Le message du refus s'affiche sous le formulaire, comme les autres.
+                isMaintenanceRefusal(e);
+                throw e;
+            });
             if (bundle.twoFactorRequired) {
                 return { twoFactorRequired: true };
             }
@@ -235,6 +263,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             await apiRefresh();
             await startSession(await apiMe());
         } catch (e) {
+            if (isMaintenanceRefusal(e)) return;
             if (isTransportFailure(e)) scheduleRetry();
             else setAnonymous();
         } finally {

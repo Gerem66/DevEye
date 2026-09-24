@@ -46,7 +46,13 @@ const CARD_PHASE_CLASS: Record<CardPhase, string> = {
     auto: ' card-to-progressbar auto-login'
 };
 
-function LoginPage({ onSignup }: { onSignup?: () => void }) {
+interface LoginPageProps {
+    onSignup?: () => void;
+    /** Pendant la maintenance du site : le retour à sa page, à la place de l'inscription. */
+    onBack?: () => void;
+}
+
+function LoginPage({ onSignup, onBack }: LoginPageProps) {
     const { status, unreachable, login, refresh } = useAuth();
     const [signupOpen, setSignupOpen] = useState(false);
     const [username, setUsername] = useState('');
@@ -304,6 +310,11 @@ function LoginPage({ onSignup }: { onSignup?: () => void }) {
                         <div ref={contentRef} className='login-card-content'>
                             {!twoFaRequired ? (
                                 <>
+                                    {onBack && (
+                                        <p className='signup-intro'>
+                                            Pendant la maintenance, seuls les administrateurs peuvent se connecter.
+                                        </p>
+                                    )}
                                     <div className='input-group'>
                                         <TextInput
                                             ref={inputUsername}
@@ -369,10 +380,16 @@ function LoginPage({ onSignup }: { onSignup?: () => void }) {
                     </div>
                     {/* Toujours monté, pour que son arrivée se joue aussi (l'ouverture
                         des inscriptions n'est connue qu'après coup) : seul `shown` change. */}
-                    {onSignup && (
-                        <TextLink href='/signup' shown={signupShown} onNavigate={onSignup}>
-                            S’inscrire
+                    {onBack ? (
+                        <TextLink href='/' shown={phase === 'form' && !twoFaRequired && !loading} onNavigate={onBack}>
+                            Retour
                         </TextLink>
+                    ) : (
+                        onSignup && (
+                            <TextLink href='/signup' shown={signupShown} onNavigate={onSignup}>
+                                S’inscrire
+                            </TextLink>
+                        )
                     )}
                 </div>
 

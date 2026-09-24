@@ -21,7 +21,18 @@ function freePort(): Promise<number> {
     });
 }
 
-test('le moteur ouvre ses quatre ports sur un certificat fourni, et s’arrête sans attendre un client muet', async () => {
+/** Vrai si quelque chose accepte une connexion sur ce port. */
+function listening(port: number): Promise<boolean> {
+    return new Promise((resolve) => {
+        const socket = net.connect({ host: 'localhost', port }, () => {
+            socket.destroy();
+            resolve(true);
+        });
+        socket.once('error', () => resolve(false));
+    });
+}
+
+test('le moteur ouvre ses quatre ports sur un certificat fourni, s’arrête sans attendre un client muet, et redémarre', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mailserver-engine-'));
     const pem = selfSigned();
     fs.writeFileSync(path.join(dir, 'cert.pem'), pem.cert);
@@ -73,6 +84,13 @@ test('le moteur ouvre ses quatre ports sur un certificat fourni, et s’arrête 
         await engine.stop();
         assert.ok(Date.now() - started < 1_500, `arrêt en ${Date.now() - started} ms`);
         idle.destroy();
+        assert.deepEqual(await Promise.all(ports.map(listening)), [false, false, false, false]);
+        assert.ok((await engine.handle.status()).listeners.every((l) => !l.up));
+
+        // Le même objet redémarré rouvre ses quatre ports, certificat déjà en main.
+        await engine.start();
+        assert.deepEqual(await Promise.all(ports.map(listening)), [true, true, true, true]);
+        assert.ok((await engine.handle.status()).listeners.every((l) => l.up));
     } finally {
         await engine.stop();
         fs.rmSync(dir, { recursive: true, force: true });

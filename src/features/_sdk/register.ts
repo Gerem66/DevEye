@@ -23,7 +23,7 @@ import {
 } from '@deveye/types/sdk/server';
 // Pour ses types seulement : c'est lui qui déclare `config.rateLimit` sur une route.
 import type {} from '@fastify/rate-limit';
-import type { FastifyInstance, FastifyRequest, RouteShorthandOptions } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest, RouteShorthandOptions } from 'fastify';
 import type { Readable } from 'node:stream';
 
 import type { Database } from '@/db';
@@ -39,6 +39,7 @@ import type {
     SdkPublicStreamRouteOptions
 } from '@deveye/types/sdk/server';
 import { logger } from '@/logger';
+import { maintenance, replyMaintenance, type MaintenanceServices } from '@/Services/maintenance';
 import { createSdkContext } from './context';
 import { createDomainsContext, type DomainsHost } from './domains';
 import { createQuota } from './quota';
@@ -356,7 +357,13 @@ export function isModuleShareWired(featureId: string): boolean {
  * Les services créés : hooks agent et contrats offerts se lisent dessus à la
  * demande, jamais à la construction, pour que l'ordre de boot ne compte pas.
  */
-const SERVICES: { manifest: FeatureManifest; service: FeatureService; logger: ModuleServiceHost['logger'] }[] = [];
+const SERVICES: {
+    manifest: FeatureManifest;
+    service: FeatureService;
+    logger: ModuleServiceHost['logger'];
+    /** Tenu à l'arrêt par une maintenance `full` : ses hooks agent sont ignorés. */
+    halted: boolean;
+}[] = [];
 
 /**
  * Les services d'arrière-plan des modules, créés une fois, démarrés par le
@@ -382,10 +389,46 @@ export function createModuleServices(host: ModuleServiceHost): FeatureService[] 
             if (other) throw new Error(`Provider « ${key} » offert par « ${other} » et « ${m.manifest.id} »`);
             providers.set(key, m.manifest.id);
         }
-        SERVICES.push({ manifest: m.manifest, service, logger: host.logger });
+        SERVICES.push({ manifest: m.manifest, service, logger: host.logger, halted: false });
         return [service];
     });
 }
+
+/** Le démarrage : un service qu'un arrêt complet tient à l'arrêt ne démarre pas. */
+export async function startModuleServices(halted: (featureId: string) => boolean): Promise<void> {
+    for (const s of SERVICES) {
+        if (halted(s.manifest.id)) {
+            s.halted = true;
+            s.logger.warn({ module: s.manifest.id }, 'service tenu à l’arrêt par la maintenance');
+            continue;
+        }
+        await s.service.start();
+    }
+}
+
+/** L'arrêt du processus : un service déjà arrêté par la maintenance ne l'est pas deux fois. */
+export function stopModuleServices(): Promise<PromiseSettledResult<void>[]> {
+    return Promise.allSettled(SERVICES.filter((s) => !s.halted).map(async (s) => s.service.stop()));
+}
+
+/** Ce que la maintenance pilote : l'arrêt et la relance d'un service, sur le même objet. */
+export const moduleServiceControl: MaintenanceServices = {
+    installed: () => MODULES.map((m) => m.manifest.id),
+    hasService: (featureId) => SERVICES.some((s) => s.manifest.id === featureId),
+    async stop(featureId) {
+        const s = SERVICES.find((x) => x.manifest.id === featureId);
+        if (!s || s.halted) return;
+        // Avant l'attente : les hooks agent cessent tout de suite.
+        s.halted = true;
+        await s.service.stop();
+    },
+    async start(featureId) {
+        const s = SERVICES.find((x) => x.manifest.id === featureId);
+        if (!s || !s.halted) return;
+        await s.service.start();
+        s.halted = false;
+    }
+};
 
 /**
  * L'agrégat des hooks agent des modules qui déclarent la capacité 'agents'.
@@ -395,7 +438,7 @@ export function createModuleServices(host: ModuleServiceHost): FeatureService[] 
 export function moduleAgentHooks(): Required<FeatureAgentHooks> {
     const each = (hook: keyof FeatureAgentHooks, run: (hooks: FeatureAgentHooks) => void | Promise<void>): void => {
         for (const s of SERVICES) {
-            if (!(s.manifest.nativeCapabilities ?? []).includes('agents')) continue;
+            if (s.halted || !(s.manifest.nativeCapabilities ?? []).includes('agents')) continue;
             const failed = (err: unknown): void =>
                 s.logger.error({ err, module: s.manifest.id, hook }, 'hook agent en échec');
             try {
@@ -518,6 +561,7 @@ export async function modulePublicRoutes(app: FastifyInstance, listener: 'app' |
             } else {
                 PUBLIC_PATHS.add(path);
             }
+            const appOnly = (opts.exposure ?? 'everywhere') === 'app';
             const route: RouteShorthandOptions = { logLevel: 'silent' };
             // Le plafond de corps se pose par route : le défaut de Fastify vaut un
             // mégaoctet, analysé avant toute validation, là où une balise en envoie
@@ -530,8 +574,10 @@ export async function modulePublicRoutes(app: FastifyInstance, listener: 'app' |
             // Deux branches plutôt qu'un `app[method]` : l'union des deux
             // signatures ne se résout pas (la surcharge WebSocket de `get`
             // prend le dessus).
-            if (method === 'get') app.get(path, route, (req, reply) => handler(req, reply));
-            else app.post(path, route, (req, reply) => handler(req, reply));
+            const guarded = (req: FastifyRequest, reply: FastifyReply) =>
+                maintenance.refusesPublic(s.manifest.id, appOnly) ? replyMaintenance(req, reply) : handler(req, reply);
+            if (method === 'get') app.get(path, route, guarded);
+            else app.post(path, route, guarded);
         };
         const streams: { path: string; opts: SdkPublicStreamRouteOptions; handler: SdkPublicStreamHandler }[] = [];
         const surface: SdkPublicApp = {
@@ -558,8 +604,11 @@ export async function modulePublicRoutes(app: FastifyInstance, listener: 'app' |
             for (const stream of streams) {
                 const route: RouteShorthandOptions = { logLevel: 'silent' };
                 if (stream.opts.rateLimit) route.config = { rateLimit: stream.opts.rateLimit };
+                // Montées sur l'origine de l'app seule : même règle que `exposure: 'app'`.
                 scoped.post(stream.path, route, (req, reply) =>
-                    stream.handler(streamRequest(req, stream.opts.maxBytes), reply)
+                    maintenance.refusesPublic(s.manifest.id, true)
+                        ? replyMaintenance(req, reply)
+                        : stream.handler(streamRequest(req, stream.opts.maxBytes), reply)
                 );
             }
         });

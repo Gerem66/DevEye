@@ -61,6 +61,15 @@ export interface TopNavbarProps {
     onOpenFeedback?: (e: ReactMouseEvent) => void;
     /** Ouvrir la page d'administration des comptes (admin). */
     onOpenUsers?: (e: ReactMouseEvent) => void;
+    /** Ouvrir la page Maintenance (admin). */
+    onOpenMaintenance?: (e: ReactMouseEvent) => void;
+    /**
+     * Le bandeau des administrateurs, à l'accueil : le site est en maintenance,
+     * ou il l'a levée alors que `MAINTENANCE=1` reste posé.
+     */
+    maintenanceBanner?: 'site' | 'env';
+    /** Fermer le rappel de `MAINTENANCE=1`, pour tous les administrateurs. */
+    onDismissMaintenanceBanner?: () => void;
     /** Ouvrir la page de gestion de l'espace courant. */
     onManageWorkspace?: (e: React.MouseEvent) => void;
     /**
@@ -95,6 +104,9 @@ export default function TopNavbar({
     onManageWorkspace,
     onOpenFeedback,
     onOpenUsers,
+    onOpenMaintenance,
+    maintenanceBanner,
+    onDismissMaintenanceBanner,
     aboutBody
 }: TopNavbarProps) {
     const { user, logout } = useAuth();
@@ -250,6 +262,51 @@ export default function TopNavbar({
                         )}
                     </motion.div>
                 )}
+                {!organizing && !viewTitle && maintenanceBanner && (
+                    <motion.div
+                        key='maintenanceBanner'
+                        className={styles.organizeBanner}
+                        role='status'
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={FADE}
+                    >
+                        <span className={`icon icon-wrench ${styles.organizeBannerIcon} ${styles.maintenanceIcon}`} />
+                        <span className={styles.organizeBannerText}>
+                            <span className={styles.organizeBannerTitle}>
+                                {maintenanceBanner === 'site'
+                                    ? 'Site en maintenance'
+                                    : 'MAINTENANCE=1 est encore posée'}
+                            </span>
+                            <span className={styles.organizeBannerHint}>
+                                {maintenanceBanner === 'site'
+                                    ? 'Seuls les administrateurs y ont accès.'
+                                    : 'Le prochain redémarrage remettra le site en maintenance.'}
+                            </span>
+                        </span>
+                        {maintenanceBanner === 'site'
+                            ? onOpenMaintenance && (
+                                  <Button
+                                      variant='secondary'
+                                      className={styles.organizeBannerDone}
+                                      onClick={onOpenMaintenance}
+                                  >
+                                      Gérer
+                                  </Button>
+                              )
+                            : onDismissMaintenanceBanner && (
+                                  <Button
+                                      variant='ghost'
+                                      icon='x'
+                                      className={styles.organizeBannerDone}
+                                      onClick={onDismissMaintenanceBanner}
+                                      title='Ne plus afficher ce rappel'
+                                      aria-label='Ne plus afficher ce rappel'
+                                  />
+                              )}
+                    </motion.div>
+                )}
             </AnimatePresence>
 
             {/* Right section: deployment readiness (only while not ready) + live status + user profile */}
@@ -365,9 +422,11 @@ export default function TopNavbar({
                                 </button>
                             ))}
                             {/* Second separator: groups the system pages (Logs,
-                                Retours, Utilisateurs) apart from the account
-                                pages above. */}
-                            {(onOpenLogs || onOpenFeedback || onOpenUsers) && <hr className={styles.divider} />}
+                                Retours, Utilisateurs, Maintenance) apart from
+                                the account pages above. */}
+                            {(onOpenLogs || onOpenFeedback || onOpenUsers || onOpenMaintenance) && (
+                                <hr className={styles.divider} />
+                            )}
                             {onOpenLogs && (
                                 <button
                                     className={styles.menuItem}
@@ -409,6 +468,22 @@ export default function TopNavbar({
                                     }}
                                 >
                                     <span className='icon icon-users' /> Utilisateurs
+                                    <span
+                                        className={`icon icon-shield ${styles.adminBadge}`}
+                                        title='Réservé aux administrateurs'
+                                        aria-label='Réservé aux administrateurs'
+                                    />
+                                </button>
+                            )}
+                            {onOpenMaintenance && (
+                                <button
+                                    className={styles.menuItem}
+                                    onClick={(e) => {
+                                        onOpenMaintenance(e);
+                                        setMenuOpen(false);
+                                    }}
+                                >
+                                    <span className='icon icon-wrench' /> Maintenance
                                     <span
                                         className={`icon icon-shield ${styles.adminBadge}`}
                                         title='Réservé aux administrateurs'

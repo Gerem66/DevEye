@@ -79,6 +79,8 @@ export interface ConvertRepo {
     progress(id: number, permille: number): Promise<void>;
     finish(id: number, outputBytes: number, at: number, expiresAt: number): Promise<void>;
     fail(id: number, code: ConvertErrorCode, errorEnc: string | null, at: number): Promise<void>;
+    /** Rend à la file un travail que l'arrêt du service a interrompu, sans lui compter cet essai. */
+    requeue(id: number): Promise<void>;
     /** Vrai si le travail était encore annulable. */
     cancel(id: number, workspaceId: number, at: number): Promise<boolean>;
     /** Vrai si la ligne est partie : seul un travail au repos se retire. */
@@ -234,6 +236,14 @@ export function createRepo(q: SdkQueryable): ConvertRepo {
                 `UPDATE ft_convert_jobs SET phase = 'error', error_code = ?, error_enc = ?, finished_at = ?
                  WHERE id = ? AND phase IN ('uploading', 'queued', 'running')`,
                 [code, errorEnc, at, id]
+            );
+        },
+
+        async requeue(id) {
+            await q.execute(
+                `UPDATE ft_convert_jobs SET phase = 'queued', attempts = GREATEST(attempts, 1) - 1, progress_permille = 0
+                 WHERE id = ? AND phase = 'running'`,
+                [id]
             );
         },
 

@@ -109,7 +109,7 @@ export function createService(deps: FeatureServiceDeps<InvoicingRepo>): FeatureS
             ticker.start();
         },
         stop() {
-            ticker.stop();
+            return ticker.stop();
         },
 
         publicRoutes(app: SdkPublicApp) {

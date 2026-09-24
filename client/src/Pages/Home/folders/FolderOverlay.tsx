@@ -14,6 +14,7 @@ import { Widget } from '@/Components/Widget';
 import { WidgetGrid } from '@/Components/WidgetGrid';
 import { useDismissLayer } from '@/Components/Dialog';
 import type { FeatureCatalogEntry } from '../catalog';
+import { LOCK_TEXT, MAINTENANCE_BADGE, type TileLock } from '../tiles/tileLock';
 import { FolderTile } from './FolderTile';
 import { folderKey, folderTitle } from './identity';
 import styles from './folders.module.css';
@@ -196,8 +197,10 @@ export interface FolderOverlayProps {
     topOffset: number;
     /** La vue actuellement ouverte par-dessus, s'il y en a une. */
     expandedWidget: string | null;
-    /** Ce rôle n'ouvre pas cette fonctionnalité : carte en retrait, comme sur la grille. */
-    isLocked: (id: HomeFeatureId) => boolean;
+    /** Pourquoi la carte reste en retrait, comme sur la grille ; `undefined` si elle s'ouvre. */
+    lockOf: (id: HomeFeatureId) => TileLock | undefined;
+    /** En maintenance, mais ouverte à l'administrateur qui la regarde. */
+    hasMaintenanceBadge: (id: HomeFeatureId) => boolean;
     onOpenFeature: (id: HomeFeatureId, e: MouseEvent<HTMLDivElement>) => void;
     onClose: () => void;
 }
@@ -215,7 +218,8 @@ export function FolderOverlay({
     source,
     topOffset,
     expandedWidget,
-    isLocked,
+    lockOf,
+    hasMaintenanceBadge,
     onOpenFeature,
     onClose
 }: FolderOverlayProps) {
@@ -240,7 +244,7 @@ export function FolderOverlay({
                     <div className={styles.content} style={{ paddingTop: `calc(var(--space-lg) + ${topOffset}px)` }}>
                         <WidgetGrid>
                             {entries.map((entry, index) => {
-                                const locked = isLocked(entry.id);
+                                const lock = lockOf(entry.id);
                                 return (
                                     <FanCard
                                         key={entry.id}
@@ -253,14 +257,17 @@ export function FolderOverlay({
                                             widgetId={entry.id}
                                             title={entry.title}
                                             icon={entry.icon}
-                                            className={locked ? styles.lockedCard : undefined}
+                                            badge={
+                                                !lock && hasMaintenanceBadge(entry.id) ? MAINTENANCE_BADGE : undefined
+                                            }
+                                            className={lock ? styles.lockedCard : undefined}
                                             onExpand={(e) => onOpenFeature(entry.id, e)}
                                         >
                                             {/* Même choix que la grille : le contenu vivant est
                                                 remplacé, pas grisé, sinon il interrogerait un
                                                 serveur qui refuse. */}
-                                            {locked ? (
-                                                <span className={styles.lockedBody}>Accès restreint</span>
+                                            {lock ? (
+                                                <span className={styles.lockedBody}>{LOCK_TEXT[lock]}</span>
                                             ) : (
                                                 <entry.WidgetContent />
                                             )}

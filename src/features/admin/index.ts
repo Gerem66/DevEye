@@ -3,6 +3,7 @@ import { adminDeleteUser, adminSetUserRole, adminSetUserStatus, adminUserList } 
 import { invalidateAccess } from '../_access';
 import { forgetSessionsOf } from '@/Services/SecureStore';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
+import { adminMaintenanceFeatures } from './maintenance';
 import { notifyAdmins } from './notify';
 
 /**
@@ -158,5 +159,6 @@ export const adminFeatures: FeatureDefinition<string, any, any>[] = [
     adminUserListFeature,
     adminSetUserRoleFeature,
     adminSetUserStatusFeature,
-    adminDeleteUserFeature
+    adminDeleteUserFeature,
+    ...adminMaintenanceFeatures
 ];

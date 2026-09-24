@@ -49,8 +49,8 @@ export const serverEntry: FeatureServer<GitRepo> = {
                 setSync(sync);
                 sync.start();
             },
-            stop() {
-                sync.stop();
+            async stop() {
+                await sync.stop();
                 setSync(null);
             },
             providers: { [GIT_ITEMS_PROVIDER]: items }

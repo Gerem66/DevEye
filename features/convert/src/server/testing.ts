@@ -117,6 +117,13 @@ export function memoryRepo(): MemoryRepo {
             }
             return Promise.resolve();
         },
+        requeue(id) {
+            const row = byId(id);
+            if (row?.phase === 'running') {
+                Object.assign(row, { phase: 'queued', attempts: Math.max(row.attempts, 1) - 1, progress_permille: 0 });
+            }
+            return Promise.resolve();
+        },
         cancel(id, workspaceId, at) {
             const row = byId(id);
             const open = ['awaiting_upload', 'uploading', 'queued', 'running'];

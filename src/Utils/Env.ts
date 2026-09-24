@@ -88,6 +88,10 @@ export const env = {
     // Ce qui est déjà en base y reste, et redevient lisible en rallumant.
     FEEDBACK_ENABLED: getEnvVar('FEEDBACK_ENABLED', 'boolean', false) ?? false,
 
+    // Démarrer le site en maintenance (voir `Services/maintenance.ts`), que
+    // l'interface lèvera ensuite : un point de départ, pas un verrou.
+    MAINTENANCE: getEnvVar('MAINTENANCE', 'boolean', false) ?? false,
+
     COOKIE_DOMAIN: getEnvVar('COOKIE_DOMAIN', 'string', false),
 
     // Les origines dont la page peut ouvrir une session ici depuis un navigateur :

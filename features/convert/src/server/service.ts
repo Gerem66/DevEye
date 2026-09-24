@@ -30,6 +30,8 @@ const PUBLISH_EVERY_MS = 1000;
 const PERSIST_EVERY_MS = 5000;
 /** Les travaux au repos (échec, annulation, résultat parti) quittent la base après ce délai. */
 const KEPT_SECONDS = 7 * 86_400;
+/** La raison d'une interruption par l'arrêt du service, que rien ne confond avec une annulation. */
+const STOPPING = Symbol('stopping');
 
 /** La couture de test : la source des taux, sans réseau. */
 export interface ConvertServiceSeam {
@@ -38,32 +40,40 @@ export interface ConvertServiceSeam {
 
 export function createService(deps: FeatureServiceDeps<ConvertRepo>, seam: ConvertServiceSeam = {}): FeatureService {
     let current: { jobId: number; controller: AbortController } | null = null;
+    let stopping = false;
 
     // Deux chemins mènent à un tour de file, le cadran et l'arrivée d'un
     // fichier : `pending` retient le second plutôt que de le perdre.
-    let running = false;
+    let loop: Promise<void> | null = null;
     let pending = false;
-    const runGuarded = async (): Promise<void> => {
-        if (running) {
+    const runGuarded = (): Promise<void> => {
+        if (loop) {
             pending = true;
-            return;
+            return Promise.resolve();
         }
-        running = true;
-        try {
-            do {
-                pending = false;
-                while (await runNext()) {
-                    // Vide la file avant de rendre la main.
-                }
-            } while (pending);
-        } finally {
-            running = false;
-        }
+        loop = (async () => {
+            try {
+                do {
+                    pending = false;
+                    while (await runNext()) {
+                        // Vide la file avant de rendre la main.
+                    }
+                } while (pending);
+            } finally {
+                loop = null;
+            }
+        })();
+        return loop;
     };
 
     async function runNext(): Promise<boolean> {
+        if (stopping) return false;
         const job = await deps.repo.claimQueued(now());
         if (!job) return false;
+        if (stopping) {
+            await deps.repo.requeue(job.id);
+            return false;
+        }
         const controller = new AbortController();
         current = { jobId: job.id, controller };
         deps.live.changed(job.workspace_id);
@@ -168,6 +178,13 @@ export function createService(deps: FeatureServiceDeps<ConvertRepo>, seam: Conve
                 Math.round((Date.now() - startedAt) / 1000)
             );
         } catch (e) {
+            if (signal.reason === STOPPING) {
+                // Le travail reprend au redémarrage : son entrée reste, seul le partiel part.
+                await fs.rm(paths.outputPart, { force: true });
+                await fs.rm(paths.work, { recursive: true, force: true });
+                await deps.repo.requeue(job.id);
+                return;
+            }
             await removeJobDir(job.workspace_id, job.id);
             if (e instanceof ConvertCanceled) return;
             const failure =
@@ -275,6 +292,7 @@ export function createService(deps: FeatureServiceDeps<ConvertRepo>, seam: Conve
 
     return {
         async start() {
+            stopping = false;
             await probeEngines(await probeStorage(), deps.logger);
             // Un arrêt brutal ne repasse par aucun `finally` : le ménage se fait ici.
             const requeued = await deps.repo.recoverStale(env.CONVERT_MAX_ATTEMPTS, now());
@@ -295,11 +313,13 @@ export function createService(deps: FeatureServiceDeps<ConvertRepo>, seam: Conve
             void refreshFx();
         },
         async stop() {
+            stopping = true;
             setQueueWaker(null);
             setJobAborter(null);
-            current?.controller.abort();
+            current?.controller.abort(STOPPING);
             await queueTicker.stop();
             await upkeepTicker.stop();
+            await loop?.catch(() => undefined);
         },
         publicRoutes(app) {
             convertRoutes(app, deps);

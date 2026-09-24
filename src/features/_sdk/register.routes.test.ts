@@ -5,6 +5,9 @@ import type { Logger } from 'pino';
 import type { FeatureManifest } from '@deveye/types/sdk';
 import type { FeatureServer } from '@deveye/types/sdk/server';
 
+import type { Database } from '@/db';
+import type { LiveHub } from '@/live/hub';
+import { maintenance } from '@/Services/maintenance';
 import { createModuleServices, modulePublicRoutes, parseFormFields, registerModules } from './register';
 import type { ModuleServiceHost } from './service';
 
@@ -49,6 +52,7 @@ const server: FeatureServer = {
             app.post('/api/x-sdkstream/json', { exposure: 'app' }, async (req, reply) =>
                 reply.send({ body: req.body })
             );
+            app.get('/api/x-sdkstream/page', {}, async (_req, reply) => reply.send({ page: true }));
         }
     })
 };
@@ -160,5 +164,79 @@ describe('parseFormFields', () => {
         assert.equal(Object.getPrototypeOf(fields), null);
         assert.deepEqual(Object.keys(fields ?? {}), ['__proto__', 'message']);
         assert.equal(({} as Record<string, unknown>).polluted, undefined);
+    });
+});
+
+/**
+ * Le filtre de maintenance, posé au montage : une route ouverte au public se
+ * ferme avec le site ou sa feature ; une route réservée à l'app prolonge une
+ * commande déjà gardée et passe, sauf à l'arrêt complet.
+ */
+describe('routes publiques en maintenance', () => {
+    const state = { site: false, level: null as 'requests' | 'full' | null };
+    const db = {
+        users: { listAdminIds: async () => [] },
+        maintenance: {
+            site: async () => ({
+                active: state.site,
+                message: 'Retour à midi',
+                envNoticeDismissed: false,
+                updated: 0,
+                updatedBy: null
+            }),
+            features: async () =>
+                state.level ? [{ feature: 'x-sdkstream', level: state.level, updated: 0, updatedBy: null }] : [],
+            setSite: async (active: boolean) => {
+                state.site = active;
+            },
+            setFeature: async (_feature: string, level: 'requests' | 'full' | null) => {
+                state.level = level;
+            }
+        }
+    } as unknown as Database;
+    const live = { broadcast() {}, closeWhere() {} } as unknown as LiveHub;
+    const services = {
+        installed: () => ['x-sdkstream'],
+        hasService: () => false,
+        stop: async () => undefined,
+        start: async () => undefined
+    };
+
+    before(() => maintenance.init({ db, live, logger: logger as never, services }));
+    after(() => maintenance.close());
+
+    it('répond 503 lisible à un visiteur et en enveloppe à un programme, le site fermé', async () => {
+        await maintenance.setSite(true, null, 1);
+        try {
+            const api = await app.inject({ method: 'GET', url: '/api/x-sdkstream/page' });
+            assert.equal(api.statusCode, 503);
+            assert.equal(api.json().error.code, 'maintenance');
+            const page = await app.inject({
+                method: 'GET',
+                url: '/api/x-sdkstream/page',
+                headers: { accept: 'text/html' }
+            });
+            assert.equal(page.statusCode, 503);
+            assert.match(page.headers['content-type'] ?? '', /text\/html/);
+            assert.match(page.body, /Retour à midi/);
+            const own = await app.inject({ method: 'POST', url: '/api/x-sdkstream/json', payload: { a: 1 } });
+            assert.equal(own.statusCode, 200);
+        } finally {
+            await maintenance.setSite(false, null, 1);
+        }
+    });
+
+    it("ferme aussi les routes de l'app à l'arrêt complet de la feature", async () => {
+        await maintenance.setFeature('x-sdkstream', 'requests', 1);
+        const own = await app.inject({ method: 'POST', url: '/api/x-sdkstream/json', payload: { a: 1 } });
+        assert.equal(own.statusCode, 200);
+        const open = await app.inject({ method: 'GET', url: '/api/x-sdkstream/page' });
+        assert.equal(open.statusCode, 503);
+        await maintenance.setFeature('x-sdkstream', 'full', 1);
+        const stopped = await app.inject({ method: 'POST', url: '/api/x-sdkstream/json', payload: { a: 1 } });
+        assert.equal(stopped.statusCode, 503);
+        await maintenance.setFeature('x-sdkstream', null, 1);
+        const back = await app.inject({ method: 'GET', url: '/api/x-sdkstream/page' });
+        assert.equal(back.statusCode, 200);
     });
 });

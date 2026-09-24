@@ -156,8 +156,8 @@ export const serverEntry: FeatureServer<DatabaseRepo> = {
                 setMonitor(monitor);
                 monitor.start();
             },
-            stop() {
-                monitor.stop();
+            async stop() {
+                await monitor.stop();
                 setMonitor(null);
             },
             providers: {

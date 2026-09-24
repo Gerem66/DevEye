@@ -49,7 +49,7 @@ async function main() {
     const db = createDatabase(pool);
     const crypt = new Encryption(env.CRYPT_KEY_A, env.CRYPT_KEY_B);
 
-    const { app, moduleServices } = await buildApp({
+    const { app, stopServices } = await buildApp({
         db,
         crypt
     });
@@ -81,7 +81,7 @@ async function main() {
             // Attendus, et avant la fermeture du pool : un module peut rendre son
             // état par une écriture en base (CloudSync libère son bail d'instance).
             // Un module qui échoue à s'arrêter ne retient pas les autres.
-            const stops = await Promise.allSettled(moduleServices.map((svc) => svc.stop()));
+            const stops = await stopServices();
             for (const stop of stops) {
                 if (stop.status === 'rejected') {
                     logger.warn({ err: (stop.reason as Error).message }, 'Module service failed to stop');

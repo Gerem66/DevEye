@@ -2,6 +2,7 @@ import { getQueryable, withTransaction, type DbPool, type Queryable } from './po
 import { devicesRepo, linkCodesRepo, type DevicesRepo, type LinkCodesRepo } from './repos/devices';
 import { feedbackRepo, type FeedbackRepo } from './repos/feedback';
 import { logsRepo, type LogsRepo } from './repos/logs';
+import { maintenanceRepo, type MaintenanceRepo } from './repos/maintenance';
 import { metricsRepo, type MetricsRepo } from './repos/metrics';
 import { featureDomainsRepo, type FeatureDomainsRepo } from './repos/featureDomains';
 import { featureKvRepo, type FeatureKvRepo } from './repos/featureKv';
@@ -44,6 +45,8 @@ export interface Database {
     logs: LogsRepo;
     /** Les signalements des utilisateurs, relus par l'administration. */
     feedback: FeedbackRepo;
+    /** La maintenance du site et des features (voir `Services/maintenance.ts`). */
+    maintenance: MaintenanceRepo;
     devices: DevicesRepo;
     linkCodes: LinkCodesRepo;
     metrics: MetricsRepo;
@@ -88,6 +91,7 @@ function buildDatabase(pool: DbPool, q: Queryable, inTransaction: boolean): Data
         remoteInstances: remoteInstancesRepo(q),
         logs: logsRepo(q),
         feedback: feedbackRepo(q),
+        maintenance: maintenanceRepo(q),
         devices: devicesRepo(q),
         linkCodes: linkCodesRepo(q),
         metrics: metricsRepo(q),

@@ -8,7 +8,7 @@ import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify, { type FastifyBaseLogger, type FastifyError, type FastifyInstance, type FastifyRequest } from 'fastify';
-import { err, ok, serverStatusSchema, type ErrorCode } from '@deveye/types';
+import { err, ok, publicMaintenanceSchema, serverStatusSchema, type ErrorCode } from '@deveye/types';
 
 import { agentRoutes } from '@/agent/routes';
 import { registerAgentWS } from '@/agent/ws';
@@ -30,16 +30,19 @@ import {
     keepRawBody,
     moduleAgentHooks,
     modulePublicRoutes,
-    parseFormFields
+    moduleServiceControl,
+    parseFormFields,
+    startModuleServices,
+    stopModuleServices
 } from '@/features/_sdk/register';
 import { setSdkHost } from '@/features/_sdk/host';
-import type { FeatureService } from '@deveye/types/sdk/server';
 import { createAuditLog } from '@/Services/AuditLog';
 import { startAttemptSweeper } from '@/Services/attempts';
 import { startDekSweeper } from '@/Services/SecureStore';
 import { createDomainVerifier } from '@/Services/domains/verifier';
 import { createMailer } from '@/Services/mailer';
 import { createSignupService } from '@/Services/signup';
+import { maintenance, MaintenanceError } from '@/Services/maintenance';
 import { status } from '@/status';
 
 import type { Database } from '@/db';
@@ -152,8 +155,8 @@ export interface AppDeps {
 
 export interface BuiltApp {
     app: FastifyInstance;
-    /** Services des modules installés — démarrés ici, arrêtés par index.ts. */
-    moduleServices: readonly FeatureService[];
+    /** Les services de fond, démarrés ici : leur arrêt, par index.ts. */
+    stopServices(): Promise<PromiseSettledResult<void>[]>;
 }
 
 export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
@@ -234,6 +237,9 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // envelope: Fastify's default body matches neither the web client's decoder
     // nor the agent's. 5xx are logged with the stack; their message stays generic.
     app.setErrorHandler((error: FastifyError, req, reply) => {
+        if (error instanceof MaintenanceError) {
+            return reply.code(503).header('Retry-After', '300').send(err('maintenance', error.message));
+        }
         const explicit = typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 500;
         const status = explicit ? (error.statusCode as number) : 500;
         if (status >= 500) req.log.error({ err: error }, 'unhandled request error');
@@ -278,6 +284,11 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         ok(serverStatusSchema.parse({ ...status.snapshot(), federation: federationEnabled() }))
     );
 
+    // Ce que la page de maintenance d'un visiteur sans session peut savoir.
+    app.get('/api/maintenance', { logLevel: 'silent' }, async () =>
+        ok(publicMaintenanceSchema.parse(maintenance.publicState()))
+    );
+
     const hub = new MonitorHub();
     // Construit avant les services de fond : ils lui adressent leurs changements
     // (ils écrivent sans commande utilisateur, donc sans socket pour diffuser).
@@ -315,12 +326,21 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         mode: env.SIGNUP_MODE,
         origin: env.PUBLIC_ORIGIN.replace(/\/+$/, '')
     });
-    const moduleServices = [
-        ...createModuleServices({ db: deps.db, crypt: deps.crypt, audit, logger, live }),
-        createDomainVerifier({ db: deps.db, crypt: deps.crypt, logger, live }),
-        signup
-    ];
-    for (const svc of moduleServices) await svc.start();
+    createModuleServices({ db: deps.db, crypt: deps.crypt, audit, logger, live });
+    const hostServices = [createDomainVerifier({ db: deps.db, crypt: deps.crypt, logger, live }), signup];
+    // Lue avant tout démarrage : un service en arrêt complet ne démarre pas, et
+    // `MAINTENANCE=1` ferme le site avant la première connexion.
+    await maintenance.init({ db: deps.db, live, logger, services: moduleServiceControl });
+    await startModuleServices((featureId) => maintenance.featureLevel(featureId) === 'full');
+    for (const svc of hostServices) await svc.start();
+    const stopServices = async (): Promise<PromiseSettledResult<void>[]> => {
+        await maintenance.close();
+        const [modules, host] = await Promise.all([
+            stopModuleServices(),
+            Promise.allSettled(hostServices.map(async (svc) => svc.stop()))
+        ]);
+        return [...modules, ...host];
+    };
 
     await authRoutes(app, { db: deps.db, crypt: deps.crypt, audit, live });
     await signupRoutes(app, { db: deps.db, audit, live, signup });
@@ -371,5 +391,5 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         app.log.debug({ clientDir }, 'No client build found; static serving disabled (host dev uses Vite)');
     }
 
-    return { app, moduleServices };
+    return { app, stopServices };
 }

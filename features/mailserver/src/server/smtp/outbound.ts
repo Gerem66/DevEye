@@ -47,7 +47,8 @@ export interface OutboundDeps {
 
 export interface Outbound {
     start(): void;
-    stop(): void;
+    /** Arrête le cadran et interrompt le tour en cours entre deux lots ; rend la fin de ce tour. */
+    stop(): Promise<void>;
     kick(): void;
     /** Un tour complet, attendu : pour les tests. */
     runOnce(): Promise<void>;
@@ -78,6 +79,7 @@ export function createOutbound(deps: OutboundDeps, seam: OutboundSeam = {}): Out
     let timer: ReturnType<typeof setInterval> | null = null;
     let running: Promise<void> | null = null;
     let again = false;
+    let halted = false;
 
     /** Où remettre : les adresses des MX, dans l'ordre de priorité. Sans MX, le domaine lui-même (RFC 5321 §5.1). */
     async function targetsOf(domain: string): Promise<{ host: string; ip: string }[]> {
@@ -218,7 +220,7 @@ export function createOutbound(deps: OutboundDeps, seam: OutboundSeam = {}): Out
 
     async function pass(): Promise<void> {
         const due = await deps.repo.dueQueue(now(), BATCH);
-        for (let i = 0; i < due.length; i += CONCURRENCY) {
+        for (let i = 0; i < due.length && !halted; i += CONCURRENCY) {
             await Promise.all(
                 due.slice(i, i + CONCURRENCY).map((row) =>
                     attempt(row).catch((error: unknown) => {
@@ -238,12 +240,13 @@ export function createOutbound(deps: OutboundDeps, seam: OutboundSeam = {}): Out
             again = true;
             return running;
         }
+        halted = false;
         running = (async () => {
             try {
                 do {
                     again = false;
                     await pass();
-                } while (again);
+                } while (again && !halted);
             } catch (error) {
                 deps.logger.error({ err: (error as Error).message }, 'File d’envoi : tour interrompu');
             } finally {
@@ -263,6 +266,8 @@ export function createOutbound(deps: OutboundDeps, seam: OutboundSeam = {}): Out
         stop() {
             if (timer) clearInterval(timer);
             timer = null;
+            halted = true;
+            return running ?? Promise.resolve();
         },
         kick: () => void run(),
         runOnce: run

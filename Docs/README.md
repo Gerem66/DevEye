@@ -14,20 +14,21 @@ Ce dossier porte le transverse ; la doc d'une feature vit dans son module,
 
 ## Systèmes transverses
 
-| Doc                                      | Quoi                                                                           |
-| ---------------------------------------- | ------------------------------------------------------------------------------ |
-| [WORKSPACES.md](./WORKSPACES.md)         | les espaces (isolation, rôles, clés), à lire avant de toucher à l'un des trois |
-| [SECURITY_MODEL.md](./SECURITY_MODEL.md) | le chiffrement : étages ouvert/gardé, DEK, mot de passe                        |
-| [KEY_ROTATION.md](./KEY_ROTATION.md)     | changer la clé serveur (`CRYPT_KEY_A/B`) : ce qu'elle emballe, la procédure    |
-| [AUTH_PROMPTS.md](./AUTH_PROMPTS.md)     | le prompt de déverrouillage unique, et qui le réutilise                        |
-| [PERMISSIONS.md](./PERMISSIONS.md)       | les quatre étages de droits, et les décisions actées                           |
-| [SHARING.md](./SHARING.md)               | la projection d'éléments entre espaces                                         |
-| [FEDERATION.md](./FEDERATION.md)         | les instances distantes : une seconde session depuis le navigateur             |
-| [LIVE.md](./LIVE.md)                     | la présence en direct : roster, curseurs, invalidation poussée, téléportation  |
-| [SETTINGS.md](./SETTINGS.md)             | la coquille de réglages unique, son bouton commun, ses onglets                 |
-| [QUOTAS.md](./QUOTAS.md)                 | offres et quotas, l'entrée de compte d'un module, illimité sans fournisseur    |
-| [SOURCES.md](./SOURCES.md)               | les sources d'une feature : jetons, destinations, clés d'API                   |
-| [NOTIFICATIONS.md](./NOTIFICATIONS.md)   | les canaux par feature et la sélection par élément                             |
+| Doc                                      | Quoi                                                                            |
+| ---------------------------------------- | ------------------------------------------------------------------------------- |
+| [WORKSPACES.md](./WORKSPACES.md)         | les espaces (isolation, rôles, clés), à lire avant de toucher à l'un des trois  |
+| [SECURITY_MODEL.md](./SECURITY_MODEL.md) | le chiffrement : étages ouvert/gardé, DEK, mot de passe                         |
+| [KEY_ROTATION.md](./KEY_ROTATION.md)     | changer la clé serveur (`CRYPT_KEY_A/B`) : ce qu'elle emballe, la procédure     |
+| [AUTH_PROMPTS.md](./AUTH_PROMPTS.md)     | le prompt de déverrouillage unique, et qui le réutilise                         |
+| [PERMISSIONS.md](./PERMISSIONS.md)       | les quatre étages de droits, et les décisions actées                            |
+| [SHARING.md](./SHARING.md)               | la projection d'éléments entre espaces                                          |
+| [FEDERATION.md](./FEDERATION.md)         | les instances distantes : une seconde session depuis le navigateur              |
+| [LIVE.md](./LIVE.md)                     | la présence en direct : roster, curseurs, invalidation poussée, téléportation   |
+| [SETTINGS.md](./SETTINGS.md)             | la coquille de réglages unique, son bouton commun, ses onglets                  |
+| [QUOTAS.md](./QUOTAS.md)                 | offres et quotas, l'entrée de compte d'un module, illimité sans fournisseur     |
+| [SOURCES.md](./SOURCES.md)               | les sources d'une feature : jetons, destinations, clés d'API                    |
+| [NOTIFICATIONS.md](./NOTIFICATIONS.md)   | les canaux par feature et la sélection par élément                              |
+| [MAINTENANCE.md](./MAINTENANCE.md)       | fermer le site ou une feature à l'instant, depuis l'interface, la base ou l'env |
 
 ## Features
 

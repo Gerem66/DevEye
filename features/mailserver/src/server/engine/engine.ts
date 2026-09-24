@@ -91,6 +91,14 @@ export function createEngine(deps: FeatureServiceDeps<MailserverRepo>): Engine {
     let imap: ImapServer | null = null;
     let fileStamp = '';
     const timers: ReturnType<typeof setInterval>[] = [];
+    let unsubscribe: (() => void) | null = null;
+    let stopped = false;
+    /** Le tour d'envoi qu'un arrêt a laissé finir : un redémarrage l'attend avant de reprendre la file. */
+    let draining: Promise<void> = Promise.resolve();
+    /** Un message reçu pendant l'arrêt reste en file jusqu'au redémarrage. */
+    const kick = (): void => {
+        if (!stopped) outbound.kick();
+    };
 
     /** Un port qui ne s'ouvre pas (déjà pris, interdit) se dit dans l'état du serveur, et ne fait pas tomber l'app. */
     async function open(name: ListenerName, port: number, listen: () => Promise<unknown>): Promise<boolean> {
@@ -124,7 +132,7 @@ export function createEngine(deps: FeatureServiceDeps<MailserverRepo>): Engine {
         await open('smtp', env.MAILSERVER_PORT_SMTP, () => server.listen(env.MAILSERVER_PORT_SMTP));
     }
 
-    /** Les trois ports qui n'existent pas sans certificat : ils ne s'ouvrent qu'une fois, quand il arrive. */
+    /** Les trois ports qui n'existent pas sans certificat : ils ne s'ouvrent qu'une fois par démarrage, quand il arrive. */
     let securing: Promise<void> | null = null;
     function openSecured(): Promise<void> {
         if (certificates.current() === null) return Promise.resolve();
@@ -142,7 +150,7 @@ export function createEngine(deps: FeatureServiceDeps<MailserverRepo>): Engine {
             store,
             auth,
             cipherFor: deps.cipherFor,
-            kick: () => outbound.kick(),
+            kick,
             logger: deps.logger
         };
         for (const [name, port, implicit] of [
@@ -219,7 +227,7 @@ export function createEngine(deps: FeatureServiceDeps<MailserverRepo>): Engine {
             notifier.dropMailbox(mailboxId);
             if (purge) await store.purgeMailbox(mailboxId);
         },
-        kickQueue: () => outbound.kick(),
+        kickQueue: kick,
         releaseBlob: (blobId) => store.releaseBlob(blobId)
     };
 
@@ -227,6 +235,8 @@ export function createEngine(deps: FeatureServiceDeps<MailserverRepo>): Engine {
         handle,
 
         async start() {
+            await draining;
+            stopped = false;
             // Un arrêt en pleine remise laisse des lignes « en cours » que personne ne reprendrait.
             await repo.requeueStuck();
             if (!configured) return;
@@ -234,7 +244,7 @@ export function createEngine(deps: FeatureServiceDeps<MailserverRepo>): Engine {
             for (const name of ['submissions', 'submission', 'imaps'] as const) {
                 states[name] = { ...states[name], reason: NEEDS_CERTIFICATE };
             }
-            certificates.subscribe(() => void openSecured());
+            unsubscribe = certificates.subscribe(() => void openSecured());
 
             if (usesFiles) {
                 await loadFiles();
@@ -254,14 +264,29 @@ export function createEngine(deps: FeatureServiceDeps<MailserverRepo>): Engine {
         },
 
         async stop() {
+            stopped = true;
             for (const timer of timers.splice(0)) clearInterval(timer);
-            outbound.stop();
+            unsubscribe?.();
+            unsubscribe = null;
+            draining = outbound.stop();
             events.stop();
-            const closing = Promise.allSettled([
-                ...[...smtpListeners.values()].map((listener) => listener.stop()),
-                imap ? imap.stop() : Promise.resolve()
+            const opening = securing;
+            securing = null;
+            const closing = (async () => {
+                // Des ports en cours d'ouverture se referment avec les autres.
+                await opening?.catch(() => undefined);
+                const held = [...smtpListeners.values(), ...(imap ? [imap] : [])];
+                smtpListeners.clear();
+                imap = null;
+                for (const name of Object.keys(states) as ListenerName[]) {
+                    states[name] = { ...states[name], up: false, reason: '' };
+                }
+                await Promise.allSettled(held.map((server) => server.stop()));
+            })();
+            await Promise.race([
+                Promise.all([closing, draining]),
+                new Promise((resolve) => setTimeout(resolve, STOP_DEADLINE_MS).unref())
             ]);
-            await Promise.race([closing, new Promise((resolve) => setTimeout(resolve, STOP_DEADLINE_MS).unref())]);
         },
 
         publicRoutes(app) {

@@ -19,7 +19,7 @@ import {
     useActiveWorkspace,
     useWorkspaceState
 } from '@/stores/workspace';
-import { getLocalUser } from '@/stores/currentUser';
+import { getLocalUser, useLocalUser } from '@/stores/currentUser';
 import { ws } from '@/api/ws';
 import { OpenPopup } from '@/Components/Popup';
 import { isHomeReady, markHomeReady, onHomeReady } from '@/stores/homeReady';
@@ -39,11 +39,18 @@ import {
     useRemoteInstances
 } from '@/stores/remoteInstances';
 import { refreshSecrecyStatus, setUnlocked } from '@/stores/secrecy';
-import { accountViewId, openAccountView, takeAccountViewHint } from '@/stores/accountView';
+import { accountViewFeature, accountViewId, openAccountView, takeAccountViewHint } from '@/stores/accountView';
 import { takeSignupPlan } from '@/stores/signupPlan';
 import { accountEntries } from '@/sdk/registry';
 import type { AccountViewProps } from '@deveye/types/sdk/client';
 import { useFeedbackEnabled } from '@/stores/feedbackEnabled';
+import {
+    featureMaintenance,
+    setMaintenanceEnvNotice,
+    useMaintenance,
+    useMaintenanceEnvNotice,
+    useSiteMaintenance
+} from '@/stores/maintenance';
 import { armFrameProbe } from '@/perf/frameBudget';
 import { noteView } from '@/diagnostics/trace';
 import { LiveProvider } from '@/live/LiveProvider';
@@ -69,12 +76,14 @@ import FeatureFeedback from '@/Features/Feedback';
 import FeatureLogs from '@/Features/Logs';
 import FeatureWorkspace from '@/Features/Workspace';
 import FeatureUsers from '@/Features/Users';
+import FeatureMaintenance from '@/Features/Maintenance';
 
 import { catalogEntries, featureCatalog, featureCatalogEntry } from './catalog';
 import { EmptyHome } from './EmptyHome';
 import { isForceReload } from './forceReload';
 import { deviceKey } from './tiles/tileVisual';
 import { DeviceTileCard, FeatureTileCard, FolderTileCard, ShortcutTileCard } from './tiles/HomeTileCard';
+import type { TileLock } from './tiles/tileLock';
 import { AboutContent } from './about';
 import { EditableHome } from './organize/EditableHome';
 import { FolderOverlay, folderTitle } from './folders';
@@ -196,6 +205,14 @@ const buildStaticViews = (): ViewConfig[] => [
         FullComponent: FeatureUsers
     },
     {
+        id: 'maintenance',
+        title: 'Maintenance',
+        icon: 'wrench',
+        cacheDurationMinutes: 0,
+        hasCard: false,
+        FullComponent: FeatureMaintenance
+    },
+    {
         id: 'workspace',
         title: 'Espace de travail',
         icon: 'users',
@@ -217,6 +234,11 @@ function featureBehind(viewId: string): FeatureId | null {
     // affichait l'erreur d'une commande là où l'accueil dit « Accès restreint ».
     if (isExternalFeatureId(viewId)) return viewId;
     return null;
+}
+
+/** Le module derrière une vue, fonctionnalité ou entrée de compte : ce que ferme sa maintenance. */
+function moduleBehind(viewId: string): string | null {
+    return featureBehind(viewId) ?? accountViewFeature(viewId);
 }
 
 /**
@@ -496,6 +518,52 @@ export default function HomePage() {
         []
     );
 
+    // Le rôle global de l'instance de l'espace actif : c'est son serveur qui
+    // laisse passer, ou non, un administrateur.
+    const isAdmin = user?.role === 'admin';
+    const maintenance = useMaintenance();
+    const maintenanceLevelOf = useCallback(
+        (viewId: string) => {
+            const id = moduleBehind(viewId);
+            return id === null ? null : featureMaintenance(maintenance, id);
+        },
+        [maintenance]
+    );
+    /** La maintenance ferme-t-elle cette vue à ce compte ? L'arrêt complet la ferme à tous. */
+    const maintenanceLockOf = useCallback(
+        (viewId: string): TileLock | undefined => {
+            const level = maintenanceLevelOf(viewId);
+            if (level === 'full') return isAdmin ? 'stopped' : 'maintenance';
+            return level === 'requests' && !isAdmin ? 'maintenance' : undefined;
+        },
+        [maintenanceLevelOf, isAdmin]
+    );
+    const lockOf = useCallback(
+        (viewId: string): TileLock | undefined => (allowedToOpen(viewId) ? maintenanceLockOf(viewId) : 'rights'),
+        [allowedToOpen, maintenanceLockOf]
+    );
+    // Le bandeau ne parle que de cette instance-ci, à son administrateur.
+    const siteMaintenance = useSiteMaintenance();
+    const envNotice = useMaintenanceEnvNotice();
+    const localAdmin = useLocalUser()?.role === 'admin';
+    const maintenanceBanner = !localAdmin
+        ? undefined
+        : siteMaintenance.site
+          ? ('site' as const)
+          : envNotice
+            ? ('env' as const)
+            : undefined;
+    const dismissEnvNotice = useCallback(() => {
+        setMaintenanceEnvNotice(false);
+        void ws.local.send('admin.maintenanceDismissNotice', {}).catch(() => {});
+    }, []);
+
+    /** Ouverte à l'administrateur seul, le temps de sa maintenance : il le voit sur la carte. */
+    const hasMaintenanceBadge = useCallback(
+        (viewId: string): boolean => isAdmin && maintenanceLevelOf(viewId) === 'requests',
+        [isAdmin, maintenanceLevelOf]
+    );
+
     /** Ouvre la vue et dit si elle s'ouvre : une bascule ou un droit manquant refuse. */
     const handleExpand = useCallback(
         (widgetId: string, forceReset = false, morphFrom?: string): boolean => {
@@ -517,6 +585,19 @@ export default function HomePage() {
                 });
                 return false;
             }
+            if (maintenanceLockOf(widgetId)) {
+                void openInfo({
+                    title: 'En maintenance',
+                    body: (
+                        <p>
+                            « {viewTitleOf(widgetId)} » est en maintenance pour le moment. Elle rouvrira dès que
+                            possible, réessayez un peu plus tard.
+                        </p>
+                    ),
+                    width: 400
+                });
+                return false;
+            }
             if (expandedWidget && expandedWidget !== widgetId) {
                 pendingExpandRef.current = { widgetId, forceReset, morphFrom };
                 closingFeatureRef.current = expandedWidget;
@@ -526,7 +607,7 @@ export default function HomePage() {
             doExpand(widgetId, forceReset, morphFrom);
             return true;
         },
-        [switching, expandedWidget, doExpand, allowedToOpen, viewTitleOf]
+        [switching, expandedWidget, doExpand, allowedToOpen, maintenanceLockOf, viewTitleOf]
     );
 
     /**
@@ -716,6 +797,30 @@ export default function HomePage() {
         setExpandedWidget(null);
     }, []);
 
+    // Une feature passe en maintenance : qui s'y trouve en sort, et ses copies
+    // gardées en vie cessent d'interroger un serveur qui refuse.
+    const maintenanceLockRef = useRef(maintenanceLockOf);
+    maintenanceLockRef.current = maintenanceLockOf;
+    useEffect(() => {
+        const open = expandedWidgetRef.current;
+        if (open && maintenanceLockOf(open)) {
+            requestCloseFeature(open);
+            void openInfo({
+                title: 'En maintenance',
+                body: (
+                    <p>
+                        « {viewTitleOf(open)} » vient de passer en maintenance. Elle rouvrira dès que possible,
+                        réessayez un peu plus tard.
+                    </p>
+                ),
+                width: 400
+            });
+        }
+        for (const id of mountedFeatures) {
+            if (id !== open && maintenanceLockOf(id)) unmountFeature(id);
+        }
+    }, [maintenanceLockOf, mountedFeatures, requestCloseFeature, unmountFeature, viewTitleOf]);
+
     const views = staticViews();
     const viewsRef = useRef(views);
     viewsRef.current = views;
@@ -797,6 +902,7 @@ export default function HomePage() {
             for (const config of viewsRef.current) {
                 const duration = config.cacheDurationMinutes;
                 if (!config.preload || duration === 0 || !gridFeatureIds.has(config.id)) continue;
+                if (maintenanceLockRef.current(config.id)) continue;
                 setMountedFeatures((prev) => new Set(prev).add(config.id));
                 if (duration !== undefined) {
                     const timer = setTimeout(() => unmountFeature(config.id), duration * 60 * 1000);
@@ -1067,7 +1173,8 @@ export default function HomePage() {
                     <FeatureTileCard
                         key={tile}
                         tile={tile}
-                        locked={!switching && !allowedToOpen(widgetId)}
+                        lock={switching ? undefined : lockOf(widgetId)}
+                        maintenanceBadge={hasMaintenanceBadge(widgetId)}
                         hidden={expandedWidget !== null && morphSourceRef.current === widgetId}
                         onExpand={expandTile}
                     />
@@ -1082,6 +1189,7 @@ export default function HomePage() {
                 <DeviceTileCard
                     key={tile}
                     deviceId={tile}
+                    lock={maintenanceLockOf('devices')}
                     hidden={expandedWidget !== null && morphSourceRef.current === deviceKey(tile)}
                     onOpen={openDeviceTile}
                 />
@@ -1118,6 +1226,9 @@ export default function HomePage() {
                             : undefined
                     }
                     onOpenUsers={user.role === 'admin' ? (e) => handleExpand('users', isForceReload(e)) : undefined}
+                    onOpenMaintenance={isAdmin ? (e) => handleExpand('maintenance', isForceReload(e)) : undefined}
+                    maintenanceBanner={maintenanceBanner}
+                    onDismissMaintenanceBanner={dismissEnvNotice}
                     onOpenSettings={canAppearance ? () => setSettingsOpen(true) : undefined}
                     onOrganize={canLayout ? () => startOrganizing() : undefined}
                     organizing={editing}
@@ -1185,7 +1296,8 @@ export default function HomePage() {
                     source={openFolder?.source ?? null}
                     topOffset={openFolder?.offset ?? 0}
                     expandedWidget={expandedWidget}
-                    isLocked={(id) => !allowedToOpen(id)}
+                    lockOf={lockOf}
+                    hasMaintenanceBadge={hasMaintenanceBadge}
                     onOpenFeature={(id, e) => handleExpand(id, isForceReload(e))}
                     onClose={closeFolder}
                 />

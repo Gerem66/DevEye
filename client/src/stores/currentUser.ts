@@ -51,6 +51,11 @@ export function useCurrentUser(): User | null {
     return useSyncExternalStore(subscribe, getCurrentUser, getCurrentUser);
 }
 
+/** Le compte de CETTE instance, qui décide seul de la page de maintenance d'ici. */
+export function useLocalUser(): User | null {
+    return useSyncExternalStore(subscribe, getLocalUser, getLocalUser);
+}
+
 export function useActingUser(): User | null {
     return useSyncExternalStore(subscribe, getActingUser, getActingUser);
 }

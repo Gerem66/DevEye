@@ -1,0 +1,168 @@
+.container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    gap: var(--space-lg);
+}
+
+.headerText {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.title {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.subtitle {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.errorBanner {
+    padding: var(--space-sm) var(--space-md);
+    background: var(--danger-bg);
+    border: 1px solid var(--danger);
+    border-radius: var(--radius-sm);
+    color: var(--danger);
+    font-size: 0.875rem;
+}
+
+.sections {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.sectionLabel {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.sectionHint {
+    margin: 0;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+
+.card {
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-sm) var(--space-md);
+    padding: var(--space-sm) 0;
+}
+
+.row + .row {
+    border-top: 1px solid var(--glass-border);
+}
+
+.rowIcon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    color: var(--text-secondary);
+}
+
+.rowText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1 1 12rem;
+}
+
+.rowTitle {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.rowMeta {
+    font-size: 0.78rem;
+    line-height: 1.4;
+    color: var(--text-muted);
+}
+
+.rowMessage {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+}
+
+.active {
+    color: var(--warning);
+}
+
+/* Le champ grandit avec son texte : le cadre est porté par le conteneur, et un
+   double invisible du texte (`::after`) lui donne sa hauteur. */
+.grow {
+    display: grid;
+    max-height: calc(10 * 1.5em + 2 * var(--space-sm) + 2px);
+    overflow-y: auto;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-md);
+    background: var(--input-bg);
+    transition:
+        border-color var(--transition-fast),
+        background-color var(--transition-fast);
+}
+
+.grow:focus-within {
+    border-color: var(--input-focus);
+    background: var(--glass-bg-light);
+}
+
+.grow > .textarea,
+.grow::after {
+    grid-area: 1 / 1;
+    min-height: calc(3 * 1.5em);
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.grow::after {
+    content: attr(data-value) ' ';
+    visibility: hidden;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.textarea {
+    resize: none;
+    overflow: hidden;
+    outline: none;
+}

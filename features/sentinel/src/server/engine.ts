@@ -172,8 +172,8 @@ export class SentinelEngine {
         this.deps.logger.info({ tickSeconds: TICK_SECONDS }, 'Security monitor started');
     }
 
-    stop(): void {
-        this.ticker.stop();
+    async stop(): Promise<void> {
+        await this.ticker.stop();
     }
 
     /** Oublie la ligne de base en mémoire d'un appareil (après une remise à zéro). */

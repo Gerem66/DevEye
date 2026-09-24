@@ -63,8 +63,8 @@ export const serverEntry: FeatureServer<UptimeRepo> = {
                 setMonitor(monitor);
                 monitor.start();
             },
-            stop() {
-                monitor.stop();
+            async stop() {
+                await monitor.stop();
                 setMonitor(null);
             },
             providers: { [UPTIME_ITEMS_PROVIDER]: items }

@@ -58,8 +58,8 @@ export const serverEntry: FeatureServer<DeployRepo> = {
                 setSync(sync);
                 sync.start();
             },
-            stop() {
-                sync.stop();
+            async stop() {
+                await sync.stop();
                 setSync(null);
             },
             providers: { [DEPLOY_ITEMS_PROVIDER]: items }

@@ -180,6 +180,29 @@ describe('createServiceDeps : createTicker', () => {
         service.stop();
     });
 
+    it('stop attend le tick en vol avant de rendre la main', async (t) => {
+        let release: () => void = () => {};
+        const { service } = ticker(
+            t,
+            () =>
+                new Promise<void>((resolve) => {
+                    release = resolve;
+                })
+        );
+        service.start();
+        t.mock.timers.tick(1000);
+        let stopped = false;
+        const stopping = Promise.resolve(service.stop()).then(() => {
+            stopped = true;
+        });
+        await flush();
+        assert.equal(stopped, false, 'le tick court encore');
+        release();
+        await stopping;
+        assert.equal(stopped, true);
+        await service.stop();
+    });
+
     it('un tick qui échoue est journalisé avec la feature, et la boucle continue', async (t) => {
         let runs = 0;
         const { service, errors } = ticker(t, async () => {

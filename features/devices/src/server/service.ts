@@ -16,6 +16,7 @@ const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
  */
 export class RetentionSweep {
     private readonly ticker: FeatureService;
+    private first: Promise<void> = Promise.resolve();
 
     constructor(private readonly deps: FeatureServiceDeps<DevicesRepo>) {
         this.ticker = deps.createTicker({ intervalMs: SWEEP_INTERVAL_MS, tick: () => this.sweep() });
@@ -24,11 +25,11 @@ export class RetentionSweep {
     start(): void {
         this.ticker.start();
         // Un serveur resté longtemps éteint n'attend pas une heure pour purger.
-        void this.sweep();
+        this.first = this.sweep();
     }
 
-    stop(): void {
-        this.ticker.stop();
+    async stop(): Promise<void> {
+        await Promise.all([this.ticker.stop(), this.first]);
     }
 
     /** Never throws: the ticker's guard would log it, the boot-time pass has none. */

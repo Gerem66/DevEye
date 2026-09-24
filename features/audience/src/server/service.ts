@@ -205,6 +205,9 @@ export class AudienceIngest {
     private readonly maintenanceTicker: FeatureService;
     private flushing = false;
     private maintaining = false;
+    /** Le premier ménage après un démarrage, et ce ménage une fois lancé : l'arrêt l'annule ou l'attend. */
+    private warmup: ReturnType<typeof setTimeout> | null = null;
+    private warming: Promise<void> = Promise.resolve();
 
     /**
      * Le secret d'où sortent les condensés de visiteurs : 32 octets dérivés de
@@ -253,17 +256,24 @@ export class AudienceIngest {
     }
 
     start(): void {
+        // Arrêté, le service ne voyait plus les invalidations, mais les routes publiques remplissaient ses caches.
+        this.invalidate();
         this.flushTicker.start();
         this.maintenanceTicker.start();
         // Un premier ménage au démarrage : le seul moment où l'on est sûr de passer,
         // même sur une instance qui ne tourne qu'une heure par jour.
-        setTimeout(() => void this.maintain(), 30_000).unref();
+        this.warmup = setTimeout(() => {
+            this.warmup = null;
+            this.warming = this.maintain();
+        }, 30_000);
+        this.warmup.unref();
         this.deps.logger.info({ flushMs: FLUSH_MS }, 'Audience ingest started');
     }
 
     async stop(): Promise<void> {
-        this.flushTicker.stop();
-        this.maintenanceTicker.stop();
+        if (this.warmup) clearTimeout(this.warmup);
+        this.warmup = null;
+        await Promise.all([this.flushTicker.stop(), this.maintenanceTicker.stop(), this.warming]);
         // Une dernière vidange, attendue : l'hôte attend l'arrêt du module avant de
         // fermer le pool, donc lancée en `void` elle serait coupée par la fermeture.
         await this.flush();

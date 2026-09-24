@@ -175,6 +175,10 @@
     pointer-events: auto;
 }
 
+.maintenanceIcon {
+    color: var(--warning);
+}
+
 .organizeBannerText {
     display: flex;
     flex-direction: column;

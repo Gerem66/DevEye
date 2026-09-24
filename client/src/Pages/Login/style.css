@@ -337,3 +337,27 @@
     color: var(--text-primary);
     font-size: 0.9rem;
 }
+
+/* Page de maintenance : la même scène, un message au lieu d'un formulaire. */
+.login .maintenance {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-sm) 0;
+}
+
+.login .maintenance .icon {
+    width: 28px;
+    height: 28px;
+    background-color: var(--text-secondary);
+}
+
+.login .maintenance-message {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+}

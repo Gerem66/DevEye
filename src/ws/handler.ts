@@ -6,12 +6,14 @@ import {
     LIVE_CURSOR_COMMAND,
     LIVE_SAY_COMMAND,
     LIVE_TYPING_COMMAND,
+    MAINTENANCE_CLOSE_CODE,
     liveCursorFrameSchema,
     liveSayFrameSchema,
     liveTypingFrameSchema,
     ok,
     type FeatureAccess,
     type ServerMessage,
+    type SessionFrame,
     type WorkspaceCapability,
     type FeatureId,
     type ItemAccess,
@@ -25,7 +27,7 @@ import { isFederatedOrigin } from '@/auth/federation';
 import { redeemWsTicket } from '@/auth/wsTicket';
 import { verifyAccessToken } from '@/auth/jwt';
 import { createMonitorTransport, type MonitorHub } from '@/agent/hub';
-import { accessEpochNow, createAccessResolver } from '@/features/_access';
+import { accessEpochNow, createAccessResolver, isAdminUser } from '@/features/_access';
 import { moduleManifest } from '@/features/_sdk/register';
 import { resolveExtras } from '@deveye/types/sdk';
 import type { LiveHub } from '@/live/hub';
@@ -33,6 +35,7 @@ import { FeatureError } from '@/features/_define';
 import { featureHandlerMap } from '@/features/registry';
 import { topicsOf } from '@/features/_topics';
 import { enterSessionCommand, exitSessionCommand, forgetSessionDek } from '@/Services/SecureStore';
+import { FEATURE_MAINTENANCE_MESSAGE, maintenance } from '@/Services/maintenance';
 import { env, isDev } from '@/Utils/Env';
 import { logger } from '@/logger';
 
@@ -102,6 +105,14 @@ export async function registerWS(
             return;
         }
 
+        // Pendant la maintenance du site, seul l'administrateur entre : le rôle
+        // n'est lu en base que dans ce cas.
+        if (maintenance.siteDown() && !(await isAdminUser(db, session.userId))) {
+            send(socket, { command: 'session', payload: err('maintenance', maintenance.message()) });
+            socket.close(MAINTENANCE_CLOSE_CODE, 'maintenance');
+            return;
+        }
+
         const reqLogger = logger.child({ userId: session.userId, sid: session.sessionId });
         reqLogger.info('WS connected');
 
@@ -117,7 +128,8 @@ export async function registerWS(
         // instrumentées. Entrer dans une salle reste conditionné à `live.here`.
         const live = liveHub.register(socket, session.userId, session.sessionId);
 
-        send(socket, { command: 'session', payload: ok({ userId: session.userId }) });
+        const opening: SessionFrame = { userId: session.userId, maintenance: maintenance.clientState() };
+        send(socket, { command: 'session', payload: ok(opening) });
 
         socket.on('message', async (raw: Buffer) => {
             const requestId = randomUUID();
@@ -233,6 +245,14 @@ export async function registerWS(
                 const assertAdmin = (): void => {
                     if (!scope.isAdmin) throw new FeatureError('forbidden', 'Réservé aux administrateurs');
                 };
+                // Toute porte vers une feature passe par l'une des deux gardes
+                // ci-dessous : les commandes qui la déclarent comme celles qui la
+                // reçoivent en entrée (`share.*`, `notify.*`, `domain.*`).
+                const assertNotInMaintenance = (f: FeatureId): void => {
+                    if (maintenance.refuses(f, scope.isAdmin)) {
+                        throw new FeatureError('maintenance', FEATURE_MAINTENANCE_MESSAGE);
+                    }
+                };
                 const can = (c: WorkspaceCapability): boolean => scope.capabilities.has(c);
                 const assertCan = (c: WorkspaceCapability): void => {
                     if (!can(c)) throw new FeatureError('forbidden', 'Droit insuffisant sur cet espace');
@@ -244,6 +264,7 @@ export async function registerWS(
                     return level === 'read' || granted === 'write';
                 };
                 const assertFeature = (f: FeatureId, level: FeatureAccess = 'read'): void => {
+                    assertNotInMaintenance(f);
                     if (!canFeature(f, level)) {
                         throw new FeatureError('forbidden', 'Cette fonctionnalité ne vous est pas ouverte ici');
                     }
@@ -344,6 +365,7 @@ export async function registerWS(
                 };
 
                 const assertDeclaredFeature = async (f: FeatureId, level: FeatureAccess = 'read'): Promise<void> => {
+                    assertNotInMaintenance(f);
                     if (canFeature(f, level)) return;
                     // Le plancher de visibilité reste le rôle : sans lecture sur
                     // la fonctionnalité, aucun élément n'existe pour lui.
@@ -357,6 +379,12 @@ export async function registerWS(
                     if (await someItemGrants(f, (o) => o.extras[key] === true)) return;
                     throw new FeatureError('forbidden', 'Cette permission ne vous est pas accordée');
                 };
+
+                // La socket d'un compte fermé par la maintenance du site peut
+                // encore parler entre la bascule et sa fermeture.
+                if (maintenance.siteDown() && !scope.isAdmin) {
+                    throw new FeatureError('maintenance', maintenance.message());
+                }
 
                 // Declared authorization (see `FeatureAccessSpec`), enforced here
                 // so a command can never ship without its guard.

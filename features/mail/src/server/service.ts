@@ -70,6 +70,7 @@ export class MailSync {
     private readonly client: SyncClient;
     private readonly accountTimeoutMs: number;
     private readonly inFlight = new Set<number>();
+    private first: Promise<void> = Promise.resolve();
 
     constructor(
         private readonly deps: FeatureServiceDeps<MailRepo>,
@@ -83,12 +84,12 @@ export class MailSync {
     start(): void {
         this.ticker.start();
         // Un premier tour tout de suite : une boîte due n'attend pas la cadence.
-        void this.tick();
+        this.first = this.tick();
         this.deps.logger.info({ tickSeconds: env.MAIL_SYNC_TICK_SECONDS }, 'Mail sync service started');
     }
 
-    stop(): void {
-        this.ticker.stop();
+    async stop(): Promise<void> {
+        await Promise.all([this.ticker.stop(), this.first]);
     }
 
     private async tick(): Promise<void> {

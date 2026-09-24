@@ -3,6 +3,7 @@ import type { HomeLayout, MinimalUser, SessionBundle, ThemeStateDTO, UserRole, W
 import { homeLayoutSchema, themeStateSchema } from '@deveye/types';
 import { toRemoteInstance } from '@/db/repos/remoteInstances';
 import { permissionsFor } from '@/features/_access';
+import { maintenance, MaintenanceError } from '@/Services/maintenance';
 import { env } from '@/Utils/Env';
 
 /**
@@ -25,6 +26,10 @@ export async function loadUserBundle(
     // Un compte suspendu n'a pas de session : `/me` et `/refresh` passent ici,
     // et le jeton d'accès déjà émis reste valide jusqu'à son expiration.
     if (row.status === 'suspended') return null;
+    const isAdmin = row.role === 'admin';
+    // Même passage obligé : pendant la maintenance du site, seul l'administrateur
+    // obtient une session.
+    if (maintenance.siteDown() && !isAdmin) throw new MaintenanceError(maintenance.message());
 
     // Security posture surfaced as "Sécurité → x / 3" in the profile. The
     // re-auth window counts when strict — short enough (≤ 5 min) to be a
@@ -87,7 +92,7 @@ export async function loadUserBundle(
             username: row.username,
             avatar: row.avatar,
             color: row.color,
-            role: (row.role === 'admin' ? 'admin' : 'user') as UserRole,
+            role: (isAdmin ? 'admin' : 'user') as UserRole,
             settings: parseStringArray(row.settings),
             security,
             personalWorkspaceId: row.personal_workspace_id,
@@ -103,7 +108,8 @@ export async function loadUserBundle(
         permissions: activeRow
             ? await permissionsFor(db, userId, activeRow)
             : { isOwner: false, capabilities: [], features: [], itemOverrides: [] },
-        feedbackEnabled: env.FEEDBACK_ENABLED
+        feedbackEnabled: env.FEEDBACK_ENABLED,
+        maintenanceEnvNotice: isAdmin && (await maintenance.envNotice())
     };
 }
 

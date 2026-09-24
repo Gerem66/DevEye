@@ -5,6 +5,7 @@ import { Widget } from '@/Components/Widget';
 import { catalogEntries } from '../catalog';
 import { isForceReload } from '../forceReload';
 import styles from '../Dashboard.module.css';
+import { LOCK_TEXT, MAINTENANCE_BADGE, type TileLock } from './tileLock';
 import { deviceTileVisual, featureTileVisual, shortcutTileVisual } from './tileVisual';
 
 /**
@@ -65,13 +66,16 @@ export const ShortcutTileCard = memo(function ShortcutTileCard({ item }: { item:
 
 export const FeatureTileCard = memo(function FeatureTileCard({
     tile,
-    locked,
+    lock,
+    maintenanceBadge,
     hidden,
     onExpand
 }: CardBase & {
     tile: HomeTile;
-    /** Le rôle n'ouvre pas cette vue : la carte reste posée, en retrait. */
-    locked?: boolean;
+    /** La carte reste posée, en retrait, et dit pourquoi. */
+    lock?: TileLock;
+    /** En maintenance, mais ouverte à l'administrateur qui la regarde. */
+    maintenanceBadge?: boolean;
     onExpand: ExpandHandler;
 }) {
     const v = featureTileVisual(tile);
@@ -81,24 +85,28 @@ export const FeatureTileCard = memo(function FeatureTileCard({
             widgetId={v.widgetId}
             title={v.title}
             icon={v.icon}
-            className={locked ? styles.lockedTile : undefined}
+            badge={!lock && maintenanceBadge ? MAINTENANCE_BADGE : undefined}
+            className={lock ? styles.lockedTile : undefined}
             style={hidden ? HIDDEN_STYLE : undefined}
             onExpand={(e) => onExpand(v.widgetId, e)}
         >
             {/* Le contenu vivant est remplacé, pas seulement grisé : il
                 interrogerait un serveur qui refuse, et afficherait des zéros qui
                 se lisent comme des données réelles. */}
-            {locked ? <span className={styles.lockedBody}>Accès restreint</span> : v.body}
+            {lock ? <span className={styles.lockedBody}>{LOCK_TEXT[lock]}</span> : v.body}
         </Widget>
     );
 });
 
 export const DeviceTileCard = memo(function DeviceTileCard({
     deviceId,
+    lock,
     hidden,
     onOpen
 }: CardBase & {
     deviceId: string;
+    /** La feature Appareils est en maintenance : la carte le dit, sans l'état de l'appareil. */
+    lock?: TileLock;
     onOpen: (deviceId: string, tileKey: string, forceReset: boolean) => void;
 }) {
     const v = deviceTileVisual(deviceId);
@@ -109,10 +117,11 @@ export const DeviceTileCard = memo(function DeviceTileCard({
             title={v.title}
             icon={v.icon}
             compact={v.compact}
+            className={lock ? styles.lockedTile : undefined}
             style={hidden ? HIDDEN_STYLE : undefined}
             onExpand={(e) => onOpen(deviceId, v.widgetId, isForceReload(e))}
         >
-            {v.body}
+            {lock ? <span className={styles.lockedBody}>{LOCK_TEXT[lock]}</span> : v.body}
         </Widget>
     );
 });

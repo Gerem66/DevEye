@@ -12,7 +12,7 @@ import { useAuth } from '@/auth/AuthProvider';
 import { whenHomeReady } from '@/stores/homeReady';
 import { setSignupPlan } from '@/stores/signupPlan';
 import { humanizeSignupError } from './errors';
-import { SignupScene } from './Scene';
+import { LoginScene } from '@/Pages/Login/Scene';
 
 /** Effondrement de la carte puis remplissage : doit rester égal à la somme des
  *  timings de `Login/style.css` (0,3 s de délai + 1 s de balayage). */
@@ -86,17 +86,17 @@ export function SignupVerify({
 
     if (dead) {
         return (
-            <SignupScene>
+            <LoginScene>
                 <p className='signup-intro'>Ce lien est invalide ou a expiré.</p>
                 <button type='button' className='submit' onClick={onRestart}>
                     Recommencer l’inscription
                 </button>
-            </SignupScene>
+            </LoginScene>
         );
     }
 
     return (
-        <SignupScene collapsing={collapsing} hidden={hidden} onSubmit={submit}>
+        <LoginScene collapsing={collapsing} hidden={hidden} onSubmit={submit}>
             <p className='signup-intro'>
                 {who ? (
                     <>
@@ -138,6 +138,6 @@ export function SignupVerify({
             <button className='submit' type='submit' disabled={collapsing || !who}>
                 Créer le compte
             </button>
-        </SignupScene>
+        </LoginScene>
     );
 }

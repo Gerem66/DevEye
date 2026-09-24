@@ -10,7 +10,7 @@ import { get, post } from '@/api/http';
 import TextInput from '@/Components/TextInput';
 import { humanizeSignupError } from './errors';
 import { TextLink } from '@/Pages/Login/TextLink';
-import { SignupScene } from './Scene';
+import { LoginScene } from '@/Pages/Login/Scene';
 
 const POLL_MS = 3000;
 /** Survit au rechargement de l'onglet qui attend, pas à sa fermeture. */
@@ -81,7 +81,7 @@ export function SignupStart({ plan, onLogin }: { plan: string | null; onLogin: (
 
     if (watch) {
         return (
-            <SignupScene>
+            <LoginScene>
                 {state === 'pending' && (
                     <>
                         <p className='signup-status'>
@@ -116,12 +116,12 @@ export function SignupStart({ plan, onLogin }: { plan: string | null; onLogin: (
                         {state === 'expired' ? 'Recommencer' : 'Utiliser une autre adresse'}
                     </button>
                 )}
-            </SignupScene>
+            </LoginScene>
         );
     }
 
     return (
-        <SignupScene
+        <LoginScene
             onSubmit={submit}
             footer={
                 <TextLink href='/' shown={!sending} onNavigate={onLogin}>
@@ -163,6 +163,6 @@ export function SignupStart({ plan, onLogin }: { plan: string | null; onLogin: (
             <button className='submit' type='submit' disabled={sending}>
                 Créer mon compte
             </button>
-        </SignupScene>
+        </LoginScene>
     );
 }

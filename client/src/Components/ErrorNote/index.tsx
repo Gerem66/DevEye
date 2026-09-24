@@ -18,7 +18,8 @@ const SPOKEN_FOR: readonly string[] = [
     'not_found',
     'locked',
     'rate_limited',
-    'quota_exceeded'
+    'quota_exceeded',
+    'maintenance'
 ];
 
 export interface ErrorNoteInput {

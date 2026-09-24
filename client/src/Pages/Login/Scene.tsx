@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 
-import '@/Pages/Login/style.css';
+import './style.css';
 
 interface SceneProps {
     /** La carte s'effondre en barre, qui se remplit. */
@@ -13,8 +13,8 @@ interface SceneProps {
     children: ReactNode;
 }
 
-/** La scène du login, pour l'inscription : c'est le même moment du parcours. */
-export function SignupScene({ collapsing = false, hidden = false, onSubmit, footer, children }: SceneProps) {
+/** La scène du login, hors du formulaire de connexion : l'inscription, la page de maintenance. */
+export function LoginScene({ collapsing = false, hidden = false, onSubmit, footer, children }: SceneProps) {
     const cardRef = useRef<HTMLDivElement | null>(null);
     const contentRef = useRef<HTMLDivElement | null>(null);
 

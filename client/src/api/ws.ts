@@ -1,18 +1,24 @@
 import {
     clientMessageSchema,
     featureCommandRegistry,
+    MAINTENANCE_CLOSE_CODE,
+    MAINTENANCE_EVENT,
+    maintenanceStateSchema,
     serverMessageSchema,
+    sessionFrameSchema,
     type ClientMessage,
     type CommandInput,
     type CommandOutput,
     type ConnectionState,
     type ErrorCode,
     type FeatureCommandName,
+    type MaintenanceState,
     type ServerMessage
 } from '@deveye/types';
 import { getActiveInstanceId, getActiveWorkspaceId, onWorkspaceChange } from '../stores/workspace';
 import { traceCall } from '../diagnostics/trace';
 import { notifyQuotaExceeded } from '@/stores/quotaPrompt';
+import { forgetMaintenance, setMaintenance } from '@/stores/maintenance';
 import { randomUuid } from '@/randomUuid';
 
 const BASE_URL: string = (import.meta.env.VITE_SERVER_URL as string | undefined) ?? '';
@@ -69,6 +75,9 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 /** Au-delà, la socket est en retard : une trame `post` n'est pas assez importante. */
 const POST_BACKPRESSURE_BYTES = 64 * 1024;
 
+/** Refusée pour maintenance : un essai à ce rythme, pas de rafale contre un serveur qui se défend. */
+const MAINTENANCE_RETRY_MS = 60_000;
+
 export class DevEyeWs {
     private socket: WebSocket | null = null;
     private _state: ConnectionState = 'idle';
@@ -80,6 +89,7 @@ export class DevEyeWs {
     private intentionallyClosed = false;
     private _hasConnected = false;
     private readonly unauthorizedListeners = new Set<() => void>();
+    private readonly maintenanceListeners = new Set<(state: MaintenanceState) => void>();
     /** Une ouverture en cours : l'adresse d'une instance distante s'obtient avant la socket. */
     private opening: Promise<void> | null = null;
     /** Ce qui attend la trame `session` de la socket en cours d'ouverture. */
@@ -124,6 +134,16 @@ export class DevEyeWs {
     onUnauthorized(fn: () => void): () => void {
         this.unauthorizedListeners.add(fn);
         return () => this.unauthorizedListeners.delete(fn);
+    }
+
+    /** L'état de maintenance du serveur, à l'ouverture puis à chaque changement. */
+    onMaintenance(fn: (state: MaintenanceState) => void): () => void {
+        this.maintenanceListeners.add(fn);
+        return () => this.maintenanceListeners.delete(fn);
+    }
+
+    private emitMaintenance(state: MaintenanceState): void {
+        for (const fn of this.maintenanceListeners) fn(state);
     }
 
     private setState(s: ConnectionState): void {
@@ -209,6 +229,10 @@ export class DevEyeWs {
                     this.refuse();
                     return;
                 }
+                if (ev.code === MAINTENANCE_CLOSE_CODE) {
+                    this.scheduleReconnect(MAINTENANCE_RETRY_MS);
+                    return;
+                }
                 if (!this.intentionallyClosed) this.scheduleReconnect();
             });
         });
@@ -238,9 +262,9 @@ export class DevEyeWs {
         return this.connect();
     }
 
-    private scheduleReconnect(): void {
+    private scheduleReconnect(fixedDelay?: number): void {
         this.reconnectAttempt += 1;
-        const delay = Math.min(30_000, 500 * 2 ** this.reconnectAttempt);
+        const delay = fixedDelay ?? Math.min(30_000, 500 * 2 ** this.reconnectAttempt);
         if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
         this.reconnectTimer = setTimeout(() => {
             this.reconnectTimer = null;
@@ -272,9 +296,22 @@ export class DevEyeWs {
 
         if (msg.command === 'session' && msg.payload.ok) {
             this.reconnectAttempt = 0;
+            const frame = sessionFrameSchema.safeParse(msg.payload.data);
+            if (frame.success && frame.data.maintenance) this.emitMaintenance(frame.data.maintenance);
             const ready = this.onSession;
             this.onSession = null;
             ready?.();
+        }
+
+        // Refusée à l'ouverture : la fermeture `MAINTENANCE_CLOSE_CODE` suit.
+        if (msg.command === 'session' && !msg.payload.ok && msg.payload.error.code === 'maintenance') {
+            this.emitMaintenance({ site: true, message: msg.payload.error.message, features: {} });
+        }
+
+        if (msg.command === MAINTENANCE_EVENT && msg.payload.ok) {
+            const state = maintenanceStateSchema.safeParse(msg.payload.data);
+            if (state.success) this.emitMaintenance(state.data);
+            return;
         }
 
         if (msg.requestId) {
@@ -434,7 +471,7 @@ class WsRouter {
     private lastInstanceId: number | null = null;
 
     constructor() {
-        this.wire(this.local);
+        this.wire(this.local, null);
         // Changer d'instance, c'est changer de socket : ceux qui se rétablissent
         // à l'ouverture (présence, abonnements) doivent le refaire sur celle-ci.
         onWorkspaceChange(() => {
@@ -445,7 +482,7 @@ class WsRouter {
         });
     }
 
-    private wire(conn: DevEyeWs): () => void {
+    private wire(conn: DevEyeWs, instanceId: number | null): () => void {
         const offMessage = conn.onMessage((msg) => {
             if (conn !== this.active()) return;
             for (const fn of this.listeners) fn(msg);
@@ -453,9 +490,13 @@ class WsRouter {
         const offState = conn.onStateChange((s) => {
             if (conn === this.active()) this.emitState(s);
         });
+        // Hors du filtre de la socket active : les tuiles d'une instance et sa
+        // page de maintenance suivent son état même quand on est ailleurs.
+        const offMaintenance = conn.onMaintenance((state) => setMaintenance(instanceId, state));
         return () => {
             offMessage();
             offState();
+            offMaintenance();
         };
     }
 
@@ -481,7 +522,7 @@ class WsRouter {
     attachRemote(target: WsTarget & { instanceId: number }): DevEyeWs {
         this.detachRemote(target.instanceId);
         const conn = new DevEyeWs(target);
-        this.remotes.set(target.instanceId, { conn, unwire: this.wire(conn) });
+        this.remotes.set(target.instanceId, { conn, unwire: this.wire(conn, target.instanceId) });
         return conn;
     }
 
@@ -491,6 +532,7 @@ class WsRouter {
         entry.unwire();
         entry.conn.close();
         this.remotes.delete(instanceId);
+        forgetMaintenance(instanceId);
     }
 
     get state(): ConnectionState {

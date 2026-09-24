@@ -130,6 +130,9 @@ export class GitSync {
      * consommé à la fin de `syncOne`, c'est ce qui enchaîne les tranches.
      */
     private readonly backfilling = new Set<number>();
+    /** Les reprises de backfill armées, par dépôt : l'arrêt les annule. */
+    private readonly resumes = new Map<number, ReturnType<typeof setTimeout>>();
+    private stopped = false;
 
     constructor(
         private readonly deps: FeatureServiceDeps<GitRepo>,
@@ -147,12 +150,21 @@ export class GitSync {
     }
 
     start(): void {
+        this.stopped = false;
         this.ticker.start();
         this.deps.logger.info({ tickSeconds: TICK_SECONDS }, 'Git sync started');
     }
 
-    stop(): void {
-        this.ticker.stop();
+    /** Un rapatriement interrompu reprend au tour ordinaire, son curseur étant en base. */
+    async stop(): Promise<void> {
+        this.stopped = true;
+        for (const [repoId, timer] of this.resumes) {
+            clearTimeout(timer);
+            this.progress.delete(repoId);
+        }
+        this.resumes.clear();
+        await this.ticker.stop();
+        await Promise.allSettled(this.inFlight.values());
     }
 
     /**
@@ -227,6 +239,8 @@ export class GitSync {
     private syncOne(repoId: number, workspaceId: number): Promise<void> {
         const running = this.inFlight.get(repoId);
         if (running) return running;
+        // Un tour demandé à la main juste avant l'arrêt peut encore arriver ici.
+        if (this.stopped) return Promise.resolve();
         // Une tranche de backfill enchaîne la précédente : elle reprend son
         // horodatage de départ, sinon le chronomètre affiché repartirait de zéro
         // toutes les trois secondes alors qu'il s'agit d'une seule opération.
@@ -238,7 +252,7 @@ export class GitSync {
 
             // L'historique n'est pas fini de rapatrier : on reprend là où on
             // s'est arrêté, sans attendre les dix minutes du régime ordinaire.
-            if (this.backfilling.delete(repoId)) {
+            if (this.backfilling.delete(repoId) && !this.stopped) {
                 // L'entrée d'avancement **survit** à la tranche. Sans cela,
                 // l'interface voyait « plus rien en cours » pendant les trois
                 // secondes de répit, en concluait que c'était terminé et retirait
@@ -255,10 +269,14 @@ export class GitSync {
                 //
                 // Un `setTimeout` et non un ticker du SDK : ce n'est pas une
                 // boucle, c'est une reprise unique, dans trois secondes.
-                const timer = setTimeout(() => void this.syncOne(repoId, workspaceId), BACKFILL_GAP_MS);
+                const timer = setTimeout(() => {
+                    this.resumes.delete(repoId);
+                    void this.syncOne(repoId, workspaceId);
+                }, BACKFILL_GAP_MS);
                 // `unref` : une tranche en attente ne doit pas retenir le
                 // processus à l'arrêt.
                 timer.unref();
+                this.resumes.set(repoId, timer);
             } else {
                 // Dans le `finally` : un échec doit lever le voile de chargement
                 // aussi sûrement qu'un succès, sinon l'interface sonde à vide.

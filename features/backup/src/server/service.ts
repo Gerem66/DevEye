@@ -36,12 +36,14 @@ export class BackupEngine {
     private readonly ticker: FeatureService;
     /** Travaux en cours d'exécution, pour qu'un même travail ne parte pas deux fois. */
     private readonly running = new Set<number>();
+    private stopping = false;
 
     constructor(private readonly deps: FeatureServiceDeps<BackupRepo>) {
         this.ticker = deps.createTicker({ intervalMs: env.BACKUP_TICK_SECONDS * 1000, tick: () => this.tick() });
     }
 
     start(): void {
+        this.stopping = false;
         // Solder ce qu'un arrêt brutal a laissé « en cours » : au-delà du budget
         // d'exécution, aucune exécution vivante ne peut porter ce statut.
         void this.deps.repo
@@ -54,8 +56,14 @@ export class BackupEngine {
         this.ticker.start();
     }
 
+    /**
+     * Aucun travail dû ne part plus, mais une sauvegarde en cours n'est pas
+     * attendue : elle dure jusqu'à des heures. Sa réservation et le seuil de
+     * `failStaleRuns` la gardent d'un redémarrage rapproché.
+     */
     stop(): void {
-        this.ticker.stop();
+        this.stopping = true;
+        void this.ticker.stop();
     }
 
     private cipherFor(workspaceId: number): SdkCipher {
@@ -66,6 +74,7 @@ export class BackupEngine {
         const now = Math.floor(Date.now() / 1000);
         const due = await this.deps.repo.listJobsDue(now, DUE_BATCH);
         for (const job of due) {
+            if (this.stopping) break;
             // Séquentiel : cinq vidages en parallèle satureraient le lien montant
             // et la machine sauvegardée.
             await this.runJob(job, null).catch((e: unknown) =>

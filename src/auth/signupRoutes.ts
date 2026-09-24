@@ -17,6 +17,7 @@ import { notifyAdmins } from '@/features/admin/notify';
 import type { LiveHub } from '@/live/hub';
 import { assertAttemptAllowed, LockedOutError, recordFailedAttempt } from '@/Services/attempts';
 import type { AuditLog } from '@/Services/AuditLog';
+import { maintenance, MaintenanceError } from '@/Services/maintenance';
 import type { SignupService } from '@/Services/signup';
 import { hashPassword } from './argon';
 import { loadUserBundle } from './loadUserBundle';
@@ -33,8 +34,13 @@ const DEAD_LINK = 'Ce lien est invalide ou a expiré';
 
 export async function signupRoutes(app: FastifyInstance, { db, audit, live, signup }: SignupRouteDeps): Promise<void> {
     app.get('/api/auth/signup', { logLevel: 'silent' }, async () =>
-        ok(signupAvailabilitySchema.parse({ open: await signup.isOpen() }))
+        ok(signupAvailabilitySchema.parse({ open: !maintenance.siteDown() && (await signup.isOpen()) }))
     );
+
+    // Pas de compte neuf pendant la maintenance du site : il n'y entrerait pas.
+    const assertSiteOpen = (): void => {
+        if (maintenance.siteDown()) throw new MaintenanceError(maintenance.message());
+    };
 
     app.post(
         '/api/auth/signup',
@@ -44,6 +50,7 @@ export async function signupRoutes(app: FastifyInstance, { db, audit, live, sign
             if (!parsed.success) {
                 return reply.code(400).send(err('validation', 'Demande invalide', parsed.error.flatten()));
             }
+            assertSiteOpen();
             const { username, email, plan } = parsed.data;
 
             // La limite par IP ne protège pas une boîte visée depuis plusieurs
@@ -104,6 +111,7 @@ export async function signupRoutes(app: FastifyInstance, { db, audit, live, sign
             if (!parsed.success) {
                 return reply.code(400).send(err('validation', 'Demande invalide', parsed.error.flatten()));
             }
+            assertSiteOpen();
             const result = await signup.complete(parsed.data.token, await hashPassword(parsed.data.password));
             if (!result.ok) {
                 if (result.reason === 'closed') {

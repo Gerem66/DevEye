@@ -33,7 +33,7 @@ export const serverEntry: FeatureServer<MailRepo> = {
                 sync.start();
             },
             stop() {
-                sync.stop();
+                return sync.stop();
             },
             providers: { [MAIL_TRANSPORT_PROVIDER]: createMailTransport(deps) },
             publicRoutes: (app) => mailRoutes(app, deps)

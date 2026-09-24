@@ -44,8 +44,8 @@ export const serverEntry: FeatureServer<SentinelRepo> = {
                 setEngine(engine);
                 engine.start();
             },
-            stop() {
-                engine.stop();
+            async stop() {
+                await engine.stop();
                 setEngine(null);
             },
             // Les hooks rendent leur promesse : l'app journalise un rejet, et un hook
