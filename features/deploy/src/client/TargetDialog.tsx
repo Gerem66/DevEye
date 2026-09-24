@@ -27,10 +27,14 @@ import styles from './style.module.css';
 type Source = 'access' | 'machine';
 
 const SOURCE_OPTIONS: readonly { value: Source; label: string; title: string }[] = [
-    { value: 'access', label: 'Par un accès', title: 'Une instance Dokploy, ou un workflow GitHub Actions' },
+    {
+        value: 'access',
+        label: 'Dokploy ou GitHub Actions',
+        title: 'Une instance Dokploy, ou un workflow GitHub Actions'
+    },
     {
         value: 'machine',
-        label: 'Sur une machine',
+        label: 'Sur une machine via un agent',
         title: 'Un service docker compose d’une machine de l’espace, relancé par son agent'
     }
 ];
