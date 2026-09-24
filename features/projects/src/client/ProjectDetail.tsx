@@ -23,7 +23,7 @@ import type {
     ProjectMilestone,
     ProjectMilestoneDraft
 } from '../contracts/domain';
-import { Board } from './Board/Board';
+import { Board, MilestoneFocus } from './Board/Board';
 import { CardDialog, type CardTab } from './Board/CardDialog';
 import { ColumnDialog, type ColumnDialogResult } from './Board/ColumnDialog';
 import { Timeline } from './Timeline/Timeline';
@@ -115,6 +115,10 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
     /** La colonne qu'on s'apprête à vider dans l'archive ; `null` = aucune. */
     const [purging, setPurging] = useState<ProjectColumn | null>(null);
     const [milestones, setMilestones] = useState<ProjectMilestone[]>([]);
+    /** Le jalon mis en avant sur le tableau (voir `Board`) ; `null` = aucun. */
+    const [focus, setFocus] = useState<{ milestoneId: number } | null>(null);
+    /** Un jalon supprimé entre-temps ne laisse pas tout le tableau estompé. */
+    const focused = focus && milestones.some((m) => m.id === focus.milestoneId) ? focus : null;
     const [deps, setDeps] = useState<ProjectCardDep[]>([]);
     const [milestoneDialog, setMilestoneDialog] = useState<{
         milestone: ProjectMilestone | null;
@@ -530,6 +534,13 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                         </div>
                     </div>
                     <div className={styles.actions}>
+                        {tab === 'board' && milestones.length > 0 && (
+                            <MilestoneFocus
+                                milestones={milestones}
+                                value={focused?.milestoneId ?? null}
+                                onChange={(id) => setFocus(id === null ? null : { milestoneId: id })}
+                            />
+                        )}
                         {/* Les réglages de ce projet, son profil et son archivage
                             compris (onglet Général). Partage n'est pas proposé
                             pour un projet confidentiel, que le serveur refuserait
@@ -598,6 +609,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                     columns={columns}
                     cards={cards}
                     milestones={milestones}
+                    focus={focused}
                     canWrite={canWrite}
                     canTasks={rights.canTasks}
                     canManage={rights.canManage}

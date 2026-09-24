@@ -1,5 +1,6 @@
 import {
     useCallback,
+    useEffect,
     useLayoutEffect,
     useMemo,
     useRef,
@@ -74,8 +75,13 @@ interface BoardProps {
     onColumnCreate: () => void;
     /** Archive d'un coup les cartes d'une colonne terminée. */
     onColumnPurge: (column: ProjectColumn) => void;
-    /** Les jalons du projet : la carte montre celui qu'elle porte, et le filtre s'en sert. */
+    /** Les jalons du projet : la carte montre celui qu'elle porte. */
     milestones: ProjectMilestone[];
+    /**
+     * Le jalon mis en avant ; `null` = aucun, toutes les tâches à plein. Un objet
+     * neuf à chaque choix, même répété : c'est lui qui relance le défilement.
+     */
+    focus: { milestoneId: number } | null;
 }
 
 /**
@@ -101,7 +107,8 @@ export function Board({
     onColumnsReorder,
     onColumnCreate,
     onColumnPurge,
-    milestones
+    milestones,
+    focus
 }: BoardProps) {
     const [activeId, setActiveId] = useState<number | null>(null);
     /** D'où la carte est partie, pour la remettre en place sur Échap. */
@@ -152,8 +159,23 @@ export function Board({
     }, [trackRef, columns.length, canManage]);
     useRequestPopupWidth(columnsWidth === null ? null : boardNaturalWidth(columnsWidth));
 
-    /** Le jalon mis en avant ; `null` = aucun, toutes les tâches à plein. */
-    const [focus, setFocus] = useState<number | null>(null);
+    /**
+     * Choisir un jalon amène sa première tâche en haut de chaque colonne qui en
+     * porte une : plus bas, rien ne paraîtrait en avant. Colonne par colonne, là où
+     * `scrollIntoView` ferait aussi défiler le tableau en travers.
+     */
+    useEffect(() => {
+        const track = trackRef.current;
+        if (focus === null || !track) return;
+        const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+        for (const body of track.querySelectorAll<HTMLElement>('[data-column-body]')) {
+            const target = body.querySelector<HTMLElement>(`[data-milestone="${focus.milestoneId}"]`);
+            const first = body.firstElementChild as HTMLElement | null;
+            if (!target || !first) continue;
+            // L'écart à la première carte : `offsetTop` ignore les décalages du tri.
+            body.scrollTo({ top: target.offsetTop - first.offsetTop, behavior });
+        }
+    }, [focus, trackRef]);
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -310,29 +332,6 @@ export function Board({
             onDragEnd={onDragEnd}
             onDragCancel={onDragCancel}
         >
-            {/* Mettre un jalon en avant : les tâches des autres s'estompent, aucune
-                ne quitte sa colonne. Un vrai filtre les retirerait de l'ordre que
-                le dépôt renvoie, et les ferait remonter à la fin de leur colonne. */}
-            {milestones.length > 0 && (
-                <div className={styles.boardFilter}>
-                    <span className={styles.boardFilterLabel}>Jalon</span>
-                    <SearchSelect
-                        aria-label='Mettre un jalon en avant'
-                        className={styles.boardFilterSelect}
-                        value={focus === null ? '' : String(focus)}
-                        options={[
-                            { value: '', label: 'Tous', prefix: <MilestoneDot color={null} /> },
-                            ...milestones.map((m) => ({
-                                value: String(m.id),
-                                label: m.name || `Jalon #${m.id}`,
-                                prefix: <MilestoneDot color={m.color} />
-                            }))
-                        ]}
-                        onChange={(v) => setFocus(v ? Number(v) : null)}
-                    />
-                </div>
-            )}
-
             <div className={styles.board}>
                 <div ref={trackRef} className={styles.boardTrack}>
                     {columns.map((column) => (
@@ -349,7 +348,11 @@ export function Board({
                             onEdit={onColumnEdit}
                             onPurge={onColumnPurge}
                             milestone={(card) => milestoneOf(milestones, card.milestoneId)}
-                            dimmed={(card) => focus !== null && card.milestoneId !== focus}
+                            // Les tâches des autres jalons s'estompent, aucune ne
+                            // quitte sa colonne : un vrai filtre les retirerait de
+                            // l'ordre que le dépôt renvoie, et les ferait remonter à
+                            // la fin de leur colonne.
+                            dimmed={(card) => focus !== null && card.milestoneId !== focus.milestoneId}
                             // Seule d'elle-même, une colonne n'a nulle part où aller.
                             onDragPointerDown={
                                 canManage && columns.length > 1
@@ -388,6 +391,35 @@ export function Board({
                 document.body
             )}
         </DndContext>
+    );
+}
+
+interface MilestoneFocusProps {
+    milestones: ProjectMilestone[];
+    value: number | null;
+    onChange: (milestoneId: number | null) => void;
+}
+
+/** Le choix du jalon mis en avant, posé par la fiche dans sa rangée d'en-tête. */
+export function MilestoneFocus({ milestones, value, onChange }: MilestoneFocusProps) {
+    return (
+        <div className={styles.boardFilter}>
+            <span className={styles.boardFilterLabel}>Jalon</span>
+            <SearchSelect
+                aria-label='Mettre un jalon en avant'
+                className={styles.boardFilterSelect}
+                value={value === null ? '' : String(value)}
+                options={[
+                    { value: '', label: 'Tous', prefix: <MilestoneDot color={null} /> },
+                    ...milestones.map((m) => ({
+                        value: String(m.id),
+                        label: m.name || `Jalon #${m.id}`,
+                        prefix: <MilestoneDot color={m.color} />
+                    }))
+                ]}
+                onChange={(v) => onChange(v ? Number(v) : null)}
+            />
+        </div>
     );
 }
 
@@ -507,7 +539,11 @@ function Column({
                 )}
             </header>
 
-            <div ref={setNodeRef} className={`${styles.columnBody} ${isOver ? styles.columnOver : ''}`}>
+            <div
+                ref={setNodeRef}
+                className={`${styles.columnBody} ${isOver ? styles.columnOver : ''}`}
+                data-column-body=''
+            >
                 <SortableContext id={`col:${column.id}`} items={ids} strategy={verticalListSortingStrategy}>
                     {cards.map((card) => (
                         <SortableCard
@@ -561,7 +597,7 @@ function SortableCard({ card, columnDone, milestone, dimmed, draggable, outline,
     // part du bouton d'ouverture : c'est l'activateur que son capteur exige, et le
     // seul élément de la carte à porter le rôle de ce qui se trie.
     return (
-        <div ref={setNodeRef} style={style} {...listeners} {...outline}>
+        <div ref={setNodeRef} style={style} data-milestone={card.milestoneId ?? undefined} {...listeners} {...outline}>
             <CardBody
                 card={card}
                 columnDone={columnDone}

@@ -780,8 +780,8 @@
 
 /* ------------------------------------------------------------------ kanban */
 
-/* La mise en avant d'un jalon, discrète : une ligne fine au-dessus du tableau,
-   absente quand le projet n'a aucun jalon. */
+/* La mise en avant d'un jalon, dans la rangée d'en-tête à côté des réglages :
+   une ligne à part prendrait sa hauteur aux colonnes. */
 .boardFilter {
     display: flex;
     align-items: center;
