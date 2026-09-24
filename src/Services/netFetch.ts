@@ -12,7 +12,7 @@ import { lookup as dnsLookup, type LookupAddress, type LookupOptions } from 'nod
 import { isIP } from 'node:net';
 
 import { isPublicIp, isSafePublicUrl } from '@deveye/types/sdk/server';
-import { Agent, fetch as undiciFetch, type RequestInit, type Response } from 'undici';
+import { Agent, fetch as undiciFetch, Headers, type RequestInit, type Response } from 'undici';
 
 import { env } from '@/Utils/Env';
 
@@ -135,11 +135,19 @@ export async function assertAllowedOutboundHost(host: string): Promise<void> {
 }
 
 /**
+ * Les en-têtes qui portent un secret : ils ne suivent pas une redirection vers
+ * un autre hôte. Un jeton GitHub ou une clé Dokploy n'ont rien à faire chez le
+ * stockage où l'API redirige un téléchargement.
+ */
+const CREDENTIAL_HEADERS = ['authorization', 'proxy-authorization', 'cookie', 'x-api-key'];
+
+/**
  * `fetch` vers une adresse saisie par un membre. Trois gardes, parce qu'un seul
  * ne suffit pas : l'URL (schéma, nom, IP littérale), chaque saut de redirection
  * revérifié (un hôte public peut rediriger vers le réseau interne), et l'adresse
  * réellement jointe ({@link publicLookup}). `redirect` vaut `'follow'` par
- * défaut ; `'manual'` rend la 3xx telle quelle.
+ * défaut ; `'manual'` rend la 3xx telle quelle. Un saut vers un autre hôte
+ * perd les {@link CREDENTIAL_HEADERS}.
  */
 export async function safeFetch(
     input: string | URL,
@@ -149,14 +157,19 @@ export async function safeFetch(
     let url = typeof input === 'string' ? input : input.toString();
     let method = init.method;
     let body = init.body;
+    const headers = new Headers(init.headers);
     for (let hop = 0; ; hop++) {
         if (!isAllowedOutboundUrl(url)) throw new UnsafeTargetError();
-        const res = await transport(url, { ...init, method, body, redirect: 'manual' });
+        const res = await transport(url, { ...init, headers, method, body, redirect: 'manual' });
         const location = res.headers.get('location');
         if (!follow || res.status < 300 || res.status >= 400 || !location) return res;
         if (hop >= MAX_REDIRECTS) throw new Error('Trop de redirections');
         await res.body?.cancel();
-        url = new URL(location, url).toString();
+        const next = new URL(location, url);
+        if (next.hostname !== new URL(url).hostname) {
+            for (const name of CREDENTIAL_HEADERS) headers.delete(name);
+        }
+        url = next.toString();
         // 303, et 301/302 sur un POST : le navigateur repart en GET sans corps.
         if (res.status === 303 || ((res.status === 301 || res.status === 302) && method?.toUpperCase() === 'POST')) {
             method = 'GET';

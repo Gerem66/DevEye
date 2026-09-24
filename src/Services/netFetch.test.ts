@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { Response } from 'undici';
+
 import {
     assertAllowedOutboundHost,
     publicLookup,
     safeFetch,
     setAllowPrivateForTest,
+    setSafeFetchTransportForTest,
     UnsafeTargetError
 } from './netFetch';
 
@@ -22,6 +25,41 @@ describe('safeFetch', () => {
         ]) {
             await assert.rejects(safeFetch(url), UnsafeTargetError, url);
         }
+    });
+});
+
+describe('safeFetch : les redirections', () => {
+    /** Chaque saut reçu, et les en-têtes secrets qu'il portait. */
+    async function follow(
+        from: string,
+        to: string
+    ): Promise<{ url: string; auth: string | null; key: string | null }[]> {
+        const hops: { url: string; auth: string | null; key: string | null }[] = [];
+        setSafeFetchTransportForTest(async (url, init) => {
+            const headers = new Headers(init.headers as HeadersInit);
+            hops.push({ url, auth: headers.get('authorization'), key: headers.get('x-api-key') });
+            return hops.length === 1
+                ? new Response(null, { status: 302, headers: { location: to } })
+                : new Response('ok', { status: 200 });
+        });
+        try {
+            await safeFetch(from, {
+                headers: { authorization: 'Bearer secret', 'x-api-key': 'clé', accept: 'text/plain' }
+            });
+        } finally {
+            setSafeFetchTransportForTest(null);
+        }
+        return hops;
+    }
+
+    it('ne porte pas un secret chez un autre hôte', async () => {
+        const hops = await follow('https://api.exemple.fr/logs', 'https://stockage.exemple.net/fichier');
+        assert.deepEqual(hops[1], { url: 'https://stockage.exemple.net/fichier', auth: null, key: null });
+    });
+
+    it('le garde sur le même hôte, passage à https compris', async () => {
+        const hops = await follow('http://api.exemple.fr/logs', 'https://api.exemple.fr/logs');
+        assert.deepEqual(hops[1], { url: 'https://api.exemple.fr/logs', auth: 'Bearer secret', key: 'clé' });
     });
 });
 
