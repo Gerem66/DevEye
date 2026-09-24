@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import type { DeployCredentialRow, DeploymentRow, DeployTargetRow } from '../contracts/domain';
 import { DEPLOY_ITEMS_PROVIDER, type DeployItemsProvider } from '@deveye/types/sdk';
-import { createTestServiceDeps } from '@deveye/types/sdk/testing';
+import { createTestServiceDeps, testDevice } from '@deveye/types/sdk/testing';
 
 import { DokployProvider, type DokployClient, type DokployTarget } from './providers/dokploy';
 import { GithubProvider } from './providers/github';
@@ -34,6 +34,7 @@ function target(over: Partial<DeployTargetRow> = {}): DeployTargetRow {
         id: 1,
         workspace_id: 1,
         credential_id: 10,
+        device_id: null,
         provider: 'dokploy',
         target_kind: 'application',
         external_id: 'app-1',
@@ -126,6 +127,7 @@ function fakeRepo(
         updateCredential: unused,
         removeCredential: unused,
         countCredentialUses: unused,
+        findTargetByDevice: unused,
         countTargetsInWorkspaces: async (ids) => targets.filter((t) => ids.includes(t.workspace_id)).length,
         // La requête du vrai dépôt, en mémoire : jointure sur la clé, accès
         // écartés, compte des déploiements en vol, les deux régimes, le tour de
@@ -201,6 +203,15 @@ function fakeRepo(
                 .filter((d) => d.target_id === targetId && d.workspace_id === workspaceId)
                 .sort((a, b) => b.started_at - a.started_at || b.id - a.id)
                 .slice(0, limit)
+                .map((d) => ({ ...d })),
+        findDeployment: async (id) => {
+            const d = deployments.find((x) => x.id === id);
+            return d ? { ...d } : null;
+        },
+        listInFlightAgentDeployments: async () =>
+            deployments
+                .filter((d) => d.status === 'queued' || d.status === 'running')
+                .filter((d) => targets.find((t) => t.id === d.target_id)?.provider === 'agent')
                 .map((d) => ({ ...d }))
     };
 }
@@ -631,5 +642,102 @@ describe('le blob d’un déploiement', () => {
         const blob = JSON.parse(repo.deployments[0].content) as { description: string; noticeIds: object };
         assert.equal(blob.description, 'Construction');
         assert.deepEqual(blob.noticeIds, { '7': 'live-1' });
+    });
+});
+
+describe('le déploiement par une machine', () => {
+    const DEVICE = '11111111-2222-4333-8444-555555555555';
+    const machineTarget = () =>
+        target({
+            id: 1,
+            credential_id: null,
+            device_id: DEVICE,
+            provider: 'agent',
+            target_kind: 'service',
+            external_id: 'docker/site/web',
+            content: JSON.stringify({ name: 'Site' })
+        });
+    const queued = (): DeploymentRow => ({
+        id: 5,
+        target_id: 1,
+        workspace_id: 1,
+        external_id: 'op-5',
+        status: 'queued',
+        triggered_by_user_id: 3,
+        started_at: NOW(),
+        finished_at: null,
+        notified: 0,
+        content: JSON.stringify({ title: 'Mise en prod', description: '', url: null })
+    });
+    const job = (repo: FakeRepo) => ({
+        target: repo.targets[0],
+        deploymentId: 5,
+        service: { engine: 'docker' as const, project: 'site', service: 'web' }
+    });
+
+    it('demande à l’agent de déployer le service, garde son journal, puis conclut le message et prévient', async () => {
+        const repo = fakeRepo([machineTarget()], [], [queued()]);
+        const orders: unknown[] = [];
+        const deps = createTestServiceDeps({
+            repo,
+            liveChannels: [7],
+            devices: [testDevice({ id: DEVICE, name: 'vps2' })],
+            dockerRun: async (_deviceId, order, options) => {
+                orders.push(order);
+                options?.onLine?.('Pulling web');
+                options?.onLine?.('Container site-web-1 Recreated');
+                return { ok: true };
+            }
+        });
+        const sync = new DeploySync(deps);
+        sync.startAgentDeploy(job(repo));
+        await sync.idle();
+
+        assert.deepEqual(orders, [{ engine: 'docker', action: 'composeDeploy', target: 'site/web' }]);
+        const [row] = repo.deployments;
+        assert.equal(row.status, 'success');
+        assert.equal(row.notified, 1);
+        assert.equal((JSON.parse(row.content) as { log: string }).log, 'Pulling web\nContainer site-web-1 Recreated');
+        // Ouvert en vol, conclu à l'atterrissage : le même message.
+        assert.deepEqual(
+            deps.recorded.liveMessages.map((m) => m.messageId),
+            [null, 'live-1']
+        );
+        assert.deepEqual(
+            deps.recorded.notifications.map((n) => [n.except, n.subject]),
+            [[[7], '[DevEye] Succès du déploiement : Site']]
+        );
+    });
+
+    it('dit pourquoi la machine a refusé', async () => {
+        const repo = fakeRepo([machineTarget()], [], [queued()]);
+        const deps = createTestServiceDeps({
+            repo,
+            dockerRun: async () => ({
+                ok: false,
+                error: 'refused by local policy (allow_docker_deploy = false in agent.toml)'
+            })
+        });
+        const sync = new DeploySync(deps);
+        sync.startAgentDeploy(job(repo));
+        await sync.idle();
+
+        const [row] = repo.deployments;
+        assert.equal(row.status, 'failed');
+        assert.match((JSON.parse(row.content) as { description: string }).description, /allow_docker_deploy/);
+        assert.equal(deps.recorded.notifications.length, 1);
+        assert.match(deps.recorded.notifications[0].body, /allow_docker_deploy/);
+    });
+
+    it('marque en échec, sans avis, ce qu’un redémarrage a interrompu', async () => {
+        const repo = fakeRepo([machineTarget()], [], [{ ...queued(), status: 'running' }]);
+        const deps = createTestServiceDeps({ repo });
+        await new DeploySync(deps).recover();
+        const [row] = repo.deployments;
+        assert.equal(row.status, 'failed');
+        assert.equal(row.notified, 1);
+        assert.match((JSON.parse(row.content) as { description: string }).description, /redémarrage du serveur/);
+        assert.equal(deps.recorded.notifications.length, 0);
+        assert.deepEqual(deps.recorded.liveChanges, [1]);
     });
 });

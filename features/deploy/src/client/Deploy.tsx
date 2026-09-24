@@ -193,7 +193,7 @@ export function FeatureDeploy(_props: FeatureViewProps) {
                         <p className={styles.empty}>
                             Aucune cible déclarée.{' '}
                             {canWrite
-                                ? 'Ajoutez un accès (une instance Dokploy ou un jeton GitHub), choisissez ce qu’il faut déployer, et vous pourrez le lancer d’ici.'
+                                ? 'Ajoutez un accès (une instance Dokploy ou un jeton GitHub) ou choisissez une machine de l’espace, puis ce qu’il faut déployer : vous pourrez le lancer d’ici.'
                                 : 'Un membre disposant du droit d’écriture peut en déclarer une.'}
                         </p>
                     ) : (

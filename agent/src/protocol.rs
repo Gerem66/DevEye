@@ -174,6 +174,7 @@ pub struct AgentPolicy {
     pub pkg_upgrade: bool,
     pub service_elevate: bool,
     pub destroy: bool,
+    pub docker_deploy: bool,
 }
 
 /// One detected package manager + its pending state (mirrors @deveye/types
@@ -1232,8 +1233,8 @@ pub enum ServerMessage {
 
 /// The orders that must carry the server's signature (mirrors
 /// `SIGNED_AGENT_COMMANDS` in @deveye/types): what runs code, writes or deletes
-/// files, changes the agent's privileges or its life.
-pub const SIGNED_COMMANDS: [&str; 8] = [
+/// files, changes the agent's privileges or its life, or drives its containers.
+pub const SIGNED_COMMANDS: [&str; 9] = [
     "term.open",
     "files.mutate",
     "files.upload",
@@ -1242,6 +1243,7 @@ pub const SIGNED_COMMANDS: [&str; 8] = [
     "agent.destroy",
     "pkg.upgrade",
     "agent.lifecycle",
+    "docker.action",
 ];
 
 /// Signature carried next to `command` and `payload` (see `orders.rs`).

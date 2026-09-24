@@ -336,6 +336,38 @@ mod tests {
     }
 
     #[test]
+    fn a_docker_action_needs_the_signature_and_a_deploy_the_policy() {
+        let mut guard = OrderGuard::new(Some(&pinned()));
+        let payload =
+            r#"{"opId":"o1","engine":"docker","action":"composeDeploy","target":"site/web"}"#;
+        let unsigned = format!(r#"{{"command":"docker.action","payload":{payload}}}"#);
+        assert_eq!(
+            check(&mut guard, &unsigned, NOW),
+            Err(Refusal::MissingSignature)
+        );
+
+        let no_deploy = Policy {
+            allow_docker_deploy: false,
+            ..Policy::default()
+        };
+        let deploy = frame("docker.action", payload, "n1", NOW);
+        assert!(matches!(
+            admit(&deploy, &mut guard, &no_deploy, NOW),
+            Admission::Refused { .. }
+        ));
+        let restart = frame(
+            "docker.action",
+            r#"{"opId":"o2","engine":"docker","action":"restart","target":"abc"}"#,
+            "n2",
+            NOW,
+        );
+        assert!(matches!(
+            admit(&restart, &mut guard, &no_deploy, NOW),
+            Admission::Allowed
+        ));
+    }
+
+    #[test]
     fn ordinary_commands_need_no_signature_and_ignore_a_bogus_one() {
         let mut guard = OrderGuard::new(None);
         let bare = r#"{"command":"agent.collect","payload":{}}"#;

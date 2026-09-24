@@ -10,7 +10,7 @@ import {
 } from '../contracts/domain';
 
 import { api } from './api';
-import { formatAgo, PROVIDER_TIMEOUT_MS, STATUS_LABELS, statusTone, targetWhere } from './format';
+import { formatAgo, isOrphan, PROVIDER_TIMEOUT_MS, STATUS_LABELS, statusTone, targetWhere } from './format';
 import styles from './style.module.css';
 
 interface TargetViewProps {
@@ -77,7 +77,7 @@ interface TargetActionsProps {
 export function TargetActions({ target, canWrite, projectId, onGone, after }: TargetActionsProps) {
     const [triggerOpen, setTriggerOpen] = useState(false);
     const [busy, setBusy] = useState(false);
-    const orphan = target.credentialId === null;
+    const orphan = isOrphan(target);
 
     return (
         <>
@@ -148,7 +148,7 @@ export function TargetView({
     showHistory = true,
     showActions = true
 }: TargetViewProps) {
-    const orphan = target.credentialId === null;
+    const orphan = isOrphan(target);
 
     // Toujours calculées, `showHistory` ou pas : l'en-tête a besoin de la
     // première ligne pour son résumé du dernier déploiement.

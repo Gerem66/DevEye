@@ -1,4 +1,4 @@
-import type { DeploymentRow, DeployTargetSyncRow } from '../contracts/domain';
+import type { DeploymentRow, DeployStatus, DeployTargetRow, DeployTargetSyncRow } from '../contracts/domain';
 import type {
     DevEyeFacade,
     FeatureService,
@@ -13,6 +13,7 @@ import type {
 // de disponibilité semblerait venir d'un autre produit.
 import { formatDuration, formatMoment } from '@/Services/notifications';
 
+import { composeTargetOf, type ComposeService } from './agent';
 import { buildNotice, estimateFromHistory, firstLine } from './notice';
 import { PROVIDERS, providerOf, type DeployProviders } from './providers';
 import {
@@ -24,7 +25,7 @@ import {
     type TargetPlace
 } from './providers/types';
 import type { DeployRepo } from './repo';
-import { providerTargetOf, readJson, type StoredTarget } from './_shared';
+import { providerTargetOf, readJson, type StoredDeployment, type StoredTarget } from './_shared';
 
 /**
  * Le rapprochement des cibles de déploiement avec ce que le fournisseur en dit,
@@ -129,13 +130,46 @@ interface SeenDeployment {
     entry: RemoteDeployment;
 }
 
-/** Une cible au travail : son fournisseur, son accès ouvert, ce qu'elle désigne chez lui, son nom. */
+/** Ce qui nourrit le message vivant d'une cible : son journal, son lieu, son dépôt. */
+type NoticeSource = Pick<DeployProviderAdapter, 'noticeLog' | 'place' | 'repoUrl'>;
+
+/** Une cible au travail : ce qui nourrit son avis, son accès ouvert, ce qu'elle désigne, son nom. */
 interface OpenTarget {
     row: DeployTargetSyncRow;
-    provider: DeployProviderAdapter;
+    notices: NoticeSource;
     access: ProviderAccess;
     spec: ProviderTarget;
     name: string;
+}
+
+/** La fin du journal d'une machine que le module retient : ce que l'avis montre et ce que la base garde. */
+const AGENT_LOG_MAX_CHARS = 64 * 1024;
+
+/** Un déploiement par une machine, confié au suivi par `deploy.trigger`. */
+export interface AgentJob {
+    target: DeployTargetRow;
+    deploymentId: number;
+    service: ComposeService;
+}
+
+interface AgentRun {
+    job: AgentJob;
+    name: string;
+    /** La fin du journal, bornée à {@link AGENT_LOG_MAX_CHARS}. */
+    lines: string[];
+    chars: number;
+    /** Les messages vivants d'un déploiement s'écrivent l'un après l'autre. */
+    noticing: Promise<void>;
+    /** Une mise à jour attend déjà son tour : elle lira l'état le plus frais, inutile d'en ajouter une. */
+    queued: boolean;
+}
+
+function keepLine(run: AgentRun, line: string): void {
+    run.lines.push(line);
+    run.chars += line.length + 1;
+    while (run.chars > AGENT_LOG_MAX_CHARS && run.lines.length > 1) {
+        run.chars -= (run.lines.shift()?.length ?? 0) + 1;
+    }
 }
 
 /** Ce que l'avis en texte dit d'un déploiement conclu. */
@@ -173,6 +207,10 @@ export class DeploySync {
      */
     private readonly credentialBackoff = new Map<number, { until: number; delay: number }>();
 
+    /** Les déploiements par une machine en cours, par ligne de déploiement. */
+    private readonly agentRuns = new Map<number, AgentRun>();
+    private readonly agentJobs = new Set<Promise<void>>();
+
     constructor(
         private readonly deps: FeatureServiceDeps<DeployRepo>,
         /** Les fournisseurs, remplaçables : un test simule une instance sans réseau. */
@@ -183,18 +221,78 @@ export class DeploySync {
 
     start(): void {
         this.ticker.start();
+        void this.recover().catch((e: unknown) =>
+            this.deps.logger.warn({ err: e }, 'Deploy sync: reprise des déploiements par machine en échec')
+        );
         this.deps.logger.info({ tickSeconds: DEPLOY_TICK_SECONDS }, 'Deploy sync started');
     }
 
+    /**
+     * L'arrêt attend les rapprochements, pas les déploiements par une machine :
+     * ceux-là durent jusqu'à trente minutes, et le prochain démarrage les
+     * reprend ({@link recover}).
+     */
     async stop(): Promise<void> {
         await this.ticker.stop();
         await this.ticking;
-        await this.idle();
+        while (this.running.size > 0) await Promise.allSettled(this.running.values());
     }
 
-    /** Rend la main quand plus aucune cible n'est en cours de rapprochement. */
+    /** Rend la main quand plus rien n'est en cours : rapprochements et déploiements par une machine. */
     async idle(): Promise<void> {
-        while (this.running.size > 0) await Promise.allSettled(this.running.values());
+        while (this.running.size > 0 || this.agentJobs.size > 0) {
+            await Promise.allSettled([...this.running.values(), ...this.agentJobs]);
+        }
+    }
+
+    /**
+     * Les déploiements par une machine restés en vol : leur attente vivait dans
+     * le processus précédent, plus personne ne recevra leur verdict. Marqués en
+     * échec, sans avis : l'issue sur la machine n'est pas connue.
+     */
+    async recover(): Promise<void> {
+        const now = Math.floor(Date.now() / 1000);
+        for (const row of await this.deps.repo.listInFlightAgentDeployments()) {
+            if (this.agentRuns.has(row.id)) continue;
+            const cipher = this.deps.cipherFor(row.workspace_id);
+            const body = (await readJson<Record<string, unknown>>(cipher, row.content)) ?? {};
+            await this.deps.repo.updateDeployment(row.id, {
+                externalId: row.external_id,
+                status: 'failed',
+                finishedAt: now,
+                content: await cipher.encrypt(
+                    JSON.stringify({
+                        ...body,
+                        description:
+                            'Suivi interrompu par un redémarrage du serveur : l’issue sur la machine n’est pas connue.'
+                    })
+                )
+            });
+            await this.deps.repo.markDeploymentNotified(row.id);
+            this.deps.live.changed(row.workspace_id);
+        }
+    }
+
+    /**
+     * Lance un déploiement par une machine sans l'attendre : l'agent récupère
+     * l'image du service puis le recrée, et ce suivi recueille ses lignes, tient
+     * le message vivant et enregistre le verdict.
+     */
+    startAgentDeploy(job: AgentJob): void {
+        const done: Promise<void> = this.runAgentDeploy(job)
+            .catch((e: unknown) =>
+                this.deps.logger.error({ err: e, deploymentId: job.deploymentId }, 'Deploy agent: suivi en échec')
+            )
+            .finally(() => {
+                this.agentRuns.delete(job.deploymentId);
+                this.agentJobs.delete(done);
+            });
+        this.agentJobs.add(done);
+    }
+
+    /** Le journal d'un déploiement par une machine encore en cours ; `null` s'il n'en tourne aucun pour cette ligne. */
+    agentLog(deploymentId: number): string | null {
+        return this.agentRuns.get(deploymentId)?.lines.join('\n') ?? null;
     }
 
     /**
@@ -211,6 +309,9 @@ export class DeploySync {
      * aboutissent. Le tour suivant reprend ce qui s'est libéré entre-temps.
      */
     private tick(): Promise<void> {
+        // Le message vivant d'une machine suit la même cadence que celui d'un
+        // fournisseur sondé.
+        for (const run of this.agentRuns.values()) void this.refreshAgentNotice(run);
         this.ticking ??= this.syncDeployTargets()
             .catch((e: unknown) => this.deps.logger.error({ err: e }, 'Deploy sync: tick failed'))
             .finally(() => {
@@ -291,9 +392,10 @@ export class DeploySync {
         const credential = await this.deps.repo.findCredential(target.credential_id, target.workspace_id);
         if (!credential) return;
         const stored = await readJson<Partial<StoredTarget>>(cipher, target.content);
+        const provider = providerOf(this.providers, credential.provider);
         const open: OpenTarget = {
             row: target,
-            provider: providerOf(this.providers, credential.provider),
+            notices: provider,
             access: {
                 credentialId: credential.id,
                 baseUrl: credential.base_url,
@@ -303,7 +405,7 @@ export class DeploySync {
             name: stored?.name ?? target.external_id
         };
 
-        const remote = await open.provider.history(open.access, open.spec, { timeoutMs: DEPLOY_SYNC_TIMEOUT_MS });
+        const remote = await provider.history(open.access, open.spec, { timeoutMs: DEPLOY_SYNC_TIMEOUT_MS });
 
         // Le premier rapprochement garnit sans prévenir : tout l'historique est
         // « nouveau » ce jour-là sans que rien ne vienne de se produire.
@@ -554,13 +656,13 @@ export class DeploySync {
                 ? { ...(blob.noticeIds as Record<string, string>) }
                 : {};
 
-        const { provider, access, spec, name } = input.target;
+        const { notices, access, spec, name } = input.target;
         const [log, place, repoUrl] = await Promise.all([
-            provider.noticeLog(access, spec, item.entry, { timeoutMs: DEPLOY_LOG_TIMEOUT_MS }).catch(() => ''),
-            provider
+            notices.noticeLog(access, spec, item.entry, { timeoutMs: DEPLOY_LOG_TIMEOUT_MS }).catch(() => ''),
+            notices
                 .place(access, spec, item.entry, name)
                 .catch((): TargetPlace => ({ fields: [{ name: '⚙️ Cible', value: name }], link: null })),
-            provider.repoUrl(access, spec).catch(() => null)
+            notices.repoUrl(access, spec).catch(() => null)
         ]);
 
         const message = buildNotice({
@@ -604,12 +706,137 @@ export class DeploySync {
         }
 
         if (dirty) {
+            // Relu juste avant d'écrire : pendant la publication, un autre
+            // écrivain (le verdict d'une machine) a pu enrichir le blob.
+            const fresh = await this.deps.repo.findDeployment(item.row.id);
+            const current = (fresh ? await readJson<Record<string, unknown>>(cipher, fresh.content) : null) ?? blob;
             await this.deps.repo.setDeploymentContent(
                 item.row.id,
-                await cipher.encrypt(JSON.stringify({ ...blob, noticeIds }))
+                await cipher.encrypt(JSON.stringify({ ...current, noticeIds }))
             );
         }
         return accepted;
+    }
+
+    private async runAgentDeploy(job: AgentJob): Promise<void> {
+        const { target, deploymentId, service } = job;
+        const cipher = this.deps.cipherFor(target.workspace_id);
+        const name = (await readJson<Partial<StoredTarget>>(cipher, target.content))?.name ?? target.external_id;
+        const run: AgentRun = { job, name, lines: [], chars: 0, noticing: Promise.resolve(), queued: false };
+        this.agentRuns.set(deploymentId, run);
+
+        await this.setAgentStatus(job, { status: 'running', finishedAt: null });
+        void this.refreshAgentNotice(run);
+
+        const result = target.device_id
+            ? await this.deps.agents.dockerRun(
+                  target.device_id,
+                  { engine: service.engine, action: 'composeDeploy', target: composeTargetOf(service) },
+                  { onLine: (line) => keepLine(run, line) }
+              )
+            : { ok: false, error: 'Cette cible ne désigne plus de machine.' };
+
+        // Le message en cours d'écriture d'abord : il range ses identifiants
+        // dans le blob que le verdict va compléter.
+        await run.noticing;
+        await this.setAgentStatus(job, {
+            status: result.ok ? 'success' : 'failed',
+            finishedAt: Math.floor(Date.now() / 1000),
+            error: result.ok ? undefined : (result.error ?? 'Le déploiement a échoué sur la machine.'),
+            log: run.lines.join('\n')
+        });
+        await this.refreshAgentNotice(run);
+    }
+
+    /** L'état d'un déploiement par une machine ; l'erreur s'ajoute à la description saisie, le journal la suit. */
+    private async setAgentStatus(
+        job: AgentJob,
+        next: { status: DeployStatus; finishedAt: number | null; error?: string; log?: string }
+    ): Promise<void> {
+        const cipher = this.deps.cipherFor(job.target.workspace_id);
+        const row = await this.deps.repo.findDeployment(job.deploymentId);
+        if (!row) return;
+        const body = (await readJson<Partial<StoredDeployment>>(cipher, row.content)) ?? {};
+        const description = next.error ? [body.description, next.error].filter(Boolean).join('\n') : body.description;
+        await this.deps.repo.updateDeployment(row.id, {
+            externalId: row.external_id,
+            status: next.status,
+            finishedAt: next.finishedAt,
+            content: await cipher.encrypt(
+                JSON.stringify({ ...body, description, ...(next.log !== undefined ? { log: next.log } : {}) })
+            )
+        });
+        this.deps.live.changed(job.target.workspace_id);
+    }
+
+    private refreshAgentNotice(run: AgentRun): Promise<void> {
+        if (run.queued) return run.noticing;
+        run.queued = true;
+        run.noticing = run.noticing
+            .then(async () => {
+                run.queued = false;
+                await this.agentNotice(run);
+            })
+            .catch((e: unknown) =>
+                this.deps.logger.warn({ err: e, deploymentId: run.job.deploymentId }, 'Deploy agent: avis en échec')
+            );
+        return run.noticing;
+    }
+
+    /**
+     * Le message vivant d'un déploiement par une machine, sur le même chemin que
+     * celui d'un fournisseur sondé : ouvert en vol, modifié à chaque battement,
+     * conclu à l'atterrissage avec l'avis en texte.
+     */
+    private async agentNotice(run: AgentRun): Promise<void> {
+        const { target, deploymentId, service } = run.job;
+        const row = await this.deps.repo.findDeployment(deploymentId);
+        if (!row) return;
+        const cipher = this.deps.cipherFor(target.workspace_id);
+        const body = await readJson<Partial<StoredDeployment>>(cipher, row.content);
+        const status: DeployStatus =
+            row.status === 'success' || row.status === 'failed' || row.status === 'running' ? row.status : 'queued';
+        const entry: RemoteDeployment = {
+            externalId: row.external_id,
+            status,
+            title: body?.title ?? 'Déploiement',
+            description: status === 'failed' ? (body?.description ?? '') : '',
+            startedAt: Number(row.started_at),
+            finishedAt: row.finished_at === null ? null : Number(row.finished_at),
+            logRef: null,
+            url: null,
+            details: []
+        };
+        const machine =
+            (await this.deps.devicesFor(target.workspace_id).list()).find((d) => d.id === target.device_id)?.name ??
+            'une machine';
+        const open: OpenTarget = {
+            row: { ...target, base_url: null, in_flight: 1 },
+            notices: {
+                noticeLog: async () => run.lines.join('\n'),
+                place: async () => ({
+                    fields: [
+                        { name: '🖥️ Machine', value: machine },
+                        { name: '🛠️ Projet', value: service.project },
+                        { name: '⚙️ Service', value: service.service },
+                        { name: '📦 Type', value: 'service compose' }
+                    ],
+                    link: null
+                }),
+                repoUrl: async () => null
+            },
+            access: { credentialId: 0, baseUrl: null, secret: '' },
+            spec: { kind: 'service', externalId: target.external_id, ref: null },
+            name: run.name
+        };
+        const history = await this.deps.repo.listDeployments(target.id, target.workspace_id, DEPLOY_IMPORT_LIMIT * 3);
+        await this.updateDeployNotices({
+            target: open,
+            history,
+            seen: [{ row, entry }],
+            firstImport: false,
+            now: Math.floor(Date.now() / 1000)
+        });
     }
 
     /**

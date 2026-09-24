@@ -756,18 +756,20 @@ par `DeployProviderAdapter` (`src/server/providers/types.ts`), un par famille
 d'accès (`PROVIDERS`, `providers/index.ts`). Chacun projette son vocabulaire sur
 les quatre états et garde ses propres caches : le catalogue d'une instance
 Dokploy (5 min) et le dépôt d'une cible (1 h) ; les exécutions d'un workflow
-GitHub avec leur ETag.
+GitHub avec leur ETag. Une cible portée par une machine n'a pas d'accès : c'est
+l'agent qui répond (`src/server/agent.ts`).
 
-|                   | Dokploy                                      | GitHub Actions                                                                |
-| ----------------- | -------------------------------------------- | ----------------------------------------------------------------------------- |
-| Accès             | adresse de l'instance + clé d'API            | jeton à grain fin, sans adresse                                               |
-| Cible             | application ou pile compose                  | workflow d'un dépôt sur une branche (`propriétaire/dépôt#id`)                 |
-| Déclencher        | `application.deploy` / `compose.deploy`      | `workflow_dispatch` ; un workflow sans ce déclencheur est refusé, raison dite |
-| Historique        | `deployment.all` / `deployment.allByCompose` | les exécutions du workflow sur la branche, un 304 ne coûte rien               |
-| Rattachement      | par identifiant, sinon par date              | par date : l'API ne rend pas l'exécution qu'elle crée                         |
-| Journal de l'avis | la queue du journal (WebSocket)              | les étapes des jobs : faites, en cours, à venir                               |
-| Journal complet   | le même flux, lu jusqu'au silence            | le texte de chaque job, par une redirection que le jeton ne suit pas          |
-| Limite de débit   | aucune                                       | compteur épuisé : l'accès recule jusqu'à `x-ratelimit-reset`                  |
+|                   | Dokploy                                      | GitHub Actions                                                                | Une machine                                                               |
+| ----------------- | -------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Accès             | adresse de l'instance + clé d'API            | jeton à grain fin, sans adresse                                               | aucun : la machine de l'espace, et la permission Docker de qui la déclare |
+| Cible             | application ou pile compose                  | workflow d'un dépôt sur une branche (`propriétaire/dépôt#id`)                 | service compose (`moteur/projet/service`)                                 |
+| Déclencher        | `application.deploy` / `compose.deploy`      | `workflow_dispatch` ; un workflow sans ce déclencheur est refusé, raison dite | `docker.action` `composeDeploy`, signé : `pull` puis `up --no-deps`       |
+| Historique        | `deployment.all` / `deployment.allByCompose` | les exécutions du workflow sur la branche, un 304 ne coûte rien               | le nôtre : rien n'est sondé                                               |
+| Rattachement      | par identifiant, sinon par date              | par date : l'API ne rend pas l'exécution qu'elle crée                         | direct : la ligne attend son verdict                                      |
+| Journal de l'avis | la queue du journal (WebSocket)              | les étapes des jobs : faites, en cours, à venir                               | les lignes de l'agent, au fil de l'action                                 |
+| Journal complet   | le même flux, lu jusqu'au silence            | le texte de chaque job, par une redirection que le jeton ne suit pas          | les 64 derniers Ko, gardés avec le déploiement                            |
+| Limite de débit   | aucune                                       | compteur épuisé : l'accès recule jusqu'à `x-ratelimit-reset`                  | une action longue à la fois par machine, verrou partagé avec Appareils    |
+| Offre             | compte dans `deploy.targets`                 | compte dans `deploy.targets`                                                  | hors `deploy.targets` : rien n'est sondé, les machines ont leur limite    |
 
 **Le jeton GitHub de Déploiements n'est pas celui de Git.** Git lit des dépôts
 (Contents en lecture) ; ici on lance des workflows (Actions en écriture).
@@ -775,9 +777,23 @@ Partager le jeton donnerait à `git: write` le pouvoir de déployer, ce que le
 §2.2 refuse. Un accès ne change jamais de fournisseur, et une cible ne désigne
 qu'un accès du sien.
 
+**Une machine ne se prête pas sans droit.** Déclarer une cible sur une machine
+exige la permission Docker d'Appareils sur elle (`devices.authorize` avec
+`extras`, dans le SDK), parce que la cible donne ensuite à `deploy: write` le
+pouvoir de relancer ce service. La machine garde le dernier mot : sa politique
+locale (`allow_docker_deploy`) refuse le déploiement, et le refus revient comme
+un échec qui le dit. Un agent trop ancien pour `composeDeploy` est grisé au
+choix de la machine.
+
+**Le verdict attend dans le processus.** `DeploySync.startAgentDeploy` suit
+l'action par `agents.dockerRun` (35 min au plus, l'agent en borne l'action
+entière à 30) et tient le message vivant au même rythme qu'une cible sondée. Au
+démarrage, `recover` passe en échec, sans avis, les déploiements par machine
+restés en vol : plus personne n'en recevra le verdict.
+
 La migration `migrations/001_providers.sql` a donné un `provider` aux accès,
-élargi `external_id` à 255 caractères, et préparé `device_id` pour les cibles
-portées par une machine.
+élargi `external_id` à 255 caractères, et ajouté `device_id` (clé étrangère
+vers `devices`, en cascade) avec son unicité par espace et par machine.
 
 ## Modules privés au déploiement
 

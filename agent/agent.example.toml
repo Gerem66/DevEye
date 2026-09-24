@@ -44,3 +44,4 @@ allow_power = true             # shut down, reboot, suspend, lock
 allow_pkg_upgrade = true       # system package upgrades
 allow_service_elevate = true   # asking the desktop to make the agent a root service
 allow_destroy = true           # wiping the agent when the device is deleted in DevEye
+allow_docker_deploy = true     # deployments: pull a compose service's image and recreate it

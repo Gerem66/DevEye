@@ -27,7 +27,8 @@ const DESTRUCTIVE: ReadonlySet<DockerAction> = new Set<DockerAction>([
     'pruneVolumes',
     'pruneNetworks',
     'pruneBuildCache',
-    'recreate'
+    'recreate',
+    'composeDeploy'
 ]);
 
 export const agentDockerInventoryFeature: FeatureDefinition<

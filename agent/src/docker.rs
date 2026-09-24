@@ -380,6 +380,7 @@ pub fn is_long_action(action: &str) -> bool {
         action,
         "pull"
             | "recreate"
+            | "composeDeploy"
             | "pruneContainers"
             | "pruneImages"
             | "pruneVolumes"
@@ -388,8 +389,10 @@ pub fn is_long_action(action: &str) -> bool {
     )
 }
 
-/// What one action runs: the arguments, and the directory it runs in (compose
-/// needs its project's, everything else runs anywhere).
+/// What one command runs: the arguments, and the directory it runs in (compose
+/// needs its project's, everything else runs anywhere). An action is one or
+/// more of them, run in order.
+#[derive(Debug, PartialEq)]
 struct ActionSpec {
     args: Vec<String>,
     cwd: Option<String>,
@@ -434,23 +437,26 @@ fn action_command(action: &str, target: Option<&str>) -> Result<ActionSpec> {
     }
 }
 
+/// One compose label of a container, `None` when absent.
+fn compose_label(bin: &str, container_id: &str, key: &str) -> Option<String> {
+    run_capture(
+        bin,
+        &[
+            "inspect",
+            "--format",
+            &format!("{{{{index .Config.Labels \"{key}\"}}}}"),
+            container_id,
+        ],
+    )
+    .and_then(|s| opt(&s))
+}
+
 /// Recreating a container means rebuilding its whole run configuration (ports,
 /// mounts, env, networks, restart policy). Reading that back out of `inspect` is
 /// not faithful enough to be safe, so only compose-managed containers can be
 /// recreated: compose already holds the configuration, and re-applies it.
 fn recreate_command(bin: &str, container_id: &str) -> Result<ActionSpec> {
-    let label = |key: &str| -> Option<String> {
-        run_capture(
-            bin,
-            &[
-                "inspect",
-                "--format",
-                &format!("{{{{index .Config.Labels \"{key}\"}}}}"),
-                container_id,
-            ],
-        )
-        .and_then(|s| opt(&s))
-    };
+    let label = |key: &str| compose_label(bin, container_id, key);
     let (Some(project), Some(service)) = (
         label("com.docker.compose.project"),
         label("com.docker.compose.service"),
@@ -474,6 +480,100 @@ fn recreate_command(bin: &str, container_id: &str) -> Result<ActionSpec> {
         ],
         cwd,
     })
+}
+
+/// A compose name as the engines accept it: letters, digits, `_`, `-`, and `.`
+/// past the first character. Anything else is refused before any command runs,
+/// though no shell would read it.
+fn is_compose_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    matches!(chars.next(), Some(c) if c.is_ascii_alphanumeric())
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+        && name.len() <= 128
+}
+
+/// `project/service`: the target of a `composeDeploy`. A service, not a
+/// container: the container id changes at every recreate.
+fn parse_compose_target(target: &str) -> Result<(String, String)> {
+    let (project, service) = target
+        .split_once('/')
+        .context("cible attendue : projet/service")?;
+    if !is_compose_name(project) || !is_compose_name(service) {
+        bail!("nom de projet ou de service compose invalide : {target}");
+    }
+    Ok((project.to_string(), service.to_string()))
+}
+
+/// Deploying a compose service: pull its image, then recreate it alone
+/// (`--no-deps` leaves its neighbours running). The project is addressed the
+/// way compose started it: its name, its files when the label lists them, and
+/// its directory. Nothing is built here: the image comes from its registry.
+fn compose_deploy_commands(
+    project: &str,
+    service: &str,
+    working_dir: Option<String>,
+    config_files: &[String],
+) -> Vec<ActionSpec> {
+    let mut base: Vec<String> = vec!["compose".into(), "-p".into(), project.into()];
+    for file in config_files {
+        base.push("-f".into());
+        base.push(file.clone());
+    }
+    let step = |tail: &[&str]| ActionSpec {
+        args: base
+            .iter()
+            .cloned()
+            .chain(tail.iter().map(|s| s.to_string()))
+            .collect(),
+        cwd: working_dir.clone(),
+    };
+    vec![
+        step(&["pull", service]),
+        step(&["up", "-d", "--force-recreate", "--no-deps", service]),
+    ]
+}
+
+/// Where compose keeps a service: read on one of its containers, running or not.
+fn compose_deploy_plan(bin: &str, target: &str) -> Result<Vec<ActionSpec>> {
+    let (project, service) = parse_compose_target(target)?;
+    let listed = run_capture(
+        bin,
+        &[
+            "ps",
+            "-a",
+            "--filter",
+            &format!("label=com.docker.compose.project={project}"),
+            "--filter",
+            &format!("label=com.docker.compose.service={service}"),
+            "--format",
+            "{{.ID}}",
+        ],
+    )
+    .unwrap_or_default();
+    let Some(id) = listed.lines().map(str::trim).find(|l| !l.is_empty()) else {
+        bail!("Aucun conteneur du service {service} dans le projet compose {project} sur cette machine.");
+    };
+    let working_dir = compose_label(bin, id, "com.docker.compose.project.working_dir");
+    let config_files: Vec<String> =
+        compose_label(bin, id, "com.docker.compose.project.config_files")
+            .map(|files| {
+                files
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|f| !f.is_empty())
+                    .map(String::from)
+                    .collect()
+            })
+            .unwrap_or_default();
+    if working_dir.is_none() && config_files.is_empty() {
+        bail!("Le projet compose {project} ne dit pas où vit son fichier : impossible de le relancer d'ici.");
+    }
+    Ok(compose_deploy_commands(
+        &project,
+        &service,
+        working_dir,
+        &config_files,
+    ))
 }
 
 /// Carry out one action, streaming its output then a terminal `Done`.
@@ -512,15 +612,43 @@ async fn action_inner(
     if !CONTAINER_RUNTIMES.contains(&engine) {
         bail!("moteur inconnu : {engine}");
     }
-    let spec = if action == "recreate" {
-        let id = target.context("cette action demande une cible")?;
-        let bin = engine.to_string();
-        let id = id.to_string();
-        tokio::task::spawn_blocking(move || recreate_command(&bin, &id)).await??
-    } else {
-        action_command(action, target)?
+    let steps = match action {
+        "recreate" | "composeDeploy" => {
+            let target = target
+                .context("cette action demande une cible")?
+                .to_string();
+            let bin = engine.to_string();
+            let action = action.to_string();
+            tokio::task::spawn_blocking(move || {
+                if action == "recreate" {
+                    recreate_command(&bin, &target).map(|spec| vec![spec])
+                } else {
+                    compose_deploy_plan(&bin, &target)
+                }
+            })
+            .await??
+        }
+        _ => vec![action_command(action, target)?],
     };
+    // Une seule échéance pour toutes les étapes : le serveur attend l'action
+    // entière, pas chacune de ses commandes.
+    let deadline = tokio::time::Instant::now() + ACTION_TIMEOUT;
+    for spec in &steps {
+        run_step(engine, action, spec, op_id, tx, deadline).await?;
+    }
+    Ok(())
+}
 
+/// One command of an action: its output streamed line by line, bounded by the
+/// action's deadline.
+async fn run_step(
+    engine: &str,
+    action: &str,
+    spec: &ActionSpec,
+    op_id: &str,
+    tx: &Sender<DockerEvent>,
+    deadline: tokio::time::Instant,
+) -> Result<()> {
     let mut cmd = TokioCommand::new(engine);
     cmd.args(&spec.args)
         .stdin(Stdio::null())
@@ -562,7 +690,7 @@ async fn action_inner(
         }));
     }
 
-    let status = match tokio::time::timeout(ACTION_TIMEOUT, child.wait()).await {
+    let status = match tokio::time::timeout_at(deadline, child.wait()).await {
         Ok(status) => status.context("attente du moteur")?,
         Err(_) => {
             let _ = child.kill().await;
@@ -634,6 +762,53 @@ mod tests {
         assert!(action_command("pruneImages", None).is_ok());
         assert!(action_command("exec", Some("abc")).is_err());
         assert!(action_command("run", Some("abc")).is_err());
+    }
+
+    #[test]
+    fn compose_target_is_project_slash_service_with_safe_names() {
+        assert_eq!(
+            parse_compose_target("site/web").unwrap(),
+            ("site".to_string(), "web".to_string())
+        );
+        assert!(parse_compose_target("site").is_err());
+        assert!(parse_compose_target("site/web;rm").is_err());
+        assert!(parse_compose_target("-p/web").is_err());
+        assert!(parse_compose_target("../etc/web").is_err());
+    }
+
+    #[test]
+    fn compose_deploy_pulls_then_recreates_the_service_alone() {
+        let steps = compose_deploy_commands(
+            "site",
+            "web",
+            Some("/srv/site".into()),
+            &["/srv/site/compose.yml".into(), "/srv/site/prod.yml".into()],
+        );
+        let base = [
+            "compose",
+            "-p",
+            "site",
+            "-f",
+            "/srv/site/compose.yml",
+            "-f",
+            "/srv/site/prod.yml",
+        ];
+        let expect = |tail: &[&str]| ActionSpec {
+            args: base.iter().chain(tail).map(|s| s.to_string()).collect(),
+            cwd: Some("/srv/site".into()),
+        };
+        assert_eq!(
+            steps,
+            vec![
+                expect(&["pull", "web"]),
+                expect(&["up", "-d", "--force-recreate", "--no-deps", "web"]),
+            ]
+        );
+    }
+
+    #[test]
+    fn compose_deploy_is_a_long_action() {
+        assert!(is_long_action("composeDeploy"));
     }
 
     #[test]

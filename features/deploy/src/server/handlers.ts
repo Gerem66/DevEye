@@ -10,19 +10,26 @@ import {
     deployHistory,
     deployList,
     deployLog,
+    deployMachines,
     deployRemove,
     deployReorder,
     deployTrigger,
     deployUpdate
 } from '../contracts/commands';
+import { randomUUID } from 'node:crypto';
+
+import type { Deployment, DeployTarget, DeployTargetRow } from '../contracts/domain';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
 // Le garde des appels sortants, partagé par toute l'app : l'adresse refusée l'est
 // à l'écriture, là où le membre voit pourquoi.
 import { isAllowedOutboundUrl, OUTBOUND_REFUSED_MESSAGE } from '@/Services/netFetch';
 
+import { candidatesOf, machineOf, parseServiceId } from './agent';
 import type { DeployProviderAdapter } from './providers/types';
 import {
+    deviceNamesOf,
+    liveAgentLog,
     loadAccess,
     loadHomeTarget,
     loadTarget,
@@ -32,6 +39,7 @@ import {
     readJson,
     recordProjectEvent,
     reloadTarget,
+    startAgentDeploy,
     targetCipherFor,
     toCredential,
     toDeployment,
@@ -74,6 +82,143 @@ function baseUrlFor(provider: string, baseUrl: string | null): string | null {
 
 const PROVIDER_LABELS: Record<string, string> = { dokploy: 'Dokploy', github: 'GitHub' };
 
+interface TargetInput {
+    kind: DeployTarget['kind'];
+    externalId: string;
+    name: string;
+    ref?: string | null;
+}
+
+/** Une cible par un accès (Dokploy, GitHub) : sondée, donc comptée dans l'offre. */
+async function addAccessTarget(ctx: Ctx, credentialId: number, input: TargetInput): Promise<DeployTarget> {
+    // La clé existe-t-elle, et dans CET espace ? Sans cette garde on
+    // déclarerait une cible sur le jeton d'un autre espace.
+    const { provider } = await loadAccess(ctx, credentialId);
+    assertKind(provider, input.kind);
+
+    const cipher = ctx.cipher();
+    const body: StoredTarget = input.ref ? { name: input.name, ref: input.ref } : { name: input.name };
+
+    // Idempotente : la même application sur la même instance est la même
+    // cible, dont l'intitulé se met à jour. Un projet peut ainsi déclarer
+    // une cible sans savoir si un autre l'a déjà fait.
+    const existing = await ctx.repo.findTargetByExternal(ctx.workspaceId, credentialId, input.externalId);
+    if (existing) {
+        await ctx.repo.updateTarget(existing.id, ctx.workspaceId, {
+            credentialId,
+            kind: input.kind,
+            externalId: input.externalId,
+            content: await cipher.encrypt(JSON.stringify(body))
+        });
+        return reloadTarget(ctx, existing.id);
+    }
+
+    // Après l'idempotence : redéclarer une cible existante n'en ajoute
+    // aucune, et ne doit donc jamais buter sur la limite.
+    await ctx.quota.assert('targets', async (owned) => (await ctx.repo.countTargetsInWorkspaces(owned)) + 1);
+
+    const row = await ctx.repo.createTarget({
+        workspaceId: ctx.workspaceId,
+        credentialId,
+        deviceId: null,
+        provider: provider.id,
+        kind: input.kind,
+        externalId: input.externalId,
+        content: await cipher.encrypt(JSON.stringify(body))
+    });
+    ctx.audit({
+        action: 'deploy.add',
+        description: `Cible de déploiement déclarée : ${input.name}`,
+        metadata: { targetId: row.id, externalId: input.externalId }
+    });
+    return reloadTarget(ctx, row.id);
+}
+
+/**
+ * Une cible portée par une machine de l'espace. La déclarer revient à confier
+ * à `deploy: write` le droit de relancer ce service : il faut donc soi-même
+ * pouvoir en piloter les conteneurs (la permission Docker d'Appareils).
+ */
+async function addMachineTarget(ctx: Ctx, deviceId: string, input: TargetInput): Promise<DeployTarget> {
+    if (input.kind !== 'service') throw new FeatureError('validation', 'Une machine déploie un service compose.');
+    parseServiceId(input.externalId);
+    await ctx.deveye.devices.authorize(deviceId, { extras: ['docker'] });
+
+    const content = await ctx.cipher().encrypt(JSON.stringify({ name: input.name } satisfies StoredTarget));
+    const existing = await ctx.repo.findTargetByDevice(ctx.workspaceId, deviceId, input.externalId);
+    if (existing) {
+        await ctx.repo.updateTarget(existing.id, ctx.workspaceId, {
+            credentialId: null,
+            kind: 'service',
+            externalId: input.externalId,
+            content
+        });
+        return reloadTarget(ctx, existing.id);
+    }
+    const row = await ctx.repo.createTarget({
+        workspaceId: ctx.workspaceId,
+        credentialId: null,
+        deviceId,
+        provider: 'agent',
+        kind: 'service',
+        externalId: input.externalId,
+        content
+    });
+    ctx.audit({
+        action: 'deploy.add',
+        description: `Cible de déploiement déclarée sur une machine : ${input.name}`,
+        metadata: { targetId: row.id, deviceId, externalId: input.externalId }
+    });
+    return reloadTarget(ctx, row.id);
+}
+
+/**
+ * Un déploiement par une machine : la ligne est écrite, puis confiée au suivi
+ * de fond qui attend l'agent. La commande rend la main sans attendre la fin.
+ */
+async function triggerOnMachine(
+    ctx: Ctx,
+    target: DeployTargetRow,
+    input: { title: string; description: string; projectId?: number }
+): Promise<Deployment> {
+    if (!target.device_id) throw new FeatureError('validation', 'Cette cible ne désigne plus de machine.');
+    const service = parseServiceId(target.external_id);
+    if (!ctx.deveye.devices.isOnline(target.device_id)) {
+        throw new FeatureError('conflict', 'La machine est hors ligne : rien ne peut s’y déployer pour l’instant.');
+    }
+
+    const cipher = await targetCipherFor(ctx, target);
+    const title = input.title || 'Déploiement depuis DevEye';
+    const body: StoredDeployment = { title, description: input.description, url: null };
+    const row = await ctx.repo.createDeployment({
+        targetId: target.id,
+        workspaceId: target.workspace_id,
+        // L'identifiant par lequel la fiche retrouve son journal.
+        externalId: randomUUID(),
+        triggeredByUserId: ctx.userId,
+        content: await cipher.encrypt(JSON.stringify(body))
+    });
+    ctx.audit({
+        level: 'warning',
+        action: 'deploy.trigger',
+        description: `Déploiement déclenché sur une machine : ${title}`,
+        metadata: { targetId: target.id, deviceId: target.device_id, service: target.external_id }
+    });
+
+    if (!startAgentDeploy({ target, deploymentId: row.id, service })) {
+        const reason = 'Le suivi des déploiements n’est pas démarré sur ce serveur.';
+        await ctx.repo.updateDeployment(row.id, {
+            externalId: row.external_id,
+            status: 'failed',
+            finishedAt: Math.floor(Date.now() / 1000),
+            content: await cipher.encrypt(JSON.stringify({ ...body, description: reason }))
+        });
+        throw new FeatureError('internal', reason);
+    }
+    if (input.projectId !== undefined) await recordProjectEvent(ctx, input.projectId, target.workspace_id, title);
+    return toDeployment(cipher, row);
+}
+
 export const deployHandlers = [
     defineSdkFeature({
         ...deployList,
@@ -83,7 +228,11 @@ export const deployHandlers = [
             // liste plutôt que d'y figurer grisées.
             const hidden = await ctx.items.restrictions();
             const visible = rows.filter((r) => hidden.get(String(r.id)) !== 'none');
-            const [scope, counts] = await Promise.all([ctx.sharing.scope(), projectCountsOf(ctx)]);
+            const [scope, counts, names] = await Promise.all([
+                ctx.sharing.scope(),
+                projectCountsOf(ctx),
+                deviceNamesOf(ctx, visible)
+            ]);
             return {
                 targets: await Promise.all(
                     visible.map(async (row) =>
@@ -91,7 +240,8 @@ export const deployHandlers = [
                             await scope.cipherFor(String(row.id)),
                             row,
                             row.workspace_id !== ctx.workspaceId,
-                            counts.get(row.id) ?? 0
+                            counts.get(row.id) ?? 0,
+                            names
                         )
                     )
                 )
@@ -134,46 +284,16 @@ export const deployHandlers = [
         access: { level: 'write' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
-            // La clé existe-t-elle, et dans CET espace ? Sans cette garde on
-            // déclarerait une cible sur le jeton d'un autre espace.
-            const { provider } = await loadAccess(ctx, input.credentialId);
-            assertKind(provider, input.kind);
-
-            const cipher = ctx.cipher();
-            const body: StoredTarget = input.ref ? { name: input.name, ref: input.ref } : { name: input.name };
-
-            // Idempotente : la même application sur la même instance est la même
-            // cible, dont l'intitulé se met à jour. Un projet peut ainsi déclarer
-            // une cible sans savoir si un autre l'a déjà fait.
-            const existing = await ctx.repo.findTargetByExternal(ctx.workspaceId, input.credentialId, input.externalId);
-            if (existing) {
-                await ctx.repo.updateTarget(existing.id, ctx.workspaceId, {
-                    credentialId: input.credentialId,
-                    kind: input.kind,
-                    externalId: input.externalId,
-                    content: await cipher.encrypt(JSON.stringify(body))
-                });
-                return { target: await reloadTarget(ctx, existing.id) };
+            if (input.deviceId) {
+                if (input.credentialId !== null) {
+                    throw new FeatureError('validation', 'Une cible vise un accès ou une machine, pas les deux.');
+                }
+                return { target: await addMachineTarget(ctx, input.deviceId, input) };
             }
-
-            // Après l'idempotence : redéclarer une cible existante n'en ajoute
-            // aucune, et ne doit donc jamais buter sur la limite.
-            await ctx.quota.assert('targets', async (owned) => (await ctx.repo.countTargetsInWorkspaces(owned)) + 1);
-
-            const row = await ctx.repo.createTarget({
-                workspaceId: ctx.workspaceId,
-                credentialId: input.credentialId,
-                provider: provider.id,
-                kind: input.kind,
-                externalId: input.externalId,
-                content: await cipher.encrypt(JSON.stringify(body))
-            });
-            ctx.audit({
-                action: 'deploy.add',
-                description: `Cible de déploiement déclarée : ${input.name}`,
-                metadata: { targetId: row.id, externalId: input.externalId }
-            });
-            return { target: await reloadTarget(ctx, row.id) };
+            if (input.credentialId === null) {
+                throw new FeatureError('validation', 'Choisissez un accès ou une machine.');
+            }
+            return { target: await addAccessTarget(ctx, input.credentialId, input) };
         }
     }),
     defineSdkFeature({
@@ -184,7 +304,18 @@ export const deployHandlers = [
             // Domicile seulement : le jeton d'une cible se choisit parmi les clés
             // de SON espace, que la fenêtre ne voit pas.
             const target = await loadHomeTarget(ctx, input.targetId);
-            if (input.credentialId !== null) {
+            if (target.provider === 'agent') {
+                // Portée par une machine, elle le reste : on change d'intitulé ou
+                // de service, pas de fournisseur.
+                if (input.credentialId !== null || input.kind !== 'service') {
+                    throw new FeatureError(
+                        'validation',
+                        'Une cible portée par une machine reste un service de cette machine.'
+                    );
+                }
+                parseServiceId(input.externalId);
+                if (target.device_id) await ctx.deveye.devices.authorize(target.device_id, { extras: ['docker'] });
+            } else if (input.credentialId !== null) {
                 const { provider } = await loadAccess(ctx, input.credentialId);
                 if (provider.id !== target.provider) {
                     throw new FeatureError('validation', 'Cet accès sert un autre fournisseur que cette cible.');
@@ -241,6 +372,15 @@ export const deployHandlers = [
         ...deployCandidates,
         access: { level: 'write' },
         handler: async (ctx: Ctx, input) => {
+            if (input.deviceId !== undefined) {
+                await ctx.deveye.devices.authorize(input.deviceId, { extras: ['docker'] });
+                const inventory = await ctx.deveye.agents.dockerInventory(input.deviceId);
+                if (!inventory) throw new FeatureError('conflict', 'La machine ne répond pas : est-elle en ligne ?');
+                return { candidates: candidatesOf(inventory) };
+            }
+            if (input.credentialId === undefined) {
+                throw new FeatureError('validation', 'Choisissez un accès ou une machine.');
+            }
             const { provider, access } = await loadAccess(ctx, input.credentialId);
             try {
                 return { candidates: await provider.candidates(access) };
@@ -248,6 +388,11 @@ export const deployHandlers = [
                 throw refusal(e, 'Fournisseur injoignable.');
             }
         }
+    }),
+    defineSdkFeature({
+        ...deployMachines,
+        access: { level: 'write' },
+        handler: async (ctx: Ctx) => ({ machines: (await ctx.deveye.devices.list()).map(machineOf) })
     }),
     defineSdkFeature({
         ...deployTrigger,
@@ -259,6 +404,10 @@ export const deployHandlers = [
             // Déclencher depuis une fenêtre est permis, mais tout ce qui s'écrit
             // appartient au domicile : la ligne, sa clé, son suivi.
             const target = await loadTarget(ctx, input.targetId, 'write');
+            if (target.provider === 'agent') {
+                const deployment = await triggerOnMachine(ctx, target, input);
+                return { deployment };
+            }
             if (target.credential_id === null) {
                 throw new FeatureError('validation', 'L’accès de cette cible a été retiré : reliez-en un.');
             }
@@ -323,6 +472,22 @@ export const deployHandlers = [
         ...deployHistory,
         handler: async (ctx: Ctx, input) => {
             const target = await loadTarget(ctx, input.targetId);
+            // Une machine ne garde pas d'historique : c'est le nôtre.
+            if (target.provider === 'agent') {
+                const cipher = await targetCipherFor(ctx, target);
+                const rows = await ctx.repo.listDeployments(target.id, target.workspace_id, 50);
+                const deployments = await Promise.all(rows.map((row) => toDeployment(cipher, row)));
+                return {
+                    entries: deployments.map(({ externalId, status, title, description, startedAt, finishedAt }) => ({
+                        externalId,
+                        status,
+                        title,
+                        description,
+                        startedAt,
+                        finishedAt
+                    }))
+                };
+            }
             // Le jeton a été retiré : rien à interroger, mais ce n'est pas une
             // erreur, la fiche le dit déjà (« accès retiré »).
             if (target.credential_id === null) return { entries: [] };
@@ -358,11 +523,21 @@ export const deployHandlers = [
         ...deployLog,
         handler: async (ctx: Ctx, input) => {
             const target = await loadTarget(ctx, input.targetId);
+            const cipher = await targetCipherFor(ctx, target);
+            // Le journal d'une machine est chez nous : en mémoire tant que
+            // l'agent parle, puis dans la ligne du déploiement.
+            if (target.provider === 'agent') {
+                const rows = await ctx.repo.listDeployments(target.id, target.workspace_id, 50);
+                const row = rows.find((r) => r.external_id === input.externalId);
+                if (!row) throw new FeatureError('not_found', 'Aucun journal pour ce déploiement.');
+                const live = liveAgentLog(row.id);
+                if (live !== null) return { log: live };
+                return { log: (await readJson<Partial<StoredDeployment>>(cipher, row.content))?.log ?? '' };
+            }
             if (target.credential_id === null) {
                 throw new FeatureError('validation', 'L’accès de cette cible a été retiré : reliez-en un.');
             }
             const { provider, access } = await loadAccess(ctx, target.credential_id, target);
-            const cipher = await targetCipherFor(ctx, target);
             const spec = providerTargetOf(target, await readJson<Partial<StoredTarget>>(cipher, target.content));
 
             const remote = await provider.history(access, spec).catch((e: unknown) => {

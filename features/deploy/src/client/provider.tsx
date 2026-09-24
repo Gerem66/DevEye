@@ -3,7 +3,7 @@ import { Button, openFeature, useResource, useWorkspaceMembers } from 'deveye-sd
 import type { DeployClientProvider, SdkTileSummary } from '@deveye/types/sdk/client';
 
 import { api } from './api';
-import { formatAgo, STATUS_LABELS, statusTone } from './format';
+import { formatAgo, isOrphan, STATUS_LABELS, statusTone } from './format';
 import { LogsDialog } from './LogsDialog';
 import { TargetDialog } from './TargetDialog';
 import { TargetView } from './TargetView';
@@ -114,7 +114,7 @@ function summarize(targetIds: readonly number[]): Promise<readonly SdkTileSummar
             if (!target) {
                 return { itemId: id, title: `Cible #${id}`, metrics: [], unavailable: 'Cette cible n’est plus ici.' };
             }
-            if (target.credentialId === null) {
+            if (isOrphan(target)) {
                 return {
                     itemId: id,
                     title: target.name,

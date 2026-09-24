@@ -13,7 +13,8 @@ import {
     DEPLOY_CREDENTIAL_LABEL_MAX_LENGTH,
     DEPLOY_CREDENTIAL_SECRET_MAX_LENGTH,
     deployCredentialProviderSchema,
-    deployCredentialSchema
+    deployCredentialSchema,
+    deployMachineSchema
 } from './domain';
 
 /**
@@ -24,6 +25,7 @@ import {
 
 const targetId = z.number().int().positive();
 const credentialId = z.number().int().positive();
+const deviceId = z.uuid();
 /** La branche d'un workflow ; absente ou `null` ailleurs, et pour la branche par défaut. */
 const ref = z.string().trim().min(1).max(DEPLOY_REF_MAX_LENGTH).nullable().optional();
 
@@ -54,14 +56,17 @@ export const deployGet = {
 };
 
 /**
- * Déclare une cible. **Idempotente** sur (jeton, identifiant externe) : la même
- * application déclarée deux fois est la même cible, et la seconde déclaration
- * met simplement son intitulé (et sa branche) à jour.
+ * Déclare une cible, par un accès (`credentialId`) ou sur une machine
+ * (`deviceId`), jamais les deux. **Idempotente** sur (accès ou machine,
+ * identifiant externe) : la même application déclarée deux fois est la même
+ * cible, et la seconde déclaration met simplement son intitulé (et sa branche)
+ * à jour.
  */
 export const deployAdd = {
     command: 'deploy.add' as const,
     input: z.object({
-        credentialId,
+        credentialId: credentialId.nullable(),
+        deviceId: deviceId.nullable().optional(),
         kind: deployTargetKindSchema,
         externalId: z.string().min(1).max(DEPLOY_EXTERNAL_ID_MAX_LENGTH),
         name: z.string().min(1).max(DEPLOY_TARGET_NAME_MAX_LENGTH),
@@ -102,13 +107,21 @@ export const deployReorder = {
 };
 
 /**
- * Ce que l'accès propose de déployer : applications et piles d'une instance
- * Dokploy, workflows des dépôts d'un jeton GitHub. Remplit un sélecteur.
+ * Ce que l'accès propose de déployer (applications et piles d'une instance
+ * Dokploy, workflows des dépôts d'un jeton GitHub), ou la machine (ses services
+ * compose). L'un ou l'autre. Remplit un sélecteur.
  */
 export const deployCandidates = {
     command: 'deploy.candidates' as const,
-    input: z.object({ credentialId }),
+    input: z.object({ credentialId: credentialId.optional(), deviceId: deviceId.optional() }),
     output: z.object({ candidates: z.array(deployCandidateSchema) })
+};
+
+/** Les machines de l'espace, pour déclarer une cible portée par l'une d'elles. */
+export const deployMachines = {
+    command: 'deploy.machines' as const,
+    input: z.object({}),
+    output: z.object({ machines: z.array(deployMachineSchema) })
 };
 
 /**
@@ -214,6 +227,7 @@ export const deployCommands = [
     deployRemove,
     deployReorder,
     deployCandidates,
+    deployMachines,
     deployTrigger,
     deployHistory,
     deployLog,

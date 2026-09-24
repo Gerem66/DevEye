@@ -80,6 +80,9 @@ pub struct Policy {
     pub allow_service_elevate: bool,
     /// `agent.destroy`: wiping the agent's config and binary on device deletion.
     pub allow_destroy: bool,
+    /// `docker.action` `composeDeploy`: pulling a compose service's image and
+    /// recreating it, what a deployment from the server does.
+    pub allow_docker_deploy: bool,
 }
 
 impl Default for Policy {
@@ -91,6 +94,7 @@ impl Default for Policy {
             allow_pkg_upgrade: true,
             allow_service_elevate: true,
             allow_destroy: true,
+            allow_docker_deploy: true,
         }
     }
 }
@@ -106,21 +110,27 @@ impl Policy {
             pkg_upgrade: self.allow_pkg_upgrade,
             service_elevate: self.allow_service_elevate,
             destroy: self.allow_destroy,
+            docker_deploy: self.allow_docker_deploy,
         }
     }
 
     /// Why this order is refused here, or `None` when the policy allows it.
-    /// `service_action` is the `action` of an `agent.service` order.
-    pub fn refusal(&self, command: &str, service_action: Option<&str>) -> Option<String> {
+    /// `action` is the `action` field of the order, for the switches that cover
+    /// one action of a command (`agent.service` `elevate`, `docker.action`
+    /// `composeDeploy`).
+    pub fn refusal(&self, command: &str, action: Option<&str>) -> Option<String> {
         let key = match command {
             "term.open" if !self.allow_terminal => "allow_terminal",
             "files.mutate" | "files.upload" if !self.allow_files_write => "allow_files_write",
             "agent.power" if !self.allow_power => "allow_power",
             "pkg.upgrade" if !self.allow_pkg_upgrade => "allow_pkg_upgrade",
-            "agent.service" if service_action == Some("elevate") && !self.allow_service_elevate => {
+            "agent.service" if action == Some("elevate") && !self.allow_service_elevate => {
                 "allow_service_elevate"
             }
             "agent.destroy" if !self.allow_destroy => "allow_destroy",
+            "docker.action" if action == Some("composeDeploy") && !self.allow_docker_deploy => {
+                "allow_docker_deploy"
+            }
             _ => return None,
         };
         Some(format!(
@@ -437,6 +447,7 @@ mod tests {
             ("pkg.upgrade", None),
             ("agent.service", Some("elevate")),
             ("agent.destroy", None),
+            ("docker.action", Some("composeDeploy")),
         ];
         let open = Policy::default();
         let closed = Policy {
@@ -446,6 +457,7 @@ mod tests {
             allow_pkg_upgrade: false,
             allow_service_elevate: false,
             allow_destroy: false,
+            allow_docker_deploy: false,
         };
         for (command, action) in cases {
             assert!(
@@ -462,6 +474,8 @@ mod tests {
         assert!(closed
             .refusal("agent.service", Some("install-user"))
             .is_none());
+        // Seul le déploiement se ferme : les autres actions Docker restent.
+        assert!(closed.refusal("docker.action", Some("restart")).is_none());
     }
 
     #[test]

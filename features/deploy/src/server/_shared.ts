@@ -7,7 +7,12 @@ import type {
     DeployTargetKind,
     DeployTargetRow
 } from '../contracts/domain';
-import { deployCredentialProviderSchema, deployTargetKindSchema, deployTargetSchema } from '../contracts/domain';
+import {
+    deployCredentialProviderSchema,
+    deployProviderSchema,
+    deployTargetKindSchema,
+    deployTargetSchema
+} from '../contracts/domain';
 import { PROJECTS_USAGE_PROVIDER, type ProjectsUsageProvider } from '@deveye/types/sdk';
 import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
 
@@ -44,6 +49,8 @@ export interface StoredDeployment {
      * de seconds.
      */
     noticeIds?: Record<string, string> | null;
+    /** La fin du journal d'un déploiement par une machine : aucun fournisseur ne le garde pour nous. */
+    log?: string;
 }
 
 /** Le suivi de fond du module, posé par `createService` : un singleton par processus. */
@@ -60,6 +67,22 @@ export function setSync(sync: DeploySync | null): void {
  */
 export function wakeSync(): void {
     syncRef?.wake();
+}
+
+/**
+ * Confie au suivi de fond un déploiement par une machine : il attend l'agent,
+ * tient le message vivant et enregistre le verdict. `false` quand le service
+ * n'est pas monté : personne ne recueillerait l'issue.
+ */
+export function startAgentDeploy(job: Parameters<DeploySync['startAgentDeploy']>[0]): boolean {
+    if (!syncRef) return false;
+    syncRef.startAgentDeploy(job);
+    return true;
+}
+
+/** La fin du journal d'une machine en cours de déploiement, `null` si aucun ne tourne pour cette ligne. */
+export function liveAgentLog(deploymentId: number): string | null {
+    return syncRef?.agentLog(deploymentId) ?? null;
 }
 
 /** Déchiffre et parse, sans jamais lever : `null` dit simplement « illisible ». */
@@ -137,11 +160,17 @@ export async function toTarget(
     row: DeployTargetWithUsageRow,
     foreign: boolean,
     /** Le nombre de projets qui la déploient, venu du contrat de Projets. */
-    projectCount: number
+    projectCount: number,
+    /** Le nom des machines de l'espace, pour situer une cible qu'une d'elles porte. */
+    deviceNames: ReadonlyMap<string, string> = new Map()
 ): Promise<DeployTarget> {
     const body = await readJson<Partial<StoredTarget>>(cipher, row.content);
-    const provider = deployCredentialProviderSchema.catch('dokploy').parse(row.provider);
+    const provider = deployProviderSchema.catch('dokploy').parse(row.provider);
     const target = providerTargetOf(row, body);
+    const location =
+        provider === 'agent'
+            ? (deviceNames.get(row.device_id ?? '') ?? 'une machine d’un autre espace')
+            : PROVIDERS[provider].location({ baseUrl: row.base_url }, target);
     return deployTargetSchema.parse({
         foreign,
         id: row.id,
@@ -152,7 +181,8 @@ export async function toTarget(
         // illisible reste désignable, plutôt que de s'afficher sans nom.
         name: body?.name ?? row.external_id,
         credentialId: row.credential_id,
-        location: PROVIDERS[provider].location({ baseUrl: row.base_url }, target),
+        deviceId: row.device_id,
+        location,
         ref: target.ref,
         lastStatus: normalizeStatus(row.last_status),
         lastDeployAt: row.last_deploy_at === null ? null : Number(row.last_deploy_at),
@@ -168,13 +198,24 @@ export async function toTarget(
 export async function reloadTarget(ctx: Ctx, targetId: number): Promise<DeployTarget> {
     const row = await ctx.repo.findVisibleTargetWithUsage(targetId, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Cible de déploiement introuvable');
-    const counts = await projectCountsOf(ctx);
+    const [counts, names] = await Promise.all([projectCountsOf(ctx), deviceNamesOf(ctx, [row])]);
     return toTarget(
         await targetCipherFor(ctx, row),
         row,
         row.workspace_id !== ctx.workspaceId,
-        counts.get(targetId) ?? 0
+        counts.get(targetId) ?? 0,
+        names
     );
+}
+
+/** Le nom des machines que ces cibles désignent ; une seule lecture, et aucune sans cible portée par une machine. */
+export async function deviceNamesOf(
+    ctx: Ctx,
+    rows: readonly Pick<DeployTargetRow, 'device_id'>[]
+): Promise<ReadonlyMap<string, string>> {
+    if (!rows.some((r) => r.device_id)) return new Map();
+    const devices = await ctx.deveye.devices.list();
+    return new Map(devices.map((d) => [d.id, d.name]));
 }
 
 /** Un état venu de la base : inconnu vaut `null`, jamais une valeur inventée. */

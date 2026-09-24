@@ -25,8 +25,12 @@ export const manifest = {
     resources: ['deploy.count', 'deploy.list', 'deploy.detail'],
     /** Une cible sondée coûte une requête sortante par minute, à vie : c'est ce que l'offre borne. */
     quotas: [{ key: 'targets', label: 'cibles de déploiement' }],
-    /** Les canaux d'avis par cible, message vivant compris (`notify.liveChannels`, `notify.postLive`). */
-    nativeCapabilities: ['notify'],
+    /**
+     * Les canaux d'avis par cible, message vivant compris (`notify.liveChannels`,
+     * `notify.postLive`) ; les machines de l'espace et leur agent, pour les
+     * cibles qu'une machine porte.
+     */
+    nativeCapabilities: ['notify', 'agents', 'devices.read'],
     /** Ce que la fiche « À propos » relie : les avis partent par un compte Mail. */
     links: [{ to: 'mail', what: 'envoie ses alertes par un compte Mail' }],
     /**

@@ -529,6 +529,7 @@ fn status() {
         ("package upgrades", c.policy.allow_pkg_upgrade),
         ("elevation", c.policy.allow_service_elevate),
         ("remote removal", c.policy.allow_destroy),
+        ("deployments", c.policy.allow_docker_deploy),
     ]
     .iter()
     .filter(|(_, allowed)| !allowed)

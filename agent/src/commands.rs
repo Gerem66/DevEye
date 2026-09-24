@@ -757,6 +757,21 @@ pub(crate) async fn refuse_order<S>(
         "agent.destroy" => {
             let _ = send_destroyed(sink, device_id, false, error).await;
         }
+        // Sans ce `done`, le verrou du serveur sur les actions longues de la
+        // machine ne se libérerait jamais.
+        "docker.action" => {
+            send_docker_event(
+                sink,
+                device_id,
+                DockerEvent::Done {
+                    op_id: text("opId"),
+                    action: text("action"),
+                    ok: false,
+                    error,
+                },
+            )
+            .await;
+        }
         _ => {}
     }
     let _ = sink.flush().await;

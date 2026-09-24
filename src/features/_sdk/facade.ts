@@ -11,6 +11,8 @@ import { MAIL_TRANSPORT_PROVIDER, type FeatureManifest, type NativeCapability } 
 import type { MailTransportProvider } from '@deveye/types/sdk';
 import type { DeviceRow, NotificationFeature } from '@deveye/types';
 
+import { randomUUID } from 'node:crypto';
+
 import type { Database } from '@/db';
 import type { Logger } from 'pino';
 import { authorizeDevice } from '@/agent/authorize';
@@ -42,7 +44,19 @@ export interface FacadeDeps {
     logger: Logger;
     /** Les contrats nommés que l'hôte tient : c'est par eux que `mail` lit le module Mail. */
     providers: SdkProviders;
+    /**
+     * Lève `forbidden` si l'APPELANT ne tient pas ces permissions d'Appareils
+     * sur cet appareil. Absent hors d'une commande : un service n'a pas
+     * d'appelant dont éprouver les droits.
+     */
+    assertDeviceExtras?: (deviceId: string, extras: readonly string[]) => Promise<void>;
 }
+
+/** L'agent borne une action à 30 minutes ; le serveur l'attend un peu plus longtemps. */
+const DOCKER_RUN_TIMEOUT_MS = 35 * 60_000;
+
+/** Un inventaire se relève en quelques secondes ; au-delà, l'agent ne répondra plus. */
+const DOCKER_INVENTORY_TIMEOUT_MS = 15_000;
 
 export function createFacade(deps: FacadeDeps): DevEyeFacade {
     const declared = new Set<NativeCapability>(deps.manifest.nativeCapabilities ?? []);
@@ -154,9 +168,20 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
         devices: {
             // La garde unique des appareils (`agent/authorize.ts`), celle du
             // transport et de la feature.
-            async authorize(deviceId) {
+            async authorize(deviceId, options) {
                 gate('devices.read');
-                return toSdkDevice(await authorizeDevice(deps, deviceId));
+                const device = toSdkDevice(await authorizeDevice(deps, deviceId));
+                const extras = options?.extras ?? [];
+                if (extras.length > 0) {
+                    if (!deps.assertDeviceExtras) {
+                        throw new FeatureError(
+                            'forbidden',
+                            'Une permission sur un appareil se vérifie depuis une commande'
+                        );
+                    }
+                    await deps.assertDeviceExtras(device.id, extras);
+                }
+                return device;
             },
             // Une seule règle : les appareils de l'espace actif, les siens et
             // ceux qui y sont projetés.
@@ -248,6 +273,20 @@ export function agentsFacade(gate: () => void): AgentsFacade {
         requestFilesUpload: (deviceId, payload) => (gate(), sdkHub().requestFilesUpload(deviceId, payload)),
         awaitFilesOp: (opId, timeoutMs) => (gate(), sdkHub().awaitFilesOp(opId, timeoutMs)),
         cancelFilesOp: (opId) => (gate(), sdkHub().cancelFilesOp(opId)),
-        buffered: (deviceId) => (gate(), sdkHub().agentBuffered(deviceId))
+        buffered: (deviceId) => (gate(), sdkHub().agentBuffered(deviceId)),
+        // Le déploiement par une machine : l'action attendue hors socket, et
+        // l'inventaire qui en propose les services.
+        dockerRun: (deviceId, order, options) => (
+            gate(),
+            sdkHub().runDockerOp(
+                deviceId,
+                { opId: randomUUID(), ...order },
+                { timeoutMs: options?.timeoutMs ?? DOCKER_RUN_TIMEOUT_MS, onLine: options?.onLine }
+            )
+        ),
+        dockerInventory: (deviceId, timeoutMs) => (
+            gate(),
+            sdkHub().awaitDockerInventory(deviceId, timeoutMs ?? DOCKER_INVENTORY_TIMEOUT_MS)
+        )
     };
 }

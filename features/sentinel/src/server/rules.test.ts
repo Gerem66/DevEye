@@ -256,7 +256,8 @@ describe('Règles de ports', () => {
                                 power: true,
                                 pkgUpgrade: true,
                                 serviceElevate: true,
-                                destroy: true
+                                destroy: true,
+                                dockerDeploy: true
                             },
                             insecureTransport: false
                         },

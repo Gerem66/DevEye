@@ -88,8 +88,11 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
      * interrogation en cours ne doit pas se lire comme lui.
      */
     const ready = target !== null && !target.foreign;
+    // Une cible portée par une machine interroge sa machine, les autres leur accès.
+    const deviceId = target?.provider === 'agent' ? target.deviceId : null;
     useEffect(() => {
-        if (!canWrite || !ready || !credentialId) {
+        const query = deviceId ? { deviceId } : credentialId ? { credentialId: Number(credentialId) } : null;
+        if (!canWrite || !ready || query === null) {
             setCandidates([]);
             return;
         }
@@ -98,11 +101,7 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
         setCandidates([]);
         void (async () => {
             try {
-                const res = await api.send(
-                    'deploy.candidates',
-                    { credentialId: Number(credentialId) },
-                    { timeoutMs: PROVIDER_TIMEOUT_MS }
-                );
+                const res = await api.send('deploy.candidates', query, { timeoutMs: PROVIDER_TIMEOUT_MS });
                 // Une réponse d'un accès qu'on ne regarde plus n'a rien à dire :
                 // en changer avant qu'elle n'arrive est courant.
                 if (!alive) return;
@@ -119,7 +118,7 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
         return () => {
             alive = false;
         };
-    }, [canWrite, ready, credentialId]);
+    }, [canWrite, ready, credentialId, deviceId]);
 
     /**
      * À l'ouverture on photographie les accès connus, à la fermeture on relit et
@@ -154,12 +153,13 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
     };
 
     const save = async () => {
-        if (!target || !credentialId || !externalId.trim()) return;
+        const onMachine = target?.provider === 'agent';
+        if (!target || (!onMachine && !credentialId) || !externalId.trim()) return;
         setError(null);
         try {
             const res = await api.send('deploy.update', {
                 targetId: target.id,
-                credentialId: Number(credentialId),
+                credentialId: onMachine ? null : Number(credentialId),
                 kind,
                 externalId: externalId.trim(),
                 // Un intitulé laissé vide retombe sur l'identifiant : une cible
@@ -215,6 +215,7 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
 
     const editable = canWrite && !busy;
     const workflow = target.provider === 'github';
+    const onMachine = target.provider === 'agent';
     // Un accès d'un autre fournisseur ne sait pas déployer ce que vise la cible.
     const usable = credentials.filter((c) => c.provider === target.provider);
     const unchanged =
@@ -223,46 +224,57 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
         (name.trim() || externalId.trim()) === target.name &&
         kind === target.kind &&
         (ref.trim() || null) === target.ref;
-    const complete = credentialId !== '' && externalId.trim() !== '';
+    const complete = (onMachine || credentialId !== '') && externalId.trim() !== '';
 
     return (
         <div className={shell.section}>
-            <div className={shell.field}>
-                <span className={shell.sectionLabel}>Accès {PROVIDER_LABELS[target.provider]}</span>
-                <div className={shell.fieldWithAction}>
-                    <SelectInput
-                        value={credentialId}
-                        disabled={!editable}
-                        aria-label={`Accès ${PROVIDER_LABELS[target.provider]}`}
-                        onChange={(e) => setCredentialId(e.target.value)}
-                    >
-                        {/* L'accès retiré : l'entrée vide dit l'état réel, et
-                            disparaît dès qu'un accès est choisi. */}
-                        {credentialId === '' && (
-                            <option value=''>Aucun : accès retiré, déclenchement impossible</option>
-                        )}
-                        {usable.map((c) => (
-                            <option key={c.id} value={c.id}>
-                                {c.provider === 'github' ? c.label : `${c.label} · ${c.baseUrl}`}
-                            </option>
-                        ))}
-                    </SelectInput>
-                    {/* Le bouton commun ouvre les réglages de la feature par-dessus,
-                        et l'accès qui y est créé est adopté au retour. */}
-                    {canWrite && (
-                        <FeatureSettingsButton
-                            scope={{ kind: 'feature', feature: 'deploy' }}
-                            initialSection='sources'
-                            variant='ghost'
-                            label='Accès'
-                            onOpenChange={onSettingsOpenChange}
-                        />
-                    )}
+            {onMachine ? (
+                <div className={shell.field}>
+                    <span className={shell.sectionLabel}>Machine</span>
+                    <span>{target.location}</span>
+                    <span className={shell.fieldHint}>
+                        Une cible portée par une machine le reste : pour en viser une autre, déclarez une nouvelle
+                        cible.
+                    </span>
                 </div>
-                <span className={shell.fieldHint}>
-                    Les accès se gèrent dans Réglages → Sources et servent à toutes les cibles de l’espace.
-                </span>
-            </div>
+            ) : (
+                <div className={shell.field}>
+                    <span className={shell.sectionLabel}>Accès {PROVIDER_LABELS[target.provider]}</span>
+                    <div className={shell.fieldWithAction}>
+                        <SelectInput
+                            value={credentialId}
+                            disabled={!editable}
+                            aria-label={`Accès ${PROVIDER_LABELS[target.provider]}`}
+                            onChange={(e) => setCredentialId(e.target.value)}
+                        >
+                            {/* L'accès retiré : l'entrée vide dit l'état réel, et
+                            disparaît dès qu'un accès est choisi. */}
+                            {credentialId === '' && (
+                                <option value=''>Aucun : accès retiré, déclenchement impossible</option>
+                            )}
+                            {usable.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                    {c.provider === 'github' ? c.label : `${c.label} · ${c.baseUrl}`}
+                                </option>
+                            ))}
+                        </SelectInput>
+                        {/* Le bouton commun ouvre les réglages de la feature par-dessus,
+                        et l'accès qui y est créé est adopté au retour. */}
+                        {canWrite && (
+                            <FeatureSettingsButton
+                                scope={{ kind: 'feature', feature: 'deploy' }}
+                                initialSection='sources'
+                                variant='ghost'
+                                label='Accès'
+                                onOpenChange={onSettingsOpenChange}
+                            />
+                        )}
+                    </div>
+                    <span className={shell.fieldHint}>
+                        Les accès se gèrent dans Réglages → Sources et servent à toutes les cibles de l’espace.
+                    </span>
+                </div>
+            )}
 
             {/* Toujours présent, y compris vide : sa première ligne porte son état. */}
             <div className={shell.field}>
@@ -275,11 +287,15 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
                 >
                     <option value=''>
                         {loadingCandidates
-                            ? 'Interrogation du fournisseur…'
+                            ? onMachine
+                                ? 'Interrogation de la machine…'
+                                : 'Interrogation du fournisseur…'
                             : candidates.length === 0
-                              ? workflow
-                                  ? 'Ce jeton ne donne accès à aucun workflow'
-                                  : 'Cette instance ne déclare aucune application'
+                              ? onMachine
+                                  ? 'Aucun service compose sur cette machine'
+                                  : workflow
+                                    ? 'Ce jeton ne donne accès à aucun workflow'
+                                    : 'Cette instance ne déclare aucune application'
                               : 'Choisir…'}
                     </option>
                     {/* La cible réglée mais absente de la liste (retirée chez le
@@ -290,7 +306,11 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
                     )}
                     {candidates.map((c) => (
                         <option key={`${c.kind}:${c.externalId}`} value={c.externalId}>
-                            {c.kind === 'compose' ? '🧩 ' : c.kind === 'workflow' ? '⚙️ ' : '📦 '}
+                            {c.kind === 'compose' || c.kind === 'service'
+                                ? '🧩 '
+                                : c.kind === 'workflow'
+                                  ? '⚙️ '
+                                  : '📦 '}
                             {c.path ? `${c.path} | ` : ''}
                             {c.name}
                         </option>
@@ -304,17 +324,24 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
                 <TextInput
                     value={externalId}
                     disabled={!editable}
-                    placeholder={workflow ? 'propriétaire/dépôt#identifiant' : 'applicationId ou composeId'}
+                    placeholder={
+                        onMachine
+                            ? 'docker/projet/service'
+                            : workflow
+                              ? 'propriétaire/dépôt#identifiant'
+                              : 'applicationId ou composeId'
+                    }
                     aria-label='Identifiant de cible'
                     onChange={(e) => setExternalId(e.target.value)}
                 />
                 <span className={shell.fieldHint}>
-                    Tel que {PROVIDER_LABELS[target.provider]} le nomme, pour une cible que la liste ci-dessus ne
-                    propose pas.
+                    {onMachine
+                        ? 'Moteur, projet et service compose, pour un service que la liste ci-dessus ne propose pas.'
+                        : `Tel que ${PROVIDER_LABELS[target.provider]} le nomme, pour une cible que la liste ci-dessus ne propose pas.`}
                 </span>
             </div>
 
-            {workflow ? (
+            {onMachine ? null : workflow ? (
                 <div className={shell.field}>
                     <span className={shell.sectionLabel}>Branche</span>
                     <TextInput
@@ -371,7 +398,7 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
                     <span className={shell.sectionLabel}>Supprimer cette cible</span>
                     <span className={shell.fieldHint}>
                         Son historique part avec elle, et les projets qui la déployaient perdent leur liaison. Ce
-                        qu’elle vise chez {PROVIDER_LABELS[target.provider]} n’est pas touché.
+                        qu’elle vise {onMachine ? 'sur' : 'chez'} {PROVIDER_LABELS[target.provider]} n’est pas touché.
                     </span>
                     <div className={shell.sectionActions}>
                         <Button
@@ -380,7 +407,7 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
                             onClick={() =>
                                 setConfirm({
                                     title: `Supprimer « ${target.name} » ?`,
-                                    description: `Son historique est perdu, et les projets qui la déployaient perdent leur liaison. Ce qu’elle vise chez ${PROVIDER_LABELS[target.provider]} n’est pas touché.`,
+                                    description: `Son historique est perdu, et les projets qui la déployaient perdent leur liaison. Ce qu’elle vise ${onMachine ? 'sur' : 'chez'} ${PROVIDER_LABELS[target.provider]} n’est pas touché.`,
                                     confirmLabel: 'Supprimer la cible',
                                     onConfirm: () => void remove()
                                 })

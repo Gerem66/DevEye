@@ -54,7 +54,19 @@ export const PROVIDER_TIMEOUT_MS = 35_000;
  */
 export const LOG_TIMEOUT_MS = 65_000;
 
-export const PROVIDER_LABELS: Record<DeployProvider, string> = { dokploy: 'Dokploy', github: 'GitHub' };
+export const PROVIDER_LABELS: Record<DeployProvider, string> = {
+    dokploy: 'Dokploy',
+    github: 'GitHub',
+    agent: 'une machine'
+};
+
+/**
+ * Une cible qui a perdu son accès : elle reste, indéployable, et le dit. Une
+ * cible portée par une machine n'en a jamais eu.
+ */
+export function isOrphan(target: Pick<DeployTarget, 'provider' | 'credentialId'>): boolean {
+    return target.provider !== 'agent' && target.credentialId === null;
+}
 
 /**
  * Les deux genres de cible d'une instance Dokploy, tous deux visibles : deux
@@ -69,7 +81,8 @@ export const DOKPLOY_KIND_OPTIONS: readonly { value: DeployTargetKind; label: st
 const KIND_LABELS: Record<DeployTargetKind, string> = {
     application: 'application',
     compose: 'pile compose',
-    workflow: 'workflow GitHub'
+    workflow: 'workflow GitHub',
+    service: 'service compose'
 };
 
 /** Le type et le lieu d'une cible, sur une ligne : « pile compose · dokploy.exemple.fr ». */

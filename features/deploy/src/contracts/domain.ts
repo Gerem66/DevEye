@@ -25,8 +25,11 @@ export const DEPLOY_REF_MAX_LENGTH = 255;
 export const deployCredentialProviderSchema = z.enum(['dokploy', 'github']);
 export type DeployCredentialProvider = z.infer<typeof deployCredentialProviderSchema>;
 
-/** Le fournisseur d'une cible : celui de son accès. */
-export const deployProviderSchema = deployCredentialProviderSchema;
+/**
+ * Le fournisseur d'une cible : celui de son accès, ou `agent` pour un service
+ * docker compose d'une machine enrôlée, que son agent récupère et relance.
+ */
+export const deployProviderSchema = z.enum([...deployCredentialProviderSchema.options, 'agent']);
 export type DeployProvider = z.infer<typeof deployProviderSchema>;
 
 /**
@@ -39,10 +42,10 @@ export type DeployStatus = z.infer<typeof deployStatusSchema>;
 /**
  * Ce que vise une cible chez son fournisseur, qui en décide la procédure :
  * application ou pile compose chez Dokploy (`application.deploy` /
- * `compose.deploy`), workflow chez GitHub. Une cible sans son type serait
- * indéployable.
+ * `compose.deploy`), workflow chez GitHub, service compose d'une machine. Une
+ * cible sans son type serait indéployable.
  */
-export const deployTargetKindSchema = z.enum(['application', 'compose', 'workflow']);
+export const deployTargetKindSchema = z.enum(['application', 'compose', 'workflow', 'service']);
 export type DeployTargetKind = z.infer<typeof deployTargetKindSchema>;
 
 /** Une cible de l'espace, et l'état de son dernier déclenchement. */
@@ -53,8 +56,13 @@ export const deployTargetSchema = z.object({
     /** Identifiant de la cible chez le fournisseur. En clair : il porte l'unicité. */
     externalId: z.string().max(DEPLOY_EXTERNAL_ID_MAX_LENGTH),
     name: z.string().max(DEPLOY_TARGET_NAME_MAX_LENGTH),
-    /** `null` = le jeton a été retiré ; la cible reste, indéployable, et le dit. */
+    /**
+     * `null` = le jeton a été retiré (la cible reste, indéployable, et le dit),
+     * ou la cible est portée par une machine.
+     */
     credentialId: z.number().int().positive().nullable(),
+    /** La machine d'une cible `agent` ; `null` ailleurs. */
+    deviceId: z.string().nullable(),
     /**
      * Où elle vit, tel que son fournisseur le dit sans réseau : l'hôte d'une
      * instance Dokploy (deux instances peuvent servir la même pile sous le même
@@ -128,8 +136,10 @@ export interface DeployTargetRow {
     id: number;
     workspace_id: number;
     credential_id: number | null;
+    /** La machine d'une cible `agent`. */
+    device_id: string | null;
     provider: string;
-    /** 'application' | 'compose' | 'workflow'. */
+    /** 'application' | 'compose' | 'workflow' | 'service'. */
     target_kind: string;
     external_id: string;
     /** Rang dans la liste, entièrement défini par l'utilisateur (`deploy.reorder`). */
@@ -172,6 +182,22 @@ export interface DeployTargetSyncRow extends DeployTargetRow {
     base_url: string | null;
     in_flight: number;
 }
+
+/**
+ * Une machine de l'espace, telle que le choix d'une cible la présente : un
+ * agent trop ancien ne sait pas déployer, et la politique locale d'une machine
+ * peut le refuser, ce que le serveur ne décide pas.
+ */
+export const deployMachineSchema = z.object({
+    id: z.string(),
+    name: z.string(),
+    online: z.boolean(),
+    /** Son agent connaît `composeDeploy`. */
+    capable: z.boolean(),
+    /** Sa politique locale accepte les déploiements (`allow_docker_deploy`). */
+    allowed: z.boolean()
+});
+export type DeployMachine = z.infer<typeof deployMachineSchema>;
 
 /**
  * Les accès de l'espace : l'adresse d'une instance Dokploy et sa clé d'API, ou

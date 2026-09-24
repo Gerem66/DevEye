@@ -14,6 +14,7 @@ import {
     DEPLOY_TARGET_NAME_MAX_LENGTH,
     type DeployCandidate,
     type DeployCredential,
+    type DeployMachine,
     type DeployTarget,
     type DeployTargetKind
 } from '../contracts/domain';
@@ -21,6 +22,26 @@ import {
 import { api } from './api';
 import { DOKPLOY_KIND_OPTIONS, PROVIDER_LABELS, PROVIDER_TIMEOUT_MS, providerError } from './format';
 import styles from './style.module.css';
+
+/** Par un accès (Dokploy, GitHub), ou sur une machine de l'espace. */
+type Source = 'access' | 'machine';
+
+const SOURCE_OPTIONS: readonly { value: Source; label: string; title: string }[] = [
+    { value: 'access', label: 'Par un accès', title: 'Une instance Dokploy, ou un workflow GitHub Actions' },
+    {
+        value: 'machine',
+        label: 'Sur une machine',
+        title: 'Un service docker compose d’une machine de l’espace, relancé par son agent'
+    }
+];
+
+/** Pourquoi une machine ne peut pas porter de cible ; `null` si elle le peut. */
+function machineRefusal(machine: DeployMachine): string | null {
+    if (!machine.capable) return 'agent trop ancien : mettez-le à jour';
+    if (!machine.allowed) return 'déploiements refusés par la machine';
+    if (!machine.online) return 'hors ligne';
+    return null;
+}
 
 interface TargetDialogProps {
     open: boolean;
@@ -41,6 +62,9 @@ interface TargetDialogProps {
 export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
     const [credentials, setCredentials] = useState<DeployCredential[] | null>(null);
     const [credentialId, setCredentialId] = useState('');
+    const [source, setSource] = useState<Source>('access');
+    const [machines, setMachines] = useState<DeployMachine[] | null>(null);
+    const [deviceId, setDeviceId] = useState('');
     const [candidates, setCandidates] = useState<DeployCandidate[]>([]);
     const [externalId, setExternalId] = useState('');
     const [name, setName] = useState('');
@@ -76,6 +100,9 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
         setExternalId('');
         setName('');
         setRef('');
+        setSource('access');
+        setDeviceId('');
+        setMachines(null);
         knownIds.current = null;
         setError(null);
         void reloadCredentials().then((list) => {
@@ -103,13 +130,32 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
         });
     };
 
+    /** Les machines de l'espace, lues la première fois qu'on les demande. */
+    useEffect(() => {
+        if (!open || source !== 'machine' || machines !== null) return;
+        api.send('deploy.machines', {})
+            .then((res) => setMachines(res.machines))
+            .catch((e) => {
+                setMachines([]);
+                setError(humanizeError(e, 'Impossible de lister les machines de l’espace.'));
+            });
+    }, [open, source, machines]);
+
     /*
-     * Ce que l'accès propose, chargé dès qu'un accès est désigné.
+     * Ce que l'accès ou la machine propose, chargé dès qu'il est désigné.
      * `busy` reste au dépôt du formulaire : une interrogation en cours ne doit
      * pas se lire comme un enregistrement en cours.
      */
     useEffect(() => {
-        if (!open || !credentialId) {
+        const query =
+            source === 'machine'
+                ? deviceId
+                    ? { deviceId }
+                    : null
+                : credentialId
+                  ? { credentialId: Number(credentialId) }
+                  : null;
+        if (!open || query === null) {
             setCandidates([]);
             return;
         }
@@ -118,16 +164,12 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
         setCandidates([]);
         setExternalId('');
         setRef('');
-        // Le type suit l'accès : un workflow chez GitHub, une application par
-        // défaut chez Dokploy.
-        setKind(github ? 'workflow' : 'application');
+        // Le type suit la source : un service sur une machine, un workflow chez
+        // GitHub, une application par défaut chez Dokploy.
+        setKind(source === 'machine' ? 'service' : github ? 'workflow' : 'application');
         void (async () => {
             try {
-                const res = await api.send(
-                    'deploy.candidates',
-                    { credentialId: Number(credentialId) },
-                    { timeoutMs: PROVIDER_TIMEOUT_MS }
-                );
+                const res = await api.send('deploy.candidates', query, { timeoutMs: PROVIDER_TIMEOUT_MS });
                 // Une réponse d'un accès qu'on ne regarde plus n'a rien à dire :
                 // en changer avant qu'elle n'arrive est courant.
                 if (!alive) return;
@@ -136,7 +178,13 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
             } catch (e) {
                 // Un fournisseur injoignable n'empêche pas de déclarer la cible :
                 // le repli manuel reste ouvert.
-                if (alive) setError(providerError(e, 'Impossible de joindre le fournisseur.'));
+                if (alive) {
+                    setError(
+                        source === 'machine'
+                            ? humanizeError(e, 'Impossible d’interroger la machine.')
+                            : providerError(e, 'Impossible de joindre le fournisseur.')
+                    );
+                }
             } finally {
                 if (alive) setLoadingCandidates(false);
             }
@@ -144,7 +192,7 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
         return () => {
             alive = false;
         };
-    }, [open, credentialId, github]);
+    }, [open, source, deviceId, credentialId, github]);
 
     /** Choisir dans la liste remplit tout le reste : type, identifiant, nom, branche. */
     const pick = (chosen: string) => {
@@ -157,12 +205,14 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
     };
 
     const submit = async () => {
-        if (busy || !credentialId || !externalId.trim()) return;
+        const where = source === 'machine' ? deviceId : credentialId;
+        if (busy || !where || !externalId.trim()) return;
         setBusy(true);
         setError(null);
         try {
             const res = await api.send('deploy.add', {
-                credentialId: Number(credentialId),
+                credentialId: source === 'machine' ? null : Number(credentialId),
+                deviceId: source === 'machine' ? deviceId : null,
                 kind,
                 externalId: externalId.trim(),
                 // Un nom laissé vide retombe sur l'identifiant : une cible sans
@@ -182,8 +232,9 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
         }
     };
 
-    /** Aucun accès : rien n'est déployable tant qu'il n'y en a pas un. */
-    const nothingToUse = credentials !== null && credentials.length === 0;
+    /** Aucun accès : rien n'est déployable par un accès tant qu'il n'y en a pas un. */
+    const nothingToUse = source === 'access' && credentials !== null && credentials.length === 0;
+    const machine = source === 'machine';
 
     return (
         <Dialog
@@ -197,13 +248,26 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
                     <Button variant='secondary' onClick={onClose} disabled={busy}>
                         Annuler
                     </Button>
-                    <Button onClick={submit} disabled={busy || nothingToUse || !externalId.trim()}>
+                    <Button
+                        onClick={submit}
+                        disabled={busy || nothingToUse || !externalId.trim() || (machine && !deviceId)}
+                    >
                         {busy ? 'Enregistrement…' : 'Déclarer'}
                     </Button>
                 </>
             }
         >
             <div className={styles.form}>
+                <div className={styles.field}>
+                    <span className={styles.label}>Où déployer</span>
+                    <SegmentedControl
+                        value={source}
+                        options={SOURCE_OPTIONS}
+                        onChange={setSource}
+                        aria-label='Où déployer'
+                    />
+                </div>
+
                 {nothingToUse ? (
                     <>
                         <p className={styles.hint}>
@@ -223,27 +287,61 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
                     </>
                 ) : (
                     <>
-                        <label className={styles.field}>
-                            <span className={styles.label}>Accès</span>
-                            <div className={styles.fieldWithAction}>
-                                <SelectInput value={credentialId} onChange={(e) => setCredentialId(e.target.value)}>
-                                    {(credentials ?? []).map((c) => (
-                                        <option key={c.id} value={c.id}>
-                                            {c.label} · {c.provider === 'github' ? PROVIDER_LABELS.github : c.baseUrl}
-                                        </option>
-                                    ))}
+                        {machine ? (
+                            <label className={styles.field}>
+                                <span className={styles.label}>Machine</span>
+                                <SelectInput
+                                    value={deviceId}
+                                    disabled={machines === null || machines.length === 0}
+                                    onChange={(e) => setDeviceId(e.target.value)}
+                                >
+                                    <option value=''>
+                                        {machines === null
+                                            ? 'Chargement…'
+                                            : machines.length === 0
+                                              ? 'Aucune machine dans cet espace'
+                                              : 'Choisir…'}
+                                    </option>
+                                    {(machines ?? []).map((m) => {
+                                        const refusal = machineRefusal(m);
+                                        return (
+                                            <option key={m.id} value={m.id} disabled={refusal !== null}>
+                                                {m.name}
+                                                {refusal ? ` (${refusal})` : ''}
+                                            </option>
+                                        );
+                                    })}
                                 </SelectInput>
-                                {/* Le « + » ouvre Réglages → Sources par-dessus ;
-                                    l'accès créé est adopté au retour. */}
-                                <FeatureSettingsButton
-                                    scope={{ kind: 'feature', feature: 'deploy' }}
-                                    initialSection='sources'
-                                    variant='ghost'
-                                    label='Accès'
-                                    onOpenChange={onSettingsOpenChange}
-                                />
-                            </div>
-                        </label>
+                                <span className={styles.hint}>
+                                    Son agent récupère l’image du service, puis le relance seul : rien ne se construit
+                                    sur la machine. Il faut pouvoir en piloter les conteneurs (permission Docker des
+                                    Appareils).
+                                </span>
+                            </label>
+                        ) : (
+                            <label className={styles.field}>
+                                <span className={styles.label}>Accès</span>
+                                <div className={styles.fieldWithAction}>
+                                    <SelectInput value={credentialId} onChange={(e) => setCredentialId(e.target.value)}>
+                                        {(credentials ?? []).map((c) => (
+                                            <option key={c.id} value={c.id}>
+                                                {c.label} ·{' '}
+                                                {c.provider === 'github' ? PROVIDER_LABELS.github : c.baseUrl}
+                                            </option>
+                                        ))}
+                                    </SelectInput>
+                                    {/* Le « + » ouvre Réglages → Sources par-dessus ;
+                                        l'accès créé est adopté au retour. */}
+                                    <FeatureSettingsButton
+                                        scope={{ kind: 'feature', feature: 'deploy' }}
+                                        initialSection='sources'
+                                        variant='ghost'
+                                        label='Accès'
+                                        onOpenChange={onSettingsOpenChange}
+                                    />
+                                </div>
+                            </label>
+                        )}
 
                         {/* Toujours présent, y compris vide : l'afficher seulement
                             une fois rempli déplacerait le formulaire sous les
@@ -257,11 +355,15 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
                             >
                                 <option value=''>
                                     {loadingCandidates
-                                        ? 'Interrogation du fournisseur…'
+                                        ? machine
+                                            ? 'Interrogation de la machine…'
+                                            : 'Interrogation du fournisseur…'
                                         : candidates.length === 0
-                                          ? github
-                                              ? 'Ce jeton ne donne accès à aucun workflow'
-                                              : 'Cette instance ne déclare aucune application'
+                                          ? machine
+                                              ? 'Aucun service compose sur cette machine'
+                                              : github
+                                                ? 'Ce jeton ne donne accès à aucun workflow'
+                                                : 'Cette instance ne déclare aucune application'
                                           : 'Choisir…'}
                                 </option>
                                 {/* Un identifiant saisi à la main, absent de la
@@ -272,7 +374,11 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
                                 )}
                                 {candidates.map((c) => (
                                     <option key={`${c.kind}:${c.externalId}`} value={c.externalId}>
-                                        {c.kind === 'compose' ? '🧩 ' : c.kind === 'workflow' ? '⚙️ ' : '📦 '}
+                                        {c.kind === 'compose' || c.kind === 'service'
+                                            ? '🧩 '
+                                            : c.kind === 'workflow'
+                                              ? '⚙️ '
+                                              : '📦 '}
                                         {c.path ? `${c.path} | ` : ''}
                                         {c.name}
                                     </option>
@@ -286,12 +392,18 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
                             <span className={styles.label}>…ou identifiant de cible</span>
                             <TextInput
                                 value={externalId}
-                                placeholder={github ? 'propriétaire/dépôt#identifiant' : 'applicationId ou composeId'}
+                                placeholder={
+                                    machine
+                                        ? 'docker/projet/service'
+                                        : github
+                                          ? 'propriétaire/dépôt#identifiant'
+                                          : 'applicationId ou composeId'
+                                }
                                 onChange={(e) => setExternalId(e.target.value)}
                             />
                         </label>
 
-                        {github ? (
+                        {machine ? null : github ? (
                             <label className={styles.field}>
                                 <span className={styles.label}>Branche</span>
                                 <TextInput

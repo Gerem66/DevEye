@@ -15,6 +15,7 @@ import type { FeatureContext } from '@/features/_define';
 import { shareScope } from '@/features/_sharing';
 import { sdkDomains } from './domains';
 import { createFacade } from './facade';
+import { moduleManifest } from './register';
 import { accountChanged } from './live';
 import { createQuota } from './quota';
 import { createFeatureStore } from './store';
@@ -67,7 +68,32 @@ export function createSdkContext(
             workspaceKind: ctx.workspace.kind,
             manifest,
             logger: ctx.logger,
-            providers
+            providers,
+            // Les permissions d'Appareils de l'appelant sur une machine, surcharges
+            // de l'élément comprises : ce que `agent.dockerAction` éprouve pour lui.
+            assertDeviceExtras: async (deviceId, keys) => {
+                if (!ctx.canFeature('devices', 'read')) {
+                    throw new FeatureError('forbidden', 'Les appareils ne vous sont pas ouverts dans cet espace');
+                }
+                const restriction = (await ctx.itemRestrictions('devices')).get(deviceId);
+                if (restriction === 'none' || restriction === 'read') {
+                    throw new FeatureError('forbidden', 'Cet appareil ne prend pas d’ordre de votre part');
+                }
+                const granted = resolveExtras(
+                    moduleManifest('devices')?.extraPermissions,
+                    ctx.isOwner,
+                    ctx.extrasFor('devices')
+                );
+                const overrides = (await ctx.itemExtraOverrides('devices')).get(deviceId) ?? {};
+                for (const key of keys) {
+                    if (!(overrides[key] ?? granted.canExtra(key))) {
+                        throw new FeatureError(
+                            'forbidden',
+                            'Cette permission ne vous est pas accordée sur cet appareil'
+                        );
+                    }
+                }
+            }
         }),
         transport: socketTransport(ctx, manifest),
         secrecy: {

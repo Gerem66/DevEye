@@ -100,6 +100,7 @@ import {
     type DeviceDockerProgressPush,
     type DeviceDockerStatsPush,
     type DockerAction,
+    type DockerInventory,
     type DeviceLogSourcesPush,
     type DevicePowerPush,
     type DevicePresence,
@@ -163,6 +164,16 @@ export class MonitorHub {
      * (une sauvegarde nocturne, sans abonné) : une promesse par `opId`.
      */
     private readonly fileOpWaiters = new Map<string, (result: { ok: boolean; error?: string }) => void>();
+    /**
+     * Les actions Docker qu'un appelant sans socket attend (un déploiement) :
+     * leurs lignes au fil de l'eau, puis leur verdict, par `opId`.
+     */
+    private readonly dockerOpWaiters = new Map<
+        string,
+        { onLine?: (line: string) => void; done: (result: { ok: boolean; error?: string }) => void }
+    >();
+    /** Les inventaires Docker attendus hors socket web, par appareil. */
+    private readonly inventoryWaiters = new Map<string, ((inventory: DockerInventory) => void)[]>();
     /**
      * Vivacité par socket agent, remise à `true` par `pong` : une machine
      * éteinte n'envoie jamais de `close`, la socket resterait ouverte jusqu'au
@@ -465,8 +476,71 @@ export class MonitorHub {
         this.publishDockerDone({ deviceId, opId: op.opId, action: op.action, ok: false, error });
     }
 
+    /**
+     * Lance une action Docker longue pour un appelant sans socket, et attend
+     * son verdict. Prend le verrou de l'appareil, que les écrans d'Appareils
+     * partagent : refusée d'emblée si une autre action longue y tourne. Ne
+     * rejette jamais : un refus est un verdict.
+     */
+    runDockerOp(
+        deviceId: string,
+        payload: AgentDockerActionPayload,
+        options: { timeoutMs: number; onLine?: (line: string) => void }
+    ): Promise<{ ok: boolean; error?: string }> {
+        if (!this.beginDockerOp(deviceId, payload.opId, payload.action)) {
+            return Promise.resolve({ ok: false, error: 'Une opération Docker longue tourne déjà sur cette machine.' });
+        }
+        const verdict = new Promise<{ ok: boolean; error?: string }>((resolve) => {
+            // L'agent borne l'action à 30 minutes : passé l'échéance, il n'en
+            // dira plus rien.
+            const timer = setTimeout(() => {
+                this.dockerOpWaiters.delete(payload.opId);
+                this.endDockerOp(deviceId, payload.opId);
+                resolve({ ok: false, error: "L'agent n'a pas rendu de verdict dans le délai imparti." });
+            }, options.timeoutMs);
+            timer.unref();
+            this.dockerOpWaiters.set(payload.opId, {
+                onLine: options.onLine,
+                done: (result) => {
+                    clearTimeout(timer);
+                    resolve(result);
+                }
+            });
+        });
+        if (!this.requestDockerAction(deviceId, payload)) {
+            this.dockerOpWaiters.delete(payload.opId);
+            this.endDockerOp(deviceId, payload.opId);
+            return Promise.resolve({ ok: false, error: 'La machine n’est pas connectée.' });
+        }
+        return verdict;
+    }
+
+    /** L'inventaire Docker d'un appareil, pour un appelant sans socket ; `null` s'il ne répond pas à temps. */
+    awaitDockerInventory(deviceId: string, timeoutMs: number): Promise<DockerInventory | null> {
+        if (!this.requestDockerInventory(deviceId)) return Promise.resolve(null);
+        return new Promise((resolve) => {
+            const waiter = (inventory: DockerInventory | null) => {
+                clearTimeout(timer);
+                resolve(inventory);
+            };
+            const timer = setTimeout(() => {
+                const list = this.inventoryWaiters.get(deviceId)?.filter((w) => w !== waiter) ?? [];
+                if (list.length > 0) this.inventoryWaiters.set(deviceId, list);
+                else this.inventoryWaiters.delete(deviceId);
+                resolve(null);
+            }, timeoutMs);
+            timer.unref();
+            this.inventoryWaiters.set(deviceId, [...(this.inventoryWaiters.get(deviceId) ?? []), waiter]);
+        });
+    }
+
     /** Fan out a device's container inventory to its subscribers. */
     publishDockerInventory(payload: DeviceDockerInventoryPush): void {
+        const waiters = this.inventoryWaiters.get(payload.deviceId);
+        if (waiters) {
+            this.inventoryWaiters.delete(payload.deviceId);
+            for (const waiter of waiters) waiter(payload.inventory);
+        }
         this.publishToSubscribers(payload.deviceId, DEVICE_DOCKER_INVENTORY_EVENT, payload);
     }
 
@@ -477,12 +551,18 @@ export class MonitorHub {
 
     /** Fan out one output line of a running action to a device's subscribers. */
     publishDockerProgress(payload: DeviceDockerProgressPush): void {
+        this.dockerOpWaiters.get(payload.opId)?.onLine?.(payload.line);
         this.publishToSubscribers(payload.deviceId, DEVICE_DOCKER_PROGRESS_EVENT, payload);
     }
 
     /** Fan out an action's outcome, releasing its lock on the way. */
     publishDockerDone(payload: DeviceDockerDonePush): void {
         this.endDockerOp(payload.deviceId, payload.opId);
+        const waiter = this.dockerOpWaiters.get(payload.opId);
+        if (waiter) {
+            this.dockerOpWaiters.delete(payload.opId);
+            waiter.done({ ok: payload.ok, error: payload.error });
+        }
         this.publishToSubscribers(payload.deviceId, DEVICE_DOCKER_DONE_EVENT, payload);
     }
 

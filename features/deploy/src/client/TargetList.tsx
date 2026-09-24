@@ -1,7 +1,7 @@
 import { useDragReorder, type LiveOutlineProps } from 'deveye-sdk-client';
 import type { DeployTarget } from '../contracts/domain';
 
-import { formatAgo, STATUS_LABELS, statusTone, targetWhere } from './format';
+import { formatAgo, isOrphan, STATUS_LABELS, statusTone, targetWhere } from './format';
 import styles from './style.module.css';
 
 interface TargetListProps {
@@ -57,7 +57,7 @@ interface TargetCardProps {
 function TargetCard({ target, outline, dragging, onOpen, onDragPointerDown }: TargetCardProps) {
     // Un accès retiré prime sur l'état du dernier déploiement : plus rien ne
     // partira tant que la clé n'est pas revenue.
-    const orphan = target.credentialId === null;
+    const orphan = isOrphan(target);
     const tone = orphan ? 'danger' : statusTone(target.lastStatus);
 
     return (

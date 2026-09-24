@@ -255,13 +255,14 @@ out in DevEye, and `deveye-agent status` lists what is refused.
 | `allow_pkg_upgrade`     | system package upgrades                                            |
 | `allow_service_elevate` | asking the desktop to turn the agent into a root service           |
 | `allow_destroy`         | wiping the agent when the device is deleted (uninstall it by hand) |
+| `allow_docker_deploy`   | deployments: pulling a compose service's image and recreating it   |
 
 Whatever the policy, the explorer never writes into the agent's own directory:
 that is where the policy lives. Be honest about the limit: a machine that allows
 the terminal to a root agent has allowed everything else with it.
 
-**Signed orders.** The orders above, plus `agent.service` and `agent.lifecycle`,
-must carry the server's Ed25519 signature (`ORDER_SIGNING_KEY` on the server),
+**Signed orders.** The orders above, plus `agent.service`, `agent.lifecycle` and
+every Docker action, must carry the server's Ed25519 signature (`ORDER_SIGNING_KEY` on the server),
 over the exact payload, a nonce and a timestamp. The agent pins the public key at
 `link` (`order_key`), refuses an unsigned or replayed order, and refuses one
 whose timestamp is more than five minutes off (keep the clock right). Holding the

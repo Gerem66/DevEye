@@ -4,6 +4,7 @@ import type { z, ZodType } from 'zod';
 
 import {
     deployAdd,
+    deployCandidates,
     deployCount,
     deployCredentialAdd,
     deployCredentialList,
@@ -11,6 +12,8 @@ import {
     deployCredentialUpdate,
     deployGet,
     deployList,
+    deployLog,
+    deployMachines,
     deployRemove,
     deployReorder,
     deployTrigger,
@@ -18,8 +21,8 @@ import {
 } from '../contracts/commands';
 import type { DeployCredentialRow, DeploymentRow, DeployTargetRow } from '../contracts/domain';
 import { PROJECTS_USAGE_PROVIDER, type ProjectsUsageProvider } from '@deveye/types/sdk';
-import { FeatureError, type SdkFeatureContext } from '@deveye/types/sdk/server';
-import { createTestContext } from '@deveye/types/sdk/testing';
+import { FeatureError, type SdkDevice, type SdkFeatureContext } from '@deveye/types/sdk/server';
+import { createTestContext, testDevice } from '@deveye/types/sdk/testing';
 
 import { deployHandlers } from './handlers';
 import type { DeployRepo, DeployTargetWithUsageRow } from './repo';
@@ -58,6 +61,7 @@ interface FakeRepo extends DeployRepo {
 function target(over: Partial<DeployTargetRow> & { id: number; workspace_id: number }): DeployTargetRow {
     return {
         credential_id: 10,
+        device_id: null,
         provider: 'dokploy',
         target_kind: 'application',
         external_id: `app-${over.id}`,
@@ -146,12 +150,18 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                     t.workspace_id === workspaceId && t.credential_id === credentialId && t.external_id === externalId
             ) ?? null,
         countTargets: async (workspaceId) => targets.filter((t) => t.workspace_id === workspaceId).length,
-        countTargetsInWorkspaces: async (ids) => targets.filter((t) => ids.includes(t.workspace_id)).length,
+        findTargetByDevice: async (workspaceId, deviceId, externalId) =>
+            targets.find(
+                (t) => t.workspace_id === workspaceId && t.device_id === deviceId && t.external_id === externalId
+            ) ?? null,
+        countTargetsInWorkspaces: async (ids) =>
+            targets.filter((t) => ids.includes(t.workspace_id) && t.provider !== 'agent').length,
         async createTarget(input) {
             const created = target({
                 id: ++seq,
                 workspace_id: input.workspaceId,
                 credential_id: input.credentialId,
+                device_id: input.deviceId,
                 provider: input.provider,
                 target_kind: input.kind,
                 external_id: input.externalId,
@@ -226,16 +236,40 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         },
         listTargetsDue: unused,
         markTargetSynced: unused,
-        createDeployment: unused,
+        async createDeployment(input) {
+            const row = deployment({
+                id: ++seq,
+                target_id: input.targetId,
+                workspace_id: input.workspaceId,
+                external_id: input.externalId,
+                status: 'queued',
+                triggered_by_user_id: input.triggeredByUserId,
+                started_at: Math.floor(Date.now() / 1000),
+                finished_at: null,
+                notified: 0,
+                content: input.content
+            });
+            deployments.push(row);
+            return { ...row };
+        },
         createRemoteDeployment: unused,
-        updateDeployment: unused,
+        updateDeployment: async (id, input) => {
+            const d = deployments.find((x) => x.id === id);
+            if (!d) return;
+            d.external_id = input.externalId;
+            d.status = input.status;
+            d.finished_at = input.finishedAt;
+            d.content = input.content;
+        },
         markDeploymentNotified: unused,
         setDeploymentContent: unused,
         listDeployments: async (targetId, workspaceId, limit) =>
             deployments
                 .filter((d) => d.target_id === targetId && d.workspace_id === workspaceId)
                 .sort((a, b) => b.started_at - a.started_at || b.id - a.id)
-                .slice(0, limit)
+                .slice(0, limit),
+        findDeployment: async (id) => deployments.find((d) => d.id === id) ?? null,
+        listInFlightAgentDeployments: unused
     };
 }
 
@@ -618,3 +652,169 @@ describe('les clés Dokploy', () => {
         await assert.rejects(handlerFor(deployCredentialRemove)(ctx, { credentialId: 12 }), failsWith('not_found'));
     });
 });
+
+describe('les cibles portées par une machine', () => {
+    const DEVICE = '11111111-2222-4333-8444-555555555555';
+    const service = {
+        credentialId: null,
+        deviceId: DEVICE,
+        kind: 'service' as const,
+        externalId: 'docker/site/web',
+        name: 'Site'
+    };
+
+    it('exige de pouvoir piloter les conteneurs de la machine pour la déclarer', async () => {
+        const repo = fakeRepo();
+        const ctx = createTestContext({ repo, refuseDeviceExtras: true });
+        await assert.rejects(handlerFor(deployAdd)(ctx, service), failsWith('forbidden'));
+        assert.equal(repo.targets.length, 0);
+    });
+
+    it('déclare un service compose hors de la limite des cibles sondées, et le retrouve au lieu de le dupliquer', async () => {
+        const repo = fakeRepo();
+        const ctx = createTestContext({
+            repo,
+            quotaLimits: { targets: 0 },
+            devices: [testDevice({ id: DEVICE, name: 'vps2' })]
+        });
+        const first = await handlerFor(deployAdd)(ctx, service);
+        assert.equal(first.target.provider, 'agent');
+        assert.equal(first.target.deviceId, DEVICE);
+        assert.equal(first.target.location, 'vps2');
+        const again = await handlerFor(deployAdd)(ctx, { ...service, name: 'Site public' });
+        assert.equal(again.target.id, first.target.id);
+        assert.equal(repo.targets.length, 1);
+    });
+
+    it('refuse un accès et une machine à la fois, et un service mal formé', async () => {
+        const ctx = createTestContext({ repo: fakeRepo() });
+        await assert.rejects(handlerFor(deployAdd)(ctx, { ...service, credentialId: 10 }), failsWith('validation'));
+        await assert.rejects(
+            handlerFor(deployAdd)(ctx, { ...service, externalId: 'docker/site/web;rm' }),
+            failsWith('validation')
+        );
+    });
+
+    it('propose un service compose par projet et service, pas un par conteneur', async () => {
+        const container = (over: Record<string, unknown>) => ({
+            engine: 'docker',
+            id: 'c',
+            name: 'n',
+            image: 'ghcr.io/oxyfoo/site:latest',
+            state: 'running',
+            status: 'Up',
+            ports: '',
+            createdAt: '',
+            composeProject: 'site',
+            composeService: 'web',
+            composeWorkingDir: '/srv/site',
+            ...over
+        });
+        const ctx = createTestContext({
+            repo: fakeRepo(),
+            dockerInventory: async () =>
+                ({
+                    engines: [],
+                    containers: [
+                        container({ id: 'a' }),
+                        container({ id: 'b' }),
+                        container({ id: 'c', composeProject: null, composeService: null })
+                    ],
+                    images: [],
+                    volumes: [],
+                    networks: []
+                }) as never
+        });
+        const out = await handlerFor(deployCandidates)(ctx, { deviceId: DEVICE });
+        assert.deepEqual(out.candidates, [
+            {
+                kind: 'service',
+                externalId: 'docker/site/web',
+                name: 'web',
+                path: 'site · ghcr.io/oxyfoo/site:latest',
+                ref: null
+            }
+        ]);
+    });
+
+    it('dit quelles machines savent déployer, et lesquelles l’acceptent', async () => {
+        const report = (probes: string[], dockerDeploy: boolean) =>
+            ({ agent: { probes, policy: { dockerDeploy } } }) as unknown as SdkDevice['report'];
+        const ctx = createTestContext({
+            repo: fakeRepo(),
+            devices: [
+                testDevice({ id: 'a', name: 'récent', report: report(['docker', 'composeDeploy'], true) }),
+                testDevice({ id: 'b', name: 'ancien', report: report(['docker'], true) }),
+                testDevice({ id: 'c', name: 'fermé', report: report(['composeDeploy'], false), online: false })
+            ]
+        });
+        const out = await handlerFor(deployMachines)(ctx, {});
+        assert.deepEqual(
+            out.machines.map((m) => [m.name, m.online, m.capable, m.allowed]),
+            [
+                ['récent', true, true, true],
+                ['ancien', true, false, true],
+                ['fermé', false, true, false]
+            ]
+        );
+    });
+
+    it('refuse de déclencher sur une machine hors ligne, et marque l’échec quand le suivi n’est pas monté', async () => {
+        const offline = seed(fakeRepo(), machineTarget(DEVICE));
+        await assert.rejects(
+            handlerFor(deployTrigger)(
+                createTestContext({ repo: offline, devices: [testDevice({ id: DEVICE, online: false })] }),
+                { targetId: 1, title: 'Mise en prod', description: '' }
+            ),
+            failsWith('conflict')
+        );
+        assert.deepEqual(offline.deployments, []);
+
+        const online = seed(fakeRepo(), machineTarget(DEVICE));
+        await assert.rejects(
+            handlerFor(deployTrigger)(createTestContext({ repo: online, devices: [testDevice({ id: DEVICE })] }), {
+                targetId: 1,
+                title: 'Mise en prod',
+                description: ''
+            }),
+            failsWith('internal')
+        );
+        assert.deepEqual(
+            online.deployments.map((d) => d.status),
+            ['failed']
+        );
+    });
+
+    it('rend le journal gardé avec le déploiement', async () => {
+        const repo = seed(fakeRepo(), machineTarget(DEVICE));
+        repo.deployments.push(
+            deployment({
+                id: 5,
+                target_id: 1,
+                workspace_id: 1,
+                external_id: 'op-5',
+                content: JSON.stringify({
+                    title: 'Mise en prod',
+                    description: '',
+                    url: null,
+                    log: 'Pulling web\nRecreated'
+                })
+            })
+        );
+        const out = await handlerFor(deployLog)(createTestContext({ repo }), { targetId: 1, externalId: 'op-5' });
+        assert.equal(out.log, 'Pulling web\nRecreated');
+    });
+});
+
+/** La cible 1 de l'espace 1, portée par cette machine. */
+function machineTarget(deviceId: string): DeployTargetRow {
+    return target({
+        id: 1,
+        workspace_id: 1,
+        provider: 'agent',
+        credential_id: null,
+        device_id: deviceId,
+        target_kind: 'service',
+        external_id: 'docker/site/web'
+    });
+}

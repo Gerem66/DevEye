@@ -35,12 +35,19 @@ export interface DeployRepo {
         credentialId: number,
         externalId: string
     ): Promise<DeployTargetRow | null>;
+    /** L'unicité d'une cible portée par une machine : même appareil, même service. */
+    findTargetByDevice(workspaceId: number, deviceId: string, externalId: string): Promise<DeployTargetRow | null>;
     countTargets(workspaceId: number): Promise<number>;
-    /** Les cibles de tous ces espaces : ce que l'offre de leur propriétaire borne. */
+    /**
+     * Les cibles sondées de tous ces espaces : ce que l'offre de leur
+     * propriétaire borne. Une cible portée par une machine ne coûte rien au
+     * repos, et les machines ont leur propre limite.
+     */
     countTargetsInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
     createTarget(input: {
         workspaceId: number;
-        credentialId: number;
+        credentialId: number | null;
+        deviceId: string | null;
         provider: string;
         kind: string;
         externalId: string;
@@ -133,6 +140,12 @@ export interface DeployRepo {
      */
     setDeploymentContent(id: number, content: string): Promise<void>;
     listDeployments(targetId: number, workspaceId: number, limit: number): Promise<DeploymentRow[]>;
+    findDeployment(id: number): Promise<DeploymentRow | null>;
+    /**
+     * Les déploiements par une machine restés en vol : leur attente vivait dans
+     * le processus, un redémarrage les laisse sans verdict.
+     */
+    listInFlightAgentDeployments(): Promise<DeploymentRow[]>;
 }
 
 /**
@@ -236,15 +249,22 @@ export function createRepo(q: SdkQueryable): DeployRepo {
             );
             return Number(rows[0]?.n ?? 0);
         },
+        async findTargetByDevice(workspaceId, deviceId, externalId) {
+            const rows = await q.query<DeployTargetRow>(
+                'SELECT * FROM deploy_targets WHERE workspace_id = ? AND device_id = ? AND external_id = ?',
+                [workspaceId, deviceId, externalId]
+            );
+            return rows[0] ?? null;
+        },
         async countTargetsInWorkspaces(workspaceIds) {
             if (workspaceIds.length === 0) return 0;
             const rows = await q.query<{ n: number }>(
-                'SELECT COUNT(*) AS n FROM deploy_targets WHERE workspace_id IN (?)',
+                "SELECT COUNT(*) AS n FROM deploy_targets WHERE workspace_id IN (?) AND provider <> 'agent'",
                 [workspaceIds]
             );
             return Number(rows[0]?.n ?? 0);
         },
-        async createTarget({ workspaceId, credentialId, provider, kind, externalId, content }) {
+        async createTarget({ workspaceId, credentialId, deviceId, provider, kind, externalId, content }) {
             // Une nouvelle cible atterrit à la fin de la liste, jamais au milieu :
             // l'ordre appartient à l'utilisateur, un ajout ne le réarrange pas.
             const posRows = await q.query<{ next: number }>(
@@ -253,9 +273,18 @@ export function createRepo(q: SdkQueryable): DeployRepo {
             );
             const res = await q.execute(
                 `INSERT INTO deploy_targets
-                     (workspace_id, credential_id, provider, target_kind, external_id, sort_order, content)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                [workspaceId, credentialId, provider, kind, externalId, Number(posRows[0]?.next ?? 0), content]
+                     (workspace_id, credential_id, device_id, provider, target_kind, external_id, sort_order, content)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    workspaceId,
+                    credentialId,
+                    deviceId,
+                    provider,
+                    kind,
+                    externalId,
+                    Number(posRows[0]?.next ?? 0),
+                    content
+                ]
             );
             const rows = await q.query<DeployTargetRow>('SELECT * FROM deploy_targets WHERE id = ?', [res.insertId]);
             return rows[0];
@@ -426,6 +455,17 @@ export function createRepo(q: SdkQueryable): DeployRepo {
                 `SELECT * FROM deployments WHERE target_id = ? AND workspace_id = ?
                  ORDER BY started_at DESC, id DESC LIMIT ?`,
                 [targetId, workspaceId, limit]
+            );
+        },
+        async findDeployment(id) {
+            const rows = await q.query<DeploymentRow>('SELECT * FROM deployments WHERE id = ?', [id]);
+            return rows[0] ?? null;
+        },
+        async listInFlightAgentDeployments() {
+            return q.query<DeploymentRow>(
+                `SELECT d.* FROM deployments d
+                   JOIN deploy_targets t ON t.id = d.target_id
+                  WHERE t.provider = 'agent' AND d.status IN ('queued', 'running')`
             );
         }
     };
