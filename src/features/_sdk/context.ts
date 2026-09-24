@@ -26,9 +26,10 @@ import { createFeatureStore } from './store';
  * construisent par requête, liés à l'espace de l'enveloppe.
  */
 /**
- * Où vit DevEye, sans barre finale : l'origine des membres et celle joignable
- * sans le VPN (`AUDIENCE_ORIGIN`, sinon la même). Le serveur seul la connaît :
- * la déduire du navigateur serait faux en production.
+ * Où vit DevEye, sans barre finale : l'origine des membres et celle des routes
+ * publiques (`AUDIENCE_ORIGIN`, sinon la même), qui diffère quand elles sont
+ * exposées à part. Le serveur seul la connaît : le navigateur d'un membre ne
+ * voit que la première.
  */
 export const ORIGINS = {
     app: env.PUBLIC_ORIGIN.replace(/\/+$/, ''),

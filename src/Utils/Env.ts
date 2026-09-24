@@ -8,9 +8,9 @@ export const env = {
 
     // Origine par laquelle le monde extérieur atteint les routes publiques des
     // modules ; nourrit `ctx.origins.public` (`_sdk/context.ts`), seul lecteur.
-    // Distincte de `PUBLIC_ORIGIN` : l'application est derrière le VPN, ces
-    // routes doivent être joignables sans lui (sous-domaine dédié exempté côté
-    // proxy). Vide, on retombe sur `PUBLIC_ORIGIN` (développement local).
+    // Distincte de `PUBLIC_ORIGIN` quand ces routes ont leur propre domaine,
+    // pointé sur `PUBLIC_LISTEN_PORT` : l'application peut alors rester privée
+    // et n'exposer qu'elles. Vide, on retombe sur `PUBLIC_ORIGIN`.
     AUDIENCE_ORIGIN: getEnvVar('AUDIENCE_ORIGIN', 'string', false),
 
     // Port du second écouteur, celui qu'on expose sur Internet (`publicApp.ts`) :

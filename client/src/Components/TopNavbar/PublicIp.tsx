@@ -9,9 +9,9 @@ import styles from './PublicIp.module.css';
  *
  * Seul endroit du client qui appelle un tiers en direct au lieu de passer par
  * une commande, et c'est la seule façon d'avoir la bonne réponse : `req.ip`
- * donne ce que Fastify voit derrière le proxy et le VPN, donc une adresse
- * privée, et un appel sortant depuis le serveur donnerait l'IP de sortie du
- * serveur. Ni l'une ni l'autre n'est celle du client.
+ * n'est l'adresse publique du client que si l'instance est jointe par Internet
+ * (par un VPN ou le réseau local, c'est une adresse privée), et un appel
+ * sortant depuis le serveur donnerait l'IP de sortie du serveur.
  *
  * Le magasin vit au-dessus du composant : l'éditeur de topbar monte un aperçu
  * vivant en même temps que la barre, et deux copies ne doivent pas faire deux

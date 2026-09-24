@@ -116,9 +116,8 @@ export const audienceGetFeature = defineSdkFeature({
             usage: [...usage],
             // L'adresse par laquelle un site suivi atteint l'ingestion, sans barre
             // finale (la balise la recolle). Le serveur est le seul à la connaître :
-            // l'application vit derrière le VPN et l'ingestion doit être joignable sans
-            // lui, donc les deux adresses diffèrent par construction et la déduire de
-            // l'origine du navigateur donnerait une balise fausse en production.
+            // l'ingestion peut avoir son propre domaine, et la déduire de l'origine du
+            // navigateur donnerait alors une balise fausse.
             ingestOrigin: ctx.origins.public
         };
     }

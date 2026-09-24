@@ -96,9 +96,9 @@ interface InstallDialogProps {
     site: AudienceSite;
     /**
      * L'adresse par laquelle les pages suivies atteignent l'ingestion, telle que
-     * le serveur la connaît. Jamais `window.location.origin` : l'application est
-     * derrière le VPN et l'ingestion doit être joignable sans lui, donc la
-     * déduire du navigateur donnerait une balise fausse en production.
+     * le serveur la connaît. Jamais `window.location.origin` : l'ingestion peut
+     * avoir son propre domaine, et la déduire du navigateur donnerait alors une
+     * balise fausse.
      */
     ingestOrigin: string;
     canWrite: boolean;

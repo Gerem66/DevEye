@@ -93,8 +93,7 @@ export const audienceList = {
 /**
  * Un site, avec les projets qui le suivent et l'adresse de sa balise.
  * `ingestOrigin` vient du serveur et non de l'origine du navigateur :
- * l'application est derrière le VPN alors que l'ingestion doit être joignable
- * sans lui, donc les deux adresses diffèrent par construction.
+ * l'ingestion peut avoir son propre domaine, distinct de celui de l'application.
  */
 export const audienceGet = {
     command: 'audience.get' as const,

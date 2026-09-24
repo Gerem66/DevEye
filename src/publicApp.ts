@@ -65,7 +65,7 @@ export async function buildPublicApp(): Promise<FastifyInstance> {
         // de délai, un corps envoyé au compte-gouttes immobilise une socket
         // jusqu'aux cinq minutes de Node, pour le prix d'un octet de temps en
         // temps. L'écouteur applicatif garde le sien, long par nécessité (les
-        // téléversements), mais il vit derrière le VPN.
+        // téléversements).
         requestTimeout: 15_000,
         // Un filet sous les plafonds que chaque route déclare : ce qui n'en a
         // pas n'a aucune raison d'être gros non plus.

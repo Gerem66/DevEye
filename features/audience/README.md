@@ -105,7 +105,7 @@ Le « par qui » nominatif vient d'ailleurs, et seulement si le site le veut : u
 
 ---
 
-## 3. L'ingestion : la seule porte de DevEye ouverte sur Internet
+## 3. L'ingestion : la porte d'Audience ouverte sur Internet
 
 ### 3.0 L'adresse vient du `.env`, jamais du navigateur
 
@@ -113,10 +113,9 @@ Le « par qui » nominatif vient d'ailleurs, et seulement si le site le veut : u
 pages suivies atteignent l'ingestion, et c'est le serveur qui la rend au client
 (`audience.get`, par `ctx.origins.public` : le contexte du SDK la porte pour
 tous les modules, aucun ne lit la variable). La déduire de
-`window.location.origin`, ce que faisait la première version, donnait une
-balise juste en développement et **fausse en production** : l'application vit
-derrière le VPN, l'ingestion doit être joignable sans lui, donc les deux
-adresses diffèrent par construction.
+`window.location.origin` donnerait une balise juste en développement et
+**fausse dès que les deux adresses diffèrent** : l'ingestion peut avoir son
+propre domaine, jusqu'à être la seule partie de l'instance exposée.
 
 En développement sur l'hôte, le client est servi par Vite sur `:5173` : `/t.js`
 est donc aussi **proxifié** dans `client/vite.config.ts`, à côté de `/api` et
@@ -125,8 +124,9 @@ rend un 404 : la balise semble cassée alors que le serveur la sert parfaitement
 
 ### 3.0 bis Un second écouteur, et non une garde
 
-L'application vit derrière le VPN ; l'ingestion doit être joignable sans lui.
-Trois façons d'y arriver, et deux sont moins sûres :
+L'ingestion doit être joignable par n'importe qui, sans compte ; rien d'autre de
+l'instance n'a à l'être, et elle peut même rester privée. Trois façons de
+séparer les deux, et deux sont moins sûres :
 
 | Approche                      | Ce qui la sépare du monde                                          |
 | ----------------------------- | ------------------------------------------------------------------ |
@@ -983,6 +983,3 @@ dev qui porte déjà des données réelles.
   grandissent le plus vite, pour un défaut qu'aucune requête actuelle ne touche.
 - **Le direct reste local au processus** : deux instances derrière un proxy =
   salles silencieusement séparées. Vrai avant ce module, ça le reste.
-- **Le domaine public reste à créer.** Le code fournit le port dédié
-  (`PUBLIC_LISTEN_PORT`) ; il reste à pointer un domaine dessus dans le proxy et
-  à accorder `AUDIENCE_ORIGIN`.
