@@ -403,7 +403,7 @@ export function FeatureSettingsButton({
         const stop = onFlash((key) => {
             if (key !== myFlashKey || !canonical) return;
             window.clearTimeout(timer);
-            // Retomber a faux d'abord relance l'animation si elle jouait deja.
+            // Retomber à faux d'abord relance l'animation si elle jouait déjà.
             setFlashing(false);
             window.requestAnimationFrame(() => setFlashing(true));
             timer = window.setTimeout(() => setFlashing(false), 1600);
