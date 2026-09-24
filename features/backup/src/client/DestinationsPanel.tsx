@@ -14,7 +14,14 @@ import {
 } from 'deveye-sdk-client';
 import { api } from './api';
 import DestinationDialog from './DestinationDialog';
-import { BACKUP_PROBE_TIMEOUT_MS, DESTINATION_ICONS, DESTINATION_LABELS, destinationTone, formatAgo } from './format';
+import {
+    BACKUP_PROBE_TIMEOUT_MS,
+    DESTINATION_ICONS,
+    DESTINATION_LABELS,
+    destinationTone,
+    formatAgo,
+    hostOf
+} from './format';
 import styles from './style.module.css';
 
 /**
@@ -117,6 +124,12 @@ export default function DestinationsPanel({ canWrite }: SettingsPanelProps) {
                                         ? ` · ${destination.deviceName}`
                                         : ''}
                                     {destination.kind === 's3' && destination.bucket ? ` · ${destination.bucket}` : ''}
+                                    {destination.kind === 'sftp' && destination.host
+                                        ? ` · ${destination.username ?? ''}@${destination.host}`
+                                        : ''}
+                                    {destination.kind === 'webdav' && destination.endpoint
+                                        ? ` · ${hostOf(destination.endpoint)}`
+                                        : ''}
                                     {destination.path ? ` · ${destination.path}` : ''}
                                 </span>
                                 <span className={shell.channelMeta}>

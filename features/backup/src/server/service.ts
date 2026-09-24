@@ -1,5 +1,11 @@
 import crypto from 'crypto';
-import type { BackupDestinationProbe, BackupDestinationRow, BackupJobRow, BackupRunRow } from '../contracts/domain';
+import type {
+    BackupDestinationKind,
+    BackupDestinationProbe,
+    BackupDestinationRow,
+    BackupJobRow,
+    BackupRunRow
+} from '../contracts/domain';
 
 import {
     CLOUDSYNC_BACKUP_PROVIDER,
@@ -13,8 +19,10 @@ import { env } from './env';
 import { buildNotice } from './notice';
 import type { BackupRepo } from './repo';
 import { nextRunAt } from './schedule';
+import { SftpSink } from './sftp';
 import { DeviceSink, LocalSink, S3Sink, type BackupSink } from './sinks';
 import { cloudSyncSource, databaseSource, deveyeSource, type BackupArtifact } from './sources';
+import { WebDavSink } from './webdav';
 import type { StoredDestination, StoredJob, StoredRun } from './_shared';
 
 /**
@@ -108,6 +116,11 @@ export class BackupEngine {
             region: parsed.region ?? null,
             bucket: parsed.bucket ?? null,
             accessKeyId: parsed.accessKeyId ?? null,
+            host: parsed.host ?? null,
+            port: parsed.port ?? null,
+            username: parsed.username ?? null,
+            sftpAuth: parsed.sftpAuth ?? null,
+            hostKey: parsed.hostKey ?? null,
             lastError: parsed.lastError ?? null
         };
     }
@@ -115,50 +128,103 @@ export class BackupEngine {
     /**
      * L'écrivain d'une destination. Lève une phrase corrigeable : une
      * destination incomplète est une configuration, pas une panne.
+     * `probing` : seul un contrôle peut faire connaissance d'un serveur SFTP.
      */
-    async sinkFor(row: BackupDestinationRow): Promise<BackupSink> {
+    async sinkFor(row: BackupDestinationRow, probing = false): Promise<BackupSink> {
         const stored = await this.readDestination(row);
+        const kind = row.kind as BackupDestinationKind;
+        const secret = async (): Promise<string | null> =>
+            row.secret_enc ? await this.cipherFor(row.workspace_id).tryDecrypt(row.secret_enc) : null;
 
-        if (row.kind === 'local') return new LocalSink(row.workspace_id, stored.path);
+        switch (kind) {
+            case 'local':
+                return new LocalSink(row.workspace_id, stored.path);
 
-        if (row.kind === 'device') {
-            if (!row.device_id) {
-                throw new Error("Cette destination n'a plus d'appareil : l'appareil a été supprimé.");
+            case 'device': {
+                if (!row.device_id) {
+                    throw new Error("Cette destination n'a plus d'appareil : l'appareil a été supprimé.");
+                }
+                const device = await this.deps.devices.find(row.device_id);
+                if (!device) throw new Error("L'appareil de cette destination est introuvable.");
+                return new DeviceSink(this.deps.agents, row.device_id, device.name, stored.path);
             }
-            const device = await this.deps.devices.find(row.device_id);
-            if (!device) throw new Error("L'appareil de cette destination est introuvable.");
-            return new DeviceSink(this.deps.agents, row.device_id, device.name, stored.path);
-        }
 
-        const secret = row.secret_enc ? await this.cipherFor(row.workspace_id).tryDecrypt(row.secret_enc) : null;
-        if (!stored.endpoint || !stored.bucket || !stored.accessKeyId || !secret) {
-            throw new Error('Cette destination S3 est incomplète : adresse, bucket, clé d’accès et clé secrète.');
+            case 's3': {
+                const key = await secret();
+                if (!stored.endpoint || !stored.bucket || !stored.accessKeyId || !key) {
+                    throw new Error(
+                        'Cette destination S3 est incomplète : adresse, bucket, clé d’accès et clé secrète.'
+                    );
+                }
+                return new S3Sink(
+                    {
+                        endpoint: stored.endpoint,
+                        region: stored.region ?? 'us-east-1',
+                        bucket: stored.bucket,
+                        accessKeyId: stored.accessKeyId,
+                        secretAccessKey: key,
+                        pathStyle: row.path_style === 1
+                    },
+                    stored.path
+                );
+            }
+
+            case 'sftp': {
+                const credential = await secret();
+                if (!stored.host || !stored.username || !stored.sftpAuth || !credential) {
+                    throw new Error(
+                        'Cette destination SFTP est incomplète : hôte, identifiant et mot de passe ou clé.'
+                    );
+                }
+                return new SftpSink(
+                    {
+                        host: stored.host,
+                        port: stored.port ?? 22,
+                        username: stored.username,
+                        auth: stored.sftpAuth,
+                        secret: credential,
+                        hostKey: stored.hostKey
+                    },
+                    stored.path,
+                    probing
+                );
+            }
+
+            case 'webdav': {
+                const password = await secret();
+                if (!stored.endpoint || !stored.username || !password) {
+                    throw new Error('Cette destination WebDAV est incomplète : adresse, identifiant et mot de passe.');
+                }
+                return new WebDavSink({ url: stored.endpoint, username: stored.username, password }, stored.path);
+            }
+
+            default: {
+                const unknown: never = kind;
+                throw new Error(`Genre de destination inconnu : ${String(unknown)}`);
+            }
         }
-        return new S3Sink(
-            {
-                endpoint: stored.endpoint,
-                region: stored.region ?? 'us-east-1',
-                bucket: stored.bucket,
-                accessKeyId: stored.accessKeyId,
-                secretAccessKey: secret,
-                pathStyle: row.path_style === 1
-            },
-            stored.path
-        );
     }
 
     /** Contrôle une destination et enregistre le verdict. */
     async probeDestination(row: BackupDestinationRow): Promise<BackupDestinationProbe> {
         let probe: BackupDestinationProbe;
+        let learnedHostKey: string | null = null;
         try {
-            probe = await (await this.sinkFor(row)).probe();
+            const sink = await this.sinkFor(row, true);
+            probe = await sink.probe();
+            // Le premier contrôle réussi fait connaissance : l'empreinte vue est retenue.
+            if (probe.ok && sink instanceof SftpSink) learnedHostKey = sink.seenHostKey;
         } catch (e) {
             probe = { ok: false, error: (e as Error).message, usedBytes: null, freeBytes: null };
         }
 
         const stored = await this.readDestination(row);
         const content = await this.cipherFor(row.workspace_id).encrypt(
-            JSON.stringify({ ...stored, lastError: probe.ok ? null : probe.error })
+            JSON.stringify({
+                ...stored,
+                hostKey: stored.hostKey ?? learnedHostKey,
+                lastError: probe.ok ? null : probe.error
+            })
         );
         await this.deps.repo.recordDestinationProbe(
             row.id,

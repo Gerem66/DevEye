@@ -16,12 +16,15 @@ declare const styles: {
     readonly factWarn: string;
     readonly facts: string;
     readonly field: string;
+    readonly fieldGrow: string;
     readonly fieldHint: string;
     readonly fieldLabel: string;
     readonly fieldRow: string;
     readonly fieldWithAction: string;
     readonly form: string;
     readonly grid: string;
+    readonly hostKey: string;
+    readonly keyField: string;
     readonly pathLabel: string;
     readonly pathRow: string;
     readonly root: string;

@@ -11,13 +11,26 @@ import type {
 export const DESTINATION_LABELS: Record<BackupDestinationKind, string> = {
     local: 'Dossier du serveur',
     device: 'Dossier d’une machine',
-    s3: 'Serveur S3'
+    s3: 'Serveur S3',
+    sftp: 'Serveur SFTP',
+    webdav: 'Serveur WebDAV'
+};
+
+/** Le libellé court d'un genre, pour que les cinq tiennent sur une rangée de segments. */
+export const DESTINATION_SHORT_LABELS: Record<BackupDestinationKind, string> = {
+    local: 'Ce serveur',
+    device: 'Machine',
+    s3: 'S3',
+    sftp: 'SFTP',
+    webdav: 'WebDAV'
 };
 
 export const DESTINATION_ICONS: Record<BackupDestinationKind, string> = {
     local: 'server',
     device: 'cpu',
-    s3: 'cloud'
+    s3: 'cloud',
+    sftp: 'terminal',
+    webdav: 'globe'
 };
 
 export const SOURCE_LABELS: Record<BackupSourceKind, string> = {
@@ -77,7 +90,7 @@ export function destinationTone(status: BackupDestinationStatus): 'neutral' | 'o
     return 'neutral';
 }
 
-/** « il y a 3 min » — la même échelle que les autres features. */
+/** « il y a 3 min » : la même échelle que les autres features. */
 export function formatAgo(at: number | null, never = 'jamais'): string {
     if (at === null) return never;
     const seconds = Math.max(0, Math.floor(Date.now() / 1000) - at);
@@ -89,7 +102,7 @@ export function formatAgo(at: number | null, never = 'jamais'): string {
     return `il y a ${Math.floor(hours / 24)} j`;
 }
 
-/** « dans 4 h » — l'échelle inverse, pour une échéance. */
+/** « dans 4 h » : l’échelle inverse, pour une échéance. */
 export function formatIn(at: number | null): string {
     if (at === null) return 'aucune';
     const seconds = at - Math.floor(Date.now() / 1000);
@@ -139,3 +152,12 @@ export function describeSchedule(job: {
  * parfois au bout d'un VPN : le défaut de la socket (15 s) est trop court.
  */
 export const BACKUP_PROBE_TIMEOUT_MS = 60_000;
+
+/** L'hôte d'une adresse, pour une ligne de liste ; l'adresse telle quelle si elle ne se lit pas. */
+export function hostOf(url: string): string {
+    try {
+        return new URL(url).host;
+    } catch {
+        return url;
+    }
+}

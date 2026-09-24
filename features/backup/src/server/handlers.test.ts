@@ -329,6 +329,10 @@ describe('Backup : handlers', () => {
             region: null,
             bucket: null,
             accessKeyId: null,
+            host: null,
+            port: null,
+            username: null,
+            sftpAuth: null,
             secret: null,
             pathStyle: true
         };
@@ -359,6 +363,10 @@ describe('Backup : handlers', () => {
             region: null,
             bucket: null,
             accessKeyId: null,
+            host: null,
+            port: null,
+            username: null,
+            sftpAuth: null,
             pathStyle: true
         };
 
@@ -367,6 +375,121 @@ describe('Backup : handlers', () => {
 
         const out = await update(ctx, { ...body, deviceId: 'dev-a' });
         assert.equal(out.destination.deviceId, 'dev-a');
+    });
+
+    it('une destination SFTP ou WebDAV exige son hôte, son identifiant et son secret', async () => {
+        const repo = fakeRepo();
+        const ctx = createTestContext({ repo, workspaceId: 1 });
+        const add = handlerFor(backupDestinationAdd);
+        const none = {
+            deviceId: null,
+            path: 'sauvegardes',
+            endpoint: null,
+            region: null,
+            bucket: null,
+            accessKeyId: null,
+            host: null,
+            port: null,
+            username: null,
+            sftpAuth: null,
+            pathStyle: true
+        };
+        const sftp = {
+            ...none,
+            kind: 'sftp' as const,
+            name: 'NAS',
+            host: 'nas.exemple.fr',
+            port: 2222,
+            username: 'deveye',
+            sftpAuth: 'key' as const,
+            secret: '-----BEGIN OPENSSH PRIVATE KEY-----'
+        };
+        const webdav = {
+            ...none,
+            kind: 'webdav' as const,
+            name: 'Nextcloud',
+            endpoint: 'https://cloud.exemple.fr/remote.php/dav/files/moi',
+            username: 'moi',
+            secret: 'motdepasse'
+        };
+
+        await assert.rejects(add(ctx, { ...sftp, secret: null }), failsWith('validation'));
+        await assert.rejects(add(ctx, { ...sftp, host: 'sftp://nas.exemple.fr/data' }), failsWith('validation'));
+        await assert.rejects(add(ctx, { ...sftp, path: '../etc' }), failsWith('validation'));
+        await assert.rejects(add(ctx, { ...webdav, secret: null }), failsWith('validation'));
+        await assert.rejects(add(ctx, { ...webdav, endpoint: 'http://cloud.exemple.fr/dav' }), failsWith('validation'));
+        await assert.rejects(
+            add(ctx, { ...webdav, endpoint: 'https://moi:secret@cloud.exemple.fr/dav' }),
+            failsWith('validation')
+        );
+        assert.equal(repo.destinations.length, 0);
+
+        const created = await add(ctx, sftp);
+        assert.equal(created.destination.host, 'nas.exemple.fr');
+        assert.equal(created.destination.port, 2222);
+        assert.equal(created.destination.sftpAuth, 'key');
+        assert.equal(created.destination.hostKey, null);
+        assert.equal(created.destination.hasSecret, true);
+        // Les champs d'un autre genre ne sont pas retenus.
+        assert.equal(created.destination.endpoint, null);
+
+        const dav = await add(ctx, { ...webdav, host: 'ignoré', sftpAuth: 'password' });
+        assert.equal(dav.destination.endpoint, webdav.endpoint);
+        assert.equal(dav.destination.username, 'moi');
+        assert.equal(dav.destination.host, null);
+        assert.equal(dav.destination.sftpAuth, null);
+    });
+
+    it('l’empreinte SFTP retenue s’oublie avec un autre serveur ou sur demande', async () => {
+        const repo = fakeRepo();
+        const ctx = createTestContext({ repo, workspaceId: 1 });
+        const stored = {
+            name: 'NAS',
+            path: 'sauvegardes',
+            endpoint: null,
+            region: null,
+            bucket: null,
+            accessKeyId: null,
+            host: 'nas.exemple.fr',
+            port: 22,
+            username: 'deveye',
+            sftpAuth: 'password',
+            hostKey: 'SHA256:abc',
+            lastError: null
+        };
+        repo.destinations.push(
+            destination({
+                id: 1,
+                workspace_id: 1,
+                kind: 'sftp',
+                content: await ctx.cipher().encrypt(JSON.stringify(stored)),
+                secret_enc: await ctx.cipher().encrypt('motdepasse')
+            })
+        );
+        const update = handlerFor(backupDestinationUpdate);
+        const body = {
+            destinationId: 1,
+            name: 'NAS',
+            deviceId: null,
+            path: 'sauvegardes',
+            endpoint: null,
+            region: null,
+            bucket: null,
+            accessKeyId: null,
+            host: 'nas.exemple.fr',
+            port: 22,
+            username: 'deveye',
+            sftpAuth: 'password' as const,
+            pathStyle: true
+        };
+
+        assert.equal((await update(ctx, body)).destination.hostKey, 'SHA256:abc');
+        // Passer à une clé sans la fournir laisserait un mot de passe servir de clé.
+        await assert.rejects(update(ctx, { ...body, sftpAuth: 'key' }), failsWith('validation'));
+        assert.equal((await update(ctx, { ...body, resetHostKey: true })).destination.hostKey, null);
+
+        repo.destinations[0].content = await ctx.cipher().encrypt(JSON.stringify(stored));
+        assert.equal((await update(ctx, { ...body, host: 'autre.exemple.fr' })).destination.hostKey, null);
     });
 
     it('refuse de retirer une destination encore visée, en disant combien', async () => {

@@ -17,15 +17,23 @@ export const BACKUP_PATH_MAX = 512;
 export const BACKUP_ENDPOINT_MAX = 255;
 export const BACKUP_BUCKET_MAX = 128;
 export const BACKUP_ACCESS_KEY_MAX = 255;
-export const BACKUP_SECRET_MAX = 512;
+export const BACKUP_HOST_MAX = 255;
+export const BACKUP_USERNAME_MAX = 255;
+/** Assez pour une clé SSH privée. */
+export const BACKUP_SECRET_MAX = 8192;
 
 /**
  * `local` : un dossier du serveur sous `BACKUP_STORAGE_DIR`. `device` : un
  * dossier d'une machine enrôlée, écrit par son agent. `s3` : un service
- * compatible S3 (Garage, MinIO, Scaleway, Backblaze, AWS).
+ * compatible S3 (Garage, MinIO, Scaleway, Backblaze, AWS). `sftp` : un
+ * serveur SSH (NAS, VPS). `webdav` : Nextcloud, Synology, kDrive.
  */
-export const backupDestinationKindSchema = z.enum(['local', 'device', 's3']);
+export const backupDestinationKindSchema = z.enum(['local', 'device', 's3', 'sftp', 'webdav']);
 export type BackupDestinationKind = z.infer<typeof backupDestinationKindSchema>;
+
+/** Comment une destination SFTP s'authentifie ; le secret est le mot de passe ou la clé privée. */
+export const backupSftpAuthSchema = z.enum(['password', 'key']);
+export type BackupSftpAuth = z.infer<typeof backupSftpAuthSchema>;
 
 /** Ce que le dernier contrôle d'accessibilité a dit d'une destination. */
 export const backupDestinationStatusSchema = z.enum(['unknown', 'ok', 'error']);
@@ -60,13 +68,27 @@ export const backupDestinationSchema = z.object({
     /**
      * `local`/`device`: le dossier qui reçoit les archives.
      * `s3`: le préfixe dans le bucket (`''` = la racine).
+     * `sftp`: le dossier sur le serveur, absolu ou relatif au dossier de connexion.
+     * `webdav`: le dossier sous l'adresse (`''` = l'adresse elle-même).
      */
     path: z.string().max(BACKUP_PATH_MAX),
-    /** `s3`: l'URL du service (`https://s3.exemple.fr`). */
+    /** `s3`: l'URL du service (`https://s3.exemple.fr`). `webdav`: l'URL de base du serveur. */
     endpoint: z.string().max(BACKUP_ENDPOINT_MAX).nullable(),
     region: z.string().max(64).nullable(),
     bucket: z.string().max(BACKUP_BUCKET_MAX).nullable(),
     accessKeyId: z.string().max(BACKUP_ACCESS_KEY_MAX).nullable(),
+    /** `sftp`: l'hôte et son port. */
+    host: z.string().max(BACKUP_HOST_MAX).nullable(),
+    port: z.number().int().min(1).max(65535).nullable(),
+    /** `sftp`/`webdav`: l'identifiant de connexion. */
+    username: z.string().max(BACKUP_USERNAME_MAX).nullable(),
+    sftpAuth: backupSftpAuthSchema.nullable(),
+    /**
+     * `sftp`: l'empreinte du serveur (`SHA256:…`), retenue au premier contrôle
+     * réussi ; `null` tant qu'aucun contrôle ne l'a validée, et rien ne part
+     * vers un serveur inconnu.
+     */
+    hostKey: z.string().nullable(),
     /** Le secret existe-t-il ? Sa valeur n'est jamais rendue. */
     hasSecret: z.boolean(),
     /** Adressage par chemin (`https://hôte/bucket/clé`) : vrai pour Garage et MinIO, faux pour AWS. */
@@ -75,7 +97,7 @@ export const backupDestinationSchema = z.object({
     /** Message du dernier contrôle raté; `null` quand tout va bien. */
     lastError: z.string().nullable(),
     checkedAt: z.number().int().nullable(),
-    /** Combien de travaux l'utilisent — ce qu'une suppression va couper. */
+    /** Combien de travaux l'utilisent : ce qu'une suppression va couper. */
     jobCount: z.number().int().nonnegative(),
     created: z.number().int()
 });
@@ -185,7 +207,7 @@ export type BackupDestinationProbe = z.infer<typeof backupDestinationProbeSchema
 export interface BackupDestinationRow {
     id: number;
     workspace_id: number;
-    /** 'local' | 'device' | 's3'. */
+    /** 'local' | 'device' | 's3' | 'sftp' | 'webdav'. */
     kind: string;
     device_id: string | null;
     /** Adressage par chemin pour S3. */
@@ -194,12 +216,14 @@ export interface BackupDestinationRow {
     status: string;
     checked_at: number | null;
     /**
-     * { name, path, endpoint, region, bucket, accessKeyId, lastError } chiffré
-     * à l'étage ouvert : un bucket et une adresse disent où sont les
-     * sauvegardes de quelqu'un.
+     * `StoredDestination` chiffré à l'étage ouvert : un bucket et une adresse
+     * disent où sont les sauvegardes de quelqu'un.
      */
     content: string;
-    /** Clé secrète S3, chiffrée à l'étage ouvert. Vide pour `local`/`device`. */
+    /**
+     * Clé secrète S3, mot de passe (SFTP, WebDAV) ou clé privée SSH, chiffré à
+     * l'étage ouvert. Vide pour `local`/`device`.
+     */
     secret_enc: string;
     created: number;
 }

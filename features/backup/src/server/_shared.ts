@@ -10,6 +10,7 @@ import type {
     BackupRunRow,
     BackupRunStatus,
     BackupScheduleKind,
+    BackupSftpAuth,
     BackupSourceKind
 } from '../contracts/domain';
 
@@ -40,6 +41,12 @@ export interface StoredDestination {
     region: string | null;
     bucket: string | null;
     accessKeyId: string | null;
+    host: string | null;
+    port: number | null;
+    username: string | null;
+    sftpAuth: BackupSftpAuth | null;
+    /** L'empreinte SFTP retenue au premier contrôle réussi. */
+    hostKey: string | null;
     lastError: string | null;
 }
 
@@ -135,6 +142,11 @@ export async function toDestination(ctx: Ctx, row: BackupDestinationWithUsageRow
         region: stored.region ?? null,
         bucket: stored.bucket ?? null,
         accessKeyId: stored.accessKeyId ?? null,
+        host: stored.host ?? null,
+        port: stored.port ?? null,
+        username: stored.username ?? null,
+        sftpAuth: stored.sftpAuth ?? null,
+        hostKey: stored.hostKey ?? null,
         // Le secret ne sort jamais.
         hasSecret: row.secret_enc.length > 0,
         pathStyle: row.path_style === 1,

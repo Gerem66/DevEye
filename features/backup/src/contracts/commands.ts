@@ -4,9 +4,11 @@ import {
     BACKUP_BUCKET_MAX,
     BACKUP_DESTINATION_NAME_MAX,
     BACKUP_ENDPOINT_MAX,
+    BACKUP_HOST_MAX,
     BACKUP_JOB_NAME_MAX,
     BACKUP_PATH_MAX,
     BACKUP_SECRET_MAX,
+    BACKUP_USERNAME_MAX,
     backupDestinationKindSchema,
     backupDestinationProbeSchema,
     backupDestinationSchema,
@@ -14,6 +16,7 @@ import {
     backupJobSchema,
     backupRunSchema,
     backupScheduleKindSchema,
+    backupSftpAuthSchema,
     backupSourceCandidateSchema,
     backupSourceKindSchema
 } from './domain';
@@ -34,38 +37,45 @@ export const backupDestinationList = {
     output: z.object({ destinations: z.array(backupDestinationSchema) })
 };
 
-/** Un seul schéma pour les trois genres, champs des autres à `null` : l'écran n'a qu'un formulaire. */
+/** Ce que tous les genres partagent ; les champs des autres genres valent `null`. */
+const destinationFields = {
+    name: z.string().min(1).max(BACKUP_DESTINATION_NAME_MAX),
+    deviceId: z.uuid().nullable(),
+    path: z.string().max(BACKUP_PATH_MAX),
+    endpoint: z.string().max(BACKUP_ENDPOINT_MAX).nullable(),
+    region: z.string().max(64).nullable(),
+    bucket: z.string().max(BACKUP_BUCKET_MAX).nullable(),
+    accessKeyId: z.string().max(BACKUP_ACCESS_KEY_MAX).nullable(),
+    host: z.string().max(BACKUP_HOST_MAX).nullable(),
+    port: z.number().int().min(1).max(65535).nullable(),
+    username: z.string().max(BACKUP_USERNAME_MAX).nullable(),
+    sftpAuth: backupSftpAuthSchema.nullable(),
+    pathStyle: z.boolean()
+};
+
+/** Un seul schéma pour tous les genres : l'écran n'a qu'un formulaire. */
 export const backupDestinationAdd = {
     command: 'backup.destinationAdd' as const,
     input: z.object({
         kind: backupDestinationKindSchema,
-        name: z.string().min(1).max(BACKUP_DESTINATION_NAME_MAX),
-        deviceId: z.uuid().nullable(),
-        path: z.string().max(BACKUP_PATH_MAX),
-        endpoint: z.string().max(BACKUP_ENDPOINT_MAX).nullable(),
-        region: z.string().max(64).nullable(),
-        bucket: z.string().max(BACKUP_BUCKET_MAX).nullable(),
-        accessKeyId: z.string().max(BACKUP_ACCESS_KEY_MAX).nullable(),
-        secret: z.string().max(BACKUP_SECRET_MAX).nullable(),
-        pathStyle: z.boolean()
+        ...destinationFields,
+        secret: z.string().max(BACKUP_SECRET_MAX).nullable()
     }),
     output: z.object({ destination: backupDestinationSchema })
 };
 
-/** `secret` omis = inchangé: le serveur ne l'a jamais rendu, on ne le réécrit pas. */
+/**
+ * `secret` omis = inchangé: le serveur ne l'a jamais rendu, on ne le réécrit
+ * pas. `resetHostKey` oublie l'empreinte SFTP retenue, pour un serveur
+ * réinstallé : le prochain contrôle retiendra la nouvelle.
+ */
 export const backupDestinationUpdate = {
     command: 'backup.destinationUpdate' as const,
     input: z.object({
         destinationId,
-        name: z.string().min(1).max(BACKUP_DESTINATION_NAME_MAX),
-        deviceId: z.uuid().nullable(),
-        path: z.string().max(BACKUP_PATH_MAX),
-        endpoint: z.string().max(BACKUP_ENDPOINT_MAX).nullable(),
-        region: z.string().max(64).nullable(),
-        bucket: z.string().max(BACKUP_BUCKET_MAX).nullable(),
-        accessKeyId: z.string().max(BACKUP_ACCESS_KEY_MAX).nullable(),
+        ...destinationFields,
         secret: z.string().max(BACKUP_SECRET_MAX).optional(),
-        pathStyle: z.boolean()
+        resetHostKey: z.boolean().optional()
     }),
     output: z.object({ destination: backupDestinationSchema })
 };

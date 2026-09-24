@@ -356,3 +356,35 @@
     width: 16px;
     color: var(--text-muted);
 }
+
+/* L'hôte prend la place, le port garde la sienne. */
+.fieldGrow {
+    flex: 3;
+}
+
+.keyField {
+    width: 100%;
+    padding: var(--space-sm);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    line-height: 1.5;
+    resize: vertical;
+}
+
+.keyField:focus {
+    outline: none;
+    border-color: var(--input-focus);
+}
+
+.hostKey {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}

@@ -14,12 +14,12 @@ import {
     backupRuns,
     backupSources
 } from '../contracts/commands';
-import type { BackupSourceCandidate } from '../contracts/domain';
+import type { BackupDestinationKind, BackupSftpAuth, BackupSourceCandidate } from '../contracts/domain';
 
-import { defineSdkFeature, FeatureError, type SdkFeatureDefinition } from '@deveye/types/sdk/server';
+import { defineSdkFeature, FeatureError, isSafePublicUrl, type SdkFeatureDefinition } from '@deveye/types/sdk/server';
 
-// Le garde des appels sortants, partagé par toute l'app : l'adresse du service S3
-// est saisie par un membre.
+// Le garde des appels sortants, partagé par toute l'app : l'adresse d'un service
+// S3 ou WebDAV est saisie par un membre.
 import { isAllowedOutboundUrl, OUTBOUND_REFUSED_MESSAGE } from '@/Services/netFetch';
 import type { BackupRepo } from './repo';
 import { nextRunAt } from './schedule';
@@ -30,6 +30,7 @@ import {
     loadDestination,
     loadHomeJob,
     loadJob,
+    readJson,
     readJsonWith,
     requireEngine,
     toDestination,
@@ -55,54 +56,156 @@ const destinationListFeature = defineSdkFeature({
     }
 });
 
-/**
- * Les champs obligatoires dépendent du genre, ce que le contrat zod n'exprime
- * pas sans imposer trois formulaires à l'écran.
- */
-function assertDestinationShape(input: {
-    kind: string;
+/** Ce que le formulaire envoie, tous genres confondus. */
+interface DestinationInput {
+    name: string;
     deviceId: string | null;
     path: string;
     endpoint: string | null;
+    region: string | null;
     bucket: string | null;
     accessKeyId: string | null;
-}): void {
-    if (input.kind === 'device') {
-        if (!input.deviceId)
-            throw new FeatureError('validation', 'Choisissez la machine qui hébergera les sauvegardes.');
-        const path = input.path.trim();
-        if (!path.startsWith('/') && !/^[A-Za-z]:[\\/]/.test(path)) {
-            throw new FeatureError('validation', 'Le dossier de la machine doit être un chemin absolu.');
-        }
-        if (path.includes('..')) {
-            throw new FeatureError('validation', 'Le dossier de la machine ne peut pas contenir « .. ».');
-        }
-        return;
-    }
+    host: string | null;
+    port: number | null;
+    username: string | null;
+    sftpAuth: BackupSftpAuth | null;
+}
 
-    if (input.kind === 'local') {
-        // Validé à l'enregistrement : découvrir un chemin refusé au premier
-        // passage nocturne, c'est une nuit sans sauvegarde.
-        try {
-            safeRelPath(input.path);
-        } catch (e) {
-            throw new FeatureError('validation', (e as Error).message);
-        }
-        return;
-    }
+/** Un chemin distant qui remonte au-dessus de son dossier. */
+const climbs = (path: string): boolean => path.split(/[\\/]/).some((s) => s.trim() === '..');
 
-    if (!input.endpoint || !input.bucket || !input.accessKeyId) {
-        throw new FeatureError('validation', 'Une destination S3 exige une adresse, un bucket et une clé d’accès.');
+/**
+ * Les champs obligatoires dépendent du genre, ce que le contrat zod n'exprime
+ * pas sans imposer un formulaire par genre à l'écran.
+ */
+function assertDestinationShape(kind: BackupDestinationKind, input: DestinationInput): void {
+    switch (kind) {
+        case 'device': {
+            if (!input.deviceId)
+                throw new FeatureError('validation', 'Choisissez la machine qui hébergera les sauvegardes.');
+            const path = input.path.trim();
+            if (!path.startsWith('/') && !/^[A-Za-z]:[\\/]/.test(path)) {
+                throw new FeatureError('validation', 'Le dossier de la machine doit être un chemin absolu.');
+            }
+            if (path.includes('..')) {
+                throw new FeatureError('validation', 'Le dossier de la machine ne peut pas contenir « .. ».');
+            }
+            return;
+        }
+
+        case 'local':
+            // Validé à l'enregistrement : découvrir un chemin refusé au premier
+            // passage nocturne, c'est une nuit sans sauvegarde.
+            try {
+                safeRelPath(input.path);
+            } catch (e) {
+                throw new FeatureError('validation', (e as Error).message);
+            }
+            return;
+
+        case 's3':
+            if (!input.endpoint || !input.bucket || !input.accessKeyId) {
+                throw new FeatureError(
+                    'validation',
+                    'Une destination S3 exige une adresse, un bucket et une clé d’accès.'
+                );
+            }
+            try {
+                new URL(input.endpoint);
+            } catch {
+                throw new FeatureError('validation', 'L’adresse du service S3 doit être une URL complète (https://…).');
+            }
+            if (!isAllowedOutboundUrl(input.endpoint)) throw new FeatureError('validation', OUTBOUND_REFUSED_MESSAGE);
+            if (input.path.includes('..')) {
+                throw new FeatureError('validation', 'Le préfixe S3 ne peut pas contenir « .. ».');
+            }
+            return;
+
+        case 'sftp': {
+            const host = input.host?.trim() ?? '';
+            if (!host || !input.username?.trim() || !input.sftpAuth) {
+                throw new FeatureError(
+                    'validation',
+                    'Une destination SFTP exige un hôte, un identifiant et une façon de se connecter.'
+                );
+            }
+            if (!/^[A-Za-z0-9._:[\]-]+$/.test(host)) {
+                throw new FeatureError(
+                    'validation',
+                    'L’hôte SFTP est un nom ou une adresse, sans « sftp:// » ni chemin.'
+                );
+            }
+            if (climbs(input.path)) {
+                throw new FeatureError('validation', 'Le dossier SFTP ne peut pas contenir « .. ».');
+            }
+            return;
+        }
+
+        case 'webdav': {
+            if (!input.endpoint || !input.username?.trim()) {
+                throw new FeatureError('validation', 'Une destination WebDAV exige une adresse et un identifiant.');
+            }
+            let url: URL;
+            try {
+                url = new URL(input.endpoint);
+            } catch {
+                throw new FeatureError('validation', 'L’adresse WebDAV doit être une URL complète (https://…).');
+            }
+            if (!isAllowedOutboundUrl(url)) throw new FeatureError('validation', OUTBOUND_REFUSED_MESSAGE);
+            // En http, le mot de passe voyage en clair : permis seulement vers une
+            // adresse privée, qu'une installation personnelle ouvre elle-même.
+            if (url.protocol === 'http:' && isSafePublicUrl(url)) {
+                throw new FeatureError(
+                    'validation',
+                    'En http, le mot de passe partirait en clair sur Internet : utilisez une adresse https.'
+                );
+            }
+            if (url.username || url.password) {
+                throw new FeatureError(
+                    'validation',
+                    'L’identifiant et le mot de passe vont dans leurs champs, pas dans l’adresse.'
+                );
+            }
+            if (climbs(input.path)) {
+                throw new FeatureError('validation', 'Le dossier WebDAV ne peut pas contenir « .. ».');
+            }
+            return;
+        }
+
+        default: {
+            const unknown: never = kind;
+            throw new FeatureError('validation', `Genre de destination inconnu : ${String(unknown)}`);
+        }
     }
-    try {
-        new URL(input.endpoint);
-    } catch {
-        throw new FeatureError('validation', 'L’adresse du service S3 doit être une URL complète (https://…).');
-    }
-    if (!isAllowedOutboundUrl(input.endpoint)) throw new FeatureError('validation', OUTBOUND_REFUSED_MESSAGE);
-    if (input.path.includes('..')) {
-        throw new FeatureError('validation', 'Le préfixe S3 ne peut pas contenir « .. ».');
-    }
+}
+
+/** Le contenu chiffré d'une destination : seuls les champs de son genre y entrent. */
+function storedFrom(kind: BackupDestinationKind, input: DestinationInput, hostKey: string | null): StoredDestination {
+    return {
+        name: input.name,
+        path: input.path.trim(),
+        endpoint: kind === 's3' || kind === 'webdav' ? (input.endpoint?.trim() ?? null) : null,
+        region: kind === 's3' ? input.region : null,
+        bucket: kind === 's3' ? input.bucket : null,
+        accessKeyId: kind === 's3' ? input.accessKeyId : null,
+        host: kind === 'sftp' ? (input.host?.trim() ?? null) : null,
+        port: kind === 'sftp' ? (input.port ?? 22) : null,
+        username: kind === 'sftp' || kind === 'webdav' ? (input.username?.trim() ?? null) : null,
+        sftpAuth: kind === 'sftp' ? input.sftpAuth : null,
+        hostKey: kind === 'sftp' ? hostKey : null,
+        // Le verdict du dernier contrôle ne survit pas à une modification :
+        // il portait sur une configuration qui n'existe plus.
+        lastError: null
+    };
+}
+
+/** Ce qu'une destination sans secret ne peut pas faire ; `null` pour un genre qui n'en a pas. */
+function missingSecretMessage(kind: BackupDestinationKind, auth: BackupSftpAuth | null): string | null {
+    if (kind === 's3') return 'Une destination S3 exige sa clé secrète.';
+    if (kind === 'webdav') return 'Une destination WebDAV exige son mot de passe.';
+    if (kind === 'sftp')
+        return auth === 'key' ? 'Collez la clé privée SSH.' : 'Une destination SFTP exige son mot de passe.';
+    return null;
 }
 
 /** Sans ce contrôle, on écrirait des archives sur la machine d'un autre espace en devinant un identifiant. */
@@ -118,21 +221,12 @@ const destinationAddFeature = defineSdkFeature({
     access: { level: 'write' },
     mutates: true,
     handler: async (ctx: Ctx, input) => {
-        assertDestinationShape(input);
-        if (input.kind === 's3' && !input.secret) {
-            throw new FeatureError('validation', 'Une destination S3 exige sa clé secrète.');
-        }
+        assertDestinationShape(input.kind, input);
+        const missing = missingSecretMessage(input.kind, input.sftpAuth);
+        if (missing && !input.secret) throw new FeatureError('validation', missing);
         if (input.kind === 'device') await assertDeviceInWorkspace(ctx, input.deviceId);
 
-        const stored: StoredDestination = {
-            name: input.name,
-            path: input.path,
-            endpoint: input.endpoint,
-            region: input.region,
-            bucket: input.bucket,
-            accessKeyId: input.accessKeyId,
-            lastError: null
-        };
+        const stored = storedFrom(input.kind, input, null);
         const cipher = ctx.cipher();
         const row = await ctx.repo.createDestination({
             workspaceId: ctx.workspaceId,
@@ -140,7 +234,7 @@ const destinationAddFeature = defineSdkFeature({
             deviceId: input.kind === 'device' ? input.deviceId : null,
             pathStyle: input.pathStyle,
             content: await cipher.encrypt(JSON.stringify(stored)),
-            secretEnc: input.secret ? await cipher.encrypt(input.secret) : ''
+            secretEnc: missing && input.secret ? await cipher.encrypt(input.secret) : ''
         });
 
         ctx.audit({
@@ -162,20 +256,21 @@ const destinationUpdateFeature = defineSdkFeature({
     mutates: true,
     handler: async (ctx: Ctx, input) => {
         const row = await loadDestination(ctx, input.destinationId);
-        assertDestinationShape({ ...input, kind: row.kind });
-        if (row.kind === 'device') await assertDeviceInWorkspace(ctx, input.deviceId);
+        const kind = row.kind as BackupDestinationKind;
+        assertDestinationShape(kind, input);
+        if (kind === 'device') await assertDeviceInWorkspace(ctx, input.deviceId);
 
-        const stored: StoredDestination = {
-            name: input.name,
-            path: input.path,
-            endpoint: input.endpoint,
-            region: input.region,
-            bucket: input.bucket,
-            accessKeyId: input.accessKeyId,
-            // Le verdict du dernier contrôle ne survit pas à une modification :
-            // il portait sur une configuration qui n'existe plus.
-            lastError: null
-        };
+        const previous = await readJson<StoredDestination>(ctx, row.content);
+        // Un autre mode de connexion rend l'ancien secret inutilisable : un mot
+        // de passe ne sert pas de clé.
+        if (kind === 'sftp' && previous.sftpAuth !== input.sftpAuth && !input.secret) {
+            throw new FeatureError('validation', missingSecretMessage(kind, input.sftpAuth) ?? '');
+        }
+        // Un autre hôte est un autre serveur : son empreinte reste à valider.
+        const sameServer = previous.host === input.host?.trim() && (previous.port ?? 22) === (input.port ?? 22);
+        const hostKey = input.resetHostKey || !sameServer ? null : (previous.hostKey ?? null);
+
+        const stored = storedFrom(kind, input, hostKey);
         const cipher = ctx.cipher();
         const updated = await ctx.repo.updateDestination(input.destinationId, ctx.workspaceId, {
             deviceId: row.kind === 'device' ? input.deviceId : null,
