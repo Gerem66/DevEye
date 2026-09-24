@@ -8,6 +8,7 @@ import { SentinelEngine } from './engine';
 import { sentinelHandlers } from './handlers';
 import { createRepo, type SentinelRepo } from './repo';
 import { setEngine } from './_shared';
+import { SENTINEL_ENV } from './env';
 
 /**
  * `createService` monte le moteur (file d'ingestion, évaluation par tour, passe
@@ -20,6 +21,7 @@ import { setEngine } from './_shared';
  * Sentinelle n'a pas d'éléments.
  */
 export const serverEntry: FeatureServer<SentinelRepo> = {
+    env: SENTINEL_ENV,
     createRepo,
     features: sentinelHandlers,
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),

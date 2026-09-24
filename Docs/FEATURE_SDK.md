@@ -709,7 +709,7 @@ contexte sans session (`FeatureDomainsContext` : `repo`, `origins`,
 suppression : s'il lève, le domaine reste.
 
 Un manifest dont les domaines servent des pages déclare `domains.web: true`
-(Rendez-vous, Facturation). Le socle ajoute alors, entre la propriété et la
+(Rendez-vous, Facturation, Uptime). Le socle ajoute alors, entre la propriété et la
 sonde du module, ses propres contrôles (`Services/domains/web.ts`) : le nom
 pointe vers l'origine publique, puis y répond en HTTPS avec un certificat
 valable, chacun avec sa phrase. Ces noms sont ceux que Traefik lit sur
@@ -721,6 +721,31 @@ limite (`quota`). La sonde du module n'a plus qu'à prouver que c'est cette
 installation qui répond : un jeton servi sous `/.well-known/deveye-<slug>`, et
 chaque route publique ne sert, sous un domaine client, que l'espace qui le
 possède.
+
+La racine d'un domaine client (`GET /`) appartient à l'hôte : aucun module n'y
+monte de route (refusé au boot). Un service qui veut y répondre, pour un nom qui
+EST la page (`statut.exemple.fr` d'une page de statut d'Uptime), déclare
+`domainRoot(req, reply, domain)` (capacité `'routes.public'` et `domains.web`
+exigés). `modulePublicRoutes` monte `GET /` sur les deux écouteurs : un hôte qui
+n'est pas une origine de DevEye et qu'un module a VÉRIFIÉ (pas seulement
+pointé : le proxy reçoit aussi ceux-là) va au premier module installé qui sert
+sa racine, derrière la garde de maintenance ; tout le reste retombe sur le
+repli de l'écouteur, le client sur l'app (d'où `index: false` à
+fastify-static, qui enregistrait sinon `/` lui-même) et 404 sur la surface
+publique. Le module route par le `domain` reçu, jamais par l'en-tête.
+
+Toujours par entrée serveur : `env`, la spec des variables d'environnement
+que le module lit (`defineModuleEnv`, lue par `readModuleEnv` : entier, texte,
+chemin, adresse, drapeau, choix, secret). Un module lit ses variables lui-même,
+jamais par `Utils/Env`, et chacune a un défaut qui marche. L'hôte relit la même
+spec au démarrage (`warnUnsetModuleEnv`, en tête de `main()`) et écrit un
+avertissement par module qui nomme chaque variable absente ou illisible, avec
+la valeur appliquée : un défaut qui devine le monde de l'exploitant (l'adresse
+du site, un dossier) se lit au démarrage au lieu de se découvrir en production.
+Une variable posée vide compte comme posée ; `optional` fait taire celles
+qu'une installation peut ne pas utiliser (clés OAuth, Stripe, certificat
+fourni) ; un secret n'est jamais écrit. Une spec mal formée arrête le démarrage
+(`registerModules`).
 
 Par entrée client (`FeatureClient`) : `providers`, le jumeau client des
 providers de service, que les écrans de l'app lisent par

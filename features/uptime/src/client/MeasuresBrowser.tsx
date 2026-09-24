@@ -4,7 +4,8 @@ import { Button } from 'deveye-sdk-client';
 import type { UptimeCheck, UptimeCheckStats, UptimeService } from '../contracts/domain';
 
 import { api } from './api';
-import { formatMoment, formatMs } from './format';
+import { formatMs } from '../contracts/format';
+import { formatMoment } from './format';
 import Pane from './Pane';
 import styles from './style.module.css';
 

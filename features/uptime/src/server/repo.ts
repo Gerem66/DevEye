@@ -9,6 +9,8 @@ import type {
 } from '../contracts/domain';
 import type { SdkQueryable } from '@deveye/types/sdk/server';
 
+import { createPagesRepo, createStatusRepo, type UptimePagesRepo, type UptimeStatusRepo } from './repoPages';
+
 /** Which pings a journal query covers; mirrors the shared command filter. */
 export interface UptimeCheckFilter {
     /** Keep only probes at or after this epoch second; `null` = everything. */
@@ -149,6 +151,9 @@ export interface UptimeHistoryRepo {
 export interface UptimeRepo {
     services: UptimeServicesRepo;
     history: UptimeHistoryRepo;
+    /** Les pages de statut, et ce que leur rendu public lit (`repoPages.ts`). */
+    pages: UptimePagesRepo;
+    status: UptimeStatusRepo;
 }
 
 const SERVICE_COLUMNS = `content = ?, method = ?, expected_status = ?, interval_seconds = ?,
@@ -558,5 +563,10 @@ function historyRepo(q: SdkQueryable): UptimeHistoryRepo {
 }
 
 export function createRepo(q: SdkQueryable): UptimeRepo {
-    return { services: servicesRepo(q), history: historyRepo(q) };
+    return {
+        services: servicesRepo(q),
+        history: historyRepo(q),
+        pages: createPagesRepo(q),
+        status: createStatusRepo(q)
+    };
 }

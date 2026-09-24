@@ -10,7 +10,8 @@ import type {
 } from '../contracts/domain';
 
 import { api } from './api';
-import { formatAgo, formatDuration, formatMoment, formatMs, formatRatio, rangeWindow, RANGES } from './format';
+import { formatDuration, formatMs, formatRatio } from '../contracts/format';
+import { formatAgo, formatMoment, rangeWindow, RANGES } from './format';
 import MeasuresBrowser from './MeasuresBrowser';
 import Pane from './Pane';
 import StatusBars from './StatusBars';

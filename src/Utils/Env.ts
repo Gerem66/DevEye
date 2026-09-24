@@ -21,11 +21,6 @@ export const env = {
     LOG_LEVEL: getEnvVar('LOG_LEVEL', 'enum', ['fatal', 'error', 'warn', 'info', 'debug', 'trace']),
     LOG_PATH: getEnvVar('LOG_PATH', 'string', false) || './logs',
 
-    // Racine du stockage CloudSync vue par le serveur (dans le conteneur) ;
-    // `CLOUDSYNC_STORAGE_ROOT` est le chemin côté hôte que le compose y monte.
-    // Ne change que hors conteneur.
-    CLOUDSYNC_STORAGE_DIR: getEnvVar('CLOUDSYNC_STORAGE_DIR', 'string', false) || '/data/cloudsync',
-
     SSL_PRIVATE_KEY_PATH: getEnvVar('SSL_PRIVATE_KEY_PATH', 'string', false),
     SSL_CERTIFICATE_PATH: getEnvVar('SSL_CERTIFICATE_PATH', 'string', false),
 

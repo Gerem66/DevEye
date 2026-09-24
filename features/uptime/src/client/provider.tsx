@@ -1,7 +1,7 @@
 import type { SdkTileSummary, UptimeClientProvider } from '@deveye/types/sdk/client';
 
 import { api } from './api';
-import { formatRatio } from './format';
+import { formatRatio } from '../contracts/format';
 import Ratios from './Ratios';
 import { ServiceDialog } from './ServiceDialog';
 import StatusBars from './StatusBars';

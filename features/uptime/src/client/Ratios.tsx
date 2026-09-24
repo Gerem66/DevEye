@@ -1,4 +1,4 @@
-import { formatRatio } from './format';
+import { formatRatio } from '../contracts/format';
 import styles from './style.module.css';
 
 import type { UptimeService } from '../contracts/domain';

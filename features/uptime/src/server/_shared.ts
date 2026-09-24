@@ -1,5 +1,5 @@
 import type { UptimeIncident, UptimeIncidentRow, UptimeService, UptimeServiceRow } from '../contracts/domain';
-import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
+import { FeatureError, type SdkCipher, type SdkDomain, type SdkFeatureContext } from '@deveye/types/sdk/server';
 
 import type { UptimeRepo } from './repo';
 import type { UptimeMonitor } from './service';
@@ -117,4 +117,65 @@ export async function toIncident(cipher: SdkCipher, row: UptimeIncidentRow): Pro
         httpStatus: row.http_status,
         error: await decryptError(cipher, row.error)
     };
+}
+
+/** Le chemin d'une page de statut sous l'adresse de DevEye. */
+export const STATUS_PATH = '/statut';
+
+/**
+ * L'adresse à partager : la racine du domaine choisi une fois vérifié, sinon
+ * celle de DevEye. Un domaine en attente n'y paraît pas : le lien ne mènerait
+ * nulle part.
+ */
+export function statusPageUrl(publicOrigin: string, ref: string, domain: SdkDomain | null): string {
+    return domain?.verified ? `https://${domain.host}/` : `${publicOrigin}${STATUS_PATH}/${ref}`;
+}
+
+/** Partie chiffrée d'une page (`ft_uptime_pages.content`). */
+export interface PagePayload {
+    title: string;
+    description: string;
+}
+
+export async function encryptPage(cipher: SdkCipher, payload: PagePayload): Promise<string> {
+    return cipher.encrypt(JSON.stringify(payload));
+}
+
+/** Un blob illisible rend une page sans titre plutôt qu'une erreur : elle reste modifiable. */
+export async function decryptPage(cipher: SdkCipher, content: string): Promise<PagePayload> {
+    const plain = await cipher.tryDecrypt(content);
+    if (plain === null) return { title: '', description: '' };
+    try {
+        const parsed = JSON.parse(plain) as Partial<PagePayload>;
+        return {
+            title: typeof parsed.title === 'string' ? parsed.title : '',
+            description: typeof parsed.description === 'string' ? parsed.description : ''
+        };
+    } catch {
+        return { title: '', description: '' };
+    }
+}
+
+/** Le rendu public, posé par `createService` : ce qu'une écriture doit oublier de son cache. */
+let statusPagesRef: { forget(pageId: number): void } | null = null;
+
+export function setStatusPages(pages: { forget(pageId: number): void } | null): void {
+    statusPagesRef = pages;
+}
+
+/** Sans service (tests), rien n'est en cache : rien à oublier. */
+export function forgetStatusPage(pageId: number): void {
+    statusPagesRef?.forget(pageId);
+}
+
+/**
+ * Ce qu'une panne dit d'elle-même en public : une catégorie, jamais le message
+ * de la sonde, qui trahirait une adresse du réseau interne ou le mot-clé
+ * attendu. Les préfixes sont ceux de `probeService`.
+ */
+export function publicReason(httpStatus: number | null, error: string | null): string {
+    if (error?.startsWith('Délai dépassé')) return 'Délai de réponse dépassé';
+    if (error?.startsWith('Mot-clé')) return 'Contenu inattendu';
+    if (httpStatus !== null) return `Réponse HTTP ${httpStatus}`;
+    return 'Connexion impossible';
 }

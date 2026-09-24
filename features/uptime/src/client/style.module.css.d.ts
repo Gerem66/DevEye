@@ -66,10 +66,14 @@ declare const styles: {
     readonly legendItem: string;
     readonly legendSwatch: string;
     readonly list: string;
+    readonly pageLink: string;
+    readonly pageService: string;
+    readonly pageServices: string;
     readonly pane: string;
     readonly paneBody: string;
     readonly paneDim: string;
     readonly paneSpinner: string;
+    readonly planNotice: string;
     readonly popupActions: string;
     readonly rangeActive: string;
     readonly rangeBtn: string;

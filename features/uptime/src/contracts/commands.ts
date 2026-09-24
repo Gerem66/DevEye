@@ -4,6 +4,9 @@ import {
     UPTIME_INTERVAL_MIN,
     UPTIME_KEYWORD_MAX_LENGTH,
     UPTIME_NAME_MAX_LENGTH,
+    UPTIME_PAGE_DESCRIPTION_MAX_LENGTH,
+    UPTIME_PAGE_SERVICES_MAX,
+    UPTIME_PAGE_TITLE_MAX_LENGTH,
     UPTIME_THRESHOLD_MAX,
     UPTIME_TIMEOUT_MAX,
     UPTIME_TIMEOUT_MIN,
@@ -12,6 +15,9 @@ import {
     uptimeCheckStatsSchema,
     uptimeIncidentSchema,
     uptimeMethodSchema,
+    uptimePageSchema,
+    uptimePageServiceSchema,
+    uptimePageThemeSchema,
     uptimePointSchema,
     uptimeRangeSchema,
     uptimeResolutionSchema,
@@ -169,6 +175,63 @@ export const uptimeIncidents = {
     output: z.object({ incidents: z.array(uptimeIncidentSchema) })
 };
 
+const pageId = z.number().int().positive();
+
+/** Tout ce qui se règle sur une page de statut. */
+const uptimePageDraftSchema = z.object({
+    title: z.string().trim().min(1).max(UPTIME_PAGE_TITLE_MAX_LENGTH),
+    description: z.string().trim().max(UPTIME_PAGE_DESCRIPTION_MAX_LENGTH),
+    /** Dans l'ordre où la page les montre. */
+    services: z
+        .array(uptimePageServiceSchema)
+        .min(1)
+        .max(UPTIME_PAGE_SERVICES_MAX)
+        .refine((list) => new Set(list.map((s) => s.id)).size === list.length, {
+            message: 'Un service ne figure qu’une fois sur une page.'
+        }),
+    /** Un domaine vérifié de l'espace, qui sert la page à sa racine ; `null` : l'adresse de DevEye seule. */
+    domainId: z.number().int().positive().nullable(),
+    theme: uptimePageThemeSchema,
+    showErrors: z.boolean(),
+    showLatency: z.boolean(),
+    enabled: z.boolean()
+});
+export type UptimePageDraft = z.infer<typeof uptimePageDraftSchema>;
+
+/**
+ * Les pages de statut de l'espace. `limit` est ce que l'offre du propriétaire
+ * permet (`null` : sans limite), pour que l'écran dise d'avance qu'il n'en
+ * permet aucune.
+ */
+export const uptimePageList = {
+    command: 'uptime.pageList' as const,
+    input: z.object({}),
+    output: z.object({
+        pages: z.array(uptimePageSchema),
+        limit: z.number().int().nonnegative().nullable()
+    })
+};
+
+export const uptimePageAdd = {
+    command: 'uptime.pageAdd' as const,
+    input: z.object({ page: uptimePageDraftSchema }),
+    output: z.object({ page: uptimePageSchema })
+};
+
+/** Remplace le réglage entier de la page ; son lien ne change pas. */
+export const uptimePageUpdate = {
+    command: 'uptime.pageUpdate' as const,
+    input: z.object({ id: pageId, page: uptimePageDraftSchema }),
+    output: z.object({ page: uptimePageSchema })
+};
+
+/** Le lien cesse aussitôt de répondre, et les services, eux, ne bougent pas. */
+export const uptimePageRemove = {
+    command: 'uptime.pageRemove' as const,
+    input: z.object({ id: pageId }),
+    output: z.object({ id: pageId })
+};
+
 export const uptimeCommands = [
     uptimeList,
     uptimeCount,
@@ -181,5 +244,9 @@ export const uptimeCommands = [
     uptimeHistory,
     uptimeChecks,
     uptimeCheckStats,
-    uptimeIncidents
+    uptimeIncidents,
+    uptimePageList,
+    uptimePageAdd,
+    uptimePageUpdate,
+    uptimePageRemove
 ] as const;

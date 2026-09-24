@@ -1,7 +1,8 @@
 import { StatusBadge, useLiveOutline } from 'deveye-sdk-client';
 import type { UptimeService } from '../contracts/domain';
 
-import { formatAgo, formatDuration, formatMs } from './format';
+import { formatDuration, formatMs } from '../contracts/format';
+import { formatAgo } from './format';
 import Ratios from './Ratios';
 import StatusBars from './StatusBars';
 import { useServiceHistory } from './useServiceHistory';

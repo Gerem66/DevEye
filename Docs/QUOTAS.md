@@ -51,7 +51,8 @@ lui qui s'applique.
 
 `domains.hosts` compte les noms des fonctionnalités dont les domaines servent
 des pages (`manifest.domains.web`), tous espaces du propriétaire confondus : un
-même nom déclaré pour Rendez-vous et pour Facturation compte pour un. Un tel nom
+même nom déclaré pour Rendez-vous, Facturation ou les pages de statut d'Uptime
+compte pour un. Un tel nom
 coûte un certificat sur le compte ACME de tout le serveur, et donne à une page
 servie ici l'adresse de son choix. Les domaines de courrier ne s'y comptent pas.
 L'onglet Domaines dit la limite avant le refus (`domain.list` rend `quota`).

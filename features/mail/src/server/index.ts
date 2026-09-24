@@ -8,6 +8,7 @@ import { createRepo, type MailRepo } from './repo';
 import { mailRoutes } from './routes';
 import { MailSync } from './service';
 import { createMailTransport } from './transport';
+import { MAIL_ENV } from './env';
 
 /**
  * L'entrée serveur du module : la relève de fond des boîtes ouvertes
@@ -24,6 +25,7 @@ import { createMailTransport } from './transport';
  * `src/server/migrations/` avec le préfixe `ft_mail_`.
  */
 export const serverEntry: FeatureServer<MailRepo> = {
+    env: MAIL_ENV,
     createRepo,
     features: mailHandlers,
     createService(deps) {

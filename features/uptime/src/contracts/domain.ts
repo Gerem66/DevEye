@@ -154,6 +154,48 @@ export const uptimeIncidentSchema = z.object({
 });
 export type UptimeIncident = z.infer<typeof uptimeIncidentSchema>;
 
+export const UPTIME_PAGE_TITLE_MAX_LENGTH = 80;
+export const UPTIME_PAGE_DESCRIPTION_MAX_LENGTH = 500;
+/** Au-delà, une page de statut cesse de se lire d'un coup d'œil. */
+export const UPTIME_PAGE_SERVICES_MAX = 30;
+/** Les jours que couvrent les barres d'une page de statut. */
+export const UPTIME_PAGE_DAYS = 90;
+
+/** `auto` suit le thème du visiteur. */
+export const uptimePageThemeSchema = z.enum(['auto', 'light', 'dark']);
+export type UptimePageTheme = z.infer<typeof uptimePageThemeSchema>;
+
+/** Un service sur une page, et le nom sous lequel le public le voit. */
+export const uptimePageServiceSchema = z.object({
+    id: z.number().int().positive(),
+    /** `null` : le nom du service. */
+    label: z.string().trim().min(1).max(UPTIME_NAME_MAX_LENGTH).nullable()
+});
+export type UptimePageService = z.infer<typeof uptimePageServiceSchema>;
+
+/**
+ * Une page de statut publique : quelques services de l'espace, lisibles sans
+ * compte, sous l'adresse de DevEye ou à la racine d'un domaine de l'espace.
+ */
+export const uptimePageSchema = z.object({
+    id: z.number().int().positive(),
+    title: z.string(),
+    description: z.string(),
+    /** L'adresse à partager : la racine du domaine choisi s'il est vérifié, sinon celle de DevEye. */
+    url: z.string(),
+    domainId: z.number().int().positive().nullable(),
+    theme: uptimePageThemeSchema,
+    /** Montrer la nature d'une panne (code HTTP, délai…), jamais son message brut. */
+    showErrors: z.boolean(),
+    /** Montrer le temps de réponse des dernières 24 h. */
+    showLatency: z.boolean(),
+    /** Une page désactivée répond « introuvable » : son lien ne dit plus rien. */
+    enabled: z.boolean(),
+    services: z.array(uptimePageServiceSchema),
+    created: z.number().int().nonnegative()
+});
+export type UptimePage = z.infer<typeof uptimePageSchema>;
+
 /** Database row shapes (server-only). Mirror the columns exactly. */
 export interface UptimeServiceRow {
     id: number;
@@ -210,4 +252,26 @@ export interface UptimeIncidentRow {
     /** Encrypted error string (open tier). */
     error: string | null;
     notified: number;
+}
+
+export interface UptimePageRow {
+    id: number;
+    workspace_id: number;
+    public_ref: string;
+    /** Encrypted `{ title, description }` (open tier). */
+    content: string;
+    domain_id: number | null;
+    theme: UptimePageTheme;
+    show_errors: number;
+    show_latency: number;
+    enabled: number;
+    created: number;
+}
+
+export interface UptimePageServiceRow {
+    page_id: number;
+    service_id: number;
+    sort_order: number;
+    /** Encrypted public name (open tier), or null for the service's own. */
+    label: string | null;
 }

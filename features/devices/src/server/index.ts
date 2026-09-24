@@ -4,6 +4,7 @@ import { devicesHandlers } from './handlers';
 import { devicesMove } from './move';
 import { createRepo, type DevicesRepo } from './repo';
 import { RetentionSweep } from './service';
+import { DEVICES_ENV } from './env';
 
 /**
  * L'entrée serveur du module : le balayage horaire de rétention
@@ -16,6 +17,7 @@ import { RetentionSweep } from './service';
  * inaugurera `src/server/migrations/` avec le préfixe `ft_devices_`.
  */
 export const serverEntry: FeatureServer<DevicesRepo> = {
+    env: DEVICES_ENV,
     createRepo,
     features: devicesHandlers,
     createService(deps) {

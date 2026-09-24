@@ -33,6 +33,7 @@ export type ResourceKey =
     | 'mail.messageList'
     | 'uptime.count'
     | 'uptime.list'
+    | 'uptime.pageList'
     | 'devices.list'
     | 'sentinel.count'
     | 'sentinel.overview'

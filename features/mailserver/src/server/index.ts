@@ -8,6 +8,7 @@ import { createDomainHooks } from './domains';
 import { mailserverHandlers } from './handlers';
 import { createRepo, type MailserverRepo } from './repo';
 import { createMailService } from './service';
+import { MAILSERVER_ENV } from './env';
 
 /**
  * Pas d'entrée `move` : une adresse vit sur un domaine de son espace, qui ne la
@@ -15,6 +16,7 @@ import { createMailService } from './service';
  * déplacement.
  */
 export const serverEntry: FeatureServer<MailserverRepo> = {
+    env: MAILSERVER_ENV,
     createRepo,
     features: mailserverHandlers,
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),

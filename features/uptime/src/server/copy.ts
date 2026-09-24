@@ -10,7 +10,8 @@ import type { UptimeRepo } from './repo';
  * doit y figurer (`sealed`), sinon un déplacement la laisse sous l'ancienne clé,
  * où elle devient illisible. Rien ne peut le détecter, un blob chiffré est
  * indistinguable d'un autre. `uptime_daily` n'y est pas : elle n'agrège que des
- * nombres.
+ * nombres. `ft_uptime_page_services.label` non plus : il appartient à la page,
+ * qui reste dans son espace, et le déplacement retire le service de ses pages.
  */
 export const uptimeTree: ItemTree = [
     {

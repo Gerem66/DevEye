@@ -18,7 +18,8 @@ features (`features/uptime/`, voir [Docs/FEATURE_SDK.md](../../Docs/FEATURE_SDK.
   ex `Services/UptimeMonitor.ts`), `notice.ts` (la mise en page Discord, ex
   `Services/notices/uptime.ts`), `index.ts` (l'entrée : `createService`, le
   singleton posé pour les handlers, l'entrée `items` du partage, le provider
-  `UPTIME_ITEMS_PROVIDER`) ;
+  `UPTIME_ITEMS_PROVIDER`), `pages.ts`, `repoPages.ts`, `domains.ts` et
+  `statusPage/` (les pages de statut, voir plus bas) ;
 - `src/client/` : la vue (`Uptime.tsx`), la carte, le widget de topbar
   (`TopbarWidget.tsx`, rendu sans prop dans le cadre de l'hôte), le magasin du
   compte (`store.ts`, ex `stores/uptime.ts`), le panneau Général d'un service
@@ -26,7 +27,8 @@ features (`features/uptime/`, voir [Docs/FEATURE_SDK.md](../../Docs/FEATURE_SDK.
   dialogue d'ajout (`ServiceDialog.tsx`) et le contrat client offert à Projets
   (`provider.tsx`, `UPTIME_CLIENT_PROVIDER`) ;
 - `deveye-feature.json` : l'allowlist des cinq tables historiques, jamais
-  déplacées.
+  déplacées ; les tables propres au module (les pages de statut) portent le
+  préfixe `ft_uptime_` et leurs migrations sont dans `src/server/migrations/`.
 
 C'est la première native à éléments partagés migrée : le manifest dit
 `shareTier: 'open'` (étalé du descripteur), et le module tient l'engagement
@@ -40,8 +42,9 @@ par `ctx.items.restrictions()` / `ctx.items.assert()` (les restrictions par
 Chaque service est une URL et une cadence. Un ordonnanceur unique
 (`features/uptime/src/server/service.ts`, le service de fond du module) se
 réveille toutes les `UPTIME_TICK_SECONDS`, réclame les services dont la
-prochaine sonde est due et les exécute `UPTIME_CONCURRENCY` à la fois (deux
-variables d'environnement lues par le module lui-même, pas par `Utils/Env`).
+prochaine sonde est due et les exécute `UPTIME_CONCURRENCY` à la fois (des
+variables lues par le module lui-même dans `src/server/env.ts`, pas par
+`Utils/Env`, et nommées au démarrage si elles restent à leur défaut).
 Il tourne **sans session ni mot de passe** : voir
 la section « Uptime » de [Docs/SECURITY_MODEL.md](../../Docs/SECURITY_MODEL.md) pour ce qui est
 chiffré et ce qui reste en clair.
@@ -241,11 +244,49 @@ L'implémentation maison garde 100 % de son état dans des refs du composant,
 jamais dans la machine à états DnD du navigateur, et gagne le support tactile
 au passage. Une pression Echap pendant un drag l'annule aussi, par sécurité.
 
+## Pages de statut
+
+Une page publique, lisible sans compte, qui montre quelques services de
+l'espace : l'état de chacun, 90 barres journalières, sa disponibilité sur 90
+jours, les pannes en cours et celles du dernier mois. Elle se règle dans
+l'onglet « Pages de statut » des réglages de la feature (`StatusPagesPanel`,
+`StatusPageDialog`), et vit dans `ft_uptime_pages` et
+`ft_uptime_page_services` (migration `001`).
+
+- **Ce qui ne sort jamais.** L'adresse sondée et le mot-clé attendu. Le nom
+  d'un service peut être remplacé par un nom public. La nature d'une panne ne
+  se montre que si la page le demande, et seulement en catégorie
+  (`publicReason` : réponse HTTP, délai dépassé, contenu inattendu, connexion
+  impossible), jamais le message de la sonde, qui trahirait le réseau interne.
+- **Les services de son espace seulement.** Un service projeté d'ailleurs
+  n'est pas le sien à exposer ; déplacé dans un autre espace, un service
+  quitte les pages de celui qu'il quitte (`move.ts`).
+- **Les barres.** Un jour est rouge dès qu'une panne l'a touché, jaune si des
+  sondes ont échoué sans franchir le seuil de panne, gris sans mesure : le
+  public voit les pannes, pas chaque sonde manquée que la bande de l'écran
+  montre.
+- **L'adresse.** `/statut/<lien>` sous l'origine publique, un lien tiré au
+  hasard. Sous un domaine client vérifié (onglet Domaines, `domains.web`), la
+  page répond à la racine du nom, par `domainRoot` : un domaine sert une page.
+  Une page ne se montre que sous l'adresse de DevEye ou sous un domaine de son
+  propre espace.
+- **Le coût.** Une page se calcule au plus une fois toutes les trente secondes,
+  un calcul à la fois (`statusPage/routes.ts`) : une panne attire tout le monde
+  au même moment, et c'est alors que la base doit rester libre pour les sondes.
+  Le nombre de pages suit l'offre du propriétaire (`uptime.pages`).
+- **Le document.** Du HTML rendu au serveur, sans ressource distante, avec sa
+  propre politique de contenu et ses propres couleurs (`statusPage/style.ts`),
+  intégrable en iframe. Un petit script servi à part (`/statut/page.js`) relit
+  la page toutes les minutes et remet les heures dans le fuseau du visiteur ;
+  sans lui, la page reste lisible en UTC. « DevEye » au pied de la page mène à
+  `UPTIME_SITE_URL` (`https://deveye.fr` par défaut, vide : pas de lien).
+
 ## Commandes
 
 `uptime.list` · `uptime.count` · `uptime.add` · `uptime.update` ·
 `uptime.setEnabled` · `uptime.remove` · `uptime.reorder` · `uptime.checkNow` ·
-`uptime.history` · `uptime.checks` · `uptime.checkStats` · `uptime.incidents`
+`uptime.history` · `uptime.checks` · `uptime.checkStats` · `uptime.incidents` ·
+`uptime.pageList` · `uptime.pageAdd` · `uptime.pageUpdate` · `uptime.pageRemove`
 
 Déclarées par le manifest du module (`features/uptime/src/contracts/commands.ts`),
 enregistrées au runtime comme celles de tout module.

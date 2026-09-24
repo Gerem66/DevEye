@@ -18,6 +18,7 @@ import { createTestContext } from '@deveye/types/sdk/testing';
 import { setMonitor } from './_shared';
 import { uptimeHandlers } from './handlers';
 import type { UptimeRepo } from './repo';
+import type { UptimePagesRepo, UptimeStatusRepo } from './repoPages';
 
 /**
  * Ce qui se vérifie ici ne lève nulle part ailleurs : les restrictions par
@@ -169,7 +170,10 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             closeIncident: async () => undefined,
             listIncidents: async () => [],
             pruneByRetention: async () => 0
-        }
+        },
+        // Les pages de statut ont leurs propres tests (`pages.test.ts`).
+        pages: {} as UptimePagesRepo,
+        status: {} as UptimeStatusRepo
     };
 }
 

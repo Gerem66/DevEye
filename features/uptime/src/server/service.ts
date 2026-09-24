@@ -8,6 +8,7 @@ import { formatDuration, formatMoment } from '@/Services/notifications';
 import { safeFetch, UnsafeTargetError } from '@/Services/netFetch';
 
 import { decryptError, decryptService, encryptError, type ServicePayload } from './_shared';
+import { env } from './env';
 import { buildNotice, type UptimeNotice } from './notice';
 import type { UptimeRepo } from './repo';
 
@@ -26,9 +27,6 @@ import type { UptimeRepo } from './repo';
  * workspace's *open* cipher (`deps.cipherFor`); see `Docs/SECURITY_MODEL.md`.
  */
 
-/** Les variables d'environnement de la feature se lisent ici, pas dans `Utils/Env`. */
-const TICK_SECONDS = Number(process.env.UPTIME_TICK_SECONDS) || 10;
-const CONCURRENCY = Number(process.env.UPTIME_CONCURRENCY) || 8;
 /** Élagage des pings bruts, une fois par heure. */
 const PRUNE_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -132,7 +130,7 @@ export class UptimeMonitor {
         private readonly deps: FeatureServiceDeps<UptimeRepo>,
         private readonly probe: ProbeFn = probeService
     ) {
-        this.ticker = deps.createTicker({ intervalMs: TICK_SECONDS * 1000, tick: () => this.tick() });
+        this.ticker = deps.createTicker({ intervalMs: env.UPTIME_TICK_SECONDS * 1000, tick: () => this.tick() });
         this.pruner = deps.createTicker({ intervalMs: PRUNE_INTERVAL_MS, tick: () => this.prune() });
     }
 
@@ -143,7 +141,7 @@ export class UptimeMonitor {
         // services attendre le premier réveil.
         void this.tick();
         this.pruning = this.prune();
-        this.deps.logger.info({ tickSeconds: TICK_SECONDS }, 'Uptime monitor started');
+        this.deps.logger.info({ tickSeconds: env.UPTIME_TICK_SECONDS }, 'Uptime monitor started');
     }
 
     async stop(): Promise<void> {
@@ -165,9 +163,9 @@ export class UptimeMonitor {
 
     private async probeDue(): Promise<void> {
         const now = Math.floor(Date.now() / 1000);
-        const due = await this.deps.repo.services.listDue(now, CONCURRENCY * 4);
-        for (let i = 0; i < due.length; i += CONCURRENCY) {
-            await Promise.all(due.slice(i, i + CONCURRENCY).map((row) => this.runOne(row)));
+        const due = await this.deps.repo.services.listDue(now, env.UPTIME_CONCURRENCY * 4);
+        for (let i = 0; i < due.length; i += env.UPTIME_CONCURRENCY) {
+            await Promise.all(due.slice(i, i + env.UPTIME_CONCURRENCY).map((row) => this.runOne(row)));
         }
     }
 

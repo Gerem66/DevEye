@@ -12,14 +12,20 @@ import type {
     SdkQueryable
 } from '@deveye/types/sdk/server';
 import {
+    DOMAIN_HOST_PATTERN,
     exportItemTree,
     FeatureError,
     importItemTree,
     itemTierOf,
     itemTreeProblem,
+    moduleEnvProblem,
+    normaliseDomainHost,
+    readModuleEnv,
     type ItemTier,
     type ItemTreeRows,
-    type SdkCopyPlan
+    type ModuleEnvSpec,
+    type SdkCopyPlan,
+    type SdkFleetDomains
 } from '@deveye/types/sdk/server';
 // Pour ses types seulement : c'est lui qui déclare `config.rateLimit` sur une route.
 import type {} from '@fastify/rate-limit';
@@ -40,8 +46,8 @@ import type {
 } from '@deveye/types/sdk/server';
 import { logger } from '@/logger';
 import { maintenance, replyMaintenance, type MaintenanceServices } from '@/Services/maintenance';
-import { createSdkContext } from './context';
-import { createDomainsContext, type DomainsHost } from './domains';
+import { createSdkContext, ORIGINS } from './context';
+import { createDomainsContext, sdkFleetDomains, type DomainsHost } from './domains';
 import { createQuota } from './quota';
 import { createServiceDeps, type ModuleServiceHost } from './service';
 
@@ -104,6 +110,9 @@ export function registerModules(installed: readonly InstalledFeatureModule[]): v
         // table listée avant celle qu'elle référence s'écrirait sans son id.
         const treeProblem = mod.server.items?.copy && itemTreeProblem(mod.server.items.copy.tree);
         if (treeProblem) throw new Error(`Module « ${manifest.id} » : arbre de copie invalide (${treeProblem})`);
+        const envProblem = mod.server.env && moduleEnvProblem(mod.server.env);
+        if (envProblem)
+            throw new Error(`Module « ${manifest.id} » : variables d'environnement mal déclarées (${envProblem})`);
         // Les deux moitiés vont ensemble : l'onglet sans la sonde ne vérifierait
         // rien, la sonde sans l'onglet ne serait jamais appelée.
         if (Boolean(manifest.domains) !== Boolean(mod.server.domains)) {
@@ -140,6 +149,42 @@ export function registerModules(installed: readonly InstalledFeatureModule[]): v
         };
         MODULES.push(registered);
         BY_ID.set(manifest.id, registered);
+    }
+}
+
+/**
+ * Ce qu'un module laisse à ses défauts, en une ligne : `null` quand tout est
+ * posé. Une valeur de secret n'est jamais écrite, et un secret n'a pas de
+ * défaut à montrer.
+ */
+export function unsetEnvReport(
+    spec: ModuleEnvSpec,
+    source: Readonly<Record<string, string | undefined>>
+): string | null {
+    const { defaulted } = readModuleEnv(spec, source);
+    if (defaulted.length === 0) return null;
+    return defaulted
+        .map((d) => {
+            const value = d.value === '' ? '(vide)' : String(d.value);
+            return `${d.name}=${value} (${d.reason === 'unset' ? 'non définie' : 'valeur invalide ignorée'})`;
+        })
+        .join(', ');
+}
+
+/**
+ * Un avertissement par module dont une variable retombe sur son défaut : un
+ * défaut qui devine le monde de l'exploitant (l'adresse d'un site, un dossier)
+ * vise parfois à côté, et cela doit se lire au démarrage plutôt que se
+ * découvrir en production.
+ */
+export function warnUnsetModuleEnv(source: Readonly<Record<string, string | undefined>> = process.env): void {
+    for (const mod of MODULES) {
+        const report = mod.server.env && unsetEnvReport(mod.server.env, source);
+        if (!report) continue;
+        logger.warn(
+            { module: mod.manifest.id },
+            `Module « ${mod.manifest.id} » : variables d'environnement non définies, défauts appliqués : ${report}`
+        );
     }
 }
 
@@ -368,6 +413,8 @@ const SERVICES: {
     logger: ModuleServiceHost['logger'];
     /** Tenu à l'arrêt par une maintenance `full` : ses hooks agent sont ignorés. */
     halted: boolean;
+    /** Ses domaines, pour la racine d'un domaine client ; `null` sans `manifest.domains`. */
+    domains: SdkFleetDomains | null;
 }[] = [];
 
 /**
@@ -394,7 +441,13 @@ export function createModuleServices(host: ModuleServiceHost): FeatureService[] 
             if (other) throw new Error(`Provider « ${key} » offert par « ${other} » et « ${m.manifest.id} »`);
             providers.set(key, m.manifest.id);
         }
-        SERVICES.push({ manifest: m.manifest, service, logger: host.logger, halted: false });
+        SERVICES.push({
+            manifest: m.manifest,
+            service,
+            logger: host.logger,
+            halted: false,
+            domains: m.manifest.domains ? sdkFleetDomains(host.db, m.manifest) : null
+        });
         return [service];
     });
 }
@@ -540,9 +593,15 @@ export function isModulePublicPath(url: string): boolean {
  */
 export async function modulePublicRoutes(app: FastifyInstance, listener: 'app' | 'public'): Promise<void> {
     for (const s of SERVICES) {
+        const exposed = (s.manifest.nativeCapabilities ?? []).includes('routes.public');
+        if (s.service.domainRoot && !(exposed && s.manifest.domains?.web)) {
+            throw new Error(
+                `Module « ${s.manifest.id} » : domainRoot exige la capacité 'routes.public' et domains.web`
+            );
+        }
         const routes = s.service.publicRoutes;
         if (!routes) continue;
-        if (!(s.manifest.nativeCapabilities ?? []).includes('routes.public')) {
+        if (!exposed) {
             throw new Error(`Module « ${s.manifest.id} » : publicRoutes sans la capacité 'routes.public'`);
         }
         const mount = (
@@ -551,6 +610,9 @@ export async function modulePublicRoutes(app: FastifyInstance, listener: 'app' |
             opts: SdkPublicRouteOptions,
             handler: SdkPublicHandler
         ) => {
+            if (path === '/') {
+                throw new Error(`Module « ${s.manifest.id} » : la racine appartient à l'hôte, voir domainRoot`);
+            }
             // Une route qui n'a de sens que depuis l'origine de l'app (ticket,
             // retour OAuth) ne s'ouvre pas sur la surface publique.
             if ((opts.exposure ?? 'everywhere') === 'app' && listener === 'public') return;
@@ -618,6 +680,43 @@ export async function modulePublicRoutes(app: FastifyInstance, listener: 'app' |
             }
         });
     }
+
+    // La racine appartient à l'hôte : servie par le module qui a vérifié ce
+    // domaine client, sinon le repli de l'écouteur (le client sur l'app, 404
+    // sur la surface publique).
+    app.get('/', { logLevel: 'silent', config: { rateLimit: DOMAIN_ROOT_RATE_LIMIT } }, async (req, reply) => {
+        if (await serveDomainRoot(req, reply)) return reply;
+        reply.callNotFound();
+        return reply;
+    });
+}
+
+/** Une page de statut se rafraîchit en bloc pendant une panne, souvent depuis un même bureau. */
+const DOMAIN_ROOT_RATE_LIMIT = { max: 300, timeWindow: '1 minute' };
+
+/**
+ * La racine d'un domaine client : le premier module installé qui a VÉRIFIÉ ce
+ * nom et qui sert `domainRoot`. Vérifié et pas seulement pointé : le proxy
+ * reçoit aussi les noms qui pointent ici avant leur preuve. Les hôtes de
+ * DevEye ne sont jamais des domaines clients.
+ */
+async function serveDomainRoot(req: FastifyRequest, reply: FastifyReply): Promise<boolean> {
+    const host = normaliseDomainHost(req.host ?? '');
+    if (!DOMAIN_HOST_PATTERN.test(host)) return false;
+    if (host === new URL(ORIGINS.app).hostname || host === new URL(ORIGINS.public).hostname) return false;
+    for (const s of SERVICES) {
+        const root = s.service.domainRoot;
+        if (!root || !s.domains) continue;
+        const domain = await s.domains.findByHost(host);
+        if (!domain?.verified) continue;
+        if (maintenance.refusesPublic(s.manifest.id, false)) {
+            await replyMaintenance(req, reply);
+            return true;
+        }
+        await root.call(s.service, req, reply, domain);
+        return true;
+    }
+    return false;
 }
 
 /**

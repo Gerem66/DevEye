@@ -207,6 +207,8 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // c'est sa réponse qui porte la politique sous laquelle la page vivra.
     app.addHook('onSend', async (req, reply) => {
         if (req.method !== 'GET' || req.url.startsWith('/api') || req.url.startsWith('/ws')) return;
+        // Une page publique de module pose sa propre politique.
+        if (isModulePublicPath(req.url)) return;
         const remoteOrigins = openFederationOrigins(req.cookies[FEDERATION_COOKIE]);
         if (remoteOrigins.length > 0) reply.header('content-security-policy', documentCsp(remoteOrigins));
     });
@@ -376,7 +378,9 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         await app.register(fastifyStatic, {
             root: clientDir,
             wildcard: false,
-            index: ['index.html'],
+            // La racine est une route (`modulePublicRoutes`), qui retombe sur le
+            // repli ci-dessous hors d'un domaine client.
+            index: false,
             allowedPath: (pathName) => !pathName.endsWith('.map')
         });
 
@@ -385,7 +389,8 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         // source du build ne sortent jamais : elles portent le code commenté.
         app.setNotFoundHandler((req, reply) => {
             if (req.url.endsWith('.map')) return reply.code(404).send({ error: 'not_found' });
-            if (req.method === 'GET' && !req.url.startsWith('/api') && !req.url.startsWith('/ws')) {
+            const page = req.method === 'GET' || req.method === 'HEAD';
+            if (page && !req.url.startsWith('/api') && !req.url.startsWith('/ws')) {
                 return reply.sendFile('index.html');
             }
             return reply.code(404).send({ error: 'not_found' });

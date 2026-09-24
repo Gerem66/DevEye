@@ -70,9 +70,12 @@ describe('uptime : changement d’espace', () => {
             writes.slice(0, 3).map((w) => w.params[1]),
             ['B:{"name":"api"}', 'B:timeout', 'B:502']
         );
-        // Le domicile change en dernier, une fois tout le reste converti.
+        // Le domicile change une fois tout le reste converti.
         assert.match(writes[3]!.sql, /UPDATE uptime_services SET workspace_id/);
         assert.deepEqual(writes[3]!.params, [2, 7, 1]);
+        // Puis le service quitte les pages de statut de l'espace qu'il quitte.
+        assert.match(writes[4]!.sql, /DELETE FROM ft_uptime_page_services WHERE service_id/);
+        assert.deepEqual(writes[4]!.params, [7]);
     });
 
     it('une cellule illisible annule tout, et rien n’a été écrit', async () => {
@@ -113,9 +116,9 @@ describe('uptime : changement d’espace', () => {
         );
     });
 
-    it('annonce le nombre de cellules à convertir, et aucun refus', async () => {
-        // Le compte vient d'un `SELECT COUNT(*)` par cellule : le faux dépôt
-        // rend une ligne à chaque fois, soit une par colonne déclarée.
+    it('annonce le nombre de cellules à convertir, le retrait de ses pages, et aucun refus', async () => {
+        // Le compte vient d'un `SELECT COUNT(*)` par cellule, et d'un pour ses
+        // pages de statut : le faux dépôt rend deux lignes à chaque fois.
         const { q } = fakeQueryable({});
         const counting: SdkQueryable = { ...q, query: async <T extends object>() => [{ n: 2 }] as T[] };
         const plan = await uptimeMove.plan({
@@ -125,6 +128,9 @@ describe('uptime : changement d’espace', () => {
             fromWorkspaceId: 1,
             toWorkspaceId: 2
         });
-        assert.deepEqual(plan, { blockers: [], drops: [], rows: 8 });
+        assert.equal(plan.rows, 8);
+        assert.deepEqual(plan.blockers, []);
+        assert.equal(plan.drops.length, 1);
+        assert.match(plan.drops[0]!, /pages de statut/);
     });
 });

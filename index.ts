@@ -11,7 +11,7 @@ import { runMigrations } from '@/db/migrate';
 import { assertSealFormat } from '@/Services/sealFormat';
 import { createDbPool, testConnection } from '@/db/pool';
 import { seedDevAccount } from '@/db/seedDev';
-import { moduleMigrationDirs } from '@/features/_sdk/register';
+import { moduleMigrationDirs, warnUnsetModuleEnv } from '@/features/_sdk/register';
 // L'import du registre déclenche l'enregistrement des modules installés :
 // leurs migrations et services deviennent visibles ci-dessous.
 import '@/features/registry';
@@ -26,6 +26,8 @@ import '@/features/registry';
 const SHUTDOWN_TIMEOUT_MS = 3000;
 
 async function main() {
+    warnUnsetModuleEnv();
+
     const pool = createDbPool();
     const dbReady = await testConnection(pool);
     if (!dbReady) {

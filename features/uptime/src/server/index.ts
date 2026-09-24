@@ -1,12 +1,19 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { UPTIME_ITEMS_PROVIDER, type UptimeItemsProvider } from '@deveye/types/sdk';
 import type { FeatureServer, SdkCipher } from '@deveye/types/sdk/server';
 
 import { uptimeHandlers } from './handlers';
-import { setMonitor } from './_shared';
+import { setMonitor, setStatusPages } from './_shared';
 import { uptimeCopy } from './copy';
+import { createDomainHooks } from './domains';
+import { UPTIME_ENV } from './env';
 import { uptimeMove } from './move';
+import { pageHandlers } from './pages';
 import { createRepo, type UptimeRepo } from './repo';
 import { UptimeMonitor } from './service';
+import { createStatusPages } from './statusPage/routes';
 
 /**
  * Le nom d'un service, déchiffré par le codec ouvert de son espace. Un service
@@ -38,14 +45,18 @@ async function labelOf(
  * service est autonome : il porte son URL, ne dépend d'aucune source d'espace
  * et n'a pas de nom unique par espace à heurter.
  *
- * Pas de `migrationsDir` : les tables d'Uptime sont dans le socle ; une nouvelle
- * table irait dans `src/server/migrations/` avec le préfixe `ft_uptime_`.
+ * Les tables des services sont dans le socle ; celles du module (les pages de
+ * statut) ont le préfixe `ft_uptime_` et leurs migrations ici.
  */
 export const serverEntry: FeatureServer<UptimeRepo> = {
+    env: UPTIME_ENV,
     createRepo,
-    features: uptimeHandlers,
+    features: [...uptimeHandlers, ...pageHandlers],
+    migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
+    domains: createDomainHooks(),
     createService(deps) {
         const monitor = new UptimeMonitor(deps);
+        const pages = createStatusPages(deps);
         // Projets ne stocke que des identifiants : `exists` refuse de relier un
         // identifiant invisible d'ici (sans trahir son existence), un service
         // projeté se reliant comme un service d'ici ; `labelOf` donne un nom sous
@@ -61,13 +72,17 @@ export const serverEntry: FeatureServer<UptimeRepo> = {
         return {
             start() {
                 setMonitor(monitor);
+                setStatusPages(pages);
                 monitor.start();
             },
             async stop() {
                 await monitor.stop();
                 setMonitor(null);
+                setStatusPages(null);
             },
-            providers: { [UPTIME_ITEMS_PROVIDER]: items }
+            providers: { [UPTIME_ITEMS_PROVIDER]: items },
+            publicRoutes: (app) => pages.routes(app),
+            domainRoot: (req, reply, domain) => pages.root(req, reply, domain)
         };
     },
     items: {

@@ -7,6 +7,7 @@ import { createTestServiceDeps } from '@deveye/types/sdk/testing';
 
 import { serverEntry } from './index';
 import type { UptimeRepo } from './repo';
+import type { UptimePagesRepo, UptimeStatusRepo } from './repoPages';
 import { UptimeMonitor, type ProbeOutcome } from './service';
 
 /**
@@ -143,7 +144,10 @@ function fakeRepo(over: Partial<UptimeServiceRow> = {}): FakeRepo {
             },
             listIncidents: unused,
             pruneByRetention: async () => 0
-        }
+        },
+        // Les pages de statut ont leurs propres tests (`pages.test.ts`).
+        pages: {} as UptimePagesRepo,
+        status: {} as UptimeStatusRepo
     };
 }
 

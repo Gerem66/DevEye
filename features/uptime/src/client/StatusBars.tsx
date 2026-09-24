@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 
-import { formatBucket, formatMs, formatRatio } from './format';
+import { formatMs, formatRatio } from '../contracts/format';
+import { formatBucket } from './format';
 import styles from './style.module.css';
 
 import type { UptimePoint, UptimeResolution } from '../contracts/domain';

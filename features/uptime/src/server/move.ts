@@ -22,7 +22,15 @@ export const uptimeMove: FeatureItemsMove<UptimeRepo> = {
     async plan({ q, itemId }) {
         // Aucun refus à déclarer : un service est autonome. Ni source d'espace
         // (il porte son URL), ni nom unique par espace, ni palier gardé.
-        return { blockers: [], drops: [], rows: await countMovableCells(q, CELLS, Number(itemId)) };
+        const pages = await q.query<{ n: number }>(
+            'SELECT COUNT(*) AS n FROM ft_uptime_page_services WHERE service_id = ?',
+            [Number(itemId)]
+        );
+        const drops =
+            Number(pages[0]?.n ?? 0) > 0
+                ? ['Sa place sur les pages de statut de cet espace : il en est retiré, elles restent ici']
+                : [];
+        return { blockers: [], drops, rows: await countMovableCells(q, CELLS, Number(itemId)) };
     },
 
     async apply({ q, itemId, fromWorkspaceId, toWorkspaceId, ciphers }) {
@@ -38,5 +46,8 @@ export const uptimeMove: FeatureItemsMove<UptimeRepo> = {
         if (res.affectedRows !== 1) {
             throw new FeatureError('not_found', 'Ce service n’est plus dans cet espace : déplacement annulé.');
         }
+        // Une page ne montre que les services de son espace : celui qui part
+        // quitte les pages de l'espace qu'il quitte.
+        await q.execute('DELETE FROM ft_uptime_page_services WHERE service_id = ?', [serviceId]);
     }
 };

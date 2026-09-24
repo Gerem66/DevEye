@@ -9,7 +9,7 @@ import {
     type SentinelRuleId
 } from '../contracts/domain';
 
-import { FINDING_RETENTION_DAYS, TICK_SECONDS } from './env';
+import { env } from './env';
 import { buildNotice } from './notice';
 import {
     allowKey,
@@ -164,12 +164,12 @@ export class SentinelEngine {
     private readonly lastEval = new Map<string, EvalMarks>();
 
     constructor(private readonly deps: FeatureServiceDeps<SentinelRepo>) {
-        this.ticker = deps.createTicker({ intervalMs: TICK_SECONDS * 1000, tick: () => this.tick() });
+        this.ticker = deps.createTicker({ intervalMs: env.SENTINEL_TICK_SECONDS * 1000, tick: () => this.tick() });
     }
 
     start(): void {
         this.ticker.start();
-        this.deps.logger.info({ tickSeconds: TICK_SECONDS }, 'Security monitor started');
+        this.deps.logger.info({ tickSeconds: env.SENTINEL_TICK_SECONDS }, 'Security monitor started');
     }
 
     async stop(): Promise<void> {
@@ -657,7 +657,7 @@ export class SentinelEngine {
             if (opened.length > 0) await this.announce(device, opened);
         }
 
-        const pruned = await this.deps.repo.findings.pruneResolved(FINDING_RETENTION_DAYS);
+        const pruned = await this.deps.repo.findings.pruneResolved(env.SENTINEL_FINDING_RETENTION_DAYS);
         if (pruned > 0) this.deps.logger.info({ pruned }, 'Sentinel: resolved findings pruned');
     }
 

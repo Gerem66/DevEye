@@ -7,6 +7,7 @@ import { backupHandlers } from './handlers';
 import { createRepo, type BackupRepo } from './repo';
 import { BackupEngine } from './service';
 import { setEngine } from './_shared';
+import { BACKUP_ENV } from './env';
 
 /**
  * `items` : ce que le partage et les routes de notification savent des
@@ -15,6 +16,7 @@ import { setEngine } from './_shared';
  * la séquence du module ne porte que ce qui les corrige.
  */
 export const serverEntry: FeatureServer<BackupRepo> = {
+    env: BACKUP_ENV,
     createRepo,
     features: backupHandlers,
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),

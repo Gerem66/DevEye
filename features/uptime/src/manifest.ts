@@ -20,18 +20,39 @@ export const manifest = {
      * Ravivées par le sujet `uptime` : après une écriture, et à chaque transition
      * d'état signalée par le service de fond (jamais à chaque sonde).
      */
-    resources: ['uptime.count', 'uptime.list'],
-    /** La seule native appelée : les canaux d'alerte de l'espace, par service. */
-    nativeCapabilities: ['notify'],
-    quotas: [{ key: 'monitors', label: 'services surveillés' }],
+    resources: ['uptime.count', 'uptime.list', 'uptime.pageList'],
+    /** Retoucher une page de statut ne relit ni la liste des services ni leur compte. */
+    topics: [{ id: 'uptimePages', keys: ['uptime.pageList'] }],
+    /** Un domaine vérifié ou retiré change l'adresse que la page donne à partager. */
+    alsoInvalidatedBy: [{ topic: 'domain', keys: ['uptime.pageList'] }],
+    /**
+     * `notify` : les canaux d'alerte de l'espace, par service. `routes.public` :
+     * les pages de statut, lisibles sans compte.
+     */
+    nativeCapabilities: ['notify', 'routes.public'],
+    quotas: [
+        { key: 'monitors', label: 'services surveillés' },
+        { key: 'pages', label: 'pages de statut' }
+    ],
+    domains: {
+        hint: 'Votre propre adresse pour une page de statut, comme statut.monentreprise.fr : la page y répond directement, à la racine. Sans elle, la page reste sur l’adresse de DevEye, qui fonctionne toujours.',
+        service: 'Faites pointer le domaine vers DevEye avec l’enregistrement ci-dessous.',
+        placeholder: 'statut.monentreprise.fr',
+        removal: 'La page qu’il sert repart sur l’adresse de DevEye, et ce domaine cesse de l’afficher.',
+        web: true
+    },
     topbarWidget: { description: 'Services en ligne sur les services surveillés' },
     links: [{ to: 'mail', what: 'envoie ses alertes par un compte Mail' }],
     /**
      * Un panneau Général à l'échelle d'un service : son identité, ses réglages
      * fins (cadence, délai, seuil, rétention) et sa suppression. Notifications,
      * Partage et Permissions s'ajoutent tout seuls : `notifies` et le
-     * branchement au partage suffisent.
+     * branchement au partage suffisent. À l'échelle de la feature, les pages de
+     * statut et les domaines qui les servent.
      */
-    settings: { item: ['general'] },
+    settings: {
+        feature: [{ id: 'pages', label: 'Pages de statut', icon: 'eye-open' }, 'domains'],
+        item: ['general']
+    },
     commands: uptimeCommands
 } satisfies FeatureManifest;

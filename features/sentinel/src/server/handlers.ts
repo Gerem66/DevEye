@@ -17,7 +17,7 @@ import {
 } from '../contracts/commands';
 import { SENTINEL_RULES, type BaselineEntry } from '../contracts/domain';
 
-import { LEARNING_DAYS } from './env';
+import { env } from './env';
 import { allowSubject } from './repo';
 import { type Ctx, deviceNames, EMPTY_COUNTS, engine, nameOf, posturize, stateOf, toAllow, toFinding } from './_shared';
 
@@ -270,7 +270,7 @@ export const sentinelHandlers = [
             // jours de plus à chaque passage dans les réglages.
             const learningUntil =
                 input.enabled && !wasEnabled
-                    ? Date.now() + (input.learningDays ?? LEARNING_DAYS) * 86400000
+                    ? Date.now() + (input.learningDays ?? env.SENTINEL_LEARNING_DAYS) * 86400000
                     : input.learningDays !== null
                       ? Date.now() + input.learningDays * 86400000
                       : undefined;
@@ -339,7 +339,7 @@ export const sentinelHandlers = [
             // la machine au tour suivant. Les autorisations survivent : ce sont des
             // décisions, pas des observations.
             await ctx.repo.deviceConfig.set(device.id, {
-                learningUntil: Date.now() + LEARNING_DAYS * 86400000
+                learningUntil: Date.now() + env.SENTINEL_LEARNING_DAYS * 86400000
             });
 
             ctx.audit({
