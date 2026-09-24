@@ -3,6 +3,7 @@ import type {
     BackupDestinationStatus,
     BackupRunStatus,
     BackupScheduleKind,
+    BackupSourceCandidate,
     BackupSourceKind
 } from '../contracts/domain';
 
@@ -25,6 +26,25 @@ export const SOURCE_LABELS: Record<BackupSourceKind, string> = {
     cloudsync: 'Partage CloudSync'
 };
 
+/** Les catégories du sélecteur de source, dans l'ordre de leurs clés. */
+export const SOURCE_GROUPS: Record<BackupSourceKind, string> = {
+    deveye: 'DevEye',
+    database: 'Bases de données',
+    cloudsync: 'Partages CloudSync'
+};
+
+export const SOURCE_ICONS: Record<BackupSourceKind, string> = {
+    deveye: 'server',
+    database: 'database',
+    cloudsync: 'folder'
+};
+
+/** Sous le sélecteur : ce que la source contient, ou pourquoi elle ne se choisit pas. */
+export function sourceHint(candidate: BackupSourceCandidate | null): string | null {
+    if (!candidate) return null;
+    return candidate.available ? candidate.detail : candidate.reason;
+}
+
 export const SCHEDULE_LABELS: Record<BackupScheduleKind, string> = {
     manual: 'Manuelle',
     hourly: 'Toutes les heures',
@@ -41,7 +61,7 @@ export const RUN_LABELS: Record<BackupRunStatus, string> = {
 
 export const WEEKDAYS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
 
-/** La clé d'une source, pour qu'un `<select>` porte à la fois le genre et l'id. */
+/** La clé d'une source, pour qu'une option porte à la fois le genre et l'id. */
 export const sourceKey = (kind: BackupSourceKind, id: number | null): string => `${kind}:${id ?? ''}`;
 
 /** « En cours » reste neutre : peindre un travail qui vient de partir le ferait passer pour un incident. */

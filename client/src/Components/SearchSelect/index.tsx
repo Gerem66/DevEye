@@ -1,4 +1,5 @@
 import {
+    Fragment,
     useEffect,
     useId,
     useLayoutEffect,
@@ -23,6 +24,10 @@ export interface SearchSelectOption<T extends string = string> {
     detail?: string;
     /** Ce que la recherche lit en plus du libellé et de la précision. */
     keywords?: readonly string[];
+    /** La catégorie : les options d'un même groupe se suivent sous son intitulé. */
+    group?: string;
+    /** Visible mais impossible à choisir ; `detail` dit pourquoi. */
+    disabled?: boolean;
 }
 
 export interface SearchSelectProps<T extends string> {
@@ -44,6 +49,27 @@ const GAP = 4;
 /** Minuscules et sans accents : « etats » trouve « États-Unis ». */
 const fold = (text: string): string => text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 
+/** Chaque groupe d'un seul tenant, dans l'ordre où il apparaît la première fois. */
+function byGroup<T extends string>(options: readonly SearchSelectOption<T>[]): SearchSelectOption<T>[] {
+    const groups = new Map<string | undefined, SearchSelectOption<T>[]>();
+    for (const option of options) {
+        const members = groups.get(option.group);
+        if (members) members.push(option);
+        else groups.set(option.group, [option]);
+    }
+    return [...groups.values()].flat();
+}
+
+/** La prochaine option choisissable dans le sens `delta`, en bouclant ; -1 s'il n'y en a aucune. */
+function nextEnabled<T extends string>(matches: readonly SearchSelectOption<T>[], from: number, delta: 1 | -1): number {
+    const count = matches.length;
+    for (let step = 1; step <= count; step++) {
+        const index = (((from + delta * step) % count) + count) % count;
+        if (!matches[index].disabled) return index;
+    }
+    return -1;
+}
+
 interface Anchor {
     left: number;
     width: number;
@@ -54,8 +80,9 @@ interface Anchor {
 
 /**
  * Une liste déroulante dans laquelle on cherche. Pour une liste trop longue
- * pour être parcourue des yeux (devises, unités, pays) ; en deçà d'une dizaine
- * de choix, `SelectInput` reste plus simple.
+ * pour être parcourue des yeux (devises, unités, pays) ou rangée en
+ * catégories ; en deçà d'une dizaine de choix sans catégorie, `SelectInput`
+ * reste plus simple.
  *
  * Le panneau passe par un portail vers `<body>`, comme `Dialog` : dans le corps
  * défilant d'un dialogue il serait rogné.
@@ -82,14 +109,25 @@ export function SearchSelect<T extends string>({
 
     const selected = options.find((o) => o.value === value);
     const placed = anchor !== null;
+    const ordered = useMemo(() => byGroup(options), [options]);
     const haystacks = useMemo(
-        () => options.map((o) => fold([o.label, o.detail ?? '', ...(o.keywords ?? [])].join(' '))),
-        [options]
+        () => ordered.map((o) => fold([o.label, o.detail ?? '', o.group ?? '', ...(o.keywords ?? [])].join(' '))),
+        [ordered]
     );
     const matches = useMemo(() => {
         const terms = fold(query).split(/\s+/).filter(Boolean);
-        return options.filter((_, index) => terms.every((term) => haystacks[index].includes(term)));
-    }, [options, haystacks, query]);
+        return ordered.filter((_, index) => terms.every((term) => haystacks[index].includes(term)));
+    }, [ordered, haystacks, query]);
+    // Les résultats par groupe ; `index` reste celui de la liste aplatie, que suivent le clavier et les ids.
+    const sections = useMemo(() => {
+        const out: { group: string | undefined; items: { option: SearchSelectOption<T>; index: number }[] }[] = [];
+        matches.forEach((option, index) => {
+            const last = out[out.length - 1];
+            if (last && last.group === option.group) last.items.push({ option, index });
+            else out.push({ group: option.group, items: [{ option, index }] });
+        });
+        return out;
+    }, [matches]);
 
     const close = (refocus: boolean): void => {
         setOpen(false);
@@ -144,11 +182,11 @@ export function SearchSelect<T extends string>({
         if (open && placed) search.current?.focus();
     }, [open, placed]);
 
-    // À l'ouverture, le choix courant ; à chaque frappe, le premier résultat.
+    // À l'ouverture, le choix courant ; à chaque frappe, le premier résultat choisissable.
     useEffect(() => {
         if (!open) return;
-        const current = query === '' ? matches.findIndex((o) => o.value === value) : 0;
-        setActive(Math.max(0, current));
+        const current = query === '' ? matches.findIndex((o) => o.value === value && !o.disabled) : -1;
+        setActive(current >= 0 ? current : nextEnabled(matches, -1, 1));
     }, [open, query]);
 
     useEffect(() => {
@@ -159,14 +197,14 @@ export function SearchSelect<T extends string>({
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
             event.preventDefault();
             if (matches.length === 0) return;
-            const step = event.key === 'ArrowDown' ? 1 : -1;
-            setActive((current) => (current + step + matches.length) % matches.length);
+            const delta = event.key === 'ArrowDown' ? 1 : -1;
+            setActive((current) => nextEnabled(matches, current, delta));
         } else if (event.key === 'Enter') {
             event.preventDefault();
             // Entrée choisit dans la liste : elle ne doit pas aussi valider le dialogue qui l'entoure.
             event.stopPropagation();
             const option = matches[active];
-            if (option) pick(option.value);
+            if (option && !option.disabled) pick(option.value);
         } else if (event.key === 'Tab') {
             close(false);
         }
@@ -234,31 +272,52 @@ export function SearchSelect<T extends string>({
                             className={styles.list}
                             style={{ maxHeight: anchor.maxHeight }}
                         >
-                            {matches.map((option, index) => (
-                                <li
-                                    key={option.value}
-                                    id={`${id}-option-${index}`}
-                                    role='option'
-                                    aria-selected={option.value === value}
-                                    className={`${styles.option} ${index === active ? styles.optionActive : ''} ${
-                                        option.value === value ? styles.optionSelected : ''
-                                    }`}
-                                    // `mousedown` et non `click` : le champ de recherche ne perd pas le focus.
-                                    onMouseDown={(event) => {
-                                        event.preventDefault();
-                                        pick(option.value);
-                                    }}
-                                    onMouseEnter={() => setActive(index)}
-                                >
-                                    {option.prefix && (
-                                        <span className={styles.prefix} aria-hidden='true'>
-                                            {option.prefix}
+                            {sections.map((section) => {
+                                const items = section.items.map(({ option, index }) => (
+                                    <li
+                                        key={option.value}
+                                        id={`${id}-option-${index}`}
+                                        role='option'
+                                        aria-selected={option.value === value}
+                                        aria-disabled={option.disabled || undefined}
+                                        className={`${styles.option} ${index === active ? styles.optionActive : ''} ${
+                                            option.value === value ? styles.optionSelected : ''
+                                        } ${option.disabled ? styles.optionDisabled : ''}`}
+                                        // `mousedown` et non `click` : le champ de recherche ne perd pas le focus.
+                                        onMouseDown={(event) => {
+                                            event.preventDefault();
+                                            if (!option.disabled) pick(option.value);
+                                        }}
+                                        onMouseEnter={() => {
+                                            if (!option.disabled) setActive(index);
+                                        }}
+                                    >
+                                        {option.prefix && (
+                                            <span className={styles.prefix} aria-hidden='true'>
+                                                {option.prefix}
+                                            </span>
+                                        )}
+                                        <span className={styles.label}>{option.label}</span>
+                                        {option.detail && <span className={styles.detail}>{option.detail}</span>}
+                                    </li>
+                                ));
+                                if (section.group === undefined) return <Fragment key='ungrouped'>{items}</Fragment>;
+                                return (
+                                    <li
+                                        key={`group:${section.group}`}
+                                        role='group'
+                                        aria-label={section.group}
+                                        className={styles.group}
+                                    >
+                                        <span className={styles.groupLabel} aria-hidden='true'>
+                                            {section.group}
                                         </span>
-                                    )}
-                                    <span className={styles.label}>{option.label}</span>
-                                    {option.detail && <span className={styles.detail}>{option.detail}</span>}
-                                </li>
-                            ))}
+                                        <ul role='presentation' className={styles.groupList}>
+                                            {items}
+                                        </ul>
+                                    </li>
+                                );
+                            })}
                             {matches.length === 0 && <li className={styles.empty}>{emptyText}</li>}
                         </ul>
                     </div>,

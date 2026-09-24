@@ -1,8 +1,9 @@
 /**
  * Un écrivain `tar` USTAR minimal (fichiers et dossiers), pour qu'une archive
- * se rouvre avec le `tar` de n'importe quel système. Seul écart : les chemins
- * que `prefix` (155) + `name` (100) ne tiennent pas passent par une entrée `L`
- * GNU (`@LongLink`), lue par GNU tar et bsdtar.
+ * se rouvre avec le `tar` de n'importe quel système. Deux écarts, tous deux
+ * des extensions GNU lues par GNU tar et bsdtar : les chemins que `prefix`
+ * (155) + `name` (100) ne tiennent pas passent par une entrée `L`
+ * (`@LongLink`), et une taille d'au moins 8 Gio s'écrit en base 256.
  */
 
 const BLOCK = 512;
@@ -36,6 +37,23 @@ function octal(value: number, length: number): string {
     );
 }
 
+/** Ce que tiennent les 11 chiffres octaux du champ de taille : 8 Gio moins un octet. */
+const OCTAL_SIZE_MAX = 0o77777777777;
+
+/** Au-delà, l'octal perdrait ses premiers chiffres : la base 256 marque son premier octet de 0x80. */
+function writeSize(buf: Buffer, size: number): void {
+    if (size <= OCTAL_SIZE_MAX) {
+        buf.write(octal(size, 12), 124, 12, 'ascii');
+        return;
+    }
+    buf[124] = 0x80;
+    let rest = size;
+    for (let i = 135; i > 124; i -= 1) {
+        buf[i] = rest % 256;
+        rest = Math.floor(rest / 256);
+    }
+}
+
 /** L'en-tête d'une entrée, somme de contrôle comprise. */
 function header(name: string, prefix: string, size: number, mtime: number, mode: number, type: string): Buffer {
     const buf = Buffer.alloc(BLOCK);
@@ -43,7 +61,7 @@ function header(name: string, prefix: string, size: number, mtime: number, mode:
     buf.write(octal(mode & 0o7777, 8), 100, 8, 'ascii');
     buf.write(octal(0, 8), 108, 8, 'ascii'); // uid
     buf.write(octal(0, 8), 116, 8, 'ascii'); // gid
-    buf.write(octal(size, 12), 124, 12, 'ascii');
+    writeSize(buf, size);
     buf.write(octal(Math.floor(mtime / 1000), 12), 136, 12, 'ascii');
     // La somme se calcule en considérant son propre champ comme huit espaces.
     buf.write('        ', 148, 8, 'ascii');

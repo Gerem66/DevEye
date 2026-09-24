@@ -18,7 +18,8 @@ import {
     type ConfirmRequest
 } from 'deveye-sdk-client';
 import { api } from './api';
-import { DESTINATION_LABELS, SCHEDULE_LABELS, sourceKey, WEEKDAYS } from './format';
+import { DESTINATION_LABELS, SCHEDULE_LABELS, sourceHint, sourceKey, WEEKDAYS } from './format';
+import SourcePicker from './SourcePicker';
 import styles from './style.module.css';
 
 /**
@@ -162,6 +163,7 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
     }
 
     const editable = canWrite && !busy;
+    const hint = sourceHint(selected);
     const ready = name.trim() !== '' && selected !== null && selected.available && destinationId > 0;
     const unchanged =
         name.trim() === job.name &&
@@ -176,19 +178,11 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
 
     return (
         <div className={shell.section}>
-            <label className={shell.field}>
+            <div className={shell.field}>
                 <span className={shell.sectionLabel}>Quoi sauvegarder</span>
-                <SelectInput value={source} disabled={!editable} onChange={(e) => setSource(e.target.value)}>
-                    <option value=''>Choisir une source…</option>
-                    {candidates.map((c) => (
-                        <option key={sourceKey(c.kind, c.id)} value={sourceKey(c.kind, c.id)} disabled={!c.available}>
-                            {c.name}
-                            {c.available ? '' : ` (${c.reason ?? 'indisponible'})`}
-                        </option>
-                    ))}
-                </SelectInput>
-                {selected?.detail && <span className={shell.fieldHint}>{selected.detail}</span>}
-            </label>
+                <SourcePicker candidates={candidates} value={source} disabled={!editable} onChange={setSource} />
+                {hint && <span className={shell.fieldHint}>{hint}</span>}
+            </div>
 
             <label className={shell.field}>
                 <span className={shell.sectionLabel}>Nom du travail</span>

@@ -105,6 +105,14 @@ function assertDestinationShape(input: {
     }
 }
 
+/** Sans ce contrôle, on écrirait des archives sur la machine d'un autre espace en devinant un identifiant. */
+async function assertDeviceInWorkspace(ctx: Ctx, deviceId: string | null): Promise<void> {
+    const devices = await ctx.deveye.devices.list();
+    if (!devices.some((d) => d.id === deviceId)) {
+        throw new FeatureError('not_found', "Cet appareil n'appartient pas à cet espace.");
+    }
+}
+
 const destinationAddFeature = defineSdkFeature({
     ...backupDestinationAdd,
     access: { level: 'write' },
@@ -114,14 +122,7 @@ const destinationAddFeature = defineSdkFeature({
         if (input.kind === 's3' && !input.secret) {
             throw new FeatureError('validation', 'Une destination S3 exige sa clé secrète.');
         }
-        if (input.kind === 'device') {
-            // Sans ce contrôle, on écrirait des archives sur la machine d'un
-            // autre espace en devinant un identifiant.
-            const devices = await ctx.deveye.devices.list();
-            if (!devices.some((d) => d.id === input.deviceId)) {
-                throw new FeatureError('not_found', "Cet appareil n'appartient pas à cet espace.");
-            }
-        }
+        if (input.kind === 'device') await assertDeviceInWorkspace(ctx, input.deviceId);
 
         const stored: StoredDestination = {
             name: input.name,
@@ -162,6 +163,7 @@ const destinationUpdateFeature = defineSdkFeature({
     handler: async (ctx: Ctx, input) => {
         const row = await loadDestination(ctx, input.destinationId);
         assertDestinationShape({ ...input, kind: row.kind });
+        if (row.kind === 'device') await assertDeviceInWorkspace(ctx, input.deviceId);
 
         const stored: StoredDestination = {
             name: input.name,
@@ -283,9 +285,26 @@ const jobGetFeature = defineSdkFeature({
     }
 });
 
+/**
+ * La base de DevEye porte tous les comptes de l'instance : seul un
+ * administrateur la sauvegarde, et depuis son espace personnel, où personne
+ * d'autre ne peut détourner la destination de ses archives.
+ */
+function canBackupDevEye(ctx: Ctx): boolean {
+    return ctx.isAdmin && ctx.workspace.kind === 'personal';
+}
+
 /** Vérifie que la source désignée existe **dans cet espace**. */
 async function assertSource(ctx: Ctx, source: string, sourceId: number | null): Promise<void> {
-    if (source === 'deveye') return;
+    if (source === 'deveye') {
+        if (!canBackupDevEye(ctx)) {
+            throw new FeatureError(
+                'forbidden',
+                'La base de DevEye ne se sauvegarde que depuis l’espace personnel d’un administrateur.'
+            );
+        }
+        return;
+    }
     if (sourceId === null) throw new FeatureError('validation', 'Choisissez ce que ce travail doit sauvegarder.');
 
     if (source === 'database') {
@@ -447,20 +466,24 @@ const jobRunFeature = defineSdkFeature({
     }
 });
 
+const ENGINE_TAGS: Record<'mysql' | 'postgres', string> = { mysql: 'MySQL', postgres: 'PostgreSQL' };
+
 const sourcesFeature = defineSdkFeature({
     ...backupSources,
     access: { level: 'read' },
     handler: async (ctx: Ctx) => {
-        const candidates: BackupSourceCandidate[] = [
-            {
+        const candidates: BackupSourceCandidate[] = [];
+        if (canBackupDevEye(ctx)) {
+            candidates.push({
                 kind: 'deveye',
                 id: null,
                 name: 'Base de DevEye',
-                detail: 'Tout ce que DevEye garde en base : notes, mots de passe, supervision, index CloudSync, projets.',
+                detail: 'Tout ce que DevEye garde en base, pour tous les comptes : notes, mots de passe, supervision, index CloudSync, projets.',
+                tag: null,
                 available: true,
                 reason: null
-            }
-        ];
+            });
+        }
 
         // Sans le contrat de Bases de données, la source disparaît du sélecteur.
         const databases = databaseProvider(ctx);
@@ -470,6 +493,7 @@ const sourcesFeature = defineSdkFeature({
                 id: row.id,
                 name: row.name,
                 detail: `${row.engine} : ${row.host} / ${row.database}`,
+                tag: ENGINE_TAGS[row.engine],
                 available: true,
                 reason: null
             });
@@ -481,11 +505,13 @@ const sourcesFeature = defineSdkFeature({
         const shares = cloudSync ? await cloudSync.listShares(ctx.workspaceId) : [];
         for (const share of shares) {
             const stats = await cloudSync!.statsByShare(share.id);
+            const files = `${stats.fileCount.toLocaleString('fr-FR')} fichier${stats.fileCount > 1 ? 's' : ''}`;
             candidates.push({
                 kind: 'cloudsync',
                 id: share.id,
                 name: share.name,
-                detail: `${stats.fileCount} fichier(s) : les fichiers, pas leur index (celui-ci est dans la base de DevEye).`,
+                detail: `${files} : les fichiers, pas leur index (celui-ci est dans la base de DevEye).`,
+                tag: stats.fileCount > 0 ? files : 'vide',
                 available: stats.fileCount > 0,
                 reason: stats.fileCount > 0 ? null : 'Ce partage est vide.'
             });

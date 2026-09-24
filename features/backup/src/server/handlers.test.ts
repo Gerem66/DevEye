@@ -5,6 +5,8 @@ import type { z, ZodType } from 'zod';
 import {
     backupDestinationAdd,
     backupDestinationRemove,
+    backupDestinationUpdate,
+    backupJobAdd,
     backupJobList,
     backupJobRemove,
     backupJobRun,
@@ -344,6 +346,29 @@ describe('Backup : handlers', () => {
         );
     });
 
+    it('une destination modifiée ne passe pas sur la machine d’un autre espace', async () => {
+        const repo = fakeRepo();
+        repo.destinations.push(destination({ id: 1, workspace_id: 1, kind: 'device', device_id: 'dev-a' }));
+        const ctx = createTestContext({ repo, workspaceId: 1, devices: [testDevice({ id: 'dev-a', name: 'Pi' })] });
+        const update = handlerFor(backupDestinationUpdate);
+        const body = {
+            destinationId: 1,
+            name: 'Le Pi',
+            path: '/mnt/backup',
+            endpoint: null,
+            region: null,
+            bucket: null,
+            accessKeyId: null,
+            pathStyle: true
+        };
+
+        await assert.rejects(update(ctx, { ...body, deviceId: 'dev-etranger' }), failsWith('not_found'));
+        assert.equal(repo.destinations[0].device_id, 'dev-a');
+
+        const out = await update(ctx, { ...body, deviceId: 'dev-a' });
+        assert.equal(out.destination.deviceId, 'dev-a');
+    });
+
     it('refuse de retirer une destination encore visée, en disant combien', async () => {
         const repo = fakeRepo();
         repo.destinations.push(destination({ id: 1, workspace_id: 1 }));
@@ -441,20 +466,74 @@ describe('Backup : handlers', () => {
         });
         const out = await handlerFor(backupSources)(both, {});
         assert.deepEqual(
-            out.candidates.map((c) => [c.kind, c.id, c.name, c.available]),
+            out.candidates.map((c) => [c.kind, c.id, c.name, c.tag, c.available]),
             [
-                ['deveye', null, 'Base de DevEye', true],
-                ['database', 7, 'Prod', true],
-                ['cloudsync', 3, 'Photos', true]
+                ['database', 7, 'Prod', 'MySQL', true],
+                ['cloudsync', 3, 'Photos', '12 fichiers', true]
             ]
         );
 
-        const none = createTestContext({ repo, workspaceId: 1 });
+        const none = createTestContext({ repo, workspaceId: 1, isAdmin: true });
         const bare = await handlerFor(backupSources)(none, {});
         assert.deepEqual(
             bare.candidates.map((c) => c.kind),
             ['deveye']
         );
+    });
+
+    it('un partage vide reste au sélecteur, indisponible', async () => {
+        const empty: CloudSyncBackupProvider = {
+            ...cloudSync,
+            statsByShare: async () => ({ fileCount: 0, liveBytes: 0 })
+        };
+        const ctx = createTestContext({
+            repo: fakeRepo(),
+            workspaceId: 1,
+            providers: { [CLOUDSYNC_BACKUP_PROVIDER]: empty }
+        });
+        const out = await handlerFor(backupSources)(ctx, {});
+        assert.deepEqual(
+            out.candidates.map((c) => [c.kind, c.tag, c.available, c.reason]),
+            [['cloudsync', 'vide', false, 'Ce partage est vide.']]
+        );
+    });
+
+    it('la base de DevEye ne se sauvegarde que depuis l’espace personnel d’un administrateur', async () => {
+        const offered = async (over: { isAdmin: boolean; kind: 'personal' | 'shared' }): Promise<boolean> => {
+            const ctx = createTestContext({ repo: fakeRepo(), workspaceId: 1, ...over });
+            const out = await handlerFor(backupSources)(ctx, {});
+            return out.candidates.some((c) => c.kind === 'deveye');
+        };
+        assert.equal(await offered({ isAdmin: false, kind: 'personal' }), false);
+        assert.equal(await offered({ isAdmin: true, kind: 'shared' }), false);
+        assert.equal(await offered({ isAdmin: true, kind: 'personal' }), true);
+
+        const create = handlerFor(backupJobAdd);
+        const body = {
+            name: 'Tout DevEye',
+            destinationId: 1,
+            encryption: 'server' as const,
+            source: 'deveye' as const,
+            sourceId: null,
+            enabled: true,
+            schedule: 'daily' as const,
+            scheduleHour: 3,
+            scheduleWeekday: 0,
+            scheduleDay: 1,
+            keepLast: 7
+        };
+        const member = fakeRepo();
+        member.destinations.push(destination({ id: 1, workspace_id: 1 }));
+        await assert.rejects(
+            create(createTestContext({ repo: member, workspaceId: 1, kind: 'shared', isAdmin: true }), body),
+            failsWith('forbidden')
+        );
+        assert.equal(member.jobs.length, 0);
+
+        const admin = fakeRepo();
+        admin.destinations.push(destination({ id: 1, workspace_id: 1 }));
+        await create(createTestContext({ repo: admin, workspaceId: 1, isAdmin: true }), body);
+        assert.equal(admin.jobs[0].source_kind, 'deveye');
     });
 
     it('un travail sur une base n’existe que si Bases de données la connaît dans cet espace', async () => {

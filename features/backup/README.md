@@ -111,11 +111,16 @@ matin est exactement ce que ce bouton existe pour éviter.
 
 ## Les trois sources
 
-### `deveye` — la base MySQL de DevEye
+### `deveye` : la base MySQL de DevEye
 
 **C'est la sauvegarde à avoir si on n'en a qu'une.** Elle couvre tout ce qui vit
 en base, c'est-à-dire presque tout : notes, mots de passe, projets, historique de
 supervision, index CloudSync, comptes mail, finances, constats Sentinelle.
+
+Elle porte **tous les comptes de l'instance** : seul un administrateur global la
+voit et la choisit, et seulement depuis son espace personnel, où personne
+d'autre ne peut modifier la destination de ses archives. Le serveur le vérifie
+à la création comme à la modification d'un travail.
 
 C'est aussi la raison pour laquelle il n'existe **pas** de source « Monitoring » :
 les relevés d'appareils sont des lignes de `device_metrics`, elles sont déjà

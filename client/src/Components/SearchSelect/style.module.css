@@ -113,6 +113,37 @@
     color: var(--accent);
 }
 
+.optionDisabled {
+    cursor: not-allowed;
+    filter: opacity(0.5);
+}
+
+.group {
+    list-style: none;
+}
+
+.group:not(:first-child) {
+    margin-top: var(--space-xs);
+    padding-top: var(--space-xs);
+    border-top: 1px solid var(--glass-border);
+}
+
+.groupLabel {
+    display: block;
+    padding: var(--space-sm) var(--space-sm) var(--space-xs);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.groupList {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
 .empty {
     padding: var(--space-md);
     font-size: 0.88rem;

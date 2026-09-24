@@ -11,7 +11,8 @@ import {
     TextInput
 } from 'deveye-sdk-client';
 import { api } from './api';
-import { DESTINATION_LABELS, SCHEDULE_LABELS, sourceKey, WEEKDAYS } from './format';
+import { DESTINATION_LABELS, SCHEDULE_LABELS, sourceHint, sourceKey, WEEKDAYS } from './format';
+import SourcePicker from './SourcePicker';
 import styles from './style.module.css';
 
 interface JobDialogProps {
@@ -126,6 +127,7 @@ export default function JobDialog({ open, destinations, onClose, onSaved }: JobD
     };
 
     const ready = name.trim() !== '' && selected !== null && selected.available && destinationId > 0;
+    const hint = sourceHint(selected);
 
     return (
         <Dialog
@@ -147,23 +149,11 @@ export default function JobDialog({ open, destinations, onClose, onSaved }: JobD
             }
         >
             <div className={styles.form}>
-                <label className={styles.field}>
+                <div className={styles.field}>
                     <span className={styles.fieldLabel}>Quoi sauvegarder</span>
-                    <SelectInput value={source} onChange={(e) => setSource(e.target.value)}>
-                        <option value=''>Choisir une source…</option>
-                        {candidates.map((c) => (
-                            <option
-                                key={sourceKey(c.kind, c.id)}
-                                value={sourceKey(c.kind, c.id)}
-                                disabled={!c.available}
-                            >
-                                {c.name}
-                                {c.available ? '' : ` (${c.reason ?? 'indisponible'})`}
-                            </option>
-                        ))}
-                    </SelectInput>
-                    {selected?.detail && <span className={styles.fieldHint}>{selected.detail}</span>}
-                </label>
+                    <SourcePicker candidates={candidates} value={source} onChange={setSource} />
+                    {hint && <span className={styles.fieldHint}>{hint}</span>}
+                </div>
 
                 <label className={styles.field}>
                     <span className={styles.fieldLabel}>Nom du travail</span>

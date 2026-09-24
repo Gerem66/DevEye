@@ -34,6 +34,7 @@ declare const styles: {
     readonly runTitle: string;
     readonly runs: string;
     readonly sectionTitle: string;
+    readonly sourceIcon: string;
     readonly statusDot: string;
     readonly statusTag: string;
     readonly subtitle: string;

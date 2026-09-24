@@ -160,8 +160,10 @@ export const backupSourceCandidateSchema = z.object({
     /** `null` pour `deveye`, qui est unique par nature. */
     id: z.number().int().positive().nullable(),
     name: z.string(),
-    /** Précision affichée en second ligne (moteur, hôte, chemin du partage). */
+    /** La phrase d'aide sous le champ, une fois la source choisie (moteur, hôte, contenu). */
     detail: z.string().nullable(),
+    /** Le repère court à droite de l'option : le moteur, le nombre de fichiers. */
+    tag: z.string().nullable(),
     /** Faux avec une raison quand la source existe mais n'est pas sauvegardable. */
     available: z.boolean(),
     reason: z.string().nullable()

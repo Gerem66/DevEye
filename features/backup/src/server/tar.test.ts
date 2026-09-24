@@ -110,4 +110,21 @@ describe('écriture tar', () => {
             await fs.rm(dir, { recursive: true, force: true });
         }
     });
+    it('une taille d’au moins 8 Gio passe en base 256 au lieu de perdre ses premiers chiffres', () => {
+        const nine = 9 * 1024 ** 3;
+        const head = tarHeader({ path: 'gros.bin', size: nine, mtime: 1_700_000_000_000, mode: null, isDir: false });
+        assert.equal(head[124], 0x80);
+        let decoded = 0;
+        for (let i = 125; i < 136; i += 1) decoded = decoded * 256 + head[i];
+        assert.equal(decoded, nine);
+
+        // La somme de contrôle couvre ces octets comme les autres.
+        const stored = parseInt(head.subarray(148, 154).toString('ascii'), 8);
+        let sum = 0;
+        for (let i = 0; i < 512; i += 1) sum += i >= 148 && i < 156 ? 0x20 : head[i];
+        assert.equal(stored, sum);
+
+        const small = tarHeader({ path: 'petit.bin', size: 0o77777777777, mtime: 0, mode: null, isDir: false });
+        assert.equal(small.subarray(124, 136).toString('ascii'), '77777777777\0');
+    });
 });
