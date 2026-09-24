@@ -317,23 +317,34 @@ que Dokploy connaît entre en base. La liste dit donc la vérité du dernier ét
 connu même sans réseau vers l'instance, et une cible déployée par une CI a une
 frise complète sans que personne n'ait ouvert sa fiche.
 
-### 6.2 Trois bornes, parce que c'est du sondage
+### 6.2 Des bornes, parce que c'est du sondage
 
-| Borne                         | Valeur            | Ce qu'elle empêche                                             |
-| ----------------------------- | ----------------- | -------------------------------------------------------------- |
-| `DEPLOY_TICK_SECONDS`         | 10 s              | — _c'est la cadence, voir 6.6_                                 |
-| `DEPLOY_BATCH`                | 6 cibles / tour   | quarante cibles = quarante requêtes d'un coup                  |
-| `DEPLOY_MIN_INTERVAL_SECONDS` | 60 s **au repos** | réinterroger une cible qui n'a rien à dire                     |
-| `DEPLOY_IMPORT_LIMIT`         | 20 lignes / appel | recopier des centaines d'entrées anciennes                     |
-| `DEPLOY_STALE_SECONDS`        | 6 h               | entretenir sans fin un déploiement que le fournisseur a oublié |
+| Borne                         | Valeur                         | Ce qu'elle empêche                                                         |
+| ----------------------------- | ------------------------------ | -------------------------------------------------------------------------- |
+| `DEPLOY_TICK_SECONDS`         | 10 s                           | _c'est la cadence, voir 6.6_                                               |
+| `DEPLOY_CONCURRENCY`          | 6 cibles en vol, une par accès | quarante cibles en quarante requêtes d'un coup, une instance lente en tête |
+| `DEPLOY_SYNC_TIMEOUT_MS`      | 10 s par lecture de fond       | une instance muette qui garde sa place en vol                              |
+| `DEPLOY_MIN_INTERVAL_SECONDS` | 60 s **au repos**              | réinterroger une cible qui n'a rien à dire                                 |
+| `DEPLOY_BACKOFF_MAX_SECONDS`  | 15 min                         | marteler une instance en panne                                             |
+| `DEPLOY_IMPORT_LIMIT`         | 20 lignes / appel              | recopier des centaines d'entrées anciennes                                 |
+| `DEPLOY_STALE_SECONDS`        | 6 h                            | entretenir sans fin un déploiement que le fournisseur a oublié             |
 
-Une cible qui a un déploiement **en vol** échappe à la deuxième et passe à chaque
-tour : c'est là que l'état bouge à la minute. Le tri est fait en SQL
-(`listTargetsDue`), la sélection finale en mémoire — comme pour les dépôts git,
-et pour la même raison : une poignée de cibles injoignables trie en tête (elles
-n'ont jamais abouti) et consommerait chaque tour, sans quoi les autres ne
-passeraient jamais. Le recul vit dans une `Map` en mémoire, jamais dans
-`synced_at` (voir 6.3).
+Une cible qui a un déploiement **en vol** échappe à l'intervalle au repos et
+passe à chaque tour : c'est là que l'état bouge à la minute.
+
+`listTargetsDue` trie en SQL et sert les espaces **à tour de rôle**
+(`ROW_NUMBER() OVER (PARTITION BY workspace_id …)`) : la première cible due de
+chaque espace passe avant la deuxième de quiconque. Un tour lance les cibles
+choisies sans les attendre. Une cible encore en vol n'est pas relancée, et un
+accès n'a jamais qu'une cible en vol : une instance lente n'occupe qu'une place,
+et ne retarde jamais les cibles d'une autre.
+
+Le recul se compte **par accès**, en mémoire, jamais dans `synced_at` (voir
+6.3) : 60 s au premier échec, doublé ensuite jusqu'à 15 min, remis à zéro au
+premier succès. Les cibles d'un accès en recul sont écartées dès la requête :
+une instance en panne ne tient plus la tête de file avec ses déploiements « en
+cours ». Ceux-ci passent quand même en suivi perdu à la borne des six heures
+(6.4).
 
 ### 6.3 `synced_at` porte deux rôles, et c'est voulu
 
@@ -358,7 +369,7 @@ serveur était arrêté a bien son avis au redémarrage, et qu'il ne l'a qu'une 
 ### 6.4 Le rattachement, et ce qu'il ne peut pas faire
 
 Une entrée du fournisseur retrouve sa ligne locale par `external_id`, sinon par
-proximité de date (deux minutes) — Dokploy ne rend pas toujours d'identifiant au
+proximité de date (deux minutes) : Dokploy ne rend pas toujours d'identifiant au
 déclenchement, et `deploy.trigger` écrit sa ligne **avant** d'appeler. La date
 est donc réservée aux lignes qui n'ont pas encore d'identifiant, sans quoi deux
 déploiements distincts partis à quelques secondes d'intervalle se colleraient sur
@@ -371,7 +382,8 @@ jamais. Au bout de six heures, ce n'est plus un déploiement en cours mais un
 **sans avis** : on ne sait justement pas ce qui s'est passé, et annoncer un échec
 qu'on n'a pas constaté serait pire que de se taire. Sans cette borne, la ligne
 resterait `queued` pour toujours _et_ garderait sa cible dans la voie rapide à
-chaque tour.
+chaque tour. La borne vaut aussi quand l'instance ne répond plus du tout : la
+description le dit alors (« l'instance ne répond plus »).
 
 ### 6.5 Les avis ont leurs propres canaux
 
@@ -391,23 +403,26 @@ continu — la mise en production suivante le dira.
 
 ### 6.6 Un minuteur à lui
 
-Le rapprochement tournait dans le tour de la synchronisation git, à 120 s. Cela
-plafonnait tout : un intervalle au repos plus court que le tour n'aurait rien
-changé, et un message de suivi ne peut pas se rafraîchir moins souvent que la
-boucle qui l'alimente. Les deux volets ont donc chacun leur minuteur — ils
-n'avaient jamais eu la même urgence, ils partageaient un tour par accident
-d'implémentation.
-
-À 10 s et 6 cibles par tour, jusqu'à 36 cibles passent par minute, ce qui couvre
-largement l'intervalle de 60 s au repos. Le coût est linéaire et modeste : dix
-cibles à 60 s font un appel toutes les six secondes vers une instance
-auto-hébergée.
+Le rapprochement a son propre ticker du SDK (`deps.createTicker`), à 10 s : un
+message de suivi ne peut pas se rafraîchir moins souvent que la boucle qui
+l'alimente. Le coût reste linéaire et modeste : dix cibles à 60 s font un appel
+toutes les six secondes vers leur instance.
 
 `DeploySync.wake()`, appelé par `deploy.trigger` (par le singleton du module,
-`wakeSync`, tolérant à l'absence du service), vise ce tour-là : le message
-d'un déploiement lancé depuis DevEye s'ouvre dans la foulée, sans attendre le
-battement. La boucle est un ticker du SDK (`deps.createTicker`), avec sa propre
-garde de ré-entrance pour ce réveil hors cadence.
+`wakeSync`, tolérant à l'absence du service), déclenche un tour hors cadence : le
+message d'un déploiement lancé depuis DevEye s'ouvre dans la foulée, sans
+attendre le battement. Le choix des cibles a sa propre garde de ré-entrance, et
+`DeploySync.idle()` attend les rapprochements en vol : l'arrêt du service s'en
+sert, les tests aussi.
+
+### 6.7 La limite de l'offre
+
+Une cible sondée interroge son fournisseur chaque minute, à vie : c'est ce que
+l'offre borne (`deploy.targets`, clé `targets` du manifest, voir
+`Docs/QUOTAS.md`). Le compte porte sur tous les espaces du propriétaire. Il est
+contrôlé dans `deploy.add` **après** la recherche qui rend l'ajout idempotent
+(redéclarer une cible n'en ajoute aucune), et dans `admit` pour une copie. Un
+déplacement ne change rien au compte.
 
 ---
 

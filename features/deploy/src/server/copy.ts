@@ -41,5 +41,8 @@ export const deployCopy: FeatureItemsCopy<DeployRepo> = {
                 'L’historique de ses déploiements'
             ]
         };
+    },
+    async admit({ repo, quota }) {
+        await quota.assert('targets', async (owned) => (await repo.countTargetsInWorkspaces(owned)) + 1);
     }
 };

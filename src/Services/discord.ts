@@ -34,6 +34,54 @@ export function isDiscordWebhook(url: string): boolean {
 
 const TIMEOUT_MS = 10_000;
 
+/** Au-delà, un 429 se rend à l'appelant plutôt que de retenir sa file. */
+const MAX_RETRY_WAIT_MS = 5_000;
+
+/**
+ * Une file par webhook : Discord en borne le débit (environ cinq requêtes par
+ * deux secondes), et plusieurs émetteurs peuvent viser le même salon au même
+ * instant. Sérialisés, ils se suivent au lieu de se faire refuser.
+ */
+const queues = new Map<string, Promise<unknown>>();
+
+/** `/api/webhooks/{id}/{token}` : un message et son webhook partagent la file. */
+function webhookKey(url: string): string {
+    return new URL(url).pathname.split('/').slice(0, 5).join('/');
+}
+
+function inQueue<T>(url: string, fn: () => Promise<T>): Promise<T> {
+    const key = webhookKey(url);
+    const run = (queues.get(key) ?? Promise.resolve()).then(fn, fn);
+    const tail = run.catch(() => undefined);
+    queues.set(key, tail);
+    void tail.then(() => {
+        if (queues.get(key) === tail) queues.delete(key);
+    });
+    return run;
+}
+
+/** Le délai demandé par un 429, en millisecondes ; `null` s'il n'en dit rien de lisible. */
+function retryAfterMs(response: Response): number | null {
+    const seconds = Number.parseFloat(response.headers.get('retry-after') ?? '');
+    return Number.isFinite(seconds) && seconds >= 0 ? Math.ceil(seconds * 1000) : null;
+}
+
+/** Un envoi, repris une fois après le délai qu'un 429 demande s'il est court. */
+async function send(url: string, init: { method: string; body: string }): Promise<Response> {
+    const once = () =>
+        safeFetch(url, {
+            ...init,
+            headers: { 'content-type': 'application/json' },
+            signal: AbortSignal.timeout(TIMEOUT_MS)
+        });
+    const response = await once();
+    if (response.status !== 429) return response;
+    const wait = retryAfterMs(response);
+    if (wait === null || wait > MAX_RETRY_WAIT_MS) return response;
+    await new Promise((resolve) => setTimeout(resolve, wait));
+    return once();
+}
+
 /**
  * Publie un message et rend son identifiant, ou `null` si Discord l'a refusé :
  * l'appelant retombe alors sur le message unique de fin.
@@ -44,12 +92,9 @@ export async function postMessage(url: string, message: DiscordMessage, logger: 
         return null;
     }
     try {
-        const response = await safeFetch(withWait(url), {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            signal: AbortSignal.timeout(TIMEOUT_MS),
-            body: JSON.stringify(message)
-        });
+        const response = await inQueue(url, () =>
+            send(withWait(url), { method: 'POST', body: JSON.stringify(message) })
+        );
         if (!response.ok) {
             logger.warn({ status: response.status, detail: await detailOf(response) }, 'Discord: message refusé');
             return null;
@@ -78,12 +123,9 @@ export async function editMessage(
         return false;
     }
     try {
-        const response = await safeFetch(`${messageUrl(url, messageId)}`, {
-            method: 'PATCH',
-            headers: { 'content-type': 'application/json' },
-            signal: AbortSignal.timeout(TIMEOUT_MS),
-            body: JSON.stringify(message)
-        });
+        const response = await inQueue(url, () =>
+            send(messageUrl(url, messageId), { method: 'PATCH', body: JSON.stringify(message) })
+        );
         if (response.ok) return true;
         logger.warn({ status: response.status, detail: await detailOf(response) }, 'Discord: modification refusée');
         return false;

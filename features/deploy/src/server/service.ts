@@ -28,8 +28,8 @@ import { readJson } from './_shared';
 
 /**
  * Le rapprochement des cibles de déploiement avec ce que le fournisseur en dit,
- * en tâche de fond : un ticker du SDK, une garde de ré-entrance, des chiffres
- * par espace (`deps.cipherFor`). Il rapproche les cibles, pas seulement les
+ * en tâche de fond : un ticker du SDK qui lance les cibles dues sans les
+ * attendre, des chiffres par espace (`deps.cipherFor`). Il rapproche les cibles, pas seulement les
  * lignes déjà en base : un déploiement lancé depuis Dokploy, une CI ou un push
  * apparaît aussi. Voir {@link DeploySync.syncDeployTargets}.
  *
@@ -38,10 +38,21 @@ import { readJson } from './_shared';
  */
 
 /**
- * Cibles rapprochées par tour (une cible = un appel tRPC) : un espace à quarante
- * cibles ne produit pas quarante requêtes d'un coup, le reste passe au tour suivant.
+ * Cibles rapprochées à la fois, tout le serveur confondu, et une seule par accès
+ * (une cible = un appel tRPC) : une instance lente ou en panne n'occupe qu'une
+ * place et ne retarde jamais les cibles d'une autre ; un espace à quarante
+ * cibles ne produit pas quarante requêtes d'un coup.
  */
-const DEPLOY_BATCH = 6;
+const DEPLOY_CONCURRENCY = 6;
+
+/**
+ * Délai d'une lecture de fond. Plus court que celui d'un geste : une instance
+ * qui met plus longtemps à répondre garde sa place en vol, pas celle des autres.
+ */
+const DEPLOY_SYNC_TIMEOUT_MS = 10_000;
+
+/** Plafond du recul d'un accès qui ne répond pas, doublé à chaque échec depuis {@link DEPLOY_MIN_INTERVAL_SECONDS}. */
+const DEPLOY_BACKOFF_MAX_SECONDS = 15 * 60;
 
 /**
  * Délai minimal entre deux rapprochements d'une même cible au repos. Une cible
@@ -154,22 +165,32 @@ export class DeploySync {
     /** La boucle du rapprochement : un ticker du SDK. */
     private readonly ticker: FeatureService;
     /**
-     * Garde de ré-entrance, en plus de celle du ticker : `wake()` déclenche un
-     * tour hors cadence, et deux tours concurrents publieraient deux messages
-     * pour le même déploiement.
+     * Garde de ré-entrance du choix des cibles : `wake()` déclenche un tour hors
+     * cadence, et deux choix concurrents lanceraient deux fois la même cible.
      */
     private ticking: Promise<void> | null = null;
 
     /**
-     * Cibles en recul, jusqu'à l'instant indiqué. En mémoire : c'est l'état d'une
-     * instance injoignable depuis ce processus, et écrire dans `synced_at` un
-     * rapprochement qui n'a pas eu lieu ferait passer le premier import pour
-     * fait.
+     * Les rapprochements en vol, par cible, et les accès qu'ils occupent. Une
+     * cible en vol n'est pas relancée : deux passes sur la même cible
+     * publieraient deux messages pour le même déploiement.
      */
-    private readonly deployBackoff = new Map<number, number>();
+    private readonly running = new Map<number, Promise<void>>();
+    private readonly busyCredentials = new Set<number>();
+
+    /**
+     * Accès en recul, jusqu'à `until`. En mémoire : c'est l'état d'une instance
+     * injoignable depuis ce processus, et écrire dans `synced_at` un
+     * rapprochement qui n'a pas eu lieu ferait passer le premier import pour
+     * fait. Par accès et non par cible : c'est l'instance qui ne répond pas, et
+     * ses cibles en vol ne doivent plus occuper la tête de file.
+     */
+    private readonly credentialBackoff = new Map<number, { until: number; delay: number }>();
 
     /** Le catalogue d'une instance, par jeton. Voir {@link DEPLOY_PLACE_TTL_SECONDS}. */
     private readonly deployPlaces = new Map<number, { at: number; targets: DokployTarget[] }>();
+    /** Le catalogue en cours de lecture, par jeton : plusieurs messages le réclament au même tour. */
+    private readonly placeLoads = new Map<number, Promise<DokployTarget[]>>();
 
     /**
      * Le dépôt d'une cible, par jeton et identifiant externe. Seule l'adresse
@@ -193,6 +214,12 @@ export class DeploySync {
     async stop(): Promise<void> {
         await this.ticker.stop();
         await this.ticking;
+        await this.idle();
+    }
+
+    /** Rend la main quand plus aucune cible n'est en cours de rapprochement. */
+    async idle(): Promise<void> {
+        while (this.running.size > 0) await Promise.allSettled(this.running.values());
     }
 
     /**
@@ -205,8 +232,8 @@ export class DeploySync {
     }
 
     /**
-     * Un tour : rapprocher les cibles, entretenir les messages. Un tour qui
-     * dépasse son intervalle saute un battement plutôt que de se chevaucher.
+     * Un tour : choisir les cibles dues et les lancer, sans attendre qu'elles
+     * aboutissent. Le tour suivant reprend ce qui s'est libéré entre-temps.
      */
     private tick(): Promise<void> {
         this.ticking ??= this.syncDeployTargets()
@@ -219,33 +246,60 @@ export class DeploySync {
 
     /**
      * Rapproche les cibles de ce que le fournisseur en dit. Dokploy n'émet
-     * aucun webhook générique : c'est du sondage, borné par {@link DEPLOY_BATCH}
-     * cibles par tour, {@link DEPLOY_MIN_INTERVAL_SECONDS} entre deux tours
-     * d'une cible au repos, {@link DEPLOY_IMPORT_LIMIT} lignes par appel.
+     * aucun webhook générique : c'est du sondage, borné par
+     * {@link DEPLOY_CONCURRENCY} cibles en vol, {@link DEPLOY_MIN_INTERVAL_SECONDS}
+     * entre deux passes d'une cible au repos, {@link DEPLOY_IMPORT_LIMIT} lignes
+     * par appel.
      */
     private async syncDeployTargets(): Promise<void> {
+        const free = DEPLOY_CONCURRENCY - this.running.size;
+        if (free <= 0) return;
         const now = Math.floor(Date.now() / 1000);
-        // On demande large, on filtre en mémoire, on tranche : sans cela, une
-        // poignée de cibles injoignables (en tête, n'ayant jamais abouti)
-        // consommerait chaque tour.
-        const due = await this.deps.repo.listTargetsDue(DEPLOY_BATCH * 4, now - DEPLOY_MIN_INTERVAL_SECONDS);
-        const picked = due.filter((t) => (this.deployBackoff.get(t.id) ?? 0) <= now).slice(0, DEPLOY_BATCH);
+        const skip = [
+            ...this.busyCredentials,
+            ...[...this.credentialBackoff].filter(([, b]) => b.until > now).map(([id]) => id)
+        ];
+        const due = await this.deps.repo.listTargetsDue(free * 4, now - DEPLOY_MIN_INTERVAL_SECONDS, skip);
 
-        for (const target of picked) {
-            try {
-                await this.syncDeployTarget(target, now);
-                this.deployBackoff.delete(target.id);
-            } catch (e) {
+        // Les accès occupés sont déjà écartés par la requête ; reste à n'en
+        // prendre qu'une cible par accès dans ce tour.
+        const taken = new Set<number>();
+        for (const target of due) {
+            if (taken.size >= free) break;
+            const credentialId = target.credential_id;
+            if (credentialId === null || taken.has(credentialId)) continue;
+            taken.add(credentialId);
+            this.launch(target, credentialId, now);
+        }
+    }
+
+    private launch(target: DeployTargetSyncRow, credentialId: number, now: number): void {
+        this.busyCredentials.add(credentialId);
+        const run = this.syncDeployTarget(target, now)
+            .then(() => {
+                this.credentialBackoff.delete(credentialId);
+            })
+            .catch(async (e: unknown) => {
                 // Un recul en mémoire plutôt qu'en base : c'est l'instance qui ne
                 // répond pas, pas la cible qui a changé. `synced_at` reste à sa
                 // valeur, sinon un premier import raté passerait pour fait.
-                this.deployBackoff.set(target.id, now + DEPLOY_MIN_INTERVAL_SECONDS);
+                const previous = this.credentialBackoff.get(credentialId)?.delay ?? 0;
+                const delay =
+                    previous === 0 ? DEPLOY_MIN_INTERVAL_SECONDS : Math.min(previous * 2, DEPLOY_BACKOFF_MAX_SECONDS);
+                this.credentialBackoff.set(credentialId, { until: now + delay, delay });
                 this.deps.logger.warn(
-                    { err: e instanceof Error ? e.message : String(e), targetId: target.id },
+                    { err: e instanceof Error ? e.message : String(e), targetId: target.id, retryInSeconds: delay },
                     'Deploy sync: cible non rapprochée'
                 );
-            }
-        }
+                await this.sweepUnreachable(target, now).catch((err: unknown) =>
+                    this.deps.logger.warn({ err, targetId: target.id }, 'Deploy sync: purge en échec')
+                );
+            })
+            .finally(() => {
+                this.running.delete(target.id);
+                this.busyCredentials.delete(credentialId);
+            });
+        this.running.set(target.id, run);
     }
 
     /**
@@ -265,7 +319,8 @@ export class DeploySync {
             credential.base_url,
             apiKey,
             target.target_kind === 'compose' ? 'compose' : 'application',
-            target.external_id
+            target.external_id,
+            { timeoutMs: DEPLOY_SYNC_TIMEOUT_MS }
         );
 
         // Le premier rapprochement garnit sans prévenir : tout l'historique est
@@ -297,12 +352,16 @@ export class DeploySync {
 
                 if (!settled) {
                     const body = await readJson<Record<string, unknown>>(cipher, match.content);
+                    const content = await cipher.encrypt(JSON.stringify({ ...body, description: entry.description }));
                     await this.deps.repo.updateDeployment(match.id, {
                         externalId,
                         status: entry.status,
                         finishedAt,
-                        content: await cipher.encrypt(JSON.stringify({ ...body, description: entry.description }))
+                        content
                     });
+                    // Le message vivant range ses identifiants dans ce blob : il
+                    // doit repartir de cette version, pas de celle lue avant.
+                    match.content = content;
                     changed = true;
                 }
                 seen.push({ row: match, entry });
@@ -333,26 +392,15 @@ export class DeploySync {
             seen.push({ row, entry });
         }
 
-        // Ce que DevEye croit en vol et que le fournisseur ne connaît pas : passé
-        // la borne, c'est un suivi perdu. Marqué `failed` faute d'état inconnu,
-        // mais sans avis : annoncer un échec qu'on n'a pas constaté serait pire.
-        for (const row of local) {
-            if (claimed.has(row.id) || isTerminal(row.status)) continue;
-            if (Number(row.started_at) > now - DEPLOY_STALE_SECONDS) continue;
-
-            const body = await readJson<Record<string, unknown>>(cipher, row.content);
-            await this.deps.repo.updateDeployment(row.id, {
-                externalId: row.external_id,
-                status: 'failed',
-                finishedAt: now,
-                content: await cipher.encrypt(
-                    JSON.stringify({
-                        ...body,
-                        description: 'Suivi perdu : le fournisseur ne connaît plus ce déploiement.'
-                    })
-                )
-            });
-            await this.deps.repo.markDeploymentNotified(row.id);
+        if (
+            await this.sweepLost(
+                target,
+                local,
+                claimed,
+                now,
+                'Suivi perdu : le fournisseur ne connaît plus ce déploiement.'
+            )
+        ) {
             changed = true;
         }
 
@@ -374,6 +422,47 @@ export class DeploySync {
             firstImport,
             now
         });
+    }
+
+    /**
+     * Ce que DevEye croit en vol et que le fournisseur ne dit plus (`claimed` :
+     * les lignes qu'il a décrites) : passé la borne, c'est un suivi perdu.
+     * Marqué `failed` faute d'état inconnu, mais sans avis : annoncer un échec
+     * qu'on n'a pas constaté serait pire. Rend vrai si une ligne a changé.
+     */
+    private async sweepLost(
+        target: DeployTargetSyncRow,
+        local: DeploymentRow[],
+        claimed: ReadonlySet<number>,
+        now: number,
+        reason: string
+    ): Promise<boolean> {
+        const cipher = this.deps.cipherFor(target.workspace_id);
+        let changed = false;
+        for (const row of local) {
+            if (claimed.has(row.id) || isTerminal(row.status)) continue;
+            if (Number(row.started_at) > now - DEPLOY_STALE_SECONDS) continue;
+
+            const body = await readJson<Record<string, unknown>>(cipher, row.content);
+            await this.deps.repo.updateDeployment(row.id, {
+                externalId: row.external_id,
+                status: 'failed',
+                finishedAt: now,
+                content: await cipher.encrypt(JSON.stringify({ ...body, description: reason }))
+            });
+            await this.deps.repo.markDeploymentNotified(row.id);
+            changed = true;
+        }
+        return changed;
+    }
+
+    /** Une instance muette ne garde pas ses déploiements « en cours » au-delà de la borne. */
+    private async sweepUnreachable(target: DeployTargetSyncRow, now: number): Promise<void> {
+        if (Number(target.in_flight) === 0) return;
+        const local = await this.deps.repo.listDeployments(target.id, target.workspace_id, DEPLOY_IMPORT_LIMIT * 3);
+        if (await this.sweepLost(target, local, new Set(), now, 'Suivi perdu : l’instance ne répond plus.')) {
+            this.deps.live.changed(target.workspace_id);
+        }
     }
 
     /**
@@ -587,8 +676,15 @@ export class DeploySync {
         const now = Math.floor(Date.now() / 1000);
         let cached = this.deployPlaces.get(credentialId);
         if (!cached || now - cached.at > DEPLOY_PLACE_TTL_SECONDS) {
+            let load = this.placeLoads.get(credentialId);
+            if (!load) {
+                load = this.dokploy
+                    .listTargets(baseUrl, apiKey, { timeoutMs: DEPLOY_SYNC_TIMEOUT_MS })
+                    .finally(() => this.placeLoads.delete(credentialId));
+                this.placeLoads.set(credentialId, load);
+            }
             try {
-                cached = { at: now, targets: await this.dokploy.listTargets(baseUrl, apiKey) };
+                cached = { at: now, targets: await load };
                 this.deployPlaces.set(credentialId, cached);
             } catch {
                 // Le catalogue périmé vaut mieux que rien : les noms de projet
@@ -619,7 +715,9 @@ export class DeploySync {
         if (cached && now - cached.at <= DEPLOY_REPO_TTL_SECONDS) return cached.url;
 
         try {
-            const url = await this.dokploy.fetchRepoUrl(baseUrl, apiKey, kind, externalId);
+            const url = await this.dokploy.fetchRepoUrl(baseUrl, apiKey, kind, externalId, {
+                timeoutMs: DEPLOY_SYNC_TIMEOUT_MS
+            });
             this.deployRepos.set(key, { at: now, url });
             return url;
         } catch {
@@ -655,7 +753,7 @@ export class DeploySync {
         if (item.description) lines.push('', item.description);
 
         return {
-            subject: `[DevEye] ${failed ? 'Échec' : 'Succès'} du déploiement — ${targetName}`,
+            subject: `[DevEye] ${failed ? 'Échec' : 'Succès'} du déploiement : ${targetName}`,
             body: lines.join('\n'),
             payload: {
                 event: failed ? 'deploy_failed' : 'deploy_succeeded',

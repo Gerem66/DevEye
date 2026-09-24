@@ -145,6 +145,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                     t.workspace_id === workspaceId && t.credential_id === credentialId && t.external_id === externalId
             ) ?? null,
         countTargets: async (workspaceId) => targets.filter((t) => t.workspace_id === workspaceId).length,
+        countTargetsInWorkspaces: async (ids) => targets.filter((t) => ids.includes(t.workspace_id)).length,
         async createTarget(input) {
             const created = target({
                 id: ++seq,
@@ -442,6 +443,22 @@ describe('deploy.add', () => {
         assert.equal(again.target.name, 'Pile renommée');
         assert.equal(repo.targets.length, 1);
         assert.equal(ctx.recorded.audits.length, 1);
+    });
+
+    it('borne les cibles de tous les espaces du propriétaire, sauf la redéclaration d’une cible existante', async () => {
+        const repo = fakeRepo();
+        repo.credentials.push(credential({ id: 10, workspace_id: 1 }));
+        repo.targets.push(target({ id: 1, workspace_id: 9, external_id: 'ailleurs' }));
+        const ctx = createTestContext({ repo, quotaLimits: { targets: 2 }, ownerWorkspaceIds: [1, 9] });
+
+        await handlerFor(deployAdd)(ctx, body);
+        await assert.rejects(
+            handlerFor(deployAdd)(ctx, { ...body, externalId: 'stack-2' }),
+            failsWith('quota_exceeded')
+        );
+        // La même cible, redéclarée : rien ne s'ajoute, rien ne bute.
+        await handlerFor(deployAdd)(ctx, { ...body, name: 'Pile renommée' });
+        assert.equal(repo.targets.length, 2);
     });
 });
 

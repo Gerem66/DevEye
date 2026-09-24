@@ -82,7 +82,7 @@ export const deployHandlers = [
     defineSdkFeature({
         ...deployCount,
         handler: async (ctx: Ctx) => {
-            // Les mêmes lignes que la liste — projetées comprises, restrictions
+            // Les mêmes lignes que la liste, projetées comprises, restrictions
             // déduites : la carte doit compter ce que la liste montre.
             const rows = await ctx.repo.listVisibleTargets(ctx.workspaceId);
             const hidden = await ctx.items.restrictions();
@@ -93,7 +93,7 @@ export const deployHandlers = [
         ...deployGet,
         handler: async (ctx: Ctx, input) => {
             // La ligne d'abord : c'est elle qui dit où vivent l'historique et sa
-            // clé — chez la cible, pas forcément ici.
+            // clé, chez la cible, pas forcément ici.
             const home = await loadTarget(ctx, input.targetId);
             const cipher = await targetCipherFor(ctx, home);
             const [target, rows, projectIds] = await Promise.all([
@@ -135,6 +135,10 @@ export const deployHandlers = [
                 });
                 return { target: await reloadTarget(ctx, existing.id) };
             }
+
+            // Après l'idempotence : redéclarer une cible existante n'en ajoute
+            // aucune, et ne doit donc jamais buter sur la limite.
+            await ctx.quota.assert('targets', async (owned) => (await ctx.repo.countTargetsInWorkspaces(owned)) + 1);
 
             const row = await ctx.repo.createTarget({
                 workspaceId: ctx.workspaceId,

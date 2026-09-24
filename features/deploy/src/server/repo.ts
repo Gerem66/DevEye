@@ -36,6 +36,8 @@ export interface DeployRepo {
         externalId: string
     ): Promise<DeployTargetRow | null>;
     countTargets(workspaceId: number): Promise<number>;
+    /** Les cibles de tous ces espaces : ce que l'offre de leur propriétaire borne. */
+    countTargetsInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
     createTarget(input: {
         workspaceId: number;
         credentialId: number;
@@ -78,12 +80,18 @@ export interface DeployRepo {
     countCredentialUses(workspaceId: number): Promise<Map<number, number>>;
 
     /**
-     * Les cibles à réinterroger, la plus urgente d'abord. Une cible qui a un
-     * déploiement en vol passe à chaque tour, les autres attendent
-     * `staleBefore` ; `limit` plafonne la rafale sortante. Les cibles sans jeton
-     * ou sans adresse sont écartées ici : rien à leur demander.
+     * Les cibles à réinterroger, la plus urgente d'abord, les espaces servis à
+     * tour de rôle : la première de chaque espace passe avant la deuxième de
+     * quiconque. Une cible qui a un déploiement en vol passe à chaque tour, les
+     * autres attendent `staleBefore` ; `limit` plafonne la rafale sortante. Les
+     * cibles sans jeton ou sans adresse sont écartées ici, comme celles des
+     * accès de `skipCredentialIds` (occupés ou en recul).
      */
-    listTargetsDue(limit: number, staleBefore: number): Promise<DeployTargetSyncRow[]>;
+    listTargetsDue(
+        limit: number,
+        staleBefore: number,
+        skipCredentialIds: readonly number[]
+    ): Promise<DeployTargetSyncRow[]>;
     /** Horodate un rapprochement réussi ; c'est lui qui sort du premier import. */
     markTargetSynced(id: number, at: number): Promise<void>;
 
@@ -226,6 +234,14 @@ export function createRepo(q: SdkQueryable): DeployRepo {
             );
             return Number(rows[0]?.n ?? 0);
         },
+        async countTargetsInWorkspaces(workspaceIds) {
+            if (workspaceIds.length === 0) return 0;
+            const rows = await q.query<{ n: number }>(
+                'SELECT COUNT(*) AS n FROM deploy_targets WHERE workspace_id IN (?)',
+                [workspaceIds]
+            );
+            return Number(rows[0]?.n ?? 0);
+        },
         async createTarget({ workspaceId, credentialId, provider, kind, externalId, content }) {
             // Une nouvelle cible atterrit à la fin de la liste, jamais au milieu :
             // l'ordre appartient à l'utilisateur, un ajout ne le réarrange pas.
@@ -329,23 +345,33 @@ export function createRepo(q: SdkQueryable): DeployRepo {
             return new Map(rows.map((row) => [Number(row.credential_id), Number(row.uses)]));
         },
 
-        async listTargetsDue(limit, staleBefore) {
+        async listTargetsDue(limit, staleBefore, skipCredentialIds) {
+            const skip = skipCredentialIds.length > 0 ? 'AND c.id NOT IN (?)' : '';
             // Sous-requête plutôt que HAVING : le compte des déploiements en vol
             // est un scalaire corrélé, pas une agrégation du groupe, et le
-            // filtrer demande donc de le matérialiser d'abord.
+            // filtrer demande donc de le matérialiser d'abord. `turn` numérote
+            // les cibles dues de chaque espace : trié en premier, il sert les
+            // espaces à tour de rôle.
             return q.query<DeployTargetSyncRow>(
                 `SELECT * FROM (
-                     SELECT t.*, c.base_url,
-                            (SELECT COUNT(*) FROM deployments d
-                              WHERE d.target_id = t.id AND d.status IN ('queued', 'running')) AS in_flight
-                       FROM deploy_targets t
-                       JOIN ft_deploy_credentials c ON c.id = t.credential_id
-                      WHERE c.base_url IS NOT NULL AND c.base_url <> ''
-                 ) AS x
-                  WHERE x.in_flight > 0 OR x.synced_at IS NULL OR x.synced_at < ?
-                  ORDER BY x.in_flight DESC, x.synced_at IS NULL DESC, x.synced_at ASC, x.id ASC
+                     SELECT x.*,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY x.workspace_id
+                                ORDER BY x.in_flight DESC, x.synced_at IS NULL DESC, x.synced_at ASC, x.id ASC
+                            ) AS turn
+                       FROM (
+                            SELECT t.*, c.base_url,
+                                   (SELECT COUNT(*) FROM deployments d
+                                     WHERE d.target_id = t.id AND d.status IN ('queued', 'running')) AS in_flight
+                              FROM deploy_targets t
+                              JOIN ft_deploy_credentials c ON c.id = t.credential_id
+                             WHERE c.base_url IS NOT NULL AND c.base_url <> '' ${skip}
+                       ) AS x
+                      WHERE x.in_flight > 0 OR x.synced_at IS NULL OR x.synced_at < ?
+                 ) AS y
+                  ORDER BY y.turn ASC, y.in_flight DESC, y.synced_at IS NULL DESC, y.synced_at ASC, y.id ASC
                   LIMIT ?`,
-                [staleBefore, limit]
+                skipCredentialIds.length > 0 ? [skipCredentialIds, staleBefore, limit] : [staleBefore, limit]
             );
         },
         async markTargetSynced(id, at) {

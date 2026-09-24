@@ -23,6 +23,8 @@ export const manifest = {
      * écriture et à chaque changement d'état vu par le rapprochement de fond.
      */
     resources: ['deploy.count', 'deploy.list', 'deploy.detail'],
+    /** Une cible sondée coûte une requête sortante par minute, à vie : c'est ce que l'offre borne. */
+    quotas: [{ key: 'targets', label: 'cibles de déploiement' }],
     /** Les canaux d'avis par cible, message vivant compris (`notify.liveChannels`, `notify.postLive`). */
     nativeCapabilities: ['notify'],
     /** Ce que la fiche « À propos » relie : les avis partent par un compte Mail. */

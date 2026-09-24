@@ -64,11 +64,19 @@ function base(baseUrl: string): string {
     return new URL('/api/trpc', baseUrl).toString().replace(/\/+$/, '');
 }
 
+/** Le délai d'une lecture, sauf mention contraire : celui d'un geste de l'utilisateur. */
+const DEFAULT_TIMEOUT_MS = 30_000;
+
+/** Un appel de fond se donne moins de temps qu'un geste, qui peut attendre. */
+export interface DokployReadOptions {
+    timeoutMs?: number;
+}
+
 async function call<T>(
     baseUrl: string,
     procedure: string,
     apiKey: string,
-    options: { input?: unknown; mutate?: boolean } = {}
+    options: { input?: unknown; mutate?: boolean; timeoutMs?: number } = {}
 ): Promise<T> {
     // superjson : l'entrée voyage sous une clé `json`, en query pour une
     // requête, en corps pour une mutation.
@@ -88,7 +96,7 @@ async function call<T>(
                 ...(options.mutate ? { 'content-type': 'application/json' } : {})
             },
             body: options.mutate ? (wrapped ?? '{"json":{}}') : undefined,
-            signal: AbortSignal.timeout(30_000)
+            signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
         });
     } catch (e) {
         if (e instanceof UnsafeTargetError) throw new DokployError(e.message, 0);
@@ -307,20 +315,31 @@ export function dashboardUrl(baseUrl: string, target: DokployTarget): string | n
     return `${root}/dashboard/project/${target.projectId}/environment/${target.environmentId}/services/${target.kind}/${target.externalId}`;
 }
 
-export async function listTargets(baseUrl: string, apiKey: string): Promise<DokployTarget[]> {
-    return readTargets(await call<unknown>(baseUrl, 'project.all', apiKey));
+export async function listTargets(
+    baseUrl: string,
+    apiKey: string,
+    options: DokployReadOptions = {}
+): Promise<DokployTarget[]> {
+    return readTargets(await call<unknown>(baseUrl, 'project.all', apiKey, options));
 }
 
 export async function listDeployments(
     baseUrl: string,
     apiKey: string,
     kind: DokployKind,
-    externalId: string
+    externalId: string,
+    options: DokployReadOptions = {}
 ): Promise<DokployDeployment[]> {
     const payload =
         kind === 'compose'
-            ? await call<unknown>(baseUrl, 'deployment.allByCompose', apiKey, { input: { composeId: externalId } })
-            : await call<unknown>(baseUrl, 'deployment.all', apiKey, { input: { applicationId: externalId } });
+            ? await call<unknown>(baseUrl, 'deployment.allByCompose', apiKey, {
+                  ...options,
+                  input: { composeId: externalId }
+              })
+            : await call<unknown>(baseUrl, 'deployment.all', apiKey, {
+                  ...options,
+                  input: { applicationId: externalId }
+              });
     return readDeployments(payload);
 }
 
@@ -337,12 +356,16 @@ export async function fetchRepoUrl(
     baseUrl: string,
     apiKey: string,
     kind: DokployKind,
-    externalId: string
+    externalId: string,
+    options: DokployReadOptions = {}
 ): Promise<string | null> {
     const row =
         kind === 'compose'
-            ? await call<unknown>(baseUrl, 'compose.one', apiKey, { input: { composeId: externalId } })
-            : await call<unknown>(baseUrl, 'application.one', apiKey, { input: { applicationId: externalId } });
+            ? await call<unknown>(baseUrl, 'compose.one', apiKey, { ...options, input: { composeId: externalId } })
+            : await call<unknown>(baseUrl, 'application.one', apiKey, {
+                  ...options,
+                  input: { applicationId: externalId }
+              });
     return row && typeof row === 'object' ? readRepoUrl(row as Record<string, unknown>) : null;
 }
 

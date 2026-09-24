@@ -103,10 +103,13 @@ function fakeRepo(
         updateCredential: unused,
         removeCredential: unused,
         countCredentialUses: unused,
-        // La requête du vrai dépôt, en mémoire : jointure sur la clé, compte des
-        // déploiements en vol, les deux régimes et l'ordre.
-        listTargetsDue: async (limit, staleBefore) =>
-            targets
+        countTargetsInWorkspaces: async (ids) => targets.filter((t) => ids.includes(t.workspace_id)).length,
+        // La requête du vrai dépôt, en mémoire : jointure sur la clé, accès
+        // écartés, compte des déploiements en vol, les deux régimes, le tour de
+        // chaque espace et l'ordre.
+        listTargetsDue: async (limit, staleBefore, skipCredentialIds) => {
+            const due = targets
+                .filter((t) => t.credential_id === null || !skipCredentialIds.includes(t.credential_id))
                 .map((t) => {
                     const c = credentials.find((x) => x.id === t.credential_id);
                     return {
@@ -119,8 +122,18 @@ function fakeRepo(
                 })
                 .filter((t) => t.base_url)
                 .filter((t) => t.in_flight > 0 || t.synced_at === null || t.synced_at < staleBefore)
-                .sort((a, b) => b.in_flight - a.in_flight || a.id - b.id)
-                .slice(0, limit),
+                .sort((a, b) => b.in_flight - a.in_flight || a.id - b.id);
+            const seen = new Map<number, number>();
+            return due
+                .map((t) => {
+                    const turn = (seen.get(t.workspace_id) ?? 0) + 1;
+                    seen.set(t.workspace_id, turn);
+                    return { t, turn };
+                })
+                .sort((a, b) => a.turn - b.turn)
+                .map(({ t }) => t)
+                .slice(0, limit);
+        },
         markTargetSynced: async (id, at) => {
             const t = targets.find((x) => x.id === id);
             if (t) t.synced_at = at;
@@ -200,7 +213,11 @@ function syncWith(repo: FakeRepo, options: { liveChannels?: readonly number[]; n
         deps,
         sync,
         repoReads: () => repoReads,
-        tick: () => deps.recorded.tickers[0].tick(),
+        /** Un battement, et l'attente des rapprochements qu'il a lancés. */
+        tick: async () => {
+            await deps.recorded.tickers[0].tick();
+            await sync.idle();
+        },
         /** Ce que l'instance répond au prochain tour ; `null` = injoignable. */
         answer(next: Answers | null) {
             answers = next;
@@ -291,7 +308,7 @@ describe('le message vivant', () => {
         assert.equal(deps.recorded.liveMessages.length, 3);
         assert.deepEqual(
             deps.recorded.notifications.map((n) => [n.itemId, n.except, n.subject]),
-            [[1, [7], '[DevEye] Succès du déploiement — Serveur']]
+            [[1, [7], '[DevEye] Succès du déploiement : Serveur']]
         );
         assert.deepEqual(deps.recorded.liveChanges, [1, 1]);
 
@@ -323,7 +340,7 @@ describe('le message vivant', () => {
         assert.deepEqual(noticeIdsOf(repo.deployments[0]), {});
         assert.deepEqual(
             deps.recorded.notifications.map((n) => [n.except, n.subject, n.body.includes('exit code 1')]),
-            [[[7], '[DevEye] Échec du déploiement — Serveur', true]]
+            [[[7], '[DevEye] Échec du déploiement : Serveur', true]]
         );
         assert.equal(repo.deployments[0].notified, 1);
     });
@@ -438,5 +455,152 @@ describe('DEPLOY_ITEMS_PROVIDER : labelOf', () => {
         assert.equal(await provider.labelOf(1, 1), 'Serveur');
         assert.equal(await provider.labelOf(42, 1), null);
         assert.equal(await provider.labelOf(1, 2), null);
+    });
+});
+
+/** Une instance par adresse : chaque test dit ce que répond chacune, ou la laisse pendre. */
+function syncByInstance(repo: FakeRepo, options: { liveChannels?: readonly number[] } = {}) {
+    const deps = createTestServiceDeps({ repo, ...options });
+    const calls: string[] = [];
+    const answers = new Map<string, DokployDeployment[] | Error | Promise<never>>();
+    const sync = new DeploySync(deps, {
+        listDeployments: async (baseUrl, _key, _kind, externalId) => {
+            calls.push(`${baseUrl}#${externalId}`);
+            const answer = answers.get(baseUrl) ?? [];
+            if (answer instanceof Error) throw answer;
+            return answer;
+        },
+        listTargets: async () => [],
+        fetchDeploymentLog: async () => '',
+        fetchRepoUrl: async () => null
+    });
+    return { deps, sync, calls, answers, beat: () => deps.recorded.tickers[0].tick() };
+}
+
+describe('le partage entre accès et espaces', () => {
+    it('une instance qui pend ne retient pas les cibles des autres', async () => {
+        const repo = fakeRepo(
+            [target({ id: 1, credential_id: 10 }), target({ id: 2, workspace_id: 2, credential_id: 20 })],
+            [
+                credential({ id: 10, base_url: 'https://lente.fr' }),
+                credential({ id: 20, workspace_id: 2, base_url: 'https://vive.fr' })
+            ]
+        );
+        const { sync, calls, answers, beat } = syncByInstance(repo);
+        let release: () => void = () => undefined;
+        answers.set(
+            'https://lente.fr',
+            new Promise<never>((_, reject) => {
+                release = () => reject(new Error('délai dépassé'));
+            })
+        );
+        answers.set('https://vive.fr', []);
+        await beat();
+        // La cible saine a abouti pendant que l'autre pend encore.
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.notEqual(repo.targets[1].synced_at, 100);
+        assert.equal(repo.targets[0].synced_at, 100);
+
+        // Un second battement ne relance pas la cible encore en vol.
+        await beat();
+        assert.equal(calls.filter((c) => c.startsWith('https://lente.fr')).length, 1);
+        release();
+        await sync.idle();
+    });
+
+    it('sert les espaces à tour de rôle', async () => {
+        const crowded = Array.from({ length: 8 }, (_, i) =>
+            target({ id: i + 1, credential_id: 100 + i, synced_at: null })
+        );
+        const repo = fakeRepo(
+            [...crowded, target({ id: 50, workspace_id: 2, credential_id: 200, synced_at: null })],
+            [
+                ...crowded.map((t) => credential({ id: t.credential_id ?? 0, base_url: `https://i${t.id}.fr` })),
+                credential({ id: 200, workspace_id: 2, base_url: 'https://seul.fr' })
+            ]
+        );
+        const { sync, calls, beat } = syncByInstance(repo);
+        await beat();
+        await sync.idle();
+        // Six places, huit cibles d'un espace devant : celle de l'autre espace passe quand même.
+        assert.equal(calls.length, 6);
+        assert.ok(calls.includes('https://seul.fr#app-1'));
+    });
+
+    it('recule par accès : toutes les cibles d’une instance muette attendent, les autres continuent', async () => {
+        const repo = fakeRepo(
+            [
+                target({ id: 1, credential_id: 10, synced_at: null }),
+                target({ id: 2, credential_id: 10, external_id: 'app-2', synced_at: null }),
+                target({ id: 3, credential_id: 20, synced_at: null })
+            ],
+            [credential({ id: 10, base_url: 'https://muette.fr' }), credential({ id: 20, base_url: 'https://vive.fr' })]
+        );
+        const { sync, calls, answers, beat } = syncByInstance(repo);
+        answers.set('https://muette.fr', new Error('Instance Dokploy injoignable'));
+        await beat();
+        await sync.idle();
+        await beat();
+        await sync.idle();
+        // Une seule tentative vers l'instance muette, jamais sa seconde cible.
+        assert.deepEqual(
+            calls.filter((c) => c.startsWith('https://muette.fr')),
+            ['https://muette.fr#app-1']
+        );
+        assert.notEqual(repo.targets[2].synced_at, null);
+    });
+
+    it('une instance muette ne garde pas un déploiement en cours au-delà de la borne', async () => {
+        const stale: DeploymentRow = {
+            id: 5,
+            target_id: 1,
+            workspace_id: 1,
+            external_id: 'dep-1',
+            status: 'running',
+            triggered_by_user_id: 3,
+            started_at: NOW() - 7 * 3600,
+            finished_at: null,
+            notified: 0,
+            content: JSON.stringify({ title: 'Perdu', description: '', url: null })
+        };
+        const repo = fakeRepo([target()], [credential()], [stale]);
+        const { deps, sync, answers, beat } = syncByInstance(repo);
+        answers.set('https://dokploy.exemple.fr', new Error('Instance Dokploy injoignable'));
+        await beat();
+        await sync.idle();
+        assert.deepEqual(
+            repo.deployments.map((d) => [
+                d.status,
+                d.notified,
+                (JSON.parse(d.content) as { description: string }).description
+            ]),
+            [['failed', 1, 'Suivi perdu : l’instance ne répond plus.']]
+        );
+        assert.deepEqual(deps.recorded.liveChanges, [1]);
+    });
+});
+
+describe('le blob d’un déploiement', () => {
+    it('garde la description écrite au même tour que le premier message vivant', async () => {
+        const startedAt = NOW() - 20;
+        const local: DeploymentRow = {
+            id: 5,
+            target_id: 1,
+            workspace_id: 1,
+            external_id: null,
+            status: 'queued',
+            triggered_by_user_id: 3,
+            started_at: startedAt,
+            finished_at: null,
+            notified: 0,
+            content: JSON.stringify({ title: 'Mise en prod', description: '', url: null })
+        };
+        const repo = fakeRepo([target()], [credential()], [local]);
+        const { tick, answer } = syncWith(repo, { liveChannels: [7] });
+        answer({ remote: [entry({ externalId: 'dep-9', startedAt, description: 'Construction' })] });
+        await tick();
+        const blob = JSON.parse(repo.deployments[0].content) as { description: string; noticeIds: object };
+        assert.equal(blob.description, 'Construction');
+        assert.deepEqual(blob.noticeIds, { '7': 'live-1' });
     });
 });
