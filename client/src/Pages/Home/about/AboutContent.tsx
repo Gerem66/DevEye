@@ -1,13 +1,13 @@
 import type { HomeFeatureId } from '@deveye/types';
 
 import {
-    featureCatalog,
     FEATURE_CATEGORIES,
     FEATURE_CATEGORY_ICON,
     FEATURE_CATEGORY_LABEL,
     featureCatalogEntry,
     featureRelations,
     featuresInCategory,
+    visibleFeatureCatalog,
     type FeatureCatalogEntry
 } from '../catalog';
 import Term from '@/Components/Term';
@@ -94,8 +94,9 @@ function FeatureRow({ entry }: { entry: FeatureCatalogEntry }) {
  * jamais en retard sur lui.
  */
 export default function AboutContent() {
-    const encrypted = featureCatalog().filter((f) => f.holdSecrecy);
-    const alerting = featureCatalog().filter((f) => (f.links ?? []).some((l) => l.to === 'mail'));
+    const catalog = visibleFeatureCatalog();
+    const encrypted = catalog.filter((f) => f.holdSecrecy);
+    const alerting = catalog.filter((f) => (f.links ?? []).some((l) => l.to === 'mail'));
 
     return (
         <>
@@ -107,7 +108,7 @@ export default function AboutContent() {
             <div>
                 <p className={styles.sectionTitle}>Fonctionnalités</p>
                 {FEATURE_CATEGORIES.map((category) => {
-                    const entries = featuresInCategory(featureCatalog(), category);
+                    const entries = featuresInCategory(catalog, category);
                     if (entries.length === 0) return null;
                     return (
                         <div key={category} className={styles.category}>

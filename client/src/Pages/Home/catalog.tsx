@@ -3,6 +3,7 @@ import type { HomeFeatureId } from '@deveye/types';
 
 import type { FeatureProps } from '@/Features/types';
 import { cardModules } from '@/sdk/registry';
+import { isFeatureHidden } from '@/stores/maintenance';
 
 /** Le rayon du marché, porté par l'entrée elle-même : le marché et l'« À
  *  propos » racontent la même chose sans table à côté. */
@@ -122,7 +123,18 @@ export function featureCatalog(): readonly FeatureCatalogEntry[] {
     return MERGED;
 }
 
+/**
+ * Le catalogue tel que le voit le compte courant : sans les features en
+ * préversion qui ne lui sont pas ouvertes. {@link featureCatalog} reste entier
+ * pour les vues, qu'un administrateur ouvre.
+ */
+export function visibleFeatureCatalog(): FeatureCatalogEntry[] {
+    return featureCatalog().filter((f) => !isFeatureHidden(f.id));
+}
+
+/** `undefined` pour un id inconnu, et pour une feature que le compte courant ne voit pas. */
 export function featureCatalogEntry(id: HomeFeatureId): FeatureCatalogEntry | undefined {
+    if (isFeatureHidden(id)) return undefined;
     return featureCatalog().find((f) => f.id === id);
 }
 
@@ -153,7 +165,7 @@ export function featureRelations(id: HomeFeatureId): FeatureRelation[] {
         const entry = featureCatalogEntry(link.to);
         if (entry) out.push({ entry, what: link.what, outgoing: true });
     }
-    for (const source of featureCatalog()) {
+    for (const source of visibleFeatureCatalog()) {
         for (const link of source.links ?? []) {
             if (link.to === id) out.push({ entry: source, what: link.what, outgoing: false });
         }

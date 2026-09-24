@@ -1,17 +1,25 @@
 # Maintenance
 
 Fermer le site entier, ou une seule fonctionnalité, pour tout le monde et à
-l'instant : une faille, un bug, un emballement. Depuis l'interface (menu du
-profil, « Maintenance », réservé aux administrateurs), depuis la base quand
-l'interface ne répond plus, ou dès le démarrage par une variable d'environnement.
+l'instant : une faille, un bug, un emballement. Ou réserver une fonctionnalité
+aux administrateurs, le temps de l'essayer en production avant de l'ouvrir.
+Depuis l'interface (menu du profil, « Maintenance », réservé aux
+administrateurs), depuis la base quand l'interface ne répond plus, ou dès le
+démarrage par une variable d'environnement.
 
 ## Les niveaux
 
 | Niveau                   | Qui entre           | Ce qui est refusé                                                             | Ce qui continue                                        |
 | ------------------------ | ------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------ |
 | Site en maintenance      | les administrateurs | la connexion, la socket et toute commande des autres comptes, l'inscription   | le travail de fond, les agents                         |
+| Feature en préversion    | les administrateurs | ses commandes, aux autres comptes                                             | son service de fond, ses routes publiques              |
 | Feature en maintenance   | les administrateurs | ses commandes et ses routes publiques (pages Rdv, traceur Audience, webhooks) | son service de fond                                    |
 | Feature en arrêt complet | personne            | idem, et même les administrateurs                                             | rien : son service est arrêté, ses hooks agent ignorés |
+
+La préversion laisse ses routes publiques ouvertes : seuls les administrateurs y
+créent quelque chose, et ce qu'elles servent est à eux (le défi ACME du serveur
+mail, une page de statut). Ce qu'un autre compte y avait créé avant la bascule
+continue aussi d'être servi, et son travail de fond de tourner.
 
 L'arrêt complet refuse aussi l'administrateur parce que la feature ne sait plus
 répondre : ses commandes lèveraient une erreur interne. Ses `providers` restent
@@ -28,6 +36,14 @@ facturation ne sautent jamais à cause d'une maintenance.
   tuile se grise avec « En maintenance » comme une tuile sans droit. Chez
   l'administrateur, la tuile reste vivante avec une pastille « Maintenance », ou
   se grise avec « Arrêt complet ».
+- **Feature en préversion** : pour les autres comptes, elle n'existe pas. Sa
+  tuile disparaît de l'accueil et des dossiers, et en mode organisation elle
+  n'est qu'un emplacement « Indisponible », comme un module retiré. Elle quitte
+  aussi le catalogue d'ajout, l'« À propos », le menu du compte, l'éditeur de
+  rôles (ses droits restent enregistrés), le tableau des offres et les liens des
+  autres modules (`moduleClientProvider` la tient pour absente). La présence ne
+  dit pas qu'un administrateur s'y trouve. Chez l'administrateur, la tuile porte
+  une pastille « Préversion ».
 - **Administrateur** : un bandeau à l'accueil tant que le site est en
   maintenance.
 
@@ -42,6 +58,7 @@ UPDATE site_maintenance SET active = 1;
 UPDATE site_maintenance SET active = 0;
 INSERT INTO feature_maintenance (feature, level) VALUES ('rdv', 'requests');
 UPDATE feature_maintenance SET level = 'full' WHERE feature = 'rdv';
+INSERT INTO feature_maintenance (feature, level) VALUES ('mailserver', 'preview');
 DELETE FROM feature_maintenance WHERE feature = 'rdv';
 ```
 
@@ -73,6 +90,8 @@ en direct). Chaque démarrage sous la variable le réarme.
 - `src/features/_sdk/register.ts` : les routes publiques des modules. Celles en
   `exposure: 'app'` passent, sauf à l'arrêt complet : elles prolongent une
   commande déjà gardée.
+- `client/src/stores/maintenance.ts` : `isFeatureHidden` et `useHiddenFeatures`,
+  ce qu'une préversion retire de l'écran d'un compte non administrateur.
 
 Restent ouverts : `/api/health`, `/api/status`, `/api/maintenance`, le client,
 et les agents, qui ne sont pas des utilisateurs.

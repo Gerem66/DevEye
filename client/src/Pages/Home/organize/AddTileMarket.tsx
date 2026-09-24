@@ -13,10 +13,10 @@ import {
     useHomeLayout
 } from '@/stores/homeLayout';
 import {
-    featureCatalog,
     FEATURE_CATEGORIES,
     FEATURE_CATEGORY_ICON,
     FEATURE_CATEGORY_LABEL,
+    visibleFeatureCatalog,
     type FeatureCategory
 } from '../catalog';
 import { allRecommendedPlaced, recommendedFeatures } from '../starters';
@@ -170,11 +170,11 @@ export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketP
             });
         }
 
-        // Tout le catalogue est proposé : le droit d'ouvrir une feature est
-        // celui du rôle, et la grille le dit tuile par tuile (« Accès
+        // Tout le catalogue visible est proposé : le droit d'ouvrir une feature
+        // est celui du rôle, et la grille le dit tuile par tuile (« Accès
         // restreint ») plutôt que de cacher ce qu'un autre membre a posé.
         const placedFeatures = new Set<string>(placedFeatureIds(layout));
-        for (const feature of featureCatalog()) {
+        for (const feature of visibleFeatureCatalog()) {
             items.push({
                 key: `feature:${feature.id}`,
                 rayon: feature.category,

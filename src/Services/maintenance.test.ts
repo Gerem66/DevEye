@@ -7,7 +7,13 @@ import type { Database } from '@/db';
 import type { FeatureMaintenanceRow, SiteMaintenanceRow } from '@/db/repos/maintenance';
 import type { LiveHub } from '@/live/hub';
 import { env } from '@/Utils/Env';
-import { DEFAULT_SITE_MESSAGE, maintenance, type MaintenanceServices } from './maintenance';
+import {
+    DEFAULT_SITE_MESSAGE,
+    FEATURE_MAINTENANCE_MESSAGE,
+    FEATURE_PREVIEW_MESSAGE,
+    maintenance,
+    type MaintenanceServices
+} from './maintenance';
 
 const ADMIN = 1;
 const MEMBER = 2;
@@ -177,6 +183,19 @@ describe('maintenance : les features', () => {
         assert.equal(maintenance.refusesPublic('uptime', true), false);
         await maintenance.setFeature('uptime', 'full', ADMIN);
         assert.equal(maintenance.refusesPublic('uptime', true), true);
+    });
+
+    it('réserve la préversion aux administrateurs sans fermer ses routes publiques ni son service', async () => {
+        const t = await boot({ features: { uptime: 'preview' } });
+        assert.equal(maintenance.refuses('uptime', false), true);
+        assert.equal(maintenance.refuses('uptime', true), false);
+        assert.equal(maintenance.refusalMessage('uptime'), FEATURE_PREVIEW_MESSAGE);
+        assert.equal(maintenance.refusesPublic('uptime', false), false);
+        await maintenance.setFeature('uptime', 'requests', ADMIN);
+        assert.equal(maintenance.refusalMessage('uptime'), FEATURE_MAINTENANCE_MESSAGE);
+        assert.equal(maintenance.refusesPublic('uptime', false), true);
+        await maintenance.setFeature('uptime', 'preview', ADMIN);
+        assert.deepEqual(t.calls, []);
     });
 
     it("arrête le service à l'arrêt complet et le relance à la sortie, pas avant", async () => {

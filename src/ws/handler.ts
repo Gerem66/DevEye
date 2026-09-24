@@ -35,7 +35,7 @@ import { FeatureError } from '@/features/_define';
 import { featureHandlerMap } from '@/features/registry';
 import { topicsOf } from '@/features/_topics';
 import { enterSessionCommand, exitSessionCommand, forgetSessionDek } from '@/Services/SecureStore';
-import { FEATURE_MAINTENANCE_MESSAGE, maintenance } from '@/Services/maintenance';
+import { maintenance } from '@/Services/maintenance';
 import { env, isDev } from '@/Utils/Env';
 import { logger } from '@/logger';
 
@@ -250,7 +250,7 @@ export async function registerWS(
                 // reçoivent en entrée (`share.*`, `notify.*`, `domain.*`).
                 const assertNotInMaintenance = (f: FeatureId): void => {
                     if (maintenance.refuses(f, scope.isAdmin)) {
-                        throw new FeatureError('maintenance', FEATURE_MAINTENANCE_MESSAGE);
+                        throw new FeatureError('maintenance', maintenance.refusalMessage(f));
                     }
                 };
                 const can = (c: WorkspaceCapability): boolean => scope.capabilities.has(c);

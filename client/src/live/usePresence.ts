@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { useAuth } from '@/auth/AuthProvider';
 import { featureCatalog } from '@/Pages/Home/catalog';
 import { usePeers } from '@/stores/live';
+import { isFeatureHidden } from '@/stores/maintenance';
 import { useActiveWorkspace } from '@/stores/workspace';
 
 /**
@@ -48,6 +49,8 @@ export function livePathLabel(path: readonly string[]): string {
     if (path.length === 0) return 'Accueil';
     const root = path[0];
     const viewId = root.slice(root.indexOf(':') + 1);
+    // Une feature en préversion n'existe pas pour ce compte : même silence.
+    if (isFeatureHidden(viewId)) return 'Accueil';
     const view = viewTitles()[viewId] ?? 'Ailleurs';
     // La coquille de réglages ferme le chemin quand elle est ouverte : le dire,
     // sinon deux personnes au même endroit s'affichent pareil alors que l'une

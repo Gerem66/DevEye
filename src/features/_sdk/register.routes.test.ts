@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Logger } from 'pino';
+import type { FeatureMaintenanceLevel } from '@deveye/types';
 import type { FeatureManifest } from '@deveye/types/sdk';
 import type { FeatureServer } from '@deveye/types/sdk/server';
 
@@ -173,7 +174,7 @@ describe('parseFormFields', () => {
  * commande déjà gardée et passe, sauf à l'arrêt complet.
  */
 describe('routes publiques en maintenance', () => {
-    const state = { site: false, level: null as 'requests' | 'full' | null };
+    const state = { site: false, level: null as FeatureMaintenanceLevel | null };
     const db = {
         users: { listAdminIds: async () => [] },
         maintenance: {
@@ -189,7 +190,7 @@ describe('routes publiques en maintenance', () => {
             setSite: async (active: boolean) => {
                 state.site = active;
             },
-            setFeature: async (_feature: string, level: 'requests' | 'full' | null) => {
+            setFeature: async (_feature: string, level: FeatureMaintenanceLevel | null) => {
                 state.level = level;
             }
         }
@@ -223,6 +224,16 @@ describe('routes publiques en maintenance', () => {
             assert.equal(own.statusCode, 200);
         } finally {
             await maintenance.setSite(false, null, 1);
+        }
+    });
+
+    it('laisse ouvertes les routes publiques de la préversion', async () => {
+        await maintenance.setFeature('x-sdkstream', 'preview', 1);
+        try {
+            const open = await app.inject({ method: 'GET', url: '/api/x-sdkstream/page' });
+            assert.equal(open.statusCode, 200);
+        } finally {
+            await maintenance.setFeature('x-sdkstream', null, 1);
         }
     });
 

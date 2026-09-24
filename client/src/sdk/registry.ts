@@ -3,6 +3,7 @@ import { externalDescriptorOf, validateManifest, type FeatureManifest } from '@d
 import type { FeatureClient } from '@deveye/types/sdk/client';
 
 import { registerCrossTopicKeys, registerFeatureResources, type ResourceKey } from '@/stores/invalidation';
+import { isFeatureHidden } from '@/stores/maintenance';
 
 /**
  * Le registre des modules installés, côté client. Volontairement sans dépendance
@@ -88,10 +89,12 @@ export function moduleClient(featureId: string): FeatureClient | undefined {
 /**
  * Le contrat nommé qu'un module offre aux écrans de l'app (voir
  * `@deveye/types/sdk/providers`), jumeau client de `moduleProvider` : recherche
- * au rendu, `undefined` quand le module est absent, à l'écran de dégrader.
+ * au rendu, `undefined` quand le module est absent ou en préversion pour ce
+ * compte, à l'écran de dégrader.
  */
 export function moduleClientProvider<T>(key: string): T | undefined {
     for (const mod of MODULES) {
+        if (isFeatureHidden(mod.manifest.id)) continue;
         const value = mod.client.providers?.[key];
         if (value !== undefined) return value as T;
     }

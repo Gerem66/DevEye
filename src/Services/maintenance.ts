@@ -20,6 +20,9 @@ export const DEFAULT_SITE_MESSAGE =
 
 export const FEATURE_MAINTENANCE_MESSAGE = 'Cette fonctionnalité est en maintenance. Réessayez un peu plus tard.';
 
+/** Le refus d'une feature en préversion : elle n'existe pas encore pour ce compte. */
+export const FEATURE_PREVIEW_MESSAGE = 'Cette fonctionnalité n’est pas disponible.';
+
 /** Relecture de la base : ce qu'on y écrit à la main s'applique sans redémarrage. */
 const POLL_MS = 15_000;
 
@@ -110,18 +113,25 @@ class MaintenanceStore {
     /** L'arrêt complet refuse aussi l'administrateur : la feature ne sait plus répondre. */
     refuses(featureId: string, isAdmin: boolean): boolean {
         const level = this.featureLevel(featureId);
-        return level === 'full' || (level === 'requests' && !isAdmin);
+        return level === 'full' || (level !== null && !isAdmin);
+    }
+
+    /** Le motif d'un refus de {@link refuses}, dit à celui qu'on refuse. */
+    refusalMessage(featureId: string): string {
+        return this.featureLevel(featureId) === 'preview' ? FEATURE_PREVIEW_MESSAGE : FEATURE_MAINTENANCE_MESSAGE;
     }
 
     /**
      * Une route publique de cette feature. Celles réservées à l'origine de l'app
      * prolongent une commande déjà gardée (ticket, retour OAuth) et passent,
-     * sauf à l'arrêt complet où plus rien ne répond derrière.
+     * sauf à l'arrêt complet où plus rien ne répond derrière. La préversion ne
+     * ferme rien au public : seuls les administrateurs y créent, et ce qu'elle
+     * sert (un défi ACME, une page) est le leur.
      */
     refusesPublic(featureId: string, appOnly: boolean): boolean {
         const level = this.featureLevel(featureId);
         if (level === 'full') return true;
-        return !appOnly && (this.current.site || level !== null);
+        return !appOnly && (this.current.site || level === 'requests');
     }
 
     clientState(): MaintenanceState {

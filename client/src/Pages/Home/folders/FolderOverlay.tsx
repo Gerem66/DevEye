@@ -14,7 +14,7 @@ import { Widget } from '@/Components/Widget';
 import { WidgetGrid } from '@/Components/WidgetGrid';
 import { useDismissLayer } from '@/Components/Dialog';
 import type { FeatureCatalogEntry } from '../catalog';
-import { LOCK_TEXT, MAINTENANCE_BADGE, type TileLock } from '../tiles/tileLock';
+import { ADMIN_BADGE, LOCK_TEXT, type AdminBadge, type TileLock } from '../tiles/tileLock';
 import { FolderTile } from './FolderTile';
 import { folderKey, folderTitle } from './identity';
 import styles from './folders.module.css';
@@ -199,8 +199,8 @@ export interface FolderOverlayProps {
     expandedWidget: string | null;
     /** Pourquoi la carte reste en retrait, comme sur la grille ; `undefined` si elle s'ouvre. */
     lockOf: (id: HomeFeatureId) => TileLock | undefined;
-    /** En maintenance, mais ouverte à l'administrateur qui la regarde. */
-    hasMaintenanceBadge: (id: HomeFeatureId) => boolean;
+    /** Fermée aux autres comptes, mais ouverte à l'administrateur qui la regarde. */
+    adminBadgeOf: (id: HomeFeatureId) => AdminBadge | undefined;
     onOpenFeature: (id: HomeFeatureId, e: MouseEvent<HTMLDivElement>) => void;
     onClose: () => void;
 }
@@ -219,7 +219,7 @@ export function FolderOverlay({
     topOffset,
     expandedWidget,
     lockOf,
-    hasMaintenanceBadge,
+    adminBadgeOf,
     onOpenFeature,
     onClose
 }: FolderOverlayProps) {
@@ -245,6 +245,7 @@ export function FolderOverlay({
                         <WidgetGrid>
                             {entries.map((entry, index) => {
                                 const lock = lockOf(entry.id);
+                                const adminBadge = adminBadgeOf(entry.id);
                                 return (
                                     <FanCard
                                         key={entry.id}
@@ -257,9 +258,7 @@ export function FolderOverlay({
                                             widgetId={entry.id}
                                             title={entry.title}
                                             icon={entry.icon}
-                                            badge={
-                                                !lock && hasMaintenanceBadge(entry.id) ? MAINTENANCE_BADGE : undefined
-                                            }
+                                            badge={!lock && adminBadge ? ADMIN_BADGE[adminBadge] : undefined}
                                             className={lock ? styles.lockedCard : undefined}
                                             onExpand={(e) => onOpenFeature(entry.id, e)}
                                         >

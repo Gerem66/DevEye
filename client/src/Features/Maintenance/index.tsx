@@ -15,6 +15,11 @@ type Level = FeatureMaintenanceLevel | 'open';
 const LEVEL_OPTIONS = [
     { value: 'open', label: 'Ouverte' },
     {
+        value: 'preview',
+        label: 'Préversion',
+        title: 'Cachée à tous sauf aux administrateurs ; ses pages publiques et son travail de fond continuent'
+    },
+    {
         value: 'requests',
         label: 'Maintenance',
         title: 'Fermée à tous sauf aux administrateurs ; son travail de fond continue'
@@ -154,8 +159,9 @@ export default function FeatureMaintenance() {
                 <section className={styles.section}>
                     <span className={styles.sectionLabel}>Fonctionnalités</span>
                     <p className={styles.sectionHint}>
-                        En maintenance, seuls les administrateurs y entrent et son travail de fond continue. En arrêt
-                        complet, personne n’y entre et son travail de fond s’arrête aussi.
+                        En préversion, elle disparaît pour tous les comptes sauf les administrateurs, qui l’essaient
+                        avant de l’ouvrir. En maintenance, seuls les administrateurs y entrent et son travail de fond
+                        continue. En arrêt complet, personne n’y entre et son travail de fond s’arrête aussi.
                     </p>
                     <div className={styles.card}>
                         {state.features.map((f) => {

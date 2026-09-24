@@ -47,6 +47,13 @@ export const adminMaintenanceSiteFeature: FeatureDefinition<
     }
 });
 
+const LEVEL_AUDIT = {
+    open: 'rouverte',
+    requests: 'mise en maintenance',
+    preview: 'réservée aux administrateurs (préversion)',
+    full: 'arrêtée'
+} as const;
+
 export const adminMaintenanceFeatureFeature: FeatureDefinition<
     typeof adminMaintenanceFeature.command,
     typeof adminMaintenanceFeature.input,
@@ -66,10 +73,7 @@ export const adminMaintenanceFeatureFeature: FeatureDefinition<
             action: 'maintenance.feature',
             level: 'warning',
             category: 'system',
-            description:
-                input.level === null
-                    ? `Fonctionnalité « ${input.feature} » rouverte`
-                    : `Fonctionnalité « ${input.feature} » ${input.level === 'full' ? 'arrêtée' : 'mise en maintenance'}`,
+            description: `Fonctionnalité « ${input.feature} » ${LEVEL_AUDIT[input.level ?? 'open']}`,
             metadata: { feature: input.feature, level: input.level }
         });
         return maintenance.adminState();

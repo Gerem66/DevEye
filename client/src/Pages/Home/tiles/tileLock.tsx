@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 import { StatusBadge } from '@/Components/StatusBadge';
 
 /**
@@ -12,9 +14,18 @@ export const LOCK_TEXT: Record<TileLock, string> = {
     stopped: 'Arrêt complet'
 };
 
-/** La pastille d'une feature ouverte au seul administrateur, le temps de sa maintenance. */
-export const MAINTENANCE_BADGE = (
-    <StatusBadge tone='warning' dot={false}>
-        Maintenance
-    </StatusBadge>
-);
+/** Pourquoi une feature fermée aux autres comptes reste ouverte à l'administrateur qui la regarde. */
+export type AdminBadge = 'maintenance' | 'preview';
+
+export const ADMIN_BADGE: Record<AdminBadge, ReactNode> = {
+    maintenance: (
+        <StatusBadge tone='warning' dot={false}>
+            Maintenance
+        </StatusBadge>
+    ),
+    preview: (
+        <StatusBadge tone='accent' dot={false}>
+            Préversion
+        </StatusBadge>
+    )
+};

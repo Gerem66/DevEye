@@ -47,6 +47,7 @@ import { useFeedbackEnabled } from '@/stores/feedbackEnabled';
 import {
     featureMaintenance,
     setMaintenanceEnvNotice,
+    useHiddenFeatures,
     useMaintenance,
     useMaintenanceEnvNotice,
     useSiteMaintenance
@@ -83,7 +84,7 @@ import { EmptyHome } from './EmptyHome';
 import { isForceReload } from './forceReload';
 import { deviceKey } from './tiles/tileVisual';
 import { DeviceTileCard, FeatureTileCard, FolderTileCard, ShortcutTileCard } from './tiles/HomeTileCard';
-import type { TileLock } from './tiles/tileLock';
+import type { AdminBadge, TileLock } from './tiles/tileLock';
 import { AboutContent } from './about';
 import { EditableHome } from './organize/EditableHome';
 import { FolderOverlay, folderTitle } from './folders';
@@ -522,12 +523,21 @@ export default function HomePage() {
     // laisse passer, ou non, un administrateur.
     const isAdmin = user?.role === 'admin';
     const maintenance = useMaintenance();
+    const hiddenFeatures = useHiddenFeatures();
     const maintenanceLevelOf = useCallback(
         (viewId: string) => {
             const id = moduleBehind(viewId);
             return id === null ? null : featureMaintenance(maintenance, id);
         },
         [maintenance]
+    );
+    /** Une vue d'une feature en préversion, que ce compte ne voit pas. */
+    const isHiddenView = useCallback(
+        (viewId: string): boolean => {
+            const id = moduleBehind(viewId);
+            return id !== null && hiddenFeatures.has(id);
+        },
+        [hiddenFeatures]
     );
     /** La maintenance ferme-t-elle cette vue à ce compte ? L'arrêt complet la ferme à tous. */
     const maintenanceLockOf = useCallback(
@@ -558,9 +568,13 @@ export default function HomePage() {
         void ws.local.send('admin.maintenanceDismissNotice', {}).catch(() => {});
     }, []);
 
-    /** Ouverte à l'administrateur seul, le temps de sa maintenance : il le voit sur la carte. */
-    const hasMaintenanceBadge = useCallback(
-        (viewId: string): boolean => isAdmin && maintenanceLevelOf(viewId) === 'requests',
+    /** Ouverte à l'administrateur seul, en maintenance ou en préversion : il le voit sur la carte. */
+    const adminBadgeOf = useCallback(
+        (viewId: string): AdminBadge | undefined => {
+            if (!isAdmin) return undefined;
+            const level = maintenanceLevelOf(viewId);
+            return level === 'requests' ? 'maintenance' : level === 'preview' ? 'preview' : undefined;
+        },
         [isAdmin, maintenanceLevelOf]
     );
 
@@ -572,6 +586,14 @@ export default function HomePage() {
             if (switching) return false;
             // Garde unique : tuile, navigation inter-features et menu de la
             // topbar aboutissent tous ici.
+            if (isHiddenView(widgetId)) {
+                void openInfo({
+                    title: 'Indisponible',
+                    body: <p>Cette fonctionnalité n’est pas disponible.</p>,
+                    width: 400
+                });
+                return false;
+            }
             if (!allowedToOpen(widgetId)) {
                 void openInfo({
                     title: 'Accès refusé',
@@ -607,7 +629,7 @@ export default function HomePage() {
             doExpand(widgetId, forceReset, morphFrom);
             return true;
         },
-        [switching, expandedWidget, doExpand, allowedToOpen, maintenanceLockOf, viewTitleOf]
+        [switching, expandedWidget, doExpand, isHiddenView, allowedToOpen, maintenanceLockOf, viewTitleOf]
     );
 
     /**
@@ -803,7 +825,14 @@ export default function HomePage() {
     maintenanceLockRef.current = maintenanceLockOf;
     useEffect(() => {
         const open = expandedWidgetRef.current;
-        if (open && maintenanceLockOf(open)) {
+        if (open && isHiddenView(open)) {
+            requestCloseFeature(open);
+            void openInfo({
+                title: 'Indisponible',
+                body: <p>Cette fonctionnalité n’est plus disponible.</p>,
+                width: 400
+            });
+        } else if (open && maintenanceLockOf(open)) {
             requestCloseFeature(open);
             void openInfo({
                 title: 'En maintenance',
@@ -817,9 +846,14 @@ export default function HomePage() {
             });
         }
         for (const id of mountedFeatures) {
-            if (id !== open && maintenanceLockOf(id)) unmountFeature(id);
+            if (id !== open && (isHiddenView(id) || maintenanceLockOf(id))) unmountFeature(id);
         }
-    }, [maintenanceLockOf, mountedFeatures, requestCloseFeature, unmountFeature, viewTitleOf]);
+    }, [isHiddenView, maintenanceLockOf, mountedFeatures, requestCloseFeature, unmountFeature, viewTitleOf]);
+
+    const accountMenuEntries = useMemo(
+        () => accountMenu().filter((entry) => !hiddenFeatures.has(entry.id)),
+        [hiddenFeatures]
+    );
 
     const views = staticViews();
     const viewsRef = useRef(views);
@@ -834,7 +868,11 @@ export default function HomePage() {
         () => (openFolder ? (findFolder(layout, openFolder.id)?.folder ?? null) : null),
         [openFolder, layout]
     );
-    const folderEntries = useMemo(() => (folderView ? catalogEntries(folderView.items) : []), [folderView]);
+    const folderEntries = useMemo(
+        () => (folderView ? catalogEntries(folderView.items) : []),
+        // Les features en préversion quittent le dossier affiché : relu quand leur liste change.
+        [folderView, hiddenFeatures]
+    );
 
     /** L'appartenance d'un appareil, en une lecture : la boucle des tuiles en
      *  faisait une par carte, sur une liste relue à chaque relevé. */
@@ -1174,7 +1212,7 @@ export default function HomePage() {
                         key={tile}
                         tile={tile}
                         lock={switching ? undefined : lockOf(widgetId)}
-                        maintenanceBadge={hasMaintenanceBadge(widgetId)}
+                        adminBadge={adminBadgeOf(widgetId)}
                         hidden={expandedWidget !== null && morphSourceRef.current === widgetId}
                         onExpand={expandTile}
                     />
@@ -1184,7 +1222,7 @@ export default function HomePage() {
 
             // Un appareil. Escamoté quand il n'existe plus (l'effet d'élagage
             // s'en charge), plutôt que de poser une carte creuse.
-            if (!deviceIds.has(tile)) continue;
+            if (!deviceIds.has(tile) || hiddenFeatures.has('devices')) continue;
             tiles.push(
                 <DeviceTileCard
                     key={tile}
@@ -1217,7 +1255,7 @@ export default function HomePage() {
                     onBack={expandedWidget ? handleClose : folderView ? closeFolder : undefined}
                     onOpenProfile={(e) => handleExpand('profile', isForceReload(e))}
                     onOpenSecurity={(e) => handleExpand('security', isForceReload(e))}
-                    accountEntries={accountMenu()}
+                    accountEntries={accountMenuEntries}
                     onOpenAccountEntry={(id, e) => handleExpand(accountViewId(id), isForceReload(e))}
                     onOpenLogs={user.role === 'admin' ? (e) => handleExpand('logs', isForceReload(e)) : undefined}
                     onOpenFeedback={
@@ -1297,7 +1335,7 @@ export default function HomePage() {
                     topOffset={openFolder?.offset ?? 0}
                     expandedWidget={expandedWidget}
                     lockOf={lockOf}
-                    hasMaintenanceBadge={hasMaintenanceBadge}
+                    adminBadgeOf={adminBadgeOf}
                     onOpenFeature={(id, e) => handleExpand(id, isForceReload(e))}
                     onClose={closeFolder}
                 />

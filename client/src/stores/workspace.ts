@@ -1,6 +1,7 @@
 import type { FeatureAccess, FeatureId, WorkspaceCapability, WorkspacePermissions } from '@deveye/types';
 import type { Workspace } from '@deveye/types';
 import { useSyncExternalStore } from 'react';
+import { useHiddenFeatures } from './maintenance';
 
 /**
  * L'espace de travail actif. `activeId` est lu synchroniquement par `api/ws.ts`
@@ -322,11 +323,14 @@ export function useWorkspacePermissions(): {
     extraValue: (f: FeatureId, key: string, spec: { default: string; ownerValue: string }) => string;
 } {
     const { permissions } = useWorkspaceState();
+    const hidden = useHiddenFeatures();
     return {
         isOwner: permissions.isOwner,
         can: (c) => permissions.capabilities.includes(c),
         // La surcharge de cet élément, s'il y en a une pour le rôle de l'appelant.
         canFeature: (f, level = 'read', itemId) => {
+            // Une feature en préversion n'existe pas pour ce compte, quel que soit son rôle.
+            if (hidden.has(f)) return false;
             const granted = permissions.features.find((g) => g.feature === f);
             // Le plancher : sans accès à la fonctionnalité, aucun élément
             // n'existe, et rien ne se surcharge.

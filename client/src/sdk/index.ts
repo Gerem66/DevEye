@@ -141,6 +141,8 @@ export { useStickyOffset, type StickyOffset } from '@/stickyOffset';
 export { moduleClientProvider } from '@/sdk/registry';
 /** L'utilisateur connecté, `null` tant que la session n'a pas répondu. */
 export { useCurrentUser } from '@/stores/currentUser';
+/** Les features en préversion que ce compte ne voit pas : ni tuile, ni lien, ni ligne. */
+export { useHiddenFeatures } from '@/stores/maintenance';
 /** Une image choisie, ramenée à un carré en data URL bornée : l'icône d'un projet. */
 export { ACCEPTED_TYPES, MAX_INPUT_BYTES, fileToSquareDataUrl } from '@/imageResize';
 

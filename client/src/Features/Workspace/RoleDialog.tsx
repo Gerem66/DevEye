@@ -15,6 +15,7 @@ import SegmentedControl from '@/Components/SegmentedControl';
 import SelectInput from '@/Components/SelectInput';
 import TextInput from '@/Components/TextInput';
 import { placedFeatureIds, useHomeLayout } from '@/stores/homeLayout';
+import { useHiddenFeatures } from '@/stores/maintenance';
 import { moduleManifest } from '@/sdk/registry';
 import shell from '@/Components/FeatureSettings/FeatureSettings.module.css';
 import styles from './Workspace.module.css';
@@ -92,8 +93,11 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
      * déplie tout d'office.
      */
     const layout = useHomeLayout();
+    const hidden = useHiddenFeatures();
     // Le registre fusionné : les natives, puis les modules externes installés.
-    const registry = allFeatureDescriptors();
+    // Une feature en préversion n'a pas de ligne ici, mais garde son droit :
+    // l'enregistrement repart du registre entier.
+    const registry = allFeatureDescriptors().filter((f) => !hidden.has(f.id));
     const placed = useMemo(() => new Set<string>(placedFeatureIds(layout)), [layout]);
     const onHome = registry.filter((f) => placed.has(f.id));
     const collapsed = !showAll && onHome.length > 0 && onHome.length < registry.length;

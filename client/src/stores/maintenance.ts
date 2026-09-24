@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 import {
     publicMaintenanceSchema,
     type FeatureMaintenanceLevel,
@@ -7,6 +7,7 @@ import {
 } from '@deveye/types';
 
 import { getLocal } from '@/api/http';
+import { getCurrentUser, useCurrentUser } from './currentUser';
 import { getActiveInstanceId, onWorkspaceChange } from './workspace';
 
 /**
@@ -85,6 +86,27 @@ export function useSiteMaintenance(): MaintenanceState {
 
 export function featureMaintenance(state: MaintenanceState, featureId: string): FeatureMaintenanceLevel | null {
     return state.features[featureId] ?? null;
+}
+
+const NOTHING_HIDDEN: ReadonlySet<string> = new Set();
+
+/** Une feature en préversion n'existe que pour les administrateurs de son instance. */
+function hiddenIn(state: MaintenanceState, isAdmin: boolean): ReadonlySet<string> {
+    if (isAdmin) return NOTHING_HIDDEN;
+    const ids = Object.keys(state.features).filter((id) => state.features[id] === 'preview');
+    return ids.length === 0 ? NOTHING_HIDDEN : new Set(ids);
+}
+
+/** Lecture hors rendu (catalogue, registre) : l'appelant se rafraîchit par {@link useHiddenFeatures}. */
+export function isFeatureHidden(featureId: string): boolean {
+    return getCurrentUser()?.role !== 'admin' && getActive().features[featureId] === 'preview';
+}
+
+/** Les features en préversion que le compte courant ne voit pas : ni tuile, ni lien, ni ligne. */
+export function useHiddenFeatures(): ReadonlySet<string> {
+    const state = useMaintenance();
+    const isAdmin = useCurrentUser()?.role === 'admin';
+    return useMemo(() => hiddenIn(state, isAdmin), [state, isAdmin]);
 }
 
 const getEnvNotice = (): boolean => envNotice;

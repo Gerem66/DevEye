@@ -2,10 +2,11 @@ import { memo, type MouseEvent } from 'react';
 import type { HomeFolder, HomeTile, ShortcutItem } from '@deveye/types';
 
 import { Widget } from '@/Components/Widget';
+import { useHiddenFeatures } from '@/stores/maintenance';
 import { catalogEntries } from '../catalog';
 import { isForceReload } from '../forceReload';
 import styles from '../Dashboard.module.css';
-import { LOCK_TEXT, MAINTENANCE_BADGE, type TileLock } from './tileLock';
+import { ADMIN_BADGE, LOCK_TEXT, type AdminBadge, type TileLock } from './tileLock';
 import { deviceTileVisual, featureTileVisual, shortcutTileVisual } from './tileVisual';
 
 /**
@@ -38,6 +39,9 @@ export const FolderTileCard = memo(function FolderTileCard({
     folder: HomeFolder;
     onOpen: (folderId: string, e: MouseEvent<HTMLDivElement>) => void;
 }) {
+    // Le contenu affiché du dossier dépend des features en préversion : la
+    // carte mémoïsée se redessine quand leur liste change.
+    useHiddenFeatures();
     const v = featureTileVisual(folder);
     if (!v) return null;
     return (
@@ -67,15 +71,15 @@ export const ShortcutTileCard = memo(function ShortcutTileCard({ item }: { item:
 export const FeatureTileCard = memo(function FeatureTileCard({
     tile,
     lock,
-    maintenanceBadge,
+    adminBadge,
     hidden,
     onExpand
 }: CardBase & {
     tile: HomeTile;
     /** La carte reste posée, en retrait, et dit pourquoi. */
     lock?: TileLock;
-    /** En maintenance, mais ouverte à l'administrateur qui la regarde. */
-    maintenanceBadge?: boolean;
+    /** Fermée aux autres comptes, mais ouverte à l'administrateur qui la regarde. */
+    adminBadge?: AdminBadge;
     onExpand: ExpandHandler;
 }) {
     const v = featureTileVisual(tile);
@@ -85,7 +89,7 @@ export const FeatureTileCard = memo(function FeatureTileCard({
             widgetId={v.widgetId}
             title={v.title}
             icon={v.icon}
-            badge={!lock && maintenanceBadge ? MAINTENANCE_BADGE : undefined}
+            badge={!lock && adminBadge ? ADMIN_BADGE[adminBadge] : undefined}
             className={lock ? styles.lockedTile : undefined}
             style={hidden ? HIDDEN_STYLE : undefined}
             onExpand={(e) => onExpand(v.widgetId, e)}
