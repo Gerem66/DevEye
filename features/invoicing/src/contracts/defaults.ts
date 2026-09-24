@@ -70,6 +70,7 @@ export const DEFAULT_SETTINGS: InvoicingSettings = {
     numberStart: 1,
     numberPad: 4,
     mailSenderId: null,
+    domainId: null,
     issuer: EMPTY_ISSUER,
     wording: DEFAULT_WORDING
 };

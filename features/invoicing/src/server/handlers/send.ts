@@ -6,7 +6,17 @@ import { formatDate, formatMoney, kindLabel } from '../../contracts/display';
 import { invoicingClientContentSchema, type DocumentKind } from '../../contracts/domain';
 import { escapeHtml, renderPaper } from '../paper';
 import { paperInputOf } from '../paperInput';
-import { assertClient, clientError, docOr404, now, settingsError, settingsOf, WRITE, type Ctx } from '../_shared';
+import {
+    assertClient,
+    clientError,
+    docOr404,
+    now,
+    publicOriginOf,
+    settingsError,
+    settingsOf,
+    WRITE,
+    type Ctx
+} from '../_shared';
 
 /**
  * L'envoi au client. Le document part **en HTML dans le corps du message**, avec
@@ -91,7 +101,9 @@ export const send = defineSdkFeature({
         // Le lien n'est ajouté que s'il existe déjà : l'envoi ne crée pas de
         // porte publique à l'insu de qui l'expédie.
         const url =
-            row.public_token === null ? null : `${ctx.origins.public}/f/${encodeURIComponent(row.public_token)}`;
+            row.public_token === null
+                ? null
+                : `${await publicOriginOf(ctx, settings)}/f/${encodeURIComponent(row.public_token)}`;
 
         const title = `${kindLabel(kind)} ${row.number_label ?? ''}`.trim();
         const amount = formatMoney(paper.totals.grossCents, row.currency);

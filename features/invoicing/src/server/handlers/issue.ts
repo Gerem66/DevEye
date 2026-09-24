@@ -17,6 +17,7 @@ import {
     openJson,
     seal,
     settingsError,
+    publicOriginOf,
     settingsOf,
     today,
     WRITE,
@@ -230,7 +231,7 @@ export const docIssue = defineSdkFeature({
             doc: await toDoc(ctx, after, freshLines, {
                 today: day,
                 vatRegime: settings.vatRegime,
-                publicOrigin: ctx.origins.public,
+                publicOrigin: await publicOriginOf(ctx, settings),
                 clientNames: new Map([[clientRow.id, client.name]]),
                 settled,
                 parentNumbers
@@ -284,7 +285,7 @@ export const docStatus = defineSdkFeature({
             doc: await toDoc(ctx, after, lines, {
                 today: today(settings),
                 vatRegime: settings.vatRegime,
-                publicOrigin: ctx.origins.public,
+                publicOrigin: await publicOriginOf(ctx, settings),
                 clientNames: new Map(),
                 settled,
                 parentNumbers: new Map()

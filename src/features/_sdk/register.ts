@@ -333,6 +333,11 @@ export function moduleDomainFeatures(): string[] {
     return MODULES.filter((mod) => mod.manifest.domains && mod.server.domains).map((mod) => mod.manifest.id);
 }
 
+/** Celles dont les domaines servent des pages (`manifest.domains.web`) : le proxy et la limite d'offre ne voient qu'elles. */
+export function moduleWebDomainFeatures(): string[] {
+    return MODULES.filter((mod) => mod.manifest.domains?.web && mod.server.domains).map((mod) => mod.manifest.id);
+}
+
 /** Un module dont les éléments se copient ailleurs : l'entrée `copy` de ses `items`. */
 export function isModuleCopyable(featureId: string): boolean {
     return BY_ID.get(featureId)?.server.items?.copy !== undefined;

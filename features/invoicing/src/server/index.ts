@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import type { FeatureServer } from '@deveye/types/sdk/server';
 
 import { invoicingClientInputSchema } from '../contracts/domain';
+import { createDomainHooks } from './domains';
 import { invoicingHandlers } from './handlers';
 import { createRepo, type InvoicingRepo } from './repo';
 import { createService } from './service';
@@ -15,6 +16,7 @@ export const serverEntry: FeatureServer<InvoicingRepo> = {
     features: invoicingHandlers,
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
     createService,
+    domains: createDomainHooks(),
     /**
      * Fourni bien que rien ne soit partageable : sans lui, l'écran des canaux
      * de notification ne saurait pas nommer le client qu'une route vise, et

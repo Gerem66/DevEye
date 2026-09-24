@@ -8,8 +8,9 @@ import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import { Dialog } from '@/Components/Dialog';
 import { StatusBadge, type BadgeTone } from '@/Components/StatusBadge';
 import TextInput from '@/Components/TextInput';
-import { moduleManifest } from '@/sdk/registry';
+import { accountEntries, moduleManifest } from '@/sdk/registry';
 import { useDomains } from '@/sdk/useDomains';
+import { openAccountView } from '@/stores/accountView';
 import { invalidateTopic } from '@/stores/invalidation';
 import { useWorkspacePermissions } from '@/stores/workspace';
 import ReadOnlyNotice from '../ReadOnlyNotice';
@@ -23,7 +24,22 @@ function rowBadge(domain: FeatureDomain): { tone: BadgeTone; label: string } {
     }
     if (domain.dnsState !== 'ok') return { tone: 'warning', label: 'Propriété à prouver' };
     if (domain.probeState === 'failed') return { tone: 'danger', label: 'Ne répond pas' };
+    if (domain.probeError) return { tone: 'accent', label: 'En cours' };
     return { tone: 'neutral', label: 'À vérifier' };
+}
+
+/** La limite dite avant le refus : elle se compte sur tous les espaces du propriétaire. */
+function quotaSentence(quota: { used: number; limit: number }, isOwner: boolean): string {
+    const whose = isOwner ? 'Votre offre' : 'L’offre du propriétaire de cet espace';
+    if (quota.limit === 0) return `${whose} n’inclut pas de domaine personnalisé.`;
+    const plural = quota.limit > 1 ? 's' : '';
+    const count = `${quota.limit} domaine${plural} personnalisé${plural}`;
+    const scope = isOwner ? 'tous vos espaces confondus' : 'tous ses espaces confondus';
+    if (quota.used >= quota.limit) {
+        return `${whose} inclut ${count}, déjà ${quota.limit > 1 ? 'tous utilisés' : 'utilisé'} (${scope}).`;
+    }
+    const used = quota.used === 0 ? 'aucun utilisé' : `${quota.used} utilisé${quota.used > 1 ? 's' : ''}`;
+    return `${whose} inclut ${count} : ${used}, ${scope}.`;
 }
 
 /**
@@ -33,8 +49,10 @@ function rowBadge(domain: FeatureDomain): { tone: BadgeTone; label: string } {
 export default function DomainsSection({ scope }: { scope: SettingsScope }) {
     const feature = scope.feature;
     const copy = moduleManifest(feature)?.domains;
-    const canWrite = useWorkspacePermissions().canFeature(feature, 'write');
-    const { domains, loading, error: loadError } = useDomains(feature);
+    const permissions = useWorkspacePermissions();
+    const canWrite = permissions.canFeature(feature, 'write');
+    const { domains, https, quota, loading, error: loadError } = useDomains(feature);
+    const full = quota !== null && quota.used >= quota.limit;
 
     const [host, setHost] = useState<string | null>(null);
     /** Par id, jamais par copie : la rangée se relit dans la liste vivante. */
@@ -114,6 +132,8 @@ export default function DomainsSection({ scope }: { scope: SettingsScope }) {
                 {domains.map((domain) => {
                     const badge = rowBadge(domain);
                     const problem = domain.dnsError || domain.probeError;
+                    /** Une attente dite par la vérification (un certificat qui arrive) n'est pas une erreur. */
+                    const waiting = domain.dnsState === 'ok' && domain.probeState === 'pending' && !!domain.probeError;
                     return (
                         <div key={domain.id} className={styles.channelRow}>
                             <span className={`icon icon-globe ${styles.channelIcon}`} aria-hidden='true' />
@@ -125,9 +145,11 @@ export default function DomainsSection({ scope }: { scope: SettingsScope }) {
                                 <span className={styles.channelMeta}>
                                     {domain.verifiedAt !== null
                                         ? `Vérifié le ${new Date(domain.verifiedAt * 1000).toLocaleDateString('fr-FR')}`
-                                        : 'Publiez les enregistrements DNS, puis vérifiez.'}
+                                        : waiting
+                                          ? domain.probeError
+                                          : 'Publiez les enregistrements DNS, puis vérifiez.'}
                                 </span>
-                                {problem && <span className={styles.errorText}>{problem}</span>}
+                                {problem && !waiting && <span className={styles.errorText}>{problem}</span>}
                             </span>
                             <span
                                 className={`${styles.channelUsage} ${domain.useCount === 0 ? styles.channelUsageIdle : ''}`}
@@ -182,9 +204,16 @@ export default function DomainsSection({ scope }: { scope: SettingsScope }) {
             {/* Dialogue d'ajout ouvert : c'est lui qui porte l'erreur du geste. */}
             {host === null && (error ?? loadError) && <p className={styles.errorText}>{error ?? loadError}</p>}
 
+            {quota !== null && (
+                <p className={full ? styles.warning : styles.notice}>{quotaSentence(quota, permissions.isOwner)}</p>
+            )}
+
             {canWrite && (
                 <div className={styles.sectionActions}>
-                    <Button variant='secondary' icon='plus' disabled={busy} onClick={() => setHost('')}>
+                    {full && permissions.isOwner && accountEntries().length > 0 && (
+                        <Button onClick={() => openAccountView()}>Voir les offres</Button>
+                    )}
+                    <Button variant='secondary' icon='plus' disabled={busy || full} onClick={() => setHost('')}>
                         Ajouter un domaine
                     </Button>
                 </div>
@@ -224,6 +253,7 @@ export default function DomainsSection({ scope }: { scope: SettingsScope }) {
             <DomainRecordsDialog
                 domain={domains.find((d) => d.id === shownId) ?? null}
                 service={copy.service}
+                https={https}
                 canWrite={canWrite}
                 busy={busy}
                 onVerify={() => shownId !== null && verify(shownId)}

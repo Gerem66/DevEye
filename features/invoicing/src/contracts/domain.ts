@@ -179,6 +179,8 @@ export const invoicingSettingsSchema = z.object({
     numberStart: z.number().int().min(1).max(999_999),
     numberPad: z.number().int().min(1).max(8),
     mailSenderId: z.number().int().positive().nullable(),
+    /** Le domaine des liens remis aux clients, parmi ceux de l'onglet Domaines. `null` : l'adresse de DevEye. */
+    domainId: z.number().int().positive().nullable(),
     issuer: invoicingIssuerSchema,
     wording: invoicingWordingSchema
 });

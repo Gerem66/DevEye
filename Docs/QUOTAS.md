@@ -32,7 +32,7 @@ absente de `limits` est illimitée.
 
 ## Ce que le cœur borne lui-même
 
-Les espaces ne sont pas un module : le cœur applique deux limites sans manifest,
+Les espaces et les domaines ne sont pas des modules : le cœur applique trois limites sans manifest,
 par `assertCoreLimit` (`src/features/_quota.ts`), avec la même comparaison que les
 modules (`assertPlanLimit`, `src/Services/quota.ts`).
 
@@ -40,6 +40,7 @@ modules (`assertPlanLimit`, `src/Services/quota.ts`).
 | ------------------- | ----------------------------------------- | ------------------------------- |
 | `workspace.shared`  | les espaces partagés qu'un compte possède | `features/workspace/add.ts`     |
 | `workspace.members` | les membres d'UN espace partagé           | `features/workspace/members.ts` |
+| `domains.hosts`     | les noms web distincts de ses espaces     | `features/domain/index.ts`      |
 
 **L'offre d'un espace est celle de son propriétaire.** Tous ses espaces tirent
 sur la même réserve, et ses membres y travaillent avec leur propre compte, quel
@@ -47,6 +48,13 @@ qu'il soit : c'est le propriétaire qui héberge. Ces deux limites sont ce qui
 empêche un seul abonnement d'héberger une équipe entière. Un membre gratuit d'un
 espace Pro n'emporte rien chez lui : dans son espace personnel, c'est son offre à
 lui qui s'applique.
+
+`domains.hosts` compte les noms des fonctionnalités dont les domaines servent
+des pages (`manifest.domains.web`), tous espaces du propriétaire confondus : un
+même nom déclaré pour Rendez-vous et pour Facturation compte pour un. Un tel nom
+coûte un certificat sur le compte ACME de tout le serveur, et donne à une page
+servie ici l'adresse de son choix. Les domaines de courrier ne s'y comptent pas.
+L'onglet Domaines dit la limite avant le refus (`domain.list` rend `quota`).
 
 ## Une taille plutôt qu'un nombre
 

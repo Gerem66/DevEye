@@ -1,6 +1,12 @@
 import { randomBytes } from 'node:crypto';
 
-import type { FeatureService, FeatureServiceDeps, SdkPublicApp } from '@deveye/types/sdk/server';
+import {
+    normaliseDomainHost,
+    type FeatureService,
+    type FeatureServiceDeps,
+    type SdkPublicApp,
+    type SdkPublicRequest
+} from '@deveye/types/sdk/server';
 
 import { todayIn } from '../contracts/calendar';
 import { daysBetween } from '../contracts/calendar';
@@ -11,6 +17,7 @@ import {
     invoicingDocContentSchema
 } from '../contracts/domain';
 import { remainingCents } from '../contracts/money';
+import { WELL_KNOWN_PATH } from './domains';
 import { answerForm, renderMissingPage, renderPublicPage } from './publicPage';
 import { paperInputOf } from './paperInput';
 import { openJson, settingsOf, type RepoIo } from './_shared';
@@ -40,6 +47,11 @@ const EMPTY_CONTENT = invoicingDocContentSchema.parse({});
 /** Un jeton d'URL : assez long pour n'être ni deviné ni énuméré. */
 export function newToken(): string {
     return randomBytes(24).toString('base64url');
+}
+
+function hostOf(req: SdkPublicRequest): string {
+    const raw = req.host ?? (Array.isArray(req.headers.host) ? req.headers.host[0] : req.headers.host);
+    return normaliseDomainHost(raw ?? '');
 }
 
 function paramOf(bag: unknown, name: string): string {
@@ -104,6 +116,20 @@ export function createService(deps: FeatureServiceDeps<InvoicingRepo>): FeatureS
 
     const ticker = deps.createTicker({ intervalMs: REMIND_EVERY_MS, tick: remind });
 
+    const originHosts = new Set([new URL(deps.origins.public).hostname, new URL(deps.origins.app).hostname]);
+
+    /**
+     * Un document ne se montre que sous l'adresse de DevEye, ou sous un domaine
+     * de son propre espace : sans quoi n'importe qui ferait paraître sa facture,
+     * et son IBAN, sous le domaine d'un autre.
+     */
+    async function servedHere(req: SdkPublicRequest, workspaceId: number): Promise<boolean> {
+        const host = hostOf(req);
+        if (originHosts.has(host)) return true;
+        const domain = host.length > 0 ? await deps.domains.findByHost(host) : null;
+        return domain !== null && domain.workspaceId === workspaceId;
+    }
+
     return {
         start() {
             ticker.start();
@@ -115,7 +141,8 @@ export function createService(deps: FeatureServiceDeps<InvoicingRepo>): FeatureS
         publicRoutes(app: SdkPublicApp) {
             app.get(PAGE_PATH, { rateLimit: { max: 120, timeWindow: '1 minute' } }, async (req, reply) => {
                 const token = paramOf(req.params, 'token');
-                const row = token.length === 0 ? null : await deps.repo.findByToken(token);
+                const found = token.length === 0 ? null : await deps.repo.findByToken(token);
+                const row = found !== null && (await servedHere(req, found.workspace_id)) ? found : null;
                 if (row === null) {
                     return reply.code(404).header('content-type', 'text/html; charset=utf-8').send(renderMissingPage());
                 }
@@ -142,7 +169,8 @@ export function createService(deps: FeatureServiceDeps<InvoicingRepo>): FeatureS
                 const name = typeof body?.name === 'string' ? body.name.slice(0, 160).trim() : '';
                 const status = body?.answer === 'decline' ? 'declined' : 'accepted';
 
-                const row = token.length === 0 ? null : await deps.repo.findByToken(token);
+                const found = token.length === 0 ? null : await deps.repo.findByToken(token);
+                const row = found !== null && (await servedHere(req, found.workspace_id)) ? found : null;
                 if (row === null) {
                     return reply.code(404).header('content-type', 'text/html; charset=utf-8').send(renderMissingPage());
                 }
@@ -184,6 +212,14 @@ export function createService(deps: FeatureServiceDeps<InvoicingRepo>): FeatureS
                     .code(303)
                     .header('location', `/f/${encodeURIComponent(token)}`)
                     .send();
+            });
+
+            /** La preuve que la sonde du domaine vient lire. Un hôte inconnu ne rend rien : la route ne dit pas quels noms existent. */
+            app.get(WELL_KNOWN_PATH, { rateLimit: { max: 30, timeWindow: '1 minute' } }, async (req, reply) => {
+                const host = hostOf(req);
+                const domain = host.length > 0 ? await deps.domains.findByHost(host) : null;
+                if (domain === null) return reply.code(404).send();
+                return reply.header('content-type', 'text/plain; charset=utf-8').send(domain.token);
             });
         }
     };

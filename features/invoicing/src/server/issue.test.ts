@@ -53,6 +53,7 @@ function readyWorkspace(store: MemoryStore, over: Record<string, unknown> = {}):
         number_start: 1,
         number_pad: 4,
         mail_sender_id: null,
+        domain_id: null,
         content: JSON.stringify({
             issuer: { ...DEFAULT_SETTINGS.issuer, legalName: 'Atelier Dupont', siret: '81234567800017' },
             wording: DEFAULT_SETTINGS.wording

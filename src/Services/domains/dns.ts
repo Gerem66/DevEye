@@ -27,3 +27,9 @@ export const systemDns: SdkDns = {
     mx: (name) => orEmpty(resolver().resolveMx(name)),
     cname: (name) => orEmpty(resolver().resolveCname(name))
 };
+
+/** Les adresses d'un nom, les deux familles réunies. Vide s'il n'en a aucune. */
+export async function resolveAddresses(name: string): Promise<string[]> {
+    const lookups = await Promise.allSettled([orEmpty(resolver().resolve4(name)), orEmpty(resolver().resolve6(name))]);
+    return lookups.flatMap((lookup) => (lookup.status === 'fulfilled' ? lookup.value : []));
+}

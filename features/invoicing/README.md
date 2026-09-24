@@ -106,6 +106,20 @@ d'être tapé.
 
 ---
 
+## Les liens sous le domaine de l'émetteur
+
+L'onglet Domaines est celui du socle (`manifest.domains`, déclaré `web`). Un
+seul domaine sert tout l'espace, choisi dans l'onglet Général
+(`ft_invoicing_settings.domain_id`) : le client est l'élément, mais c'est
+l'émetteur qui a un nom, pas chacun de ses clients. Tant que le domaine n'est
+pas vérifié, les liens repartent sur l'adresse de DevEye, et un lien déjà remis
+sur l'une reste bon sur l'autre, puisque le jeton seul désigne le document.
+
+La page d'un document ne se montre que sous l'adresse de DevEye ou sous un
+domaine de **son** espace. Sans cette règle, n'importe quel émetteur ferait
+paraître sa facture, et son IBAN, sous le domaine d'un autre, en changeant
+seulement le nom d'hôte du lien : c'est le scénario d'une fraude au virement.
+
 ## Limites connues, et assumées
 
 - **Pas de pièce jointe PDF.** Le document part en HTML dans le corps du mail,

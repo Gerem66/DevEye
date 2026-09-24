@@ -15,7 +15,7 @@ import {
     type InvoicingLine,
     type VatRegime
 } from '../../contracts/domain';
-import { now, seal, settingsOf, today, WRITE, type Ctx, docOr404, assertClient } from '../_shared';
+import { now, publicOriginOf, seal, settingsOf, today, WRITE, type Ctx, docOr404, assertClient } from '../_shared';
 import { clientNamesOf, regimeOf, toDoc, toLine, toPayments, type DocViewContext } from '../views';
 import type { InvoicingDocRow, LineWrite } from '../repo';
 
@@ -36,7 +36,7 @@ async function viewContextOf(ctx: Ctx, rows: readonly InvoicingDocRow[]): Promis
     return {
         today: today(settings),
         vatRegime: settings.vatRegime,
-        publicOrigin: ctx.origins.public,
+        publicOrigin: await publicOriginOf(ctx, settings),
         clientNames,
         settled,
         parentNumbers

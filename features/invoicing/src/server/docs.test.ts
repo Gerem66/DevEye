@@ -34,6 +34,7 @@ function liableToVat(store: MemoryStore, over: Record<string, unknown> = {}): vo
         number_start: 1,
         number_pad: 4,
         mail_sender_id: null,
+        domain_id: null,
         content: '{}',
         ...over
     });

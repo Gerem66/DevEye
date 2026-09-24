@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { SdkPublicApp, SdkPublicReply, SdkPublicRequest } from '@deveye/types/sdk/server';
+import type { SdkDomain, SdkPublicApp, SdkPublicReply, SdkPublicRequest } from '@deveye/types/sdk/server';
 import { createTestServiceDeps } from '@deveye/types/sdk/testing';
 
 import { todayIn } from '../contracts/calendar';
@@ -38,20 +38,20 @@ function reply(): SdkPublicReply & { answer: Answer } {
     return self;
 }
 
-function mount(store: MemoryStore) {
+function mount(store: MemoryStore, domains: readonly SdkDomain[] = []) {
     const handlers = new Map<string, (req: SdkPublicRequest, res: SdkPublicReply) => Promise<unknown>>();
     const app: SdkPublicApp = {
         get: (path, _opts, handler) => handlers.set(`GET ${path}`, handler),
         post: (path, _opts, handler) => handlers.set(`POST ${path}`, handler),
         postStream: () => undefined
     };
-    const deps = createTestServiceDeps({ repo: memoryRepo(store) });
+    const deps = createTestServiceDeps({ repo: memoryRepo(store), domains });
     createService(deps).publicRoutes?.(app);
     return { handlers, deps };
 }
 
 function request(over: Partial<SdkPublicRequest> = {}): SdkPublicRequest {
-    return { headers: {}, body: undefined, ip: '203.0.113.7', ...over };
+    return { headers: {}, host: 'public.deveye.test', body: undefined, ip: '203.0.113.7', ...over };
 }
 
 function readySettings(store: MemoryStore): void {
@@ -69,6 +69,7 @@ function readySettings(store: MemoryStore): void {
         number_start: 1,
         number_pad: 4,
         mail_sender_id: null,
+        domain_id: null,
         content: JSON.stringify({
             issuer: { ...DEFAULT_SETTINGS.issuer, legalName: 'Atelier Dupont', siret: '81234567800017' },
             wording: DEFAULT_SETTINGS.wording
@@ -265,5 +266,61 @@ describe('la réponse en ligne', () => {
         const res = reply();
         await handlers.get('POST /api/invoicing/answer')!(request({ body: { token: 'inconnu' } }), res);
         assert.equal(res.answer.status, 404);
+    });
+});
+
+describe('la page publique sous un domaine', () => {
+    const domain = (over: Partial<SdkDomain>): SdkDomain => ({
+        id: 1,
+        workspaceId: 1,
+        host: 'factures.dupont.fr',
+        token: 'preuve-dupont',
+        verified: true,
+        verifiedAt: 1,
+        ...over
+    });
+
+    it('rend le document sous un domaine de son espace', async () => {
+        const store = emptyStore();
+        readySettings(store);
+        store.docs.push(docRow({ id: 10, kind: 'invoice', status: 'issued', public_token: 'jeton' }));
+        const { handlers } = mount(store, [domain({})]);
+
+        const res = reply();
+        await handlers.get('GET /f/:token')!(request({ host: 'factures.dupont.fr', params: { token: 'jeton' } }), res);
+        assert.equal(res.answer.status, 200);
+    });
+
+    it('ne rend jamais le document d’un espace sous le domaine d’un autre', async () => {
+        const store = emptyStore();
+        readySettings(store);
+        store.docs.push(docRow({ id: 10, kind: 'quote', status: 'sent', public_token: 'jeton' }));
+        const { handlers } = mount(store, [domain({ workspaceId: 2, host: 'factures.voisin.fr' })]);
+
+        for (const host of ['factures.voisin.fr', 'inconnu.exemple.fr']) {
+            const page = reply();
+            await handlers.get('GET /f/:token')!(request({ host, params: { token: 'jeton' } }), page);
+            assert.equal(page.answer.status, 404, host);
+
+            const answer = reply();
+            await handlers.get('POST /api/invoicing/answer')!(
+                request({ host, body: { token: 'jeton', name: 'Intrus', answer: 'accept' } }),
+                answer
+            );
+            assert.equal(answer.answer.status, 404, host);
+        }
+        assert.equal(store.docs[0].status, 'sent');
+    });
+
+    it('rend la preuve du domaine à la sonde, et rien pour un nom inconnu', async () => {
+        const { handlers } = mount(emptyStore(), [domain({})]);
+
+        const known = reply();
+        await handlers.get('GET /.well-known/deveye-invoicing')!(request({ host: 'factures.dupont.fr' }), known);
+        assert.equal(known.answer.body, 'preuve-dupont');
+
+        const unknown = reply();
+        await handlers.get('GET /.well-known/deveye-invoicing')!(request({ host: 'ailleurs.fr' }), unknown);
+        assert.equal(unknown.answer.status, 404);
     });
 });

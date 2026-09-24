@@ -10,7 +10,8 @@ import {
     SaveButton,
     SelectInput,
     settingsStyles as shell,
-    TextInput
+    TextInput,
+    useDomains
 } from 'deveye-sdk-client';
 import { MAIL_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { MailClientProvider, SettingsPanelProps } from '@deveye/types/sdk/client';
@@ -70,6 +71,7 @@ export default function IssuerPanel({ canWrite }: SettingsPanelProps) {
     const mail = moduleClientProvider<MailClientProvider>(MAIL_CLIENT_PROVIDER);
     const [adding, setAdding] = useState(false);
     const known = useRef<Set<number> | null>(null);
+    const { domains } = useDomains('invoicing');
 
     // Les comptes mail de l'espace. Sans module Mail installé, la commande
     // échoue et l'écran le dit plutôt que de promettre un envoi.
@@ -240,6 +242,31 @@ export default function IssuerPanel({ canWrite }: SettingsPanelProps) {
             {mail !== undefined && (
                 <mail.AccountDialog open={adding} onClose={() => setAdding(false)} onSaved={() => void onAdded()} />
             )}
+
+            <label className={shell.field}>
+                <span className={shell.fieldLabel}>Adresse des liens envoyés à vos clients</span>
+                <SelectInput
+                    value={draft.domainId === null ? '' : String(draft.domainId)}
+                    disabled={!canWrite}
+                    onChange={(e) => patch({ domainId: e.target.value === '' ? null : Number(e.target.value) })}
+                >
+                    <option value=''>L’adresse de DevEye</option>
+                    {/* Le domaine choisi reste affiché s'il retombe : le taire ferait croire qu'il n'est plus choisi. */}
+                    {domains
+                        .filter((domain) => domain.verifiedAt !== null || domain.id === draft.domainId)
+                        .map((domain) => (
+                            <option key={domain.id} value={String(domain.id)}>
+                                {domain.verifiedAt === null
+                                    ? `${domain.host} (en attente de vérification)`
+                                    : domain.host}
+                            </option>
+                        ))}
+                </SelectInput>
+                <span className={shell.fieldHint}>
+                    Chaque devis et facture s’ouvre à cette adresse. Seuls vos domaines vérifiés sont proposés : on les
+                    déclare dans l’onglet Domaines. Les liens déjà envoyés restent valables.
+                </span>
+            </label>
 
             {canWrite ? (
                 <SaveButton onSave={save} disabled={busy} />

@@ -35,6 +35,12 @@ export const settingsSave = defineSdkFeature({
             );
         }
 
+        // Un domaine retiré entre l'ouverture du formulaire et son envoi ne doit
+        // pas revenir désigner une ligne disparue.
+        if (settings.domainId !== null && (await ctx.domains.get(settings.domainId)) === null) {
+            throw new FeatureError('validation', 'Ce domaine n’existe plus : choisissez-en un autre.');
+        }
+
         const content = await seal(ctx, { issuer: settings.issuer, wording: settings.wording });
         await ctx.repo.saveSettings(ctx.workspaceId, settingsRow(settings, content), now());
         ctx.audit({

@@ -9,7 +9,18 @@ import {
     type DocumentKind,
     type VatRegime
 } from '../../contracts/domain';
-import { assertClient, docOr404, now, openJson, seal, settingsOf, today, WRITE, type Ctx } from '../_shared';
+import {
+    assertClient,
+    docOr404,
+    now,
+    openJson,
+    publicOriginOf,
+    seal,
+    settingsOf,
+    today,
+    WRITE,
+    type Ctx
+} from '../_shared';
 import { regimeOf, toDoc, toLine } from '../views';
 import type { InvoicingDocRow, LineWrite } from '../repo';
 
@@ -204,7 +215,7 @@ export const docDerive = defineSdkFeature({
             doc: await toDoc(ctx, row, lines, {
                 today: day,
                 vatRegime: settings.vatRegime,
-                publicOrigin: ctx.origins.public,
+                publicOrigin: await publicOriginOf(ctx, settings),
                 clientNames: new Map(),
                 settled,
                 parentNumbers

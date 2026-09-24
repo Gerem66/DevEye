@@ -13,6 +13,8 @@ interface Props {
     domain: FeatureDomain | null;
     /** La phrase de l'étape 2 (`manifest.domains.service`). */
     service: string;
+    /** Comment un domaine web obtient son certificat ici ; `null` pour des domaines qui ne sont pas web. */
+    https: 'auto' | 'manual' | null;
     canWrite: boolean;
     busy: boolean;
     onVerify: () => void;
@@ -31,8 +33,14 @@ function serviceChip(domain: FeatureDomain): Chip {
     if (domain.dnsState !== 'ok') return { tone: 'neutral', label: 'Après l’étape 1' };
     if (domain.probeState === 'ok') return { tone: 'success', label: 'Opérationnel' };
     if (domain.probeState === 'failed') return { tone: 'danger', label: 'Ne répond pas' };
+    if (domain.probeError) return { tone: 'accent', label: 'En cours' };
     return { tone: 'neutral', label: 'En attente' };
 }
+
+const CERTIFICATE: Record<'auto' | 'manual', string> = {
+    auto: 'Le certificat HTTPS s’obtient ensuite tout seul, en quelques minutes.',
+    manual: 'Il doit ensuite être ajouté au proxy du serveur qui héberge DevEye, pour obtenir son certificat HTTPS : c’est la seule étape que DevEye ne fait pas seul.'
+};
 
 function verifiedChip(domain: FeatureDomain): Chip {
     return domain.verifiedAt === null
@@ -138,7 +146,7 @@ function Step({
 }
 
 /** Ce qu'un domaine demande de publier, et où il en est, en trois étapes. */
-export default function DomainRecordsDialog({ domain, service, canWrite, busy, onVerify, onClose }: Props) {
+export default function DomainRecordsDialog({ domain, service, https, canWrite, busy, onVerify, onClose }: Props) {
     if (domain === null) return null;
     return (
         <Dialog
@@ -146,7 +154,7 @@ export default function DomainRecordsDialog({ domain, service, canWrite, busy, o
             onClose={onClose}
             title={domain.host}
             description='Trois étapes, dans l’ordre. Chacune dit où elle en est.'
-            width={620}
+            width={820}
             footer={<DialogCancelButton variant='ghost'>Fermer</DialogCancelButton>}
         >
             <ol className={styles.steps}>
@@ -167,9 +175,16 @@ export default function DomainRecordsDialog({ domain, service, canWrite, busy, o
                     chip={serviceChip(domain)}
                     done={domain.dnsState === 'ok' && domain.probeState === 'ok'}
                 >
-                    <p className={styles.stepText}>{service}</p>
+                    <p className={styles.stepText}>
+                        {service}
+                        {https !== null && ` ${CERTIFICATE[https]}`}
+                    </p>
                     <RecordTable records={domain.records} />
-                    {domain.probeError && <p className={shell.errorText}>{domain.probeError}</p>}
+                    {domain.probeError && (
+                        <p className={domain.probeState === 'pending' ? styles.stepNote : shell.errorText}>
+                            {domain.probeError}
+                        </p>
+                    )}
                 </Step>
 
                 <Step index={3} title='Vérifier' chip={verifiedChip(domain)} done={domain.verifiedAt !== null}>

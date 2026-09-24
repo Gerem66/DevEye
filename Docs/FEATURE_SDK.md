@@ -708,6 +708,20 @@ contexte sans session (`FeatureDomainsContext` : `repo`, `origins`,
 `cipherFor`, `storeFor`, `keys`, `dns`, `logger`). `onRemoved` passe avant la
 suppression : s'il lève, le domaine reste.
 
+Un manifest dont les domaines servent des pages déclare `domains.web: true`
+(Rendez-vous, Facturation). Le socle ajoute alors, entre la propriété et la
+sonde du module, ses propres contrôles (`Services/domains/web.ts`) : le nom
+pointe vers l'origine publique, puis y répond en HTTPS avec un certificat
+valable, chacun avec sa phrase. Ces noms sont ceux que Traefik lit sur
+`/api/domains/proxy` (`Services/domains/proxy.ts`, env `DOMAIN_PROXY_*`) pour
+obtenir seul leurs certificats ; un certificat qui arrive laisse le service
+`pending`, pas `failed`. Ils se comptent à la limite d'offre `domains.hosts`
+(`QUOTAS.md`), et `domain.list` rend le mode des certificats (`https`) et cette
+limite (`quota`). La sonde du module n'a plus qu'à prouver que c'est cette
+installation qui répond : un jeton servi sous `/.well-known/deveye-<slug>`, et
+chaque route publique ne sert, sous un domaine client, que l'espace qui le
+possède.
+
 Par entrée client (`FeatureClient`) : `providers`, le jumeau client des
 providers de service, que les écrans de l'app lisent par
 `moduleClientProvider` (Projets compose ainsi les composants d'Uptime).

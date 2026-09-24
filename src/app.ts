@@ -39,6 +39,7 @@ import { setSdkHost } from '@/features/_sdk/host';
 import { createAuditLog } from '@/Services/AuditLog';
 import { startAttemptSweeper } from '@/Services/attempts';
 import { startDekSweeper } from '@/Services/SecureStore';
+import { registerProxyRoute } from '@/Services/domains/proxy';
 import { createDomainVerifier } from '@/Services/domains/verifier';
 import { createMailer } from '@/Services/mailer';
 import { createSignupService } from '@/Services/signup';
@@ -288,6 +289,8 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     app.get('/api/maintenance', { logLevel: 'silent' }, async () =>
         ok(publicMaintenanceSchema.parse(maintenance.publicState()))
     );
+
+    registerProxyRoute(app, deps.db.featureDomains);
 
     const hub = new MonitorHub();
     // Construit avant les services de fond : ils lui adressent leurs changements

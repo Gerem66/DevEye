@@ -4,7 +4,7 @@ import { invoicingDashboard, invoicingPaymentRemove, invoicingPaymentSave } from
 import { addDays, periodBounds, startOfMonth } from '../../contracts/calendar';
 import { formatMoney } from '../../contracts/display';
 import { invoicingPaymentInputSchema, type InvoicingDoc, type InvoicingPayment } from '../../contracts/domain';
-import { now, seal, settingsOf, today, WRITE, type Ctx, docOr404, assertClient } from '../_shared';
+import { now, publicOriginOf, seal, settingsOf, today, WRITE, type Ctx, docOr404, assertClient } from '../_shared';
 import { monthUsage } from '../planUsage';
 import { EMPTY_CLIENT_USAGE, toClient } from './clients';
 import { clientNamesOf, regimeOf, toDoc, toLine, toPayments } from '../views';
@@ -30,7 +30,7 @@ async function refreshed(ctx: Ctx, id: number): Promise<{ doc: InvoicingDoc; pay
         doc: await toDoc(ctx, row, lines, {
             today: today(settings),
             vatRegime: settings.vatRegime,
-            publicOrigin: ctx.origins.public,
+            publicOrigin: await publicOriginOf(ctx, settings),
             clientNames,
             settled,
             parentNumbers
@@ -177,7 +177,7 @@ export const dashboard = defineSdkFeature({
         const view = {
             today: day,
             vatRegime: settings.vatRegime,
-            publicOrigin: ctx.origins.public,
+            publicOrigin: await publicOriginOf(ctx, settings),
             clientNames,
             settled,
             parentNumbers

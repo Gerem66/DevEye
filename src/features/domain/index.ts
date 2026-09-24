@@ -12,10 +12,12 @@ import {
 import { DOMAIN_HOST_PATTERN, domainOwnershipRecord, normaliseDomainHost } from '@deveye/types/sdk/server';
 
 import type { FeatureDomainRow } from '@/db/repos/featureDomains';
+import { httpsMode } from '@/Services/domains/proxy';
 import { verifyFeatureDomain } from '@/Services/domains/verifier';
 import { toSdkDomain } from '../_sdk/domains';
-import { moduleDomains } from '../_sdk/register';
+import { moduleDomains, moduleWebDomainFeatures } from '../_sdk/register';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
+import { assertCoreLimit, coreAllowance } from '../_quota';
 
 /**
  * Les domaines d'une fonctionnalité dans l'espace actif. Module transversal :
@@ -24,6 +26,21 @@ import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinitio
  */
 
 type Hooks = NonNullable<ReturnType<typeof moduleDomains>>;
+
+/**
+ * Un domaine web coûte un certificat sur le compte ACME de tout le serveur, et
+ * donne à une page servie ici l'adresse de son choix : il se compte à l'offre.
+ * Un même nom déclaré pour deux fonctionnalités ne compte qu'une fois.
+ */
+const HOSTS_KEY = 'domains.hosts';
+
+function isWeb(hooks: Hooks): boolean {
+    return hooks.manifest.domains?.web === true;
+}
+
+async function webHostsOf(ctx: FeatureContext, ownerWorkspaceIds: readonly number[]): Promise<Set<string>> {
+    return new Set(await ctx.db.featureDomains.hostsOf(ownerWorkspaceIds, moduleWebDomainFeatures()));
+}
 
 function hooksFor(ctx: FeatureContext, feature: FeatureId, level: 'read' | 'write'): Hooks {
     ctx.assertFeature(feature, level);
@@ -66,11 +83,23 @@ const listFeature = defineFeature({
     ...domainList,
     handler: async (ctx, input) => {
         const hooks = hooksFor(ctx, input.feature, 'read');
-        const [rows, uses] = await Promise.all([
+        const web = isWeb(hooks);
+        const [rows, uses, allowance] = await Promise.all([
             ctx.db.featureDomains.list(ctx.workspaceId, input.feature),
-            hooks.useCount(ctx.workspaceId)
+            hooks.useCount(ctx.workspaceId),
+            web ? coreAllowance(ctx, ctx.workspace.ownerUserId, HOSTS_KEY) : null
         ]);
-        return { domains: await Promise.all(rows.map((row) => view(ctx, hooks, row, uses.get(row.id) ?? 0))) };
+        return {
+            domains: await Promise.all(rows.map((row) => view(ctx, hooks, row, uses.get(row.id) ?? 0))),
+            https: web ? httpsMode() : null,
+            quota:
+                allowance === null
+                    ? null
+                    : {
+                          used: (await webHostsOf(ctx, allowance.ownerWorkspaceIds)).size,
+                          limit: allowance.limit
+                      }
+        };
     }
 });
 
@@ -89,6 +118,17 @@ const addFeature = defineFeature({
         // Tous espaces confondus : deux espaces ne peuvent pas servir le même nom.
         if (await ctx.db.featureDomains.findByHost(input.feature, host)) {
             throw new FeatureError('conflict', 'Ce domaine est déjà déclaré.');
+        }
+        if (isWeb(hooks)) {
+            await assertCoreLimit(ctx, {
+                ownerUserId: ctx.workspace.ownerUserId,
+                fullKey: HOSTS_KEY,
+                label: 'domaines personnalisés',
+                countAfter: async (ids) => {
+                    const hosts = await webHostsOf(ctx, ids);
+                    return hosts.size + (hosts.has(host) ? 0 : 1);
+                }
+            });
         }
         const now = Math.floor(Date.now() / 1000);
         const id = await ctx.db.featureDomains.insert({

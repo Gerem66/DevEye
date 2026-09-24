@@ -1,7 +1,7 @@
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
 import { invoicingShare } from '../../contracts/commands';
-import { assertClient, docOr404, WRITE, type Ctx } from '../_shared';
+import { assertClient, docOr404, publicOriginOf, settingsOf, WRITE, type Ctx } from '../_shared';
 import { newToken } from '../service';
 
 /**
@@ -34,7 +34,7 @@ export const share = defineSdkFeature({
         const token = row.public_token ?? newToken();
         if (row.public_token === null) await ctx.repo.setToken(row.id, ctx.workspaceId, token);
 
-        return { url: `${ctx.origins.public}/f/${encodeURIComponent(token)}` };
+        return { url: `${await publicOriginOf(ctx, await settingsOf(ctx))}/f/${encodeURIComponent(token)}` };
     }
 });
 

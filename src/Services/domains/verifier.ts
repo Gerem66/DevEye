@@ -2,11 +2,14 @@ import { domainOwnershipRecord, type FeatureService } from '@deveye/types/sdk/se
 
 import type { FeatureDomainRow } from '@/db/repos/featureDomains';
 import { moduleDomainFeatures, moduleDomains } from '@/features/_sdk/register';
+import { ORIGINS } from '@/features/_sdk/context';
 import { toSdkDomain, type DomainsHost } from '@/features/_sdk/domains';
 import type { LiveHub } from '@/live/hub';
 import { env } from '@/Utils/Env';
 import { systemDns } from './dns';
 import { judge, verdictChanged } from './engine';
+import { httpsMode } from './proxy';
+import { webCheck } from './web';
 
 const BATCH = 20;
 
@@ -23,9 +26,19 @@ export async function verifyFeatureDomain(
     const hooks = moduleDomains(row.feature, host);
     if (!hooks) return null;
     const domain = toSdkDomain(row);
+    const web = hooks.manifest.domains?.web === true;
     const verdict = await judge(row, domainOwnershipRecord(row.feature, row.host, row.token), now, {
         txt: systemDns.txt,
-        probe: () => hooks.probe(domain),
+        probe: async () => {
+            const held = web
+                ? await webCheck(row.host, {
+                      originHost: new URL(ORIGINS.public).hostname,
+                      auto: httpsMode() === 'auto',
+                      verified: row.verified_at !== null
+                  })
+                : null;
+            return held ?? hooks.probe(domain);
+        },
         okSeconds: env.DOMAIN_OK_SECONDS,
         pendingSeconds: env.DOMAIN_PENDING_SECONDS
     });

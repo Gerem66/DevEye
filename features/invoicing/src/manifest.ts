@@ -31,6 +31,16 @@ export const manifest = {
      * l'espace.
      */
     topics: [{ id: 'invoicingDrafts', keys: ['invoicing.docList', 'invoicing.doc'] }],
+    /** Un domaine qui tombe ou qu'on retire change l'adresse des liens remis aux clients. */
+    alsoInvalidatedBy: [{ topic: 'domain', keys: ['invoicing.dashboard', 'invoicing.docList', 'invoicing.doc'] }],
+    domains: {
+        hint: 'Votre propre adresse pour les liens de vos devis et factures, comme factures.monentreprise.fr : vos clients y lisent le document et y répondent à un devis. Sans elle, les liens restent sur l’adresse de DevEye, qui fonctionne toujours.',
+        service: 'Faites pointer le domaine vers DevEye avec l’enregistrement ci-dessous.',
+        placeholder: 'factures.monentreprise.fr',
+        removal:
+            'Les nouveaux liens repartent sur l’adresse de DevEye, et ceux déjà envoyés sur ce domaine cessent de fonctionner.',
+        web: true
+    },
     /**
      * Deux limites plutôt qu'une : proposer et facturer ne sont pas le même
      * geste, et une seule enveloppe aurait fait payer au devis la place de sa
@@ -73,7 +83,8 @@ export const manifest = {
             'general',
             { id: 'taxes', label: 'TVA', icon: 'finance' },
             { id: 'numbering', label: 'Numérotation', icon: 'list-numbered' },
-            { id: 'wording', label: 'Mentions', icon: 'format' }
+            { id: 'wording', label: 'Mentions', icon: 'format' },
+            'domains'
         ],
         /** L'élément est le client : son onglet Général porte son identité et son retrait. */
         item: ['general']

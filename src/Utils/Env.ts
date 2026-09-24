@@ -79,6 +79,14 @@ export const env = {
     DOMAIN_PROBE_TICK_SECONDS: getEnvVar('DOMAIN_PROBE_TICK_SECONDS', 'number', false) || 300,
     DOMAIN_OK_SECONDS: getEnvVar('DOMAIN_OK_SECONDS', 'number', false) || 60 * 60 * 6,
     DOMAIN_PENDING_SECONDS: getEnvVar('DOMAIN_PENDING_SECONDS', 'number', false) || 600,
+    // Le proxy qui sert les domaines des clients (Traefik) lit leur liste ici,
+    // et obtient seul leur certificat (`Services/domains/proxy.ts`). Sans jeton,
+    // c'est à l'administrateur d'ajouter chaque nom au proxy. L'amont est
+    // l'écouteur public tel que le proxy le joint : `http://deveye-server:3001`.
+    DOMAIN_PROXY_TOKEN: getEnvVar('DOMAIN_PROXY_TOKEN', 'string', false),
+    DOMAIN_PROXY_UPSTREAM: getEnvVar('DOMAIN_PROXY_UPSTREAM', 'string', false),
+    DOMAIN_PROXY_CERT_RESOLVER: getEnvVar('DOMAIN_PROXY_CERT_RESOLVER', 'string', false) || 'letsencrypt',
+    DOMAIN_PROXY_ENTRYPOINT: getEnvVar('DOMAIN_PROXY_ENTRYPOINT', 'string', false) || 'websecure',
 
     // Les variables propres à un module (SENTINEL_*, MAIL_SYNC_*, OAUTH_*,
     // MONITORING_RETENTION_DAYS, LINK_CODE_TTL_SECONDS) sont lues par le module.
@@ -168,6 +176,16 @@ for (const name of [
 ] as const) {
     if (env[name].length < SECRET_MIN_LENGTH) {
         throw new Error(`${name} doit faire au moins ${SECRET_MIN_LENGTH} caractères (openssl rand -base64 48).`);
+    }
+}
+if (env.DOMAIN_PROXY_TOKEN) {
+    if (env.DOMAIN_PROXY_TOKEN.length < SECRET_MIN_LENGTH) {
+        throw new Error(
+            `DOMAIN_PROXY_TOKEN doit faire au moins ${SECRET_MIN_LENGTH} caractères (openssl rand -hex 32).`
+        );
+    }
+    if (!env.DOMAIN_PROXY_UPSTREAM) {
+        throw new Error('DOMAIN_PROXY_UPSTREAM est requis dès que DOMAIN_PROXY_TOKEN est renseigné.');
     }
 }
 if (env.SMTP_HOST && !env.SMTP_FROM) {

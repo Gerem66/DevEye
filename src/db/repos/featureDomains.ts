@@ -58,6 +58,13 @@ export interface FeatureDomainsRepo {
     delete(id: number, workspaceId: number, feature: string): Promise<boolean>;
     /** Les domaines à revérifier, restreints aux fonctionnalités installées. */
     due(now: number, limit: number, features: readonly string[]): Promise<FeatureDomainRow[]>;
+    /** Les noms distincts de ces espaces, pour ces fonctionnalités : ce qu'une offre compte. */
+    hostsOf(workspaceIds: readonly number[], features: readonly string[]): Promise<string[]>;
+    /**
+     * Les noms que le proxy doit servir : propriété prouvée, ou déjà vérifiés et
+     * tenus malgré un échec passager. `verified` dit s'il l'a été une fois.
+     */
+    routable(features: readonly string[]): Promise<{ host: string; verified: boolean }[]>;
 }
 
 export function featureDomainsRepo(pool: Q): FeatureDomainsRepo {
@@ -126,6 +133,27 @@ export function featureDomainsRepo(pool: Q): FeatureDomainsRepo {
                 [now, ...features]
             );
             return r.rows.map(normalise);
+        },
+        async hostsOf(workspaceIds, features) {
+            if (workspaceIds.length === 0 || features.length === 0) return [];
+            const r = await pool.query<{ host: string }>(
+                `SELECT DISTINCT host FROM feature_domains
+                  WHERE workspace_id IN (${workspaceIds.map(() => '?').join(', ')})
+                    AND feature IN (${features.map(() => '?').join(', ')})`,
+                [...workspaceIds, ...features]
+            );
+            return r.rows.map((row) => row.host);
+        },
+        async routable(features) {
+            if (features.length === 0) return [];
+            const r = await pool.query<{ host: string; verified: number | string }>(
+                `SELECT host, MAX(verified_at IS NOT NULL) AS verified FROM feature_domains
+                  WHERE (dns_state = 'ok' OR verified_at IS NOT NULL)
+                    AND feature IN (${features.map(() => '?').join(', ')})
+                  GROUP BY host ORDER BY host`,
+                [...features]
+            );
+            return r.rows.map((row) => ({ host: row.host, verified: Number(row.verified) === 1 }));
         }
     };
 }

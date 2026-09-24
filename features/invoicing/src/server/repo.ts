@@ -26,6 +26,7 @@ export interface InvoicingSettingsRow {
     number_start: number;
     number_pad: number;
     mail_sender_id: number | null;
+    domain_id: number | null;
     content: string;
 }
 
@@ -122,6 +123,8 @@ export interface InvoicingOutstanding {
 export interface InvoicingRepo {
     getSettings(workspaceId: number): Promise<InvoicingSettingsRow | null>;
     saveSettings(workspaceId: number, row: InvoicingSettingsRow, at: number): Promise<void>;
+    /** Le domaine retiré ne désigne plus rien : les liens repartent sur l'adresse de DevEye. */
+    clearDomain(domainId: number, workspaceId: number): Promise<void>;
     /** Le reste dû de l'espace, et sa part échue au jour donné. */
     outstanding(workspaceId: number, today: string): Promise<InvoicingOutstanding>;
     /** Les devis acceptés dont aucune facture n'est encore sortie. */
@@ -328,7 +331,7 @@ export interface LineWrite {
 
 const SETTINGS_COLUMNS = `currency, time_zone, vat_regime, default_vat_bp, payment_terms_days,
     quote_validity_days, quote_prefix, invoice_prefix, credit_prefix, number_reset,
-    number_start, number_pad, mail_sender_id, content`;
+    number_start, number_pad, mail_sender_id, domain_id, content`;
 
 /**
  * Le reste dû d'une facture, en SQL. Son jumeau TypeScript est
@@ -389,8 +392,8 @@ export function createRepo(q: SdkQueryable): InvoicingRepo {
                 `INSERT INTO ft_invoicing_settings
                     (workspace_id, currency, time_zone, vat_regime, default_vat_bp, payment_terms_days,
                      quote_validity_days, quote_prefix, invoice_prefix, credit_prefix, number_reset,
-                     number_start, number_pad, mail_sender_id, content, updated)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     number_start, number_pad, mail_sender_id, domain_id, content, updated)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                  ON DUPLICATE KEY UPDATE
                     currency = VALUES(currency),
                     time_zone = VALUES(time_zone),
@@ -405,6 +408,7 @@ export function createRepo(q: SdkQueryable): InvoicingRepo {
                     number_start = VALUES(number_start),
                     number_pad = VALUES(number_pad),
                     mail_sender_id = VALUES(mail_sender_id),
+                    domain_id = VALUES(domain_id),
                     content = VALUES(content),
                     updated = VALUES(updated)`,
                 [
@@ -422,9 +426,17 @@ export function createRepo(q: SdkQueryable): InvoicingRepo {
                     row.number_start,
                     row.number_pad,
                     row.mail_sender_id,
+                    row.domain_id,
                     row.content,
                     at
                 ]
+            );
+        },
+
+        async clearDomain(domainId, workspaceId) {
+            await q.execute(
+                'UPDATE ft_invoicing_settings SET domain_id = NULL WHERE workspace_id = ? AND domain_id = ?',
+                [workspaceId, domainId]
             );
         },
 

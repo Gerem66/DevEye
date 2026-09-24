@@ -78,6 +78,7 @@ export async function settingsOf(io: RepoIo): Promise<InvoicingSettings> {
         numberStart: row.number_start,
         numberPad: row.number_pad,
         mailSenderId: row.mail_sender_id,
+        domainId: row.domain_id,
         issuer: content.issuer,
         wording: content.wording
     });
@@ -102,8 +103,20 @@ export function settingsRow(settings: InvoicingSettings, content: string): Invoi
         number_start: settings.numberStart,
         number_pad: settings.numberPad,
         mail_sender_id: settings.mailSenderId,
+        domain_id: settings.domainId,
         content
     };
+}
+
+/**
+ * L'origine des liens remis aux clients : le domaine choisi dans les réglages
+ * tant qu'il est vérifié, l'adresse de DevEye sinon. Un lien déjà remis sur
+ * l'une reste bon sur l'autre, le jeton seul désignant le document.
+ */
+export async function publicOriginOf(ctx: Ctx, settings: InvoicingSettings): Promise<string> {
+    if (settings.domainId === null) return ctx.origins.public;
+    const domain = await ctx.domains.get(settings.domainId);
+    return domain?.verified ? `https://${domain.host}` : ctx.origins.public;
 }
 
 /** Le jour courant dans le fuseau de l'espace, jamais celui du processus. */

@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import type { FeatureManifest } from '@deveye/types/sdk';
-import { FeatureError, type SdkDomain } from '@deveye/types/sdk/server';
+import type { Logger } from 'pino';
+import { ACCOUNT_PLAN_PROVIDER, type AccountPlan, type FeatureManifest } from '@deveye/types/sdk';
+import { FeatureError, type FeatureDomainsEntry, type SdkDomain } from '@deveye/types/sdk/server';
 
 import type { FeatureDomainRow, FeatureDomainsRepo } from '@/db/repos/featureDomains';
 import type { FeatureContext } from '@/features/_define';
-import { registerModules } from '@/features/_sdk/register';
+import { createModuleServices, registerModules } from '@/features/_sdk/register';
+import type { ModuleServiceHost } from '@/features/_sdk/service';
 import { domainFeatures } from './index';
 
 /**
@@ -13,7 +15,9 @@ import { domainFeatures } from './index';
  * fois en tête de fichier (le registre est un état de processus).
  */
 
-function manifest(id: 'x-domyes' | 'x-domno', domains: boolean): FeatureManifest {
+type TestFeature = 'x-domyes' | 'x-domno' | 'x-domweb' | 'x-domsite' | 'x-domplan';
+
+function manifest(id: TestFeature, domains: boolean, web = false): FeatureManifest {
     return {
         id,
         label: 'Test',
@@ -25,9 +29,17 @@ function manifest(id: 'x-domyes' | 'x-domno', domains: boolean): FeatureManifest
         shareTier: 'never',
         resources: [],
         commands: [],
-        ...(domains ? { domains: { hint: 'Vos noms.', service: 'Pointez le nom ici.' } } : {})
+        ...(domains ? { domains: { hint: 'Vos noms.', service: 'Pointez le nom ici.', web } } : {})
     };
 }
+
+const webHooks: FeatureDomainsEntry = {
+    records: () => Promise.resolve([]),
+    probe: () => Promise.resolve({ ok: true })
+};
+
+/** L'offre que rend le fournisseur, réglée par chaque test. `null` : aucune limite. */
+let plan: AccountPlan | null = null;
 
 const removed: SdkDomain[] = [];
 let refuseRemoval = false;
@@ -50,8 +62,33 @@ registerModules([
             }
         }
     },
-    { manifest: manifest('x-domno', false), server: { features: [] } }
+    { manifest: manifest('x-domno', false), server: { features: [] } },
+    { manifest: manifest('x-domweb', true, true), server: { features: [], domains: webHooks } },
+    { manifest: manifest('x-domsite', true, true), server: { features: [], domains: webHooks } },
+    {
+        manifest: manifest('x-domplan', false),
+        server: {
+            features: [],
+            createService: () => ({
+                start() {},
+                stop() {},
+                providers: {
+                    [ACCOUNT_PLAN_PROVIDER]: {
+                        planFor: () => Promise.resolve(plan ?? { id: 'admin', label: 'Admin', limits: {} })
+                    }
+                }
+            })
+        }
+    }
 ]);
+
+const quietLogger = { debug() {}, info() {}, warn() {}, error() {} } as unknown as Logger;
+createModuleServices({
+    db: { queryable: {} },
+    crypt: {},
+    audit: { record() {} },
+    logger: quietLogger
+} as unknown as ModuleServiceHost);
 
 function memoryRepo(): FeatureDomainsRepo & { rows: FeatureDomainRow[] } {
     const rows: FeatureDomainRow[] = [];
@@ -88,7 +125,14 @@ function memoryRepo(): FeatureDomainsRepo & { rows: FeatureDomainRow[] } {
             if (at !== -1) rows.splice(at, 1);
             return Promise.resolve(at !== -1);
         },
-        due: () => Promise.resolve([])
+        due: () => Promise.resolve([]),
+        hostsOf: (ids, features) =>
+            Promise.resolve([
+                ...new Set(
+                    rows.filter((r) => ids.includes(r.workspace_id) && features.includes(r.feature)).map((r) => r.host)
+                )
+            ]),
+        routable: () => Promise.resolve([])
     };
 }
 
@@ -97,7 +141,9 @@ function context(repo: FeatureDomainsRepo, opts: { workspaceId?: number; level?:
     const audits: string[] = [];
     const ctx = {
         workspaceId: opts.workspaceId ?? 1,
-        db: { featureDomains: repo, featureKv: {} },
+        // Le compte 1 possède les espaces 1 et 2 : ses domaines s'y comptent ensemble.
+        workspace: { ownerUserId: 1 },
+        db: { featureDomains: repo, featureKv: {}, workspaces: { listOwnedIds: () => Promise.resolve([1, 2]) } },
         crypt: {},
         logger: { warn() {}, error() {}, info() {}, debug() {} },
         assertFeature: (_feature: string, wanted: 'read' | 'write' = 'read') => {
@@ -206,5 +252,75 @@ describe('domain.list et domain.remove', () => {
         await run('domain.remove', ctx, { feature: 'x-domyes', id: 1 });
         assert.equal(repo.rows.length, 0);
         assert.equal(removed.at(-1)?.host, 'exemple.fr');
+    });
+});
+
+describe('domain.* : les domaines web et l’offre', () => {
+    const limited = (limit: number): AccountPlan => ({
+        id: 'free',
+        label: 'Gratuite',
+        limits: { 'domains.hosts': limit }
+    });
+
+    it('la liste dit le mode des certificats et l’usage, seulement pour des domaines web', async () => {
+        const repo = memoryRepo();
+        plan = limited(3);
+        await run('domain.add', context(repo).ctx, { feature: 'x-domweb', host: 'rdv.exemple.fr' });
+        await run('domain.add', context(repo, { workspaceId: 2 }).ctx, {
+            feature: 'x-domweb',
+            host: 'autre.exemple.fr'
+        });
+        const web = (await run('domain.list', context(repo).ctx, { feature: 'x-domweb' })) as {
+            https: string | null;
+            quota: { used: number; limit: number } | null;
+        };
+        assert.equal(web.https, 'manual');
+        assert.deepEqual(web.quota, { used: 2, limit: 3 });
+
+        const other = (await run('domain.list', context(repo).ctx, { feature: 'x-domyes' })) as {
+            https: string | null;
+            quota: unknown;
+        };
+        assert.equal(other.https, null);
+        assert.equal(other.quota, null);
+        plan = null;
+    });
+
+    it('une offre à 0 refuse le premier domaine web, et laisse passer les autres domaines', async () => {
+        const repo = memoryRepo();
+        plan = limited(0);
+        await assert.rejects(
+            run('domain.add', context(repo).ctx, { feature: 'x-domweb', host: 'rdv.exemple.fr' }),
+            code('quota_exceeded')
+        );
+        await assert.doesNotReject(
+            run('domain.add', context(repo).ctx, { feature: 'x-domyes', host: 'mx.exemple.fr' })
+        );
+        plan = null;
+    });
+
+    it('pile à la limite passe, au-delà refuse, tous espaces du propriétaire confondus', async () => {
+        const repo = memoryRepo();
+        plan = limited(2);
+        await run('domain.add', context(repo).ctx, { feature: 'x-domweb', host: 'un.exemple.fr' });
+        await run('domain.add', context(repo, { workspaceId: 2 }).ctx, {
+            feature: 'x-domweb',
+            host: 'deux.exemple.fr'
+        });
+        await assert.rejects(
+            run('domain.add', context(repo).ctx, { feature: 'x-domweb', host: 'trois.exemple.fr' }),
+            code('quota_exceeded')
+        );
+        plan = null;
+    });
+
+    it('un nom déjà compté pour une autre fonctionnalité web ne compte pas deux fois', async () => {
+        const repo = memoryRepo();
+        plan = limited(1);
+        await run('domain.add', context(repo).ctx, { feature: 'x-domweb', host: 'pages.exemple.fr' });
+        await assert.doesNotReject(
+            run('domain.add', context(repo).ctx, { feature: 'x-domsite', host: 'pages.exemple.fr' })
+        );
+        plan = null;
     });
 });

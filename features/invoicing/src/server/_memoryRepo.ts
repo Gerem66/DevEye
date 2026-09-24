@@ -125,6 +125,11 @@ export function memoryRepo(store: MemoryStore = emptyStore()): InvoicingRepo & {
             store.settings.set(workspaceId, { ...row });
         },
 
+        clearDomain: async (domainId, workspaceId) => {
+            const row = store.settings.get(workspaceId);
+            if (row?.domain_id === domainId) store.settings.set(workspaceId, { ...row, domain_id: null });
+        },
+
         outstanding: async (workspaceId, today) => {
             let outstandingCents = 0;
             let overdueCents = 0;

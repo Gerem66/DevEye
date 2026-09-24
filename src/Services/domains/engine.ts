@@ -1,6 +1,5 @@
-import type { SdkDomainProbe } from '@deveye/types/sdk/server';
-
 import type { FeatureDomainRow, FeatureDomainVerdict } from '@/db/repos/featureDomains';
+import type { WebCheck } from './web';
 
 /**
  * La vérification d'un domaine, en deux étages qui ne disent pas la même chose.
@@ -20,8 +19,11 @@ export const FAILURES_BEFORE_DROP = 3;
 export interface DomainSeam {
     /** Les TXT du nom, morceaux recollés. */
     txt(name: string): Promise<string[]>;
-    /** La sonde du module, appelée seulement quand la propriété tient. */
-    probe(): Promise<SdkDomainProbe>;
+    /**
+     * La sonde du module, appelée seulement quand la propriété tient. Une
+     * attente (`pending`) échoue comme un échec, mais se montre comme en cours.
+     */
+    probe(): Promise<WebCheck>;
     okSeconds: number;
     pendingSeconds: number;
 }
@@ -65,7 +67,7 @@ export async function judge(
         };
     }
 
-    let probe: SdkDomainProbe;
+    let probe: WebCheck;
     try {
         probe = await seam.probe();
     } catch (error) {
@@ -86,7 +88,7 @@ export async function judge(
     return {
         dns_state: 'ok',
         dns_error: '',
-        probe_state: 'failed',
+        probe_state: 'pending' in probe ? 'pending' : 'failed',
         probe_error: probe.error,
         verified_at: held,
         checked_at: now,

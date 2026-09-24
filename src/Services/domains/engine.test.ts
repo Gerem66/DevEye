@@ -107,6 +107,22 @@ describe('judge : le service', () => {
     });
 });
 
+describe('judge : une attente', () => {
+    it('reste en attente avec sa phrase, sans vérifier, et revient à la cadence d’attente', async () => {
+        const verdict = await judge(
+            row(),
+            OWNERSHIP,
+            NOW,
+            seam({ probe: () => Promise.resolve({ ok: false, pending: true, error: 'Certificat en cours.' }) })
+        );
+        assert.equal(verdict.dns_state, 'ok');
+        assert.equal(verdict.probe_state, 'pending');
+        assert.equal(verdict.probe_error, 'Certificat en cours.');
+        assert.equal(verdict.verified_at, null);
+        assert.equal(verdict.next_probe_at, NOW + 600);
+    });
+});
+
 describe('judge : un domaine vérifié ne retombe qu’au troisième échec', () => {
     for (const [stage, broken] of [
         ['propriété', seam({ txt: () => Promise.resolve([]) })],
