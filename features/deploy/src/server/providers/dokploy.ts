@@ -1,8 +1,20 @@
 import WebSocket from 'ws';
 
+import type { DeployCandidate } from '../../contracts/domain';
+
 // Le garde des appels sortants, partagé par toute l'app : l'adresse de l'instance
 // est saisie par un membre, et ses réponses lui reviennent.
 import { isAllowedOutboundUrl, publicLookup, safeFetch, UnsafeTargetError } from '@/Services/netFetch';
+
+import {
+    ProviderError,
+    type DeployProviderAdapter,
+    type ProviderAccess,
+    type ProviderTarget,
+    type ReadOptions,
+    type RemoteDeployment,
+    type TargetPlace
+} from './types';
 
 /**
  * Adaptateur Dokploy, calé sur une instance réelle plutôt que sur la doc :
@@ -16,16 +28,6 @@ import { isAllowedOutboundUrl, publicLookup, safeFetch, UnsafeTargetError } from
  * Décodage défensif : champs cherchés sous plusieurs noms, valeur neutre s'ils
  * manquent. Une instance d'une autre version dégrade l'affichage sans planter.
  */
-
-export class DokployError extends Error {
-    constructor(
-        message: string,
-        readonly status: number
-    ) {
-        super(message);
-        this.name = 'DokployError';
-    }
-}
 
 /** Ce qu'on déploie : une application, ou une pile compose. */
 export type DokployKind = 'application' | 'compose';
@@ -48,29 +50,12 @@ export interface DokployTarget {
     environmentId: string | null;
 }
 
-export interface DokployDeployment {
-    externalId: string | null;
-    /** Vocabulaire Dokploy, projeté sur le nôtre. */
-    status: 'queued' | 'running' | 'success' | 'failed';
-    title: string;
-    description: string;
-    startedAt: number;
-    finishedAt: number | null;
-    /** Chemin du journal chez le fournisseur, pour {@link fetchDeploymentLog}. */
-    logPath: string | null;
-}
-
 function base(baseUrl: string): string {
     return new URL('/api/trpc', baseUrl).toString().replace(/\/+$/, '');
 }
 
 /** Le délai d'une lecture, sauf mention contraire : celui d'un geste de l'utilisateur. */
 const DEFAULT_TIMEOUT_MS = 30_000;
-
-/** Un appel de fond se donne moins de temps qu'un geste, qui peut attendre. */
-export interface DokployReadOptions {
-    timeoutMs?: number;
-}
 
 async function call<T>(
     baseUrl: string,
@@ -99,24 +84,24 @@ async function call<T>(
             signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
         });
     } catch (e) {
-        if (e instanceof UnsafeTargetError) throw new DokployError(e.message, 0);
+        if (e instanceof UnsafeTargetError) throw new ProviderError(e.message, 0);
         // Le détail d'une panne réseau reste au journal : renvoyé tel quel, il
         // dirait à l'appelant ce qui écoute ou non derrière l'adresse saisie.
-        throw new DokployError('Instance Dokploy injoignable', 0);
+        throw new ProviderError('Instance Dokploy injoignable', 0);
     }
 
     let payload: unknown;
     try {
         payload = await res.json();
     } catch {
-        throw new DokployError(`Réponse Dokploy illisible (HTTP ${res.status}).`, res.status);
+        throw new ProviderError(`Réponse Dokploy illisible (HTTP ${res.status}).`, res.status);
     }
 
     // tRPC répond parfois 200 avec une erreur dans le corps : on lit l'erreur
     // avant le code HTTP.
     const err = readError(payload);
-    if (err) throw new DokployError(err, res.status);
-    if (!res.ok) throw new DokployError(`Dokploy a répondu ${res.status}.`, res.status);
+    if (err) throw new ProviderError(err, res.status);
+    if (!res.ok) throw new ProviderError(`Dokploy a répondu ${res.status}.`, res.status);
 
     return unwrap(payload) as T;
 }
@@ -274,7 +259,7 @@ export function readTargets(payload: unknown): DokployTarget[] {
  * Un état inconnu est traité comme « en cours » plutôt que comme un échec : se
  * tromper en annonçant une panne est pire que d'attendre un tour de plus.
  */
-function readStatus(raw: string | null): DokployDeployment['status'] {
+function readStatus(raw: string | null): RemoteDeployment['status'] {
     const value = (raw ?? '').toLowerCase();
     if (['done', 'success', 'succeeded', 'completed', 'ok'].includes(value)) return 'success';
     if (['error', 'failed', 'failure', 'cancelled', 'canceled'].includes(value)) return 'failed';
@@ -282,7 +267,7 @@ function readStatus(raw: string | null): DokployDeployment['status'] {
     return 'running';
 }
 
-export function readDeployments(payload: unknown): DokployDeployment[] {
+export function readDeployments(payload: unknown): RemoteDeployment[] {
     return asArray(payload).map((row) => {
         const status = readStatus(pick(row, ['status', 'state']));
         const startedAt = toSeconds(row.startedAt ?? row.createdAt ?? row.date) ?? Math.floor(Date.now() / 1000);
@@ -299,7 +284,9 @@ export function readDeployments(payload: unknown): DokployDeployment[] {
             // Un déploiement en cours n'a pas de fin, même si l'instance
             // renvoie un horodatage qui bouge à chaque battement.
             finishedAt: status === 'running' || status === 'queued' ? null : finishedAt,
-            logPath: pick(row, ['logPath'])
+            logRef: pick(row, ['logPath']),
+            url: null,
+            details: []
         };
     });
 }
@@ -318,7 +305,7 @@ export function dashboardUrl(baseUrl: string, target: DokployTarget): string | n
 export async function listTargets(
     baseUrl: string,
     apiKey: string,
-    options: DokployReadOptions = {}
+    options: ReadOptions = {}
 ): Promise<DokployTarget[]> {
     return readTargets(await call<unknown>(baseUrl, 'project.all', apiKey, options));
 }
@@ -328,8 +315,8 @@ export async function listDeployments(
     apiKey: string,
     kind: DokployKind,
     externalId: string,
-    options: DokployReadOptions = {}
-): Promise<DokployDeployment[]> {
+    options: ReadOptions = {}
+): Promise<RemoteDeployment[]> {
     const payload =
         kind === 'compose'
             ? await call<unknown>(baseUrl, 'deployment.allByCompose', apiKey, {
@@ -357,7 +344,7 @@ export async function fetchRepoUrl(
     apiKey: string,
     kind: DokployKind,
     externalId: string,
-    options: DokployReadOptions = {}
+    options: ReadOptions = {}
 ): Promise<string | null> {
     const row =
         kind === 'compose'
@@ -464,4 +451,195 @@ export function fetchDeploymentLog(
         socket.on('close', () => finish());
         socket.on('error', (err) => finish(err));
     });
+}
+
+/**
+ * Durée de vie du catalogue d'une instance (`project.all`, un appel pour toute
+ * l'instance) : des noms d'organisation, qui ne bougent pas, et les redemander
+ * à chaque battement coûterait un appel permanent.
+ */
+const PLACE_TTL_SECONDS = 300;
+
+/**
+ * Durée de vie du dépôt d'une cible. Un appel par cible, contrairement au
+ * catalogue : plus long, parce qu'un dépôt bouge encore moins qu'un nom de
+ * projet, et qu'une heure borne l'écart après un changement de source.
+ */
+const REPO_TTL_SECONDS = 3600;
+
+/** Le catalogue et la fiche ne se lisent que pour l'avis, en tâche de fond : le délai du suivi. */
+const BACKGROUND_TIMEOUT_MS = 10_000;
+
+/** Les appels réseau de l'adaptateur, remplaçables : un test simule une instance sans réseau. */
+export interface DokployClient {
+    listTargets: typeof listTargets;
+    listDeployments: typeof listDeployments;
+    triggerDeploy: typeof triggerDeploy;
+    fetchDeploymentLog: typeof fetchDeploymentLog;
+    fetchRepoUrl: typeof fetchRepoUrl;
+}
+
+const NETWORK: DokployClient = { listTargets, listDeployments, triggerDeploy, fetchDeploymentLog, fetchRepoUrl };
+
+function kindOf(target: ProviderTarget): DokployKind {
+    return target.kind === 'compose' ? 'compose' : 'application';
+}
+
+/** L'adresse de l'instance : sans elle, rien n'est adressable chez Dokploy. */
+function baseOf(access: Pick<ProviderAccess, 'baseUrl'>): string {
+    if (!access.baseUrl) throw new ProviderError('Cet accès Dokploy n’a pas d’adresse d’instance.', 0);
+    return access.baseUrl;
+}
+
+/** Dokploy derrière le contrat du module, avec ses caches : un catalogue par instance, un dépôt par cible. */
+export class DokployProvider implements DeployProviderAdapter {
+    readonly id = 'dokploy' as const;
+    readonly kinds = ['application', 'compose'] as const;
+
+    private readonly places = new Map<number, { at: number; targets: DokployTarget[] }>();
+    /** Le catalogue en cours de lecture, par accès : plusieurs messages le réclament au même tour. */
+    private readonly placeLoads = new Map<number, Promise<DokployTarget[]>>();
+    /**
+     * Le dépôt d'une cible, par accès et identifiant externe. Seule l'adresse
+     * est retenue : la fiche qui la porte contient aussi les identifiants du
+     * fournisseur Git.
+     */
+    private readonly repos = new Map<string, { at: number; url: string | null }>();
+
+    constructor(private readonly client: DokployClient = NETWORK) {}
+
+    location(access: Pick<ProviderAccess, 'baseUrl'>): string | null {
+        if (!access.baseUrl) return null;
+        try {
+            return new URL(access.baseUrl).host;
+        } catch {
+            return access.baseUrl;
+        }
+    }
+
+    async candidates(access: ProviderAccess): Promise<DeployCandidate[]> {
+        const targets = await this.client.listTargets(baseOf(access), access.secret);
+        return targets.map((t) => ({ kind: t.kind, externalId: t.externalId, name: t.name, path: t.path, ref: null }));
+    }
+
+    async trigger(
+        access: ProviderAccess,
+        target: ProviderTarget,
+        input: { title: string; description: string }
+    ): Promise<void> {
+        await this.client.triggerDeploy(
+            baseOf(access),
+            access.secret,
+            kindOf(target),
+            target.externalId,
+            input.title,
+            input.description
+        );
+    }
+
+    async history(
+        access: ProviderAccess,
+        target: ProviderTarget,
+        options: ReadOptions = {}
+    ): Promise<RemoteDeployment[]> {
+        const base = baseOf(access);
+        const rows = await this.client.listDeployments(base, access.secret, kindOf(target), target.externalId, options);
+        return rows.map((row) => ({ ...row, url: base }));
+    }
+
+    async noticeLog(
+        access: ProviderAccess,
+        _target: ProviderTarget,
+        entry: RemoteDeployment,
+        options: ReadOptions = {}
+    ): Promise<string> {
+        if (!entry.logRef) return '';
+        return this.client.fetchDeploymentLog(baseOf(access), access.secret, entry.logRef, options);
+    }
+
+    async fullLog(access: ProviderAccess, _target: ProviderTarget, entry: RemoteDeployment): Promise<string> {
+        if (!entry.logRef) throw new ProviderError('Aucun journal pour ce déploiement.', 404);
+        return this.client.fetchDeploymentLog(baseOf(access), access.secret, entry.logRef);
+    }
+
+    /**
+     * Projet, service et environnement, tels que Dokploy les organise, et le
+     * lien vers la fiche. Le nom donné à la cible dans DevEye sert de repli :
+     * une instance injoignable fait perdre les colonnes, jamais l'identité.
+     */
+    async place(
+        access: ProviderAccess,
+        target: ProviderTarget,
+        _entry: RemoteDeployment,
+        fallbackName: string
+    ): Promise<TargetPlace> {
+        const found = await this.catalogEntry(access, target.externalId);
+        const url = found && access.baseUrl ? dashboardUrl(access.baseUrl, found) : null;
+        return {
+            fields: [
+                { name: '🛠️ Projet', value: found?.projectName ?? 'inconnu' },
+                { name: '⚙️ Service', value: found?.name ?? fallbackName },
+                { name: '🌍 Environnement', value: found?.environmentName ?? 'inconnu' },
+                { name: '📦 Type', value: kindOf(target) }
+            ],
+            link: url ? { name: '🔗 Dokploy', label: 'Ouvrir la fiche du service', url } : null
+        };
+    }
+
+    /**
+     * Le dépôt, mémoïsé {@link REPO_TTL_SECONDS}. Le résultat vide compte comme
+     * une réponse : une cible sur une image Docker n'a pas de dépôt, et
+     * redemander à chaque battement coûterait un appel toutes les dix secondes
+     * pour rien. Une instance qui ne répond pas ne laisse rien en cache : c'est
+     * le message qui perd son lien, pas la cible.
+     */
+    async repoUrl(access: ProviderAccess, target: ProviderTarget): Promise<string | null> {
+        const key = `${access.credentialId}:${target.externalId}`;
+        const now = Math.floor(Date.now() / 1000);
+        const cached = this.repos.get(key);
+        if (cached && now - cached.at <= REPO_TTL_SECONDS) return cached.url;
+        try {
+            const url = await this.client.fetchRepoUrl(
+                baseOf(access),
+                access.secret,
+                kindOf(target),
+                target.externalId,
+                {
+                    timeoutMs: BACKGROUND_TIMEOUT_MS
+                }
+            );
+            this.repos.set(key, { at: now, url });
+            return url;
+        } catch {
+            return cached?.url ?? null;
+        }
+    }
+
+    /**
+     * Une cible dans le catalogue de son instance, mémoïsé {@link PLACE_TTL_SECONDS}
+     * pour tout l'accès. `null` si l'instance ne répond pas et que rien n'est en
+     * cache, ou si elle ne connaît plus la cible.
+     */
+    private async catalogEntry(access: ProviderAccess, externalId: string): Promise<DokployTarget | null> {
+        const now = Math.floor(Date.now() / 1000);
+        let cached = this.places.get(access.credentialId);
+        if (!cached || now - cached.at > PLACE_TTL_SECONDS) {
+            let load = this.placeLoads.get(access.credentialId);
+            if (!load) {
+                load = this.client
+                    .listTargets(baseOf(access), access.secret, { timeoutMs: BACKGROUND_TIMEOUT_MS })
+                    .finally(() => this.placeLoads.delete(access.credentialId));
+                this.placeLoads.set(access.credentialId, load);
+            }
+            try {
+                cached = { at: now, targets: await load };
+                this.places.set(access.credentialId, cached);
+            } catch {
+                // Le catalogue périmé vaut mieux que rien : les noms de projet
+                // ne bougent pas.
+                if (!cached) return null;
+            }
+        }
+        return cached.targets.find((t) => t.externalId === externalId) ?? null;
+    }
 }

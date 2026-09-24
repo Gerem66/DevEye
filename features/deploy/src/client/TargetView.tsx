@@ -10,7 +10,7 @@ import {
 } from '../contracts/domain';
 
 import { api } from './api';
-import { DOKPLOY_TIMEOUT_MS, formatAgo, hostOf, STATUS_LABELS, statusTone } from './format';
+import { formatAgo, PROVIDER_TIMEOUT_MS, STATUS_LABELS, statusTone, targetWhere } from './format';
 import styles from './style.module.css';
 
 interface TargetViewProps {
@@ -33,7 +33,7 @@ interface TargetViewProps {
      * d'un projet : une requête externe par cible reliée coûterait trop.
      */
     fullHistory?: DeployHistoryEntry[] | null;
-    /** Dokploy injoignable pendant le chargement de `fullHistory` ; le reste de la fiche fonctionne. */
+    /** Fournisseur injoignable pendant le chargement de `fullHistory` ; le reste de la fiche fonctionne. */
     fullHistoryError?: string | null;
     /**
      * Ouvre le journal d'une ligne : celles de l'historique, et le dernier
@@ -86,7 +86,7 @@ export function TargetActions({ target, canWrite, projectId, onGone, after }: Ta
                     Déployer
                 </Button>
             )}
-            {/* Les réglages de cette cible : son accès Dokploy, ce qu'elle vise
+            {/* Les réglages de cette cible : son accès, ce qu'elle vise
                 et sa suppression (onglet Général), ses canaux. Le bouton se
                 garde de lui-même, sans section accessible il ne s'affiche pas. */}
             <FeatureSettingsButton
@@ -117,14 +117,14 @@ export function TargetActions({ target, canWrite, projectId, onGone, after }: Ta
     );
 }
 
-/** Une ligne d'historique, qu'elle vienne du suivi local ou de Dokploy en direct. */
+/** Une ligne d'historique, qu'elle vienne du suivi local ou du fournisseur en direct. */
 interface HistoryRow {
     key: string | number;
     status: DeployStatus;
     title: string;
     description: string;
     startedAt: number;
-    /** `null` = inconnu (ligne venue de Dokploy) ou tâche de fond. */
+    /** `null` = inconnu (ligne venue du fournisseur) ou tâche de fond. */
     triggeredByUserId: number | null;
     /** `null` = pas d'identifiant fournisseur, donc pas de journal à ouvrir. */
     externalId: string | null;
@@ -166,7 +166,7 @@ export function TargetView({
             : fullHistory === null
               ? null
               : fullHistory.map((d, i) => ({
-                    // Pas d'id DevEye pour une ligne que Dokploy seul connaît.
+                    // Pas d'id DevEye pour une ligne que le fournisseur seul connaît.
                     key: d.externalId ?? `${d.startedAt}-${i}`,
                     status: d.status,
                     title: d.title,
@@ -212,8 +212,8 @@ export function TargetView({
                                 <span className={styles.overdue}>accès retiré, déclenchement impossible</span>
                             ) : (
                                 <span>
-                                    {target.kind === 'compose' ? 'pile compose' : 'application'} ·{' '}
-                                    {hostOf(target.baseUrl)} · {target.externalId}
+                                    {targetWhere(target)}
+                                    {target.ref ? ` · ${target.ref}` : ''}
                                 </span>
                             )}
                             {target.projectCount > 1 && (
@@ -348,7 +348,7 @@ function TriggerDialog({ open, targetId, projectId, busy, setBusy, onClose, onDo
                     description,
                     ...(projectId === undefined ? {} : { projectId })
                 },
-                { timeoutMs: DOKPLOY_TIMEOUT_MS }
+                { timeoutMs: PROVIDER_TIMEOUT_MS }
             );
             setTitle('');
             setDescription('');

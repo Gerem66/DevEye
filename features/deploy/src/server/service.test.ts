@@ -5,7 +5,9 @@ import type { DeployCredentialRow, DeploymentRow, DeployTargetRow } from '../con
 import { DEPLOY_ITEMS_PROVIDER, type DeployItemsProvider } from '@deveye/types/sdk';
 import { createTestServiceDeps } from '@deveye/types/sdk/testing';
 
-import type { DokployDeployment, DokployTarget } from './dokploy';
+import { DokployProvider, type DokployClient, type DokployTarget } from './providers/dokploy';
+import { GithubProvider } from './providers/github';
+import type { RemoteDeployment } from './providers/types';
 import { serverEntry } from './index';
 import type { DeployRepo } from './repo';
 import { DeploySync } from './service';
@@ -47,6 +49,7 @@ function credential(over: Partial<DeployCredentialRow> = {}): DeployCredentialRo
     return {
         id: 10,
         workspace_id: 1,
+        provider: 'dokploy',
         label: 'Prod',
         base_url: 'https://dokploy.exemple.fr',
         secret_enc: 'clé',
@@ -55,7 +58,7 @@ function credential(over: Partial<DeployCredentialRow> = {}): DeployCredentialRo
     };
 }
 
-function entry(over: Partial<DokployDeployment> = {}): DokployDeployment {
+function entry(over: Partial<RemoteDeployment> = {}): RemoteDeployment {
     return {
         externalId: 'dep-1',
         status: 'running',
@@ -63,8 +66,28 @@ function entry(over: Partial<DokployDeployment> = {}): DokployDeployment {
         description: '',
         startedAt: NOW() - 30,
         finishedAt: null,
-        logPath: '/logs/dep-1',
+        logRef: '/logs/dep-1',
+        url: null,
+        details: [],
         ...over
+    };
+}
+
+/** Le service sur une instance Dokploy simulée ; GitHub reste le vrai, jamais appelé ici. */
+function withDokploy(client: Partial<DokployClient>) {
+    const unused = async () => {
+        throw new Error('non attendu ici');
+    };
+    return {
+        dokploy: new DokployProvider({
+            listTargets: unused,
+            listDeployments: unused,
+            triggerDeploy: unused,
+            fetchDeploymentLog: unused,
+            fetchRepoUrl: unused,
+            ...client
+        }),
+        github: new GithubProvider()
     };
 }
 
@@ -184,7 +207,7 @@ function fakeRepo(
 
 /** Ce que l'instance factice répond : l'historique de la cible, son catalogue, la queue d'un journal, le dépôt. */
 interface Answers {
-    remote: DokployDeployment[];
+    remote: RemoteDeployment[];
     catalog?: DokployTarget[];
     log?: string;
     repoUrl?: string | null;
@@ -196,19 +219,22 @@ function syncWith(repo: FakeRepo, options: { liveChannels?: readonly number[]; n
     let answers: Answers | null = { remote: [] };
     /** Lectures de la fiche d'une cible : une par cible et par heure, pas une par tour. */
     let repoReads = 0;
-    const sync = new DeploySync(deps, {
-        listDeployments: async () => {
-            if (!answers) throw new Error('Instance Dokploy injoignable');
-            return answers.remote;
-        },
-        listTargets: async () => answers?.catalog ?? [],
-        fetchDeploymentLog: async () => answers?.log ?? '',
-        fetchRepoUrl: async () => {
-            repoReads += 1;
-            if (!answers) throw new Error('Instance Dokploy injoignable');
-            return answers.repoUrl ?? null;
-        }
-    });
+    const sync = new DeploySync(
+        deps,
+        withDokploy({
+            listDeployments: async () => {
+                if (!answers) throw new Error('Instance Dokploy injoignable');
+                return answers.remote;
+            },
+            listTargets: async () => answers?.catalog ?? [],
+            fetchDeploymentLog: async () => answers?.log ?? '',
+            fetchRepoUrl: async () => {
+                repoReads += 1;
+                if (!answers) throw new Error('Instance Dokploy injoignable');
+                return answers.repoUrl ?? null;
+            }
+        })
+    );
     return {
         deps,
         sync,
@@ -462,18 +488,21 @@ describe('DEPLOY_ITEMS_PROVIDER : labelOf', () => {
 function syncByInstance(repo: FakeRepo, options: { liveChannels?: readonly number[] } = {}) {
     const deps = createTestServiceDeps({ repo, ...options });
     const calls: string[] = [];
-    const answers = new Map<string, DokployDeployment[] | Error | Promise<never>>();
-    const sync = new DeploySync(deps, {
-        listDeployments: async (baseUrl, _key, _kind, externalId) => {
-            calls.push(`${baseUrl}#${externalId}`);
-            const answer = answers.get(baseUrl) ?? [];
-            if (answer instanceof Error) throw answer;
-            return answer;
-        },
-        listTargets: async () => [],
-        fetchDeploymentLog: async () => '',
-        fetchRepoUrl: async () => null
-    });
+    const answers = new Map<string, RemoteDeployment[] | Error | Promise<never>>();
+    const sync = new DeploySync(
+        deps,
+        withDokploy({
+            listDeployments: async (baseUrl, _key, _kind, externalId) => {
+                calls.push(`${baseUrl}#${externalId}`);
+                const answer = answers.get(baseUrl) ?? [];
+                if (answer instanceof Error) throw answer;
+                return answer;
+            },
+            listTargets: async () => [],
+            fetchDeploymentLog: async () => '',
+            fetchRepoUrl: async () => null
+        })
+    );
     return { deps, sync, calls, answers, beat: () => deps.recorded.tickers[0].tick() };
 }
 

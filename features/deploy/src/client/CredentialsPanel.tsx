@@ -5,6 +5,7 @@ import {
     Dialog,
     humanizeError,
     invalidate,
+    SegmentedControl,
     settingsStyles as shell,
     TextInput,
     useResource,
@@ -14,21 +15,30 @@ import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import {
     DEPLOY_CREDENTIAL_LABEL_MAX_LENGTH,
     DEPLOY_CREDENTIAL_SECRET_MAX_LENGTH,
-    type DeployCredential
+    type DeployCredential,
+    type DeployCredentialProvider
 } from '../contracts/domain';
 
 import { api } from './api';
+import { PROVIDER_LABELS } from './format';
+
+const PROVIDER_OPTIONS: readonly { value: DeployCredentialProvider; label: string; title: string }[] = [
+    { value: 'dokploy', label: 'Dokploy', title: 'Une instance Dokploy : son adresse et une clé d’API' },
+    { value: 'github', label: 'GitHub', title: 'Un jeton GitHub, pour lancer des workflows GitHub Actions' }
+];
 
 /** Le formulaire ouvert : un accès existant, ou un nouveau. */
 type Editing = { credential: DeployCredential | null } | null;
 
 /**
- * Les accès Dokploy de l'espace : le panneau de l'onglet « Sources » des
- * réglages de la feature. Mêmes formes que la liste des canaux de la section
- * Notifications (rangées, dialogue empilé, confirmation), d'où `settingsStyles`.
+ * Les accès de l'espace, Dokploy et GitHub : le panneau de l'onglet « Sources »
+ * des réglages de la feature. Mêmes formes que la liste des canaux de la
+ * section Notifications (rangées, dialogue empilé, confirmation), d'où
+ * `settingsStyles`.
  *
  * Un secret n'est jamais relu : le champ reste vide à la ré-ouverture, et vide
- * veut dire « garder celui en place ». L'adresse de l'instance est obligatoire.
+ * veut dire « garder celui en place ». L'adresse d'une instance Dokploy est
+ * obligatoire ; le fournisseur d'un accès ne change plus après sa création.
  * Autonome : il suit `deploy.list`, qu'un accès retiré rend orpheline.
  */
 export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
@@ -39,6 +49,7 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
     );
 
     const [editing, setEditing] = useState<Editing>(null);
+    const [provider, setProvider] = useState<DeployCredentialProvider>('dokploy');
     const [label, setLabel] = useState('');
     const [baseUrl, setBaseUrl] = useState('');
     const [secret, setSecret] = useState('');
@@ -51,6 +62,7 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
 
     const openForm = (credential: DeployCredential | null) => {
         setEditing({ credential });
+        setProvider(credential?.provider ?? 'dokploy');
         setLabel(credential?.label ?? '');
         setBaseUrl(credential?.baseUrl ?? '');
         setSecret('');
@@ -60,15 +72,20 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
     const submit = async () => {
         if (busy || !label.trim()) return;
         // Un service auto-hébergé sans adresse n'est pas adressable.
-        if (!baseUrl.trim()) {
+        if (provider === 'dokploy' && !baseUrl.trim()) {
             setError('Cette instance a besoin de l’adresse de son API.');
             return;
         }
         const existing = editing?.credential ?? null;
         if (!existing && !secret.trim()) {
-            setError('Un accès sans clé d’API ne sert à rien.');
+            setError(
+                provider === 'github'
+                    ? 'Un accès sans jeton ne sert à rien.'
+                    : 'Un accès sans clé d’API ne sert à rien.'
+            );
             return;
         }
+        const address = provider === 'dokploy' ? baseUrl.trim() : null;
 
         setBusy(true);
         setError(null);
@@ -77,14 +94,15 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                 await api.send('deploy.credentialUpdate', {
                     credentialId: existing.id,
                     label: label.trim(),
-                    baseUrl: baseUrl.trim(),
+                    baseUrl: address,
                     // Champ vide = inchangé : le serveur ne nous l'a jamais rendu.
                     ...(secret.trim() ? { secret: secret.trim() } : {})
                 });
             } else {
                 await api.send('deploy.credentialAdd', {
+                    provider,
                     label: label.trim(),
-                    baseUrl: baseUrl.trim(),
+                    baseUrl: address,
                     secret: secret.trim()
                 });
             }
@@ -129,8 +147,8 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
             {credentials?.length === 0 && (
                 <p className={shell.empty}>
                     {canWrite
-                        ? 'Aucun accès Dokploy. Déclarez-en un (adresse de l’instance + clé d’API) pour pouvoir déclarer une cible.'
-                        : 'Aucun accès Dokploy. Un membre disposant du droit d’écriture peut en déclarer un.'}
+                        ? 'Aucun accès. Déclarez une instance Dokploy (adresse + clé d’API) ou un jeton GitHub pour pouvoir déclarer une cible.'
+                        : 'Aucun accès. Un membre disposant du droit d’écriture peut en déclarer un.'}
                 </p>
             )}
 
@@ -140,7 +158,11 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                         <span className={`icon icon-key ${shell.channelIcon}`} aria-hidden='true' />
                         <span className={shell.channelText}>
                             <span className={shell.channelLabel}>{c.label}</span>
-                            <span className={shell.channelMeta}>{c.baseUrl ?? 'instance inconnue'}</span>
+                            <span className={shell.channelMeta}>
+                                {c.provider === 'github'
+                                    ? 'GitHub Actions'
+                                    : `${PROVIDER_LABELS[c.provider]} · ${c.baseUrl ?? 'instance inconnue'}`}
+                            </span>
                         </span>
                         <span
                             className={`${shell.channelUsage} ${c.useCount === 0 ? shell.channelUsageIdle : ''}`}
@@ -193,7 +215,7 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
             <Dialog
                 open={editing !== null}
                 onClose={() => setEditing(null)}
-                title={editing?.credential ? 'Modifier l’accès' : 'Nouvel accès Dokploy'}
+                title={editing?.credential ? 'Modifier l’accès' : 'Nouvel accès'}
                 description='Il servira à toutes les cibles de déploiement de cet espace.'
                 width={520}
                 onSubmit={submit}
@@ -209,29 +231,49 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                 }
             >
                 <div className={shell.section}>
+                    {!editing?.credential && (
+                        <div className={shell.field}>
+                            <span className={shell.sectionLabel}>Fournisseur</span>
+                            <SegmentedControl
+                                value={provider}
+                                options={PROVIDER_OPTIONS}
+                                onChange={setProvider}
+                                aria-label='Fournisseur de l’accès'
+                            />
+                        </div>
+                    )}
+
                     <label className={shell.field}>
                         <span className={shell.sectionLabel}>Nom de l’accès</span>
                         <TextInput
                             data-autofocus
                             value={label}
                             maxLength={DEPLOY_CREDENTIAL_LABEL_MAX_LENGTH}
-                            placeholder='Dokploy — prod'
+                            placeholder={provider === 'github' ? 'GitHub, mon organisation' : 'Dokploy, production'}
                             onChange={(e) => setLabel(e.target.value)}
                         />
                     </label>
 
-                    <label className={shell.field}>
-                        <span className={shell.sectionLabel}>Adresse de l’instance</span>
-                        <TextInput
-                            value={baseUrl}
-                            placeholder='https://dokploy.exemple.fr'
-                            onChange={(e) => setBaseUrl(e.target.value)}
-                        />
-                    </label>
+                    {provider === 'dokploy' && (
+                        <label className={shell.field}>
+                            <span className={shell.sectionLabel}>Adresse de l’instance</span>
+                            <TextInput
+                                value={baseUrl}
+                                placeholder='https://dokploy.exemple.fr'
+                                onChange={(e) => setBaseUrl(e.target.value)}
+                            />
+                        </label>
+                    )}
 
                     <label className={shell.field}>
                         <span className={shell.sectionLabel}>
-                            {editing?.credential ? 'Nouvelle clé d’API (facultatif)' : 'Clé d’API'}
+                            {provider === 'github'
+                                ? editing?.credential
+                                    ? 'Nouveau jeton (facultatif)'
+                                    : 'Jeton GitHub'
+                                : editing?.credential
+                                  ? 'Nouvelle clé d’API (facultatif)'
+                                  : 'Clé d’API'}
                         </span>
                         {/* Un secret se relit une fois à la saisie, jamais après. */}
                         <TextInput
@@ -239,13 +281,21 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                             enableShowHideButton
                             value={secret}
                             maxLength={DEPLOY_CREDENTIAL_SECRET_MAX_LENGTH}
-                            placeholder='clé d’API'
+                            placeholder={provider === 'github' ? 'github_pat_…' : 'clé d’API'}
                             onChange={(e) => setSecret(e.target.value)}
                         />
-                        {editing?.credential && (
+                        {editing?.credential ? (
                             <span className={shell.fieldHint}>
-                                Laissez vide pour conserver la clé en place : elle n’est jamais renvoyée.
+                                Laissez vide pour conserver le secret en place : il n’est jamais renvoyé.
                             </span>
+                        ) : (
+                            provider === 'github' && (
+                                <span className={shell.fieldHint}>
+                                    Un jeton à grain fin, limité aux dépôts à déployer : Actions en lecture et écriture,
+                                    Contents en lecture. Il ne sert qu’aux déploiements, pas au suivi des dépôts de la
+                                    fonctionnalité Git.
+                                </span>
+                            )
                         )}
                     </label>
                 </div>

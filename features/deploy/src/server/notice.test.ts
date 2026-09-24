@@ -27,7 +27,7 @@ function row(over: Partial<DeploymentRow> & { id: number }): DeploymentRow {
     };
 }
 
-describe('estimateFromHistory — la durée de référence', () => {
+describe('estimateFromHistory : la durée de référence', () => {
     it('moyenne les déploiements réussis', () => {
         const history = [
             row({ id: 1, started_at: 100, finished_at: 160 }), // 60 s
@@ -70,7 +70,7 @@ describe('estimateFromHistory — la durée de référence', () => {
     });
 });
 
-describe('progressBar — bornée à [0, 100] %', () => {
+describe('progressBar : bornée à [0, 100] %', () => {
     it('remplit proportionnellement', () => {
         assert.equal(progressBar(0), '▱▱▱▱▱▱▱▱▱▱');
         assert.equal(progressBar(0.5), '▰▰▰▰▰▱▱▱▱▱');
@@ -86,7 +86,7 @@ describe('progressBar — bornée à [0, 100] %', () => {
     });
 });
 
-describe('tailOf — la queue du journal', () => {
+describe('tailOf : la queue du journal', () => {
     it('retire les séquences ANSI', () => {
         // Dokploy colore sa sortie ; un bloc de code Discord rendrait les
         // séquences telles quelles.
@@ -107,7 +107,7 @@ describe('tailOf — la queue du journal', () => {
     });
 });
 
-describe('firstLine — le sujet d’un message de commit', () => {
+describe('firstLine : le sujet d’un message de commit', () => {
     it('ne garde que la première ligne', () => {
         // Dokploy range le message de commit ENTIER dans le titre.
         assert.equal(firstLine('feat: le sujet\n\nUn corps\nsur deux lignes.'), 'feat: le sujet');
@@ -132,13 +132,15 @@ describe('firstLine — le sujet d’un message de commit', () => {
     });
 });
 
-describe('buildNotice — ce que le lecteur voit', () => {
+describe('buildNotice : ce que le lecteur voit', () => {
     const base = {
-        project: 'DevEye',
-        service: 'server',
-        environment: 'production',
-        kind: 'compose',
-        url: null,
+        fields: [
+            { name: '🛠️ Projet', value: 'DevEye' },
+            { name: '⚙️ Service', value: 'server' },
+            { name: '🌍 Environnement', value: 'production' },
+            { name: '📦 Type', value: 'compose' }
+        ],
+        link: null,
         repoUrl: null,
         title: 'Manual deployment',
         startedAt: 1_000,
@@ -203,7 +205,7 @@ describe('buildNotice — ce que le lecteur voit', () => {
             status: 'success',
             finishedAt: 1_100,
             log: 'ligne de build',
-            url: 'https://x/y'
+            link: { name: '🔗 Dokploy', label: 'Ouvrir la fiche du service', url: 'https://x/y' }
         }).embeds![0] as { fields: { name: string }[] };
         assert.deepEqual(
             embed.fields.map((f) => f.name),
@@ -242,22 +244,27 @@ describe('buildNotice — ce que le lecteur voit', () => {
         assert.equal(nameAt(fini, 5), '⏱️ Durée');
     });
 
-    it('ajoute le lien Dokploy seulement quand il est reconstructible', () => {
+    it('ajoute le lien de la fiche seulement quand le fournisseur le donne', () => {
         // Un lien faux serait pire que pas de lien.
         const sans = buildNotice({ ...base, status: 'success', finishedAt: 1_100 });
-        const avec = buildNotice({ ...base, status: 'success', finishedAt: 1_100, url: 'https://x/y' });
+        const avec = buildNotice({
+            ...base,
+            status: 'success',
+            finishedAt: 1_100,
+            link: { name: '🔗 Dokploy', label: 'Ouvrir la fiche du service', url: 'https://x/y' }
+        });
         const names = (n: DiscordNotice) => (n.embeds![0] as { fields: { name: string }[] }).fields.map((f) => f.name);
         assert.ok(!names(sans).includes('🔗 Dokploy'));
         assert.ok(names(avec).includes('🔗 Dokploy'));
     });
 
-    it('ajoute le dépôt à côté du lien Dokploy', () => {
+    it('ajoute le dépôt à côté du lien de la fiche', () => {
         // Deux liens côte à côte : celui de la fiche, celui du dépôt déployé.
         const embed = buildNotice({
             ...base,
             status: 'success',
             finishedAt: 1_100,
-            url: 'https://dokploy/x',
+            link: { name: '🔗 Dokploy', label: 'Ouvrir la fiche du service', url: 'https://dokploy/x' },
             repoUrl: 'https://github.com/Gerem66/DevEye'
         }).embeds![0] as { fields: { name: string; value: string; inline: boolean }[] };
 

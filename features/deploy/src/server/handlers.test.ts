@@ -71,6 +71,7 @@ function target(over: Partial<DeployTargetRow> & { id: number; workspace_id: num
 
 function credential(over: Partial<DeployCredentialRow> & { id: number; workspace_id: number }): DeployCredentialRow {
     return {
+        provider: 'dokploy',
         label: `Clé ${over.id}`,
         base_url: 'https://dokploy.exemple.fr',
         secret_enc: 'clé-secrète',
@@ -189,6 +190,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             const created = credential({
                 id: ++seq,
                 workspace_id: input.workspaceId,
+                provider: input.provider,
                 label: input.label,
                 base_url: input.baseUrl,
                 secret_enc: input.secretEnc
@@ -285,9 +287,9 @@ describe('deploy.count et deploy.list', () => {
 
         const listed = await handlerFor(deployList)(ctx, {});
         assert.deepEqual(
-            listed.targets.map((t) => [t.id, t.name, t.foreign, t.baseUrl, t.lastStatus, t.projectCount]),
+            listed.targets.map((t) => [t.id, t.name, t.foreign, t.location, t.lastStatus, t.projectCount]),
             [
-                [1, 'Cible 1', false, 'https://dokploy.exemple.fr', 'failed', 2],
+                [1, 'Cible 1', false, 'dokploy.exemple.fr', 'failed', 2],
                 [2, 'Cible 2', false, null, null, 0]
             ]
         );
@@ -428,7 +430,7 @@ describe('deploy.add', () => {
         const first = await handlerFor(deployAdd)(ctx, body);
         assert.equal(first.target.name, 'Pile de prod');
         assert.equal(first.target.kind, 'compose');
-        assert.equal(first.target.baseUrl, 'https://dokploy.exemple.fr');
+        assert.equal(first.target.location, 'dokploy.exemple.fr');
         assert.equal(first.target.projectCount, 0);
         // Le harnais chiffre à l'identité : le nom est dans le blob.
         assert.equal(repo.targets[0].content, JSON.stringify({ name: 'Pile de prod' }));
@@ -541,6 +543,7 @@ describe('les clés Dokploy', () => {
         const repo = fakeRepo();
         const ctx = createTestContext({ repo });
         const out = await handlerFor(deployCredentialAdd)(ctx, {
+            provider: 'dokploy',
             label: 'Prod',
             baseUrl: 'https://dokploy.exemple.fr',
             secret: 'sk-1'

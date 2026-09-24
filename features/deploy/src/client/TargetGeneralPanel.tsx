@@ -15,6 +15,7 @@ import {
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import {
+    DEPLOY_REF_MAX_LENGTH,
     DEPLOY_TARGET_NAME_MAX_LENGTH,
     type DeployCandidate,
     type DeployCredential,
@@ -23,11 +24,11 @@ import {
 } from '../contracts/domain';
 
 import { api } from './api';
-import { DOKPLOY_TIMEOUT_MS, KIND_OPTIONS } from './format';
+import { DOKPLOY_KIND_OPTIONS, PROVIDER_LABELS, PROVIDER_TIMEOUT_MS, providerError } from './format';
 
 /**
- * La cible elle-même : son accès Dokploy, ce qu'elle vise chez lui, son type,
- * son intitulé et sa suppression. L'onglet Général de ses réglages, là où le
+ * La cible elle-même : son accès (du même fournisseur), ce qu'elle vise chez
+ * lui, son type ou sa branche, son intitulé et sa suppression. L'onglet Général de ses réglages, là où le
  * bouton commun mène. Le dialogue, lui, ne fait plus que DÉCLARER une cible,
  * geste qui n'a pas d'élément à viser.
  *
@@ -46,6 +47,7 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
     const [externalId, setExternalId] = useState('');
     const [name, setName] = useState('');
     const [kind, setKind] = useState<DeployTargetKind>('application');
+    const [ref, setRef] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
@@ -72,6 +74,7 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
                 setExternalId(res.target.externalId);
                 setName(res.target.name);
                 setKind(res.target.kind);
+                setRef(res.target.ref ?? '');
             } catch (e) {
                 setError(humanizeError(e, 'La cible n’a pas pu être lue.'));
             }
@@ -79,7 +82,7 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
     }, [targetId, loadCredentials]);
 
     /*
-     * Les applications de l'instance, dès qu'une est désignée. `deploy.candidates`
+     * Ce que l'accès propose, dès qu'il est désigné. `deploy.candidates`
      * exige l'écriture, et l'accès d'une cible étrangère n'est pas d'ici : dans
      * ces deux cas on ne demande rien. `busy` reste à l'enregistrement : une
      * interrogation en cours ne doit pas se lire comme lui.
@@ -98,17 +101,17 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
                 const res = await api.send(
                     'deploy.candidates',
                     { credentialId: Number(credentialId) },
-                    { timeoutMs: DOKPLOY_TIMEOUT_MS }
+                    { timeoutMs: PROVIDER_TIMEOUT_MS }
                 );
-                // Une réponse d'une instance qu'on ne regarde plus n'a rien à
-                // dire : changer d'accès avant qu'elle n'arrive est courant.
+                // Une réponse d'un accès qu'on ne regarde plus n'a rien à dire :
+                // en changer avant qu'elle n'arrive est courant.
                 if (!alive) return;
                 setCandidates(res.candidates);
                 setError(null);
             } catch (e) {
-                // Une instance injoignable n'empêche pas de régler la cible :
+                // Un fournisseur injoignable n'empêche pas de régler la cible :
                 // le repli manuel reste ouvert.
-                if (alive) setError(humanizeError(e, 'Impossible de joindre l’instance Dokploy.'));
+                if (alive) setError(providerError(e, 'Impossible de joindre le fournisseur.'));
             } finally {
                 if (alive) setLoadingCandidates(false);
             }
@@ -140,12 +143,13 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
             });
     };
 
-    /** Choisir dans la liste remplit tout le reste : type, identifiant, intitulé. */
+    /** Choisir dans la liste remplit tout le reste : type, identifiant, intitulé, branche. */
     const pick = (chosen: string) => {
         setExternalId(chosen);
         const candidate = candidates.find((c) => c.externalId === chosen);
         if (!candidate) return;
         setKind(candidate.kind);
+        setRef(candidate.ref ?? '');
         setName((candidate.path ? `${candidate.path} | ` : '') + candidate.name);
     };
 
@@ -160,12 +164,14 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
                 externalId: externalId.trim(),
                 // Un intitulé laissé vide retombe sur l'identifiant : une cible
                 // sans nom resterait désignable, mais illisible dans une liste.
-                name: name.trim() || externalId.trim()
+                name: name.trim() || externalId.trim(),
+                ref: kind === 'workflow' ? ref.trim() || null : null
             });
             setTarget(res.target);
             setExternalId(res.target.externalId);
             setName(res.target.name);
             setKind(res.target.kind);
+            setRef(res.target.ref ?? '');
             // La liste, la fiche, et l'onglet du projet qui la déploie.
             invalidate('deploy.list', 'deploy.detail', 'projects.board');
         } catch (e) {
@@ -208,22 +214,26 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
     }
 
     const editable = canWrite && !busy;
+    const workflow = target.provider === 'github';
+    // Un accès d'un autre fournisseur ne sait pas déployer ce que vise la cible.
+    const usable = credentials.filter((c) => c.provider === target.provider);
     const unchanged =
         credentialId === (target.credentialId === null ? '' : String(target.credentialId)) &&
         externalId.trim() === target.externalId &&
         (name.trim() || externalId.trim()) === target.name &&
-        kind === target.kind;
+        kind === target.kind &&
+        (ref.trim() || null) === target.ref;
     const complete = credentialId !== '' && externalId.trim() !== '';
 
     return (
         <div className={shell.section}>
             <div className={shell.field}>
-                <span className={shell.sectionLabel}>Instance Dokploy</span>
+                <span className={shell.sectionLabel}>Accès {PROVIDER_LABELS[target.provider]}</span>
                 <div className={shell.fieldWithAction}>
                     <SelectInput
                         value={credentialId}
                         disabled={!editable}
-                        aria-label='Instance Dokploy'
+                        aria-label={`Accès ${PROVIDER_LABELS[target.provider]}`}
                         onChange={(e) => setCredentialId(e.target.value)}
                     >
                         {/* L'accès retiré : l'entrée vide dit l'état réel, et
@@ -231,9 +241,9 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
                         {credentialId === '' && (
                             <option value=''>Aucun : accès retiré, déclenchement impossible</option>
                         )}
-                        {credentials.map((c) => (
+                        {usable.map((c) => (
                             <option key={c.id} value={c.id}>
-                                {c.label} · {c.baseUrl}
+                                {c.provider === 'github' ? c.label : `${c.label} · ${c.baseUrl}`}
                             </option>
                         ))}
                     </SelectInput>
@@ -244,14 +254,13 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
                             scope={{ kind: 'feature', feature: 'deploy' }}
                             initialSection='sources'
                             variant='ghost'
-                            label='Accès Dokploy'
+                            label='Accès'
                             onOpenChange={onSettingsOpenChange}
                         />
                     )}
                 </div>
                 <span className={shell.fieldHint}>
-                    Les accès (adresse de l’instance + clé d’API) se gèrent dans Réglages → Sources et servent à toutes
-                    les cibles de l’espace.
+                    Les accès se gèrent dans Réglages → Sources et servent à toutes les cibles de l’espace.
                 </span>
             </div>
 
@@ -266,9 +275,11 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
                 >
                     <option value=''>
                         {loadingCandidates
-                            ? 'Interrogation de l’instance…'
+                            ? 'Interrogation du fournisseur…'
                             : candidates.length === 0
-                              ? 'Cette instance ne déclare aucune application'
+                              ? workflow
+                                  ? 'Ce jeton ne donne accès à aucun workflow'
+                                  : 'Cette instance ne déclare aucune application'
                               : 'Choisir…'}
                     </option>
                     {/* La cible réglée mais absente de la liste (retirée chez le
@@ -279,7 +290,7 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
                     )}
                     {candidates.map((c) => (
                         <option key={`${c.kind}:${c.externalId}`} value={c.externalId}>
-                            {c.kind === 'compose' ? '🧩 ' : '📦 '}
+                            {c.kind === 'compose' ? '🧩 ' : c.kind === 'workflow' ? '⚙️ ' : '📦 '}
                             {c.path ? `${c.path} | ` : ''}
                             {c.name}
                         </option>
@@ -293,28 +304,47 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
                 <TextInput
                     value={externalId}
                     disabled={!editable}
-                    placeholder='applicationId ou composeId'
+                    placeholder={workflow ? 'propriétaire/dépôt#identifiant' : 'applicationId ou composeId'}
                     aria-label='Identifiant de cible'
                     onChange={(e) => setExternalId(e.target.value)}
                 />
                 <span className={shell.fieldHint}>
-                    Tel que Dokploy le nomme, pour une cible que la liste ci-dessus ne propose pas.
+                    Tel que {PROVIDER_LABELS[target.provider]} le nomme, pour une cible que la liste ci-dessus ne
+                    propose pas.
                 </span>
             </div>
 
-            <div className={shell.field}>
-                <span className={shell.sectionLabel}>Type</span>
-                <SegmentedControl
-                    value={kind}
-                    options={KIND_OPTIONS}
-                    disabled={!editable}
-                    onChange={setKind}
-                    aria-label='Type de cible'
-                />
-                <span className={shell.fieldHint}>
-                    Les deux ne se déclenchent pas par la même procédure : une cible du mauvais type reste indéployable.
-                </span>
-            </div>
+            {workflow ? (
+                <div className={shell.field}>
+                    <span className={shell.sectionLabel}>Branche</span>
+                    <TextInput
+                        value={ref}
+                        disabled={!editable}
+                        maxLength={DEPLOY_REF_MAX_LENGTH}
+                        placeholder='Celle par défaut du dépôt'
+                        aria-label='Branche'
+                        onChange={(e) => setRef(e.target.value)}
+                    />
+                    <span className={shell.fieldHint}>
+                        Le workflow se lance sur cette branche, et l’historique ne montre que ses exécutions.
+                    </span>
+                </div>
+            ) : (
+                <div className={shell.field}>
+                    <span className={shell.sectionLabel}>Type</span>
+                    <SegmentedControl
+                        value={kind}
+                        options={DOKPLOY_KIND_OPTIONS}
+                        disabled={!editable}
+                        onChange={setKind}
+                        aria-label='Type de cible'
+                    />
+                    <span className={shell.fieldHint}>
+                        Les deux ne se déclenchent pas par la même procédure : une cible du mauvais type reste
+                        indéployable.
+                    </span>
+                </div>
+            )}
 
             <div className={shell.field}>
                 <span className={shell.sectionLabel}>Intitulé</span>
@@ -340,8 +370,8 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
                 <div className={shell.field}>
                     <span className={shell.sectionLabel}>Supprimer cette cible</span>
                     <span className={shell.fieldHint}>
-                        Son historique part avec elle, et les projets qui la déployaient perdent leur liaison.
-                        L’application, elle, continue de tourner chez Dokploy.
+                        Son historique part avec elle, et les projets qui la déployaient perdent leur liaison. Ce
+                        qu’elle vise chez {PROVIDER_LABELS[target.provider]} n’est pas touché.
                     </span>
                     <div className={shell.sectionActions}>
                         <Button
@@ -350,8 +380,7 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
                             onClick={() =>
                                 setConfirm({
                                     title: `Supprimer « ${target.name} » ?`,
-                                    description:
-                                        'Son historique est perdu, et les projets qui la déployaient perdent leur liaison. L’application chez Dokploy n’est pas touchée.',
+                                    description: `Son historique est perdu, et les projets qui la déployaient perdent leur liaison. Ce qu’elle vise chez ${PROVIDER_LABELS[target.provider]} n’est pas touché.`,
                                     confirmLabel: 'Supprimer la cible',
                                     onConfirm: () => void remove()
                                 })

@@ -1,3 +1,6 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { DEPLOY_ITEMS_PROVIDER, type DeployItemsProvider } from '@deveye/types/sdk';
 import type { FeatureServer, SdkCipher } from '@deveye/types/sdk/server';
 
@@ -26,18 +29,20 @@ async function labelOf(
 }
 
 /**
- * L'entrée serveur du module : le rapprochement de fond des cibles chez Dokploy
- * (`DeploySync`, posé en singleton pour que `deploy.trigger` réveille un tour),
- * le contrat offert à Projets (`DEPLOY_ITEMS_PROVIDER`) et l'entrée `items`
- * qu'exige `shareTier: 'open'` (domicile et nom d'une cible visible d'ici).
+ * L'entrée serveur du module : le rapprochement de fond des cibles chez leur
+ * fournisseur (`DeploySync`, posé en singleton pour que `deploy.trigger`
+ * réveille un tour), le contrat offert à Projets (`DEPLOY_ITEMS_PROVIDER`) et
+ * l'entrée `items` qu'exige `shareTier: 'open'` (domicile et nom d'une cible
+ * visible d'ici).
  *
- * Pas de `migrationsDir` : `deploy_targets`, `deployments` et
- * `ft_deploy_credentials` datent du socle (allowlist dans deveye-feature.json) ;
- * une nouvelle table inaugurera `src/server/migrations/` avec le préfixe
- * `ft_deploy_`. `project_deploy_links` appartient à Projets.
+ * `deploy_targets`, `deployments` et `ft_deploy_credentials` datent du socle
+ * (allowlist dans deveye-feature.json) ; `migrations/` les fait évoluer, et une
+ * table neuve y prendra le préfixe `ft_deploy_`. `project_deploy_links`
+ * appartient à Projets.
  */
 export const serverEntry: FeatureServer<DeployRepo> = {
     createRepo,
+    migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
     features: deployHandlers,
     createService(deps) {
         const sync = new DeploySync(deps);

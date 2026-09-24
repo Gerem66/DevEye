@@ -35,8 +35,8 @@ qu'une **liaison** — une ligne dans `project_deploy_links`, et rien d'autre.
 > **Supprimer l'un ne supprime jamais l'autre.** Délier une cible d'un projet
 > laisse la cible, son historique et les autres projets qui la déploient.
 > Supprimer une cible laisse les projets, qui perdent seulement leur pointeur.
-> L'application chez Dokploy, elle, n'est évidemment jamais touchée : DevEye ne
-> fait que la pointer.
+> Ce que vise la cible chez son fournisseur, lui, n'est évidemment jamais
+> touché : DevEye ne fait que le pointer.
 
 ---
 
@@ -95,9 +95,10 @@ fournisseur, qui le fait mieux et dont ce n'est pas à nous de dupliquer
 l'interface. Le module répond à deux questions : « est-ce que je peux lancer ça
 d'ici ? » et « où en est le dernier ? ».
 
-Aucun webhook n'arrive, et il n'y en aura pas : Dokploy n'émet pas de forme
-générique, ses « notifications » étant mises en page pour Discord, Slack ou
-Telegram. L'état est donc **sondé**, par le service de fond du module
+Aucun webhook n'arrive : Dokploy n'émet pas de forme générique, ses
+« notifications » étant mises en page pour Discord, Slack ou Telegram. GitHub
+en émet, mais il faudrait une route publique et un secret par dépôt ; sondé avec
+son ETag, un workflow qui ne bouge pas ne coûte rien à son quota. L'état est donc **sondé**, par le service de fond du module
 (`DeploySync`, `features/deploy/src/server/service.ts`, l'ex moitié
 déploiement d'`IntegrationSyncService`), qui diffuse sur le sujet `deploy` : la
 fiche de la cible et l'onglet du projet qui la déploie suivent tous deux
@@ -119,14 +120,14 @@ visible. Il portait sur les **lignes encore en vol** ; il porte désormais sur l
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Cibles**                   | toutes les cibles de l'espace, état du dernier déploiement, nombre de projets, rangeables au glisser-déposer                                                                |
 | **Fiche**                    | l'en-tête de la cible (retour, titre, actions, dont le bouton de réglages commun), « Déployer », et l'historique de ce qui est parti                                        |
-| **Réglages → Sources**       | les clés d'API Dokploy de l'espace, avec ce que chacune dessert : l'ancien bouton « Accès Dokploy », absorbé par la coquille commune (voir `Docs/SOURCES.md`)               |
+| **Réglages → Sources**       | les accès de l'espace, Dokploy (adresse + clé d'API) ou GitHub (jeton), avec ce que chacun dessert (voir `Docs/SOURCES.md`)                                                 |
 | **Réglages → Notifications** | les canaux de la feature (ses sources d'avis) ; chaque **cible** coche les siens dans ses propres réglages (092). Sur Discord, un message qui suit le déploiement en direct |
-| **Réglages d'une cible**     | général (accès Dokploy, cible visée, type, intitulé, suppression), notifications, partage entre espaces et permissions par rôle (`Docs/SETTINGS.md`, `Docs/SHARING.md`)     |
+| **Réglages d'une cible**     | général (accès, cible visée, type ou branche, intitulé, suppression), notifications, partage entre espaces et permissions par rôle (`Docs/SETTINGS.md`, `Docs/SHARING.md`)  |
 | **Onglet d'un projet**       | les cibles reliées — une vue sur cette feature, voir [Projets](../projects/README.md)                                                                                       |
 
-Une cible se **déclare** (elle existe déjà chez Dokploy), elle ne se crée pas :
-le dialogue interroge l'instance **dès qu'on en désigne une** et propose ce
-qu'elle publie, avec un repli manuel pour le jour où le décodeur ne reconnaîtra
+Une cible se **déclare** (elle existe déjà chez son fournisseur), elle ne se
+crée pas : le dialogue interroge l'accès **dès qu'on en désigne un** et propose
+ce qu'il publie, avec un repli manuel pour le jour où le décodeur ne reconnaîtra
 pas une forme de réponse. L'interrogation vivait sur un bouton « Lister les
 applications » : un geste que personne n'avait de raison de ne pas faire, donc
 un clic imposé avant le vrai choix.
@@ -156,20 +157,24 @@ deveye-feature.json                 l'allowlist des tables historiques (deploy_t
 package.json                        deveye-feature-deploy ; `ws` en dépendance (le journal Dokploy)
 src/index.ts, src/manifest.ts       l'entrée isomorphe ; le descripteur étalé, `shareTier: 'open'`,
                                     ressources deploy.count / list / detail, capacité `notify`, onglet Sources
-src/contracts/domain.ts             la cible, le déploiement, le candidat, la clé Dokploy (l'ex domain/deploy.ts)
+src/contracts/domain.ts             la cible, le déploiement, le candidat, l'accès (Dokploy ou GitHub)
 src/contracts/commands.ts           les quinze commandes (préfixe unique `deploy.`)
 
 src/server/index.ts                 serverEntry : dépôt, handlers, service, `items` (domicile et nom d'une cible),
                                     provider DEPLOY_ITEMS_PROVIDER offert à Projets
-src/server/repo.ts                  cibles, déploiements, et les clés Dokploy (ft_deploy_credentials) ; sur SdkQueryable
-src/server/_shared.ts               Stored*, loadTarget / loadHomeTarget, toTarget, toDeployment, loadDokployCredential,
+src/server/repo.ts                  cibles, déploiements, et les accès (ft_deploy_credentials) ; sur SdkQueryable
+src/server/_shared.ts               Stored*, loadTarget / loadHomeTarget, toTarget, toDeployment, loadAccess,
                                     le singleton du suivi (setSync / wakeSync), le contrat de Projets (compte, liste, frise)
 src/server/handlers.ts              les onze commandes + les quatre gestes de clés, en defineSdkFeature
 src/server/service.ts               DeploySync : le rapprochement de fond (minuteur propre), le message vivant
 src/server/notice.ts                la mise en forme du message vivant (barre, journal) ; helpers Discord de l'app par privilège
-src/server/dokploy.ts               l'adaptateur tRPC + le WebSocket du journal
+src/server/providers/types.ts       le contrat d'un fournisseur (§10) ; providers/index.ts, la table PROVIDERS
+src/server/providers/dokploy.ts     l'adaptateur tRPC + le WebSocket du journal, et ses caches
+src/server/providers/github.ts      GitHub Actions : workflow_dispatch, exécutions, étapes, journaux
+src/server/migrations/              ce que le module change à ses tables (001 : les fournisseurs)
 src/server/uninstall.sql            DROP de ft_deploy_credentials (les tables historiques restent)
-src/server/*.test.ts                handlers (harnais SDK), service (Dokploy factice), notice (les calculs), dokploy (vraie WebSocket)
+src/server/*.test.ts                handlers (harnais SDK), service (Dokploy simulé), notice (les calculs)
+src/server/providers/*.test.ts      dokploy (vraie WebSocket), github (réseau simulé)
 
 src/client/index.tsx                clientEntry : widget, vue complète, panneaux Général et Sources, provider client
 src/client/Deploy.tsx               liste + fiche ; possède le niveau live `l1` (l'identifiant nu de la cible)
@@ -177,7 +182,7 @@ src/client/TargetList.tsx           les cartes + le glisser-déposer
 src/client/TargetView.tsx           ⟵ le cœur partagé avec l'onglet d'un projet
 src/client/TargetDialog.tsx         déclarer seulement ; le « + » du sélecteur de clé ouvre Réglages → Sources
 src/client/TargetGeneralPanel.tsx   régler et supprimer : l'onglet Général des réglages d'une cible, où le bouton commun mène
-src/client/CredentialsPanel.tsx     les clés Dokploy (panneau Sources du manifest, le sien : Git garde le sien)
+src/client/CredentialsPanel.tsx     les accès Dokploy et GitHub (panneau Sources du manifest, le sien : Git garde le sien)
 src/client/LogsDialog.tsx           le journal complet d'un déploiement
 src/client/DeployWidget.tsx         la tuile d'accueil
 src/client/provider.tsx             ce que l'onglet d'un projet compose (DEPLOY_CLIENT_PROVIDER)
@@ -732,9 +737,8 @@ changé, en plus des chemins du §4 :
   inscrit dans une frise ravive `projects` par le contrat de Projets
   lui-même. `deploy.remove` et `deploy.trigger` déclaraient
   `['deploy', 'projects']` en natif.
-- **Le service accepte une couture de test** (`new DeploySync(deps, { listDeployments,
-listTargets, fetchDeploymentLog })`, patron `{ openSession }` de Bases de
-  données) : `service.test.ts` rejoue le premier import silencieux, le message
+- **Le service accepte une couture de test** (`new DeploySync(deps, providers)`,
+  où `DokployProvider` prend un client simulé) : `service.test.ts` rejoue le premier import silencieux, le message
   ouvert puis modifié puis conclu, l'avis en texte avec `except`, le suivi
   perdu, sans réseau.
 - **Deux privilèges de native**, commentés à chaque import : les helpers
@@ -744,6 +748,36 @@ listTargets, fetchDeploymentLog })`, patron `{ openSession }` de Bases de
   tel quel, commentaires compris.
 - **`src/types/ws.d.ts` reste dans l'app** : la déclaration ambiante de `ws`
   (dépendance du module) est incluse par le projet serveur des modules.
+
+## 10. Les fournisseurs
+
+Le module ne parle à aucun fournisseur en direct : handlers et service passent
+par `DeployProviderAdapter` (`src/server/providers/types.ts`), un par famille
+d'accès (`PROVIDERS`, `providers/index.ts`). Chacun projette son vocabulaire sur
+les quatre états et garde ses propres caches : le catalogue d'une instance
+Dokploy (5 min) et le dépôt d'une cible (1 h) ; les exécutions d'un workflow
+GitHub avec leur ETag.
+
+|                   | Dokploy                                      | GitHub Actions                                                                |
+| ----------------- | -------------------------------------------- | ----------------------------------------------------------------------------- |
+| Accès             | adresse de l'instance + clé d'API            | jeton à grain fin, sans adresse                                               |
+| Cible             | application ou pile compose                  | workflow d'un dépôt sur une branche (`propriétaire/dépôt#id`)                 |
+| Déclencher        | `application.deploy` / `compose.deploy`      | `workflow_dispatch` ; un workflow sans ce déclencheur est refusé, raison dite |
+| Historique        | `deployment.all` / `deployment.allByCompose` | les exécutions du workflow sur la branche, un 304 ne coûte rien               |
+| Rattachement      | par identifiant, sinon par date              | par date : l'API ne rend pas l'exécution qu'elle crée                         |
+| Journal de l'avis | la queue du journal (WebSocket)              | les étapes des jobs : faites, en cours, à venir                               |
+| Journal complet   | le même flux, lu jusqu'au silence            | le texte de chaque job, par une redirection que le jeton ne suit pas          |
+| Limite de débit   | aucune                                       | compteur épuisé : l'accès recule jusqu'à `x-ratelimit-reset`                  |
+
+**Le jeton GitHub de Déploiements n'est pas celui de Git.** Git lit des dépôts
+(Contents en lecture) ; ici on lance des workflows (Actions en écriture).
+Partager le jeton donnerait à `git: write` le pouvoir de déployer, ce que le
+§2.2 refuse. Un accès ne change jamais de fournisseur, et une cible ne désigne
+qu'un accès du sien.
+
+La migration `migrations/001_providers.sql` a donné un `provider` aux accès,
+élargi `external_id` à 255 caractères, et préparé `device_id` pour les cibles
+portées par une machine.
 
 ## Modules privés au déploiement
 

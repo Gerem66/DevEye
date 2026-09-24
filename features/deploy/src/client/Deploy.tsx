@@ -14,7 +14,7 @@ import type { FeatureViewProps } from '@deveye/types/sdk/client';
 import type { DeployHistoryEntry, DeployTarget, Deployment } from '../contracts/domain';
 
 import { api } from './api';
-import { dokployError, DOKPLOY_TIMEOUT_MS } from './format';
+import { PROVIDER_TIMEOUT_MS, providerError } from './format';
 import LogsDialog from './LogsDialog';
 import TargetDialog from './TargetDialog';
 import TargetList from './TargetList';
@@ -40,7 +40,7 @@ export function FeatureDeploy(_props: FeatureViewProps) {
     const [opened, setOpened] = useState<{ target: DeployTarget; deployments: Deployment[] } | null>(null);
 
     /**
-     * L'historique complet tel que Dokploy le rend, chargé à part de `opened` :
+     * L'historique complet tel que le fournisseur le rend, chargé à part de `opened` :
      * une instance injoignable ne doit pas priver la fiche de son nom ni de son
      * bouton « Déployer ». `null` = en cours de chargement.
      */
@@ -48,7 +48,7 @@ export function FeatureDeploy(_props: FeatureViewProps) {
     const [historyError, setHistoryError] = useState<string | null>(null);
 
     const [addOpen, setAddOpen] = useState(false);
-    /** L'identifiant Dokploy dont on regarde le journal ; `null` = popup fermée. */
+    /** L'identifiant chez le fournisseur dont on regarde le journal ; `null` = popup fermée. */
     const [logsFor, setLogsFor] = useState<string | null>(null);
 
     const listVersion = useResourceVersion('deploy.list');
@@ -118,12 +118,12 @@ export function FeatureDeploy(_props: FeatureViewProps) {
         setHistory(null);
         setHistoryError(null);
         try {
-            const res = await api.send('deploy.history', { targetId }, { timeoutMs: DOKPLOY_TIMEOUT_MS });
+            const res = await api.send('deploy.history', { targetId }, { timeoutMs: PROVIDER_TIMEOUT_MS });
             setHistory(res.entries);
         } catch (e) {
-            // Le message de Dokploy lui-même (voir `dokployError`) : la seule
+            // Le message du fournisseur lui-même (voir `providerError`) : la seule
             // piste pour distinguer injoignable de refus d'authentification.
-            setHistoryError(dokployError(e, 'Impossible de charger l’historique complet.'));
+            setHistoryError(providerError(e, 'Impossible de charger l’historique complet.'));
         }
     }, []);
 
@@ -174,8 +174,8 @@ export function FeatureDeploy(_props: FeatureViewProps) {
                             <p className={styles.subtitle}>Ce que vous mettez en production, et ce que ça a donné.</p>
                         </div>
                         <div className={styles.actions}>
-                            {/* Les accès Dokploy vivent dans Réglages → Sources,
-                                à côté des canaux d'alerte. */}
+                            {/* Les accès (Dokploy, GitHub) vivent dans Réglages →
+                                Sources, à côté des canaux d'alerte. */}
                             <FeatureSettingsButton scope={{ kind: 'feature', feature: 'deploy' }} />
                             {canWrite && (
                                 <Button icon='add' onClick={() => setAddOpen(true)}>
@@ -193,7 +193,7 @@ export function FeatureDeploy(_props: FeatureViewProps) {
                         <p className={styles.empty}>
                             Aucune cible déclarée.{' '}
                             {canWrite
-                                ? 'Posez une clé d’API Dokploy, choisissez une application, et vous pourrez la déployer d’ici.'
+                                ? 'Ajoutez un accès (une instance Dokploy ou un jeton GitHub), choisissez ce qu’il faut déployer, et vous pourrez le lancer d’ici.'
                                 : 'Un membre disposant du droit d’écriture peut en déclarer une.'}
                         </p>
                     ) : (

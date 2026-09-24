@@ -64,6 +64,7 @@ export interface DeployRepo {
     findCredential(id: number, workspaceId: number): Promise<DeployCredentialRow | null>;
     createCredential(input: {
         workspaceId: number;
+        provider: string;
         label: string;
         baseUrl: string | null;
         secretEnc: string;
@@ -84,8 +85,9 @@ export interface DeployRepo {
      * tour de rôle : la première de chaque espace passe avant la deuxième de
      * quiconque. Une cible qui a un déploiement en vol passe à chaque tour, les
      * autres attendent `staleBefore` ; `limit` plafonne la rafale sortante. Les
-     * cibles sans jeton ou sans adresse sont écartées ici, comme celles des
-     * accès de `skipCredentialIds` (occupés ou en recul).
+     * cibles sans jeton, ou dont l'instance Dokploy n'a pas d'adresse, sont
+     * écartées ici, comme celles des accès de `skipCredentialIds` (occupés ou en
+     * recul).
      */
     listTargetsDue(
         limit: number,
@@ -293,10 +295,10 @@ export function createRepo(q: SdkQueryable): DeployRepo {
             );
         },
         findCredential,
-        async createCredential({ workspaceId, label, baseUrl, secretEnc }) {
+        async createCredential({ workspaceId, provider, label, baseUrl, secretEnc }) {
             const res = await q.execute(
-                'INSERT INTO ft_deploy_credentials (workspace_id, label, base_url, secret_enc) VALUES (?, ?, ?, ?)',
-                [workspaceId, label, baseUrl, secretEnc]
+                'INSERT INTO ft_deploy_credentials (workspace_id, provider, label, base_url, secret_enc) VALUES (?, ?, ?, ?, ?)',
+                [workspaceId, provider, label, baseUrl, secretEnc]
             );
             const rows = await q.query<DeployCredentialRow>('SELECT * FROM ft_deploy_credentials WHERE id = ?', [
                 res.insertId
@@ -365,7 +367,7 @@ export function createRepo(q: SdkQueryable): DeployRepo {
                                      WHERE d.target_id = t.id AND d.status IN ('queued', 'running')) AS in_flight
                               FROM deploy_targets t
                               JOIN ft_deploy_credentials c ON c.id = t.credential_id
-                             WHERE c.base_url IS NOT NULL AND c.base_url <> '' ${skip}
+                             WHERE (c.provider <> 'dokploy' OR (c.base_url IS NOT NULL AND c.base_url <> '')) ${skip}
                        ) AS x
                       WHERE x.in_flight > 0 OR x.synced_at IS NULL OR x.synced_at < ?
                  ) AS y

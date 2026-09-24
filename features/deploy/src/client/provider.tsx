@@ -3,7 +3,7 @@ import { Button, openFeature, useResource, useWorkspaceMembers } from 'deveye-sd
 import type { DeployClientProvider, SdkTileSummary } from '@deveye/types/sdk/client';
 
 import { api } from './api';
-import { formatAgo, hostOf, STATUS_LABELS, statusTone } from './format';
+import { formatAgo, STATUS_LABELS, statusTone } from './format';
 import { LogsDialog } from './LogsDialog';
 import { TargetDialog } from './TargetDialog';
 import { TargetView } from './TargetView';
@@ -145,7 +145,7 @@ export const clientProvider: DeployClientProvider = {
         (await api.send('deploy.list', {})).targets.map((t) => ({
             id: t.id,
             name: t.name,
-            host: hostOf(t.baseUrl),
+            host: t.location ?? 'lieu inconnu',
             foreign: t.foreign
         })),
     summarize,

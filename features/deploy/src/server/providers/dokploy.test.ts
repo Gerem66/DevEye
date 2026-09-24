@@ -54,7 +54,7 @@ function fetchLog(timeoutMs: number): Promise<{ log: string; elapsed: number }> 
     }));
 }
 
-describe('fetchDeploymentLog — conclure sans fermeture', () => {
+describe('fetchDeploymentLog : conclure sans fermeture', () => {
     it('rend le journal sans attendre le plafond quand le serveur ne ferme pas', async () => {
         // LE cas réel. Sans la conclusion au repos, ceci prendrait 20 s.
         behaviour = { chunks: ['ligne 1\n', 'ligne 2\n'], gapMs: 0, close: false };
@@ -90,7 +90,7 @@ describe('fetchDeploymentLog — conclure sans fermeture', () => {
     });
 });
 
-describe('webGitUrl — une URL de clone ramenée au web', () => {
+describe('webGitUrl : une URL de clone ramenée au web', () => {
     it('lit les trois formes qui mènent au même dépôt', () => {
         assert.equal(webGitUrl('git@github.com:Gerem66/DevEye.git'), 'https://github.com/Gerem66/DevEye');
         assert.equal(webGitUrl('ssh://git@github.com:22/Gerem66/DevEye.git'), 'https://github.com/Gerem66/DevEye');
@@ -119,7 +119,7 @@ describe('webGitUrl — une URL de clone ramenée au web', () => {
     });
 });
 
-describe('readRepoUrl — le dépôt d’une cible', () => {
+describe('readRepoUrl : le dépôt d’une cible', () => {
     it('assemble le dépôt GitHub à partir du propriétaire et du nom', () => {
         assert.equal(
             readRepoUrl({ sourceType: 'github', owner: 'OxyFoo', repository: 'Pierre', branch: 'main' }),

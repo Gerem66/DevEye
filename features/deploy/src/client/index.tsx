@@ -10,7 +10,7 @@ import TargetGeneralPanel from './TargetGeneralPanel';
 export const clientEntry: FeatureClient = {
     Widget: DeployWidget,
     Full: Deploy,
-    /** La cible elle-même (Général de sa fiche) ; les accès Dokploy de l'espace (Sources de la feature). */
+    /** La cible elle-même (Général de sa fiche) ; les accès de l'espace, Dokploy et GitHub (Sources de la feature). */
     settingsPanels: { general: TargetGeneralPanel, sources: CredentialsPanel },
     // Démonté dès la fermeture : la fiche d'une cible suit un déploiement en vol,
     // et une instance en cache continuerait de le suivre sans être vue. Pas de

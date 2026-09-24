@@ -1,4 +1,4 @@
-import type { DeployStatus, DeployTargetKind } from '../contracts/domain';
+import type { DeployProvider, DeployStatus, DeployTarget, DeployTargetKind } from '../contracts/domain';
 
 /** Le vocabulaire d'état, un seul jeu pour toute la feature. */
 export const STATUS_LABELS: Record<DeployStatus, string> = {
@@ -31,44 +31,48 @@ export function formatAgo(at: number | null): string {
 }
 
 /**
- * Le message d'un échec côté Dokploy, tel quel. `humanizeError` ne rend le
+ * Le message d'un échec côté fournisseur, tel quel. `humanizeError` ne rend le
  * message du serveur que pour `validation` ou `conflict` ; ici l'échec vient du
  * fournisseur (`internal`), et son message est la seule piste. Une réponse
  * d'échec se reconnaît à son `code` ; une erreur de code garde le repli.
  */
-export function dokployError(e: unknown, fallback: string): string {
+export function providerError(e: unknown, fallback: string): string {
     if (e instanceof Error && 'code' in e && e.message) return e.message;
     return fallback;
 }
 
 /**
- * Budget client pour un aller-retour Dokploy, au-delà du défaut de la socket
- * (15 s) : le serveur borne chaque appel à l'instance à 30 s, et le client doit
+ * Budget client pour un aller-retour chez le fournisseur, au-delà du défaut de
+ * la socket (15 s) : le serveur borne chaque appel à 30 s, et le client doit
  * laisser ce délai s'écouler avant de conclure à une panne.
  */
-export const DOKPLOY_TIMEOUT_MS = 35_000;
+export const PROVIDER_TIMEOUT_MS = 35_000;
 
 /**
- * Budget client pour `deploy.log` : un aller-retour Dokploy
- * ({@link DOKPLOY_TIMEOUT_MS}) puis l'attente du flux de journaux (30 s de plus).
+ * Budget client pour `deploy.log` : un aller-retour chez le fournisseur
+ * ({@link PROVIDER_TIMEOUT_MS}) puis la lecture du journal (30 s de plus).
  */
-export const DOKPLOY_LOG_TIMEOUT_MS = 65_000;
+export const LOG_TIMEOUT_MS = 65_000;
+
+export const PROVIDER_LABELS: Record<DeployProvider, string> = { dokploy: 'Dokploy', github: 'GitHub' };
 
 /**
- * Les deux genres de cible, tous deux visibles : deux choix fixes, un segment
- * chacun plutôt qu'un déroulant qui les cacherait derrière un clic.
+ * Les deux genres de cible d'une instance Dokploy, tous deux visibles : deux
+ * choix fixes, un segment chacun plutôt qu'un déroulant qui les cacherait
+ * derrière un clic. Un workflow GitHub n'a pas de choix à faire.
  */
-export const KIND_OPTIONS: readonly { value: DeployTargetKind; label: string; title: string }[] = [
+export const DOKPLOY_KIND_OPTIONS: readonly { value: DeployTargetKind; label: string; title: string }[] = [
     { value: 'application', label: 'Application', title: 'Une application Dokploy (application.deploy)' },
     { value: 'compose', label: 'Pile compose', title: 'Une pile Docker Compose (compose.deploy)' }
 ];
 
-/** L'hôte seul : une liste n'a pas besoin du schéma ni du chemin. */
-export function hostOf(baseUrl: string | null): string {
-    if (!baseUrl) return 'instance inconnue';
-    try {
-        return new URL(baseUrl).host;
-    } catch {
-        return baseUrl;
-    }
+const KIND_LABELS: Record<DeployTargetKind, string> = {
+    application: 'application',
+    compose: 'pile compose',
+    workflow: 'workflow GitHub'
+};
+
+/** Le type et le lieu d'une cible, sur une ligne : « pile compose · dokploy.exemple.fr ». */
+export function targetWhere(target: Pick<DeployTarget, 'kind' | 'location'>): string {
+    return `${KIND_LABELS[target.kind]} · ${target.location ?? 'lieu inconnu'}`;
 }

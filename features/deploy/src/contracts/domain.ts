@@ -13,10 +13,20 @@ import { z } from 'zod';
 export const DEPLOY_TITLE_MAX_LENGTH = 120;
 export const DEPLOY_DESCRIPTION_MAX_LENGTH = 500;
 export const DEPLOY_TARGET_NAME_MAX_LENGTH = 120;
-export const DEPLOY_EXTERNAL_ID_MAX_LENGTH = 128;
+/** `propriétaire/dépôt#workflow` va jusqu'à 151 caractères chez GitHub. */
+export const DEPLOY_EXTERNAL_ID_MAX_LENGTH = 255;
+/** Une branche Git : GitHub en accepte jusqu'à 255 caractères. */
+export const DEPLOY_REF_MAX_LENGTH = 255;
 
-/** Les fournisseurs que le module sait déclencher (une énumération, pour le second). */
-export const deployProviderSchema = z.enum(['dokploy']);
+/**
+ * Les fournisseurs qu'un accès ouvre : une instance Dokploy (adresse et clé
+ * d'API), ou GitHub (un jeton, sans adresse).
+ */
+export const deployCredentialProviderSchema = z.enum(['dokploy', 'github']);
+export type DeployCredentialProvider = z.infer<typeof deployCredentialProviderSchema>;
+
+/** Le fournisseur d'une cible : celui de son accès. */
+export const deployProviderSchema = deployCredentialProviderSchema;
 export type DeployProvider = z.infer<typeof deployProviderSchema>;
 
 /**
@@ -27,11 +37,12 @@ export const deployStatusSchema = z.enum(['queued', 'running', 'success', 'faile
 export type DeployStatus = z.infer<typeof deployStatusSchema>;
 
 /**
- * Application ou pile compose : chacune a sa procédure de déclenchement
- * (`application.deploy` / `compose.deploy`) et d'historique (`deployment.all` /
- * `deployment.allByCompose`). Une cible sans son type serait indéployable.
+ * Ce que vise une cible chez son fournisseur, qui en décide la procédure :
+ * application ou pile compose chez Dokploy (`application.deploy` /
+ * `compose.deploy`), workflow chez GitHub. Une cible sans son type serait
+ * indéployable.
  */
-export const deployTargetKindSchema = z.enum(['application', 'compose']);
+export const deployTargetKindSchema = z.enum(['application', 'compose', 'workflow']);
 export type DeployTargetKind = z.infer<typeof deployTargetKindSchema>;
 
 /** Une cible de l'espace, et l'état de son dernier déclenchement. */
@@ -45,10 +56,13 @@ export const deployTargetSchema = z.object({
     /** `null` = le jeton a été retiré ; la cible reste, indéployable, et le dit. */
     credentialId: z.number().int().positive().nullable(),
     /**
-     * L'adresse de l'instance, recopiée du jeton : deux instances peuvent servir
-     * la même pile sous le même nom.
+     * Où elle vit, tel que son fournisseur le dit sans réseau : l'hôte d'une
+     * instance Dokploy (deux instances peuvent servir la même pile sous le même
+     * nom), `github.com/propriétaire/dépôt`.
      */
-    baseUrl: z.string().nullable(),
+    location: z.string().nullable(),
+    /** La branche sur laquelle un workflow se lance ; `null` ailleurs. */
+    ref: z.string().nullable(),
     /** L'état du dernier déploiement, ou `null` si rien n'est jamais parti d'ici. */
     lastStatus: deployStatusSchema.nullable(),
     lastDeployAt: z.number().int().nullable(),
@@ -65,8 +79,10 @@ export const deployCandidateSchema = z.object({
     kind: deployTargetKindSchema,
     externalId: z.string(),
     name: z.string(),
-    /** Chemin lisible chez le fournisseur (projet / environnement), s'il en donne un. */
-    path: z.string().nullable()
+    /** Chemin lisible chez le fournisseur (projet / environnement, dépôt), s'il en donne un. */
+    path: z.string().nullable(),
+    /** La branche par défaut d'un workflow, proposée à l'ajout. */
+    ref: z.string().nullable()
 });
 export type DeployCandidate = z.infer<typeof deployCandidateSchema>;
 
@@ -88,12 +104,12 @@ export const deploymentSchema = z.object({
 export type Deployment = z.infer<typeof deploymentSchema>;
 
 /**
- * Une ligne d'historique telle que le fournisseur la connaît — pas seulement
+ * Une ligne d'historique telle que le fournisseur la connaît, pas seulement
  * ce que DevEye a déclenché.
  *
  * `deploymentSchema` porte l'identité DevEye d'un déclenchement (`id`, `targetId`,
- * `triggeredByUserId`) ; celui-ci n'a que ce que Dokploy rend, y compris pour ce
- * qui est parti de sa propre interface ou d'une CI. Aucun `id` DevEye n'existe
+ * `triggeredByUserId`) ; celui-ci n'a que ce que le fournisseur rend, y compris
+ * pour ce qui est parti de sa propre interface ou d'une CI. Aucun `id` DevEye n'existe
  * pour ces lignes-là, d'où un schéma distinct plutôt qu'un `Deployment` aux
  * champs devinés.
  */
@@ -113,7 +129,7 @@ export interface DeployTargetRow {
     workspace_id: number;
     credential_id: number | null;
     provider: string;
-    /** 'application' | 'compose'. */
+    /** 'application' | 'compose' | 'workflow'. */
     target_kind: string;
     external_id: string;
     /** Rang dans la liste, entièrement défini par l'utilisateur (`deploy.reorder`). */
@@ -158,17 +174,18 @@ export interface DeployTargetSyncRow extends DeployTargetRow {
 }
 
 /**
- * Les accès Dokploy de l'espace : l'adresse d'une instance et sa clé d'API.
- * Le secret ne sort jamais (`hasSecret` seulement). Chiffré à l'étage ouvert :
- * le suivi de fond tourne sans session.
+ * Les accès de l'espace : l'adresse d'une instance Dokploy et sa clé d'API, ou
+ * un jeton GitHub. Le secret ne sort jamais (`hasSecret` seulement). Chiffré à
+ * l'étage ouvert : le suivi de fond tourne sans session.
  */
 export const DEPLOY_CREDENTIAL_LABEL_MAX_LENGTH = 64;
 export const DEPLOY_CREDENTIAL_SECRET_MAX_LENGTH = 512;
 
 export const deployCredentialSchema = z.object({
     id: z.number().int().positive(),
+    provider: deployCredentialProviderSchema,
     label: z.string().max(DEPLOY_CREDENTIAL_LABEL_MAX_LENGTH),
-    /** Racine de l'instance Dokploy, auto-hébergée par définition. */
+    /** Racine de l'instance Dokploy, auto-hébergée par définition ; `null` pour GitHub. */
     baseUrl: z.string().nullable(),
     hasSecret: z.boolean(),
     created: z.number().int(),
@@ -181,6 +198,7 @@ export type DeployCredential = z.infer<typeof deployCredentialSchema>;
 export interface DeployCredentialRow {
     id: number;
     workspace_id: number;
+    provider: string;
     label: string;
     base_url: string | null;
     secret_enc: string;

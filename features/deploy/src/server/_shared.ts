@@ -4,12 +4,15 @@ import type {
     Deployment,
     DeploymentRow,
     DeployTarget,
+    DeployTargetKind,
     DeployTargetRow
 } from '../contracts/domain';
-import { deployTargetSchema } from '../contracts/domain';
+import { deployCredentialProviderSchema, deployTargetKindSchema, deployTargetSchema } from '../contracts/domain';
 import { PROJECTS_USAGE_PROVIDER, type ProjectsUsageProvider } from '@deveye/types/sdk';
 import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
 
+import { PROVIDERS, providerOf } from './providers';
+import type { DeployProviderAdapter, ProviderAccess, ProviderTarget } from './providers/types';
 import type { DeployRepo, DeployTargetWithUsageRow } from './repo';
 import type { DeploySync } from './service';
 
@@ -25,6 +28,8 @@ export type Ctx = SdkFeatureContext<DeployRepo>;
 /** Ce que porte `deploy_targets.content`, chiffré. */
 export interface StoredTarget {
     name: string;
+    /** La branche d'un workflow ; absente ailleurs. */
+    ref?: string | null;
 }
 
 /** Ce que porte `deployments.content`, chiffré. */
@@ -113,6 +118,20 @@ export async function targetCipherFor(ctx: Ctx, row: Pick<DeployTargetRow, 'id' 
     return scope.cipherFor(String(row.id));
 }
 
+/** Le type d'une cible tel qu'écrit en base ; un type inconnu vaut application, le défaut de la colonne. */
+export function kindOf(row: Pick<DeployTargetRow, 'target_kind'>): DeployTargetKind {
+    const parsed = deployTargetKindSchema.safeParse(row.target_kind);
+    return parsed.success ? parsed.data : 'application';
+}
+
+/** Ce qu'une cible désigne chez son fournisseur, sa branche lue dans son corps déchiffré. */
+export function providerTargetOf(
+    row: Pick<DeployTargetRow, 'target_kind' | 'external_id'>,
+    body: Partial<StoredTarget> | null
+): ProviderTarget {
+    return { kind: kindOf(row), externalId: row.external_id, ref: body?.ref ?? null };
+}
+
 export async function toTarget(
     cipher: SdkCipher,
     row: DeployTargetWithUsageRow,
@@ -121,17 +140,20 @@ export async function toTarget(
     projectCount: number
 ): Promise<DeployTarget> {
     const body = await readJson<Partial<StoredTarget>>(cipher, row.content);
+    const provider = deployCredentialProviderSchema.catch('dokploy').parse(row.provider);
+    const target = providerTargetOf(row, body);
     return deployTargetSchema.parse({
         foreign,
         id: row.id,
-        provider: 'dokploy',
-        kind: row.target_kind === 'compose' ? 'compose' : 'application',
+        provider,
+        kind: target.kind,
         externalId: row.external_id,
         // Repli sur l'identifiant externe : une cible dont le corps serait
         // illisible reste désignable, plutôt que de s'afficher sans nom.
         name: body?.name ?? row.external_id,
         credentialId: row.credential_id,
-        baseUrl: row.base_url,
+        location: PROVIDERS[provider].location({ baseUrl: row.base_url }, target),
+        ref: target.ref,
         lastStatus: normalizeStatus(row.last_status),
         lastDeployAt: row.last_deploy_at === null ? null : Number(row.last_deploy_at),
         projectCount,
@@ -177,10 +199,11 @@ export async function toDeployment(cipher: SdkCipher, row: DeploymentRow): Promi
     };
 }
 
-/** Une clé Dokploy telle que le client la voit : jamais son secret, seulement sa présence. */
+/** Un accès tel que le client le voit : jamais son secret, seulement sa présence. */
 export function toCredential(row: DeployCredentialRow, useCount: number): DeployCredential {
     return {
         id: row.id,
+        provider: deployCredentialProviderSchema.catch('dokploy').parse(row.provider),
         label: row.label,
         baseUrl: row.base_url,
         hasSecret: row.secret_enc.length > 0,
@@ -190,28 +213,32 @@ export function toCredential(row: DeployCredentialRow, useCount: number): Deploy
 }
 
 /**
- * Charge une clé Dokploy utilisable, ou explique ce qui manque. L'adresse de
- * l'instance vit sur le jeton, pas sur la cible.
+ * Charge un accès utilisable et son fournisseur, ou explique ce qui manque.
+ * L'adresse d'une instance vit sur l'accès, pas sur la cible.
  */
-export async function loadDokployCredential(
+export async function loadAccess(
     ctx: Ctx,
     credentialId: number,
     /**
-     * La cible pour laquelle on charge la clé, quand elle peut être projetée :
-     * son jeton vit dans SON espace. Absent = la clé de l'espace actif.
+     * La cible pour laquelle on charge l'accès, quand elle peut être projetée :
+     * son jeton vit dans SON espace. Absent = l'accès de l'espace actif.
      */
     target?: DeployTargetRow
-): Promise<{ baseUrl: string; apiKey: string }> {
+): Promise<{ provider: DeployProviderAdapter; access: ProviderAccess }> {
     const home = target?.workspace_id ?? ctx.workspaceId;
     const credential = await ctx.repo.findCredential(credentialId, home);
-    if (!credential) throw new FeatureError('not_found', 'Accès Dokploy introuvable');
-    if (!credential.base_url) {
+    if (!credential) throw new FeatureError('not_found', 'Accès de déploiement introuvable');
+    const provider = providerOf(PROVIDERS, credential.provider);
+    if (provider.id === 'dokploy' && !credential.base_url) {
         throw new FeatureError('validation', 'Cet accès Dokploy n’a pas d’adresse d’instance.');
     }
     // Le codec du domicile, étage ouvert : le secret d'une cible projetée est
     // scellé sous la clé de son espace.
     const cipher = target ? await targetCipherFor(ctx, target) : ctx.cipher();
-    return { baseUrl: credential.base_url, apiKey: await cipher.decrypt(credential.secret_enc) };
+    return {
+        provider,
+        access: { credentialId, baseUrl: credential.base_url, secret: await cipher.decrypt(credential.secret_enc) }
+    };
 }
 
 /**

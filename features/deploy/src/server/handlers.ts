@@ -21,13 +21,15 @@ import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 // à l'écriture, là où le membre voit pourquoi.
 import { isAllowedOutboundUrl, OUTBOUND_REFUSED_MESSAGE } from '@/Services/netFetch';
 
-import { fetchDeploymentLog, listDeployments, listTargets, triggerDeploy } from './dokploy';
+import type { DeployProviderAdapter } from './providers/types';
 import {
-    loadDokployCredential,
+    loadAccess,
     loadHomeTarget,
     loadTarget,
     projectCountsOf,
     projectIdsOf,
+    providerTargetOf,
+    readJson,
     recordProjectEvent,
     reloadTarget,
     targetCipherFor,
@@ -50,10 +52,27 @@ import {
  * aucun. `mutates` est à relire à la main sur chaque écriture.
  */
 
-/** Le type d'une cible, tel que l'adaptateur Dokploy le prend. */
-function kindOf(target: { target_kind: string }): 'application' | 'compose' {
-    return target.target_kind === 'compose' ? 'compose' : 'application';
+/** Le refus d'un fournisseur, dans ses mots : c'est lui qui sait pourquoi. */
+function refusal(e: unknown, fallback: string): FeatureError {
+    return new FeatureError('internal', e instanceof Error ? e.message : fallback);
 }
+
+/** Un type de cible que ce fournisseur ne sait pas déployer n'entre pas. */
+function assertKind(provider: DeployProviderAdapter, kind: string): void {
+    if (!(provider.kinds as readonly string[]).includes(kind)) {
+        throw new FeatureError('validation', 'Ce type de cible ne se déploie pas par cet accès.');
+    }
+}
+
+/** L'adresse d'un accès : obligatoire et publique pour Dokploy, sans objet pour GitHub. */
+function baseUrlFor(provider: string, baseUrl: string | null): string | null {
+    if (provider !== 'dokploy') return null;
+    if (!baseUrl) throw new FeatureError('validation', 'Une instance Dokploy demande son adresse.');
+    if (!isAllowedOutboundUrl(baseUrl)) throw new FeatureError('validation', OUTBOUND_REFUSED_MESSAGE);
+    return baseUrl;
+}
+
+const PROVIDER_LABELS: Record<string, string> = { dokploy: 'Dokploy', github: 'GitHub' };
 
 export const deployHandlers = [
     defineSdkFeature({
@@ -117,10 +136,11 @@ export const deployHandlers = [
         handler: async (ctx: Ctx, input) => {
             // La clé existe-t-elle, et dans CET espace ? Sans cette garde on
             // déclarerait une cible sur le jeton d'un autre espace.
-            await loadDokployCredential(ctx, input.credentialId);
+            const { provider } = await loadAccess(ctx, input.credentialId);
+            assertKind(provider, input.kind);
 
             const cipher = ctx.cipher();
-            const body: StoredTarget = { name: input.name };
+            const body: StoredTarget = input.ref ? { name: input.name, ref: input.ref } : { name: input.name };
 
             // Idempotente : la même application sur la même instance est la même
             // cible, dont l'intitulé se met à jour. Un projet peut ainsi déclarer
@@ -143,7 +163,7 @@ export const deployHandlers = [
             const row = await ctx.repo.createTarget({
                 workspaceId: ctx.workspaceId,
                 credentialId: input.credentialId,
-                provider: 'dokploy',
+                provider: provider.id,
                 kind: input.kind,
                 externalId: input.externalId,
                 content: await cipher.encrypt(JSON.stringify(body))
@@ -163,10 +183,16 @@ export const deployHandlers = [
         handler: async (ctx: Ctx, input) => {
             // Domicile seulement : le jeton d'une cible se choisit parmi les clés
             // de SON espace, que la fenêtre ne voit pas.
-            await loadHomeTarget(ctx, input.targetId);
-            if (input.credentialId !== null) await loadDokployCredential(ctx, input.credentialId);
+            const target = await loadHomeTarget(ctx, input.targetId);
+            if (input.credentialId !== null) {
+                const { provider } = await loadAccess(ctx, input.credentialId);
+                if (provider.id !== target.provider) {
+                    throw new FeatureError('validation', 'Cet accès sert un autre fournisseur que cette cible.');
+                }
+                assertKind(provider, input.kind);
+            }
 
-            const body: StoredTarget = { name: input.name };
+            const body: StoredTarget = input.ref ? { name: input.name, ref: input.ref } : { name: input.name };
             const row = await ctx.repo.updateTarget(input.targetId, ctx.workspaceId, {
                 credentialId: input.credentialId,
                 kind: input.kind,
@@ -215,20 +241,11 @@ export const deployHandlers = [
         ...deployCandidates,
         access: { level: 'write' },
         handler: async (ctx: Ctx, input) => {
-            const { baseUrl, apiKey } = await loadDokployCredential(ctx, input.credentialId);
+            const { provider, access } = await loadAccess(ctx, input.credentialId);
             try {
-                // Applications et piles compose.
-                const targets = await listTargets(baseUrl, apiKey);
-                return {
-                    candidates: targets.map((t) => ({
-                        kind: t.kind,
-                        externalId: t.externalId,
-                        name: t.name,
-                        path: t.path
-                    }))
-                };
+                return { candidates: await provider.candidates(access) };
             } catch (e) {
-                throw new FeatureError('internal', e instanceof Error ? e.message : 'Instance Dokploy injoignable.');
+                throw refusal(e, 'Fournisseur injoignable.');
             }
         }
     }),
@@ -243,13 +260,14 @@ export const deployHandlers = [
             // appartient au domicile : la ligne, sa clé, son suivi.
             const target = await loadTarget(ctx, input.targetId, 'write');
             if (target.credential_id === null) {
-                throw new FeatureError('validation', 'L’accès Dokploy a été retiré : reliez une clé.');
+                throw new FeatureError('validation', 'L’accès de cette cible a été retiré : reliez-en un.');
             }
-            const { baseUrl, apiKey } = await loadDokployCredential(ctx, target.credential_id, target);
+            const { provider, access } = await loadAccess(ctx, target.credential_id, target);
 
             const cipher = await targetCipherFor(ctx, target);
+            const spec = providerTargetOf(target, await readJson<Partial<StoredTarget>>(cipher, target.content));
             const title = input.title || 'Déploiement depuis DevEye';
-            const body: StoredDeployment = { title, description: input.description, url: baseUrl };
+            const body: StoredDeployment = { title, description: input.description, url: access.baseUrl };
 
             // La ligne est écrite AVANT l'appel : si le fournisseur accepte puis que
             // la réponse se perd, il reste une trace de ce qui a été déclenché.
@@ -270,7 +288,7 @@ export const deployHandlers = [
             });
 
             try {
-                await triggerDeploy(baseUrl, apiKey, kindOf(target), target.external_id, title, input.description);
+                await provider.trigger(access, spec, { title, description: input.description });
             } catch (e) {
                 const message = e instanceof Error ? e.message : 'Déclenchement refusé.';
                 await ctx.repo.updateDeployment(row.id, {
@@ -309,45 +327,60 @@ export const deployHandlers = [
             // erreur, la fiche le dit déjà (« accès retiré »).
             if (target.credential_id === null) return { entries: [] };
 
-            const { baseUrl, apiKey } = await loadDokployCredential(ctx, target.credential_id, target);
+            const { provider, access } = await loadAccess(ctx, target.credential_id, target);
+            const cipher = await targetCipherFor(ctx, target);
+            const spec = providerTargetOf(target, await readJson<Partial<StoredTarget>>(cipher, target.content));
             try {
-                const remote = await listDeployments(baseUrl, apiKey, kindOf(target), target.external_id);
-                return { entries: [...remote].sort((a, b) => b.startedAt - a.startedAt) };
+                const remote = await provider.history(access, spec);
+                return {
+                    entries: [...remote]
+                        .sort((a, b) => b.startedAt - a.startedAt)
+                        .map(({ externalId, status, title, description, startedAt, finishedAt }) => ({
+                            externalId,
+                            status,
+                            title,
+                            description,
+                            startedAt,
+                            finishedAt
+                        }))
+                };
             } catch (e) {
-                throw new FeatureError('internal', e instanceof Error ? e.message : 'Instance Dokploy injoignable.');
+                throw refusal(e, 'Fournisseur injoignable.');
             }
         }
     }),
     /**
-     * Le journal complet d'un déploiement. Le chemin du journal est retrouvé en
-     * repassant par l'historique plutôt que porté par le client : c'est un
-     * emplacement sur le disque du fournisseur, rien à exposer.
+     * Le journal complet d'un déploiement. Sa référence est retrouvée en
+     * repassant par l'historique plutôt que portée par le client : chez Dokploy,
+     * c'est un emplacement sur le disque du fournisseur, rien à exposer.
      */
     defineSdkFeature({
         ...deployLog,
         handler: async (ctx: Ctx, input) => {
             const target = await loadTarget(ctx, input.targetId);
             if (target.credential_id === null) {
-                throw new FeatureError('validation', 'L’accès Dokploy a été retiré : reliez une clé.');
+                throw new FeatureError('validation', 'L’accès de cette cible a été retiré : reliez-en un.');
             }
-            const { baseUrl, apiKey } = await loadDokployCredential(ctx, target.credential_id, target);
+            const { provider, access } = await loadAccess(ctx, target.credential_id, target);
+            const cipher = await targetCipherFor(ctx, target);
+            const spec = providerTargetOf(target, await readJson<Partial<StoredTarget>>(cipher, target.content));
 
-            const remote = await listDeployments(baseUrl, apiKey, kindOf(target), target.external_id).catch((e) => {
-                throw new FeatureError('internal', e instanceof Error ? e.message : 'Instance Dokploy injoignable.');
+            const remote = await provider.history(access, spec).catch((e: unknown) => {
+                throw refusal(e, 'Fournisseur injoignable.');
             });
             const match = remote.find((d) => d.externalId === input.externalId);
-            if (!match?.logPath) throw new FeatureError('not_found', 'Aucun journal pour ce déploiement.');
+            if (!match) throw new FeatureError('not_found', 'Aucun journal pour ce déploiement.');
 
             try {
-                return { log: await fetchDeploymentLog(baseUrl, apiKey, match.logPath) };
+                return { log: await provider.fullLog(access, spec, match) };
             } catch (e) {
-                throw new FeatureError('internal', e instanceof Error ? e.message : 'Flux de journaux injoignable.');
+                throw refusal(e, 'Journal injoignable.');
             }
         }
     }),
 
-    // Les clés d'API Dokploy de l'espace. L'adresse de l'instance est
-    // obligatoire : Dokploy est auto-hébergé, sans elle rien n'est adressable.
+    // Les accès de l'espace. L'adresse d'une instance Dokploy est obligatoire :
+    // Dokploy est auto-hébergé, sans elle rien n'est adressable.
     defineSdkFeature({
         ...deployCredentialList,
         handler: async (ctx: Ctx) => {
@@ -363,17 +396,17 @@ export const deployHandlers = [
         access: { level: 'write' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
-            if (!isAllowedOutboundUrl(input.baseUrl)) throw new FeatureError('validation', OUTBOUND_REFUSED_MESSAGE);
             const row = await ctx.repo.createCredential({
                 workspaceId: ctx.workspaceId,
+                provider: input.provider,
                 label: input.label,
-                baseUrl: input.baseUrl,
+                baseUrl: baseUrlFor(input.provider, input.baseUrl),
                 secretEnc: await ctx.cipher().encrypt(input.secret)
             });
             ctx.audit({
                 action: 'deploy.credentialAdd',
-                description: 'Accès Dokploy ajouté',
-                metadata: { credentialId: row.id }
+                description: `Accès ${PROVIDER_LABELS[input.provider]} ajouté`,
+                metadata: { credentialId: row.id, provider: input.provider }
             });
             return { credential: toCredential(row, 0) };
         }
@@ -383,14 +416,15 @@ export const deployHandlers = [
         access: { level: 'write' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
-            if (!isAllowedOutboundUrl(input.baseUrl)) throw new FeatureError('validation', OUTBOUND_REFUSED_MESSAGE);
+            const existing = await ctx.repo.findCredential(input.credentialId, ctx.workspaceId);
+            if (!existing) throw new FeatureError('not_found', 'Accès de déploiement introuvable');
             const row = await ctx.repo.updateCredential(input.credentialId, ctx.workspaceId, {
                 label: input.label,
-                baseUrl: input.baseUrl,
+                baseUrl: baseUrlFor(existing.provider, input.baseUrl),
                 // Secret absent = inchangé : le client ne l'a jamais reçu.
                 secretEnc: input.secret ? await ctx.cipher().encrypt(input.secret) : undefined
             });
-            if (!row) throw new FeatureError('not_found', 'Accès Dokploy introuvable');
+            if (!row) throw new FeatureError('not_found', 'Accès de déploiement introuvable');
             const uses = await ctx.repo.countCredentialUses(ctx.workspaceId);
             return { credential: toCredential(row, uses.get(row.id) ?? 0) };
         }
@@ -403,10 +437,10 @@ export const deployHandlers = [
             // Les cibles de la clé gardent leur ligne mais perdent leur accès (le
             // dépôt les met à NULL avant de retirer la clé).
             const ok = await ctx.repo.removeCredential(input.credentialId, ctx.workspaceId);
-            if (!ok) throw new FeatureError('not_found', 'Accès Dokploy introuvable');
+            if (!ok) throw new FeatureError('not_found', 'Accès de déploiement introuvable');
             ctx.audit({
                 action: 'deploy.credentialRemove',
-                description: 'Accès Dokploy retiré',
+                description: 'Accès de déploiement retiré',
                 metadata: { credentialId: input.credentialId }
             });
             return { credentialId: input.credentialId };

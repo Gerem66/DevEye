@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
     DEPLOY_DESCRIPTION_MAX_LENGTH,
     DEPLOY_EXTERNAL_ID_MAX_LENGTH,
+    DEPLOY_REF_MAX_LENGTH,
     DEPLOY_TARGET_NAME_MAX_LENGTH,
     DEPLOY_TITLE_MAX_LENGTH,
     deployCandidateSchema,
@@ -11,6 +12,7 @@ import {
     deploymentSchema,
     DEPLOY_CREDENTIAL_LABEL_MAX_LENGTH,
     DEPLOY_CREDENTIAL_SECRET_MAX_LENGTH,
+    deployCredentialProviderSchema,
     deployCredentialSchema
 } from './domain';
 
@@ -22,6 +24,8 @@ import {
 
 const targetId = z.number().int().positive();
 const credentialId = z.number().int().positive();
+/** La branche d'un workflow ; absente ou `null` ailleurs, et pour la branche par défaut. */
+const ref = z.string().trim().min(1).max(DEPLOY_REF_MAX_LENGTH).nullable().optional();
 
 /** Les cibles de l'espace, dans l'ordre choisi par l'utilisateur. */
 export const deployList = {
@@ -52,7 +56,7 @@ export const deployGet = {
 /**
  * Déclare une cible. **Idempotente** sur (jeton, identifiant externe) : la même
  * application déclarée deux fois est la même cible, et la seconde déclaration
- * met simplement son intitulé à jour.
+ * met simplement son intitulé (et sa branche) à jour.
  */
 export const deployAdd = {
     command: 'deploy.add' as const,
@@ -60,12 +64,13 @@ export const deployAdd = {
         credentialId,
         kind: deployTargetKindSchema,
         externalId: z.string().min(1).max(DEPLOY_EXTERNAL_ID_MAX_LENGTH),
-        name: z.string().min(1).max(DEPLOY_TARGET_NAME_MAX_LENGTH)
+        name: z.string().min(1).max(DEPLOY_TARGET_NAME_MAX_LENGTH),
+        ref
     }),
     output: z.object({ target: deployTargetSchema })
 };
 
-/** Change le jeton, le type ou l'intitulé d'une cible. */
+/** Change le jeton (du même fournisseur), le type, l'intitulé ou la branche d'une cible. */
 export const deployUpdate = {
     command: 'deploy.update' as const,
     input: z.object({
@@ -73,7 +78,8 @@ export const deployUpdate = {
         credentialId: credentialId.nullable(),
         kind: deployTargetKindSchema,
         externalId: z.string().min(1).max(DEPLOY_EXTERNAL_ID_MAX_LENGTH),
-        name: z.string().min(1).max(DEPLOY_TARGET_NAME_MAX_LENGTH)
+        name: z.string().min(1).max(DEPLOY_TARGET_NAME_MAX_LENGTH),
+        ref
     }),
     output: z.object({ target: deployTargetSchema })
 };
@@ -96,8 +102,8 @@ export const deployReorder = {
 };
 
 /**
- * Les applications proposées par l'instance. Seule commande du module qui
- * appelle le fournisseur en direct : elle remplit un sélecteur.
+ * Ce que l'accès propose de déployer : applications et piles d'une instance
+ * Dokploy, workflows des dépôts d'un jeton GitHub. Remplit un sélecteur.
  */
 export const deployCandidates = {
     command: 'deploy.candidates' as const,
@@ -122,9 +128,10 @@ export const deployTrigger = {
 };
 
 /**
- * L'historique complet d'une cible tel que Dokploy le rend, y compris ce qui
- * n'est pas parti de DevEye. Interroge l'instance à chaque appel : réservé à la
- * fiche d'une cible, jamais à une liste. `deployGet` reste le suivi local.
+ * L'historique complet d'une cible tel que son fournisseur le rend, y compris ce
+ * qui n'est pas parti de DevEye. Interroge le fournisseur à chaque appel :
+ * réservé à la fiche d'une cible, jamais à une liste. `deployGet` reste le suivi
+ * local.
  */
 export const deployHistory = {
     command: 'deploy.history' as const,
@@ -134,8 +141,9 @@ export const deployHistory = {
 
 /**
  * Le journal complet d'un déploiement. `externalId` vient d'une ligne de
- * `deployHistory`. Repose sur un point d'entrée Dokploy sans procédure tRPC
- * (voir `dokploy.ts`) : peut échouer sur une instance qui l'authentifie autrement.
+ * `deployHistory`. Chez Dokploy, il repose sur un point d'entrée sans procédure
+ * tRPC (voir `providers/dokploy.ts`) : il peut échouer sur une instance qui
+ * l'authentifie autrement.
  */
 export const deployLog = {
     command: 'deploy.log' as const,
@@ -143,7 +151,7 @@ export const deployLog = {
     output: z.object({ log: z.string() })
 };
 
-/** Les clés d'API Dokploy de l'espace. Le secret n'est jamais rendu. */
+/** Les accès de l'espace, Dokploy et GitHub. Le secret n'est jamais rendu. */
 export const deployCredentialList = {
     command: 'deploy.credentialList' as const,
     input: z.object({}),
@@ -157,24 +165,31 @@ export const deployCredentialList = {
  */
 const dokployBaseUrl = z.url({ protocol: /^https?$/ }).max(255);
 
-/** Une instance Dokploy exige son adresse : sans elle, rien n'est adressable. */
+/**
+ * Un accès. Une instance Dokploy exige son adresse : sans elle, rien n'est
+ * adressable ; GitHub n'en a pas (`baseUrl` à `null`).
+ */
 export const deployCredentialAdd = {
     command: 'deploy.credentialAdd' as const,
     input: z.object({
+        provider: deployCredentialProviderSchema,
         label: z.string().min(1).max(DEPLOY_CREDENTIAL_LABEL_MAX_LENGTH),
-        baseUrl: dokployBaseUrl,
+        baseUrl: dokployBaseUrl.nullable(),
         secret: z.string().min(1).max(DEPLOY_CREDENTIAL_SECRET_MAX_LENGTH)
     }),
     output: z.object({ credential: deployCredentialSchema })
 };
 
-/** `secret` omis = inchangé : le serveur ne l'a jamais rendu, on ne le réécrit pas. */
+/**
+ * `secret` omis = inchangé : le serveur ne l'a jamais rendu, on ne le réécrit
+ * pas. Le fournisseur d'un accès ne change pas.
+ */
 export const deployCredentialUpdate = {
     command: 'deploy.credentialUpdate' as const,
     input: z.object({
         credentialId,
         label: z.string().min(1).max(DEPLOY_CREDENTIAL_LABEL_MAX_LENGTH),
-        baseUrl: dokployBaseUrl,
+        baseUrl: dokployBaseUrl.nullable(),
         secret: z.string().min(1).max(DEPLOY_CREDENTIAL_SECRET_MAX_LENGTH).optional()
     }),
     output: z.object({ credential: deployCredentialSchema })

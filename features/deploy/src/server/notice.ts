@@ -16,13 +16,15 @@ import {
 
 /**
  * Le message de suivi d'un déploiement : transforme un état en objet Discord,
- * sans base ni réseau.
+ * sans base ni réseau. Ce qui situe la cible (cases d'identité, lien vers sa
+ * fiche) vient de son fournisseur.
  *
- * Dokploy ne publie aucune progression (`deployment.all` rend statut, dates,
- * message d'erreur, chemin du journal, rien d'autre). La barre est donc une
- * estimation sur la durée moyenne des derniers déploiements réussis de la
- * cible, présentée comme telle : « estimé », et « plus long que d'habitude »
- * passé la moyenne plutôt qu'un 100 % trompeur. Sans historique, pas de barre.
+ * Aucun fournisseur ne publie de progression chiffrée (Dokploy rend statut,
+ * dates, message d'erreur et chemin du journal ; GitHub, des étapes). La barre
+ * est donc une estimation sur la durée moyenne des derniers déploiements
+ * réussis de la cible, présentée comme telle : « estimé », et « plus long que
+ * d'habitude » passé la moyenne plutôt qu'un 100 % trompeur. Sans historique,
+ * pas de barre.
  */
 
 /** Segments de la barre. Dix : lisible sur mobile, sans passer à la ligne. */
@@ -41,22 +43,17 @@ const LOG_LINE_MAX = 110;
 const DESCRIPTION_MAX = 4000;
 
 /**
- * Coupe de l'intitulé : Dokploy y met le message de commit entier. Cent laisse
- * de la marge au-delà des 72 caractères d'un sujet bien écrit, sans manger
- * l'écran d'un téléphone.
+ * Coupe de l'intitulé : un fournisseur y met parfois le message de commit
+ * entier. Cent laisse de la marge au-delà des 72 caractères d'un sujet bien
+ * écrit, sans manger l'écran d'un téléphone.
  */
 const TITLE_MAX = 100;
 
 export interface NoticeState {
-    /** Le projet Dokploy (« OxyFoo »). `null` si l'instance n'a pu être lue. */
-    project: string | null;
-    /** Le service déployé (« server ») — à défaut, le nom de la cible DevEye. */
-    service: string;
-    /** L'environnement (« production »). */
-    environment: string | null;
-    kind: 'application' | 'compose';
-    /** La fiche dans le tableau de bord Dokploy ; `null` si non reconstructible. */
-    url: string | null;
+    /** Les cases qui situent la cible, dans l'ordre (projet, service, environnement, type chez Dokploy). */
+    fields: readonly { name: string; value: string }[];
+    /** Sa fiche chez le fournisseur ; `null` si elle ne se reconstruit pas. */
+    link: { name: string; label: string; url: string } | null;
     /** Le dépôt déployé, tel que le fournisseur le déclare ; `null` sinon. */
     repoUrl: string | null;
     /** Le titre du déploiement chez le fournisseur (« Manual deployment »…). */
@@ -70,7 +67,7 @@ export interface NoticeState {
     log: string;
     /** Durée moyenne des déploiements passés, en secondes ; `null` si inconnue. */
     estimateSeconds: number | null;
-    /** L'instant de rendu — passé en argument pour que le message soit reproductible. */
+    /** L'instant de rendu, passé en argument pour que le message soit reproductible. */
     now: number;
 }
 
@@ -93,7 +90,7 @@ export function estimateFromHistory(rows: DeploymentRow[], excludeId: number): n
     return Math.round(durations.reduce((sum, d) => sum + d, 0) / durations.length);
 }
 
-/** `▰▰▰▰▰▱▱▱▱▱`, borné à [0, 100] % — jamais négatif, jamais au-delà. */
+/** `▰▰▰▰▰▱▱▱▱▱`, borné à [0, 100] % : jamais négatif, jamais au-delà. */
 export function progressBar(ratio: number): string {
     // `Number.isFinite` d'abord : `Math.min`/`Math.max` laissent passer NaN, et
     // `repeat(NaN)` rend une chaîne vide sans lever.
@@ -122,10 +119,10 @@ export function tailOf(log: string, lines = LOG_LINES): string {
 }
 
 /**
- * Le sujet d'un message de commit : sa première ligne. Dokploy range le message
- * entier dans le titre, et un corps de commit repousserait tout le message. Le
- * corps est abandonné (un embed Discord n'a pas d'infobulle) ; les points de
- * suspension ne signalent qu'une ligne coupée.
+ * Le sujet d'un message de commit : sa première ligne. Un fournisseur range
+ * parfois le message entier dans le titre, et un corps de commit repousserait
+ * tout le message. Le corps est abandonné (un embed Discord n'a pas
+ * d'infobulle) ; les points de suspension ne signalent qu'une ligne coupée.
  */
 export function firstLine(text: string, max = TITLE_MAX): string {
     const line = text.replace(/\r/g, '').split('\n')[0].trim();
@@ -135,9 +132,9 @@ export function firstLine(text: string, max = TITLE_MAX): string {
 
 /**
  * Le journal en champ et non dans la description : Discord rend les `fields`
- * après la `description`, et c'est le seul moyen de garder projet, service et
- * durée près du titre. Un champ est plafonné à 1024 caractères : on retire des
- * lignes par le haut jusqu'à tenir.
+ * après la `description`, et c'est le seul moyen de garder les cases d'identité
+ * et la durée près du titre. Un champ est plafonné à 1024 caractères : on
+ * retire des lignes par le haut jusqu'à tenir.
  */
 function logField(log: string): string | null {
     const tail = tailOf(log);
@@ -164,13 +161,10 @@ export function buildNotice(state: NoticeState): SdkRichMessage {
     const failed = state.status === 'failed';
     const elapsed = Math.max(0, (state.finishedAt ?? state.now) - state.startedAt);
 
-    // Trois par ligne, ce que Discord place côte à côte : projet, service,
-    // environnement d'abord (« où ? » avant « quand ? »).
+    // Trois par ligne, ce que Discord place côte à côte : le lieu d'abord
+    // (« où ? » avant « quand ? »).
     const fields: Record<string, unknown>[] = [
-        { name: '🛠️ Projet', value: trim(state.project ?? '—'), inline: true },
-        { name: '⚙️ Service', value: trim(state.service), inline: true },
-        { name: '🌍 Environnement', value: trim(state.environment ?? '—'), inline: true },
-        { name: '📦 Type', value: state.kind === 'compose' ? 'compose' : 'application', inline: true },
+        ...state.fields.map((f) => ({ name: f.name, value: trim(f.value), inline: true })),
         { name: '📅 Démarré', value: moment(state.startedAt, 'f'), inline: true }
     ];
 
@@ -190,7 +184,7 @@ export function buildNotice(state: NoticeState): SdkRichMessage {
     // Deux liens tiennent côte à côte ; seul, un lien en colonne laisserait les
     // deux tiers de la ligne vides.
     const links: { name: string; value: string }[] = [];
-    if (state.url) links.push({ name: '🔗 Dokploy', value: `[Ouvrir la fiche du service](${state.url})` });
+    if (state.link) links.push({ name: state.link.name, value: `[${state.link.label}](${state.link.url})` });
     if (state.repoUrl) links.push(repoLink(state.repoUrl));
     for (const link of links) fields.push({ ...link, inline: links.length > 1 });
 
@@ -241,7 +235,7 @@ function repoLink(url: string): { name: string; value: string } {
  */
 function progressLine(state: NoticeState, elapsed: number): string {
     if (state.estimateSeconds === null || state.estimateSeconds <= 0) {
-        return `⏳ ${duration(elapsed)} écoulées — première mise en production de cette cible, aucune durée de référence.`;
+        return `⏳ ${duration(elapsed)} écoulées : première mise en production de cette cible, aucune durée de référence.`;
     }
     const ratio = elapsed / state.estimateSeconds;
     const percent = Math.min(100, Math.max(0, Math.round(ratio * 100)));

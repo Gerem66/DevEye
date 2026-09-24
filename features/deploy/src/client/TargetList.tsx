@@ -1,7 +1,7 @@
 import { useDragReorder, type LiveOutlineProps } from 'deveye-sdk-client';
 import type { DeployTarget } from '../contracts/domain';
 
-import { formatAgo, hostOf, STATUS_LABELS, statusTone } from './format';
+import { formatAgo, STATUS_LABELS, statusTone, targetWhere } from './format';
 import styles from './style.module.css';
 
 interface TargetListProps {
@@ -104,9 +104,7 @@ function TargetCard({ target, outline, dragging, onOpen, onDragPointerDown }: Ta
                             </span>
                         )}
                     </p>
-                    <p className={styles.cardMeta}>
-                        {target.kind === 'compose' ? 'pile compose' : 'application'} · {hostOf(target.baseUrl)}
-                    </p>
+                    <p className={styles.cardMeta}>{targetWhere(target)}</p>
                     <div className={styles.cardFoot}>
                         <span className={styles.statusTag} data-tone={tone}>
                             {orphan ? 'accès retiré' : target.lastStatus ? STATUS_LABELS[target.lastStatus] : 'jamais'}

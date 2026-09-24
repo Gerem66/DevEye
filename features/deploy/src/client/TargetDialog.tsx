@@ -10,6 +10,7 @@ import {
     TextInput
 } from 'deveye-sdk-client';
 import {
+    DEPLOY_REF_MAX_LENGTH,
     DEPLOY_TARGET_NAME_MAX_LENGTH,
     type DeployCandidate,
     type DeployCredential,
@@ -18,7 +19,7 @@ import {
 } from '../contracts/domain';
 
 import { api } from './api';
-import { DOKPLOY_TIMEOUT_MS, KIND_OPTIONS } from './format';
+import { DOKPLOY_KIND_OPTIONS, PROVIDER_LABELS, PROVIDER_TIMEOUT_MS, providerError } from './format';
 import styles from './style.module.css';
 
 interface TargetDialogProps {
@@ -31,8 +32,9 @@ interface TargetDialogProps {
  * Déclarer une cible de déploiement. Rien d'autre : une fois déclarée, une
  * cible se règle dans l'onglet Général de sa fiche, comme tout élément.
  *
- * Rien ne se crée chez le fournisseur : le dialogue interroge l'instance pour
- * proposer ce qu'elle déclare, avec un repli manuel. Il charge lui-même les
+ * Rien ne se crée chez le fournisseur : le dialogue l'interroge pour proposer
+ * ce qu'il déclare (applications et piles d'une instance Dokploy, workflows
+ * d'un jeton GitHub), avec un repli manuel. Il charge lui-même les
  * accès de l'espace ; ils se gèrent dans Réglages → Sources, et l'accès créé
  * pendant ce temps est adopté à la fermeture.
  */
@@ -43,6 +45,7 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
     const [externalId, setExternalId] = useState('');
     const [name, setName] = useState('');
     const [kind, setKind] = useState<DeployTargetKind>('application');
+    const [ref, setRef] = useState('');
     const [busy, setBusy] = useState(false);
     const [loadingCandidates, setLoadingCandidates] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -65,11 +68,14 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
         }
     }, []);
 
+    const credential = (credentials ?? []).find((c) => String(c.id) === credentialId) ?? null;
+    const github = credential?.provider === 'github';
+
     useEffect(() => {
         if (!open) return;
         setExternalId('');
         setName('');
-        setKind('application');
+        setRef('');
         knownIds.current = null;
         setError(null);
         void reloadCredentials().then((list) => {
@@ -98,7 +104,7 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
     };
 
     /*
-     * Les applications de l'instance, chargées dès qu'une instance est désignée.
+     * Ce que l'accès propose, chargé dès qu'un accès est désigné.
      * `busy` reste au dépôt du formulaire : une interrogation en cours ne doit
      * pas se lire comme un enregistrement en cours.
      */
@@ -110,22 +116,27 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
         let alive = true;
         setLoadingCandidates(true);
         setCandidates([]);
+        setExternalId('');
+        setRef('');
+        // Le type suit l'accès : un workflow chez GitHub, une application par
+        // défaut chez Dokploy.
+        setKind(github ? 'workflow' : 'application');
         void (async () => {
             try {
                 const res = await api.send(
                     'deploy.candidates',
                     { credentialId: Number(credentialId) },
-                    { timeoutMs: DOKPLOY_TIMEOUT_MS }
+                    { timeoutMs: PROVIDER_TIMEOUT_MS }
                 );
-                // Une réponse d'une instance qu'on ne regarde plus n'a rien à
-                // dire : changer de jeton avant qu'elle n'arrive est courant.
+                // Une réponse d'un accès qu'on ne regarde plus n'a rien à dire :
+                // en changer avant qu'elle n'arrive est courant.
                 if (!alive) return;
                 setCandidates(res.candidates);
                 setError(null);
             } catch (e) {
-                // Une instance injoignable n'empêche pas de déclarer la cible :
+                // Un fournisseur injoignable n'empêche pas de déclarer la cible :
                 // le repli manuel reste ouvert.
-                if (alive) setError(humanizeError(e, 'Impossible de joindre l’instance Dokploy.'));
+                if (alive) setError(providerError(e, 'Impossible de joindre le fournisseur.'));
             } finally {
                 if (alive) setLoadingCandidates(false);
             }
@@ -133,14 +144,15 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
         return () => {
             alive = false;
         };
-    }, [open, credentialId]);
+    }, [open, credentialId, github]);
 
-    /** Choisir dans la liste remplit tout le reste : type, identifiant, nom. */
+    /** Choisir dans la liste remplit tout le reste : type, identifiant, nom, branche. */
     const pick = (chosen: string) => {
         setExternalId(chosen);
         const candidate = candidates.find((c) => c.externalId === chosen);
         if (!candidate) return;
         setKind(candidate.kind);
+        setRef(candidate.ref ?? '');
         setName((candidate.path ? `${candidate.path} | ` : '') + candidate.name);
     };
 
@@ -155,7 +167,9 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
                 externalId: externalId.trim(),
                 // Un nom laissé vide retombe sur l'identifiant : une cible sans
                 // intitulé resterait désignable, mais illisible dans une liste.
-                name: name.trim() || externalId.trim()
+                name: name.trim() || externalId.trim(),
+                // Une branche vide : celle par défaut du dépôt, lue au déclenchement.
+                ref: kind === 'workflow' ? ref.trim() || null : null
             });
             // `deploy.detail` aussi : déclarer une cible déjà connue (idempotence)
             // met à jour son intitulé, que sa fiche peut montrer.
@@ -168,7 +182,7 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
         }
     };
 
-    /** Aucun accès Dokploy : rien n'est déployable tant qu'il n'y en a pas un. */
+    /** Aucun accès : rien n'est déployable tant qu'il n'y en a pas un. */
     const nothingToUse = credentials !== null && credentials.length === 0;
 
     return (
@@ -193,8 +207,8 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
                 {nothingToUse ? (
                     <>
                         <p className={styles.hint}>
-                            Aucun accès Dokploy dans cet espace. Déclarez-en un (adresse de l’instance + clé d’API) : il
-                            sera sélectionné ici à votre retour.
+                            Aucun accès dans cet espace. Déclarez une instance Dokploy (adresse + clé d’API) ou un jeton
+                            GitHub : il sera sélectionné ici à votre retour.
                         </p>
                         <div>
                             {/* Le bouton commun, ouvert sur l'onglet Sources : la
@@ -202,7 +216,7 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
                             <FeatureSettingsButton
                                 scope={{ kind: 'feature', feature: 'deploy' }}
                                 initialSection='sources'
-                                label='Déclarer un accès Dokploy'
+                                label='Déclarer un accès'
                                 onOpenChange={onSettingsOpenChange}
                             />
                         </div>
@@ -210,12 +224,12 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
                 ) : (
                     <>
                         <label className={styles.field}>
-                            <span className={styles.label}>Instance Dokploy</span>
+                            <span className={styles.label}>Accès</span>
                             <div className={styles.fieldWithAction}>
                                 <SelectInput value={credentialId} onChange={(e) => setCredentialId(e.target.value)}>
                                     {(credentials ?? []).map((c) => (
                                         <option key={c.id} value={c.id}>
-                                            {c.label} · {c.baseUrl}
+                                            {c.label} · {c.provider === 'github' ? PROVIDER_LABELS.github : c.baseUrl}
                                         </option>
                                     ))}
                                 </SelectInput>
@@ -225,7 +239,7 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
                                     scope={{ kind: 'feature', feature: 'deploy' }}
                                     initialSection='sources'
                                     variant='ghost'
-                                    label='Accès Dokploy'
+                                    label='Accès'
                                     onOpenChange={onSettingsOpenChange}
                                 />
                             </div>
@@ -243,9 +257,11 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
                             >
                                 <option value=''>
                                     {loadingCandidates
-                                        ? 'Interrogation de l’instance…'
+                                        ? 'Interrogation du fournisseur…'
                                         : candidates.length === 0
-                                          ? 'Cette instance ne déclare aucune application'
+                                          ? github
+                                              ? 'Ce jeton ne donne accès à aucun workflow'
+                                              : 'Cette instance ne déclare aucune application'
                                           : 'Choisir…'}
                                 </option>
                                 {/* Un identifiant saisi à la main, absent de la
@@ -256,7 +272,7 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
                                 )}
                                 {candidates.map((c) => (
                                     <option key={`${c.kind}:${c.externalId}`} value={c.externalId}>
-                                        {c.kind === 'compose' ? '🧩 ' : '📦 '}
+                                        {c.kind === 'compose' ? '🧩 ' : c.kind === 'workflow' ? '⚙️ ' : '📦 '}
                                         {c.path ? `${c.path} | ` : ''}
                                         {c.name}
                                     </option>
@@ -270,24 +286,40 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
                             <span className={styles.label}>…ou identifiant de cible</span>
                             <TextInput
                                 value={externalId}
-                                placeholder='applicationId ou composeId'
+                                placeholder={github ? 'propriétaire/dépôt#identifiant' : 'applicationId ou composeId'}
                                 onChange={(e) => setExternalId(e.target.value)}
                             />
                         </label>
 
-                        <div className={styles.field}>
-                            <span className={styles.label}>Type</span>
-                            <SegmentedControl
-                                value={kind}
-                                options={KIND_OPTIONS}
-                                onChange={setKind}
-                                aria-label='Type de cible'
-                            />
-                            <span className={styles.hint}>
-                                Les deux ne se déclenchent pas par la même procédure : une cible du mauvais type reste
-                                indéployable.
-                            </span>
-                        </div>
+                        {github ? (
+                            <label className={styles.field}>
+                                <span className={styles.label}>Branche</span>
+                                <TextInput
+                                    value={ref}
+                                    maxLength={DEPLOY_REF_MAX_LENGTH}
+                                    placeholder='Celle par défaut du dépôt'
+                                    onChange={(e) => setRef(e.target.value)}
+                                />
+                                <span className={styles.hint}>
+                                    Le workflow se lance sur cette branche, et l’historique ne montre que ses
+                                    exécutions.
+                                </span>
+                            </label>
+                        ) : (
+                            <div className={styles.field}>
+                                <span className={styles.label}>Type</span>
+                                <SegmentedControl
+                                    value={kind}
+                                    options={DOKPLOY_KIND_OPTIONS}
+                                    onChange={setKind}
+                                    aria-label='Type de cible'
+                                />
+                                <span className={styles.hint}>
+                                    Les deux ne se déclenchent pas par la même procédure : une cible du mauvais type
+                                    reste indéployable.
+                                </span>
+                            </div>
+                        )}
 
                         <label className={styles.field}>
                             <span className={styles.label}>Intitulé</span>

@@ -2,21 +2,22 @@ import { useEffect, useState } from 'react';
 import { Button, Dialog } from 'deveye-sdk-client';
 
 import { api } from './api';
-import { dokployError, DOKPLOY_LOG_TIMEOUT_MS } from './format';
+import { LOG_TIMEOUT_MS, providerError } from './format';
 import styles from './style.module.css';
 
 interface LogsDialogProps {
     open: boolean;
     targetId: number | null;
-    /** L'identifiant chez Dokploy — celui d'une ligne de `deploy.history`. */
+    /** L'identifiant chez le fournisseur : celui d'une ligne de `deploy.history`. */
     externalId: string | null;
     onClose: () => void;
 }
 
 /**
- * Le journal complet d'un déploiement, rejoué depuis un point d'entrée Dokploy
- * non documenté (voir l'adaptateur) : une instance peut le refuser, d'où le
- * message tel que Dokploy l'a formulé (`dokployError`, pas `humanizeError`).
+ * Le journal complet d'un déploiement, relu chez le fournisseur. Chez Dokploy,
+ * par un point d'entrée non documenté (voir l'adaptateur) qu'une instance peut
+ * refuser, d'où le message tel que le fournisseur l'a formulé (`providerError`,
+ * pas `humanizeError`).
  */
 export function LogsDialog({ open, targetId, externalId, onClose }: LogsDialogProps) {
     const [log, setLog] = useState<string | null>(null);
@@ -27,9 +28,9 @@ export function LogsDialog({ open, targetId, externalId, onClose }: LogsDialogPr
         if (targetId === null || externalId === null) return;
         setBusy(true);
         setError(null);
-        api.send('deploy.log', { targetId, externalId }, { timeoutMs: DOKPLOY_LOG_TIMEOUT_MS })
+        api.send('deploy.log', { targetId, externalId }, { timeoutMs: LOG_TIMEOUT_MS })
             .then((res) => setLog(res.log))
-            .catch((e) => setError(dokployError(e, 'Impossible de charger le journal.')))
+            .catch((e) => setError(providerError(e, 'Impossible de charger le journal.')))
             .finally(() => setBusy(false));
     };
 
