@@ -11,8 +11,8 @@ import {
     TextInput
 } from 'deveye-sdk-client';
 import { api } from './api';
-import { DESTINATION_LABELS, SCHEDULE_LABELS, sourceHint, sourceKey, WEEKDAYS } from './format';
-import SourcePicker from './SourcePicker';
+import { candidateKey, DESTINATION_LABELS, SCHEDULE_LABELS, WEEKDAYS } from './format';
+import JobSourceFields, { EMPTY_FOLDER, type FolderDraft } from './JobSourceFields';
 import styles from './style.module.css';
 
 interface JobDialogProps {
@@ -33,6 +33,7 @@ export default function JobDialog({ open, destinations, onClose, onSaved }: JobD
     const [candidates, setCandidates] = useState<BackupSourceCandidate[]>([]);
     const [name, setName] = useState('');
     const [source, setSource] = useState('');
+    const [folder, setFolder] = useState<FolderDraft>(EMPTY_FOLDER);
     const [destinationId, setDestinationId] = useState(0);
     const [enabled, setEnabled] = useState(true);
     const [schedule, setSchedule] = useState<BackupScheduleKind>('daily');
@@ -61,6 +62,7 @@ export default function JobDialog({ open, destinations, onClose, onSaved }: JobD
             .catch(() => setCandidates([]));
         setName('');
         setSource('');
+        setFolder(EMPTY_FOLDER);
         setDestinationId(0);
         setEnabled(true);
         setSchedule('daily');
@@ -86,10 +88,7 @@ export default function JobDialog({ open, destinations, onClose, onSaved }: JobD
         setDestinationId(fresh.id);
     }, [destinations]);
 
-    const selected = useMemo(
-        () => candidates.find((c) => sourceKey(c.kind, c.id) === source) ?? null,
-        [candidates, source]
-    );
+    const selected = useMemo(() => candidates.find((c) => candidateKey(c) === source) ?? null, [candidates, source]);
 
     // Le nom suit la source tant qu'on ne l'a pas écrit soi-même : personne n'a
     // envie de retaper « Base de production » juste après l'avoir choisie.
@@ -108,6 +107,15 @@ export default function JobDialog({ open, destinations, onClose, onSaved }: JobD
                 destinationId,
                 source: selected.kind,
                 sourceId: selected.id,
+                folder:
+                    selected.kind === 'deviceFolder' && selected.deviceId
+                        ? {
+                              deviceId: selected.deviceId,
+                              path: folder.path.trim(),
+                              exclusions: folder.exclusions,
+                              oneFileSystem: folder.oneFileSystem
+                          }
+                        : null,
                 enabled,
                 schedule,
                 scheduleHour: hour,
@@ -126,8 +134,12 @@ export default function JobDialog({ open, destinations, onClose, onSaved }: JobD
         }
     };
 
-    const ready = name.trim() !== '' && selected !== null && selected.available && destinationId > 0;
-    const hint = sourceHint(selected);
+    const ready =
+        name.trim() !== '' &&
+        selected !== null &&
+        selected.available &&
+        (selected.kind !== 'deviceFolder' || folder.path.trim() !== '') &&
+        destinationId > 0;
 
     return (
         <Dialog
@@ -149,11 +161,14 @@ export default function JobDialog({ open, destinations, onClose, onSaved }: JobD
             }
         >
             <div className={styles.form}>
-                <div className={styles.field}>
-                    <span className={styles.fieldLabel}>Quoi sauvegarder</span>
-                    <SourcePicker candidates={candidates} value={source} onChange={setSource} />
-                    {hint && <span className={styles.fieldHint}>{hint}</span>}
-                </div>
+                <JobSourceFields
+                    candidates={candidates}
+                    source={source}
+                    onSourceChange={setSource}
+                    folder={folder}
+                    onFolderChange={setFolder}
+                    classes={{ field: styles.field, label: styles.fieldLabel, hint: styles.fieldHint }}
+                />
 
                 <label className={styles.field}>
                     <span className={styles.fieldLabel}>Nom du travail</span>

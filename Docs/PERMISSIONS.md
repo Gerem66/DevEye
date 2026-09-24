@@ -235,6 +235,24 @@ qu'il faut en retenir ici :
   serveur l'acceptait, l'interface la refusait. Seules les exceptions voyagent,
   et le propriétaire n'en reçoit aucune, lui qui passe outre.
 
+### Le droit d'une autre fonctionnalité, et le droit sans session
+
+Un module ne nomme que ses propres permissions dans son `access`. Quand son
+geste touche la surface d'une autre fonctionnalité, il demande un verdict à
+l'app au lieu de lire un rôle : `ctx.deveye.devices.authorize(id, { extras })`
+éprouve les permissions d'Appareils de l'appelant sur CETTE machine, avec la
+règle des commandes natives (une machine passée en lecture seule pour son rôle
+ne prend pas d'ordre). Sauvegardes l'exige pour écrire des archives sur une
+machine ou en archiver un dossier : c'est la surface Fichiers.
+
+Un travail planifié s'exécute longtemps après que son auteur l'a réglé. Le
+service d'un module relit donc les droits de cet auteur à chaque passage,
+sans session (`deps.access.feature` pour les siens, `deps.access.device` pour
+une machine) : compte actif, appartenance, rôle, surcharge de l'élément,
+permissions. Un droit retiré, un compte suspendu ou un départ de l'espace
+arrêtent le travail suivant, qui le dit. Côté app, `memberVerdict` et
+`deviceVerdict` (`_access.ts`) portent ces règles.
+
 ## 6. Reste à faire
 
 - `mail.oauthStart` est déclarée dans les contrats mais **n'a aucun handler**.

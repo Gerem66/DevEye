@@ -1,8 +1,9 @@
 import { spawn } from 'child_process';
 import { createGzip } from 'zlib';
 
+import type { PathExclusion } from '@deveye/types';
 import type { CloudSyncBackupProvider, DatabaseBackupAccess } from '@deveye/types/sdk';
-import type { SdkLogger } from '@deveye/types/sdk/server';
+import type { AgentFolderArchiveSummary, AgentsFacade, SdkLogger } from '@deveye/types/sdk/server';
 import { env } from './env';
 import { tarEnd, tarHeader, tarPadding } from './tar';
 
@@ -18,6 +19,8 @@ export interface BackupArtifact {
     name: string;
     /** Le contenu, en flux. */
     stream: AsyncIterable<Buffer>;
+    /** Lu une fois le flux épuisé : ce qu'une archive réussie a dû laisser de côté. */
+    warning?: () => string | null;
 }
 
 /** Horodatage de nom d'archive : triable à l'œil comme au `ls`. */
@@ -299,4 +302,47 @@ export async function cloudSyncSource(
     }
 
     return { name: `${slugify(share.name)}-${stamp()}.tar.gz`, stream: gzipStream(stream()) };
+}
+
+const plural = (n: number, one: string, many: string): string => `${n.toLocaleString('fr-FR')} ${n > 1 ? many : one}`;
+
+/** Ce qu'une archive réussie a dû laisser de côté, en une phrase ; `null` si rien. */
+export function describeArchiveSummary(summary: AgentFolderArchiveSummary | null): string | null {
+    if (!summary || (summary.skipped === 0 && summary.changed === 0)) return null;
+    const parts: string[] = [];
+    if (summary.skipped > 0)
+        parts.push(plural(summary.skipped, 'élément illisible ignoré', 'éléments illisibles ignorés'));
+    if (summary.changed > 0) {
+        parts.push(
+            plural(summary.changed, 'fichier modifié pendant la lecture', 'fichiers modifiés pendant la lecture')
+        );
+    }
+    const first = summary.samples
+        .slice(0, 3)
+        .map((s) => `${s.path} (${s.reason})`)
+        .join(', ');
+    return `${parts.join(', ')}.${first ? ` Premiers : ${first}.` : ''}`;
+}
+
+/**
+ * Un dossier d'une machine, archivé par son agent au rythme où la destination
+ * absorbe : le flux est déjà un `.tar.gz`, il ne se recompresse pas.
+ */
+export function deviceFolderSource(
+    agents: AgentsFacade,
+    device: { id: string; name: string },
+    folder: { path: string; exclusions: readonly PathExclusion[]; oneFileSystem: boolean },
+    signal: AbortSignal
+): BackupArtifact {
+    const archive = agents.archiveFolder(
+        device.id,
+        { path: folder.path, exclusions: folder.exclusions, oneFileSystem: folder.oneFileSystem },
+        { signal }
+    );
+    const base = folder.path.split(/[\\/]/).filter(Boolean).pop() ?? 'racine';
+    return {
+        name: `${slugify(device.name)}-${slugify(base)}-${stamp()}.tar.gz`,
+        stream: archive,
+        warning: () => describeArchiveSummary(archive.summary)
+    };
 }

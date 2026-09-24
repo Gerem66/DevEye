@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import type { BackupDestination, BackupDestinationKind, BackupSftpAuth } from '../contracts/domain';
 
 import {
     Button,
-    DeviceFolderPicker,
+    DeviceFolderField,
     Dialog,
     humanizeError,
     SegmentedControl,
@@ -87,14 +87,12 @@ export default function DestinationDialog({ open, destination, onClose, onSaved 
     const [resetHostKey, setResetHostKey] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [pickerOpen, setPickerOpen] = useState(false);
 
     useEffect(() => {
         if (!open) return;
         setError(null);
         setSecret('');
         setResetHostKey(false);
-        setPickerOpen(false);
         if (destination) {
             setKind(destination.kind);
             setName(destination.name);
@@ -127,6 +125,7 @@ export default function DestinationDialog({ open, destination, onClose, onSaved 
     }, [open, destination]);
 
     const selectedDevice = devices.find((d) => d.id === deviceId) ?? null;
+    const pathId = useId();
     const hasSecret = destination?.hasSecret ?? false;
     // Changer de mode de connexion rend l'ancien secret inutilisable : il faut le nouveau.
     const secretKept = hasSecret && (kind !== 'sftp' || destination?.sftpAuth === sftpAuth);
@@ -374,34 +373,27 @@ export default function DestinationDialog({ open, destination, onClose, onSaved 
                 )}
 
                 <div className={styles.field}>
-                    {/* Frère du libellé, pas enfant : dans un `<label>`, un clic
-                        sur le bouton activerait aussi le champ. */}
-                    <div className={styles.pathRow}>
-                        <label className={styles.pathLabel}>
-                            <span className={styles.fieldLabel}>{kind === 's3' ? 'Préfixe' : 'Dossier'}</span>
-                            {/* Reste saisissable : coller un chemin connu ne doit
-                                pas obliger à naviguer, et la machine peut être
-                                hors ligne. */}
-                            <TextInput
-                                value={path}
-                                maxLength={512}
-                                placeholder={PATH_PLACEHOLDERS[kind]}
-                                onChange={(e) => setPath(e.target.value)}
-                            />
-                        </label>
-                        {kind === 'device' && (
-                            <Button
-                                variant='secondary'
-                                icon='folder'
-                                type='button'
-                                disabled={deviceId === ''}
-                                title={deviceId === '' ? 'Choisissez d’abord une machine' : undefined}
-                                onClick={() => setPickerOpen(true)}
-                            >
-                                Parcourir
-                            </Button>
-                        )}
-                    </div>
+                    <label className={styles.fieldLabel} htmlFor={pathId}>
+                        {kind === 's3' ? 'Préfixe' : 'Dossier'}
+                    </label>
+                    {kind === 'device' ? (
+                        <DeviceFolderField
+                            id={pathId}
+                            device={selectedDevice}
+                            value={path}
+                            placeholder={PATH_PLACEHOLDERS[kind]}
+                            pickerDescription='Choisissez le dossier qui recevra les archives de sauvegarde. Il sera créé s’il n’existe pas.'
+                            onChange={setPath}
+                        />
+                    ) : (
+                        <TextInput
+                            id={pathId}
+                            value={path}
+                            maxLength={512}
+                            placeholder={PATH_PLACEHOLDERS[kind]}
+                            onChange={(e) => setPath(e.target.value)}
+                        />
+                    )}
                     <span className={styles.fieldHint}>{PATH_HINTS[kind]}</span>
                 </div>
 
@@ -459,23 +451,6 @@ export default function DestinationDialog({ open, destination, onClose, onSaved 
 
                 {error && <p className={styles.error}>{error}</p>}
             </div>
-
-            {/* Empilé au-dessus du formulaire : Échap referme le sélecteur sans
-                perdre la saisie. Monté seulement avec une machine choisie : il
-                s'abonne aux métriques de l'appareil dès l'ouverture. */}
-            {kind === 'device' && selectedDevice && (
-                <DeviceFolderPicker
-                    description='Choisissez le dossier qui recevra les archives de sauvegarde. Il sera créé s’il n’existe pas.'
-                    open={pickerOpen}
-                    deviceId={selectedDevice.id}
-                    deviceName={selectedDevice.name}
-                    onClose={() => setPickerOpen(false)}
-                    onPick={(picked) => {
-                        setPath(picked);
-                        setPickerOpen(false);
-                    }}
-                />
-            )}
         </Dialog>
     );
 }

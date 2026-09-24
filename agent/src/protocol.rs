@@ -526,10 +526,17 @@ pub struct ProcessInfo {
     pub listen_ports: Vec<u16>,
 }
 
-/// One CloudSync exclusion rule (`path` = exact rel path or dir prefix,
+/// An entry a folder archive left out or read while it changed, and why.
+#[derive(Debug, Clone, Serialize)]
+pub struct ArchiveSample {
+    pub path: String,
+    pub reason: String,
+}
+
+/// One exclusion of a walked folder (`path` = exact rel path or dir prefix,
 /// `name` = exact path component, `regex` = linear-time regex on the rel path).
 #[derive(Debug, Clone, Deserialize)]
-pub struct SyncExclusion {
+pub struct PathExclusion {
     pub kind: String,
     pub pattern: String,
 }
@@ -543,7 +550,7 @@ pub struct SyncShareAssignment {
     pub local_path: String,
     /// `active` | `paused` (share-level OR device-level pause, pre-merged).
     pub status: String,
-    pub exclusions: Vec<SyncExclusion>,
+    pub exclusions: Vec<PathExclusion>,
     /// Plafond de débit des MONTÉES en octets/s ; `None` = illimité. Appliqué
     /// ici parce que l'agent est l'émetteur : brider côté serveur ne ferait que
     /// gonfler les tampons intermédiaires sans ralentir la lecture du disque.
@@ -759,6 +766,45 @@ pub enum ClientMessage {
         done: bool,
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
+    },
+    /// One piece of a folder archive (`data` base64). Spends one credit.
+    #[serde(rename = "files.archiveChunk")]
+    FilesArchiveChunk {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "opId")]
+        op_id: String,
+        seq: u64,
+        data: String,
+    },
+    /// A folder archive is still walking but has no piece to send yet.
+    #[serde(rename = "files.archiveProgress")]
+    FilesArchiveProgress {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "opId")]
+        op_id: String,
+        entries: u64,
+        #[serde(rename = "bytesRead")]
+        bytes_read: u64,
+    },
+    /// How a folder archive ended: the last frame of the operation.
+    #[serde(rename = "files.archiveEnd")]
+    FilesArchiveEnd {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "opId")]
+        op_id: String,
+        ok: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+        files: u64,
+        dirs: u64,
+        #[serde(rename = "bytesRead")]
+        bytes_read: u64,
+        skipped: u64,
+        changed: u64,
+        samples: Vec<ArchiveSample>,
     },
     /// CloudSync: the local watcher saw the share's folder change (debounced).
     #[serde(rename = "sync.changed")]
@@ -1029,6 +1075,31 @@ pub enum ServerMessage {
         #[serde(rename = "opId")]
         op_id: String,
         path: String,
+    },
+    /// Archive a folder as a `.tar.gz`, streamed as `files.archiveChunk` pieces
+    /// under credits: `window` up front, more with `files.archiveCredit`.
+    #[serde(rename = "files.archive")]
+    FilesArchive {
+        #[serde(rename = "opId")]
+        op_id: String,
+        path: String,
+        exclusions: Vec<PathExclusion>,
+        #[serde(rename = "oneFileSystem")]
+        one_file_system: bool,
+        window: u32,
+    },
+    /// More credits for a folder archive.
+    #[serde(rename = "files.archiveCredit")]
+    FilesArchiveCredit {
+        #[serde(rename = "opId")]
+        op_id: String,
+        credits: u32,
+    },
+    /// Stop a folder archive (it still ends with `files.archiveEnd`).
+    #[serde(rename = "files.archiveCancel")]
+    FilesArchiveCancel {
+        #[serde(rename = "opId")]
+        op_id: String,
     },
     /// Upload one chunk of a file at `offset` (base64 `data`; confirms on `done`).
     #[serde(rename = "files.upload")]

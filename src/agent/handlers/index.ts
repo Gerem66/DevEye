@@ -1,6 +1,9 @@
 export { handleHello } from './connect';
 export { handleDestroyed, handlePowerResult, handleServiceResult, handleUpdated } from './actions';
 export {
+    handleFilesArchiveChunk,
+    handleFilesArchiveEnd,
+    handleFilesArchiveProgress,
     handleFilesChunk,
     handleFilesListing,
     handleFilesMatches,

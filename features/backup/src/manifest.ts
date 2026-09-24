@@ -20,10 +20,20 @@ export const manifest = {
      */
     settings: { feature: ['sources'], item: ['general', 'encryption'] },
     /**
-     * `agents` pour écrire par l'agent d'une machine (`DeviceSink`),
-     * `devices.read` pour n'accepter comme destination qu'une machine de l'espace.
+     * `agents` pour écrire par l'agent d'une machine (`DeviceSink`) et y lire un
+     * dossier, `devices.read` pour n'accepter qu'une machine de l'espace et y
+     * éprouver le droit Fichiers, `members.read` pour nommer l'auteur d'un travail.
      */
-    nativeCapabilities: ['agents', 'devices.read'],
+    nativeCapabilities: ['agents', 'devices.read', 'members.read'],
+    extraPermissions: [
+        {
+            key: 'deviceFolders',
+            label: 'Sauvegarder les fichiers d’une machine',
+            description:
+                'Créer ou modifier un travail qui archive un dossier d’une machine. Exige aussi le droit Fichiers sur cette machine, dans Appareils ; le travail s’arrête si son auteur perd l’un ou l’autre.',
+            type: 'toggle'
+        }
+    ],
     quotas: [{ key: 'storage', label: 'de sauvegardes sur le serveur', unit: 'bytes' }],
     links: [
         { to: 'database', what: 'sauvegarde les bases supervisées' },

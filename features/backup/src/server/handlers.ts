@@ -14,9 +14,22 @@ import {
     backupRuns,
     backupSources
 } from '../contracts/commands';
-import type { BackupDestinationKind, BackupSftpAuth, BackupSourceCandidate } from '../contracts/domain';
+import type {
+    BackupDestinationKind,
+    BackupFolder,
+    BackupSftpAuth,
+    BackupSourceCandidate,
+    BackupSourceKind
+} from '../contracts/domain';
 
-import { defineSdkFeature, FeatureError, isSafePublicUrl, type SdkFeatureDefinition } from '@deveye/types/sdk/server';
+import { AGENT_FOLDER_ARCHIVE_PROBE, pathExclusionProblem } from '@deveye/types';
+import {
+    defineSdkFeature,
+    FeatureError,
+    isSafePublicUrl,
+    type SdkDevice,
+    type SdkFeatureDefinition
+} from '@deveye/types/sdk/server';
 
 // Le garde des appels sortants, partagé par toute l'app : l'adresse d'un service
 // S3 ou WebDAV est saisie par un membre.
@@ -208,12 +221,17 @@ function missingSecretMessage(kind: BackupDestinationKind, auth: BackupSftpAuth 
     return null;
 }
 
-/** Sans ce contrôle, on écrirait des archives sur la machine d'un autre espace en devinant un identifiant. */
-async function assertDeviceInWorkspace(ctx: Ctx, deviceId: string | null): Promise<void> {
+/**
+ * Sans ce contrôle, on écrirait des archives sur la machine d'un autre espace
+ * en devinant un identifiant. Écrire sur une machine relève de la surface
+ * Fichiers : le droit d'Appareils se vérifie aussi, surcharges comprises.
+ */
+async function assertDeviceInWorkspace(ctx: Ctx, deviceId: string | null): Promise<SdkDevice> {
     const devices = await ctx.deveye.devices.list();
-    if (!devices.some((d) => d.id === deviceId)) {
+    if (!deviceId || !devices.some((d) => d.id === deviceId)) {
         throw new FeatureError('not_found', "Cet appareil n'appartient pas à cet espace.");
     }
+    return ctx.deveye.devices.authorize(deviceId, { extras: ['files'] });
 }
 
 const destinationAddFeature = defineSdkFeature({
@@ -328,8 +346,12 @@ const destinationTestFeature = defineSdkFeature({
     // Écrit le verdict du contrôle sur la ligne : les autres écrans doivent le
     // voir sans recharger.
     mutates: true,
-    handler: async (ctx: Ctx, input) =>
-        requireEngine().probeDestination(await loadDestination(ctx, input.destinationId))
+    handler: async (ctx: Ctx, input) => {
+        const row = await loadDestination(ctx, input.destinationId);
+        // Le contrôle écrit un fichier témoin sur la machine : même droit qu'une archive.
+        if (row.kind === 'device') await assertDeviceInWorkspace(ctx, row.device_id);
+        return requireEngine().probeDestination(row);
+    }
 });
 
 const jobListFeature = defineSdkFeature({
@@ -389,34 +411,118 @@ function canBackupDevEye(ctx: Ctx): boolean {
     return ctx.isAdmin && ctx.workspace.kind === 'personal';
 }
 
-/** Vérifie que la source désignée existe **dans cet espace**. */
-async function assertSource(ctx: Ctx, source: string, sourceId: number | null): Promise<void> {
-    if (source === 'deveye') {
-        if (!canBackupDevEye(ctx)) {
-            throw new FeatureError(
-                'forbidden',
-                'La base de DevEye ne se sauvegarde que depuis l’espace personnel d’un administrateur.'
-            );
-        }
-        return;
-    }
-    if (sourceId === null) throw new FeatureError('validation', 'Choisissez ce que ce travail doit sauvegarder.');
+/** Ce qu'une création ou une modification de travail désigne comme source. */
+interface SourceInput {
+    source: BackupSourceKind;
+    sourceId: number | null;
+    folder: BackupFolder | null;
+}
 
-    if (source === 'database') {
-        const databases = databaseProvider(ctx);
-        if (!databases) throw new FeatureError('not_found', 'Les bases de données sont indisponibles.');
-        if (!(await databases.findDatabase(sourceId, ctx.workspaceId))) {
-            throw new FeatureError('not_found', 'Cette base de données est introuvable dans cet espace.');
+/** La machine sait-elle archiver un dossier ? Déclaré par son agent, la version ne le dit pas. */
+const archivesFolders = (device: SdkDevice): boolean =>
+    device.report?.agent?.probes.includes(AGENT_FOLDER_ARCHIVE_PROBE) ?? false;
+
+/**
+ * Vérifie que la source désignée existe **dans cet espace**, et que l'appelant
+ * a le droit de la sauvegarder. `jobId` : le travail modifié, dont la
+ * surcharge de permissions compte.
+ */
+async function assertSource(ctx: Ctx, input: SourceInput, jobId?: number): Promise<void> {
+    switch (input.source) {
+        case 'deveye':
+            if (!canBackupDevEye(ctx)) {
+                throw new FeatureError(
+                    'forbidden',
+                    'La base de DevEye ne se sauvegarde que depuis l’espace personnel d’un administrateur.'
+                );
+            }
+            return;
+
+        case 'deviceFolder': {
+            const folder = input.folder;
+            if (!folder) throw new FeatureError('validation', 'Choisissez le dossier de la machine à sauvegarder.');
+            const allowed =
+                jobId === undefined
+                    ? ctx.canExtra('deviceFolders')
+                    : await ctx.items.canExtra(String(jobId), 'deviceFolders');
+            if (!allowed) {
+                throw new FeatureError(
+                    'forbidden',
+                    'Votre rôle ne permet pas de sauvegarder les fichiers d’une machine.'
+                );
+            }
+            const path = folder.path.trim();
+            if (!path.startsWith('/') && !/^[A-Za-z]:[\\/]/.test(path)) {
+                throw new FeatureError('validation', 'Le dossier de la machine doit être un chemin absolu.');
+            }
+            for (const rule of folder.exclusions) {
+                const problem = pathExclusionProblem(rule.kind, rule.pattern);
+                if (problem) throw new FeatureError('validation', `Exclusion « ${rule.pattern} » : ${problem}`);
+            }
+            // Le droit Fichiers de l'appelant sur CETTE machine, surcharges comprises.
+            const device = await assertDeviceInWorkspace(ctx, folder.deviceId);
+            if (!archivesFolders(device)) {
+                throw new FeatureError(
+                    'conflict',
+                    'L’agent de cette machine est à mettre à jour pour sauvegarder un dossier.'
+                );
+            }
+            return;
         }
-        return;
-    }
-    const cloudSync = cloudSyncProvider(ctx);
-    if (!cloudSync) throw new FeatureError('not_found', 'CloudSync est indisponible : module non installé.');
-    const share = await cloudSync.findShare(sourceId);
-    if (!share || share.workspaceId !== ctx.workspaceId) {
-        throw new FeatureError('not_found', 'Ce partage CloudSync est introuvable dans cet espace.');
+
+        case 'database': {
+            if (input.sourceId === null) {
+                throw new FeatureError('validation', 'Choisissez ce que ce travail doit sauvegarder.');
+            }
+            const databases = databaseProvider(ctx);
+            if (!databases) throw new FeatureError('not_found', 'Les bases de données sont indisponibles.');
+            if (!(await databases.findDatabase(input.sourceId, ctx.workspaceId))) {
+                throw new FeatureError('not_found', 'Cette base de données est introuvable dans cet espace.');
+            }
+            return;
+        }
+
+        case 'cloudsync': {
+            if (input.sourceId === null) {
+                throw new FeatureError('validation', 'Choisissez ce que ce travail doit sauvegarder.');
+            }
+            const cloudSync = cloudSyncProvider(ctx);
+            if (!cloudSync) throw new FeatureError('not_found', 'CloudSync est indisponible : module non installé.');
+            const share = await cloudSync.findShare(input.sourceId);
+            if (!share || share.workspaceId !== ctx.workspaceId) {
+                throw new FeatureError('not_found', 'Ce partage CloudSync est introuvable dans cet espace.');
+            }
+            return;
+        }
+
+        default: {
+            const unknown: never = input.source;
+            throw new FeatureError('validation', `Source de sauvegarde inconnue : ${String(unknown)}`);
+        }
     }
 }
+
+/**
+ * Ce que le travail garde chiffré. Pour un dossier de machine, l'appelant en
+ * devient l'auteur : c'est de ses droits que le travail tiendra les siens.
+ */
+function storedJobOf(ctx: Ctx, input: SourceInput & { name: string }): StoredJob {
+    if (input.source !== 'deviceFolder' || !input.folder) return { name: input.name };
+    return {
+        name: input.name,
+        folder: {
+            deviceId: input.folder.deviceId,
+            path: input.folder.path.trim(),
+            exclusions: input.folder.exclusions,
+            oneFileSystem: input.folder.oneFileSystem,
+            authorUserId: ctx.userId
+        }
+    };
+}
+
+/** Seules les bases et les partages ont un identifiant numérique. */
+const sourceIdOf = (input: SourceInput): number | null =>
+    input.source === 'database' || input.source === 'cloudsync' ? input.sourceId : null;
 
 const jobAddFeature = defineSdkFeature({
     ...backupJobAdd,
@@ -424,13 +530,13 @@ const jobAddFeature = defineSdkFeature({
     mutates: true,
     handler: async (ctx: Ctx, input) => {
         await loadDestination(ctx, input.destinationId);
-        await assertSource(ctx, input.source, input.sourceId);
+        await assertSource(ctx, input);
 
         const row = await ctx.repo.createJob({
             workspaceId: ctx.workspaceId,
             destinationId: input.destinationId,
             sourceKind: input.source,
-            sourceId: input.source === 'deveye' ? null : input.sourceId,
+            sourceId: sourceIdOf(input),
             enabled: input.enabled,
             scheduleKind: input.schedule,
             scheduleHour: input.scheduleHour,
@@ -445,7 +551,7 @@ const jobAddFeature = defineSdkFeature({
                 input.scheduleWeekday,
                 input.scheduleDay
             ),
-            content: await ctx.cipher().encrypt(JSON.stringify({ name: input.name } satisfies StoredJob))
+            content: await ctx.cipher().encrypt(JSON.stringify(storedJobOf(ctx, input)))
         });
 
         ctx.audit({
@@ -469,12 +575,12 @@ const jobUpdateFeature = defineSdkFeature({
         // les objets de SON espace, que la fenêtre ne voit pas.
         await loadHomeJob(ctx, input.jobId);
         await loadDestination(ctx, input.destinationId);
-        await assertSource(ctx, input.source, input.sourceId);
+        await assertSource(ctx, input, input.jobId);
 
         const row = await ctx.repo.updateJob(input.jobId, ctx.workspaceId, {
             destinationId: input.destinationId,
             sourceKind: input.source,
-            sourceId: input.source === 'deveye' ? null : input.sourceId,
+            sourceId: sourceIdOf(input),
             enabled: input.enabled,
             scheduleKind: input.schedule,
             scheduleHour: input.scheduleHour,
@@ -491,7 +597,7 @@ const jobUpdateFeature = defineSdkFeature({
                 input.scheduleWeekday,
                 input.scheduleDay
             ),
-            content: await ctx.cipher().encrypt(JSON.stringify({ name: input.name } satisfies StoredJob))
+            content: await ctx.cipher().encrypt(JSON.stringify(storedJobOf(ctx, input)))
         });
         if (!row) throw new FeatureError('not_found', 'Travail de sauvegarde introuvable');
 
@@ -563,6 +669,48 @@ const jobRunFeature = defineSdkFeature({
 
 const ENGINE_TAGS: Record<'mysql' | 'postgres', string> = { mysql: 'MySQL', postgres: 'PostgreSQL' };
 
+/**
+ * Les machines de l'espace, chacune choisissable si l'appelant peut en
+ * sauvegarder un dossier. Une machine qu'il ne peut pas choisir reste
+ * visible, grisée, avec sa raison : c'est ainsi qu'on apprend que le droit
+ * existe.
+ */
+async function machineCandidates(ctx: Ctx): Promise<BackupSourceCandidate[]> {
+    const devices = await ctx.deveye.devices.list();
+    const mayFolders = ctx.canExtra('deviceFolders');
+    return Promise.all(
+        devices.map(async (device): Promise<BackupSourceCandidate> => {
+            const hasFiles =
+                mayFolders &&
+                (await ctx.deveye.devices.authorize(device.id, { extras: ['files'] }).then(
+                    () => true,
+                    () => false
+                ));
+            const refusal: { tag: string; reason: string } | null = !mayFolders
+                ? { tag: 'non autorisé', reason: 'Votre rôle ne permet pas de sauvegarder les fichiers d’une machine.' }
+                : !hasFiles
+                  ? { tag: 'sans droit Fichiers', reason: 'Vous n’avez pas le droit Fichiers sur cette machine.' }
+                  : !archivesFolders(device)
+                    ? {
+                          tag: 'agent à mettre à jour',
+                          reason: 'L’agent de cette machine est à mettre à jour pour sauvegarder un dossier.'
+                      }
+                    : null;
+            return {
+                kind: 'deviceFolder',
+                id: null,
+                deviceId: device.id,
+                name: device.name,
+                detail: 'Un dossier de cette machine, archivé par son agent. Une machine hors ligne fait échouer ce passage-là, pas les suivants.',
+                // Hors ligne n'empêche pas de choisir : le travail partira plus tard.
+                tag: refusal?.tag ?? (device.online ? null : 'hors ligne'),
+                available: refusal === null,
+                reason: refusal?.reason ?? null
+            };
+        })
+    );
+}
+
 const sourcesFeature = defineSdkFeature({
     ...backupSources,
     access: { level: 'read' },
@@ -572,6 +720,7 @@ const sourcesFeature = defineSdkFeature({
             candidates.push({
                 kind: 'deveye',
                 id: null,
+                deviceId: null,
                 name: 'Base de DevEye',
                 detail: 'Tout ce que DevEye garde en base, pour tous les comptes : notes, mots de passe, supervision, index CloudSync, projets.',
                 tag: null,
@@ -586,6 +735,7 @@ const sourcesFeature = defineSdkFeature({
             candidates.push({
                 kind: 'database',
                 id: row.id,
+                deviceId: null,
                 name: row.name,
                 detail: `${row.engine} : ${row.host} / ${row.database}`,
                 tag: ENGINE_TAGS[row.engine],
@@ -604,6 +754,7 @@ const sourcesFeature = defineSdkFeature({
             candidates.push({
                 kind: 'cloudsync',
                 id: share.id,
+                deviceId: null,
                 name: share.name,
                 detail: `${files} : les fichiers, pas leur index (celui-ci est dans la base de DevEye).`,
                 tag: stats.fileCount > 0 ? files : 'vide',
@@ -612,6 +763,7 @@ const sourcesFeature = defineSdkFeature({
             });
         }
 
+        candidates.push(...(await machineCandidates(ctx)));
         return { candidates };
     }
 });

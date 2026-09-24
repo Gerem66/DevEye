@@ -16,9 +16,11 @@ import type { SecretKeyService } from '@/Services/SecretKeyService';
 import type { Database } from '@/db';
 import { WORKSPACE_CAPABILITIES, WORKSPACE_FEATURE_IDS } from '@deveye/types';
 import { FeatureError } from './_define';
-import { moduleManifests } from './_sdk/register';
+import { moduleManifest, moduleManifests } from './_sdk/register';
 import { parseJsonArray } from '@/Utils/json';
 import { extraOverridesOf } from '@/db/repos/itemSharing';
+import { resolveExtras } from '@deveye/types/sdk';
+import type { SdkAccessDenial, SdkAccessVerdict } from '@deveye/types/sdk/server';
 
 /**
  * Résolution d'autorisation des commandes de feature : le seul endroit qui
@@ -76,6 +78,99 @@ export async function holdsFeatureIn(
     const role = isOwner ? null : await db.workspaceRoles.findForMember(userId, workspaceId);
     const granted = grantsFor(isOwner, role).features.get(feature);
     return granted === 'write' || (level === 'read' && granted === 'read');
+}
+
+/** Ce qu'un membre tient sur une fonctionnalité, et sur un élément s'il est nommé. */
+interface MemberGrant {
+    access: ItemAccess;
+    /** La surcharge posée sur l'élément pour son rôle, s'il y en a une. */
+    override: ItemAccess | null;
+    canExtra: (key: string) => boolean;
+}
+
+/**
+ * Les droits d'un compte sur une fonctionnalité, résolus sans session, avec
+ * les règles d'une commande : compte actif, appartenance, rôle, et la
+ * surcharge de l'élément qui remplace ce que la fonctionnalité donne.
+ */
+async function memberGrant(
+    db: Database,
+    userId: number,
+    workspaceId: number,
+    feature: FeatureId,
+    itemId?: string
+): Promise<MemberGrant | SdkAccessDenial> {
+    const user = await db.users.findById(userId);
+    if (!user) return 'not_member';
+    if (user.status === 'suspended') return 'suspended';
+    const workspace = await db.workspaces.findById(workspaceId);
+    if (!workspace) return 'not_member';
+    const isOwner = workspace.owner_user_id === userId;
+    if (!isOwner && !(await db.workspaceMembers.isMember(userId, workspaceId))) return 'not_member';
+    const role = isOwner ? null : await db.workspaceRoles.findForMember(userId, workspaceId);
+    const { features, extras } = grantsFor(isOwner, role);
+    const base = features.get(feature);
+    // Le plancher : sans lecture sur la fonctionnalité, aucune surcharge ne rouvre rien.
+    if (!base) return 'level';
+    const row =
+        role && itemId !== undefined
+            ? (await db.itemSharing.grantsForRole(workspaceId, feature, role.id)).find((g) => g.item_id === itemId)
+            : undefined;
+    const granted = resolveExtras(moduleManifest(feature)?.extraPermissions, isOwner, extras.get(feature) ?? {});
+    const overrides = row ? extraOverridesOf(row) : {};
+    return {
+        access: row?.access ?? base,
+        override: row?.access ?? null,
+        canExtra: (key) => overrides[key] ?? granted.canExtra(key)
+    };
+}
+
+const deny = (reason: SdkAccessDenial): SdkAccessVerdict => ({ ok: false, reason });
+
+/**
+ * Ce qu'un membre peut faire MAINTENANT sur une fonctionnalité, sans session :
+ * pour un travail qui s'exécute en son nom longtemps après qu'il l'a réglé, et
+ * doit s'arrêter quand il perd le droit.
+ */
+export async function memberVerdict(
+    db: Database,
+    userId: number,
+    workspaceId: number,
+    feature: FeatureId,
+    need: { level?: FeatureAccess; extras?: readonly string[]; itemId?: string }
+): Promise<SdkAccessVerdict> {
+    const grant = await memberGrant(db, userId, workspaceId, feature, need.itemId);
+    if (typeof grant === 'string') return deny(grant);
+    if (grant.access === 'none') return deny('hidden');
+    if (need.level === 'write' && grant.access !== 'write') return deny(grant.override ? 'read_only' : 'level');
+    for (const key of need.extras ?? []) {
+        if (!grant.canExtra(key)) return deny('not_granted');
+    }
+    return { ok: true };
+}
+
+/**
+ * Les permissions d'Appareils d'un membre sur une machine, sans session. La
+ * règle de `authorizeReachableDevice` : une machine passée en lecture seule
+ * pour son rôle ne prend pas d'ordre, quelles que soient ses permissions.
+ */
+export async function deviceVerdict(
+    db: Database,
+    userId: number,
+    workspaceId: number,
+    deviceId: string,
+    extras: readonly string[]
+): Promise<SdkAccessVerdict> {
+    const device = await db.devices.findVisible(deviceId, workspaceId);
+    if (!device) return deny('no_device');
+    const grant = await memberGrant(db, userId, workspaceId, 'devices', device.id);
+    if (typeof grant === 'string') return deny(grant);
+    if (grant.access === 'none') return deny('hidden');
+    if (grant.override === 'read') return deny('read_only');
+    for (const key of extras) {
+        if (!grant.canExtra(key)) return deny('not_granted');
+    }
+    return { ok: true };
 }
 
 /** L'espace visé par une commande, tel que le voit un handler. */

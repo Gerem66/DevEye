@@ -4,6 +4,9 @@ import {
     AGENT_DESTROY,
     AGENT_DESTROYED,
     AGENT_ERROR,
+    AGENT_FILES_ARCHIVE_CHUNK,
+    AGENT_FILES_ARCHIVE_END,
+    AGENT_FILES_ARCHIVE_PROGRESS,
     AGENT_FILES_CHUNK,
     AGENT_FILES_LISTING,
     AGENT_FILES_MATCHES,
@@ -49,6 +52,9 @@ import {
     handleDestroyed,
     handleHello,
     handleIntegrity,
+    handleFilesArchiveChunk,
+    handleFilesArchiveEnd,
+    handleFilesArchiveProgress,
     handleFilesChunk,
     handleFilesListing,
     handleFilesMatches,
@@ -145,6 +151,12 @@ function dispatch(session: AgentSession, msg: AgentClientMessage): void | Promis
             return handleFilesOpResult(session, msg.payload);
         case AGENT_FILES_CHUNK:
             return handleFilesChunk(session, msg.payload);
+        case AGENT_FILES_ARCHIVE_CHUNK:
+            return handleFilesArchiveChunk(session, msg.payload);
+        case AGENT_FILES_ARCHIVE_PROGRESS:
+            return handleFilesArchiveProgress(session, msg.payload);
+        case AGENT_FILES_ARCHIVE_END:
+            return handleFilesArchiveEnd(session, msg.payload);
         case AGENT_SYNC_CHANGED:
             return handleSyncChanged(session, msg.payload);
         case AGENT_SYNC_INDEX:

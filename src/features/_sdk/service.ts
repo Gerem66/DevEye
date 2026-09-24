@@ -22,6 +22,7 @@ import type { Logger } from 'pino';
 import type { AuditLog } from '@/Services/AuditLog';
 import type { LiveHub } from '@/live/hub';
 import { agentsFacade, createFacade, createTelemetry, toSdkDevice } from './facade';
+import { deviceVerdict, memberVerdict } from '../_access';
 import { sdkFleetDomains } from './domains';
 import { createFeatureStore } from './store';
 import { sdkHub } from './host';
@@ -138,6 +139,14 @@ export function createServiceDeps(
         origins: ORIGINS,
         domains: sdkFleetDomains(host.db, manifest),
         deveyeFor: (workspaceId) => ({ notify: facadeFor(workspaceId).notify }),
+        // Relus à chaque appel : un droit retiré doit arrêter le travail suivant.
+        access: {
+            feature: (workspaceId, userId, need) => memberVerdict(host.db, userId, workspaceId, manifest.id, need),
+            device: (workspaceId, userId, deviceId, extras) => {
+                gateDevices();
+                return deviceVerdict(host.db, userId, workspaceId, deviceId, extras);
+            }
+        },
         devicesFor: (workspaceId) => {
             const { list, isOnline } = facadeFor(workspaceId).devices;
             return { list, isOnline };

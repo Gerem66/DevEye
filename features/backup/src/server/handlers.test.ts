@@ -26,9 +26,11 @@ import {
     type CloudSyncBackupProvider,
     type DatabaseBackupProvider
 } from '@deveye/types/sdk';
+import type { DeviceReport } from '@deveye/types';
 import { FeatureError, type SdkFeatureContext } from '@deveye/types/sdk/server';
 import { createTestContext, testDevice } from '@deveye/types/sdk/testing';
 
+import { manifest } from '../manifest';
 import { backupHandlers } from './handlers';
 import type { BackupRepo } from './repo';
 import type { BackupEngine } from './service';
@@ -540,6 +542,7 @@ describe('Backup : handlers', () => {
             encryption: 'server' as const,
             source: 'deveye' as const,
             sourceId: null,
+            folder: null,
             enabled: true,
             schedule: 'daily' as const,
             scheduleHour: 3,
@@ -638,6 +641,7 @@ describe('Backup : handlers', () => {
             encryption: 'server' as const,
             source: 'deveye' as const,
             sourceId: null,
+            folder: null,
             enabled: true,
             schedule: 'daily' as const,
             scheduleHour: 3,
@@ -672,6 +676,7 @@ describe('Backup : handlers', () => {
             destinationId: 1,
             encryption: 'server' as const,
             source: 'database' as const,
+            folder: null,
             enabled: true,
             schedule: 'daily' as const,
             scheduleHour: 3,
@@ -684,5 +689,129 @@ describe('Backup : handlers', () => {
         const out = (await create.handler(ctx, { ...body, sourceId: 7 })) as { job: { sourceName: string | null } };
         assert.equal(out.job.sourceName, 'Prod');
         assert.equal(repo.jobs[0].source_id, 7);
+    });
+    describe('fichiers d’une machine', () => {
+        const NAS = '11111111-1111-4111-8111-111111111111';
+        const OLD = '22222222-2222-4222-8222-222222222222';
+        const OFF = '33333333-3333-4333-8333-333333333333';
+        const SHUT = '44444444-4444-4444-8444-444444444444';
+        const capable = { agent: { probes: ['folderArchive'] } } as unknown as DeviceReport;
+        const devices = [
+            testDevice({ id: NAS, name: 'NAS', report: capable }),
+            testDevice({ id: OLD, name: 'Vieux', report: null }),
+            testDevice({ id: OFF, name: 'Éteint', online: false, report: capable }),
+            testDevice({ id: SHUT, name: 'Fermé', report: capable })
+        ];
+        const folderCtx = (repo: FakeRepo, extras: Record<string, boolean> = { deviceFolders: true }) =>
+            createTestContext({
+                repo,
+                workspaceId: 1,
+                userId: 5,
+                isOwner: false,
+                manifest,
+                extras,
+                devices,
+                refuseDeviceExtras: [SHUT]
+            });
+        const body = {
+            name: 'Site web',
+            destinationId: 1,
+            encryption: 'server' as const,
+            source: 'deviceFolder' as const,
+            sourceId: null,
+            folder: {
+                deviceId: NAS,
+                path: '/srv/www',
+                exclusions: [{ kind: 'name' as const, pattern: 'node_modules' }],
+                oneFileSystem: true
+            },
+            enabled: true,
+            schedule: 'daily' as const,
+            scheduleHour: 3,
+            scheduleWeekday: 0,
+            scheduleDay: 1,
+            keepLast: 7
+        };
+
+        it('chaque machine est proposée, grisée avec sa raison quand elle ne se choisit pas', async () => {
+            const out = await handlerFor(backupSources)(folderCtx(fakeRepo()), {});
+            assert.deepEqual(
+                out.candidates.map((c) => [c.name, c.available, c.tag]),
+                [
+                    ['NAS', true, null],
+                    ['Vieux', false, 'agent à mettre à jour'],
+                    ['Éteint', true, 'hors ligne'],
+                    ['Fermé', false, 'sans droit Fichiers']
+                ]
+            );
+            assert.ok(out.candidates.every((c) => c.kind === 'deviceFolder' && c.id === null && c.deviceId));
+
+            const without = await handlerFor(backupSources)(folderCtx(fakeRepo(), {}), {});
+            assert.ok(without.candidates.every((c) => !c.available && c.tag === 'non autorisé'));
+        });
+
+        it('un travail ne se crée qu’avec les deux droits, sur un agent qui sait archiver', async () => {
+            const repo = fakeRepo();
+            repo.destinations.push(destination({ id: 1, workspace_id: 1 }));
+            const create = handlerFor(backupJobAdd);
+            const folder = body.folder;
+
+            await assert.rejects(create(folderCtx(repo, {}), body), failsWith('forbidden'));
+            await assert.rejects(
+                create(folderCtx(repo), { ...body, folder: { ...folder, deviceId: SHUT } }),
+                failsWith('forbidden')
+            );
+            await assert.rejects(
+                create(folderCtx(repo), { ...body, folder: { ...folder, deviceId: OLD } }),
+                failsWith('conflict')
+            );
+            await assert.rejects(
+                create(folderCtx(repo), { ...body, folder: { ...folder, path: 'srv/www' } }),
+                failsWith('validation')
+            );
+            await assert.rejects(
+                create(folderCtx(repo), {
+                    ...body,
+                    folder: { ...folder, exclusions: [{ kind: 'regex', pattern: '(?=x)' }] }
+                }),
+                failsWith('validation')
+            );
+            assert.equal(repo.jobs.length, 0);
+
+            const ctx = folderCtx(repo);
+            const out = await create(ctx, body);
+            assert.equal(repo.jobs[0].source_kind, 'deviceFolder');
+            assert.equal(repo.jobs[0].source_id, null);
+            // L'auteur est celui qui enregistre : ses droits portent le travail.
+            assert.equal(out.job.folder?.authorUserId, 5);
+            assert.equal(out.job.folder?.deviceName, 'NAS');
+            assert.equal(out.job.sourceName, 'NAS : /srv/www');
+            const stored = JSON.parse(await ctx.cipher().decrypt(repo.jobs[0].content));
+            assert.deepEqual(stored.folder.exclusions, [{ kind: 'name', pattern: 'node_modules' }]);
+        });
+
+        it('écrire des archives sur une machine demande le droit Fichiers', async () => {
+            const repo = fakeRepo();
+            const ctx = folderCtx(repo);
+            const add = handlerFor(backupDestinationAdd);
+            const device = {
+                kind: 'device' as const,
+                name: 'Disque',
+                path: '/mnt/backup',
+                endpoint: null,
+                region: null,
+                bucket: null,
+                accessKeyId: null,
+                host: null,
+                port: null,
+                username: null,
+                sftpAuth: null,
+                secret: null,
+                pathStyle: true
+            };
+            await assert.rejects(add(ctx, { ...device, deviceId: SHUT }), failsWith('forbidden'));
+            const out = await add(ctx, { ...device, deviceId: NAS });
+            assert.equal(out.destination.deviceId, NAS);
+        });
     });
 });

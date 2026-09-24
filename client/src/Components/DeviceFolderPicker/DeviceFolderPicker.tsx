@@ -26,6 +26,8 @@ interface DeviceFolderPickerProps {
     /** À quoi le dossier va servir, dit par l'appelant : le composant sert la
      *  synchronisation d'un partage comme la destination d'une sauvegarde. */
     description?: string;
+    /** Proposer de créer un dossier ; faux pour choisir ce qui existe déjà (ce qu'on sauvegarde). */
+    allowCreate?: boolean;
 }
 
 /**
@@ -40,7 +42,8 @@ export function DeviceFolderPicker({
     deviceName,
     onClose,
     onPick,
-    description
+    description,
+    allowCreate = true
 }: DeviceFolderPickerProps) {
     const [listing, setListing] = useState<FileListing | null>(null);
     const [loading, setLoading] = useState(false);
@@ -166,19 +169,21 @@ export function DeviceFolderPicker({
                     >
                         <span className='icon icon-refresh' />
                     </button>
-                    <button
-                        type='button'
-                        className={styles.pickerIconBtn}
-                        title='Nouveau dossier'
-                        aria-label='Nouveau dossier'
-                        disabled={!listing}
-                        onClick={() => {
-                            setMkdirName('');
-                            setMkdirOpen(true);
-                        }}
-                    >
-                        <span className='icon icon-folder-plus' />
-                    </button>
+                    {allowCreate && (
+                        <button
+                            type='button'
+                            className={styles.pickerIconBtn}
+                            title='Nouveau dossier'
+                            aria-label='Nouveau dossier'
+                            disabled={!listing}
+                            onClick={() => {
+                                setMkdirName('');
+                                setMkdirOpen(true);
+                            }}
+                        >
+                            <span className='icon icon-folder-plus' />
+                        </button>
+                    )}
                 </div>
                 {error && <div className={styles.mutedNote}>{error}</div>}
                 <div className={styles.pickerList}>
@@ -211,7 +216,7 @@ export function DeviceFolderPicker({
                 fermeture, donc Échap annule la saisie du nom sans refermer le
                 sélecteur derrière. */}
             <Dialog
-                open={mkdirOpen}
+                open={allowCreate && mkdirOpen}
                 onClose={() => setMkdirOpen(false)}
                 title='Nouveau dossier'
                 description={listing ? `Il sera créé dans ${listing.path}.` : undefined}

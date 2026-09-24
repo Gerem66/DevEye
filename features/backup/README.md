@@ -182,6 +182,49 @@ jamais tourné : copier le blob store tel quel (des contenus chiffrés adressés
 par condensé) aurait produit un répertoire technique inutilisable sans le reste
 du système.
 
+### `deviceFolder` : les fichiers d'une machine
+
+Un dossier d'une machine enrôlée (un site, `/etc`, des volumes Docker),
+archivé **par son agent** en `.tar.gz` : l'ordre `files.archive` construit
+l'archive sur la machine, avec les exclusions du travail (les mêmes règles
+que CloudSync), et le serveur la tire morceau par morceau
+(`deps.agents.archiveFolder`). Elle ne se recompresse pas en route.
+
+**L'agent n'envoie que ce que le serveur a pris.** Chaque morceau de 512 Kio
+dépense un crédit ; le serveur en accorde huit d'avance et les rend par
+quatre, au rythme où la destination absorbe. Une destination lente freine la
+machine au lieu de remplir la mémoire du serveur, et un travail abandonné
+(délai dépassé, destination en panne) annule l'archive sur la machine. Un
+agent qui ne connaît pas l'ordre ne déclare pas `folderArchive` dans son
+rapport : la machine apparaît grisée « agent à mettre à jour ».
+
+**Deux droits, revérifiés à chaque passage.** Créer ou modifier un tel travail
+demande la permission « Sauvegarder les fichiers d'une machine » de
+Sauvegardes, et le droit « Fichiers » d'Appareils sur cette machine (surcharges
+de l'élément comprises : qui peut tout télécharger à la main peut le
+sauvegarder). L'enregistrer en fait l'auteur ; le moteur relit ses droits sans
+session avant chaque passage (`deps.access`), et le travail échoue, en le
+disant, le jour où il ne les a plus, ne serait-ce que parce qu'il a quitté
+l'espace. Sans cela, un ancien membre qui avait choisi son propre S3 comme
+destination continuerait de recevoir les fichiers de la machine.
+
+Le dossier, ses exclusions et l'auteur vivent dans le `content` chiffré du
+travail : un chemin dit ce qu'on garde, comme un bucket. Une machine
+supprimée fait échouer le passage avec sa raison.
+
+Ce que l'archive laisse de côté est dit sur l'exécution, pas tu : les éléments
+illisibles, et les fichiers modifiés pendant la lecture (archivés à la taille
+annoncée, complétés ou coupés : la structure du `tar` reste lisible, leur
+contenu peut être déchiré). Pour une base de données, on passe par sa source.
+Les liens symboliques sont gardés comme liens ; les liens durs sont dupliqués,
+les fichiers creux recopiés pleins ; sous Windows, pas de cliché VSS, un
+fichier verrouillé est ignoré.
+
+Si la destination est un dossier de la même machine situé sous le dossier
+sauvegardé, il est exclu d'office ; si c'est le dossier même, le passage est
+refusé. Une machine qui héberge DevEye doit exclure le dossier de ses
+sauvegardes à la main : le lien entre les deux ne se voit pas d'ici.
+
 ---
 
 ## Le vidage des bases : `mysqldump` / `pg_dump`
@@ -307,7 +350,9 @@ sinon le canal se remplirait de succès et l'échec s'y perdrait.
 
 L'agent écrit par la façade agents du SDK (`deps.agents.requestFilesMutate`,
 `requestFilesUpload`, `awaitFilesOp`, `buffered` pour la contre-pression) :
-les ordres de l'explorateur de fichiers, sans rien changer à l'agent.
+les ordres de l'explorateur de fichiers. Écrire sur une machine relève du
+droit « Fichiers » d'Appareils, vérifié à l'ajout, à la modification et au
+contrôle de la destination.
 
 ---
 

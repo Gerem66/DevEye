@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import type { BackupSourceCandidate, BackupSourceKind } from '../contracts/domain';
 
 import { SearchSelect, type SearchSelectOption } from 'deveye-sdk-client';
-import { SOURCE_GROUPS, SOURCE_ICONS, sourceKey } from './format';
+import { candidateKey, SOURCE_GROUPS, SOURCE_ICONS } from './format';
 import styles from './style.module.css';
 
 interface SourcePickerProps {
@@ -23,7 +23,7 @@ export default function SourcePicker({ candidates, value, onChange, disabled }: 
             [...candidates]
                 .sort((a, b) => RANK.indexOf(a.kind) - RANK.indexOf(b.kind) || compareNames(a.name, b.name))
                 .map((c): SearchSelectOption => ({
-                    value: sourceKey(c.kind, c.id),
+                    value: candidateKey(c),
                     label: c.name,
                     group: SOURCE_GROUPS[c.kind],
                     prefix: <span className={`icon icon-${SOURCE_ICONS[c.kind]} ${styles.sourceIcon}`} />,
@@ -43,7 +43,7 @@ export default function SourcePicker({ candidates, value, onChange, disabled }: 
             disabled={disabled}
             aria-label='Quoi sauvegarder'
             placeholder='Choisir une source…'
-            searchPlaceholder='Rechercher une base, un partage…'
+            searchPlaceholder='Rechercher une base, un partage, une machine…'
             emptyText={candidates.length === 0 ? 'Aucune source dans cet espace' : 'Aucune source ne correspond'}
         />
     );

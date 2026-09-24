@@ -53,6 +53,9 @@ export { flashSettings } from '@/Components/FeatureSettings/flash';
 export { ProviderKeys } from '@/Components/FeatureSettings/sections/ProviderKeys';
 export type { ProviderKeyRow } from '@/Components/FeatureSettings/sections/ProviderKeys';
 export { DeviceFolderPicker } from '@/Components/DeviceFolderPicker';
+export { DeviceFolderField } from '@/Components/DeviceFolderField';
+export { PathExclusionsEditor } from '@/Components/PathExclusionsEditor';
+export type { PathExclusionItem } from '@/Components/PathExclusionsEditor';
 /**
  * Les appareils de l'espace actif, tels que le module Appareils les offre à l'app
  * (`DEVICES_CLIENT_PROVIDER`). Vide, chargée et sans erreur quand le module n'est

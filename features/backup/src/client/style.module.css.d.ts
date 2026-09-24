@@ -25,8 +25,6 @@ declare const styles: {
     readonly grid: string;
     readonly hostKey: string;
     readonly keyField: string;
-    readonly pathLabel: string;
-    readonly pathRow: string;
     readonly root: string;
     readonly rowError: string;
     readonly run: string;
@@ -35,6 +33,7 @@ declare const styles: {
     readonly runMain: string;
     readonly runPath: string;
     readonly runTitle: string;
+    readonly runWarning: string;
     readonly runs: string;
     readonly sectionTitle: string;
     readonly sourceIcon: string;

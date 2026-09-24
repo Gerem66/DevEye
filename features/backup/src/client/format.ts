@@ -1,5 +1,7 @@
 import type {
     BackupDestinationKind,
+    BackupFolder,
+    BackupJob,
     BackupDestinationStatus,
     BackupRunStatus,
     BackupScheduleKind,
@@ -36,20 +38,23 @@ export const DESTINATION_ICONS: Record<BackupDestinationKind, string> = {
 export const SOURCE_LABELS: Record<BackupSourceKind, string> = {
     deveye: 'Base de DevEye',
     database: 'Base de données',
-    cloudsync: 'Partage CloudSync'
+    cloudsync: 'Partage CloudSync',
+    deviceFolder: 'Fichiers d’une machine'
 };
 
 /** Les catégories du sélecteur de source, dans l'ordre de leurs clés. */
 export const SOURCE_GROUPS: Record<BackupSourceKind, string> = {
     deveye: 'DevEye',
     database: 'Bases de données',
-    cloudsync: 'Partages CloudSync'
+    cloudsync: 'Partages CloudSync',
+    deviceFolder: 'Machines'
 };
 
 export const SOURCE_ICONS: Record<BackupSourceKind, string> = {
     deveye: 'server',
     database: 'database',
-    cloudsync: 'folder'
+    cloudsync: 'folder',
+    deviceFolder: 'cpu'
 };
 
 /** Sous le sélecteur : ce que la source contient, ou pourquoi elle ne se choisit pas. */
@@ -74,8 +79,14 @@ export const RUN_LABELS: Record<BackupRunStatus, string> = {
 
 export const WEEKDAYS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
 
-/** La clé d'une source, pour qu'une option porte à la fois le genre et l'id. */
-export const sourceKey = (kind: BackupSourceKind, id: number | null): string => `${kind}:${id ?? ''}`;
+/**
+ * La clé d'une source, pour qu'une option porte à la fois le genre et ce
+ * qu'elle vise : l'id d'une base ou d'un partage, la machine d'un dossier.
+ */
+export const sourceKey = (kind: BackupSourceKind, ref: number | string | null): string => `${kind}:${ref ?? ''}`;
+
+/** La clé d'un candidat du sélecteur. */
+export const candidateKey = (c: BackupSourceCandidate): string => sourceKey(c.kind, c.id ?? c.deviceId);
 
 /** « En cours » reste neutre : peindre un travail qui vient de partir le ferait passer pour un incident. */
 export function runTone(status: BackupRunStatus | null): 'neutral' | 'online' | 'danger' {
@@ -160,4 +171,15 @@ export function hostOf(url: string): string {
     } catch {
         return url;
     }
+}
+
+/** Le dossier d'un travail tel que la modification le renvoie, sans ce que le serveur y joint. */
+export function folderInput(folder: BackupJob['folder']): BackupFolder | null {
+    if (!folder) return null;
+    return {
+        deviceId: folder.deviceId,
+        path: folder.path,
+        exclusions: folder.exclusions,
+        oneFileSystem: folder.oneFileSystem
+    };
 }

@@ -244,8 +244,8 @@ sa config et décide, l'app ne garde plus rien de ses réglages), la **façade
 télémétrie** (`telemetry.snapshot` remplace la lecture en dur de l'instant,
 `telemetry.pinInstant` l'épinglage de la preuve), la **flotte par la façade**
 (`deps.devices.find` rend un `SdkDevice` au rapport déjà analysé,
-`ctx.deveye.devices.list` porte la règle « l'admin dans son espace personnel
-voit la flotte »), la **façade agents** (`requestScan`, `pushConfig`) et le
+`ctx.deveye.devices.list` rend les appareils de l'espace et ceux qui y sont
+projetés), la **façade agents** (`requestScan`, `pushConfig`) et le
 **provider vers l'app** (`SENTINEL_AGENT_CONFIG_PROVIDER` : l'app recompose la
 config poussée à un agent, `src/agent/config.ts`, en demandant au module sa
 part ; `DEFAULT_SENTINEL_INTEGRITY_MINUTES` vit à côté, dans
@@ -630,12 +630,17 @@ harnais ; une commande qui exige l'administrateur global le déclare par
 `deveye` (façade gardée par `nativeCapabilities` : `notify` avec `embeds`
 Discord, `except`, et le suivi vivant `liveChannels` / `postLive`, `mail.accounts`, `members.read` (chaque membre avec la couleur de son compte), `devices.read` (des `SdkDevice`
 complets : état, propriétaire, espace, cadence, rapport ; `authorize` est LA
-garde de l'app, `list()` suit la règle de `devices.list`, l'admin dans son
-espace personnel voit la flotte), `workspaces.read` (`list()`, tous les
+garde de l'app, et avec `{ extras }` elle éprouve les permissions d'Appareils
+de l'appelant sur CET appareil, surcharges comprises, qu'un module ne peut pas
+nommer dans son `access` ; `list()` rend les appareils de l'espace et ceux qui
+y sont projetés, l'administrateur global compris), `workspaces.read` (`list()`, tous les
 espaces, administrateur seulement), `telemetry.read` (`snapshot`,
 `pinInstant`, réservée aux ids natifs) et `agents` (`requestScan`,
 `pushConfig`, les trois ordres du cycle de vie `resetAgentSession` /
-`disconnectAgent` / `requestDestroy`, `servedManifest`, les requêtes sync)),
+`disconnectAgent` / `requestDestroy`, `servedManifest`, les requêtes sync,
+`dockerRun` / `dockerInventory`, et `archiveFolder` : l'archive `.tar.gz` d'un
+dossier, faite par l'agent et tirée par crédits au rythme du consommateur,
+annulée sur la machine quand on quitte la boucle)),
 `transport` (socket appelant, `agents`), `live.publish(event, payload)` (la voie
 de poussée, capacité `live.publish` : une trame nommée sous le préfixe du module,
 aux connexions de la salle qui ont `read` sur sa feature ; voir LIVE.md §4),
@@ -662,7 +667,12 @@ par identifiant, même garde), `telemetry`, `live.changed(workspaceId, topics?)`
 manifest, celui d'une autre feature ; diffusé par le hub, projections
 comprises) et `live.publish(workspaceId, event, payload)` (la même voie de
 poussée qu'en requête, l'espace étant nommé faute d'appelant), `audit` (source
-système), `agents`, `keys` (`sealBytes`/`openBytes` sous la clé serveur,
+système), `agents`, `access` (ce qu'un membre peut faire MAINTENANT, sans
+session, pour un travail qui s'exécute en son nom : `feature(ws, userId,
+{ level, extras, itemId })` pour la feature du module, `device(ws, userId,
+deviceId, extras)` pour les permissions d'Appareils sur une machine, sous
+`devices.read` ; un verdict `{ ok }` ou `{ ok: false, reason }`, relu à
+chaque appel), `keys` (`sealBytes`/`openBytes` sous la clé serveur,
 `derive(salt, info, length)` : HKDF sur la même clé, jamais stockée),
 `secrecy.redeem(ticket)` (le ticket d'un module rendu en `{ userId,
 workspaceId, payload, cipher: { server, private | null } }`), `origins`,

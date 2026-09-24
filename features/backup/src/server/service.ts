@@ -13,7 +13,8 @@ import {
     type CloudSyncBackupProvider,
     type DatabaseBackupProvider
 } from '@deveye/types/sdk';
-import type { FeatureService, FeatureServiceDeps, SdkCipher } from '@deveye/types/sdk/server';
+import { AGENT_FOLDER_ARCHIVE_PROBE } from '@deveye/types';
+import type { FeatureService, FeatureServiceDeps, SdkAccessDenial, SdkCipher } from '@deveye/types/sdk/server';
 import { backupKey, sealStream } from './crypto';
 import { env } from './env';
 import { buildNotice } from './notice';
@@ -21,9 +22,9 @@ import type { BackupRepo } from './repo';
 import { nextRunAt } from './schedule';
 import { SftpSink } from './sftp';
 import { DeviceSink, LocalSink, S3Sink, type BackupSink } from './sinks';
-import { cloudSyncSource, databaseSource, deveyeSource, type BackupArtifact } from './sources';
+import { cloudSyncSource, databaseSource, deveyeSource, deviceFolderSource, type BackupArtifact } from './sources';
 import { WebDavSink } from './webdav';
-import type { StoredDestination, StoredJob, StoredRun } from './_shared';
+import type { StoredDestination, StoredFolder, StoredJob, StoredRun } from './_shared';
 
 /**
  * L'ordonnanceur des sauvegardes : un ticker du SDK qui cherche ce qui est dû
@@ -39,6 +40,38 @@ import type { StoredDestination, StoredJob, StoredRun } from './_shared';
 
 /** Combien de travaux dus on ramasse par tour. Borne la rafale, pas le débit. */
 const DUE_BATCH = 20;
+
+/** Pourquoi l'auteur d'un travail ne peut plus le faire tourner, en fin de phrase. */
+const DENIALS: Record<SdkAccessDenial, string> = {
+    not_member: 'il n’est plus membre de cet espace',
+    suspended: 'son compte est suspendu',
+    level: 'son rôle ne le permet plus',
+    not_granted: 'la permission lui a été retirée',
+    hidden: 'cet élément lui est fermé',
+    read_only: 'cet élément est en lecture seule pour lui',
+    no_device: 'la machine n’est plus dans cet espace'
+};
+
+/**
+ * La destination est-elle un dossier de la même machine, sous le dossier
+ * sauvegardé ? Son chemin relatif, pour l'exclure : sinon l'archive
+ * s'avalerait elle-même à mesure qu'elle s'écrit. `''` quand c'est le dossier
+ * même, qu'aucune exclusion ne sait écarter.
+ */
+export function destinationInside(source: string, destination: string): string | null {
+    const windows = /^[A-Za-z]:/.test(source);
+    const norm = (p: string): string => {
+        const clean = p.replace(/\\/g, '/').replace(/\/+$/, '');
+        return windows ? clean.toLowerCase() : clean;
+    };
+    const root = norm(source);
+    const target = norm(destination);
+    if (target === root) return '';
+    const prefix = root === '' ? '/' : `${root}/`;
+    if (!target.startsWith(prefix)) return null;
+    // Le chemin tel qu'écrit, pas sa forme minuscule : l'agent compare à la lettre.
+    return destination.replace(/\\/g, '/').replace(/\/+$/, '').slice(prefix.length);
+}
 
 export class BackupEngine {
     private readonly ticker: FeatureService;
@@ -311,19 +344,22 @@ export class BackupEngine {
     private async execute(job: BackupJobRow, destination: BackupDestinationRow, run: BackupRunRow): Promise<void> {
         const cipher = this.cipherFor(job.workspace_id);
         const started = Date.now();
-        let jobName = 'Sauvegarde';
+        let storedJob: Partial<StoredJob> = {};
         try {
-            jobName = ((JSON.parse((await cipher.tryDecrypt(job.content)) ?? '{}') as StoredJob).name ?? '').trim();
+            storedJob = JSON.parse((await cipher.tryDecrypt(job.content)) ?? '{}') as Partial<StoredJob>;
         } catch {
             // Un intitulé illisible ne doit pas empêcher une sauvegarde : le
             // nom sert l'écran et le nom de fichier, jamais la mécanique.
         }
-        if (jobName === '') jobName = 'Sauvegarde';
+        const jobName = (storedJob.name ?? '').trim() || 'Sauvegarde';
 
         let artifact: string | null = null;
         let size = 0;
         let checksum: string | null = null;
         let error: string | null = null;
+        let warning: string | null = null;
+        // Le budget écoulé arrête la source, pas seulement l'attente.
+        const abort = new AbortController();
         /**
          * `withTimeout` abandonne l'attente, pas le travail : la réservation ne
          * se relâche qu'à l'issue réelle de l'écriture, sinon le passage suivant
@@ -345,7 +381,7 @@ export class BackupEngine {
                     .assert('storage', async (owned) => (await this.deps.repo.storedBytesInWorkspaces(owned)) + 1);
             }
 
-            const source = await this.sourceFor(job, jobName);
+            const source = await this.sourceFor(job, jobName, storedJob, destination, abort.signal);
             const sink = await this.sinkFor(destination);
 
             // Condensé du clair, avant scellement : deux scellements du même
@@ -366,10 +402,11 @@ export class BackupEngine {
                 : measured(source.stream);
 
             writing = sink.write(name, body);
-            const written = await this.withTimeout(writing, env.BACKUP_RUN_TIMEOUT_SECONDS * 1000);
+            const written = await this.withTimeout(writing, env.BACKUP_RUN_TIMEOUT_SECONDS * 1000, abort);
             artifact = written.artifact;
             size = written.size;
             checksum = digest.digest('hex');
+            warning = source.warning?.() ?? null;
         } catch (e) {
             error = (e as Error).message;
         } finally {
@@ -388,7 +425,7 @@ export class BackupEngine {
             finishedAt: Math.floor(Date.now() / 1000),
             sizeBytes: size,
             checksum,
-            content: await cipher.encrypt(JSON.stringify({ artifact, error } satisfies StoredRun))
+            content: await cipher.encrypt(JSON.stringify({ artifact, error, warning } satisfies StoredRun))
         });
 
         this.deps.audit({
@@ -415,8 +452,19 @@ export class BackupEngine {
     }
 
     /** Ce que le travail sauvegarde, résolu au moment de l'exécution. */
-    private async sourceFor(job: BackupJobRow, jobName: string): Promise<BackupArtifact> {
+    private async sourceFor(
+        job: BackupJobRow,
+        jobName: string,
+        stored: Partial<StoredJob>,
+        destination: BackupDestinationRow,
+        signal: AbortSignal
+    ): Promise<BackupArtifact> {
         if (job.source_kind === 'deveye') return deveyeSource();
+
+        if (job.source_kind === 'deviceFolder') {
+            if (!stored.folder) throw new Error('Ce travail ne dit plus quel dossier sauvegarder.');
+            return this.deviceFolderFor(job, stored.folder, destination, signal);
+        }
 
         if (job.source_kind === 'database') {
             if (!job.source_id) throw new Error('Ce travail ne désigne aucune base.');
@@ -442,6 +490,59 @@ export class BackupEngine {
         }
 
         throw new Error(`Source de sauvegarde inconnue : ${job.source_kind}`);
+    }
+
+    /**
+     * Le dossier d'une machine, au nom de l'auteur du travail : ses droits sont
+     * relus à chaque passage, et le travail s'arrête le jour où il les perd.
+     */
+    private async deviceFolderFor(
+        job: BackupJobRow,
+        folder: StoredFolder,
+        destination: BackupDestinationRow,
+        signal: AbortSignal
+    ): Promise<BackupArtifact> {
+        const again = 'un membre autorisé doit enregistrer ce travail de nouveau.';
+        const may = await this.deps.access.feature(job.workspace_id, folder.authorUserId, {
+            level: 'write',
+            extras: ['deviceFolders'],
+            itemId: String(job.id)
+        });
+        if (!may.ok) {
+            throw new Error(
+                `L’auteur de ce travail ne peut plus sauvegarder les fichiers d’une machine (${DENIALS[may.reason]}) : ${again}`
+            );
+        }
+        const files = await this.deps.access.device(job.workspace_id, folder.authorUserId, folder.deviceId, ['files']);
+        if (!files.ok) {
+            throw new Error(
+                `L’auteur de ce travail n’a plus le droit Fichiers sur cette machine (${DENIALS[files.reason]}) : ${again}`
+            );
+        }
+
+        const device = await this.deps.devices.find(folder.deviceId);
+        if (!device) throw new Error('La machine de ce travail a été supprimée.');
+        if (!this.deps.devices.isOnline(device.id)) throw new Error(`La machine « ${device.name} » est hors ligne.`);
+        if (!device.report?.agent?.probes.includes(AGENT_FOLDER_ARCHIVE_PROBE)) {
+            throw new Error(`L’agent de « ${device.name} » est à mettre à jour pour sauvegarder un dossier.`);
+        }
+
+        const exclusions = [...folder.exclusions];
+        if (destination.kind === 'device' && destination.device_id === folder.deviceId) {
+            const inside = destinationInside(folder.path, (await this.readDestination(destination)).path);
+            if (inside === '') {
+                throw new Error(
+                    'Ce travail écrit ses archives dans le dossier même qu’il sauvegarde : choisissez une destination ailleurs.'
+                );
+            }
+            if (inside !== null) exclusions.push({ kind: 'path', pattern: inside });
+        }
+        return deviceFolderSource(
+            this.deps.agents,
+            device,
+            { path: folder.path, exclusions, oneFileSystem: folder.oneFileSystem },
+            signal
+        );
     }
 
     /**
@@ -516,17 +617,22 @@ export class BackupEngine {
         }
     }
 
-    /** Sans borne, un agent muet au milieu d'un dépôt laisserait le travail dans `running` pour toujours. */
-    private async withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+    /**
+     * Sans borne, un agent muet au milieu d'un dépôt laisserait le travail dans
+     * `running` pour toujours. L'échéance déclenche `abort` : une source qui
+     * l'écoute s'arrête, au lieu de continuer pour personne.
+     */
+    private async withTimeout<T>(promise: Promise<T>, ms: number, abort: AbortController): Promise<T> {
         let timer: ReturnType<typeof setTimeout> | null = null;
         try {
             return await Promise.race([
                 promise,
                 new Promise<never>((_, reject) => {
-                    timer = setTimeout(
-                        () => reject(new Error(`Sauvegarde abandonnée après ${Math.round(ms / 60000)} minutes.`)),
-                        ms
-                    );
+                    timer = setTimeout(() => {
+                        const reason = new Error(`Sauvegarde abandonnée après ${Math.round(ms / 60000)} minutes.`);
+                        abort.abort(reason);
+                        reject(reason);
+                    }, ms);
                     timer.unref();
                 })
             ]);

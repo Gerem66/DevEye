@@ -1,12 +1,14 @@
 //! DevEye Agent: lightweight cross-platform monitoring daemon (Linux, macOS,
 //! Windows). The subcommands are documented on `Command`.
 
+mod archive;
 mod authlog;
 mod commands;
 mod config;
 mod docker;
 mod elevate;
 mod enroll;
+mod exclusions;
 mod files;
 mod identity;
 mod integrity;

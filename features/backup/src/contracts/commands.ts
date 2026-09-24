@@ -13,6 +13,7 @@ import {
     backupDestinationProbeSchema,
     backupDestinationSchema,
     backupEncryptionSchema,
+    backupFolderSchema,
     backupJobSchema,
     backupRunSchema,
     backupScheduleKindSchema,
@@ -125,6 +126,8 @@ const jobBody = {
     encryption: backupEncryptionSchema,
     source: backupSourceKindSchema,
     sourceId: z.number().int().positive().nullable(),
+    /** `deviceFolder` seulement ; `null` pour les autres sources. */
+    folder: backupFolderSchema.nullable(),
     enabled: z.boolean(),
     schedule: backupScheduleKindSchema,
     scheduleHour: z.number().int().min(0).max(23),

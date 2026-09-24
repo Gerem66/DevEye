@@ -1,5 +1,6 @@
 import type {
     BackupDestination,
+    BackupFolder,
     BackupDestinationKind,
     BackupDestinationRow,
     BackupDestinationStatus,
@@ -50,15 +51,25 @@ export interface StoredDestination {
     lastError: string | null;
 }
 
+/**
+ * Le dossier d'un travail `deviceFolder`, et le membre au nom de qui il
+ * s'exécute : c'est de ses droits que le travail tient les siens.
+ */
+export interface StoredFolder extends BackupFolder {
+    authorUserId: number;
+}
+
 /** Ce que `content` porte, chiffré, sur un travail. */
 export interface StoredJob {
     name: string;
+    folder?: StoredFolder;
 }
 
 /** Ce que `content` porte, chiffré, sur une exécution. */
 export interface StoredRun {
     artifact: string | null;
     error: string | null;
+    warning?: string | null;
 }
 
 /** Le moteur, posé par `createService` au démarrage : unique par processus. */
@@ -158,6 +169,34 @@ export async function toDestination(ctx: Ctx, row: BackupDestinationWithUsageRow
     };
 }
 
+/** Les noms d'une requête, lus une fois pour toute une liste de travaux. */
+const memberNames = new WeakMap<Ctx, Promise<Map<number, string>>>();
+const deviceNames = new WeakMap<Ctx, Promise<Map<string, string>>>();
+
+function memberNamesOf(ctx: Ctx): Promise<Map<number, string>> {
+    let names = memberNames.get(ctx);
+    if (!names) {
+        names = ctx.deveye.members
+            .list()
+            .then((members) => new Map(members.map((m) => [m.userId, m.name])))
+            .catch(() => new Map());
+        memberNames.set(ctx, names);
+    }
+    return names;
+}
+
+function deviceNamesOf(ctx: Ctx): Promise<Map<string, string>> {
+    let names = deviceNames.get(ctx);
+    if (!names) {
+        names = ctx.deveye.devices
+            .list()
+            .then((devices) => new Map(devices.map((d) => [d.id, d.name])))
+            .catch(() => new Map());
+        deviceNames.set(ctx, names);
+    }
+    return names;
+}
+
 export async function toJob(ctx: Ctx, row: BackupJobWithStateRow, shares?: SdkShareScope): Promise<BackupJob> {
     // Le codec du **domicile** de la ligne : un travail projeté, et tout ce qui
     // pend à lui, sa destination, sa dernière erreur, reste chiffré sous la clé
@@ -180,7 +219,24 @@ export async function toJob(ctx: Ctx, row: BackupJobWithStateRow, shares?: SdkSh
         destinationKind: row.destination_kind as BackupDestinationKind,
         source: row.source_kind as BackupSourceKind,
         sourceId: row.source_id,
-        sourceName: await sourceNameOf(ctx, row.source_kind as BackupSourceKind, row.source_id, row.workspace_id),
+        sourceName: await sourceNameOf(
+            ctx,
+            row.source_kind as BackupSourceKind,
+            row.source_id,
+            row.workspace_id,
+            job.folder
+        ),
+        folder: job.folder
+            ? {
+                  deviceId: job.folder.deviceId,
+                  path: job.folder.path,
+                  exclusions: job.folder.exclusions,
+                  oneFileSystem: job.folder.oneFileSystem,
+                  deviceName: (await deviceNamesOf(ctx)).get(job.folder.deviceId) ?? null,
+                  authorUserId: job.folder.authorUserId,
+                  authorName: (await memberNamesOf(ctx)).get(job.folder.authorUserId) ?? null
+              }
+            : null,
         schedule: row.schedule_kind as BackupScheduleKind,
         scheduleHour: row.schedule_hour,
         scheduleWeekday: row.schedule_weekday,
@@ -205,18 +261,29 @@ export async function sourceNameOf(
     kind: BackupSourceKind,
     sourceId: number | null,
     /** L'espace du travail : sa source vit chez lui, pas forcément ici. */
-    homeWorkspaceId: number = ctx.workspaceId
+    homeWorkspaceId: number = ctx.workspaceId,
+    folder?: Partial<StoredFolder>
 ): Promise<string | null> {
-    if (kind === 'deveye') return 'Base de DevEye';
-    if (sourceId === null) return null;
-
-    if (kind === 'database') {
-        const row = await databaseProvider(ctx)?.findDatabase(sourceId, homeWorkspaceId);
-        return row?.name ?? null;
+    switch (kind) {
+        case 'deveye':
+            return 'Base de DevEye';
+        case 'deviceFolder': {
+            if (!folder?.deviceId || !folder.path) return null;
+            // Une machine d'un autre espace ne se nomme pas d'ici : son chemin suffit.
+            const device = (await deviceNamesOf(ctx)).get(folder.deviceId);
+            return device ? `${device} : ${folder.path}` : folder.path;
+        }
+        case 'database': {
+            if (sourceId === null) return null;
+            const row = await databaseProvider(ctx)?.findDatabase(sourceId, homeWorkspaceId);
+            return row?.name ?? null;
+        }
+        case 'cloudsync': {
+            if (sourceId === null) return null;
+            const share = await cloudSyncProvider(ctx)?.findShare(sourceId);
+            return share && share.workspaceId === homeWorkspaceId ? share.name : null;
+        }
     }
-
-    const share = await cloudSyncProvider(ctx)?.findShare(sourceId);
-    return share && share.workspaceId === homeWorkspaceId ? share.name : null;
 }
 
 export async function toRun(ctx: Ctx, row: BackupRunRow, cipher?: SdkCipher): Promise<BackupRun> {
@@ -237,6 +304,7 @@ export async function toRun(ctx: Ctx, row: BackupRunRow, cipher?: SdkCipher): Pr
             row.status === 'failed'
                 ? (stored.error ?? 'Interrompue : le serveur a redémarré pendant la sauvegarde.')
                 : null,
+        warning: stored.warning ?? null,
         pruned: row.pruned === 1
     };
 }

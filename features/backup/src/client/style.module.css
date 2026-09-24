@@ -322,24 +322,6 @@
     color: var(--text-muted);
 }
 
-/* `flex-end` aligne le bouton sur le bas du champ, pas sur le milieu du couple libellé + champ. */
-.pathRow {
-    display: flex;
-    align-items: flex-end;
-    gap: var(--space-sm);
-}
-
-/* Le champ prend la place restante. `min-width: 0` est indispensable : sans
-   lui, la base `auto` d'un élément flex ne descend jamais sous son contenu, et
-   un chemin profond pousserait le bouton hors du dialogue. */
-.pathLabel {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    flex: 1;
-    min-width: 0;
-}
-
 /* `min-width: 0` : un intitulé long rétrécit le champ, jamais ne pousse le bouton. */
 .fieldWithAction {
     display: flex;
@@ -387,4 +369,12 @@
     font-family: var(--font-mono);
     font-size: 0.8rem;
     color: var(--text-secondary);
+}
+
+/* Une archive réussie mais incomplète : pas un échec, pas rien non plus. */
+.runWarning {
+    margin: var(--space-xs) 0 0;
+    font-size: 0.76rem;
+    color: var(--warning);
+    overflow-wrap: anywhere;
 }

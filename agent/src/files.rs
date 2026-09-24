@@ -13,6 +13,8 @@ use std::path::Path;
 use anyhow::{bail, Context, Result};
 use tokio::sync::mpsc::Sender;
 
+use crate::archive::{write_tree, ArchiveStats, WalkLimits, WalkOptions};
+use crate::exclusions::CompiledExclusions;
 use crate::protocol::{FileEntry, FileListing, FileMatch, FileSearchFilter, FileUsageEntry};
 
 /// Hard cap on returned search hits (mirrors @deveye/types `FILE_SEARCH_MAX`).
@@ -53,6 +55,23 @@ pub enum FilesEvent {
         op_id: String,
         data: Vec<u8>,
         done: bool,
+        error: Option<String>,
+    },
+    /// One piece of a folder archive, sent under one credit.
+    ArchiveChunk {
+        op_id: String,
+        seq: u64,
+        data: Vec<u8>,
+    },
+    ArchiveProgress {
+        op_id: String,
+        entries: u64,
+        bytes_read: u64,
+    },
+    /// The last event of a folder archive; `error` set when it failed.
+    ArchiveEnd {
+        op_id: String,
+        stats: crate::archive::ArchiveStats,
         error: Option<String>,
     },
 }
@@ -175,11 +194,11 @@ pub fn list(path: &str) -> Result<FileListing> {
 /// Virtual (kernel) filesystems whose apparent sizes are meaningless, and
 /// sometimes absurd (`/proc/kcore` reports ~128 TiB): never walk them.
 #[cfg(target_os = "linux")]
-fn is_virtual_fs(path: &Path) -> bool {
+pub(crate) fn is_virtual_fs(path: &Path) -> bool {
     matches!(path.to_str(), Some("/proc" | "/sys" | "/dev" | "/run"))
 }
 #[cfg(not(target_os = "linux"))]
-fn is_virtual_fs(_path: &Path) -> bool {
+pub(crate) fn is_virtual_fs(_path: &Path) -> bool {
     false
 }
 
@@ -521,72 +540,25 @@ impl std::io::Write for ChunkSink {
     }
 }
 
-/// Write `root` into `sink` as a gzipped tar, entries prefixed with the folder's
-/// own name so extracting never scatters files into the current directory.
-///
-/// Same discipline as `dir_size`: symlinks stored as symlinks (never followed),
-/// kernel filesystems skipped, and an unreadable entry skipped rather than
-/// failing the whole archive (a single root-owned file would otherwise sink it).
+/// Write `root` into `sink` as a gzipped tar, bounded for a browser that
+/// rebuilds the whole stream in memory before saving it.
 fn archive_dir(root: &Path, sink: &mut ChunkSink) -> Result<()> {
     use flate2::write::GzEncoder;
     use flate2::Compression;
 
-    let base = Path::new(root.file_name().unwrap_or_else(|| "archive".as_ref()));
-    // `fast` rather than the default: the archive is produced live on a monitored
-    // machine, and the extra ratio isn't worth the CPU it costs there.
+    let exclusions = CompiledExclusions::default();
+    let opts = WalkOptions {
+        exclusions: &exclusions,
+        one_file_system: false,
+        limits: Some(WalkLimits {
+            max_entries: ARCHIVE_MAX_ENTRIES,
+            max_bytes: ARCHIVE_MAX_BYTES,
+        }),
+    };
     let mut builder = tar::Builder::new(GzEncoder::new(sink, Compression::fast()));
     builder.follow_symlinks(false);
-
-    let mut budget = ARCHIVE_MAX_ENTRIES;
-    let mut bytes = 0u64;
-    let mut skipped = 0u64;
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        let Ok(rd) = std::fs::read_dir(&dir) else {
-            skipped += 1;
-            continue;
-        };
-        for entry in rd.flatten() {
-            if budget == 0 {
-                bail!("dossier trop volumineux : plus de {ARCHIVE_MAX_ENTRIES} éléments");
-            }
-            budget -= 1;
-            let Ok(ft) = entry.file_type() else { continue };
-            let path = entry.path();
-            let Ok(rel) = path.strip_prefix(root) else {
-                continue;
-            };
-            let name = base.join(rel);
-            if ft.is_dir() {
-                if is_virtual_fs(&path) {
-                    continue;
-                }
-                if builder.append_dir(&name, &path).is_err() {
-                    skipped += 1;
-                    continue;
-                }
-                stack.push(path);
-            } else if ft.is_file() {
-                let Ok(meta) = entry.metadata() else {
-                    skipped += 1;
-                    continue;
-                };
-                bytes += meta.len();
-                if bytes > ARCHIVE_MAX_BYTES {
-                    bail!(
-                        "dossier trop volumineux : plus de {} Go",
-                        ARCHIVE_MAX_BYTES / (1024 * 1024 * 1024)
-                    );
-                }
-                if builder.append_path_with_name(&path, &name).is_err() {
-                    skipped += 1;
-                }
-            } else if ft.is_symlink() && builder.append_path_with_name(&path, &name).is_err() {
-                skipped += 1;
-            }
-            // Anything else (socket, fifo, device) has no content to archive.
-        }
-    }
+    let mut stats = ArchiveStats::default();
+    write_tree(root, &opts, &mut builder, &mut stats, &mut |_| Ok(()))?;
 
     // `into_inner` writes the tar trailer, `finish` the gzip one; then whatever is
     // left in the sink is short by definition and goes out as the last frame.
@@ -596,9 +568,9 @@ fn archive_dir(root: &Path, sink: &mut ChunkSink) -> Result<()> {
         .finish()
         .context("compression de l'archive")?;
     sink.emit_tail().context("envoi de l'archive")?;
-    if skipped > 0 {
+    if stats.skipped > 0 {
         tracing::warn!(
-            skipped,
+            skipped = stats.skipped,
             root = %root.display(),
             "archive de dossier : éléments illisibles ignorés"
         );
@@ -871,6 +843,7 @@ mod tests {
         assert_eq!(
             names,
             vec![
+                base.clone(),
                 format!("{base}/nested"),
                 format!("{base}/nested/deep.txt"),
                 format!("{base}/top.txt"),

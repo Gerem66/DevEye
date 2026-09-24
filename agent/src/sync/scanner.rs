@@ -9,12 +9,12 @@ use std::sync::{Arc, Mutex};
 use std::time::UNIX_EPOCH;
 
 use anyhow::{Context, Result};
-use regex::Regex;
 use sha2::{Digest, Sha256};
 use tokio::sync::mpsc::Sender;
-use tracing::{debug, warn};
+use tracing::debug;
 
-use crate::protocol::{SyncExclusion, SyncIndexEntry, SyncShareAssignment};
+use crate::exclusions::CompiledExclusions;
+use crate::protocol::{SyncIndexEntry, SyncShareAssignment};
 use crate::sync::fingerprint::{Fingerprint, FingerprintEntry};
 use crate::sync::index_cache::{CacheEntry, IndexCache};
 use crate::sync::paths::{is_reserved_top, rel_path_of, rel_path_problem};
@@ -25,8 +25,6 @@ use crate::sync::{CleanMark, SyncEvent};
 const BATCH: usize = 500;
 /// Garde-fou : au-delà, le scan est abandonné (dossier manifestement hors sujet).
 const SCAN_BUDGET: usize = 2_000_000;
-/// Cap de compilation regex, comme dans files.rs (motifs bornés côté serveur).
-const REGEX_SIZE_LIMIT: usize = 1 << 20;
 /// En deçà de cet âge, un fichier est TOUJOURS re-hashé, cache ou pas.
 ///
 /// Le cache s'appuie sur (taille, mtime). Or la granularité du mtime n'est pas
@@ -38,58 +36,6 @@ const RECENT_MS: i64 = 3_000;
 /// SHA-256 du contenu vide : le hash conventionnel porté par une entrée `dir`.
 /// Miroir de `SYNC_DIR_HASH` (DevEye-Types/src/domain/cloudSync.ts).
 const SYNC_DIR_HASH: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
-
-/// Exclusions compilées — mêmes sémantiques que `src/cloudSync/exclusions.ts`.
-pub struct CompiledExclusions {
-    paths: Vec<String>,
-    names: Vec<String>,
-    regexes: Vec<Regex>,
-}
-
-impl CompiledExclusions {
-    pub fn compile(rows: &[SyncExclusion]) -> Self {
-        let mut out = Self {
-            paths: Vec::new(),
-            names: Vec::new(),
-            regexes: Vec::new(),
-        };
-        for row in rows {
-            match row.kind.as_str() {
-                "path" => out.paths.push(row.pattern.clone()),
-                "name" => out.names.push(row.pattern.clone()),
-                "regex" => {
-                    match regex::RegexBuilder::new(&row.pattern)
-                        .size_limit(REGEX_SIZE_LIMIT)
-                        .build()
-                    {
-                        Ok(re) => out.regexes.push(re),
-                        Err(e) => {
-                            warn!(pattern = %row.pattern, error = %e, "sync: invalid exclusion regex ignored")
-                        }
-                    }
-                }
-                other => warn!(kind = %other, "sync: unknown exclusion kind ignored"),
-            }
-        }
-        out
-    }
-
-    pub fn matches(&self, rel_path: &str) -> bool {
-        for p in &self.paths {
-            if rel_path == p || rel_path.starts_with(&format!("{p}/")) {
-                return true;
-            }
-        }
-        if !self.names.is_empty()
-            && rel_path
-                .split('/')
-                .any(|seg| self.names.iter().any(|n| n == seg))
-        {
-            return true;
-        }
-        self.regexes.iter().any(|re| re.is_match(rel_path))
-    }
-}
 
 fn mtime_millis(meta: &std::fs::Metadata) -> i64 {
     meta.modified()

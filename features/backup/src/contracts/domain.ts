@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { pathExclusionSchema } from '@deveye/types';
 
 /**
  * Sauvegardes : une destination (où), un travail (quoi, où, quand, combien de
@@ -44,9 +45,25 @@ export type BackupDestinationStatus = z.infer<typeof backupDestinationStatusSche
  * supervision (tunnel compris). `deveye` : la base MySQL de DevEye, qui couvre
  * tout ce qui vit en base. `cloudsync` : les blobs d'un partage, en clair dans
  * un `tar` reconstitué depuis l'index, restaurable sans DevEye.
+ * `deviceFolder` : un dossier d'une machine, archivé par son agent.
  */
-export const backupSourceKindSchema = z.enum(['database', 'deveye', 'cloudsync']);
+export const backupSourceKindSchema = z.enum(['database', 'deveye', 'cloudsync', 'deviceFolder']);
 export type BackupSourceKind = z.infer<typeof backupSourceKindSchema>;
+
+/** Un chemin sur une machine : ce que l'agent accepte. */
+export const BACKUP_FOLDER_PATH_MAX = 4096;
+export const BACKUP_FOLDER_EXCLUSIONS_MAX = 100;
+
+/** Le dossier qu'un travail `deviceFolder` archive, tel qu'on le règle. */
+export const backupFolderSchema = z.object({
+    deviceId: z.uuid(),
+    /** Chemin absolu sur la machine. */
+    path: z.string().min(1).max(BACKUP_FOLDER_PATH_MAX),
+    exclusions: z.array(pathExclusionSchema).max(BACKUP_FOLDER_EXCLUSIONS_MAX),
+    /** Ne pas descendre dans un autre système de fichiers (montage réseau, disque amovible). */
+    oneFileSystem: z.boolean()
+});
+export type BackupFolder = z.infer<typeof backupFolderSchema>;
 
 /** Pas de cron, volontairement : une expression mal écrite est un travail qui ne part jamais sans rien dire. */
 export const backupScheduleKindSchema = z.enum(['manual', 'hourly', 'daily', 'weekly', 'monthly']);
@@ -128,6 +145,17 @@ export const backupJobSchema = z.object({
     sourceId: z.number().int().positive().nullable(),
     /** Intitulé de la source, joint pour l'affichage; `null` si elle a disparu. */
     sourceName: z.string().nullable(),
+    /**
+     * `deviceFolder` : le dossier archivé, et le membre au nom de qui le travail
+     * s'exécute. Ses droits sont revérifiés à chaque passage.
+     */
+    folder: backupFolderSchema
+        .extend({
+            deviceName: z.string().nullable(),
+            authorUserId: z.number().int().positive(),
+            authorName: z.string().nullable()
+        })
+        .nullable(),
     schedule: backupScheduleKindSchema,
     /** Heure locale du serveur (0-23), pour tout sauf `hourly` et `manual`. */
     scheduleHour: z.number().int().min(0).max(23),
@@ -168,6 +196,8 @@ export const backupRunSchema = z.object({
     /** `null` = déclenchée par l'ordonnanceur. */
     triggeredByUserId: z.number().int().positive().nullable(),
     error: z.string().nullable(),
+    /** Une archive réussie mais incomplète : éléments illisibles, fichiers modifiés pendant la lecture. */
+    warning: z.string().nullable(),
     /** L'archive existe-t-elle encore, ou la rétention l'a-t-elle effacée ? */
     pruned: z.boolean()
 });
@@ -179,8 +209,10 @@ export type BackupRun = z.infer<typeof backupRunSchema>;
  */
 export const backupSourceCandidateSchema = z.object({
     kind: backupSourceKindSchema,
-    /** `null` pour `deveye`, qui est unique par nature. */
+    /** `null` pour `deveye`, unique par nature, et pour `deviceFolder`, qui vise une machine. */
     id: z.number().int().positive().nullable(),
+    /** `deviceFolder` : la machine dont on choisira ensuite le dossier. */
+    deviceId: z.uuid().nullable(),
     name: z.string(),
     /** La phrase d'aide sous le champ, une fois la source choisie (moteur, hôte, contenu). */
     detail: z.string().nullable(),
@@ -240,7 +272,7 @@ export interface BackupJobRow {
     id: number;
     workspace_id: number;
     destination_id: number;
-    /** 'database' | 'deveye' | 'cloudsync'. */
+    /** 'database' | 'deveye' | 'cloudsync' | 'deviceFolder'. */
     source_kind: string;
     source_id: number | null;
     enabled: number;

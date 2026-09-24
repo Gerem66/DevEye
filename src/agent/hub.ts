@@ -4,6 +4,9 @@ import {
     AGENT_CONFIG,
     AGENT_DESTROY,
     AGENT_FILES_ANALYZE,
+    AGENT_FILES_ARCHIVE,
+    AGENT_FILES_ARCHIVE_CANCEL,
+    AGENT_FILES_ARCHIVE_CREDIT,
     AGENT_FILES_DOWNLOAD,
     AGENT_FILES_LIST,
     AGENT_FILES_MUTATE,
@@ -61,6 +64,10 @@ import {
     PACKAGE_STARTED_EVENT,
     type AgentConfigPayload,
     type AgentFilesAnalyzePayload,
+    type AgentFilesArchiveChunkPayload,
+    type AgentFilesArchiveEndPayload,
+    type AgentFilesArchivePayload,
+    type AgentFilesArchiveProgressPayload,
     type AgentFilesDownloadPayload,
     type AgentFilesListPayload,
     type AgentFilesMutatePayload,
@@ -118,6 +125,8 @@ import {
     type PackageStartedPush
 } from '@deveye/types';
 
+import type { AgentFolderArchive, AgentFolderArchiveSummary } from '@deveye/types/sdk/server';
+
 import { accessEpochNow } from '@/features/_access';
 import { logger } from '@/logger';
 import { agentFrame } from './orders';
@@ -138,6 +147,43 @@ import { agentFrame } from './orders';
  * plus qu'un fantôme dans une liste de présence.
  */
 const AGENT_HEARTBEAT_MS = 60_000;
+
+/**
+ * Une archive de dossier : pièces accordées d'avance, et rendues par lots à
+ * mesure que le consommateur les prend. Le lot reste plus petit que la
+ * fenêtre : l'agent n'est jamais à court de crédit quand le serveur attend.
+ */
+const ARCHIVE_WINDOW = 8;
+const ARCHIVE_CREDIT_BATCH = 4;
+/** Un agent qui ne connaît pas l'ordre ne répond rien : c'est ce délai qui le dit. */
+const ARCHIVE_FIRST_FRAME_MS = 60_000;
+/** L'agent donne signe de vie toutes les dix secondes au plus quand il n'a rien à envoyer. */
+const ARCHIVE_IDLE_MS = 120_000;
+
+const archiveKey = (deviceId: string, opId: string): string => `${deviceId}\n${opId}`;
+
+function abortReason(signal: AbortSignal | undefined): Error {
+    return signal?.reason instanceof Error ? signal.reason : new Error('Archive abandonnée.');
+}
+
+/** Une archive de dossier en cours de lecture, côté serveur. */
+interface ArchiveFlow {
+    deviceId: string;
+    opId: string;
+    /** La session qui la porte : une autre session du même appareil ne la prolonge pas. */
+    socket: WebSocket;
+    pieces: Buffer[];
+    nextSeq: number;
+    /** Crédits accordés depuis le début, pièces reçues. */
+    granted: number;
+    received: number;
+    /** Pièces prises depuis le dernier crédit rendu. */
+    taken: number;
+    /** L'agent a répondu au moins une fois. */
+    started: boolean;
+    end: { ok: true; summary: AgentFolderArchiveSummary } | { ok: false; error: string } | null;
+    wake: (() => void) | null;
+}
 
 /**
  * Fenêtre et seuil du signalement de reconnexions en rafale : lien instable, DNS
@@ -163,6 +209,8 @@ export class MonitorHub {
      * Attentes de verdict d'une opération de fichier lancée hors socket web
      * (une sauvegarde nocturne, sans abonné) : une promesse par `opId`.
      */
+    /** Archives de dossier en cours, par appareil et opération. */
+    private readonly archives = new Map<string, ArchiveFlow>();
     private readonly fileOpWaiters = new Map<string, (result: { ok: boolean; error?: string }) => void>();
     /**
      * Les actions Docker qu'un appelant sans socket attend (un déploiement) :
@@ -296,6 +344,9 @@ export class MonitorHub {
     }
 
     agentOffline(deviceId: string, socket: WebSocket): void {
+        // Avant le filtre ci-dessous : une session remplacée emporte ses archives,
+        // la nouvelle n'en sait rien.
+        this.failArchives(socket, 'La machine s’est déconnectée pendant l’archive.');
         // Only forget the agent if the socket closing is the one we still hold: a
         // fast reconnect may have replaced it, and a late close from the old
         // socket must not evict the new one.
@@ -750,6 +801,196 @@ export class MonitorHub {
     /** Fan out one chunk of a downloaded file to a device's subscribers. */
     publishFilesChunk(payload: DeviceFilesChunkPush): void {
         this.publishToSubscribers(payload.deviceId, DEVICE_FILES_CHUNK_EVENT, payload);
+    }
+
+    /**
+     * L'archive d'un dossier de la machine, tirée pièce par pièce : l'agent
+     * n'envoie que ce que le consommateur a pris (crédits), si bien qu'une
+     * destination lente freine la machine au lieu de remplir la mémoire. Sortir
+     * de la boucle, y lever ou déclencher `signal` annule l'archive sur la
+     * machine. Les pièces ne vont jamais aux navigateurs abonnés.
+     */
+    openFolderArchive(
+        deviceId: string,
+        payload: Omit<AgentFilesArchivePayload, 'window'>,
+        signal?: AbortSignal
+    ): AgentFolderArchive {
+        let summary: AgentFolderArchiveSummary | null = null;
+        return {
+            get summary() {
+                return summary;
+            },
+            [Symbol.asyncIterator]: () =>
+                this.pullArchive(deviceId, payload, signal, (done) => {
+                    summary = done;
+                })
+        };
+    }
+
+    private async *pullArchive(
+        deviceId: string,
+        payload: Omit<AgentFilesArchivePayload, 'window'>,
+        signal: AbortSignal | undefined,
+        onDone: (summary: AgentFolderArchiveSummary) => void
+    ): AsyncGenerator<Buffer> {
+        const socket = this.agents.get(deviceId);
+        if (!socket) throw new Error('La machine n’est pas connectée.');
+        const key = archiveKey(deviceId, payload.opId);
+        const flow: ArchiveFlow = {
+            deviceId,
+            opId: payload.opId,
+            socket,
+            pieces: [],
+            nextSeq: 0,
+            granted: ARCHIVE_WINDOW,
+            received: 0,
+            taken: 0,
+            started: false,
+            end: null,
+            wake: null
+        };
+        // Inscrite avant l'ordre : une réponse immédiate ne doit pas se perdre.
+        this.archives.set(key, flow);
+        try {
+            socket.send(agentFrame(AGENT_FILES_ARCHIVE, { ...payload, window: ARCHIVE_WINDOW }));
+            for (;;) {
+                if (signal?.aborted) throw abortReason(signal);
+                const piece = flow.pieces.shift();
+                if (piece) {
+                    flow.taken += 1;
+                    if (flow.taken >= ARCHIVE_CREDIT_BATCH) {
+                        this.sendToFlow(flow, AGENT_FILES_ARCHIVE_CREDIT, { opId: flow.opId, credits: flow.taken });
+                        flow.granted += flow.taken;
+                        flow.taken = 0;
+                    }
+                    yield piece;
+                    continue;
+                }
+                if (flow.end) {
+                    if (!flow.end.ok) throw new Error(flow.end.error);
+                    onDone(flow.end.summary);
+                    return;
+                }
+                await this.awaitArchive(flow, signal);
+            }
+        } finally {
+            this.archives.delete(key);
+            if (!flow.end) this.sendToFlow(flow, AGENT_FILES_ARCHIVE_CANCEL, { opId: flow.opId });
+        }
+    }
+
+    /**
+     * La pièce suivante d'une archive. Hors d'ordre, ou au-delà des crédits
+     * accordés, l'archive échoue : un agent qui déborde ne remplit pas la
+     * mémoire du serveur.
+     */
+    receiveArchiveChunk(deviceId: string, socket: WebSocket, payload: AgentFilesArchiveChunkPayload): void {
+        const flow = this.flowOf(deviceId, socket, payload.opId);
+        if (!flow) return;
+        flow.started = true;
+        if (payload.seq !== flow.nextSeq || flow.received >= flow.granted) {
+            this.endArchive(flow, { ok: false, error: 'L’agent a envoyé l’archive hors d’ordre.' });
+            this.sendToFlow(flow, AGENT_FILES_ARCHIVE_CANCEL, { opId: flow.opId });
+            return;
+        }
+        flow.nextSeq += 1;
+        flow.received += 1;
+        flow.pieces.push(Buffer.from(payload.data, 'base64'));
+        flow.wake?.();
+    }
+
+    /** Un signe de vie : l'attente repart de zéro. */
+    receiveArchiveProgress(deviceId: string, socket: WebSocket, payload: AgentFilesArchiveProgressPayload): void {
+        const flow = this.flowOf(deviceId, socket, payload.opId);
+        if (!flow) return;
+        flow.started = true;
+        flow.wake?.();
+    }
+
+    receiveArchiveEnd(deviceId: string, socket: WebSocket, payload: AgentFilesArchiveEndPayload): void {
+        const flow = this.flowOf(deviceId, socket, payload.opId);
+        if (!flow) return;
+        flow.started = true;
+        this.endArchive(
+            flow,
+            payload.ok
+                ? {
+                      ok: true,
+                      summary: {
+                          files: payload.files,
+                          dirs: payload.dirs,
+                          bytesRead: payload.bytesRead,
+                          skipped: payload.skipped,
+                          changed: payload.changed,
+                          samples: payload.samples
+                      }
+                  }
+                : { ok: false, error: payload.error ?? 'L’archive a échoué sur la machine.' }
+        );
+    }
+
+    private flowOf(deviceId: string, socket: WebSocket, opId: string): ArchiveFlow | null {
+        const flow = this.archives.get(archiveKey(deviceId, opId));
+        return flow && flow.socket === socket && !flow.end ? flow : null;
+    }
+
+    private endArchive(flow: ArchiveFlow, end: NonNullable<ArchiveFlow['end']>): void {
+        flow.end = end;
+        flow.wake?.();
+    }
+
+    private failArchives(socket: WebSocket, error: string): void {
+        for (const flow of this.archives.values()) {
+            if (flow.socket === socket && !flow.end) this.endArchive(flow, { ok: false, error });
+        }
+    }
+
+    /** Une trame vers la session de l'archive ; une session fermée ne reçoit plus rien. */
+    private sendToFlow(flow: ArchiveFlow, command: string, payload: unknown): void {
+        if (this.agents.get(flow.deviceId) !== flow.socket) return;
+        try {
+            flow.socket.send(agentFrame(command, payload));
+        } catch {
+            /* la session se ferme : `agentOffline` solde l'archive */
+        }
+    }
+
+    /**
+     * Attend la trame suivante. Ne compte que quand le serveur attend : l'agent
+     * a alors toujours du crédit, et son silence est le sien.
+     */
+    private awaitArchive(flow: ArchiveFlow, signal?: AbortSignal): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const cleanup = (): void => {
+                clearTimeout(timer);
+                flow.wake = null;
+                signal?.removeEventListener('abort', onAbort);
+            };
+            const onAbort = (): void => {
+                cleanup();
+                reject(abortReason(signal));
+            };
+            const timer = setTimeout(
+                () => {
+                    cleanup();
+                    reject(
+                        new Error(
+                            flow.started
+                                ? 'La machine ne donne plus signe de vie pendant l’archive.'
+                                : 'La machine ne répond pas à la demande d’archive : son agent est peut-être à mettre à jour.'
+                        )
+                    );
+                },
+                flow.started ? ARCHIVE_IDLE_MS : ARCHIVE_FIRST_FRAME_MS
+            );
+            timer.unref();
+            if (signal?.aborted) return onAbort();
+            signal?.addEventListener('abort', onAbort, { once: true });
+            flow.wake = () => {
+                cleanup();
+                resolve();
+            };
+        });
     }
 
     /** Push a device's CloudSync assignments to its agent. No-op if offline. */

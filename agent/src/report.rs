@@ -369,13 +369,14 @@ fn agent_info() -> AgentInfo {
 /// Ce que cette version de l'agent sait relever : décrit le binaire, pas la
 /// machine. Le serveur distingue ainsi « la sonde a échoué ici » d'« un agent
 /// trop ancien pour l'avoir ». Ajouter une sonde, c'est ajouter son nom ici.
-const PROBES: [&str; 6] = [
+const PROBES: [&str; 7] = [
     "execPath",
     "posture",
     "integrity",
     "auth",
     "docker",
     "composeDeploy",
+    "folderArchive",
 ];
 
 /// Effective uid 0 ⇒ root.

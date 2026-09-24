@@ -573,6 +573,38 @@ where
             done,
             error,
         },
+        FilesEvent::ArchiveChunk { op_id, seq, data } => ClientMessage::FilesArchiveChunk {
+            device_id: device_id.to_string(),
+            op_id,
+            seq,
+            data: base64::engine::general_purpose::STANDARD.encode(&data),
+        },
+        FilesEvent::ArchiveProgress {
+            op_id,
+            entries,
+            bytes_read,
+        } => ClientMessage::FilesArchiveProgress {
+            device_id: device_id.to_string(),
+            op_id,
+            entries,
+            bytes_read,
+        },
+        FilesEvent::ArchiveEnd {
+            op_id,
+            stats,
+            error,
+        } => ClientMessage::FilesArchiveEnd {
+            device_id: device_id.to_string(),
+            op_id,
+            ok: error.is_none(),
+            error,
+            files: stats.files,
+            dirs: stats.dirs,
+            bytes_read: stats.bytes_read,
+            skipped: stats.skipped,
+            changed: stats.changed,
+            samples: stats.samples,
+        },
     };
     if let Ok(text) = serde_json::to_string(&msg) {
         let _ = sink.send(Message::Text(text)).await;

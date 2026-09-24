@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
-import type { BackupJob, BackupScheduleKind, BackupSourceCandidate } from '../contracts/domain';
+import type {
+    BackupFolder,
+    BackupJob,
+    BackupScheduleKind,
+    BackupSourceCandidate,
+    BackupSourceKind
+} from '../contracts/domain';
 
 import {
     Button,
@@ -18,8 +24,8 @@ import {
     type ConfirmRequest
 } from 'deveye-sdk-client';
 import { api } from './api';
-import { DESTINATION_LABELS, SCHEDULE_LABELS, sourceHint, sourceKey, WEEKDAYS } from './format';
-import SourcePicker from './SourcePicker';
+import { candidateKey, DESTINATION_LABELS, folderInput, SCHEDULE_LABELS, sourceKey, WEEKDAYS } from './format';
+import JobSourceFields, { EMPTY_FOLDER, type FolderDraft } from './JobSourceFields';
 import styles from './style.module.css';
 
 /**
@@ -37,6 +43,7 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
     const [candidates, setCandidates] = useState<BackupSourceCandidate[]>([]);
     const [name, setName] = useState('');
     const [source, setSource] = useState('');
+    const [folder, setFolder] = useState<FolderDraft>(EMPTY_FOLDER);
     const [destinationId, setDestinationId] = useState(0);
     const [enabled, setEnabled] = useState(true);
     const [schedule, setSchedule] = useState<BackupScheduleKind>('daily');
@@ -75,7 +82,8 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
                 setCandidates(sources.candidates);
                 setJob(res.job);
                 setName(res.job.name);
-                setSource(sourceKey(res.job.source, res.job.sourceId));
+                setSource(sourceKey(res.job.source, res.job.sourceId ?? res.job.folder?.deviceId ?? null));
+                setFolder(res.job.folder ? { ...EMPTY_FOLDER, ...folderInput(res.job.folder) } : EMPTY_FOLDER);
                 setDestinationId(res.job.destinationId);
                 setEnabled(res.job.enabled);
                 setSchedule(res.job.schedule);
@@ -99,10 +107,7 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
         setDestinationId(fresh.id);
     }, [destinations]);
 
-    const selected = useMemo(
-        () => candidates.find((c) => sourceKey(c.kind, c.id) === source) ?? null,
-        [candidates, source]
-    );
+    const selected = useMemo(() => candidates.find((c) => candidateKey(c) === source) ?? null, [candidates, source]);
 
     const save = async () => {
         if (!job || !selected) return;
@@ -114,6 +119,7 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
                 destinationId,
                 source: selected.kind,
                 sourceId: selected.id,
+                folder: folderOf(selected.kind, selected.deviceId, folder),
                 enabled,
                 schedule,
                 scheduleHour: hour,
@@ -163,11 +169,17 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
     }
 
     const editable = canWrite && !busy;
-    const hint = sourceHint(selected);
-    const ready = name.trim() !== '' && selected !== null && selected.available && destinationId > 0;
+    const ready =
+        name.trim() !== '' &&
+        selected !== null &&
+        selected.available &&
+        (selected.kind !== 'deviceFolder' || folder.path.trim() !== '') &&
+        destinationId > 0;
     const unchanged =
         name.trim() === job.name &&
-        source === sourceKey(job.source, job.sourceId) &&
+        source === sourceKey(job.source, job.sourceId ?? job.folder?.deviceId ?? null) &&
+        JSON.stringify(folderOf(job.source, job.folder?.deviceId ?? null, folder)) ===
+            JSON.stringify(folderInput(job.folder)) &&
         destinationId === job.destinationId &&
         enabled === job.enabled &&
         schedule === job.schedule &&
@@ -178,11 +190,16 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
 
     return (
         <div className={shell.section}>
-            <div className={shell.field}>
-                <span className={shell.sectionLabel}>Quoi sauvegarder</span>
-                <SourcePicker candidates={candidates} value={source} disabled={!editable} onChange={setSource} />
-                {hint && <span className={shell.fieldHint}>{hint}</span>}
-            </div>
+            <JobSourceFields
+                candidates={candidates}
+                source={source}
+                onSourceChange={setSource}
+                folder={folder}
+                onFolderChange={setFolder}
+                author={job.folder ? job.folder.authorName : undefined}
+                disabled={!editable}
+                classes={{ field: shell.field, label: shell.sectionLabel, hint: shell.fieldHint }}
+            />
 
             <label className={shell.field}>
                 <span className={shell.sectionLabel}>Nom du travail</span>
@@ -363,4 +380,15 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
             <ConfirmDialog request={confirm} busy={busy} onClose={() => setConfirm(null)} />
         </div>
     );
+}
+
+/** Le dossier à envoyer : celui de la saisie pour une machine, rien pour les autres sources. */
+function folderOf(kind: BackupSourceKind, deviceId: string | null, draft: FolderDraft): BackupFolder | null {
+    if (kind !== 'deviceFolder' || !deviceId) return null;
+    return {
+        deviceId,
+        path: draft.path.trim(),
+        exclusions: draft.exclusions,
+        oneFileSystem: draft.oneFileSystem
+    };
 }

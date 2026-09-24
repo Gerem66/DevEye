@@ -78,6 +78,11 @@ export default function JobView({ job, canWrite, onBack, onRun, running }: JobVi
                         <span className={styles.factWarn}> (supprimée)</span>
                     )}
                 </Fact>
+                {job.folder && (
+                    <Fact label='Au nom de'>
+                        {job.folder.authorName ?? <span className={styles.factWarn}>un ancien membre</span>}
+                    </Fact>
+                )}
                 <Fact label='Destination'>
                     {job.destinationName} ({DESTINATION_LABELS[job.destinationKind]})
                 </Fact>
@@ -114,6 +119,7 @@ export default function JobView({ job, canWrite, onBack, onRun, running }: JobVi
                                 </p>
                                 {run.artifact && !run.pruned && <p className={styles.runPath}>{run.artifact}</p>}
                                 {run.error && <p className={styles.rowError}>{run.error}</p>}
+                                {run.warning && <p className={styles.runWarning}>{run.warning}</p>}
                                 {/* Condensé du clair, avant scellement : vérifie une
                                     restauration sans faire confiance à la destination. */}
                                 {run.checksum && <p className={styles.runHash}>sha256 : {run.checksum}</p>}

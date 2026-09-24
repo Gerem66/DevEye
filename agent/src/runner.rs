@@ -510,6 +510,9 @@ async fn stream_session(
     let mut terminals = crate::terminal::TermManager::new(term_tx);
     // File explorer tasks (list/analyze/search/mutate) stream their results here.
     let (files_tx, mut files_rx) = tokio::sync::mpsc::channel::<crate::files::FilesEvent>(256);
+    // Folder archives run on their own threads under the server's credits; the
+    // manager cancels them all when the session ends.
+    let mut archives = crate::archive::ArchiveManager::new(files_tx.clone());
     // CloudSync: scans, uploads and the debounced watchers stream through here;
     // the manager owns assignments + watchers and is dropped with the session.
     let (sync_tx, mut sync_rx) = tokio::sync::mpsc::channel::<crate::sync::SyncEvent>(256);
@@ -550,6 +553,9 @@ async fn stream_session(
                 commands::send_log_event(&mut sink, device_id, ev).await;
             }
             Some(ev) = files_rx.recv() => {
+                if let crate::files::FilesEvent::ArchiveEnd { op_id, .. } = &ev {
+                    archives.forget(op_id);
+                }
                 commands::send_files_event(&mut sink, device_id, ev).await;
             }
             Some(ev) = sync_rx.recv() => {
@@ -836,6 +842,16 @@ async fn stream_session(
                             // Download streams on its own thread (bounded by the channel).
                             Ok(ServerMessage::FilesDownload { op_id, path }) => {
                                 crate::files::spawn_download(op_id, path, files_tx.clone());
+                            }
+                            Ok(ServerMessage::FilesArchive { op_id, path, exclusions, one_file_system, window }) => {
+                                let request = crate::archive::ArchiveRequest { path, exclusions, one_file_system };
+                                archives.start(op_id, request, window);
+                            }
+                            Ok(ServerMessage::FilesArchiveCredit { op_id, credits }) => {
+                                archives.credit(&op_id, credits);
+                            }
+                            Ok(ServerMessage::FilesArchiveCancel { op_id }) => {
+                                archives.cancel(&op_id);
                             }
                             // Upload chunks are applied inline (sequentially), so an
                             // offset-based write never races another chunk of the same file.

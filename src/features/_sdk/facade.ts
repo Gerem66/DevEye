@@ -287,6 +287,21 @@ export function agentsFacade(gate: () => void): AgentsFacade {
         dockerInventory: (deviceId, timeoutMs) => (
             gate(),
             sdkHub().awaitDockerInventory(deviceId, timeoutMs ?? DOCKER_INVENTORY_TIMEOUT_MS)
+        ),
+        // La sauvegarde d'un dossier d'une machine : l'archive faite par l'agent,
+        // tirée au rythme du consommateur.
+        archiveFolder: (deviceId, request, options) => (
+            gate(),
+            sdkHub().openFolderArchive(
+                deviceId,
+                {
+                    opId: randomUUID(),
+                    path: request.path,
+                    exclusions: [...request.exclusions],
+                    oneFileSystem: request.oneFileSystem
+                },
+                options?.signal
+            )
         )
     };
 }

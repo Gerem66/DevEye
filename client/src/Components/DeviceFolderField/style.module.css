@@ -1,0 +1,15 @@
+.row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+/* Le champ prend la place restante ; `min-width: 0` le laisse rétrécir. */
+.row > :first-child {
+    flex: 1;
+    min-width: 0;
+}
+
+.input {
+    width: 100%;
+}

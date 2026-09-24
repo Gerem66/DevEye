@@ -1,4 +1,7 @@
 import {
+    AGENT_FILES_ARCHIVE_CHUNK,
+    AGENT_FILES_ARCHIVE_END,
+    AGENT_FILES_ARCHIVE_PROGRESS,
     AGENT_FILES_CHUNK,
     AGENT_FILES_LISTING,
     AGENT_FILES_MATCHES,
@@ -74,5 +77,27 @@ export async function handleFilesChunk(s: AgentSession, payload: PayloadOf<typeo
         done: payload.done,
         error: payload.error
     });
+    ack(s, 1);
+}
+
+/**
+ * Les trames d'une archive de dossier vont au consommateur qui l'a demandée,
+ * jamais aux navigateurs. Synchrones jusqu'au hub : l'ordre d'arrivée des
+ * pièces est celui de leur traitement, et `seq` le vérifie.
+ */
+export function handleFilesArchiveChunk(s: AgentSession, payload: PayloadOf<typeof AGENT_FILES_ARCHIVE_CHUNK>): void {
+    s.hub.receiveArchiveChunk(s.device.id, s.socket, payload);
+    ack(s, 1);
+}
+
+export function handleFilesArchiveProgress(
+    s: AgentSession,
+    payload: PayloadOf<typeof AGENT_FILES_ARCHIVE_PROGRESS>
+): void {
+    s.hub.receiveArchiveProgress(s.device.id, s.socket, payload);
+}
+
+export function handleFilesArchiveEnd(s: AgentSession, payload: PayloadOf<typeof AGENT_FILES_ARCHIVE_END>): void {
+    s.hub.receiveArchiveEnd(s.device.id, s.socket, payload);
     ack(s, 1);
 }
