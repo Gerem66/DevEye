@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { Response } from 'undici';
+import { Headers, Response } from 'undici';
 
 import {
     assertAllowedOutboundHost,
@@ -36,7 +36,7 @@ describe('safeFetch : les redirections', () => {
     ): Promise<{ url: string; auth: string | null; key: string | null }[]> {
         const hops: { url: string; auth: string | null; key: string | null }[] = [];
         setSafeFetchTransportForTest(async (url, init) => {
-            const headers = new Headers(init.headers as HeadersInit);
+            const headers = new Headers(init.headers);
             hops.push({ url, auth: headers.get('authorization'), key: headers.get('x-api-key') });
             return hops.length === 1
                 ? new Response(null, { status: 302, headers: { location: to } })
