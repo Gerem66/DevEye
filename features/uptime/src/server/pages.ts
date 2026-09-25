@@ -11,7 +11,7 @@ import type { UptimePage, UptimePageRow, UptimePageServiceRow } from '../contrac
 import { defineSdkFeature, FeatureError, type SdkDomain } from '@deveye/types/sdk/server';
 
 import { decryptPage, encryptPage, forgetStatusPage, statusPageUrl, type Ctx } from './_shared';
-import type { UptimePageEntry } from './repoPages';
+import { pageStockId, type UptimePageEntry } from './repoPages';
 
 /**
  * Les pages de statut, côté membres : leur réglage dans l'onglet « Pages de
@@ -47,7 +47,7 @@ async function toPage(
         showErrors: row.show_errors === 1,
         showLatency: row.show_latency === 1,
         enabled: row.enabled === 1,
-        planPaused: ctx.quota.isPaused('pages', String(row.id)),
+        planPaused: ctx.quota.isPaused('pages', pageStockId(row.id)),
         services: await Promise.all(
             entries.map(async (entry) => ({
                 id: entry.service_id,

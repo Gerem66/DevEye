@@ -284,7 +284,7 @@ describe('uptime.pageList / pageRemove', () => {
         const ctx = createTestContext({ repo });
         await add(ctx, { page: draft() });
         await add(ctx, { page: draft({ title: 'Seconde' }) });
-        const { pages } = await list(createTestContext({ repo, pausedItems: { pages: ['2'] } }), {});
+        const { pages } = await list(createTestContext({ repo, pausedItems: { pages: ['page:2'] } }), {});
         assert.deepEqual(
             pages.map((page) => [page.id, page.enabled, page.planPaused]),
             [

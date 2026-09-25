@@ -1,4 +1,4 @@
-# Projets — gestion de projets dans DevEye
+# Projets : la gestion de projets dans DevEye
 
 DevEye savait superviser (appareils, uptime, mail, notes, coffre) mais pas
 **piloter le travail**. Ce module suit plusieurs dizaines de projets, de leurs
@@ -54,7 +54,7 @@ sans clé. Passe par `content` **chiffré** tout ce qui identifie.
 | `counts_as_done`                          | l'avancement d'un projet, calculé en SQL        |
 
 Corollaire : **ce qui doit être unique ne peut pas être chiffré**, le chiffrement
-étant non déterministe. D'où les colonnes `*_ref` — condensés stables qui portent
+étant non déterministe. D'où les colonnes `*_ref`, condensés stables qui portent
 l'unicité pendant que la valeur lisible vit dans `content`. Le module git en fait
 l'usage le plus systématique (voir [Git](../git/README.md) §2.2).
 
@@ -89,7 +89,7 @@ Ni dépôt git, ni base, ni site suivi, ni cible de déploiement. Deux raisons q
 vont dans le même sens :
 le service de fond tourne **sans session** et n'atteindra jamais l'étage gardé ;
 et une liaison est une ligne **en clair**, qui rattacherait un projet
-confidentiel à un dépôt nommé — exactement ce que le palier est censé cacher.
+confidentiel à un dépôt nommé : exactement ce que le palier est censé cacher.
 
 `projects.repoLink` refuse donc un projet gardé (et ses trois sœurs avec lui),
 et passer un projet en gardé **retire ses liaisons** (`projects.setSecurityTier`),
@@ -113,9 +113,9 @@ appartient à l'espace.
 | **Vue d'ensemble**   | avancement par colonne, échéances, mes tâches, charge de l'équipe, jalon, mises à jour, puis les liens |
 | **Tableau**          | kanban, glisser-déposer (dnd-kit), colonnes, limites WIP                                               |
 | **Frise**            | cartes datées, jalons, dépendances « bloque / bloqué par »                                             |
-| **Git**              | les dépôts reliés — une vue sur la feature Git, voir [Git](../git/README.md)                           |
-| **Bases de données** | les bases reliées — une vue sur la feature Bases, voir [Bases de données](../database/README.md)       |
-| **Audience**         | les sites suivis reliés — une vue sur la feature Audience, voir [Audience](../audience/README.md)      |
+| **Git**              | les dépôts reliés, une vue sur la feature Git, voir [Git](../git/README.md)                            |
+| **Bases de données** | les bases reliées, une vue sur la feature Bases, voir [Bases de données](../database/README.md)        |
+| **Audience**         | les sites suivis reliés, une vue sur la feature Audience, voir [Audience](../audience/README.md)       |
 | **Déploiements**     | les cibles reliées, une vue sur la feature Déploiements, voir [Déploiements](../deploy/README.md)      |
 | **Uptime**           | les services surveillés rattachés, une vue sur la feature Uptime, voir [Uptime](../uptime/README.md)   |
 | **Historique**       | frise verticale des faits marquants, blocs archivés en lecture seule                                   |
@@ -132,14 +132,14 @@ se demande : elle résume, elle ne fait pas travailler, et un projet neuf n'a ri
 y montrer. L'**Historique** n'est plus un onglet de la barre mais le dernier onglet
 des réglages du projet : on l'ouvre rarement, pour une question précise, et il
 occupait la barre toute la journée pour ça. Les cinq autres ne
-montrent que des **liaisons** vers des objets d'espace — tant qu'un projet n'en
+montrent que des **liaisons** vers des objets d'espace : tant qu'un projet n'en
 a aucune, ils n'affichaient qu'une phrase disant qu'il n'y a rien, quatre fois
 de suite, et il fallait les ouvrir un par un pour s'en apercevoir.
 
 Un onglet d'intégration paraît donc **avec son premier élément** et se replie
 **avec le dernier**. Ce qui n'est pas dans la barre est dans le **« + »** posé à
 son bout : le menu nomme la feature et le geste, et le clic ouvre le formulaire
-d'ajout de cette feature — le même que son bouton « Ajouter un… », pas une
+d'ajout de cette feature, le même que son bouton « Ajouter un… », pas une
 copie. L'ajout abouti, l'onglet naît et s'ouvre dans la foulée ; annulé, rien ne
 bouge.
 
@@ -154,7 +154,7 @@ Trois conséquences à connaître :
 
 - **Un compte n'est pas un droit.** Les liaisons relèvent de `projects`, leur
   contenu de la feature visée. Un membre sans accès à Git voit l'onglet Git d'un
-  projet qui a des dépôts, et dedans la phrase qui explique ce qui lui manque —
+  projet qui a des dépôts, et dedans la phrase qui explique ce qui lui manque :
   l'escamoter lui cacherait l'existence même du lien. Le « + », lui, n'offre que
   ce que l'appelant peut vraiment ajouter (voir `tabs.ts`, `add.requires`).
 - **Un projet confidentiel n'a pas de « + »** : les cinq liaisons lui sont
@@ -203,12 +203,12 @@ Le portefeuille est une **grille de cartes** (`auto-fill`, 320 px au minimum).
 Ce furent d'abord des lignes pleine largeur, mais tout leur milieu restait vide :
 le titre à gauche, l'avancement à l'autre bout, et rien entre les deux.
 
-Une carte tient en deux rangées — identité en haut (vignette, statut, titre,
-description), état en bas — et la **barre d'avancement les traverse d'un bord à
+Une carte tient en deux rangées, identité en haut (vignette, statut, titre,
+description) et état en bas, et la **barre d'avancement les traverse d'un bord à
 l'autre**. Elle a donc la même longueur sur toutes les cartes, ce qui est la
 seule chose qu'on lui demande : que deux avancements se comparent d'un coup
 d'œil. Ses deux marges sont celles du rembourrage de la carte, et rien d'autre
-n'a le droit de s'intercaler à gauche — c'est pourquoi la poignée de
+n'a le droit de s'intercaler à gauche : c'est pourquoi la poignée de
 réorganisation est **hors du flux**, logée dans cette marge, plutôt qu'en
 colonne comme dans les listes des autres features.
 
@@ -242,7 +242,7 @@ déduit de la place offerte, donc chaque pixel de plus est une journée de plus 
 les yeux. Et elle se dessine sur la largeur que la popup **vise**, pas sur celle
 qu'elle a (`popupTargetWidth`) : la popup s'élargit par une transition CSS de
 400 ms, et une frise recalculée à chaque image de cette transition rouvre sa
-fenêtre de temps quarante fois de suite — tout son contenu glisse sous les yeux
+fenêtre de temps quarante fois de suite : tout son contenu glisse sous les yeux
 pendant que le cadre grandit. Dessinée sur la cible, elle est juste dès la première
 image et le cadre ne fait que la découvrir.
 
@@ -691,7 +691,7 @@ projet à suivre ; les cibles de déploiement de même depuis la `080`.
 
 ### La collision de classes CSS que rien ne signalait
 
-`.grid` a été défini **deux fois** dans le module de style des Projets — la
+`.grid` a été défini **deux fois** dans le module de style des Projets : la
 grille du portefeuille, puis la couche de fond de la frise, en `position:
 absolute` + `pointer-events: none`. La seconde gagnait, et la page d'accueil de
 la feature devenait inutilisable. Ni TypeScript, ni ESLint, ni le build ne
@@ -701,7 +701,7 @@ Deux réponses, et il fallait les deux : `client/scripts/check-css-modules.mjs`,
 branché en tête du script `ci` du client, qui échoue si une classe est redéfinie
 seule dans son sélecteur ; et le **découpage** du module, dont la section git est
 partie dans `features/git/src/client/style.module.css`. Le filet attrape le symptôme, le
-découpage traite la cause — un module de 2000 lignes pour une douzaine d'écrans
+découpage traite la cause : un module de 2000 lignes pour une douzaine d'écrans
 rend la collision structurellement probable.
 
 ### Dokploy ne parle pas REST
@@ -717,14 +717,14 @@ Deux conséquences qui ont façonné l'adaptateur :
 - **Il n'y a pas de `application.all`.** Les cibles se découvrent par
   `project.all`, imbriquées dans les environnements de chaque projet.
 - **Une infra Dokploy est surtout faite de piles `compose`**, pas
-  d'applications — sur l'instance de référence, 8 contre 1. Chaque type a sa
+  d'applications : sur l'instance de référence, 8 contre 1. Chaque type a sa
   propre procédure de déclenchement (`compose.deploy` / `application.deploy`) et
   d'historique (`deployment.allByCompose` / `deployment.all`), d'où la colonne
   `target_kind` (migration `062`) : une cible sans son type est indéployable.
 
 Pour explorer une autre instance sans rien déclencher : un `GET` sur une
 mutation tRPC répond `METHOD_NOT_SUPPORTED` (elle existe), et un `POST` avec un
-corps vide renvoie le `zodError` des champs requis — la validation passe avant
+corps vide renvoie le `zodError` des champs requis : la validation passe avant
 l'exécution.
 
 ### `'projects'` existait déjà
@@ -788,25 +788,25 @@ transaction, et ne sont jamais rejouées.
 
 ### Points d'attention à l'essai manuel
 
-1. **Droits** — un rôle sans `projects` : tuile désaturée, `handleExpand` refuse.
+1. **Droits** : un rôle sans `projects` : tuile désaturée, `handleExpand` refuse.
 2. **Espaces** : un projet de l'espace A est invisible depuis B, sauf projeté
    (onglet Partage de sa fiche, ouvert seulement). Il s'y lit et s'y édite
    alors avec sa pastille, ses liaisons nommées mais non modifiables, ses
    membres inconnus d'ici masqués, et son « + » absent.
-3. **Chiffrement** — `content` illisible en base ; un projet `guarded` en espace
+3. **Chiffrement** : `content` illisible en base ; un projet `guarded` en espace
    personnel avec chiffrement actif déclenche l'invite, et passer un projet en
    `guarded` **retire ses liaisons** (les objets, eux, survivent).
-4. **Direct, à deux onglets** — carte déplacée, message reçu, « X écrit… » qui
+4. **Direct, à deux onglets** : carte déplacée, message reçu, « X écrit… » qui
    **disparaît** quand l'onglet se ferme, contours de présence, badge non-lus.
-5. **Archives** — une carte archivée quitte le tableau, apparaît dans
+5. **Archives** : une carte archivée quitte le tableau, apparaît dans
    l'historique, s'ouvre en lecture seule.
-6. **Onglets** — un projet neuf n'ouvre que Tableau, Frise et Historique. Le
+6. **Onglets** : un projet neuf n'ouvre que Tableau, Frise et Historique. Le
    « + » propose les quatre autres ; annuler l'ajout ne change rien, le valider
    fait paraître l'onglet **et** l'ouvre. Retirer le dernier élément d'une
    feature renvoie au tableau et remet son entrée dans le « + ». Un rôle sans
    `git`/`database`/`audience` ne voit pas l'entrée correspondante ; un projet
    confidentiel n'a pas de « + » du tout.
-7. **Dialogue de tâche** — sur un projet d'une seule tâche, le bloc « Dépend
+7. **Dialogue de tâche** : sur un projet d'une seule tâche, le bloc « Dépend
    de » ne s'affiche pas du tout ; dès qu'il y a une autre tâche, il propose de
    la choisir. La popup prend la hauteur de son contenu et grandit avec la
    discussion jusqu'au bord de l'écran, sans second ascenseur.

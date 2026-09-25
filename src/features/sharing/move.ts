@@ -132,7 +132,7 @@ async function stockBlocker(
         const home = await stock.list(await ctx.db.workspaces.listOwnedIds(homeOwner));
         if (!home.some((item) => item.id === itemId)) continue;
         const allowance = await coreAllowance(ctx, target.owner_user_id, stock.fullKey);
-        if (allowance === null) return null;
+        if (allowance === null) continue;
         if ((await stock.list(allowance.ownerWorkspaceIds)).length + 1 > allowance.limit) {
             return `L’offre du propriétaire de « ${target.name} » est pleine : ${allowance.limit} ${stock.label} au plus.`;
         }

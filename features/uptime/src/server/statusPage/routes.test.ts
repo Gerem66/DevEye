@@ -225,7 +225,7 @@ describe('la pause de l’offre', () => {
         assert.equal((await atRoot()).status, 200);
 
         // Relue après le cache : la page en cache ne la sert plus, sans rien oublier.
-        pages.push('1');
+        pages.push('page:1');
         const paused = await statusPage(m);
         assert.equal(paused.status, 404);
         assert.equal((await atRoot()).status, 404);
@@ -237,7 +237,7 @@ describe('la pause de l’offre', () => {
     });
 
     it('n’est pas calculée quand elle est déjà en pause', async () => {
-        const m = mount([page()], [], { pages: ['1'] });
+        const m = mount([page()], [], { pages: ['page:1'] });
         assert.equal((await statusPage(m)).status, 404);
         assert.equal((await statusPage(m)).status, 404);
         // Rien en cache : chaque visite relit la ligne, comme pour une page retirée.

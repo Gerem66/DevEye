@@ -9,6 +9,15 @@ import type {
 import type { SdkQueryable, SdkStockItem } from '@deveye/types/sdk/server';
 
 /**
+ * L'identifiant d'une page de statut dans le stock de l'offre. Pas son numéro
+ * seul : un déplacement vérifie l'offre de la cible pour les identifiants qui
+ * sont celui du service déplacé, et une page porterait le même par hasard.
+ */
+export function pageStockId(pageId: number): string {
+    return `page:${pageId}`;
+}
+
+/**
  * Les pages de statut : leur réglage, et les lectures groupées que la page
  * publique fait pour tous ses services d'un coup. Section détachée de
  * `repo.ts` ; les deux se rejoignent dans un seul `UptimeRepo`.
@@ -132,7 +141,7 @@ export function createPagesRepo(q: SdkQueryable): UptimePagesRepo {
                 'SELECT id, workspace_id FROM ft_uptime_pages WHERE workspace_id IN (?) ORDER BY created ASC, id ASC',
                 [[...workspaceIds]]
             );
-            return rows.map((row) => ({ id: String(row.id), workspaceId: Number(row.workspace_id) }));
+            return rows.map((row) => ({ id: pageStockId(row.id), workspaceId: Number(row.workspace_id) }));
         },
         async create({ workspaceId, publicRef, ...config }) {
             const res = await q.execute(

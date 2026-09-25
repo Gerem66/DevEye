@@ -143,7 +143,8 @@ export function createService(deps: FeatureServiceDeps<InvoicingRepo>): FeatureS
         const host = hostOf(req);
         if (originHosts.has(host)) return true;
         const domain = host.length > 0 ? await deps.domains.findByHost(host) : null;
-        return domain !== null && domain.workspaceId === workspaceId;
+        // Vérifié, donc ni en attente ni tenu en pause par l'offre : ce que les autres pages publiques exigent aussi.
+        return domain !== null && domain.verified && domain.workspaceId === workspaceId;
     }
 
     const htmlReply = (reply: SdkPublicReply, status: number) =>

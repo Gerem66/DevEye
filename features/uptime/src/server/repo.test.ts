@@ -55,17 +55,18 @@ describe('la liste des dus', () => {
 
 describe('les listes du stock', () => {
     it('rendent services et pages du plus ancien au plus récent, sous le filtre du compteur', async () => {
-        for (const [table, of] of [
-            ['uptime_services', (q: SdkQueryable) => createRepo(q).services],
-            ['ft_uptime_pages', (q: SdkQueryable) => createRepo(q).pages]
+        // Une page porte un identifiant à part : un service déplacé ne doit jamais la rencontrer.
+        for (const [table, of, prefix] of [
+            ['uptime_services', (q: SdkQueryable) => createRepo(q).services, ''],
+            ['ft_uptime_pages', (q: SdkQueryable) => createRepo(q).pages, 'page:']
         ] as const) {
             const { q, calls } = recording([
                 { id: 3, workspace_id: 1 },
                 { id: 8, workspace_id: 2 }
             ]);
             assert.deepEqual(await of(q).listStock([1, 2]), [
-                { id: '3', workspaceId: 1 },
-                { id: '8', workspaceId: 2 }
+                { id: `${prefix}3`, workspaceId: 1 },
+                { id: `${prefix}8`, workspaceId: 2 }
             ]);
             assert.equal(
                 flat(calls[0].sql),
@@ -90,7 +91,7 @@ describe('les listes du stock', () => {
         assert.deepEqual(Object.keys(serverEntry.quotas ?? {}).sort(), [...stock].sort());
 
         const { q, calls } = recording([{ id: 4, workspace_id: 1 }]);
-        assert.deepEqual(await serverEntry.quotas?.pages.list(createRepo(q), [1]), [{ id: '4', workspaceId: 1 }]);
+        assert.deepEqual(await serverEntry.quotas?.pages.list(createRepo(q), [1]), [{ id: 'page:4', workspaceId: 1 }]);
         assert.match(calls[0].sql, /ft_uptime_pages/);
     });
 });

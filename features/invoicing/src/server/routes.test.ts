@@ -310,6 +310,24 @@ describe('la page publique sous un domaine', () => {
         assert.equal(res.answer.status, 200);
     });
 
+    it('ne rend rien sous un domaine de son espace en attente ou tenu en pause par l’offre', async () => {
+        const store = emptyStore();
+        readySettings(store);
+        store.docs.push(docRow({ id: 10, kind: 'invoice', status: 'issued', public_token: 'jeton' }));
+        for (const over of [
+            { verified: false, verifiedAt: null },
+            { verified: false, planPaused: true }
+        ]) {
+            const { handlers } = mount(store, [domain(over)]);
+            const res = reply();
+            await handlers.get('GET /f/:token')!(
+                request({ host: 'factures.dupont.fr', params: { token: 'jeton' } }),
+                res
+            );
+            assert.equal(res.answer.status, 404);
+        }
+    });
+
     it('ne rend jamais le document d’un espace sous le domaine d’un autre', async () => {
         const store = emptyStore();
         readySettings(store);

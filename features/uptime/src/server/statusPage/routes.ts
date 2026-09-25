@@ -12,6 +12,7 @@ import { decryptError, decryptPage, decryptService, STATUS_PATH } from '../_shar
 import { WELL_KNOWN_PATH } from '../domains';
 import { env } from '../env';
 import type { UptimeRepo } from '../repo';
+import { pageStockId } from '../repoPages';
 import { renderMissingPage, renderStatusPage, type RenderOptions } from './render';
 import { STATUS_SCRIPT, STATUS_SCRIPT_ETAG } from './script';
 import { buildStatusView, DAY, LATENCY_HOURS } from './view';
@@ -78,7 +79,7 @@ export function createStatusPages(deps: FeatureServiceDeps<UptimeRepo>): StatusP
 
     const hostOf = (req: SdkPublicRequest) => normaliseDomainHost(req.host ?? '');
     /** Publiée, et pas tenue en pause par l'offre : une page en pause répond comme une page retirée. */
-    const served = (row: UptimePageRow) => row.enabled === 1 && !deps.pauses.isPaused('pages', String(row.id));
+    const served = (row: UptimePageRow) => row.enabled === 1 && !deps.pauses.isPaused('pages', pageStockId(row.id));
 
     async function build(row: UptimePageRow): Promise<string> {
         const cipher = deps.cipherFor(row.workspace_id);
