@@ -157,6 +157,9 @@ describe('la page publique', () => {
         assert.ok(res.body.includes('Interne 2'));
         assert.ok(res.body.includes('Panne en cours sur 1 service sur 2'));
         assert.ok(res.body.includes('<script src="/statut/page.js" defer></script>'));
+        // L'icône d'onglet, servie par l'hôte : la politique doit la laisser passer.
+        assert.ok(res.body.includes('<link rel="icon" href="/deveye-icon.png" />'));
+        assert.match(res.headers['content-security-policy'] ?? '', /img-src data: 'self'/);
     });
 
     it('ne laisse sortir ni l’adresse sondée, ni le mot-clé, ni le message d’une panne', async () => {

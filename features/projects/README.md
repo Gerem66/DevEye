@@ -338,8 +338,8 @@ script relit chaque minute ; rien du client React ne sort de l'app.
   jamais.
 - **L'icône d'onglet** : la vignette du projet, servie à l'adresse de la page
   suivie de `?icone`, sous les mêmes gardes qu'elle, et revalidée à chaque
-  visite. Sans vignette, le logo de DevEye (`/projet/logo.png`, tiré de
-  `client/public/logo_deveye.png`).
+  visite. Sans vignette, l'icône de DevEye que l'hôte sert à tous
+  (`DEVEYE_ICON_PATH`).
 - **L'apparence** : le sélecteur commun des pages publiques (`PageLookFields`
   du SDK, celui de Rendez-vous), automatique par défaut (le thème du
   visiteur), clair ou sombre, et un accent. Les couleurs de la page vivent dans

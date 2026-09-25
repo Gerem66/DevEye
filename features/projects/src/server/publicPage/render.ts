@@ -1,4 +1,4 @@
-import type { PageThemeChoice } from '@deveye/types/sdk';
+import { DEVEYE_ICON_PATH, type PageThemeChoice } from '@deveye/types/sdk';
 
 import type { ProjectPriority } from '../../contracts/domain';
 import { escapeHtml } from './html';
@@ -16,8 +16,6 @@ export interface RenderOptions {
     /** Où mène « DevEye » au pied de la page ; vide, pas de lien. */
     siteUrl: string;
     scriptPath: string;
-    /** L'icône d'onglet d'une page sans vignette de projet. */
-    logoPath: string;
 }
 
 const dayFormat = new Intl.DateTimeFormat('fr-FR', {
@@ -226,7 +224,7 @@ export function renderBoardPage(view: PublicBoardView, options: RenderOptions): 
         theme: view.theme,
         accent: view.accent,
         // La même adresse que la page : ses gardes valent pour sa vignette.
-        icon: view.icon.length > 0 ? '?icone' : options.logoPath,
+        icon: view.icon.length > 0 ? '?icone' : DEVEYE_ICON_PATH,
         body: `<main id="board">
             <header class="top">
                 ${iconTag}
@@ -252,7 +250,7 @@ export function renderMissingPage(options: RenderOptions): string {
         robots: false,
         theme: 'auto',
         accent: '',
-        icon: options.logoPath,
+        icon: DEVEYE_ICON_PATH,
         body: `<main class="missing">
                 <h1>Page introuvable</h1>
                 <p>Ce tableau n’existe pas, ou n’est plus publié.</p>

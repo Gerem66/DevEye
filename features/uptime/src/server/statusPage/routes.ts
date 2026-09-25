@@ -35,15 +35,15 @@ const REF_PATTERN = /^[0-9a-f]{16}$/;
 const PAGE_RATE = { max: 300, timeWindow: '1 minute' };
 
 /**
- * Tout est en ligne sauf le script, servi d'ici ; la page se laisse intégrer
- * dans le site de son propriétaire.
+ * Tout est en ligne sauf le script et l'icône d'onglet, servis d'ici ; la page
+ * se laisse intégrer dans le site de son propriétaire.
  */
 const CSP = [
     "default-src 'none'",
     "style-src 'unsafe-inline'",
     "script-src 'self'",
     "connect-src 'self'",
-    'img-src data:',
+    "img-src data: 'self'",
     "base-uri 'none'",
     "form-action 'none'",
     'frame-ancestors *'

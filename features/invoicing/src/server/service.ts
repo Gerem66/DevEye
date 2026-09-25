@@ -5,6 +5,7 @@ import {
     type FeatureService,
     type FeatureServiceDeps,
     type SdkPublicApp,
+    type SdkPublicReply,
     type SdkPublicRequest
 } from '@deveye/types/sdk/server';
 
@@ -41,6 +42,21 @@ const REMIND_AGAIN_DAYS = 7;
 const REMIND_BATCH = 50;
 
 const PAGE_PATH = '/f/:token';
+
+/**
+ * Le document se suffit à lui-même : son style en ligne, le logo de l'émetteur
+ * en URL de données, l'icône d'onglet et le formulaire de réponse servis d'ici.
+ * Sans elle, l'écouteur public, qui sert l'adresse publique et les domaines
+ * clients, ferme tout (`default-src 'none'`) et la page perd style et logo.
+ */
+const PAGE_CSP = [
+    "default-src 'none'",
+    "style-src 'unsafe-inline'",
+    "img-src data: 'self'",
+    "form-action 'self'",
+    "base-uri 'none'",
+    "frame-ancestors 'none'"
+].join('; ');
 const ANSWER_PATH = '/api/invoicing/answer';
 const EMPTY_CONTENT = invoicingDocContentSchema.parse({});
 
@@ -130,6 +146,12 @@ export function createService(deps: FeatureServiceDeps<InvoicingRepo>): FeatureS
         return domain !== null && domain.workspaceId === workspaceId;
     }
 
+    const htmlReply = (reply: SdkPublicReply, status: number) =>
+        reply
+            .code(status)
+            .header('content-type', 'text/html; charset=utf-8')
+            .header('content-security-policy', PAGE_CSP);
+
     return {
         start() {
             ticker.start();
@@ -144,7 +166,7 @@ export function createService(deps: FeatureServiceDeps<InvoicingRepo>): FeatureS
                 const found = token.length === 0 ? null : await deps.repo.findByToken(token);
                 const row = found !== null && (await servedHere(req, found.workspace_id)) ? found : null;
                 if (row === null) {
-                    return reply.code(404).header('content-type', 'text/html; charset=utf-8').send(renderMissingPage());
+                    return htmlReply(reply, 404).send(renderMissingPage());
                 }
 
                 const io = ioFor(row.workspace_id);
@@ -157,8 +179,7 @@ export function createService(deps: FeatureServiceDeps<InvoicingRepo>): FeatureS
                         ? answerForm(token, settings.wording.signatureText)
                         : null;
 
-                return reply
-                    .header('content-type', 'text/html; charset=utf-8')
+                return htmlReply(reply, 200)
                     .header('x-robots-tag', 'noindex, nofollow')
                     .send(renderPublicPage(input, form));
             });
@@ -172,7 +193,7 @@ export function createService(deps: FeatureServiceDeps<InvoicingRepo>): FeatureS
                 const found = token.length === 0 ? null : await deps.repo.findByToken(token);
                 const row = found !== null && (await servedHere(req, found.workspace_id)) ? found : null;
                 if (row === null) {
-                    return reply.code(404).header('content-type', 'text/html; charset=utf-8').send(renderMissingPage());
+                    return htmlReply(reply, 404).send(renderMissingPage());
                 }
 
                 const io = ioFor(row.workspace_id);

@@ -3,7 +3,7 @@ import { after, before, describe, it } from 'node:test';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Logger } from 'pino';
 import type { FeatureMaintenanceLevel } from '@deveye/types';
-import type { FeatureManifest } from '@deveye/types/sdk';
+import { DEVEYE_ICON_PATH, type FeatureManifest } from '@deveye/types/sdk';
 import type { FeatureServer } from '@deveye/types/sdk/server';
 
 import type { Database } from '@/db';
@@ -140,6 +140,29 @@ describe('postStream', () => {
  * entrée par entrée dans la validation du module avant qu'aucun plafond de
  * cardinalité ne morde.
  */
+describe('l’icône de DevEye', () => {
+    it('se sert sur les deux écouteurs, en PNG, cachée et revalidable', async () => {
+        const open = await listener('public');
+        try {
+            for (const surface of [app, open]) {
+                const res = await surface.inject({ method: 'GET', url: DEVEYE_ICON_PATH });
+                assert.equal(res.statusCode, 200);
+                assert.equal(res.headers['content-type'], 'image/png');
+                assert.match(String(res.headers['cache-control']), /max-age=86400/);
+                assert.deepEqual([...res.rawPayload.subarray(1, 4)], [...Buffer.from('PNG')]);
+                const again = await surface.inject({
+                    method: 'GET',
+                    url: DEVEYE_ICON_PATH,
+                    headers: { 'if-none-match': String(res.headers.etag) }
+                });
+                assert.equal(again.statusCode, 304);
+            }
+        } finally {
+            await open.close();
+        }
+    });
+});
+
 describe('parseFormFields', () => {
     it('groupe un nom répété, sans quoi des cases à cocher perdraient leurs valeurs', () => {
         assert.deepEqual(

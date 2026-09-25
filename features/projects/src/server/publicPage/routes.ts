@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 
 import {
     normaliseDomainHost,
@@ -10,6 +9,7 @@ import {
     type SdkPublicRequest
 } from '@deveye/types/sdk/server';
 import { defaultUserColor, USER_COLORS } from '@deveye/types';
+import { DEVEYE_ICON_PATH } from '@deveye/types/sdk';
 
 import { PROJECT_SLUG_PATTERN, PUBLIC_PATH, type ProjectPublicRow } from '../../contracts/domain';
 import { decryptCard, decryptColumn, decryptMilestone, priorityFromDb, tryDecryptProject } from '../_shared';
@@ -30,14 +30,13 @@ import { buildBoardView, type PublicMember } from './view';
  * la fois : un lien partagé largement attire tout le monde au même moment.
  *
  * Son icône d'onglet est la vignette du projet, servie à la même adresse suivie
- * de `?icone`, sous les mêmes gardes que la page ; sans vignette, le logo de
- * DevEye. À part plutôt qu'en ligne : la page se relit chaque minute, l'icône
- * une fois.
+ * de `?icone`, sous les mêmes gardes que la page ; sans vignette, celle de
+ * DevEye (`DEVEYE_ICON_PATH`). À part plutôt qu'en ligne : la page se relit
+ * chaque minute, l'icône une fois.
  */
 
 const PAGE_PATH = `${PUBLIC_PATH}/:ref`;
 const SCRIPT_PATH = `${PUBLIC_PATH}/page.js`;
-const LOGO_PATH = `${PUBLIC_PATH}/logo.png`;
 const CACHE_MS = 30_000;
 const REF_PATTERN = /^[0-9a-f]{16}$/;
 const PAGE_RATE = { max: 300, timeWindow: '1 minute' };
@@ -67,16 +66,13 @@ interface Cached {
     expires: number;
     row: ProjectPublicRow;
     html: string;
-    /** La vignette du projet ; `null` sans vignette, le logo de DevEye la remplace. */
+    /** La vignette du projet ; `null` sans vignette, l'icône de DevEye la remplace. */
     icon: IconFile | null;
 }
 
 function iconFile(bytes: Buffer, type: string): IconFile {
     return { bytes, type, etag: `"${createHash('sha256').update(bytes).digest('hex').slice(0, 16)}"` };
 }
-
-/** Le logo de DevEye, en 64 pixels. */
-const LOGO = iconFile(readFileSync(new URL('./logo.png', import.meta.url)), 'image/png');
 
 /** Une vignette déjà validée par la vue : une image, jamais un SVG qui porterait du script. */
 const ICON_DATA = /^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/]+=*)$/;
@@ -106,7 +102,7 @@ export interface PublicPages {
 
 export function createPublicPages(deps: FeatureServiceDeps<ProjectsRepo>): PublicPages {
     const originHosts = new Set([new URL(deps.origins.public).hostname, new URL(deps.origins.app).hostname]);
-    const options: RenderOptions = { siteUrl: env.PROJECTS_SITE_URL, scriptPath: SCRIPT_PATH, logoPath: LOGO_PATH };
+    const options: RenderOptions = { siteUrl: env.PROJECTS_SITE_URL, scriptPath: SCRIPT_PATH };
     /** Par clé de recherche : `ref:<lien>`, `slug:<domaine>:<chemin>` ou `root:<domaine>`. */
     const cache = new Map<string, Cached>();
     const pending = new Map<string, Promise<Cached | null>>();
@@ -245,18 +241,19 @@ export function createPublicPages(deps: FeatureServiceDeps<ProjectsRepo>): Publi
         return reply.send(html);
     }
 
-    function sendIcon(req: SdkPublicRequest, reply: SdkPublicReply, icon: IconFile, cacheControl: string) {
-        reply
-            .header('etag', icon.etag)
-            .header('cache-control', cacheControl)
-            .header('x-content-type-options', 'nosniff');
+    /**
+     * La vignette, revalidée à chaque visite : le propriétaire peut en changer.
+     * Retirée depuis que la page a été servie, l'icône de DevEye la remplace.
+     */
+    function sendIcon(req: SdkPublicRequest, reply: SdkPublicReply, icon: IconFile | null) {
+        if (icon === null) return reply.code(302).header('location', DEVEYE_ICON_PATH).send();
+        reply.header('etag', icon.etag).header('cache-control', 'no-cache').header('x-content-type-options', 'nosniff');
         if (req.headers['if-none-match'] === icon.etag) return reply.code(304).send();
         return reply.header('content-type', icon.type).send(icon.bytes);
     }
 
-    /** La page, ou son icône d'onglet, revalidée à chaque visite : le propriétaire peut en changer. */
     const serve = (req: SdkPublicRequest, reply: SdkPublicReply, hit: Cached) =>
-        wantsIcon(req) ? sendIcon(req, reply, hit.icon ?? LOGO, 'no-cache') : sendHtml(req, reply, 200, hit.html);
+        wantsIcon(req) ? sendIcon(req, reply, hit.icon) : sendHtml(req, reply, 200, hit.html);
 
     const missing = (req: SdkPublicRequest, reply: SdkPublicReply) =>
         wantsIcon(req) ? reply.code(404).send() : sendHtml(req, reply, 404, renderMissingPage(options));
@@ -279,10 +276,6 @@ export function createPublicPages(deps: FeatureServiceDeps<ProjectsRepo>): Publi
                 if (req.headers['if-none-match'] === BOARD_SCRIPT_ETAG) return reply.code(304).send();
                 return reply.header('content-type', 'application/javascript; charset=utf-8').send(BOARD_SCRIPT);
             });
-
-            app.get(LOGO_PATH, { rateLimit: PAGE_RATE }, async (req, reply) =>
-                sendIcon(req, reply, LOGO, 'public, max-age=86400')
-            );
 
             app.get(PAGE_PATH, { rateLimit: PAGE_RATE }, async (req, reply) => {
                 const ref = paramOf(req.params, 'ref');

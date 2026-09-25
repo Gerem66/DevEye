@@ -1,3 +1,5 @@
+import { DEVEYE_ICON_PATH } from '@deveye/types/sdk';
+
 import { UPTIME_PAGE_DAYS } from '../../contracts/domain';
 import { formatDuration, formatMs, formatRatio } from '../../contracts/format';
 import { escapeHtml } from './html';
@@ -241,6 +243,7 @@ function documentOf(input: {
         <meta name="color-scheme" content="${scheme}" />
         ${input.robots ? '' : '<meta name="robots" content="noindex" />'}
         <title>${escapeHtml(input.title)}</title>
+        <link rel="icon" href="${DEVEYE_ICON_PATH}" />
         <meta name="description" content="${escapeHtml(input.description)}" />
         <style>${STATUS_STYLE}</style>
     </head>

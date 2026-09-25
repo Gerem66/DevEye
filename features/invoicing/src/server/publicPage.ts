@@ -1,3 +1,5 @@
+import { DEVEYE_ICON_PATH } from '@deveye/types/sdk';
+
 import { escapeHtml, renderPaper, type PaperInput } from './paper';
 
 /**
@@ -52,8 +54,11 @@ export function answerForm(token: string, signatureText: string): string {
 }
 
 /** La page complète : le document, et le bloc de réponse s'il y a lieu. */
+/** L'icône d'onglet, celle de DevEye : le papier imprimé n'en a pas besoin, la page en ligne si. */
+const ICON_LINK = `<link rel="icon" href="${DEVEYE_ICON_PATH}">`;
+
 export function renderPublicPage(input: PaperInput, form: string | null): string {
-    const html = renderPaper({ ...input, extra: form ?? '' });
+    const html = renderPaper({ ...input, extra: form ?? '' }).replace('</head>', `${ICON_LINK}\n</head>`);
     return form === null ? html : html.replace('</style>', `${FORM_STYLE}</style>`);
 }
 
@@ -65,6 +70,7 @@ export function renderMissingPage(): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Document introuvable</title>
+${ICON_LINK}
 <style>
     body { margin: 0; display: grid; place-items: center; min-height: 100vh; background: #f6f8fa; color: #14181d;
            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }

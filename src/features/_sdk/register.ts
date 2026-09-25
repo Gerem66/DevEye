@@ -1,5 +1,5 @@
 import { isExternalFeatureId, registerExternalFeature, type LiveTopic } from '@deveye/types';
-import { externalDescriptorOf, validateManifest, type FeatureManifest } from '@deveye/types/sdk';
+import { DEVEYE_ICON_PATH, externalDescriptorOf, validateManifest, type FeatureManifest } from '@deveye/types/sdk';
 import type {
     FeatureAgentHooks,
     FeatureServer,
@@ -32,6 +32,8 @@ import {
 // Pour ses types seulement : c'est lui qui déclare `config.rateLimit` sur une route.
 import type {} from '@fastify/rate-limit';
 import type { FastifyInstance, FastifyReply, FastifyRequest, RouteShorthandOptions } from 'fastify';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import type { Readable } from 'node:stream';
 
 import type { Database } from '@/db';
@@ -750,7 +752,28 @@ export async function modulePublicRoutes(app: FastifyInstance, listener: 'app' |
         reply.callNotFound();
         return reply;
     });
+
+    // L'icône des pages publiques qui n'en ont pas à elles : sur les deux
+    // écouteurs, donc sous tout domaine client, et même en maintenance.
+    app.get(
+        DEVEYE_ICON_PATH,
+        { logLevel: 'silent', config: { rateLimit: DOMAIN_ROOT_RATE_LIMIT } },
+        async (req, reply) => {
+            reply
+                .header('etag', DEVEYE_ICON.etag)
+                .header('cache-control', 'public, max-age=86400')
+                .header('cross-origin-resource-policy', 'cross-origin');
+            if (req.headers['if-none-match'] === DEVEYE_ICON.etag) return reply.code(304).send();
+            return reply.header('content-type', 'image/png').send(DEVEYE_ICON.bytes);
+        }
+    );
 }
+
+/** Le logo de DevEye en 64 pixels, lu une fois : `DEVEYE_ICON_PATH` le sert. */
+const DEVEYE_ICON = (() => {
+    const bytes = readFileSync(new URL('../../assets/deveye-icon.png', import.meta.url));
+    return { bytes, etag: `"${createHash('sha256').update(bytes).digest('hex').slice(0, 16)}"` };
+})();
 
 /** Une page de statut se rafraîchit en bloc pendant une panne, souvent depuis un même bureau. */
 const DOMAIN_ROOT_RATE_LIMIT = { max: 300, timeWindow: '1 minute' };

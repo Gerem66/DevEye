@@ -95,6 +95,24 @@ describe('la page publique', () => {
         assert.equal(res.answer.headers['x-robots-tag'], 'noindex, nofollow');
     });
 
+    it('pose sa propre politique, sans quoi l’écouteur public lui retire style et logo', async () => {
+        const store = emptyStore();
+        readySettings(store);
+        store.docs.push(docRow({ id: 10, kind: 'quote', status: 'sent', public_token: 'jeton' }));
+        const { handlers } = mount(store);
+
+        for (const token of ['jeton', 'inconnu']) {
+            const res = reply();
+            await handlers.get('GET /f/:token')!(request({ params: { token } }), res);
+            const csp = res.answer.headers['content-security-policy'] ?? '';
+            assert.match(csp, /style-src 'unsafe-inline'/);
+            assert.match(csp, /img-src data: 'self'/);
+            assert.match(csp, /form-action 'self'/);
+            assert.ok(!/script-src/.test(csp), 'aucun script permis');
+            assert.ok(res.answer.body.includes('<link rel="icon" href="/deveye-icon.png">'));
+        }
+    });
+
     it('propose l’accord sur un devis en attente, et sans une ligne de script', async () => {
         const store = emptyStore();
         readySettings(store);

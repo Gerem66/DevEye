@@ -378,17 +378,16 @@ describe('le tableau public', () => {
         assert.equal((await board(m, { query: { icone: '' }, host: 'roadmap.autre.fr' })).status, 404);
     });
 
-    it('prend le logo de DevEye sans vignette, et pour une page introuvable', async () => {
+    it('prend l’icône de DevEye sans vignette, et pour une page introuvable', async () => {
         const m = mount([project({ id: 1 })], [publication({ project_id: 1 })]);
-        assert.ok((await board(m)).body.includes('<link rel="icon" href="/projet/logo.png" />'));
-        const logo = await m.get('/projet/logo.png');
-        assert.equal(logo.headers['content-type'], 'image/png');
-        assert.match(logo.headers['cache-control'] ?? '', /max-age=86400/);
-        // `?icone` d'une page sans vignette rend le même logo.
-        assert.equal((await board(m, { query: { icone: '' } })).headers.etag, logo.headers.etag);
+        assert.ok((await board(m)).body.includes('<link rel="icon" href="/deveye-icon.png" />'));
+        // Une page servie avec sa vignette, que le propriétaire a retirée depuis.
+        const removed = await board(m, { query: { icone: '' } });
+        assert.equal(removed.status, 302);
+        assert.equal(removed.headers.location, '/deveye-icon.png');
 
         const gone = await board(mount([project({ id: 1 })], []));
-        assert.ok(gone.body.includes('<link rel="icon" href="/projet/logo.png" />'));
+        assert.ok(gone.body.includes('<link rel="icon" href="/deveye-icon.png" />'));
     });
 
     it('sert son script avec un ETag, et 304 quand le navigateur l’a déjà', async () => {

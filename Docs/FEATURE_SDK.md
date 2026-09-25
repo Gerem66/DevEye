@@ -746,6 +746,13 @@ repli de l'écouteur, le client sur l'app (d'où `index: false` à
 fastify-static, qui enregistrait sinon `/` lui-même) et 404 sur la surface
 publique. Le module route par le `domain` reçu, jamais par l'en-tête.
 
+L'hôte sert aussi, sur les deux écouteurs et donc sous tout domaine client,
+l'icône de DevEye en 64 pixels à `DEVEYE_ICON_PATH` (`/deveye-icon.png`,
+`src/assets/deveye-icon.png`) : l'icône d'onglet d'une page publique qui n'en a
+pas à elle. Une adresse et non une URL de données, que les aperçus de lien et
+les robots savent suivre ; une page qui pose sa politique y ajoute
+`img-src 'self'`.
+
 Toujours par entrée serveur : `env`, la spec des variables d'environnement
 que le module lit (`defineModuleEnv`, lue par `readModuleEnv` : entier, texte,
 chemin, adresse, drapeau, choix, secret). Un module lit ses variables lui-même,
