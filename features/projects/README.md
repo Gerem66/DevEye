@@ -336,6 +336,10 @@ script relit chaque minute ; rien du client React ne sort de l'app.
   (un `<details>`, qui se déplie sans le script et reste ouvert quand il relit
   le tableau). La discussion, l'historique et les tâches archivées ne sortent
   jamais.
+- **L'icône d'onglet** : la vignette du projet, servie à l'adresse de la page
+  suivie de `?icone`, sous les mêmes gardes qu'elle, et revalidée à chaque
+  visite. Sans vignette, le logo de DevEye (`/projet/logo.png`, tiré de
+  `client/public/logo_deveye.png`).
 - **L'apparence** : le sélecteur commun des pages publiques (`PageLookFields`
   du SDK, celui de Rendez-vous), automatique par défaut (le thème du
   visiteur), clair ou sombre, et un accent. Les couleurs de la page vivent dans

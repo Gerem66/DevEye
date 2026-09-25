@@ -16,6 +16,8 @@ export interface RenderOptions {
     /** Où mène « DevEye » au pied de la page ; vide, pas de lien. */
     siteUrl: string;
     scriptPath: string;
+    /** L'icône d'onglet d'une page sans vignette de projet. */
+    logoPath: string;
 }
 
 const dayFormat = new Intl.DateTimeFormat('fr-FR', {
@@ -166,6 +168,8 @@ function documentOf(input: {
     robots: boolean;
     theme: PageThemeChoice;
     accent: string;
+    /** L'adresse de l'icône d'onglet. */
+    icon: string;
 }): string {
     const theme = input.theme === 'auto' ? '' : ` data-theme="${input.theme}"`;
     const scheme = input.theme === 'auto' ? 'light dark' : input.theme;
@@ -177,6 +181,7 @@ function documentOf(input: {
         <meta name="color-scheme" content="${scheme}" />
         ${input.robots ? '' : '<meta name="robots" content="noindex" />'}
         <title>${escapeHtml(input.title)}</title>
+        <link rel="icon" href="${escapeHtml(input.icon)}" />
         <meta name="description" content="${escapeHtml(input.description)}" />
         <style>${BOARD_STYLE}${accentStyle(input.accent)}</style>
     </head>
@@ -220,6 +225,8 @@ export function renderBoardPage(view: PublicBoardView, options: RenderOptions): 
         robots: true,
         theme: view.theme,
         accent: view.accent,
+        // La même adresse que la page : ses gardes valent pour sa vignette.
+        icon: view.icon.length > 0 ? '?icone' : options.logoPath,
         body: `<main id="board">
             <header class="top">
                 ${iconTag}
@@ -245,6 +252,7 @@ export function renderMissingPage(options: RenderOptions): string {
         robots: false,
         theme: 'auto',
         accent: '',
+        icon: options.logoPath,
         body: `<main class="missing">
                 <h1>Page introuvable</h1>
                 <p>Ce tableau n’existe pas, ou n’est plus publié.</p>

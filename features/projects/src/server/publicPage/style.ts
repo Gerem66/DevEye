@@ -61,14 +61,16 @@ export const BOARD_STYLE = `${byTheme(tokens)}
 }
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
+/* Le pied de page au bas de la fenêtre quand le tableau est court. */
 body {
+    display: flex; flex-direction: column; min-height: 100vh;
     margin: 0;
     border-top: 4px solid var(--accent);
     background: var(--bg);
     color: var(--ink);
     font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
-.page { max-width: 1320px; margin: 0 auto; padding: 40px 20px 28px; }
+.page { flex: 1 0 auto; display: flex; flex-direction: column; width: 100%; max-width: 1320px; margin: 0 auto; padding: 40px 20px 28px; }
 .sr {
     position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
     overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
@@ -145,7 +147,7 @@ ${Object.keys(PAGE_ACCENTS)
     .join('\n')}
 
 .updated { margin: 18px 0 0; color: var(--muted); font-size: 12px; }
-.foot { margin-top: 28px; text-align: center; font-size: 12px; color: var(--muted); }
+.foot { margin-top: auto; padding-top: 28px; text-align: center; font-size: 12px; color: var(--muted); }
 .foot a { color: inherit; font-weight: 600; text-decoration: none; }
 .foot a:hover, .foot a:focus-visible { text-decoration: underline; }
 .missing { max-width: 560px; margin: 0 auto; padding: 64px 0 32px; text-align: center; }

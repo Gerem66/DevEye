@@ -356,6 +356,41 @@ describe('le tableau public', () => {
         assert.equal(m.lookups.byRef, 2);
     });
 
+    it('donne pour icône d’onglet la vignette du projet, sous les gardes de la page', async () => {
+        const icon = 'data:image/png;base64,iVBORw0KGgo=';
+        const content = JSON.stringify({ title: 'Site', icon, description: '', tags: [], version: '' });
+        const m = mount(
+            [project({ id: 1, content })],
+            [publication({ project_id: 1 })],
+            [testDomain({ id: 6, host: 'roadmap.autre.fr', workspaceId: 42 })]
+        );
+        const page = await board(m);
+        assert.ok(page.body.includes('<link rel="icon" href="?icone" />'));
+
+        const png = await board(m, { query: { icone: '' } });
+        assert.equal(png.status, 200);
+        assert.equal(png.headers['content-type'], 'image/png');
+        assert.equal(png.headers['cache-control'], 'no-cache');
+        const again = await board(m, { query: { icone: '' }, headers: { 'if-none-match': png.headers.etag } });
+        assert.equal(again.status, 304);
+
+        // Là où la page ne se montre pas, sa vignette non plus.
+        assert.equal((await board(m, { query: { icone: '' }, host: 'roadmap.autre.fr' })).status, 404);
+    });
+
+    it('prend le logo de DevEye sans vignette, et pour une page introuvable', async () => {
+        const m = mount([project({ id: 1 })], [publication({ project_id: 1 })]);
+        assert.ok((await board(m)).body.includes('<link rel="icon" href="/projet/logo.png" />'));
+        const logo = await m.get('/projet/logo.png');
+        assert.equal(logo.headers['content-type'], 'image/png');
+        assert.match(logo.headers['cache-control'] ?? '', /max-age=86400/);
+        // `?icone` d'une page sans vignette rend le même logo.
+        assert.equal((await board(m, { query: { icone: '' } })).headers.etag, logo.headers.etag);
+
+        const gone = await board(mount([project({ id: 1 })], []));
+        assert.ok(gone.body.includes('<link rel="icon" href="/projet/logo.png" />'));
+    });
+
     it('sert son script avec un ETag, et 304 quand le navigateur l’a déjà', async () => {
         const m = mount([], []);
         const first = await m.get('/projet/page.js');

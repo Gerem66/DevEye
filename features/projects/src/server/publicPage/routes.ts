@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+
 import {
     normaliseDomainHost,
     type FeatureServiceDeps,
@@ -25,10 +28,16 @@ import { buildBoardView, type PublicMember } from './view';
  *
  * Un tableau se calcule au plus une fois toutes les trente secondes, un calcul à
  * la fois : un lien partagé largement attire tout le monde au même moment.
+ *
+ * Son icône d'onglet est la vignette du projet, servie à la même adresse suivie
+ * de `?icone`, sous les mêmes gardes que la page ; sans vignette, le logo de
+ * DevEye. À part plutôt qu'en ligne : la page se relit chaque minute, l'icône
+ * une fois.
  */
 
 const PAGE_PATH = `${PUBLIC_PATH}/:ref`;
 const SCRIPT_PATH = `${PUBLIC_PATH}/page.js`;
+const LOGO_PATH = `${PUBLIC_PATH}/logo.png`;
 const CACHE_MS = 30_000;
 const REF_PATTERN = /^[0-9a-f]{16}$/;
 const PAGE_RATE = { max: 300, timeWindow: '1 minute' };
@@ -42,16 +51,45 @@ const CSP = [
     "style-src 'unsafe-inline'",
     "script-src 'self'",
     "connect-src 'self'",
-    'img-src data:',
+    "img-src data: 'self'",
     "base-uri 'none'",
     "form-action 'none'",
     'frame-ancestors *'
 ].join('; ');
 
+interface IconFile {
+    bytes: Buffer;
+    type: string;
+    etag: string;
+}
+
 interface Cached {
     expires: number;
     row: ProjectPublicRow;
     html: string;
+    /** La vignette du projet ; `null` sans vignette, le logo de DevEye la remplace. */
+    icon: IconFile | null;
+}
+
+function iconFile(bytes: Buffer, type: string): IconFile {
+    return { bytes, type, etag: `"${createHash('sha256').update(bytes).digest('hex').slice(0, 16)}"` };
+}
+
+/** Le logo de DevEye, en 64 pixels. */
+const LOGO = iconFile(readFileSync(new URL('./logo.png', import.meta.url)), 'image/png');
+
+/** Une vignette déjà validée par la vue : une image, jamais un SVG qui porterait du script. */
+const ICON_DATA = /^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/]+=*)$/;
+
+function iconOf(dataUrl: string): IconFile | null {
+    const match = ICON_DATA.exec(dataUrl);
+    return match ? iconFile(Buffer.from(match[2], 'base64'), match[1]) : null;
+}
+
+/** `?icone` : l'icône d'onglet de la page plutôt que la page. */
+function wantsIcon(req: SdkPublicRequest): boolean {
+    const query = req.query;
+    return typeof query === 'object' && query !== null && Object.prototype.hasOwnProperty.call(query, 'icone');
 }
 
 function paramOf(bag: unknown, name: string): string {
@@ -68,7 +106,7 @@ export interface PublicPages {
 
 export function createPublicPages(deps: FeatureServiceDeps<ProjectsRepo>): PublicPages {
     const originHosts = new Set([new URL(deps.origins.public).hostname, new URL(deps.origins.app).hostname]);
-    const options: RenderOptions = { siteUrl: env.PROJECTS_SITE_URL, scriptPath: SCRIPT_PATH };
+    const options: RenderOptions = { siteUrl: env.PROJECTS_SITE_URL, scriptPath: SCRIPT_PATH, logoPath: LOGO_PATH };
     /** Par clé de recherche : `ref:<lien>`, `slug:<domaine>:<chemin>` ou `root:<domaine>`. */
     const cache = new Map<string, Cached>();
     const pending = new Map<string, Promise<Cached | null>>();
@@ -94,7 +132,7 @@ export function createPublicPages(deps: FeatureServiceDeps<ProjectsRepo>): Publi
         return new Map(members.map((m) => [m.userId, { name: m.name, color: colorOf(m) }]));
     }
 
-    async function build(row: ProjectPublicRow): Promise<string | null> {
+    async function build(row: ProjectPublicRow): Promise<{ html: string; icon: IconFile | null } | null> {
         const workspaceId = row.workspace_id;
         const project = await deps.repo.projects.findById(row.project_id, workspaceId);
         if (!project) return null;
@@ -133,7 +171,7 @@ export function createPublicPages(deps: FeatureServiceDeps<ProjectsRepo>): Publi
             theme: themeOf(row),
             accent: row.accent
         });
-        return renderBoardPage(view, options);
+        return { html: renderBoardPage(view, options), icon: iconOf(view.icon) };
     }
 
     /** Le tableau d'une clé, calculé une fois pour tous ceux qui le demandent en même temps. */
@@ -146,9 +184,9 @@ export function createPublicPages(deps: FeatureServiceDeps<ProjectsRepo>): Publi
         const task = (async () => {
             const row = await find();
             if (!row || !served(row)) return null;
-            const html = await build(row);
-            if (html === null) return null;
-            const entry = { expires: Date.now() + CACHE_MS, row, html };
+            const built = await build(row);
+            if (built === null) return null;
+            const entry = { expires: Date.now() + CACHE_MS, row, ...built };
             if (started === generation) {
                 for (const [k, v] of cache) if (v.expires <= Date.now()) cache.delete(k);
                 cache.set(key, entry);
@@ -207,8 +245,21 @@ export function createPublicPages(deps: FeatureServiceDeps<ProjectsRepo>): Publi
         return reply.send(html);
     }
 
+    function sendIcon(req: SdkPublicRequest, reply: SdkPublicReply, icon: IconFile, cacheControl: string) {
+        reply
+            .header('etag', icon.etag)
+            .header('cache-control', cacheControl)
+            .header('x-content-type-options', 'nosniff');
+        if (req.headers['if-none-match'] === icon.etag) return reply.code(304).send();
+        return reply.header('content-type', icon.type).send(icon.bytes);
+    }
+
+    /** La page, ou son icône d'onglet, revalidée à chaque visite : le propriétaire peut en changer. */
+    const serve = (req: SdkPublicRequest, reply: SdkPublicReply, hit: Cached) =>
+        wantsIcon(req) ? sendIcon(req, reply, hit.icon ?? LOGO, 'no-cache') : sendHtml(req, reply, 200, hit.html);
+
     const missing = (req: SdkPublicRequest, reply: SdkPublicReply) =>
-        sendHtml(req, reply, 404, renderMissingPage(options));
+        wantsIcon(req) ? reply.code(404).send() : sendHtml(req, reply, 404, renderMissingPage(options));
 
     /** Le chemin d'un projet sous le domaine vérifié de l'hôte, s'il y en a un. */
     async function bySlug(req: SdkPublicRequest, slug: string): Promise<Cached | null> {
@@ -229,15 +280,19 @@ export function createPublicPages(deps: FeatureServiceDeps<ProjectsRepo>): Publi
                 return reply.header('content-type', 'application/javascript; charset=utf-8').send(BOARD_SCRIPT);
             });
 
+            app.get(LOGO_PATH, { rateLimit: PAGE_RATE }, async (req, reply) =>
+                sendIcon(req, reply, LOGO, 'public, max-age=86400')
+            );
+
             app.get(PAGE_PATH, { rateLimit: PAGE_RATE }, async (req, reply) => {
                 const ref = paramOf(req.params, 'ref');
                 const underDomain = await bySlug(req, ref);
-                if (underDomain) return sendHtml(req, reply, 200, underDomain.html);
+                if (underDomain) return serve(req, reply, underDomain);
                 const hit = REF_PATTERN.test(ref)
                     ? await lookup(`ref:${ref}`, () => deps.repo.publication.findByRef(ref))
                     : null;
                 if (!hit || !(await servedHere(req, hit.row.workspace_id))) return missing(req, reply);
-                return sendHtml(req, reply, 200, hit.html);
+                return serve(req, reply, hit);
             });
 
             /** La preuve que la sonde du domaine vient lire. Un hôte inconnu ne rend rien : la route ne dit pas quels noms existent. */
@@ -252,7 +307,7 @@ export function createPublicPages(deps: FeatureServiceDeps<ProjectsRepo>): Publi
         async root(req, reply, domain) {
             const hit = await lookup(`root:${domain.id}`, () => rootOf(domain));
             if (!hit || hit.row.workspace_id !== domain.workspaceId) return missing(req, reply);
-            return sendHtml(req, reply, 200, hit.html);
+            return serve(req, reply, hit);
         },
 
         forget(projectId) {
