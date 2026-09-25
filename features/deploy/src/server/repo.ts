@@ -1,5 +1,5 @@
 import type { DeployCredentialRow, DeploymentRow, DeployTargetRow, DeployTargetSyncRow } from '../contracts/domain';
-import type { SdkQueryable } from '@deveye/types/sdk/server';
+import type { SdkQueryable, SdkStockItem } from '@deveye/types/sdk/server';
 
 /**
  * Une cible augmentée de ce qu'une liste montre sans ouvrir la fiche : l'adresse
@@ -44,6 +44,8 @@ export interface DeployRepo {
      * repos, et les machines ont leur propre limite.
      */
     countTargetsInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
+    /** Ce que compte `countTargetsInWorkspaces`, du plus ancien au plus récent : le stock du quota `targets`. */
+    listStockTargets(workspaceIds: readonly number[]): Promise<SdkStockItem[]>;
     createTarget(input: {
         workspaceId: number;
         credentialId: number | null;
@@ -94,12 +96,14 @@ export interface DeployRepo {
      * autres attendent `staleBefore` ; `limit` plafonne la rafale sortante. Les
      * cibles sans jeton, ou dont l'instance Dokploy n'a pas d'adresse, sont
      * écartées ici, comme celles des accès de `skipCredentialIds` (occupés ou en
-     * recul).
+     * recul) et les `pausedIds` que l'offre tient en pause : filtrées après le
+     * `LIMIT`, ces dernières occuperaient la fenêtre sans jamais avancer.
      */
     listTargetsDue(
         limit: number,
         staleBefore: number,
-        skipCredentialIds: readonly number[]
+        skipCredentialIds: readonly number[],
+        pausedIds: readonly number[]
     ): Promise<DeployTargetSyncRow[]>;
     /** Horodate un rapprochement réussi ; c'est lui qui sort du premier import. */
     markTargetSynced(id: number, at: number): Promise<void>;
@@ -264,6 +268,15 @@ export function createRepo(q: SdkQueryable): DeployRepo {
             );
             return Number(rows[0]?.n ?? 0);
         },
+        async listStockTargets(workspaceIds) {
+            if (workspaceIds.length === 0) return [];
+            const rows = await q.query<{ id: number; workspace_id: number }>(
+                `SELECT id, workspace_id FROM deploy_targets WHERE workspace_id IN (?) AND provider <> 'agent'
+                  ORDER BY created ASC, id ASC`,
+                [workspaceIds]
+            );
+            return rows.map((row) => ({ id: String(row.id), workspaceId: Number(row.workspace_id) }));
+        },
         async createTarget({ workspaceId, credentialId, deviceId, provider, kind, externalId, content }) {
             // Une nouvelle cible atterrit à la fin de la liste, jamais au milieu :
             // l'ordre appartient à l'utilisateur, un ajout ne le réarrange pas.
@@ -376,8 +389,10 @@ export function createRepo(q: SdkQueryable): DeployRepo {
             return new Map(rows.map((row) => [Number(row.credential_id), Number(row.uses)]));
         },
 
-        async listTargetsDue(limit, staleBefore, skipCredentialIds) {
+        async listTargetsDue(limit, staleBefore, skipCredentialIds, pausedIds) {
+            // `NOT IN ()` n'est pas du SQL : chaque clause n'existe que non vide.
             const skip = skipCredentialIds.length > 0 ? 'AND c.id NOT IN (?)' : '';
+            const paused = pausedIds.length > 0 ? 'AND t.id NOT IN (?)' : '';
             // Sous-requête plutôt que HAVING : le compte des déploiements en vol
             // est un scalaire corrélé, pas une agrégation du groupe, et le
             // filtrer demande donc de le matérialiser d'abord. `turn` numérote
@@ -396,13 +411,19 @@ export function createRepo(q: SdkQueryable): DeployRepo {
                                      WHERE d.target_id = t.id AND d.status IN ('queued', 'running')) AS in_flight
                               FROM deploy_targets t
                               JOIN ft_deploy_credentials c ON c.id = t.credential_id
-                             WHERE (c.provider <> 'dokploy' OR (c.base_url IS NOT NULL AND c.base_url <> '')) ${skip}
+                             WHERE (c.provider <> 'dokploy' OR (c.base_url IS NOT NULL AND c.base_url <> ''))
+                                   ${skip} ${paused}
                        ) AS x
                       WHERE x.in_flight > 0 OR x.synced_at IS NULL OR x.synced_at < ?
                  ) AS y
                   ORDER BY y.turn ASC, y.in_flight DESC, y.synced_at IS NULL DESC, y.synced_at ASC, y.id ASC
                   LIMIT ?`,
-                skipCredentialIds.length > 0 ? [skipCredentialIds, staleBefore, limit] : [staleBefore, limit]
+                [
+                    ...(skipCredentialIds.length > 0 ? [skipCredentialIds] : []),
+                    ...(pausedIds.length > 0 ? [[...pausedIds]] : []),
+                    staleBefore,
+                    limit
+                ]
             );
         },
         async markTargetSynced(id, at) {

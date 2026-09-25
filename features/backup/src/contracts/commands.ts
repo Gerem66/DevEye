@@ -148,7 +148,11 @@ export const backupJobUpdate = {
     output: z.object({ job: backupJobSchema })
 };
 
-/** Supprime un travail et son historique. Les archives déjà écrites ne sont pas touchées. */
+/**
+ * Supprime un travail et son historique. Sur ce serveur, ses archives partent
+ * avec lui : elles ne se compteraient plus, et resteraient sur le disque.
+ * Ailleurs, elles restent où elles sont.
+ */
 export const backupJobRemove = {
     command: 'backup.jobRemove' as const,
     input: z.object({ jobId }),
@@ -172,6 +176,13 @@ export const backupSources = {
     output: z.object({ candidates: z.array(backupSourceCandidateSchema) })
 };
 
+/** Efface l'archive d'une sauvegarde réussie, à sa destination : de quoi faire de la place. */
+export const backupRunRemove = {
+    command: 'backup.runRemove' as const,
+    input: z.object({ runId: z.number().int().positive() }),
+    output: z.object({ runId: z.number().int().positive() })
+};
+
 /** Les dernières exécutions de l'espace, tous travaux confondus. */
 export const backupRuns = {
     command: 'backup.runs' as const,
@@ -191,6 +202,7 @@ export const backupCommands = [
     backupJobAdd,
     backupJobUpdate,
     backupJobRemove,
+    backupRunRemove,
     backupJobRun,
     backupSources,
     backupRuns

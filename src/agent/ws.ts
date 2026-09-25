@@ -47,6 +47,7 @@ import type { FastifyInstance } from 'fastify';
 import { signDeviceToken, type DeviceClaims } from '@/auth/jwt';
 import { sha256hex } from '@/Utils/hash';
 import { logger } from '@/logger';
+import { isPlanPaused } from '@/Services/planPauses';
 import {
     handleAuthEvents,
     handleDestroyed,
@@ -110,6 +111,24 @@ function send(socket: WebSocket, msg: AgentServerMessage): void {
 
 /** En dessous de ce reste de vie, le jeton est remplacé à la connexion. */
 const TOKEN_ROTATE_BELOW_SECONDS = 7 * 24 * 3600;
+
+/**
+ * Un appareil que l'offre de son propriétaire tient en pause est refusé comme
+ * un révoqué : l'agent réessaie de lui-même, sans rien effacer. Sauf quand son
+ * jeton approche de sa fin : il reçoit d'abord le suivant, sans quoi une pause
+ * de plus d'un mois forcerait à relier l'appareil.
+ */
+export function admitPausedAgent(
+    claims: Pick<DeviceClaims, 'exp'>,
+    presented: 'current' | 'previous',
+    nowSeconds: number
+): 'deny' | 'rotate-then-close' {
+    const due = claims.exp === undefined || claims.exp - nowSeconds < TOKEN_ROTATE_BELOW_SECONDS;
+    return presented === 'previous' || due ? 'rotate-then-close' : 'deny';
+}
+
+/** Le temps que l'agent sorte de sa fenêtre de config et lise le jeton, avant la fermeture. */
+const PAUSED_ROTATION_GRACE_MS = 3_000;
 
 /** Route one validated agent frame to its handler. The big per-message logic lives
  *  in the focused `handlers/*` modules; this stays a thin, exhaustive dispatcher. */
@@ -260,6 +279,16 @@ export async function registerAgentWS(
         const { device, claims, presented } = authenticated;
         // Revoked and archived devices are refused identically to unknown ones.
         if (device.status === 'revoked' || device.status === 'archived') return deny();
+        if (device.status === 'active' && isPlanPaused('devices.agents', device.id)) {
+            if (admitPausedAgent(claims, presented, Math.floor(Date.now() / 1000)) === 'deny') return deny();
+            // L'agent ne lit une rotation qu'une fois sa config reçue. Aucun
+            // gestionnaire n'est branché : ce qu'il envoie d'ici là est ignoré.
+            const pausedLog = logger.child({ deviceId: device.id, ownerId: claims.oid });
+            send(socket, { command: AGENT_CONFIG, payload: await agentConfigFor(device) });
+            await rotateTokenIfDue(db, socket, device, claims, presented, pausedLog);
+            setTimeout(() => socket.close(1012), PAUSED_ROTATION_GRACE_MS).unref();
+            return;
+        }
 
         const deviceId = device.id;
         const reqLogger = logger.child({ deviceId, ownerId: claims.oid });

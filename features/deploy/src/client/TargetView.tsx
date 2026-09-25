@@ -1,5 +1,14 @@
 import { useState, type ReactNode } from 'react';
-import { Avatar, Button, Dialog, FeatureSettingsButton, humanizeError, invalidate, TextInput } from 'deveye-sdk-client';
+import {
+    Avatar,
+    Button,
+    Dialog,
+    FeatureSettingsButton,
+    humanizeError,
+    invalidate,
+    PlanPausedBadge,
+    TextInput
+} from 'deveye-sdk-client';
 import type { MinimalUser } from '@deveye/types';
 import {
     DEPLOY_TITLE_MAX_LENGTH,
@@ -222,6 +231,12 @@ export function TargetView({
                                     · partagée avec {target.projectCount - 1} autre{target.projectCount > 2 ? 's' : ''}{' '}
                                     projet{target.projectCount > 2 ? 's' : ''}
                                 </span>
+                            )}
+                            {target.planPaused && (
+                                <>
+                                    {' '}
+                                    <PlanPausedBadge />
+                                </>
                             )}
                         </p>
                         {/* Le dernier état à même hauteur que l'identité, et son

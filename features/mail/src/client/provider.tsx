@@ -62,7 +62,7 @@ function AccountDialog({ open, onClose, onSaved, prefill }: AccountDialogProps) 
 export const clientProvider: MailClientProvider = {
     listSenders: async () =>
         (await api.send('mail.accountList', {})).accounts
-            .filter((a) => a.securityTier === 'open' && a.enabled)
+            .filter((a) => a.securityTier === 'open' && a.enabled && !a.planPaused)
             .map((a) => ({ id: a.id, label: a.displayName, address: a.emailAddress })),
     findByAddress: async (address) => {
         const wanted = address.trim().toLowerCase();

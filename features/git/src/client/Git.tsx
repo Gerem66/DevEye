@@ -5,6 +5,7 @@ import {
     humanizeError,
     invalidate,
     openFeature,
+    PlanPausedNotice,
     useActiveWorkspace,
     useLiveItemTarget,
     useLiveOutlines,
@@ -279,6 +280,14 @@ export function FeatureGit(_props: FeatureViewProps) {
                     Aucun dépôt pour l’instant.
                     {canWrite && ' Ajoutez-en un pour suivre ses commits, ses branches et ses pull requests.'}
                 </p>
+            )}
+
+            {repos && (
+                <PlanPausedNotice
+                    count={repos.filter((r) => r.planPaused).length}
+                    one='dépôt suivi'
+                    many='dépôts suivis'
+                />
             )}
 
             {repos && repos.length > 0 && (

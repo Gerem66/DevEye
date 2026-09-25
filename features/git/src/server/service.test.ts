@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, it, mock } from 'node:test';
 
 import type {
     GitBranchRow,
@@ -122,6 +122,7 @@ function fakeRepo(repos: GitRepoRow[], credentials: GitCredentialRow[]): FakeRep
         pulls,
         countReposInWorkspaces: async (ids: readonly number[]) =>
             repos.filter((r) => ids.includes(r.workspace_id)).length,
+        listStockRepos: unused,
         listRepos: unused,
         listVisibleRepos: unused,
         findRepo: async (id, workspaceId) => repos.find((r) => r.id === id && r.workspace_id === workspaceId) ?? null,
@@ -142,10 +143,11 @@ function fakeRepo(repos: GitRepoRow[], credentials: GitCredentialRow[]): FakeRep
         removeCredential: unused,
         countCredentialUses: unused,
         // La requête du vrai dépôt, en mémoire : jamais synchronisé d'abord,
-        // puis le plus ancien ; un dépôt sans jeton ou suspendu n'est pas tenté.
-        listDue: async (limit) =>
+        // puis le plus ancien ; un dépôt sans jeton, suspendu ou en pause
+        // d'offre n'est pas tenté.
+        listDue: async (limit, pausedIds) =>
             repos
-                .filter((r) => r.enabled === 1 && r.credential_id !== null)
+                .filter((r) => r.enabled === 1 && r.credential_id !== null && !pausedIds.includes(r.id))
                 .sort((a, b) => (a.last_sync_at ?? -1) - (b.last_sync_at ?? -1))
                 .slice(0, limit),
         markSynced: async (repoId, input) => {
@@ -306,8 +308,11 @@ interface Remote {
     onReleases?: () => void;
 }
 
-/** Le service sur le harnais, avec un GitHub piloté par le test. */
-function syncWith(store: FakeRepo, remote: Remote) {
+/**
+ * Le service sur le harnais, avec un GitHub piloté par le test. `paused` est le
+ * miroir des pauses d'offre, qu'un test peut modifier en cours de route.
+ */
+function syncWith(store: FakeRepo, remote: Remote, paused: string[] = []) {
     const versions: [string, number, number, string][] = [];
     const projects: ProjectsUsageProvider = {
         usageOf: async () => [],
@@ -322,7 +327,11 @@ function syncWith(store: FakeRepo, remote: Remote) {
             versions.push([feature, itemId, workspaceId, version]);
         }
     };
-    const deps = createTestServiceDeps({ repo: store, providers: { [PROJECTS_USAGE_PROVIDER]: projects } });
+    const deps = createTestServiceDeps({
+        repo: store,
+        providers: { [PROJECTS_USAGE_PROVIDER]: projects },
+        pausedItems: { repos: paused }
+    });
     const windows: { ref?: string; since?: number; until?: number }[] = [];
     const compared: [string, string][] = [];
     const sync = new GitSync(deps, {
@@ -496,6 +505,59 @@ describe('un premier tour', () => {
         await tick();
         assert.deepEqual(windows, []);
         assert.deepEqual(deps.recorded.liveChanges, []);
+    });
+});
+
+describe('la pause d’offre', () => {
+    const quiet: Remote = {
+        defaultBranch: 'main',
+        branches: null,
+        commits: () => ({ commits: [], exhausted: true }),
+        releases: null,
+        pulls: null
+    };
+
+    it('un dépôt en pause n’est pas tenté, ni au tour ni à la demande, et son réglage reste intact', async () => {
+        const store = fakeRepo([repo(), repo({ id: 2, slug_ref: 'def' })], [credential()]);
+        const { sync, windows, tick } = syncWith(store, quiet, ['2']);
+        await tick();
+        assert.deepEqual(
+            store.repos.map((r) => [r.id, r.last_sync_at !== null, r.enabled]),
+            [
+                [1, true, 1],
+                [2, false, 1]
+            ]
+        );
+        // Un réveil à la main passe par la même requête : rien ne part.
+        sync.requestSync(2);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        assert.equal(windows.length, 1);
+        assert.equal(store.repos[1].last_sync_at, null);
+    });
+
+    it('la reprise armée d’un backfill s’arrête si l’offre met le dépôt en pause entre deux tranches', async () => {
+        mock.timers.enable({ apis: ['setTimeout'] });
+        try {
+            const store = fakeRepo([repo()], [credential()]);
+            const paused: string[] = [];
+            const { sync, windows, tick } = syncWith(
+                store,
+                { ...quiet, commits: () => ({ commits: [commit('sha-2', 200)], exhausted: false }) },
+                paused
+            );
+            await tick();
+            assert.deepEqual(windows, [{}]);
+            assert.equal(sync.syncStatus(1).running, true);
+
+            paused.push('1');
+            mock.timers.tick(3_000);
+            await Promise.resolve();
+            // Aucune tranche de plus, et la barre de progression tombe.
+            assert.deepEqual(windows, [{}]);
+            assert.equal(sync.syncStatus(1).running, false);
+        } finally {
+            mock.timers.reset();
+        }
     });
 });
 

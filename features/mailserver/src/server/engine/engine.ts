@@ -54,8 +54,8 @@ export function createEngine(deps: FeatureServiceDeps<MailserverRepo>): Engine {
         cipherFor: deps.cipherFor,
         beat: (workspaceId) => deps.live.changed(workspaceId, ['mailserverFlow'])
     });
-    const auth = createAuthenticator({ repo, events });
-    const delivery = createDelivery({ repo, domains: deps.domains, store, events });
+    const auth = createAuthenticator({ repo, events, pauses: deps.pauses });
+    const delivery = createDelivery({ repo, domains: deps.domains, pauses: deps.pauses, store, events });
     const certificates = new TlsStore();
     const usesFiles = env.MAILSERVER_TLS_CERT_FILE !== '' && env.MAILSERVER_TLS_KEY_FILE !== '';
     const acme = createAcme({
@@ -147,6 +147,7 @@ export function createEngine(deps: FeatureServiceDeps<MailserverRepo>): Engine {
             maxBytes: maxMessageBytes(),
             certificates,
             repo,
+            pauses: deps.pauses,
             store,
             auth,
             cipherFor: deps.cipherFor,

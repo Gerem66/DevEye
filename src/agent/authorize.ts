@@ -1,6 +1,7 @@
 import type { Device, DeviceRow } from '@deveye/types';
 
 import { FeatureError, type FeatureContext } from '@/features/_define';
+import { isPlanPaused } from '@/Services/planPauses';
 import { computeAgentUpdate, deviceRowToDevice } from './mappers';
 import { agentDistDir, readServedManifestCached } from './sync';
 
@@ -68,6 +69,14 @@ export async function authorizeReachableDevice(ctx: FeatureContext, deviceId: st
     // La permission que la commande déclare, éprouvée contre CET appareil : le
     // dispatcheur ne l'a vue qu'à l'échelle de la fonctionnalité.
     await ctx.assertItemExtras('devices', row.id);
+    // Avant « hors ligne » : un appareil en pause l'est aussi, mais la raison à
+    // dire est l'offre, avec son invite.
+    if (isPlanPaused('devices.agents', row.id)) {
+        throw new FeatureError('quota_exceeded', 'Cet appareil est en pause : il dépasse la limite de l’offre.', {
+            key: 'devices.agents',
+            paused: true
+        });
+    }
     if (!(online(ctx, [row.id])[row.id] ?? false)) {
         throw new FeatureError('conflict', 'Agent hors ligne');
     }

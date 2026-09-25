@@ -105,7 +105,8 @@ async function toServices(ctx: Ctx, rows: UptimeServiceRow[]): Promise<UptimeSer
                 row,
                 stats.get(row.id) ?? EMPTY_STATS,
                 downSince.get(row.id) ?? null,
-                row.workspace_id !== ctx.workspaceId
+                row.workspace_id !== ctx.workspaceId,
+                ctx.quota.isPaused('monitors', String(row.id))
             )
         )
     );
@@ -159,7 +160,13 @@ export const uptimeHandlers = [
             // lit comme un bug, dans un sens comme dans l'autre.
             const rows = await ctx.repo.services.listVisible(ctx.workspaceId);
             const hidden = await ctx.items.restrictions();
-            const visible = rows.filter((r) => hidden.get(String(r.id)) !== 'none' && r.enabled === 1);
+            // Seuls comptent les services surveillés : ni mis en pause, ni tenus en pause par l'offre.
+            const visible = rows.filter(
+                (r) =>
+                    hidden.get(String(r.id)) !== 'none' &&
+                    r.enabled === 1 &&
+                    !ctx.quota.isPaused('monitors', String(r.id))
+            );
             return {
                 total: visible.length,
                 up: visible.filter((r) => r.status === 'up').length,
@@ -302,6 +309,8 @@ export const uptimeHandlers = [
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const row = await loadService(ctx, input.id);
+            // La pause choisie n'empêche pas un test ; celle de l'offre, si.
+            await ctx.quota.assertActive('monitors', String(row.id));
             // Same code path as the scheduler, so a manual check counts in the
             // history, the rollup and the incident log exactly like an automatic one.
             await monitor().runOne(row);

@@ -1,5 +1,4 @@
-import type { Device } from '@deveye/types';
-
+import type { FleetDevice } from '../contracts/commands';
 import { manifest } from '../manifest';
 
 /** Pourquoi une entrée du menu est inerte : le glyphe qui le dit, la phrase en infobulle. */
@@ -54,6 +53,12 @@ export const OFFLINE: Unavailable = {
     reason: 'Appareil hors ligne : la machine ne répond pas'
 };
 
+/** L'offre tient l'appareil en pause : son agent est refusé, ce qui explique aussi qu'il soit hors ligne. */
+export const PLAN_PAUSED: Unavailable = {
+    icon: 'icon-pause',
+    reason: 'Appareil en pause, au-delà de la limite de l’offre : il reprend dans les minutes qui suivent, dès que l’offre le permet'
+};
+
 /**
  * Le premier motif qui s'applique, dans l'ordre où ils sont donnés. Cet ordre
  * est la règle : ce que le rôle interdit prime sur ce que l'état de la machine
@@ -64,6 +69,10 @@ export function firstReason(...reasons: (Unavailable | false | undefined)[]): Un
 }
 
 /** Ce qui empêche de parler à l'agent, une fois la permission accordée. */
-export function agentReach(device: Device): Unavailable | undefined {
-    return firstReason(device.status === 'archived' && ARCHIVED, !device.online && OFFLINE);
+export function agentReach(device: FleetDevice): Unavailable | undefined {
+    return firstReason(
+        device.status === 'archived' && ARCHIVED,
+        device.planPaused && PLAN_PAUSED,
+        !device.online && OFFLINE
+    );
 }

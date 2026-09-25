@@ -11,6 +11,7 @@ import { notificationChannelsRepo, type NotificationChannelsRepo } from './repos
 import { pendingSignupsRepo, type PendingSignupsRepo } from './repos/pendingSignups';
 import { presenceRepo, type PresenceRepo } from './repos/presence';
 import { processSamplesRepo, type ProcessSamplesRepo } from './repos/processSamples';
+import { quotaPausesRepo, type QuotaPausesRepo } from './repos/quotaPauses';
 import { refreshTokensRepo, type RefreshTokensRepo } from './repos/refreshTokens';
 import { remoteInstancesRepo, type RemoteInstancesRepo } from './repos/remoteInstances';
 import { twoFactorRepo, type TwoFactorRepo } from './repos/twoFactor';
@@ -54,6 +55,8 @@ export interface Database {
     pendingSignups: PendingSignupsRepo;
     presence: PresenceRepo;
     processSamples: ProcessSamplesRepo;
+    /** Ce que l'offre de son propriétaire tient en pause (voir `Services/planPauses.ts`). */
+    quotaPauses: QuotaPausesRepo;
     twoFactor: TwoFactorRepo;
     userSecretKeys: UserSecretKeysRepo;
     /** Le magasin clé-valeur des modules de features (SDK). */
@@ -98,6 +101,7 @@ function buildDatabase(pool: DbPool, q: Queryable, inTransaction: boolean): Data
         pendingSignups: pendingSignupsRepo(q),
         presence: presenceRepo(q),
         processSamples: processSamplesRepo(q),
+        quotaPauses: quotaPausesRepo(q),
         twoFactor: twoFactorRepo(q),
         userSecretKeys: userSecretKeysRepo(q),
         featureDomains: featureDomainsRepo(q),

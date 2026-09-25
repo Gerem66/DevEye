@@ -31,6 +31,8 @@ export const gitRepoSchema = z.object({
     projectCount: z.number().int().nonnegative(),
     /** Cet élément vient d'un autre espace, qui le projette ici. */
     foreign: z.boolean(),
+    /** L'offre de son propriétaire le tient en pause : plus rien ne se synchronise, `enabled` reste intact. */
+    planPaused: z.boolean(),
     created: z.number().int()
 });
 export type GitRepo = z.infer<typeof gitRepoSchema>;

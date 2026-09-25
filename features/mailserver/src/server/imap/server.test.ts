@@ -267,6 +267,27 @@ describe('imapflow contre le serveur', () => {
         assert.equal(c.usable, false);
     });
 
+    it('une boîte que l’offre met en pause perd sa session, puis refuse la connexion comme une éteinte', async () => {
+        const paused = await engine.createMailbox('pause@exemple.test', 'secret-pause');
+        const c = client('pause@exemple.test', 'secret-pause');
+        await c.connect();
+        const closed = new Promise<void>((resolve) => c.once('close', () => resolve()));
+        engine.paused.push(String(paused.id));
+        try {
+            // Ce que le moteur fait des boîtes que `onPlanPause` lui nomme.
+            engine.notifier.dropMailbox(paused.id);
+            await closed;
+            const refused = client('pause@exemple.test', 'secret-pause');
+            await assert.rejects(refused.connect());
+            refused.close();
+        } finally {
+            engine.paused.splice(0);
+        }
+        const resumed = client('pause@exemple.test', 'secret-pause');
+        await resumed.connect();
+        await resumed.logout();
+    });
+
     it('marque lu un message lu par un client qui ne dit pas PEEK', async () => {
         const uid = await deliver('Sans peek', 'Junk');
         const mailbox = await engine.repo.findByAddress('bob@exemple.test');

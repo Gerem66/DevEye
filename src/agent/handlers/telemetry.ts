@@ -1,5 +1,6 @@
 import { AGENT_ERROR, AGENT_METRICS_BATCH, AGENT_REPORT, type ProcessKind, type ReportProcess } from '@deveye/types';
 
+import { isPlanPaused } from '@/Services/planPauses';
 import { ack, reply, type AgentSession, type PayloadOf } from './session';
 
 /**
@@ -21,6 +22,11 @@ import { ack, reply, type AgentSession, type PayloadOf } from './session';
  * de refuser, et seulement dans ce cas : le chemin normal ne coûte rien.
  */
 async function gated(s: AgentSession): Promise<boolean> {
+    // L'agent est déconnecté à la mise en pause ; ceci couvre la trame en vol.
+    if (isPlanPaused('devices.agents', s.device.id)) {
+        ack(s, 0);
+        return true;
+    }
     if (s.device.status === 'active') return false;
 
     const fresh = await s.db.devices.findById(s.device.id);

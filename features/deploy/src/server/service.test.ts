@@ -129,12 +129,14 @@ function fakeRepo(
         countCredentialUses: unused,
         findTargetByDevice: unused,
         countTargetsInWorkspaces: async (ids) => targets.filter((t) => ids.includes(t.workspace_id)).length,
+        listStockTargets: unused,
         // La requête du vrai dépôt, en mémoire : jointure sur la clé, accès
         // écartés, compte des déploiements en vol, les deux régimes, le tour de
         // chaque espace et l'ordre.
-        listTargetsDue: async (limit, staleBefore, skipCredentialIds) => {
+        listTargetsDue: async (limit, staleBefore, skipCredentialIds, pausedIds) => {
             const due = targets
                 .filter((t) => t.credential_id === null || !skipCredentialIds.includes(t.credential_id))
+                .filter((t) => !pausedIds.includes(t.id))
                 .map((t) => {
                     const c = credentials.find((x) => x.id === t.credential_id);
                     return {
@@ -225,7 +227,14 @@ interface Answers {
 }
 
 /** Le service sur le harnais, avec une instance Dokploy pilotée par le test. */
-function syncWith(repo: FakeRepo, options: { liveChannels?: readonly number[]; notifyAccepted?: boolean } = {}) {
+function syncWith(
+    repo: FakeRepo,
+    options: {
+        liveChannels?: readonly number[];
+        notifyAccepted?: boolean;
+        pausedItems?: Record<string, readonly string[]>;
+    } = {}
+) {
     const deps = createTestServiceDeps({ repo, ...options });
     let answers: Answers | null = { remote: [] };
     /** Lectures de la fiche d'une cible : une par cible et par heure, pas une par tour. */
@@ -303,6 +312,37 @@ describe('la boucle', () => {
         await tick();
         assert.equal(repo.targets[0].synced_at, null);
         assert.deepEqual(deps.recorded.liveChanges, []);
+    });
+});
+
+describe('la pause d’offre', () => {
+    it('une cible en pause n’est pas sondée, même avec un déploiement en vol ; les autres le sont', async () => {
+        const inFlight: DeploymentRow = {
+            id: 5,
+            target_id: 2,
+            workspace_id: 1,
+            external_id: 'dep-1',
+            status: 'running',
+            triggered_by_user_id: 3,
+            started_at: NOW() - 30,
+            finished_at: null,
+            notified: 0,
+            content: JSON.stringify({ title: 'Mise en prod', description: '', url: null })
+        };
+        const repo = fakeRepo(
+            [
+                target({ id: 1, synced_at: null }),
+                target({ id: 2, credential_id: 20, external_id: 'app-2', synced_at: null })
+            ],
+            [credential(), credential({ id: 20, base_url: 'https://autre.fr' })],
+            [inFlight]
+        );
+        const { tick, answer } = syncWith(repo, { pausedItems: { targets: ['2'] } });
+        answer({ remote: [] });
+        await tick();
+        assert.notEqual(repo.targets[0].synced_at, null);
+        assert.equal(repo.targets[1].synced_at, null);
+        assert.equal(repo.deployments[0].status, 'running');
     });
 });
 

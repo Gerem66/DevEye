@@ -13,6 +13,7 @@ import { loadDatabase, monitorOf, reloadDatabase, type Ctx } from './_shared';
 /** Ouvre une session vers une base visible, cible déchiffrée sous la clé de son domicile. */
 async function sessionFor(ctx: Ctx, databaseId: number): Promise<Session> {
     const row = await loadDatabase(ctx, databaseId);
+    await ctx.quota.assertActive('connections', String(databaseId));
     const monitor = monitorOf();
     try {
         return await openSession(await monitor.targetOf(row, row.workspace_id));
@@ -45,6 +46,8 @@ export const databaseProbeFeatures = [
         access: { level: 'write' },
         handler: async (ctx: Ctx, input) => {
             await loadDatabase(ctx, input.databaseId);
+            // Avant l'essai, qui rend tout échec comme un résultat : la pause doit lever.
+            await ctx.quota.assertActive('connections', String(input.databaseId));
             const started = Date.now();
             // Ne lève jamais : un échec de connexion est le résultat normal d'un test.
             try {
@@ -112,6 +115,7 @@ export const databaseProbeFeatures = [
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const row = await loadDatabase(ctx, input.databaseId);
+            await ctx.quota.assertActive('connections', String(input.databaseId));
             // Le relevé lit la base chez elle et diffuse à son espace.
             const probe = await monitorOf().checkNow(input.databaseId, row.workspace_id);
             return { database: await reloadDatabase(ctx, input.databaseId), probe };

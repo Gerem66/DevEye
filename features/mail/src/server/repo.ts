@@ -10,7 +10,7 @@ import type {
     MailSecurityTier,
     MailSettingsRow
 } from '../contracts/domain';
-import type { SdkQueryable } from '@deveye/types/sdk/server';
+import type { SdkQueryable, SdkStockItem } from '@deveye/types/sdk/server';
 
 /**
  * Le dépôt du module sur `SdkQueryable`, en sections parce que les mêmes verbes
@@ -43,6 +43,8 @@ export interface MailAccountConfig {
 export interface MailAccountsRepo {
     listByWorkspace(workspaceId: number): Promise<MailAccountRow[]>;
     countInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
+    /** Ce que compte `countInWorkspaces`, du plus ancien au plus récent : le stock du quota `accounts`. */
+    listStock(workspaceIds: readonly number[]): Promise<SdkStockItem[]>;
     /**
      * Les comptes visibles depuis cet espace : les siens, plus ceux qu'un autre
      * espace y projette (`item_shares`), les locaux d'abord. Ne retient des
@@ -80,11 +82,13 @@ export interface MailAccountsRepo {
     /** Re-key the cached error alone, when a tier switch changes which cipher it must be under. */
     updateSyncError(id: number, lastSyncErrorEnc: string | null): Promise<void>;
     /**
-     * Enabled, "open"-tier accounts due for a background sync tick (never
-     * "guarded" — those only sync on demand during a live session). Staleness
-     * is per account, from its own `sync_interval_seconds`.
+     * Les comptes actifs et ouverts dus pour la relève de fond (jamais les
+     * gardés, relevés à la demande pendant une session), l'échéance tenant à la
+     * cadence propre de chacun. `pausedIds`, que l'offre tient en pause, sont
+     * écartés dans la requête : filtrés après le `LIMIT`, ils rempliraient la
+     * fenêtre sans que leur `last_sync_at` n'avance jamais.
      */
-    listSyncDue(now: number, limit: number): Promise<MailAccountRow[]>;
+    listSyncDue(now: number, limit: number, pausedIds: readonly number[]): Promise<MailAccountRow[]>;
 }
 
 export interface MailFolderUpsertInput {
@@ -232,6 +236,14 @@ function accountsRepo(q: SdkQueryable): MailAccountsRepo {
             );
             return Number(rows[0]?.total ?? 0);
         },
+        async listStock(workspaceIds) {
+            if (workspaceIds.length === 0) return [];
+            const rows = await q.query<{ id: number; workspace_id: number }>(
+                'SELECT id, workspace_id FROM mail_accounts WHERE workspace_id IN (?) ORDER BY created ASC, id ASC',
+                [[...workspaceIds]]
+            );
+            return rows.map((row) => ({ id: String(row.id), workspaceId: Number(row.workspace_id) }));
+        },
         async listByWorkspace(workspaceId) {
             return q.query<MailAccountRow>(
                 'SELECT * FROM mail_accounts WHERE workspace_id = ? ORDER BY sort_order ASC, id ASC',
@@ -349,14 +361,17 @@ function accountsRepo(q: SdkQueryable): MailAccountsRepo {
         async updateSyncError(id, lastSyncErrorEnc) {
             await q.execute('UPDATE mail_accounts SET last_sync_error_enc = ? WHERE id = ?', [lastSyncErrorEnc, id]);
         },
-        async listSyncDue(now, limit) {
+        async listSyncDue(now, limit, pausedIds) {
+            // `NOT IN ()` n'est pas du SQL : la clause n'existe qu'avec des pauses.
+            const paused = pausedIds.length > 0;
             return q.query<MailAccountRow>(
                 `SELECT * FROM mail_accounts
                  WHERE enabled = 1 AND security_tier = 'open'
                    AND (last_sync_at IS NULL OR last_sync_at <= ? - sync_interval_seconds)
+                   ${paused ? 'AND id NOT IN (?)' : ''}
                  ORDER BY last_sync_at IS NOT NULL, last_sync_at ASC
                  LIMIT ?`,
-                [now, limit]
+                paused ? [now, [...pausedIds], limit] : [now, limit]
             );
         }
     };

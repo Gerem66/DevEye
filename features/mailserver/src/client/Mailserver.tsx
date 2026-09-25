@@ -6,6 +6,8 @@ import {
     formatBytesFr,
     humanizeError,
     invalidate,
+    PlanPausedBadge,
+    PlanPausedNotice,
     useActiveWorkspace,
     useLiveItemTarget,
     useLiveOutlines,
@@ -110,6 +112,11 @@ export function FeatureMailserver(_props: FeatureViewProps) {
             </header>
 
             {error && <p className={styles.error}>{error}</p>}
+            <PlanPausedNotice
+                count={mailboxes?.filter((m) => m.planPaused).length ?? 0}
+                one='adresse hébergée'
+                many='adresses hébergées'
+            />
             {mailboxes === null && !error && <p className={styles.hint}>Chargement…</p>}
             {mailboxes?.length === 0 && (
                 <p className={styles.hint}>
@@ -143,6 +150,7 @@ export function FeatureMailserver(_props: FeatureViewProps) {
                                         </span>
                                     </span>
                                     {!mailbox.enabled && <StatusBadge tone='neutral'>Éteinte</StatusBadge>}
+                                    {mailbox.planPaused && <PlanPausedBadge />}
                                     {mailbox.foreign && <StatusBadge tone='accent'>Partagée</StatusBadge>}
                                     <span className={`icon icon-arrow ${styles.cardArrow}`} aria-hidden='true' />
                                 </button>

@@ -1,6 +1,6 @@
 import { UPTIME_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { UptimeClientProvider, UptimeLinkedService } from '@deveye/types/sdk/client';
-import { Button, moduleClientProvider, openFeature } from 'deveye-sdk-client';
+import { Button, moduleClientProvider, openFeature, PlanPausedBadge } from 'deveye-sdk-client';
 import styles from '../style.module.css';
 
 interface UptimeLinkRowProps {
@@ -12,7 +12,7 @@ interface UptimeLinkRowProps {
 
 /** Le point d'état, avec la même sémantique que dans Uptime. */
 function tone(service: UptimeLinkedService): 'online' | 'down' | 'neutral' {
-    if (!service.enabled) return 'neutral';
+    if (!service.enabled || service.planPaused) return 'neutral';
     if (service.status === 'up') return 'online';
     if (service.status === 'down') return 'down';
     return 'neutral';
@@ -36,6 +36,7 @@ export function UptimeLinkRow({ service, canWrite, busy, onUnlink }: UptimeLinkR
                     <p className={styles.blockName}>
                         <span className={styles.uptimeDot} data-tone={tone(service)} aria-hidden='true' />
                         {service.name}
+                        {service.planPaused && <PlanPausedBadge />}
                     </p>
                     <p className={styles.blockMeta}>{service.url}</p>
                 </div>

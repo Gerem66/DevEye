@@ -107,7 +107,9 @@ export { useDragReorder } from '@/dragReorder';
 // ── Les données ────────────────────────────────────────────────────────────
 export { humanizeError, useResource } from '@/api/useResource';
 /** L'offre du compte, et l'ouverture d'une vue de compte (`manifest.accountEntry`). */
-export { useAccountPlan } from '@/stores/accountPlan';
+export { useAccountPlan, usePlanPauses } from '@/stores/accountPlan';
+/** Un élément que l'offre tient en pause : sa pastille, et le bandeau de sa liste. */
+export { PlanPausedBadge, PlanPausedNotice } from '@/Components/PlanPause';
 export { openAccountView } from '@/stores/accountView';
 /** L'erreur d'une commande refusée : son code, son message, ses détails de validation. */
 export { WsError } from '@/api/ws';

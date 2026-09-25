@@ -7,6 +7,7 @@ import {
     onServerEvent,
     onSocketOpen,
     OpenPopup,
+    PlanPausedNotice,
     TextInput,
     useLiveItemTarget,
     useLiveSegment,
@@ -86,6 +87,12 @@ export default function Mail(_props: FeatureViewProps) {
     /** A card is being dragged: the periodic reload must not reshuffle under it. */
     const draggingRef = useRef(false);
     const selectedAccountIdRef = useRef<number | null>(null);
+    /**
+     * Boîte ouverte en pause d'offre : ce qui partirait seul vers IMAP (relève à
+     * l'ouverture d'un dossier, incursion vers le passé) ne part pas ; un geste
+     * explicite se heurte au refus du serveur, qui l'explique.
+     */
+    const selectedPausedRef = useRef(false);
     // Which of panel A's two slides is showing — its own bit of state,
     // independent of the selection (see AccountPanel), also used here to
     // widen the column while the (more space-hungry) account list shows.
@@ -373,6 +380,11 @@ export default function Mail(_props: FeatureViewProps) {
                 setReachedFolderStart(false);
                 return;
             }
+            // Le cache est tout ce qu'une boîte en pause a à montrer.
+            if (selectedPausedRef.current) {
+                setReachedFolderStart(true);
+                return;
+            }
 
             // Le cache est épuisé : une seule incursion vers le passé, dont les
             // lignes se posent sous celles déjà affichées.
@@ -562,7 +574,7 @@ export default function Mail(_props: FeatureViewProps) {
         async (folderId: number) => {
             const run = folderRunRef.current;
             await loadMessages(folderId, null);
-            if (folderRunRef.current !== run) return;
+            if (folderRunRef.current !== run || selectedPausedRef.current) return;
             await syncNow();
         },
         [loadMessages, syncNow]
@@ -647,6 +659,7 @@ export default function Mail(_props: FeatureViewProps) {
     const selectedAccount = accounts.find((a) => a.id === selectedAccountId) ?? null;
     const accountStatus = selectedAccount ? describeAccountStatus(selectedAccount) : null;
     selectedAccountIdRef.current = selectedAccountId;
+    selectedPausedRef.current = selectedAccount?.planPaused ?? false;
     const selectedFolder = folders.find((f) => f.id === selectedFolderId) ?? null;
 
     /**
@@ -973,6 +986,8 @@ export default function Mail(_props: FeatureViewProps) {
             )}
 
             {error && <p className={styles.error}>{error}</p>}
+
+            <PlanPausedNotice count={accounts.filter((a) => a.planPaused).length} one='boîte mail' many='boîtes mail' />
 
             {/* The sidebar width goes through a custom property rather than
                 `grid-template-columns` directly: an inline shorthand would

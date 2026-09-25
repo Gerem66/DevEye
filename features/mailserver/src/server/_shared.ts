@@ -1,4 +1,4 @@
-import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
+import { FeatureError, type SdkCipher, type SdkFeatureContext, type SdkPlanPauses } from '@deveye/types/sdk/server';
 import { z } from 'zod';
 
 import type { Connection, Mailbox, MailEvent, QueueEntry, ServerStatus } from '../contracts/domain';
@@ -28,6 +28,17 @@ export type EventContent = z.infer<typeof eventContentSchema>;
 
 export const seal = (cipher: SdkCipher, value: unknown): Promise<string> => cipher.encrypt(JSON.stringify(value));
 
+/** La limite d'offre qui compte les boîtes : l'hôte en met en pause, les plus récentes d'abord. */
+export const ADDRESSES = 'addresses';
+
+/**
+ * Une boîte qui sert : allumée, et pas tenue en pause par l'offre. Une boîte en
+ * pause est refusée partout exactement comme une éteinte, mêmes codes compris.
+ */
+export function isServing(mailbox: MailboxRow, pauses: SdkPlanPauses): boolean {
+    return mailbox.enabled === 1 && !pauses.isPaused(ADDRESSES, String(mailbox.id));
+}
+
 /** Descelle et valide, sans jamais lever : un blob illisible rend le repli. */
 export async function unseal<T>(cipher: SdkCipher, blob: string, schema: z.ZodType<T>, fallback: T): Promise<T> {
     const plain = await cipher.tryDecrypt(blob);
@@ -43,7 +54,8 @@ export async function toMailbox(
     cipher: SdkCipher,
     row: MailboxRow,
     domainHost: string,
-    foreign: boolean
+    foreign: boolean,
+    pauses: SdkPlanPauses
 ): Promise<Mailbox> {
     const content = await unseal(cipher, row.content, mailboxContentSchema, { displayName: '' });
     return {
@@ -55,6 +67,7 @@ export async function toMailbox(
         domainHost,
         displayName: content.displayName,
         enabled: row.enabled === 1,
+        planPaused: pauses.isPaused(ADDRESSES, String(row.id)),
         quotaMb: Math.round(row.quota_bytes / MB),
         usedBytes: row.used_bytes,
         messageCount: row.message_count,

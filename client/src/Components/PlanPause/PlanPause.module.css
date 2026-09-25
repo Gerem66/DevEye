@@ -1,0 +1,27 @@
+.notice {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-sm) var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--warning-bg);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.notice > div {
+    flex: 1;
+    min-width: 240px;
+}
+
+.notice p {
+    margin: 0;
+}
+
+.title {
+    font-weight: 600;
+    color: var(--warning);
+}

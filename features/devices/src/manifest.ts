@@ -30,7 +30,7 @@ export const manifest = {
      * (`ctx.deveye.devices.authorize`).
      */
     nativeCapabilities: ['agents', 'devices.read'],
-    quotas: [{ key: 'agents', label: 'appareils actifs' }],
+    quotas: [{ key: 'agents', label: 'appareils actifs', stock: true }],
     /** Le compteur d'appareils en ligne de la barre du haut. */
     topbarWidget: { description: "Nombre d'appareils en ligne" },
     /**

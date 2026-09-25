@@ -4,6 +4,7 @@ import { homeLayoutSchema, themeStateSchema } from '@deveye/types';
 import { toRemoteInstance } from '@/db/repos/remoteInstances';
 import { permissionsFor } from '@/features/_access';
 import { maintenance, MaintenanceError } from '@/Services/maintenance';
+import { memberPausedIn, workspacePauses } from '@/Services/planPauses';
 import { env } from '@/Utils/Env';
 
 /**
@@ -69,13 +70,17 @@ export async function loadUserBundle(
             ownerUserId: w.owner_user_id,
             users,
             features: parseStringArray(w.features),
-            created: Number(w.created)
+            created: Number(w.created),
+            ...workspacePauses(w.id, [...userIds])
         };
     });
 
     // Par préséance : l'espace où le client se trouve déjà, sinon son favori,
-    // sinon le personnel ; chacun seulement s'il est encore accessible.
-    const accessible = new Set(workspaces.map((w) => w.id));
+    // sinon le personnel ; chacun seulement s'il est encore accessible. Un
+    // espace où l'offre de son propriétaire le tient en pause ne l'est pas.
+    const accessible = new Set(
+        workspaces.filter((w) => w.ownerUserId === userId || !memberPausedIn(w.id, userId)).map((w) => w.id)
+    );
     const activeWorkspaceId =
         [preferredWorkspaceId, row.default_workspace_id].find((id): id is number => id != null && accessible.has(id)) ??
         // L'espace personnel est accessible par construction ; si cet invariant

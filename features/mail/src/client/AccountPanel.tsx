@@ -1,4 +1,4 @@
-import { StatusBadge } from 'deveye-sdk-client';
+import { PlanPausedBadge, StatusBadge } from 'deveye-sdk-client';
 
 import AccountList from './AccountList';
 import FolderTree from './FolderTree';
@@ -101,6 +101,7 @@ export function AccountPanel({
                                         <StatusBadge tone='accent'>partagée</StatusBadge>
                                     </span>
                                 )}
+                                {selected.planPaused && <PlanPausedBadge />}
                             </button>
                             <div className={styles.folderScroll}>
                                 <h4 className={styles.sidebarSubhead}>Dossiers</h4>

@@ -53,6 +53,13 @@ export interface StoredAccess {
     auth: TunnelConfig['auth'];
 }
 
+/**
+ * Ce que disent les chemins sans session (relevé, mesure pour Projets, accès pour
+ * Sauvegardes) d'une base que l'offre tient en pause : une commande, elle, lève
+ * par `ctx.quota.assertActive`, que l'écran sait expliquer.
+ */
+export const PLAN_PAUSED_MESSAGE = 'Au-delà de l’offre : cette base est en pause.';
+
 /** Le service de relevé, posé par `createService` au démarrage : un singleton par processus. */
 let monitorRef: DatabaseMonitor | null = null;
 
@@ -130,7 +137,8 @@ export async function toDatabase(
     row: DatabaseWithStatsRow,
     foreign: boolean,
     /** Le nombre de projets qui s'en servent, venu du contrat de Projets. */
-    projectCount: number
+    projectCount: number,
+    planPaused: boolean
 ): Promise<Database> {
     const body = await readJson<Partial<StoredDatabase>>(cipher, row.content);
     const access = await readJson<Partial<StoredAccess>>(cipher, row.access_content);
@@ -166,6 +174,7 @@ export async function toDatabase(
         alertCount: row.alert_count,
         firingCount: row.firing_count,
         projectCount,
+        planPaused,
         created: row.created
     });
 }
@@ -198,6 +207,7 @@ export async function reloadDatabase(ctx: Ctx, databaseId: number): Promise<Data
         await databaseCipherFor(ctx, row),
         row,
         row.workspace_id !== ctx.workspaceId,
-        counts.get(databaseId) ?? 0
+        counts.get(databaseId) ?? 0,
+        ctx.quota.isPaused('connections', String(databaseId))
     );
 }

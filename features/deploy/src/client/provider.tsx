@@ -114,6 +114,14 @@ function summarize(targetIds: readonly number[]): Promise<readonly SdkTileSummar
             if (!target) {
                 return { itemId: id, title: `Cible #${id}`, metrics: [], unavailable: 'Cette cible n’est plus ici.' };
             }
+            if (target.planPaused) {
+                return {
+                    itemId: id,
+                    title: target.name,
+                    metrics: [],
+                    unavailable: 'Au-delà de l’offre : son suivi est en pause.'
+                };
+            }
             if (isOrphan(target)) {
                 return {
                     itemId: id,

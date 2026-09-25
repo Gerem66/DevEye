@@ -9,7 +9,9 @@ import type {
     SdkDomain,
     SdkDomainProbe,
     SdkMovePlan,
-    SdkQueryable
+    SdkPlanPauseChange,
+    SdkQueryable,
+    SdkStockItem
 } from '@deveye/types/sdk/server';
 import {
     DOMAIN_HOST_PATTERN,
@@ -46,6 +48,7 @@ import type {
 } from '@deveye/types/sdk/server';
 import { logger } from '@/logger';
 import { maintenance, replyMaintenance, type MaintenanceServices } from '@/Services/maintenance';
+import { touchPlanPauses, type StockSource } from '@/Services/planPauses';
 import { createSdkContext, ORIGINS } from './context';
 import { createDomainsContext, sdkFleetDomains, type DomainsHost } from './domains';
 import { createQuota } from './quota';
@@ -117,6 +120,19 @@ export function registerModules(installed: readonly InstalledFeatureModule[]): v
         // rien, la sonde sans l'onglet ne serait jamais appelée.
         if (Boolean(manifest.domains) !== Boolean(mod.server.domains)) {
             throw new Error(`Module « ${manifest.id} » : manifest.domains et server.domains vont ensemble`);
+        }
+        // Même appariement pour un stock : sans son lister, rien ne se mettrait
+        // en pause, et un lister sans stock déclaré ne serait jamais appelé.
+        const stocks = (manifest.quotas ?? []).filter((q) => q.stock).map((q) => q.key);
+        const listed = Object.keys(mod.server.quotas ?? {});
+        const unpaired = [
+            ...stocks.filter((key) => !listed.includes(key)),
+            ...listed.filter((key) => !stocks.includes(key))
+        ];
+        if (unpaired.length > 0) {
+            throw new Error(
+                `Module « ${manifest.id} » : quota stock et server.quotas vont ensemble (${unpaired.join(', ')})`
+            );
         }
         if (manifest.accountOnly) {
             const scoped = mod.server.features.find((def) => def.access?.scope !== 'account');
@@ -226,7 +242,11 @@ export function moduleFeatureHandlers(): FeatureDefinition<string, never, never>
                     // les gestes de flotte (appairer, révoquer, supprimer).
                     if (def.access?.admin) ctx.assertAdmin();
                     const sdkCtx = createSdkContext(ctx, mod.manifest, mod.repoFor(ctx.db), PROVIDERS);
-                    return def.handler(sdkCtx, input as never) as never;
+                    const out = await def.handler(sdkCtx, input as never);
+                    // Une suppression a pu libérer une place : le plus ancien en
+                    // pause la reprend, sans que le module ait à y penser.
+                    if (def.mutates) touchPlanPauses(ctx.workspace.ownerUserId, mod.manifest.id);
+                    return out as never;
                 }
             })
         )
@@ -371,6 +391,47 @@ export function moduleDomains(
         useCount: (workspaceId) => hooks.useCount?.(ctx, workspaceId) ?? Promise.resolve(new Map()),
         onRemoved: (domain) => hooks.onRemoved?.(ctx, domain) ?? Promise.resolve()
     };
+}
+
+/** Les limites de stock d'un module, avec leur libellé, liées à son repo. */
+export function moduleStocks(
+    featureId: string,
+    db: Database
+): { fullKey: string; label: string; list(ownerWorkspaceIds: readonly number[]): Promise<readonly SdkStockItem[]> }[] {
+    const mod = BY_ID.get(featureId);
+    if (!mod) return [];
+    return Object.entries(mod.server.quotas ?? {}).map(([key, stock]) => ({
+        fullKey: `${featureId}.${key}`,
+        label: mod.manifest.quotas?.find((q) => q.key === key)?.label ?? key,
+        list: (ownerWorkspaceIds) => stock.list(mod.repoFor(db), ownerWorkspaceIds)
+    }));
+}
+
+/** Les limites de stock des modules (`stock: true`), chacune liée au repo de son module. */
+export function moduleStockSources(db: Database): StockSource[] {
+    return MODULES.flatMap((mod) =>
+        Object.entries(mod.server.quotas ?? {}).map(([key, stock]) => ({
+            fullKey: `${mod.manifest.id}.${key}`,
+            featureId: mod.manifest.id,
+            overLimit: async (_owner: number, ownerWorkspaceIds: readonly number[], limit: number) =>
+                (await stock.list(mod.repoFor(db), ownerWorkspaceIds)).slice(limit)
+        }))
+    );
+}
+
+/**
+ * Ce qu'une passe vient de mettre en pause ou de reprendre, au service du
+ * module : pour ce qu'il tient ouvert. Isolé comme un hook agent, et sauté
+ * tant qu'une maintenance complète tient le service à l'arrêt.
+ */
+export async function notifyModulePlanPause(featureId: string, change: SdkPlanPauseChange): Promise<void> {
+    const s = SERVICES.find((x) => x.manifest.id === featureId);
+    if (!s || s.halted || !s.service.onPlanPause) return;
+    try {
+        await s.service.onPlanPause(change);
+    } catch (err) {
+        s.logger.error({ err, module: featureId }, 'crochet de pause d’offre en échec');
+    }
 }
 
 /** Les fonctionnalités installées qui gèrent des domaines. */

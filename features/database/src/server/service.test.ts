@@ -2,7 +2,14 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import type { DatabaseAlertRow, DatabaseRow, DatabaseRows } from '../contracts/domain';
-import { DATABASE_ITEMS_PROVIDER, type DatabaseItemsProvider } from '@deveye/types/sdk';
+import {
+    DATABASE_BACKUP_PROVIDER,
+    DATABASE_ITEMS_PROVIDER,
+    DATABASE_MEASURE_PROVIDER,
+    type DatabaseBackupProvider,
+    type DatabaseItemsProvider,
+    type DatabaseMeasureProvider
+} from '@deveye/types/sdk';
 import { createTestServiceDeps } from '@deveye/types/sdk/testing';
 
 import type { Inventory, Session } from './engine';
@@ -94,6 +101,7 @@ function fakeRepo(rows: DatabaseRow[], alerts: DatabaseAlertRow[] = []): FakeRep
         findVisibleWithStats: unused,
         findByName: unused,
         countInWorkspaces: async (ids: readonly number[]) => ids.length - ids.length,
+        listStock: unused,
         count: unused,
         create: unused,
         update: unused,
@@ -110,11 +118,12 @@ function fakeRepo(rows: DatabaseRow[], alerts: DatabaseAlertRow[] = []): FakeRep
             target.size_bytes = input.sizeBytes;
             target.table_count = input.tableCount;
         },
-        listDue: async (now, limit) =>
+        listDue: async (now, limit, pausedIds) =>
             rows
                 .filter(
                     (r) =>
                         r.monitor_enabled === 1 &&
+                        !pausedIds.includes(r.id) &&
                         (r.last_check_at === null || r.last_check_at + r.interval_seconds <= now)
                 )
                 .slice(0, limit)
@@ -173,9 +182,9 @@ function fakeSession(answers: Answers): Session & { closed: number } {
 
 const number = (n: number): DatabaseRows => ({ columns: ['n'], rows: [[String(n)]], total: null, elapsedMs: 0 });
 
-/** Le service sur le harnais, avec une base pilotée par le test. */
-function monitorWith(repo: FakeRepo) {
-    const deps = createTestServiceDeps({ repo });
+/** Le service sur le harnais, avec une base pilotée par le test ; `paused`, les bases que l'offre tient en pause. */
+function monitorWith(repo: FakeRepo, paused: string[] = []) {
+    const deps = createTestServiceDeps({ repo, pausedItems: { connections: paused } });
     let next: (() => Session) | null = null;
     let opened = 0;
     const monitor = new DatabaseMonitor(deps, {
@@ -260,6 +269,50 @@ describe('un relevé', () => {
         const [a, b] = await Promise.all([monitor.checkNow(1, 1), monitor.checkNow(1, 1)]);
         assert.equal(a, b);
         assert.equal(opened(), 1);
+    });
+});
+
+describe('la pause d’offre', () => {
+    it('une base en pause n’entre pas dans la boucle, et un relevé demandé n’ouvre rien ni n’écrit rien', async () => {
+        const repo = fakeRepo([row({ id: 1 }), row({ id: 2 })]);
+        const { monitor, answer, opened, deps } = monitorWith(repo, ['2']);
+        answer({});
+        await deps.recorded.tickers[0].tick();
+        assert.deepEqual(
+            repo.rows.map((r) => [r.id, r.status, r.monitor_enabled]),
+            [
+                [1, 'up', 1],
+                [2, 'unknown', 1]
+            ]
+        );
+        assert.equal(opened(), 1);
+
+        const probe = await monitor.checkNow(2, 1);
+        assert.deepEqual(probe, {
+            ok: false,
+            serverVersion: null,
+            elapsedMs: 0,
+            error: 'Au-delà de l’offre : cette base est en pause.'
+        });
+        assert.equal(opened(), 1);
+        assert.equal(repo.rows[1].last_check_at, null);
+    });
+
+    it('Projets ne l’ouvre pas, et rend la raison ; Sauvegardes l’ouvre, que borne son propre stockage', async () => {
+        const repo = fakeRepo([row({ id: 2 })]);
+        const service = serverEntry.createService?.(
+            createTestServiceDeps({ repo, pausedItems: { connections: ['2'] } })
+        );
+        const measure = service?.providers?.[DATABASE_MEASURE_PROVIDER] as DatabaseMeasureProvider | undefined;
+        const backup = service?.providers?.[DATABASE_BACKUP_PROVIDER] as DatabaseBackupProvider | undefined;
+        assert.ok(measure && backup);
+        assert.deepEqual(await measure.measure(2, 1, ['SELECT 1', 'SELECT 2']), [
+            { value: null, error: 'Au-delà de l’offre : cette base est en pause.' },
+            { value: null, error: 'Au-delà de l’offre : cette base est en pause.' }
+        ]);
+        const access = await backup.openAccess(2, 1);
+        assert.ok(access);
+        await access.close();
     });
 });
 

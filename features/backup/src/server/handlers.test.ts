@@ -11,6 +11,7 @@ import {
     backupJobRemove,
     backupJobRun,
     backupJobUpdate,
+    backupRunRemove,
     backupSources
 } from '../contracts/commands';
 import type {
@@ -262,8 +263,27 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         },
         finishRun: async () => undefined,
         listRunsToPrune: async () => [],
+        listRunsPresent: async (jobId) =>
+            runs.filter((r) => r.job_id === jobId && r.status === 'success' && r.pruned === 0),
         markPruned: async () => undefined,
         failStaleRuns: async () => 0
+    };
+}
+
+/** Une exécution réussie, archive présente. */
+function successRun(over: Partial<BackupRunRow> & { id: number; job_id: number }): BackupRunRow {
+    return {
+        workspace_id: 1,
+        status: 'success',
+        started_at: 1,
+        finished_at: 2,
+        size_bytes: 1024,
+        checksum: null,
+        encrypted: 1,
+        triggered_by_user_id: null,
+        pruned: 0,
+        content: JSON.stringify({ artifact: `nuit/${over.id}.tar.enc`, error: null }),
+        ...over
     };
 }
 
@@ -290,11 +310,19 @@ const cloudSync: CloudSyncBackupProvider = {
     }
 };
 
-/** Le moteur, réduit à ce que ces handlers lui demandent ; `running` dit ce qui tourne. */
-function fakeEngine(running: number[] = []): { triggered: number[] } {
-    const calls = { triggered: [] as number[] };
+/**
+ * Le moteur, réduit à ce que ces handlers lui demandent ; `running` dit ce qui
+ * tourne, `stubborn` les exécutions dont l'archive refuse de s'effacer.
+ */
+function fakeEngine(running: number[] = [], stubborn: number[] = []): { triggered: number[]; erased: number[] } {
+    const calls = { triggered: [] as number[], erased: [] as number[] };
     setEngine({
         isRunning: (jobId: number) => running.includes(jobId),
+        erase: async (_j: BackupJobRow, _d: BackupDestinationRow, list: readonly BackupRunRow[]) => {
+            const kept = list.filter((r) => stubborn.includes(r.id));
+            for (const r of list) if (!stubborn.includes(r.id)) calls.erased.push(r.id);
+            return kept.length;
+        },
         trigger: async (j: BackupJobRow, userId: number) => {
             calls.triggered.push(j.id);
             return {
@@ -570,6 +598,55 @@ describe('Backup : handlers', () => {
 
         assert.deepEqual(repo.jobs, []);
         assert.deepEqual(ctx.forgotten, ['10']);
+    });
+
+    it('supprimer un travail efface ses archives sur le stockage de DevEye, et reste si l’une résiste', async () => {
+        const repo = fakeRepo();
+        repo.destinations.push(destination({ id: 1, workspace_id: 1, kind: 'local' }));
+        repo.jobs.push(job({ id: 10, workspace_id: 1 }));
+        repo.runs.push(successRun({ id: 1, job_id: 10 }), successRun({ id: 2, job_id: 10 }));
+        const ctx = createTestContext({ repo, workspaceId: 1 });
+
+        fakeEngine([], [2]);
+        await assert.rejects(handlerFor(backupJobRemove)(ctx, { jobId: 10 }), failsWith('conflict'));
+        assert.equal(repo.jobs.length, 1, 'une archive restée sans historique ne se compterait plus');
+
+        const engine = fakeEngine();
+        await handlerFor(backupJobRemove)(ctx, { jobId: 10 });
+        assert.deepEqual(engine.erased, [1, 2]);
+        assert.deepEqual(repo.jobs, []);
+    });
+
+    it('ailleurs que chez DevEye, supprimer un travail laisse ses archives où elles sont', async () => {
+        const repo = fakeRepo();
+        repo.destinations.push(destination({ id: 1, workspace_id: 1, kind: 's3' }));
+        repo.jobs.push(job({ id: 10, workspace_id: 1 }));
+        repo.runs.push(successRun({ id: 1, job_id: 10 }));
+        const engine = fakeEngine();
+        await handlerFor(backupJobRemove)(createTestContext({ repo, workspaceId: 1 }), { jobId: 10 });
+        assert.deepEqual(engine.erased, []);
+    });
+
+    it('une sauvegarde précise s’efface pour faire de la place, pas une déjà effacée ni un échec', async () => {
+        const repo = fakeRepo();
+        repo.destinations.push(destination({ id: 1, workspace_id: 1 }));
+        repo.jobs.push(job({ id: 10, workspace_id: 1 }));
+        repo.runs.push(
+            successRun({ id: 1, job_id: 10 }),
+            successRun({ id: 2, job_id: 10, pruned: 1 }),
+            successRun({ id: 3, job_id: 10, status: 'failed' })
+        );
+        const ctx = createTestContext({ repo, workspaceId: 1 });
+        const engine = fakeEngine([], [4]);
+
+        assert.deepEqual(await handlerFor(backupRunRemove)(ctx, { runId: 1 }), { runId: 1 });
+        assert.deepEqual(engine.erased, [1]);
+        await assert.rejects(handlerFor(backupRunRemove)(ctx, { runId: 2 }), failsWith('validation'));
+        await assert.rejects(handlerFor(backupRunRemove)(ctx, { runId: 3 }), failsWith('validation'));
+        await assert.rejects(handlerFor(backupRunRemove)(ctx, { runId: 99 }), failsWith('not_found'));
+
+        repo.runs.push(successRun({ id: 4, job_id: 10 }));
+        await assert.rejects(handlerFor(backupRunRemove)(ctx, { runId: 4 }), failsWith('conflict'));
     });
 
     it('un travail en cours ne se supprime pas', async () => {

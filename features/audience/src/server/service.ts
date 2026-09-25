@@ -297,7 +297,7 @@ export class AudienceIngest {
      */
     async accept(req: IngestRequest): Promise<void> {
         const site = await this.resolveSite(req.key);
-        if (!site || !site.active) return;
+        if (!site || !this.receiving(site)) return;
         if (!originAllowed(site.origins, req.origin, site.platform)) return;
         if (looksLikeBot(req.userAgent)) return;
         const usage = await this.planUsage(site.workspaceId);
@@ -382,7 +382,7 @@ export class AudienceIngest {
         let cipher: SdkCipher;
         try {
             site = await this.resolveSite(req.key);
-            if (!site || !site.active) return { status: 'ignored' };
+            if (!site || !this.receiving(site)) return { status: 'ignored' };
             if (!originAllowed(site.origins, req.origin, site.platform)) return { status: 'ignored' };
 
             cipher = this.deps.cipherFor(site.workspaceId);
@@ -688,6 +688,15 @@ export class AudienceIngest {
         if (proposed === undefined) return now;
         if (proposed > now) return now;
         return Math.max(proposed, now - 86400);
+    }
+
+    /**
+     * Éteint par l'utilisateur ou tenu en pause par l'offre : rien n'entre, dans
+     * un cas comme dans l'autre. La pause se lit après le cache des sites, qui
+     * n'a donc rien à oublier quand elle change.
+     */
+    private receiving(site: CachedSite): boolean {
+        return site.active && !this.deps.pauses.isPaused('sites', String(site.id));
     }
 
     private async resolveSite(key: string): Promise<CachedSite | null> {

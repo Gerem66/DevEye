@@ -1,4 +1,4 @@
-import { StatusBadge, useLiveOutline } from 'deveye-sdk-client';
+import { PlanPausedBadge, StatusBadge, useLiveOutline } from 'deveye-sdk-client';
 import type { UptimeService } from '../contracts/domain';
 
 import { formatDuration, formatMs } from '../contracts/format';
@@ -18,7 +18,8 @@ interface ServiceCardProps {
 
 /** Badge tone + label for a service's live state. */
 function statusBadge(service: UptimeService): { tone: 'online' | 'danger' | 'neutral'; label: string } {
-    if (!service.enabled) return { tone: 'neutral', label: 'en pause' };
+    // Tenu en pause par l'offre, son dernier état est figé : le montrer mentirait.
+    if (!service.enabled || service.planPaused) return { tone: 'neutral', label: 'en pause' };
     if (service.status === 'up') return { tone: 'online', label: 'en ligne' };
     if (service.status === 'down') {
         const since = service.downSince;
@@ -39,13 +40,14 @@ function statusBadge(service: UptimeService): { tone: 'online' | 'danger' | 'neu
  */
 export function ServiceCard({ service, onOpen, dragging, onDragPointerDown }: ServiceCardProps) {
     const badge = statusBadge(service);
+    const paused = !service.enabled || service.planPaused;
     // Quelqu'un consulte ce service, plus bas que moi : sa couleur ici.
     const outline = useLiveOutline('l1', String(service.id));
     const { points, resolution, axis } = useServiceHistory(service.id, service.lastCheckedAt);
 
     return (
         <div
-            className={`${styles.card} ${service.enabled ? '' : styles.cardPaused} ${dragging ? styles.cardDragging : ''}`}
+            className={`${styles.card} ${paused ? styles.cardPaused : ''} ${dragging ? styles.cardDragging : ''}`}
             {...outline}
             role='button'
             tabIndex={0}
@@ -74,6 +76,7 @@ export function ServiceCard({ service, onOpen, dragging, onDragPointerDown }: Se
                 <div className={styles.cardHead}>
                     <h4 className={styles.cardName}>{service.name}</h4>
                     <StatusBadge tone={badge.tone}>{badge.label}</StatusBadge>
+                    {service.planPaused && <PlanPausedBadge />}
                     {/* Projeté depuis un autre espace : le serveur refuse de le
                         supprimer d'ici, et rien d'autre ne le distingue d'une
                         ligne locale. */}

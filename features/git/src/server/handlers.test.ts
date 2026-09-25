@@ -3,6 +3,7 @@ import { afterEach, describe, it } from 'node:test';
 import type { z, ZodType } from 'zod';
 
 import {
+    gitCommitDetail,
     gitCount,
     gitCredentialAdd,
     gitCredentialList,
@@ -106,6 +107,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         reset,
         countReposInWorkspaces: async (ids: readonly number[]) =>
             repos.filter((r) => ids.includes(r.workspace_id)).length,
+        listStockRepos: unused,
         listRepos: async (workspaceId) => repos.filter((r) => r.workspace_id === workspaceId),
         listVisibleRepos: async (workspaceId) => repos.filter((r) => visible(r, workspaceId)),
         // Des copies, comme des lignes lues en base : un handler compare ce
@@ -493,6 +495,46 @@ describe('git.repoUpdate, git.repoRemove, git.repoReorder et git.repoResync', ()
         assert.deepEqual(store.reset, [1]);
         assert.equal(ctx.recorded.audits[0].action, 'git.repoResync');
         assert.deepEqual(requested, [1]);
+    });
+});
+
+describe('la pause d’offre', () => {
+    const pausedCtx = (store: FakeRepo) => createTestContext({ repo: store, pausedItems: { repos: ['2'] } });
+    const isPausedRefusal = (e: unknown): boolean =>
+        e instanceof FeatureError &&
+        e.code === 'quota_exceeded' &&
+        (e.details as { paused?: boolean } | undefined)?.paused === true;
+
+    it('la liste et la fiche disent la pause, sans toucher au réglage de l’utilisateur', async () => {
+        const store = seed(fakeRepo(), repo({ id: 1, workspace_id: 1 }), repo({ id: 2, workspace_id: 1 }));
+        const listed = await handlerFor(gitRepoList)(pausedCtx(store), {});
+        assert.deepEqual(
+            listed.repos.map((r) => [r.id, r.planPaused, r.enabled]),
+            [
+                [1, false, true],
+                [2, true, true]
+            ]
+        );
+        const got = await handlerFor(gitRepoGet)(pausedCtx(store), { repoId: 2 });
+        assert.equal(got.repo.planPaused, true);
+    });
+
+    it('refuse de synchroniser, de relire ou de lire un diff d’un dépôt en pause, sans rien réveiller ni jeter', async () => {
+        const store = seed(fakeRepo(), repo({ id: 1, workspace_id: 1 }), repo({ id: 2, workspace_id: 1 }));
+        store.credentials.push(credential({ id: 10, workspace_id: 1 }));
+        const requested = mountFakeSync();
+        const ctx = pausedCtx(store);
+
+        await assert.rejects(handlerFor(gitRepoSyncNow)(ctx, { repoId: 2 }), isPausedRefusal);
+        await assert.rejects(handlerFor(gitRepoResync)(ctx, { repoId: 2 }), isPausedRefusal);
+        await assert.rejects(handlerFor(gitCommitDetail)(ctx, { repoId: 2, sha: 'abc1234' }), isPausedRefusal);
+        assert.deepEqual(requested, []);
+        assert.deepEqual(store.reset, []);
+
+        // Le dépôt actif, lui, se synchronise ; un inconnu reste introuvable.
+        await handlerFor(gitRepoSyncNow)(ctx, { repoId: 1 });
+        assert.deepEqual(requested, [1]);
+        await assert.rejects(handlerFor(gitRepoResync)(ctx, { repoId: 99 }), failsWith('not_found'));
     });
 });
 

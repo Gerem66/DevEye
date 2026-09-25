@@ -321,7 +321,10 @@ export class DevEyeWs {
                 this.pending.delete(msg.requestId);
                 if (msg.payload.ok) pending.resolve(msg.payload.data);
                 else {
-                    if (msg.payload.error.code === 'quota_exceeded') notifyQuotaExceeded(msg.payload.error.message);
+                    if (msg.payload.error.code === 'quota_exceeded') {
+                        const details = msg.payload.error.details as { paused?: unknown } | undefined;
+                        notifyQuotaExceeded(msg.payload.error.message, details?.paused === true);
+                    }
                     pending.reject(
                         new WsError(msg.payload.error.code, msg.payload.error.message, msg.payload.error.details)
                     );

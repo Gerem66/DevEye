@@ -1,4 +1,4 @@
-import { StatusBadge, useDragReorder, type useLiveOutlines } from 'deveye-sdk-client';
+import { PlanPausedBadge, StatusBadge, useDragReorder, type useLiveOutlines } from 'deveye-sdk-client';
 import type { GitRepo, GitRepoSyncState } from '../contracts/domain';
 
 import styles from './style.module.css';
@@ -154,6 +154,7 @@ function RepoCard({ repo, sync, outline, dragging, onOpen, onDragPointerDown }: 
                                 ? 'aucun projet'
                                 : `${repo.projectCount} projet${repo.projectCount > 1 ? 's' : ''}`}
                         </span>
+                        {repo.planPaused && <PlanPausedBadge />}
                         {!sync && stalled && <span className={styles.overdue}>{stalled}</span>}
                     </div>
                 </div>

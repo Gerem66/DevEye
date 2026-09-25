@@ -6,7 +6,7 @@ import type {
     UptimePageTheme,
     UptimeServiceRow
 } from '../contracts/domain';
-import type { SdkQueryable } from '@deveye/types/sdk/server';
+import type { SdkQueryable, SdkStockItem } from '@deveye/types/sdk/server';
 
 /**
  * Les pages de statut : leur réglage, et les lectures groupées que la page
@@ -55,6 +55,8 @@ export interface UptimePagesRepo {
     findByRef(ref: string): Promise<UptimePageRow | null>;
     findByDomain(domainId: number): Promise<UptimePageRow | null>;
     countInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
+    /** Ce que `countInWorkspaces` compte, les plus anciennes d'abord : l'offre sert celles de tête. */
+    listStock(workspaceIds: readonly number[]): Promise<SdkStockItem[]>;
     create(input: { workspaceId: number; publicRef: string } & UptimePageConfig): Promise<UptimePageRow>;
     update(id: number, workspaceId: number, config: UptimePageConfig): Promise<UptimePageRow | null>;
     /**
@@ -123,6 +125,14 @@ export function createPagesRepo(q: SdkQueryable): UptimePagesRepo {
                 [[...workspaceIds]]
             );
             return Number(rows[0]?.n ?? 0);
+        },
+        async listStock(workspaceIds) {
+            if (workspaceIds.length === 0) return [];
+            const rows = await q.query<{ id: number; workspace_id: number }>(
+                'SELECT id, workspace_id FROM ft_uptime_pages WHERE workspace_id IN (?) ORDER BY created ASC, id ASC',
+                [[...workspaceIds]]
+            );
+            return rows.map((row) => ({ id: String(row.id), workspaceId: Number(row.workspace_id) }));
         },
         async create({ workspaceId, publicRef, ...config }) {
             const res = await q.execute(

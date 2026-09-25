@@ -551,40 +551,52 @@ export class BackupEngine {
      * rétention repassera.
      */
     private async prune(job: BackupJobRow, destination: BackupDestinationRow): Promise<void> {
-        const stale = await this.deps.repo.listRunsToPrune(job.id, job.keep_last);
-        if (stale.length === 0) return;
+        await this.erase(job, destination, await this.deps.repo.listRunsToPrune(job.id, job.keep_last));
+    }
+
+    /**
+     * Efface l'archive de chaque exécution à sa destination, puis la marque
+     * effacée : elle ne compte plus au stockage. Rend combien n'ont pas pu
+     * l'être, qui restent présentes et comptées.
+     */
+    async erase(job: BackupJobRow, destination: BackupDestinationRow, runs: readonly BackupRunRow[]): Promise<number> {
+        if (runs.length === 0) return 0;
 
         const cipher = this.cipherFor(job.workspace_id);
         let sink: BackupSink;
         try {
             sink = await this.sinkFor(destination);
         } catch (e) {
-            this.deps.logger.warn({ jobId: job.id, err: (e as Error).message }, 'Backup: rétention reportée');
-            return;
+            this.deps.logger.warn({ jobId: job.id, err: (e as Error).message }, 'Backup: effacement reporté');
+            return runs.length;
         }
 
-        for (const old of stale) {
+        let failed = 0;
+        for (const run of runs) {
             let stored: StoredRun;
             try {
-                stored = JSON.parse((await cipher.tryDecrypt(old.content)) ?? '{}') as StoredRun;
+                stored = JSON.parse((await cipher.tryDecrypt(run.content)) ?? '{}') as StoredRun;
             } catch {
+                failed++;
                 continue;
             }
             if (!stored.artifact) {
                 // Rien à effacer : la ligne n'a jamais porté d'archive.
-                await this.deps.repo.markPruned(old.id);
+                await this.deps.repo.markPruned(run.id);
                 continue;
             }
             try {
                 await sink.remove(stored.artifact);
-                await this.deps.repo.markPruned(old.id);
+                await this.deps.repo.markPruned(run.id);
             } catch (e) {
+                failed++;
                 this.deps.logger.warn(
-                    { jobId: job.id, runId: old.id, err: (e as Error).message },
+                    { jobId: job.id, runId: run.id, err: (e as Error).message },
                     'Backup: archive non effacée, réessai au prochain passage'
                 );
             }
         }
+        return failed;
     }
 
     private async notifyFailure(

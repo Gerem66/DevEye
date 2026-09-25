@@ -219,7 +219,7 @@ export class GitSync {
         if (this.ticking) return;
         this.ticking = true;
         try {
-            const due = await this.deps.repo.listDue(BATCH * 4);
+            const due = await this.deps.repo.listDue(BATCH * 4, this.deps.pauses.paused('repos').map(Number));
             const now = Math.floor(Date.now() / 1000);
             const picked = due
                 .filter((row) => {
@@ -241,6 +241,13 @@ export class GitSync {
         if (running) return running;
         // Un tour demandé à la main juste avant l'arrêt peut encore arriver ici.
         if (this.stopped) return Promise.resolve();
+        // La reprise d'un backfill arrive ici sans passer par `listDue` : un dépôt
+        // mis en pause par l'offre entre deux tranches s'arrête là, sans voile.
+        if (this.deps.pauses.isPaused('repos', String(repoId))) {
+            this.progress.delete(repoId);
+            this.forced.delete(repoId);
+            return Promise.resolve();
+        }
         // Une tranche de backfill enchaîne la précédente : elle reprend son
         // horodatage de départ, sinon le chronomètre affiché repartirait de zéro
         // toutes les trois secondes alors qu'il s'agit d'une seule opération.

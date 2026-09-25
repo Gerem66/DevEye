@@ -11,6 +11,7 @@ import {
     deployCredentialRemove,
     deployCredentialUpdate,
     deployGet,
+    deployHistory,
     deployList,
     deployLog,
     deployMachines,
@@ -156,6 +157,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             ) ?? null,
         countTargetsInWorkspaces: async (ids) =>
             targets.filter((t) => ids.includes(t.workspace_id) && t.provider !== 'agent').length,
+        listStockTargets: unused,
         async createTarget(input) {
             const created = target({
                 id: ++seq,
@@ -551,6 +553,46 @@ describe('deploy.trigger', () => {
         );
         assert.deepEqual(repo.deployments, []);
         assert.deepEqual(ctx.recorded.audits, []);
+    });
+});
+
+describe('la pause d’offre', () => {
+    const isPausedRefusal = (e: unknown): boolean =>
+        e instanceof FeatureError &&
+        e.code === 'quota_exceeded' &&
+        (e.details as { paused?: boolean } | undefined)?.paused === true;
+
+    it('la liste la dit ; déclencher et lire un journal chez le fournisseur sont refusés, l’historique se lit en local', async () => {
+        const repo = seed(fakeRepo(), target({ id: 1, workspace_id: 1 }), target({ id: 2, workspace_id: 1 }));
+        repo.credentials.push(credential({ id: 10, workspace_id: 1 }));
+        repo.deployments.push(deployment({ id: 50, target_id: 2, workspace_id: 1 }));
+        const ctx = createTestContext({ repo, pausedItems: { targets: ['2'] } });
+
+        const listed = await handlerFor(deployList)(ctx, {});
+        assert.deepEqual(
+            listed.targets.map((t) => [t.id, t.planPaused]),
+            [
+                [1, false],
+                [2, true]
+            ]
+        );
+        await assert.rejects(
+            handlerFor(deployTrigger)(ctx, { targetId: 2, title: 'Mise en prod', description: '' }),
+            isPausedRefusal
+        );
+        await assert.rejects(handlerFor(deployLog)(ctx, { targetId: 2, externalId: 'dep-50' }), isPausedRefusal);
+        assert.deepEqual(
+            repo.deployments.map((d) => d.id),
+            [50]
+        );
+        assert.deepEqual(ctx.recorded.audits, []);
+
+        // Le relevé local, sans appel au fournisseur (qui, ici, ne répondrait pas).
+        const history = await handlerFor(deployHistory)(ctx, { targetId: 2 });
+        assert.deepEqual(
+            history.entries.map((e) => [e.externalId, e.status]),
+            [['dep-50', 'success']]
+        );
     });
 });
 

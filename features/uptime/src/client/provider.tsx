@@ -40,6 +40,14 @@ function summarize(serviceIds: readonly number[]): Promise<readonly SdkTileSumma
                     unavailable: 'Sa surveillance est en pause.'
                 };
             }
+            if (service.planPaused) {
+                return {
+                    itemId: id,
+                    title: service.name,
+                    metrics: [],
+                    unavailable: 'Au-delà de l’offre : sa surveillance est en pause.'
+                };
+            }
             return {
                 itemId: id,
                 title: service.name,

@@ -1,3 +1,5 @@
+import { PlanPausedBadge } from 'deveye-sdk-client';
+
 import { useDeviceUsage } from './deviceUsage';
 import { useDevices } from './store';
 import { activityLevel, formatAgo, pct, type Activity } from './utils';
@@ -45,7 +47,8 @@ export function DeviceWidget({ deviceId, hideStatus }: DeviceWidgetProps) {
 
     const online = device.online;
     const archived = device.status === 'archived';
-    const showUsage = online && !archived && !!usage;
+    const paused = device.planPaused && !archived;
+    const showUsage = online && !archived && !paused && !!usage;
     const cores = device.report?.os.cores ?? 0;
     const level = showUsage ? activityLevel(usage, cores) : null;
 
@@ -65,12 +68,15 @@ export function DeviceWidget({ deviceId, hideStatus }: DeviceWidgetProps) {
                     <span className={`icon icon-server ${styles.nameIcon}`} />
                     {device.name}
                 </span>
-                {!hideStatus && (
-                    <span className={`${styles.status} ${statusKind}`}>
-                        <span className={styles.statusDot} />
-                        {statusLabel}
-                    </span>
-                )}
+                {!hideStatus &&
+                    (paused ? (
+                        <PlanPausedBadge />
+                    ) : (
+                        <span className={`${styles.status} ${statusKind}`}>
+                            <span className={styles.statusDot} />
+                            {statusLabel}
+                        </span>
+                    ))}
             </div>
 
             {showUsage ? (
@@ -81,13 +87,15 @@ export function DeviceWidget({ deviceId, hideStatus }: DeviceWidgetProps) {
                 </div>
             ) : (
                 <span className={styles.hint}>
-                    {online && !archived
-                        ? 'Mesure en cours…'
-                        : archived
-                          ? 'Historique en lecture seule'
-                          : device.lastSeen
-                            ? `Vu il y a ${formatAgo(device.lastSeen * 1000)}`
-                            : 'Jamais connecté'}
+                    {paused
+                        ? 'Reprend dans les minutes qui suivent, dès que l’offre le permet'
+                        : online && !archived
+                          ? 'Mesure en cours…'
+                          : archived
+                            ? 'Historique en lecture seule'
+                            : device.lastSeen
+                              ? `Vu il y a ${formatAgo(device.lastSeen * 1000)}`
+                              : 'Jamais connecté'}
                 </span>
             )}
         </div>

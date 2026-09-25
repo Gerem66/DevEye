@@ -132,6 +132,12 @@ function memoryRepo(): FeatureDomainsRepo & { rows: FeatureDomainRow[] } {
                     rows.filter((r) => ids.includes(r.workspace_id) && features.includes(r.feature)).map((r) => r.host)
                 )
             ]),
+        rowsOf: (ids, features) =>
+            Promise.resolve(
+                rows
+                    .filter((r) => ids.includes(r.workspace_id) && features.includes(r.feature))
+                    .map((r) => ({ id: r.id, workspace_id: r.workspace_id, host: r.host }))
+            ),
         routable: () => Promise.resolve([])
     };
 }

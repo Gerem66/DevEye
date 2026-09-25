@@ -4,6 +4,7 @@ import type { Workspace } from '@deveye/types';
 import { invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { assertCoreLimit } from '../_quota';
+import { schedulePlanReconcile, workspacePauses } from '@/Services/planPauses';
 
 /**
  * Gestion des membres d'un espace, par les capacités `workspace.members` et
@@ -55,6 +56,8 @@ export const workspaceLeaveFeature: FeatureDefinition<
         await ctx.db.workspaceMembers.remove(ctx.userId, ctx.workspaceId);
         await clearFavoriteIfPointingAt(ctx, ctx.userId, ctx.workspaceId);
         invalidateAccess();
+        // Sa place revient au membre en pause arrivé le plus tôt.
+        schedulePlanReconcile(ctx.workspace.ownerUserId);
         ctx.live?.evict(ctx.workspaceId, ctx.userId);
         ctx.audit({
             action: 'workspace.leave',
@@ -83,6 +86,7 @@ export const workspaceRemoveMemberFeature: FeatureDefinition<
         // connexion viserait un espace auquel il n'a plus accès.
         await clearFavoriteIfPointingAt(ctx, input.userId, ctx.workspaceId);
         invalidateAccess();
+        schedulePlanReconcile(ctx.workspace.ownerUserId);
         ctx.live?.evict(ctx.workspaceId, input.userId);
         // Miroir de l'ajout : assis dans un autre espace, l'exclu ne recevrait
         // pas la diffusion de celui-ci, et l'entrée resterait dans son menu.
@@ -174,7 +178,11 @@ async function describe(ctx: FeatureContext, workspaceId: number): Promise<Works
             created: Number(u.created)
         })),
         features: parseFeatures(row.features),
-        created: Number(row.created)
+        created: Number(row.created),
+        ...workspacePauses(
+            row.id,
+            members.map((m) => m.user_id)
+        )
     };
 }
 

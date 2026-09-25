@@ -88,6 +88,8 @@ export const databaseSchema = z.object({
     firingCount: z.number().int().nonnegative(),
     /** Combien de projets s'en servent. */
     projectCount: z.number().int().nonnegative(),
+    /** L'offre de son propriétaire la tient en pause : ni relevé, ni session, `monitorEnabled` reste intact. */
+    planPaused: z.boolean(),
     created: z.number().int()
 });
 export type Database = z.infer<typeof databaseSchema>;

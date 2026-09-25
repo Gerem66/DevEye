@@ -14,6 +14,7 @@ import type { Database } from '@/db';
 import type { FeatureDomainRow } from '@/db/repos/featureDomains';
 import { systemDns } from '@/Services/domains/dns';
 import type Encryption from '@/Services/Encryption';
+import { isPlanPaused } from '@/Services/planPauses';
 import { createOpenCipher } from '@/Services/SecureStore';
 import { ORIGINS } from './context';
 import { serverKeysOf } from './host';
@@ -27,13 +28,16 @@ export interface DomainsHost {
 }
 
 export function toSdkDomain(row: FeatureDomainRow): SdkDomain {
+    const planPaused = isPlanPaused('domains.hosts', String(row.id));
     return {
         id: row.id,
         workspaceId: row.workspace_id,
         host: row.host,
         token: row.token,
-        verified: row.verified_at !== null,
-        verifiedAt: row.verified_at
+        // Ce que les modules lisent pour servir ou non : un nom en pause ne l'est plus.
+        verified: row.verified_at !== null && !planPaused,
+        verifiedAt: row.verified_at,
+        planPaused
     };
 }
 

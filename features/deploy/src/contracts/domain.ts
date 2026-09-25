@@ -78,6 +78,8 @@ export const deployTargetSchema = z.object({
     foreign: z.boolean(),
     /** Combien de projets la déploient. */
     projectCount: z.number().int().nonnegative(),
+    /** L'offre de son propriétaire la tient en pause : ni suivi, ni déploiement, ni appel au fournisseur. */
+    planPaused: z.boolean(),
     created: z.number().int()
 });
 export type DeployTarget = z.infer<typeof deployTargetSchema>;

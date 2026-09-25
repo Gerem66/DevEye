@@ -77,7 +77,14 @@ export const mailAccountListFeature = defineSdkFeature<
         // sous la clé de son espace d'origine, et le lire avec celle d'ici le
         // ferait passer pour verrouillé.
         const accounts = await Promise.all(
-            rows.map(async (row) => toAccountDTO(await accountCipher(ctx, row), row, isForeign(ctx, row)))
+            rows.map(async (row) =>
+                toAccountDTO(
+                    await accountCipher(ctx, row),
+                    row,
+                    isForeign(ctx, row),
+                    ctx.quota.isPaused('accounts', String(row.id))
+                )
+            )
         );
         return { accounts };
     }
@@ -131,7 +138,7 @@ export const mailAccountAddFeature = defineSdkFeature<
             description: `Compte mail ajouté : « ${input.draft.displayName} »`,
             metadata: { accountId: row.id }
         });
-        return { account: await toAccountDTO(cipher, row, false) };
+        return { account: await toAccountDTO(cipher, row, false, ctx.quota.isPaused('accounts', String(row.id))) };
     }
 });
 
@@ -198,7 +205,7 @@ export const mailAccountUpdateFeature = defineSdkFeature<
             description: `Compte mail modifié : « ${input.draft.displayName} »`,
             metadata: { accountId: row.id }
         });
-        return { account: await toAccountDTO(cipher, row, false) };
+        return { account: await toAccountDTO(cipher, row, false, ctx.quota.isPaused('accounts', String(row.id))) };
     }
 });
 
@@ -254,7 +261,9 @@ export const mailAccountSetProfileFeature = defineSdkFeature<
             description: `Compte mail modifié : « ${input.displayName} »`,
             metadata: { accountId: row.id, securityTier: input.securityTier }
         });
-        return { account: await toAccountDTO(to, row, isForeign(ctx, row)) };
+        return {
+            account: await toAccountDTO(to, row, isForeign(ctx, row), ctx.quota.isPaused('accounts', String(row.id)))
+        };
     }
 });
 
@@ -317,7 +326,14 @@ export const mailAccountSetEnabledFeature = defineSdkFeature<
         const existing = await loadAccount(ctx, input.id, 'write');
         const row = await ctx.repo.accounts.setEnabled(input.id, existing.workspace_id, input.enabled);
         if (!row) throw new FeatureError('not_found', 'Compte mail introuvable');
-        return { account: await toAccountDTO(await accountCipher(ctx, row), row, isForeign(ctx, row)) };
+        return {
+            account: await toAccountDTO(
+                await accountCipher(ctx, row),
+                row,
+                isForeign(ctx, row),
+                ctx.quota.isPaused('accounts', String(row.id))
+            )
+        };
     }
 });
 

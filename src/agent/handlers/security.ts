@@ -1,6 +1,7 @@
 import { AGENT_AUTH_EVENTS, AGENT_INTEGRITY } from '@deveye/types';
 
 import { ack, type AgentSession, type PayloadOf } from './session';
+import { isPlanPaused } from '@/Services/planPauses';
 
 /**
  * Les deux relevés de Sentinelle : le manifeste des surfaces de persistance et
@@ -26,7 +27,7 @@ async function gated(s: AgentSession): Promise<boolean> {
     const fresh = await s.db.devices.findById(s.device.id);
     if (fresh) s.device = fresh;
 
-    if (s.device.status !== 'active') {
+    if (s.device.status !== 'active' || isPlanPaused('devices.agents', s.device.id)) {
         s.logger.debug({ status: s.device.status }, 'Sentinel probe dropped: device not active');
         ack(s, 0);
         return true;

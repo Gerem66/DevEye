@@ -21,26 +21,34 @@ import {
 
 const deviceId = z.uuid();
 
+/**
+ * Un appareil tel que la flotte le rend : le domaine public, plus
+ * `planPaused`, l'offre de son propriétaire qui le tient en pause (son agent est
+ * refusé, rien n'en est relevé). Distinct de `status`, qui reste celui choisi.
+ */
+export const fleetDeviceSchema = deviceSchema.extend({ planPaused: z.boolean() });
+export type FleetDevice = z.infer<typeof fleetDeviceSchema>;
+
 /** List devices visible to the caller (own devices; all devices for admins). */
 /** Les appareils que l'espace actif voit : les siens, et ceux qui y sont projetés. */
 export const devicesList = {
     command: 'devices.list' as const,
     input: z.object({}),
-    output: z.object({ devices: z.array(deviceSchema) })
+    output: z.object({ devices: z.array(fleetDeviceSchema) })
 };
 
 /** Confirm a `pending` device, moving it to `active`. */
 export const devicesConfirm = {
     command: 'devices.confirm' as const,
     input: z.object({ deviceId }),
-    output: z.object({ device: deviceSchema })
+    output: z.object({ device: fleetDeviceSchema })
 };
 
 /** Revoke a device: its token is rejected and it can no longer push metrics. */
 export const devicesRevoke = {
     command: 'devices.revoke' as const,
     input: z.object({ deviceId }),
-    output: z.object({ device: deviceSchema })
+    output: z.object({ device: fleetDeviceSchema })
 };
 
 /**
@@ -57,7 +65,7 @@ export const devicesReorder = {
 export const devicesRename = {
     command: 'devices.rename' as const,
     input: z.object({ deviceId, name: z.string().min(1).max(128) }),
-    output: z.object({ device: deviceSchema })
+    output: z.object({ device: fleetDeviceSchema })
 };
 
 /**
@@ -89,14 +97,14 @@ export const devicesSetConfig = {
                 v.terminalCloseOnExit !== undefined,
             { message: 'No config field provided' }
         ),
-    output: z.object({ device: deviceSchema })
+    output: z.object({ device: fleetDeviceSchema })
 };
 
 /** Reactivate a revoked device, moving it back to `active`. */
 export const devicesReactivate = {
     command: 'devices.reactivate' as const,
     input: z.object({ deviceId }),
-    output: z.object({ device: deviceSchema })
+    output: z.object({ device: fleetDeviceSchema })
 };
 
 /**
@@ -107,14 +115,14 @@ export const devicesReactivate = {
 export const devicesRequestDelete = {
     command: 'devices.requestDelete' as const,
     input: z.object({ deviceId }),
-    output: z.object({ device: deviceSchema })
+    output: z.object({ device: fleetDeviceSchema })
 };
 
 /** Cancel a `pending_deletion` (only effective while the agent hasn't reconnected). */
 export const devicesCancelDelete = {
     command: 'devices.cancelDelete' as const,
     input: z.object({ deviceId }),
-    output: z.object({ device: deviceSchema })
+    output: z.object({ device: fleetDeviceSchema })
 };
 
 /**
@@ -124,7 +132,7 @@ export const devicesCancelDelete = {
 export const devicesForceDelete = {
     command: 'devices.forceDelete' as const,
     input: z.object({ deviceId }),
-    output: z.object({ device: deviceSchema })
+    output: z.object({ device: fleetDeviceSchema })
 };
 
 /**

@@ -86,6 +86,7 @@ function fakeRepo(accountRows: MailAccountRow[], projections: Record<number, num
             // Des copies, comme une lecture SQL : la ligne que le service tient
             // est un instantané, `recordSync` n'a pas à le faire bouger.
             countInWorkspaces: async (ids: readonly number[]) => ids.length - ids.length,
+            listStock: unused,
             listByWorkspace: async (ws) => accountRows.filter((a) => a.workspace_id === ws).map((a) => ({ ...a })),
             listVisible: async (ws) => accountRows.filter((a) => visible(a, ws)).map((a) => ({ ...a })),
             findById: async (id, ws) => {
@@ -105,13 +106,14 @@ function fakeRepo(accountRows: MailAccountRow[], projections: Record<number, num
             setEnabled: unused,
             delete: unused,
             reorder: unused,
-            // Comme la vraie requête : ouverts, actifs, à échéance.
-            listSyncDue: async (now, limit) =>
+            // Comme la vraie requête : ouverts, actifs, à échéance, hors pause d'offre.
+            listSyncDue: async (now, limit, pausedIds) =>
                 accountRows
                     .filter(
                         (a) =>
                             a.enabled === 1 &&
                             a.security_tier === 'open' &&
+                            !pausedIds.includes(a.id) &&
                             (a.last_sync_at === null || a.last_sync_at <= now - a.sync_interval_seconds)
                     )
                     .slice(0, limit)
@@ -343,6 +345,20 @@ describe('la relève de fond', () => {
         assert.deepEqual(deps.recorded.liveChanges, []);
     });
 
+    it('un compte en pause d’offre n’est relevé ni au tour ni par son identifiant, et son réglage reste intact', async () => {
+        const repo = fakeRepo([account({ id: 1 }), account({ id: 2 })]);
+        const deps = createTestServiceDeps({ repo, pausedItems: { accounts: ['2'] } });
+        const client = fakeClient([envelope(1)]);
+        const sync = new MailSync(deps, { mailClient: client });
+        await deps.recorded.tickers[0].tick();
+        await sync.syncOne(2);
+        assert.deepEqual(
+            repo.synced.map((s) => s.id),
+            [1]
+        );
+        assert.equal(repo.accountRows[1].enabled, 1);
+    });
+
     it('encadre la relève de deux trames d’avancement, dont la terminale qui repose la barre', async () => {
         const repo = fakeRepo([account({ id: 1 })]);
         const deps = createTestServiceDeps({ repo });
@@ -501,6 +517,24 @@ describe('le transport des alertes', () => {
         // Lu sous le codec de SON espace, jamais sous celui du canal.
         assert.ok(ciphersAsked.includes(42));
         assert.ok(!ciphersAsked.includes(1));
+    });
+
+    it('un compte en pause d’offre n’est pas un expéditeur, et rien n’en part', async () => {
+        const repo = fakeRepo([account({ id: 1 }), account({ id: 2 })]);
+        const sent: OutgoingMail[] = [];
+        const transport = createMailTransport(createTestServiceDeps({ repo, pausedItems: { accounts: ['2'] } }), {
+            sendMail: async (_credentials, message) => {
+                sent.push(message);
+                return { messageId: '<id@exemple.fr>' };
+            }
+        });
+        assert.deepEqual(
+            (await transport.listSenders(1)).map((s) => s.id),
+            [1]
+        );
+        assert.equal(await transport.isReady(2, 1), false);
+        assert.equal(await transport.send(2, 1, { to: 'x@exemple.fr', subject: 's', text: 't' }), false);
+        assert.deepEqual(sent, []);
     });
 
     it('envoie depuis l’adresse du compte, par le client, et répond vrai', async () => {

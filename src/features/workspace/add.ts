@@ -75,7 +75,10 @@ export const workspaceAddFeature: FeatureDefinition<
                     }
                 ],
                 features: [],
-                created: Number(workspace.created)
+                created: Number(workspace.created),
+                // Une création au-delà de la limite est refusée : rien n'y naît en pause.
+                planPaused: false,
+                pausedMemberIds: []
             }
         };
     }

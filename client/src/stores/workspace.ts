@@ -148,6 +148,15 @@ export function useWorkspacesHere(): readonly Workspace[] {
     return hereOf(useWorkspaceState());
 }
 
+/**
+ * L'offre du propriétaire tient ce compte hors de l'espace : l'espace partagé
+ * est en pause, ou lui-même l'est. Le propriétaire n'est jamais dehors.
+ */
+export function isShutOutByPlan(w: Workspace, userId: number | undefined): boolean {
+    if (userId === undefined || w.ownerUserId === userId) return false;
+    return w.planPaused || w.pausedMemberIds.includes(userId);
+}
+
 /** L'espace actif résolu, ou `null` tant que la session n'a rien fourni. */
 export function useActiveWorkspace(): Workspace | null {
     const s = useWorkspaceState();

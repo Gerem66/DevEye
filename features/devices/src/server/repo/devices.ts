@@ -1,5 +1,5 @@
 import type { DeviceRow, DeviceStatus, ProcessCapture } from '@deveye/types';
-import type { SdkQueryable } from '@deveye/types/sdk/server';
+import type { SdkQueryable, SdkStockItem } from '@deveye/types/sdk/server';
 
 /** Partial device config; only provided fields are updated (`null` resets). */
 export interface DeviceConfigPatch {
@@ -30,6 +30,8 @@ export interface DeviceRepo {
     findVisible(id: string, workspaceId: number): Promise<DeviceRow | null>;
     setStatus(id: string, status: DeviceStatus): Promise<void>;
     countActiveInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
+    /** Ce que compte {@link countActiveInWorkspaces}, du plus ancien au plus récent. */
+    listActiveInWorkspaces(workspaceIds: readonly number[]): Promise<SdkStockItem[]>;
     rename(id: string, name: string): Promise<void>;
     setConfig(id: string, patch: DeviceConfigPatch): Promise<void>;
     /** Mark a device for deletion, remembering its status so it can be restored. */
@@ -47,6 +49,13 @@ export interface DeviceRepo {
      */
     reorder(workspaceId: number, ids: string[]): Promise<void>;
 }
+
+/**
+ * Ce que borne la limite `agents` : le compteur de création et la liste des
+ * pauses de l'offre lisent ce même filtre, sans quoi l'hôte mettrait en pause
+ * autre chose que ce qu'il a compté.
+ */
+const ACTIVE_IN = "status = 'active' AND workspace_id IN (?)";
 
 export function deviceRepo(q: SdkQueryable): DeviceRepo {
     return {
@@ -96,11 +105,18 @@ export function deviceRepo(q: SdkQueryable): DeviceRepo {
         },
         async countActiveInWorkspaces(workspaceIds) {
             if (workspaceIds.length === 0) return 0;
-            const rows = await q.query<{ n: number }>(
-                "SELECT COUNT(*) AS n FROM devices WHERE status = 'active' AND workspace_id IN (?)",
+            const rows = await q.query<{ n: number }>(`SELECT COUNT(*) AS n FROM devices WHERE ${ACTIVE_IN}`, [
+                [...workspaceIds]
+            ]);
+            return Number(rows[0]?.n ?? 0);
+        },
+        async listActiveInWorkspaces(workspaceIds) {
+            if (workspaceIds.length === 0) return [];
+            const rows = await q.query<{ id: string; workspace_id: number }>(
+                `SELECT id, workspace_id FROM devices WHERE ${ACTIVE_IN} ORDER BY created ASC, id ASC`,
                 [[...workspaceIds]]
             );
-            return Number(rows[0]?.n ?? 0);
+            return rows.map((r) => ({ id: r.id, workspaceId: Number(r.workspace_id) }));
         },
         async rename(id, name) {
             await q.execute('UPDATE devices SET name = ? WHERE id = ?', [name, id]);

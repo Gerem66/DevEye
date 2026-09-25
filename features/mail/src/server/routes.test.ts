@@ -138,6 +138,7 @@ function fakeRepo(accountRows: MailAccountRow[], projections: Record<number, num
         accountRows,
         accounts: {
             countInWorkspaces: async (ids: readonly number[]) => ids.length - ids.length,
+            listStock: unused,
             listByWorkspace: unused,
             listVisible: unused,
             findById: async (id, ws) => accountRows.find((a) => a.id === id && a.workspace_id === ws) ?? null,
@@ -283,11 +284,17 @@ function mount(
     accounts: MailAccountRow[] = [account({ id: 1 })],
     projections: Record<number, number[]> = {},
     /** Ce que le fournisseur rend au consentement, pour en simuler les avarices. */
-    tokens: { refreshToken?: string | null } = {}
+    tokens: { refreshToken?: string | null } = {},
+    /** Les comptes que l'offre tient en pause. */
+    paused: string[] = []
 ) {
     const repo = fakeRepo(accounts, projections);
     const deps = tagging(
-        createTestServiceDeps({ repo, origins: { app: 'https://app.test', public: 'https://p.test' } })
+        createTestServiceDeps({
+            repo,
+            origins: { app: 'https://app.test', public: 'https://p.test' },
+            pausedItems: { accounts: paused }
+        })
     );
     const fetched: { imapPath: string; uid: number }[] = [];
     const exchanged: { provider: string; code: string; appOrigin: string }[] = [];
@@ -365,6 +372,13 @@ describe('GET /api/mail/attachment', () => {
             state.headers['Content-Disposition'],
             `attachment; filename="rapport.pdf"; filename*=UTF-8''rapport.pdf`
         );
+    });
+
+    it('un compte mis en pause par l’offre après la délivrance du ticket : 403, rien n’atteint IMAP', async () => {
+        const { call, fetched } = mount([account({ id: 1 })], {}, {}, ['1']);
+        const state = await call('/api/mail/attachment', { token: ticket({ messageId: 20, attachmentId: 'att-0' }) });
+        assert.equal(state.status, 403);
+        assert.deepEqual(fetched, []);
     });
 
     it('une pièce inconnue du message rend 404 ; un message d’un autre espace, 404 aussi', async () => {

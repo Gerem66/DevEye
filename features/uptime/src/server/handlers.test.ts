@@ -86,6 +86,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         services: {
             listByWorkspace: async (workspaceId) => rows.filter((r) => r.workspace_id === workspaceId),
             countInWorkspaces: async (workspaceIds) => rows.filter((r) => workspaceIds.includes(r.workspace_id)).length,
+            listStock: async () => [],
             listVisible: async (workspaceId) => rows.filter((r) => visible(r, workspaceId)),
             findById: async (id, workspaceId) =>
                 rows.find((r) => r.id === id && r.workspace_id === workspaceId) ?? null,
@@ -218,6 +219,41 @@ describe('uptime.list et uptime.count : les restrictions par élément', () => {
         // La carte compte ce que la liste montre, restrictions déduites.
         const counted = await handlerFor(uptimeCount)(ctx, {});
         assert.deepEqual(counted, { total: 2, up: 0, down: 0 });
+    });
+});
+
+describe('la pause de l’offre', () => {
+    it('se lit dans la liste sans toucher au choix de l’utilisateur, et ne compte pas comme surveillé', async () => {
+        const repo = seed(
+            fakeRepo(),
+            row({ id: 1, workspace_id: 1, status: 'up' }),
+            row({ id: 2, workspace_id: 1, status: 'down' })
+        );
+        const ctx = createTestContext({ repo, pausedItems: { monitors: ['2'] } });
+
+        const listed = await handlerFor(uptimeList)(ctx, {});
+        assert.deepEqual(
+            listed.services.map((s) => [s.id, s.enabled, s.planPaused]),
+            [
+                [1, true, false],
+                [2, true, true]
+            ]
+        );
+        // Son dernier état est figé : la carte d'accueil ne le compte ni en ligne, ni en panne.
+        assert.deepEqual(await handlerFor(uptimeCount)(ctx, {}), { total: 1, up: 1, down: 0 });
+    });
+
+    it('refuse un test à la demande, avant toute sonde, avec l’invite de l’offre', async () => {
+        setMonitor(null);
+        const repo = seed(fakeRepo(), row({ id: 1, workspace_id: 1 }));
+        const ctx = createTestContext({ repo, pausedItems: { monitors: ['1'] } });
+        await assert.rejects(
+            handlerFor(uptimeCheckNow)(ctx, { id: 1 }),
+            (e: unknown) =>
+                e instanceof FeatureError &&
+                e.code === 'quota_exceeded' &&
+                (e.details as { paused?: boolean } | undefined)?.paused === true
+        );
     });
 });
 

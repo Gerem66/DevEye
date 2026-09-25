@@ -314,7 +314,9 @@ export const mailAttachmentDownloadFeature = defineSdkFeature<
 >({
     ...mailAttachmentDownload,
     handler: async (ctx, input) => {
-        await loadMessageChain(ctx, input.messageId);
+        const { account } = await loadMessageChain(ctx, input.messageId);
+        // La route relit la pièce chez IMAP : le refus se dit ici, où l'écran sait l'expliquer.
+        await ctx.quota.assertActive('accounts', String(account.id));
         const token = await ctx.secrecy.ticket(
             { messageId: input.messageId, attachmentId: input.attachmentId },
             { ttlSeconds: 120 }

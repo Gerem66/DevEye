@@ -47,6 +47,7 @@ async function toPage(
         showErrors: row.show_errors === 1,
         showLatency: row.show_latency === 1,
         enabled: row.enabled === 1,
+        planPaused: ctx.quota.isPaused('pages', String(row.id)),
         services: await Promise.all(
             entries.map(async (entry) => ({
                 id: entry.service_id,

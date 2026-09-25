@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { FeatureError } from '@deveye/types/sdk/server';
-import { createTestContext, testDomain } from '@deveye/types/sdk/testing';
+import { FeatureError, type SdkQueryable } from '@deveye/types/sdk/server';
+import { createTestContext, createTestServiceDeps, testDomain } from '@deveye/types/sdk/testing';
 
 import type { z } from 'zod';
 
@@ -10,7 +10,9 @@ import type { mailserverCommands } from '../contracts/commands';
 import { manifest } from '../manifest';
 import { setEngine, type EngineHandle } from './_shared';
 import { mailserverHandlers } from './handlers';
+import { serverEntry } from './index';
 import { verifySecret } from './passwords';
+import { createRepo } from './repo';
 import { memoryRepo } from './testing/memoryRepo';
 
 const DOMAINS = [
@@ -149,6 +151,86 @@ describe('lire et régler', () => {
             await run(ctx, 'mailserver.delete', { id: 1 });
             assert.deepEqual(dropped[1], [1, true]);
             assert.deepEqual((await run(ctx, 'mailserver.list', {})).mailboxes, []);
+        } finally {
+            setEngine(null);
+        }
+    });
+});
+
+describe('la limite de l’offre', () => {
+    it('liste ce que compte le compteur, de la plus ancienne à la plus récente', async () => {
+        const seen: { sql: string; params: unknown[] }[] = [];
+        const q: SdkQueryable = {
+            query: <T extends object>(sql: string, params: unknown[] = []) => {
+                seen.push({ sql, params });
+                const rows = sql.includes('COUNT(*)')
+                    ? [{ n: 2 }]
+                    : [
+                          { id: 7, workspace_id: 1 },
+                          { id: 3, workspace_id: 2 }
+                      ];
+                return Promise.resolve(rows as unknown as T[]);
+            },
+            execute: () => Promise.reject(new Error('aucune écriture attendue'))
+        };
+        const repo = createRepo(q);
+        const listed = await serverEntry.quotas?.addresses.list(repo, [1, 2]);
+        assert.deepEqual(listed, [
+            { id: '7', workspaceId: 1 },
+            { id: '3', workspaceId: 2 }
+        ]);
+        await repo.countInWorkspaces([1, 2]);
+
+        const [list, count] = seen;
+        assert.match(list.sql, /ORDER BY created ASC, id ASC$/);
+        // Le même filtre, aux mêmes paramètres : l'hôte met en pause ce qu'il a compté.
+        const where = (sql: string) => sql.replace(/ ORDER BY .*$/, '').slice(sql.indexOf('WHERE'));
+        assert.equal(where(list.sql), where(count.sql));
+        assert.deepEqual(list.params, count.params);
+
+        assert.deepEqual(await repo.listInWorkspaces([]), []);
+        assert.equal(seen.length, 2);
+    });
+
+    it('la liste et la fiche disent quelle boîte l’offre tient en pause, sans toucher à `enabled`', async () => {
+        const paused: string[] = [];
+        const { ctx } = setup({ pausedItems: { addresses: paused } });
+        const first = await run(ctx, 'mailserver.create', { ...base, localPart: 'ancienne', domainId: 1 });
+        const second = await run(ctx, 'mailserver.create', { ...base, localPart: 'recente', domainId: 1 });
+        paused.push(String(second.mailbox.id));
+
+        const list = await run(ctx, 'mailserver.list', {});
+        assert.deepEqual(
+            list.mailboxes.map((m) => [m.address, m.enabled, m.planPaused]),
+            [
+                ['ancienne@exemple.test', true, false],
+                ['recente@exemple.test', true, true]
+            ]
+        );
+        assert.equal((await run(ctx, 'mailserver.get', { id: second.mailbox.id })).mailbox.planPaused, true);
+        assert.equal((await run(ctx, 'mailserver.get', { id: first.mailbox.id })).mailbox.planPaused, false);
+    });
+
+    it('une boîte mise en pause perd ses sessions ouvertes, sans rien effacer, et la reprise ne touche à rien', async () => {
+        const dropped: [number, boolean][] = [];
+        const service = serverEntry.createService?.(createTestServiceDeps({ repo: memoryRepo() }));
+        assert.ok(service?.onPlanPause);
+        setEngine({
+            dropMailbox: (id: number, purge: boolean) => Promise.resolve(void dropped.push([id, purge]))
+        } as unknown as EngineHandle);
+        try {
+            await service.onPlanPause({
+                key: 'addresses',
+                paused: [
+                    { id: '4', workspaceId: 1 },
+                    { id: '9', workspaceId: 2 }
+                ],
+                resumed: [{ id: '5', workspaceId: 1 }]
+            });
+            assert.deepEqual(dropped, [
+                [4, false],
+                [9, false]
+            ]);
         } finally {
             setEngine(null);
         }

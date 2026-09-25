@@ -1,7 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { isSocketOpen, onResourceChange, onSocketOpen } from 'deveye-sdk-client';
-import type { Device } from '@deveye/types';
 
+import type { FleetDevice } from '../contracts/commands';
 import { api } from './api';
 
 /**
@@ -11,7 +11,7 @@ import { api } from './api';
  * déconnecte).
  */
 interface DevicesState {
-    devices: Device[];
+    devices: FleetDevice[];
     loading: boolean;
     error: string | null;
 }
@@ -20,7 +20,7 @@ interface DeviceListStore {
     refresh: () => Promise<void>;
     reset: () => void;
     use: () => DevicesState & { refresh: () => Promise<void> };
-    current: () => Device[];
+    current: () => FleetDevice[];
     onChange: (cb: () => void) => () => void;
 }
 

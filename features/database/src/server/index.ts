@@ -18,7 +18,7 @@ import { databaseMove } from './move';
 import { createRepo, type DatabaseRepo } from './repo';
 import { DatabaseMonitor } from './service';
 import { openTunnel } from './tunnel';
-import { readJson, setMonitor, type StoredDatabase } from './_shared';
+import { PLAN_PAUSED_MESSAGE, readJson, setMonitor, type StoredDatabase } from './_shared';
 
 /**
  * Ce que Sauvegardes demande (`DATABASE_BACKUP_PROVIDER`) : les bases nommées,
@@ -54,6 +54,8 @@ function createBackupProvider(
         async openAccess(databaseId, workspaceId) {
             const row = await deps.repo.find(databaseId, workspaceId);
             if (!row) return null;
+            // Pas de garde de pause ici : une sauvegarde est un travail de
+            // Sauvegardes, que borne son propre stockage, pas le suivi des bases.
             const target = await monitor.targetOf(row, workspaceId);
             const tunnel = await openTunnel(target.access, { host: target.host, port: target.port });
             return {
@@ -84,6 +86,9 @@ function createMeasureProvider(
             const row = await deps.repo.findVisible(databaseId, workspaceId);
             if (!row) return null;
             if (queries.length === 0) return [];
+            if (deps.pauses.isPaused('connections', String(row.id))) {
+                return queries.map(() => ({ value: null, error: PLAN_PAUSED_MESSAGE }));
+            }
             // Le codec du DOMICILE : le secret d'une base projetée est scellé
             // sous la clé de son espace, pas sous celle d'où on la regarde.
             const session = await openSession(await monitor.targetOf(row, row.workspace_id));
@@ -173,5 +178,6 @@ export const serverEntry: FeatureServer<DatabaseRepo> = {
         labelOf: (repo, cipher, itemId, workspaceId) => labelOf(repo, cipher, Number(itemId), workspaceId),
         move: databaseMove,
         copy: databaseCopy
-    }
+    },
+    quotas: { connections: { list: (repo, owned) => repo.listStock(owned) } }
 };

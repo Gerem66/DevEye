@@ -13,7 +13,8 @@ import { decryptCredentials, persistRefreshedToken } from './_shared';
  *
  * Un expéditeur est un compte ouvert et actif, visible de l'espace : un compte
  * gardé exige un déverrouillage que l'ordonnanceur de fond n'a jamais, et un
- * compte en pause ne doit pas partir tout seul. Tout se lit sous le codec ouvert
+ * compte en pause, qu'elle vienne de l'utilisateur ou de l'offre, ne doit pas
+ * partir tout seul. Tout se lit sous le codec ouvert
  * du domicile du compte, sans session : un compte projeté reste chiffré sous la
  * clé de son espace d'origine, et le lire sous celle de l'espace du canal le
  * ferait passer pour muet.
@@ -25,14 +26,15 @@ import { decryptCredentials, persistRefreshedToken } from './_shared';
 /** Ce que la livraison demande au client : l'envoi, et rien d'autre. */
 export type TransportClient = Pick<typeof mailClient, 'sendMail'>;
 
-function isReadySender(row: MailAccountRow | null): row is MailAccountRow {
-    return row !== null && row.enabled === 1 && row.security_tier === 'open';
-}
-
 export function createMailTransport(
     deps: FeatureServiceDeps<MailRepo>,
     client: TransportClient = mailClient
 ): MailTransportProvider {
+    const isReadySender = (row: MailAccountRow | null): row is MailAccountRow =>
+        row !== null &&
+        row.enabled === 1 &&
+        row.security_tier === 'open' &&
+        !deps.pauses.isPaused('accounts', String(row.id));
     const senderOf = async (row: MailAccountRow): Promise<MailSender | null> => {
         const cipher = deps.cipherFor(row.workspace_id);
         const address = await cipher.tryDecrypt(row.email_address_enc);

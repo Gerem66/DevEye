@@ -4,6 +4,7 @@ import type { SdkProviders } from '@deveye/types/sdk/server';
 import { FeatureError } from '@deveye/types/sdk/server';
 
 import type { Database } from '@/db';
+import { notePlanChangesAt } from '@/Services/planPauses';
 
 interface QuotaLogger {
     error(obj: object, msg: string): void;
@@ -23,11 +24,24 @@ export async function planOf(
     const provider = providers.get<AccountPlanProvider>(ACCOUNT_PLAN_PROVIDER);
     if (!provider) return null;
     try {
-        return await provider.planFor(userId);
+        const plan = await provider.planFor(userId);
+        // Un essai qui finit ne s'annonce pas : relevé à chaque lecture, pour
+        // que la passe des pauses l'attende.
+        notePlanChangesAt(userId, plan.changesAt);
+        return plan;
     } catch (e) {
         logger.error({ err: (e as Error).message, userId }, 'Offre du compte illisible, aucune limite appliquée');
         return null;
     }
+}
+
+/**
+ * Pour mettre en pause ou reprendre : jamais d'un cache, et une panne du
+ * fournisseur lève au lieu de valoir « illimité ». `null` : aucun fournisseur.
+ */
+export async function planOfStrict(providers: SdkProviders, userId: number): Promise<AccountPlan | null> {
+    const provider = providers.get<AccountPlanProvider>(ACCOUNT_PLAN_PROVIDER);
+    return provider ? provider.planFor(userId, { fresh: true }) : null;
 }
 
 /** La limite d'une clé `<featureId>.<quotaKey>` pour ce compte, `null` = illimité. */

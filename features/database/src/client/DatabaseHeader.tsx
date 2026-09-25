@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Button, FeatureSettingsButton, openInfo } from 'deveye-sdk-client';
+import { Button, FeatureSettingsButton, openInfo, PlanPausedBadge } from 'deveye-sdk-client';
 import type { Database } from '../contracts/domain';
 
 import { ENGINE_LABELS, STATUS_META } from './format';
@@ -108,6 +108,12 @@ export function DatabaseHeader({
                             <span className={styles.viaTag}>
                                 via {database.access.kind === 'ssh' ? 'SSH' : 'SOCKS'} {database.access.host}
                             </span>
+                        )}
+                        {database.planPaused && (
+                            <>
+                                {' '}
+                                <PlanPausedBadge />
+                            </>
                         )}
                     </p>
                     {database.lastError && <p className={styles.error}>{database.lastError}</p>}

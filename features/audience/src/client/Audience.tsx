@@ -3,6 +3,7 @@ import {
     Button,
     FeatureSettingsButton,
     humanizeError,
+    PlanPausedNotice,
     useActiveWorkspace,
     useLiveItemTarget,
     useLiveOutlines,
@@ -164,6 +165,12 @@ export function FeatureAudience(_props: FeatureViewProps) {
 
                     {error && <p className={styles.error}>{error}</p>}
                     <QuotaNotice quota={eventsQuota} />
+                    {/* Un site partagé d'ailleurs relève de l'offre d'un autre compte que celle dont parle le bandeau. */}
+                    <PlanPausedNotice
+                        count={(sites ?? []).filter((site) => site.planPaused && !site.foreign).length}
+                        one='site suivi'
+                        many='sites suivis'
+                    />
 
                     {sites === null ? (
                         <p className={styles.empty}>Chargement…</p>

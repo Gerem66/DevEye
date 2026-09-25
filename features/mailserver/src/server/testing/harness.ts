@@ -19,17 +19,22 @@ import { hashSecret } from '../passwords';
 import type { MailboxRow } from '../repo';
 import { memoryRepo } from './memoryRepo';
 
-/** Le moteur monté en mémoire : dépôt, corps, notifieur, authentification, sans un seul port ouvert. */
+/**
+ * Le moteur monté en mémoire : dépôt, corps, notifieur, authentification, sans
+ * un seul port ouvert. `paused` : les boîtes que l'offre tient en pause, qu'un
+ * test remplit à la volée.
+ */
 export function createTestEngine(domains: readonly SdkDomain[] = [testDomain({ id: 1, host: 'exemple.test' })]) {
     const repo = memoryRepo();
     const blobs = memoryBlobStore();
-    const deps = createTestServiceDeps({ repo, domains });
+    const paused: string[] = [];
+    const deps = createTestServiceDeps({ repo, domains, pausedItems: { addresses: paused } });
     const notifier = new Notifier();
     const beats: number[] = [];
     const events = createEventRecorder({ repo, cipherFor: deps.cipherFor, beat: (ws) => beats.push(ws) });
     const store = createMailStore({ repo, blobs, keys: deps.keys, cipherFor: deps.cipherFor, notifier });
-    const auth = createAuthenticator({ repo, events });
-    const delivery = createDelivery({ repo, domains: deps.domains, store, events });
+    const auth = createAuthenticator({ repo, events, pauses: deps.pauses });
+    const delivery = createDelivery({ repo, domains: deps.domains, pauses: deps.pauses, store, events });
 
     async function createMailbox(
         address: string,
@@ -55,7 +60,7 @@ export function createTestEngine(domains: readonly SdkDomain[] = [testDomain({ i
         return row;
     }
 
-    return { repo, blobs, deps, notifier, events, store, auth, delivery, beats, createMailbox };
+    return { repo, blobs, deps, paused, notifier, events, store, auth, delivery, beats, createMailbox };
 }
 
 let cached: { cert: string; key: string } | null = null;

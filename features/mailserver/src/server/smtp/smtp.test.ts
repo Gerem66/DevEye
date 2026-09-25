@@ -4,6 +4,7 @@ import { after, before, describe, it } from 'node:test';
 import { testDomain } from '@deveye/types/sdk/testing';
 import { dkimVerify } from 'mailauth';
 import nodemailer from 'nodemailer';
+import SMTPConnection from 'nodemailer/lib/smtp-connection';
 import { SMTPServer } from 'smtp-server';
 
 import { queueContentSchema, unseal } from '../_shared';
@@ -53,6 +54,18 @@ const send = (
 
 const code = (expected: number) => (error: unknown) => (error as { responseCode?: number }).responseCode === expected;
 
+/** Éteinte par son réglage, comme depuis sa fiche. */
+async function switchOff(address: string, password: string) {
+    const mailbox = await engine.createMailbox(address, password);
+    await engine.repo.updateMailbox(mailbox.id, {
+        enabled: false,
+        quotaBytes: mailbox.quota_bytes,
+        outboundDailyLimit: mailbox.outbound_daily_limit,
+        content: mailbox.content
+    });
+    return mailbox;
+}
+
 async function inboxOf(address: string, folder = 'INBOX') {
     const mailbox = await engine.repo.findByAddress(address);
     assert.ok(mailbox);
@@ -84,6 +97,7 @@ before(async () => {
             maxBytes: 64 * 1024,
             certificates,
             repo: engine.repo,
+            pauses: engine.deps.pauses,
             store: engine.store,
             auth: engine.auth,
             cipherFor: engine.deps.cipherFor,
@@ -144,6 +158,23 @@ describe('le port 25', () => {
         await send(inboundPort, { from: 'douteux@ailleurs.test', to: 'alice@exemple.test' });
         assert.equal((await inboxOf('alice@exemple.test', 'Junk')).messages.length, 1);
         nextCheck = check();
+    });
+
+    it('une boîte que l’offre tient en pause refuse en 550 comme une éteinte, puis reçoit une fois reprise', async () => {
+        await switchOff('eteinte@exemple.test', 'secret-eteinte');
+        const paused = await engine.createMailbox('enpause@exemple.test', 'secret-en-pause');
+        engine.paused.push(String(paused.id));
+        try {
+            for (const to of ['eteinte@exemple.test', 'enpause@exemple.test']) {
+                await assert.rejects(send(inboundPort, { from: 'x@ailleurs.test', to }), code(550), to);
+            }
+            // La pause est celle de l'offre : l'état choisi de la boîte ne bouge pas.
+            assert.equal((await engine.repo.findById(paused.id))?.enabled, 1);
+        } finally {
+            engine.paused.splice(0);
+        }
+        await send(inboundPort, { from: 'x@ailleurs.test', to: 'enpause@exemple.test' });
+        assert.equal((await inboxOf('enpause@exemple.test')).messages.length, 1);
     });
 
     it('une boîte pleine refuse en 552, un message trop gros aussi', async () => {
@@ -211,6 +242,64 @@ describe('la soumission', () => {
                 }),
             code(553)
         );
+        assert.equal(engine.repo.queue.length, 0);
+    });
+
+    it('une boîte que l’offre tient en pause refuse l’authentification en 535, comme une éteinte', async () => {
+        await switchOff('muette@exemple.test', 'secret-muette');
+        const paused = await engine.createMailbox('suspendue@exemple.test', 'secret-suspendue');
+        engine.paused.push(String(paused.id));
+        try {
+            for (const [user, pass] of [
+                ['muette@exemple.test', 'secret-muette'],
+                ['suspendue@exemple.test', 'secret-suspendue']
+            ]) {
+                await assert.rejects(
+                    send(submissionPort, { from: user, to: 'x@ailleurs.test' }, { user, pass }),
+                    code(535),
+                    user
+                );
+            }
+        } finally {
+            engine.paused.splice(0);
+        }
+        assert.equal(engine.repo.queue.length, 0);
+    });
+
+    it('une session authentifiée avant la pause n’envoie plus rien', async () => {
+        const mailbox = await engine.createMailbox('ouverte@exemple.test', 'secret-ouverte');
+        const connection = new SMTPConnection({
+            host: 'localhost',
+            port: submissionPort,
+            secure: true,
+            tls: { ca: selfSigned().cert }
+        });
+        await new Promise<void>((resolve, reject) => {
+            connection.once('error', reject);
+            connection.connect(() => resolve());
+        });
+        connection.on('error', () => undefined);
+        await new Promise<void>((resolve, reject) =>
+            connection.login({ user: mailbox.address, pass: 'secret-ouverte' }, (error) =>
+                error ? reject(error) : resolve()
+            )
+        );
+        engine.paused.push(String(mailbox.id));
+        try {
+            await assert.rejects(
+                new Promise((resolve, reject) =>
+                    connection.send(
+                        { from: mailbox.address, to: ['x@ailleurs.test'] },
+                        'Subject: x\r\n\r\nx\r\n',
+                        (error, info) => (error ? reject(error) : resolve(info))
+                    )
+                ),
+                code(535)
+            );
+        } finally {
+            engine.paused.splice(0);
+            connection.quit();
+        }
         assert.equal(engine.repo.queue.length, 0);
     });
 

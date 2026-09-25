@@ -2,7 +2,6 @@ import {
     deviceReportSchema,
     isNewerVersion,
     type AgentManifest,
-    type Device,
     type DevicePlatform,
     type DeviceReport,
     type DeviceRow,
@@ -11,6 +10,7 @@ import {
 } from '@deveye/types';
 import { FeatureError, type SdkFeatureContext } from '@deveye/types/sdk/server';
 
+import type { FleetDevice } from '../contracts/commands';
 import type { DevicesRepo } from './repo';
 
 export type DevicesContext = SdkFeatureContext<DevicesRepo>;
@@ -84,7 +84,13 @@ export function parseDeviceReport(reportJson: string | null): DeviceReport | nul
  * que `src/agent/mappers.ts` fait pour l'infrastructure : deux lecteurs d'un
  * même schéma, tenus d'accord par `deviceSchema`.
  */
-export function rowToDevice(row: DeviceRow, online: boolean, update: AgentUpdateInfo, foreign: boolean): Device {
+export function rowToDevice(
+    row: DeviceRow,
+    online: boolean,
+    update: AgentUpdateInfo,
+    foreign: boolean,
+    planPaused: boolean
+): FleetDevice {
     return {
         id: row.id,
         ownerId: row.owner_id,
@@ -105,17 +111,19 @@ export function rowToDevice(row: DeviceRow, online: boolean, update: AgentUpdate
         terminalDefaultUser: row.terminal_default_user ?? null,
         terminalCloseOnExit: row.terminal_close_on_exit !== 0,
         foreign,
-        deleteError: row.delete_error ?? null
+        deleteError: row.delete_error ?? null,
+        planPaused
     };
 }
 
-/** Une ligne, avec sa présence en direct, son état de mise à jour et son origine. */
-export async function toDevice(ctx: DevicesContext, row: DeviceRow): Promise<Device> {
+/** Une ligne, avec sa présence en direct, son état de mise à jour, son origine et sa pause d'offre. */
+export async function toDevice(ctx: DevicesContext, row: DeviceRow): Promise<FleetDevice> {
     const manifest = await ctx.deveye.agents.servedManifest();
     return rowToDevice(
         row,
         ctx.deveye.devices.isOnline(row.id),
         computeAgentUpdate(row, manifest),
-        row.workspace_id !== ctx.workspaceId
+        row.workspace_id !== ctx.workspaceId,
+        ctx.quota.isPaused('agents', row.id)
     );
 }

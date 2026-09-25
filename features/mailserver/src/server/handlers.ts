@@ -28,6 +28,7 @@ import {
     type ServerStatus
 } from '../contracts/domain';
 import {
+    ADDRESSES,
     bytesOfMb,
     dayOf,
     getEngine,
@@ -71,7 +72,7 @@ async function visibleRows(ctx: Ctx): Promise<MailboxRow[]> {
 async function reload(ctx: Ctx, id: number) {
     const row = await ctx.repo.find(id, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Adresse introuvable.');
-    return toMailbox(ctx.cipher(), row, hostOf(row), false);
+    return toMailbox(ctx.cipher(), row, hostOf(row), false, ctx.quota);
 }
 
 export const mailserverHandlers = [
@@ -95,7 +96,8 @@ export const mailserverHandlers = [
                             await shares.cipherFor(String(row.id)),
                             row,
                             hostOf(row),
-                            row.workspace_id !== ctx.workspaceId
+                            row.workspace_id !== ctx.workspaceId,
+                            ctx.quota
                         )
                     )
                 )
@@ -109,7 +111,7 @@ export const mailserverHandlers = [
             const row = await loadMailbox(ctx, input.id);
             const cipher = await (await ctx.sharing.scope()).cipherFor(String(row.id));
             return {
-                mailbox: await toMailbox(cipher, row, hostOf(row), row.workspace_id !== ctx.workspaceId),
+                mailbox: await toMailbox(cipher, row, hostOf(row), row.workspace_id !== ctx.workspaceId, ctx.quota),
                 connection: getEngine()?.connection() ?? null
             };
         }
@@ -140,7 +142,7 @@ export const mailserverHandlers = [
                 throw new FeatureError('conflict', 'Cette adresse existe déjà.');
             }
 
-            await ctx.quota.assert('addresses', async (owned) => (await ctx.repo.countInWorkspaces(owned)) + 1);
+            await ctx.quota.assert(ADDRESSES, async (owned) => (await ctx.repo.countInWorkspaces(owned)) + 1);
             const password = generateSecret();
             const id = await ctx.repo.createMailbox({
                 workspaceId: ctx.workspaceId,

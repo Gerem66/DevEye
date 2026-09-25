@@ -105,6 +105,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         pruneBans: unused,
         bumpUsage: async () => undefined,
         countInWorkspaces: async (ids: readonly number[]) => ids.length - ids.length,
+        listStock: unused,
         list: unused,
         listVisible: unused,
         find: async (id, workspaceId) => repo.sites.find((s) => s.id === id && s.workspace_id === workspaceId) ?? null,

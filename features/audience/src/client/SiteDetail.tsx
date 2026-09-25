@@ -4,6 +4,7 @@ import {
     FeatureSettingsButton,
     invalidate,
     openFeature,
+    PlanPausedBadge,
     StatusBadge,
     useLiveSegment,
     useStickyOffset
@@ -117,6 +118,7 @@ export function SiteDetail({
                     <h2 className={styles.detailName}>
                         {section === null ? site.name : SECTION_LABELS[section]}
                         <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
+                        {site.planPaused && <PlanPausedBadge />}
                         {/* Sans cette pastille, rien ne distingue un site local d'une
                             fenêtre sur l'espace voisin. */}
                         {site.foreign && (
@@ -167,10 +169,16 @@ export function SiteDetail({
             </header>
 
             {/* Un site partagé ici est borné par l'offre de son propre espace, pas par celle-ci. */}
-            {site.active && !site.foreign && <QuotaNotice quota={eventsQuota} />}
+            {site.active && !site.planPaused && !site.foreign && <QuotaNotice quota={eventsQuota} />}
             {!site.active && (
                 <p className={styles.notice}>
                     La mesure est éteinte : plus rien n’entre, retours compris. L’historique ne bouge plus.
+                </p>
+            )}
+            {site.active && site.planPaused && (
+                <p className={styles.notice}>
+                    Au-delà de la limite de l’offre, la mesure est en pause : plus rien n’entre, retours compris. Elle
+                    reprend d’elle-même dès que l’offre le permet.
                 </p>
             )}
 

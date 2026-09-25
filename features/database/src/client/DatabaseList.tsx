@@ -1,4 +1,4 @@
-import { useDragReorder, type LiveOutlineProps } from 'deveye-sdk-client';
+import { PlanPausedBadge, useDragReorder, type LiveOutlineProps } from 'deveye-sdk-client';
 import type { Database } from '../contracts/domain';
 
 import { ENGINE_LABELS, formatAgo, formatBytes, STATUS_META } from './format';
@@ -116,6 +116,7 @@ function DatabaseCard({ database, outline, dragging, onOpen, onDragPointerDown }
                         <span className={styles.statusTag} data-tone={status.tone}>
                             {status.label}
                         </span>
+                        {database.planPaused && <PlanPausedBadge />}
                         {database.monitorEnabled ? (
                             <span className={styles.tag}>relevée {formatAgo(database.lastCheckAt)}</span>
                         ) : (

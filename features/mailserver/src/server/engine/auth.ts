@@ -1,4 +1,6 @@
-import { now } from '../_shared';
+import type { SdkPlanPauses } from '@deveye/types/sdk/server';
+
+import { isServing, now } from '../_shared';
 import { hashSecret, verifySecret } from '../passwords';
 import type { CredentialRow, MailboxRow, MailserverRepo } from '../repo';
 import type { EventRecorder } from './events';
@@ -42,7 +44,11 @@ class FailureWindow {
     }
 }
 
-export function createAuthenticator(deps: { repo: MailserverRepo; events: EventRecorder }): Authenticator {
+export function createAuthenticator(deps: {
+    repo: MailserverRepo;
+    events: EventRecorder;
+    pauses: SdkPlanPauses;
+}): Authenticator {
     const failures = new FailureWindow();
     const noted = new Map<string, number>();
     // Vérifié quand l'adresse n'existe pas : le refus prend alors le même temps, et ne dit pas quelles adresses existent.
@@ -61,7 +67,7 @@ export function createAuthenticator(deps: { repo: MailserverRepo; events: EventR
             const mailbox = await deps.repo.findByAddress(address);
             let credential: CredentialRow | null = null;
             let granted = false;
-            if (!mailbox || mailbox.enabled !== 1) {
+            if (!mailbox || !isServing(mailbox, deps.pauses)) {
                 await verifySecret(secret, await decoy);
             } else if (await verifySecret(secret, mailbox.password_hash)) {
                 granted = true;

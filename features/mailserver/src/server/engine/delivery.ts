@@ -1,7 +1,7 @@
-import type { SdkFleetDomains } from '@deveye/types/sdk/server';
+import type { SdkFleetDomains, SdkPlanPauses } from '@deveye/types/sdk/server';
 
 import type { AuthVerdict } from '../../contracts/domain';
-import { now } from '../_shared';
+import { isServing, now } from '../_shared';
 import type { MailboxRow, MailserverRepo } from '../repo';
 import type { EventRecorder } from './events';
 import type { MailStore } from './mailstore';
@@ -17,7 +17,7 @@ export interface Verdicts {
 export const NO_VERDICTS: Verdicts = { spf: 'none', dkim: 'none', dmarc: 'none' };
 
 export interface Delivery {
-    /** La boîte qu'une adresse désigne, ou `null` : domaine inconnu ou pas vérifié, boîte absente ou éteinte. */
+    /** La boîte qu'une adresse désigne, ou `null` : domaine inconnu ou pas vérifié, boîte absente, éteinte ou en pause. */
     resolve(address: string): Promise<MailboxRow | null>;
     /** Lève `OverQuotaError` quand la boîte est pleine. */
     deliver(
@@ -30,6 +30,7 @@ export interface Delivery {
 export function createDelivery(deps: {
     repo: MailserverRepo;
     domains: SdkFleetDomains;
+    pauses: SdkPlanPauses;
     store: MailStore;
     events: EventRecorder;
 }): Delivery {
@@ -44,7 +45,9 @@ export function createDelivery(deps: {
             if (!domain?.verified) return null;
             const mailbox = await deps.repo.findByAddress(`${local}@${domain.host}`);
             // Le domaine doit être celui de l'espace de la boîte : un nom redéclaré ailleurs ne lui amène pas son courrier.
-            if (!mailbox || mailbox.enabled !== 1 || mailbox.workspace_id !== domain.workspaceId) return null;
+            if (!mailbox || !isServing(mailbox, deps.pauses) || mailbox.workspace_id !== domain.workspaceId) {
+                return null;
+            }
             return mailbox;
         },
 

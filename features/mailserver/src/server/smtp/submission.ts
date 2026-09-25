@@ -1,10 +1,10 @@
 import crypto from 'node:crypto';
 
-import type { SdkCipher, SdkLogger } from '@deveye/types/sdk/server';
+import type { SdkCipher, SdkLogger, SdkPlanPauses } from '@deveye/types/sdk/server';
 import addressparser from 'nodemailer/lib/addressparser';
 import { SMTPServer } from 'smtp-server';
 
-import { dayOf, now, seal } from '../_shared';
+import { dayOf, isServing, now, seal } from '../_shared';
 import type { Authenticator } from '../engine/auth';
 import { IpLimiter, SlidingCounter } from '../engine/limits';
 import { FLAG, type MailStore } from '../engine/mailstore';
@@ -32,6 +32,7 @@ export interface SubmissionDeps {
     maxBytes: number;
     certificates: TlsStore;
     repo: MailserverRepo;
+    pauses: SdkPlanPauses;
     store: MailStore;
     auth: Authenticator;
     cipherFor(workspaceId: number): SdkCipher;
@@ -107,7 +108,9 @@ export function createSubmissionServer(deps: SubmissionDeps, implicitTls: boolea
             deps.repo
                 .findById(user.mailboxId)
                 .then((mailbox) => {
-                    if (!mailbox || mailbox.enabled !== 1) return done(smtpError(535, '5.7.8 Mailbox disabled'));
+                    if (!mailbox || !isServing(mailbox, deps.pauses)) {
+                        return done(smtpError(535, '5.7.8 Mailbox disabled'));
+                    }
                     if (address.address.toLowerCase() !== mailbox.address) {
                         return done(smtpError(553, `5.7.1 You may only send as ${mailbox.address}`));
                     }
@@ -129,7 +132,9 @@ export function createSubmissionServer(deps: SubmissionDeps, implicitTls: boolea
                 const body = await collect(stream, deps.maxBytes);
                 if (body === null) throw smtpError(552, '5.3.4 Message too large');
                 const mailbox = user ? await deps.repo.findById(user.mailboxId) : null;
-                if (!user || !mailbox || mailbox.enabled !== 1) throw smtpError(530, '5.7.0 Authentication required');
+                if (!user || !mailbox || !isServing(mailbox, deps.pauses)) {
+                    throw smtpError(530, '5.7.0 Authentication required');
+                }
 
                 const recipients = [...new Set(session.envelope.rcptTo.map((rcpt) => rcpt.address.toLowerCase()))];
                 if (recipients.length === 0) throw smtpError(554, '5.5.1 No valid recipients');

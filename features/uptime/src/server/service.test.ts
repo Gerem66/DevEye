@@ -66,6 +66,7 @@ function fakeRepo(over: Partial<UptimeServiceRow> = {}): FakeRepo {
         services: {
             listByWorkspace: unused,
             countInWorkspaces: unused,
+            listStock: unused,
             listVisible: unused,
             findById: async (id, workspaceId) =>
                 rows.find((r) => r.id === id && r.workspace_id === workspaceId) ?? null,
@@ -79,11 +80,13 @@ function fakeRepo(over: Partial<UptimeServiceRow> = {}): FakeRepo {
             // Des copies, comme une ligne lue en base : le moniteur compare
             // l'état d'AVANT la sonde à celui qu'il écrit, et une ligne mutée
             // sous lui ferait croire à un état inchangé.
-            listDue: async (now, limit) =>
+            // Les pauses d'offre s'écartent avant la coupe, comme dans la requête.
+            listDue: async (now, limit, planPaused) =>
                 rows
                     .filter(
                         (r) =>
                             r.enabled === 1 &&
+                            !planPaused.includes(r.id) &&
                             (r.last_checked_at === null || r.last_checked_at + r.interval_seconds <= now)
                     )
                     .slice(0, limit)
@@ -249,6 +252,53 @@ describe('une panne', () => {
         assert.notEqual(repo.incidents[0].ended_at, null);
         // Rien de plus n'est parti : la tentative de la panne, et c'est tout.
         assert.equal(deps.recorded.notifications.length, 1);
+    });
+});
+
+describe('la pause de l’offre', () => {
+    it('n’est ni relevée ni sondée, et reprend d’elle-même quand l’offre la lève', async () => {
+        const repo = fakeRepo();
+        const paused = ['1'];
+        const asked: (readonly number[])[] = [];
+        const listDue = repo.services.listDue;
+        repo.services.listDue = (now, limit, planPaused) => {
+            asked.push(planPaused);
+            return listDue(now, limit, planPaused);
+        };
+        const { probe } = monitorWith(repo, createTestServiceDeps({ repo, pausedItems: { monitors: paused } }));
+
+        await probe(DOWN);
+        assert.deepEqual(asked, [[1]]);
+        assert.equal(repo.checks.length, 0);
+        // Le choix de l'utilisateur n'a pas bougé : c'est lui qui reprend.
+        assert.equal(repo.rows[0].enabled, 1);
+
+        paused.length = 0;
+        await probe(DOWN);
+        assert.deepEqual(asked[1], []);
+        assert.equal(repo.checks.length, 1);
+    });
+
+    it('ne sonde pas un service en pause qu’on lui tend directement', async () => {
+        const repo = fakeRepo();
+        const deps = createTestServiceDeps({ repo, pausedItems: { monitors: ['1'] } });
+        await new UptimeMonitor(deps, async () => UP).runOne({ ...repo.rows[0] });
+        assert.equal(repo.checks.length, 0);
+    });
+
+    it('ferme la panne en cours d’un service qu’elle vient de mettre en pause', async () => {
+        const repo = fakeRepo();
+        const { deps, probe } = monitorWith(repo);
+        await probe(DOWN);
+        await probe(DOWN);
+        assert.equal(repo.incidents[0].ended_at, null);
+
+        const service = serverEntry.createService?.(deps);
+        assert.ok(service?.onPlanPause);
+        await service.onPlanPause({ key: 'pages', paused: [{ id: '1', workspaceId: 1 }], resumed: [] });
+        assert.equal(repo.incidents[0].ended_at, null, 'une page du même identifiant n’est pas ce service');
+        await service.onPlanPause({ key: 'monitors', paused: [{ id: '1', workspaceId: 1 }], resumed: [] });
+        assert.notEqual(repo.incidents[0].ended_at, null);
     });
 });
 

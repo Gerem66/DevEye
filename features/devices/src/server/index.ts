@@ -8,9 +8,10 @@ import { DEVICES_ENV } from './env';
 
 /**
  * L'entrée serveur du module : le balayage horaire de rétention
- * (`RetentionSweep`) sur le dépôt du module, et l'entrée `items` sans laquelle
- * un `shareTier` autre que `'never'` est refusé au démarrage. Aucun hook agent
- * (la télémétrie est ingérée par l'app, hors session), aucune notification.
+ * (`RetentionSweep`) sur le dépôt du module, l'entrée `items` sans laquelle
+ * un `shareTier` autre que `'never'` est refusé au démarrage, et la limite de
+ * stock `agents`. Aucun hook agent (la télémétrie est ingérée par l'app, hors
+ * session), aucune notification.
  *
  * Pas de `migrationsDir` : les cinq tables datent du socle (voir `repo/index.ts`
  * et l'allowlist de `deveye-feature.json`) ; une table propre au module
@@ -28,8 +29,18 @@ export const serverEntry: FeatureServer<DevicesRepo> = {
             },
             stop() {
                 return sweep.stop();
+            },
+            // La session d'un agent garde sa ligne d'appareil et continuerait
+            // d'émettre : seule la fermeture l'arrête. La reprise n'a rien à
+            // faire, l'agent se reconnecte de lui-même.
+            onPlanPause(change) {
+                if (change.key !== 'agents') return;
+                for (const item of change.paused) deps.agents.disconnectAgent(item.id);
             }
         };
+    },
+    quotas: {
+        agents: { list: (repo, owned) => repo.devices.listActiveInWorkspaces(owned) }
     },
     items: {
         homeOf: async (repo, itemId, workspaceId) =>

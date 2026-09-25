@@ -1,5 +1,12 @@
 import { useCallback, useState } from 'react';
-import { Button, FeatureSettingsButton, openFeature, useResource, useWorkspaceMembers } from 'deveye-sdk-client';
+import {
+    Button,
+    FeatureSettingsButton,
+    openFeature,
+    PlanPausedBadge,
+    useResource,
+    useWorkspaceMembers
+} from 'deveye-sdk-client';
 import type { GitClientProvider, SdkTileSummary } from '@deveye/types/sdk/client';
 
 import { api } from './api';
@@ -58,6 +65,12 @@ function LinkedRepo({ repoId, canWrite, onUnlink }: LinkedRepoProps) {
                         )}
                         {repo.credentialId === null && (
                             <span className={styles.overdue}> · jeton retiré, synchronisation arrêtée</span>
+                        )}
+                        {repo.planPaused && (
+                            <>
+                                {' '}
+                                <PlanPausedBadge />
+                            </>
                         )}
                         {repo.projectCount > 1 && (
                             <span>
@@ -150,6 +163,14 @@ function summarize(repoIds: readonly number[]): Promise<readonly SdkTileSummary[
                 return { itemId: id, title: `Dépôt #${id}`, metrics: [], unavailable: 'Ce dépôt n’est plus ici.' };
             }
             const title = `${repo.owner}/${repo.repo}`;
+            if (repo.planPaused) {
+                return {
+                    itemId: id,
+                    title,
+                    metrics: [],
+                    unavailable: 'Au-delà de l’offre : sa synchronisation est en pause.'
+                };
+            }
             if (repo.credentialId === null) {
                 return { itemId: id, title, metrics: [], unavailable: 'Son accès a été retiré.' };
             }

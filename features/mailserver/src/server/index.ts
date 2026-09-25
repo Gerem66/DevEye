@@ -22,6 +22,9 @@ export const serverEntry: FeatureServer<MailserverRepo> = {
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
     createService: (deps) => createMailService(deps),
     domains: createDomainHooks(),
+    quotas: {
+        addresses: { list: (repo, owned) => repo.listInWorkspaces(owned) }
+    },
     items: {
         homeOf: async (repo, itemId, workspaceId) =>
             (await repo.findVisible(Number(itemId), workspaceId))?.workspace_id ?? null,

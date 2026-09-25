@@ -20,7 +20,7 @@ export const manifest = {
     resources: ['database.count', 'database.list', 'database.detail'],
     /** Les canaux d'alerte de l'espace, par base. */
     nativeCapabilities: ['notify'],
-    quotas: [{ key: 'connections', label: 'bases de données' }],
+    quotas: [{ key: 'connections', label: 'bases de données', stock: true }],
     links: [
         { to: 'mail', what: 'envoie ses alertes par un compte Mail' },
         { to: 'backup', what: 'offre ses bases aux sauvegardes' }

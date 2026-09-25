@@ -13,6 +13,7 @@ import { DOMAIN_HOST_PATTERN, domainOwnershipRecord, normaliseDomainHost } from 
 
 import type { FeatureDomainRow } from '@/db/repos/featureDomains';
 import { httpsMode } from '@/Services/domains/proxy';
+import { schedulePlanReconcile } from '@/Services/planPauses';
 import { verifyFeatureDomain } from '@/Services/domains/verifier';
 import { toSdkDomain } from '../_sdk/domains';
 import { moduleDomains, moduleWebDomainFeatures } from '../_sdk/register';
@@ -57,7 +58,8 @@ async function view(
 ): Promise<FeatureDomain> {
     // Un module qui ne sait pas dire ses enregistrements ne doit pas faire
     // échouer la liste entière : la propriété reste prouvable sans lui.
-    const records = await hooks.records(toSdkDomain(row)).catch((error: unknown) => {
+    const domain = toSdkDomain(row);
+    const records = await hooks.records(domain).catch((error: unknown) => {
         ctx.logger.warn(
             { feature: row.feature, host: row.host, err: (error as Error).message },
             'Domain records failed'
@@ -75,7 +77,8 @@ async function view(
         probeError: row.probe_error,
         verifiedAt: row.verified_at,
         checkedAt: row.checked_at,
-        useCount
+        useCount,
+        planPaused: domain.planPaused
     };
 }
 
@@ -140,6 +143,8 @@ const addFeature = defineFeature({
         });
         const row = await ctx.db.featureDomains.find(id, ctx.workspaceId, input.feature);
         if (!row) throw new FeatureError('internal', 'Le domaine n’a pas pu être relu.');
+        // Un nom que l'offre tient déjà en pause ailleurs l'est aussi ici.
+        if (isWeb(hooks)) schedulePlanReconcile(ctx.workspace.ownerUserId);
         ctx.audit({
             action: 'domain.add',
             description: `${featureDescriptor(input.feature).label} : domaine ${host} déclaré`
@@ -172,6 +177,8 @@ const removeFeature = defineFeature({
         // le domaine reste, plutôt que de laisser des éléments le désigner.
         await hooks.onRemoved(toSdkDomain(row));
         await ctx.db.featureDomains.delete(row.id, ctx.workspaceId, input.feature);
+        // Une place libérée rend la sienne au plus ancien nom en pause.
+        if (isWeb(hooks)) schedulePlanReconcile(ctx.workspace.ownerUserId);
         ctx.audit({
             action: 'domain.remove',
             level: 'warning',

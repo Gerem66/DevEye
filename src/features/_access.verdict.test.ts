@@ -4,13 +4,16 @@ import { describe, it } from 'node:test';
 import type { ItemRoleGrantRow } from '@deveye/types';
 
 import type { Database } from '@/db';
+import { attachPlanPauses, type PlanPauses } from '@/Services/planPauses';
 import { manifest as devicesManifest } from '../../features/devices/src/manifest';
 import { registerModules } from './_sdk/register';
 import { deviceVerdict, memberVerdict } from './_access';
 
 // Les permissions d'Appareils se résolvent contre son manifest : le vrai, sans
-// son partage par élément, qui n'est pas ce qu'on éprouve ici.
-registerModules([{ manifest: { ...devicesManifest, shareTier: 'never' }, server: { features: [] } }]);
+// son partage par élément ni son stock, qui ne sont pas ce qu'on éprouve ici.
+registerModules([
+    { manifest: { ...devicesManifest, shareTier: 'never', quotas: undefined }, server: { features: [] } }
+]);
 
 const OWNER = 1;
 const MEMBER = 7;
@@ -115,5 +118,24 @@ describe('memberVerdict : le niveau d’un membre, élément compris', () => {
         assert.deepEqual(await write({ overrides: [{ item_id: DEVICE, access: 'write', extra_overrides: null }] }), {
             ok: true
         });
+    });
+});
+
+describe('memberVerdict : un membre que l’offre du propriétaire tient dehors', () => {
+    it('perd l’accès, espace en pause ou lui-même en pause, et le propriétaire jamais', async () => {
+        const read = (userId = MEMBER) => memberVerdict(fakeDb({}), userId, WORKSPACE, 'devices', { level: 'read' });
+        const paused = new Set<string>();
+        attachPlanPauses({ isPaused: (key: string, id: string) => paused.has(`${key}/${id}`) } as PlanPauses);
+        try {
+            assert.deepEqual(await read(), { ok: true });
+            paused.add(`workspace.members/${WORKSPACE}:${MEMBER}`);
+            assert.deepEqual(await read(), { ok: false, reason: 'not_member' });
+            paused.clear();
+            paused.add(`workspace.shared/${WORKSPACE}`);
+            assert.deepEqual(await read(), { ok: false, reason: 'not_member' });
+            assert.deepEqual(await read(OWNER), { ok: true });
+        } finally {
+            attachPlanPauses(null);
+        }
     });
 });

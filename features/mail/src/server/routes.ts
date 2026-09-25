@@ -28,7 +28,7 @@ import { decryptCredentials, encryptCredentials, persistRefreshedToken, tryDecry
 
 export type MailRouteDeps = Pick<
     FeatureServiceDeps<MailRepo>,
-    'repo' | 'secrecy' | 'cipherFor' | 'origins' | 'logger' | 'audit' | 'quotaFor'
+    'repo' | 'secrecy' | 'cipherFor' | 'origins' | 'logger' | 'audit' | 'quotaFor' | 'pauses'
 >;
 
 /**
@@ -181,6 +181,10 @@ export function mailRoutes(app: SdkPublicApp, deps: MailRouteDeps, seam: MailRou
         // d'un compte projeté se sert comme son message se lit.
         const account = await deps.repo.accounts.findVisible(folder.account_id, ticket.workspaceId);
         if (!account) return reply.code(404).send({ error: 'not_found' });
+        // Mis en pause par l'offre depuis la délivrance du ticket : rien ne part vers IMAP.
+        if (deps.pauses.isPaused('accounts', String(account.id))) {
+            return reply.code(403).send({ error: 'plan_paused' });
+        }
 
         // Un compte gardé dont la session s'est verrouillée entre-temps : le
         // même refus qu'une commande, sans rien tenter.

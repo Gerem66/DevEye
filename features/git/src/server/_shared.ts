@@ -116,7 +116,8 @@ export async function toRepo(
     row: GitRepoRow,
     foreign: boolean,
     /** Le nombre de projets qui s'en servent, venu du contrat de Projets. */
-    projectCount: number
+    projectCount: number,
+    planPaused: boolean
 ): Promise<GitRepoDto> {
     const target = await readJson<Partial<StoredRepo>>(cipher, row.content);
     return gitRepoSchema.parse({
@@ -131,6 +132,7 @@ export async function toRepo(
         lastSyncAt: row.last_sync_at,
         lastSyncError: row.last_sync_error ? await cipher.tryDecrypt(row.last_sync_error) : null,
         projectCount,
+        planPaused,
         created: row.created
     });
 }
@@ -144,7 +146,13 @@ export async function reloadRepo(ctx: Ctx, repoId: number): Promise<GitRepoDto> 
     const row = await ctx.repo.findVisibleRepo(repoId, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Dépôt introuvable');
     const counts = await projectCountsOf(ctx);
-    return toRepo(await repoCipher(ctx, row.id), row, row.workspace_id !== ctx.workspaceId, counts.get(repoId) ?? 0);
+    return toRepo(
+        await repoCipher(ctx, row.id),
+        row,
+        row.workspace_id !== ctx.workspaceId,
+        counts.get(repoId) ?? 0,
+        ctx.quota.isPaused('repos', String(repoId))
+    );
 }
 
 /**

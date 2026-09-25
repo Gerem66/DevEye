@@ -226,6 +226,7 @@ declare const styles: {
     readonly pairCard: string;
     readonly pairCardIcon: string;
     readonly panelScroll: string;
+    readonly pausedTag: string;
     readonly pkgBar: string;
     readonly pkgBarErr: string;
     readonly pkgBarFill: string;

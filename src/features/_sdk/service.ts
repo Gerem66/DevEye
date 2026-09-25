@@ -12,7 +12,7 @@ import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
 import { FeatureError } from '@deveye/types/sdk/server';
 import { accountChanged, toSdkAccount } from './live';
-import { createQuota } from './quota';
+import { createQuota, modulePauses } from './quota';
 import { serverKeysOf } from './host';
 import { ORIGINS, publishFrame } from './context';
 import { createOpenCipher, createSecureStore } from '@/Services/SecureStore';
@@ -179,6 +179,7 @@ export function createServiceDeps(
                 async () => (await host.db.workspaces.findById(workspaceId))?.owner_user_id ?? null,
                 host.logger
             ),
+        pauses: modulePauses(manifest),
         accounts: {
             find: async (userId) => {
                 gateAccounts();

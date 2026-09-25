@@ -37,7 +37,7 @@ export class Notifier {
         }
     }
 
-    /** Prévenu quand la boîte est éteinte, supprimée, ou que ses identifiants changent. */
+    /** Prévenu quand la boîte est éteinte, mise en pause par l'offre, supprimée, ou que ses identifiants changent. */
     watchMailbox(mailboxId: number, listener: MailboxListener): () => void {
         let set = this.mailboxes.get(mailboxId);
         if (!set) {

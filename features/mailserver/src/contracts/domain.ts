@@ -25,6 +25,8 @@ export const mailboxSchema = z.object({
     domainHost: z.string(),
     displayName: z.string(),
     enabled: z.boolean(),
+    /** L'offre de son propriétaire la tient en pause : elle se comporte comme éteinte, sans que `enabled` change. */
+    planPaused: z.boolean(),
     quotaMb: z.number().int(),
     usedBytes: z.number().int().nonnegative(),
     messageCount: z.number().int().nonnegative(),

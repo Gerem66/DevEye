@@ -7,7 +7,7 @@ import type {
     GitReleaseRow,
     GitRepoRow
 } from '../contracts/domain';
-import type { SdkQueryable } from '@deveye/types/sdk/server';
+import type { SdkQueryable, SdkStockItem } from '@deveye/types/sdk/server';
 
 /** Un point du graphe, tel que SQL le rend — sans rien déchiffrer. */
 export interface CommitPointRow {
@@ -37,6 +37,8 @@ export interface GitRepo {
     findRepoBySlug(workspaceId: number, slugRef: string): Promise<GitRepoRow | null>;
     countRepos(workspaceId: number): Promise<number>;
     countReposInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
+    /** Ce que compte `countReposInWorkspaces`, du plus ancien au plus récent : le stock du quota `repos`. */
+    listStockRepos(workspaceIds: readonly number[]): Promise<SdkStockItem[]>;
     createRepo(input: {
         workspaceId: number;
         provider: string;
@@ -87,8 +89,12 @@ export interface GitRepo {
         repoId: number,
         input: { at: number | null; error: string | null; syncState: string | null; defaultBranch?: string | null }
     ): Promise<void>;
-    /** Les dépôts que l'ordonnanceur doit traiter, les plus en retard d'abord. */
-    listDue(limit: number): Promise<GitRepoRow[]>;
+    /**
+     * Les dépôts que l'ordonnanceur doit traiter, les plus en retard d'abord,
+     * hors `pausedIds` : écartés après le `LIMIT`, ces dépôts que l'offre tient
+     * en pause occuperaient la fenêtre sans jamais avancer.
+     */
+    listDue(limit: number, pausedIds: readonly number[]): Promise<GitRepoRow[]>;
     /**
      * Jette le cache d'un dépôt pour qu'il soit relu entièrement. Les auteurs sont
      * épargnés : leur rattachement à un membre est fait à la main et rien ne
@@ -245,6 +251,14 @@ export function createRepo(q: SdkQueryable): GitRepo {
             );
             return Number(rows[0]?.total ?? 0);
         },
+        async listStockRepos(workspaceIds) {
+            if (workspaceIds.length === 0) return [];
+            const rows = await q.query<{ id: number; workspace_id: number }>(
+                'SELECT id, workspace_id FROM git_repos WHERE workspace_id IN (?) ORDER BY created ASC, id ASC',
+                [[...workspaceIds]]
+            );
+            return rows.map((row) => ({ id: String(row.id), workspaceId: Number(row.workspace_id) }));
+        },
         async countRepos(workspaceId) {
             const rows = await q.query<{ total: number }>(
                 'SELECT COUNT(*) AS total FROM git_repos WHERE workspace_id = ?',
@@ -391,15 +405,18 @@ export function createRepo(q: SdkQueryable): GitRepo {
             );
             return true;
         },
-        async listDue(limit) {
+        async listDue(limit, pausedIds) {
             // Jamais synchronisé d'abord (NULL trie en tête), puis le plus
             // ancien. Un dépôt sans jeton n'est pas lisible : on ne le tente pas.
+            // `NOT IN ()` n'est pas du SQL : la clause n'existe qu'avec des pauses.
+            const paused = pausedIds.length > 0;
             return q.query<GitRepoRow>(
                 `SELECT * FROM git_repos
                  WHERE enabled = 1 AND credential_id IS NOT NULL
+                   ${paused ? 'AND id NOT IN (?)' : ''}
                  ORDER BY last_sync_at IS NOT NULL, last_sync_at ASC
                  LIMIT ?`,
-                [limit]
+                paused ? [[...pausedIds], limit] : [limit]
             );
         },
 

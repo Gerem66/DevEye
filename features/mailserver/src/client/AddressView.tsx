@@ -8,6 +8,7 @@ import {
     formatBytesFr,
     humanizeError,
     invalidate,
+    PlanPausedBadge,
     useResource,
     useWorkspacePermissions
 } from 'deveye-sdk-client';
@@ -95,9 +96,13 @@ export default function AddressView({
                             {mailbox.foreign && ' · vue depuis un autre espace'}
                         </p>
                     </div>
-                    <StatusBadge tone={mailbox.enabled ? 'success' : 'neutral'}>
-                        {mailbox.enabled ? 'Active' : 'Éteinte'}
-                    </StatusBadge>
+                    {/* En pause, elle ne sert pas : « Active » serait faux, « Éteinte » reste vrai. */}
+                    {(!mailbox.enabled || !mailbox.planPaused) && (
+                        <StatusBadge tone={mailbox.enabled ? 'success' : 'neutral'}>
+                            {mailbox.enabled ? 'Active' : 'Éteinte'}
+                        </StatusBadge>
+                    )}
+                    {mailbox.planPaused && <PlanPausedBadge />}
                 </div>
                 <div className={styles.actions}>
                     {typeof link.linkedId === 'number' && (

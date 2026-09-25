@@ -95,7 +95,11 @@ export class MailSync {
     private async tick(): Promise<void> {
         try {
             const now = Math.floor(Date.now() / 1000);
-            const due = await this.deps.repo.accounts.listSyncDue(now, env.MAIL_SYNC_CONCURRENCY * 4);
+            const due = await this.deps.repo.accounts.listSyncDue(
+                now,
+                env.MAIL_SYNC_CONCURRENCY * 4,
+                this.deps.pauses.paused('accounts').map(Number)
+            );
             for (let i = 0; i < due.length; i += env.MAIL_SYNC_CONCURRENCY) {
                 await Promise.all(due.slice(i, i + env.MAIL_SYNC_CONCURRENCY).map((row) => this.syncOne(row.id)));
             }
@@ -119,6 +123,7 @@ export class MailSync {
         try {
             const row = await this.deps.repo.accounts.findByIdUnscoped(accountId);
             if (!row || row.enabled !== 1 || row.security_tier !== 'open') return;
+            if (this.deps.pauses.isPaused('accounts', String(row.id))) return;
             const cipher = this.deps.cipherFor(row.workspace_id);
             try {
                 const credentials = await decryptCredentials(cipher, row.credentials_enc);

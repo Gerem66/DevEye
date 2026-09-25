@@ -112,6 +112,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         pruneBans: unused,
         bumpUsage: async () => undefined,
         countInWorkspaces: async (ids: readonly number[]) => sites.filter((r) => ids.includes(r.workspace_id)).length,
+        listStock: unused,
         list: async (workspaceId) => sites.filter((s) => s.workspace_id === workspaceId).map(withStats),
         listVisible: async (workspaceId) => sites.filter((s) => visible(s, workspaceId)).map(withStats),
         find: async (id, workspaceId) => sites.find((s) => s.id === id && s.workspace_id === workspaceId) ?? null,
@@ -375,6 +376,21 @@ describe('audience.count et audience.list', () => {
         const listed = await handlerFor(audienceList)(createTestContext({ repo, quotaLimits: { events: 10 } }), {});
         assert.equal(listed.sites.length, 1);
         assert.equal(listed.eventsQuota, null);
+    });
+
+    it('disent quel site l’offre tient en pause, sans toucher à son état ni le retirer du compte', async () => {
+        const repo = seed(fakeRepo(), site({ id: 1, workspace_id: 1 }), site({ id: 2, workspace_id: 1 }));
+        const ctx = createTestContext({ repo, pausedItems: { sites: ['2'] } });
+        const listed = await handlerFor(audienceList)(ctx, {});
+        assert.deepEqual(
+            listed.sites.map((s) => [s.id, s.active, s.planPaused]),
+            [
+                [1, true, false],
+                [2, true, true]
+            ]
+        );
+        assert.equal((await handlerFor(audienceGet)(ctx, { siteId: 2 })).site.planPaused, true);
+        assert.deepEqual(await handlerFor(audienceCount)(ctx, {}), { count: 2 });
     });
 
     it('sans contrat de Projets, le compte vaut zéro plutôt qu’une erreur', async () => {

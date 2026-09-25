@@ -218,6 +218,11 @@ function fakeRepo(deviceRows: DeviceRow[], shares: Record<string, number[]> = {}
             },
             countActiveInWorkspaces: async (workspaceIds) =>
                 deviceRows.filter((r) => r.status === 'active' && workspaceIds.includes(r.workspace_id)).length,
+            listActiveInWorkspaces: async (workspaceIds) =>
+                deviceRows
+                    .filter((r) => r.status === 'active' && workspaceIds.includes(r.workspace_id))
+                    .sort((a, b) => a.created - b.created || a.id.localeCompare(b.id))
+                    .map((r) => ({ id: r.id, workspaceId: r.workspace_id })),
             async rename(id, name) {
                 const r = find(id);
                 if (r) r.name = name;
@@ -392,6 +397,8 @@ interface CtxOverrides {
     /** Ce que la façade révèle ; par défaut, chaque ligne du dépôt, A seule en ligne. */
     devices?: readonly SdkDevice[];
     quotaLimits?: Record<string, number>;
+    /** Les appareils que l'offre tient en pause, sous la clé `agents`. */
+    pausedItems?: Record<string, readonly string[]>;
 }
 
 function contextFor(repo: FakeRepo, over: CtxOverrides = {}): TestContext<DevicesRepo> {
@@ -442,6 +449,24 @@ describe('devices.list', () => {
         // Rien de synchronisé : aucune mise à jour à proposer.
         assert.equal(out.devices[1].latestAgentVersion, null);
         assert.equal(out.devices[1].agentUpdateAvailable, false);
+    });
+
+    it("un appareil que l'offre tient en pause le dit, sans que son statut change", async () => {
+        const repo = fleet();
+        const ctx = contextFor(repo, { pausedItems: { agents: [DEVICE_B] } });
+        const out = await handlerFor(devicesList)(ctx, {});
+        devicesList.output.parse(out);
+        assert.deepEqual(
+            out.devices.map((d) => [d.id, d.status, d.planPaused]),
+            [
+                [DEVICE_A, 'active', false],
+                [DEVICE_B, 'active', true],
+                [DEVICE_C, 'archived', false]
+            ]
+        );
+        // La fiche relue après un geste le dit aussi.
+        const renamed = await handlerFor(devicesRename)(ctx, { deviceId: DEVICE_B, name: 'Toujours là' });
+        assert.equal(renamed.device.planPaused, true);
     });
 
     it("un appareil projeté figure dans la liste, marqué comme venant d'ailleurs", async () => {
@@ -542,6 +567,21 @@ describe("le cycle de vie d'un appareil", () => {
         const out = await handlerFor(devicesReactivate)(ctx, { deviceId: DEVICE_B });
         assert.equal(out.device.status, 'active');
         assert.deepEqual(agentOrders(ctx, 'resetAgentSession'), [DEVICE_B]);
+    });
+
+    it('annuler une suppression rend une place de l’offre : refusé quand elle est pleine', async () => {
+        const repo = fakeRepo([
+            row({ id: DEVICE_A, status: 'pending_deletion', status_before_delete: 'active' }),
+            row({ id: DEVICE_B, status: 'active' })
+        ]);
+        const full = contextFor(repo, { isAdmin: true, quotaLimits: { agents: 1 } });
+        await assert.rejects(
+            handlerFor(devicesCancelDelete)(full, { deviceId: DEVICE_A }),
+            failsWith('quota_exceeded')
+        );
+        assert.equal(repo.deviceRows[0].status, 'pending_deletion');
+        const out = await handlerFor(devicesCancelDelete)(contextFor(repo, { isAdmin: true }), { deviceId: DEVICE_A });
+        assert.equal(out.device.status, 'active');
     });
 
     it('le renommage écrit le nom et le journalise', async () => {

@@ -72,7 +72,8 @@ export const gitCrudFeatures = [
                             await shares.cipherFor(String(row.id)),
                             row,
                             row.workspace_id !== ctx.workspaceId,
-                            counts.get(row.id) ?? 0
+                            counts.get(row.id) ?? 0,
+                            ctx.quota.isPaused('repos', String(row.id))
                         )
                     )
                 )
@@ -92,7 +93,8 @@ export const gitCrudFeatures = [
                     await repoCipher(ctx, row.id),
                     row,
                     row.workspace_id !== ctx.workspaceId,
-                    counts.get(row.id) ?? 0
+                    counts.get(row.id) ?? 0,
+                    ctx.quota.isPaused('repos', String(row.id))
                 ),
                 usage: usage.map((u) => ({ projectId: u.projectId, title: u.title, status: u.status }))
             };
@@ -277,6 +279,7 @@ export const gitCrudFeatures = [
             // Depuis la fenêtre aussi : réveiller la synchronisation d'un dépôt
             // projeté rafraîchit la même donnée pour tout le monde, chez lui.
             await loadRepo(ctx, input.repoId, 'write');
+            await ctx.quota.assertActive('repos', String(input.repoId));
             requestSync(input.repoId);
             return { repo: await reloadRepo(ctx, input.repoId) };
         }
@@ -291,6 +294,11 @@ export const gitCrudFeatures = [
         access: { level: 'write' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
+            // Refusé avant de jeter le cache : un dépôt en pause ne le relirait pas.
+            if (!(await ctx.repo.findRepo(input.repoId, ctx.workspaceId))) {
+                throw new FeatureError('not_found', 'Dépôt introuvable');
+            }
+            await ctx.quota.assertActive('repos', String(input.repoId));
             const ok = await ctx.repo.resetCache(input.repoId, ctx.workspaceId);
             if (!ok) throw new FeatureError('not_found', 'Dépôt introuvable');
             ctx.audit({

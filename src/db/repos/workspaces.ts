@@ -14,6 +14,10 @@ export interface WorkspacesRepo {
     listAll(): Promise<WorkspaceRow[]>;
     /** Les espaces dont ce compte est propriétaire, personnel compris. */
     listOwnedIds(ownerUserId: number): Promise<number[]>;
+    /** Ses espaces partagés, du plus ancien au plus récent : l'ordre où l'offre les garde ouverts. */
+    listOwnedShared(ownerUserId: number): Promise<{ id: number }[]>;
+    /** Tous les comptes qui possèdent un espace. */
+    listOwnerIds(): Promise<number[]>;
     /** Crée l'espace personnel d'un compte (un seul par compte) et y inscrit son propriétaire. */
     createPersonal(ownerUserId: number, name: string): Promise<WorkspaceRow>;
     create(input: { ownerUserId: number; name: string }): Promise<WorkspaceRow>;
@@ -54,6 +58,17 @@ export function workspacesRepo(pool: Q): WorkspacesRepo {
                 ownerUserId
             ]);
             return r.rows.map((row) => Number(row.id));
+        },
+        async listOwnedShared(ownerUserId) {
+            const r = await pool.query<{ id: number }>(
+                "SELECT id FROM workspaces WHERE owner_user_id = ? AND kind = 'shared' ORDER BY created ASC, id ASC",
+                [ownerUserId]
+            );
+            return r.rows.map((row) => ({ id: Number(row.id) }));
+        },
+        async listOwnerIds() {
+            const r = await pool.query<{ owner_user_id: number }>('SELECT DISTINCT owner_user_id FROM workspaces');
+            return r.rows.map((row) => Number(row.owner_user_id));
         },
         async listAll() {
             const r = await pool.query<WorkspaceRow>(

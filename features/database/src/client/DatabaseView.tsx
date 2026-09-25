@@ -152,7 +152,7 @@ export function DatabaseView({
             <TableExplorer
                 databaseId={database.id}
                 databaseName={database.name}
-                autoLoad={canWrite && database.autoLoadTables}
+                autoLoad={canWrite && database.autoLoadTables && !database.planPaused}
                 expanded={expanded}
                 onExpandedChange={expand}
             />

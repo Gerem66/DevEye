@@ -3,14 +3,17 @@ import type { FeatureManifest } from '@deveye/types/sdk';
 import type { SdkAccount } from '@deveye/types/sdk/server';
 
 import type { Database } from '@/db';
+import { schedulePlanReconcile } from '@/Services/planPauses';
 import { sdkLive } from './host';
 
 /**
  * Un compte est prévenu où que ses connexions soient assises : son offre et les
  * ressources du module se relisent. La trame nomme son espace personnel, seul
- * espace qu'un compte a toujours.
+ * espace qu'un compte a toujours. Son offre a pu changer : ses limites de stock
+ * se réappliquent.
  */
 export function accountChanged(db: Pick<Database, 'users'>, manifest: FeatureManifest, userId: number): void {
+    schedulePlanReconcile(userId);
     void db.users
         .findById(userId)
         .then((row) => {

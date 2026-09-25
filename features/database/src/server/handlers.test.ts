@@ -9,9 +9,13 @@ import {
     databaseAlertUpdate,
     databaseCount,
     databaseGet,
+    databaseInspect,
     databaseList,
+    databaseQuery,
     databaseRemove,
     databaseReorder,
+    databaseTableList,
+    databaseTest,
     databaseUpdate
 } from '../contracts/commands';
 import type { DatabaseAlertRow, DatabaseRow } from '../contracts/domain';
@@ -128,6 +132,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         findByName: async (workspaceId, ref) =>
             rows.find((r) => r.workspace_id === workspaceId && r.name_ref === ref) ?? null,
         countInWorkspaces: async (ids: readonly number[]) => ids.length - ids.length,
+        listStock: unused,
         count: async (workspaceId) => rows.filter((r) => r.workspace_id === workspaceId).length,
         async create(input) {
             const created = row({
@@ -280,6 +285,36 @@ describe('database.count et database.list', () => {
         const repo = seed(fakeRepo(), row({ id: 1, workspace_id: 1 }));
         const listed = await handlerFor(databaseList)(createTestContext({ repo }), {});
         assert.equal(listed.databases[0].projectCount, 0);
+    });
+});
+
+describe('la pause d’offre', () => {
+    const isPausedRefusal = (e: unknown): boolean =>
+        e instanceof FeatureError &&
+        e.code === 'quota_exceeded' &&
+        (e.details as { paused?: boolean } | undefined)?.paused === true;
+
+    it('la liste et la fiche la disent ; tester, relever et toute session sont refusés avant d’ouvrir quoi que ce soit', async () => {
+        const repo = seed(fakeRepo(), row({ id: 1, workspace_id: 1 }), row({ id: 2, workspace_id: 1 }));
+        // Sans service de relevé monté : une commande qui passerait la garde
+        // lèverait `internal`, pas le refus de l'offre.
+        const ctx = createTestContext({ repo, pausedItems: { connections: ['2'] } });
+
+        const listed = await handlerFor(databaseList)(ctx, {});
+        assert.deepEqual(
+            listed.databases.map((d) => [d.id, d.planPaused]),
+            [
+                [1, false],
+                [2, true]
+            ]
+        );
+        assert.equal((await handlerFor(databaseGet)(ctx, { databaseId: 2 })).database.planPaused, true);
+
+        await assert.rejects(handlerFor(databaseTest)(ctx, { databaseId: 2 }), isPausedRefusal);
+        await assert.rejects(handlerFor(databaseInspect)(ctx, { databaseId: 2 }), isPausedRefusal);
+        await assert.rejects(handlerFor(databaseQuery)(ctx, { databaseId: 2, sql: 'SELECT 1' }), isPausedRefusal);
+        await assert.rejects(handlerFor(databaseTableList)(ctx, { databaseId: 2 }), isPausedRefusal);
+        await assert.rejects(handlerFor(databaseTableList)(ctx, { databaseId: 1 }), failsWith('internal'));
     });
 });
 

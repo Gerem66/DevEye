@@ -162,7 +162,7 @@ export class ImapSession {
         this.state = 'auth';
         this.socket.setTimeout(AUTH_TIMEOUT_MS);
         this.reader.setLimits({ maxLine: MAX_LINE, maxLiteral: this.ctx.maxMessageBytes });
-        // Boîte éteinte, supprimée, ou mot de passe changé : la session ne survit pas.
+        // Boîte éteinte, mise en pause par l'offre, supprimée, ou mot de passe changé : la session ne survit pas.
         this.unwatchMailbox = this.ctx.notifier.watchMailbox(mailbox.id, () => {
             this.send(untagged(atom('BYE'), atom('Session closed by the server')));
             this.close();

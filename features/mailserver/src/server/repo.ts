@@ -1,4 +1,4 @@
-import type { SdkQueryable } from '@deveye/types/sdk/server';
+import type { SdkQueryable, SdkStockItem } from '@deveye/types/sdk/server';
 
 /**
  * Tout le SQL du module. Le dépôt ne chiffre rien : `content`, `meta`,
@@ -133,6 +133,8 @@ export interface MailserverRepo {
     findById(id: number): Promise<MailboxRow | null>;
     findByAddress(address: string): Promise<MailboxRow | null>;
     countInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
+    /** Ce que compte {@link countInWorkspaces}, de la plus ancienne à la plus récente. */
+    listInWorkspaces(workspaceIds: readonly number[]): Promise<SdkStockItem[]>;
     createMailbox(input: {
         workspaceId: number;
         domainId: number;
@@ -264,6 +266,13 @@ const MAILBOX_COLUMNS =
     'm.password_set_at, m.quota_bytes, m.used_bytes, m.message_count, m.outbound_daily_limit, m.blob_key, ' +
     'm.banner_dismissed, m.last_delivery_at, m.last_login_at, m.content, m.created';
 
+/**
+ * Ce que borne la limite `addresses` : le compteur de création et la liste des
+ * pauses de l'offre lisent ce même filtre, sans quoi l'hôte mettrait en pause
+ * autre chose que ce qu'il a compté.
+ */
+const COUNTED_IN = 'workspace_id IN (?)';
+
 const MESSAGE_COLUMNS = 'id, mailbox_id, folder_id, uid, flags, keywords, internal_date, size, blob_id';
 
 const nullable = (value: unknown): number | null => (value === null || value === undefined ? null : Number(value));
@@ -346,10 +355,19 @@ export function createRepo(q: SdkQueryable): MailserverRepo {
         async countInWorkspaces(workspaceIds) {
             if (workspaceIds.length === 0) return 0;
             const rows = await q.query<{ n: number }>(
-                'SELECT COUNT(*) AS n FROM ft_mailserver_mailboxes WHERE workspace_id IN (?)',
+                `SELECT COUNT(*) AS n FROM ft_mailserver_mailboxes WHERE ${COUNTED_IN}`,
                 [[...workspaceIds]]
             );
             return Number(rows[0]?.n ?? 0);
+        },
+
+        async listInWorkspaces(workspaceIds) {
+            if (workspaceIds.length === 0) return [];
+            const rows = await q.query<{ id: number; workspace_id: number }>(
+                `SELECT id, workspace_id FROM ft_mailserver_mailboxes WHERE ${COUNTED_IN} ORDER BY created ASC, id ASC`,
+                [[...workspaceIds]]
+            );
+            return rows.map((row) => ({ id: String(row.id), workspaceId: Number(row.workspace_id) }));
         },
         async findByAddress(address) {
             const row = one(

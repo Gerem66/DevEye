@@ -132,6 +132,14 @@ function summarize(databaseIds: readonly number[]): Promise<readonly SdkTileSumm
             if (!database) {
                 return { itemId: id, title: `Base #${id}`, metrics: [], unavailable: 'Cette base n’est plus ici.' };
             }
+            if (database.planPaused) {
+                return {
+                    itemId: id,
+                    title: database.name,
+                    metrics: [],
+                    unavailable: 'Au-delà de l’offre : son relevé est en pause.'
+                };
+            }
             if (!database.monitorEnabled) {
                 return {
                     itemId: id,

@@ -45,7 +45,8 @@ export const devicesListFeature = defineSdkFeature<
                     r,
                     ctx.deveye.devices.isOnline(r.id),
                     computeAgentUpdate(r, manifest),
-                    r.workspace_id !== ctx.workspaceId
+                    r.workspace_id !== ctx.workspaceId,
+                    ctx.quota.isPaused('agents', r.id)
                 )
             )
         };
@@ -261,6 +262,8 @@ export const devicesCancelDeleteFeature = defineSdkFeature<
     access: WRITE,
     handler: async (ctx, input) => {
         const row = await loadDevice(ctx, input.deviceId, 'write');
+        // Revenir actif, c'est reprendre une place de l'offre, comme une réactivation.
+        if ((row.status_before_delete ?? 'active') === 'active') await assertAgentQuota(ctx);
         await ctx.repo.devices.cancelDeletion(row.id);
         const updated = (await ctx.repo.devices.findById(row.id)) ?? row;
         ctx.audit({

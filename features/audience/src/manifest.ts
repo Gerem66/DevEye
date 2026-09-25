@@ -36,7 +36,7 @@ export const manifest = {
      */
     nativeCapabilities: ['routes.public'],
     quotas: [
-        { key: 'sites', label: 'sites suivis' },
+        { key: 'sites', label: 'sites suivis', stock: true },
         { key: 'events', label: 'vues et événements par mois' }
     ],
     /**

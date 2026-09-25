@@ -59,5 +59,6 @@ export const serverEntry: FeatureServer<MailRepo> = {
             (await repo.accounts.findById(Number(itemId), workspaceId))?.security_tier === 'open',
         move: mailMove,
         copy: mailCopy
-    }
+    },
+    quotas: { accounts: { list: (repo, owned) => repo.accounts.listStock(owned) } }
 };

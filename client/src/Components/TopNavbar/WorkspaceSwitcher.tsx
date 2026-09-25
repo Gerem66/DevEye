@@ -3,7 +3,8 @@ import type React from 'react';
 import type { Workspace } from '@deveye/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRemoteInstances, useRemotePing, type RemoteEntry } from '@/stores/remoteInstances';
-import { useWorkspaceState } from '@/stores/workspace';
+import { useLocalUser } from '@/stores/currentUser';
+import { isShutOutByPlan, useWorkspaceState } from '@/stores/workspace';
 import styles from './TopNavbar.module.css';
 
 /** Le dépli des actions de l'espace quand la bascule change d'espace courant. */
@@ -57,6 +58,7 @@ export function WorkspaceSwitcher({
 }: WorkspaceSwitcherProps) {
     const { workspaces, remoteWorkspaces, activeId, activeInstanceId } = useWorkspaceState();
     const remotes = useRemoteInstances();
+    const me = useLocalUser();
     // Le menu est ouvert tant que ce composant est monté.
     useRemotePing(true);
 
@@ -105,9 +107,13 @@ export function WorkspaceSwitcher({
     const row = (w: Workspace, entry: RemoteEntry | null) => {
         const instanceId = entry?.instance.id ?? null;
         const current = w.id === activeId && instanceId === activeInstanceId;
-        const blocked = entry ? unavailable(entry) : null;
+        const blocked = entry
+            ? unavailable(entry)
+            : isShutOutByPlan(w, me?.id)
+              ? 'En pause : au-delà de l’offre du propriétaire'
+              : null;
         const shared = w.kind === 'shared' ? `Partagé · ${members(w.users.length)}` : null;
-        const meta = entry ? ['Distant', blocked ?? shared ?? entry.instance.label].join(' · ') : shared;
+        const meta = entry ? ['Distant', blocked ?? shared ?? entry.instance.label].join(' · ') : (blocked ?? shared);
         return (
             <Fragment key={`${instanceId ?? 'local'}:${w.id}`}>
                 <button

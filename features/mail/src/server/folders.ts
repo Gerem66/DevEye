@@ -73,8 +73,12 @@ export const mailFolderListFeature = defineSdkFeature<
         // cache makes switching mailboxes instant instead of round-tripping to
         // IMAP on every click. "Guarded" accounts have no background sync, so
         // this on-demand call is their only chance to refresh.
-        let rows = account.security_tier === 'guarded' ? [] : await ctx.repo.folders.listByAccount(account.id);
-        if (rows.length === 0) {
+        // En pause d'offre, la boîte se lit dans son cache, quel que soit le
+        // palier : ouvrir un compte n'est pas un geste qui doit buter sur l'offre.
+        const paused = ctx.quota.isPaused('accounts', String(account.id));
+        let rows =
+            account.security_tier === 'guarded' && !paused ? [] : await ctx.repo.folders.listByAccount(account.id);
+        if (rows.length === 0 && !paused) {
             try {
                 rows = await syncFoldersWithRetry(ctx, account, cipher);
             } catch (e) {

@@ -6,6 +6,7 @@ import { humanizeError } from '@/api/useResource';
 import Button from '@/Components/Button';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import { Dialog } from '@/Components/Dialog';
+import { PlanPausedBadge } from '@/Components/PlanPause';
 import { StatusBadge, type BadgeTone } from '@/Components/StatusBadge';
 import TextInput from '@/Components/TextInput';
 import { accountEntries, moduleManifest } from '@/sdk/registry';
@@ -35,6 +36,9 @@ function quotaSentence(quota: { used: number; limit: number }, isOwner: boolean)
     const plural = quota.limit > 1 ? 's' : '';
     const count = `${quota.limit} domaine${plural} personnalisé${plural}`;
     const scope = isOwner ? 'tous vos espaces confondus' : 'tous ses espaces confondus';
+    if (quota.used > quota.limit) {
+        return `${whose} inclut ${count}, pour ${quota.used} déclarés (${scope}) : les plus récents sont en pause, et ne sont plus servis.`;
+    }
     if (quota.used >= quota.limit) {
         return `${whose} inclut ${count}, déjà ${quota.limit > 1 ? 'tous utilisés' : 'utilisé'} (${scope}).`;
     }
@@ -140,7 +144,11 @@ export default function DomainsSection({ scope }: { scope: SettingsScope }) {
                             <span className={styles.channelText}>
                                 <span className={styles.channelLabel}>
                                     {domain.host}
-                                    <StatusBadge tone={badge.tone}>{badge.label}</StatusBadge>
+                                    {domain.planPaused ? (
+                                        <PlanPausedBadge />
+                                    ) : (
+                                        <StatusBadge tone={badge.tone}>{badge.label}</StatusBadge>
+                                    )}
                                 </span>
                                 <span className={styles.channelMeta}>
                                     {domain.verifiedAt !== null

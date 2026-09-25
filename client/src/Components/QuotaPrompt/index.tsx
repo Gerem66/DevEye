@@ -6,18 +6,25 @@ import { accountEntries } from '@/sdk/registry';
 import { openAccountView } from '@/stores/accountView';
 import { onQuotaExceeded } from '@/stores/quotaPrompt';
 
-/** L'invite commune à toute limite d'offre atteinte. Montée une fois, par l'accueil. */
+/**
+ * L'invite commune à toute limite d'offre : une création refusée, ou un élément
+ * en pause qu'on voulait lancer. Montée une fois, par l'accueil.
+ */
 export function QuotaPrompt() {
-    const [message, setMessage] = useState<string | null>(null);
-    useEffect(() => onQuotaExceeded(setMessage), []);
+    const [refusal, setRefusal] = useState<{ message: string; paused: boolean } | null>(null);
+    useEffect(() => onQuotaExceeded((message, paused) => setRefusal({ message, paused })), []);
 
-    const close = (): void => setMessage(null);
+    const close = (): void => setRefusal(null);
     return (
         <Dialog
-            open={message !== null}
+            open={refusal !== null}
             onClose={close}
-            title='Limite de votre offre atteinte'
-            description={`${message ?? ''} Vos éléments existants restent pleinement utilisables.`}
+            title={refusal?.paused ? 'Élément en pause' : 'Limite de votre offre atteinte'}
+            description={
+                refusal?.paused
+                    ? `${refusal.message} Il reprend dès que l’offre le permet, ou qu’un plus ancien est supprimé.`
+                    : `${refusal?.message ?? ''} Ce que vous avez déjà n’est pas touché.`
+            }
             width={440}
             footer={
                 <>

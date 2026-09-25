@@ -62,5 +62,6 @@ export const serverEntry: FeatureServer<GitRepo> = {
         labelOf: (repo, cipher, itemId, workspaceId) => labelOf(repo, cipher, Number(itemId), workspaceId),
         move: gitMove,
         copy: gitCopy
-    }
+    },
+    quotas: { repos: { list: (repo, owned) => repo.listStockRepos(owned) } }
 };

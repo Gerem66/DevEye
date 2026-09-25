@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Button,
     FeatureSettingsButton,
+    humanizeError,
     onResourceChange,
     onSocketOpen,
+    PlanPausedNotice,
     useActiveWorkspace,
     useLiveSegment
 } from 'deveye-sdk-client';
@@ -80,8 +82,8 @@ export default function Uptime(_props: FeatureViewProps) {
                 await run();
                 await reload();
                 void refreshUptime();
-            } catch {
-                setError('Action impossible.');
+            } catch (e) {
+                setError(humanizeError(e, 'Action impossible.'));
             }
         },
         [reload]
@@ -90,7 +92,9 @@ export default function Uptime(_props: FeatureViewProps) {
     const [addOpen, setAddOpen] = useState(false);
 
     const selected = selectedId === null ? null : (services.find((s) => s.id === selectedId) ?? null);
-    const downCount = services.filter((s) => s.enabled && s.status === 'down').length;
+    const downCount = services.filter((s) => s.enabled && !s.planPaused && s.status === 'down').length;
+    // Un service partagé d'ailleurs relève de l'offre d'un autre compte que celle dont parle le bandeau.
+    const planPausedCount = services.filter((s) => s.planPaused && !s.foreign).length;
 
     /**
      * Apply a drop: reorder locally first so the row lands where it was dropped
@@ -144,6 +148,7 @@ export default function Uptime(_props: FeatureViewProps) {
                     </div>
 
                     {error && <p className={styles.error}>{error}</p>}
+                    <PlanPausedNotice count={planPausedCount} one='service surveillé' many='services surveillés' />
 
                     {!loading && services.length === 0 ? (
                         <p className={styles.empty}>

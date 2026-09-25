@@ -53,6 +53,11 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
     const [keepLast, setKeepLast] = useState(7);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // Sur ce serveur, rien ne resterait pour les effacer ensuite.
+    const removalNote =
+        job?.destinationKind === 'local'
+            ? 'Son historique et ses archives, gardées sur ce serveur, partent avec lui : la place se libère.'
+            : 'Son historique part avec lui. Les archives déjà écrites restent où elles sont, sur la destination : à vous de les effacer si vous le souhaitez.';
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
     /**
      * Les destinations connues à l'ouverture des réglages de la feature : celle
@@ -351,10 +356,7 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
             {canWrite && (
                 <div className={shell.field}>
                     <span className={shell.sectionLabel}>Supprimer ce travail</span>
-                    <span className={shell.fieldHint}>
-                        Son historique part avec lui. Les archives déjà écrites, elles, restent où elles sont : à vous
-                        de les effacer si vous le souhaitez.
-                    </span>
+                    <span className={shell.fieldHint}>{removalNote}</span>
                     <div className={shell.sectionActions}>
                         <Button
                             variant='danger'
@@ -362,8 +364,7 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
                             onClick={() =>
                                 setConfirm({
                                     title: `Supprimer « ${job.name} » ?`,
-                                    description:
-                                        'Son historique part avec lui. Les archives déjà écrites restent où elles sont, sur la destination.',
+                                    description: removalNote,
                                     confirmLabel: 'Supprimer le travail',
                                     onConfirm: () => void remove()
                                 })

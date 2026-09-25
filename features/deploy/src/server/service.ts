@@ -335,7 +335,12 @@ export class DeploySync {
             ...this.busyCredentials,
             ...[...this.credentialBackoff].filter(([, b]) => b.until > now).map(([id]) => id)
         ];
-        const due = await this.deps.repo.listTargetsDue(free * 4, now - DEPLOY_MIN_INTERVAL_SECONDS, skip);
+        const due = await this.deps.repo.listTargetsDue(
+            free * 4,
+            now - DEPLOY_MIN_INTERVAL_SECONDS,
+            skip,
+            this.deps.pauses.paused('targets').map(Number)
+        );
 
         // Les accès occupés sont déjà écartés par la requête ; reste à n'en
         // prendre qu'une cible par accès dans ce tour.

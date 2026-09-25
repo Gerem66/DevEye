@@ -1,5 +1,5 @@
 import type { DatabaseAlertRow, DatabaseRow } from '../contracts/domain';
-import type { SdkQueryable } from '@deveye/types/sdk/server';
+import type { SdkQueryable, SdkStockItem } from '@deveye/types/sdk/server';
 
 /** Une base et ses compteurs d'alertes ; le compte de projets vient du contrat de Projets. */
 export interface DatabaseWithStatsRow extends DatabaseRow {
@@ -26,6 +26,8 @@ export interface DatabaseRepo {
     findByName(workspaceId: number, nameRef: string): Promise<DatabaseRow | null>;
     count(workspaceId: number): Promise<number>;
     countInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
+    /** Ce que compte `countInWorkspaces`, du plus ancien au plus récent : le stock du quota `connections`. */
+    listStock(workspaceIds: readonly number[]): Promise<SdkStockItem[]>;
     create(input: {
         workspaceId: number;
         engine: string;
@@ -66,8 +68,12 @@ export interface DatabaseRepo {
             tableCount: number | null;
         }
     ): Promise<void>;
-    /** Les bases surveillées dont le relevé est dû, les plus en retard d'abord. */
-    listDue(now: number, limit: number): Promise<DatabaseRow[]>;
+    /**
+     * Les bases surveillées dont le relevé est dû, les plus en retard d'abord,
+     * hors `pausedIds` : écartées après le `LIMIT`, ces bases que l'offre tient
+     * en pause occuperaient la fenêtre sans que leur relevé n'avance jamais.
+     */
+    listDue(now: number, limit: number, pausedIds: readonly number[]): Promise<DatabaseRow[]>;
 
     listAlerts(databaseId: number, workspaceId: number): Promise<DatabaseAlertRow[]>;
     /** Les alertes actives d'une base, pour le relevé périodique. */
@@ -198,6 +204,14 @@ export function createRepo(q: SdkQueryable): DatabaseRepo {
             );
             return Number(rows[0]?.total ?? 0);
         },
+        async listStock(workspaceIds) {
+            if (workspaceIds.length === 0) return [];
+            const rows = await q.query<{ id: number; workspace_id: number }>(
+                'SELECT id, workspace_id FROM database_connections WHERE workspace_id IN (?) ORDER BY created ASC, id ASC',
+                [[...workspaceIds]]
+            );
+            return rows.map((row) => ({ id: String(row.id), workspaceId: Number(row.workspace_id) }));
+        },
         async count(workspaceId) {
             const rows = await q.query<{ total: number }>(
                 'SELECT COUNT(*) AS total FROM database_connections WHERE workspace_id = ?',
@@ -299,15 +313,18 @@ export function createRepo(q: SdkQueryable): DatabaseRepo {
                 ]
             );
         },
-        async listDue(now, limit) {
+        async listDue(now, limit, pausedIds) {
             // Jamais relevée d'abord (NULL trie en tête), puis la plus en retard.
+            // `NOT IN ()` n'est pas du SQL : la clause n'existe qu'avec des pauses.
+            const paused = pausedIds.length > 0;
             return q.query<DatabaseRow>(
                 `SELECT * FROM database_connections
                   WHERE monitor_enabled = 1
                     AND (last_check_at IS NULL OR last_check_at + interval_seconds <= ?)
+                    ${paused ? 'AND id NOT IN (?)' : ''}
                   ORDER BY last_check_at IS NOT NULL, last_check_at ASC
                   LIMIT ?`,
-                [now, limit]
+                paused ? [now, [...pausedIds], limit] : [now, limit]
             );
         },
 

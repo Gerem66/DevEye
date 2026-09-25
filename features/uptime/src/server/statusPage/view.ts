@@ -83,16 +83,19 @@ export interface StatusViewInput {
     theme: UptimePageTheme;
     showErrors: boolean;
     showLatency: boolean;
-    /** Dans l'ordre de la page, chacun sous son nom public. */
-    services: readonly { row: UptimeServiceRow; name: string }[];
+    /**
+     * Dans l'ordre de la page, chacun sous son nom public. `planPaused` : l'offre
+     * de son propriétaire le tient en pause, il se montre comme une pause choisie.
+     */
+    services: readonly { row: UptimeServiceRow; name: string; planPaused?: boolean }[];
     daily: readonly UptimeDayRow[];
     /** `error` déchiffré seulement quand la page montre la nature des pannes. */
     incidents: readonly { row: UptimeIncidentRow; error: string | null }[];
     latency: readonly UptimeHourLatencyRow[];
 }
 
-function stateOf(row: UptimeServiceRow): ServiceState {
-    if (row.enabled !== 1) return 'paused';
+function stateOf(row: UptimeServiceRow, planPaused: boolean): ServiceState {
+    if (row.enabled !== 1 || planPaused) return 'paused';
     if (row.status === 'down') return 'down';
     return row.status === 'up' ? 'up' : 'pending';
 }
@@ -150,7 +153,7 @@ export function buildStatusView(input: StatusViewInput): StatusPageView {
     const firstHour = Math.floor(input.now / HOUR) * HOUR - (LATENCY_HOURS - 1) * HOUR;
     const names = new Map(input.services.map(({ row, name }) => [row.id, name]));
 
-    const services = input.services.map(({ row, name }): StatusServiceView => {
+    const services = input.services.map(({ row, name, planPaused = false }): StatusServiceView => {
         const days = new Map(input.daily.filter((d) => Number(d.service_id) === row.id).map((d) => [Number(d.day), d]));
         const incidents = input.incidents.filter((i) => i.row.service_id === row.id).map((i) => i.row);
         const inWindow = [...days.values()].filter((d) => Number(d.day) >= firstDay);
@@ -158,7 +161,7 @@ export function buildStatusView(input: StatusViewInput): StatusPageView {
         const upChecks = inWindow.reduce((total, d) => total + Number(d.up_checks), 0);
         return {
             name,
-            state: stateOf(row),
+            state: stateOf(row, planPaused),
             bars: barsOf(days, incidents, firstDay, input.now),
             ratio: checks > 0 ? upChecks / checks : null,
             latency: input.showLatency

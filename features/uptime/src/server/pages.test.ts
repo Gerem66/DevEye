@@ -74,6 +74,7 @@ function fakeRepo(services: UptimeServiceRow[]): FakeRepo {
         findByRef: async (ref) => pageRows.find((p) => p.public_ref === ref) ?? null,
         findByDomain: async (domainId) => pageRows.find((p) => p.domain_id === domainId) ?? null,
         countInWorkspaces: async (ids) => pageRows.filter((p) => ids.includes(p.workspace_id)).length,
+        listStock: async () => [],
         async create({ workspaceId, publicRef, ...config }) {
             const row: UptimePageRow = {
                 id: ++seq,
@@ -276,5 +277,20 @@ describe('uptime.pageList / pageRemove', () => {
         const { page } = await add(ctx, { page: draft() });
         await remove(ctx, { id: page.id });
         assert.deepEqual((await list(ctx, {})).pages, []);
+    });
+
+    it('dit quelle page l’offre tient en pause, sans toucher à sa publication', async () => {
+        const repo = fakeRepo([service(1, 1), service(2, 1)]);
+        const ctx = createTestContext({ repo });
+        await add(ctx, { page: draft() });
+        await add(ctx, { page: draft({ title: 'Seconde' }) });
+        const { pages } = await list(createTestContext({ repo, pausedItems: { pages: ['2'] } }), {});
+        assert.deepEqual(
+            pages.map((page) => [page.id, page.enabled, page.planPaused]),
+            [
+                [1, true, false],
+                [2, true, true]
+            ]
+        );
     });
 });

@@ -5,7 +5,7 @@ import { explainError, openSession, type EngineTarget, type Session } from './en
 import { buildNotice } from './notice';
 import type { DatabaseRepo } from './repo';
 import { isFiring, renderMessage, runConditions } from './rules';
-import { readJson, type StoredAccess, type StoredAlert, type StoredDatabase } from './_shared';
+import { PLAN_PAUSED_MESSAGE, readJson, type StoredAccess, type StoredAlert, type StoredDatabase } from './_shared';
 
 /**
  * Le relevé périodique des bases, et l'évaluation de leurs alertes. Éteint par
@@ -50,7 +50,7 @@ export class DatabaseMonitor {
     private async tick(): Promise<void> {
         try {
             const now = Math.floor(Date.now() / 1000);
-            const due = await this.deps.repo.listDue(now, BATCH);
+            const due = await this.deps.repo.listDue(now, BATCH, this.deps.pauses.paused('connections').map(Number));
             await Promise.all(due.map((row) => this.checkNow(row.id, row.workspace_id)));
         } catch (e) {
             this.deps.logger.error({ err: e }, 'Database monitor: tick failed');
@@ -96,6 +96,10 @@ export class DatabaseMonitor {
     }
 
     private async runCheck(databaseId: number, workspaceId: number): Promise<DatabaseProbe> {
+        // Rien n'est écrit : le dernier relevé reste celui d'avant la pause.
+        if (this.deps.pauses.isPaused('connections', String(databaseId))) {
+            return { ok: false, serverVersion: null, elapsedMs: 0, error: PLAN_PAUSED_MESSAGE };
+        }
         const started = Date.now();
         const row = await this.deps.repo.find(databaseId, workspaceId);
         if (!row) return { ok: false, serverVersion: null, elapsedMs: 0, error: 'Base introuvable.' };

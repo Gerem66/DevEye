@@ -103,6 +103,7 @@ function fakeRepo(sites: AudienceSiteRow[]): FakeRepo {
             usage.set(key, (usage.get(key) ?? 0) + delta);
         },
         countInWorkspaces: async (ids: readonly number[]) => sites.filter((r) => ids.includes(r.workspace_id)).length,
+        listStock: unused,
         list: unused,
         listVisible: unused,
         find: async (id, workspaceId) => sites.find((s) => s.id === id && s.workspace_id === workspaceId) ?? null,
@@ -346,8 +347,12 @@ function submission(over: Partial<SubmitRequest> = {}): SubmitRequest {
 }
 
 /** Le service sur le harnais : les deux tickers, dans l'ordre où le service les pose. */
-function ingestWith(repo: FakeRepo, quotaLimits?: Record<string, number>) {
-    const deps = createTestServiceDeps({ repo, quotaLimits });
+function ingestWith(
+    repo: FakeRepo,
+    quotaLimits?: Record<string, number>,
+    pausedItems?: Record<string, readonly string[]>
+) {
+    const deps = createTestServiceDeps({ repo, quotaLimits, pausedItems });
     const ingest = new AudienceIngest(deps);
     return {
         deps,
@@ -447,6 +452,40 @@ describe('les refus', () => {
             repo.events.map((e) => e.siteId),
             [2]
         );
+    });
+});
+
+describe('la pause de l’offre', () => {
+    it('ferme la porte comme un site éteint, mesure et retours, et la rouvre sans vider le cache', async () => {
+        const repo = fakeRepo([autoSite()]);
+        const paused = ['1'];
+        const { ingest, flush } = ingestWith(repo, undefined, { sites: paused });
+        await ingest.accept(request());
+        assert.deepEqual(await ingest.submit(submission()), { status: 'ignored' });
+        await flush();
+        assert.equal(repo.events.length, 0);
+        assert.equal(repo.submissions.length, 0);
+        // Le choix de l'utilisateur n'a pas bougé : c'est lui qui reprend.
+        assert.equal(repo.sites[0].active, 1);
+
+        // Le site est en cache depuis la première requête : la pause se relit après lui.
+        paused.length = 0;
+        await ingest.accept(request());
+        assert.deepEqual(await ingest.submit(submission()), { status: 'stored' });
+        await flush();
+        assert.equal(repo.events.length, 1);
+        assert.equal(repo.submissions.length, 1);
+    });
+
+    it('prend effet sur un site déjà en cache, sans invalidation', async () => {
+        const repo = fakeRepo([site()]);
+        const paused: string[] = [];
+        const { ingest, flush } = ingestWith(repo, undefined, { sites: paused });
+        await ingest.accept(request());
+        paused.push('1');
+        await ingest.accept(request());
+        await flush();
+        assert.equal(repo.events.length, 1);
     });
 });
 

@@ -9,6 +9,7 @@ import {
     backupJobGet,
     backupJobList,
     backupJobRemove,
+    backupRunRemove,
     backupJobRun,
     backupJobUpdate,
     backupRuns,
@@ -619,8 +620,21 @@ const jobRemoveFeature = defineSdkFeature({
     mutates: true,
     handler: async (ctx: Ctx, input) => {
         const job = await loadHomeJob(ctx, input.jobId);
-        if (requireEngine().isRunning(job.id)) {
+        const engine = requireEngine();
+        if (engine.isRunning(job.id)) {
             throw new FeatureError('conflict', 'Une sauvegarde de ce travail est en cours. Réessayez ensuite.');
+        }
+        // Sur ce serveur, une archive sans historique ne se compterait plus au
+        // stockage de l'offre, et n'aurait plus de moyen d'être effacée.
+        const destination = await ctx.repo.findDestinationForJob(job.id);
+        if (destination?.kind === 'local') {
+            const left = await engine.erase(job, destination, await ctx.repo.listRunsPresent(job.id));
+            if (left > 0) {
+                throw new FeatureError(
+                    'conflict',
+                    `${left} archive(s) n’ont pas pu être effacées de ce serveur : le travail reste. Réessayez.`
+                );
+            }
         }
         const ok = await ctx.repo.deleteJob(input.jobId, ctx.workspaceId);
         if (!ok) throw new FeatureError('not_found', 'Travail de sauvegarde introuvable');
@@ -636,6 +650,36 @@ const jobRemoveFeature = defineSdkFeature({
             metadata: { jobId: input.jobId }
         });
         return { jobId: input.jobId };
+    }
+});
+
+const runRemoveFeature = defineSdkFeature({
+    ...backupRunRemove,
+    access: { level: 'write' },
+    mutates: true,
+    handler: async (ctx: Ctx, input) => {
+        const run = await ctx.repo.findRun(input.runId);
+        if (!run) throw new FeatureError('not_found', 'Sauvegarde introuvable');
+        const job = await loadHomeJob(ctx, run.job_id);
+        if (run.status !== 'success' || run.pruned === 1) {
+            throw new FeatureError('validation', 'Cette sauvegarde n’a plus d’archive à effacer.');
+        }
+        const engine = requireEngine();
+        if (engine.isRunning(job.id)) {
+            throw new FeatureError('conflict', 'Une sauvegarde de ce travail est en cours. Réessayez ensuite.');
+        }
+        const destination = await ctx.repo.findDestinationForJob(job.id);
+        if (!destination) throw new FeatureError('not_found', 'La destination de ce travail n’existe plus.');
+        if ((await engine.erase(job, destination, [run])) > 0) {
+            throw new FeatureError('conflict', 'L’archive n’a pas pu être effacée de la destination. Réessayez.');
+        }
+        ctx.audit({
+            action: 'backup.runRemove',
+            level: 'warning',
+            description: 'Sauvegarde effacée',
+            metadata: { jobId: job.id, runId: run.id }
+        });
+        return { runId: run.id };
     }
 });
 
@@ -789,6 +833,7 @@ export const backupHandlers: ReadonlyArray<SdkFeatureDefinition<BackupRepo>> = [
     jobAddFeature,
     jobUpdateFeature,
     jobRemoveFeature,
+    runRemoveFeature,
     jobRunFeature,
     sourcesFeature,
     runsFeature

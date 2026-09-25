@@ -36,7 +36,9 @@ import type { ModuleServiceHost } from './service';
  * natifs : les modules à hooks empruntent des ids de l'enum.
  */
 
-type Extra = Partial<Pick<FeatureManifest, 'nativeCapabilities' | 'extraPermissions' | 'shareTier' | 'domains'>>;
+type Extra = Partial<
+    Pick<FeatureManifest, 'nativeCapabilities' | 'extraPermissions' | 'shareTier' | 'domains' | 'quotas'>
+>;
 
 function manifest(id: FeatureId, extra: Extra = {}): FeatureManifest {
     return {
@@ -286,6 +288,28 @@ describe('registerModules : les sentinelles', () => {
             /manifest.domains et server.domains vont ensemble/
         );
         assert.equal(moduleManifest('x-sdkdomhalf'), undefined);
+    });
+
+    it('refuse un stock sans sa liste, et une liste sans stock déclaré', () => {
+        const stock = [{ key: 'things', label: 'choses', stock: true as const }];
+        assert.throws(
+            () =>
+                registerModules([
+                    { manifest: manifest('x-sdkstockhalf', { quotas: stock }), server: { features: [] } }
+                ]),
+            /quota stock et server.quotas vont ensemble \(things\)/
+        );
+        assert.throws(
+            () =>
+                registerModules([
+                    {
+                        manifest: manifest('x-sdkstocklist', { quotas: [{ key: 'things', label: 'choses' }] }),
+                        server: { features: [], quotas: { things: { list: () => Promise.resolve([]) } } }
+                    }
+                ]),
+            /quota stock et server.quotas vont ensemble \(things\)/
+        );
+        assert.equal(moduleManifest('x-sdkstockhalf'), undefined);
     });
 
     it('moduleManifest retrouve un module enregistré par son id', () => {

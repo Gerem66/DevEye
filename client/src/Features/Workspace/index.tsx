@@ -6,6 +6,7 @@ import SelectInput from '@/Components/SelectInput';
 import TextInput from '@/Components/TextInput';
 import type { WorkspaceRole } from '@deveye/types';
 import { useAuth } from '@/auth/AuthProvider';
+import { PlanPausedBadge, PlanPausedNotice } from '@/Components/PlanPause';
 import { useWorkspacePermissions } from '@/stores/workspace';
 import RoleDialog from './RoleDialog';
 import Tabs, { type TabDef } from './Tabs';
@@ -151,6 +152,11 @@ export default function FeatureWorkspace() {
                                 </Button>
                             )}
                         </div>
+                        {workspace.planPaused ? (
+                            <PlanPausedNotice count={1} one='espace partagé' many='espaces partagés' />
+                        ) : (
+                            <PlanPausedNotice count={workspace.pausedMemberIds.length} one='membre' many='membres' />
+                        )}
                         {/* `rowList` : le gap de la carte tombe et son padding
                             vertical se resserre, pour que l'air au-dessus de la
                             première ligne (carte + ligne) égale les côtés, et
@@ -165,6 +171,11 @@ export default function FeatureWorkspace() {
                                             <span className={styles.rowTitle}>
                                                 {u.username}{' '}
                                                 {owner && <span className={styles.defaultTag}>propriétaire</span>}
+                                                {!owner &&
+                                                    (workspace.planPaused ||
+                                                        workspace.pausedMemberIds.includes(u.id)) && (
+                                                        <PlanPausedBadge />
+                                                    )}
                                             </span>
                                             <span className={styles.rowMeta}>
                                                 {u.email} · {lastSeen(u.lastLogin)}

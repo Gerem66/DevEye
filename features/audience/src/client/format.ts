@@ -479,13 +479,15 @@ export interface SiteStatus {
 export const quotaReached = (quota: AudienceEventsQuota | null): boolean => quota !== null && quota.used >= quota.limit;
 
 /**
- * Quatre états, un seul alarmant : « en attente » est l'état normal d'un site
+ * Cinq états, un seul alarmant : « en attente » est l'état normal d'un site
  * qu'on vient de déclarer, et le peindre en rouge ferait passer une
  * installation en cours pour un incident. La limite de l'offre ne dit rien d'un
  * site partagé ici : c'est celle de son propre espace qui le borne.
  */
 export function siteStatus(site: AudienceSite, quota: AudienceEventsQuota | null): SiteStatus {
     if (!site.active) return { label: 'éteint', tone: 'danger' };
+    // Tenu en pause par l'offre, dont la pastille dit pourquoi : rien n'entre.
+    if (site.planPaused) return { label: 'en pause', tone: 'warning' };
     if (quotaReached(quota) && !site.foreign) return { label: 'limite atteinte', tone: 'warning' };
     if (site.lastEventAt === null) return { label: 'en attente', tone: 'neutral' };
     return { label: 'actif', tone: 'online' };

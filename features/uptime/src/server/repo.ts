@@ -7,7 +7,7 @@ import type {
     UptimeServiceRow,
     UptimeStatus
 } from '../contracts/domain';
-import type { SdkQueryable } from '@deveye/types/sdk/server';
+import type { SdkQueryable, SdkStockItem } from '@deveye/types/sdk/server';
 
 import { createPagesRepo, createStatusRepo, type UptimePagesRepo, type UptimeStatusRepo } from './repoPages';
 
@@ -53,6 +53,8 @@ export interface UptimeWindowStat {
 export interface UptimeServicesRepo {
     listByWorkspace(workspaceId: number): Promise<UptimeServiceRow[]>;
     countInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
+    /** Ce que `countInWorkspaces` compte, les plus anciens d'abord : l'offre fait tourner ceux de tête. */
+    listStock(workspaceIds: readonly number[]): Promise<SdkStockItem[]>;
     /**
      * Les services **visibles** depuis cet espace : les siens, plus ceux qu'un
      * autre espace y projette (`item_shares`).
@@ -76,10 +78,12 @@ export interface UptimeServicesRepo {
      */
     reorder(workspaceId: number, ids: number[]): Promise<void>;
     /**
-     * Enabled services whose next probe is due at `now`, most overdue first.
-     * Not scoped to a user: this is what the background scheduler polls.
+     * Les services actifs dont la sonde est due à `now`, les plus en retard
+     * d'abord, tous espaces confondus : ce que relève l'ordonnanceur de fond.
+     * `planPaused` s'écarte dans la requête, avant le `LIMIT` : jamais sondés,
+     * ils resteraient en tête de file et affameraient les autres.
      */
-    listDue(now: number, limit: number): Promise<UptimeServiceRow[]>;
+    listDue(now: number, limit: number, planPaused: readonly number[]): Promise<UptimeServiceRow[]>;
     /** Write back the outcome of a probe. */
     recordProbe(id: number, result: UptimeProbeResult): Promise<void>;
     /**
@@ -250,6 +254,14 @@ function servicesRepo(q: SdkQueryable): UptimeServicesRepo {
             );
             return Number(rows[0]?.n ?? 0);
         },
+        async listStock(workspaceIds) {
+            if (workspaceIds.length === 0) return [];
+            const rows = await q.query<{ id: number; workspace_id: number }>(
+                'SELECT id, workspace_id FROM uptime_services WHERE workspace_id IN (?) ORDER BY created ASC, id ASC',
+                [[...workspaceIds]]
+            );
+            return rows.map((row) => ({ id: String(row.id), workspaceId: Number(row.workspace_id) }));
+        },
         async listVisible(workspaceId) {
             // `sort_order` appartient à l'espace d'origine : un service projeté
             // se range donc après les locaux, par identifiant. Lui donner un
@@ -340,13 +352,16 @@ function servicesRepo(q: SdkQueryable): UptimeServicesRepo {
                 ]);
             }
         },
-        async listDue(now, limit) {
+        async listDue(now, limit, planPaused) {
+            // `NOT IN ()` n'est pas du SQL : la clause n'existe qu'avec des pauses.
+            const skip = planPaused.length > 0;
             return q.query<UptimeServiceRow>(
                 `SELECT * FROM uptime_services
                  WHERE enabled = 1 AND (last_checked_at IS NULL OR last_checked_at + interval_seconds <= ?)
+                 ${skip ? 'AND id NOT IN (?)' : ''}
                  ORDER BY last_checked_at IS NOT NULL, last_checked_at ASC
                  LIMIT ?`,
-                [now, limit]
+                skip ? [now, [...planPaused], limit] : [now, limit]
             );
         },
         async recordProbe(id, result) {

@@ -419,6 +419,11 @@
     vertical-align: middle;
 }
 
+/* Sous le nom et la plateforme : la pastille ne rogne pas le nom. */
+.pausedTag {
+    margin-top: 0.2rem;
+}
+
 .deviceCardPlatform {
     font-size: 0.72rem;
     color: var(--text-muted);

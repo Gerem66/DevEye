@@ -56,6 +56,11 @@ export interface FeatureDomainsRepo {
     insert(entry: { workspaceId: number; feature: string; host: string; token: string; now: number }): Promise<number>;
     saveState(id: number, verdict: FeatureDomainVerdict): Promise<void>;
     delete(id: number, workspaceId: number, feature: string): Promise<boolean>;
+    /** Les lignes de ces espaces pour ces fonctionnalités, de la plus ancienne à la plus récente. */
+    rowsOf(
+        workspaceIds: readonly number[],
+        features: readonly string[]
+    ): Promise<{ id: number; workspace_id: number; host: string }[]>;
     /** Les domaines à revérifier, restreints aux fonctionnalités installées. */
     due(now: number, limit: number, features: readonly string[]): Promise<FeatureDomainRow[]>;
     /** Les noms distincts de ces espaces, pour ces fonctionnalités : ce qu'une offre compte. */
@@ -63,8 +68,9 @@ export interface FeatureDomainsRepo {
     /**
      * Les noms que le proxy doit servir : propriété prouvée, ou déjà vérifiés et
      * tenus malgré un échec passager. `verified` dit s'il l'a été une fois.
+     * `pausedIds` : les lignes que l'offre de leur propriétaire tient en pause.
      */
-    routable(features: readonly string[]): Promise<{ host: string; verified: boolean }[]>;
+    routable(features: readonly string[], pausedIds: readonly string[]): Promise<{ host: string; verified: boolean }[]>;
 }
 
 export function featureDomainsRepo(pool: Q): FeatureDomainsRepo {
@@ -134,6 +140,20 @@ export function featureDomainsRepo(pool: Q): FeatureDomainsRepo {
             );
             return r.rows.map(normalise);
         },
+        async rowsOf(workspaceIds, features) {
+            if (workspaceIds.length === 0 || features.length === 0) return [];
+            const r = await pool.query<{ id: number; workspace_id: number; host: string }>(
+                `SELECT id, workspace_id, host FROM feature_domains
+                  WHERE workspace_id IN (?) AND feature IN (?)
+                  ORDER BY created ASC, id ASC`,
+                [workspaceIds, features]
+            );
+            return r.rows.map((row) => ({
+                id: Number(row.id),
+                workspace_id: Number(row.workspace_id),
+                host: row.host
+            }));
+        },
         async hostsOf(workspaceIds, features) {
             if (workspaceIds.length === 0 || features.length === 0) return [];
             const r = await pool.query<{ host: string }>(
@@ -144,14 +164,15 @@ export function featureDomainsRepo(pool: Q): FeatureDomainsRepo {
             );
             return r.rows.map((row) => row.host);
         },
-        async routable(features) {
+        async routable(features, pausedIds) {
             if (features.length === 0) return [];
             const r = await pool.query<{ host: string; verified: number | string }>(
                 `SELECT host, MAX(verified_at IS NOT NULL) AS verified FROM feature_domains
                   WHERE (dns_state = 'ok' OR verified_at IS NOT NULL)
                     AND feature IN (${features.map(() => '?').join(', ')})
+                    ${pausedIds.length > 0 ? 'AND id NOT IN (?)' : ''}
                   GROUP BY host ORDER BY host`,
-                [...features]
+                pausedIds.length > 0 ? [...features, pausedIds] : [...features]
             );
             return r.rows.map((row) => ({ host: row.host, verified: Number(row.verified) === 1 }));
         }

@@ -1,4 +1,4 @@
-import { useDragReorder, type LiveOutlineProps } from 'deveye-sdk-client';
+import { PlanPausedBadge, useDragReorder, type LiveOutlineProps } from 'deveye-sdk-client';
 import type { AudienceEventsQuota, AudienceSite } from '../contracts/domain';
 
 import { formatAgo, formatCount, siteStatus } from './format';
@@ -123,6 +123,7 @@ function SiteCard({ site, eventsQuota, outline, dragging, onOpen, onDragPointerD
                         <span className={styles.statusTag} data-tone={status.tone}>
                             {status.label}
                         </span>
+                        {site.planPaused && <PlanPausedBadge />}
                         <span>{formatAgo(site.lastEventAt)}</span>
                         {site.projectCount > 0 && (
                             <span>

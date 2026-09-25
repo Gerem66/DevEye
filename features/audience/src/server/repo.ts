@@ -1,6 +1,6 @@
 import type { AudienceDimension, AudienceFunnelRow, AudienceFunnelStepRow, AudienceSiteRow } from '../contracts/domain';
 import { AUDIENCE_FUNNEL_MAX_STEPS } from '../contracts/domain';
-import type { SdkQueryable } from '@deveye/types/sdk/server';
+import type { SdkQueryable, SdkStockItem } from '@deveye/types/sdk/server';
 
 import { createFormsRepo, type AudienceDailyPointRow, type AudienceFormsRepo } from './repoForms';
 import { dayKey } from './normalize';
@@ -136,6 +136,8 @@ export interface AudienceRepo extends AudienceFormsRepo {
     findByName(workspaceId: number, nameRef: string): Promise<AudienceSiteRow | null>;
     count(workspaceId: number): Promise<number>;
     countInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
+    /** Ce que `countInWorkspaces` compte, les plus anciens d'abord : l'offre fait tourner ceux de tête. */
+    listStock(workspaceIds: readonly number[]): Promise<SdkStockItem[]>;
     /**
      * Vues et événements nommés acceptés ce mois-ci (AAAAMM) dans ces espaces.
      *
@@ -395,6 +397,14 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
                 [[...workspaceIds]]
             );
             return Number(rows[0]?.total ?? 0);
+        },
+        async listStock(workspaceIds) {
+            if (workspaceIds.length === 0) return [];
+            const rows = await q.query<{ id: number; workspace_id: number }>(
+                'SELECT id, workspace_id FROM audience_sites WHERE workspace_id IN (?) ORDER BY created ASC, id ASC',
+                [[...workspaceIds]]
+            );
+            return rows.map((row) => ({ id: String(row.id), workspaceId: Number(row.workspace_id) }));
         },
         async count(workspaceId) {
             const rows = await q.query<{ total: number }>(

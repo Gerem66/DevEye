@@ -277,6 +277,7 @@ describe('la page publique sous un domaine', () => {
         token: 'preuve-dupont',
         verified: true,
         verifiedAt: 1,
+        planPaused: false,
         ...over
     });
 

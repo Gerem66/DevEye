@@ -4,6 +4,7 @@ import { PROJECTS_USAGE_PROVIDER, type ProjectsUsageProvider } from '@deveye/typ
 import { grantsFor } from '../_access';
 import { FeatureError, type FeatureContext } from '../_define';
 import { moduleItems, moduleProvider } from '../_sdk/register';
+import { memberPausedIn } from '@/Services/planPauses';
 
 /**
  * Les gardes que le partage et le déplacement se partagent : « où vit cet
@@ -27,6 +28,7 @@ export async function featureAccessIn(
     if (!workspace) return none;
     if (workspace.owner_user_id === ctx.userId) return { access: 'write', restricted: new Set() };
     if (!(await ctx.db.workspaceMembers.isMember(ctx.userId, workspaceId))) return none;
+    if (memberPausedIn(workspaceId, ctx.userId)) return none;
     const role = await ctx.db.workspaceRoles.findForMember(ctx.userId, workspaceId);
     const access = grantsFor(false, role).features.get(feature) ?? null;
     if (!role || access === null) return none;
@@ -34,6 +36,12 @@ export async function featureAccessIn(
     // lecture seule chez lui, on n'en dispose pas depuis ailleurs.
     const rows = await ctx.db.itemSharing.grantsForRole(workspaceId, feature, role.id);
     return { access, restricted: new Set(rows.map((g) => g.item_id)) };
+}
+
+/** L'offre du propriétaire tient l'appelant hors de cet espace (jamais le propriétaire lui-même). */
+export async function shutOutByPlan(ctx: FeatureContext, workspaceId: number): Promise<boolean> {
+    const workspace = await ctx.db.workspaces.findById(workspaceId);
+    return workspace !== null && workspace.owner_user_id !== ctx.userId && memberPausedIn(workspaceId, ctx.userId);
 }
 
 /**

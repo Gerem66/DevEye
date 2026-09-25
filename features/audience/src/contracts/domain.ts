@@ -210,6 +210,11 @@ export const audienceSiteSchema = z.object({
     origins: z.array(z.string().max(AUDIENCE_ORIGIN_MAX_LENGTH)).max(AUDIENCE_MAX_ORIGINS),
     /** Éteint, plus rien n'entre ; l'historique déjà là ne bouge pas. */
     active: z.boolean(),
+    /**
+     * Au-delà de la limite de l'offre de son propriétaire : rien n'entre non
+     * plus, retours compris, sans que `active`, le choix de l'utilisateur, ne bouge.
+     */
+    planPaused: z.boolean(),
     /** Conservation des événements bruts. L'agrégat journalier, lui, survit. */
     retentionDays: z.number().int().min(AUDIENCE_RETENTION_MIN_DAYS).max(AUDIENCE_RETENTION_MAX_DAYS),
     /**

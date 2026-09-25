@@ -3,7 +3,8 @@
  * la signale ici, et l'invite montée par l'accueil la montre. Aucun module n'a
  * à traiter ce refus lui-même.
  */
-type Listener = (message: string) => void;
+/** `paused` : l'élément visé est en pause, et non une création refusée. */
+type Listener = (message: string, paused: boolean) => void;
 
 let listener: Listener | null = null;
 
@@ -14,6 +15,6 @@ export function onQuotaExceeded(fn: Listener): () => void {
     };
 }
 
-export function notifyQuotaExceeded(message: string): void {
-    listener?.(message);
+export function notifyQuotaExceeded(message: string, paused = false): void {
+    listener?.(message, paused);
 }

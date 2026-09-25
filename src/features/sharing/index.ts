@@ -17,7 +17,7 @@ import { grantsFor, invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { isModuleCopyable, isModuleMovable, moduleItems, moduleManifest } from '../_sdk/register';
 import { isShareWired, shareBlockerFor } from '../_sharing';
-import { canWriteItemIn, detachLinks, itemHomeWorkspace, loadHome } from './_shared';
+import { canWriteItemIn, detachLinks, itemHomeWorkspace, loadHome, shutOutByPlan } from './_shared';
 import { copyFeatures } from './copy';
 import { moveFeatures } from './move';
 import { projectLinkFeatures } from './projectLinks';
@@ -171,7 +171,10 @@ const setFeature = defineFeature({
         // La cible doit être un espace de l'appelant. Vérifié ici et pas
         // seulement à l'écran : c'est la garde qui empêche de projeter chez
         // quelqu'un d'autre.
-        if (!(await ctx.db.workspaceMembers.isMember(ctx.userId, input.workspaceId))) {
+        if (
+            !(await ctx.db.workspaceMembers.isMember(ctx.userId, input.workspaceId)) ||
+            (await shutOutByPlan(ctx, input.workspaceId))
+        ) {
             throw new FeatureError('forbidden', 'Vous n’êtes pas membre de cet espace.');
         }
 
@@ -236,7 +239,7 @@ async function resolveGrantTarget(
     if (target.kind !== 'shared') {
         throw new FeatureError('validation', 'Un espace personnel n’a pas de rôles à restreindre.');
     }
-    if (!(await ctx.db.workspaceMembers.isMember(ctx.userId, targetId))) {
+    if (!(await ctx.db.workspaceMembers.isMember(ctx.userId, targetId)) || (await shutOutByPlan(ctx, targetId))) {
         throw new FeatureError('forbidden', 'Vous n’êtes pas membre de cet espace.');
     }
 

@@ -12,10 +12,13 @@ import {
     mailAccountUpdate,
     mailAttachmentDownload,
     mailFolderList,
+    mailFolderSync,
     mailGetSettings,
+    mailMessageGet,
     mailMessageList,
     mailOAuthProviders,
     mailOAuthStart,
+    mailSend,
     mailSetSettings
 } from '../contracts/commands';
 import type {
@@ -124,6 +127,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         messageRows,
         accounts: {
             countInWorkspaces: async (ids: readonly number[]) => ids.length - ids.length,
+            listStock: unused,
             listByWorkspace: async (ws) => accountRows.filter((a) => a.workspace_id === ws).map((a) => ({ ...a })),
             // Les locaux d'abord, les projetés ensuite : l'ordre de la requête.
             listVisible: async (ws) =>
@@ -469,6 +473,90 @@ function folderRow(id: number, accountId: number): MailFolderRow {
         total_count: 1
     };
 }
+
+describe('la pause d’offre', () => {
+    const isPausedRefusal = (e: unknown): boolean =>
+        e instanceof FeatureError &&
+        e.code === 'quota_exceeded' &&
+        (e.details as { paused?: boolean } | undefined)?.paused === true;
+
+    it('la liste la dit, et une boîte en pause se lit dans son cache sans rien tenter chez IMAP, même gardée', async () => {
+        const repo = fakeRepo();
+        repo.accountRows.push(
+            row({ id: 7, workspace_id: 1 }),
+            row({ id: 8, workspace_id: 1, security_tier: 'guarded' })
+        );
+        repo.folderRows.push(folderRow(10, 8));
+        const ctx = createTestContext({ repo, pausedItems: { accounts: ['8'] } });
+
+        const listed = await handlerFor(mailAccountList)(ctx, {});
+        assert.deepEqual(
+            listed.accounts.map((a) => [a.id, a.planPaused, a.enabled]),
+            [
+                [7, false, true],
+                [8, true, true]
+            ]
+        );
+        // Gardée, une boîte se relit d'ordinaire chez IMAP à l'ouverture.
+        const folders = await handlerFor(mailFolderList)(ctx, { accountId: 8 });
+        assert.deepEqual(
+            folders.folders.map((f) => f.id),
+            [10]
+        );
+    });
+
+    it('refuse toute commande qui parlerait au serveur de mail, avant la moindre connexion', async () => {
+        const repo = fakeRepo();
+        const account = row({ id: 8, workspace_id: 1 });
+        repo.accountRows.push(account);
+        repo.folderRows.push(folderRow(10, 8));
+        repo.messageRows.push({
+            id: 20,
+            folder_id: 10,
+            uid: 5,
+            envelope_enc: JSON.stringify({ subject: 'Pièce', from: null, to: [], snippet: '' }),
+            date: 1,
+            seen: 0,
+            flagged: 0,
+            answered: 0,
+            has_attachments: 1
+        });
+        const ctx = createTestContext({ repo, pausedItems: { accounts: ['8'] } });
+
+        let reached = false;
+        await assert.rejects(
+            imapFor(ctx, account, async () => {
+                reached = true;
+            }),
+            isPausedRefusal
+        );
+        assert.equal(reached, false);
+        await assert.rejects(handlerFor(mailFolderSync)(ctx, { folderId: 10 }), isPausedRefusal);
+        await assert.rejects(
+            handlerFor(mailMessageGet)(ctx, { messageId: 20, allowRemoteImages: false }),
+            isPausedRefusal
+        );
+        await assert.rejects(
+            handlerFor(mailAttachmentDownload)(ctx, { messageId: 20, attachmentId: 'att-0' }),
+            isPausedRefusal
+        );
+        await assert.rejects(
+            handlerFor(mailSend)(ctx, {
+                accountId: 8,
+                to: [{ name: null, address: 'x@exemple.fr' }],
+                subject: 's',
+                bodyText: 't'
+            }),
+            isPausedRefusal
+        );
+        // Le cache, lui, se lit toujours.
+        const messages = await handlerFor(mailMessageList)(ctx, { folderId: 10, cursor: null, limit: 50 });
+        assert.deepEqual(
+            messages.messages.map((m) => m.id),
+            [20]
+        );
+    });
+});
 
 describe('le partage inter-espaces', () => {
     it('liste un compte projeté avec sa pastille `foreign`, sous le codec de son domicile, et le compte', async () => {

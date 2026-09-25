@@ -17,6 +17,7 @@ import type { Database } from '@/db';
 import { WORKSPACE_CAPABILITIES, WORKSPACE_FEATURE_IDS } from '@deveye/types';
 import { FeatureError } from './_define';
 import { moduleManifest, moduleManifests } from './_sdk/register';
+import { memberPausedIn } from '@/Services/planPauses';
 import { parseJsonArray } from '@/Utils/json';
 import { extraOverridesOf } from '@/db/repos/itemSharing';
 import { resolveExtras } from '@deveye/types/sdk';
@@ -75,6 +76,7 @@ export async function holdsFeatureIn(
     if (!workspace) return false;
     const isOwner = workspace.owner_user_id === userId;
     if (!isOwner && !(await db.workspaceMembers.isMember(userId, workspaceId))) return false;
+    if (!isOwner && memberPausedIn(workspaceId, userId)) return false;
     const role = isOwner ? null : await db.workspaceRoles.findForMember(userId, workspaceId);
     const granted = grantsFor(isOwner, role).features.get(feature);
     return granted === 'write' || (level === 'read' && granted === 'read');
@@ -107,6 +109,8 @@ async function memberGrant(
     if (!workspace) return 'not_member';
     const isOwner = workspace.owner_user_id === userId;
     if (!isOwner && !(await db.workspaceMembers.isMember(userId, workspaceId))) return 'not_member';
+    // En pause, un membre est dehors, pour le travail qu'il a laissé tourner aussi.
+    if (!isOwner && memberPausedIn(workspaceId, userId)) return 'not_member';
     const role = isOwner ? null : await db.workspaceRoles.findForMember(userId, workspaceId);
     const { features, extras } = grantsFor(isOwner, role);
     const base = features.get(feature);
@@ -355,6 +359,12 @@ export function createAccessResolver(
         }
 
         const isOwner = row.owner_user_id === userId;
+        if (!isOwner && memberPausedIn(row.id, userId)) {
+            throw new FeatureError(
+                'forbidden',
+                'Votre accès à cet espace est en pause : l’offre de son propriétaire ne le couvre plus.'
+            );
+        }
         // Le propriétaire n'a pas de rôle : il passe outre, et lui en donner un
         // laisserait croire qu'on peut le lui retirer.
         const role = isOwner ? null : await db.workspaceRoles.findForMember(userId, row.id);

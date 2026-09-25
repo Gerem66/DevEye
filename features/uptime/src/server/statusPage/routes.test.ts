@@ -91,7 +91,8 @@ function service(id: number, over: Partial<UptimeServiceRow> = {}): UptimeStatus
     };
 }
 
-function mount(pages: UptimePageRow[], domains: readonly SdkDomain[] = []) {
+/** `paused` : les pauses d'offre par clé, lues à chaque visite (le test les change en route). */
+function mount(pages: UptimePageRow[], domains: readonly SdkDomain[] = [], paused: Record<string, string[]> = {}) {
     const lookups = { byRef: 0 };
     const now = Math.floor(Date.now() / 1000);
     const incidents: UptimeIncidentRow[] = [
@@ -120,7 +121,7 @@ function mount(pages: UptimePageRow[], domains: readonly SdkDomain[] = []) {
             hourlyLatencyOf: async () => []
         } satisfies UptimeStatusRepo
     } as unknown as UptimeRepo;
-    const deps = createTestServiceDeps({ repo, domains });
+    const deps = createTestServiceDeps({ repo, domains, pausedItems: paused });
     const status = createStatusPages(deps);
     const handlers = new Map<string, (req: SdkPublicRequest, res: SdkPublicReply) => Promise<unknown>>();
     const app: SdkPublicApp = {
@@ -204,6 +205,47 @@ describe('la page publique', () => {
         m.status.forget(1);
         await statusPage(m);
         assert.equal(m.lookups.byRef, 2);
+    });
+});
+
+describe('la pause de l’offre', () => {
+    it('répond « introuvable » comme une page retirée, dès la visite suivante, puis revient', async () => {
+        const pages: string[] = [];
+        const bound = testDomain({ id: 5, host: 'statut.exemple.fr', workspaceId: 1 });
+        const m = mount([page({ domain_id: 5 })], [bound], { pages });
+        const atRoot = async () => {
+            const res = reply();
+            await m.status.root({ headers: {}, host: bound.host, body: undefined, ip: '203.0.113.7' }, res, bound);
+            return res.answer;
+        };
+        assert.equal((await statusPage(m)).status, 200);
+        assert.equal((await atRoot()).status, 200);
+
+        // Relue après le cache : la page en cache ne la sert plus, sans rien oublier.
+        pages.push('1');
+        const paused = await statusPage(m);
+        assert.equal(paused.status, 404);
+        assert.equal((await atRoot()).status, 404);
+        assert.equal(m.lookups.byRef, 1);
+        assert.equal(paused.body, (await m.get('/statut/:ref', { params: { ref: 'ffffffffffffffff' } })).body);
+
+        pages.length = 0;
+        assert.equal((await statusPage(m)).status, 200);
+    });
+
+    it('n’est pas calculée quand elle est déjà en pause', async () => {
+        const m = mount([page()], [], { pages: ['1'] });
+        assert.equal((await statusPage(m)).status, 404);
+        assert.equal((await statusPage(m)).status, 404);
+        // Rien en cache : chaque visite relit la ligne, comme pour une page retirée.
+        assert.equal(m.lookups.byRef, 2);
+    });
+
+    it('montre en pause un service que l’offre tient en pause, et ne le compte pas', async () => {
+        const res = await statusPage(mount([page()], [], { monitors: ['1'] }));
+        assert.equal(res.status, 200);
+        // Le service 1 était en panne : en pause, seul le service 2 est surveillé.
+        assert.ok(res.body.includes('Le service fonctionne'));
     });
 });
 

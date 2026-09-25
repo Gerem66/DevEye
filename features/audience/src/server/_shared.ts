@@ -153,7 +153,8 @@ export async function toSite(
     row: AudienceSiteWithStatsRow,
     foreign: boolean,
     /** Le nombre de projets qui le suivent, venu du contrat de Projets. */
-    projectCount: number
+    projectCount: number,
+    planPaused: boolean
 ): Promise<AudienceSite> {
     const body = await readJson<Partial<StoredSite>>(cipher, row.content);
     return audienceSiteSchema.parse({
@@ -167,6 +168,7 @@ export async function toSite(
         visitorMode: row.visitor_mode,
         origins: parseOrigins(row.origins),
         active: Number(row.active) === 1,
+        planPaused,
         retentionDays: Number(row.retention_days),
         formsAuto: Number(row.forms_auto) === 1,
         submissionIpQuota: Number(row.submission_ip_quota),

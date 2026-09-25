@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import type { SdkQueryable } from '@deveye/types/sdk/server';
 import { createTestServiceDeps } from '@deveye/types/sdk/testing';
 
-import type { DevicesRepo } from './repo';
+import { createRepo, type DevicesRepo } from './repo';
 
 /**
- * Le balayage de rétention, sur le harnais de service du SDK : un tick purge
- * les trois tables sous la durée de l'environnement, sans diffusion ni audit.
+ * Le service du module sur le harnais du SDK : le balayage de rétention (un
+ * tick purge les trois tables sous la durée de l'environnement, sans diffusion
+ * ni audit), et la limite de stock `agents`.
  *
  * `MONITORING_RETENTION_DAYS` est posée AVANT le chargement du module, parce
  * que `env.ts` lit l'environnement à l'import : d'où l'import dynamique.
@@ -34,6 +36,7 @@ function fakeRepo(pruned: string[]): DevicesRepo {
             findVisible: unused,
             setStatus: unused,
             countActiveInWorkspaces: unused,
+            listActiveInWorkspaces: unused,
             rename: unused,
             setConfig: unused,
             requestDeletion: unused,
@@ -89,5 +92,60 @@ describe('le balayage de rétention', () => {
         await new Promise((resolve) => setImmediate(resolve));
         assert.equal(pruned.length, 3);
         await service.stop();
+    });
+});
+
+describe('la limite de stock `agents`', () => {
+    it('liste ce que compte le compteur, du plus ancien au plus récent', async () => {
+        const seen: { sql: string; params: unknown[] }[] = [];
+        const q: SdkQueryable = {
+            query: <T extends object>(sql: string, params: unknown[] = []) => {
+                seen.push({ sql, params });
+                const rows = sql.includes('COUNT(*)')
+                    ? [{ n: 2 }]
+                    : [
+                          { id: 'aaaa', workspace_id: 1 },
+                          { id: 'bbbb', workspace_id: '2' }
+                      ];
+                return Promise.resolve(rows as unknown as T[]);
+            },
+            execute: () => Promise.reject(new Error('aucune écriture attendue'))
+        };
+        const repo = createRepo(q);
+        const listed = await serverEntry.quotas?.agents.list(repo, [1, 2]);
+        assert.deepEqual(listed, [
+            { id: 'aaaa', workspaceId: 1 },
+            { id: 'bbbb', workspaceId: 2 }
+        ]);
+        await repo.devices.countActiveInWorkspaces([1, 2]);
+
+        const [list, count] = seen;
+        assert.match(list.sql, /ORDER BY created ASC, id ASC$/);
+        // Le même filtre, aux mêmes paramètres : l'hôte met en pause ce qu'il a compté.
+        const where = (sql: string) => sql.replace(/ ORDER BY .*$/, '').slice(sql.indexOf('WHERE'));
+        assert.equal(where(list.sql), where(count.sql));
+        assert.match(where(list.sql), /status = 'active'/);
+        assert.deepEqual(list.params, count.params);
+
+        assert.deepEqual(await repo.devices.listActiveInWorkspaces([]), []);
+        assert.equal(seen.length, 2);
+    });
+
+    it("coupe tout de suite l'agent d'un appareil mis en pause, et laisse la reprise à l'agent", async () => {
+        const deps = createTestServiceDeps<DevicesRepo>({ repo: fakeRepo([]) });
+        const service = serverEntry.createService!(deps);
+        assert.ok(service.onPlanPause);
+        await service.onPlanPause({
+            key: 'agents',
+            paused: [
+                { id: 'aaaa', workspaceId: 1 },
+                { id: 'bbbb', workspaceId: 2 }
+            ],
+            resumed: [{ id: 'cccc', workspaceId: 1 }]
+        });
+        assert.deepEqual(deps.recorded.agentRequests, [
+            { method: 'disconnectAgent', deviceId: 'aaaa' },
+            { method: 'disconnectAgent', deviceId: 'bbbb' }
+        ]);
     });
 });

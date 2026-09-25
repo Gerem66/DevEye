@@ -1,4 +1,4 @@
-import { StatusBadge, useLiveOutline } from 'deveye-sdk-client';
+import { PlanPausedBadge, StatusBadge, useLiveOutline } from 'deveye-sdk-client';
 
 import { describeAccountStatus } from './accountStatus';
 import SyncProgressBar from './SyncProgressBar';
@@ -112,6 +112,7 @@ export function AccountCard({
                         <StatusBadge tone='accent'>partagée</StatusBadge>
                     </span>
                 )}
+                {account.planPaused && <PlanPausedBadge />}
                 {status && <StatusBadge tone={status.tone}>{status.badge}</StatusBadge>}
             </span>
             <p className={styles.accountCardMeta}>

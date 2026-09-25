@@ -6,6 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import type { FeatureDomainsRepo } from '@/db/repos/featureDomains';
 import { ORIGINS } from '@/features/_sdk/context';
 import { moduleWebDomainFeatures } from '@/features/_sdk/register';
+import { planPausedIds } from '@/Services/planPauses';
 import { env } from '@/Utils/Env';
 import { pointsHere, systemWeb, type WebSeam } from './web';
 
@@ -58,6 +59,8 @@ export function createProxyConfig(
     settings: ProxySettings,
     opts: {
         features: () => readonly string[];
+        /** Les lignes que l'offre de leur propriétaire tient en pause : leur nom n'est plus routé. */
+        pausedIds?: () => readonly string[];
         /** L'origine publique, vers laquelle un nom doit pointer. */
         publicHost: string;
         /** Les noms de DevEye lui-même, qu'aucun client ne peut réclamer. */
@@ -81,7 +84,7 @@ export function createProxyConfig(
     };
 
     return async () => {
-        const rows = await repo.routable(opts.features());
+        const rows = await repo.routable(opts.features(), opts.pausedIds?.() ?? []);
         const listed = new Set(rows.map((row) => row.host));
         for (const host of cache.keys()) if (!listed.has(host)) cache.delete(host);
 
@@ -123,6 +126,7 @@ export function registerProxyRoute(app: FastifyInstance, repo: FeatureDomainsRep
         { upstream, certResolver: env.DOMAIN_PROXY_CERT_RESOLVER, entryPoint: env.DOMAIN_PROXY_ENTRYPOINT },
         {
             features: moduleWebDomainFeatures,
+            pausedIds: () => planPausedIds('domains.hosts'),
             publicHost: new URL(ORIGINS.public).hostname,
             reserved: [new URL(ORIGINS.app).hostname, new URL(ORIGINS.public).hostname]
         }

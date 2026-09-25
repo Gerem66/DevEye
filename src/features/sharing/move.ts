@@ -12,8 +12,10 @@ import type { Database } from '@/db';
 import { createOpenCipher } from '@/Services/SecureStore';
 
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
-import { moduleItems } from '../_sdk/register';
-import { canWriteItemIn, detachLinks, loadHome, usageProvider } from './_shared';
+import { coreAllowance } from '../_quota';
+import { moduleItems, moduleStocks } from '../_sdk/register';
+import { schedulePlanReconcile } from '@/Services/planPauses';
+import { canWriteItemIn, detachLinks, loadHome, shutOutByPlan, usageProvider } from './_shared';
 
 /**
  * Changer un élément d'espace. La seule opération du système qui re-chiffre :
@@ -114,6 +116,31 @@ async function dropsOf(db: Database, feature: FeatureId, itemId: string, homeWor
 }
 
 /**
+ * Chez un autre propriétaire, l'élément entre dans SON offre : refusé quand elle
+ * est pleine, comme une création. Sans ça, l'arrivée d'un élément ancien
+ * mettrait en pause le plus récent de la cible.
+ */
+async function stockBlocker(
+    ctx: FeatureContext,
+    feature: FeatureId,
+    itemId: string,
+    homeOwner: number,
+    target: { owner_user_id: number; name: string }
+): Promise<string | null> {
+    if (target.owner_user_id === homeOwner) return null;
+    for (const stock of moduleStocks(feature, ctx.db)) {
+        const home = await stock.list(await ctx.db.workspaces.listOwnedIds(homeOwner));
+        if (!home.some((item) => item.id === itemId)) continue;
+        const allowance = await coreAllowance(ctx, target.owner_user_id, stock.fullKey);
+        if (allowance === null) return null;
+        if ((await stock.list(allowance.ownerWorkspaceIds)).length + 1 > allowance.limit) {
+            return `L’offre du propriétaire de « ${target.name} » est pleine : ${allowance.limit} ${stock.label} au plus.`;
+        }
+    }
+    return null;
+}
+
+/**
  * Le plan complet, sans rien écrire. Les gardes lèvent (l'écran ne propose pas
  * un déplacement qu'elles refuseraient) ; ce qui tient à la cible se range dans
  * `blockers`, où il s'affiche au lieu de passer pour une panne.
@@ -132,7 +159,7 @@ async function buildContext(
     }
     const target = await ctx.db.workspaces.findById(targetId);
     if (!target) throw new FeatureError('not_found', 'Espace introuvable');
-    if (!(await ctx.db.workspaceMembers.isMember(ctx.userId, targetId))) {
+    if (!(await ctx.db.workspaceMembers.isMember(ctx.userId, targetId)) || (await shutOutByPlan(ctx, targetId))) {
         throw new FeatureError('forbidden', 'Vous n’êtes pas membre de cet espace.');
     }
 
@@ -153,6 +180,9 @@ async function buildContext(
     } else if (!(await canWriteItemIn(ctx, targetId, feature, itemId))) {
         blockers.push(`Vous n’avez pas le droit d’écrire ${label} dans « ${target.name} ».`);
     } else {
+        const home = await ctx.db.workspaces.findById(homeWorkspaceId);
+        const full = home && (await stockBlocker(ctx, feature, itemId, home.owner_user_id, target));
+        if (full) blockers.push(full);
         const plan = await move.plan(itemId, homeWorkspaceId, targetId);
         blockers.push(...plan.blockers);
         rows = plan.rows;
@@ -241,6 +271,12 @@ const moveFeature = defineFeature({
         const leaving = [homeWorkspaceId, ...shares.map((s) => s.workspace_id)].filter(
             (ws) => ws !== targetWorkspaceId
         );
+        // Une place libérée d'un côté, un élément arrivé de l'autre, ou son espace
+        // changé chez le même propriétaire : les pauses se recalculent partout.
+        for (const ws of [homeWorkspaceId, targetWorkspaceId]) {
+            const owner = (await ctx.db.workspaces.findById(ws))?.owner_user_id;
+            if (owner !== undefined) schedulePlanReconcile(owner);
+        }
         await detachLinks(input.feature, input.itemId, leaving).catch((err: unknown) => {
             ctx.logger.warn(
                 { err, feature: input.feature, itemId: input.itemId },

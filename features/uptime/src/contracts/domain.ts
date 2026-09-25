@@ -67,6 +67,11 @@ export const uptimeServiceSchema = z.object({
     retentionDays: uptimeRetentionSchema,
     /** Paused services keep their history but are never probed. */
     enabled: z.boolean(),
+    /**
+     * Au-delà de la limite de l'offre de son propriétaire : ni sondé ni testé
+     * à la demande, sans que `enabled`, le choix de l'utilisateur, ne bouge.
+     */
+    planPaused: z.boolean(),
     /** Rank in the list; only the user's drag & drop changes it. */
     sortOrder: z.number().int().nonnegative(),
     /**
@@ -191,6 +196,8 @@ export const uptimePageSchema = z.object({
     showLatency: z.boolean(),
     /** Une page désactivée répond « introuvable » : son lien ne dit plus rien. */
     enabled: z.boolean(),
+    /** Au-delà de la limite de l'offre : elle répond « introuvable », sans que `enabled` ne bouge. */
+    planPaused: z.boolean(),
     services: z.array(uptimePageServiceSchema),
     created: z.number().int().nonnegative()
 });

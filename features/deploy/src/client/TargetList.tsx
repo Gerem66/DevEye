@@ -1,4 +1,4 @@
-import { useDragReorder, type LiveOutlineProps } from 'deveye-sdk-client';
+import { PlanPausedBadge, useDragReorder, type LiveOutlineProps } from 'deveye-sdk-client';
 import type { DeployTarget } from '../contracts/domain';
 
 import { formatAgo, isOrphan, STATUS_LABELS, statusTone, targetWhere } from './format';
@@ -109,6 +109,7 @@ function TargetCard({ target, outline, dragging, onOpen, onDragPointerDown }: Ta
                         <span className={styles.statusTag} data-tone={tone}>
                             {orphan ? 'accès retiré' : target.lastStatus ? STATUS_LABELS[target.lastStatus] : 'jamais'}
                         </span>
+                        {target.planPaused && <PlanPausedBadge />}
                         <span>{formatAgo(target.lastDeployAt)}</span>
                         {target.projectCount > 0 && (
                             <span>

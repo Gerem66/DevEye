@@ -241,6 +241,7 @@ export const deployHandlers = [
                             row,
                             row.workspace_id !== ctx.workspaceId,
                             counts.get(row.id) ?? 0,
+                            ctx.quota.isPaused('targets', String(row.id)),
                             names
                         )
                     )
@@ -404,6 +405,7 @@ export const deployHandlers = [
             // Déclencher depuis une fenêtre est permis, mais tout ce qui s'écrit
             // appartient au domicile : la ligne, sa clé, son suivi.
             const target = await loadTarget(ctx, input.targetId, 'write');
+            await ctx.quota.assertActive('targets', String(target.id));
             if (target.provider === 'agent') {
                 const deployment = await triggerOnMachine(ctx, target, input);
                 return { deployment };
@@ -472,8 +474,9 @@ export const deployHandlers = [
         ...deployHistory,
         handler: async (ctx: Ctx, input) => {
             const target = await loadTarget(ctx, input.targetId);
-            // Une machine ne garde pas d'historique : c'est le nôtre.
-            if (target.provider === 'agent') {
+            // Une machine ne garde pas d'historique : c'est le nôtre. Une cible en
+            // pause d'offre ne sonde pas son fournisseur : le relevé local se lit.
+            if (target.provider === 'agent' || ctx.quota.isPaused('targets', String(target.id))) {
                 const cipher = await targetCipherFor(ctx, target);
                 const rows = await ctx.repo.listDeployments(target.id, target.workspace_id, 50);
                 const deployments = await Promise.all(rows.map((row) => toDeployment(cipher, row)));
@@ -537,6 +540,7 @@ export const deployHandlers = [
             if (target.credential_id === null) {
                 throw new FeatureError('validation', 'L’accès de cette cible a été retiré : reliez-en un.');
             }
+            await ctx.quota.assertActive('targets', String(target.id));
             const { provider, access } = await loadAccess(ctx, target.credential_id, target);
             const spec = providerTargetOf(target, await readJson<Partial<StoredTarget>>(cipher, target.content));
 

@@ -1,6 +1,7 @@
 import { adminDeleteUser, adminSetUserRole, adminSetUserStatus, adminUserList } from '@deveye/types';
 
 import { invalidateAccess } from '../_access';
+import { schedulePlanReconcile } from '@/Services/planPauses';
 import { forgetSessionsOf } from '@/Services/SecureStore';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { adminMaintenanceFeatures } from './maintenance';
@@ -44,10 +45,12 @@ export const adminSetUserRoleFeature: FeatureDefinition<
         assertNotSelf(ctx, input.userId, 'changer le rôle de');
         await ctx.db.users.setRole(input.userId, input.role);
         invalidateAccess();
+        // Un administrateur n'a aucune limite : ce rôle ôté, son offre s'applique.
+        schedulePlanReconcile(input.userId);
         if (ctx.live) {
             // L'intéressé relit sa session : la page Utilisateurs entre dans
-            // son menu ou en sort à l'instant.
-            ctx.live.userChanged(input.userId, ctx.workspaceId, ['workspace'], ctx.userId);
+            // son menu ou en sort à l'instant, et son offre avec.
+            ctx.live.userChanged(input.userId, ctx.workspaceId, ['workspace', 'account'], ctx.userId);
             await notifyAdmins(ctx.db, ctx.live, ctx.workspaceId, ctx.userId);
         }
         ctx.audit({

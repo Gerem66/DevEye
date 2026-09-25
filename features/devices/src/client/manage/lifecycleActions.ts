@@ -1,6 +1,5 @@
-import type { Device } from '@deveye/types';
-
-import { ARCHIVED, FOREIGN, firstReason, NO_WRITE, OFFLINE } from '../availability';
+import type { FleetDevice } from '../../contracts/commands';
+import { ARCHIVED, FOREIGN, firstReason, NO_WRITE, OFFLINE, PLAN_PAUSED } from '../availability';
 import type { DeviceAction } from '../DeviceActionsMenu';
 import type { DeviceActions } from './useDeviceActions';
 
@@ -15,7 +14,7 @@ import type { DeviceActions } from './useDeviceActions';
  * l'accepte, c'est même le seul moyen de s'en défaire), et seule l'interruption
  * de l'agent exige qu'il soit en ligne.
  */
-export function deviceLifecycleActions(device: Device, actions: DeviceActions, canWrite: boolean): DeviceAction[] {
+export function deviceLifecycleActions(device: FleetDevice, actions: DeviceActions, canWrite: boolean): DeviceAction[] {
     const target = { id: device.id, name: device.name };
     // Ce qui vaut pour tous : le droit, puis le domicile de l'appareil.
     const fleet = firstReason(!canWrite && NO_WRITE, device.foreign && FOREIGN);
@@ -77,7 +76,7 @@ export function deviceLifecycleActions(device: Device, actions: DeviceActions, c
             icon: 'icon-power',
             label: 'Interrompre l’agent',
             onClick: () => actions.setStopTarget(target),
-            unavailable: firstReason(managed, !device.online && OFFLINE)
+            unavailable: firstReason(managed, device.planPaused && PLAN_PAUSED, !device.online && OFFLINE)
         },
         {
             icon: 'icon-trash',

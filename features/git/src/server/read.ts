@@ -278,6 +278,7 @@ export const gitReadFeatures = [
         ...gitCommitDetail,
         handler: async (ctx: Ctx, input) => {
             const repoRow = await loadRepo(ctx, input.repoId);
+            await ctx.quota.assertActive('repos', String(input.repoId));
             if (repoRow.credential_id === null) {
                 throw new FeatureError('validation', 'Le jeton d’accès a été retiré : le dépôt n’est plus lisible.');
             }

@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import type { MinimalUser } from '@deveye/types';
-import { Button, FeatureSettingsButton, StatusBadge } from 'deveye-sdk-client';
+import { Button, FeatureSettingsButton, PlanPausedBadge, StatusBadge } from 'deveye-sdk-client';
 import type { GitRepo, GitRepoUsage } from '../contracts/domain';
 
 import { PROJECT_STATUS_LABELS } from '@deveye/types';
@@ -68,6 +68,12 @@ export function RepoDetail({
                             )}
                             {repo.credentialId !== null && !repo.enabled && (
                                 <span className={styles.overdue}> · synchronisation suspendue</span>
+                            )}
+                            {repo.planPaused && (
+                                <>
+                                    {' '}
+                                    <PlanPausedBadge />
+                                </>
                             )}
                         </p>
                         {repo.lastSyncError && <p className={styles.error}>{repo.lastSyncError}</p>}

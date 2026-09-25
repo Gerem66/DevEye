@@ -125,6 +125,8 @@ export interface BackupRepo {
      * présentes au-delà des `keepLast` plus récentes.
      */
     listRunsToPrune(jobId: number, keepLast: number): Promise<BackupRunRow[]>;
+    /** Toutes les réussites dont l'archive est encore présente. */
+    listRunsPresent(jobId: number): Promise<BackupRunRow[]>;
     markPruned(id: number): Promise<void>;
     /** Les exécutions restées `running` après une mort du processus, soldées au démarrage. */
     failStaleRuns(before: number): Promise<number>;
@@ -462,6 +464,11 @@ export function createRepo(q: Q): BackupRepo {
                   LIMIT 1000 OFFSET ${Math.max(1, Math.trunc(keepLast))}`,
                 [jobId]
             ),
+
+        listRunsPresent: (jobId) =>
+            q.query<BackupRunRow>("SELECT * FROM backup_runs WHERE job_id = ? AND status = 'success' AND pruned = 0", [
+                jobId
+            ]),
 
         async markPruned(id) {
             await q.execute('UPDATE backup_runs SET pruned = 1 WHERE id = ?', [id]);

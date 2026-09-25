@@ -5,6 +5,7 @@ import {
     humanizeError,
     invalidate,
     openFeature,
+    PlanPausedNotice,
     useActiveWorkspace,
     useLiveItemTarget,
     useLiveOutlines,
@@ -215,6 +216,14 @@ export function FeatureDatabase(_props: FeatureViewProps) {
             </header>
 
             {error && <p className={styles.error}>{error}</p>}
+
+            {databases && (
+                <PlanPausedNotice
+                    count={databases.filter((d) => d.planPaused).length}
+                    one='base de données'
+                    many='bases de données'
+                />
+            )}
 
             {databases === null && <p className={styles.hint}>Chargement…</p>}
 

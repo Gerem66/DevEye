@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Device } from '@deveye/types';
-import { openInfo, useDragReorder, useLiveOutlines, useLiveSegment, useWorkspacePermissions } from 'deveye-sdk-client';
+import {
+    openInfo,
+    PlanPausedBadge,
+    PlanPausedNotice,
+    useDragReorder,
+    useLiveOutlines,
+    useLiveSegment,
+    useWorkspacePermissions
+} from 'deveye-sdk-client';
 
+import type { FleetDevice } from '../contracts/commands';
 import { agentUpdatable } from './agentVersion';
 import { api } from './api';
 import { MonitoringInfo } from './MonitoringInfo';
@@ -127,7 +135,7 @@ export default function Monitoring({ onPair, pairing }: MonitoringProps) {
      * magasin partagé n'a pas de setter, on superpose l'ordre local le temps de
      * l'aller-retour.
      */
-    const [ordered, setOrdered] = useState<Device[] | null>(null);
+    const [ordered, setOrdered] = useState<FleetDevice[] | null>(null);
     /** Un glissé est en cours : la liste ne doit pas bouger dessous. */
     const dragging = useRef(false);
     const devices = ordered ?? stored;
@@ -211,6 +219,11 @@ export default function Monitoring({ onPair, pairing }: MonitoringProps) {
                             onUpdateAll={() => void updater.updateAll(updatableIds)}
                             updating={updater.anyBusy}
                         />
+                        <PlanPausedNotice
+                            count={devices.filter((d) => d.planPaused).length}
+                            one='appareil'
+                            many='appareils'
+                        />
                         {/* Boîte intérieure, et non `.deviceListFull` : elle ancre
                             la barre d'insertion et suit le défilement. */}
                         <div ref={drag.listRef} className={styles.deviceCards}>
@@ -255,6 +268,7 @@ export default function Monitoring({ onPair, pairing }: MonitoringProps) {
                                                 {d.platform}
                                                 {d.agentVersion && ` · v${d.agentVersion}`}
                                             </span>
+                                            {d.planPaused && <PlanPausedBadge className={styles.pausedTag} />}
                                         </div>
                                         {canUpdate && (
                                             <button

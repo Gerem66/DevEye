@@ -6,6 +6,7 @@ import {
     FeatureSettingsButton,
     onServerEvent,
     openInfo,
+    PlanPausedBadge,
     useWorkspacePermissions
 } from 'deveye-sdk-client';
 import {
@@ -686,6 +687,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const lastKnown = liveSnapshot;
     const online = selected?.online ?? false;
     const archived = selected?.status === 'archived';
+    const paused = (selected?.planPaused ?? false) && !archived;
     const cores = report?.os.cores ?? 0;
     const valuesMuted = !online && focus.kind === 'live';
 
@@ -1066,6 +1068,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                             {online ? 'En ligne' : 'Hors ligne'}
                         </span>
                     )}
+                    {paused && <PlanPausedBadge />}
                     {online && !archived && canWrite && agentUpdatable(selected) && (
                         <button
                             className={`${styles.iconHeaderBtn} ${styles.iconHeaderUpdate}`}
@@ -1115,15 +1118,23 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 </div>
             ) : null}
 
-            {!online && (
+            {paused ? (
                 <div className={styles.offlineBanner}>
-                    <span className='icon icon-clock' />
-                    Hors ligne
-                    {selected.lastSeen ? ` depuis ${formatAgo(selected.lastSeen * 1000)}` : ''}
-                    {lastKnown
-                        ? ` · dernières données le ${new Date(lastKnown.timestamp).toLocaleString('fr-FR')}`
-                        : ''}
+                    <span className='icon icon-pause' />
+                    En pause : l’appareil dépasse la limite de l’offre, son agent n’est plus accepté et rien n’est
+                    relevé. Rien n’est supprimé, et il reprend dans les minutes qui suivent, dès que l’offre le permet.
                 </div>
+            ) : (
+                !online && (
+                    <div className={styles.offlineBanner}>
+                        <span className='icon icon-clock' />
+                        Hors ligne
+                        {selected.lastSeen ? ` depuis ${formatAgo(selected.lastSeen * 1000)}` : ''}
+                        {lastKnown
+                            ? ` · dernières données le ${new Date(lastKnown.timestamp).toLocaleString('fr-FR')}`
+                            : ''}
+                    </div>
+                )
             )}
 
             {readError && (

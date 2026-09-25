@@ -161,6 +161,7 @@ export async function toTarget(
     foreign: boolean,
     /** Le nombre de projets qui la déploient, venu du contrat de Projets. */
     projectCount: number,
+    planPaused: boolean,
     /** Le nom des machines de l'espace, pour situer une cible qu'une d'elles porte. */
     deviceNames: ReadonlyMap<string, string> = new Map()
 ): Promise<DeployTarget> {
@@ -187,6 +188,7 @@ export async function toTarget(
         lastStatus: normalizeStatus(row.last_status),
         lastDeployAt: row.last_deploy_at === null ? null : Number(row.last_deploy_at),
         projectCount,
+        planPaused,
         created: Number(row.created)
     });
 }
@@ -204,6 +206,7 @@ export async function reloadTarget(ctx: Ctx, targetId: number): Promise<DeployTa
         row,
         row.workspace_id !== ctx.workspaceId,
         counts.get(targetId) ?? 0,
+        ctx.quota.isPaused('targets', String(targetId)),
         names
     );
 }

@@ -7,6 +7,8 @@ import {
     humanizeError,
     invalidate,
     openAccountView,
+    PlanPausedBadge,
+    PlanPausedNotice,
     safeHref,
     settingsStyles as shell,
     StatusBadge,
@@ -42,6 +44,7 @@ export default function StatusPagesPanel({ canWrite }: SettingsPanelProps) {
     const pages = data?.pages ?? null;
     // 0 est une limite : l'offre de l'espace n'en permet aucune.
     const closed = data?.limit === 0;
+    const planPausedCount = (pages ?? []).filter((page) => page.planPaused).length;
     const hosts = useMemo(() => new Map(domains.map((domain) => [domain.id, domain])), [domains]);
     const takenDomains = useMemo(
         () =>
@@ -99,7 +102,9 @@ export default function StatusPagesPanel({ canWrite }: SettingsPanelProps) {
                 : à partager avec vos clients ou vos utilisateurs, sur l’adresse de DevEye ou sur votre propre domaine.
             </p>
 
-            {closed && (
+            <PlanPausedNotice count={planPausedCount} one='page de statut' many='pages de statut' />
+            {/* Des pages en pause : le bandeau commun dit déjà l'offre, et mène aux offres. */}
+            {closed && planPausedCount === 0 && (
                 <div className={styles.planNotice} role='status'>
                     <p>
                         L’offre de cet espace n’inclut aucune page de statut.
@@ -129,6 +134,7 @@ export default function StatusPagesPanel({ canWrite }: SettingsPanelProps) {
                                 <span className={shell.channelLabel}>
                                     {page.title}
                                     {!page.enabled && <StatusBadge tone='neutral'>non publiée</StatusBadge>}
+                                    {page.planPaused && <PlanPausedBadge />}
                                 </span>
                                 <a
                                     className={`${shell.channelMeta} ${styles.pageLink}`}

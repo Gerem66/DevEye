@@ -1,7 +1,16 @@
-import type { ReactNode } from 'react';
-import type { BackupJob } from '../contracts/domain';
+import { useState, type ReactNode } from 'react';
+import type { BackupJob, BackupRun } from '../contracts/domain';
 
-import { Button, FeatureSettingsButton, formatBytesFr, StatusBadge, useResource } from 'deveye-sdk-client';
+import {
+    Button,
+    ConfirmDialog,
+    FeatureSettingsButton,
+    formatBytesFr,
+    humanizeError,
+    StatusBadge,
+    useResource,
+    type ConfirmRequest
+} from 'deveye-sdk-client';
 import { api } from './api';
 import {
     describeSchedule,
@@ -25,12 +34,41 @@ interface JobViewProps {
 
 /** La fiche d'un travail : ses réglages en tête, son historique en dessous. */
 export default function JobView({ job, canWrite, onBack, onRun, running }: JobViewProps) {
-    const { data: runs, error } = useResource(
+    const {
+        data: runs,
+        error,
+        reload
+    } = useResource(
         'backup.detail',
         () => api.send('backup.jobGet', { jobId: job.id, limit: 50 }).then((res) => res.runs),
         'Impossible de charger l’historique.',
         [job.id]
     );
+    const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
+    const [busy, setBusy] = useState(false);
+    const [removeError, setRemoveError] = useState<string | null>(null);
+    // Un travail projeté s'administre chez lui : ses archives aussi.
+    const canErase = canWrite && !job.foreign;
+
+    const doErase = async (run: BackupRun): Promise<void> => {
+        setBusy(true);
+        setRemoveError(null);
+        try {
+            await api.send('backup.runRemove', { runId: run.id });
+            reload();
+        } catch (failure) {
+            setRemoveError(humanizeError(failure, 'La sauvegarde n’a pas pu être effacée.'));
+        } finally {
+            setBusy(false);
+        }
+    };
+    const erase = (run: BackupRun): void =>
+        setConfirm({
+            title: 'Effacer cette sauvegarde ?',
+            description: `L’archive du ${formatMoment(run.startedAt)} est effacée de sa destination, sans retour possible. La place qu’elle occupait se libère.`,
+            confirmLabel: 'Effacer',
+            onConfirm: () => void doErase(run)
+        });
 
     return (
         <div className={styles.detail}>
@@ -94,6 +132,7 @@ export default function JobView({ job, canWrite, onBack, onRun, running }: JobVi
 
             {job.lastError && <p className={styles.error}>Dernier échec : {job.lastError}</p>}
             {error && <p className={styles.error}>{error}</p>}
+            {removeError && <p className={styles.error}>{removeError}</p>}
 
             <h3 className={styles.sectionTitle}>Historique</h3>
             {runs === null && !error && <p className={styles.empty}>Chargement…</p>}
@@ -113,7 +152,7 @@ export default function JobView({ job, canWrite, onBack, onRun, running }: JobVi
                                             {' · '}
                                             {formatBytesFr(run.sizeBytes)}
                                             {run.encrypted ? ' · chiffrée' : ''}
-                                            {run.pruned ? ' · effacée par rétention' : ''}
+                                            {run.pruned ? ' · archive effacée' : ''}
                                         </>
                                     )}
                                 </p>
@@ -125,10 +164,22 @@ export default function JobView({ job, canWrite, onBack, onRun, running }: JobVi
                                 {run.checksum && <p className={styles.runHash}>sha256 : {run.checksum}</p>}
                             </div>
                             <span className={styles.runAgo}>{formatAgo(run.startedAt)}</span>
+                            {canErase && run.status === 'success' && !run.pruned && (
+                                <Button
+                                    variant='ghost'
+                                    icon='trash'
+                                    disabled={busy}
+                                    title='Effacer cette sauvegarde'
+                                    aria-label={`Effacer la sauvegarde du ${formatMoment(run.startedAt)}`}
+                                    onClick={() => erase(run)}
+                                />
+                            )}
                         </li>
                     ))}
                 </ul>
             )}
+
+            <ConfirmDialog request={confirm} busy={busy} onClose={() => setConfirm(null)} />
         </div>
     );
 }

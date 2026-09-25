@@ -84,3 +84,21 @@ describe('createProxyConfig', () => {
         assert.equal(lookups(), 2);
     });
 });
+
+describe('createProxyConfig et les pauses de l’offre', () => {
+    it('passe au dépôt les lignes que l’offre tient en pause, pour qu’il les écarte', async () => {
+        const seen: (readonly string[])[] = [];
+        const config = createProxyConfig(
+            {
+                routable: (_features, pausedIds) => {
+                    seen.push(pausedIds);
+                    return Promise.resolve([]);
+                }
+            },
+            SETTINGS,
+            { features: () => ['x-rdv'], pausedIds: () => ['4', '9'], publicHost: HERE, reserved: [] }
+        );
+        await config();
+        assert.deepEqual(seen, [['4', '9']]);
+    });
+});

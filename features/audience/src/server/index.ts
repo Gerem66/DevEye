@@ -50,6 +50,7 @@ export const serverEntry: FeatureServer<AudienceRepo> = {
     createRepo,
     features: audienceHandlers,
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
+    quotas: { sites: { list: (repo, owned) => repo.listStock(owned) } },
     createService(deps) {
         const ingest = new AudienceIngest(deps);
         // Projets ne stocke que des identifiants : avant d'en relier un, il demande si

@@ -36,6 +36,7 @@ import {
     stopModuleServices
 } from '@/features/_sdk/register';
 import { setSdkHost } from '@/features/_sdk/host';
+import { createPlanPausesService } from '@/features/_planPauses';
 import { createAuditLog } from '@/Services/AuditLog';
 import { startAttemptSweeper } from '@/Services/attempts';
 import { startDekSweeper } from '@/Services/SecureStore';
@@ -336,13 +337,16 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // Lue avant tout démarrage : un service en arrêt complet ne démarre pas, et
     // `MAINTENANCE=1` ferme le site avant la première connexion.
     await maintenance.init({ db: deps.db, live, logger, services: moduleServiceControl });
+    // Avant les modules : leur premier tour lit déjà ce que l'offre tient en pause.
+    const planPauses = createPlanPausesService({ db: deps.db, logger, live });
+    await planPauses.start();
     await startModuleServices((featureId) => maintenance.featureLevel(featureId) === 'full');
     for (const svc of hostServices) await svc.start();
     const stopServices = async (): Promise<PromiseSettledResult<void>[]> => {
         await maintenance.close();
         const [modules, host] = await Promise.all([
             stopModuleServices(),
-            Promise.allSettled(hostServices.map(async (svc) => svc.stop()))
+            Promise.allSettled([...hostServices, planPauses].map(async (svc) => svc.stop()))
         ]);
         return [...modules, ...host];
     };

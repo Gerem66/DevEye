@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
     invalidate,
+    PlanPausedBadge,
     ReadOnlyNotice,
     SaveButton,
     settingsStyles as shell,
@@ -113,6 +114,12 @@ export default function MailSyncPanel({ scope, canWrite }: SettingsPanelProps) {
                     onChange={(on) => void setEnabled(on)}
                     label={account.enabled ? 'Boîte relevée automatiquement' : 'Boîte en pause : plus aucune relève'}
                 />
+                {account.planPaused && (
+                    <span className={shell.fieldHint}>
+                        <PlanPausedBadge /> Rien n’est relevé tant que l’offre ne le permet pas, quel que soit ce
+                        réglage, qui reprendra alors.
+                    </span>
+                )}
                 <div className={styles.formRow}>
                     <TextInput
                         type='number'

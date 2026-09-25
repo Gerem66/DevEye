@@ -71,7 +71,8 @@ export const databaseCrudFeatures = [
                             await scope.cipherFor(String(row.id)),
                             row,
                             row.workspace_id !== ctx.workspaceId,
-                            counts.get(row.id) ?? 0
+                            counts.get(row.id) ?? 0,
+                            ctx.quota.isPaused('connections', String(row.id))
                         )
                     )
                 )
@@ -99,7 +100,8 @@ export const databaseCrudFeatures = [
                     homeCipher,
                     row,
                     row.workspace_id !== ctx.workspaceId,
-                    counts.get(input.databaseId) ?? 0
+                    counts.get(input.databaseId) ?? 0,
+                    ctx.quota.isPaused('connections', String(input.databaseId))
                 ),
                 usage,
                 alerts: await Promise.all(alertRows.map((a) => toAlert(homeCipher, a)))

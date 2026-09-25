@@ -188,6 +188,11 @@ export const mailAccountSchema = z.object({
      * syncing.
      */
     syncProgress: z.number().min(0).max(1).nullable(),
+    /**
+     * L'offre du propriétaire tient ce compte en pause : il se lit dans son
+     * cache, rien ne part vers le serveur de mail, et `enabled` reste intact.
+     */
+    planPaused: z.boolean(),
     created: z.number().int().nonnegative()
 });
 export type MailAccount = z.infer<typeof mailAccountSchema>;

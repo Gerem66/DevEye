@@ -50,7 +50,7 @@ async function reloadHomeSite(ctx: Ctx, siteId: number): Promise<AudienceSite> {
     const row = await ctx.repo.findWithStats(siteId, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Site introuvable');
     const counts = await projectCountsOf(ctx);
-    return toSite(ctx.cipher(), row, false, counts.get(siteId) ?? 0);
+    return toSite(ctx.cipher(), row, false, counts.get(siteId) ?? 0, ctx.quota.isPaused('sites', String(siteId)));
 }
 
 export const audienceCountFeature = defineSdkFeature({
@@ -86,7 +86,8 @@ export const audienceListFeature = defineSdkFeature({
                         await shares.cipherFor(String(row.id)),
                         row,
                         row.workspace_id !== ctx.workspaceId,
-                        counts.get(row.id) ?? 0
+                        counts.get(row.id) ?? 0,
+                        ctx.quota.isPaused('sites', String(row.id))
                     )
                 )
             )
@@ -111,7 +112,8 @@ export const audienceGetFeature = defineSdkFeature({
                 await siteCipher(ctx, row.id),
                 row,
                 row.workspace_id !== ctx.workspaceId,
-                counts.get(row.id) ?? 0
+                counts.get(row.id) ?? 0,
+                ctx.quota.isPaused('sites', String(row.id))
             ),
             usage: [...usage],
             // L'adresse par laquelle un site suivi atteint l'ingestion, sans barre

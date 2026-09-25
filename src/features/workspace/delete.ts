@@ -1,6 +1,7 @@
 import { workspaceDelete } from '@deveye/types';
 import { invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
+import { schedulePlanReconcile } from '@/Services/planPauses';
 
 /**
  * Supprime un espace partagé avec tout ce qu'il contient (FK ON DELETE
@@ -33,6 +34,8 @@ export const workspaceDeleteFeature: FeatureDefinition<
 
         // L'accès de tous les membres vient de disparaître.
         invalidateAccess();
+        // Ses éléments en pause partent avec lui, et sa place revient à un autre espace.
+        schedulePlanReconcile(ctx.userId);
         ctx.live?.evictRoom(target.id);
         // Et leur menu d'espaces aussi : ceux qui sont connectés ailleurs ne
         // reçoivent rien de la salle (vidée à l'instant), on les vise par compte.

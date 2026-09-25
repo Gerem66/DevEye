@@ -249,7 +249,12 @@ export async function reencryptAccountTree(
  * Le DTO d'un compte, sous le codec de son domicile ({@link accountCipher}) ;
  * `foreign` dit à l'écran qu'il regarde une fenêtre sur un autre espace.
  */
-export async function toAccountDTO(cipher: SdkCipher, row: MailAccountRow, foreign: boolean): Promise<MailAccount> {
+export async function toAccountDTO(
+    cipher: SdkCipher,
+    row: MailAccountRow,
+    foreign: boolean,
+    planPaused: boolean
+): Promise<MailAccount> {
     const displayName = (await cipher.tryDecrypt(row.display_name_enc)) ?? '(compte verrouillé)';
     const emailAddress = (await cipher.tryDecrypt(row.email_address_enc)) ?? '';
     const lastSyncError = row.last_sync_error_enc ? await cipher.tryDecrypt(row.last_sync_error_enc) : null;
@@ -315,6 +320,7 @@ export async function toAccountDTO(cipher: SdkCipher, row: MailAccountRow, forei
         ),
         syncing: syncStatus.syncing,
         syncProgress: syncStatus.progress,
+        planPaused,
         created: row.created
     };
 }
@@ -534,17 +540,19 @@ function mailCommandFailure(error: unknown): FeatureError {
 }
 
 /**
- * Toute opération de commande qui parle à IMAP, avec l'état du compte tenu à
- * jour au passage : un accès qui tombe se voit dès l'ouverture de la boîte,
- * sans attendre un tour de relève, et un accès qui revient efface la mention
- * d'erreur. Le déchiffrement des identifiants est dedans à dessein : une DEK
- * qui ne se déballe pas est une boîte inaccessible comme une autre.
+ * Toute opération de commande qui parle à IMAP ou SMTP, avec l'état du compte
+ * tenu à jour au passage : un accès qui tombe se voit dès l'ouverture de la
+ * boîte, sans attendre un tour de relève, et un accès qui revient efface la
+ * mention d'erreur. Le déchiffrement des identifiants est dedans à dessein :
+ * une DEK qui ne se déballe pas est une boîte inaccessible comme une autre. Un
+ * compte que l'offre tient en pause est refusé ici, avant toute connexion.
  */
 export async function imapFor<T>(
     ctx: Ctx,
     account: MailAccountRow,
     work: (credentials: MailCredentials) => Promise<T>
 ): Promise<T> {
+    await ctx.quota.assertActive('accounts', String(account.id));
     const cipher = await accountCipher(ctx, account);
     try {
         // Rien à diffuser d'ici : les commandes qui écrivent le font par

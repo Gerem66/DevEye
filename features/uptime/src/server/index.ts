@@ -54,6 +54,10 @@ export const serverEntry: FeatureServer<UptimeRepo> = {
     features: [...uptimeHandlers, ...pageHandlers],
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
     domains: createDomainHooks(),
+    quotas: {
+        monitors: { list: (repo, owned) => repo.services.listStock(owned) },
+        pages: { list: (repo, owned) => repo.pages.listStock(owned) }
+    },
     createService(deps) {
         const monitor = new UptimeMonitor(deps);
         const pages = createStatusPages(deps);
@@ -82,7 +86,10 @@ export const serverEntry: FeatureServer<UptimeRepo> = {
             },
             providers: { [UPTIME_ITEMS_PROVIDER]: items },
             publicRoutes: (app) => pages.routes(app),
-            domainRoot: (req, reply, domain) => pages.root(req, reply, domain)
+            domainRoot: (req, reply, domain) => pages.root(req, reply, domain),
+            async onPlanPause(change) {
+                if (change.key === 'monitors') await monitor.closeOutages(change.paused.map((item) => Number(item.id)));
+            }
         };
     },
     items: {

@@ -138,6 +138,19 @@ describe('le bandeau', () => {
         assert.equal(view.services[2].state, 'paused');
     });
 
+    it('tient pour en pause un service que l’offre de son propriétaire met en pause', async () => {
+        const view = buildStatusView(
+            input({
+                services: [
+                    { row: service(1, { status: 'down' }), name: 'API', planPaused: true },
+                    { row: service(2), name: 'Site' }
+                ]
+            })
+        );
+        assert.equal(view.services[0].state, 'paused');
+        assert.deepEqual(view.banner, { tone: 'up', down: 0, watched: 1 });
+    });
+
     it('attend la première mesure, et se dit suspendu quand tout est en pause', async () => {
         assert.equal(
             buildStatusView(input({ services: [{ row: service(1, { status: 'unknown' }), name: 'API' }] })).banner.tone,

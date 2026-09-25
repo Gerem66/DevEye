@@ -31,7 +31,7 @@
     "ci:agent": "cd agent; /usr/bin/cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test",
     "clean": "rm -rf node_modules client/node_modules client/build package-lock.json",
     "test": "DOTENV_CONFIG_PATH=.env.test NODE_OPTIONS=--disable-warning=ExperimentalWarning tsx --test \"src/**/*.test.ts\" \"scripts/lib/*.test.ts\"",
-    "test:features": "DOTENV_CONFIG_PATH=.env.test tsx --test \"features/*/src/**/*.test.ts\"",
+    "test:features": "DOTENV_CONFIG_PATH=.env.test NODE_OPTIONS=--disable-warning=ExperimentalWarning tsx --test \"features/*/src/**/*.test.ts\"",
     "gen:features": "tsx scripts/gen-features.ts",
     "gen:features:local": "tsx scripts/gen-features.ts --ensure-local",
     "smoke:feature": "tsx scripts/smoke-feature.ts",

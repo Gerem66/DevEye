@@ -77,6 +77,8 @@ export function createStatusPages(deps: FeatureServiceDeps<UptimeRepo>): StatusP
     let generation = 0;
 
     const hostOf = (req: SdkPublicRequest) => normaliseDomainHost(req.host ?? '');
+    /** Publiée, et pas tenue en pause par l'offre : une page en pause répond comme une page retirée. */
+    const served = (row: UptimePageRow) => row.enabled === 1 && !deps.pauses.isPaused('pages', String(row.id));
 
     async function build(row: UptimePageRow): Promise<string> {
         const cipher = deps.cipherFor(row.workspace_id);
@@ -95,7 +97,11 @@ export function createStatusPages(deps: FeatureServiceDeps<UptimeRepo>): StatusP
             services.map(async (service) => {
                 const label = service.page_label === null ? null : await cipher.tryDecrypt(service.page_label);
                 const name = label || (await decryptService(cipher, service.content)).name;
-                return { row: service, name: name || 'Service' };
+                return {
+                    row: service,
+                    name: name || 'Service',
+                    planPaused: deps.pauses.isPaused('monitors', String(service.id))
+                };
             })
         );
         const withErrors = await Promise.all(
@@ -121,8 +127,17 @@ export function createStatusPages(deps: FeatureServiceDeps<UptimeRepo>): StatusP
         return renderStatusPage(view, options);
     }
 
+    /**
+     * La page d'une clé, servable. La pause d'offre se relit après le cache :
+     * elle prend effet à la visite suivante, sans rien avoir à en oublier.
+     */
+    async function lookup(key: string, find: () => Promise<UptimePageRow | null>): Promise<Cached | null> {
+        const entry = await compute(key, find);
+        return entry && served(entry.row) ? entry : null;
+    }
+
     /** La page d'une clé, calculée une fois pour tous ceux qui la demandent en même temps. */
-    function lookup(key: string, find: () => Promise<UptimePageRow | null>): Promise<Cached | null> {
+    function compute(key: string, find: () => Promise<UptimePageRow | null>): Promise<Cached | null> {
         const hit = cache.get(key);
         if (hit && hit.expires > Date.now()) return Promise.resolve(hit);
         const running = pending.get(key);
@@ -130,7 +145,7 @@ export function createStatusPages(deps: FeatureServiceDeps<UptimeRepo>): StatusP
         const started = generation;
         const task = (async () => {
             const row = await find();
-            if (!row || row.enabled !== 1) return null;
+            if (!row || !served(row)) return null;
             const entry = { expires: Date.now() + CACHE_MS, row, html: await build(row) };
             if (started === generation) {
                 for (const [k, v] of cache) if (v.expires <= Date.now()) cache.delete(k);

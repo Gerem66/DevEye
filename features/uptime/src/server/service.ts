@@ -163,9 +163,23 @@ export class UptimeMonitor {
 
     private async probeDue(): Promise<void> {
         const now = Math.floor(Date.now() / 1000);
-        const due = await this.deps.repo.services.listDue(now, env.UPTIME_CONCURRENCY * 4);
+        const paused = this.deps.pauses.paused('monitors').map(Number);
+        const due = await this.deps.repo.services.listDue(now, env.UPTIME_CONCURRENCY * 4, paused);
         for (let i = 0; i < due.length; i += env.UPTIME_CONCURRENCY) {
             await Promise.all(due.slice(i, i + env.UPTIME_CONCURRENCY).map((row) => this.runOne(row)));
+        }
+    }
+
+    /**
+     * Des services que l'offre vient de mettre en pause : leur panne en cours se
+     * ferme, comme à une pause choisie, sans quoi la page publique la dirait
+     * « en cours » et sa durée courrait sans que personne ne mesure plus rien.
+     */
+    async closeOutages(serviceIds: readonly number[]): Promise<void> {
+        const at = Math.floor(Date.now() / 1000);
+        for (const id of serviceIds) {
+            const open = await this.deps.repo.history.openIncident(id);
+            if (open) await this.deps.repo.history.closeIncident(open.id, at);
         }
     }
 
@@ -191,6 +205,9 @@ export class UptimeMonitor {
      * de-duplicated so a service is never probed twice at once.
      */
     async runOne(row: UptimeServiceRow): Promise<void> {
+        // Relu ici aussi : l'offre peut mettre le service en pause entre la
+        // liste des dus et son tour dans le lot.
+        if (this.deps.pauses.isPaused('monitors', String(row.id))) return;
         const running = this.inFlight.get(row.id);
         if (running) return running;
         const probe = this.probeAndRecord(row).finally(() => this.inFlight.delete(row.id));

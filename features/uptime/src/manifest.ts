@@ -31,8 +31,8 @@ export const manifest = {
      */
     nativeCapabilities: ['notify', 'routes.public'],
     quotas: [
-        { key: 'monitors', label: 'services surveillés' },
-        { key: 'pages', label: 'pages de statut' }
+        { key: 'monitors', label: 'services surveillés', stock: true },
+        { key: 'pages', label: 'pages de statut', stock: true }
     ],
     domains: {
         hint: 'Votre propre adresse pour une page de statut, comme statut.monentreprise.fr : la page y répond directement, à la racine. Sans elle, la page reste sur l’adresse de DevEye, qui fonctionne toujours.',

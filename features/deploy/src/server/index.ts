@@ -76,5 +76,6 @@ export const serverEntry: FeatureServer<DeployRepo> = {
         labelOf: (repo, cipher, itemId, workspaceId) => labelOf(repo, cipher, Number(itemId), workspaceId),
         move: deployMove,
         copy: deployCopy
-    }
+    },
+    quotas: { targets: { list: (repo, owned) => repo.listStockTargets(owned) } }
 };

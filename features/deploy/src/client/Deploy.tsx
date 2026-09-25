@@ -3,6 +3,7 @@ import {
     Button,
     FeatureSettingsButton,
     humanizeError,
+    PlanPausedNotice,
     useActiveWorkspace,
     useLiveItemTarget,
     useLiveOutlines,
@@ -186,6 +187,14 @@ export function FeatureDeploy(_props: FeatureViewProps) {
                     </header>
 
                     {error && <p className={styles.error}>{error}</p>}
+
+                    {targets && (
+                        <PlanPausedNotice
+                            count={targets.filter((t) => t.planPaused).length}
+                            one='cible de déploiement'
+                            many='cibles de déploiement'
+                        />
+                    )}
 
                     {targets === null ? (
                         <p className={styles.empty}>Chargement…</p>
